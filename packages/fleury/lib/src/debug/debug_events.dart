@@ -174,16 +174,15 @@ final class InputDebugEvent extends DebugEvent {
 
   factory InputDebugEvent.fromTuiEvent(TuiEvent event) {
     return switch (event) {
-      KeyEvent(:final keyCode, :final char, :final modifiers, :final type) =>
-        InputDebugEvent(
-          kind: 'key',
-          summary: [
-            if (modifiers.isNotEmpty)
-              modifiers.map((modifier) => modifier.name).join('+'),
-            keyCode?.name ?? char ?? '?',
-            if (type != KeyEventType.down) type.name,
-          ].join('+'),
-        ),
+      KeyEvent(:final code, :final modifiers, :final type) => InputDebugEvent(
+        kind: 'key',
+        summary: [
+          if (modifiers.isNotEmpty)
+            modifiers.map((modifier) => modifier.name).join('+'),
+          code.special?.name ?? code.character!,
+          if (type != KeyEventType.down) type.name,
+        ].join('+'),
+      ),
       TextInputEvent(:final text) => InputDebugEvent(
         kind: 'text',
         summary: '${text.length} chars',

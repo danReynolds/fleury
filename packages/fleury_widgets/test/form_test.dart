@@ -650,9 +650,9 @@ void main() {
 
     _screen(tester);
     for (var i = 0; i < 5; i++) {
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.tab));
+      tester.sendKey(const KeyEvent(KeyCode.tab));
     }
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
 
     expect(submitted, isNotNull);
     expect(submitted!.valid, isTrue);
@@ -679,7 +679,7 @@ void main() {
     );
 
     tester.type('secret-token');
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
 
     expect(submitted, isNotNull);
     expect(submitted!.valid, isTrue);
@@ -1107,7 +1107,7 @@ void main() {
 
     tester.type('9');
     expect(controller.value('retries'), 29);
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
 
     expect(submitted, isNotNull);
     expect(submitted!.valid, isTrue);
@@ -1139,7 +1139,7 @@ void main() {
     expect(_screen(tester), contains('1.5'));
 
     // Editing: backspace over the "5" (leaving "1.") then typing 7.
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.backspace));
+    tester.sendKey(const KeyEvent(KeyCode.backspace));
     tester.type('7');
     expect(controller.value('ratio'), 1.7);
   });
@@ -1160,7 +1160,7 @@ void main() {
     // Backspace the field empty, then type a negative number: the "-"
     // in-progress token must survive to accept the digits after it.
     for (var i = 0; i < 4; i++) {
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.backspace));
+      tester.sendKey(const KeyEvent(KeyCode.backspace));
     }
     expect(controller.value('ratio'), isNull);
     tester.type('-');
@@ -1223,7 +1223,7 @@ void main() {
 
     tester.type('1');
     tester.type('.');
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.tab));
+    tester.sendKey(const KeyEvent(KeyCode.tab));
     tester.pump();
 
     // No blur normalization: the token stays visible, the value stays null,
@@ -1304,8 +1304,8 @@ void main() {
     expect(field.state['minSelected'], 1);
     expect(field.state['maxSelected'], 2);
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     tester.pump();
 
     expect(controller.values.listValue('capabilities'), ['logs', 'metrics']);

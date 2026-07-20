@@ -7,7 +7,7 @@ Matcher _stateError(String message) => throwsA(
 
 KeyEvent _key(String char, {bool ctrl = false, bool alt = false}) {
   return KeyEvent(
-    char: char,
+    KeyCode.char(char),
     modifiers: {if (ctrl) KeyModifier.ctrl, if (alt) KeyModifier.alt},
   );
 }
@@ -171,7 +171,7 @@ void main() {
             focusNode: node,
             autofocus: true,
             onKey: (e) {
-              received.add('inner:${e.char}');
+              received.add('inner:${e.code.character}');
               return KeyEventResult.handled;
             },
             child: const EmptyBox(),
@@ -193,13 +193,13 @@ void main() {
           manager: manager,
           child: Focus(
             onKey: (e) {
-              received.add('outer:${e.char}');
+              received.add('outer:${e.code.character}');
               return KeyEventResult.handled;
             },
             child: Focus(
               autofocus: true,
               onKey: (e) {
-                received.add('inner:${e.char}');
+                received.add('inner:${e.code.character}');
                 return KeyEventResult.ignored;
               },
               child: const EmptyBox(),
@@ -222,13 +222,13 @@ void main() {
           manager: manager,
           child: Focus(
             onKey: (e) {
-              received.add('outer:${e.char}');
+              received.add('outer:${e.code.character}');
               return KeyEventResult.handled;
             },
             child: Focus(
               autofocus: true,
               onKey: (e) {
-                received.add('inner:${e.char}');
+                received.add('inner:${e.code.character}');
                 return KeyEventResult.handled;
               },
               child: const EmptyBox(),
@@ -422,35 +422,43 @@ void main() {
       // the hit. The hit only lands if dispatchKey's upward walk from the
       // child's element reaches the ancestor.
       Widget host({required bool show}) => FocusManagerScope(
-            manager: manager,
-            child: show
-                ? Focus(
-                    onKey: (e) {
-                      hits++;
-                      return KeyEventResult.handled;
-                    },
-                    child: Focus(
-                      focusNode: node,
-                      onKey: (e) => KeyEventResult.ignored,
-                      child: const EmptyBox(),
-                    ),
-                  )
-                : const EmptyBox(),
-          );
+        manager: manager,
+        child: show
+            ? Focus(
+                onKey: (e) {
+                  hits++;
+                  return KeyEventResult.handled;
+                },
+                child: Focus(
+                  focusNode: node,
+                  onKey: (e) => KeyEventResult.ignored,
+                  child: const EmptyBox(),
+                ),
+              )
+            : const EmptyBox(),
+      );
 
       var root = owner.mountRoot(host(show: true));
       node.requestFocus();
       manager.dispatchKey(_key('a'));
-      expect(hits, 1, reason: 'the ancestor Focus is reached when first mounted');
+      expect(
+        hits,
+        1,
+        reason: 'the ancestor Focus is reached when first mounted',
+      );
 
       root = owner.updateRoot(root, host(show: false)); // subtree unmounts
       root = owner.updateRoot(root, host(show: true)); // remounts, reusing node
 
       node.requestFocus();
       manager.dispatchKey(_key('a'));
-      expect(hits, 2,
-          reason: 'the remounted ancestor binding still fires — the reattach '
-              'refreshed node._element so the upward walk reaches it');
+      expect(
+        hits,
+        2,
+        reason:
+            'the remounted ancestor binding still fires — the reattach '
+            'refreshed node._element so the upward walk reaches it',
+      );
     });
 
     test('requestFocus on a node whose Focus was unmounted no-ops — it must '
@@ -467,27 +475,27 @@ void main() {
       final owner = BuildOwner();
 
       Widget host({required bool show}) => FocusManagerScope(
-            manager: manager,
-            // Non-focusable, so it participates in the ambient (unfocused)
-            // dispatch chain — where keys land once nothing holds focus.
-            child: Focus(
-              canRequestFocus: false,
-              onKey: (e) {
-                liveHits++;
-                return KeyEventResult.handled;
-              },
-              child: show
-                  ? Focus(
-                      focusNode: node,
-                      onKey: (e) {
-                        deadHits++;
-                        return KeyEventResult.handled;
-                      },
-                      child: const EmptyBox(),
-                    )
-                  : const EmptyBox(),
-            ),
-          );
+        manager: manager,
+        // Non-focusable, so it participates in the ambient (unfocused)
+        // dispatch chain — where keys land once nothing holds focus.
+        child: Focus(
+          canRequestFocus: false,
+          onKey: (e) {
+            liveHits++;
+            return KeyEventResult.handled;
+          },
+          child: show
+              ? Focus(
+                  focusNode: node,
+                  onKey: (e) {
+                    deadHits++;
+                    return KeyEventResult.handled;
+                  },
+                  child: const EmptyBox(),
+                )
+              : const EmptyBox(),
+        ),
+      );
 
       var root = owner.mountRoot(host(show: true));
       node.requestFocus();
@@ -499,15 +507,17 @@ void main() {
       expect(node.context, isNull, reason: 'context is null when unattached');
 
       node.requestFocus();
-      expect(manager.focusedNode, isNull,
-          reason: 'a dead node must not become the focused node');
+      expect(
+        manager.focusedNode,
+        isNull,
+        reason: 'a dead node must not become the focused node',
+      );
       expect(node.hasFocus, isFalse);
 
       // Keys route to the live tree, never through the unmounted handler.
       manager.dispatchKey(_key('a'));
       expect(deadHits, 0);
-      expect(liveHits, 1,
-          reason: 'the live ambient chain still receives keys');
+      expect(liveHits, 1, reason: 'the live ambient chain still receives keys');
     });
   });
 }

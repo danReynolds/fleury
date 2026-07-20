@@ -2,13 +2,12 @@ import 'package:meta/meta.dart';
 
 import '../foundation/geometry.dart';
 
-/// A single special-key code that the terminal reports.
+/// The non-character keys a terminal can report, as an enumerable set.
 ///
-/// Printable characters and multi-byte Unicode input come through as
-/// [TextInputEvent], not as a key code. Modifier-only presses (e.g.
-/// Ctrl+letter) come through as a [KeyEvent] with [KeyEvent.char] set
-/// and the modifiers populated.
-enum KeyCode {
+/// This is the *implementation vocabulary* behind the special-key half of
+/// [KeyCode]; application code compares codes directly
+/// (`event.code == KeyCode.enter`) and rarely needs to name this type.
+enum SpecialKey {
   enter,
   tab,
   backspace,
@@ -35,6 +34,138 @@ enum KeyCode {
   f10,
   f11,
   f12,
+}
+
+/// One logical key: a printable character or a special key.
+///
+/// `KeyCode` unifies the two vocabularies a terminal reports — characters
+/// (`KeyCode.char('a')`, `KeyCode.char('?')`) and specials
+/// ([KeyCode.enter], [KeyCode.f1], …) — into a single value type with
+/// structural equality, so `KeyCode.a == KeyCode.char('a')` and codes work
+/// as map keys and in `case` patterns.
+///
+/// A `KeyCode` names the key itself, never its modifiers: Ctrl+C is a
+/// [KeyEvent] carrying `KeyCode.c` plus `{KeyModifier.ctrl}`. Committed
+/// text (IME composition, paste, multi-grapheme input) is not a keypress
+/// and arrives as [TextInputEvent], never as a code.
+///
+/// Per RFC 0018, `KeyCode` is the one-step form of a key sequence; the
+/// sequence supertype lands with the binding-surface rework.
+@immutable
+final class KeyCode {
+  /// A printable-character key.
+  ///
+  /// [character] must be a single grapheme cluster (one user-perceived
+  /// character); the parsers, dispatcher, and codec only construct such
+  /// values. Matching against events uses the character exactly as given.
+  const KeyCode.char(String this.character)
+    : special = null,
+      assert(character.length > 0, 'character must be non-empty');
+
+  const KeyCode._special(this.special) : character = null;
+
+  /// Looks up the canonical const instance for [key].
+  ///
+  /// For construction from a [SpecialKey] held in a variable (parsers, the
+  /// wire codec). With a known key, prefer the named static
+  /// (`KeyCode.enter`).
+  static KeyCode forSpecial(SpecialKey key) {
+    final code = _bySpecial[key.index];
+    assert(code.special == key, 'canonical-instance table out of order');
+    return code;
+  }
+
+  /// The printable character, or null for a special key.
+  final String? character;
+
+  /// The special key, or null for a printable character.
+  final SpecialKey? special;
+
+  /// Whether this code is a printable character (as opposed to a special
+  /// key).
+  bool get isCharacter => character != null;
+
+  // Letters. Uppercase letters are the shifted *characters* ('A'), not
+  // distinct codes: `KeyCode.char('A')` is what Shift+A produces.
+  static const KeyCode a = KeyCode.char('a');
+  static const KeyCode b = KeyCode.char('b');
+  static const KeyCode c = KeyCode.char('c');
+  static const KeyCode d = KeyCode.char('d');
+  static const KeyCode e = KeyCode.char('e');
+  static const KeyCode f = KeyCode.char('f');
+  static const KeyCode g = KeyCode.char('g');
+  static const KeyCode h = KeyCode.char('h');
+  static const KeyCode i = KeyCode.char('i');
+  static const KeyCode j = KeyCode.char('j');
+  static const KeyCode k = KeyCode.char('k');
+  static const KeyCode l = KeyCode.char('l');
+  static const KeyCode m = KeyCode.char('m');
+  static const KeyCode n = KeyCode.char('n');
+  static const KeyCode o = KeyCode.char('o');
+  static const KeyCode p = KeyCode.char('p');
+  static const KeyCode q = KeyCode.char('q');
+  static const KeyCode r = KeyCode.char('r');
+  static const KeyCode s = KeyCode.char('s');
+  static const KeyCode t = KeyCode.char('t');
+  static const KeyCode u = KeyCode.char('u');
+  static const KeyCode v = KeyCode.char('v');
+  static const KeyCode w = KeyCode.char('w');
+  static const KeyCode x = KeyCode.char('x');
+  static const KeyCode y = KeyCode.char('y');
+  static const KeyCode z = KeyCode.char('z');
+
+  static const KeyCode space = KeyCode.char(' ');
+
+  // Specials.
+  static const KeyCode enter = KeyCode._special(SpecialKey.enter);
+  static const KeyCode tab = KeyCode._special(SpecialKey.tab);
+  static const KeyCode backspace = KeyCode._special(SpecialKey.backspace);
+  static const KeyCode escape = KeyCode._special(SpecialKey.escape);
+  static const KeyCode arrowUp = KeyCode._special(SpecialKey.arrowUp);
+  static const KeyCode arrowDown = KeyCode._special(SpecialKey.arrowDown);
+  static const KeyCode arrowLeft = KeyCode._special(SpecialKey.arrowLeft);
+  static const KeyCode arrowRight = KeyCode._special(SpecialKey.arrowRight);
+  static const KeyCode home = KeyCode._special(SpecialKey.home);
+  static const KeyCode end = KeyCode._special(SpecialKey.end);
+  static const KeyCode pageUp = KeyCode._special(SpecialKey.pageUp);
+  static const KeyCode pageDown = KeyCode._special(SpecialKey.pageDown);
+  static const KeyCode insert = KeyCode._special(SpecialKey.insert);
+  static const KeyCode delete = KeyCode._special(SpecialKey.delete);
+  static const KeyCode f1 = KeyCode._special(SpecialKey.f1);
+  static const KeyCode f2 = KeyCode._special(SpecialKey.f2);
+  static const KeyCode f3 = KeyCode._special(SpecialKey.f3);
+  static const KeyCode f4 = KeyCode._special(SpecialKey.f4);
+  static const KeyCode f5 = KeyCode._special(SpecialKey.f5);
+  static const KeyCode f6 = KeyCode._special(SpecialKey.f6);
+  static const KeyCode f7 = KeyCode._special(SpecialKey.f7);
+  static const KeyCode f8 = KeyCode._special(SpecialKey.f8);
+  static const KeyCode f9 = KeyCode._special(SpecialKey.f9);
+  static const KeyCode f10 = KeyCode._special(SpecialKey.f10);
+  static const KeyCode f11 = KeyCode._special(SpecialKey.f11);
+  static const KeyCode f12 = KeyCode._special(SpecialKey.f12);
+
+  /// Canonical instances indexed by [SpecialKey.index] for [forSpecial].
+  static const List<KeyCode> _bySpecial = [
+    enter, tab, backspace, escape, //
+    arrowUp, arrowDown, arrowLeft, arrowRight, //
+    home, end, pageUp, pageDown, insert, delete, //
+    f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12,
+  ];
+
+  @override
+  bool operator ==(Object other) =>
+      other is KeyCode &&
+      other.character == character &&
+      other.special == special;
+
+  @override
+  int get hashCode => Object.hash(KeyCode, character, special);
+
+  @override
+  String toString() {
+    final s = special;
+    return s != null ? 'KeyCode.${s.name}' : "KeyCode.char('$character')";
+  }
 }
 
 /// Keyboard modifier flags.
@@ -74,26 +205,23 @@ sealed class TuiEvent {
   const TuiEvent();
 }
 
-/// A non-text key press: a special key (arrows, enter, escape, ...) or
-/// a Ctrl-shortcut.
+/// A non-text key press: exactly one [KeyCode] plus its modifiers.
 ///
-/// At least one of [keyCode] or [char] is non-null. When [char] is set,
-/// it carries the base character of a modified key (so Ctrl+C reports
-/// `char: 'c'`, `modifiers: {ctrl}`).
+/// Ctrl+C reports `KeyCode.c` with `modifiers: {KeyModifier.ctrl}`; Enter
+/// reports [KeyCode.enter]. On terminals, *unmodified* printables arrive
+/// as [TextInputEvent] rather than key events; character-coded `KeyEvent`s
+/// carry the base character of a modified key.
 @immutable
 final class KeyEvent extends TuiEvent {
-  const KeyEvent({
-    this.keyCode,
-    this.char,
+  const KeyEvent(
+    this.code, {
     this.modifiers = const <KeyModifier>{},
     this.type = KeyEventType.down,
-  }) : assert(
-         keyCode != null || char != null,
-         'KeyEvent must carry a keyCode or char',
-       );
+  });
 
-  final KeyCode? keyCode;
-  final String? char;
+  /// The logical key this event reports.
+  final KeyCode code;
+
   final Set<KeyModifier> modifiers;
 
   /// Whether this is a press, auto-repeat, or release. Always
@@ -108,15 +236,13 @@ final class KeyEvent extends TuiEvent {
   @override
   bool operator ==(Object other) =>
       other is KeyEvent &&
-      other.keyCode == keyCode &&
-      other.char == char &&
+      other.code == code &&
       other.type == type &&
       _setEquals(other.modifiers, modifiers);
 
   @override
   int get hashCode => Object.hash(
-    keyCode,
-    char,
+    code,
     type,
     modifiers.fold<int>(0, (acc, m) => acc ^ m.hashCode),
   );
@@ -129,7 +255,7 @@ final class KeyEvent extends TuiEvent {
       if (modifiers.contains(KeyModifier.shift)) 'shift',
       if (modifiers.contains(KeyModifier.superKey)) 'super',
       if (modifiers.contains(KeyModifier.meta)) 'meta',
-      if (keyCode != null) keyCode!.name else char ?? '',
+      code.special?.name ?? code.character ?? '',
     ];
     final suffix = type == KeyEventType.down ? '' : ' ${type.name}';
     return 'KeyEvent(${parts.join('+')}$suffix)';

@@ -232,82 +232,101 @@ void main() {
     // Finding 3 (P2): give-up must replay real keystrokes, not discard them —
     // otherwise a scripted/CI PTY that never answers DA loses everything typed
     // during an output stall, including the Ctrl+C escape hatch.
-    test('give-up replays buffered keystrokes instead of discarding them', () async {
-      driver.debugBeginLateProbeDrain(); // one probe timed out, draining
-      // The terminal never answers DA; the user's keystrokes are what arrive.
-      input.push([0x71, 0x03]); // 'q' then Ctrl+C
-      await _pump();
-      expect(driver.debugDrainingLateProbe, isTrue, reason: 'within grace');
+    test(
+      'give-up replays buffered keystrokes instead of discarding them',
+      () async {
+        driver.debugBeginLateProbeDrain(); // one probe timed out, draining
+        // The terminal never answers DA; the user's keystrokes are what arrive.
+        input.push([0x71, 0x03]); // 'q' then Ctrl+C
+        await _pump();
+        expect(driver.debugDrainingLateProbe, isTrue, reason: 'within grace');
 
-      await Future<void>.delayed(const Duration(milliseconds: 90));
-      await _pump();
-      expect(driver.debugDrainingLateProbe, isFalse);
+        await Future<void>.delayed(const Duration(milliseconds: 90));
+        await _pump();
+        expect(driver.debugDrainingLateProbe, isFalse);
 
-      expect(
-        events.whereType<TextInputEvent>().map((e) => e.text).join(),
-        'q',
-        reason: 'plain keystrokes typed during the stall survive give-up',
-      );
-      expect(
-        events.whereType<KeyEvent>().where((e) => e.hasCtrl && e.char == 'c'),
-        isNotEmpty,
-        reason: 'the Ctrl+C escape hatch must survive give-up',
-      );
-    });
+        expect(
+          events.whereType<TextInputEvent>().map((e) => e.text).join(),
+          'q',
+          reason: 'plain keystrokes typed during the stall survive give-up',
+        );
+        expect(
+          events.whereType<KeyEvent>().where(
+            (e) => e.hasCtrl && e.code.character == 'c',
+          ),
+          isNotEmpty,
+          reason: 'the Ctrl+C escape hatch must survive give-up',
+        );
+      },
+    );
 
-    test('give-up strips a straggling reply but replays the trailing keys', () async {
-      driver.debugBeginLateProbeDrain();
-      // A late Cursor-Position reply the terminal emitted, then a real 'x'.
-      input.push([..._cprReply, 0x78]);
-      await _pump();
+    test(
+      'give-up strips a straggling reply but replays the trailing keys',
+      () async {
+        driver.debugBeginLateProbeDrain();
+        // A late Cursor-Position reply the terminal emitted, then a real 'x'.
+        input.push([..._cprReply, 0x78]);
+        await _pump();
 
-      await Future<void>.delayed(const Duration(milliseconds: 90));
-      await _pump();
-      expect(driver.debugDrainingLateProbe, isFalse);
+        await Future<void>.delayed(const Duration(milliseconds: 90));
+        await _pump();
+        expect(driver.debugDrainingLateProbe, isFalse);
 
-      expect(
-        events.whereType<KeyEvent>(),
-        isEmpty,
-        reason: 'the straggling Cursor-Position reply is stripped, not decoded',
-      );
-      expect(
-        events.whereType<TextInputEvent>().map((e) => e.text).join(),
-        'x',
-        reason: 'real input trailing the reply is still replayed',
-      );
-    });
+        expect(
+          events.whereType<KeyEvent>(),
+          isEmpty,
+          reason:
+              'the straggling Cursor-Position reply is stripped, not decoded',
+        );
+        expect(
+          events.whereType<TextInputEvent>().map((e) => e.text).join(),
+          'x',
+          reason: 'real input trailing the reply is still replayed',
+        );
+      },
+    );
 
     // Finding 2 (P2): an abandoned bracketed paste (ESC[200~ with no ESC[201~)
     // must not capture all later input forever; a generous idle deadline
     // finalizes it and restores keyboard control.
-    test('an abandoned bracketed paste is finalized after the idle timeout', () async {
-      final savedPaste = PosixTerminalDriver.pasteIdleTimeout;
-      PosixTerminalDriver.pasteIdleTimeout = const Duration(milliseconds: 40);
-      try {
-        // Paste opens but the ESC[201~ terminator never arrives.
-        input.push([0x1B, 0x5B, ...'200~'.codeUnits, ...'hi'.codeUnits]);
-        await _pump();
-        expect(events, isEmpty, reason: 'paste still open — nothing emitted yet');
+    test(
+      'an abandoned bracketed paste is finalized after the idle timeout',
+      () async {
+        final savedPaste = PosixTerminalDriver.pasteIdleTimeout;
+        PosixTerminalDriver.pasteIdleTimeout = const Duration(milliseconds: 40);
+        try {
+          // Paste opens but the ESC[201~ terminator never arrives.
+          input.push([0x1B, 0x5B, ...'200~'.codeUnits, ...'hi'.codeUnits]);
+          await _pump();
+          expect(
+            events,
+            isEmpty,
+            reason: 'paste still open — nothing emitted yet',
+          );
 
-        await Future<void>.delayed(const Duration(milliseconds: 70));
-        await _pump();
-        expect(
-          events.whereType<PasteEvent>().map((e) => e.text),
-          ['hi'],
-          reason: 'the abandoned paste is force-finalized on the idle deadline',
-        );
+          await Future<void>.delayed(const Duration(milliseconds: 70));
+          await _pump();
+          expect(
+            events.whereType<PasteEvent>().map((e) => e.text),
+            ['hi'],
+            reason:
+                'the abandoned paste is force-finalized on the idle deadline',
+          );
 
-        // Keyboard control is restored: Ctrl+C now reaches the app.
-        input.push([0x03]);
-        await _pump();
-        expect(
-          events.whereType<KeyEvent>().where((e) => e.hasCtrl && e.char == 'c'),
-          isNotEmpty,
-          reason: 'input is no longer swallowed by the stuck paste',
-        );
-      } finally {
-        PosixTerminalDriver.pasteIdleTimeout = savedPaste;
-      }
-    });
+          // Keyboard control is restored: Ctrl+C now reaches the app.
+          input.push([0x03]);
+          await _pump();
+          expect(
+            events.whereType<KeyEvent>().where(
+              (e) => e.hasCtrl && e.code.character == 'c',
+            ),
+            isNotEmpty,
+            reason: 'input is no longer swallowed by the stuck paste',
+          );
+        } finally {
+          PosixTerminalDriver.pasteIdleTimeout = savedPaste;
+        }
+      },
+    );
   });
 }

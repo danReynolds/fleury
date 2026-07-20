@@ -40,7 +40,7 @@ void main() {
     expect(_screen(tester).contains('tip'), isTrue);
 
     // Move focus down to B; the tooltip disappears.
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
     expect(other.hasFocus, isTrue);
     expect(_screen(tester).contains('tip'), isFalse, reason: 'hidden on blur');
     expect(tester.overlay.entries.length, 1);
@@ -61,7 +61,7 @@ void main() {
     tester.render(size: const CellSize(20, 6));
     expect(_screen(tester).contains('Save file'), isTrue);
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+    tester.sendKey(const KeyEvent(KeyCode.escape));
     expect(node.hasFocus, isTrue, reason: 'Esc must not move focus');
     expect(
       _screen(tester).contains('Save file'),
@@ -115,7 +115,7 @@ void main() {
     );
     tester.render(size: const CellSize(20, 6));
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
 
     final region = tester.semantics().single(
       role: SemanticRole.region,

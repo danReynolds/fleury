@@ -17,12 +17,12 @@ Matcher _stateError(String message) => throwsA(
 
 KeyEvent _char(String c, {bool ctrl = false, bool alt = false}) {
   return KeyEvent(
-    char: c,
+    KeyCode.char(c),
     modifiers: {if (ctrl) KeyModifier.ctrl, if (alt) KeyModifier.alt},
   );
 }
 
-KeyEvent _code(KeyCode kc) => KeyEvent(keyCode: kc);
+KeyEvent _code(KeyCode kc) => KeyEvent(kc);
 
 /// Wires up a manager + dispatcher + element tree for testing.
 class _TestHarness {
@@ -500,8 +500,11 @@ void main() {
 
       h.dispatcher.dispatch(const TextInputEvent('b'));
       expect(switchBuffer, 1, reason: 'the sequence completes');
-      expect(controller.text, isEmpty,
-          reason: 'the continuation char must not corrupt the field');
+      expect(
+        controller.text,
+        isEmpty,
+        reason: 'the continuation char must not corrupt the field',
+      );
       expect(h.dispatcher.hasPendingSequence, isFalse);
     });
 

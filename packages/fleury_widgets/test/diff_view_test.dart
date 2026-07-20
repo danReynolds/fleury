@@ -109,18 +109,14 @@ index 1111111..2222222 100644
     expect(deleted.newPath, 'migrate.sql');
     expect(deleted.hunkIndex, 0);
 
-    final added = document.rows.singleWhere(
-      (row) => row.text == '+++i;',
-    );
+    final added = document.rows.singleWhere((row) => row.text == '+++i;');
     expect(added.kind, DiffLineKind.addition);
     expect(added.newLine, 2);
     expect(added.oldLine, isNull);
 
     // The deletion advanced oldCursor, so the following context keeps its true
     // numbering (old=3/new=3), not the off-by-one the misclassification caused.
-    final select = document.rows.singleWhere(
-      (row) => row.text == ' SELECT 1;',
-    );
+    final select = document.rows.singleWhere((row) => row.text == ' SELECT 1;');
     expect(select.kind, DiffLineKind.context);
     expect(select.oldLine, 3);
     expect(select.newLine, 3);
@@ -128,7 +124,10 @@ index 1111111..2222222 100644
 
   testWidgets('renders an old/new line-number gutter by default', (tester) {
     tester.pumpWidget(
-      DiffView(diff: '@@ -1,2 +1,2 @@\n context\n-old\n+new\n', semanticLabel: 'Patch'),
+      DiffView(
+        diff: '@@ -1,2 +1,2 @@\n context\n-old\n+new\n',
+        semanticLabel: 'Patch',
+      ),
     );
     final output = tester.renderToString(
       size: const CellSize(40, 8),
@@ -197,7 +196,9 @@ index 1111111..2222222 100644
       );
 
       tester.render(size: const CellSize(80, 12));
-      tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await Future<void>.delayed(Duration.zero);
 
       expect(
@@ -339,7 +340,9 @@ index 1111111..2222222 100644
       expect(unsafe.label, isNot(contains('secret')));
       expect(unsafe.state.outputSanitized, isTrue);
 
-      tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await Future<void>.delayed(Duration.zero);
 
       expect(tester.clipboard.readInProcess(), contains('+bad'));

@@ -248,7 +248,7 @@ Future<void> main() async {
   await runApp(
     const _Gallery(),
     onEvent: (event) {
-      if (event is KeyEvent && event.hasCtrl && event.char == 'c') {
+      if (event is KeyEvent && event.hasCtrl && event.code.character == 'c') {
         return const ExitRequested();
       }
       return null;

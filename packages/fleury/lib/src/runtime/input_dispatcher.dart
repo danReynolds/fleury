@@ -362,7 +362,7 @@ class InputDispatcher {
     if (!iterator.moveNext()) return null;
     final grapheme = iterator.current;
     if (iterator.moveNext()) return null;
-    return KeyEvent(char: grapheme);
+    return KeyEvent(KeyCode.char(grapheme));
   }
 
   KeyEventResult _dispatchPlain(

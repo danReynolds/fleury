@@ -160,7 +160,9 @@ void main() {
       expect(log.state['filterActive'], isTrue);
       expect(log.state.filterText, 'deploy');
 
-      tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await Future<void>.delayed(Duration.zero);
 
       expect(tester.clipboard.readInProcess(), '[ERROR stderr] deploy failed');
@@ -207,7 +209,7 @@ void main() {
       expect(task.actions, contains(SemanticAction.cancel));
       expect(task.state['canCancel'], isTrue);
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+      tester.sendKey(const KeyEvent(KeyCode.escape));
       await Future<void>.delayed(Duration.zero);
 
       expect(controller.status, TaskStatus.canceled);

@@ -64,11 +64,11 @@ void main() {
 
     take('mount');
 
-    driver.enqueue(const KeyEvent(char: 't'));
+    driver.enqueue(const KeyEvent(KeyCode.char('t')));
     await _settle();
     take('after t (rebuild)');
 
-    driver.enqueue(const KeyEvent(char: 's'));
+    driver.enqueue(const KeyEvent(KeyCode.char('s')));
     await _settle();
     take('after s (no-work: must be empty)');
 
@@ -84,7 +84,9 @@ void main() {
       matchesGolden('runtime/frame_driver_ansi_scenario.txt'),
     );
 
-    driver.enqueue(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+    driver.enqueue(
+      const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+    );
     await done;
   });
 }

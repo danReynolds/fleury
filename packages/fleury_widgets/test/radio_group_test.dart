@@ -39,10 +39,10 @@ void main() {
     tester.pumpWidget(_Host(picked: picked));
     tester.render(size: const CellSize(20, 4));
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // a -> b
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // b -> c
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // c -> a (wrap)
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp)); // a -> c (wrap)
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // a -> b
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // b -> c
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // c -> a (wrap)
+    tester.sendKey(const KeyEvent(KeyCode.arrowUp)); // a -> c (wrap)
     expect(picked, ['b', 'c', 'a', 'c']);
   });
 
@@ -59,9 +59,7 @@ void main() {
       ),
     );
     tester.render(size: const CellSize(20, 4));
-    tester.sendKey(
-      const KeyEvent(keyCode: KeyCode.arrowDown),
-    ); // a -> c (skip b)
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // a -> c (skip b)
     expect(picked, ['c']);
   });
 

@@ -61,10 +61,10 @@ void main() {
         ),
       );
       // Navigating only moves the preview cursor — nothing is committed yet.
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight));
       expect(received, isNull, reason: 'arrow previews without committing');
       // Enter locks in the highlighted color.
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(received, const AnsiColor(1));
     });
 
@@ -101,9 +101,9 @@ void main() {
         ),
       );
       tester.render(); // build snapshots the focus-in color
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight)); // preview 1
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.escape)); // abandon
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // commit cursor
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight)); // preview 1
+      tester.sendKey(const KeyEvent(KeyCode.escape)); // abandon
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // commit cursor
       expect(
         received,
         isNull,
@@ -135,8 +135,8 @@ void main() {
           onChanged: (c) => received = c,
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       // Default columns = 8, so down from 0 lands on 8.
       expect(received, const AnsiColor(8));
     });
@@ -151,7 +151,7 @@ void main() {
           onChanged: (c) => received = c,
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight));
       expect(received, isNull);
     });
 
@@ -164,8 +164,8 @@ void main() {
           onChanged: (c) => received = c,
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.home));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.home));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(received, const AnsiColor(0));
     });
 
@@ -178,8 +178,8 @@ void main() {
           onChanged: (c) => received = c,
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.end));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.end));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(received, const AnsiColor(15));
     });
 
@@ -194,8 +194,8 @@ void main() {
           onChanged: (c) => received = c,
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(received, const AnsiColor(5));
     });
 

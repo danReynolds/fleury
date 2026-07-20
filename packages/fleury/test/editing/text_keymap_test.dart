@@ -2,11 +2,11 @@ import 'package:fleury/fleury.dart';
 import 'package:test/test.dart';
 
 KeyEvent _code(KeyCode keyCode, [Set<KeyModifier> modifiers = const {}]) {
-  return KeyEvent(keyCode: keyCode, modifiers: modifiers);
+  return KeyEvent(keyCode, modifiers: modifiers);
 }
 
 KeyEvent _char(String char, [Set<KeyModifier> modifiers = const {}]) {
-  return KeyEvent(char: char, modifiers: modifiers);
+  return KeyEvent(KeyCode.char(char), modifiers: modifiers);
 }
 
 void main() {
@@ -81,7 +81,10 @@ void main() {
         isNull,
       );
       // Everything else is the standard multiline map.
-      expect(keymap.resolve(_code(KeyCode.arrowUp)), TextEditingKeyAction.moveUp);
+      expect(
+        keymap.resolve(_code(KeyCode.arrowUp)),
+        TextEditingKeyAction.moveUp,
+      );
       expect(
         keymap.resolve(_code(KeyCode.home)),
         TextEditingKeyAction.moveLineStart,

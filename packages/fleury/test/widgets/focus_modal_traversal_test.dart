@@ -17,10 +17,8 @@ import 'package:fleury/fleury.dart';
 import '../support/harness.dart';
 import 'package:test/test.dart';
 
-KeyEvent _code(KeyCode kc, {bool shift = false}) => KeyEvent(
-  keyCode: kc,
-  modifiers: shift ? const {KeyModifier.shift} : const {},
-);
+KeyEvent _code(KeyCode kc, {bool shift = false}) =>
+    KeyEvent(kc, modifiers: shift ? const {KeyModifier.shift} : const {});
 
 /// Records every focused node the manager broadcasts to, so a test can
 /// inspect the full transition path — not just where focus ended up.
@@ -834,7 +832,7 @@ void main() {
   });
 }
 
-KeyEvent _char(String c) => KeyEvent(char: c);
+KeyEvent _char(String c) => KeyEvent(KeyCode.char(c));
 
 /// Host whose `build()` calls a builder with the current rebuild count.
 /// Tests trigger a rebuild via `bump()`.

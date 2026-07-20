@@ -659,7 +659,9 @@ void main() {
       ),
     );
 
-    tester.sendKey(const KeyEvent(char: 'r', modifiers: {KeyModifier.ctrl}));
+    tester.sendKey(
+      const KeyEvent(KeyCode.char('r'), modifiers: {KeyModifier.ctrl}),
+    );
 
     expect(tester.exists(text('Overview body')), isFalse);
     expect(tester.exists(text('Runs body')), isTrue);
@@ -787,9 +789,15 @@ void main() {
       ),
     );
 
-    tester.sendKey(const KeyEvent(char: 'f', modifiers: {KeyModifier.ctrl}));
-    tester.sendKey(const KeyEvent(char: 'r', modifiers: {KeyModifier.ctrl}));
-    tester.sendKey(const KeyEvent(char: 'f', modifiers: {KeyModifier.ctrl}));
+    tester.sendKey(
+      const KeyEvent(KeyCode.char('f'), modifiers: {KeyModifier.ctrl}),
+    );
+    tester.sendKey(
+      const KeyEvent(KeyCode.char('r'), modifiers: {KeyModifier.ctrl}),
+    );
+    tester.sendKey(
+      const KeyEvent(KeyCode.char('f'), modifiers: {KeyModifier.ctrl}),
+    );
 
     expect(shellKey.currentState!.overviewRefreshes, 1);
     expect(shellKey.currentState!.runRefreshes, 1);
@@ -925,7 +933,9 @@ void main() {
 
     expect(tester.exists(text('Idle')), isTrue);
 
-    tester.sendKey(const KeyEvent(char: 'f', modifiers: {KeyModifier.ctrl}));
+    tester.sendKey(
+      const KeyEvent(KeyCode.char('f'), modifiers: {KeyModifier.ctrl}),
+    );
 
     expect(tester.exists(text('Task: done')), isTrue);
     final task = tester.semantics().single(
@@ -991,7 +1001,7 @@ void main() {
     );
 
     tester.render(size: const CellSize(24, 3));
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+    tester.sendKey(const KeyEvent(KeyCode.arrowRight));
     tester.pump();
 
     expect(right.hasFocus, isTrue);

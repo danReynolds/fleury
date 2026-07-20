@@ -821,12 +821,12 @@ class _DataTableState extends State<DataTable> {
     if (widget.copySelectedRow &&
         widget.columns.isNotEmpty &&
         event.hasCtrl &&
-        event.char?.toLowerCase() == 'c') {
+        event.code.character?.toLowerCase() == 'c') {
       unawaited(_copySelection());
       return KeyEventResult.handled;
     }
     final extend = event.hasShift;
-    switch (event.keyCode) {
+    switch (event.code) {
       // Boundary escape: an arrow at the grid edge bubbles so focus can leave
       // the table (Tab/Shift+Tab and Esc also leave). Shift-extends never
       // escape — they're an editing gesture, not navigation.
@@ -886,7 +886,7 @@ class _DataTableState extends State<DataTable> {
         widget.onSelect?.call(_controller.selectedIndex);
         return KeyEventResult.handled;
       default:
-        final ch = event.char;
+        final ch = event.code.character;
         if (widget.typeahead &&
             ch != null &&
             ch.length == 1 &&

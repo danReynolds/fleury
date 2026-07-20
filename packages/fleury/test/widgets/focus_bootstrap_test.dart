@@ -12,10 +12,8 @@ import 'package:fleury/fleury.dart';
 import '../support/harness.dart';
 import 'package:test/test.dart';
 
-KeyEvent _code(KeyCode kc, {bool shift = false}) => KeyEvent(
-  keyCode: kc,
-  modifiers: shift ? const {KeyModifier.shift} : const {},
-);
+KeyEvent _code(KeyCode kc, {bool shift = false}) =>
+    KeyEvent(kc, modifiers: shift ? const {KeyModifier.shift} : const {});
 
 void main() {
   group('keyboard bootstrap with nothing focused', () {
@@ -37,7 +35,7 @@ void main() {
         reason: 'precondition: nothing is focused',
       );
 
-      tester.sendKey(const KeyEvent(char: 'x'));
+      tester.sendKey(const KeyEvent(KeyCode.char('x')));
       expect(
         fired,
         1,
@@ -102,7 +100,7 @@ void main() {
       );
       tester.render(size: const CellSize(20, 1));
 
-      tester.sendKey(const KeyEvent(char: 'x'));
+      tester.sendKey(const KeyEvent(KeyCode.char('x')));
       expect(order, [
         'inner',
       ], reason: 'deepest binding consumes the event; outer never sees it');
@@ -129,7 +127,7 @@ void main() {
       tester.render(size: const CellSize(20, 1));
       expect(node.hasFocus, isFalse, reason: 'precondition: not focused');
 
-      tester.sendKey(const KeyEvent(char: ' '));
+      tester.sendKey(const KeyEvent(KeyCode.char(' ')));
       expect(
         sawKey,
         0,
@@ -139,7 +137,7 @@ void main() {
       // Once focused, it handles chords as normal.
       node.requestFocus();
       tester.pump();
-      tester.sendKey(const KeyEvent(char: ' '));
+      tester.sendKey(const KeyEvent(KeyCode.char(' ')));
       expect(sawKey, 1, reason: 'focused control handles chords');
     });
   });
@@ -186,7 +184,7 @@ void main() {
         );
         tester.render(size: const CellSize(20, 2));
 
-        tester.sendKey(const KeyEvent(char: 'x'));
+        tester.sendKey(const KeyEvent(KeyCode.char('x')));
         expect(insideFired, 1, reason: 'the in-modal binding fires');
         expect(
           outsideFired,

@@ -1693,7 +1693,7 @@ void main() {
 
     final event =
         transport.sent.whereType<InputEventFrame>().last.event as KeyEvent;
-    expect(event.keyCode, KeyCode.enter);
+    expect(event.code, KeyCode.enter);
     expect(event.modifiers, contains(KeyModifier.ctrl));
   });
 
@@ -1734,8 +1734,7 @@ void main() {
 
       final event =
           transport.sent.whereType<InputEventFrame>().last.event as KeyEvent;
-      expect(event.keyCode, isNull);
-      expect(event.char, 'a');
+      expect(event.code, KeyCode.char('a'));
       expect(event.modifiers, contains(KeyModifier.ctrl));
     },
   );

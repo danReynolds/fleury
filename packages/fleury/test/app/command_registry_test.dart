@@ -325,7 +325,9 @@ void main() {
         ),
       );
 
-      tester.sendKey(const KeyEvent(char: 's', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('s'), modifiers: {KeyModifier.ctrl}),
+      );
 
       expect(calls, 1);
     });
@@ -349,7 +351,9 @@ void main() {
         ),
       );
 
-      tester.sendKey(const KeyEvent(char: 's', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('s'), modifiers: {KeyModifier.ctrl}),
+      );
 
       expect(calls, 0);
       final command = tester.semantics().single(
@@ -378,7 +382,9 @@ void main() {
       );
 
       final registry = tester.commandRegistry();
-      tester.sendKey(const KeyEvent(char: 's', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('s'), modifiers: {KeyModifier.ctrl}),
+      );
       await Future<void>.delayed(Duration.zero);
 
       expect(registry.lastResult, isNull);

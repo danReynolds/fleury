@@ -150,7 +150,7 @@ void main() {
 
     // --- Invariant 5: input dispatched before the skip gate.
     final sentBefore = transport.sent.length;
-    transport.emit(const InputEventFrame(KeyEvent(char: 't')));
+    transport.emit(const InputEventFrame(KeyEvent(KeyCode.char('t'))));
     await _settle();
     expect(
       plans(),
@@ -170,7 +170,7 @@ void main() {
     // --- Invariant 3: a no-work frame writes nothing.
     final sentBeforeSilent = transport.sent.length;
     final tagsBeforeSilent = postFrameTags.length;
-    transport.emit(const InputEventFrame(KeyEvent(char: 's')));
+    transport.emit(const InputEventFrame(KeyEvent(KeyCode.char('s'))));
     await _settle();
     expect(
       transport.sent.length,

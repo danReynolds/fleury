@@ -29,7 +29,7 @@ Future<void> main() async {
     const HotReloadDemo(),
     enableHotReload: true,
     onEvent: (event) {
-      if (event is KeyEvent && event.hasCtrl && event.char == 'c') {
+      if (event is KeyEvent && event.hasCtrl && event.code.character == 'c') {
         return const ExitRequested();
       }
       return null;
@@ -67,7 +67,7 @@ class _HotReloadDemoState extends State<HotReloadDemo> {
   void _dec() => setState(() => _count = (_count - _step).clamp(0, _max));
 
   KeyEventResult _onKey(KeyEvent event) {
-    switch (event.keyCode) {
+    switch (event.code) {
       case KeyCode.arrowRight:
         _inc();
         return KeyEventResult.handled;

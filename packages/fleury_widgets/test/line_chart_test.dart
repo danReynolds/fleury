@@ -490,40 +490,43 @@ void main() {
       );
     });
 
-    testWidgets('a far out-of-range point clips instead of hanging paint', (
-      tester,
-    ) {
-      // A far-past-range x (unit mistake: seconds-scale x against a 0..1
-      // window) maps to a huge pixel column. The unbounded Bresenham walk
-      // then costs one iteration per pixel step — linear in the overshoot and
-      // paid every frame — freezing paint (measured seconds-to-minutes). With
-      // clipping the walk is bounded by the plot, so paint stays flat-fast
-      // regardless of how far out the point is. The threshold sits ~150× above
-      // a clipped paint (single-digit ms) yet far below the pre-fix cost
-      // (seconds) for this 1e7 overshoot, so there is no false-positive risk.
-      tester.pumpWidget(
-        SizedBox(
-          width: 20,
-          height: 8,
-          child: LineChart(
-            xRange: (0, 1),
-            yRange: (0, 1),
-            series: const [
-              LineSeries([(0, 0), (1e7, 0.5), (1, 1)]),
-            ],
-            showAxes: false,
+    testWidgets(
+      'a far out-of-range point clips instead of hanging paint',
+      (tester) {
+        // A far-past-range x (unit mistake: seconds-scale x against a 0..1
+        // window) maps to a huge pixel column. The unbounded Bresenham walk
+        // then costs one iteration per pixel step — linear in the overshoot and
+        // paid every frame — freezing paint (measured seconds-to-minutes). With
+        // clipping the walk is bounded by the plot, so paint stays flat-fast
+        // regardless of how far out the point is. The threshold sits ~150× above
+        // a clipped paint (single-digit ms) yet far below the pre-fix cost
+        // (seconds) for this 1e7 overshoot, so there is no false-positive risk.
+        tester.pumpWidget(
+          SizedBox(
+            width: 20,
+            height: 8,
+            child: LineChart(
+              xRange: (0, 1),
+              yRange: (0, 1),
+              series: const [
+                LineSeries([(0, 0), (1e7, 0.5), (1, 1)]),
+              ],
+              showAxes: false,
+            ),
           ),
-        ),
-      );
-      final stopwatch = Stopwatch()..start();
-      tester.render(size: const CellSize(20, 8));
-      stopwatch.stop();
-      expect(
-        stopwatch.elapsedMilliseconds,
-        lessThan(750),
-        reason: 'clipping must bound the line walk; the overshoot froze paint',
-      );
-    }, timeout: const Timeout(Duration(seconds: 60)));
+        );
+        final stopwatch = Stopwatch()..start();
+        tester.render(size: const CellSize(20, 8));
+        stopwatch.stop();
+        expect(
+          stopwatch.elapsedMilliseconds,
+          lessThan(750),
+          reason:
+              'clipping must bound the line walk; the overshoot froze paint',
+        );
+      },
+      timeout: const Timeout(Duration(seconds: 60)),
+    );
 
     testWidgets('NaN and infinite y values do not crash', (tester) {
       tester.pumpWidget(
@@ -959,7 +962,7 @@ void main() {
           ),
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight));
       final buf = tester.render(size: const CellSize(30, 8));
       // 4 data x's → cursor moves to index 1 → x=1, t≈0.333 across 30 cols.
       // Find which column has the cursor — expect it advanced away from 0.
@@ -1076,9 +1079,9 @@ void main() {
           ),
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.end));
+      tester.sendKey(const KeyEvent(KeyCode.end));
       // Another arrow-right should be a no-op.
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight));
       final buf = tester.render(size: const CellSize(30, 8));
       // Cursor should be at the rightmost column (col 29).
       var rightCursor = 0;
@@ -1254,7 +1257,7 @@ void main() {
           ),
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight));
       final out = tester.renderToString(
         size: const CellSize(40, 10),
         emptyMark: ' ',
@@ -1354,7 +1357,7 @@ void main() {
       );
       // Jump cursor to the last x with End. With only 2 x's, that's x=1
       // at the right edge.
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.end));
+      tester.sendKey(const KeyEvent(KeyCode.end));
       final buf = tester.render(size: const CellSize(40, 8));
       var leftBorderCol = -1;
       for (var c = 0; c < 40; c++) {

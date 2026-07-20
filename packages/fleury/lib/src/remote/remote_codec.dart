@@ -998,6 +998,10 @@ Set<int> applyRemotePlanToBuffer(RemotePlan plan, CellBuffer mirror) {
 
 const int _evKey = 1;
 const int _evText = 2;
+
+// [KeyEvent.code] payload discriminants within an _evKey record.
+const int _keyKindSpecial = 0;
+const int _keyKindChar = 1;
 const int _evComposition = 3;
 const int _evMouse = 4;
 const int _evPaste = 5;
@@ -1027,11 +1031,16 @@ Uint8List encodeInputEvent(TuiEvent event) {
   switch (event) {
     case KeyEvent e:
       w.u8(_evKey);
-      // keyCode is optional; encode presence then index.
-      w.boolean(e.keyCode != null);
-      if (e.keyCode != null) w.u8(e.keyCode!.index);
-      w.boolean(e.char != null);
-      if (e.char != null) w.str(e.char!);
+      // The code is one of two kinds; a leading discriminant picks the
+      // payload shape (special-key enum index vs UTF-8 character).
+      final special = e.code.special;
+      if (special != null) {
+        w.u8(_keyKindSpecial);
+        w.u8(special.index);
+      } else {
+        w.u8(_keyKindChar);
+        w.str(e.code.character!);
+      }
       _writeModifiers(w, e.modifiers);
       w.u8(e.type.index);
     case TextInputEvent e:
@@ -1083,21 +1092,25 @@ TuiEvent decodeInputEvent(Uint8List bytes) {
   final TuiEvent event;
   switch (tag) {
     case _evKey:
-      final keyCode = r.boolean() ? r.enumValue(KeyCode.values) : null;
-      final char = r.boolean() ? r.str() : null;
+      final kind = r.u8();
+      final KeyCode code;
+      switch (kind) {
+        case _keyKindSpecial:
+          code = KeyCode.forSpecial(r.enumValue(SpecialKey.values));
+        case _keyKindChar:
+          final char = r.str();
+          if (char.isEmpty) {
+            throw const RemoteCodecException(
+              'key event character must be non-empty',
+            );
+          }
+          code = KeyCode.char(char);
+        default:
+          throw RemoteCodecException('unknown key code kind $kind');
+      }
       final mods = _readModifiers(r);
       final type = r.enumValue(KeyEventType.values);
-      if (keyCode == null && char == null) {
-        throw const RemoteCodecException(
-          'key event must carry a keyCode or char',
-        );
-      }
-      event = KeyEvent(
-        keyCode: keyCode,
-        char: char,
-        modifiers: mods,
-        type: type,
-      );
+      event = KeyEvent(code, modifiers: mods, type: type);
     case _evText:
       event = TextInputEvent(r.str());
     case _evComposition:

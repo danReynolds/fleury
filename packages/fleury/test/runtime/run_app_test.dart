@@ -335,7 +335,7 @@ void main() {
         expect(controller.text, 'startup');
 
         driver.enqueue(
-          const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+          const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
         );
         await future.timeout(const Duration(seconds: 2));
       } finally {
@@ -401,7 +401,7 @@ void main() {
       final driver = _LifecycleFaultDriver(
         onEnter: (events) {
           for (var i = 0; i < 4097; i += 1) {
-            events.add(const KeyEvent(char: 'x'));
+            events.add(const KeyEvent(KeyCode.char('x')));
           }
         },
       );
@@ -451,7 +451,9 @@ void main() {
       await _settle();
       expect(driver.isActive, isTrue);
 
-      driver.enqueue(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      driver.enqueue(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await future;
 
       expect(driver.isActive, isFalse);
@@ -477,17 +479,17 @@ void main() {
           expect(driver.isActive, isTrue);
 
           driver.enqueue(
-            const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+            const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
           );
           await Future<void>.delayed(Duration.zero);
 
           expect(driver.isActive, isTrue);
           expect(clipboard.readInProcess(), 'copy');
 
-          driver.enqueue(const KeyEvent(keyCode: KeyCode.arrowRight));
+          driver.enqueue(const KeyEvent(KeyCode.arrowRight));
           await Future<void>.delayed(Duration.zero);
           driver.enqueue(
-            const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+            const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
           );
           await future;
 
@@ -512,7 +514,7 @@ void main() {
         await _settle();
 
         driver.clearOutput();
-        driver.enqueue(const KeyEvent(keyCode: KeyCode.enter));
+        driver.enqueue(const KeyEvent(KeyCode.enter));
         await _settle();
 
         // The throw is reported on screen and the session keeps running — a
@@ -532,7 +534,7 @@ void main() {
 
         // Clean shutdown via Ctrl+C restores the terminal exactly once.
         driver.enqueue(
-          const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+          const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
         );
         await future;
         expect(sessionFailed, isFalse);
@@ -549,7 +551,7 @@ void main() {
         driver: driver,
         enableHotReload: false,
         onEvent: (event) {
-          if (event is KeyEvent && event.keyCode == KeyCode.enter) {
+          if (event is KeyEvent && event.code == KeyCode.enter) {
             // Three uncaught async failures land as three reports in the
             // same microtask window — all before the banner entry's lazy
             // insert microtask runs. The insert must be idempotent.
@@ -562,7 +564,7 @@ void main() {
       );
       await _settle();
 
-      driver.enqueue(const KeyEvent(keyCode: KeyCode.enter));
+      driver.enqueue(const KeyEvent(KeyCode.enter));
       await _settle();
 
       // A double insert would trip OverlayState.insert's already-inserted
@@ -572,7 +574,9 @@ void main() {
       expect(driver.output, contains('3 errors'));
       expect(driver.output, isNot(contains('4 errors')));
 
-      driver.enqueue(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      driver.enqueue(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await future;
       await driver.dispose();
     });
@@ -603,7 +607,9 @@ void main() {
       );
 
       // The session is still interactive: Ctrl+C exits cleanly.
-      driver.enqueue(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      driver.enqueue(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await future;
       expect(driver.isActive, isFalse);
       expect(driver.restoreCallCount, 1);
@@ -621,10 +627,12 @@ void main() {
       await _settle();
       // Events after the contained crash still dispatch (the session is
       // alive); then exit.
-      driver.enqueue(const KeyEvent(keyCode: KeyCode.enter));
+      driver.enqueue(const KeyEvent(KeyCode.enter));
       await _settle();
       expect(driver.isActive, isTrue);
-      driver.enqueue(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      driver.enqueue(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await future;
       expect(driver.restoreCallCount, 1);
       await driver.dispose();
@@ -646,7 +654,9 @@ void main() {
       // terminal restored, and runApp completes normally. Without the fix this
       // future never completes (30s timeout) and restoreCallCount stays 0; the
       // 5s timeout here makes a regression fail loudly instead of hanging.
-      driver.enqueue(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      driver.enqueue(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await future.timeout(const Duration(seconds: 5));
       expect(
         driver.restoreCallCount,
@@ -670,7 +680,7 @@ void main() {
           );
           await _settle();
           driver.enqueue(
-            const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+            const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
           );
 
           await future.timeout(const Duration(seconds: 2));
@@ -693,7 +703,7 @@ void main() {
         );
         await _settle();
         driver.enqueue(
-          const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+          const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
         );
 
         await future.timeout(const Duration(seconds: 3));
@@ -723,7 +733,7 @@ void main() {
         );
         await _settle();
         driver.enqueue(
-          const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+          const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
         );
 
         await future.timeout(const Duration(seconds: 2));
@@ -745,7 +755,7 @@ void main() {
         );
         await _settle();
         driver.enqueue(
-          const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+          const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
         );
 
         await future.timeout(const Duration(seconds: 2));
@@ -778,7 +788,7 @@ void main() {
         expect(TuiBinding.of(context!).rootNavigator, isNull);
 
         driver.enqueue(
-          const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+          const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
         );
         await future;
       } finally {
@@ -821,7 +831,7 @@ void main() {
           expect(TuiBinding.of(routeContext!).rootNavigator, same(navigator));
           expect(nodeA.hasFocus, isTrue, reason: 'autofocus lands on A');
 
-          driver.enqueue(const KeyEvent(keyCode: KeyCode.arrowDown));
+          driver.enqueue(const KeyEvent(KeyCode.arrowDown));
           await _settle();
           expect(
             nodeB.hasFocus,
@@ -832,7 +842,7 @@ void main() {
           );
 
           driver.enqueue(
-            const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+            const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
           );
           await future;
         } finally {
@@ -877,7 +887,9 @@ void main() {
         reason: 'the whole screen is re-emitted, not diffed away as unchanged',
       );
 
-      driver.enqueue(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      driver.enqueue(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await future;
       await driver.dispose();
     });
@@ -902,7 +914,9 @@ void main() {
       expect(driver.output, contains('\x1B[2J'));
       expect(driver.output, contains('HANDOFF-MARKER'));
 
-      driver.enqueue(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      driver.enqueue(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await future;
       await driver.dispose();
     });
@@ -934,7 +948,9 @@ void main() {
       await _settle();
       expect(driver.enterCallCount, 1);
 
-      driver.enqueue(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      driver.enqueue(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await future;
       expect(driver.restoreCallCount, 1);
       await driver.dispose();
@@ -956,7 +972,7 @@ void main() {
       await _settle();
 
       driver.clearOutput();
-      driver.enqueue(const KeyEvent(keyCode: KeyCode.f12)); // open Logs
+      driver.enqueue(const KeyEvent(KeyCode.f12)); // open Logs
       await _settle();
       expect(
         driver.output.contains('Logs'),
@@ -964,7 +980,9 @@ void main() {
         reason: 'debug shell opens on its Logs tab',
       );
 
-      driver.enqueue(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      driver.enqueue(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await future;
       await driver.dispose();
     });
@@ -997,7 +1015,7 @@ void main() {
           expect(first.dirtySpans.coveredCellCount, first.dirtyCells);
 
           driver.enqueue(
-            const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+            const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
           );
           await future;
         } finally {
@@ -1058,7 +1076,7 @@ void main() {
         expect(secondBoundaries.copiedCellCount, greaterThan(0));
 
         driver.enqueue(
-          const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+          const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
         );
         await future;
       } finally {
@@ -1080,7 +1098,7 @@ void main() {
           driver: driver,
           enableHotReload: false,
           onEvent: (event) {
-            if (event is KeyEvent && event.keyCode == KeyCode.enter) {
+            if (event is KeyEvent && event.code == KeyCode.enter) {
               throw StateError('banner-boom');
             }
             return null;
@@ -1094,7 +1112,7 @@ void main() {
         expect(frames.last.repaintBoundaries.boundaryCount, 0);
 
         driver.clearOutput();
-        driver.enqueue(const KeyEvent(keyCode: KeyCode.enter));
+        driver.enqueue(const KeyEvent(KeyCode.enter));
         await _settle();
 
         // The report mounted the banner entry (a microtask later): two
@@ -1127,7 +1145,7 @@ void main() {
         expect(driver.isActive, isTrue);
 
         driver.enqueue(
-          const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+          const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
         );
         await future;
       } finally {
@@ -1145,7 +1163,7 @@ void main() {
           driver: driver,
           enableHotReload: false,
           onEvent: (event) {
-            if (event is KeyEvent && event.keyCode == KeyCode.enter) {
+            if (event is KeyEvent && event.code == KeyCode.enter) {
               key.currentState!.shrink();
             }
             return null;
@@ -1154,7 +1172,7 @@ void main() {
         await _settle();
 
         driver.clearOutput();
-        driver.enqueue(const KeyEvent(keyCode: KeyCode.enter));
+        driver.enqueue(const KeyEvent(KeyCode.enter));
         await _settle();
 
         expect(
@@ -1164,7 +1182,7 @@ void main() {
         );
 
         driver.enqueue(
-          const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+          const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
         );
         await future;
       } finally {
@@ -1185,7 +1203,7 @@ void main() {
           driver: driver,
           enableHotReload: false,
           onEvent: (event) {
-            if (event is KeyEvent && event.keyCode == KeyCode.enter) {
+            if (event is KeyEvent && event.code == KeyCode.enter) {
               key.currentState!.increment();
             }
             return null;
@@ -1194,7 +1212,7 @@ void main() {
         await _settle();
         frames.clear();
 
-        driver.enqueue(const KeyEvent(keyCode: KeyCode.enter));
+        driver.enqueue(const KeyEvent(KeyCode.enter));
         await _settle();
 
         expect(frames, isNotEmpty);
@@ -1206,7 +1224,7 @@ void main() {
         );
 
         driver.enqueue(
-          const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+          const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
         );
         await future;
       } finally {
@@ -1230,10 +1248,10 @@ void main() {
 
           driver.resize(const CellSize(30, 6));
           await _settle();
-          driver.enqueue(const KeyEvent(keyCode: KeyCode.enter));
+          driver.enqueue(const KeyEvent(KeyCode.enter));
           await _settle();
           driver.enqueue(
-            const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+            const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
           );
           await future;
 
@@ -1286,7 +1304,7 @@ void main() {
       await _settle();
 
       driver.clearOutput();
-      driver.enqueue(const KeyEvent(keyCode: KeyCode.f12)); // open Logs
+      driver.enqueue(const KeyEvent(KeyCode.f12)); // open Logs
       await _settle();
       expect(
         driver.output.contains('Logs'),
@@ -1294,7 +1312,9 @@ void main() {
         reason: 'F12 must fire even inside a modal route — escape hatch',
       );
 
-      driver.enqueue(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      driver.enqueue(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await future;
       await driver.dispose();
     });
@@ -1317,7 +1337,9 @@ void main() {
       await _settle();
 
       driver.clearOutput();
-      driver.enqueue(const KeyEvent(char: 'y', modifiers: {KeyModifier.ctrl}));
+      driver.enqueue(
+        const KeyEvent(KeyCode.char('y'), modifiers: {KeyModifier.ctrl}),
+      );
       await _settle();
       await _settle();
       expect(
@@ -1329,7 +1351,9 @@ void main() {
             'terminal',
       );
 
-      driver.enqueue(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      driver.enqueue(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await future;
       await driver.dispose();
     });
@@ -1367,14 +1391,14 @@ void main() {
       }
     });
 
-    test('an error thrown in build() is reported, not silently swallowed',
-        () async {
-      // build() errors are contained (red ErrorWidget) and the app survives,
-      // but pre-fix the error reached no reporter — no stderr, no banner, no
-      // debug history, stack trace lost. It must reach the reporter's log.
-      final logged = _StderrCapture();
-      await IOOverrides.runZoned(
-        () async {
+    test(
+      'an error thrown in build() is reported, not silently swallowed',
+      () async {
+        // build() errors are contained (red ErrorWidget) and the app survives,
+        // but pre-fix the error reached no reporter — no stderr, no banner, no
+        // debug history, stack trace lost. It must reach the reporter's log.
+        final logged = _StderrCapture();
+        await IOOverrides.runZoned(() async {
           final driver = _LifecycleFaultDriver();
           final future = runApp(
             const _ThrowingBuild(),
@@ -1383,24 +1407,23 @@ void main() {
           );
           await _settle();
           driver.enqueue(
-            const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+            const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
           );
           await future;
           await driver.dispose();
-        },
-        stderr: () => logged,
-      );
-      expect(logged.text, contains('build-boom'));
-    });
+        }, stderr: () => logged);
+        expect(logged.text, contains('build-boom'));
+      },
+    );
 
-    test('an async error thrown after the app exits is surfaced on stderr',
-        () async {
-      // A Timer created in the guarded zone that fires after a clean exit:
-      // pre-fix the disposed reporter swallowed it (no trace, exit 0). The
-      // terminal is already restored, so it must reach stderr.
-      final logged = _StderrCapture();
-      await IOOverrides.runZoned(
-        () async {
+    test(
+      'an async error thrown after the app exits is surfaced on stderr',
+      () async {
+        // A Timer created in the guarded zone that fires after a clean exit:
+        // pre-fix the disposed reporter swallowed it (no trace, exit 0). The
+        // terminal is already restored, so it must reach stderr.
+        final logged = _StderrCapture();
+        await IOOverrides.runZoned(() async {
           final driver = _LifecycleFaultDriver();
           final future = runApp(
             const _LateThrowApp(),
@@ -1409,17 +1432,16 @@ void main() {
           );
           await _settle();
           driver.enqueue(
-            const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+            const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
           );
           await future;
           // Let the post-exit Timer fire inside the still-live guarded zone.
           await Future<void>.delayed(const Duration(milliseconds: 120));
           await driver.dispose();
-        },
-        stderr: () => logged,
-      );
-      expect(logged.text, contains('late-boom'));
-    });
+        }, stderr: () => logged);
+        expect(logged.text, contains('late-boom'));
+      },
+    );
   });
 }
 

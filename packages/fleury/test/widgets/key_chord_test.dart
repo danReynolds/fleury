@@ -9,7 +9,7 @@ KeyEvent _char(
   bool shift = false,
 }) {
   return KeyEvent(
-    char: c,
+    KeyCode.char(c),
     modifiers: {
       if (ctrl) KeyModifier.ctrl,
       if (alt) KeyModifier.alt,
@@ -25,7 +25,7 @@ KeyEvent _code(
   bool shift = false,
 }) {
   return KeyEvent(
-    keyCode: kc,
+    kc,
     modifiers: {
       if (ctrl) KeyModifier.ctrl,
       if (alt) KeyModifier.alt,

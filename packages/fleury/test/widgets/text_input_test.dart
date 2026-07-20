@@ -6,11 +6,11 @@ import 'package:fleury/fleury.dart';
 import '../support/harness.dart';
 import 'package:test/test.dart';
 
-KeyEvent _code(KeyCode kc) => KeyEvent(keyCode: kc);
+KeyEvent _code(KeyCode kc) => KeyEvent(kc);
 KeyEvent _shiftCode(KeyCode kc) =>
-    KeyEvent(keyCode: kc, modifiers: const {KeyModifier.shift});
+    KeyEvent(kc, modifiers: const {KeyModifier.shift});
 KeyEvent _ctrlChar(String c) =>
-    KeyEvent(char: c, modifiers: const {KeyModifier.ctrl});
+    KeyEvent(KeyCode.char(c), modifiers: const {KeyModifier.ctrl});
 
 final class _DispatcherSink implements TuiEventSink {
   const _DispatcherSink(this.dispatcher);
@@ -296,16 +296,13 @@ void main() {
       tester.pumpWidget(TextInput(controller: controller, autofocus: true));
 
       tester.sendKey(
-        const KeyEvent(
-          keyCode: KeyCode.arrowLeft,
-          modifiers: {KeyModifier.ctrl},
-        ),
+        const KeyEvent(KeyCode.arrowLeft, modifiers: {KeyModifier.ctrl}),
       );
       expect(controller.caretOffset, 11);
 
       tester.sendKey(
         const KeyEvent(
-          keyCode: KeyCode.arrowLeft,
+          KeyCode.arrowLeft,
           modifiers: {KeyModifier.ctrl, KeyModifier.shift},
         ),
       );

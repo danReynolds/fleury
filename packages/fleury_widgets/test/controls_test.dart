@@ -31,14 +31,14 @@ void main() {
       tester.pumpWidget(
         Checkbox(value: false, autofocus: true, onChanged: (v) => changed = v),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(changed, isTrue);
     });
 
     testWidgets('does not toggle when unfocused', (tester) {
       var calls = 0;
       tester.pumpWidget(Checkbox(value: false, onChanged: (_) => calls++));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(calls, 0);
     });
 
@@ -208,7 +208,7 @@ void main() {
           onChanged: (v) => picked = v,
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(picked, 3);
     });
 

@@ -135,7 +135,7 @@ class _SelectState<T> extends State<Select<T>> {
   KeyEventResult _onTriggerKey(KeyEvent event) {
     if (widget.onChanged == null) return KeyEventResult.ignored;
     if (_isOpen) return KeyEventResult.ignored;
-    if (event.keyCode == KeyCode.enter || event.keyCode == KeyCode.arrowDown) {
+    if (event.code == KeyCode.enter || event.code == KeyCode.arrowDown) {
       _open();
       return KeyEventResult.handled;
     }
@@ -474,7 +474,7 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
 
   KeyEventResult _onKey(KeyEvent event) {
     if (!_enabled) return KeyEventResult.ignored;
-    switch (event.keyCode) {
+    switch (event.code) {
       case KeyCode.arrowUp:
         final previous = _step(-1);
         if (previous != null) _moveTo(previous);
@@ -493,7 +493,7 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
         _toggleHighlighted();
         return KeyEventResult.handled;
       default:
-        if (event.char == 'a' && event.hasCtrl && !event.hasAlt) {
+        if (event.code.character == 'a' && event.hasCtrl && !event.hasAlt) {
           _selectAll();
           return KeyEventResult.handled;
         }
@@ -702,7 +702,7 @@ class _SelectListState<T> extends State<_SelectList<T>> {
   }
 
   KeyEventResult _onKey(KeyEvent event) {
-    switch (event.keyCode) {
+    switch (event.code) {
       case KeyCode.arrowUp:
         final n = _step(_list.selectedIndex ?? widget.options.length, -1);
         if (n != null) _list.selectedIndex = n;
@@ -725,7 +725,7 @@ class _SelectListState<T> extends State<_SelectList<T>> {
         widget.onDismiss();
         return KeyEventResult.handled;
       default:
-        final ch = event.char;
+        final ch = event.code.character;
         if (ch != null &&
             ch.length == 1 &&
             ch.codeUnitAt(0) >= 0x21 &&

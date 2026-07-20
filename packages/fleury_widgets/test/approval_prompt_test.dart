@@ -133,7 +133,7 @@ void main() {
 
       // Enter activates the focused button — which must be Deny for a
       // destructive request, so a single Enter can't drop the database.
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(decision, ApprovalDecision.denied);
     });
 
@@ -145,9 +145,9 @@ void main() {
           onDecision: (value) => decision = value,
         ),
       );
-      tester.sendKey(const KeyEvent(char: 'n'));
+      tester.sendKey(const KeyEvent(KeyCode.char('n')));
       expect(decision, ApprovalDecision.denied);
-      tester.sendKey(const KeyEvent(char: 'y'));
+      tester.sendKey(const KeyEvent(KeyCode.char('y')));
       expect(decision, ApprovalDecision.approved);
     });
   });

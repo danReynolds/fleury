@@ -175,7 +175,8 @@ void main() {
       expect(
         out,
         contains('[j] next'),
-        reason: 'the free alias keeps the binding visible without its claimed '
+        reason:
+            'the free alias keeps the binding visible without its claimed '
             'alias',
       );
       expect(out, contains('scroll'), reason: 'the deeper binding owns Down');
@@ -246,7 +247,11 @@ void main() {
         ),
       );
       final out = bar(tester);
-      expect(out, contains('deepSave'), reason: 'the deeper binding owns the key');
+      expect(
+        out,
+        contains('deepSave'),
+        reason: 'the deeper binding owns the key',
+      );
       expect(
         out,
         isNot(contains('shallowSave')),
@@ -297,7 +302,7 @@ void main() {
       );
       expect(bar(tester), contains('reveal'));
 
-      tester.sendKey(const KeyEvent(char: 'r')); // toggles the label
+      tester.sendKey(const KeyEvent(KeyCode.char('r'))); // toggles the label
       // The notify is microtask-deferred (didUpdateWidget runs mid-build).
       await tester.settle();
       expect(
@@ -321,7 +326,7 @@ void main() {
         reason: 'no rebuild, no content change → label unchanged',
       );
 
-      tester.sendKey(const KeyEvent(char: 'r')); // real content change
+      tester.sendKey(const KeyEvent(KeyCode.char('r'))); // real content change
       await tester.settle();
       expect(bar(tester), contains('hide'));
     });

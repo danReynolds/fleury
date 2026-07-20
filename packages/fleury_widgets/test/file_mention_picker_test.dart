@@ -101,7 +101,7 @@ void main() {
       tester.type('docs/launch');
       tester.pump();
       tester.render(size: const CellSize(90, 6));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
 
       expect(picked?.entry.path, 'docs/launch.md');
       expect(picked?.entryIndex, 1);

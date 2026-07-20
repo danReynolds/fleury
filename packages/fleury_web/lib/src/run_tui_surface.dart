@@ -627,8 +627,7 @@ final class _PendingSemanticAction {
 String _frameReasonForEvent(TuiEvent event) {
   return switch (event) {
     ResizeEvent() => 'resize',
-    KeyEvent(:final keyCode, :final char) =>
-      'key:${keyCode?.name ?? char ?? '?'}',
+    KeyEvent(:final code) => 'key:${code.special?.name ?? code.character!}',
     TextInputEvent() => 'text-input',
     TextCompositionEvent(:final kind) => 'text-composition:${kind.name}',
     PasteEvent() => 'paste',

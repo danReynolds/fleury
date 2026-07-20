@@ -199,9 +199,7 @@ void main() {
     testWidgets('renders a connecting timeline rail (first/middle/last)', (
       tester,
     ) {
-      tester.pumpWidget(
-        TraceTimeline(label: 'Demo trace', events: _events()),
-      );
+      tester.pumpWidget(TraceTimeline(label: 'Demo trace', events: _events()));
       final out = tester.renderToString(
         size: const CellSize(90, 5),
         emptyMark: ' ',
@@ -240,7 +238,7 @@ void main() {
       );
 
       tester.render(size: const CellSize(90, 5));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
 
       expect(selected?.event.id, 'trace.boot');
       expect(selected?.eventIndex, 0);

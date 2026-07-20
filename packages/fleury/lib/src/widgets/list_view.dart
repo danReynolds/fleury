@@ -736,8 +736,7 @@ class _ListViewState extends State<ListView> {
   }
 
   KeyEventResult _handleKey(KeyEvent event) {
-    final code = event.keyCode;
-    if (code == null) return KeyEventResult.ignored;
+    final code = event.code;
     final count = widget.effectiveItemCount;
     if (count == 0) return KeyEventResult.ignored;
 

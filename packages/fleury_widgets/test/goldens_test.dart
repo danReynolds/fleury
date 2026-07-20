@@ -73,11 +73,9 @@ void main() {
           ],
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight)); // expand lib
-      tester.sendKey(
-        const KeyEvent(keyCode: KeyCode.arrowRight),
-      ); // step to src
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight)); // expand src
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight)); // expand lib
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight)); // step to src
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight)); // expand src
       expect(
         tester.renderToString(size: const CellSize(18, 6)),
         matchesGolden('tree/expanded.txt'),
@@ -420,7 +418,7 @@ void main() {
           ),
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight));
       expect(
         tester.renderToString(size: const CellSize(40, 10)),
         matchesGolden('viz/line_chart_crosshair.txt'),

@@ -93,9 +93,9 @@ Future<void> main(List<String> args) async {
   stdout.writeln(
     latencyMode
         ? 'serve live-wire: scenario=$scenario samples=$latencySamples '
-              'runs=$runs port=$port'
+            'runs=$runs port=$port'
         : 'serve live-wire: scenario=$scenario steps=$steps '
-              'interval=${intervalMs}ms runs=$runs port=$port',
+            'interval=${intervalMs}ms runs=$runs port=$port',
   );
 
   final serve = await _bootServe(paths, port, scenario, steps, intervalMs);
@@ -134,11 +134,11 @@ Future<void> main(List<String> args) async {
       samples.add(m);
       final timing = m.latencyP50Ms != null
           ? 'input→paint p50 ${m.latencyP50Ms!.toStringAsFixed(1)} '
-                'p95 ${m.latencyP95Ms!.toStringAsFixed(1)} '
-                'max ${m.latencyMaxMs!.toStringAsFixed(1)} ms '
-                '(${m.latencySamples} keys)'
+              'p95 ${m.latencyP95Ms!.toStringAsFixed(1)} '
+              'max ${m.latencyMaxMs!.toStringAsFixed(1)} ms '
+              '(${m.latencySamples} keys)'
           : 'cadence p50 ${m.cadenceP50Ms!.toStringAsFixed(1)} '
-                'p95 ${m.cadenceP95Ms!.toStringAsFixed(1)} ms';
+              'p95 ${m.cadenceP95Ms!.toStringAsFixed(1)} ms';
       stdout.writeln(
         'run $run/$runs: plan ${m.planFrames}f '
         '${m.planBytesPerFrame.toStringAsFixed(1)} B/f · '
@@ -161,7 +161,8 @@ Future<void> main(List<String> args) async {
       if (latencyFailures.every((f) => f == _LatencyFailure.keyTimeout)) {
         why = 'every run lost a key to the per-key timeout — the input→paint '
             'path is broken (reproduces across $runs run(s)).';
-      } else if (latencyFailures.every((f) => f == _LatencyFailure.extraPlans)) {
+      } else if (latencyFailures
+          .every((f) => f == _LatencyFailure.extraPlans)) {
         why = 'every run saw unsolicited PLAN frames — one-key⟹one-plan '
             'attribution is broken: either the scenario app self-ticks, or '
             'the frame loop now emits more than one plan per input event.';
@@ -190,13 +191,13 @@ Future<void> main(List<String> args) async {
   stdout.writeln(
     latencyMode
         ? 'median: input→paint p50 ${result['latencyP50Ms']} ms · '
-              'p95 ${result['latencyP95Ms']} ms · '
-              'total ${result['totalBytes']} B raw / '
-              '${result['deflatedBytes']} B deflated'
+            'p95 ${result['latencyP95Ms']} ms · '
+            'total ${result['totalBytes']} B raw / '
+            '${result['deflatedBytes']} B deflated'
         : 'median: plan ${result['planBytesPerFrame']} B/f · '
-              'semantics ${result['semanticsBytesPerFrame']} B/f · '
-              'total ${result['totalBytes']} B raw / ${result['deflatedBytes']} B '
-              'deflated · p95 cadence ${result['cadenceP95Ms']} ms',
+            'semantics ${result['semanticsBytesPerFrame']} B/f · '
+            'total ${result['totalBytes']} B raw / ${result['deflatedBytes']} B '
+            'deflated · p95 cadence ${result['cadenceP95Ms']} ms',
   );
   if (outPath != null) {
     File(outPath).writeAsStringSync(
@@ -485,7 +486,7 @@ Future<(_RunMetrics?, _LatencyFailure?)> _captureLatencyRun(
     final plansBefore = planBytes.length;
     planWaiter = Completer<double>();
     final sentAt = sw.elapsedMicroseconds / 1000.0;
-    ws.add(encodeFrame(const InputEventFrame(KeyEvent(char: 'k'))));
+    ws.add(encodeFrame(const InputEventFrame(KeyEvent(KeyCode.char('k')))));
     final arrival = await awaitPlan(keyTimeout);
     if (arrival == null) {
       final infra = socketDown;
@@ -622,7 +623,8 @@ Map<String, Object?> _median(
     'planFrames': med(samples.map((s) => s.planFrames)),
     'semanticsFrames': med(samples.map((s) => s.semanticsFrames)),
     'planBytesPerFrame': med1(samples.map((s) => s.planBytesPerFrame)),
-    'semanticsBytesPerFrame': med1(samples.map((s) => s.semanticsBytesPerFrame)),
+    'semanticsBytesPerFrame':
+        med1(samples.map((s) => s.semanticsBytesPerFrame)),
     'totalBytes': med(samples.map((s) => s.totalBytes)),
     'deflatedBytes': med(samples.map((s) => s.deflatedBytes)),
     'otherBytes': med(samples.map((s) => s.otherBytes)),

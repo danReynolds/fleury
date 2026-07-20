@@ -279,7 +279,7 @@ void main() {
         contains('layout-boom'),
       );
 
-      tester.sendKey(const KeyEvent(char: 'f'));
+      tester.sendKey(const KeyEvent(KeyCode.char('f')));
       final out = tester.renderToString(size: const CellSize(30, 6));
       expect(out, contains('healthy###'), reason: 'subtree re-attempted');
       expect(out, isNot(contains('⚠')));
@@ -384,7 +384,7 @@ void main() {
         );
         tester.render(size: const CellSize(30, 6));
 
-        tester.sendKey(const KeyEvent(char: 'g'));
+        tester.sendKey(const KeyEvent(KeyCode.char('g')));
         expect(tester.dispatcher.hasPendingSequence, isTrue);
 
         key.currentState!.failPaint();
@@ -393,7 +393,7 @@ void main() {
           tester.renderToString(size: const CellSize(30, 6)),
           contains('⚠'),
         );
-        tester.sendKey(const KeyEvent(char: 'g'));
+        tester.sendKey(const KeyEvent(KeyCode.char('g')));
 
         expect(triggers, 0);
         expect(tester.dispatcher.hasPendingSequence, isFalse);
@@ -719,7 +719,7 @@ void _coherenceOracle() {
     expect(contained, contains('layout-boom'), reason: 'panel on the wire');
 
     // Recover: the 'f' binding heals the subtree.
-    transport.emit(const InputEventFrame(KeyEvent(char: 'f')));
+    transport.emit(const InputEventFrame(KeyEvent(KeyCode.char('f'))));
     await Future<void>.delayed(const Duration(milliseconds: 20));
 
     mirrorText();

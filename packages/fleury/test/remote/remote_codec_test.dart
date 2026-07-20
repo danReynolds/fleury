@@ -732,10 +732,17 @@ void main() {
   });
 
   group('INPUT_EVENT round-trip', () {
-    test('key event with code, char, modifiers, type', () {
+    test('character-key event round-trips, including non-ASCII', () {
+      const ascii = KeyEvent(KeyCode.c, modifiers: {KeyModifier.ctrl});
+      expect(decodeInputEvent(encodeInputEvent(ascii)), ascii);
+
+      const unicode = KeyEvent(KeyCode.char('é'), modifiers: {KeyModifier.alt});
+      expect(decodeInputEvent(encodeInputEvent(unicode)), unicode);
+    });
+
+    test('special-key event with modifiers and type', () {
       const event = KeyEvent(
-        keyCode: KeyCode.arrowDown,
-        char: 'c',
+        KeyCode.arrowDown,
         modifiers: {KeyModifier.ctrl, KeyModifier.shift},
         type: KeyEventType.repeat,
       );
@@ -797,7 +804,7 @@ void main() {
     });
 
     test('through the framing layer', () {
-      const event = KeyEvent(keyCode: KeyCode.enter);
+      const event = KeyEvent(KeyCode.enter);
       final wire = encodeFrame(const InputEventFrame(event));
       final out = (FrameDecoder()..feed(wire)).drain().toList();
       expect(out, hasLength(1));
@@ -1077,14 +1084,12 @@ TuiEvent _randomEvent(Random rng) {
   };
   switch (rng.nextInt(6)) {
     case 0:
-      final hasCode = rng.nextBool();
       return KeyEvent(
-        keyCode: hasCode
-            ? KeyCode.values[rng.nextInt(KeyCode.values.length)]
-            : null,
-        char: hasCode && rng.nextBool()
-            ? null
-            : String.fromCharCode(97 + rng.nextInt(26)),
+        rng.nextBool()
+            ? KeyCode.forSpecial(
+                SpecialKey.values[rng.nextInt(SpecialKey.values.length)],
+              )
+            : KeyCode.char(String.fromCharCode(97 + rng.nextInt(26))),
         modifiers: mods(),
         type: KeyEventType.values[rng.nextInt(KeyEventType.values.length)],
       );

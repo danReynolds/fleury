@@ -69,7 +69,7 @@ void main() {
     tester.pump();
     expect(_screen(tester, rows: 10).contains('second'), isTrue);
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+    tester.sendKey(const KeyEvent(KeyCode.escape));
     tester.pump();
     final out = _screen(tester, rows: 10);
     expect(out.contains('second'), isFalse, reason: 'latest toast dismissed');
@@ -169,7 +169,9 @@ void main() {
       tester.pump();
       expect(_screen(tester, cols: 40).contains('Undo'), isTrue);
 
-      tester.sendKey(const KeyEvent(char: 'u', modifiers: {KeyModifier.alt}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('u'), modifiers: {KeyModifier.alt}),
+      );
       expect(undone, 1);
       tester.pump();
       expect(
@@ -258,7 +260,8 @@ void main() {
       expect(
         stats.boundaryCount,
         0,
-        reason: 'single visible entry → boundaries stay pass-through: an '
+        reason:
+            'single visible entry → boundaries stay pass-through: an '
             'idle Toaster must not tax app frames',
       );
 

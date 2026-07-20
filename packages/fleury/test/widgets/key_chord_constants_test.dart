@@ -16,7 +16,7 @@ KeyEvent _key(
   bool alt = false,
   bool shift = false,
 }) => KeyEvent(
-  keyCode: k,
+  k,
   modifiers: {
     if (ctrl) KeyModifier.ctrl,
     if (alt) KeyModifier.alt,
@@ -54,8 +54,11 @@ void main() {
 
   group('KeyChord named statics — match the right events', () {
     test('.space matches a space char event', () {
-      expect(KeyChord.space.matches(const KeyEvent(char: ' ')), isTrue);
-      expect(KeyChord.space.matches(const KeyEvent(char: 'a')), isFalse);
+      expect(KeyChord.space.matches(const KeyEvent(KeyCode.char(' '))), isTrue);
+      expect(
+        KeyChord.space.matches(const KeyEvent(KeyCode.char('a'))),
+        isFalse,
+      );
     });
     test('.enter / .escape / .tab match their keycodes', () {
       expect(KeyChord.enter.matches(_key(KeyCode.enter)), isTrue);
@@ -97,7 +100,7 @@ void main() {
       );
       tester.render(size: const CellSize(10, 1));
 
-      tester.sendKey(const KeyEvent(char: ' '));
+      tester.sendKey(const KeyEvent(KeyCode.char(' ')));
       tester.pump();
       expect(sp, 1);
 
@@ -120,13 +123,17 @@ void main() {
       );
       tester.render(size: const CellSize(10, 1));
 
-      tester.sendKey(const KeyEvent(char: 's', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('s'), modifiers: {KeyModifier.ctrl}),
+      );
       tester.pump();
-      tester.sendKey(const KeyEvent(char: 'x', modifiers: {KeyModifier.alt}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('x'), modifiers: {KeyModifier.alt}),
+      );
       tester.pump();
       tester.sendKey(
         const KeyEvent(
-          char: 'p',
+          KeyCode.char('p'),
           modifiers: {KeyModifier.ctrl, KeyModifier.shift},
         ),
       );
@@ -150,7 +157,7 @@ void main() {
       // Strict match: fires only on Ctrl+Shift+Space.
       tester.sendKey(
         const KeyEvent(
-          char: ' ',
+          KeyCode.char(' '),
           modifiers: {KeyModifier.ctrl, KeyModifier.shift},
         ),
       );
@@ -158,12 +165,14 @@ void main() {
       expect(fired, 1);
 
       // Bare Ctrl+Space → no match.
-      tester.sendKey(const KeyEvent(char: ' ', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char(' '), modifiers: {KeyModifier.ctrl}),
+      );
       tester.pump();
       expect(fired, 1);
 
       // Bare Space → no match.
-      tester.sendKey(const KeyEvent(char: ' '));
+      tester.sendKey(const KeyEvent(KeyCode.char(' ')));
       tester.pump();
       expect(fired, 1);
     });
@@ -194,9 +203,9 @@ void main() {
       );
       tester.render(size: const CellSize(10, 1));
 
-      tester.sendKey(const KeyEvent(char: 'd'));
+      tester.sendKey(const KeyEvent(KeyCode.char('d')));
       tester.pump();
-      tester.sendKey(const KeyEvent(char: 'd'));
+      tester.sendKey(const KeyEvent(KeyCode.char('d')));
       tester.pump();
       expect(fired, 1);
     });
@@ -213,9 +222,13 @@ void main() {
       );
       tester.render(size: const CellSize(10, 1));
 
-      tester.sendKey(const KeyEvent(char: 'x', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('x'), modifiers: {KeyModifier.ctrl}),
+      );
       tester.pump();
-      tester.sendKey(const KeyEvent(char: 's', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('s'), modifiers: {KeyModifier.ctrl}),
+      );
       tester.pump();
       expect(fired, 1);
     });

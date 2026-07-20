@@ -328,7 +328,7 @@ void main() {
     tester.pumpWidget(const $className());
 
     expect(tester.renderToString(emptyMark: ' '), contains('Count: 0'));
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     expect(tester.renderToString(emptyMark: ' '), contains('Count: 1'));
   });
 

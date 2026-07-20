@@ -604,7 +604,7 @@ KeyEvent? keyEventFromBrowser(web.KeyboardEvent event) {
   final type = event.repeat ? KeyEventType.repeat : KeyEventType.down;
   if (_isBrowserPasteAccelerator(event, key, keyCode)) return null;
   if (keyCode != null) {
-    return KeyEvent(keyCode: keyCode, modifiers: modifiers, type: type);
+    return KeyEvent(keyCode, modifiers: modifiers, type: type);
   }
 
   if (_isBrowserTextInputModifiedKey(event, key)) return null;
@@ -612,7 +612,7 @@ KeyEvent? keyEventFromBrowser(web.KeyboardEvent event) {
   final shortcut = event.ctrlKey || event.altKey || event.metaKey;
   if (!shortcut || key.length != 1) return null;
   return KeyEvent(
-    char: _shortcutChar(key),
+    KeyCode.char(_shortcutChar(key)),
     modifiers: _shortcutModifiersFromKeyboard(event),
     type: type,
   );

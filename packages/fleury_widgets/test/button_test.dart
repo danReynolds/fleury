@@ -18,7 +18,7 @@ void main() {
       tester.pumpWidget(
         Button(label: 'Save', autofocus: true, onPressed: () => presses++),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(presses, 1);
     });
 
@@ -57,7 +57,7 @@ void main() {
     testWidgets('does not activate when unfocused', (tester) {
       var presses = 0;
       tester.pumpWidget(Button(label: 'Save', onPressed: () => presses++));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(presses, 0);
     });
 
@@ -132,7 +132,7 @@ void main() {
         final buf = tester.render(size: const CellSize(10, 1));
         expect(buf.atColRow(0, 0).style.dim, isTrue, reason: 'muted = dim');
         // Nothing claimed focus, so Enter reaches nothing.
-        tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+        tester.sendKey(const KeyEvent(KeyCode.enter));
         expect(presses, 0);
       });
 

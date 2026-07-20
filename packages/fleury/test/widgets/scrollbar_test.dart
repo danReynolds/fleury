@@ -171,7 +171,7 @@ void main() {
         ),
       );
       tester.render(size: const CellSize(8, 4));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.end)); // → last item
+      tester.sendKey(const KeyEvent(KeyCode.end)); // → last item
       final buf = tester.render(size: const CellSize(8, 4));
       expect(
         _col(buf, 7).endsWith('█'),
@@ -202,7 +202,11 @@ void main() {
       );
       // 10 rows content, 4-row viewport → thumb round(4*4/10)=2 at the top.
       final buf = tester.render(size: const CellSize(6, 4));
-      expect(_col(buf, 5), '██││', reason: 'thumb (2 of 4) at top over 10 rows');
+      expect(
+        _col(buf, 5),
+        '██││',
+        reason: 'thumb (2 of 4) at top over 10 rows',
+      );
     });
 
     testWidgets('scrollbar: true under unbounded width fails loudly, not '

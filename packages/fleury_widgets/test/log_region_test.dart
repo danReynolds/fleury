@@ -158,7 +158,9 @@ void main() {
       );
 
       tester.render(size: const CellSize(60, 4));
-      tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await Future<void>.delayed(Duration.zero);
 
       expect(tester.clipboard.readInProcess(), '[WARN worker] needs attention');
@@ -371,7 +373,9 @@ void main() {
       );
       expect(rowFallback.states, contains('row 2, view row 0, row key c'));
 
-      tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await Future<void>.delayed(Duration.zero);
 
       expect(tester.clipboard.readInProcess(), '[ERROR worker] deploy failed');
@@ -575,13 +579,10 @@ void main() {
     (tester) {
       final controller = LogRegionController(followTail: true);
       List<LogEntry> build(int count) => [
-        for (var i = 0; i < count; i++)
-          LogEntry(id: 'e$i', message: 'line $i'),
+        for (var i = 0; i < count; i++) LogEntry(id: 'e$i', message: 'line $i'),
       ];
 
-      tester.pumpWidget(
-        LogRegion(controller: controller, entries: build(8)),
-      );
+      tester.pumpWidget(LogRegion(controller: controller, entries: build(8)));
       tester.render(size: const CellSize(40, 3));
       expect(controller.selectedIndex, 7);
       expect(controller.visibleRange?.first, 5);
@@ -593,15 +594,14 @@ void main() {
       expect(
         controller.selectedIndex,
         2,
-        reason: 'the jump must move the selection to the target so a later '
+        reason:
+            'the jump must move the selection to the target so a later '
             'relayout keeps it in view',
       );
       expect(controller.visibleRange?.first, 2);
 
       // A streamed entry arrives; the list relayouts.
-      tester.pumpWidget(
-        LogRegion(controller: controller, entries: build(9)),
-      );
+      tester.pumpWidget(LogRegion(controller: controller, entries: build(9)));
       tester.render(size: const CellSize(40, 3));
 
       // The viewport must stay on the jumped-to region, not snap back to the

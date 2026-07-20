@@ -23,7 +23,7 @@ void main() {
           onChanged: (v) => received = v,
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
+      tester.sendKey(const KeyEvent(KeyCode.arrowUp));
       expect(received, 13);
     });
 
@@ -65,7 +65,7 @@ void main() {
           onChanged: (v) => received = v,
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
       expect(received, 8);
     });
 
@@ -80,8 +80,8 @@ void main() {
           onChanged: calls.add,
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.pageUp));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.pageDown));
+      tester.sendKey(const KeyEvent(KeyCode.pageUp));
+      tester.sendKey(const KeyEvent(KeyCode.pageDown));
       expect(calls, [75, 25]);
     });
 
@@ -96,8 +96,8 @@ void main() {
           onChanged: calls.add,
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.home));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.end));
+      tester.sendKey(const KeyEvent(KeyCode.home));
+      tester.sendKey(const KeyEvent(KeyCode.end));
       expect(calls, [0, 100]);
     });
 
@@ -106,7 +106,7 @@ void main() {
       tester.pumpWidget(
         Stepper(value: 10, max: 10, autofocus: true, onChanged: (_) => count++),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
+      tester.sendKey(const KeyEvent(KeyCode.arrowUp));
       expect(count, 0, reason: 'already at max, no change');
     });
 
@@ -136,7 +136,7 @@ void main() {
         tester.renderToString(size: const CellSize(16, 1)).contains('42'),
         isTrue,
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(calls, [42]);
     });
 
@@ -153,7 +153,7 @@ void main() {
       );
       tester.type('9');
       tester.type('9');
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(calls, [10]);
     });
 
@@ -163,7 +163,7 @@ void main() {
         Stepper(value: 5, autofocus: true, onChanged: calls.add),
       );
       tester.type('9');
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+      tester.sendKey(const KeyEvent(KeyCode.escape));
       expect(calls, isEmpty);
       // Display reverts to the controlled value.
       expect(

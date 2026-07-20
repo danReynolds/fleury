@@ -105,7 +105,9 @@ void main() {
         enableHotReload: false,
       );
       await Future<void>.delayed(const Duration(milliseconds: 5));
-      driver.enqueue(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      driver.enqueue(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await future;
       await driver.dispose();
     });
@@ -129,12 +131,12 @@ void main() {
       );
       tester.render(size: const CellSize(10, 1));
 
-      tester.sendKey(const KeyEvent(char: ' '));
+      tester.sendKey(const KeyEvent(KeyCode.char(' ')));
       tester.pump();
       expect(spaceFired, 1);
       expect(enterFired, 0);
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       tester.pump();
       expect(enterFired, 1);
       expect(spaceFired, 1);
@@ -155,7 +157,7 @@ void main() {
         ),
       );
       tester.render(size: const CellSize(10, 1));
-      tester.sendKey(const KeyEvent(char: 'q'));
+      tester.sendKey(const KeyEvent(KeyCode.char('q')));
       tester.pump();
       expect(fired, 1);
     });

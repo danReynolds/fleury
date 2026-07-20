@@ -1308,7 +1308,7 @@ class _SelectionScrollStoryState extends State<_SelectionScrollStory> {
   }
 
   KeyEventResult _handleListKey(KeyEvent event) {
-    return switch (event.keyCode) {
+    return switch (event.code) {
       KeyCode.arrowUp => _moveList(-1),
       KeyCode.arrowDown => _moveList(1),
       _ => KeyEventResult.ignored,

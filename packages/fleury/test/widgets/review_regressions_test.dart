@@ -225,7 +225,7 @@ void main() {
           'autofocus must not yank focus out of the modal',
     );
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+    tester.sendKey(const KeyEvent(KeyCode.escape));
     tester.pump();
     expect(home!.navigator.depth, 1, reason: 'Esc still dismisses the modal');
   });

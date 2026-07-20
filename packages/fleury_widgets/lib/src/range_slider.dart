@@ -228,7 +228,7 @@ class _RangeSliderState extends State<RangeSlider> {
 
   KeyEventResult _onKey(KeyEvent event) {
     if (!_enabled) return KeyEventResult.ignored;
-    switch (event.keyCode) {
+    switch (event.code) {
       // Up/Down adjust the active handle's value — the universal slider
       // convention (Up = increase, Down = decrease). They bubble (escape)
       // once the handle is pinned against its bound, so arrow-based focus

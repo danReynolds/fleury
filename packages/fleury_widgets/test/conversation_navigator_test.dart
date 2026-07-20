@@ -139,7 +139,7 @@ void main() {
       tester.type('deploy-review');
       tester.pump();
       tester.render(size: const CellSize(90, 6));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
 
       expect(selected?.entry.id, 'deploy-review');
       expect(selected?.entryIndex, 1);

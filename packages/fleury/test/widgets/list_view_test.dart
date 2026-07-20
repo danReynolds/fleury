@@ -5,7 +5,7 @@ import 'package:fleury/fleury.dart';
 import '../support/harness.dart';
 import 'package:test/test.dart';
 
-KeyEvent _code(KeyCode kc) => KeyEvent(keyCode: kc);
+KeyEvent _code(KeyCode kc) => KeyEvent(kc);
 
 MouseEvent _mouse(MouseEventKind kind, int col, int row) =>
     MouseEvent(kind: kind, button: MouseButton.left, col: col, row: row);
@@ -555,7 +555,8 @@ void main() {
       expect(
         tester.renderToString(size: const CellSize(12, 4), emptyMark: ' '),
         contains('Item 0'),
-        reason: 'dropping the controller for the internal fallback must not '
+        reason:
+            'dropping the controller for the internal fallback must not '
             'blank the list',
       );
     });
@@ -1332,7 +1333,8 @@ void main() {
       expect(
         netMounted,
         {for (var i = 990; i <= 999; i++) i},
-        reason: 'only the visible tail window stays mounted; the pre-jump '
+        reason:
+            'only the visible tail window stays mounted; the pre-jump '
             'first walk (0..9) and the probe boundary (989) must not leak',
       );
     });

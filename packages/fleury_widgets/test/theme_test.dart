@@ -37,7 +37,7 @@ void main() {
         ),
       ),
     );
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // open
+    tester.sendKey(const KeyEvent(KeyCode.enter)); // open
     final buf = tester.render(size: const CellSize(20, 6));
     // Find the 'N' of the selected "New" row and check it's underlined.
     var found = false;

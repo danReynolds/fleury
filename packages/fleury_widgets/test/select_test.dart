@@ -183,7 +183,7 @@ void main() {
         isTrue,
       );
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(tester.semantics().where(role: SemanticRole.menu), isEmpty);
 
       final result = await tester.invokeSemanticAction(
@@ -195,7 +195,7 @@ void main() {
 
     testWidgets('Enter opens the list anchored below the trigger', (tester) {
       tester.pumpWidget(const _Host());
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       final out = _screen(tester);
       expect(out.contains('Red'), isTrue);
       expect(out.contains('Green'), isTrue);
@@ -205,9 +205,9 @@ void main() {
     testWidgets('Down then Enter picks the next option and closes', (tester) {
       String? picked;
       tester.pumpWidget(_Host(initial: 'red', onPick: (v) => picked = v));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // open
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // -> Green
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // pick
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // open
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // -> Green
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // pick
       expect(picked, 'green');
       final out = _screen(tester);
       expect(out.contains('Green'), isTrue, reason: 'trigger shows new value');
@@ -218,9 +218,9 @@ void main() {
     testWidgets('Esc closes without changing the value', (tester) {
       String? picked;
       tester.pumpWidget(_Host(initial: 'red', onPick: (v) => picked = v));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      tester.sendKey(const KeyEvent(KeyCode.escape));
       expect(picked, isNull);
       final out = _screen(tester);
       expect(out.contains('Red'), isTrue, reason: 'value unchanged');
@@ -229,7 +229,7 @@ void main() {
 
     testWidgets('the open list marks the currently-selected option', (tester) {
       tester.pumpWidget(const _Host(initial: 'green'));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(_screen(tester).contains('• Green'), isTrue);
     });
 
@@ -246,9 +246,9 @@ void main() {
           ],
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // open at Red
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // skip Green
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // open at Red
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // skip Green
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(picked, 'blue');
     });
 
@@ -450,7 +450,7 @@ void main() {
     testWidgets('Enter toggles the highlighted option', (tester) {
       tester.pumpWidget(const _MultiHost());
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
 
       final out = _screen(tester, cols: 18, rows: 3);
       expect(out.contains('[x] Red'), isTrue);
@@ -459,13 +459,17 @@ void main() {
     testWidgets('Ctrl+A selects all, then deselects all', (tester) {
       tester.pumpWidget(const _MultiHost());
 
-      tester.sendKey(const KeyEvent(char: 'a', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('a'), modifiers: {KeyModifier.ctrl}),
+      );
       var out = _screen(tester, cols: 18, rows: 3);
       expect(out.contains('[x] Red'), isTrue);
       expect(out.contains('[x] Green'), isTrue);
       expect(out.contains('[x] Blue'), isTrue);
 
-      tester.sendKey(const KeyEvent(char: 'a', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('a'), modifiers: {KeyModifier.ctrl}),
+      );
       out = _screen(tester, cols: 18, rows: 3);
       expect(out.contains('[ ] Red'), isTrue);
       expect(out.contains('[ ] Blue'), isTrue);
@@ -487,8 +491,8 @@ void main() {
         ),
       );
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
 
       expect(picked, {'red', 'blue'});
     });
@@ -559,7 +563,7 @@ void main() {
     final closed = _screen(tester, cols: 32);
     expect(closed, isNot(contains('secret')), reason: 'trigger label');
     expect(closed, contains(replacementCharacter));
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // open
+    tester.sendKey(const KeyEvent(KeyCode.enter)); // open
     final open = _screen(tester, cols: 32);
     expect(open, isNot(contains('secret')), reason: 'list row label');
     final rows = tester.semantics().byRole(SemanticRole.menuItem);

@@ -144,12 +144,12 @@ void main() {
     tester.render(size: const CellSize(20, 2));
     expect(c.index, 0);
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+    tester.sendKey(const KeyEvent(KeyCode.arrowRight));
     expect(c.index, 1);
     expect(_row(tester, 1), 'bbb', reason: 'content follows the selection');
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowLeft));
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowLeft));
+    tester.sendKey(const KeyEvent(KeyCode.arrowLeft));
+    tester.sendKey(const KeyEvent(KeyCode.arrowLeft));
     expect(c.index, 2, reason: 'wrapped past 0 to the last tab');
     expect(_row(tester, 1), 'ccc');
   });
@@ -262,7 +262,7 @@ void main() {
         ),
       );
       tester.render(size: const CellSize(20, 2));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight));
       expect(c.index, 0, reason: 'unfocused strip ignores arrows');
     });
   });
@@ -282,7 +282,9 @@ void main() {
         ),
       );
       tester.render(size: const CellSize(20, 2));
-      tester.sendKey(const KeyEvent(char: '3', modifiers: {KeyModifier.alt}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('3'), modifiers: {KeyModifier.alt}),
+      );
       expect(c.index, 2);
       expect(_row(tester, 1), 'ccc');
     });
@@ -310,7 +312,9 @@ void main() {
       );
       tester.render(size: const CellSize(20, 2));
       expect(inner.hasFocus, isTrue);
-      tester.sendKey(const KeyEvent(char: '2', modifiers: {KeyModifier.alt}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('2'), modifiers: {KeyModifier.alt}),
+      );
       expect(c.index, 1, reason: 'accelerator fired from inside the content');
       expect(_row(tester, 1), 'bbb');
     });
@@ -479,8 +483,8 @@ void main() {
       tester.render(size: const CellSize(20, 2));
 
       counter.requestFocus();
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(_row(tester, 1), 'count=2');
 
       c.index = 1; // hide tab A
@@ -519,7 +523,7 @@ void main() {
       a.requestFocus();
       // Cycle: only the strip and tab A's node are traversable; B is hidden.
       for (var i = 0; i < 4; i++) {
-        tester.sendKey(const KeyEvent(keyCode: KeyCode.tab));
+        tester.sendKey(const KeyEvent(KeyCode.tab));
         expect(
           b.hasFocus,
           isFalse,
@@ -543,7 +547,7 @@ class _CounterState extends State<_Counter> {
   Widget build(BuildContext context) => Focus(
     focusNode: widget.focusNode,
     onKey: (e) {
-      if (e.keyCode == KeyCode.enter) {
+      if (e.code == KeyCode.enter) {
         setState(() => _count++);
         return KeyEventResult.handled;
       }

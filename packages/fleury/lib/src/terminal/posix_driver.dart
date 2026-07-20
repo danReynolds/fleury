@@ -653,7 +653,7 @@ class PosixTerminalDriver
     if (!_active ||
         !_nativeRawMode ||
         event is! KeyEvent ||
-        event.char != 'z' ||
+        event.code.character != 'z' ||
         event.type != KeyEventType.down ||
         event.modifiers.length != 1 ||
         !event.hasCtrl) {

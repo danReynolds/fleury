@@ -687,14 +687,14 @@ bool _matchStep(KeyChord step, KeyEvent event) {
   // KeyCode path — strict shift match (special chords never have
   // "implicit shift" the way characters do).
   if (step._keyCode != null) {
-    if (event.keyCode != step._keyCode) return false;
+    if (event.code != step._keyCode) return false;
     if (step._shift != event.hasShift) return false;
     return true;
   }
 
   // Character path with shift-canonicalisation.
   final stepChar = step._char;
-  final eventChar = event.char;
+  final eventChar = event.code.character;
   if (stepChar == null || eventChar == null) return false;
 
   final stepLower = stepChar.toLowerCase();
@@ -727,33 +727,36 @@ String _stepLabel(KeyChord step) {
   return '${mods.join('+')}+$base';
 }
 
-String _keyCodeLabel(KeyCode k) => switch (k) {
-  KeyCode.enter => 'Enter',
-  KeyCode.tab => 'Tab',
-  KeyCode.backspace => 'Backspace',
-  KeyCode.escape => 'Esc',
-  KeyCode.arrowUp => '↑',
-  KeyCode.arrowDown => '↓',
-  KeyCode.arrowLeft => '←',
-  KeyCode.arrowRight => '→',
-  KeyCode.home => 'Home',
-  KeyCode.end => 'End',
-  KeyCode.pageUp => 'PgUp',
-  KeyCode.pageDown => 'PgDn',
-  KeyCode.insert => 'Ins',
-  KeyCode.delete => 'Del',
-  KeyCode.f1 => 'F1',
-  KeyCode.f2 => 'F2',
-  KeyCode.f3 => 'F3',
-  KeyCode.f4 => 'F4',
-  KeyCode.f5 => 'F5',
-  KeyCode.f6 => 'F6',
-  KeyCode.f7 => 'F7',
-  KeyCode.f8 => 'F8',
-  KeyCode.f9 => 'F9',
-  KeyCode.f10 => 'F10',
-  KeyCode.f11 => 'F11',
-  KeyCode.f12 => 'F12',
+String _keyCodeLabel(KeyCode k) => switch (k.special) {
+  SpecialKey.enter => 'Enter',
+  SpecialKey.tab => 'Tab',
+  SpecialKey.backspace => 'Backspace',
+  SpecialKey.escape => 'Esc',
+  SpecialKey.arrowUp => '↑',
+  SpecialKey.arrowDown => '↓',
+  SpecialKey.arrowLeft => '←',
+  SpecialKey.arrowRight => '→',
+  SpecialKey.home => 'Home',
+  SpecialKey.end => 'End',
+  SpecialKey.pageUp => 'PgUp',
+  SpecialKey.pageDown => 'PgDn',
+  SpecialKey.insert => 'Ins',
+  SpecialKey.delete => 'Del',
+  SpecialKey.f1 => 'F1',
+  SpecialKey.f2 => 'F2',
+  SpecialKey.f3 => 'F3',
+  SpecialKey.f4 => 'F4',
+  SpecialKey.f5 => 'F5',
+  SpecialKey.f6 => 'F6',
+  SpecialKey.f7 => 'F7',
+  SpecialKey.f8 => 'F8',
+  SpecialKey.f9 => 'F9',
+  SpecialKey.f10 => 'F10',
+  SpecialKey.f11 => 'F11',
+  SpecialKey.f12 => 'F12',
+  // A character code routed through the keyCode path (rare — only via
+  // KeyChord.key with a character): label with the character itself.
+  null => k.character ?? '',
 };
 
 // ===========================================================================
@@ -824,8 +827,7 @@ class KeyBindingEvent {
 
   // Forwarding getters so handlers can read the event directly,
   // without `.raw.` indirection.
-  KeyCode? get keyCode => _raw.keyCode;
-  String? get char => _raw.char;
+  KeyCode get code => _raw.code;
   Set<KeyModifier> get modifiers => _raw.modifiers;
   bool get hasCtrl => _raw.hasCtrl;
   bool get hasAlt => _raw.hasAlt;

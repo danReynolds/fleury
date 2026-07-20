@@ -295,7 +295,7 @@ final class McpServer {
     for (final a in SemanticAction.values) a.name: a,
   };
   static final Map<String, KeyCode> _keysByName = {
-    for (final k in KeyCode.values) k.name: k,
+    for (final k in SpecialKey.values) k.name: KeyCode.forSpecial(k),
   };
   static final Set<String> _roleNames = {
     for (final r in SemanticRole.values) r.name,
@@ -1307,10 +1307,10 @@ final class McpServer {
     final keyCode = _keysByName[key];
     final before = bridge.revision;
     if (keyCode != null) {
-      bridge.pressKey(keyCode: keyCode, modifiers: modifiers);
+      bridge.pressKey(keyCode, modifiers: modifiers);
     } else if (modifiers.isNotEmpty) {
       // A literal character held with modifiers — a chord (e.g. ctrl+a).
-      bridge.pressKey(char: key, modifiers: modifiers);
+      bridge.pressKey(KeyCode.char(key), modifiers: modifiers);
     } else if (key.characters.length == 1) {
       // A bare printable character (one grapheme cluster — counts an emoji or
       // accented letter as one): a plain KeyEvent(char:) does NOT insert text

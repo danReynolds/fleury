@@ -102,7 +102,7 @@ class _MenuState extends State<Menu> {
   bool get _isOpen => _entry != null;
 
   KeyEventResult _onTriggerKey(KeyEvent event) {
-    if (!_isOpen && event.keyCode == KeyCode.enter) {
+    if (!_isOpen && event.code == KeyCode.enter) {
       _open();
       return KeyEventResult.handled;
     }
@@ -384,7 +384,7 @@ class _MenuBodyState extends State<_MenuBody> {
   }
 
   KeyEventResult _onKey(KeyEvent event) {
-    switch (event.keyCode) {
+    switch (event.code) {
       case KeyCode.arrowUp:
         final n = _step(_list.selectedIndex ?? 0, -1);
         if (n != null) _list.selectedIndex = n;
@@ -414,7 +414,7 @@ class _MenuBodyState extends State<_MenuBody> {
         widget.onDismiss();
         return KeyEventResult.handled;
       default:
-        final ch = event.char;
+        final ch = event.code.character;
         if (ch != null &&
             ch.length == 1 &&
             ch.codeUnitAt(0) >= 0x21 &&

@@ -164,7 +164,7 @@ class _TabsState extends State<Tabs> {
   void _onChange() => setState(() {});
 
   KeyEventResult _onKey(KeyEvent event) {
-    switch (event.keyCode) {
+    switch (event.code) {
       case KeyCode.arrowLeft:
         _controller.previous();
         return KeyEventResult.handled;

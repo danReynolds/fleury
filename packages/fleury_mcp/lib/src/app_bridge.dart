@@ -340,18 +340,13 @@ final class FleuryAppBridge {
     _send(InputEventFrame(TextInputEvent(text)));
   }
 
-  /// Presses a key — a named [keyCode] (enter, tab, arrows…) or a literal
-  /// [char] — with optional [modifiers].
-  void pressKey({
-    KeyCode? keyCode,
-    String? char,
+  /// Presses a key — a special key (enter, tab, arrows…) or a literal
+  /// character code — with optional [modifiers].
+  void pressKey(
+    KeyCode code, {
     Set<KeyModifier> modifiers = const <KeyModifier>{},
   }) {
-    _send(
-      InputEventFrame(
-        KeyEvent(keyCode: keyCode, char: char, modifiers: modifiers),
-      ),
-    );
+    _send(InputEventFrame(KeyEvent(code, modifiers: modifiers)));
   }
 
   /// Resizes the app's viewport, reflowing the layout (and thus which rows of
@@ -425,7 +420,8 @@ final class FleuryAppBridge {
     // agent that needs the settled value should `wait_for_change` or re-read.
     // Sub-`settleCap` reactions are unaffected.
     final phase2Deadline = stopwatch.elapsed + settleCap;
-    Duration phase2Remaining() => clampToZero(phase2Deadline - stopwatch.elapsed);
+    Duration phase2Remaining() =>
+        clampToZero(phase2Deadline - stopwatch.elapsed);
     while (isRunning &&
         stopwatch.elapsed < timeout &&
         stopwatch.elapsed < phase2Deadline) {
@@ -490,9 +486,7 @@ final class FleuryAppBridge {
         final pending = _pendingDebug.remove(f.seq);
         if (pending != null && !pending.isCompleted) {
           try {
-            pending.complete(
-              jsonDecode(utf8.decode(f.json)) as List<Object?>,
-            );
+            pending.complete(jsonDecode(utf8.decode(f.json)) as List<Object?>);
           } catch (_) {
             pending.complete(null); // malformed payload — treat as unavailable
           }

@@ -54,15 +54,17 @@ void main() {
     );
 
     tester.type('ch');
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.tab));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+    tester.sendKey(const KeyEvent(KeyCode.tab));
 
     expect(controller.text, 'cherry-pick');
     expect(controller.selection, const TextSelection.collapsed(offset: 11));
     expect(accepted?.label, 'cherry-pick');
     expect(tester.overlay.entries.length, 1);
 
-    tester.sendKey(const KeyEvent(char: 'z', modifiers: {KeyModifier.ctrl}));
+    tester.sendKey(
+      const KeyEvent(KeyCode.char('z'), modifiers: {KeyModifier.ctrl}),
+    );
     expect(controller.text, 'ch');
   });
 
@@ -77,7 +79,7 @@ void main() {
     );
 
     tester.type('git ch');
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.tab));
+    tester.sendKey(const KeyEvent(KeyCode.tab));
 
     expect(controller.text, 'git checkout');
     expect(controller.selection, const TextSelection.collapsed(offset: 12));
@@ -96,11 +98,11 @@ void main() {
     tester.type('ch');
     expect(tester.overlay.entries.length, 2);
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+    tester.sendKey(const KeyEvent(KeyCode.escape));
     expect(tester.overlay.entries.length, 1);
     expect(escapes, 0);
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+    tester.sendKey(const KeyEvent(KeyCode.escape));
     expect(escapes, 1);
   });
 
@@ -124,7 +126,7 @@ void main() {
     );
     tester.render(size: const CellSize(32, 4));
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.tab));
+    tester.sendKey(const KeyEvent(KeyCode.tab));
 
     expect(b.hasFocus, isTrue);
   });
@@ -152,7 +154,7 @@ void main() {
     tester.pump();
     controller.caretOffset = 2;
     tester.pump();
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.tab));
+    tester.sendKey(const KeyEvent(KeyCode.tab));
 
     expect(changes, ['ch', 'checkout']);
     final field = tester.semantics().single(

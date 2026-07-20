@@ -252,6 +252,7 @@ export 'src/input/events.dart'
         PasteEventPhase,
         ResizeEvent,
         SignalEvent,
+        SpecialKey,
         TextCompositionEvent,
         TextCompositionEventKind,
         TextInputEvent,

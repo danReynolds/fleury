@@ -353,7 +353,7 @@ class _LineChartState extends State<LineChart> {
   KeyEventResult _onKey(KeyEvent e) {
     if (_cursorXs.isEmpty) return KeyEventResult.ignored;
     final last = _cursorXs.length - 1;
-    switch (e.keyCode) {
+    switch (e.code) {
       case KeyCode.arrowLeft:
         if (_cursorIdx == 0) return KeyEventResult.ignored;
         setState(() => _cursorIdx -= 1);

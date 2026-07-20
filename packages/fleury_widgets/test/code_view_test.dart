@@ -164,7 +164,9 @@ void main() {
       );
 
       tester.render(size: const CellSize(80, 12));
-      tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await Future<void>.delayed(Duration.zero);
 
       expect(
@@ -320,7 +322,9 @@ void main() {
       expect(unsafe.label, isNot(contains('secret')));
       expect(unsafe.state.outputSanitized, isTrue);
 
-      tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await Future<void>.delayed(Duration.zero);
 
       expect(tester.clipboard.readInProcess(), contains("final note = 'safe"));

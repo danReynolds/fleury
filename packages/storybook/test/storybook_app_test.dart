@@ -29,26 +29,35 @@ void main() {
     );
   });
 
-  testWidgets('cyber theme is the default and paints its dark bg + green accent',
-      (tester) {
-    tester.pumpWidget(StorybookApp());
-    final buffer = tester.render(size: const CellSize(120, 40));
-    const green = RgbColor(0x2E, 0xE6, 0xA6);
-    const bg = RgbColor(0x0E, 0x0F, 0x13);
-    var greenCells = 0;
-    var bgCells = 0;
-    for (var r = 0; r < buffer.size.rows; r++) {
-      for (var c = 0; c < buffer.size.cols; c++) {
-        final style = buffer.atColRow(c, r).style;
-        if (style.foreground == green || style.background == green) greenCells++;
-        if (style.background == bg) bgCells++;
+  testWidgets(
+    'cyber theme is the default and paints its dark bg + green accent',
+    (tester) {
+      tester.pumpWidget(StorybookApp());
+      final buffer = tester.render(size: const CellSize(120, 40));
+      const green = RgbColor(0x2E, 0xE6, 0xA6);
+      const bg = RgbColor(0x0E, 0x0F, 0x13);
+      var greenCells = 0;
+      var bgCells = 0;
+      for (var r = 0; r < buffer.size.rows; r++) {
+        for (var c = 0; c < buffer.size.cols; c++) {
+          final style = buffer.atColRow(c, r).style;
+          if (style.foreground == green || style.background == green)
+            greenCells++;
+          if (style.background == bg) bgCells++;
+        }
       }
-    }
-    expect(greenCells, greaterThan(0),
-        reason: 'the cool-green accent should render (focus/selection/primary)');
-    expect(bgCells, greaterThan(1000),
-        reason: 'the dark cyber background should fill the surface');
-  });
+      expect(
+        greenCells,
+        greaterThan(0),
+        reason: 'the cool-green accent should render (focus/selection/primary)',
+      );
+      expect(
+        bgCells,
+        greaterThan(1000),
+        reason: 'the dark cyber background should fill the surface',
+      );
+    },
+  );
 
   testWidgets('storybook commands navigate stories and variants', (
     tester,
@@ -214,13 +223,11 @@ void main() {
     tester,
   ) async {
     tester.pumpWidget(
-      StorybookApp(
-        initialStoryId: 'controls.text-entry.completion-text-input',
-      ),
+      StorybookApp(initialStoryId: 'controls.text-entry.completion-text-input'),
     );
     tester.render(size: const CellSize(120, 28));
     // Move focus from the widget list into the preview, then type.
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+    tester.sendKey(const KeyEvent(KeyCode.arrowRight));
     tester.pump();
     tester.render(size: const CellSize(120, 28));
     tester.type('c');
@@ -272,7 +279,7 @@ void main() {
     expect(output, contains('Button'));
 
     tester.render(size: const CellSize(120, 40));
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     tester.pump();
     output = tester.renderToString(
       size: const CellSize(120, 40),
@@ -288,7 +295,7 @@ void main() {
     tester.pumpWidget(StorybookApp());
     tester.render(size: const CellSize(120, 40));
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
     tester.pump();
 
     final output = tester.renderToString(
@@ -306,9 +313,7 @@ void main() {
     // Regression: the details panel used to sit outside the focus-traversal
     // group, so once focus crossed into it (e.g. onto a control), Left/Right
     // had no group to handle them and focus was stranded on the right.
-    tester.pumpWidget(
-      StorybookApp(initialStoryId: 'core.layout-text.text'),
-    );
+    tester.pumpWidget(StorybookApp(initialStoryId: 'core.layout-text.text'));
     tester.render(size: const CellSize(120, 40));
 
     int? left() => tester.focusManager.focusedNode?.rect?.left;
@@ -316,30 +321,39 @@ void main() {
     // Walk Right into the details panel (its content starts past column ~76).
     var enteredDetails = false;
     for (var i = 0; i < 8 && !enteredDetails; i++) {
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight));
       tester.pump();
       tester.render(size: const CellSize(120, 40));
       if ((left() ?? 0) > 76) enteredDetails = true;
     }
-    expect(enteredDetails, isTrue,
-        reason: 'arrow-right should be able to reach the details panel');
+    expect(
+      enteredDetails,
+      isTrue,
+      reason: 'arrow-right should be able to reach the details panel',
+    );
 
     // Now Left must carry focus back leftward and ultimately into the widgets
     // panel (column < selector width ~34) — not get stuck on a details control.
     var reachedWidgets = false;
     var lastLeft = left() ?? 999;
     for (var i = 0; i < 14 && !reachedWidgets; i++) {
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowLeft));
+      tester.sendKey(const KeyEvent(KeyCode.arrowLeft));
       tester.pump();
       tester.render(size: const CellSize(120, 40));
       final l = left() ?? lastLeft;
-      expect(l, lessThanOrEqualTo(lastLeft),
-          reason: 'each Left should move focus leftward, never rightward');
+      expect(
+        l,
+        lessThanOrEqualTo(lastLeft),
+        reason: 'each Left should move focus leftward, never rightward',
+      );
       lastLeft = l;
       if (l < 34) reachedWidgets = true;
     }
-    expect(reachedWidgets, isTrue,
-        reason: 'Left from the details panel should return to the widgets list');
+    expect(
+      reachedWidgets,
+      isTrue,
+      reason: 'Left from the details panel should return to the widgets list',
+    );
   });
 
   testWidgets('Esc steps out of a focused widget back to the widget list', (
@@ -351,16 +365,16 @@ void main() {
 
     // Focus a preview widget (the calendar, which captures arrows).
     tester.type('DatePicker');
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     tester.pump();
     tester.render(size: sz);
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+    tester.sendKey(const KeyEvent(KeyCode.arrowRight));
     tester.pump();
     tester.render(size: sz);
     expect(tester.focusManager.focusedNode.toString(), contains('date-picker'));
 
     // Esc steps out to the widget list — the coarse escape hatch.
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+    tester.sendKey(const KeyEvent(KeyCode.escape));
     tester.pump();
     expect(tester.focusManager.focusedNode.toString(), contains('widget-list'));
   });
@@ -372,16 +386,16 @@ void main() {
     tester.render(size: const CellSize(120, 40));
 
     tester.type('ListView');
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     tester.pump();
     tester.render(size: const CellSize(120, 40));
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+    tester.sendKey(const KeyEvent(KeyCode.arrowRight));
     tester.pump();
     tester.render(size: const CellSize(120, 40));
     expect(tester.focusManager.focusedNode.toString(), contains('ListView'));
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
     tester.pump();
     tester.render(size: const CellSize(120, 40));
 
@@ -401,7 +415,7 @@ void main() {
 
     // Select the ScrollView widget by search (order-independent).
     tester.type('ScrollView');
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     tester.pump();
     tester.render(size: const CellSize(120, 24));
 
@@ -411,12 +425,12 @@ void main() {
     );
     expect(output, contains('> ScrollView  Core'));
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+    tester.sendKey(const KeyEvent(KeyCode.arrowRight));
     tester.pump();
     tester.render(size: const CellSize(120, 24));
     expect(tester.focusManager.focusedNode.toString(), contains('ScrollView'));
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
     tester.pump();
 
     output = tester.renderToString(
@@ -435,7 +449,7 @@ void main() {
     );
     tester.render(size: const CellSize(120, 40));
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+    tester.sendKey(const KeyEvent(KeyCode.arrowRight));
     tester.pump();
     tester.render(size: const CellSize(120, 40));
 
@@ -465,7 +479,7 @@ void main() {
 
     // Select the ScrollView widget by search (order-independent).
     tester.type('ScrollView');
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     tester.pump();
     tester.render(size: const CellSize(120, 24));
 
@@ -487,7 +501,7 @@ void main() {
     tester.render(size: const CellSize(120, 24));
     expect(tester.focusManager.focusedNode.toString(), contains('ScrollView'));
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
     tester.pump();
 
     output = tester.renderToString(
@@ -549,7 +563,8 @@ void main() {
     expect(
       roundedBoxes(framed),
       roundedBoxes(fit) + 1,
-      reason: 'the fixed-size preset adds exactly one rounded viewport box; '
+      reason:
+          'the fixed-size preset adds exactly one rounded viewport box; '
           'Fit must not draw a nested border of its own',
     );
   });

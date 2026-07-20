@@ -639,7 +639,7 @@ class _JsonViewState extends State<JsonView> {
     final copyEnabled = widget.copySelection && rows.isNotEmpty;
     Widget list = Focus(
       canRequestFocus: false,
-      onKey: (event) => switch (event.keyCode) {
+      onKey: (event) => switch (event.code) {
         KeyCode.arrowRight => _expandOrEnter(rows),
         KeyCode.arrowLeft => _collapseOrParent(rows),
         _ => KeyEventResult.ignored,

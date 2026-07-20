@@ -174,7 +174,7 @@ void main() {
           events.whereType<KeyEvent>(),
           contains(
             const KeyEvent(
-              char: 'z',
+              KeyCode.char('z'),
               modifiers: <KeyModifier>{KeyModifier.ctrl, KeyModifier.shift},
             ),
           ),

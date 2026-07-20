@@ -10,9 +10,9 @@ import 'package:fleury/src/widgets/text_area.dart' show TextAreaDebugStats;
 import 'package:test/test.dart';
 
 KeyEvent _shiftCode(KeyCode keyCode) =>
-    KeyEvent(keyCode: keyCode, modifiers: const {KeyModifier.shift});
+    KeyEvent(keyCode, modifiers: const {KeyModifier.shift});
 KeyEvent _ctrlChar(String char) =>
-    KeyEvent(char: char, modifiers: const {KeyModifier.ctrl});
+    KeyEvent(KeyCode.char(char), modifiers: const {KeyModifier.ctrl});
 
 final class _DispatcherSink implements TuiEventSink {
   const _DispatcherSink(this.dispatcher);
@@ -50,7 +50,7 @@ void main() {
     tester.pumpWidget(TextArea(controller: ctl, autofocus: true));
     tester.type('a');
     tester.type('b');
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     tester.type('c');
     tester.type('d');
     expect(ctl.text, 'ab\ncd');
@@ -63,11 +63,11 @@ void main() {
     ctl.caretOffset = 11;
     tester.pumpWidget(TextArea(controller: ctl, autofocus: true));
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
+    tester.sendKey(const KeyEvent(KeyCode.arrowUp));
     // Middle line "xy" is only length 2 → column clamps to end (index 7).
     expect(ctl.caretOffset, 7);
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
+    tester.sendKey(const KeyEvent(KeyCode.arrowUp));
     // First line "abcd": the preserved column came from "xy" (col 2) → 2.
     expect(ctl.caretOffset, 2);
   });
@@ -77,9 +77,9 @@ void main() {
     ctl.caretOffset = 8; // "wo|rld"
     tester.pumpWidget(TextArea(controller: ctl, autofocus: true));
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.home));
+    tester.sendKey(const KeyEvent(KeyCode.home));
     expect(ctl.caretOffset, 6, reason: 'start of "world"');
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.end));
+    tester.sendKey(const KeyEvent(KeyCode.end));
     expect(ctl.caretOffset, 11, reason: 'end of "world"');
   });
 
@@ -132,7 +132,7 @@ void main() {
     tester.pumpWidget(TextArea(controller: ctl, autofocus: true));
 
     tester.type('ab');
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     tester.type('cd');
 
     tester.sendKey(_ctrlChar('z'));
@@ -148,7 +148,7 @@ void main() {
     final ctl = TextEditingController(text: 'ab\ncd');
     ctl.caretOffset = 3; // just after the newline, before "cd"
     tester.pumpWidget(TextArea(controller: ctl, autofocus: true));
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.backspace));
+    tester.sendKey(const KeyEvent(KeyCode.backspace));
     expect(ctl.text, 'abcd');
   });
 
@@ -157,9 +157,9 @@ void main() {
     ctl.caretOffset = 0; // cursor at index 0
     tester.pumpWidget(TextArea(controller: ctl, autofocus: true));
     // These compute the line start from index 0 — must not throw.
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.home));
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+    tester.sendKey(const KeyEvent(KeyCode.home));
+    tester.sendKey(const KeyEvent(KeyCode.arrowUp));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
     expect(ctl.caretOffset, isNonNegative);
   });
 
@@ -214,7 +214,7 @@ void main() {
       tester.pumpWidget(TextArea(controller: ctl, autofocus: true));
       tester.render(size: const CellSize(4, 1));
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.home));
+      tester.sendKey(const KeyEvent(KeyCode.home));
       final buf = tester.render(size: const CellSize(4, 1));
 
       expect(buf.atColRow(0, 0).grapheme, 'a');
@@ -261,7 +261,7 @@ void main() {
       tester.pumpWidget(TextArea(controller: ctl, autofocus: true));
       tester.render(size: const CellSize(4, 2));
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
+      tester.sendKey(const KeyEvent(KeyCode.arrowUp));
       final buf = tester.render(size: const CellSize(4, 2));
 
       expect(buf.atColRow(0, 0).grapheme, 'a');
@@ -517,7 +517,7 @@ void main() {
       tester.paste('ab\ncd');
       expect(ctl.text, 'ab', reason: 'the paste is still frame-chunked');
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
 
       expect(submitted, ['ab\ncd']);
       expect(ctl.text, 'ab\ncd');
@@ -549,7 +549,7 @@ void main() {
       tester.paste('ab\ncd');
       expect(ctl.text, 'ab');
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+      tester.sendKey(const KeyEvent(KeyCode.escape));
 
       expect(escapedValue, 'ab\ncd');
       expect(ctl.text, 'ab\ncd');
@@ -579,7 +579,7 @@ void main() {
       tester.paste('ab\ncd');
       expect(ctl.text, 'ab');
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+      tester.sendKey(const KeyEvent(KeyCode.escape));
 
       expect(ancestorEscapes, 1);
       expect(ctl.text, 'ab\ncd');
@@ -625,9 +625,9 @@ void main() {
       tester.pumpWidget(TextArea(autofocus: true, onChanged: changes.add));
 
       tester.type('a');
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       tester.type('b');
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowLeft));
+      tester.sendKey(const KeyEvent(KeyCode.arrowLeft));
 
       expect(changes, ['a', 'a\n', 'a\nb']);
     });
@@ -715,11 +715,11 @@ void main() {
 
       tester.type('X');
       tester.paste('YZ');
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.backspace));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.backspace));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(ctl.text, 'ab\ncd');
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowLeft));
+      tester.sendKey(const KeyEvent(KeyCode.arrowLeft));
       expect(ctl.caretOffset, ctl.text.length - 1);
     });
 
@@ -931,7 +931,7 @@ void main() {
         ),
       );
       tester.render(size: const CellSize(12, 4));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(submitted, ['hello']);
       // Enter submitted — it did not also insert a newline into the draft.
       expect(ctl.text, 'hello');
@@ -952,7 +952,7 @@ void main() {
       );
       tester.render(size: const CellSize(12, 4));
       tester.sendKey(
-        const KeyEvent(keyCode: KeyCode.enter, modifiers: {KeyModifier.alt}),
+        const KeyEvent(KeyCode.enter, modifiers: {KeyModifier.alt}),
       );
       tester.type('b');
       expect(submitted, isEmpty);
@@ -969,7 +969,7 @@ void main() {
         ),
       );
       tester.render(size: const CellSize(12, 4));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(ctl.text, 'x');
     });
 
@@ -1072,7 +1072,7 @@ void main() {
       // — still no new split.
       expect(
         splitsDuring(() {
-          tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
+          tester.sendKey(const KeyEvent(KeyCode.arrowUp));
           tester.render(size: const CellSize(10, 4));
         }),
         0,
@@ -1124,7 +1124,7 @@ void main() {
       );
       expect(
         splitsDuring(() {
-          tester.sendKey(const KeyEvent(keyCode: KeyCode.backspace));
+          tester.sendKey(const KeyEvent(KeyCode.backspace));
           tester.render(size: const CellSize(10, 2));
           expect(_lines(tester, rows: 2), ['type', 'here']);
         }),

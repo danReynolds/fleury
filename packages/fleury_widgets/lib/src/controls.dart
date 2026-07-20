@@ -78,7 +78,7 @@ class _FocusableControlState extends State<_FocusableControl>
   }
 
   KeyEventResult _onKey(KeyEvent event) {
-    if (event.keyCode == KeyCode.enter) {
+    if (event.code == KeyCode.enter) {
       widget.onActivate!();
       return KeyEventResult.handled;
     }
@@ -553,7 +553,7 @@ class _RadioGroupState<T> extends State<RadioGroup<T>> {
   }
 
   KeyEventResult _onKey(KeyEvent event) {
-    switch (event.keyCode) {
+    switch (event.code) {
       case KeyCode.arrowUp:
       case KeyCode.arrowLeft:
         _move(-1);

@@ -142,7 +142,7 @@ void main() {
         NumberInput(autofocus: true, onSubmit: (v) => submitted = v),
       );
       tester.type('123');
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(submitted, 123);
     });
 
@@ -168,7 +168,7 @@ void main() {
       tester.type('250');
       expect(changed, [250]);
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
 
       expect(changed, [250, 100]);
       expect(events, ['changed:250', 'changed:100', 'submitted:100']);
@@ -193,7 +193,7 @@ void main() {
       );
       tester.type('50');
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
 
       expect(events, ['changed:50', 'submitted:50']);
       expect(controller.text, '50');
@@ -216,7 +216,7 @@ void main() {
         ),
       );
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
 
       expect(events, ['submitted:null']);
       expect(controller.text, isEmpty);
@@ -240,7 +240,7 @@ void main() {
       );
       tester.type('-');
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
 
       expect(events, ['changed:null', 'submitted:null']);
       expect(controller.text, '-');

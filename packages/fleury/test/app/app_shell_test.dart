@@ -248,7 +248,10 @@ void main() {
     );
 
     tester.sendKey(
-      const KeyEvent(char: 'n', modifiers: <KeyModifier>{KeyModifier.ctrl}),
+      const KeyEvent(
+        KeyCode.char('n'),
+        modifiers: <KeyModifier>{KeyModifier.ctrl},
+      ),
     );
     await Future<void>.value();
     tester.pump();
@@ -376,7 +379,7 @@ void main() {
     );
 
     tester.render(size: const CellSize(24, 3));
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+    tester.sendKey(const KeyEvent(KeyCode.arrowRight));
     tester.pump();
 
     expect(right.hasFocus, isTrue);
@@ -474,7 +477,10 @@ void main() {
     expect(shortcutRouteContext, isNotNull);
 
     tester.sendKey(
-      const KeyEvent(char: 'n', modifiers: <KeyModifier>{KeyModifier.ctrl}),
+      const KeyEvent(
+        KeyCode.char('n'),
+        modifiers: <KeyModifier>{KeyModifier.ctrl},
+      ),
     );
     await Future<void>.value();
     tester.pump();
@@ -547,10 +553,16 @@ void main() {
     );
 
     tester.sendKey(
-      const KeyEvent(char: 'r', modifiers: <KeyModifier>{KeyModifier.ctrl}),
+      const KeyEvent(
+        KeyCode.char('r'),
+        modifiers: <KeyModifier>{KeyModifier.ctrl},
+      ),
     );
     tester.sendKey(
-      const KeyEvent(char: 'd', modifiers: <KeyModifier>{KeyModifier.ctrl}),
+      const KeyEvent(
+        KeyCode.char('d'),
+        modifiers: <KeyModifier>{KeyModifier.ctrl},
+      ),
     );
     await Future<void>.value();
     expect(rootCalls, 1);
@@ -575,7 +587,10 @@ void main() {
       isTrue,
     );
     tester.sendKey(
-      const KeyEvent(char: 'd', modifiers: <KeyModifier>{KeyModifier.ctrl}),
+      const KeyEvent(
+        KeyCode.char('d'),
+        modifiers: <KeyModifier>{KeyModifier.ctrl},
+      ),
     );
     await Future<void>.value();
     expect(detailCalls, 1);

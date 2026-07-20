@@ -340,7 +340,7 @@ void main() {
     expect(home!.navigator.depth, 2);
     expect(_screen(tester), contains('locked'));
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+    tester.sendKey(const KeyEvent(KeyCode.escape));
     tester.pump();
     expect(
       home!.navigator.depth,
@@ -378,7 +378,7 @@ void main() {
     tester.pump(const Duration(milliseconds: 300));
     expect(_screen(tester), 'detail');
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+    tester.sendKey(const KeyEvent(KeyCode.escape));
     tester.pump(const Duration(milliseconds: 300));
     expect(_screen(tester), 'home');
   });
@@ -398,7 +398,7 @@ void main() {
     tester.pump();
     expect(_screen(tester), 'detail');
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+    tester.sendKey(const KeyEvent(KeyCode.escape));
     tester.pump();
     expect(
       _screen(tester),
@@ -580,13 +580,17 @@ void main() {
       focus.requestFocus();
       tester.pump();
 
-      tester.sendKey(const KeyEvent(char: 'k', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('k'), modifiers: {KeyModifier.ctrl}),
+      );
       expect(calls, ['ancestor']);
 
       home!.present<void>(const Focus(autofocus: true, child: Text('modal')));
       tester.pump(const Duration(milliseconds: 300));
       tester.render();
-      tester.sendKey(const KeyEvent(char: 'k', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('k'), modifiers: {KeyModifier.ctrl}),
+      );
 
       expect(calls, ['ancestor']);
     },
@@ -1118,7 +1122,7 @@ void main() {
       tester.pump(const Duration(milliseconds: 300));
       expect(_screen(tester), 'editor');
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+      tester.sendKey(const KeyEvent(KeyCode.escape));
       tester.pump(const Duration(milliseconds: 300));
       expect(blocked, 1, reason: 'Esc was intercepted');
       expect(_screen(tester), 'editor', reason: 'still on the guarded screen');
@@ -1172,7 +1176,7 @@ void main() {
       );
       tester.pump(const Duration(milliseconds: 300));
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+      tester.sendKey(const KeyEvent(KeyCode.escape));
       tester.pump(const Duration(milliseconds: 300));
       expect(nav.depth, 1, reason: 'pop allowed');
       expect(_screen(tester), 'home');

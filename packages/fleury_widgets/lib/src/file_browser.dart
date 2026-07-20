@@ -436,7 +436,7 @@ class _FileBrowserState extends State<FileBrowser> {
   }
 
   KeyEventResult _onNavigationKey(KeyEvent event) {
-    switch (event.keyCode) {
+    switch (event.code) {
       case KeyCode.arrowRight:
         _activateSelected();
         return KeyEventResult.handled;
