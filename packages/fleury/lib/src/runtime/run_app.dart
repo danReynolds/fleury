@@ -252,7 +252,7 @@ Future<AppExit> runApp(
   DebugConfig debug = const DebugConfig(),
   Duration frameInterval = Duration.zero,
 }) async {
-  fd.StdioCapture? cap;
+  fd.Stdio? cap;
   try {
     return await _runAppImpl(
       root,
@@ -337,7 +337,7 @@ Future<AppExit> _runAppImpl(
   Duration sequenceTimeout = const Duration(milliseconds: 500),
   DebugConfig debug = const DebugConfig(),
   Duration frameInterval = Duration.zero,
-  void Function(fd.StdioCapture capture)? onFdCaptureStarted,
+  void Function(fd.Stdio capture)? onFdCaptureStarted,
 }) async {
   final runtimeMarkers = _RuntimeMarkerRecorder.fromEnvironment();
   runtimeMarkers?.mark('runApp.entry');
@@ -353,7 +353,7 @@ Future<AppExit> _runAppImpl(
   // custom drivers — they own output policy; Windows — pending stdio
   // support; FLEURY_FD_CAPTURE=0), stray output flows wherever fd 1/2
   // point, conventionally.
-  fd.StdioCapture? fdCapture;
+  fd.Stdio? fdCapture;
   Future<Stdout?> startFdCapture() async {
     if (Platform.isWindows) return null;
     if (Platform.environment['FLEURY_FD_CAPTURE'] == '0') return null;
@@ -364,19 +364,19 @@ Future<AppExit> _runAppImpl(
     // this runs before any redirection.
     if (!stdout.hasTerminal) return null;
     try {
-      fdCapture = await fd.StdioCapture.start();
+      fdCapture = await fd.Stdio.start();
     } on Object {
       return null; // capture unavailable (e.g. another session) — fall back
     }
     onFdCaptureStarted?.call(fdCapture!);
-    return fdCapture!.terminalStdout;
+    return fdCapture!.terminal;
   }
 
   // Remote sessions (fleury mcp / serve --spawn / a shell handle) skip the
   // terminal fd guard above — frames go over the socket, not fd 1, so there's
   // nothing to protect. But that also left the LogBuffer unfed, so an agent's
   // read_logs came back empty. When debug tooling is on, capture on the real
-  // remote paths too — with `mirrorToSavedFds`: stdio's reader isolate mirrors
+  // remote paths too — with `mirrorToOriginal`: stdio's reader isolate mirrors
   // every raw captured chunk back through the saved descriptors,
   // byte-transparent and split-intact, so the parent's own log forwarding
   // (fleury_mcp's [app out/err], serve's sanitized relay) keeps working
@@ -395,7 +395,7 @@ Future<AppExit> _runAppImpl(
     if (Platform.isWindows) return;
     if (Platform.environment['FLEURY_FD_CAPTURE'] == '0') return;
     try {
-      fdCapture = await fd.StdioCapture.start(mirrorToSavedFds: true);
+      fdCapture = await fd.Stdio.start(mirrorToOriginal: true);
       remoteFdMirror = true;
       onFdCaptureStarted?.call(fdCapture!);
     } on Object {
@@ -553,7 +553,7 @@ Future<AppExit> _runAppImpl(
   final activeFdCapture = fdCapture;
   if (activeFdCapture != null) {
     // (Remote sessions ALSO mirror raw bytes to the parent — but that happens
-    // on stdio's reader isolate via mirrorToSavedFds, not here; this consumer
+    // on stdio's reader isolate via mirrorToOriginal, not here; this consumer
     // only feeds the in-app LogBuffer.)
     void consume(fd.CapturedLine line) => capture.addLine(
       line.text,

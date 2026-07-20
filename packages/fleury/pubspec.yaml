@@ -24,7 +24,7 @@ dependencies:
   # from native/FFI libraries (which zones and IOOverrides cannot see) is kept
   # off the terminal so it can't corrupt rendered frames. POSIX-only at
   # runtime; never imported by the web-safe barrels.
-  stdio: ^0.3.0
+  stdio: ^0.4.0
   vm_service: ^15.0.2
 
 dev_dependencies:
