@@ -79,6 +79,7 @@ export default defineConfig({
             { label: 'Animation', slug: 'guides/animation' },
             { label: 'Focus & keyboard', slug: 'guides/focus-and-keyboard' },
             { label: 'Testing', slug: 'guides/testing' },
+            { label: 'Hot reload', slug: 'guides/hot-reload' },
             { label: 'Debugging', slug: 'guides/debugging' },
             {
               label: 'Terminal capabilities',
