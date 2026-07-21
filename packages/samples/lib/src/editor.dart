@@ -385,25 +385,32 @@ class _EditorBodyState extends State<_EditorBody> implements TextInputClaimant {
 
   @override
   Widget build(BuildContext context) {
-    return KeyBindings(
-      bindings: _bindings(),
-      child: WhichKey(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 1),
-                child: Focus(
-                  focusNode: _focusNode,
-                  autofocus: true,
-                  child: _BufferView(model: _model),
+    // Fleury's SelectionArea makes the rendered text drag-selectable and
+    // copies on release (the terminal "select to copy" idiom) as well as on
+    // Ctrl+C; over `fleury serve` it writes to the browser clipboard. Its keys
+    // bubble when idle, so they coexist with the editor's own bindings.
+    return SelectionArea(
+      copyOnRelease: true,
+      child: KeyBindings(
+        bindings: _bindings(),
+        child: WhichKey(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 1),
+                  child: Focus(
+                    focusNode: _focusNode,
+                    autofocus: true,
+                    child: _BufferView(model: _model),
+                  ),
                 ),
               ),
-            ),
-            _StatusLine(model: _model),
-            _chrome(context),
-          ],
+              _StatusLine(model: _model),
+              _chrome(context),
+            ],
+          ),
         ),
       ),
     );
