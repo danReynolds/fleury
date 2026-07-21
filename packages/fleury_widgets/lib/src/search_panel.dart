@@ -607,9 +607,9 @@ class _SearchPanelState extends State<SearchPanel> {
       panel = KeyBindings(
         bindings: [
           KeyBinding(
-            KeyChord.ctrl.c,
+            KeySequence.ctrl.c,
             label: 'Copy search result',
-            onEvent: (_) => unawaited(_copySelection()),
+            onTrigger: () => unawaited(_copySelection()),
           ),
         ],
         child: panel,
@@ -619,13 +619,13 @@ class _SearchPanelState extends State<SearchPanel> {
     return KeyBindings(
       bindings: [
         KeyBinding(
-          KeyChord.key(KeyCode.arrowUp),
-          onEvent: (_) => _move(-1),
+          KeyCode.arrowUp,
+          onTrigger: () => _move(-1),
           hideFromHintBar: true,
         ),
         KeyBinding(
-          KeyChord.key(KeyCode.arrowDown),
-          onEvent: (_) => _move(1),
+          KeyCode.arrowDown,
+          onTrigger: () => _move(1),
           hideFromHintBar: true,
         ),
       ],

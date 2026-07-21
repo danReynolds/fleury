@@ -44,8 +44,8 @@ class _HostState extends State<_Host> {
     return KeyBindings(
       bindings: [
         KeyBinding(
-          KeyChord.char('f'),
-          onEvent: (_) => setState(() => mode = BoomMode.healthy),
+          KeyCode.char('f'),
+          onTrigger: () => setState(() => mode = BoomMode.healthy),
         ),
       ],
       child: Focus(
@@ -137,7 +137,7 @@ class _SequenceInteractivePaintFailureState
       rethrowContained: false,
       child: KeyBindings(
         bindings: [
-          KeyBinding(KeyChord.g.g, onEvent: (_) => widget.onTriggered()),
+          KeyBinding(KeySequence.g.g, onTrigger: () => widget.onTriggered()),
         ],
         child: Focus(
           autofocus: true,

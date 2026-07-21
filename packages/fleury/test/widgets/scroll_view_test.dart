@@ -273,9 +273,7 @@ void main() {
     final ctl = ScrollController();
     tester.pumpWidget(
       KeyBindings(
-        bindings: [
-          KeyBinding(KeyChord.key(KeyCode.arrowUp), onEvent: (_) => bubbled++),
-        ],
+        bindings: [KeyBinding(KeyCode.arrowUp, onTrigger: () => bubbled++)],
         child: ScrollView(
           controller: ctl,
           autofocus: true,

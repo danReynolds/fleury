@@ -563,7 +563,10 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyChord.escape, onEvent: (_) => ancestorEscapes += 1),
+            KeyBinding(
+              KeySequence.escape,
+              onTrigger: () => ancestorEscapes += 1,
+            ),
           ],
           child: TextArea(
             controller: ctl,
@@ -793,7 +796,10 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyChord.ctrl.c, onEvent: (_) => ancestorCopies += 1),
+            KeyBinding(
+              KeySequence.ctrl.c,
+              onTrigger: () => ancestorCopies += 1,
+            ),
           ],
           child: TextArea(
             controller: ctl,

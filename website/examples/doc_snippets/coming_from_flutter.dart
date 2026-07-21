@@ -24,14 +24,14 @@ class _CounterAppState extends State<CounterApp> {
     return KeyBindings(
       bindings: [
         KeyBinding(
-          KeyChord.space,
+          KeySequence.space,
           label: 'Increment',
-          onEvent: (_) => setState(() => _count++),
+          onTrigger: () => setState(() => _count++),
         ),
         KeyBinding(
-          KeyChord.enter,
+          KeySequence.enter,
           label: 'Details',
-          onEvent: (_) => unawaited(context.push<void>(const DetailScreen())),
+          onTrigger: () => unawaited(context.push<void>(const DetailScreen())),
         ),
       ],
       child: Center(
@@ -56,9 +56,9 @@ class DetailScreen extends StatelessWidget {
     return KeyBindings(
       bindings: [
         KeyBinding(
-          KeyChord.escape,
+          KeySequence.escape,
           label: 'Close',
-          onEvent: (_) => context.pop(),
+          onTrigger: () => context.pop(),
         ),
       ],
       child: Reveal(

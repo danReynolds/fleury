@@ -1114,17 +1114,17 @@ TextArea(
     rows: 6,
     code: '''KeyBindings(
   bindings: <KeyBinding>[
-    KeyBinding(KeyChord.char('s'), label: 'Save', onEvent: save),
-    KeyBinding(KeyChord.char('q'), label: 'Quit', onEvent: quit),
+    KeyBinding.event(KeyCode.char('s'), label: 'Save', onEvent: save),
+    KeyBinding.event(KeyCode.char('q'), label: 'Quit', onEvent: quit),
   ],
   child: const KeyHintBar(),
 )''',
     builder: () => _framed(
       KeyBindings(
         bindings: <KeyBinding>[
-          KeyBinding(KeyChord.char('s'), label: 'Save', onEvent: (_) {}),
-          KeyBinding(KeyChord.char('r'), label: 'Run', onEvent: (_) {}),
-          KeyBinding(KeyChord.char('q'), label: 'Quit', onEvent: (_) {}),
+          KeyBinding(KeyCode.char('s'), label: 'Save', onTrigger: () {}),
+          KeyBinding(KeyCode.char('r'), label: 'Run', onTrigger: () {}),
+          KeyBinding(KeyCode.char('q'), label: 'Quit', onTrigger: () {}),
         ],
         child: const Column(
           mainAxisSize: MainAxisSize.min,
@@ -1241,7 +1241,8 @@ TextArea(
     id: 'table.basic',
     widget: 'Table',
     category: 'Data & lists',
-    blurb: 'A column-aligned grid of widget cells, with optional row selection.',
+    blurb:
+        'A column-aligned grid of widget cells, with optional row selection.',
     cols: 44,
     // Header + 3 data rows, framed, need 7; at rows: 6 the last row (lin) was
     // clipped.
@@ -1629,7 +1630,7 @@ import 'package:fleury/fleury.dart';
 void main() => runApp(
       KeyBindings(
         bindings: [
-          KeyBinding(KeyChord.q, onEvent: (_) => requestExit(), label: 'Quit'),
+          KeyBinding(KeySequence.q, onTrigger: () => requestExit(), label: 'Quit'),
         ],
         child: const CounterApp(),
       ),
@@ -2009,9 +2010,7 @@ class _TutorialFilterExampleState extends State<_TutorialFilterExample> {
                 ? const Text('No matches', style: CellStyle(dim: true))
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      for (final name in matches) Text(name),
-                    ],
+                    children: <Widget>[for (final name in matches) Text(name)],
                   ),
           ),
         ],
@@ -2043,13 +2042,7 @@ class _AutocompleteExampleState extends State<_AutocompleteExample> {
       controller: _controller,
       autofocus: true,
       placeholder: 'Type a fruit…',
-      options: const <String>[
-        'Apple',
-        'Apricot',
-        'Banana',
-        'Cherry',
-        'Grape',
-      ],
+      options: const <String>['Apple', 'Apricot', 'Banana', 'Cherry', 'Grape'],
     ),
   );
 }
@@ -2063,7 +2056,8 @@ class _TextAreaExample extends StatefulWidget {
 
 class _TextAreaExampleState extends State<_TextAreaExample> {
   final TextEditingController _controller = TextEditingController(
-    text: 'Ship v1.4.0\n\n- Add a --version flag\n- Fix the Windows resize crash',
+    text:
+        'Ship v1.4.0\n\n- Add a --version flag\n- Fix the Windows resize crash',
   );
 
   @override

@@ -35,7 +35,7 @@ AppCommand _openPaletteCommand() {
   return AppCommand(
     id: const CommandId('app.openPalette'),
     title: 'Open Command Palette',
-    shortcuts: [KeyChord.ctrl.k],
+    shortcuts: [KeySequence.ctrl.k],
     showInPalette: false,
     semanticAction: SemanticAction.open,
     run: (context) {
@@ -332,7 +332,7 @@ void main() {
               AppCommand(
                 id: const CommandId('app.openPalette'),
                 title: 'Open Command Palette',
-                shortcuts: [KeyChord.ctrl.k],
+                shortcuts: [KeySequence.ctrl.k],
                 showInPalette: false,
                 run: (_) {
                   shortcutCalls += 1;
@@ -386,7 +386,7 @@ void main() {
             AppCommand(
               id: const CommandId('file.open'),
               title: 'Open File',
-              shortcuts: [KeyChord.ctrl.o],
+              shortcuts: [KeySequence.ctrl.o],
               run: (_) {
                 calls.add('open');
               },
@@ -396,7 +396,7 @@ void main() {
               title: 'Save File',
               description: 'Write changes',
               category: 'File',
-              shortcuts: [KeyChord.ctrl.s],
+              shortcuts: [KeySequence.ctrl.s],
               run: (_) {
                 calls.add('save');
               },
@@ -669,7 +669,7 @@ void main() {
               title: 'Save File',
               description: 'Write changes',
               category: 'File',
-              shortcuts: [KeyChord.ctrl.s],
+              shortcuts: [KeySequence.ctrl.s],
               run: (_) {},
             ),
           ],

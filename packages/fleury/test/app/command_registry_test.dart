@@ -261,7 +261,7 @@ void main() {
               title: 'Save',
               description: 'Write current file',
               category: 'File',
-              shortcuts: [KeyChord.ctrl.s],
+              shortcuts: [KeySequence.ctrl.s],
               semanticAction: SemanticAction.submit,
               run: (_) {},
             ),
@@ -315,7 +315,7 @@ void main() {
             AppCommand(
               id: _save,
               title: 'Save',
-              shortcuts: [KeyChord.ctrl.s],
+              shortcuts: [KeySequence.ctrl.s],
               run: (_) {
                 calls += 1;
               },
@@ -340,7 +340,7 @@ void main() {
             AppCommand(
               id: _disabled,
               title: 'Disabled',
-              shortcuts: [KeyChord.ctrl.s],
+              shortcuts: [KeySequence.ctrl.s],
               enabled: (_) => false,
               run: (_) {
                 calls += 1;
@@ -373,7 +373,7 @@ void main() {
             AppCommand(
               id: _save,
               title: 'Save',
-              shortcuts: [KeyChord.ctrl.s],
+              shortcuts: [KeySequence.ctrl.s],
               run: (_) => gate.future,
             ),
           ],

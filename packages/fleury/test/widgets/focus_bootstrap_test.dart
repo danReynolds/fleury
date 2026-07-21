@@ -23,7 +23,7 @@ void main() {
       var fired = 0;
       tester.pumpWidget(
         KeyBindings(
-          bindings: [KeyBinding(KeyChord.char('x'), onEvent: (_) => fired++)],
+          bindings: [KeyBinding(KeyCode.char('x'), onTrigger: () => fired++)],
           // Deliberately NO focusable descendant and no autofocus.
           child: const Text('no focus here'),
         ),
@@ -85,13 +85,13 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyChord.char('x'), onEvent: (_) => order.add('outer')),
+            KeyBinding(KeyCode.char('x'), onTrigger: () => order.add('outer')),
           ],
           child: KeyBindings(
             bindings: [
               KeyBinding(
-                KeyChord.char('x'),
-                onEvent: (_) => order.add('inner'),
+                KeyCode.char('x'),
+                onTrigger: () => order.add('inner'),
               ),
             ],
             child: const Text('nested'),
@@ -157,8 +157,8 @@ void main() {
                 child: KeyBindings(
                   bindings: [
                     KeyBinding(
-                      KeyChord.char('x'),
-                      onEvent: (_) => outsideFired++,
+                      KeyCode.char('x'),
+                      onTrigger: () => outsideFired++,
                     ),
                   ],
                   child: const Text('outside'),
@@ -171,8 +171,8 @@ void main() {
                   child: KeyBindings(
                     bindings: [
                       KeyBinding(
-                        KeyChord.char('x'),
-                        onEvent: (_) => insideFired++,
+                        KeyCode.char('x'),
+                        onTrigger: () => insideFired++,
                       ),
                     ],
                     child: const Text('inside modal'),

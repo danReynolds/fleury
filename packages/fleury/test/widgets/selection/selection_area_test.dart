@@ -215,7 +215,7 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyChord.ctrl.c, onEvent: (_) => ancestorCtrlC++),
+            KeyBinding(KeySequence.ctrl.c, onTrigger: () => ancestorCtrlC++),
           ],
           child: const SelectionArea(child: Text('hello')),
         ),
@@ -253,7 +253,7 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyChord.escape, onEvent: (_) => ancestorEscape++),
+            KeyBinding(KeySequence.escape, onTrigger: () => ancestorEscape++),
           ],
           child: const SelectionArea(child: Text('hello')),
         ),
@@ -613,7 +613,10 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyChord.shift.home, onEvent: (_) => ancestorHomeHit++),
+            KeyBinding(
+              KeySequence.shift.home,
+              onTrigger: () => ancestorHomeHit++,
+            ),
           ],
           child: const SelectionArea(child: Text('hello')),
         ),
@@ -632,8 +635,8 @@ void main() {
         KeyBindings(
           bindings: [
             KeyBinding(
-              KeyChord.shift.right,
-              onEvent: (_) => ancestorRightHit++,
+              KeySequence.shift.right,
+              onTrigger: () => ancestorRightHit++,
             ),
           ],
           child: const SelectionArea(child: Text('hello')),

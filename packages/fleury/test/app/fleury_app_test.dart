@@ -69,7 +69,7 @@ final class _WorkspacePackageExtension extends FleuryAppExtension {
       id: _openWorkspace,
       title: 'Open Workspace',
       category: 'Workspace',
-      shortcuts: [KeyChord.ctrl.o],
+      shortcuts: [KeySequence.ctrl.o],
       semanticAction: SemanticAction.activate,
       run: (context) {
         final extension = context.appExtension<_WorkspacePackageExtension>();
@@ -137,7 +137,7 @@ final class _ScreenShellState extends State<_ScreenShell> {
               AppCommand(
                 id: _refresh,
                 title: 'Refresh Runs',
-                shortcuts: [KeyChord.ctrl.f],
+                shortcuts: [KeySequence.ctrl.f],
                 run: (_) {
                   runRefreshes += 1;
                 },
@@ -153,7 +153,7 @@ final class _ScreenShellState extends State<_ScreenShell> {
               AppCommand(
                 id: _refresh,
                 title: 'Refresh Overview',
-                shortcuts: [KeyChord.ctrl.f],
+                shortcuts: [KeySequence.ctrl.f],
                 run: (_) {
                   overviewRefreshes += 1;
                 },
@@ -648,7 +648,7 @@ void main() {
           AppCommand(
             id: _goRuns,
             title: 'Go to Runs',
-            shortcuts: [KeyChord.ctrl.r],
+            shortcuts: [KeySequence.ctrl.r],
             semanticAction: SemanticAction.navigate,
             run: (_) {
               shellKey.currentState!.openScreen('runs');
@@ -779,7 +779,7 @@ void main() {
           AppCommand(
             id: _goRuns,
             title: 'Go to Runs',
-            shortcuts: [KeyChord.ctrl.r],
+            shortcuts: [KeySequence.ctrl.r],
             run: (_) {
               shellKey.currentState!.openScreen('runs');
             },
@@ -823,7 +823,7 @@ void main() {
           AppCommand(
             id: _goRuns,
             title: 'Go to Runs',
-            shortcuts: [KeyChord.ctrl.r],
+            shortcuts: [KeySequence.ctrl.r],
             run: (_) {
               active = 'Runs';
             },
@@ -914,7 +914,7 @@ void main() {
           AppCommand(
             id: _refresh,
             title: 'Refresh',
-            shortcuts: [KeyChord.ctrl.f],
+            shortcuts: [KeySequence.ctrl.f],
             run: (context) {
               context.status!.update([
                 StatusItem.success('Task', id: 'task', value: 'done'),

@@ -12,7 +12,7 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyChord.char('q'), onEvent: (_) {}, label: 'Quit'),
+            KeyBinding(KeyCode.char('q'), onTrigger: () {}, label: 'Quit'),
           ],
           child: const Column(
             children: [
@@ -30,11 +30,11 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyChord.char('q'), onEvent: (_) {}, label: 'outer'),
+            KeyBinding(KeyCode.char('q'), onTrigger: () {}, label: 'outer'),
           ],
           child: KeyBindings(
             bindings: [
-              KeyBinding(KeyChord.char('q'), onEvent: (_) {}, label: 'inner'),
+              KeyBinding(KeyCode.char('q'), onTrigger: () {}, label: 'inner'),
             ],
             child: const Column(
               children: [
@@ -55,20 +55,20 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyChord.char('a'), onEvent: (_) {}),
+            KeyBinding(KeyCode.char('a'), onTrigger: () {}),
             KeyBinding(
-              KeyChord.char('b'),
-              onEvent: (_) {},
+              KeyCode.char('b'),
+              onTrigger: () {},
               label: 'hidden',
               hideFromHintBar: true,
             ),
             KeyBinding(
-              KeyChord.char('c'),
-              onEvent: (_) {},
+              KeyCode.char('c'),
+              onTrigger: () {},
               label: 'off',
               enabled: false,
             ),
-            KeyBinding(KeyChord.char('d'), onEvent: (_) {}, label: 'shown'),
+            KeyBinding(KeyCode.char('d'), onTrigger: () {}, label: 'shown'),
           ],
           child: const Column(
             children: [
@@ -93,7 +93,7 @@ void main() {
             AppCommand(
               id: const CommandId('go.runs'),
               title: 'Go to Runs',
-              shortcuts: [KeyChord.ctrl.r],
+              shortcuts: [KeySequence.ctrl.r],
               run: (_) {},
             ),
           ],
@@ -121,10 +121,10 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding.list(
-              [KeyChord.key(KeyCode.arrowUp), KeyChord.key(KeyCode.arrowDown)],
+            KeyBinding.any(
+              [KeyCode.arrowUp, KeyCode.arrowDown],
               label: 'move',
-              onEvent: (_) {},
+              onTrigger: () {},
             ),
           ],
           child: const Column(
@@ -144,7 +144,7 @@ void main() {
         KeyBindings(
           bindings: [
             for (var i = 0; i < 6; i++)
-              KeyBinding(KeyChord.char('$i'), label: 'act$i', onEvent: (_) {}),
+              KeyBinding(KeyCode.char('$i'), label: 'act$i', onTrigger: () {}),
           ],
           child: const Column(
             children: [
@@ -171,7 +171,7 @@ void main() {
         KeyBindings(
           bindings: [
             for (var i = 0; i < 4; i++)
-              KeyBinding(KeyChord.char('$i'), label: 'act$i', onEvent: (_) {}),
+              KeyBinding(KeyCode.char('$i'), label: 'act$i', onTrigger: () {}),
           ],
           // A non-Expanded bar in a Row receives an unbounded width.
           child: Row(
@@ -195,9 +195,9 @@ void main() {
           bindings: [
             for (var i = 0; i < 20; i++)
               KeyBinding(
-                KeyChord.char(String.fromCharCode(97 + i)),
+                KeyCode.char(String.fromCharCode(97 + i)),
                 label: 'a$i',
-                onEvent: (_) {},
+                onTrigger: () {},
               ),
           ],
           child: const Column(

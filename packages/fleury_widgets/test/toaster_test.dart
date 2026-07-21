@@ -139,7 +139,7 @@ void main() {
         'Deleted',
         action: ToastAction(
           label: 'Undo',
-          key: KeyChord.alt.u,
+          key: KeySequence.alt.u,
           onPressed: () {},
         ),
       );
@@ -162,7 +162,7 @@ void main() {
         'Deleted',
         action: ToastAction(
           label: 'Undo',
-          key: KeyChord.alt.u,
+          key: KeySequence.alt.u,
           onPressed: () => undone++,
         ),
       );
@@ -362,7 +362,7 @@ void main() {
         'Deleted',
         action: ToastAction(
           label: 'Undo',
-          key: KeyChord.alt.u,
+          key: KeySequence.alt.u,
           onPressed: () => undone++,
         ),
       );
@@ -401,7 +401,7 @@ void main() {
         severity: ToastSeverity.warning,
         action: ToastAction(
           label: 'Undo',
-          key: KeyChord.alt.u,
+          key: KeySequence.alt.u,
           onPressed: () {},
         ),
       );

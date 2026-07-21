@@ -288,8 +288,8 @@ class _TabsState extends State<Tabs> {
       bindings: [
         for (var i = 0; i < widget.tabs.length && i < 9; i++)
           KeyBinding(
-            KeyChord.alt.char('${i + 1}'),
-            onEvent: (_) {
+            KeySequence.alt.char('${i + 1}'),
+            onTrigger: () {
               _controller.index = i;
             },
             hideFromHintBar: true,
@@ -298,13 +298,13 @@ class _TabsState extends State<Tabs> {
         // cross-app convention (browsers, VS Code, iTerm2) for switching tabs
         // while focus is deep inside panel content.
         KeyBinding(
-          KeyChord.ctrl.pageUp,
-          onEvent: (_) => _controller.previous(),
+          KeySequence.ctrl.pageUp,
+          onTrigger: () => _controller.previous(),
           hideFromHintBar: true,
         ),
         KeyBinding(
-          KeyChord.ctrl.pageDown,
-          onEvent: (_) => _controller.next(),
+          KeySequence.ctrl.pageDown,
+          onTrigger: () => _controller.next(),
           hideFromHintBar: true,
         ),
       ],

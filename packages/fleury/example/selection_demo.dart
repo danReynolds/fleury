@@ -47,8 +47,8 @@ class _SelectionDemoState extends State<SelectionDemo> {
   Widget build(BuildContext context) {
     return KeyBindings(
       bindings: [
-        KeyBinding(
-          KeyChord.ctrl.c,
+        KeyBinding.event(
+          KeySequence.ctrl.c,
           onEvent: (event) {
             event.bubble();
           },

@@ -24,7 +24,7 @@ class StorybookApp extends StatefulWidget {
         stories,
         'stories',
         'StorybookApp needs at least one story; pass a non-empty list or omit '
-        '`stories` to use the built-in catalog',
+            '`stories` to use the built-in catalog',
       );
     }
   }
@@ -258,7 +258,7 @@ class _StorybookAppState extends State<StorybookApp> {
         id: const CommandId('storybook.palette.open'),
         title: 'Open command palette',
         category: 'Storybook',
-        shortcuts: [KeyChord.ctrl.k],
+        shortcuts: [KeySequence.ctrl.k],
         showInPalette: false,
         run: (context) {
           final buildContext = context.buildContext;
@@ -272,28 +272,28 @@ class _StorybookAppState extends State<StorybookApp> {
         title: 'Cycle theme',
         description: 'Switch terminal, dark, light, and high-contrast themes.',
         category: 'Storybook',
-        shortcuts: [KeyChord.ctrl.t],
+        shortcuts: [KeySequence.ctrl.t],
         run: (_) => _cycleTheme(),
       ),
       AppCommand(
         id: const CommandId('storybook.story.previous'),
         title: 'Previous story',
         category: 'Storybook',
-        shortcuts: [KeyChord.pageUp],
+        shortcuts: [KeySequence.pageUp],
         run: (_) => _moveStory(-1),
       ),
       AppCommand(
         id: const CommandId('storybook.story.next'),
         title: 'Next story',
         category: 'Storybook',
-        shortcuts: [KeyChord.pageDown],
+        shortcuts: [KeySequence.pageDown],
         run: (_) => _moveStory(1),
       ),
       AppCommand(
         id: const CommandId('storybook.variant.previous'),
         title: 'Previous variant',
         category: 'Storybook',
-        shortcuts: [KeyChord.alt.left],
+        shortcuts: [KeySequence.alt.left],
         enabled: (_) => _selectedStory.variants.isNotEmpty,
         run: (_) => _moveVariant(-1),
       ),
@@ -301,7 +301,7 @@ class _StorybookAppState extends State<StorybookApp> {
         id: const CommandId('storybook.variant.next'),
         title: 'Next variant',
         category: 'Storybook',
-        shortcuts: [KeyChord.alt.right],
+        shortcuts: [KeySequence.alt.right],
         enabled: (_) => _selectedStory.variants.isNotEmpty,
         run: (_) => _moveVariant(1),
       ),
@@ -309,28 +309,28 @@ class _StorybookAppState extends State<StorybookApp> {
         id: const CommandId('storybook.inspector.toggle'),
         title: _showInspector ? 'Hide inspector' : 'Show inspector',
         category: 'Storybook',
-        shortcuts: [KeyChord.ctrl.s],
+        shortcuts: [KeySequence.ctrl.s],
         run: (_) => _toggleInspector(),
       ),
       AppCommand(
         id: const CommandId('storybook.preview.density'),
         title: _compactPreview ? 'Use full preview' : 'Use compact preview',
         category: 'Storybook',
-        shortcuts: [KeyChord.ctrl.d],
+        shortcuts: [KeySequence.ctrl.d],
         run: (_) => _toggleDensity(),
       ),
       AppCommand(
         id: const CommandId('storybook.viewport.next'),
         title: 'Cycle viewport preset',
         category: 'Storybook',
-        shortcuts: [KeyChord.ctrl.v],
+        shortcuts: [KeySequence.ctrl.v],
         run: (_) => _cycleViewport(),
       ),
       AppCommand(
         id: const CommandId('storybook.story.reset'),
         title: 'Reset current story',
         category: 'Storybook',
-        shortcuts: [KeyChord.ctrl.r],
+        shortcuts: [KeySequence.ctrl.r],
         run: (_) => _resetStory(),
       ),
     ];
@@ -348,8 +348,8 @@ class _StorybookAppState extends State<StorybookApp> {
         // and Tab. (Bubbled here: widgets that use Esc themselves consume
         // it first.)
         KeyBinding(
-          KeyChord.escape,
-          onEvent: (_) => _selectorFocusNode.requestFocus(),
+          KeySequence.escape,
+          onTrigger: () => _selectorFocusNode.requestFocus(),
           hideFromHintBar: true,
         ),
       ],

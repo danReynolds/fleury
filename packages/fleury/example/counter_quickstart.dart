@@ -23,7 +23,7 @@ class _CounterAppState extends State<CounterApp> {
   @override
   Widget build(BuildContext context) {
     return KeyBindings(
-      bindings: [KeyBinding(.space, onEvent: (_) => setState(() => _count++))],
+      bindings: [KeyBinding(.space, onTrigger: () => setState(() => _count++))],
       child: Center(
         child: Text('count: $_count   (space to increment, Ctrl+C to quit)'),
       ),

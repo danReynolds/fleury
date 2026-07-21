@@ -38,7 +38,7 @@ class ProcessPanel extends StatelessWidget {
     this.copyOutput = true,
     this.copyOptions = const LogRegionCopyOptions(),
     this.onCopy,
-    this.cancelShortcut = KeyChord.escape,
+    this.cancelShortcut = KeySequence.escape,
     this.showHeader = true,
     this.showProgress = true,
     this.border,
@@ -76,7 +76,7 @@ class ProcessPanel extends StatelessWidget {
   final void Function(LogRegionCopyResult result)? onCopy;
 
   /// Shortcut that cancels the running process; null disables the binding.
-  final KeyChord? cancelShortcut;
+  final KeySequence? cancelShortcut;
 
   /// Whether to render the status/command header above output.
   final bool showHeader;
@@ -145,7 +145,7 @@ class ProcessPanel extends StatelessWidget {
           KeyBinding(
             shortcut,
             label: 'Cancel process',
-            onEvent: (_) => controller.cancel(),
+            onTrigger: () => controller.cancel(),
           ),
         ],
         child: body,

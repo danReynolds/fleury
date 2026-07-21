@@ -66,13 +66,13 @@ void main() {
         bindings: [
           // Synchronous throw inside dispatch (caught by the event-loop guard).
           KeyBinding(
-            KeyChord.key(KeyCode.f1),
-            onEvent: (_) => throw StateError('boom-sync'),
+            KeyCode.f1,
+            onTrigger: () => throw StateError('boom-sync'),
           ),
           // Asynchronous throw (escapes to the zone guard).
           KeyBinding(
-            KeyChord.key(KeyCode.f2),
-            onEvent: (_) {
+            KeyCode.f2,
+            onTrigger: () {
               unawaited(Future<void>(() => throw StateError('boom-async')));
             },
           ),

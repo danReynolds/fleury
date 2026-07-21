@@ -388,27 +388,61 @@ pedagogy — another reason the type stays exported.
 
 ## 12. Delivery
 
-Four PRs, each independently green, landed after the in-flight docs
-branch clears `dom_input_source.dart`:
+Originally planned as four PRs; **PR 1 shipped standalone (#157) and PRs
+2–3 plus the value-level parts of PR 4 landed together** as the combined
+break (no deprecation shims at any step, per the pre-launch policy):
 
-1. **Events + parsers + wire.** `KeyCode` value type, required
-   `KeyEvent.code`, terminal parser (~30 construction sites), DOM input
-   source, dispatcher text→key synthesis, remote codec re-encoding.
-   Gates: `serve-wire-live`, `serve-semantics-gate`, `bundle-size`.
-2. **`KeySequence` + matcher.** Rename from `KeyChord`, super/meta
-   model + strictness (the §5.3 bug fix), `up` rejection, produced-
-   character rule, shadow predicates (text + capability), labels.
+1. **Events + parsers + wire** (#157). `KeyCode` value type, required
+   `KeyEvent.code`, `SpecialKey` rename, terminal + DOM parsers,
+   dispatcher text→key synthesis, remote codec re-encoding (kind
+   discriminant). Gates: `serve-wire-live`, `serve-semantics-gate`,
+   `bundle-size`.
+2. **`KeySequence` + matcher.** `KeyChord` → `KeySequence` with
+   `KeyCode extends KeySequence`, five-modifier strict matching (the
+   §5.3 super/meta bug fix), `up` rejection (at the dispatcher entry),
+   produced-character folding, text-shadow predicate excludes super/meta.
 3. **`KeyBinding` constructors + sweep.** `onTrigger` / `.event` /
-   `.any`, `KeySequenceMatch`, then the mechanical pass: 156
-   `onEvent: (_)` sites, 20 `KeyBinding.list` sites, ~88 files
-   referencing `KeyChord`, docs and website snippets.
-4. **Introspection + strings + tester.** `activeOf`/`pendingOf`,
-   `PendingKeySequenceMatch`, `WhichKey`, `parse`/`hintLabel`
-   round-trip, `isPrefixOf`, `toSequence`, `tester.press`/`type`.
+   `.any`, `KeySequenceMatch` (which alias fired + consumed events), then
+   the mechanical pass across every package, tests, and docs snippets.
+4. **Strings + value APIs** (this PR): `parse` / `tryParse` ↔
+   `hintLabel` round-trip, `isPrefixOf`, `KeyEvent.toSequence`.
 
-No deprecation shims at any step (pre-launch policy). Not on the hot
-paint path, so paint/alloc gates are unaffected; `check` plus the serve
-gates above cover it.
+**Deferred to a follow-up PR** (new reactive runtime plumbing, best
+reviewed on its own): the `KeyBindings.activeOf` / `pendingOf` context
+accessors, `PendingKeySequenceMatch`, the `WhichKey` widget, and
+`tester.press` / `type`. None blocks the core redesign — they are
+additive discovery/ergonomics surfaces. `resolveActiveKeyBindings`
+(the resolution logic behind `activeOf`) already ships and powers the
+hint bar. The `samples/editor` proving ground (§13) also lands with
+that follow-up, since its which-key demo depends on `pendingOf`.
+
+Not on the hot paint path, so paint/alloc gates are unaffected; `check`
+plus the serve gates above cover it.
+
+### 12.1 Implementation errata
+
+Three refinements discovered while implementing, noted so the code and
+this RFC agree:
+
+- **`sealed`, not `final`, for `KeySequence`.** §3.1 preferred `final`
+  to avoid exhaustive-switch friction. In practice the two subtypes
+  (`KeyCode`; the private `_ModifiedSequence`) must share one library
+  with the supertype for the extension to work, and the non-`KeyCode`
+  subtype is private — so external code can never write an exhaustive
+  switch anyway (it always needs a default). `sealed` is then the
+  cleaner tool: it gives the abstract step interface the two subtypes
+  implement. No user-visible difference.
+- **`KeyCode.char` asserts one grapheme; it does not NFC-normalize.**
+  §3.1 called for NFC normalization, but Dart has no built-in
+  normalizer and a `const` constructor can't run one. The constructor
+  asserts non-empty and documents the single-grapheme expectation;
+  callers passing pre-composed characters (the parsers do) are
+  unaffected.
+- **`hintLabel` renders a modified letter uppercase (`Ctrl+S`) for
+  readability; `parse` treats that uppercase as styling, not Shift,**
+  when a non-Shift modifier is present. Shift on a letter is otherwise
+  carried by case (`Shift+G` ↔ upper `G`). This keeps `parse(hintLabel)
+  == x` while matching the conventional `Ctrl+S` display.
 
 ## 13. Proving ground: `samples/editor`
 

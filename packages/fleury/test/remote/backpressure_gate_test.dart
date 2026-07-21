@@ -41,8 +41,8 @@ class _AppState extends State<_App> {
     return KeyBindings(
       bindings: [
         KeyBinding(
-          KeyChord.char('t'),
-          onEvent: (_) => setState(() => _count++),
+          KeyCode.char('t'),
+          onTrigger: () => setState(() => _count++),
         ),
       ],
       child: Focus(
@@ -76,8 +76,8 @@ class _ImageAppState extends State<_ImageApp> {
     return KeyBindings(
       bindings: [
         KeyBinding(
-          KeyChord.char('i'),
-          onEvent: (_) => setState(() => _generation++),
+          KeyCode.char('i'),
+          onTrigger: () => setState(() => _generation++),
         ),
       ],
       child: Focus(autofocus: true, child: _ImageProbe(_generation)),
@@ -147,8 +147,8 @@ class _PostFrameAppState extends State<_PostFrameApp> {
     return KeyBindings(
       bindings: [
         KeyBinding(
-          KeyChord.char('t'),
-          onEvent: (_) => setState(() => _count++),
+          KeyCode.char('t'),
+          onTrigger: () => setState(() => _count++),
         ),
       ],
       child: Focus(autofocus: true, child: Text('count: $_count')),

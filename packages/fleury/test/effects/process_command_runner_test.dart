@@ -57,8 +57,8 @@ void main() {
       final runner = ProcessCommandRunner(
         controller: controller,
         command: const ProcessTaskCommand('dart', ['--version']),
-        shortcuts: [KeyChord.ctrl.r],
-        cancelShortcuts: [KeyChord.ctrl.x],
+        shortcuts: [KeySequence.ctrl.r],
+        cancelShortcuts: [KeySequence.ctrl.x],
       );
 
       expect(runner.startCommandId.value, 'process.doctor-run.start');

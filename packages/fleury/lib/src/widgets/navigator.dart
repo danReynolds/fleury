@@ -781,8 +781,8 @@ class _RouteHost extends StatelessWidget {
         bindings: active && dismissible
             ? [
                 KeyBinding(
-                  KeyChord.key(KeyCode.escape),
-                  onEvent: (_) => navigator.maybePop(),
+                  KeySequence.escape,
+                  onTrigger: () => navigator.maybePop(),
                   hideFromHintBar: true,
                 ),
               ]

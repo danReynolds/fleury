@@ -40,7 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
         id: _openDetail,
         title: 'Open detail',
         category: 'Navigation',
-        shortcuts: [KeyChord.ctrl.o],
+        shortcuts: [KeySequence.ctrl.o],
         semanticAction: SemanticAction.navigate,
         run: (command) {
           final source = command.buildContext;
@@ -76,7 +76,7 @@ class DetailScreen extends StatelessWidget {
           id: _confirmDetail,
           title: 'Confirm and go back',
           category: 'Navigation',
-          shortcuts: [KeyChord.ctrl.enter],
+          shortcuts: [KeySequence.ctrl.enter],
           semanticAction: SemanticAction.activate,
           run: (command) => command.buildContext?.pop(true),
         ),

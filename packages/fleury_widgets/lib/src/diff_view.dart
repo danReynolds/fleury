@@ -586,9 +586,9 @@ class _DiffViewState extends State<DiffView> {
       list = KeyBindings(
         bindings: [
           KeyBinding(
-            KeyChord.ctrl.c,
+            KeySequence.ctrl.c,
             label: 'Copy diff selection',
-            onEvent: (_) => unawaited(_copySelection()),
+            onTrigger: () => unawaited(_copySelection()),
           ),
         ],
         child: list,

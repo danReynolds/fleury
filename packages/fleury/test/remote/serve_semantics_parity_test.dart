@@ -84,8 +84,8 @@ class _AppState extends State<_App> {
     return KeyBindings(
       bindings: [
         KeyBinding(
-          KeyChord.char('t'),
-          onEvent: (_) => setState(() => _count++),
+          KeyCode.char('t'),
+          onTrigger: () => setState(() => _count++),
         ),
       ],
       child: Focus(

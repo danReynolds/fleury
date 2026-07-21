@@ -41,7 +41,7 @@ final class AppCommand {
     required this.run,
     this.description,
     this.category,
-    this.shortcuts = const <KeyChord>[],
+    this.shortcuts = const <KeySequence>[],
     this.enabled = _alwaysCommandPredicate,
     this.visible = _alwaysCommandPredicate,
     this.showInPalette = true,
@@ -53,7 +53,7 @@ final class AppCommand {
   final AppCommandCallback run;
   final String? description;
   final String? category;
-  final List<KeyChord> shortcuts;
+  final List<KeySequence> shortcuts;
   final AppCommandPredicate enabled;
 
   /// Whether the command participates in its scope at all.
@@ -404,11 +404,11 @@ class _CommandScopeState extends State<CommandScope> {
       );
       if (!command.visible(context)) continue;
       bindings.add(
-        KeyBinding.list(
+        KeyBinding.any(
           command.shortcuts,
           label: command.title,
           enabled: command.enabled(context),
-          onEvent: (_) {
+          onTrigger: () {
             unawaited(registry.invoke(command.id, buildContext: this.context));
           },
         ),

@@ -245,10 +245,7 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(
-              KeyChord.key(KeyCode.arrowUp),
-              onEvent: (_) => bubbled += 1,
-            ),
+            KeyBinding(KeyCode.arrowUp, onTrigger: () => bubbled += 1),
           ],
           child: ListView.builder(
             itemCount: 3,
@@ -269,10 +266,7 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(
-              KeyChord.key(KeyCode.arrowUp),
-              onEvent: (_) => bubbled += 1,
-            ),
+            KeyBinding(KeyCode.arrowUp, onTrigger: () => bubbled += 1),
           ],
           child: ListView.builder(
             itemCount: 3,
@@ -294,10 +288,7 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(
-              KeyChord.key(KeyCode.arrowDown),
-              onEvent: (_) => bubbled += 1,
-            ),
+            KeyBinding(KeyCode.arrowDown, onTrigger: () => bubbled += 1),
           ],
           child: ListView.builder(
             controller: controller,
@@ -817,10 +808,7 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(
-              KeyChord.key(KeyCode.pageDown),
-              onEvent: (_) => bubbled += 1,
-            ),
+            KeyBinding(KeyCode.pageDown, onTrigger: () => bubbled += 1),
           ],
           child: ListView.builder(
             controller: controller,

@@ -70,7 +70,7 @@ void main() {
     tester.pumpWidget(
       KeyBindings(
         bindings: <KeyBinding>[
-          KeyBinding(KeyChord.enter, onEvent: (_) => ancestorSubmits += 1),
+          KeyBinding(KeySequence.enter, onTrigger: () => ancestorSubmits += 1),
         ],
         child: Autocomplete(
           options: _fruits,

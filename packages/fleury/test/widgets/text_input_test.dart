@@ -355,12 +355,7 @@ void main() {
       var escapes = 0;
       tester.pumpWidget(
         KeyBindings(
-          bindings: [
-            KeyBinding(
-              KeyChord.key(KeyCode.escape),
-              onEvent: (_) => escapes += 1,
-            ),
-          ],
+          bindings: [KeyBinding(KeyCode.escape, onTrigger: () => escapes += 1)],
           child: const TextInput(autofocus: true),
         ),
       );
@@ -435,7 +430,9 @@ void main() {
       var ancestorUps = 0;
       tester.pumpWidget(
         KeyBindings(
-          bindings: [KeyBinding(KeyChord.up, onEvent: (_) => ancestorUps += 1)],
+          bindings: [
+            KeyBinding(KeySequence.up, onTrigger: () => ancestorUps += 1),
+          ],
           child: const TextInput(autofocus: true),
         ),
       );
@@ -477,7 +474,7 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyChord.down, onEvent: (_) => ancestorDowns += 1),
+            KeyBinding(KeySequence.down, onTrigger: () => ancestorDowns += 1),
           ],
           child: TextInput(
             controller: controller,
@@ -645,7 +642,7 @@ void main() {
         ..open(range: const TextRange.collapsed(0));
       tester.pumpWidget(
         KeyBindings(
-          bindings: [KeyBinding(KeyChord.tab, onEvent: (_) => tabs += 1)],
+          bindings: [KeyBinding(KeySequence.tab, onTrigger: () => tabs += 1)],
           child: TextInput(completionController: completions, autofocus: true),
         ),
       );
@@ -667,7 +664,9 @@ void main() {
       final controller = TextEditingController();
       tester.pumpWidget(
         KeyBindings(
-          bindings: [KeyBinding(KeyChord.ctrl.s, onEvent: (_) => saves += 1)],
+          bindings: [
+            KeyBinding(KeySequence.ctrl.s, onTrigger: () => saves += 1),
+          ],
           child: TextInput(controller: controller, autofocus: true),
         ),
       );
@@ -703,7 +702,7 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyChord.space.p, onEvent: (_) => paletteOpens += 1),
+            KeyBinding(KeySequence.space.p, onTrigger: () => paletteOpens += 1),
           ],
           child: TextInput(controller: controller, autofocus: true),
         ),
@@ -1156,7 +1155,10 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyChord.ctrl.c, onEvent: (_) => ancestorCopies += 1),
+            KeyBinding(
+              KeySequence.ctrl.c,
+              onTrigger: () => ancestorCopies += 1,
+            ),
           ],
           child: TextInput(controller: controller, autofocus: true),
         ),
@@ -1176,7 +1178,10 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyChord.ctrl.c, onEvent: (_) => ancestorCopies += 1),
+            KeyBinding(
+              KeySequence.ctrl.c,
+              onTrigger: () => ancestorCopies += 1,
+            ),
           ],
           child: TextInput(
             controller: controller,
@@ -1207,7 +1212,10 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyChord.ctrl.c, onEvent: (_) => ancestorCopies += 1),
+            KeyBinding(
+              KeySequence.ctrl.c,
+              onTrigger: () => ancestorCopies += 1,
+            ),
           ],
           child: TextInput(
             controller: controller,

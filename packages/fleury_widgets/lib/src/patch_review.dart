@@ -629,9 +629,9 @@ class _PatchReviewState extends State<PatchReview> {
       fileList = KeyBindings(
         bindings: [
           KeyBinding(
-            KeyChord.ctrl.c,
+            KeySequence.ctrl.c,
             label: 'Copy patch file',
-            onEvent: (_) => unawaited(_copySelection()),
+            onTrigger: () => unawaited(_copySelection()),
           ),
         ],
         child: fileList,
@@ -843,7 +843,8 @@ String _summaryText(
 }
 
 /// `1 file`, `2 files` — pluralizes [noun] unless [count] is exactly one.
-String _plural(int count, String noun) => '$count $noun${count == 1 ? '' : 's'}';
+String _plural(int count, String noun) =>
+    '$count $noun${count == 1 ? '' : 's'}';
 
 String _rowText(PatchReviewFile file, {required bool activeSelection}) {
   final prefix = activeSelection ? '> ' : '  ';

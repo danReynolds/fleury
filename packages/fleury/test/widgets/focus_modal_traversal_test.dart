@@ -742,8 +742,8 @@ void main() {
         // needed, and the next dispatcher consultation sees the new value.
         var globalFired = 0;
         final binding = KeyBinding(
-          KeyChord.char('g'),
-          onEvent: (_) => globalFired += 1,
+          KeyCode.char('g'),
+          onTrigger: () => globalFired += 1,
           label: 'g',
         );
         final dispatcher = InputDispatcher(
@@ -793,8 +793,8 @@ void main() {
         // focused node's enclosing scope when there's no active modal.
         var globalFired = 0;
         final binding = KeyBinding(
-          KeyChord.char('g'),
-          onEvent: (_) => globalFired += 1,
+          KeyCode.char('g'),
+          onTrigger: () => globalFired += 1,
           label: 'g',
         );
         final dispatcher = InputDispatcher(

@@ -102,8 +102,8 @@ class _TooltipState extends State<Tooltip> {
         onFocusChange: _onFocusChange,
         child: KeyBindings(
           bindings: <KeyBinding>[
-            KeyBinding(
-              KeyChord.escape,
+            KeyBinding.event(
+              KeySequence.escape,
               onEvent: (event) {
                 if (_entry == null) {
                   event.bubble();

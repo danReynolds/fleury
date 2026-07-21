@@ -25,8 +25,8 @@ final class ProcessCommandRunner {
     this.description,
     this.cancelDescription,
     this.category = 'Process',
-    this.shortcuts = const <KeyChord>[],
-    this.cancelShortcuts = const <KeyChord>[],
+    this.shortcuts = const <KeySequence>[],
+    this.cancelShortcuts = const <KeySequence>[],
     this.restart = false,
     this.terminalDriver,
     this.handoffTerminal = false,
@@ -48,8 +48,8 @@ final class ProcessCommandRunner {
   final String? description;
   final String? cancelDescription;
   final String category;
-  final List<KeyChord> shortcuts;
-  final List<KeyChord> cancelShortcuts;
+  final List<KeySequence> shortcuts;
+  final List<KeySequence> cancelShortcuts;
   final bool restart;
   final TerminalDriver? terminalDriver;
   final bool handoffTerminal;

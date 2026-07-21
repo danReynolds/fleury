@@ -260,7 +260,7 @@ Future<void> main() async {
   await runApp(
     KeyBindings(
       bindings: [
-        KeyBinding(KeyChord.q, onEvent: (_) => requestExit(), label: 'Quit'),
+        KeyBinding(KeySequence.q, onTrigger: () => requestExit(), label: 'Quit'),
       ],
       child: const CounterApp(),
     ),

@@ -29,10 +29,10 @@ class _ScriptState extends State<_Script> {
     return KeyBindings(
       bindings: [
         KeyBinding(
-          KeyChord.char('t'),
-          onEvent: (_) => setState(() => _count++),
+          KeyCode.char('t'),
+          onTrigger: () => setState(() => _count++),
         ),
-        KeyBinding(KeyChord.char('s'), onEvent: (_) {}),
+        KeyBinding(KeyCode.char('s'), onTrigger: () {}),
       ],
       child: Focus(
         autofocus: true,

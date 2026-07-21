@@ -561,8 +561,8 @@ void main() {
         KeyBindings(
           bindings: [
             KeyBinding(
-              KeyChord.ctrl.k,
-              onEvent: (_) {
+              KeySequence.ctrl.k,
+              onTrigger: () {
                 calls.add('ancestor');
               },
             ),

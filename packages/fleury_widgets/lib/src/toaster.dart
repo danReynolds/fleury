@@ -25,7 +25,7 @@ CellStyle _styleForSeverity(ToastSeverity severity, ColorScheme colors) =>
 /// An actionable affordance on a toast — a [label] and the [key] chord
 /// that triggers [onPressed] (and dismisses the toast) while it's
 /// visible. The chord fires from anywhere in the app, so prefer a
-/// modifier chord (e.g. `KeyChord.alt('u')`); a bare letter is swallowed
+/// modifier chord (e.g. `KeySequence.alt('u')`); a bare letter is swallowed
 /// by a focused text field.
 class ToastAction {
   const ToastAction({
@@ -41,7 +41,7 @@ class ToastAction {
   final void Function() onPressed;
 
   /// App-wide chord that activates this action while the toast is visible.
-  final KeyChord key;
+  final KeySequence key;
 }
 
 /// Hosts transient toast notifications. Place one high in the app
@@ -317,7 +317,7 @@ class _ToasterState extends State<Toaster> {
       for (final toast in actionable)
         KeyBinding(
           toast.action!.key,
-          onEvent: (_) {
+          onTrigger: () {
             _activateAction(toast);
           },
           hideFromHintBar: true,
@@ -327,8 +327,8 @@ class _ToasterState extends State<Toaster> {
       // so a modal/menu that uses Esc consumes it first; it only fires here
       // when a toast is showing and nothing inner handled it.
       if (_toasts.isNotEmpty)
-        KeyBinding(
-          KeyChord.escape,
+        KeyBinding.event(
+          KeySequence.escape,
           onEvent: (event) {
             if (_toasts.isEmpty) {
               event.bubble();

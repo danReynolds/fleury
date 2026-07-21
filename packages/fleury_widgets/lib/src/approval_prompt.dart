@@ -120,13 +120,13 @@ class ApprovalPrompt extends StatelessWidget {
         // keyboard-first user decides without moving focus to a button.
         bindings: <KeyBinding>[
           KeyBinding(
-            KeyChord.char('y'),
-            onEvent: (_) => _approve(),
+            KeyCode.char('y'),
+            onTrigger: () => _approve(),
             hideFromHintBar: true,
           ),
           KeyBinding(
-            KeyChord.char('n'),
-            onEvent: (_) => _deny(),
+            KeyCode.char('n'),
+            onTrigger: () => _deny(),
             hideFromHintBar: true,
           ),
         ],

@@ -1,6 +1,6 @@
-// Locks the named KeyChord constants used with Dart 3.10 dot-shorthand
+// Locks the named KeySequence constants used with Dart 3.10 dot-shorthand
 // in KeyBinding declarations:
-//   KeyBinding(keys: [.space, .ctrl.s, ...], onEvent: ...)
+//   KeyBinding.event(keys: [.space, .ctrl.s, ...], onEvent: ...)
 //
 // Each constant should equal the same chord built via the escape-hatch
 // constructor, match the corresponding KeyEvent, and (for non-special
@@ -25,59 +25,65 @@ KeyEvent _key(
 );
 
 void main() {
-  group('KeyChord named statics — equal escape-hatch long form', () {
-    test('space equals KeyChord.char(\' \')', () {
-      expect(KeyChord.space, const KeyChord.char(' '));
+  group('KeySequence named statics — equal escape-hatch long form', () {
+    test('space equals KeyCode.char(\' \')', () {
+      expect(KeySequence.space, const KeyCode.char(' '));
     });
-    test('letter atoms equal KeyChord.char(...)', () {
-      expect(KeyChord.a, const KeyChord.char('a'));
-      expect(KeyChord.q, const KeyChord.char('q'));
-      expect(KeyChord.z, const KeyChord.char('z'));
+    test('letter atoms equal KeyCode.char(...)', () {
+      expect(KeySequence.a, const KeyCode.char('a'));
+      expect(KeySequence.q, const KeyCode.char('q'));
+      expect(KeySequence.z, const KeyCode.char('z'));
     });
-    test('special chords equal KeyChord.key(...)', () {
-      expect(KeyChord.enter, const KeyChord.key(KeyCode.enter));
-      expect(KeyChord.escape, const KeyChord.key(KeyCode.escape));
-      expect(KeyChord.tab, const KeyChord.key(KeyCode.tab));
-      expect(KeyChord.up, const KeyChord.key(KeyCode.arrowUp));
-      expect(KeyChord.down, const KeyChord.key(KeyCode.arrowDown));
-      expect(KeyChord.left, const KeyChord.key(KeyCode.arrowLeft));
-      expect(KeyChord.right, const KeyChord.key(KeyCode.arrowRight));
-      expect(KeyChord.home, const KeyChord.key(KeyCode.home));
-      expect(KeyChord.end, const KeyChord.key(KeyCode.end));
-      expect(KeyChord.pageUp, const KeyChord.key(KeyCode.pageUp));
-      expect(KeyChord.pageDown, const KeyChord.key(KeyCode.pageDown));
-      expect(KeyChord.f1, const KeyChord.key(KeyCode.f1));
-      expect(KeyChord.f12, const KeyChord.key(KeyCode.f12));
-      expect(KeyChord.shiftTab, const KeyChord.key(KeyCode.tab, shift: true));
+    test('special chords equal their KeyCode statics', () {
+      expect(KeySequence.enter, KeyCode.enter);
+      expect(KeySequence.escape, KeyCode.escape);
+      expect(KeySequence.tab, KeyCode.tab);
+      expect(KeySequence.up, KeyCode.arrowUp);
+      expect(KeySequence.down, KeyCode.arrowDown);
+      expect(KeySequence.left, KeyCode.arrowLeft);
+      expect(KeySequence.right, KeyCode.arrowRight);
+      expect(KeySequence.home, KeyCode.home);
+      expect(KeySequence.end, KeyCode.end);
+      expect(KeySequence.pageUp, KeyCode.pageUp);
+      expect(KeySequence.pageDown, KeyCode.pageDown);
+      expect(KeySequence.f1, KeyCode.f1);
+      expect(KeySequence.f12, KeyCode.f12);
+      expect(KeySequence.shiftTab, KeySequence.shift.tab);
     });
   });
 
-  group('KeyChord named statics — match the right events', () {
+  group('KeySequence named statics — match the right events', () {
     test('.space matches a space char event', () {
-      expect(KeyChord.space.matches(const KeyEvent(KeyCode.char(' '))), isTrue);
       expect(
-        KeyChord.space.matches(const KeyEvent(KeyCode.char('a'))),
+        KeySequence.space.matches(const KeyEvent(KeyCode.char(' '))),
+        isTrue,
+      );
+      expect(
+        KeySequence.space.matches(const KeyEvent(KeyCode.char('a'))),
         isFalse,
       );
     });
     test('.enter / .escape / .tab match their keycodes', () {
-      expect(KeyChord.enter.matches(_key(KeyCode.enter)), isTrue);
-      expect(KeyChord.escape.matches(_key(KeyCode.escape)), isTrue);
-      expect(KeyChord.tab.matches(_key(KeyCode.tab)), isTrue);
+      expect(KeySequence.enter.matches(_key(KeyCode.enter)), isTrue);
+      expect(KeySequence.escape.matches(_key(KeyCode.escape)), isTrue);
+      expect(KeySequence.tab.matches(_key(KeyCode.tab)), isTrue);
     });
     test('.shiftTab needs the shift modifier', () {
-      expect(KeyChord.shiftTab.matches(_key(KeyCode.tab, shift: true)), isTrue);
       expect(
-        KeyChord.shiftTab.matches(_key(KeyCode.tab)),
+        KeySequence.shiftTab.matches(_key(KeyCode.tab, shift: true)),
+        isTrue,
+      );
+      expect(
+        KeySequence.shiftTab.matches(_key(KeyCode.tab)),
         isFalse,
         reason: 'bare Tab should not match Shift+Tab',
       );
     });
     test('arrow chords', () {
-      expect(KeyChord.up.matches(_key(KeyCode.arrowUp)), isTrue);
-      expect(KeyChord.down.matches(_key(KeyCode.arrowDown)), isTrue);
-      expect(KeyChord.left.matches(_key(KeyCode.arrowLeft)), isTrue);
-      expect(KeyChord.right.matches(_key(KeyCode.arrowRight)), isTrue);
+      expect(KeySequence.up.matches(_key(KeyCode.arrowUp)), isTrue);
+      expect(KeySequence.down.matches(_key(KeyCode.arrowDown)), isTrue);
+      expect(KeySequence.left.matches(_key(KeyCode.arrowLeft)), isTrue);
+      expect(KeySequence.right.matches(_key(KeyCode.arrowRight)), isTrue);
     });
   });
 
@@ -90,10 +96,10 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            // Dart resolves `.space` to `KeyChord.space` because the
-            // list's element type is `KeyChord`.
-            KeyBinding(.space, onEvent: (_) => sp++),
-            KeyBinding(.enter, onEvent: (_) => en++),
+            // Dart resolves `.space` to `KeySequence.space` because the
+            // list's element type is `KeySequence`.
+            KeyBinding(.space, onTrigger: () => sp++),
+            KeyBinding(.enter, onTrigger: () => en++),
           ],
           child: const Text('app'),
         ),
@@ -114,9 +120,9 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(.ctrl.s, onEvent: (_) => fired.add('save')),
-            KeyBinding(.alt.x, onEvent: (_) => fired.add('alt-x')),
-            KeyBinding(.ctrl.shift.p, onEvent: (_) => fired.add('palette')),
+            KeyBinding(.ctrl.s, onTrigger: () => fired.add('save')),
+            KeyBinding(.alt.x, onTrigger: () => fired.add('alt-x')),
+            KeyBinding(.ctrl.shift.p, onTrigger: () => fired.add('palette')),
           ],
           child: const Text('app'),
         ),
@@ -148,7 +154,7 @@ void main() {
       var fired = 0;
       tester.pumpWidget(
         KeyBindings(
-          bindings: [KeyBinding(.ctrl.shift.space, onEvent: (_) => fired++)],
+          bindings: [KeyBinding(.ctrl.shift.space, onTrigger: () => fired++)],
           child: const Text('app'),
         ),
       );
@@ -178,15 +184,18 @@ void main() {
     });
 
     test('modifier order does not matter', () {
-      expect(KeyChord.ctrl.shift.p, KeyChord.shift.ctrl.p);
-      expect(KeyChord.ctrl.alt.shift.f5, KeyChord.shift.alt.ctrl.f5);
+      expect(KeySequence.ctrl.shift.p, KeySequence.shift.ctrl.p);
+      expect(KeySequence.ctrl.alt.shift.f5, KeySequence.shift.alt.ctrl.f5);
     });
 
     test('hint label puts modifiers in canonical Ctrl/Alt/Shift order', () {
-      expect(KeyChord.shift.ctrl.p.hintLabel, 'Ctrl+Shift+P');
-      expect(KeyChord.shift.alt.ctrl.space.hintLabel, 'Ctrl+Alt+Shift+Space');
+      expect(KeySequence.shift.ctrl.p.hintLabel, 'Ctrl+Shift+P');
+      expect(
+        KeySequence.shift.alt.ctrl.space.hintLabel,
+        'Ctrl+Alt+Shift+Space',
+      );
       // Bare char keeps its lowercase hint.
-      expect(KeyChord.a.hintLabel, 'a');
+      expect(KeySequence.a.hintLabel, 'a');
     });
   });
 
@@ -197,7 +206,7 @@ void main() {
       var fired = 0;
       tester.pumpWidget(
         KeyBindings(
-          bindings: [KeyBinding(.d.d, onEvent: (_) => fired++)],
+          bindings: [KeyBinding(.d.d, onTrigger: () => fired++)],
           child: const Text('app'),
         ),
       );
@@ -216,7 +225,7 @@ void main() {
       var fired = 0;
       tester.pumpWidget(
         KeyBindings(
-          bindings: [KeyBinding(.ctrl.x.ctrl.s, onEvent: (_) => fired++)],
+          bindings: [KeyBinding(.ctrl.x.ctrl.s, onTrigger: () => fired++)],
           child: const Text('app'),
         ),
       );

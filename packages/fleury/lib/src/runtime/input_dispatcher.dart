@@ -142,6 +142,12 @@ class InputDispatcher {
   }
 
   KeyEventResult _dispatchKeyEvent(KeyEvent event, {String? textOrigin}) {
+    // Releases are transparent to bindings (RFC 0018 §5): a binding fires on
+    // down/repeat only. Guarding here keeps a release from disturbing a
+    // pending sequence, and means enabling Kitty event-type reporting can't
+    // double-fire bindings. (Only reachable when that reporting is on;
+    // otherwise every event arrives as `down`.)
+    if (event.type == KeyEventType.up) return KeyEventResult.ignored;
     // 1. Pending sequence handling.
     if (_pending != null) {
       final result = _tryPendingSequence(event, textOrigin: textOrigin);
@@ -178,10 +184,13 @@ class InputDispatcher {
       );
       _pending = pending;
     }
-    final completedBinding = pending.tryComplete(event);
-    if (completedBinding != null) {
+    final completed = pending.tryComplete(event);
+    if (completed != null) {
       _clearPending();
-      return _fire(completedBinding, event);
+      return _fire(completed.binding, completed.sequence, [
+        ...pending.events,
+        event,
+      ]);
     }
     // Could the event extend the sequence by one more step?
     final survivors = pending.surviveOneMoreStep(event);
@@ -216,11 +225,16 @@ class InputDispatcher {
         _globalBindings.any((entry) => identical(entry, binding));
   }
 
-  /// Runs [binding]'s handler and returns the propagation decision.
-  /// The handler may call `event.bubble()` to let the event continue
-  /// propagating after it runs; otherwise the event is consumed.
-  static KeyEventResult _fire(KeyBinding binding, KeyEvent event) {
-    final wrapped = KeyBindingEvent(event);
+  /// Runs [binding]'s handler for a match of [sequence] that consumed
+  /// [events], and returns the propagation decision. The handler may call
+  /// `event.bubble()` to let the event continue propagating; otherwise it's
+  /// consumed.
+  static KeyEventResult _fire(
+    KeyBinding binding,
+    KeySequence sequence,
+    List<KeyEvent> events,
+  ) {
+    final wrapped = KeyBindingEvent(KeySequenceMatch(sequence, events));
     binding.onEvent(wrapped);
     return wrapped.isBubbling ? KeyEventResult.ignored : KeyEventResult.handled;
   }
@@ -397,10 +411,10 @@ class InputDispatcher {
           if (sequenceCandidates.isEmpty) {
             final hit = _findDirectMatch(source.activeBindings, event);
             if (hit != null) {
-              final result = _fire(hit, event);
+              final result = _fire(hit.binding, hit.sequence, [event]);
               // Bindings that call event.bubble() return
               // KeyEventResult.ignored — continue walking ancestors so
-              // an outer binding for the same chord gets a chance.
+              // an outer binding for the same sequence gets a chance.
               if (result == KeyEventResult.handled) return result;
             }
           }
@@ -408,7 +422,7 @@ class InputDispatcher {
           // Replay mode: pre-sequence-rule semantics.
           final hit = _findDirectMatch(source.activeBindings, event);
           if (hit != null) {
-            final result = _fire(hit, event);
+            final result = _fire(hit.binding, hit.sequence, [event]);
             if (result == KeyEventResult.handled) return result;
           }
         }
@@ -443,7 +457,7 @@ class InputDispatcher {
       }
       final hit = _findDirectMatch(_globalBindings, event);
       if (hit != null) {
-        final result = _fire(hit, event);
+        final result = _fire(hit.binding, hit.sequence, [event]);
         if (result == KeyEventResult.handled) return result;
       }
     }
@@ -451,23 +465,26 @@ class InputDispatcher {
     return KeyEventResult.ignored;
   }
 
-  /// Scans [bindings] for an enabled, single-step chord that matches
-  /// [event] directly. Returns the first hit, or null.
-  static KeyBinding? _findDirectMatch(
+  /// Scans [bindings] for an enabled, single-step sequence that matches
+  /// [event] directly. Returns the first hit (binding + the specific alias
+  /// that matched), or null.
+  static ({KeyBinding binding, KeySequence sequence})? _findDirectMatch(
     Iterable<KeyBinding> bindings,
     KeyEvent event,
   ) {
     for (final binding in bindings) {
       if (!binding.enabled) continue;
-      for (final chord in binding.chords) {
-        if (chord.isSequence) continue;
-        if (chord.matches(event)) return binding;
+      for (final sequence in binding.sequences) {
+        if (sequence.isSequence) continue;
+        if (sequence.matches(event)) {
+          return (binding: binding, sequence: sequence);
+        }
       }
     }
     return null;
   }
 
-  /// Appends each enabled binding whose sequence chord matches [event]
+  /// Appends each enabled binding whose multi-step sequence matches [event]
   /// at step 0 to [out].
   static void _collectSequenceStarts(
     Iterable<KeyBinding> bindings,
@@ -476,9 +493,9 @@ class InputDispatcher {
   ) {
     for (final binding in bindings) {
       if (!binding.enabled) continue;
-      for (final chord in binding.chords) {
-        if (!chord.isSequence) continue;
-        if (chord.matchesStepAt(0, event)) {
+      for (final sequence in binding.sequences) {
+        if (!sequence.isSequence) continue;
+        if (sequence.matchesStepAt(0, event)) {
           out.add(binding);
           break;
         }
@@ -541,7 +558,7 @@ class _PendingSequence {
   /// held events equals the number of steps matched so far.
   final List<KeyEvent> events;
 
-  /// Bindings whose chord still has events held matched as a prefix.
+  /// Bindings whose sequence still has events held matched as a prefix.
   final List<KeyBinding> candidates;
 
   /// Per-held-event text origin: `texts[i]` is the original typed text
@@ -550,25 +567,25 @@ class _PendingSequence {
   /// focused text claimant, not just direct key dispatch.
   final List<String?> texts;
 
-  /// Tries to complete a candidate chord with [event] as its final
-  /// step. Returns the binding to fire, or null if none completes
-  /// here.
-  KeyBinding? tryComplete(KeyEvent event) {
+  /// Tries to complete a candidate sequence with [event] as its final
+  /// step. Returns the binding to fire and the specific alias that
+  /// completed, or null if none completes here.
+  ({KeyBinding binding, KeySequence sequence})? tryComplete(KeyEvent event) {
     final matchedSoFar = events.length;
     for (final binding in candidates) {
-      for (final chord in binding.chords) {
-        if (!chord.isSequence) continue;
-        if (chord.stepCount != matchedSoFar + 1) continue;
-        if (_prefixMatches(chord, events) &&
-            chord.matchesStepAt(matchedSoFar, event)) {
-          return binding;
+      for (final sequence in binding.sequences) {
+        if (!sequence.isSequence) continue;
+        if (sequence.stepCount != matchedSoFar + 1) continue;
+        if (_prefixMatches(sequence, events) &&
+            sequence.matchesStepAt(matchedSoFar, event)) {
+          return (binding: binding, sequence: sequence);
         }
       }
     }
     return null;
   }
 
-  /// Returns the subset of [candidates] whose chord still has events
+  /// Returns the subset of [candidates] whose sequence still has events
   /// matched as a strict prefix after appending [event] (i.e. still
   /// has at least one more step to go). Empty list means the pending
   /// state must be cancelled.
@@ -576,11 +593,11 @@ class _PendingSequence {
     final matchedSoFar = events.length;
     final out = <KeyBinding>[];
     for (final binding in candidates) {
-      for (final chord in binding.chords) {
-        if (!chord.isSequence) continue;
-        if (chord.stepCount <= matchedSoFar + 1) continue;
-        if (_prefixMatches(chord, events) &&
-            chord.matchesStepAt(matchedSoFar, event)) {
+      for (final sequence in binding.sequences) {
+        if (!sequence.isSequence) continue;
+        if (sequence.stepCount <= matchedSoFar + 1) continue;
+        if (_prefixMatches(sequence, events) &&
+            sequence.matchesStepAt(matchedSoFar, event)) {
           out.add(binding);
           break;
         }
@@ -604,9 +621,9 @@ class _PendingSequence {
   }
 }
 
-bool _prefixMatches(KeyChord chord, List<KeyEvent> events) {
+bool _prefixMatches(KeySequence sequence, List<KeyEvent> events) {
   for (var i = 0; i < events.length; i++) {
-    if (!chord.matchesStepAt(i, events[i])) return false;
+    if (!sequence.matchesStepAt(i, events[i])) return false;
   }
   return true;
 }

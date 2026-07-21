@@ -1455,9 +1455,9 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
       list = KeyBindings(
         bindings: [
           KeyBinding(
-            KeyChord.ctrl.c,
+            KeySequence.ctrl.c,
             label: 'Copy tree row',
-            onEvent: (_) => unawaited(_copySelection(rows)),
+            onTrigger: () => unawaited(_copySelection(rows)),
           ),
         ],
         child: list,

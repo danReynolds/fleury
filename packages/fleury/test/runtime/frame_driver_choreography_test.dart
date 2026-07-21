@@ -40,8 +40,8 @@ class _Counter extends StatefulWidget {
   const _Counter({required this.onPostFrame});
   final void Function(String tag) onPostFrame;
 
-  static final tap = KeyChord.char('t');
-  static final silent = KeyChord.char('s');
+  static final tap = KeyCode.char('t');
+  static final silent = KeyCode.char('s');
 
   @override
   State<_Counter> createState() => _CounterState();
@@ -58,12 +58,12 @@ class _CounterState extends State<_Counter> {
     });
     return KeyBindings(
       bindings: [
-        KeyBinding(_Counter.tap, onEvent: (_) => setState(() => _count++)),
+        KeyBinding(_Counter.tap, onTrigger: () => setState(() => _count++)),
         KeyBinding(
           _Counter.silent,
           // Mutates non-visual state without setState: dispatch happens,
           // nothing rebuilds, the frame is a no-work skip.
-          onEvent: (_) => _silentPokes++,
+          onTrigger: () => _silentPokes++,
         ),
       ],
       child: Semantics(

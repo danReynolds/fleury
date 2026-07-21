@@ -290,29 +290,29 @@ class _GalleryState extends State<_Gallery> {
     return KeyBindings(
       bindings: [
         KeyBinding(
-          KeyChord.key(KeyCode.arrowDown),
-          onEvent: (_) =>
+          KeyCode.arrowDown,
+          onTrigger: () =>
               setState(() => _selected = (_selected + 1) % _rows.length),
         ),
         KeyBinding(
-          KeyChord.key(KeyCode.arrowUp),
-          onEvent: (_) => setState(
+          KeyCode.arrowUp,
+          onTrigger: () => setState(
             () => _selected = (_selected - 1 + _rows.length) % _rows.length,
           ),
         ),
         KeyBinding(
-          KeyChord.char(' '),
-          onEvent: (_) => setState(() => _panelOpen = !_panelOpen),
+          KeyCode.char(' '),
+          onTrigger: () => setState(() => _panelOpen = !_panelOpen),
         ),
         KeyBinding(
-          KeyChord.char('+'),
-          onEvent: (_) => setState(() => _counter += 10),
+          KeyCode.char('+'),
+          onTrigger: () => setState(() => _counter += 10),
         ),
         KeyBinding(
-          KeyChord.char('-'),
-          onEvent: (_) => setState(() => _counter -= 10),
+          KeyCode.char('-'),
+          onTrigger: () => setState(() => _counter -= 10),
         ),
-        KeyBinding(KeyChord.char('n'), onEvent: (_) => _newItem()),
+        KeyBinding(KeyCode.char('n'), onTrigger: () => _newItem()),
       ],
       child: Container(
         border: const BoxBorder(style: BorderStyle.rounded),

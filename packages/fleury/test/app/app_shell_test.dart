@@ -219,7 +219,7 @@ void main() {
           AppCommand(
             id: _shortcutRoute,
             title: 'Shortcut Route',
-            shortcuts: <KeyChord>[KeyChord.ctrl.n],
+            shortcuts: <KeySequence>[KeySequence.ctrl.n],
             run: (context) => push(context, 'Shortcut detail'),
           ),
           AppCommand(
@@ -440,7 +440,7 @@ void main() {
           AppCommand(
             id: _shortcutRoute,
             title: 'Custom Shortcut Route',
-            shortcuts: <KeyChord>[KeyChord.ctrl.n],
+            shortcuts: <KeySequence>[KeySequence.ctrl.n],
             run: (command) {
               shortcutContext = command.buildContext;
               push(command, 'Custom shortcut detail');
@@ -514,7 +514,7 @@ void main() {
           AppCommand(
             id: rootOnly,
             title: 'Root Only',
-            shortcuts: <KeyChord>[KeyChord.ctrl.r],
+            shortcuts: <KeySequence>[KeySequence.ctrl.r],
             visible: (command) => routeDepth(command) == 1,
             run: (_) {
               rootCalls += 1;
@@ -523,7 +523,7 @@ void main() {
           AppCommand(
             id: detailOnly,
             title: 'Detail Only',
-            shortcuts: <KeyChord>[KeyChord.ctrl.d],
+            shortcuts: <KeySequence>[KeySequence.ctrl.d],
             enabled: (command) => (routeDepth(command) ?? 0) > 1,
             run: (_) {
               detailCalls += 1;

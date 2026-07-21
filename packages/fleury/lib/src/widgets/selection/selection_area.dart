@@ -546,31 +546,31 @@ class _SelectionAreaState extends State<SelectionArea> {
       registrar: _delegate,
       child: KeyBindings(
         bindings: [
-          KeyBinding(KeyChord.ctrl.a, onEvent: _onSelectAll),
-          KeyBinding(KeyChord.ctrl.c, onEvent: _onCopy),
-          KeyBinding(KeyChord.escape, onEvent: _onEscape),
-          KeyBinding(
-            KeyChord.shift.left,
+          KeyBinding.event(KeySequence.ctrl.a, onEvent: _onSelectAll),
+          KeyBinding.event(KeySequence.ctrl.c, onEvent: _onCopy),
+          KeyBinding.event(KeySequence.escape, onEvent: _onEscape),
+          KeyBinding.event(
+            KeySequence.shift.left,
             onEvent: (e) => _extendCursor(-1, 0, e),
           ),
-          KeyBinding(
-            KeyChord.shift.right,
+          KeyBinding.event(
+            KeySequence.shift.right,
             onEvent: (e) => _extendCursor(1, 0, e),
           ),
-          KeyBinding(
-            KeyChord.shift.up,
+          KeyBinding.event(
+            KeySequence.shift.up,
             onEvent: (e) => _extendCursor(0, -1, e),
           ),
-          KeyBinding(
-            KeyChord.shift.down,
+          KeyBinding.event(
+            KeySequence.shift.down,
             onEvent: (e) => _extendCursor(0, 1, e),
           ),
-          KeyBinding(
-            KeyChord.shift.home,
+          KeyBinding.event(
+            KeySequence.shift.home,
             onEvent: (e) => _extendToLineEdge(-1, e),
           ),
-          KeyBinding(
-            KeyChord.shift.end,
+          KeyBinding.event(
+            KeySequence.shift.end,
             onEvent: (e) => _extendToLineEdge(1, e),
           ),
         ],

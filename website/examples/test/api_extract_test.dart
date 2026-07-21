@@ -108,7 +108,7 @@ void main() {
         expect(action['params'], [
           {
             'name': 'key',
-            'type': 'KeyChord',
+            'type': 'KeySequence',
             'required': true,
             'named': true,
             'default': null,
@@ -118,7 +118,7 @@ void main() {
         expect(inheritedAction['params'], [
           {
             'name': 'key',
-            'type': 'KeyChord',
+            'type': 'KeySequence',
             'required': true,
             'named': true,
             'default': null,
@@ -328,7 +328,7 @@ class ToastAction {
   const ToastAction({required this.key});
 
   /// The hotkey that invokes the action.
-  final KeyChord key;
+  final KeySequence key;
 }
 
 class InheritedToastAction extends ToastAction {
