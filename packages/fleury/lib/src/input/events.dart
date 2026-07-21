@@ -297,16 +297,24 @@ sealed class KeySequence {
 
   /// This event's key and modifiers as a one-step sequence (see
   /// [KeyEvent.toSequence]).
-  static KeySequence fromEvent(KeyEvent event) => _sequenceFromSteps([
-    _KeyStep.build(
-      event.code,
-      ctrl: event.hasCtrl,
-      alt: event.hasAlt,
-      shift: event.hasShift,
-      superKey: event.hasSuper,
-      meta: event.hasMeta,
-    ),
-  ]);
+  static KeySequence fromEvent(KeyEvent event) => fromEvents([event]);
+
+  /// A multi-step sequence from the events that produced it, one step per
+  /// event, in order — used to render the prefix of a pending match.
+  static KeySequence fromEvents(List<KeyEvent> events) {
+    assert(events.isNotEmpty, 'a sequence has at least one step');
+    return _sequenceFromSteps([
+      for (final event in events)
+        _KeyStep.build(
+          event.code,
+          ctrl: event.hasCtrl,
+          alt: event.hasAlt,
+          shift: event.hasShift,
+          superKey: event.hasSuper,
+          meta: event.hasMeta,
+        ),
+    ]);
+  }
 
   /// Parses a human-readable sequence such as `ctrl+x ctrl+s`, `g g`,
   /// `super+k`, or `?`. Throws [FormatException] on malformed input; see
@@ -652,6 +660,21 @@ extension $KeySequenceInternal on KeySequence {
     return _stepAt(index).matches(event);
   }
 
+  /// The [hintLabel]-style label of the step at [index] (`Ctrl+S`, `↑`, `d`),
+  /// or null when out of range. Used to render which-key completions.
+  String? stepLabelAt(int index) {
+    if (index < 0 || index >= stepCount) return null;
+    return _stepAt(index).label;
+  }
+
+  /// The events a terminal would emit for this sequence: a bare printable
+  /// step arrives as a [TextInputEvent] (shift folded into the character's
+  /// case), any modified or special step as a [KeyEvent]. Test harnesses use
+  /// this so `press(sequence)` exercises the real text-vs-key routing.
+  List<TuiEvent> asInputEvents() => [
+    for (var i = 0; i < stepCount; i++) _stepAt(i).asInputEvent(),
+  ];
+
   /// Whether a focused text field swallows this sequence before matching:
   /// its first step is a bare printable (a character with no
   /// Ctrl/Alt/Super/Meta — Shift is allowed, since shifted printables arrive
@@ -770,6 +793,25 @@ final class _KeyStep {
     final eventHasShift =
         event.hasShift || eventChar != eventChar.toLowerCase();
     return stepWantsShift == eventHasShift;
+  }
+
+  /// The single event a terminal would emit for this step: a bare printable
+  /// as [TextInputEvent] (shift is in the character's case), otherwise a
+  /// [KeyEvent] carrying the code and modifiers.
+  TuiEvent asInputEvent() {
+    final character = code.character;
+    final bare = character != null && !ctrl && !alt && !superKey && !meta;
+    if (bare) return TextInputEvent(character);
+    return KeyEvent(
+      code,
+      modifiers: {
+        if (ctrl) KeyModifier.ctrl,
+        if (alt) KeyModifier.alt,
+        if (shift) KeyModifier.shift,
+        if (superKey) KeyModifier.superKey,
+        if (meta) KeyModifier.meta,
+      },
+    );
   }
 
   /// Per-step label: `Ctrl+S`, `↑`, `d`, `Space`, `Shift+G`.

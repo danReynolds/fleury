@@ -44,6 +44,7 @@ import '../widgets/basic.dart';
 import '../runtime/clipboard.dart';
 import '../widgets/clipboard_scope.dart';
 import '../widgets/focus.dart';
+import '../widgets/key_bindings.dart';
 import '../widgets/framework.dart';
 import '../widgets/media_query.dart';
 import '../widgets/overlay.dart';
@@ -556,6 +557,20 @@ class FleuryTester {
     _owner.flushBuild();
   }
 
+  /// Presses a whole [KeySequence] the way a terminal delivers it: a bare
+  /// printable step arrives as typed text, a chord or special step as a key
+  /// event. So `press(.d.d)` sends two `TextInputEvent`s and `press(.ctrl.s)`
+  /// a single `KeyEvent`, exercising the real text-vs-key routing rather than
+  /// a synthetic shortcut. Multi-step sequences dispatch their steps in order,
+  /// completing the sequence in the dispatcher.
+  void press(KeySequence sequence) {
+    _assertNotDisposed('press');
+    for (final event in sequence.asInputEvents()) {
+      _dispatcher.dispatch(event);
+    }
+    _owner.flushBuild();
+  }
+
   /// Dispatches a bracketed [PasteEvent] — the whole blob at once, as a
   /// real paste arrives (so embedded newlines don't act as Enter).
   void paste(String text) {
@@ -870,14 +885,19 @@ class FleuryTester {
             router: _pointerRouter,
             child: ClipboardScope(
               clipboard: clipboard,
-              // Opt out of entry repaint boundaries. The harness overlay is
-              // usually single-entry (pass-through anyway under adaptive
-              // engagement), but a test that floats extra entries — a menu,
-              // a toast — would otherwise engage harness-owned boundaries
-              // and skew the boundary stats and paint counts under test.
-              child: Overlay(
-                initialEntries: [_userEntry],
-                addRepaintBoundaries: false,
+              // Mirror runApp's host scopes: share the dispatcher's pending
+              // state so KeyBindings.pendingOf / WhichKey work under test.
+              child: PendingSequenceScope(
+                notifier: _dispatcher.pendingSequenceNotifier,
+                // Opt out of entry repaint boundaries. The harness overlay is
+                // usually single-entry (pass-through anyway under adaptive
+                // engagement), but a test that floats extra entries — a menu,
+                // a toast — would otherwise engage harness-owned boundaries
+                // and skew the boundary stats and paint counts under test.
+                child: Overlay(
+                  initialEntries: [_userEntry],
+                  addRepaintBoundaries: false,
+                ),
               ),
             ),
           ),
