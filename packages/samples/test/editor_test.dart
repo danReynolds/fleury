@@ -133,6 +133,19 @@ void main() {
       expect(_render(tester), contains('Saved'), reason: 'Space w saved');
     });
 
+    testWidgets('A appends after the last character (end of line)', (tester) {
+      tester.pumpWidget(const EditorApp());
+      tester.render(size: _size);
+      tester.press(KeyCode.f2); // → vim NORMAL
+      tester.press(KeyCode.char('A')); // append at end of line 1
+      tester.type('!');
+      expect(
+        _render(tester),
+        contains('lazy dog.!'),
+        reason: 'text lands after the last char, not before it',
+      );
+    });
+
     testWidgets('which-key reveals the d-prefix completions', (tester) async {
       tester.pumpWidget(const EditorApp());
       tester.render(size: _size);

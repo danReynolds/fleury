@@ -510,17 +510,19 @@ class _EditorBodyState extends State<_EditorBody> implements TextInputClaimant {
     KeyBinding(
       KeyCode.a,
       label: 'append',
+      // Enter INSERT first so the cursor can advance past the last character
+      // (a block cursor is clamped to len-1; a bar cursor reaches len).
       onTrigger: () {
-        _model.moveRight();
         _model.enterInsert();
+        _model.moveRight();
       },
     ),
     KeyBinding(
       KeyCode.char('A'),
       label: 'append at end',
       onTrigger: () {
-        _model.lineEnd();
         _model.enterInsert();
+        _model.lineEnd();
       },
     ),
     KeyBinding(KeyCode.o, label: 'open below', onTrigger: _model.openLineBelow),
