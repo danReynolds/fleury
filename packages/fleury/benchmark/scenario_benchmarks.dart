@@ -350,21 +350,18 @@ Future<_TextEditingJourneySample> _runTextEditingJourney(
     tester.pump();
     final cursorMoveUs = <int>[
       _visibleActionUs(tester, config, () {
-        tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowLeft));
+        tester.sendKey(const KeyEvent(KeyCode.arrowLeft));
       }),
       _visibleActionUs(tester, config, () {
         tester.sendKey(
-          const KeyEvent(
-            keyCode: KeyCode.arrowLeft,
-            modifiers: {KeyModifier.ctrl},
-          ),
+          const KeyEvent(KeyCode.arrowLeft, modifiers: {KeyModifier.ctrl}),
         );
       }),
       _visibleActionUs(tester, config, () {
-        tester.sendKey(const KeyEvent(keyCode: KeyCode.home));
+        tester.sendKey(const KeyEvent(KeyCode.home));
       }),
       _visibleActionUs(tester, config, () {
-        tester.sendKey(const KeyEvent(keyCode: KeyCode.end));
+        tester.sendKey(const KeyEvent(KeyCode.end));
       }),
     ];
     final insertionDeletionUs = <int>[
@@ -372,13 +369,13 @@ Future<_TextEditingJourneySample> _runTextEditingJourney(
         tester.type(' --verbose');
       }),
       _visibleActionUs(tester, config, () {
-        tester.sendKey(const KeyEvent(keyCode: KeyCode.backspace));
+        tester.sendKey(const KeyEvent(KeyCode.backspace));
       }),
     ];
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowLeft));
+    tester.sendKey(const KeyEvent(KeyCode.arrowLeft));
     insertionDeletionUs.add(
       _visibleActionUs(tester, config, () {
-        tester.sendKey(const KeyEvent(keyCode: KeyCode.delete));
+        tester.sendKey(const KeyEvent(KeyCode.delete));
       }),
     );
     final insertionDeletionWorked =
@@ -391,10 +388,7 @@ Future<_TextEditingJourneySample> _runTextEditingJourney(
       for (var i = 0; i < 4; i++)
         _visibleActionUs(tester, config, () {
           tester.sendKey(
-            const KeyEvent(
-              keyCode: KeyCode.arrowLeft,
-              modifiers: {KeyModifier.shift},
-            ),
+            const KeyEvent(KeyCode.arrowLeft, modifiers: {KeyModifier.shift}),
           );
         }),
       _visibleActionUs(tester, config, () {
@@ -408,12 +402,12 @@ Future<_TextEditingJourneySample> _runTextEditingJourney(
     final undoRedoUs = <int>[
       _visibleActionUs(tester, config, () {
         tester.sendKey(
-          const KeyEvent(char: 'z', modifiers: {KeyModifier.ctrl}),
+          const KeyEvent(KeyCode.char('z'), modifiers: {KeyModifier.ctrl}),
         );
       }),
       _visibleActionUs(tester, config, () {
         tester.sendKey(
-          const KeyEvent(char: 'y', modifiers: {KeyModifier.ctrl}),
+          const KeyEvent(KeyCode.char('y'), modifiers: {KeyModifier.ctrl}),
         );
       }),
     ];
@@ -446,7 +440,7 @@ Future<_TextEditingJourneySample> _runTextEditingJourney(
     );
     tester.pump();
     final completionAcceptUs = _visibleActionUs(tester, config, () {
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.tab));
+      tester.sendKey(const KeyEvent(KeyCode.tab));
     });
     final completionAccepted = composer.text == 'git checkout';
 
@@ -454,10 +448,10 @@ Future<_TextEditingJourneySample> _runTextEditingJourney(
     tester.pump();
     final historyNavigationUs = <int>[
       _visibleActionUs(tester, config, () {
-        tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
+        tester.sendKey(const KeyEvent(KeyCode.arrowUp));
       }),
       _visibleActionUs(tester, config, () {
-        tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+        tester.sendKey(const KeyEvent(KeyCode.arrowDown));
       }),
     ];
     final historyRestoredDraft = composer.text == fixture.historyDraft;

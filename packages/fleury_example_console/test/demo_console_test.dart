@@ -550,7 +550,7 @@ void main() {
     expect(diagnostics.state.shortcut, 'Ctrl+D');
     expect(diagnostics.state.commandCategory, 'Navigation');
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     await _settleModal(tester);
 
     expect(_demoApp(tester).state.activeScreenId, 'diagnostics');
@@ -1123,7 +1123,7 @@ void main() {
     expect(selectedCells.first.state['rowKey'], 'RUN-1001');
     expect(selectedCells.first.state['columnIndex'], 0);
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
     tester.render(size: const CellSize(80, 24));
     table = tester.semantics().single(role: SemanticRole.table);
     expect(table.state.selectedKey, 'RUN-1002');
@@ -1135,7 +1135,7 @@ void main() {
     expect(selectedCells.first.state['rowIndex'], 1);
     expect(selectedCells.first.state['rowKey'], 'RUN-1002');
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     await _invoke(tester, demoCommandGoTranscript);
     tester.render(size: const CellSize(110, 36));
 
@@ -1150,10 +1150,12 @@ void main() {
 
     await _invoke(tester, demoCommandGoRuns);
     await _invoke(tester, demoCommandFocusRunsTable);
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
     tester.render(size: const CellSize(80, 24));
 
-    tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+    tester.sendKey(
+      const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+    );
     await _flushAsyncUi(tester);
 
     expect(
@@ -1199,7 +1201,9 @@ void main() {
     expect(semanticGraph.state['rowKey'], 'semantic-graph');
     expect(semanticGraph.state['depth'], 1);
 
-    tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+    tester.sendKey(
+      const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+    );
     await _flushAsyncUi(tester);
 
     expect(
@@ -1214,8 +1218,8 @@ void main() {
     );
     expect(tree.state.clipboardPolicy, 'inProcessOnly');
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     await _flushAsyncUi(tester);
     await _invoke(tester, demoCommandGoTranscript);
     tester.render(size: const CellSize(90, 24));
@@ -1264,7 +1268,9 @@ void main() {
     expect(unsafe.state.outputSanitized, isTrue);
     expect(unsafe.state['jsonPath'], r'$.unsafeOutput');
 
-    tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+    tester.sendKey(
+      const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+    );
     await _flushAsyncUi(tester);
 
     expect(tester.clipboard.readInProcess(), contains('"jsonView": true'));
@@ -1381,7 +1387,9 @@ void main() {
     expect(unsafe.state.outputSanitized, isTrue);
     expect(unsafe.state['newLine'], 3);
 
-    tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+    tester.sendKey(
+      const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+    );
     await _flushAsyncUi(tester);
 
     expect(tester.clipboard.readInProcess(), contains('@@ -1,4 +1,5 @@'));
@@ -1479,7 +1487,9 @@ void main() {
     expect(unsafe.state.outputSanitized, isTrue);
     expect(unsafe.state['lineNumber'], 8);
 
-    tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+    tester.sendKey(
+      const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+    );
     await _flushAsyncUi(tester);
 
     expect(
@@ -1578,7 +1588,9 @@ void main() {
     expect(unsafe.state.outputSanitized, isTrue);
     expect(unsafe.state['markdownBlockKind'], 'blockquote');
 
-    tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+    tester.sendKey(
+      const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+    );
     await _flushAsyncUi(tester);
 
     expect(tester.clipboard.readInProcess(), contains('> unsafe safe'));
@@ -1691,9 +1703,9 @@ void main() {
     recordCommand(demoCommandFocusRunsTable);
     await _invoke(tester, demoCommandFocusRunsTable);
     capture.record(const InputDebugEvent(kind: 'key', summary: 'arrowDown'));
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
     capture.record(const InputDebugEvent(kind: 'key', summary: 'enter'));
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     await _flushAsyncUi(tester);
     recordCommand(demoCommandCaptureDebug);
     await _invoke(tester, demoCommandCaptureDebug);
@@ -1800,7 +1812,7 @@ void main() {
     );
     expect(composer.value, 'operator note');
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     await _flushAsyncUi(tester);
     tester.render(size: const CellSize(80, 24));
 
@@ -1996,7 +2008,7 @@ void main() {
     );
     expect(composer.value, '/summarize deployment risk');
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     await _flushAsyncUi(tester);
     tester.render(size: const CellSize(110, 32));
 
@@ -2021,7 +2033,7 @@ void main() {
     expect(composer.value, 'first operator note');
     expect(composer.state.historyCount, 0);
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     await _flushAsyncUi(tester);
     tester.render(size: const CellSize(110, 32));
 
@@ -2036,7 +2048,7 @@ void main() {
     expect(tester.exists(text('[log] user: first operator note')), isTrue);
 
     tester.type('draft follow-up');
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
+    tester.sendKey(const KeyEvent(KeyCode.arrowUp));
     composer = tester.semantics().single(
       role: SemanticRole.textField,
       label: 'Type a note and press Enter',
@@ -2047,7 +2059,7 @@ void main() {
     expect(composer.state.historyIndex, 0);
     expect(composer.state.historyBrowsing, isTrue);
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
     composer = tester.semantics().single(
       role: SemanticRole.textField,
       label: 'Type a note and press Enter',
@@ -2065,7 +2077,7 @@ void main() {
 
     tester.type('/');
     tester.render(size: const CellSize(110, 32));
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
+    tester.sendKey(const KeyEvent(KeyCode.arrowUp));
     composer = tester.semantics().single(
       role: SemanticRole.textField,
       label: 'Type a note and press Enter',

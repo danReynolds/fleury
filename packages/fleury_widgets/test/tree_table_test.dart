@@ -138,13 +138,13 @@ void main() {
       ),
     );
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     var output = tester.renderToString(size: const CellSize(60, 8));
     expect(output, contains('▾ App'));
     expect(output, contains('Search'));
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     expect(selected, isNotNull);
     expect(selected!.key, 'search');
   });
@@ -580,7 +580,9 @@ void main() {
       );
 
       tester.render(size: const CellSize(60, 8));
-      tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await Future<void>.delayed(Duration.zero);
 
       expect(
@@ -732,7 +734,7 @@ void main() {
       // Arrow-key selection move: no re-flatten, only the mounted window
       // rebuilds.
       cellBuilderCalls = 0;
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
       tester.render(size: const CellSize(60, 10));
       expect(controller.selectedIndex, 1);
       expect(
@@ -824,7 +826,10 @@ void main() {
       tester.pumpWidget(buildTable(fullIndex));
       tester.render(size: const CellSize(60, 10));
       expect(
-        tester.semantics().single(role: SemanticRole.tree).state
+        tester
+            .semantics()
+            .single(role: SemanticRole.tree)
+            .state
             .collectionRowCount,
         nodeCount + 1,
       );
@@ -832,7 +837,10 @@ void main() {
       tester.pumpWidget(buildTable(subsetIndex));
       tester.render(size: const CellSize(60, 10));
       expect(
-        tester.semantics().single(role: SemanticRole.tree).state
+        tester
+            .semantics()
+            .single(role: SemanticRole.tree)
+            .state
             .collectionRowCount,
         3,
         reason: 'the swapped-in index must be consulted, not the stale cache',

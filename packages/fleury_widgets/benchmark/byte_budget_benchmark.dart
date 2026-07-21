@@ -59,7 +59,7 @@ MouseEvent _up(int c, int r) => MouseEvent(
   row: r,
 );
 const _shiftRight = KeyEvent(
-  keyCode: KeyCode.arrowRight,
+  KeyCode.arrowRight,
   modifiers: {KeyModifier.shift},
 );
 

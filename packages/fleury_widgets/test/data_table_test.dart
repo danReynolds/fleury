@@ -392,7 +392,7 @@ void main() {
     expect(lines[3], 'run-1    failed');
     expect(lines[4], 'run-2    ok');
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.pageDown));
+    tester.sendKey(const KeyEvent(KeyCode.pageDown));
     expect(controller.selectedIndex, 3);
     lines = _lines(tester, cols: 20, rows: 5);
     expect(lines[0], 'Run      Status');
@@ -412,7 +412,7 @@ void main() {
       'RUN-3',
     );
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     expect(selected, 3);
   });
 
@@ -424,7 +424,7 @@ void main() {
     final controller = DataTableController();
     var quits = 0;
     Widget host({required bool typeahead}) => KeyBindings(
-      bindings: [KeyBinding(KeyChord.q, onEvent: (_) => quits += 1)],
+      bindings: [KeyBinding(KeySequence.q, onTrigger: () => quits += 1)],
       child: DataTable(
         rowCount: 5,
         columns: _columns(),
@@ -771,7 +771,9 @@ void main() {
       );
 
       tester.render(size: const CellSize(20, 6));
-      tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await Future<void>.delayed(Duration.zero);
 
       expect(tester.clipboard.readInProcess(), 'Run\tStatus\nrun-1\tfailed');
@@ -854,12 +856,9 @@ void main() {
       );
 
       tester.render(size: const CellSize(20, 6));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight));
       tester.sendKey(
-        const KeyEvent(
-          keyCode: KeyCode.arrowDown,
-          modifiers: {KeyModifier.shift},
-        ),
+        const KeyEvent(KeyCode.arrowDown, modifiers: {KeyModifier.shift}),
       );
       tester.render(size: const CellSize(20, 6));
 
@@ -877,7 +876,9 @@ void main() {
         hasLength(2),
       );
 
-      tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await Future<void>.delayed(Duration.zero);
 
       expect(tester.clipboard.readInProcess(), 'Status\nok\nfailed');
@@ -911,7 +912,9 @@ void main() {
       tester.render(size: const CellSize(20, 5));
       requestedRows.clear();
 
-      tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await Future<void>.delayed(Duration.zero);
 
       expect(tester.clipboard.readInProcess(), 'Name\nabc long cell');
@@ -933,7 +936,9 @@ void main() {
         ),
       );
 
-      tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await Future<void>.delayed(Duration.zero);
 
       expect(tester.clipboard.readInProcess(), isNull);

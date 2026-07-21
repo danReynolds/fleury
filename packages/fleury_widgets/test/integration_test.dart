@@ -32,7 +32,7 @@ void main() {
       tester.render(size: const CellSize(20, 4)); // record rects
       expect(a.hasFocus, isTrue);
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.tab));
+      tester.sendKey(const KeyEvent(KeyCode.tab));
       expect(b.hasFocus, isTrue, reason: 'Tab bubbled to the focus group');
     });
 
@@ -55,7 +55,7 @@ void main() {
       tester.type('ap'); // opens the dropdown
       expect(tester.overlay.entries.length, 2);
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
       expect(a.hasFocus, isTrue, reason: 'Down drove the list, not traversal');
       expect(tester.overlay.entries.length, 2, reason: 'dropdown still open');
     });
@@ -78,11 +78,11 @@ void main() {
       );
       tester.render(size: const CellSize(20, 4));
       tester.type('ap'); // apple, apricot
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // pick apple
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // pick apple
       expect(tester.overlay.entries.length, 1, reason: 'closed after pick');
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.tab)); // → b
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.tab)); // wraps back → a
+      tester.sendKey(const KeyEvent(KeyCode.tab)); // → b
+      tester.sendKey(const KeyEvent(KeyCode.tab)); // wraps back → a
       expect(a.hasFocus, isTrue);
       expect(
         tester.overlay.entries.length,
@@ -123,7 +123,7 @@ void main() {
       expect(out.contains('tip B'), isFalse);
       expect(tester.overlay.entries.length, 2, reason: 'one tooltip layer');
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.tab)); // → B
+      tester.sendKey(const KeyEvent(KeyCode.tab)); // → B
       expect(b.hasFocus, isTrue);
       out = _screen(tester);
       expect(out.contains('tip A'), isFalse, reason: 'A blurred');
@@ -143,7 +143,7 @@ void main() {
           ),
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // open menu
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // open menu
       expect(_screen(tester).contains('Quit'), isTrue);
 
       Toaster.show(ctx, 'busy');

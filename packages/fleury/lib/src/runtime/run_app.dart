@@ -175,7 +175,7 @@ final class _StartupEventBuffer {
       TextInputEvent(:final text) => text,
       TextCompositionEvent(:final text) => text,
       PasteEvent(:final text) => text,
-      KeyEvent(:final char) => char,
+      KeyEvent(:final code) => code.character,
       _ => null,
     };
     return text == null ? 0 : utf8.encode(text).length;
@@ -659,7 +659,7 @@ Future<AppExit> _runAppImpl(
       // Ctrl+C exits only when the app did not handle it first. Structured
       // browser sessions are exempt because browser Cmd+C maps to Ctrl+C.
       if (event is KeyEvent &&
-          event.char == 'c' &&
+          event.code.character == 'c' &&
           event.hasCtrl &&
           dispatchResult != KeyEventResult.handled &&
           surfaceSink == null) {
@@ -1455,8 +1455,7 @@ Future<AppExit> _runAppImpl(
 String _frameReasonForEvent(TuiEvent event) {
   return switch (event) {
     ResizeEvent() => 'resize',
-    KeyEvent(:final keyCode, :final char) =>
-      'key:${keyCode?.name ?? char ?? '?'}',
+    KeyEvent(:final code) => 'key:${code.special?.name ?? code.character!}',
     TextInputEvent() => 'text-input',
     TextCompositionEvent(:final kind) => 'text-composition:${kind.name}',
     PasteEvent() => 'paste',

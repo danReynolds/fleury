@@ -21,7 +21,7 @@ FocusNode _node({
   )..rect = CellRect.fromLTWH(left, top, width, height);
 }
 
-KeyEvent _code(KeyCode kc) => KeyEvent(keyCode: kc);
+KeyEvent _code(KeyCode kc) => KeyEvent(kc);
 
 Widget _stub(BuildContext context, int i, bool selected) => Text('Item $i');
 
@@ -439,7 +439,7 @@ void main() {
       expect(a.hasFocus, isTrue, reason: 'wraps to the first');
 
       tester.sendKey(
-        const KeyEvent(keyCode: KeyCode.tab, modifiers: {KeyModifier.shift}),
+        const KeyEvent(KeyCode.tab, modifiers: {KeyModifier.shift}),
       );
       expect(c.hasFocus, isTrue, reason: 'Shift+Tab wraps backward');
     });
@@ -473,7 +473,7 @@ void main() {
                   focusNode: a,
                   autofocus: true,
                   onKey: (e) {
-                    if (e.keyCode == KeyCode.tab) {
+                    if (e.code == KeyCode.tab) {
                       consumed++;
                       return KeyEventResult.handled;
                     }
@@ -826,7 +826,10 @@ void main() {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            SizedBox(width: 6, child: Focus(focusNode: a, child: const Text('A'))),
+            SizedBox(
+              width: 6,
+              child: Focus(focusNode: a, child: const Text('A')),
+            ),
             SizedBox(
               width: 6,
               child: ExcludeFocus(
@@ -885,7 +888,9 @@ void main() {
     ) {
       final hidden = FocusNode(debugLabel: 'hidden');
       tester.pumpWidget(
-        ExcludeFocus(child: Focus(focusNode: hidden, child: const Text('H'))),
+        ExcludeFocus(
+          child: Focus(focusNode: hidden, child: const Text('H')),
+        ),
       );
       tester.render(size: const CellSize(20, 3));
 

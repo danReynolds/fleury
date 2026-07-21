@@ -24,7 +24,7 @@ class _ShellCliE2eAppState extends State<_ShellCliE2eApp> {
   var _scheduledExit = false;
 
   KeyEventResult _onKey(KeyEvent event) {
-    if (event.keyCode != KeyCode.enter) return KeyEventResult.ignored;
+    if (event.code != KeyCode.enter) return KeyEventResult.ignored;
     setState(() => _activated = true);
     return KeyEventResult.handled;
   }

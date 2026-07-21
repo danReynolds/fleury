@@ -163,7 +163,7 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
     if (!_enabled) return KeyEventResult.ignored;
     // Buffer-control keys take effect only while a direct entry is in flight,
     // so when idle they bubble (Esc closes overlays, Enter submits forms).
-    switch (event.keyCode) {
+    switch (event.code) {
       case KeyCode.enter:
         if (_buffer == null) return KeyEventResult.ignored;
         _commitBuffer();
@@ -184,7 +184,7 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
     }
     // Any step/jump key commits a pending entry first, then acts on the value.
     if (_buffer != null) _commitBuffer();
-    switch (event.keyCode) {
+    switch (event.code) {
       // Up/Down adjust the value and bubble (escape) once pinned at a bound,
       // so the arrows that drive the stepper also carry focus off it.
       // (Left/Right are unused and already bubble for horizontal escape.)

@@ -350,9 +350,7 @@ void main() {
   group('renderToString overlay geometry', () {
     testWidgets('an inline image holds its columns; the caption keeps its '
         'position', (tester) {
-      tester.pumpWidget(
-        const Row(children: [_ImageBox(width: 6), Text('HI')]),
-      );
+      tester.pumpWidget(const Row(children: [_ImageBox(width: 6), Text('HI')]));
       expect(
         tester.renderToString(size: const CellSize(10, 1)),
         '######HI\n',
@@ -367,13 +365,9 @@ void main() {
       // Under the drop-the-overlay-cell bug BOTH widths snapshotted as the
       // identical "HI", so a layout differing only in image width was
       // undetectable. They must now differ by the footprint width.
-      tester.pumpWidget(
-        const Row(children: [_ImageBox(width: 6), Text('HI')]),
-      );
+      tester.pumpWidget(const Row(children: [_ImageBox(width: 6), Text('HI')]));
       final wide = tester.renderToString(size: const CellSize(10, 1));
-      tester.pumpWidget(
-        const Row(children: [_ImageBox(width: 2), Text('HI')]),
-      );
+      tester.pumpWidget(const Row(children: [_ImageBox(width: 2), Text('HI')]));
       final narrow = tester.renderToString(size: const CellSize(10, 1));
 
       expect(narrow, '##HI\n');
@@ -463,7 +457,7 @@ void main() {
     testWidgets('sendKey dispatches a KeyEvent', (tester) {
       final controller = TextEditingController(text: 'ab');
       tester.pumpWidget(TextInput(controller: controller, autofocus: true));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.backspace));
+      tester.sendKey(const KeyEvent(KeyCode.backspace));
       expect(controller.text, 'a');
     });
   });

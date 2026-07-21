@@ -62,10 +62,7 @@ void main() {
       // Extend the selection by one cell (no render in between, so the
       // invalidation survives to the measured frame).
       tester.sendKey(
-        const KeyEvent(
-          keyCode: KeyCode.arrowRight,
-          modifiers: {KeyModifier.shift},
-        ),
+        const KeyEvent(KeyCode.arrowRight, modifiers: {KeyModifier.shift}),
       );
 
       // Self-validation: the selection really changed, so the trigger fired.

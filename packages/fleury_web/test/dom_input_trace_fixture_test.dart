@@ -186,8 +186,8 @@ List<TraceMap> _serializeEvents(List<TuiEvent> events) =>
 TraceMap _serializeEvent(TuiEvent event) => switch (event) {
   KeyEvent() => {
     'type': 'key',
-    if (event.keyCode case final keyCode?) 'keyCode': keyCode.name,
-    if (event.char case final char?) 'char': char,
+    if (event.code.special case final special?) 'keyCode': special.name,
+    if (event.code.character case final char?) 'char': char,
     'keyEventType': event.type.name,
     'modifiers': _modifierNames(event.modifiers),
   },

@@ -288,13 +288,13 @@ class _TreeState<T> extends State<Tree<T>> {
       child: Focus(
         canRequestFocus: false,
         onKey: (event) {
-          switch (event.keyCode) {
+          switch (event.code) {
             case KeyCode.arrowRight:
               return _expandOrEnter();
             case KeyCode.arrowLeft:
               return _collapseOrParent();
             default:
-              final ch = event.char;
+              final ch = event.code.character;
               if (widget.typeahead &&
                   ch != null &&
                   ch.length == 1 &&

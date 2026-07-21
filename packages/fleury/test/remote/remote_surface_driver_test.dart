@@ -119,12 +119,12 @@ void main() {
       final entered = driver.enter(TerminalMode.interactive);
       transport.emit(_init);
       await entered;
-      transport.emit(const InputEventFrame(KeyEvent(keyCode: KeyCode.enter)));
+      transport.emit(const InputEventFrame(KeyEvent(KeyCode.enter)));
       transport.emit(const InputEventFrame(PasteEvent('hi')));
       transport.emit(const InputEventFrame(ResizeEvent(CellSize(80, 24))));
       await Future<void>.delayed(Duration.zero);
       expect(events, hasLength(3));
-      expect(events[0], const KeyEvent(keyCode: KeyCode.enter));
+      expect(events[0], const KeyEvent(KeyCode.enter));
       expect(events[1], const PasteEvent('hi'));
       expect(events[2], const ResizeEvent(CellSize(80, 24)));
       expect(driver.size, const CellSize(80, 24), reason: 'resize tracked');

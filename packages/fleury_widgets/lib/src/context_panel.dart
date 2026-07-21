@@ -478,9 +478,9 @@ class _ContextPanelState extends State<ContextPanel> {
       list = KeyBindings(
         bindings: [
           KeyBinding(
-            KeyChord.ctrl.c,
+            KeySequence.ctrl.c,
             label: 'Copy context item',
-            onEvent: (_) => unawaited(_copySelection()),
+            onTrigger: () => unawaited(_copySelection()),
           ),
         ],
         child: list,

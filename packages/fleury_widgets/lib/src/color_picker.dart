@@ -204,7 +204,7 @@ class _ColorPickerState extends State<ColorPicker>
     final idx = _cursor;
     final cols = widget.columns;
     final n = _palette.length;
-    switch (event.keyCode) {
+    switch (event.code) {
       // Arrows move the preview cursor; at the grid edge they bubble so
       // directional focus traversal carries you out of the picker (the same
       // moveOrEscape convention RangeSlider/DatePicker use).

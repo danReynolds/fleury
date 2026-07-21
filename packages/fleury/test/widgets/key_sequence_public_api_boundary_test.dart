@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:test/test.dart';
 
 void main() {
-  test('key chord dispatcher internals stay out of public libraries', () {
+  test('key sequence dispatcher internals stay out of public libraries', () {
     final productionLibraries = <String>[
       'lib/fleury.dart',
       'lib/fleury_core.dart',
@@ -20,31 +20,24 @@ void main() {
 
       expect(
         exportLines,
-        isNot(contains(r'$KeyChordInternal')),
+        isNot(contains(r'$KeySequenceInternal')),
         reason:
-            '$path must not export dispatcher-only key chord inspection '
+            '$path must not export dispatcher-only key sequence inspection '
             'helpers as production API.',
       );
       expect(
         text,
         isNot(contains('matchesStepAt')),
         reason:
-            '$path must not freeze step-by-step chord inspection as public '
+            '$path must not freeze step-by-step sequence inspection as public '
             'API before a stable extension contract exists.',
-      );
-      expect(
-        text,
-        isNot(contains('isSequence')),
-        reason:
-            '$path must not expose dispatcher sequence-state helpers as '
-            'public API.',
       );
     }
 
-    final keyBindings = File(
-      'lib/src/widgets/key_bindings.dart',
-    ).readAsStringSync();
-    expect(keyBindings, contains(r'extension $KeyChordInternal'));
-    expect(keyBindings, contains('Framework-internal'));
+    // The internal step-walking extension lives in events.dart (co-located
+    // with the sequence types) and is clearly marked framework-internal.
+    final events = File('lib/src/input/events.dart').readAsStringSync();
+    expect(events, contains(r'extension $KeySequenceInternal'));
+    expect(events, contains('Framework-internal'));
   });
 }

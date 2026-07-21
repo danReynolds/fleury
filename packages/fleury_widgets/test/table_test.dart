@@ -422,7 +422,7 @@ void main() {
     testWidgets('Down/Up move the highlight', (tester) {
       tester.pumpWidget(people());
       tester.render(size: const CellSize(8, 5));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
       var buf = tester.render(size: const CellSize(8, 5));
       expect(
         buf.atColRow(0, 1).style.inverse,
@@ -435,7 +435,7 @@ void main() {
         reason: 'row 1 selected',
       );
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
+      tester.sendKey(const KeyEvent(KeyCode.arrowUp));
       buf = tester.render(size: const CellSize(8, 5));
       expect(buf.atColRow(0, 1).style.inverse, isTrue, reason: 'back to row 0');
     });
@@ -444,8 +444,8 @@ void main() {
       int? picked;
       tester.pumpWidget(people(onSelect: (i) => picked = i));
       tester.render(size: const CellSize(8, 5));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(picked, 1);
     });
 
@@ -512,11 +512,11 @@ void main() {
       // Viewport 3 rows: header pinned (row 0) + 2 body rows visible.
       expect(_lines(tester, cols: 4, rows: 3), ['H', 'r0', 'r1']);
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.end));
+      tester.sendKey(const KeyEvent(KeyCode.end));
       // End jumps to r9; window slides so r9 is the bottom row, header stays.
       expect(_lines(tester, cols: 4, rows: 3), ['H', 'r8', 'r9']);
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.home));
+      tester.sendKey(const KeyEvent(KeyCode.home));
       expect(_lines(tester, cols: 4, rows: 3), ['H', 'r0', 'r1']);
     });
 
@@ -525,7 +525,7 @@ void main() {
       tester.render(size: const CellSize(4, 3));
       // Step down past the bottom of the window; it should follow.
       for (var i = 0; i < 3; i++) {
-        tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+        tester.sendKey(const KeyEvent(KeyCode.arrowDown));
       }
       // Selection is now r3; window shows r2,r3 (r3 at the bottom).
       expect(_lines(tester, cols: 4, rows: 3), ['H', 'r2', 'r3']);

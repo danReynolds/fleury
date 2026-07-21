@@ -50,9 +50,11 @@ class _ShopAppState extends State<ShopApp> {
   Widget build(BuildContext context) {
     return KeyBindings(
       bindings: [
-        KeyBinding(const KeyChord.char('a'),
-            onEvent: (_) => _cart.add('Item ${_cart.count + 1}')),
-        KeyBinding(const KeyChord.char('c'), onEvent: (_) => _cart.clear()),
+        KeyBinding(
+          const KeyCode.char('a'),
+          onTrigger: () => _cart.add('Item ${_cart.count + 1}'),
+        ),
+        KeyBinding(const KeyCode.char('c'), onTrigger: () => _cart.clear()),
       ],
       child: Padding(
         padding: const EdgeInsets.all(1),

@@ -261,7 +261,7 @@ void main() {
               title: 'Save',
               description: 'Write current file',
               category: 'File',
-              shortcuts: [KeyChord.ctrl.s],
+              shortcuts: [KeySequence.ctrl.s],
               semanticAction: SemanticAction.submit,
               run: (_) {},
             ),
@@ -315,7 +315,7 @@ void main() {
             AppCommand(
               id: _save,
               title: 'Save',
-              shortcuts: [KeyChord.ctrl.s],
+              shortcuts: [KeySequence.ctrl.s],
               run: (_) {
                 calls += 1;
               },
@@ -325,7 +325,9 @@ void main() {
         ),
       );
 
-      tester.sendKey(const KeyEvent(char: 's', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('s'), modifiers: {KeyModifier.ctrl}),
+      );
 
       expect(calls, 1);
     });
@@ -338,7 +340,7 @@ void main() {
             AppCommand(
               id: _disabled,
               title: 'Disabled',
-              shortcuts: [KeyChord.ctrl.s],
+              shortcuts: [KeySequence.ctrl.s],
               enabled: (_) => false,
               run: (_) {
                 calls += 1;
@@ -349,7 +351,9 @@ void main() {
         ),
       );
 
-      tester.sendKey(const KeyEvent(char: 's', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('s'), modifiers: {KeyModifier.ctrl}),
+      );
 
       expect(calls, 0);
       final command = tester.semantics().single(
@@ -369,7 +373,7 @@ void main() {
             AppCommand(
               id: _save,
               title: 'Save',
-              shortcuts: [KeyChord.ctrl.s],
+              shortcuts: [KeySequence.ctrl.s],
               run: (_) => gate.future,
             ),
           ],
@@ -378,7 +382,9 @@ void main() {
       );
 
       final registry = tester.commandRegistry();
-      tester.sendKey(const KeyEvent(char: 's', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('s'), modifiers: {KeyModifier.ctrl}),
+      );
       await Future<void>.delayed(Duration.zero);
 
       expect(registry.lastResult, isNull);

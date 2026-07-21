@@ -120,7 +120,7 @@ void main() {
       );
 
       tester.render(size: const CellSize(100, 6));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
 
       expect(selected?.item.id, 'ctx.demo');
       expect(selected?.itemIndex, 0);

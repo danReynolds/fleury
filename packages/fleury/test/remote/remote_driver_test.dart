@@ -122,7 +122,7 @@ void main() {
       transport.emit(InputFrame(Uint8List.fromList([0x1B, 0x5B, 0x41])));
       await Future<void>.delayed(Duration.zero);
       final chords = events.whereType<KeyEvent>().toList();
-      expect(chords.last.keyCode, KeyCode.arrowUp);
+      expect(chords.last.code, KeyCode.arrowUp);
 
       await eventSub.cancel();
       await driver.restore();
@@ -153,7 +153,7 @@ void main() {
         transport.emit(InputFrame(Uint8List.fromList([0x1B])));
 
         await Future<void>.delayed(const Duration(milliseconds: 15));
-        expect(events, [const KeyEvent(keyCode: KeyCode.escape)]);
+        expect(events, [const KeyEvent(KeyCode.escape)]);
 
         await eventSub.cancel();
         await driver.restore();
@@ -447,10 +447,7 @@ void main() {
         var entered = false;
         final entering = driver
             .enter(TerminalMode.interactive)
-            .then(
-              (_) => entered = true,
-              onError: (Object e) => error = e,
-            );
+            .then((_) => entered = true, onError: (Object e) => error = e);
 
         // Let the would-be fuse fire: an unsupervised driver throws
         // 'sent no INIT' by now.

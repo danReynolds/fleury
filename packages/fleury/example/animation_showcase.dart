@@ -20,7 +20,7 @@ Future<void> main() async {
   await runApp(
     const _ShowcaseApp(),
     onEvent: (event) {
-      if (event is KeyEvent && event.hasCtrl && event.char == 'c') {
+      if (event is KeyEvent && event.hasCtrl && event.code.character == 'c') {
         return const ExitRequested();
       }
       return null;
@@ -63,9 +63,9 @@ class _ShowcaseAppState extends State<_ShowcaseApp> {
     return KeyBindings(
       bindings: [
         KeyBinding(
-          KeyChord.char(' '),
+          KeyCode.char(' '),
           label: 'bump progress',
-          onEvent: (_) => _bumpProgress(),
+          onTrigger: () => _bumpProgress(),
         ),
       ],
       child: Container(

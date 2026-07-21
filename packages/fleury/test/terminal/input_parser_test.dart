@@ -79,21 +79,21 @@ void main() {
 
   group('Special chords', () {
     test('lone CR and lone LF each become one Enter', () {
-      expect(_parse([0x0D]), [const KeyEvent(keyCode: KeyCode.enter)]);
-      expect(_parse([0x0A]), [const KeyEvent(keyCode: KeyCode.enter)]);
+      expect(_parse([0x0D]), [const KeyEvent(KeyCode.enter)]);
+      expect(_parse([0x0A]), [const KeyEvent(KeyCode.enter)]);
     });
 
     test('CRLF collapses to a single Enter (no double-submit)', () {
       // Piped/scripted input, LNM terminals, and Windows/serial PTYs deliver
       // `\r\n`; it must be ONE Enter, not two.
-      expect(_parse([0x0D, 0x0A]), [const KeyEvent(keyCode: KeyCode.enter)]);
+      expect(_parse([0x0D, 0x0A]), [const KeyEvent(KeyCode.enter)]);
       // Split across two feeds (fragmented reads) collapses the same way —
       // the latch persists across feed() boundaries.
       final parser = InputParser();
       final sink = _ListSink();
       parser.feed([0x0D], sink);
       parser.feed([0x0A], sink);
-      expect(sink.events, [const KeyEvent(keyCode: KeyCode.enter)]);
+      expect(sink.events, [const KeyEvent(KeyCode.enter)]);
     });
 
     test('a flush ends the CR window — a later lone LF is not swallowed', () {
@@ -106,56 +106,56 @@ void main() {
       parser.flush(sink); // idle — ends the pairing window
       parser.feed([0x0A], sink); // a fresh, unrelated LF
       expect(sink.events, [
-        const KeyEvent(keyCode: KeyCode.enter),
-        const KeyEvent(keyCode: KeyCode.enter),
+        const KeyEvent(KeyCode.enter),
+        const KeyEvent(KeyCode.enter),
       ]);
     });
 
     test('LFCR and CR-x-LF do NOT swallow (only an immediate paired LF)', () {
       // `\n\r` is two Enters (LF first, then CR).
       expect(_parse([0x0A, 0x0D]), [
-        const KeyEvent(keyCode: KeyCode.enter),
-        const KeyEvent(keyCode: KeyCode.enter),
+        const KeyEvent(KeyCode.enter),
+        const KeyEvent(KeyCode.enter),
       ]);
       // CR, an intervening key, then LF → two Enters (the latch cleared on 'a').
       expect(_parse([0x0D, 0x61, 0x0A]), [
-        const KeyEvent(keyCode: KeyCode.enter),
+        const KeyEvent(KeyCode.enter),
         const TextInputEvent('a'),
-        const KeyEvent(keyCode: KeyCode.enter),
+        const KeyEvent(KeyCode.enter),
       ]);
     });
 
     test('Tab byte becomes KeyCode.tab', () {
-      expect(_parse([0x09]), [const KeyEvent(keyCode: KeyCode.tab)]);
+      expect(_parse([0x09]), [const KeyEvent(KeyCode.tab)]);
     });
 
     test('DEL (0x7F) and BS (0x08) both become KeyCode.backspace', () {
-      expect(_parse([0x7F]), [const KeyEvent(keyCode: KeyCode.backspace)]);
-      expect(_parse([0x08]), [const KeyEvent(keyCode: KeyCode.backspace)]);
+      expect(_parse([0x7F]), [const KeyEvent(KeyCode.backspace)]);
+      expect(_parse([0x08]), [const KeyEvent(KeyCode.backspace)]);
     });
   });
 
   group('Ctrl shortcuts', () {
     test('Ctrl+A through Ctrl+Z map to letters with ctrl modifier', () {
       expect(_parse([0x01]), [
-        const KeyEvent(char: 'a', modifiers: {KeyModifier.ctrl}),
+        const KeyEvent(KeyCode.char('a'), modifiers: {KeyModifier.ctrl}),
       ]);
       expect(_parse([0x03]), [
-        const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
       ]);
       expect(_parse([0x1A]), [
-        const KeyEvent(char: 'z', modifiers: {KeyModifier.ctrl}),
+        const KeyEvent(KeyCode.char('z'), modifiers: {KeyModifier.ctrl}),
       ]);
     });
 
     test('Ctrl+Tab is not produced (tab takes precedence)', () {
       // 0x09 is Tab, not Ctrl+I — terminals deliver Tab here.
-      expect(_parse([0x09]), [const KeyEvent(keyCode: KeyCode.tab)]);
+      expect(_parse([0x09]), [const KeyEvent(KeyCode.tab)]);
     });
 
     test('NUL (0x00) becomes Ctrl+Space', () {
       expect(_parse([0x00]), [
-        const KeyEvent(char: ' ', modifiers: {KeyModifier.ctrl}),
+        const KeyEvent(KeyCode.char(' '), modifiers: {KeyModifier.ctrl}),
       ]);
     });
   });
@@ -167,71 +167,53 @@ void main() {
       parser.feed([0x1B], sink);
       expect(sink.events, isEmpty);
       parser.flush(sink);
-      expect(sink.events, [const KeyEvent(keyCode: KeyCode.escape)]);
+      expect(sink.events, [const KeyEvent(KeyCode.escape)]);
     });
 
     test('two ESCs: first emits as escape, second waits for continuation', () {
       final parser = InputParser();
       final sink = _ListSink();
       parser.feed([0x1B, 0x1B], sink);
-      expect(sink.events, [const KeyEvent(keyCode: KeyCode.escape)]);
+      expect(sink.events, [const KeyEvent(KeyCode.escape)]);
       parser.flush(sink);
       expect(sink.events, [
-        const KeyEvent(keyCode: KeyCode.escape),
-        const KeyEvent(keyCode: KeyCode.escape),
+        const KeyEvent(KeyCode.escape),
+        const KeyEvent(KeyCode.escape),
       ]);
     });
 
     test('ESC followed by printable becomes Alt+<char>', () {
       // ESC + 'a' → Alt+a (xterm legacy convention).
       expect(_parse([0x1B, 0x61]), [
-        const KeyEvent(char: 'a', modifiers: {KeyModifier.alt}),
+        const KeyEvent(KeyCode.char('a'), modifiers: {KeyModifier.alt}),
       ]);
     });
   });
 
   group('CSI cursor chords', () {
     test('CSI A/B/C/D map to arrow chords', () {
-      expect(_parse([0x1B, 0x5B, 0x41]), [
-        const KeyEvent(keyCode: KeyCode.arrowUp),
-      ]);
-      expect(_parse([0x1B, 0x5B, 0x42]), [
-        const KeyEvent(keyCode: KeyCode.arrowDown),
-      ]);
-      expect(_parse([0x1B, 0x5B, 0x43]), [
-        const KeyEvent(keyCode: KeyCode.arrowRight),
-      ]);
-      expect(_parse([0x1B, 0x5B, 0x44]), [
-        const KeyEvent(keyCode: KeyCode.arrowLeft),
-      ]);
+      expect(_parse([0x1B, 0x5B, 0x41]), [const KeyEvent(KeyCode.arrowUp)]);
+      expect(_parse([0x1B, 0x5B, 0x42]), [const KeyEvent(KeyCode.arrowDown)]);
+      expect(_parse([0x1B, 0x5B, 0x43]), [const KeyEvent(KeyCode.arrowRight)]);
+      expect(_parse([0x1B, 0x5B, 0x44]), [const KeyEvent(KeyCode.arrowLeft)]);
     });
 
     test('CSI H is home, F is end', () {
-      expect(_parse([0x1B, 0x5B, 0x48]), [
-        const KeyEvent(keyCode: KeyCode.home),
-      ]);
-      expect(_parse([0x1B, 0x5B, 0x46]), [
-        const KeyEvent(keyCode: KeyCode.end),
-      ]);
+      expect(_parse([0x1B, 0x5B, 0x48]), [const KeyEvent(KeyCode.home)]);
+      expect(_parse([0x1B, 0x5B, 0x46]), [const KeyEvent(KeyCode.end)]);
     });
 
     test('CSI 1;5C is Ctrl+arrowRight', () {
       // ESC [ 1 ; 5 C  → arrow right with mod=5 (= ctrl).
       expect(_parse([0x1B, 0x5B, 0x31, 0x3B, 0x35, 0x43]), [
-        const KeyEvent(
-          keyCode: KeyCode.arrowRight,
-          modifiers: {KeyModifier.ctrl},
-        ),
+        const KeyEvent(KeyCode.arrowRight, modifiers: {KeyModifier.ctrl}),
       ]);
     });
 
     test('CSI 1;2A is Shift+arrowUp', () {
       // mod=2 = shift.
       expect(_parse([0x1B, 0x5B, 0x31, 0x3B, 0x32, 0x41]), [
-        const KeyEvent(
-          keyCode: KeyCode.arrowUp,
-          modifiers: {KeyModifier.shift},
-        ),
+        const KeyEvent(KeyCode.arrowUp, modifiers: {KeyModifier.shift}),
       ]);
     });
 
@@ -239,7 +221,7 @@ void main() {
       // mod=7 = alt + ctrl.
       expect(_parse([0x1B, 0x5B, 0x31, 0x3B, 0x37, 0x44]), [
         isA<KeyEvent>()
-            .having((e) => e.keyCode, 'keyCode', KeyCode.arrowLeft)
+            .having((e) => e.code, 'keyCode', KeyCode.arrowLeft)
             .having((e) => e.hasCtrl, 'hasCtrl', isTrue)
             .having((e) => e.hasAlt, 'hasAlt', isTrue),
       ]);
@@ -250,14 +232,14 @@ void main() {
     test('ESC [ Z decodes as Shift+Tab', () {
       final events = _parse([0x1B, 0x5B, 0x5A]);
       final key = events.single as KeyEvent;
-      expect(key.keyCode, KeyCode.tab);
+      expect(key.code, KeyCode.tab);
       expect(key.modifiers, {KeyModifier.shift});
     });
 
     test('ESC [ 1;5 Z merges ctrl with the implied shift', () {
       final events = _parse([0x1B, 0x5B, 0x31, 0x3B, 0x35, 0x5A]);
       final key = events.single as KeyEvent;
-      expect(key.keyCode, KeyCode.tab);
+      expect(key.code, KeyCode.tab);
       expect(key.modifiers, containsAll({KeyModifier.shift, KeyModifier.ctrl}));
     });
   });
@@ -265,41 +247,39 @@ void main() {
   group('CSI tilde-finalised chords', () {
     test('CSI 5~ is pageUp, 6~ is pageDown', () {
       expect(_parse([0x1B, 0x5B, 0x35, 0x7E]), [
-        const KeyEvent(keyCode: KeyCode.pageUp),
+        const KeyEvent(KeyCode.pageUp),
       ]);
       expect(_parse([0x1B, 0x5B, 0x36, 0x7E]), [
-        const KeyEvent(keyCode: KeyCode.pageDown),
+        const KeyEvent(KeyCode.pageDown),
       ]);
     });
 
     test('CSI 3~ is delete, 2~ is insert', () {
       expect(_parse([0x1B, 0x5B, 0x33, 0x7E]), [
-        const KeyEvent(keyCode: KeyCode.delete),
+        const KeyEvent(KeyCode.delete),
       ]);
       expect(_parse([0x1B, 0x5B, 0x32, 0x7E]), [
-        const KeyEvent(keyCode: KeyCode.insert),
+        const KeyEvent(KeyCode.insert),
       ]);
     });
 
     test('CSI 11~ is F1, 24~ is F12', () {
       expect(_parse([0x1B, 0x5B, 0x31, 0x31, 0x7E]), [
-        const KeyEvent(keyCode: KeyCode.f1),
+        const KeyEvent(KeyCode.f1),
       ]);
       expect(_parse([0x1B, 0x5B, 0x32, 0x34, 0x7E]), [
-        const KeyEvent(keyCode: KeyCode.f12),
+        const KeyEvent(KeyCode.f12),
       ]);
     });
   });
 
   group('SS3 (ESC O ...) sequences', () {
     test('ESC O A is arrowUp', () {
-      expect(_parse([0x1B, 0x4F, 0x41]), [
-        const KeyEvent(keyCode: KeyCode.arrowUp),
-      ]);
+      expect(_parse([0x1B, 0x4F, 0x41]), [const KeyEvent(KeyCode.arrowUp)]);
     });
 
     test('ESC O P is F1', () {
-      expect(_parse([0x1B, 0x4F, 0x50]), [const KeyEvent(keyCode: KeyCode.f1)]);
+      expect(_parse([0x1B, 0x4F, 0x50]), [const KeyEvent(KeyCode.f1)]);
     });
   });
 
@@ -308,7 +288,7 @@ void main() {
       // 'h' + ESC[A + 'i' → text 'h', arrow up, text 'i'.
       expect(_parse([0x68, 0x1B, 0x5B, 0x41, 0x69]), [
         const TextInputEvent('h'),
-        const KeyEvent(keyCode: KeyCode.arrowUp),
+        const KeyEvent(KeyCode.arrowUp),
         const TextInputEvent('i'),
       ]);
     });
@@ -364,7 +344,7 @@ void main() {
       // ESC [ A decodes as arrowUp — not swallowed and re-parsed as the typed
       // text "[" then "A".
       expect(_parse([0x1B, 0x5B, 0x1B, 0x5B, 0x41]), [
-        const KeyEvent(keyCode: KeyCode.arrowUp),
+        const KeyEvent(KeyCode.arrowUp),
       ]);
     });
 
@@ -376,7 +356,7 @@ void main() {
       parser.feed([0x1B, 0x5B, 0x1B], sink);
       expect(sink.events, isEmpty);
       parser.flush(sink);
-      expect(sink.events, [const KeyEvent(keyCode: KeyCode.escape)]);
+      expect(sink.events, [const KeyEvent(KeyCode.escape)]);
     });
   });
 
@@ -478,7 +458,10 @@ void main() {
 
       // Keyboard control is back: Ctrl+C is now delivered, not eaten as paste.
       parser.feed([0x03], sink);
-      expect(sink.events.last, const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      expect(
+        sink.events.last,
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
     });
 
     test('flushPaste is a no-op when not mid-paste', () {
@@ -600,24 +583,21 @@ void main() {
       // mods = 1 + ctrl(4) = 5; 'i' = 105.
       expect(
         _parse(csiu('105;5')).single,
-        const KeyEvent(char: 'i', modifiers: {KeyModifier.ctrl}),
+        const KeyEvent(KeyCode.char('i'), modifiers: {KeyModifier.ctrl}),
       );
       // Raw Tab still reads as the Tab key — the two are no longer conflated.
-      expect(_parse([0x09]).single, const KeyEvent(keyCode: KeyCode.tab));
+      expect(_parse([0x09]).single, const KeyEvent(KeyCode.tab));
     });
 
     test('lone Esc reports as the escape key without waiting for a flush', () {
-      expect(
-        _parse(csiu('27')).single,
-        const KeyEvent(keyCode: KeyCode.escape),
-      );
+      expect(_parse(csiu('27')).single, const KeyEvent(KeyCode.escape));
     });
 
     test('Ctrl+M is distinct from Enter', () {
       // 'm' = 109, ctrl.
       expect(
         _parse(csiu('109;5')).single,
-        const KeyEvent(char: 'm', modifiers: {KeyModifier.ctrl}),
+        const KeyEvent(KeyCode.char('m'), modifiers: {KeyModifier.ctrl}),
       );
     });
 
@@ -625,7 +605,7 @@ void main() {
       // codepoint 13 is Enter even in CSI-u form.
       expect(
         _parse(csiu('13;5')).single,
-        const KeyEvent(keyCode: KeyCode.enter, modifiers: {KeyModifier.ctrl}),
+        const KeyEvent(KeyCode.enter, modifiers: {KeyModifier.ctrl}),
       );
     });
 
@@ -634,7 +614,7 @@ void main() {
       expect(
         _parse(csiu('97;6')).single,
         const KeyEvent(
-          char: 'a',
+          KeyCode.char('a'),
           modifiers: {KeyModifier.ctrl, KeyModifier.shift},
         ),
       );
@@ -644,12 +624,12 @@ void main() {
       // mods = 1 + super(8) = 9.
       expect(
         _parse(csiu('107;9')).single,
-        const KeyEvent(char: 'k', modifiers: {KeyModifier.superKey}),
+        const KeyEvent(KeyCode.char('k'), modifiers: {KeyModifier.superKey}),
       );
       // mods = 1 + meta(32) = 33.
       expect(
         _parse(csiu('107;33')).single,
-        const KeyEvent(char: 'k', modifiers: {KeyModifier.meta}),
+        const KeyEvent(KeyCode.char('k'), modifiers: {KeyModifier.meta}),
       );
     });
 
@@ -657,7 +637,7 @@ void main() {
       // mods = 1 + alt(2) = 3.
       expect(
         _parse(csiu('97;3')).single,
-        const KeyEvent(char: 'a', modifiers: {KeyModifier.alt}),
+        const KeyEvent(KeyCode.char('a'), modifiers: {KeyModifier.alt}),
       );
     });
 
@@ -667,7 +647,7 @@ void main() {
         expect(
           _parse(csiu('97;5:3')).single,
           const KeyEvent(
-            char: 'a',
+            KeyCode.char('a'),
             modifiers: {KeyModifier.ctrl},
             type: KeyEventType.up,
           ),
@@ -678,7 +658,7 @@ void main() {
         expect(
           _parse(csiu('97;5:2')).single,
           const KeyEvent(
-            char: 'a',
+            KeyCode.char('a'),
             modifiers: {KeyModifier.ctrl},
             type: KeyEventType.repeat,
           ),
@@ -695,7 +675,7 @@ void main() {
         expect(
           _parse([0x1B, 0x5B, ...'1;5:3A'.codeUnits]).single,
           const KeyEvent(
-            keyCode: KeyCode.arrowUp,
+            KeyCode.arrowUp,
             modifiers: {KeyModifier.ctrl},
             type: KeyEventType.up,
           ),

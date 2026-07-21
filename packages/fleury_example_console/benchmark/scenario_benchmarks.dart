@@ -328,7 +328,7 @@ Future<_DemoAppJourneySample> _runDemoAppJourney(_ScenarioConfig config) async {
     tester.pump();
     frame = tester.render(size: config.terminalSize);
     unsafeFrameCount += _unsafeVisibleFrameCount(frame, config.terminalSize);
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     tester.pump(const Duration(milliseconds: 300));
     tester.pump();
     frame = tester.render(size: config.terminalSize);
@@ -429,7 +429,9 @@ Future<_DemoAppJourneySample> _runDemoAppJourney(_ScenarioConfig config) async {
 
     final runsCopy = Stopwatch()..start();
     await _invoke(tester, demoCommandFocusRunsTable);
-    tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+    tester.sendKey(
+      const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+    );
     await _flushAsyncUi(tester);
     frame = tester.render(size: config.terminalSize);
     unsafeFrameCount += _unsafeVisibleFrameCount(frame, config.terminalSize);
@@ -440,7 +442,7 @@ Future<_DemoAppJourneySample> _runDemoAppJourney(_ScenarioConfig config) async {
     await _invoke(tester, demoCommandGoTranscript);
     await _invoke(tester, demoCommandFocusComposer);
     tester.type('operator note ${config.seed}');
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     await _flushAsyncUi(tester);
     await _invoke(tester, demoCommandAppendLogBurst);
     await _invoke(tester, demoCommandToggleStream);

@@ -18,10 +18,7 @@ void main() {
             web.KeyboardEventInit(key: 'ArrowLeft', shiftKey: true),
           ),
         ),
-        const KeyEvent(
-          keyCode: KeyCode.arrowLeft,
-          modifiers: {KeyModifier.shift},
-        ),
+        const KeyEvent(KeyCode.arrowLeft, modifiers: {KeyModifier.shift}),
       );
 
       expect(
@@ -37,7 +34,7 @@ void main() {
           ),
         ),
         const KeyEvent(
-          char: 's',
+          KeyCode.char('s'),
           modifiers: {KeyModifier.ctrl, KeyModifier.shift},
           type: KeyEventType.repeat,
         ),
@@ -61,7 +58,7 @@ void main() {
             web.KeyboardEventInit(key: 'z', metaKey: true),
           ),
         ),
-        const KeyEvent(char: 'z', modifiers: {KeyModifier.ctrl}),
+        const KeyEvent(KeyCode.char('z'), modifiers: {KeyModifier.ctrl}),
       );
       expect(
         keyEventFromBrowser(
@@ -71,7 +68,7 @@ void main() {
           ),
         ),
         const KeyEvent(
-          char: 'z',
+          KeyCode.char('z'),
           modifiers: {KeyModifier.ctrl, KeyModifier.shift},
         ),
       );
@@ -268,7 +265,7 @@ void main() {
     );
 
     expect(events, [
-      const KeyEvent(keyCode: KeyCode.enter),
+      const KeyEvent(KeyCode.enter),
       const TextCompositionEvent.update('é'),
       const TextCompositionEvent.commit('é'),
       const TextInputEvent('x'),

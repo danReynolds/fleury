@@ -71,7 +71,7 @@ void main() {
           onChanged: (d) => selected = d,
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight));
       expect(selected, _d(2024, 3, 16));
     });
 
@@ -84,7 +84,7 @@ void main() {
           onChanged: (d) => selected = d,
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
       expect(selected, _d(2024, 3, 22));
     });
 
@@ -128,7 +128,7 @@ void main() {
           onChanged: (d) => selected = d,
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.pageDown));
+      tester.sendKey(const KeyEvent(KeyCode.pageDown));
       expect(selected, _d(2024, 4, 15));
     });
 
@@ -144,7 +144,7 @@ void main() {
           onChanged: (d) => selected = d,
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.pageDown));
+      tester.sendKey(const KeyEvent(KeyCode.pageDown));
       expect(selected, _d(2024, 2, 29));
     });
 
@@ -172,7 +172,7 @@ void main() {
           onChanged: (d) => selected = d,
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.pageUp));
+      tester.sendKey(const KeyEvent(KeyCode.pageUp));
       expect(selected, _d(2025, 12, 15));
     });
 
@@ -188,7 +188,7 @@ void main() {
           onChanged: (d) => selected = d,
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.pageUp));
+      tester.sendKey(const KeyEvent(KeyCode.pageUp));
       expect(selected, _d(2024, 2, 29));
     });
 
@@ -232,7 +232,7 @@ void main() {
         ),
       );
       // Backward past firstDate: ignored.
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.pageUp));
+      tester.sendKey(const KeyEvent(KeyCode.pageUp));
       expect(selected, isNull);
       tester.type('[');
       expect(selected, isNull);
@@ -240,7 +240,7 @@ void main() {
       tester.type(']');
       expect(selected, isNull);
       // In-bounds paging still works.
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.pageDown));
+      tester.sendKey(const KeyEvent(KeyCode.pageDown));
       expect(selected, _d(2024, 4, 15));
     });
 
@@ -256,10 +256,10 @@ void main() {
         ),
       );
       // Left from the first day: out of bounds → no callback.
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowLeft));
+      tester.sendKey(const KeyEvent(KeyCode.arrowLeft));
       expect(selected, isNull);
       // Right works fine.
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight));
       expect(selected, _d(2024, 3, 2));
     });
 
@@ -276,17 +276,17 @@ void main() {
       // 2024-03-02 is a Saturday — the last column of a Sunday-start week.
       tester.pumpWidget(cal(_d(2024, 3, 2)));
       selected = null;
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight));
       expect(selected, isNull, reason: 'Right at the last column bubbles out');
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
       expect(selected, _d(2024, 3, 9), reason: 'Down stays inside the grid');
 
       // 2024-03-03 is a Sunday — the first column.
       selected = null;
       tester.pumpWidget(cal(_d(2024, 3, 3)));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowLeft));
+      tester.sendKey(const KeyEvent(KeyCode.arrowLeft));
       expect(selected, isNull, reason: 'Left at the first column bubbles out');
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight));
       expect(selected, _d(2024, 3, 4), reason: 'Right stays inside the grid');
     });
 
@@ -299,9 +299,9 @@ void main() {
           onChanged: (d) => selected = d,
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.home));
+      tester.sendKey(const KeyEvent(KeyCode.home));
       expect(selected, _d(2024, 3, 1));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.end));
+      tester.sendKey(const KeyEvent(KeyCode.end));
       // March has 31 days.
       expect(selected, _d(2024, 3, 31));
     });

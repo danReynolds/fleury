@@ -493,55 +493,48 @@ void main() {
     expect(list.state.selectedMessageId, 'm3');
   });
 
-  testWidgets(
-    'a streamed append does not re-engage followTail after the app '
-    'disengaged it',
-    (tester) {
-      final controller = MessageListController(followTail: true);
-      List<MessageEntry> build(int count) => [
-        for (var i = 0; i < count; i++)
-          MessageEntry(id: 'm$i', role: MessageRole.log, text: 'line $i'),
-      ];
+  testWidgets('a streamed append does not re-engage followTail after the app '
+      'disengaged it', (tester) {
+    final controller = MessageListController(followTail: true);
+    List<MessageEntry> build(int count) => [
+      for (var i = 0; i < count; i++)
+        MessageEntry(id: 'm$i', role: MessageRole.log, text: 'line $i'),
+    ];
 
-      tester.pumpWidget(
-        MessageList(controller: controller, messages: build(6)),
-      );
-      tester.render(size: const CellSize(40, 3));
+    tester.pumpWidget(MessageList(controller: controller, messages: build(6)));
+    tester.render(size: const CellSize(40, 3));
 
-      // Following the tail: selection on the last message, tail in view.
-      expect(controller.followTail, isTrue);
-      expect(controller.selectedIndex, 5);
-      expect(controller.visibleRange?.last, 5);
+    // Following the tail: selection on the last message, tail in view.
+    expect(controller.followTail, isTrue);
+    expect(controller.selectedIndex, 5);
+    expect(controller.visibleRange?.last, 5);
 
-      // The app pauses auto-scroll to read history (documented as
-      // "freezes in place").
-      controller.followTail = false;
-      tester.render(size: const CellSize(40, 3));
-      expect(controller.selectedIndex, 5);
-      expect(controller.visibleRange?.last, 5);
+    // The app pauses auto-scroll to read history (documented as
+    // "freezes in place").
+    controller.followTail = false;
+    tester.render(size: const CellSize(40, 3));
+    expect(controller.selectedIndex, 5);
+    expect(controller.visibleRange?.last, 5);
 
-      // A streamed message arrives while the reader is parked.
-      tester.pumpWidget(
-        MessageList(controller: controller, messages: build(7)),
-      );
-      tester.render(size: const CellSize(40, 3));
+    // A streamed message arrives while the reader is parked.
+    tester.pumpWidget(MessageList(controller: controller, messages: build(7)));
+    tester.render(size: const CellSize(40, 3));
 
-      // Follow must stay disengaged, the selection must stay on the message
-      // the reader left it on (id m5 == index 5), and the viewport must not
-      // yank down to the new tail (index 6).
-      expect(
-        controller.followTail,
-        isFalse,
-        reason: 'a streamed append must not silently re-engage followTail',
-      );
-      expect(controller.selectedIndex, 5);
-      expect(
-        controller.visibleRange?.last,
-        5,
-        reason: 'the viewport must not yank to the new tail (index 6)',
-      );
-    },
-  );
+    // Follow must stay disengaged, the selection must stay on the message
+    // the reader left it on (id m5 == index 5), and the viewport must not
+    // yank down to the new tail (index 6).
+    expect(
+      controller.followTail,
+      isFalse,
+      reason: 'a streamed append must not silently re-engage followTail',
+    );
+    expect(controller.selectedIndex, 5);
+    expect(
+      controller.visibleRange?.last,
+      5,
+      reason: 'the viewport must not yank to the new tail (index 6)',
+    );
+  });
 
   testWidgets(
     'jumpToIndex survives a later append instead of snapping back to the '
@@ -616,7 +609,9 @@ void main() {
       );
 
       tester.render(size: const CellSize(60, 5));
-      tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await Future<void>.delayed(Duration.zero);
 
       expect(tester.clipboard.readInProcess(), '[assistant Agent] answer');

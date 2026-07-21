@@ -35,7 +35,7 @@ class _DemoState extends State<_Demo> {
   int count = 0;
 
   KeyEventResult _onKey(KeyEvent event) {
-    switch (event.keyCode) {
+    switch (event.code) {
       case KeyCode.arrowUp:
         setState(() => count++);
         return KeyEventResult.handled;

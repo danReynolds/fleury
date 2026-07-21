@@ -19,9 +19,9 @@ class _TogglingLabelState extends State<_TogglingLabel> {
   Widget build(BuildContext context) => KeyBindings(
     bindings: [
       KeyBinding(
-        KeyChord.char('r'),
+        KeyCode.char('r'),
         label: revealed ? 'hide' : 'reveal',
-        onEvent: (_) => setState(() => revealed = !revealed),
+        onTrigger: () => setState(() => revealed = !revealed),
       ),
     ],
     child: const Focus(autofocus: true, child: Text('body')),
@@ -40,17 +40,13 @@ void main() {
           children: [
             KeyBindings(
               bindings: [
-                KeyBinding(KeyChord.char('?'), label: 'help', onEvent: (_) {}),
+                KeyBinding(KeyCode.char('?'), label: 'help', onTrigger: () {}),
                 KeyBinding(
-                  KeyChord.char('s', ctrl: true),
+                  KeySequence.ctrl.char('s'),
                   label: 'save',
-                  onEvent: (_) {},
+                  onTrigger: () {},
                 ),
-                KeyBinding(
-                  KeyChord.key(KeyCode.f1),
-                  label: 'manual',
-                  onEvent: (_) {},
-                ),
+                KeyBinding(KeyCode.f1, label: 'manual', onTrigger: () {}),
               ],
               child: TextInput(autofocus: true),
             ),
@@ -78,7 +74,7 @@ void main() {
           children: [
             KeyBindings(
               bindings: [
-                KeyBinding(KeyChord.char('?'), label: 'help', onEvent: (_) {}),
+                KeyBinding(KeyCode.char('?'), label: 'help', onTrigger: () {}),
               ],
               child: Column(
                 children: [
@@ -111,10 +107,10 @@ void main() {
           children: [
             KeyBindings(
               bindings: [
-                KeyBinding.list(
-                  [KeyChord.char('j'), KeyChord.key(KeyCode.arrowDown)],
+                KeyBinding.any(
+                  [KeyCode.char('j'), KeyCode.arrowDown],
                   label: 'next',
-                  onEvent: (_) {},
+                  onTrigger: () {},
                 ),
               ],
               child: TextInput(autofocus: true),
@@ -148,18 +144,18 @@ void main() {
           children: [
             KeyBindings(
               bindings: [
-                KeyBinding.list(
-                  [KeyChord.char('j'), KeyChord.key(KeyCode.arrowDown)],
+                KeyBinding.any(
+                  [KeyCode.char('j'), KeyCode.arrowDown],
                   label: 'next',
-                  onEvent: (_) {},
+                  onTrigger: () {},
                 ),
               ],
               child: KeyBindings(
                 bindings: [
                   KeyBinding(
-                    KeyChord.key(KeyCode.arrowDown),
+                    KeyCode.arrowDown,
                     label: 'scroll',
-                    onEvent: (_) {},
+                    onTrigger: () {},
                   ),
                 ],
                 child: const Focus(autofocus: true, child: Text('x')),
@@ -175,7 +171,8 @@ void main() {
       expect(
         out,
         contains('[j] next'),
-        reason: 'the free alias keeps the binding visible without its claimed '
+        reason:
+            'the free alias keeps the binding visible without its claimed '
             'alias',
       );
       expect(out, contains('scroll'), reason: 'the deeper binding owns Down');
@@ -189,10 +186,10 @@ void main() {
           children: [
             KeyBindings(
               bindings: [
-                KeyBinding.list(
-                  [KeyChord.char('s', shift: true), KeyChord.char('S')],
+                KeyBinding.any(
+                  [KeyCode.char('S'), KeyCode.char('S')],
                   label: 'save-as',
-                  onEvent: (_) {},
+                  onTrigger: () {},
                 ),
               ],
               child: const Focus(autofocus: true, child: Text('x')),
@@ -225,17 +222,17 @@ void main() {
             KeyBindings(
               bindings: [
                 KeyBinding(
-                  KeyChord.char('s', shift: true),
+                  KeyCode.char('S'),
                   label: 'shallowSave',
-                  onEvent: (_) {},
+                  onTrigger: () {},
                 ),
               ],
               child: KeyBindings(
                 bindings: [
                   KeyBinding(
-                    KeyChord.char('S'),
+                    KeyCode.char('S'),
                     label: 'deepSave',
-                    onEvent: (_) {},
+                    onTrigger: () {},
                   ),
                 ],
                 child: const Focus(autofocus: true, child: Text('x')),
@@ -246,7 +243,11 @@ void main() {
         ),
       );
       final out = bar(tester);
-      expect(out, contains('deepSave'), reason: 'the deeper binding owns the key');
+      expect(
+        out,
+        contains('deepSave'),
+        reason: 'the deeper binding owns the key',
+      );
       expect(
         out,
         isNot(contains('shallowSave')),
@@ -264,9 +265,9 @@ void main() {
             KeyBindings(
               bindings: [
                 KeyBinding(
-                  KeyChord.char('?'),
+                  KeyCode.char('?'),
                   label: 'help',
-                  onEvent: (_) => fired++,
+                  onTrigger: () => fired++,
                 ),
               ],
               child: TextInput(focusNode: node, enabled: false),
@@ -297,7 +298,7 @@ void main() {
       );
       expect(bar(tester), contains('reveal'));
 
-      tester.sendKey(const KeyEvent(char: 'r')); // toggles the label
+      tester.sendKey(const KeyEvent(KeyCode.char('r'))); // toggles the label
       // The notify is microtask-deferred (didUpdateWidget runs mid-build).
       await tester.settle();
       expect(
@@ -321,7 +322,7 @@ void main() {
         reason: 'no rebuild, no content change → label unchanged',
       );
 
-      tester.sendKey(const KeyEvent(char: 'r')); // real content change
+      tester.sendKey(const KeyEvent(KeyCode.char('r'))); // real content change
       await tester.settle();
       expect(bar(tester), contains('hide'));
     });

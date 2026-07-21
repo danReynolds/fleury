@@ -203,7 +203,7 @@ void main() {
 
     test('input round-trips through the full framing layer', () {
       const events = <TuiEvent>[
-        KeyEvent(keyCode: KeyCode.arrowUp, modifiers: {KeyModifier.ctrl}),
+        KeyEvent(KeyCode.arrowUp, modifiers: {KeyModifier.ctrl}),
         TextInputEvent('hi'),
         MouseEvent(
           kind: MouseEventKind.down,

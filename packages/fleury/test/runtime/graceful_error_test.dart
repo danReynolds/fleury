@@ -66,13 +66,13 @@ void main() {
         bindings: [
           // Synchronous throw inside dispatch (caught by the event-loop guard).
           KeyBinding(
-            KeyChord.key(KeyCode.f1),
-            onEvent: (_) => throw StateError('boom-sync'),
+            KeyCode.f1,
+            onTrigger: () => throw StateError('boom-sync'),
           ),
           // Asynchronous throw (escapes to the zone guard).
           KeyBinding(
-            KeyChord.key(KeyCode.f2),
-            onEvent: (_) {
+            KeyCode.f2,
+            onTrigger: () {
               unawaited(Future<void>(() => throw StateError('boom-async')));
             },
           ),
@@ -87,7 +87,7 @@ void main() {
     final baseline = transport.sent.whereType<PlanFrame>().length;
 
     // Synchronous handler throw.
-    transport.emit(const InputEventFrame(KeyEvent(keyCode: KeyCode.f1)));
+    transport.emit(const InputEventFrame(KeyEvent(KeyCode.f1)));
     await _settle();
     final afterSync = transport.sent.whereType<PlanFrame>().toList();
     expect(
@@ -99,7 +99,7 @@ void main() {
     expect(sessionError, isFalse, reason: 'session survived the sync throw');
 
     // Asynchronous handler throw — escapes to the zone guard.
-    transport.emit(const InputEventFrame(KeyEvent(keyCode: KeyCode.f2)));
+    transport.emit(const InputEventFrame(KeyEvent(KeyCode.f2)));
     await _settle();
     expect(sessionError, isFalse, reason: 'session survived the async throw');
 

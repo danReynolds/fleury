@@ -38,8 +38,8 @@ void main() {
       ),
     );
     tester.type('ap'); // apple, apricot
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // → apricot
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // → apricot
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     expect(selected, 'apricot');
     expect(_screen(tester).contains('apricot'), isTrue, reason: 'field filled');
     expect(tester.overlay.entries.length, 1, reason: 'dropdown closed');
@@ -49,7 +49,7 @@ void main() {
     tester.pumpWidget(const Autocomplete(options: _fruits, autofocus: true));
     tester.type('ba'); // banana
     expect(tester.overlay.entries.length, 2);
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+    tester.sendKey(const KeyEvent(KeyCode.escape));
     expect(tester.overlay.entries.length, 1, reason: 'dropdown closed');
     expect(_screen(tester).contains('ba'), isTrue, reason: 'typed text stays');
 
@@ -70,7 +70,7 @@ void main() {
     tester.pumpWidget(
       KeyBindings(
         bindings: <KeyBinding>[
-          KeyBinding(KeyChord.enter, onEvent: (_) => ancestorSubmits += 1),
+          KeyBinding(KeySequence.enter, onTrigger: () => ancestorSubmits += 1),
         ],
         child: Autocomplete(
           options: _fruits,
@@ -81,9 +81,9 @@ void main() {
       ),
     );
     tester.type('ap');
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+    tester.sendKey(const KeyEvent(KeyCode.escape));
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
 
     expect(controller.text, 'ap');
     expect(selected, isNull);
@@ -119,8 +119,8 @@ void main() {
       expect(out.contains('Alan'), isTrue);
       expect(out.contains('Bob'), isFalse);
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // → Alan
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // → Alan
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(
         picked?.id,
         2,
@@ -301,7 +301,7 @@ void main() {
       tester.semantics().single(role: SemanticRole.menu).label,
       'Fruit suggestions',
     );
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
 
     expect(changes, ['ap', 'apple']);
     final field = tester.semantics().single(

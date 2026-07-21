@@ -35,7 +35,7 @@ AppCommand _openPaletteCommand() {
   return AppCommand(
     id: const CommandId('app.openPalette'),
     title: 'Open Command Palette',
-    shortcuts: [KeyChord.ctrl.k],
+    shortcuts: [KeySequence.ctrl.k],
     showInPalette: false,
     semanticAction: SemanticAction.open,
     run: (context) {
@@ -99,7 +99,7 @@ void main() {
 
     tester.type('save'); // matches only "Save File"
     tester.pump();
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     expect(ran, 'save');
 
     await _settleClose(tester);
@@ -112,12 +112,10 @@ void main() {
     _open(tester, ctx, commands((v) => ran = v));
 
     // No query → all three; selection starts at 0 (Open File).
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // → Save File
-    tester.sendKey(
-      const KeyEvent(keyCode: KeyCode.arrowDown),
-    ); // → Close Window
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // → Save File
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // → Close Window
     tester.pump();
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     expect(ran, 'close');
   });
 
@@ -128,7 +126,7 @@ void main() {
       Command(label: 'Dangerous', onInvoke: () => ran = true),
     ]);
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+    tester.sendKey(const KeyEvent(KeyCode.escape));
     await _settleClose(tester);
 
     expect(ran, isFalse);
@@ -142,7 +140,7 @@ void main() {
     _open(tester, ctx, commands((_) {}));
     expect(tester.semantics().byRole(SemanticRole.commandPalette), isNotEmpty);
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+    tester.sendKey(const KeyEvent(KeyCode.escape));
     await _settleClose(tester);
 
     expect(tester.semantics().byRole(SemanticRole.commandPalette), isEmpty);
@@ -169,7 +167,7 @@ void main() {
         tester.semantics().byRole(SemanticRole.commandPalette),
         hasLength(1),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       await _settleClose(tester);
       expect(Navigator.of(ctx).depth, 1);
       expect(tester.semantics().byRole(SemanticRole.commandPalette), isEmpty);
@@ -302,17 +300,17 @@ void main() {
 
       // Move off the top, then type — 's' matches Save + Close, and the
       // selection should snap back to the first match (Save), not stay at 1.
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
       tester.type('s');
       tester.pump();
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(ran, 'save', reason: 'selection reset to the first match');
     });
 
     testWidgets('an empty command list is inert, not a crash', (tester) async {
       tester.pumpWidget(Navigator(home: _Capture((c) => ctx = c)));
       _open(tester, ctx, const []);
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       tester.pump();
       expect(
         Navigator.of(ctx).depth,
@@ -334,7 +332,7 @@ void main() {
               AppCommand(
                 id: const CommandId('app.openPalette'),
                 title: 'Open Command Palette',
-                shortcuts: [KeyChord.ctrl.k],
+                shortcuts: [KeySequence.ctrl.k],
                 showInPalette: false,
                 run: (_) {
                   shortcutCalls += 1;
@@ -353,7 +351,7 @@ void main() {
         );
 
         tester.sendKey(
-          const KeyEvent(char: 'k', modifiers: {KeyModifier.ctrl}),
+          const KeyEvent(KeyCode.char('k'), modifiers: {KeyModifier.ctrl}),
         );
         await Future<void>.delayed(Duration.zero);
         tester.pump();
@@ -372,7 +370,7 @@ void main() {
           'Refresh Workspace',
         ]);
 
-        tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+        tester.sendKey(const KeyEvent(KeyCode.escape));
         await _settleClose(tester);
       },
     );
@@ -388,7 +386,7 @@ void main() {
             AppCommand(
               id: const CommandId('file.open'),
               title: 'Open File',
-              shortcuts: [KeyChord.ctrl.o],
+              shortcuts: [KeySequence.ctrl.o],
               run: (_) {
                 calls.add('open');
               },
@@ -398,7 +396,7 @@ void main() {
               title: 'Save File',
               description: 'Write changes',
               category: 'File',
-              shortcuts: [KeyChord.ctrl.s],
+              shortcuts: [KeySequence.ctrl.s],
               run: (_) {
                 calls.add('save');
               },
@@ -411,7 +409,7 @@ void main() {
       _openRegistryPalette(tester, ctx);
       tester.type('save');
       tester.pump();
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
 
       expect(calls, ['save']);
       await _settleClose(tester);
@@ -451,7 +449,7 @@ void main() {
       expect(row.label, 'Reload Workspace');
       expect(row.state.commandId, 'workspace.reload');
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       await _settleClose(tester);
       expect(calls, ['reload']);
     });
@@ -497,7 +495,7 @@ void main() {
       expect(row.label, 'Refresh Active Screen');
       expect(row.state.commandId, 'screen.refresh');
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       await _settleClose(tester);
 
       expect(calls, ['screen']);
@@ -540,7 +538,7 @@ void main() {
             tester.semantics().byRole(SemanticRole.commandPalette),
             hasLength(1),
           );
-          tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+          tester.sendKey(const KeyEvent(KeyCode.enter));
           await _settleClose(tester);
           expect(Navigator.of(ctx).depth, 1);
           expect(
@@ -585,7 +583,7 @@ void main() {
         tester.pump();
         final row = _paletteCommandRows(tester).single;
         expect(row.state.commandId, id(target));
-        tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+        tester.sendKey(const KeyEvent(KeyCode.enter));
         await _settleClose(tester);
         expect(Navigator.of(ctx).depth, 1);
         expect(tester.semantics().byRole(SemanticRole.commandPalette), isEmpty);
@@ -627,7 +625,7 @@ void main() {
           tester.type(title);
           tester.pump();
           if (i == 0) {
-            tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+            tester.sendKey(const KeyEvent(KeyCode.enter));
           } else if (i == 1) {
             await tester.invokeSemanticAction(
               SemanticAction.submit,
@@ -642,7 +640,7 @@ void main() {
               node: row,
             );
           } else if (i == 3) {
-            tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+            tester.sendKey(const KeyEvent(KeyCode.escape));
           } else {
             await tester.invokeSemanticAction(
               SemanticAction.dismiss,
@@ -671,7 +669,7 @@ void main() {
               title: 'Save File',
               description: 'Write changes',
               category: 'File',
-              shortcuts: [KeyChord.ctrl.s],
+              shortcuts: [KeySequence.ctrl.s],
               run: (_) {},
             ),
           ],
@@ -709,7 +707,7 @@ void main() {
       );
 
       _openRegistryPalette(tester, ctx);
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       await Future<void>.delayed(Duration.zero);
       tester.pump();
 
@@ -763,7 +761,9 @@ void main() {
       tester.pump();
       expect(focus.hasFocus, isTrue);
 
-      tester.sendKey(const KeyEvent(char: 'k', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('k'), modifiers: {KeyModifier.ctrl}),
+      );
       tester.pump(const Duration(milliseconds: 300));
       tester.render();
       expect(Navigator.of(focus.context!).depth, 2);
@@ -775,7 +775,7 @@ void main() {
       expect(paletteCommands.single.state.commandId, 'tabs.runs');
       expect(paletteCommands.single.state.commandCategory, 'Navigation');
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       await _settleClose(tester);
 
       expect(calls, ['source']);
@@ -832,7 +832,7 @@ void main() {
       expect(paletteCommands.map((node) => node.label), ['Refresh Local']);
       expect(paletteCommands.single.state.commandId, 'refresh');
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       await Future<void>.delayed(Duration.zero);
 
       expect(calls, ['local']);
@@ -890,7 +890,9 @@ void main() {
       leftFocus.requestFocus();
       tester.pump();
 
-      tester.sendKey(const KeyEvent(char: 'k', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('k'), modifiers: {KeyModifier.ctrl}),
+      );
       tester.pump(const Duration(milliseconds: 300));
       tester.render();
       tester.type('Action');
@@ -899,12 +901,14 @@ void main() {
         'Left Action',
       ]);
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+      tester.sendKey(const KeyEvent(KeyCode.escape));
       await _settleClose(tester);
       rightFocus.requestFocus();
       tester.pump();
 
-      tester.sendKey(const KeyEvent(char: 'k', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('k'), modifiers: {KeyModifier.ctrl}),
+      );
       tester.pump(const Duration(milliseconds: 300));
       tester.render();
       tester.type('Action');

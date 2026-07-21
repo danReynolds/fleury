@@ -248,7 +248,7 @@ void main() {
       );
 
       // Cleanup so the test doesn't dangle on a pending future.
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+      tester.sendKey(const KeyEvent(KeyCode.escape));
     });
   });
 

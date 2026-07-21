@@ -1,0 +1,35 @@
+# fleury
+
+Retained-mode UI framework for terminal and browser: one Flutter-shaped widget tree, two render surfaces. Multi-package repo with **no root pubspec** — each package under `packages/` stands alone. Primary consumer: `../dune_cli` (path-deps `packages/fleury` and `packages/fleury_widgets`); API changes there land in dune_cli immediately.
+
+## Packages
+
+- `packages/fleury` — core: element tree, layout, terminal render surface
+- `packages/fleury_widgets` — higher-level components
+- `packages/fleury_web` — browser/xterm.js surface
+- `packages/fleury_git`, `packages/fleury_mcp` — integration packages
+- `packages/storybook`, `packages/fleury_example_console`, `packages/samples` — galleries/demos
+- Sibling worktrees `../fleury-mcp`, `../fleury-acp` hold in-flight integration work — check them before starting MCP/ACP-adjacent tasks to avoid duplicating.
+
+## Commands (run inside the target package)
+
+- Setup: `cd packages/<pkg> && dart pub get`
+- Gate: `dart analyze && dart test` per touched package (core has `dart_test.yaml`, `benchmark/`)
+- Visual review: run the storybook package; demos in `fleury_example_console`
+- Dev driver: `dart run tool/fleury_dev.dart` from repo root (inspect its help before relying on it)
+- Benchmarks/profiling: root `benchmarks/` and `profiling/` dirs
+
+## Architecture notes
+
+- Core vs widgets split mirrors Flutter: rendering/layout invariants live in `packages/fleury`; convenience belongs in `fleury_widgets`. Don't blur it.
+- Two render surfaces means core changes need checking against both terminal and `fleury_web` where they touch painting/layout.
+- Recent lifecycle work: `runApp` app-owned shutdown (Jul 2026) — shutdown/teardown paths are fresh; be careful layering on them.
+
+## Conventions & quality bar
+
+- Public API changes: run dune_cli's analyze+tests against your branch before merge (path dep makes it cheap) — dune_cli is the integration proving ground.
+- Rendering changes need a test in the touched package; visual changes should be checkable in storybook.
+
+## Pointers
+
+- `docs/`, `website/`; `DOSSIER.md` — Phase 2 (planned, does not exist yet).

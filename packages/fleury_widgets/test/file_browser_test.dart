@@ -112,17 +112,17 @@ void main() {
       ),
     );
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     var output = tester.renderToString(size: const CellSize(80, 6));
 
     expect(changedDirectory, endsWith('${Platform.pathSeparator}src'));
     expect(output, contains('main.dart'));
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     expect(activated, isNotNull);
     expect(activated!.name, 'main.dart');
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.backspace));
+    tester.sendKey(const KeyEvent(KeyCode.backspace));
     output = tester.renderToString(size: const CellSize(80, 8));
     expect(output, contains('deploy.log'));
   });
@@ -179,7 +179,9 @@ void main() {
       );
 
       tester.render(size: const CellSize(80, 6));
-      tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await Future<void>.delayed(Duration.zero);
 
       expect(

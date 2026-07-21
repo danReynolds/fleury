@@ -47,7 +47,7 @@ void main() {
     tester.pump(const Duration(milliseconds: 300));
     expect(nav.depth, 2);
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+    tester.sendKey(const KeyEvent(KeyCode.escape));
     tester.pump(const Duration(milliseconds: 300));
     expect(nav.depth, 1, reason: 'Esc popped the modal');
   });
@@ -94,7 +94,7 @@ void main() {
     tester.render(size: const CellSize(20, 5));
     expect(inA.hasFocus, isTrue, reason: 'modal autofocuses its first field');
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
     tester.render(size: const CellSize(20, 5));
     expect(
       inB.hasFocus,
@@ -102,7 +102,7 @@ void main() {
       reason: 'arrowDown traverses within the modal via its per-route group',
     );
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
     tester.render(size: const CellSize(20, 5));
     expect(
       inB.hasFocus,
@@ -136,7 +136,7 @@ void main() {
       ),
     );
     tester.pump(const Duration(milliseconds: 300));
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+    tester.sendKey(const KeyEvent(KeyCode.escape));
     tester.pump(const Duration(milliseconds: 300));
     expect(nav.depth, 2, reason: 'PopScope vetoed the Esc dismissal');
   });
@@ -170,7 +170,7 @@ void main() {
     tester.pump(const Duration(milliseconds: 300));
     expect(nav.depth, 3);
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+    tester.sendKey(const KeyEvent(KeyCode.escape));
     tester.pump(const Duration(milliseconds: 300));
     expect(nav.depth, 2, reason: 'only the top dialog dismissed');
   });

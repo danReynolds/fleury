@@ -1,5 +1,10 @@
 import 'package:fleury/fleury_core.dart';
 
+/// The default reveal sequence, Ctrl+R. A lazily-initialised top-level value
+/// because a modified [KeySequence] is built through the dot-chain and isn't
+/// const-constructible (so it can't be a parameter default).
+final KeySequence _defaultRevealChord = KeySequence.ctrl.char('r');
+
 /// A [TextInput] tuned for password / secret entry: every typed grapheme
 /// is rendered as a single `•` (or [obscuringCharacter]) regardless of
 /// what's in the controller. The real text is unchanged; only the
@@ -37,7 +42,7 @@ class PasswordInput extends StatefulWidget {
     this.enabled = true,
     this.readOnly = false,
     this.canReveal = true,
-    this.revealChord = const KeyChord.char('r', ctrl: true),
+    this.revealChord,
     this.validationError,
     this.semanticLabel,
     this.semanticState = SemanticState.empty,
@@ -87,9 +92,10 @@ class PasswordInput extends StatefulWidget {
   /// field is focused.
   final bool canReveal;
 
-  /// The chord that toggles reveal. Defaults to Ctrl+R. The focused field
-  /// consumes it, so it shadows any app-level binding on the same chord.
-  final KeyChord revealChord;
+  /// The sequence that toggles reveal. Defaults to Ctrl+R (see
+  /// [_defaultRevealChord]). The focused field consumes it, so it shadows any
+  /// app-level binding on the same sequence.
+  final KeySequence? revealChord;
 
   /// Optional validation error displayed by the underlying input.
   final String? validationError;
@@ -142,8 +148,8 @@ class _PasswordInputState extends State<PasswordInput> {
     return KeyBindings(
       bindings: <KeyBinding>[
         KeyBinding(
-          widget.revealChord,
-          onEvent: (_) => setState(() => _revealed = !_revealed),
+          widget.revealChord ?? _defaultRevealChord,
+          onTrigger: () => setState(() => _revealed = !_revealed),
           hideFromHintBar: true,
         ),
       ],

@@ -30,7 +30,9 @@ void main() {
 
       // Ctrl+C with nothing selected — SelectionArea's onCopy bubbles,
       // the framework-level binding exits.
-      driver.enqueue(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      driver.enqueue(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await future;
 
       expect(
@@ -103,10 +105,10 @@ void main() {
         );
 
         // Esc clears, then Ctrl+C exits.
-        driver.enqueue(const KeyEvent(keyCode: KeyCode.escape));
+        driver.enqueue(const KeyEvent(KeyCode.escape));
         await _settle();
         driver.enqueue(
-          const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}),
+          const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
         );
         await future;
         await driver.dispose();

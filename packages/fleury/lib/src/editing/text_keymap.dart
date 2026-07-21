@@ -60,8 +60,9 @@ final class TextEditingKeyBinding {
 
   bool matches(KeyEvent event) {
     if (event.type == KeyEventType.up) return false;
-    if (keyCode != null && event.keyCode != keyCode) return false;
-    if (char != null && event.char?.toLowerCase() != char) return false;
+    if (keyCode != null && event.code != keyCode) return false;
+    if (char != null && event.code.character?.toLowerCase() != char)
+      return false;
     for (final modifier in modifiers) {
       if (!event.modifiers.contains(modifier)) return false;
     }

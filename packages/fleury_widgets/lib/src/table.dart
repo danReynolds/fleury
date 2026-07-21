@@ -284,7 +284,7 @@ class _TableState extends State<Table> {
     if (controller == null || count == 0) return KeyEventResult.ignored;
     final selected = controller.selectedIndex;
     if (selected == null) return KeyEventResult.ignored;
-    switch (event.keyCode) {
+    switch (event.code) {
       case KeyCode.arrowUp:
         if (selected <= 0) return KeyEventResult.handled;
         controller.selectedIndex = selected - 1;

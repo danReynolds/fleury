@@ -17,10 +17,8 @@ import 'package:fleury/fleury.dart';
 import '../support/harness.dart';
 import 'package:test/test.dart';
 
-KeyEvent _code(KeyCode kc, {bool shift = false}) => KeyEvent(
-  keyCode: kc,
-  modifiers: shift ? const {KeyModifier.shift} : const {},
-);
+KeyEvent _code(KeyCode kc, {bool shift = false}) =>
+    KeyEvent(kc, modifiers: shift ? const {KeyModifier.shift} : const {});
 
 /// Records every focused node the manager broadcasts to, so a test can
 /// inspect the full transition path — not just where focus ended up.
@@ -744,8 +742,8 @@ void main() {
         // needed, and the next dispatcher consultation sees the new value.
         var globalFired = 0;
         final binding = KeyBinding(
-          KeyChord.char('g'),
-          onEvent: (_) => globalFired += 1,
+          KeyCode.char('g'),
+          onTrigger: () => globalFired += 1,
           label: 'g',
         );
         final dispatcher = InputDispatcher(
@@ -795,8 +793,8 @@ void main() {
         // focused node's enclosing scope when there's no active modal.
         var globalFired = 0;
         final binding = KeyBinding(
-          KeyChord.char('g'),
-          onEvent: (_) => globalFired += 1,
+          KeyCode.char('g'),
+          onTrigger: () => globalFired += 1,
           label: 'g',
         );
         final dispatcher = InputDispatcher(
@@ -834,7 +832,7 @@ void main() {
   });
 }
 
-KeyEvent _char(String c) => KeyEvent(char: c);
+KeyEvent _char(String c) => KeyEvent(KeyCode.char(c));
 
 /// Host whose `build()` calls a builder with the current rebuild count.
 /// Tests trigger a rebuild via `bump()`.

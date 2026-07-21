@@ -86,7 +86,7 @@ void main() {
 
     tester.type('deploy');
     tester.pump();
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
 
     expect(activated?.id, 'deploy.prod');
     expect(activatedIndex, 1);
@@ -144,8 +144,8 @@ void main() {
 
     tester.type('deploy');
     tester.pump();
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
 
     expect(activated?.id, 'logs.deploy');
   });
@@ -172,7 +172,7 @@ void main() {
     tester.pumpWidget(panel());
     tester.render(size: const CellSize(60, 8));
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
     tester.pump();
     tester.pumpWidget(panel());
 
@@ -236,7 +236,9 @@ void main() {
       );
 
       tester.render(size: const CellSize(80, 6));
-      tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await Future<void>.delayed(Duration.zero);
 
       expect(

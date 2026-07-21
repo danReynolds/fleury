@@ -33,38 +33,46 @@ void main() {
       await driver.dispose();
     });
 
-    test('a claimed signal hands shutdown to the app; requestExit finishes it',
-        () async {
-      final driver = FakeTerminalDriver();
-      final seen = <AppSignal>[];
-      final future = runApp(
-        const Text('hi'),
-        driver: driver,
-        enableHotReload: false,
-        onEvent: (event) {
-          if (event is SignalEvent) {
-            seen.add(event.signal);
-            return const EventHandled();
-          }
-          return null;
-        },
-      );
-      await pump();
+    test(
+      'a claimed signal hands shutdown to the app; requestExit finishes it',
+      () async {
+        final driver = FakeTerminalDriver();
+        final seen = <AppSignal>[];
+        final future = runApp(
+          const Text('hi'),
+          driver: driver,
+          enableHotReload: false,
+          onEvent: (event) {
+            if (event is SignalEvent) {
+              seen.add(event.signal);
+              return const EventHandled();
+            }
+            return null;
+          },
+        );
+        await pump();
 
-      driver.enqueue(const SignalEvent(AppSignal.terminate));
-      await pump();
-      expect(seen, [AppSignal.terminate]);
-      expect(driver.isActive, isTrue,
-          reason: 'claimed signal must NOT exit the loop');
+        driver.enqueue(const SignalEvent(AppSignal.terminate));
+        await pump();
+        expect(seen, [AppSignal.terminate]);
+        expect(
+          driver.isActive,
+          isTrue,
+          reason: 'claimed signal must NOT exit the loop',
+        );
 
-      expect(requestExit(), isTrue);
-      final exit = await future;
-      expect(exit.signal, isNull, reason: 'app-owned shutdown = requested');
+        expect(requestExit(), isTrue);
+        final exit = await future;
+        expect(exit.signal, isNull, reason: 'app-owned shutdown = requested');
 
-      expect(requestExit(), isFalse,
-          reason: 'no app running once cleanup has cleared the seam');
-      await driver.dispose();
-    });
+        expect(
+          requestExit(),
+          isFalse,
+          reason: 'no app running once cleanup has cleared the seam',
+        );
+        await driver.dispose();
+      },
+    );
 
     test('ExitRequested from onEvent still exits (regression)', () async {
       final driver = FakeTerminalDriver();
@@ -97,7 +105,9 @@ void main() {
       );
       await pump();
 
-      driver.enqueue(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      driver.enqueue(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       final exit = await future;
       expect(exit.signal, isNull);
       await driver.dispose();
@@ -114,8 +124,8 @@ void main() {
         KeyBindings(
           bindings: [
             KeyBinding(
-              KeyChord.q,
-              onEvent: (_) => requestExit(),
+              KeySequence.q,
+              onTrigger: () => requestExit(),
               label: 'Quit',
             ),
           ],
@@ -132,59 +142,63 @@ void main() {
       await driver.dispose();
     });
 
-    test("a focused text field claims the typed 'q' before the quit binding",
-        () async {
-      final driver = FakeTerminalDriver();
-      final controller = TextEditingController();
-      final future = runApp(
-        KeyBindings(
-          bindings: [
-            KeyBinding(
-              KeyChord.q,
-              onEvent: (_) => requestExit(),
-              label: 'Quit',
-            ),
-          ],
-          child: TextInput(controller: controller, autofocus: true),
-        ),
-        driver: driver,
-        enableHotReload: false,
-      );
-      await pump();
+    test(
+      "a focused text field claims the typed 'q' before the quit binding",
+      () async {
+        final driver = FakeTerminalDriver();
+        final controller = TextEditingController();
+        final future = runApp(
+          KeyBindings(
+            bindings: [
+              KeyBinding(
+                KeySequence.q,
+                onTrigger: () => requestExit(),
+                label: 'Quit',
+              ),
+            ],
+            child: TextInput(controller: controller, autofocus: true),
+          ),
+          driver: driver,
+          enableHotReload: false,
+        );
+        await pump();
 
-      driver.enqueue(const TextInputEvent('q'));
-      await pump();
-      expect(controller.text, 'q', reason: 'typing wins over the quit key');
-      expect(driver.isActive, isTrue, reason: 'the app must not exit');
+        driver.enqueue(const TextInputEvent('q'));
+        await pump();
+        expect(controller.text, 'q', reason: 'typing wins over the quit key');
+        expect(driver.isActive, isTrue, reason: 'the app must not exit');
 
-      requestExit();
-      final exit = await future;
-      expect(exit.signal, isNull);
-      await driver.dispose();
-    });
+        requestExit();
+        final exit = await future;
+        expect(exit.signal, isNull);
+        await driver.dispose();
+      },
+    );
 
-    test('a claimed signal leaves the loop alive (shutdown UI can render)',
-        () async {
-      final driver = FakeTerminalDriver();
-      final future = runApp(
-        const Text('hi'),
-        driver: driver,
-        enableHotReload: false,
-        onEvent: (event) =>
-            event is SignalEvent ? const EventHandled() : null,
-      );
-      await pump();
+    test(
+      'a claimed signal leaves the loop alive (shutdown UI can render)',
+      () async {
+        final driver = FakeTerminalDriver();
+        final future = runApp(
+          const Text('hi'),
+          driver: driver,
+          enableHotReload: false,
+          onEvent: (event) =>
+              event is SignalEvent ? const EventHandled() : null,
+        );
+        await pump();
 
-      // A claimed signal falls through to frame scheduling (unlike an
-      // unclaimed one, which exits before scheduling) — the loop stays
-      // alive so the app's "disconnecting…" state can paint.
-      driver.enqueue(const SignalEvent(AppSignal.interrupt));
-      await pump();
-      expect(driver.isActive, isTrue);
+        // A claimed signal falls through to frame scheduling (unlike an
+        // unclaimed one, which exits before scheduling) — the loop stays
+        // alive so the app's "disconnecting…" state can paint.
+        driver.enqueue(const SignalEvent(AppSignal.interrupt));
+        await pump();
+        expect(driver.isActive, isTrue);
 
-      requestExit();
-      await future;
-      await driver.dispose();
-    });
+        requestExit();
+        await future;
+        await driver.dispose();
+      },
+    );
   });
 }

@@ -69,7 +69,7 @@ final class _WorkspacePackageExtension extends FleuryAppExtension {
       id: _openWorkspace,
       title: 'Open Workspace',
       category: 'Workspace',
-      shortcuts: [KeyChord.ctrl.o],
+      shortcuts: [KeySequence.ctrl.o],
       semanticAction: SemanticAction.activate,
       run: (context) {
         final extension = context.appExtension<_WorkspacePackageExtension>();
@@ -137,7 +137,7 @@ final class _ScreenShellState extends State<_ScreenShell> {
               AppCommand(
                 id: _refresh,
                 title: 'Refresh Runs',
-                shortcuts: [KeyChord.ctrl.f],
+                shortcuts: [KeySequence.ctrl.f],
                 run: (_) {
                   runRefreshes += 1;
                 },
@@ -153,7 +153,7 @@ final class _ScreenShellState extends State<_ScreenShell> {
               AppCommand(
                 id: _refresh,
                 title: 'Refresh Overview',
-                shortcuts: [KeyChord.ctrl.f],
+                shortcuts: [KeySequence.ctrl.f],
                 run: (_) {
                   overviewRefreshes += 1;
                 },
@@ -648,7 +648,7 @@ void main() {
           AppCommand(
             id: _goRuns,
             title: 'Go to Runs',
-            shortcuts: [KeyChord.ctrl.r],
+            shortcuts: [KeySequence.ctrl.r],
             semanticAction: SemanticAction.navigate,
             run: (_) {
               shellKey.currentState!.openScreen('runs');
@@ -659,7 +659,9 @@ void main() {
       ),
     );
 
-    tester.sendKey(const KeyEvent(char: 'r', modifiers: {KeyModifier.ctrl}));
+    tester.sendKey(
+      const KeyEvent(KeyCode.char('r'), modifiers: {KeyModifier.ctrl}),
+    );
 
     expect(tester.exists(text('Overview body')), isFalse);
     expect(tester.exists(text('Runs body')), isTrue);
@@ -777,7 +779,7 @@ void main() {
           AppCommand(
             id: _goRuns,
             title: 'Go to Runs',
-            shortcuts: [KeyChord.ctrl.r],
+            shortcuts: [KeySequence.ctrl.r],
             run: (_) {
               shellKey.currentState!.openScreen('runs');
             },
@@ -787,9 +789,15 @@ void main() {
       ),
     );
 
-    tester.sendKey(const KeyEvent(char: 'f', modifiers: {KeyModifier.ctrl}));
-    tester.sendKey(const KeyEvent(char: 'r', modifiers: {KeyModifier.ctrl}));
-    tester.sendKey(const KeyEvent(char: 'f', modifiers: {KeyModifier.ctrl}));
+    tester.sendKey(
+      const KeyEvent(KeyCode.char('f'), modifiers: {KeyModifier.ctrl}),
+    );
+    tester.sendKey(
+      const KeyEvent(KeyCode.char('r'), modifiers: {KeyModifier.ctrl}),
+    );
+    tester.sendKey(
+      const KeyEvent(KeyCode.char('f'), modifiers: {KeyModifier.ctrl}),
+    );
 
     expect(shellKey.currentState!.overviewRefreshes, 1);
     expect(shellKey.currentState!.runRefreshes, 1);
@@ -815,7 +823,7 @@ void main() {
           AppCommand(
             id: _goRuns,
             title: 'Go to Runs',
-            shortcuts: [KeyChord.ctrl.r],
+            shortcuts: [KeySequence.ctrl.r],
             run: (_) {
               active = 'Runs';
             },
@@ -906,7 +914,7 @@ void main() {
           AppCommand(
             id: _refresh,
             title: 'Refresh',
-            shortcuts: [KeyChord.ctrl.f],
+            shortcuts: [KeySequence.ctrl.f],
             run: (context) {
               context.status!.update([
                 StatusItem.success('Task', id: 'task', value: 'done'),
@@ -925,7 +933,9 @@ void main() {
 
     expect(tester.exists(text('Idle')), isTrue);
 
-    tester.sendKey(const KeyEvent(char: 'f', modifiers: {KeyModifier.ctrl}));
+    tester.sendKey(
+      const KeyEvent(KeyCode.char('f'), modifiers: {KeyModifier.ctrl}),
+    );
 
     expect(tester.exists(text('Task: done')), isTrue);
     final task = tester.semantics().single(
@@ -991,7 +1001,7 @@ void main() {
     );
 
     tester.render(size: const CellSize(24, 3));
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+    tester.sendKey(const KeyEvent(KeyCode.arrowRight));
     tester.pump();
 
     expect(right.hasFocus, isTrue);

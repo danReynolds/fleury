@@ -386,8 +386,8 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
       title: 'Run Dart Version',
       cancelTitle: 'Cancel Dart Version',
       category: 'Process',
-      shortcuts: [KeyChord.ctrl.enter],
-      cancelShortcuts: [KeyChord.ctrl.x],
+      shortcuts: [KeySequence.ctrl.enter],
+      cancelShortcuts: [KeySequence.ctrl.x],
     );
     _runsFilter.addListener(_rebuild);
     _globalSearchQuery.addListener(_scheduleGlobalSearch);
@@ -553,7 +553,7 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
           id: demoCommandFocusSearch,
           title: 'Focus Global Search',
           category: 'Search',
-          shortcuts: const [KeyChord.char('/')],
+          shortcuts: const [KeyCode.char('/')],
           semanticAction: SemanticAction.focus,
           run: (_) {
             _globalSearchFocus.requestFocus();
@@ -603,7 +603,7 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
           id: demoCommandFocusIndexFilter,
           title: 'Focus Indexed Log Filter',
           category: 'Index',
-          shortcuts: const [KeyChord.char('/')],
+          shortcuts: const [KeyCode.char('/')],
           semanticAction: SemanticAction.focus,
           run: (_) {
             _indexedLogFilterFocus.requestFocus();
@@ -647,7 +647,7 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
           id: demoCommandFocusRunsFilter,
           title: 'Focus Run Filter',
           category: 'Runs',
-          shortcuts: const [KeyChord.char('/')],
+          shortcuts: const [KeyCode.char('/')],
           semanticAction: SemanticAction.focus,
           run: (_) {
             _runsFilterFocus.requestFocus();
@@ -886,7 +886,7 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
       title: 'Open Command Palette',
       description: 'Search and run available commands',
       category: 'App',
-      shortcuts: [KeyChord.ctrl.k],
+      shortcuts: [KeySequence.ctrl.k],
       showInPalette: false,
       semanticAction: SemanticAction.open,
       run: _openPalette,
@@ -895,79 +895,79 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
       id: demoCommandGoOverview,
       title: 'Go to Overview',
       screen: demoScreenOverview,
-      shortcut: KeyChord.ctrl.o,
+      shortcut: KeySequence.ctrl.o,
     ),
     _goCommand(
       id: demoCommandGoSearch,
       title: 'Go to Search',
       screen: demoScreenSearch,
-      shortcut: KeyChord.ctrl.f,
+      shortcut: KeySequence.ctrl.f,
     ),
     _goCommand(
       id: demoCommandGoIndex,
       title: 'Go to Indexed Logs',
       screen: demoScreenIndex,
-      shortcut: KeyChord.ctrl.i,
+      shortcut: KeySequence.ctrl.i,
     ),
     _goCommand(
       id: demoCommandGoConnection,
       title: 'Go to Connection',
       screen: demoScreenConnection,
-      shortcut: KeyChord.ctrl.l,
+      shortcut: KeySequence.ctrl.l,
     ),
     _goCommand(
       id: demoCommandGoRuns,
       title: 'Go to Runs',
       screen: demoScreenRuns,
-      shortcut: KeyChord.ctrl.r,
+      shortcut: KeySequence.ctrl.r,
     ),
     _goCommand(
       id: demoCommandGoTree,
       title: 'Go to Tree',
       screen: demoScreenTree,
-      shortcut: KeyChord.ctrl.y,
+      shortcut: KeySequence.ctrl.y,
     ),
     _goCommand(
       id: demoCommandGoPayload,
       title: 'Go to Payload',
       screen: demoScreenPayload,
-      shortcut: KeyChord.ctrl.j,
+      shortcut: KeySequence.ctrl.j,
     ),
     _goCommand(
       id: demoCommandGoChanges,
       title: 'Go to Changes',
       screen: demoScreenChanges,
-      shortcut: KeyChord.ctrl.g,
+      shortcut: KeySequence.ctrl.g,
     ),
     _goCommand(
       id: demoCommandGoSource,
       title: 'Go to Source',
       screen: demoScreenSource,
-      shortcut: KeyChord.ctrl.s,
+      shortcut: KeySequence.ctrl.s,
     ),
     _goCommand(
       id: demoCommandGoDocs,
       title: 'Go to Docs',
       screen: demoScreenDocs,
-      shortcut: KeyChord.ctrl.h,
+      shortcut: KeySequence.ctrl.h,
     ),
     _goCommand(
       id: demoCommandGoTranscript,
       title: 'Go to Transcript',
       screen: demoScreenTranscript,
-      shortcut: KeyChord.ctrl.t,
+      shortcut: KeySequence.ctrl.t,
     ),
     _goCommand(
       id: demoCommandGoProcess,
       title: 'Go to Process',
       screen: demoScreenProcess,
-      shortcut: KeyChord.ctrl.p,
+      shortcut: KeySequence.ctrl.p,
     ),
     _goCommand(
       id: demoCommandGoDiagnostics,
       title: 'Go to Diagnostics',
       screen: demoScreenDiagnostics,
-      shortcut: KeyChord.ctrl.d,
+      shortcut: KeySequence.ctrl.d,
     ),
     AppCommand(
       id: demoCommandStartTask,
@@ -1044,7 +1044,7 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
     required CommandId id,
     required String title,
     required String screen,
-    required KeyChord shortcut,
+    required KeySequence shortcut,
   }) {
     return AppCommand(
       id: id,

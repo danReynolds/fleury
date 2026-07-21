@@ -121,9 +121,9 @@ void main() {
     );
 
     tester.render(size: const CellSize(80, 8));
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // name
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // meta
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // name
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // meta
+    tester.sendKey(const KeyEvent(KeyCode.arrowRight));
     tester.render(size: const CellSize(80, 8));
 
     var json = tester.semantics().single(role: SemanticRole.json);
@@ -138,7 +138,7 @@ void main() {
     expect(version.state['jsonPath'], r'$.meta.version');
     expect(version.value, '1');
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowLeft));
+    tester.sendKey(const KeyEvent(KeyCode.arrowLeft));
     tester.render(size: const CellSize(80, 8));
 
     json = tester.semantics().single(role: SemanticRole.json);
@@ -241,7 +241,9 @@ void main() {
       );
 
       tester.render(size: const CellSize(80, 8));
-      tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await Future<void>.delayed(Duration.zero);
 
       expect(
@@ -343,7 +345,9 @@ void main() {
       expect(unsafe.value, isNot(contains('secret')));
       expect(unsafe.state.outputSanitized, isTrue);
 
-      tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await Future<void>.delayed(Duration.zero);
 
       expect(tester.clipboard.readInProcess(), isNot(contains('secret')));

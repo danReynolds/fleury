@@ -25,120 +25,136 @@ void main() {
       // encodeFrame rejects it ("frame was not encoded") — the socket is intact.
       final huge = 'x' * (maxRemoteInputFramePayloadLength + 1024);
       expect(
-        () => bridge.pressKey(char: huge, modifiers: {KeyModifier.ctrl}),
+        () =>
+            bridge.pressKey(KeyCode.char(huge), modifiers: {KeyModifier.ctrl}),
         throwsA(isA<RemoteProtocolException>()),
         reason: 'an over-cap frame is a recoverable encode rejection',
       );
 
       // The bridge must NOT have declared the healthy app dead.
       expect(bridge.isRunning, isTrue, reason: 'app must stay attached');
-      expect(doneFired, isFalse, reason: 'no teardown — bridge.done must not fire');
+      expect(
+        doneFired,
+        isFalse,
+        reason: 'no teardown — bridge.done must not fire',
+      );
       // The rejected chord was never handed to the wire.
       expect(transport.sent.whereType<InputEventFrame>(), isEmpty);
     });
 
-    test('an over-cap set_value payload is rejected, not read as app death',
-        () async {
-      final transport = _EncodingTransport();
-      final bridge = FleuryAppBridge(transport)..start();
-      addTearDown(bridge.close);
+    test(
+      'an over-cap set_value payload is rejected, not read as app death',
+      () async {
+        final transport = _EncodingTransport();
+        final bridge = FleuryAppBridge(transport)..start();
+        addTearDown(bridge.close);
 
-      var doneFired = false;
-      unawaited(bridge.done.then((_) => doneFired = true));
+        var doneFired = false;
+        unawaited(bridge.done.then((_) => doneFired = true));
 
-      // ~200k control chars: jsonEncode escapes each to "\u0001" (6 bytes) so the
-      // encoded value is ~1.2 MB — over the 1 MiB semantic-action cap — even
-      // though the char count is under the server's 200k input ceiling.
-      final huge = '\u0001' * 200000;
+        // ~200k control chars: jsonEncode escapes each to "\u0001" (6 bytes) so the
+        // encoded value is ~1.2 MB — over the 1 MiB semantic-action cap — even
+        // though the char count is under the server's 200k input ceiling.
+        final huge = '\u0001' * 200000;
 
-      Object? thrown;
-      try {
-        // The encode + handling are synchronous inside setValue; the returned
-        // future (fixed path never reaches it) is dropped on the failing path so
-        // its 2 s timeout can't leak.
-        bridge.setValue(const SemanticNodeId('field'), huge).ignore();
-      } catch (error) {
-        thrown = error;
-      }
+        Object? thrown;
+        try {
+          // The encode + handling are synchronous inside setValue; the returned
+          // future (fixed path never reaches it) is dropped on the failing path so
+          // its 2 s timeout can't leak.
+          bridge.setValue(const SemanticNodeId('field'), huge).ignore();
+        } catch (error) {
+          thrown = error;
+        }
 
-      expect(
-        thrown,
-        isA<RemoteProtocolException>(),
-        reason: 'an over-cap set_value must throw, not be swallowed as app death',
-      );
-      expect(bridge.isRunning, isTrue, reason: 'app must stay attached');
-      await _pump();
-      expect(doneFired, isFalse, reason: 'no teardown — bridge.done must not fire');
-      expect(transport.sent.whereType<SemanticActionFrame>(), isEmpty);
-    });
+        expect(
+          thrown,
+          isA<RemoteProtocolException>(),
+          reason:
+              'an over-cap set_value must throw, not be swallowed as app death',
+        );
+        expect(bridge.isRunning, isTrue, reason: 'app must stay attached');
+        await _pump();
+        expect(
+          doneFired,
+          isFalse,
+          reason: 'no teardown — bridge.done must not fire',
+        );
+        expect(transport.sent.whereType<SemanticActionFrame>(), isEmpty);
+      },
+    );
   });
 
   group('SEMANTIC_ACTION_RESULT is correlated to its request', () {
-    test('a late result from a superseded action is not attributed to the next',
-        () async {
-      final transport = _EncodingTransport();
-      final bridge = FleuryAppBridge(transport)..start();
-      addTearDown(bridge.close);
+    test(
+      'a late result from a superseded action is not attributed to the next',
+      () async {
+        final transport = _EncodingTransport();
+        final bridge = FleuryAppBridge(transport)..start();
+        addTearDown(bridge.close);
 
-      const a = SemanticNodeId('nodeA');
-      const b = SemanticNodeId('nodeB');
+        const a = SemanticNodeId('nodeA');
+        const b = SemanticNodeId('nodeB');
 
-      // Invoke A (its app-side handler is slow), then — before A's result lands —
-      // invoke B. In the server this is the post-2 s-timeout next mutation; here
-      // the second arm supersedes A's wait the same way, leaving B armed.
-      final aResult = bridge.invokeAction(a, SemanticAction.activate);
-      final bResult = bridge.invokeAction(b, SemanticAction.activate);
+        // Invoke A (its app-side handler is slow), then — before A's result lands —
+        // invoke B. In the server this is the post-2 s-timeout next mutation; here
+        // the second arm supersedes A's wait the same way, leaving B armed.
+        final aResult = bridge.invokeAction(a, SemanticAction.activate);
+        final bResult = bridge.invokeAction(b, SemanticAction.activate);
 
-      // A's late result arrives while B is the armed mutation. It must NOT bind
-      // to B — a mismatched (id, action) is a stale straggler and is dropped.
-      transport.addIncoming(
-        SemanticActionResultFrame(
-          a,
-          SemanticAction.activate,
-          SemanticActionInvocationStatus.failed,
-        ),
-      );
-      await _pump();
+        // A's late result arrives while B is the armed mutation. It must NOT bind
+        // to B — a mismatched (id, action) is a stale straggler and is dropped.
+        transport.addIncoming(
+          SemanticActionResultFrame(
+            a,
+            SemanticAction.activate,
+            SemanticActionInvocationStatus.failed,
+          ),
+        );
+        await _pump();
 
-      // B's real result then arrives and binds to B.
-      transport.addIncoming(
-        SemanticActionResultFrame(
-          b,
-          SemanticAction.activate,
+        // B's real result then arrives and binds to B.
+        transport.addIncoming(
+          SemanticActionResultFrame(
+            b,
+            SemanticAction.activate,
+            SemanticActionInvocationStatus.completed,
+          ),
+        );
+        await _pump();
+
+        expect(
+          await bResult,
           SemanticActionInvocationStatus.completed,
-        ),
-      );
-      await _pump();
+          reason: 'B must reflect its OWN result, not the stale A failure',
+        );
+        expect(
+          await aResult,
+          isNull,
+          reason: "A's superseded wait degrades to null (its result was stale)",
+        );
+      },
+    );
 
-      expect(
-        await bResult,
-        SemanticActionInvocationStatus.completed,
-        reason: 'B must reflect its OWN result, not the stale A failure',
-      );
-      expect(
-        await aResult,
-        isNull,
-        reason: "A's superseded wait degrades to null (its result was stale)",
-      );
-    });
+    test(
+      'a matching result completes the pending action (happy path intact)',
+      () async {
+        final transport = _EncodingTransport();
+        final bridge = FleuryAppBridge(transport)..start();
+        addTearDown(bridge.close);
 
-    test('a matching result completes the pending action (happy path intact)',
-        () async {
-      final transport = _EncodingTransport();
-      final bridge = FleuryAppBridge(transport)..start();
-      addTearDown(bridge.close);
-
-      const a = SemanticNodeId('nodeA');
-      final result = bridge.invokeAction(a, SemanticAction.activate);
-      transport.addIncoming(
-        SemanticActionResultFrame(
-          a,
-          SemanticAction.activate,
-          SemanticActionInvocationStatus.completed,
-        ),
-      );
-      expect(await result, SemanticActionInvocationStatus.completed);
-    });
+        const a = SemanticNodeId('nodeA');
+        final result = bridge.invokeAction(a, SemanticAction.activate);
+        transport.addIncoming(
+          SemanticActionResultFrame(
+            a,
+            SemanticAction.activate,
+            SemanticActionInvocationStatus.completed,
+          ),
+        );
+        expect(await result, SemanticActionInvocationStatus.completed);
+      },
+    );
 
     test('a result matching nothing armed is dropped without error', () async {
       final transport = _EncodingTransport();

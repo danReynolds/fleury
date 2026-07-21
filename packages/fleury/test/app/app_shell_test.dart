@@ -219,7 +219,7 @@ void main() {
           AppCommand(
             id: _shortcutRoute,
             title: 'Shortcut Route',
-            shortcuts: <KeyChord>[KeyChord.ctrl.n],
+            shortcuts: <KeySequence>[KeySequence.ctrl.n],
             run: (context) => push(context, 'Shortcut detail'),
           ),
           AppCommand(
@@ -248,7 +248,10 @@ void main() {
     );
 
     tester.sendKey(
-      const KeyEvent(char: 'n', modifiers: <KeyModifier>{KeyModifier.ctrl}),
+      const KeyEvent(
+        KeyCode.char('n'),
+        modifiers: <KeyModifier>{KeyModifier.ctrl},
+      ),
     );
     await Future<void>.value();
     tester.pump();
@@ -376,7 +379,7 @@ void main() {
     );
 
     tester.render(size: const CellSize(24, 3));
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+    tester.sendKey(const KeyEvent(KeyCode.arrowRight));
     tester.pump();
 
     expect(right.hasFocus, isTrue);
@@ -437,7 +440,7 @@ void main() {
           AppCommand(
             id: _shortcutRoute,
             title: 'Custom Shortcut Route',
-            shortcuts: <KeyChord>[KeyChord.ctrl.n],
+            shortcuts: <KeySequence>[KeySequence.ctrl.n],
             run: (command) {
               shortcutContext = command.buildContext;
               push(command, 'Custom shortcut detail');
@@ -474,7 +477,10 @@ void main() {
     expect(shortcutRouteContext, isNotNull);
 
     tester.sendKey(
-      const KeyEvent(char: 'n', modifiers: <KeyModifier>{KeyModifier.ctrl}),
+      const KeyEvent(
+        KeyCode.char('n'),
+        modifiers: <KeyModifier>{KeyModifier.ctrl},
+      ),
     );
     await Future<void>.value();
     tester.pump();
@@ -508,7 +514,7 @@ void main() {
           AppCommand(
             id: rootOnly,
             title: 'Root Only',
-            shortcuts: <KeyChord>[KeyChord.ctrl.r],
+            shortcuts: <KeySequence>[KeySequence.ctrl.r],
             visible: (command) => routeDepth(command) == 1,
             run: (_) {
               rootCalls += 1;
@@ -517,7 +523,7 @@ void main() {
           AppCommand(
             id: detailOnly,
             title: 'Detail Only',
-            shortcuts: <KeyChord>[KeyChord.ctrl.d],
+            shortcuts: <KeySequence>[KeySequence.ctrl.d],
             enabled: (command) => (routeDepth(command) ?? 0) > 1,
             run: (_) {
               detailCalls += 1;
@@ -547,10 +553,16 @@ void main() {
     );
 
     tester.sendKey(
-      const KeyEvent(char: 'r', modifiers: <KeyModifier>{KeyModifier.ctrl}),
+      const KeyEvent(
+        KeyCode.char('r'),
+        modifiers: <KeyModifier>{KeyModifier.ctrl},
+      ),
     );
     tester.sendKey(
-      const KeyEvent(char: 'd', modifiers: <KeyModifier>{KeyModifier.ctrl}),
+      const KeyEvent(
+        KeyCode.char('d'),
+        modifiers: <KeyModifier>{KeyModifier.ctrl},
+      ),
     );
     await Future<void>.value();
     expect(rootCalls, 1);
@@ -575,7 +587,10 @@ void main() {
       isTrue,
     );
     tester.sendKey(
-      const KeyEvent(char: 'd', modifiers: <KeyModifier>{KeyModifier.ctrl}),
+      const KeyEvent(
+        KeyCode.char('d'),
+        modifiers: <KeyModifier>{KeyModifier.ctrl},
+      ),
     );
     await Future<void>.value();
     expect(detailCalls, 1);

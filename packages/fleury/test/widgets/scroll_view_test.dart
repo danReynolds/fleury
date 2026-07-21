@@ -177,9 +177,13 @@ void main() {
     );
     _lines(tester, rows: 4); // viewport 4, content 20 → half page = 2
     expect(ctl.offset, 0);
-    tester.sendKey(const KeyEvent(char: 'd', modifiers: {KeyModifier.ctrl}));
+    tester.sendKey(
+      const KeyEvent(KeyCode.char('d'), modifiers: {KeyModifier.ctrl}),
+    );
     expect(ctl.offset, 2);
-    tester.sendKey(const KeyEvent(char: 'u', modifiers: {KeyModifier.ctrl}));
+    tester.sendKey(
+      const KeyEvent(KeyCode.char('u'), modifiers: {KeyModifier.ctrl}),
+    );
     expect(ctl.offset, 0);
   });
 
@@ -250,17 +254,17 @@ void main() {
     );
     _lines(tester, rows: 4); // populate metrics (viewport 4 → page 4)
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
     expect(ctl.offset, 1);
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.pageDown));
+    tester.sendKey(const KeyEvent(KeyCode.pageDown));
     _lines(tester, rows: 4);
     expect(ctl.offset, 5, reason: '1 + one viewport (4)');
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.end));
+    tester.sendKey(const KeyEvent(KeyCode.end));
     expect(ctl.offset, 16, reason: 'maxOffset = 20 - 4');
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.home));
+    tester.sendKey(const KeyEvent(KeyCode.home));
     expect(ctl.offset, 0);
   });
 
@@ -269,9 +273,7 @@ void main() {
     final ctl = ScrollController();
     tester.pumpWidget(
       KeyBindings(
-        bindings: [
-          KeyBinding(KeyChord.key(KeyCode.arrowUp), onEvent: (_) => bubbled++),
-        ],
+        bindings: [KeyBinding(KeyCode.arrowUp, onTrigger: () => bubbled++)],
         child: ScrollView(
           controller: ctl,
           autofocus: true,
@@ -283,7 +285,7 @@ void main() {
     _lines(tester, rows: 3);
 
     // At the top, Up bubbles to the ancestor binding.
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
+    tester.sendKey(const KeyEvent(KeyCode.arrowUp));
     expect(bubbled, 1);
     expect(ctl.offset, 0);
   });

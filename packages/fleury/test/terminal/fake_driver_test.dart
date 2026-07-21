@@ -118,7 +118,7 @@ void main() {
       expect(() => driver.write('late frame'), throwsA(_stateError(message)));
       expect(driver.clearOutput, throwsA(_stateError(message)));
       expect(
-        () => driver.enqueue(const KeyEvent(keyCode: KeyCode.enter)),
+        () => driver.enqueue(const KeyEvent(KeyCode.enter)),
         throwsA(_stateError(message)),
       );
       expect(
@@ -153,12 +153,12 @@ void main() {
       final events = <TuiEvent>[];
       final sub = driver.events.listen(events.add);
 
-      driver.enqueue(const KeyEvent(keyCode: KeyCode.enter));
+      driver.enqueue(const KeyEvent(KeyCode.enter));
       driver.enqueue(const TextInputEvent('hi'));
       await Future<void>.delayed(Duration.zero);
 
       expect(events, [
-        const KeyEvent(keyCode: KeyCode.enter),
+        const KeyEvent(KeyCode.enter),
         const TextInputEvent('hi'),
       ]);
       await sub.cancel();
@@ -186,11 +186,11 @@ void main() {
       final subA = driver.events.listen(a.add);
       final subB = driver.events.listen(b.add);
 
-      driver.enqueue(const KeyEvent(keyCode: KeyCode.arrowUp));
+      driver.enqueue(const KeyEvent(KeyCode.arrowUp));
       await Future<void>.delayed(Duration.zero);
 
-      expect(a, [const KeyEvent(keyCode: KeyCode.arrowUp)]);
-      expect(b, [const KeyEvent(keyCode: KeyCode.arrowUp)]);
+      expect(a, [const KeyEvent(KeyCode.arrowUp)]);
+      expect(b, [const KeyEvent(KeyCode.arrowUp)]);
       await subA.cancel();
       await subB.cancel();
       await driver.dispose();

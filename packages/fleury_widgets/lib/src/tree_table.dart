@@ -1414,7 +1414,7 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
         ? Text('  (empty)', style: emptyStyle)
         : Focus(
             canRequestFocus: false,
-            onKey: (event) => switch (event.keyCode) {
+            onKey: (event) => switch (event.code) {
               KeyCode.arrowRight => _expandOrEnter(rows),
               KeyCode.arrowLeft => _collapseOrParent(rows),
               _ => KeyEventResult.ignored,
@@ -1455,9 +1455,9 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
       list = KeyBindings(
         bindings: [
           KeyBinding(
-            KeyChord.ctrl.c,
+            KeySequence.ctrl.c,
             label: 'Copy tree row',
-            onEvent: (_) => unawaited(_copySelection(rows)),
+            onTrigger: () => unawaited(_copySelection(rows)),
           ),
         ],
         child: list,

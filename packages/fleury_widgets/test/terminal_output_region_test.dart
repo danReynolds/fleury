@@ -128,7 +128,9 @@ void main() {
       expect(log.state.collectionRowCount, 1);
       expect(log.state.filterText, 'deploy');
 
-      tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await Future<void>.delayed(Duration.zero);
 
       expect(tester.clipboard.readInProcess(), '[ERROR stderr] deploy failed');
@@ -219,10 +221,7 @@ void main() {
           SizedBox(
             width: 60,
             height: 6,
-            child: TerminalOutputRegion(
-              buffer: buffer,
-              controller: controller,
-            ),
+            child: TerminalOutputRegion(buffer: buffer, controller: controller),
           ),
         );
         tester.render(size: const CellSize(60, 6));

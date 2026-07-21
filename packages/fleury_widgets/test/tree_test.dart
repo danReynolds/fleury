@@ -82,7 +82,7 @@ void main() {
   testWidgets('Right expands a branch, Left collapses it', (tester) {
     tester.pumpWidget(_tree());
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+    tester.sendKey(const KeyEvent(KeyCode.arrowRight));
     expect(_lines(tester, rows: 4), [
       '▾ src',
       '    a.dart',
@@ -90,7 +90,7 @@ void main() {
       '  README',
     ]);
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowLeft));
+    tester.sendKey(const KeyEvent(KeyCode.arrowLeft));
     expect(_lines(tester, rows: 4), ['▸ src', '  README', '', '']);
   });
 
@@ -116,8 +116,8 @@ void main() {
     tester.pumpWidget(_tree(onSelect: (n) => selected = n));
     tester.render(size: const CellSize(14, 4));
     // 'r' moves the selection to README; Enter activates that leaf.
-    tester.sendKey(const KeyEvent(char: 'r'));
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.char('r')));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     expect(selected?.label, 'README');
   });
 
@@ -128,7 +128,7 @@ void main() {
     // The opt-out must let the character fall through the tree's handler.
     var quits = 0;
     Widget host({required bool typeahead}) => KeyBindings(
-      bindings: [KeyBinding(KeyChord.q, onEvent: (_) => quits += 1)],
+      bindings: [KeyBinding(KeySequence.q, onTrigger: () => quits += 1)],
       child: _tree(typeahead: typeahead),
     );
 
@@ -146,9 +146,9 @@ void main() {
   testWidgets('Down + Enter toggles the focused branch', (tester) {
     tester.pumpWidget(_tree());
     // Move to README (a leaf) then back; expand src via Enter instead.
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // src is selected
+    tester.sendKey(const KeyEvent(KeyCode.enter)); // src is selected
     expect(_lines(tester, rows: 4).first, '▾ src');
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // collapse again
+    tester.sendKey(const KeyEvent(KeyCode.enter)); // collapse again
     expect(_lines(tester, rows: 4).first, '▸ src');
   });
 
@@ -156,8 +156,8 @@ void main() {
     String? activated;
     tester.pumpWidget(_tree(onSelect: (n) => activated = n.label));
     // Down to README (leaf), Enter activates it.
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     expect(activated, 'README');
   });
 
@@ -196,7 +196,7 @@ void main() {
     expect(src.state['expanded'], isFalse);
     expect(src.state['childCount'], 2);
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     tester.render(size: const CellSize(20, 4));
 
     tree = tester.semantics().single(role: SemanticRole.tree);
@@ -304,14 +304,12 @@ void main() {
 
   testWidgets('Left from a child steps out to its parent', (tester) {
     tester.pumpWidget(_tree());
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight)); // expand src
-    tester.sendKey(
-      const KeyEvent(keyCode: KeyCode.arrowRight),
-    ); // step to a.dart
+    tester.sendKey(const KeyEvent(KeyCode.arrowRight)); // expand src
+    tester.sendKey(const KeyEvent(KeyCode.arrowRight)); // step to a.dart
     // a.dart is a leaf; Left steps out to src (the parent).
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowLeft));
+    tester.sendKey(const KeyEvent(KeyCode.arrowLeft));
     // Now on src (still expanded); Left again collapses it.
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowLeft));
+    tester.sendKey(const KeyEvent(KeyCode.arrowLeft));
     expect(_lines(tester, rows: 4), ['▸ src', '  README', '', '']);
   });
 
@@ -321,10 +319,7 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(
-              KeyChord.key(KeyCode.arrowRight),
-              onEvent: (_) => bubbled++,
-            ),
+            KeyBinding(KeyCode.arrowRight, onTrigger: () => bubbled++),
           ],
           child: const Tree<String>(
             autofocus: true,
@@ -332,7 +327,7 @@ void main() {
           ),
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight));
       expect(bubbled, 1, reason: 'a leaf has nothing to expand');
     });
 
@@ -342,12 +337,7 @@ void main() {
       var bubbled = 0;
       tester.pumpWidget(
         KeyBindings(
-          bindings: [
-            KeyBinding(
-              KeyChord.key(KeyCode.arrowLeft),
-              onEvent: (_) => bubbled++,
-            ),
-          ],
+          bindings: [KeyBinding(KeyCode.arrowLeft, onTrigger: () => bubbled++)],
           child: const Tree<String>(
             autofocus: true,
             roots: [
@@ -356,7 +346,7 @@ void main() {
           ),
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowLeft));
+      tester.sendKey(const KeyEvent(KeyCode.arrowLeft));
       expect(bubbled, 1, reason: 'collapsed root with no parent');
     });
 
@@ -387,7 +377,7 @@ void main() {
           ],
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(_lines(tester, rows: 2).first, '▾ dir', reason: 'expanded');
       expect(selected, 0, reason: 'onSelect is for leaves only');
     });
@@ -402,7 +392,7 @@ void main() {
           ],
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight)); // expand a
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight)); // expand a
       expect(_lines(tester, rows: 3), ['▾ a', '    a1', '▸ b']);
     });
 
@@ -425,10 +415,10 @@ void main() {
           ],
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight)); // expand
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // → one
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // → two
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight)); // expand
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // → one
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // → two
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(picked, 2, reason: 'the typed value rode along on the node');
     });
 

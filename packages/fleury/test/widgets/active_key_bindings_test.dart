@@ -6,17 +6,17 @@ void main() {
   testWidgets(
     'resolves live unshadowed aliases in dispatch order as immutable values',
     (tester) {
-      final down = KeyChord.key(KeyCode.arrowDown);
-      final next = KeyBinding.list(
-        [KeyChord.char('j'), down],
+      final down = KeyCode.arrowDown;
+      final next = KeyBinding.any(
+        [KeyCode.char('j'), down],
         label: 'Next',
-        onEvent: (_) {},
+        onTrigger: () {},
       );
-      final scroll = KeyBinding(down, label: 'Scroll', onEvent: (_) {});
+      final scroll = KeyBinding(down, label: 'Scroll', onTrigger: () {});
       final quit = KeyBinding(
-        KeyChord.char('q'),
+        KeyCode.char('q'),
         label: 'Quit',
-        onEvent: (_) {},
+        onTrigger: () {},
       );
 
       tester.pumpWidget(
@@ -35,11 +35,11 @@ void main() {
       );
 
       expect(active.map((entry) => entry.binding), [scroll, next, quit]);
-      expect(active.map((entry) => entry.chordLabel), ['↓', 'j', 'q']);
-      expect(active[1].chords, [KeyChord.char('j')]);
+      expect(active.map((entry) => entry.sequenceLabel), ['↓', 'j', 'q']);
+      expect(active[1].sequences, [KeyCode.char('j')]);
       expect(() => active.add(active.first), throwsUnsupportedError);
       expect(
-        () => active.first.chords.add(KeyChord.escape),
+        () => active.first.sequences.add(KeySequence.escape),
         throwsUnsupportedError,
       );
     },
@@ -48,15 +48,15 @@ void main() {
   testWidgets('omits printable aliases claimed by focused text input', (
     tester,
   ) {
-    final mixed = KeyBinding.list(
-      [KeyChord.char('j'), KeyChord.key(KeyCode.arrowDown)],
+    final mixed = KeyBinding.any(
+      [KeyCode.char('j'), KeyCode.arrowDown],
       label: 'Next',
-      onEvent: (_) {},
+      onTrigger: () {},
     );
     final printable = KeyBinding(
-      KeyChord.char('?'),
+      KeyCode.char('?'),
       label: 'Help',
-      onEvent: (_) {},
+      onTrigger: () {},
     );
 
     tester.pumpWidget(
@@ -69,6 +69,6 @@ void main() {
     final active = resolveActiveKeyBindings(tester.focusManager);
 
     expect(active.map((entry) => entry.binding), [mixed]);
-    expect(active.single.chordLabel, '↓');
+    expect(active.single.sequenceLabel, '↓');
   });
 }

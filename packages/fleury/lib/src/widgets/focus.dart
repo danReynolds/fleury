@@ -421,7 +421,7 @@ class FocusManager extends ChangeNotifier {
 
   /// Whether the focused node claims typed text (a focused, editable
   /// [TextInput]). While true, chords shadowed by text input
-  /// ([KeyChord.isShadowedByTextInput]) can never fire — the claimant
+  /// ([KeySequence.isShadowedByTextInput]) can never fire — the claimant
   /// consumes the characters before chord matching runs. The hint bar uses
   /// this to hide such bindings instead of advertising dead keys.
   bool get focusedNodeClaimsText {

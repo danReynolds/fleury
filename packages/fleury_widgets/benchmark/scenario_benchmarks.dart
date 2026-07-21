@@ -320,22 +320,24 @@ Future<_DataTableJourneySample> _runDataTableJourney(
     firstRender.stop();
 
     final arrow = Stopwatch()..start();
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
     tester.render(size: config.terminalSize);
     arrow.stop();
 
     final page = Stopwatch()..start();
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.pageDown));
+    tester.sendKey(const KeyEvent(KeyCode.pageDown));
     tester.render(size: config.terminalSize);
     page.stop();
 
     final jump = Stopwatch()..start();
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.end));
+    tester.sendKey(const KeyEvent(KeyCode.end));
     final finalFrame = tester.render(size: config.terminalSize);
     jump.stop();
 
     final copy = Stopwatch()..start();
-    tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+    tester.sendKey(
+      const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+    );
     await Future<void>.delayed(Duration.zero);
     copy.stop();
 
@@ -740,7 +742,9 @@ Future<_LogRegionJourneySample> _runLogRegionJourney(
     tail.stop();
 
     final copy = Stopwatch()..start();
-    tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+    tester.sendKey(
+      const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+    );
     await Future<void>.delayed(Duration.zero);
     copy.stop();
 
@@ -1204,7 +1208,9 @@ Future<_StreamingMarkdownJourneySample> _runStreamingMarkdownJourney(
     finalRender.stop();
 
     final copy = Stopwatch()..start();
-    tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+    tester.sendKey(
+      const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+    );
     await Future<void>.delayed(Duration.zero);
     copy.stop();
 
@@ -2087,7 +2093,7 @@ Future<_OverlayCommandPaletteJourneySample> _runOverlayCommandPaletteJourney(
       );
       if (targetRowIndex > 0 && selected?.state.commandId != target.id) {
         for (var step = 0; step < targetRowIndex; step++) {
-          tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+          tester.sendKey(const KeyEvent(KeyCode.arrowDown));
         }
         tester.pump();
         filteredFrame = tester.render(size: config.terminalSize);
@@ -2130,7 +2136,7 @@ Future<_OverlayCommandPaletteJourneySample> _runOverlayCommandPaletteJourney(
 
       final action = Stopwatch()..start();
       if (cycle % 5 == 0) {
-        tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+        tester.sendKey(const KeyEvent(KeyCode.enter));
       } else if (cycle % 5 == 1) {
         final result = await tester.invokeSemanticAction(
           SemanticAction.submit,
@@ -2152,7 +2158,7 @@ Future<_OverlayCommandPaletteJourneySample> _runOverlayCommandPaletteJourney(
           semanticMismatchCount += 1;
         }
       } else if (cycle % 5 == 3) {
-        tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+        tester.sendKey(const KeyEvent(KeyCode.escape));
       } else {
         final result = await tester.invokeSemanticAction(
           SemanticAction.dismiss,
@@ -2335,7 +2341,7 @@ Future<_DisabledOverlayProbe> _runDisabledOverlayProbe(
   semanticAction.stop();
 
   final keyboardAction = Stopwatch()..start();
-  tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+  tester.sendKey(const KeyEvent(KeyCode.enter));
   await Future<void>.delayed(Duration.zero);
   tester.pump();
   keyboardAction.stop();
@@ -3256,7 +3262,9 @@ Future<_SubprocessOutputJourneySample> _runSubprocessOutputJourney(
     processPanelRender.stop();
 
     final copy = Stopwatch()..start();
-    tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+    tester.sendKey(
+      const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+    );
     await Future<void>.delayed(Duration.zero);
     copy.stop();
 
@@ -3946,7 +3954,7 @@ Future<_TreeTableJourneySample> _runTreeTableJourney(
     final expand = Stopwatch()..start();
     controller.selectedIndex = initialRows.length;
     tester.pump();
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowRight));
+    tester.sendKey(const KeyEvent(KeyCode.arrowRight));
     tester.render(size: config.terminalSize);
     expand.stop();
     final expandedRows = buildTreeTableRows<int>(
@@ -3957,12 +3965,12 @@ Future<_TreeTableJourneySample> _runTreeTableJourney(
     );
 
     final page = Stopwatch()..start();
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.pageDown));
+    tester.sendKey(const KeyEvent(KeyCode.pageDown));
     tester.render(size: config.terminalSize);
     page.stop();
 
     final jump = Stopwatch()..start();
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.end));
+    tester.sendKey(const KeyEvent(KeyCode.end));
     final expandedFrame = tester.render(size: config.terminalSize);
     jump.stop();
 
@@ -3997,7 +4005,9 @@ Future<_TreeTableJourneySample> _runTreeTableJourney(
     );
 
     final copy = Stopwatch()..start();
-    tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+    tester.sendKey(
+      const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+    );
     await Future<void>.delayed(Duration.zero);
     copy.stop();
 

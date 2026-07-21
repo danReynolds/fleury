@@ -384,8 +384,8 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
     _borderStyle = theme.borderStyle;
     return KeyBindings(
       bindings: [
-        KeyBinding(
-          KeyChord.up,
+        KeyBinding.event(
+          KeySequence.up,
           onEvent: (event) {
             if (_entry == null) {
               event.bubble();
@@ -395,8 +395,8 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
           },
           hideFromHintBar: true,
         ),
-        KeyBinding(
-          KeyChord.down,
+        KeyBinding.event(
+          KeySequence.down,
           onEvent: (event) {
             if (_entry == null) {
               event.bubble();
@@ -406,8 +406,8 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
           },
           hideFromHintBar: true,
         ),
-        KeyBinding(
-          KeyChord.escape,
+        KeyBinding.event(
+          KeySequence.escape,
           onEvent: (event) {
             if (_entry == null) {
               event.bubble();
@@ -420,8 +420,8 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
         // TextInput's local keymap intentionally leaves Enter unresolved so
         // this binding can accept a visible suggestion or bubble when the menu
         // is closed. A dismissed menu must never submit a hidden row.
-        KeyBinding(
-          KeyChord.enter,
+        KeyBinding.event(
+          KeySequence.enter,
           onEvent: (event) {
             if (_entry == null) {
               event.bubble();
@@ -434,8 +434,8 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
         // Tab accepts the highlighted suggestion when the menu is open — the
         // dominant shell/fzf completion convention. When closed, Tab bubbles
         // so it still moves focus between widgets.
-        KeyBinding(
-          KeyChord.tab,
+        KeyBinding.event(
+          KeySequence.tab,
           onEvent: (event) {
             if (_entry == null) {
               event.bubble();

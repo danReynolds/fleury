@@ -17,7 +17,7 @@ import 'package:fleury/fleury_core.dart';
 /// missing "no affordance" the plain-`Text` bar lacked). Pinning ubiquitous
 /// globals like quit/help ahead of locals is a deliberate non-goal for now —
 /// it would break the contiguous prefix + single trailing marker. A binding
-/// bound to several aliases (`KeyBinding.list([↑, ↓], …)`) renders a
+/// bound to several aliases (`KeyBinding.any([↑, ↓], …)`) renders a
 /// **combined** label — `[↑↓] move`, not just `[↑] move`.
 ///
 /// Filtering rules:
@@ -69,7 +69,7 @@ class KeyHintBar extends StatelessWidget {
     final total = hints.length;
     final segments = [
       for (final h in hints.take(maxBindings))
-        '[${h.chordLabel}] ${h.binding.displayLabel}',
+        '[${h.sequenceLabel}] ${h.binding.displayLabel}',
     ];
     // Fit whole bindings to the width the bar is actually given, degrading
     // with a trailing "+N" instead of clipping a label mid-word. Under an

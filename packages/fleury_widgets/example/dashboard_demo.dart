@@ -33,7 +33,7 @@ Future<void> main() async {
   await runApp(
     const FleuryApp(title: 'Widget dashboard', home: DashboardApp()),
     onEvent: (event) {
-      if (event is KeyEvent && event.hasCtrl && event.char == 'c') {
+      if (event is KeyEvent && event.hasCtrl && event.code.character == 'c') {
         return const ExitRequested();
       }
       return null;
@@ -159,9 +159,9 @@ class _DashboardAppState extends State<DashboardApp> {
     return KeyBindings(
       bindings: [
         KeyBinding(
-          KeyChord.space,
+          KeySequence.space,
           label: _paused ? 'Resume' : 'Pause',
-          onEvent: (_) => setState(() => _paused = !_paused),
+          onTrigger: () => setState(() => _paused = !_paused),
         ),
       ],
       child: Padding(

@@ -1308,7 +1308,7 @@ class _SelectionScrollStoryState extends State<_SelectionScrollStory> {
   }
 
   KeyEventResult _handleListKey(KeyEvent event) {
-    return switch (event.keyCode) {
+    return switch (event.code) {
       KeyCode.arrowUp => _moveList(-1),
       KeyCode.arrowDown => _moveList(1),
       _ => KeyEventResult.ignored,
@@ -1826,11 +1826,11 @@ class _OverlayStory extends StatelessWidget {
         ),
         'KeyHintBar' => KeyBindings(
           bindings: <KeyBinding>[
-            KeyBinding(KeyChord.ctrl.k, onEvent: (_) {}, label: 'palette'),
-            KeyBinding(KeyChord.char('?'), onEvent: (_) {}, label: 'help'),
+            KeyBinding(KeySequence.ctrl.k, onTrigger: () {}, label: 'palette'),
+            KeyBinding(KeyCode.char('?'), onTrigger: () {}, label: 'help'),
             KeyBinding(
-              KeyChord.ctrl.s,
-              onEvent: (_) {},
+              KeySequence.ctrl.s,
+              onTrigger: () {},
               label: 'hidden binding',
               hideFromHintBar: true,
             ),
@@ -1907,7 +1907,7 @@ class _OverlayStory extends StatelessWidget {
                 severity: ToastSeverity.warning,
                 action: ToastAction(
                   label: 'Undo',
-                  key: KeyChord.alt.u,
+                  key: KeySequence.alt.u,
                   onPressed: () => Toaster.show(
                     context,
                     'Restored',

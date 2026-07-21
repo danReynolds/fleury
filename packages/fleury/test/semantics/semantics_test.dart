@@ -925,7 +925,7 @@ void main() {
     expect(field.state.historyIndex, isNull);
     expect(field.state.historyBrowsing, isFalse);
 
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
+    tester.sendKey(const KeyEvent(KeyCode.arrowUp));
 
     field = tester.semantics().single(role: SemanticRole.textField);
     expect(field.value, 'two');

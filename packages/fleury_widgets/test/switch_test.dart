@@ -26,7 +26,7 @@ void main() {
       tester.pumpWidget(
         Switch(value: false, autofocus: true, onChanged: (v) => received = v),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(received, true);
     });
 

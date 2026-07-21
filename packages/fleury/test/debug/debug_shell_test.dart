@@ -18,8 +18,8 @@ import 'package:fleury/src/debug/debug_state.dart';
 import 'package:test/test.dart';
 
 KeyEvent _ctrl(String c) =>
-    KeyEvent(char: c, modifiers: const {KeyModifier.ctrl});
-KeyEvent _key(KeyCode k) => KeyEvent(keyCode: k);
+    KeyEvent(KeyCode.char(c), modifiers: const {KeyModifier.ctrl});
+KeyEvent _key(KeyCode k) => KeyEvent(k);
 TextInputEvent _text(String s) => TextInputEvent(s);
 
 Matcher _stateError(String message) {
@@ -1228,10 +1228,7 @@ void main() {
       expect(
         tryConsumeDebugKey(
           c,
-          const KeyEvent(
-            keyCode: KeyCode.arrowLeft,
-            modifiers: {KeyModifier.ctrl},
-          ),
+          const KeyEvent(KeyCode.arrowLeft, modifiers: {KeyModifier.ctrl}),
         ),
         isFalse,
         reason: 'Ctrl+Left is an app chord, not a tab cycle',
@@ -1239,10 +1236,7 @@ void main() {
       expect(
         tryConsumeDebugKey(
           c,
-          const KeyEvent(
-            keyCode: KeyCode.arrowRight,
-            modifiers: {KeyModifier.alt},
-          ),
+          const KeyEvent(KeyCode.arrowRight, modifiers: {KeyModifier.alt}),
         ),
         isFalse,
         reason: 'Alt+Right is an app chord, not a tab cycle',

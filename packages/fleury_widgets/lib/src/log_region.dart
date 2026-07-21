@@ -491,9 +491,9 @@ class _LogRegionState extends State<LogRegion> {
       list = KeyBindings(
         bindings: [
           KeyBinding(
-            KeyChord.ctrl.c,
+            KeySequence.ctrl.c,
             label: 'Copy log entry',
-            onEvent: (_) => unawaited(_copySelection()),
+            onTrigger: () => unawaited(_copySelection()),
           ),
         ],
         child: list,

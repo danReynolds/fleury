@@ -89,7 +89,9 @@ void main() {
       );
       tester.render(size: const CellSize(20, 1));
 
-      tester.sendKey(const KeyEvent(char: 'a', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('a'), modifiers: {KeyModifier.ctrl}),
+      );
       expect(captured?.plainText, 'one two three');
     });
 
@@ -162,10 +164,7 @@ void main() {
 
       // Shift+Right — should cross the a→b style boundary.
       tester.sendKey(
-        const KeyEvent(
-          keyCode: KeyCode.arrowRight,
-          modifiers: {KeyModifier.shift},
-        ),
+        const KeyEvent(KeyCode.arrowRight, modifiers: {KeyModifier.shift}),
       );
       expect(
         captured?.plainText,
@@ -195,7 +194,9 @@ void main() {
       );
       tester.render(size: const CellSize(20, 2));
 
-      tester.sendKey(const KeyEvent(char: 'a', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('a'), modifiers: {KeyModifier.ctrl}),
+      );
       expect(
         captured?.plainText,
         'regular text',

@@ -2209,7 +2209,7 @@ class _FormMultiSelectControlState extends State<_FormMultiSelectControl>
   }
 
   KeyEventResult _onKey(KeyEvent event) {
-    switch (event.keyCode) {
+    switch (event.code) {
       case KeyCode.arrowUp:
         final previous = _step(-1);
         if (previous != null) _moveTo(previous);

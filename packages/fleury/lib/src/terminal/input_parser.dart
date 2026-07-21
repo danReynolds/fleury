@@ -7,7 +7,7 @@
 //   - Tab (0x09) → KeyEvent(KeyCode.tab).
 //   - Backspace (0x7F or 0x08) → KeyEvent(KeyCode.backspace).
 //   - Ctrl+letter (0x01..0x1A, excluding the ones above) →
-//     KeyEvent(char: 'a'..'z', modifiers: {ctrl}).
+//     KeyEvent(KeyCode.char('a'..'z'), modifiers: {ctrl}).
 //   - Lone ESC → KeyEvent(KeyCode.escape), emitted on [flush].
 //   - CSI sequences `ESC [ ... <final>`:
 //       A/B/C/D → arrowUp/Down/Right/Left
@@ -144,7 +144,7 @@ class InputParser {
     _swallowNextLf = false;
     switch (_state) {
       case _State.afterEsc:
-        sink.add(const KeyEvent(keyCode: KeyCode.escape));
+        sink.add(const KeyEvent(KeyCode.escape));
         _state = _State.ground;
       case _State.utf8Continuation:
         // A stream read can split a scalar and the next byte can arrive after
@@ -179,7 +179,7 @@ class InputParser {
     _swallowNextLf = false;
     switch (_state) {
       case _State.afterEsc:
-        sink.add(const KeyEvent(keyCode: KeyCode.escape));
+        sink.add(const KeyEvent(KeyCode.escape));
       case _State.utf8Continuation:
         if (_pendingUtf8.isNotEmpty) {
           sink.add(
@@ -250,39 +250,45 @@ class InputParser {
       return;
     }
     if (byte == 0x0D) {
-      sink.add(const KeyEvent(keyCode: KeyCode.enter));
+      sink.add(const KeyEvent(KeyCode.enter));
       _swallowNextLf = true; // swallow a paired LF
       return;
     }
     if (byte == 0x0A) {
       if (swallowLf) return; // the LF half of a CRLF — already emitted Enter
-      sink.add(const KeyEvent(keyCode: KeyCode.enter));
+      sink.add(const KeyEvent(KeyCode.enter));
       return;
     }
     if (byte == 0x09) {
-      sink.add(const KeyEvent(keyCode: KeyCode.tab));
+      sink.add(const KeyEvent(KeyCode.tab));
       return;
     }
     if (byte == 0x7F || byte == 0x08) {
-      sink.add(const KeyEvent(keyCode: KeyCode.backspace));
+      sink.add(const KeyEvent(KeyCode.backspace));
       return;
     }
     if (byte == 0) {
       // Ctrl+Space / Ctrl+@ on some terminals. Emit as Ctrl+space.
-      sink.add(const KeyEvent(char: ' ', modifiers: {KeyModifier.ctrl}));
+      sink.add(
+        const KeyEvent(KeyCode.char(' '), modifiers: {KeyModifier.ctrl}),
+      );
       return;
     }
     if (byte >= 0x01 && byte <= 0x1A) {
       // Ctrl+letter. 0x01 = Ctrl+A, 0x1A = Ctrl+Z.
       final letter = String.fromCharCode(byte + 0x60); // 'a'..'z'
-      sink.add(KeyEvent(char: letter, modifiers: const {KeyModifier.ctrl}));
+      sink.add(
+        KeyEvent(KeyCode.char(letter), modifiers: const {KeyModifier.ctrl}),
+      );
       return;
     }
     if (byte >= 0x1C && byte <= 0x1F) {
       // Ctrl+\, Ctrl+], Ctrl+^, Ctrl+_. Best effort: surface as
       // Ctrl-modified printable equivalents.
       const map = {0x1C: r'\', 0x1D: ']', 0x1E: '^', 0x1F: '_'};
-      sink.add(KeyEvent(char: map[byte], modifiers: const {KeyModifier.ctrl}));
+      sink.add(
+        KeyEvent(KeyCode.char(map[byte]!), modifiers: const {KeyModifier.ctrl}),
+      );
       return;
     }
     if (byte < 0x80) {
@@ -313,14 +319,14 @@ class InputParser {
     if (byte == 0x1B) {
       // Two ESCs in a row — emit the previous one as escape and stay
       // in afterEsc for the new one.
-      sink.add(const KeyEvent(keyCode: KeyCode.escape));
+      sink.add(const KeyEvent(KeyCode.escape));
       return;
     }
     if (byte >= 0x20 && byte < 0x7F) {
       // Alt + printable.
       sink.add(
         KeyEvent(
-          char: String.fromCharCode(byte),
+          KeyCode.char(String.fromCharCode(byte)),
           modifiers: const {KeyModifier.alt},
         ),
       );
@@ -455,25 +461,25 @@ class InputParser {
     // SS3 is a single final byte.
     switch (byte) {
       case 0x41: // 'A'
-        sink.add(const KeyEvent(keyCode: KeyCode.arrowUp));
+        sink.add(const KeyEvent(KeyCode.arrowUp));
       case 0x42: // 'B'
-        sink.add(const KeyEvent(keyCode: KeyCode.arrowDown));
+        sink.add(const KeyEvent(KeyCode.arrowDown));
       case 0x43: // 'C'
-        sink.add(const KeyEvent(keyCode: KeyCode.arrowRight));
+        sink.add(const KeyEvent(KeyCode.arrowRight));
       case 0x44: // 'D'
-        sink.add(const KeyEvent(keyCode: KeyCode.arrowLeft));
+        sink.add(const KeyEvent(KeyCode.arrowLeft));
       case 0x48: // 'H'
-        sink.add(const KeyEvent(keyCode: KeyCode.home));
+        sink.add(const KeyEvent(KeyCode.home));
       case 0x46: // 'F'
-        sink.add(const KeyEvent(keyCode: KeyCode.end));
+        sink.add(const KeyEvent(KeyCode.end));
       case 0x50: // 'P' — F1
-        sink.add(const KeyEvent(keyCode: KeyCode.f1));
+        sink.add(const KeyEvent(KeyCode.f1));
       case 0x51:
-        sink.add(const KeyEvent(keyCode: KeyCode.f2));
+        sink.add(const KeyEvent(KeyCode.f2));
       case 0x52:
-        sink.add(const KeyEvent(keyCode: KeyCode.f3));
+        sink.add(const KeyEvent(KeyCode.f3));
       case 0x53:
-        sink.add(const KeyEvent(keyCode: KeyCode.f4));
+        sink.add(const KeyEvent(KeyCode.f4));
     }
     _state = _State.ground;
   }
@@ -500,7 +506,7 @@ class InputParser {
       // '~' — tilde-finalised chords, p1 selects which.
       final kc = _tildeKey(p1 ?? 0);
       if (kc != null) {
-        sink.add(KeyEvent(keyCode: kc, modifiers: modifiers, type: type));
+        sink.add(KeyEvent(kc, modifiers: modifiers, type: type));
       }
       return;
     }
@@ -511,7 +517,7 @@ class InputParser {
       // explicit modifier param (xterm sends `CSI 1;5Z` for Ctrl+Shift+Tab).
       sink.add(
         KeyEvent(
-          keyCode: KeyCode.tab,
+          KeyCode.tab,
           modifiers: {...modifiers, KeyModifier.shift},
           type: type,
         ),
@@ -534,7 +540,7 @@ class InputParser {
       _ => null,
     };
     if (kc != null) {
-      sink.add(KeyEvent(keyCode: kc, modifiers: modifiers, type: type));
+      sink.add(KeyEvent(kc, modifiers: modifiers, type: type));
     }
   }
 
@@ -556,7 +562,7 @@ class InputParser {
     // Ctrl+M vs Enter all become distinct, modifier-bearing events).
     final kc = _kittyFunctionalKey(codepoint);
     if (kc != null) {
-      sink.add(KeyEvent(keyCode: kc, modifiers: modifiers, type: type));
+      sink.add(KeyEvent(kc, modifiers: modifiers, type: type));
       return;
     }
 
@@ -581,7 +587,7 @@ class InputParser {
     // character so bindings like Ctrl+C match regardless of layout.
     sink.add(
       KeyEvent(
-        char: String.fromCharCode(codepoint),
+        KeyCode.char(String.fromCharCode(codepoint)),
         modifiers: modifiers,
         type: type,
       ),

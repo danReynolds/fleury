@@ -155,11 +155,11 @@ class _DebugShellState extends State<DebugShell> {
 bool tryConsumeDebugKey(DebugController controller, KeyEvent event) {
   if (!controller.config.enabled) return false;
 
-  if (event.char == 'g' && event.hasCtrl) {
+  if (event.code.character == 'g' && event.hasCtrl) {
     controller.toggleOnOff();
     return true;
   }
-  if (event.keyCode == KeyCode.f11) {
+  if (event.code == KeyCode.f11) {
     if (controller.mode != DebugMode.off) {
       controller.toggleExpand();
       return true;
@@ -170,14 +170,14 @@ bool tryConsumeDebugKey(DebugController controller, KeyEvent event) {
   // session). Deliberately a key code, never a printable — restart drops
   // state, and docked mode keeps the app (and its text inputs) live below
   // the shell. Unavailable → fall through so the app can own F5.
-  if (event.keyCode == KeyCode.f5) {
+  if (event.code == KeyCode.f5) {
     if (controller.mode != DebugMode.off && controller.hotRestartAvailable) {
       controller.requestHotRestart();
       return true;
     }
     return false;
   }
-  if (event.keyCode == KeyCode.escape) {
+  if (event.code == KeyCode.escape) {
     // In the Logs tab, Esc first backs out of search — cancel an open field or
     // clear a committed query — before it collapses fullscreen.
     if (controller.mode != DebugMode.off &&
@@ -192,7 +192,7 @@ bool tryConsumeDebugKey(DebugController controller, KeyEvent event) {
     }
     return false;
   }
-  if (event.keyCode == KeyCode.f12) {
+  if (event.code == KeyCode.f12) {
     if (controller.mode == DebugMode.off) {
       controller.selectTab(DebugTab.logs);
       controller.toggleOnOff();
@@ -209,17 +209,17 @@ bool tryConsumeDebugKey(DebugController controller, KeyEvent event) {
   if (controller.mode != DebugMode.off &&
       controller.tab == DebugTab.logs &&
       controller.logSearching) {
-    if (event.keyCode == KeyCode.enter) {
+    if (event.code == KeyCode.enter) {
       controller.commitLogSearch();
       return true;
     }
-    if (event.keyCode == KeyCode.backspace) {
+    if (event.code == KeyCode.backspace) {
       controller.backspaceLogQuery();
       return true;
     }
   }
   if (controller.mode != DebugMode.off &&
-      event.keyCode == KeyCode.tab &&
+      event.code == KeyCode.tab &&
       !event.hasCtrl &&
       !event.hasAlt) {
     // While the shell is open, Tab / Shift+Tab cycle the panel tabs.
@@ -236,21 +236,20 @@ bool tryConsumeDebugKey(DebugController controller, KeyEvent event) {
       !event.hasCtrl &&
       !event.hasAlt &&
       !(controller.tab == DebugTab.logs && controller.logSearching) &&
-      (event.keyCode == KeyCode.arrowLeft ||
-          event.keyCode == KeyCode.arrowRight)) {
-    controller.nextTab(event.keyCode == KeyCode.arrowLeft ? -1 : 1);
+      (event.code == KeyCode.arrowLeft || event.code == KeyCode.arrowRight)) {
+    controller.nextTab(event.code == KeyCode.arrowLeft ? -1 : 1);
     return true;
   }
   if (controller.mode != DebugMode.off && controller.tab == DebugTab.tree) {
-    if (event.keyCode == KeyCode.arrowDown) {
+    if (event.code == KeyCode.arrowDown) {
       controller.moveSemanticCursor(1);
       return true;
     }
-    if (event.keyCode == KeyCode.arrowUp) {
+    if (event.code == KeyCode.arrowUp) {
       controller.moveSemanticCursor(-1);
       return true;
     }
-    if (event.keyCode == KeyCode.home) {
+    if (event.code == KeyCode.home) {
       controller.resetSemanticCursor();
       return true;
     }

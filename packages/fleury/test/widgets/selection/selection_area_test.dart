@@ -185,7 +185,9 @@ void main() {
       );
       tester.render(size: const CellSize(10, 1));
 
-      tester.sendKey(const KeyEvent(char: 'a', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('a'), modifiers: {KeyModifier.ctrl}),
+      );
       expect(captured?.plainText, 'abc');
     });
 
@@ -201,7 +203,9 @@ void main() {
       tester.sendMouse(_up(7, 0));
 
       // Then Ctrl+C.
-      tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       await Future<void>.delayed(Duration.zero);
       expect(tester.clipboard.readInProcess(), 'llo w');
     });
@@ -211,14 +215,16 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyChord.ctrl.c, onEvent: (_) => ancestorCtrlC++),
+            KeyBinding(KeySequence.ctrl.c, onTrigger: () => ancestorCtrlC++),
           ],
           child: const SelectionArea(child: Text('hello')),
         ),
       );
       tester.render(size: const CellSize(10, 1));
 
-      tester.sendKey(const KeyEvent(char: 'c', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
       // SelectionArea had no selection → bubbled → ancestor fired.
       expect(ancestorCtrlC, 1);
     });
@@ -238,7 +244,7 @@ void main() {
       tester.sendMouse(_up(7, 0));
       expect(captured?.plainText, 'llo w');
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+      tester.sendKey(const KeyEvent(KeyCode.escape));
       expect(captured, isNull);
     });
 
@@ -247,14 +253,14 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyChord.escape, onEvent: (_) => ancestorEscape++),
+            KeyBinding(KeySequence.escape, onTrigger: () => ancestorEscape++),
           ],
           child: const SelectionArea(child: Text('hello')),
         ),
       );
       tester.render(size: const CellSize(10, 1));
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+      tester.sendKey(const KeyEvent(KeyCode.escape));
       expect(ancestorEscape, 1);
     });
   });
@@ -492,10 +498,7 @@ void main() {
 
       // Shift+Right pushes cursor from col 5 to col 6 → 'llo ' becomes 'llo '.
       tester.sendKey(
-        const KeyEvent(
-          keyCode: KeyCode.arrowRight,
-          modifiers: {KeyModifier.shift},
-        ),
+        const KeyEvent(KeyCode.arrowRight, modifiers: {KeyModifier.shift}),
       );
       expect(captured?.plainText, 'llo ');
     });
@@ -518,10 +521,7 @@ void main() {
       expect(captured?.plainText, 'llo w');
 
       tester.sendKey(
-        const KeyEvent(
-          keyCode: KeyCode.arrowLeft,
-          modifiers: {KeyModifier.shift},
-        ),
+        const KeyEvent(KeyCode.arrowLeft, modifiers: {KeyModifier.shift}),
       );
       expect(captured?.plainText, 'llo ');
     });
@@ -551,10 +551,7 @@ void main() {
 
       // Shift+Right — one keystroke should cross all of '中' (width 2).
       tester.sendKey(
-        const KeyEvent(
-          keyCode: KeyCode.arrowRight,
-          modifiers: {KeyModifier.shift},
-        ),
+        const KeyEvent(KeyCode.arrowRight, modifiers: {KeyModifier.shift}),
       );
       expect(
         captured?.plainText,
@@ -582,7 +579,7 @@ void main() {
       expect(captured?.plainText, 'llo');
 
       tester.sendKey(
-        const KeyEvent(keyCode: KeyCode.end, modifiers: {KeyModifier.shift}),
+        const KeyEvent(KeyCode.end, modifiers: {KeyModifier.shift}),
       );
       expect(captured?.plainText, 'llo world');
     });
@@ -606,7 +603,7 @@ void main() {
       expect(captured?.plainText, 'o w');
 
       tester.sendKey(
-        const KeyEvent(keyCode: KeyCode.home, modifiers: {KeyModifier.shift}),
+        const KeyEvent(KeyCode.home, modifiers: {KeyModifier.shift}),
       );
       expect(captured?.plainText, 'hello w');
     });
@@ -616,7 +613,10 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyChord.shift.home, onEvent: (_) => ancestorHomeHit++),
+            KeyBinding(
+              KeySequence.shift.home,
+              onTrigger: () => ancestorHomeHit++,
+            ),
           ],
           child: const SelectionArea(child: Text('hello')),
         ),
@@ -624,7 +624,7 @@ void main() {
       tester.render(size: const CellSize(10, 1));
 
       tester.sendKey(
-        const KeyEvent(keyCode: KeyCode.home, modifiers: {KeyModifier.shift}),
+        const KeyEvent(KeyCode.home, modifiers: {KeyModifier.shift}),
       );
       expect(ancestorHomeHit, 1);
     });
@@ -635,8 +635,8 @@ void main() {
         KeyBindings(
           bindings: [
             KeyBinding(
-              KeyChord.shift.right,
-              onEvent: (_) => ancestorRightHit++,
+              KeySequence.shift.right,
+              onTrigger: () => ancestorRightHit++,
             ),
           ],
           child: const SelectionArea(child: Text('hello')),
@@ -645,10 +645,7 @@ void main() {
       tester.render(size: const CellSize(10, 1));
 
       tester.sendKey(
-        const KeyEvent(
-          keyCode: KeyCode.arrowRight,
-          modifiers: {KeyModifier.shift},
-        ),
+        const KeyEvent(KeyCode.arrowRight, modifiers: {KeyModifier.shift}),
       );
       expect(ancestorRightHit, 1);
     });
@@ -683,10 +680,7 @@ void main() {
       // Shift+Down moves the cursor to row 1 col 4 — selection now
       // spans 'first line\nseco'.
       tester.sendKey(
-        const KeyEvent(
-          keyCode: KeyCode.arrowDown,
-          modifiers: {KeyModifier.shift},
-        ),
+        const KeyEvent(KeyCode.arrowDown, modifiers: {KeyModifier.shift}),
       );
       expect(
         captured?.plainText,
@@ -721,10 +715,7 @@ void main() {
       // leading anchor cell on row 1 is excluded since the selection
       // ends there).
       tester.sendKey(
-        const KeyEvent(
-          keyCode: KeyCode.arrowUp,
-          modifiers: {KeyModifier.shift},
-        ),
+        const KeyEvent(KeyCode.arrowUp, modifiers: {KeyModifier.shift}),
       );
       // The reverse-direction span covers cells on row 0 from col 4
       // onward plus row 1 up to col 0 (exclusive). Just assert that
@@ -756,10 +747,7 @@ void main() {
       // Nothing below — cursor must NOT move (no exception, no
       // selection change).
       tester.sendKey(
-        const KeyEvent(
-          keyCode: KeyCode.arrowDown,
-          modifiers: {KeyModifier.shift},
-        ),
+        const KeyEvent(KeyCode.arrowDown, modifiers: {KeyModifier.shift}),
       );
       expect(
         captured?.plainText,
@@ -878,7 +866,7 @@ void main() {
 
         // Ctrl+A should select the outer Text but skip the disabled inner.
         tester.sendKey(
-          const KeyEvent(char: 'a', modifiers: {KeyModifier.ctrl}),
+          const KeyEvent(KeyCode.char('a'), modifiers: {KeyModifier.ctrl}),
         );
         expect(
           captured?.plainText,
@@ -908,7 +896,7 @@ void main() {
         tester.render(size: const CellSize(20, 2));
 
         tester.sendKey(
-          const KeyEvent(char: 'a', modifiers: {KeyModifier.ctrl}),
+          const KeyEvent(KeyCode.char('a'), modifiers: {KeyModifier.ctrl}),
         );
         expect(captured?.plainText, 'selectable');
       },
@@ -973,7 +961,9 @@ void main() {
       );
       tester.render(size: const CellSize(5, 1));
 
-      tester.sendKey(const KeyEvent(char: 'a', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('a'), modifiers: {KeyModifier.ctrl}),
+      );
       expect(captured, isNull);
     });
 
@@ -1014,7 +1004,9 @@ void main() {
       );
       tester.render(size: const CellSize(10, 1));
 
-      tester.sendKey(const KeyEvent(char: 'a', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('a'), modifiers: {KeyModifier.ctrl}),
+      );
       // Whatever the sanitizer produces, the selection round-trips
       // through it cleanly (length 3, all characters captured).
       expect(captured, isNotNull);

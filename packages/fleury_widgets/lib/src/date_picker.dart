@@ -246,7 +246,7 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
     final value = _midnight(widget.value);
     final column = _backToWeekStart(value); // 0 = first column of the week
     final lastDay = DateTime(value.year, value.month + 1, 0).day;
-    switch (event.keyCode) {
+    switch (event.code) {
       case KeyCode.arrowLeft:
         return moveOrEscape(
           atEdge: column == 0 || value.day == 1,

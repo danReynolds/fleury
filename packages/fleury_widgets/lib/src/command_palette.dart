@@ -427,15 +427,15 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
     return KeyBindings(
       bindings: [
         KeyBinding(
-          KeyChord.key(KeyCode.arrowUp),
-          onEvent: (_) {
+          KeyCode.arrowUp,
+          onTrigger: () {
             _move(-1);
           },
           hideFromHintBar: true,
         ),
         KeyBinding(
-          KeyChord.key(KeyCode.arrowDown),
-          onEvent: (_) {
+          KeyCode.arrowDown,
+          onTrigger: () {
             _move(1);
           },
           hideFromHintBar: true,

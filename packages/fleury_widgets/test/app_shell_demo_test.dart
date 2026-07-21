@@ -17,7 +17,10 @@ List<SemanticNode> _paletteRows(FleuryTester tester) {
 
 void _sendCtrl(FleuryTester tester, String character) {
   tester.sendKey(
-    KeyEvent(char: character, modifiers: const <KeyModifier>{KeyModifier.ctrl}),
+    KeyEvent(
+      KeyCode.char(character),
+      modifiers: const <KeyModifier>{KeyModifier.ctrl},
+    ),
   );
 }
 
@@ -28,7 +31,7 @@ void _openPalette(FleuryTester tester) {
 }
 
 void _dismissPalette(FleuryTester tester) {
-  tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+  tester.sendKey(const KeyEvent(KeyCode.escape));
   tester.pump(_transitionDuration);
 }
 
@@ -88,7 +91,7 @@ void main() {
       output = tester.renderToString(size: _size);
       expect(output, contains('refreshes: 1'));
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.escape));
+      tester.sendKey(const KeyEvent(KeyCode.escape));
       tester.pump(_transitionDuration);
       output = tester.renderToString(size: _size);
       expect(output, contains('Fleury Launchpad'));

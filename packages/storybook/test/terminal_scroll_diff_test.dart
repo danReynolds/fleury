@@ -200,13 +200,13 @@ void main() {
     // way to the bottom and back — each rendered frame must stay in sync.
     for (var batch = 0; batch < 26; batch++) {
       for (var k = 0; k < 5; k++) {
-        tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+        tester.sendKey(const KeyEvent(KeyCode.arrowDown));
       }
       present('down batch $batch');
     }
     for (var batch = 0; batch < 26; batch++) {
       for (var k = 0; k < 5; k++) {
-        tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
+        tester.sendKey(const KeyEvent(KeyCode.arrowUp));
       }
       present('up batch $batch');
     }

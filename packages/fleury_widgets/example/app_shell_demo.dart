@@ -38,7 +38,7 @@ class AppShellDemo extends StatelessWidget {
           title: 'Open Command Palette',
           description: 'Search app-wide and active-screen commands',
           category: 'Application',
-          shortcuts: <KeyChord>[KeyChord.ctrl.k],
+          shortcuts: <KeySequence>[KeySequence.ctrl.k],
           showInPalette: false,
           semanticAction: SemanticAction.open,
           run: (command) {
@@ -81,7 +81,7 @@ class _DeploymentsScreen extends StatelessWidget {
           title: 'Open Production Deployment',
           description: 'Show the current production deployment',
           category: 'Navigation',
-          shortcuts: <KeyChord>[KeyChord.ctrl.o],
+          shortcuts: <KeySequence>[KeySequence.ctrl.o],
           semanticAction: SemanticAction.navigate,
           run: (command) {
             final source = command.buildContext;
@@ -141,7 +141,7 @@ class _DeploymentScreenState extends State<_DeploymentScreen> {
           title: 'Refresh Production Deployment',
           description: 'Fetch the latest production status',
           category: 'Deployment',
-          shortcuts: <KeyChord>[KeyChord.ctrl.r],
+          shortcuts: <KeySequence>[KeySequence.ctrl.r],
           run: (_) => _refresh(),
         ),
       ],

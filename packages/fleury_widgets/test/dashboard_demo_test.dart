@@ -47,7 +47,7 @@ void main() {
       tester.pumpFleuryHome(const DashboardApp());
       tester.render(size: const CellSize(80, 24));
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.tab));
+      tester.sendKey(const KeyEvent(KeyCode.tab));
 
       expect(tester.focusManager.focusedNode?.debugLabel, 'line chart');
     });

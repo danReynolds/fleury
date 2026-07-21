@@ -47,7 +47,7 @@ void main() {
     tester.pumpWidget(
       Menu(trigger: const Text('Edit'), autofocus: true, items: items((_) {})),
     );
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     final out = _screen(tester);
     expect(out.contains('Cut'), isTrue);
     expect(out.contains('Paste'), isTrue);
@@ -84,9 +84,9 @@ void main() {
         items: items((v) => ran = v),
       ),
     );
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // open
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // → Copy
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // run
+    tester.sendKey(const KeyEvent(KeyCode.enter)); // open
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // → Copy
+    tester.sendKey(const KeyEvent(KeyCode.enter)); // run
     expect(ran, 'copy');
     expect(_screen(tester).contains('Paste'), isFalse, reason: 'menu closed');
   });
@@ -100,7 +100,7 @@ void main() {
         items: items((v) => ran = v),
       ),
     );
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // open
+    tester.sendKey(const KeyEvent(KeyCode.enter)); // open
     // The menu opens anchored below the trigger inside a border; 'Copy' is the
     // second item, at row 3, with its label past the left border at col 3.
     tester.render(size: const CellSize(16, 8));
@@ -118,9 +118,9 @@ void main() {
         items: [MenuItem(label: 'Delete', onSelect: () => ran = true)],
       ),
     );
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // open
+    tester.sendKey(const KeyEvent(KeyCode.enter)); // open
     expect(_screen(tester).contains('Delete'), isTrue);
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.escape)); // close
+    tester.sendKey(const KeyEvent(KeyCode.escape)); // close
     expect(ran, isFalse);
     expect(_screen(tester).contains('Delete'), isFalse);
   });
@@ -129,11 +129,11 @@ void main() {
     tester.pumpWidget(
       Menu(trigger: const Text('Edit'), autofocus: true, items: items((_) {})),
     );
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // open
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.escape)); // close
+    tester.sendKey(const KeyEvent(KeyCode.enter)); // open
+    tester.sendKey(const KeyEvent(KeyCode.escape)); // close
     expect(_screen(tester).contains('Cut'), isFalse);
     // The trigger is focused again, so Enter reopens.
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.enter));
     expect(
       _screen(tester).contains('Cut'),
       isTrue,
@@ -155,11 +155,11 @@ void main() {
           ],
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // open
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // open
       expect(_screen(tester).contains('─'), isTrue, reason: 'rule drawn');
       // One Down should skip the separator and land on Paste.
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(ran, 'paste');
     });
 
@@ -180,9 +180,9 @@ void main() {
           ],
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // open
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // skip Copy
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // open
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // skip Copy
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(ran, 'paste', reason: 'Down hopped over the disabled Copy');
     });
 
@@ -198,8 +198,8 @@ void main() {
           ],
         ),
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // open
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // activate
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // open
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // activate
       expect(ran, 'on', reason: 'first selectable, not the disabled first row');
     });
   });
@@ -223,15 +223,13 @@ void main() {
 
     testWidgets('Right opens a submenu to the right', (tester) {
       tester.pumpWidget(fileMenu((_) {}));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // open root
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // open root
       final root = _screen(tester, cols: 30);
       expect(root.contains('Open'), isTrue);
       expect(root.contains('▸'), isTrue, reason: 'submenu cascade indicator');
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // → Open
-      tester.sendKey(
-        const KeyEvent(keyCode: KeyCode.arrowRight),
-      ); // open submenu
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // → Open
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight)); // open submenu
       final out = _screen(tester, cols: 30);
       expect(out.contains('Recent'), isTrue, reason: 'submenu items visible');
       expect(out.contains('Browse'), isTrue);
@@ -242,11 +240,11 @@ void main() {
     ) {
       String? ran;
       tester.pumpWidget(fileMenu((v) => ran = v));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // open root
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // → Open
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // open submenu
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // → Browse
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // run Browse
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // open root
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // → Open
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // open submenu
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // → Browse
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // run Browse
       expect(ran, 'browse');
       expect(
         _screen(tester, cols: 30).contains('Recent'),
@@ -258,14 +256,12 @@ void main() {
 
     testWidgets('Left steps back out of a submenu to the parent', (tester) {
       tester.pumpWidget(fileMenu((_) {}));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // open root
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // → Open
-      tester.sendKey(
-        const KeyEvent(keyCode: KeyCode.arrowRight),
-      ); // open submenu
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // open root
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // → Open
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight)); // open submenu
       expect(_screen(tester, cols: 30).contains('Recent'), isTrue);
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowLeft)); // back out
+      tester.sendKey(const KeyEvent(KeyCode.arrowLeft)); // back out
       final out = _screen(tester, cols: 30);
       expect(out.contains('Recent'), isFalse, reason: 'submenu closed');
       expect(out.contains('Open'), isTrue, reason: 'parent still open');
@@ -280,12 +276,10 @@ void main() {
       tester,
     ) {
       tester.pumpWidget(fileMenu((_) {}));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // open root
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown)); // → Open
-      tester.sendKey(
-        const KeyEvent(keyCode: KeyCode.arrowRight),
-      ); // open submenu
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.escape)); // close submenu
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // open root
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // → Open
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight)); // open submenu
+      tester.sendKey(const KeyEvent(KeyCode.escape)); // close submenu
       final out = _screen(tester, cols: 30);
       expect(out.contains('Recent'), isFalse);
       expect(out.contains('New'), isTrue, reason: 'parent menu still open');
@@ -467,7 +461,7 @@ void main() {
         ],
       ),
     );
-    tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // open
+    tester.sendKey(const KeyEvent(KeyCode.enter)); // open
     final out = _screen(tester, cols: 32);
     expect(out, isNot(contains('secret')));
     expect(out, contains(replacementCharacter));

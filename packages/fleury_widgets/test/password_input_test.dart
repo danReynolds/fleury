@@ -34,7 +34,7 @@ void main() {
         PasswordInput(autofocus: true, onSubmit: (t) => submitted = t),
       );
       tester.type('p@ss');
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(submitted, 'p@ss');
     });
 
@@ -117,11 +117,15 @@ void main() {
       expect(render().contains('hunter2'), isFalse);
       expect(render().contains('•••••••'), isTrue);
       // Reveal with Ctrl+R.
-      tester.sendKey(const KeyEvent(char: 'r', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('r'), modifiers: {KeyModifier.ctrl}),
+      );
       tester.pump();
       expect(render().contains('hunter2'), isTrue);
       // Re-mask with Ctrl+R.
-      tester.sendKey(const KeyEvent(char: 'r', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('r'), modifiers: {KeyModifier.ctrl}),
+      );
       tester.pump();
       expect(render().contains('hunter2'), isFalse);
     });
@@ -131,7 +135,9 @@ void main() {
     ) {
       final ctrl = TextEditingController(text: 'hunter2');
       tester.pumpWidget(PasswordInput(controller: ctrl, autofocus: true));
-      tester.sendKey(const KeyEvent(char: 'r', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('r'), modifiers: {KeyModifier.ctrl}),
+      );
       tester.pump();
       final field = tester.semantics().single(
         role: SemanticRole.textField,
@@ -153,7 +159,9 @@ void main() {
       tester.pumpWidget(
         PasswordInput(controller: ctrl, autofocus: true, canReveal: false),
       );
-      tester.sendKey(const KeyEvent(char: 'r', modifiers: {KeyModifier.ctrl}));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('r'), modifiers: {KeyModifier.ctrl}),
+      );
       tester.pump();
       final out = tester
           .renderToString(size: const CellSize(12, 1), emptyMark: ' ')

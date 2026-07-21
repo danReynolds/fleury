@@ -211,7 +211,7 @@ class _FilePickerState extends State<FilePicker> {
   }
 
   KeyEventResult _onKey(KeyEvent event) {
-    switch (event.keyCode) {
+    switch (event.code) {
       case KeyCode.arrowDown:
         if (_entries.isEmpty) return KeyEventResult.handled;
         setState(() => _cursor = (_cursor + 1) % _entries.length);

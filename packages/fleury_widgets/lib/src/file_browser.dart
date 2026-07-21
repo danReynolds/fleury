@@ -436,7 +436,7 @@ class _FileBrowserState extends State<FileBrowser> {
   }
 
   KeyEventResult _onNavigationKey(KeyEvent event) {
-    switch (event.keyCode) {
+    switch (event.code) {
       case KeyCode.arrowRight:
         _activateSelected();
         return KeyEventResult.handled;
@@ -500,9 +500,9 @@ class _FileBrowserState extends State<FileBrowser> {
       body = KeyBindings(
         bindings: [
           KeyBinding(
-            KeyChord.ctrl.c,
+            KeySequence.ctrl.c,
             label: 'Copy file path',
-            onEvent: (_) => unawaited(_copySelection()),
+            onTrigger: () => unawaited(_copySelection()),
           ),
         ],
         child: body,

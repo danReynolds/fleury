@@ -69,8 +69,8 @@ class FocusTraversalGroup extends StatelessWidget {
     // traversal group (or any ancestor) have a chance at it.
     return KeyBindings(
       bindings: [
-        KeyBinding(
-          KeyChord.left,
+        KeyBinding.event(
+          KeySequence.left,
           onEvent: (event) {
             if (_navigate(context, TraversalDirection.left) ==
                 KeyEventResult.ignored) {
@@ -79,8 +79,8 @@ class FocusTraversalGroup extends StatelessWidget {
           },
           hideFromHintBar: true,
         ),
-        KeyBinding(
-          KeyChord.right,
+        KeyBinding.event(
+          KeySequence.right,
           onEvent: (event) {
             if (_navigate(context, TraversalDirection.right) ==
                 KeyEventResult.ignored) {
@@ -89,8 +89,8 @@ class FocusTraversalGroup extends StatelessWidget {
           },
           hideFromHintBar: true,
         ),
-        KeyBinding(
-          KeyChord.up,
+        KeyBinding.event(
+          KeySequence.up,
           onEvent: (event) {
             if (_navigate(context, TraversalDirection.up) ==
                 KeyEventResult.ignored) {
@@ -99,8 +99,8 @@ class FocusTraversalGroup extends StatelessWidget {
           },
           hideFromHintBar: true,
         ),
-        KeyBinding(
-          KeyChord.down,
+        KeyBinding.event(
+          KeySequence.down,
           onEvent: (event) {
             if (_navigate(context, TraversalDirection.down) ==
                 KeyEventResult.ignored) {
@@ -109,15 +109,15 @@ class FocusTraversalGroup extends StatelessWidget {
           },
           hideFromHintBar: true,
         ),
-        KeyBinding(
-          KeyChord.tab,
+        KeyBinding.event(
+          KeySequence.tab,
           onEvent: (event) {
             if (!Focus.of(context).focusNext()) event.bubble();
           },
           hideFromHintBar: true,
         ),
-        KeyBinding(
-          KeyChord.shiftTab,
+        KeyBinding.event(
+          KeySequence.shiftTab,
           onEvent: (event) {
             if (!Focus.of(context).focusPrevious()) event.bubble();
           },

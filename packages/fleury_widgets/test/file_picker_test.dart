@@ -70,7 +70,7 @@ void main() {
       tester.render(size: const CellSize(40, 8));
       // End jumps to the last entry; the window must scroll it into view and
       // push the top entry off (a plain Column would have clipped it).
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.end));
+      tester.sendKey(const KeyEvent(KeyCode.end));
       final out = tester.renderToString(
         size: const CellSize(40, 8),
         emptyMark: ' ',
@@ -174,8 +174,8 @@ void main() {
       );
       // Directory 'sub' sorts first; arrow down twice lands on a.txt
       // (the first file after the sub dir).
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(picked, isNotNull);
       expect(picked!.path.endsWith('a.txt'), isTrue);
     });
@@ -186,7 +186,7 @@ void main() {
         FilePicker(initialDirectory: dir, autofocus: true, onSelect: (_) {}),
       );
       // Cursor starts at row 0 = the sub/ directory; Enter opens it.
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
       final out = tester.renderToString(size: const CellSize(80, 4));
       expect(
         out.contains('inside.dart'),
@@ -208,7 +208,7 @@ void main() {
       var out = tester.renderToString(size: const CellSize(80, 4));
       expect(out.contains('inside.dart'), isTrue);
 
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.backspace));
+      tester.sendKey(const KeyEvent(KeyCode.backspace));
       out = tester.renderToString(size: const CellSize(80, 6));
       expect(
         out.contains('sub/'),
@@ -224,8 +224,8 @@ void main() {
       );
       // We have 3 entries (sub/, a.txt, b.dart). Arrow Up at row 0 wraps
       // to the last; arrow Down then wraps back to the top.
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowUp));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
+      tester.sendKey(const KeyEvent(KeyCode.arrowUp));
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
       // The expected state is "back at row 0"; just verify no throw.
       tester.render(size: const CellSize(60, 6));
     });
@@ -241,7 +241,7 @@ void main() {
       // The cursor starts on sub/ (directories sort first). Delete it
       // out-of-band, then try to enter it: must not throw, must not move.
       Directory('$dir/sub').deleteSync(recursive: true);
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
 
       final out = tester.renderToString(
         size: const CellSize(70, 8),
@@ -253,14 +253,14 @@ void main() {
       expect(tree.state['error'], isNotNull);
 
       // A later successful navigation clears the error again.
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // a.txt: onSelect
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // a.txt: onSelect
       expect(
         tester.semantics().single(role: SemanticRole.tree).state['error'],
         isNotNull,
         reason: 'selecting a file does not relist',
       );
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.backspace)); // parent
+      tester.sendKey(const KeyEvent(KeyCode.backspace)); // parent
       expect(
         tester.semantics().single(role: SemanticRole.tree).state['error'],
         isNull,
@@ -289,7 +289,7 @@ void main() {
       tester.render(size: const CellSize(70, 9));
 
       // Directories sort first alphabetically: locked/ is the cursor row.
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
 
       final out = tester.renderToString(
         size: const CellSize(70, 9),
@@ -301,9 +301,9 @@ void main() {
       expect(tree.state['error'], isNotNull);
 
       // Pressing Enter again is still safe, and navigation elsewhere works.
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.arrowDown));
-      tester.sendKey(const KeyEvent(keyCode: KeyCode.enter)); // into sub/
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // into sub/
       expect(
         tester.renderToString(size: const CellSize(70, 9)),
         contains('inside.dart'),

@@ -222,7 +222,7 @@ class _ScrollViewState extends State<ScrollView> {
     final page = _controller.viewportExtent < 1
         ? 1
         : _controller.viewportExtent;
-    switch (event.keyCode) {
+    switch (event.code) {
       case KeyCode.arrowUp:
         if (_controller.atTop) return _edge();
         _controller.scrollBy(-1);
@@ -249,12 +249,12 @@ class _ScrollViewState extends State<ScrollView> {
         // Ctrl+D / Ctrl+U scroll a half page (the less / vim convention).
         if (event.hasCtrl && !event.hasAlt) {
           final half = page < 2 ? 1 : page ~/ 2;
-          if (event.char == 'd') {
+          if (event.code.character == 'd') {
             if (_controller.atBottom) return _edge();
             _controller.scrollBy(half);
             return KeyEventResult.handled;
           }
-          if (event.char == 'u') {
+          if (event.code.character == 'u') {
             if (_controller.atTop) return _edge();
             _controller.scrollBy(-half);
             return KeyEventResult.handled;
