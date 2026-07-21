@@ -308,7 +308,9 @@ export 'src/widgets/key_bindings.dart'
         KeyBindingHandler,
         KeyBindingTrigger,
         KeyBindings,
+        KeyCompletion,
         KeySequenceMatch,
+        PendingKeySequenceMatch,
         resolveActiveKeyBindings;
 export 'src/widgets/list_view.dart'
     show

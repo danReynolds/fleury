@@ -1182,6 +1182,7 @@ Future<AppExit> _runAppImpl(
             overlayEntries: [rootEntry],
             logBuffer: logBuffer,
             debugController: debugController,
+            pendingSequenceNotifier: dispatcher.pendingSequenceNotifier,
           );
           final activeSurfaceSink = surfaceSink;
           // The clipboard is a host service shared via ClipboardScope in

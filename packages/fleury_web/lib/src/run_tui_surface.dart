@@ -254,6 +254,7 @@ Future<MountedApp> runTuiSurface(
     overlayEntries: [rootEntry],
     logBuffer: null,
     debugController: null,
+    pendingSequenceNotifier: inputDispatcher.pendingSequenceNotifier,
   );
 
   if (semanticPresenter != null) {

@@ -53,12 +53,49 @@ class InputDispatcher {
     _globalBindings = value;
   }
 
-  _PendingSequence? _pending;
+  _PendingSequence? _pendingSequence;
   Timer? _timer;
   bool _disposed = false;
 
+  /// Reactive view of the current pending sequence, shared with the widget
+  /// tree by `runApp` (via `PendingSequenceScope`) so a which-key widget can
+  /// read it through `KeyBindings.pendingOf`. Updated whenever the pending
+  /// state changes.
+  final PendingSequenceNotifier pendingSequenceNotifier =
+      PendingSequenceNotifier();
+
+  // All pending-state transitions assign through this setter, so publishing
+  // the reactive snapshot happens in exactly one place. Dispatch runs outside
+  // the build phase, so notifying synchronously just marks which-key
+  // dependents dirty for the next frame — no re-entrancy, no coalescing.
+  _PendingSequence? get _pending => _pendingSequence;
+  set _pending(_PendingSequence? value) {
+    _pendingSequence = value;
+    pendingSequenceNotifier.set(value == null ? null : _snapshotFor(value));
+  }
+
   /// Whether a sequence is currently pending. Useful for tests.
   bool get hasPendingSequence => _pending != null;
+
+  /// Builds the public snapshot: the held prefix plus every live next step
+  /// (the completions a which-key popup lists).
+  PendingKeySequenceMatch _snapshotFor(_PendingSequence pending) {
+    final completions = <KeyCompletion>[];
+    for (final binding in pending.candidates) {
+      if (!binding.enabled) continue;
+      for (final sequence in binding.sequences) {
+        if (sequence.stepCount <= pending.events.length) continue;
+        if (!_prefixMatches(sequence, pending.events)) continue;
+        final label = sequence.stepLabelAt(pending.events.length);
+        if (label == null) continue;
+        completions.add(KeyCompletion(next: label, binding: binding));
+      }
+    }
+    return PendingKeySequenceMatch(
+      prefix: KeySequence.fromEvents(pending.events),
+      completions: completions,
+    );
+  }
 
   /// Routes [event] through the dispatch algorithm.
   ///
@@ -536,6 +573,7 @@ class InputDispatcher {
     if (_disposed) return;
     _disposed = true;
     _clearPending();
+    pendingSequenceNotifier.dispose();
   }
 
   void _checkNotDisposed() {

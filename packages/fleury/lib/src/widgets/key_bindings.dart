@@ -21,10 +21,12 @@
 
 import 'package:meta/meta.dart';
 
+import '../foundation/change_notifier.dart';
 import '../foundation/collections.dart';
 import '../input/events.dart';
 import 'focus.dart';
 import 'framework.dart';
+import 'inherited_notifier.dart';
 
 // The pattern vocabulary a binding is written in lives in events.dart
 // (co-located with KeyCode/KeyEvent). Re-export it so importing this binding
@@ -59,6 +61,73 @@ final class KeySequenceMatch {
   /// Every event consumed by the match, in order. Length equals
   /// [KeySequence.stepCount].
   final List<KeyEvent> events;
+}
+
+/// A snapshot of a sequence the user is partway through typing — the leader
+/// (`Space`, `Ctrl+X`) has landed and the dispatcher is holding for the next
+/// step. Read via [KeyBindings.pendingOf]; the value a which-key popup renders.
+///
+/// This is the *runtime* pending state (a match still being typed), distinct
+/// from [PendingKeySequence] (an *authoring* expression still being written).
+@immutable
+final class PendingKeySequenceMatch {
+  PendingKeySequenceMatch({
+    required this.prefix,
+    required List<KeyCompletion> completions,
+  }) : completions = List<KeyCompletion>.unmodifiable(completions);
+
+  /// The steps typed so far, as a complete [KeySequence] (e.g. `Space`,
+  /// `Ctrl+X`). `prefix.hintLabel` renders it; `prefix == KeySequence.space`
+  /// lets a popup pick a per-leader layout.
+  final KeySequence prefix;
+
+  /// The ways this pending match can complete — one per live next step.
+  final List<KeyCompletion> completions;
+}
+
+/// One way a [PendingKeySequenceMatch] can continue: the label of the next
+/// key ([next], e.g. `f`, `Ctrl+S`) and the [binding] it would fire.
+@immutable
+final class KeyCompletion {
+  const KeyCompletion({required this.next, required this.binding});
+
+  /// The remaining-step label — what to press next.
+  final String next;
+
+  /// The binding that completes on this step. Its [KeyBinding.displayLabel]
+  /// names the action; an unlabeled binding is typically hidden from the popup.
+  final KeyBinding binding;
+}
+
+/// Reactive holder for the dispatcher's current [PendingKeySequenceMatch].
+///
+/// One per `runApp`, owned by the `InputDispatcher` and shared with the widget
+/// tree by [PendingSequenceScope]. Framework-internal: apps read the value via
+/// [KeyBindings.pendingOf], never touch this directly.
+final class PendingSequenceNotifier with ChangeNotifier {
+  PendingKeySequenceMatch? _value;
+
+  /// The current pending match, or null when no sequence is in flight.
+  PendingKeySequenceMatch? get value => _value;
+
+  /// Framework-only: the dispatcher publishes each pending-state change here.
+  void set(PendingKeySequenceMatch? value) {
+    if (identical(_value, value)) return;
+    _value = value;
+    notifyListeners();
+  }
+}
+
+/// Shares the runtime [PendingSequenceNotifier] with the widget tree.
+/// Installed by `runApp`; depended on by [KeyBindings.pendingOf] so a
+/// which-key widget rebuilds as a sequence is pressed, advanced, or cleared.
+final class PendingSequenceScope
+    extends InheritedNotifier<PendingSequenceNotifier> {
+  const PendingSequenceScope({
+    super.key,
+    required super.notifier,
+    required super.child,
+  });
 }
 
 /// Passed to a [KeyBinding.event] handler. Exposes what matched ([match]),
@@ -330,6 +399,30 @@ class KeyBindings extends StatefulWidget {
 
   final List<KeyBinding> bindings;
   final Widget child;
+
+  /// The discoverable bindings active in [context]'s focus context — hint
+  /// bars, help overlays, and command palettes read this instead of walking
+  /// the focus tree. Rebuilds when focus moves or the active bindings change.
+  ///
+  /// `runApp`'s global bindings aren't in the tree, so pass them via
+  /// [globalBindings] (as `KeyHintBar` does) to have them included.
+  static List<ActiveKeyBinding> activeOf(
+    BuildContext context, {
+    List<KeyBinding> globalBindings = const <KeyBinding>[],
+  }) {
+    final manager = Focus.maybeOf(context);
+    if (manager == null) return const <ActiveKeyBinding>[];
+    return resolveActiveKeyBindings(manager, globalBindings: globalBindings);
+  }
+
+  /// The sequence the user is partway through typing, or null when none is in
+  /// flight. Rebuilds when a leader is pressed, advanced, completed, or
+  /// cancelled — a which-key popup depends on this. Null unless `runApp`
+  /// installed a [PendingSequenceScope] (it does by default).
+  static PendingKeySequenceMatch? pendingOf(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<PendingSequenceScope>()
+      ?.notifier
+      .value;
 
   @override
   State<KeyBindings> createState() => _KeyBindingsState();

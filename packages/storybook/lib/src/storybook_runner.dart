@@ -563,6 +563,11 @@ bool _looksLikeWidgetExport(String symbol) {
     'TreeTableNode',
     'TreeTableRow',
     'TreeTableSearchIndex',
+    // Unlike the data types above, WhichKey is a real widget — but it renders
+    // nothing on its own: the popup appears only while the live dispatcher is
+    // mid-sequence, which a static story snapshot can't reproduce. Covered by
+    // its own widget test instead.
+    'WhichKey',
     'WorkflowSnapshot',
     'WorkflowSummary',
   };

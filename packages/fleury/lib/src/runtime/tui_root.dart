@@ -20,6 +20,7 @@ import '../foundation/geometry.dart';
 import '../rendering/surface_capabilities.dart';
 import '../widgets/clipboard_scope.dart';
 import '../widgets/focus.dart';
+import '../widgets/key_bindings.dart';
 import '../widgets/framework.dart';
 import '../widgets/media_query.dart';
 import '../widgets/output_capture_view.dart';
@@ -52,6 +53,10 @@ Widget buildTuiRoot({
   // layers (`null` to omit), so it can't silently lack one the other host has.
   required LogBuffer? logBuffer,
   required DebugController? debugController,
+  // Shares the dispatcher's pending-sequence state so `KeyBindings.pendingOf`
+  // (a which-key widget) can read it. Null in hosts that route input without
+  // an `InputDispatcher`.
+  required PendingSequenceNotifier? pendingSequenceNotifier,
 }) {
   // The Overlay is the innermost shared layer; the app root and any floating
   // host entries live inside it. Entry repaint boundaries stay on
@@ -69,6 +74,11 @@ Widget buildTuiRoot({
   // floating console can read it.
   if (logBuffer != null) {
     tree = LogBufferScope(buffer: logBuffer, child: tree);
+  }
+  // The reactive pending-sequence view sits just below the focus scope so any
+  // app or console widget can reach it via KeyBindings.pendingOf.
+  if (pendingSequenceNotifier != null) {
+    tree = PendingSequenceScope(notifier: pendingSequenceNotifier, child: tree);
   }
   // Host services (clipboard) and the ambient frameworks (media, focus,
   // pointer) wrap everything, so the app and the debug console alike can
