@@ -1,9 +1,9 @@
 ---
 title: Fleury
-description: A retained-mode UI framework for the terminal — and the browser.
+description: A fast, retained-mode UI framework for the terminal — and the browser.
 template: splash
 hero:
-  tagline: A retained-mode UI framework for the terminal — and the browser. One widget tree, two surfaces, and a semantic graph agents can drive.
+  tagline: A fast, retained-mode UI framework for the terminal — and the browser. One widget tree, two surfaces, and a semantic graph agents can drive.
   actions:
     - text: Get started
       link: /fleury/getting-started/
@@ -102,8 +102,8 @@ mountApp(() => const Dashboard(), into: appHost);
 <CardGrid>
   <FeatureCard icon="puzzle" title="A real widget tree, for cells" href="/fleury/architecture/core-and-targets/" cta="How it fits together">
     Widgets, elements, render objects, and a semantics tree — incremental
-    rebuilds, layout, and paint over a grid of cells instead of pixels. With
-    stateful hot reload on save, out of the box.
+    rebuilds, layout, and paint over a grid of cells instead of pixels. An idle
+    app emits nothing.
   </FeatureCard>
   <FeatureCard icon="open-book" title="Built for agents" href="/fleury/guides/driving-with-agents/" cta="Drive it with an agent">
     AI agents and tests operate the real UI over the Model Context Protocol — by
@@ -114,9 +114,10 @@ mountApp(() => const Dashboard(), into: appHost);
     dart2js or previewed with <code>fleury serve</code>. A parity oracle keeps
     the two surfaces honest.
   </FeatureCard>
-  <FeatureCard icon="rocket" title="Fast, and measured" href="/fleury/architecture/performance/" cta="The numbers">
-    Dirty-subtree rebuilds and cell-level diffs — an idle app emits nothing.
-    Virtualized data widgets, and a benchmark suite with regression gates in CI.
+  <FeatureCard icon="rocket" title="A dev loop like Flutter's" href="/fleury/guides/hot-reload/" cta="Hot reload">
+    Stateful hot reload, rare in the terminal — save and your running app
+    updates in place, state intact. Plus a built-in debug shell and a headless
+    test harness.
   </FeatureCard>
 </CardGrid>
 
