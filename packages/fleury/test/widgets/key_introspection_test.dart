@@ -203,5 +203,26 @@ void main() {
       expect(controller.text, 'a');
       expect(bindingFired, isFalse);
     });
+
+    testWidgets('a shifted non-cased printable keeps Shift', (tester) {
+      // Shift on a cased letter folds into the character's case at build time,
+      // but Shift on a non-cased printable (a digit, Space) has no case to fold
+      // into and stays a modifier. `press` must deliver it as a KeyEvent that
+      // carries Shift — a bare TextInputEvent would drop the modifier and never
+      // match the binding.
+      var fired = false;
+      tester.pumpWidget(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeySequence.shift.char('1'), onTrigger: () => fired = true),
+          ],
+          child: const Focus(autofocus: true, child: Text('x')),
+        ),
+      );
+      tester.render();
+
+      tester.press(KeySequence.shift.char('1'));
+      expect(fired, isTrue);
+    });
   });
 }
