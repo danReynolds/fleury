@@ -141,6 +141,10 @@ class _DebugShellState extends State<DebugShell> {
 /// Logs-search query — arrive as text, not key codes, and are handled by the
 /// companion [tryConsumeDebugText].
 ///   Ctrl+G              toggle off ↔ last-used open mode
+///   F5                  hot restart (only while open, and only when the
+///                       runtime installed a handler — a dev supervisor
+///                       session). A key code on purpose: a printable would
+///                       steal a destructive action from app text input.
 ///   F11                 docked ↔ fullscreen (only while open)
 ///   Tab / Shift+Tab     next / previous panel tab (only while open)
 ///   Esc                 clear a Logs search, else fullscreen → docked
@@ -158,6 +162,17 @@ bool tryConsumeDebugKey(DebugController controller, KeyEvent event) {
   if (event.keyCode == KeyCode.f11) {
     if (controller.mode != DebugMode.off) {
       controller.toggleExpand();
+      return true;
+    }
+    return false;
+  }
+  // Hot restart: shell open + a handler installed (a dev supervisor
+  // session). Deliberately a key code, never a printable — restart drops
+  // state, and docked mode keeps the app (and its text inputs) live below
+  // the shell. Unavailable → fall through so the app can own F5.
+  if (event.keyCode == KeyCode.f5) {
+    if (controller.mode != DebugMode.off && controller.hotRestartAvailable) {
+      controller.requestHotRestart();
       return true;
     }
     return false;

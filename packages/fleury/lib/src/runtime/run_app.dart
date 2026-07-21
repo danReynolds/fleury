@@ -425,6 +425,9 @@ Future<AppExit> _runAppImpl(
     }
   }
 
+  // Captured before the frame-loop scope shadows `driver` with the
+  // FrameDriver local — the hot-restart gate below needs the injection fact.
+  final driverInjected = driver != null;
   final usedDriver =
       driver ??
       await _resolveDefaultDriver(
@@ -788,6 +791,10 @@ Future<AppExit> _runAppImpl(
     captureSync(
       'debug semantic provider',
       () => debugController.setSemanticTreeProvider(null),
+    );
+    captureSync(
+      'debug hot-restart handler',
+      () => debugController.setHotRestartHandler(null),
     );
     captureSync(
       'debug terminal provider',
@@ -1292,14 +1299,36 @@ Future<AppExit> _runAppImpl(
                   LogSource.stderr,
                 );
               } else {
+                // Teach the recovery at the moment of need: a rejected edit
+                // is exactly when hot restart applies. Only when the taught
+                // keys can actually work: a supervisor session AND the debug
+                // shell enabled (Ctrl+G is dead when the shell is off).
+                final restartHint =
+                    DevBootstrap.isSupervisedChild &&
+                        debugController.config.enabled
+                    ? ' — hot restart applies it: Ctrl+G, then F5 (drops '
+                          'state)'
+                    : '';
                 errorReporter.report(
                   StateError(
                     'hot reload failed: '
-                    '${report.message ?? 'rejected by the VM'}',
+                    '${report.message ?? 'rejected by the VM'}$restartHint',
                   ),
                   StackTrace.current,
                 );
               }
+            }
+
+            // Surface the shell's F5 hot-restart action when a supervisor is
+            // listening (plain `dart run` sessions). Gated like the hint —
+            // and on a real (non-injected) driver, so runApp-driven tests
+            // never grow the affordance from an inherited environment.
+            if (!driverInjected &&
+                DevBootstrap.isSupervisedChild &&
+                debugController.config.enabled) {
+              debugController.setHotRestartHandler(
+                DevBootstrap.requestRestartFromApp,
+              );
             }
 
             hotReload = await HotReloadController.attach(

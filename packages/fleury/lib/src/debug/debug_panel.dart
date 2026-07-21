@@ -1134,9 +1134,10 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final restart = controller.hotRestartAvailable ? ' · F5 restart' : '';
     final hint = controller.mode == DebugMode.fullscreen
-        ? '←→ tabs · Esc dock · Ctrl+G close'
-        : '←→ tabs · F11 expand · Ctrl+G close';
+        ? '←→ tabs · Esc dock$restart · Ctrl+G close'
+        : '←→ tabs · F11 expand$restart · Ctrl+G close';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

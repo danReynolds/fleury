@@ -26,6 +26,13 @@ void Function(HotReloadReport report)? _activeOnReloadReport;
 void Function()? _activeOnShutdownRequested;
 bool _extensionRegistered = false;
 
+/// The `postEvent` kind that asks a listening dev supervisor for a hot
+/// restart. Posted by `ext.fleury.restart` and by the debug shell's F5
+/// action; matched by the supervisor's Extension-stream listener. One
+/// constant — the match is a silent string compare, so a drifted literal
+/// would turn the affordance into a no-op with no error anywhere.
+const String kRestartRequestedEvent = 'fleury.restartRequested';
+
 /// Outcome of one dev-tooling `reloadSources`, as delivered to the app via
 /// the `ext.fleury.reloadReport` extension.
 final class HotReloadReport {
@@ -158,7 +165,7 @@ class HotReloadController {
         // Invoked on the app; relayed as an event so the dev bootstrap (a
         // service client) can orchestrate the teardown + respawn. A no-op
         // without a bootstrap session.
-        developer.postEvent('fleury.restartRequested', const {});
+        developer.postEvent(kRestartRequestedEvent, const {});
         return developer.ServiceExtensionResponse.result(
           jsonEncode({'ok': true}),
         );

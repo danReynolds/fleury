@@ -110,6 +110,23 @@ void main() {
       expect(roots, isNotNull);
       expect(roots!.directories, contains(Directory('${temp.path}/app/lib').path));
     });
+
+    test('resolve walks up to the nearest ancestor package_config '
+        '(dart run from a subdirectory)', () {
+      dir('app/lib');
+      dir('app/tool/scripts');
+      dir('app/.dart_tool');
+      File('${temp.path}/app/.dart_tool/package_config.json').writeAsStringSync(
+        '{"configVersion":2,"packages":[{"name":"app","rootUri":"../"}]}',
+      );
+
+      final roots = DevSourceRoots.resolve(
+        projectRoot: '${temp.path}/app/tool/scripts',
+        pubCachePath: '${temp.path}/cache',
+      );
+      expect(roots, isNotNull);
+      expect(roots!.directories, contains(Directory('${temp.path}/app/lib').path));
+    });
   });
 
   group('SourceWatcher', () {

@@ -132,10 +132,14 @@ language's ergonomics (const constructors, named parameters, mixins, sound null
 safety) co-evolved with exactly this kind of declarative tree. Fleury isn't
 bending Dart to fit; it's using it for what it was shaped to do.
 
-**Hot reload, in a terminal.** Edit a widget and watch your running TUI update
-without losing its state — the same stateful hot reload Flutter developers lean
-on, straight from the Dart VM. Most terminal stacks restart the process and lose
-your place.
+**Hot reload, in a terminal.** Save a file and your running TUI updates in
+place — widget state, focus, and scroll intact — with a plain `dart run`, in
+any editor. This is the Dart VM's stateful code-swapping, the loop Flutter
+developers lean on, [built into `runApp`](/fleury/guides/hot-reload/). Peer
+stacks iterate by restarting: Textual live-applies CSS edits but restarts for
+code changes, and the Go and Rust stacks pair with an external watcher that
+reruns the process — either way, your app's state and your place in it are
+lost on every edit.
 
 None of this makes Dart the *leanest* option at the floor — Rust boots quicker
 and idles smaller, and [the benchmarks](/fleury/architecture/performance/) say so

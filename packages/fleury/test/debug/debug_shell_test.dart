@@ -1156,6 +1156,44 @@ void main() {
       expect(tryConsumeDebugKey(c, _ctrl('p')), isFalse);
     });
 
+    test('F5 requests a hot restart only when a handler is installed', () {
+      final c = DebugController(const DebugConfig());
+      var restarts = 0;
+
+      // Shell closed: F5 always belongs to the app.
+      c.setHotRestartHandler(() => restarts++);
+      expect(tryConsumeDebugKey(c, _key(KeyCode.f5)), isFalse);
+
+      c.toggleOnOff(); // → docked
+      expect(c.hotRestartAvailable, isTrue);
+      expect(tryConsumeDebugKey(c, _key(KeyCode.f5)), isTrue);
+      expect(restarts, 1);
+
+      // No handler (classic/editor sessions): F5 falls through to the app
+      // even with the shell open — restart isn't available there.
+      c.setHotRestartHandler(null);
+      expect(c.hotRestartAvailable, isFalse);
+      expect(tryConsumeDebugKey(c, _key(KeyCode.f5)), isFalse);
+      expect(restarts, 1);
+
+      // A key code on purpose: restart must never be a printable that app
+      // text input could feed (a docked shell keeps the app interactive).
+      // 'r' typed as text is NOT a restart — and an open Logs search keeps
+      // capturing text while F5 still restarts.
+      c.setHotRestartHandler(() => restarts++);
+      c.selectTab(DebugTab.logs);
+      c.startLogSearch();
+      expect(tryConsumeDebugText(c, _text('r')), isTrue);
+      expect(c.logQuery, 'r', reason: 'text goes to the search, not restart');
+      expect(restarts, 1);
+      expect(tryConsumeDebugKey(c, _key(KeyCode.f5)), isTrue);
+      expect(restarts, 2, reason: 'F5 works even while a search captures');
+
+      // Disposal severs the handler like the sibling providers.
+      c.dispose();
+      expect(c.hotRestartAvailable, isFalse);
+    });
+
     test('tree cursor keys are scoped to an open Tree tab', () {
       final c = DebugController(
         const DebugConfig(startMode: DebugMode.fullscreen),

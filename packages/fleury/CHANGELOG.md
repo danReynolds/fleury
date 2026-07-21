@@ -12,8 +12,12 @@
   re-runs `main()` fresh in the same terminal session (for the edits reload
   can't apply). `ext.fleury.shutdown` and `ext.fleury.reloadReport` complete
   the dev-tooling service-extension surface.
-- Apps spawned under `fleury serve --spawn` self-reload on save (the browser
-  preview updates live); restart is intentionally disabled there.
+- Apps spawned under `fleury serve --spawn` self-reload on save when the
+  spawn command itself enables the VM service (e.g. `dart
+  --enable-vm-service=0 run bin/main.dart`) — the browser preview updates
+  live; restart is intentionally disabled there. Hot restart is also
+  available from the debug shell: `Ctrl+G`, then `F5` (dev-supervisor
+  sessions).
 
 ## 0.1.0
 

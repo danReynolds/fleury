@@ -34,6 +34,7 @@ drives the app.
 | `F12` | Jump straight to the **Logs** tab (opens the shell if closed; pressed again on Logs, closes it) |
 | `Tab` / `Shift+Tab` | Next / previous tab (while open) |
 | `p` | Toggle **paint flash** — repainted regions flash so you can *see* what each frame touched (while open) |
+| `F5` | **[Hot restart](/fleury/guides/hot-reload/#hot-restart)** — drop state and re-run `main()` fresh, same terminal (while open; plain `dart run` sessions only, where the dev supervisor is listening — in an editor debug session use the editor's own restart) |
 | `/` · `s` | In the **Logs** tab: open search (type to filter, `Enter` keeps it) · cycle the source filter (all / stdout / stderr) |
 | `Esc` | Clear a Logs search, else fullscreen → back to docked |
 

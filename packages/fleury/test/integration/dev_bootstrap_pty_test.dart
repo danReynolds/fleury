@@ -6,15 +6,17 @@ library;
 // End-to-end proof of the dev bootstrap under a real PTY:
 //
 //   1. A generated throwaway app runs via plain `dart bin/main.dart` — no
-//      flags, no editor. The bootstrap must self-enable the VM service and
-//      spawn the app as the `fleury-dev-app` child isolate.
+//      flags, no editor. The first process becomes the supervisor and
+//      re-spawns the entrypoint as a child process with a flag-origin VM
+//      service (inheritStdio: the child owns the PTY).
 //   2. Editing lib/marker.dart hot RELOADS on save: the frame shows the new
 //      `live:` text while `boot:` (captured in initState) keeps the old one —
 //      code swapped, state preserved.
-//   3. `ext.fleury.restart` hot RESTARTS: a fresh child isolate re-runs
-//      main(), so `boot:` now shows the new text — state dropped on purpose.
-//   4. `ext.fleury.shutdown` ends the session; the process exits 0 with the
-//      terminal restored, even though the app's main() ends in exit().
+//   3. `ext.fleury.restart` hot RESTARTS: the supervisor tears the child down
+//      gracefully and respawns it, so `boot:` shows the new text — state
+//      dropped on purpose, same terminal session.
+//   4. `ext.fleury.shutdown` ends the session; the supervisor mirrors the
+//      child's exit code (0) with the terminal restored.
 import 'dart:convert';
 import 'dart:io';
 

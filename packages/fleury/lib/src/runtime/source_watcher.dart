@@ -27,31 +27,39 @@ class DevSourceRoots {
   /// Absolute directory paths to watch recursively.
   final List<String> directories;
 
-  /// Resolves watch roots for the package rooted at [projectRoot] (defaults
-  /// to the current working directory).
+  /// Resolves watch roots for the package containing [projectRoot] (defaults
+  /// to the current working directory): the nearest directory — itself or an
+  /// ancestor — holding `.dart_tool/package_config.json`, matching how
+  /// `dart run` locates the config when launched from a subdirectory.
   ///
-  /// Returns null when no `.dart_tool/package_config.json` exists — the app
-  /// is not running from a pub workspace (e.g. a compiled snapshot in a bare
-  /// directory) and there is nothing meaningful to watch.
+  /// Returns null when no ancestor has one — the app is not running from a
+  /// pub workspace (e.g. a compiled snapshot in a bare directory) and there
+  /// is nothing meaningful to watch.
   static DevSourceRoots? resolve({String? projectRoot, String? pubCachePath}) {
-    final root = Directory(projectRoot ?? Directory.current.path).absolute;
-    final configFile = File(
-      '${root.path}${Platform.pathSeparator}.dart_tool'
-      '${Platform.pathSeparator}package_config.json',
-    );
-    if (!configFile.existsSync()) return null;
-    final Object? decoded;
-    try {
-      decoded = jsonDecode(configFile.readAsStringSync());
-    } on FormatException {
-      return null;
+    var dir = Directory(projectRoot ?? Directory.current.path).absolute;
+    while (true) {
+      final configFile = File(
+        '${dir.path}${Platform.pathSeparator}.dart_tool'
+        '${Platform.pathSeparator}package_config.json',
+      );
+      if (configFile.existsSync()) {
+        final Object? decoded;
+        try {
+          decoded = jsonDecode(configFile.readAsStringSync());
+        } on FormatException {
+          return null;
+        }
+        if (decoded is! Map<String, Object?>) return null;
+        return resolveFromConfig(
+          decoded,
+          configDirectory: configFile.parent.uri,
+          pubCachePath: pubCachePath ?? defaultPubCachePath(),
+        );
+      }
+      final parent = dir.parent;
+      if (parent.path == dir.path) return null; // Hit the filesystem root.
+      dir = parent;
     }
-    if (decoded is! Map<String, Object?>) return null;
-    return resolveFromConfig(
-      decoded,
-      configDirectory: configFile.parent.uri,
-      pubCachePath: pubCachePath ?? defaultPubCachePath(),
-    );
   }
 
   /// Pure resolution from a decoded package_config — separated for tests.
