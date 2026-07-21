@@ -66,36 +66,10 @@ BarChart(
 <FleuryExample slot="demo-2" id="barchart.basic" cols={52} rows={12} surfaceTheme="site" />
 </HomeSplit>
 
-None of these are screenshots — each is a real Fleury widget tree, compiled to
-JavaScript with `dart2js` and running live in your browser: the clock ticks, the
-bars stream, and the table responds to your clicks. Tab through them in the title
-bar, or watch them cycle. The same reusable widget trees also run behind a
-native terminal entrypoint.
-
-That same widget tree is also *agent-first*: meaningful content and interactive
-widgets contribute roles, values, state, and supported actions, while
-layout-only structure can be folded away. An AI agent can therefore **drive**
-your app instead of screen-scraping it. Point any [Model Context
-Protocol](https://modelcontextprotocol.io) host — Claude included — at a Fleury
-app and it reads the UI by meaning and operates it through those actions. No
-ANSI parsing or guessed keystrokes, and no agent-specific app integration: it is
-the same semantic model your tests and accessibility use.
-
-```sh
-fleury_mcp -- dart run bin/run_app.dart
-```
-
-[Drive it with an agent (MCP) →](/fleury/guides/driving-with-agents/)
-
-And dropping it into *your* page is the fun part: hand Fleury a host element and a
-widget tree, and a `dart2js` bundle does the rest — no iframe, no backend, no
-screenshot. Every live demo on this site is one line like this:
-
-```dart
-mountApp(() => const Dashboard(), into: appHost);
-```
-
-[Embed Fleury in any page →](/fleury/architecture/serving-and-embedding/)
+None of these are screenshots — each is a real Fleury widget tree compiled to
+JavaScript with `dart2js`, running live in your browser: the clock ticks, the
+bars stream, the table takes your clicks. The same trees also run native in a
+terminal. [How that works →](/fleury/architecture/serving-and-embedding/)
 
 ## Why Fleury
 
