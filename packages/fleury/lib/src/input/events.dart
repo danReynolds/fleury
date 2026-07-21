@@ -796,11 +796,17 @@ final class _KeyStep {
   }
 
   /// The single event a terminal would emit for this step: a bare printable
-  /// as [TextInputEvent] (shift is in the character's case), otherwise a
-  /// [KeyEvent] carrying the code and modifiers.
+  /// as [TextInputEvent], otherwise a [KeyEvent] carrying the code and
+  /// modifiers. Shift on a cased letter was folded into the character's case
+  /// by [build] (so `Shift+G` is the bare printable `G`); a Shift that
+  /// survived — a non-cased printable like `Shift+1` or `Shift+Space` — keeps
+  /// the modifier and so takes the [KeyEvent] branch, matching what enhanced
+  /// terminal reporting delivers (a bare `TextInputEvent` would drop it and
+  /// fail to match a shifted binding).
   TuiEvent asInputEvent() {
     final character = code.character;
-    final bare = character != null && !ctrl && !alt && !superKey && !meta;
+    final bare =
+        character != null && !ctrl && !alt && !shift && !superKey && !meta;
     if (bare) return TextInputEvent(character);
     return KeyEvent(
       code,
