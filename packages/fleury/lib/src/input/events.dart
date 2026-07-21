@@ -857,33 +857,41 @@ String _specialLabel(SpecialKey key) => switch (key) {
   SpecialKey.f12 => 'F12',
 };
 
-/// Parses one step token (`ctrl+x`, `Shift+G`, `esc`, `?`) into a [_KeyStep],
-/// or null if malformed. Modifier and key names are case-insensitive.
+/// Parses one step token (`ctrl+x`, `Shift+G`, `esc`, `?`, `ctrl++`) into a
+/// [_KeyStep], or null if malformed. Modifier and key names are
+/// case-insensitive.
+///
+/// Modifiers are stripped as `name+` prefixes rather than by splitting on
+/// `+`, so the `+` key itself parses as an atom (`ctrl++` → Ctrl and the `+`
+/// key), keeping `parse(x.hintLabel) == x` for `+`-bearing sequences.
 _KeyStep? _parseStep(String token) {
   if (token.isEmpty) return null;
-  final parts = token.split('+');
-  // A lone '+' atom (e.g. the '+' key) survives the split as empty parts;
-  // treat a token that is exactly '+' as the character atom.
-  if (token == '+') return _KeyStep.build(const KeyCode.char('+'));
 
+  var rest = token;
   var ctrl = false, alt = false, shift = false, superKey = false, meta = false;
-  for (var index = 0; index < parts.length - 1; index++) {
-    switch (parts[index].toLowerCase()) {
-      case 'ctrl' || 'control':
+  while (true) {
+    final plus = rest.indexOf('+');
+    // No separator, or a leading `+` (the atom is `+` itself) → done.
+    if (plus <= 0) break;
+    final modifier = _modifierByName(rest.substring(0, plus).toLowerCase());
+    if (modifier == null) break; // not a modifier — the rest is the atom
+    switch (modifier) {
+      case KeyModifier.ctrl:
         ctrl = true;
-      case 'alt' || 'opt' || 'option':
+      case KeyModifier.alt:
         alt = true;
-      case 'shift':
+      case KeyModifier.shift:
         shift = true;
-      case 'super' || 'cmd' || 'command' || 'win':
+      case KeyModifier.superKey:
         superKey = true;
-      case 'meta':
+      case KeyModifier.meta:
         meta = true;
-      default:
-        return null;
     }
+    rest = rest.substring(plus + 1);
+    if (rest.isEmpty) return null; // trailing modifier with no key (`ctrl+`)
   }
-  var atom = _parseAtom(parts.last);
+
+  var atom = _parseAtom(rest);
   if (atom == null) return null;
 
   // Reverse the display convention: [label] renders a modified letter in
@@ -907,6 +915,16 @@ _KeyStep? _parseStep(String token) {
     meta: meta,
   );
 }
+
+/// Maps a modifier name (with aliases) to its [KeyModifier], or null.
+KeyModifier? _modifierByName(String name) => switch (name) {
+  'ctrl' || 'control' => KeyModifier.ctrl,
+  'alt' || 'opt' || 'option' => KeyModifier.alt,
+  'shift' => KeyModifier.shift,
+  'super' || 'cmd' || 'command' || 'win' => KeyModifier.superKey,
+  'meta' => KeyModifier.meta,
+  _ => null,
+};
 
 /// Parses one key atom into a [KeyCode]: a special-key name/glyph, or a
 /// single-character literal. Case-insensitive for named keys.

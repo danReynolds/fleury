@@ -278,6 +278,11 @@ void main() {
       KeySequence.ctrl.x.ctrl.s,
       KeySequence.space.f,
       KeySequence.alt.char('1'),
+      // The '+' key: bare and modified (Ctrl+Plus zoom). '+' doubles as the
+      // modifier separator, so this pins that the grammar stays unambiguous.
+      KeyCode.char('+'),
+      KeySequence.ctrl.char('+'),
+      KeySequence.shift.char('='),
     ];
 
     test('parse(x.hintLabel) == x for every sample', () {
