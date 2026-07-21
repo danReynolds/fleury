@@ -118,6 +118,24 @@ class DebugController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Set by the native runtime when this session can hot restart (a dev
+  /// supervisor is listening — plain `dart run`). Non-null makes the shell
+  /// show and accept the `r` action; the debug layer itself stays free of
+  /// `dart:io`/`dart:developer` by delegating the actual signal here.
+  void setHotRestartHandler(void Function()? handler) {
+    _checkNotDisposed();
+    _hotRestartHandler = handler;
+    notifyListeners();
+  }
+
+  void Function()? _hotRestartHandler;
+
+  /// Whether a hot-restart handler is installed for this session.
+  bool get hotRestartAvailable => _hotRestartHandler != null;
+
+  /// Asks the dev supervisor to hot restart; a no-op when unavailable.
+  void requestHotRestart() => _hotRestartHandler?.call();
+
   SemanticTree? semanticSnapshot() => _semanticTreeProvider?.call();
 
   /// Supplies the current terminal profile/capability diagnosis to the
@@ -280,6 +298,7 @@ class DebugController extends ChangeNotifier {
     _disposed = true;
     _semanticTreeProvider = null;
     _terminalDiagnosisProvider = null;
+    _hotRestartHandler = null;
     super.dispose();
   }
 }

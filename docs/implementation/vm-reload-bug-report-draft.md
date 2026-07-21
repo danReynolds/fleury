@@ -29,8 +29,9 @@ Bad state: No element
 
 …and the `reloadSources` RPC then **never completes** — no error response, no
 timeout. The target isolate group is left seized (service requests against its
-isolates, e.g. `getIsolate`, also hang; in the self-reload shape the
-requesting isolate itself freezes, so the process is fully wedged).
+isolates, e.g. `getIsolate`, also hang; in most observed orderings the
+requesting isolate itself is seized too — in others it stays live but the
+response simply never arrives).
 
 Two defects, arguably:
 
@@ -48,50 +49,90 @@ source change (the incremental-compile path).
 
 ## Reproduction
 
-Two files plus a `pubspec.yaml` depending on `vm_service` (any recent
-version; used only as a convenience client).
-
-`lib/marker.dart`:
+**Zero dependencies, two files, 100% reproducible** (8/8 runs across
+variants on this machine). `marker.dart`:
 
 ```dart
-String greeting() => 'ALPHA';
+String greeting() => 'ORIGINAL';
 ```
 
-`bin/repro.dart`:
+`repro.dart` (raw-WebSocket VM-service client; handles the DDS handoff
+event so the identical program is its own control under flags):
 
 ```dart
+// Repro: `reloadSources` never completes (VM kernel-service crash) when the
+// VM service was enabled at runtime via Service.controlWebServer and a
+// loaded source file changed on disk.
+//
+//   dart repro.dart                      -> kernel-service crash on stderr;
+//                                           the reload RPC never answers and
+//                                           the process hangs (kill it)
+//   dart --enable-vm-service repro.dart  -> ReloadReport success:true;
+//                                           greeting() becomes CHANGED
+//
+// Zero dependencies (raw WebSocket JSON-RPC). Handles the DDS handoff event
+// so the same client works in both modes.
 import 'dart:async';
+import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:isolate';
 
-import 'package:reload_repro/marker.dart' as m;
-import 'package:vm_service/vm_service.dart' hide Isolate;
-import 'package:vm_service/vm_service_io.dart';
+import 'marker.dart' as m;
+
+final _response = Completer<Map<String, Object?>>();
+
+Future<void> _connectAndSend(Uri httpUri) async {
+  final ws = await WebSocket.connect(
+    httpUri
+        .replace(
+          scheme: 'ws',
+          path: httpUri.path.endsWith('/')
+              ? '${httpUri.path}ws'
+              : '${httpUri.path}/ws',
+        )
+        .toString(),
+  );
+  ws.listen((data) {
+    final msg = jsonDecode(data as String) as Map<String, Object?>;
+    // Under --enable-vm-service, DDS attaches and closes this direct
+    // connection; follow it to the new URI and retry there.
+    final event = ((msg['params'] as Map?)?['event'] as Map?);
+    if (event?['kind'] == 'DartDevelopmentServiceConnected') {
+      unawaited(_connectAndSend(Uri.parse(event!['uri'] as String)));
+      return;
+    }
+    if (msg['id'] == '1' && !_response.isCompleted) _response.complete(msg);
+  });
+  ws.add(
+    jsonEncode({
+      'jsonrpc': '2.0',
+      'id': '1',
+      'method': 'reloadSources',
+      'params': {'isolateId': developer.Service.getIsolateId(Isolate.current)},
+    }),
+  );
+}
 
 Future<void> main() async {
-  File('lib/marker.dart').writeAsStringSync("String greeting() => 'ALPHA';\n");
-  final uri = (await developer.Service.controlWebServer(
+  var uri = (await developer.Service.getInfo()).serverUri;
+  uri ??= (await developer.Service.controlWebServer(
     enable: true,
     silenceOutput: true,
-  )).serverUri!;
-  final ws = uri.replace(
-      scheme: 'ws',
-      path: uri.path.endsWith('/') ? '${uri.path}ws' : '${uri.path}/ws');
-  final vm = await vmServiceConnectUri(ws.toString());
-  final selfId = developer.Service.getIsolateId(Isolate.current)!;
+  )).serverUri;
+
   print('before: ${m.greeting()}');
-  // The trigger: an actual on-disk change before the reload.
-  File('lib/marker.dart').writeAsStringSync("String greeting() => 'BETA';\n");
-  final sw = Stopwatch()..start();
-  try {
-    final r =
-        await vm.reloadSources(selfId).timeout(const Duration(seconds: 20));
-    print('reload success=${r.success} in ${sw.elapsedMilliseconds}ms; '
-        'after: ${m.greeting()}');
-  } on TimeoutException {
-    print('HANG (>20s)'); // Never prints: the requester itself is seized.
-  }
+  // The trigger: a real on-disk change to a loaded source before the reload.
+  File('${File.fromUri(Platform.script).parent.path}/marker.dart')
+      .writeAsStringSync("String greeting() => 'CHANGED';\n");
+  await _connectAndSend(uri!);
+
+  // In the failing mode this await never completes and the process must be
+  // killed: the kernel-service crash (stderr) leaves the reload operation
+  // wedged, and the requesting isolate is seized with it.
+  final result = await _response.future;
+  print('reload response: $result');
+  print('after: ${m.greeting()}');
   exit(0);
 }
 ```
@@ -99,15 +140,20 @@ Future<void> main() async {
 Run:
 
 ```sh
-dart bin/repro.dart              # kernel-service crash on stderr; process wedges
-dart --enable-vm-service=0 bin/repro.dart
-                                 # control: "reload success=true in 46ms; after: BETA"
+dart repro.dart
+# kernel-service crash on stderr; reloadSources never answers; process
+# hangs until killed; greeting() still ORIGINAL
+
+dart --enable-vm-service repro.dart
+# control: "reload response: {…ReloadReport, success: true…}", greeting()
+# becomes CHANGED (~50ms)
 ```
 
-Observed (crash case): the kernel-service stack above on stderr, then the
-process hangs until killed. Note even the in-process 20-second `timeout` never
-fires — the reload operation seizes the requester's own group. (An external
-timeout: `timeout 40 dart bin/repro.dart` exits 124.)
+Notes on the hang shape: the RPC never receives a response in any observed
+variant. In most orderings the requesting isolate is seized outright (even
+its own timers cannot fire); in some, the isolate stays live but the
+response simply never arrives. An external client (separate process) shows
+the same non-response, so it is not a self-connection artifact.
 
 ## Variants tested (all Dart 3.12.2 stable, macOS arm64)
 

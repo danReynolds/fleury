@@ -31,15 +31,18 @@ reloads on save. Edit in vim, Zed, IntelliJ, anything — saving is the trigger.
   in Xms" in the **Logs** tab, compile errors in the **Errors** tab. The
   frames themselves are never disturbed.
 - **Hot restart** — drop state and re-run `main()` fresh, same terminal
-  session — is one service-extension call away: any VM-service client (an
-  editor, `fleury_mcp`, a script) can invoke `ext.fleury.restart`. Reload
-  keeps state; restart is for the changes reload can't apply (see below).
+  session — is in the debug shell: `Ctrl+G`, then `F5` (shown in the shell
+  header whenever it's available). Any VM-service client (an editor,
+  `fleury_mcp`, a script) can also invoke `ext.fleury.restart`. Reload keeps
+  state; restart is for the changes reload can't apply (see below).
 - Opt out with `FLEURY_HOT_RELOAD=0`, or `runApp(enableHotReload: false)`.
 - The supervisor steps aside automatically whenever something else owns the
   run: an editor debug session (a live VM service), a `fleury serve` handle,
   an AOT build, Windows, a non-TTY, or an injected test driver. Under a
-  `fleury serve --spawn` session the app still self-reloads on save — the
-  browser preview updates live — but never restarts (the serve socket accepts
+  `fleury serve --spawn` session, save-to-reload stays available when the
+  spawn command itself enables the VM service (e.g. `fleury serve --spawn
+  'dart --enable-vm-service=0 run bin/main.dart'`) — the browser preview then
+  updates live — but there is never a restart there (the serve socket accepts
   exactly one connection).
 - One caveat: a dev restart re-runs `main()` without the original CLI
   arguments (a process cannot recover its own argv for a sibling spawn). An
@@ -133,8 +136,8 @@ process or sends a signal is not stateful hot reload.
 - Edits that change a constructor signature, generic parameter, or
   add a non-`const` top-level initializer — the VM rejects these as
   `isolate reload failed` (the message lands in the debug shell's Errors
-  tab). **Hot restart** instead: invoke `ext.fleury.restart` (or stop and
-  relaunch); it drops state but picks up the unsupported change, in the same
+  tab). **Hot restart** instead: `Ctrl+G`, then `F5` — or invoke
+  `ext.fleury.restart` (or stop and relaunch); it drops state but picks up the unsupported change, in the same
   terminal session.
 
 ## Cache invalidation in your widgets
