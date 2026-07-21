@@ -1,22 +1,28 @@
 # DRAFT — dart-lang/sdk bug report (for review before filing)
 
-> Status: draft. Verified on Dart 3.12.2 (stable) macOS arm64; the crashing
-> `.first` is still present on sdk `main` (pkg/vm/bin/kernel_service.dart,
-> `lookupOrBuildNewIncrementalCompiler`). Same crash signature as the open
-> #54905, which reaches it via the internal `--reload-every` flag; this report
-> covers the user-reachable path and the resulting protocol hang.
+> Status: draft. Verified on Dart 3.12.2 (stable) macOS arm64. Clone-and-run
+> repro repo: <https://github.com/danReynolds/dart-reload-hang-repro> —
+> re-verified from a fresh clone of that repo on this machine: 10/10 runs
+> (5 control + 5 bug mode, `./verify.sh 5`). Tone note: written to present
+> observations, not conclusions — we're first-time reporters in this repo and
+> the mechanism section is explicitly a guess.
 
 ---
 
-**Title:** `reloadSources` hangs forever (kernel-service crash) when the VM
+**Title:** `reloadSources` never completes (kernel-service crash) when the VM
 service was enabled at runtime via `Service.controlWebServer`
 
 ## Summary
 
-If a program enables the VM service **at runtime** with
+I hit this while building save-to-reload dev tooling for a terminal UI
+framework. I haven't worked in this part of the SDK before, so apologies in
+advance if I've misread something or this is known/expected behavior — happy
+to be redirected.
+
+What I observe: if a program enables the VM service **at runtime** with
 `dart:developer`'s `Service.controlWebServer(enable: true)` (instead of the
 `--enable-vm-service` flag) and a client then calls `reloadSources` **after a
-source file changed on disk**, the VM's kernel service crashes:
+source file changed on disk**, the kernel service crashes:
 
 ```
 kernel-service: Error: Unhandled exception:
@@ -27,30 +33,34 @@ Bad state: No element
 #3      _RawReceivePort._handleMessage (dart:isolate-patch/isolate_patch.dart:192:12)
 ```
 
-…and the `reloadSources` RPC then **never completes** — no error response, no
-timeout. The target isolate group is left seized (service requests against its
-isolates, e.g. `getIsolate`, also hang; in most observed orderings the
-requesting isolate itself is seized too — in others it stays live but the
+…and the `reloadSources` RPC then never completes — no error response, no
+timeout. The target isolate group appears to be left seized (service requests
+against its isolates, e.g. `getIsolate`, also hang; in most orderings I saw,
+the requesting isolate itself is seized too — in others it stays live but the
 response simply never arrives).
 
-Two defects, arguably:
+The identical program started with `--enable-vm-service` reloads the same
+edit successfully in <50 ms, and a reload with **no** changed sources
+succeeds even on the runtime-enabled service — in everything I tried, the
+crash needed both the runtime-enabled service and an actual source change.
 
-1. The kernel service crashes (`.first` on an empty `isolateCompilers` in
-   `lookupOrBuildNewIncrementalCompiler`) — same signature as #54905, which
-   reaches it via the internal `--reload-every` flag.
-2. The crash is not surfaced: `reloadSources` should fail with an RPC error,
-   but instead hangs indefinitely, which makes the failure undetectable and
-   unrecoverable for tooling.
-
-The identical program started with `--enable-vm-service` flags reloads the
-same edit successfully in <50 ms. A reload with **no** changed sources
-succeeds even on the runtime-enabled service — the crash requires an actual
-source change (the incremental-compile path).
+The stack looks the same as the open #54905 (reached there via the internal
+`--reload-every` flag). If this is really the same underlying issue, I'm
+happy for this to become a comment on that issue instead — the parts that
+seemed worth adding are the user-reachable path (`controlWebServer`) and the
+hang: even if the crash itself is expected to be rare, the RPC hanging with
+no response makes the failure hard for tooling to detect or recover from.
+Whether that's one issue or two, you'll know better than I do.
 
 ## Reproduction
 
-**Zero dependencies, two files, 100% reproducible** (8/8 runs across
-variants on this machine). `marker.dart`:
+Two files, no dependencies. Clone-and-run:
+<https://github.com/danReynolds/dart-reload-hang-repro> (includes a
+`verify.sh` that runs both modes a few times and checks the observed
+behavior). It has reproduced on every run I've tried on this machine —
+10/10 from a fresh clone. The same two files inline:
+
+`marker.dart`:
 
 ```dart
 String greeting() => 'ORIGINAL';
@@ -60,18 +70,20 @@ String greeting() => 'ORIGINAL';
 event so the identical program is its own control under flags):
 
 ```dart
-// Repro: `reloadSources` never completes (VM kernel-service crash) when the
-// VM service was enabled at runtime via Service.controlWebServer and a
-// loaded source file changed on disk.
+// Reproduction: `reloadSources` never completes (kernel-service crash on
+// stderr) when the VM service was enabled at runtime via
+// Service.controlWebServer and a loaded source file changed on disk.
 //
 //   dart repro.dart                      -> kernel-service crash on stderr;
 //                                           the reload RPC never answers and
 //                                           the process hangs (kill it)
 //   dart --enable-vm-service repro.dart  -> ReloadReport success:true;
-//                                           greeting() becomes CHANGED
+//                                           greeting() picks up the edit
 //
-// Zero dependencies (raw WebSocket JSON-RPC). Handles the DDS handoff event
-// so the same client works in both modes.
+// No dependencies (raw WebSocket JSON-RPC). Handles the DDS handoff event so
+// the same client works in both modes. Each run writes a unique value into
+// marker.dart so the repro works again even when a previous run left the
+// file edited (`git checkout .` tidies up).
 import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
@@ -123,8 +135,12 @@ Future<void> main() async {
 
   print('before: ${m.greeting()}');
   // The trigger: a real on-disk change to a loaded source before the reload.
+  // Unique per run, so the on-disk content always differs from what this
+  // process was compiled from.
   File('${File.fromUri(Platform.script).parent.path}/marker.dart')
-      .writeAsStringSync("String greeting() => 'CHANGED';\n");
+      .writeAsStringSync(
+        "String greeting() => 'CHANGED ${DateTime.now().toIso8601String()}';\n",
+      );
   await _connectAndSend(uri!);
 
   // In the failing mode this await never completes and the process must be
@@ -146,16 +162,17 @@ dart repro.dart
 
 dart --enable-vm-service repro.dart
 # control: "reload response: {…ReloadReport, success: true…}", greeting()
-# becomes CHANGED (~50ms)
+# picks up the edit (~50ms)
 ```
 
-Notes on the hang shape: the RPC never receives a response in any observed
-variant. In most orderings the requesting isolate is seized outright (even
-its own timers cannot fire); in some, the isolate stays live but the
-response simply never arrives. An external client (separate process) shows
-the same non-response, so it is not a self-connection artifact.
+A note on the hang shape, since it varied a little: the RPC never received a
+response in any variant I observed. In most orderings the requesting isolate
+was seized outright (even its own timers stopped firing); in some it stayed
+live but the response simply never arrived. An external client in a separate
+process saw the same non-response, so it doesn't seem to be a
+self-connection artifact.
 
-## Variants tested (all Dart 3.12.2 stable, macOS arm64)
+## Variants tried (all Dart 3.12.2 stable, macOS arm64)
 
 | target of reloadSources | service origin | sources edited | result |
 | --- | --- | --- | --- |
@@ -168,36 +185,36 @@ the same non-response, so it is not a self-connection artifact.
 | separate child **process**'s main group (external client) | runtime (child self-enabled) | **yes** | **hang** (crash on child stderr) |
 | separate child process's main group (external client) | `--enable-vm-service` | yes | ok, ~35 ms |
 
-The failing dimension is exclusively the **service origin**: every
-runtime-enabled × edited-sources combination crashes and hangs; every
-flag-enabled combination succeeds; every no-edit combination succeeds. The
-external-client row shows it is not a self-connection artifact.
+In everything I tried, the outcome tracked only the service origin: every
+runtime-enabled × edited-sources combination crashed and hung, every
+flag-enabled combination succeeded, and every no-edit combination succeeded.
 
-## Likely mechanism (hypothesis)
+## Possibly-relevant code (my guess — could easily be wrong)
 
-`lookupOrBuildNewIncrementalCompiler` clones from
-`isolateCompilers.entries.first` ("use first compiler that should represent
-main isolate as a source for cloning" — still present on `main`). When the VM
-boots without service/reload flags, no incremental-compiler session appears to
-be retained for the boot compilation, so the map is empty when a reload's
-compile request arrives later, and `.first` throws `Bad state: No element`.
-The reload operation then waits forever on a compile response that will never
-come.
+I'm not familiar with this code, so please take this as a pointer rather
+than a diagnosis: `lookupOrBuildNewIncrementalCompiler` takes
+`isolateCompilers.entries.first` (the comment there says "use first compiler
+that should represent main isolate as a source for cloning"; the line looks
+the same on current `main`). The stack suggests the map is empty when the
+reload's compile request arrives in this configuration — maybe because a VM
+booted without service/reload flags doesn't retain an incremental-compiler
+session from the boot compilation? I may well be misreading how these pieces
+fit together.
 
-## Why this matters
+## Impact
 
 `Service.controlWebServer` is the documented way for a program to opt into
-the service at runtime; dev tools that use it (e.g. in-process reload
-helpers, and our terminal-UI framework's dev supervisor — which now must
-spawn a child process purely to get flag-origin service) silently hit an
-unrecoverable hang rather than an error. Even if the crash itself is
-non-trivial to fix, surfacing it as a failed `reloadSources` response instead
-of a hang would make the failure mode tractable for tooling.
+the service at runtime, so tooling that uses it (in-process reload helpers;
+in our case, a dev supervisor that now spawns a child process specifically to
+get a flag-origin service instead) hits a silent, unrecoverable hang rather
+than an error. Even if the crash itself turns out to be low priority, a
+failed `reloadSources` response instead of a hang would make this detectable
+for tooling — though I don't have a sense of how feasible that is on your
+side.
 
 ## Environment
 
-- Dart SDK 3.12.2 (stable) — `dartvm` macOS arm64 (also inspected
-  `pkg/vm/bin/kernel_service.dart` on current `main`: the `.first` remains)
-- macOS 15.x (Darwin 25.2), Apple M1 Pro
-- Related: #54905 (same crash signature via the internal `--reload-every`
-  flag, filed by @dcharkes)
+- Dart SDK 3.12.2 (stable), macOS arm64 (Darwin 25.2, Apple M1 Pro)
+- Repro repo: <https://github.com/danReynolds/dart-reload-hang-repro>
+- Possibly related: #54905 (same stack, reached via the internal
+  `--reload-every` flag)
