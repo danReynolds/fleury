@@ -52,6 +52,35 @@ void main() {
       expect(_render(tester), isNot(contains('Find file')));
     });
 
+    testWidgets('caps the list with a "+N more" for a large keymap', (tester) {
+      // 20 distinct next-keys under one leader → 20 live completions.
+      final letters = 'abcdefghijklmnopqrst'.split('');
+      tester.pumpWidget(
+        WhichKey(
+          showDelay: Duration.zero,
+          maxCompletions: 5,
+          child: KeyBindings(
+            bindings: [
+              for (final letter in letters)
+                KeyBinding(
+                  KeySequence.space.char(letter),
+                  label: 'Cmd $letter',
+                  onTrigger: () {},
+                ),
+            ],
+            child: const Focus(autofocus: true, child: Text('body')),
+          ),
+        ),
+      );
+      tester.render();
+      tester.press(KeySequence.space);
+      final out = tester.renderToString(
+        size: const CellSize(40, 24),
+        emptyMark: ' ',
+      );
+      expect(out, contains('+15 more'), reason: '20 completions, cap 5');
+    });
+
     testWidgets('a non-zero delay suppresses a fast sequence', (tester) async {
       tester.pumpWidget(_app(showDelay: const Duration(milliseconds: 40)));
       tester.render();

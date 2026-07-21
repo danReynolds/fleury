@@ -111,9 +111,10 @@ final class PendingSequenceNotifier with ChangeNotifier {
   PendingKeySequenceMatch? get value => _value;
 
   /// Framework-only: the dispatcher publishes each pending-state change here.
-  void set(PendingKeySequenceMatch? value) {
-    if (identical(_value, value)) return;
-    _value = value;
+  /// Skips notifying when the value is unchanged (the null→null clears).
+  set value(PendingKeySequenceMatch? next) {
+    if (identical(_value, next)) return;
+    _value = next;
     notifyListeners();
   }
 }

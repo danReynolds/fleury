@@ -71,7 +71,7 @@ class InputDispatcher {
   _PendingSequence? get _pending => _pendingSequence;
   set _pending(_PendingSequence? value) {
     _pendingSequence = value;
-    pendingSequenceNotifier.set(value == null ? null : _snapshotFor(value));
+    pendingSequenceNotifier.value = value == null ? null : _snapshotFor(value);
   }
 
   /// Whether a sequence is currently pending. Useful for tests.

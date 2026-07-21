@@ -27,6 +27,7 @@ class WhichKey extends StatefulWidget {
     super.key,
     required this.child,
     this.showDelay = const Duration(milliseconds: 150),
+    this.maxCompletions = 12,
   });
 
   final Widget child;
@@ -34,6 +35,11 @@ class WhichKey extends StatefulWidget {
   /// How long a sequence must stay pending before the popup appears. Keeps
   /// fast sequences from flashing it.
   final Duration showDelay;
+
+  /// Cap on how many completions the popup lists before collapsing the rest
+  /// into a trailing `+N more` — so a leader with many bindings can't render a
+  /// popup taller than the screen (which would clip its own title).
+  final int maxCompletions;
 
   @override
   State<WhichKey> createState() => _WhichKeyState();
@@ -87,18 +93,29 @@ class _WhichKeyState extends State<WhichKey> {
       foreground: theme.colorScheme.primary,
       bold: true,
     );
-    final rows = <Widget>[
+    final labeled = [
       for (final completion in pending.completions)
-        if (completion.binding.label != null)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('${completion.next}  ', style: keyStyle),
-              Text(completion.binding.displayLabel),
-            ],
-          ),
+        if (completion.binding.label != null) completion,
     ];
-    if (rows.isEmpty) return widget.child;
+    if (labeled.isEmpty) return widget.child;
+
+    // Bound the height: show the first [maxCompletions], collapse the rest
+    // into a trailing "+N more" so the popup can't overrun the viewport.
+    final shown = labeled.length > widget.maxCompletions
+        ? labeled.take(widget.maxCompletions)
+        : labeled;
+    final hidden = labeled.length - shown.length;
+    final rows = <Widget>[
+      for (final completion in shown)
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('${completion.next}  ', style: keyStyle),
+            Text(completion.binding.displayLabel),
+          ],
+        ),
+      if (hidden > 0) Text('+$hidden more', style: const CellStyle(dim: true)),
+    ];
 
     return Stack(
       children: [
