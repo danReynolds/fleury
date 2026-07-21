@@ -92,7 +92,7 @@ void main() {
     testWidgets('NORMAL declines text; commands route as keys', (tester) {
       tester.pumpWidget(const EditorApp());
       tester.render(size: _size);
-      tester.press(KeyCode.f2); // → vim NORMAL
+      tester.press(KeySequence.ctrl.b); // → vim NORMAL
       expect(_render(tester), contains('NORMAL'));
 
       // A printable in NORMAL is a command, not text: an unbound letter does
@@ -109,7 +109,7 @@ void main() {
     testWidgets('i enters INSERT where text is claimed; Esc returns', (tester) {
       tester.pumpWidget(const EditorApp());
       tester.render(size: _size);
-      tester.press(KeyCode.f2); // → vim NORMAL
+      tester.press(KeySequence.ctrl.b); // → vim NORMAL
       tester.press(KeyCode.i); // → INSERT
       expect(_render(tester), contains('INSERT'));
 
@@ -127,7 +127,7 @@ void main() {
     testWidgets('the Space leader fires a sequenced command', (tester) {
       tester.pumpWidget(const EditorApp());
       tester.render(size: _size);
-      tester.press(KeyCode.f2); // → vim NORMAL
+      tester.press(KeySequence.ctrl.b); // → vim NORMAL
 
       tester.press(KeySequence.space.w); // leader → write / save
       expect(_render(tester), contains('Saved'), reason: 'Space w saved');
@@ -136,7 +136,7 @@ void main() {
     testWidgets('A appends after the last character (end of line)', (tester) {
       tester.pumpWidget(const EditorApp());
       tester.render(size: _size);
-      tester.press(KeyCode.f2); // → vim NORMAL
+      tester.press(KeySequence.ctrl.b); // → vim NORMAL
       tester.press(KeyCode.char('A')); // append at end of line 1
       tester.type('!');
       expect(
@@ -149,7 +149,7 @@ void main() {
     testWidgets('which-key reveals the d-prefix completions', (tester) async {
       tester.pumpWidget(const EditorApp());
       tester.render(size: _size);
-      tester.press(KeyCode.f2); // → vim NORMAL
+      tester.press(KeySequence.ctrl.b); // → vim NORMAL
 
       tester.press(KeyCode.d); // start the `d` prefix — a pending sequence
       // Outlive WhichKey's reveal delay, then flush the reveal.

@@ -30,7 +30,7 @@ enum VimMode { normal, insert }
 const String _sampleText =
     'The quick brown fox jumps over the lazy dog.\n'
     'Fleury renders this editor to a terminal and a browser alike.\n'
-    'Toggle nano/vim with F2 — the same buffer, two keymaps.\n'
+    'Toggle nano/vim with Ctrl+B — the same buffer, two keymaps.\n'
     'In vim, press d or the Space leader to see which-key.\n'
     'In nano, the shortcut bar shows every command.';
 
@@ -397,10 +397,7 @@ class _EditorBodyState extends State<_EditorBody> implements TextInputClaimant {
                 child: Focus(
                   focusNode: _focusNode,
                   autofocus: true,
-                  child: _BufferView(
-                    model: _model,
-                    blockCursor: _isVim && _isNormal,
-                  ),
+                  child: _BufferView(model: _model),
                 ),
               ),
             ),
@@ -440,10 +437,12 @@ class _EditorBodyState extends State<_EditorBody> implements TextInputClaimant {
   // ---- keymaps ------------------------------------------------------------
 
   List<KeyBinding> _bindings() {
-    // F2 toggles the personality from anywhere (a function key, so it reaches
-    // the bindings even while INSERT/nano claims text).
+    // Ctrl+B toggles the personality from anywhere: it's a key event (not
+    // text), so it reaches the bindings even while nano/INSERT claims text,
+    // and unlike a function key it isn't swallowed by the OS (macOS media
+    // keys) or the browser.
     final toggle = KeyBinding(
-      KeyCode.f2,
+      KeySequence.ctrl.b,
       label: _isVim ? 'nano' : 'vim',
       onTrigger: _model.togglePersonality,
     );
@@ -595,13 +594,12 @@ class _EditorBodyState extends State<_EditorBody> implements TextInputClaimant {
   ];
 }
 
-/// Renders the buffer with a cursor (a block under vim NORMAL, an underline
-/// caret otherwise).
+/// Renders the buffer with a block cursor (an inverted cell — the standard
+/// TUI caret, which reads clearly in both the terminal and the browser).
 class _BufferView extends StatelessWidget {
-  const _BufferView({required this.model, required this.blockCursor});
+  const _BufferView({required this.model});
 
   final EditorModel model;
-  final bool blockCursor;
 
   @override
   Widget build(BuildContext context) {
@@ -617,9 +615,7 @@ class _BufferView extends StatelessWidget {
 
   Widget _line(String text, int? cursorCol) {
     if (cursorCol == null) return Text(text.isEmpty ? ' ' : text);
-    final cursorStyle = blockCursor
-        ? const CellStyle(inverse: true)
-        : const CellStyle(underline: true);
+    const cursorStyle = CellStyle(inverse: true);
     final char = cursorCol < text.length ? text[cursorCol] : ' ';
     final after = cursorCol < text.length ? text.substring(cursorCol + 1) : '';
     return Row(
@@ -657,7 +653,7 @@ class _StatusLine extends StatelessWidget {
               ),
             ),
           ),
-          Text('$name  ·  F2 to switch', style: theme.mutedStyle),
+          Text('$name  ·  Ctrl+B to switch', style: theme.mutedStyle),
         ],
       ),
     );
