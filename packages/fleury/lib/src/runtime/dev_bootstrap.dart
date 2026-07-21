@@ -17,10 +17,19 @@
 // The child re-enters runApp, sees a live VM service plus the supervisor
 // marker, and proceeds as a normal single-isolate Fleury app — the exact
 // battle-tested F5 shape, where reload means "reload the main isolate group
-// of a plain app". That path is exercised daily by editors; the earlier
-// child-ISOLATE design died on a real VM defect (reloadSources of an
-// Isolate.spawnUri group deadlocks the group when sources actually changed —
-// minimal plain-Dart repro, no Fleury involved).
+// of a plain app". That path is exercised daily by editors.
+//
+// Why a child PROCESS at all: reloadSources with actually-changed sources is
+// broken whenever the VM service was enabled at runtime via
+// Service.controlWebServer — the VM's kernel service crashes ("Bad state: No
+// element" in lookupOrBuildNewIncrementalCompiler) and the reload RPC hangs
+// forever (minimal plain-Dart repro, no Fleury involved; see
+// docs/implementation/vm-reload-bug-report-draft.md, same crash signature as
+// dart-lang/sdk#54905). A running process can never retroactively gain
+// `--enable-vm-service` flags, so any in-process design (self-reload, or a
+// child isolate — which shares the process's service) is unfixably on the
+// broken path. Spawning a fresh process is precisely what makes flag-origin
+// service — the working path — possible.
 //
 // Ownership rules (process edition):
 //   - The child owns the terminal: raw mode, alt screen, stdin, stdio
@@ -272,10 +281,12 @@ final class DevBootstrap {
       _child = await Process.start(
         Platform.resolvedExecutable,
         [
-          // The service MUST come from VM flags: enabling it at runtime via
-          // `Service.controlWebServer` yields a service whose reloadSources
-          // wedges against this very child (empirically — the flag path is
-          // also what every editor session exercises daily). The cost is the
+          // The service MUST come from VM flags: under a runtime-enabled
+          // service (`Service.controlWebServer`) any reload of changed
+          // sources crashes the VM's kernel service and hangs the RPC — see
+          // the file-header note and
+          // docs/implementation/vm-reload-bug-report-draft.md. The flag path
+          // is what every editor session exercises daily. The cost is the
           // VM's one-line startup banner, which the alt screen hides.
           '--enable-vm-service=0',
           '--no-serve-devtools',

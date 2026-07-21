@@ -176,9 +176,12 @@ first process becomes a thin supervisor instead of running the app:
    and `inheritStdio` — the child owns the PTY, raw mode, signals, and stdio
    capture exactly as a normal run would. (The one visible trace is the VM
    service's single startup line, which the alt screen immediately hides.
-   The service must come from VM flags: a runtime-enabled service's
-   `reloadSources` wedges — one of two VM-level landmines this design routes
-   around; the other is that reload deadlocks `Isolate.spawnUri` groups.)
+   The service must come from VM flags — the whole reason a child *process*
+   exists: under a runtime-enabled service (`Service.controlWebServer`, the
+   only kind an already-running process can have) reloading changed sources
+   crashes the VM's kernel service and hangs the RPC. See
+   `docs/implementation/vm-reload-bug-report-draft.md`; same crash signature
+   as dart-lang/sdk#54905.)
 2. The child re-enters `runApp`, sees the `FLEURY_DEV_SUPERVISED` marker,
    confirms its service URI through a handshake file, and runs the classic
    single-isolate app — the same battle-tested shape an editor debugs.
