@@ -72,19 +72,40 @@ void main() {
       );
     });
 
-    testWidgets('Ctrl+A selects all, then Ctrl+C copies the whole text', (
+    testWidgets('Ctrl+C copies then clears, so a second Ctrl+C can quit', (
       tester,
     ) {
       tester.pumpWidget(const Text('hello world'));
       tester.render(size: _size);
 
-      tester.press(KeySequence.ctrl.a); // default select-all
-      tester.press(KeySequence.ctrl.c);
+      _dragSelect(tester, fromCol: 0, toCol: 11);
+      // The dragged cells are highlighted.
+      expect(tester.render(size: _size).atColRow(0, 0).style.inverse, isTrue);
 
+      tester.press(KeySequence.ctrl.c);
       expect(tester.clipboard.readInProcess(), 'hello world');
+
+      // The copy cleared the selection: the highlight is gone, so a following
+      // Ctrl+C finds nothing, bubbles, and (in a real app) reaches the runApp
+      // quit guard instead of copying again.
+      expect(tester.render(size: _size).atColRow(0, 0).style.inverse, isFalse);
     });
 
-    testWidgets('an app Ctrl+A binding wins over the default select-all', (
+    testWidgets('Ctrl+A is not bound by default (no keyboard select-all)', (
+      tester,
+    ) {
+      tester.pumpWidget(const Text('hello world'));
+      tester.render(size: _size);
+
+      // The default wrap does NOT bind Ctrl+A, so it can't shadow an app's own
+      // global Ctrl+A. It bubbles unhandled — nothing is selected — so a
+      // following Ctrl+C copies nothing.
+      tester.press(KeySequence.ctrl.a);
+      tester.press(KeySequence.ctrl.c);
+      expect(tester.clipboard.readInProcess(), isNull);
+    });
+
+    testWidgets('an app Ctrl+A binding is not shadowed by the default', (
       tester,
     ) {
       var appHits = 0;
@@ -97,17 +118,14 @@ void main() {
       tester.render(size: _size);
 
       tester.press(KeySequence.ctrl.a);
+      // The default doesn't bind Ctrl+A (and the app binding is deeper than the
+      // root anyway), so the app's Ctrl+A fires and nothing else selects.
       expect(appHits, 1);
-
-      // Prove the default select-all was actually SUPPRESSED (not that both
-      // fired): the app binding is deeper in the chain, consumes the chord, and
-      // the root default never sees it — so nothing is selected and a following
-      // Ctrl+C copies nothing.
       tester.press(KeySequence.ctrl.c);
       expect(
         tester.clipboard.readInProcess(),
         isNull,
-        reason: 'the root select-all never ran, so there is nothing to copy',
+        reason: 'no default select-all ran, so there is nothing to copy',
       );
     });
 

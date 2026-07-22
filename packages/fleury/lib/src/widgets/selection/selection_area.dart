@@ -122,6 +122,8 @@ class SelectionArea extends StatefulWidget {
     super.key,
     this.onSelectionChanged,
     this.copyOnRelease = false,
+    this.copyClearsSelection = false,
+    this.selectAllShortcut = true,
     this.scrollController,
     this.autoScrollEdgeRows = 1,
     this.autoScrollInterval = const Duration(milliseconds: 50),
@@ -157,6 +159,22 @@ class SelectionArea extends StatefulWidget {
   /// default — most apps want explicit Ctrl+C wiring or a different
   /// trigger.
   final bool copyOnRelease;
+
+  /// When true, a Ctrl+C copy clears the selection after writing it. Off by
+  /// default (an explicit [SelectionArea] keeps the selection visible so you
+  /// can copy again). The app-wide default wrap ([DefaultRootSelection]) turns
+  /// it ON: there, Ctrl+C also means quit (the runApp exit guard), so a held
+  /// selection must not trap Ctrl+C on "copy" — clearing after the copy lets
+  /// the next Ctrl+C bubble through to quit.
+  final bool copyClearsSelection;
+
+  /// Whether to bind Ctrl+A to select-all. On by default. The app-wide default
+  /// wrap ([DefaultRootSelection]) turns it OFF so the always-on selection
+  /// never shadows an app's own `runApp(globalBindings: [Ctrl+A …])` (widget
+  /// bindings out-rank globals in dispatch, so a bound-here Ctrl+A would eat
+  /// the chord before the globals are consulted). Drag-select still works; an
+  /// app that wants keyboard select-all uses an explicit [SelectionArea].
+  final bool selectAllShortcut;
 
   /// Optional scroll controller for the scrollable below us. When set,
   /// dragging near the top/bottom edge of the selectable region
@@ -529,6 +547,10 @@ class _SelectionAreaState extends State<SelectionArea> {
       return;
     }
     unawaited(ClipboardScope.of(context).write(text));
+    // The app-wide default clears after copying so a held selection can't trap
+    // Ctrl+C on "copy": once cleared, the next Ctrl+C finds nothing to copy and
+    // bubbles through to the runApp quit guard.
+    if (widget.copyClearsSelection) _delegate.clear();
   }
 
   void _onEscape(KeyBindingEvent event) {
@@ -546,7 +568,8 @@ class _SelectionAreaState extends State<SelectionArea> {
       registrar: _delegate,
       child: KeyBindings(
         bindings: [
-          KeyBinding.event(KeySequence.ctrl.a, onEvent: _onSelectAll),
+          if (widget.selectAllShortcut)
+            KeyBinding.event(KeySequence.ctrl.a, onEvent: _onSelectAll),
           KeyBinding.event(KeySequence.ctrl.c, onEvent: _onCopy),
           KeyBinding.event(KeySequence.escape, onEvent: _onEscape),
           KeyBinding.event(
@@ -612,13 +635,26 @@ class _DisabledSelection extends StatelessWidget {
 /// are free (they cost an O(1) registration + one inherited lookup, with the
 /// reading-order walk happening only on a selection event, not per frame).
 ///
-/// Its chords defer to the app. Dispatch is deepest-first, so an app's own
-/// Ctrl+A / Ctrl+C / Esc bindings sit deeper in the chain and win; this acts
-/// only as the outermost fallback (just above the runApp exit guard), and its
-/// Ctrl+C / Esc / Shift+Arrow bindings bubble when nothing is selected. An app
-/// that wants different selection behavior (auto-copy, a scroll controller, a
-/// change callback) nests its own [SelectionArea], which shadows this one for
-/// its subtree; a subtree opts out entirely with [SelectionArea.disabled] or
+/// Its chord contract is deliberately conservative, because it is always on and
+/// widget bindings out-rank `runApp` globals + the Ctrl+C exit guard in
+/// dispatch:
+///
+///  - **Ctrl+C** copies only when there IS a selection, and then CLEARS it
+///    (`copyClearsSelection`), so a held selection can't trap Ctrl+C on "copy"
+///    — the next Ctrl+C finds nothing and bubbles through to the runApp quit
+///    guard. With no selection it bubbles straight to quit.
+///  - **Ctrl+A** is NOT bound here (`selectAllShortcut: false`), so the
+///    always-on default never shadows an app's own `globalBindings` Ctrl+A.
+///    Drag-select still selects everything reachable; an app that wants
+///    keyboard select-all uses an explicit [SelectionArea].
+///  - **Esc / Shift+Arrow** act only while a selection is live and bubble when
+///    idle, so they don't shadow app bindings in the common (no-selection) case.
+///
+/// App bindings otherwise win outright: dispatch is deepest-first, so an app's
+/// own widget-tree bindings sit deeper than this root wrap. An app that wants
+/// different selection behavior (auto-copy, a scroll controller, keyboard
+/// select-all) nests its own [SelectionArea], which shadows this one for its
+/// subtree; a subtree opts out entirely with [SelectionArea.disabled] or
 /// `Text(allowSelect: false)`.
 ///
 /// Deliberately scoped to the app root: floating host layers (the runtime
@@ -631,5 +667,9 @@ class DefaultRootSelection extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => SelectionArea(child: child);
+  Widget build(BuildContext context) => SelectionArea(
+    copyClearsSelection: true,
+    selectAllShortcut: false,
+    child: child,
+  );
 }
