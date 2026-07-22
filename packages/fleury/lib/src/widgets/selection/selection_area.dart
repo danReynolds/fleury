@@ -599,3 +599,37 @@ class _DisabledSelection extends StatelessWidget {
     return SelectionScope(registrar: null, child: child);
   }
 }
+
+/// The host's app-wide default text selection, wrapped around every app root.
+///
+/// Text selection is *input infrastructure*, not app policy: like the
+/// clipboard, pointer, and focus scopes the host installs, it turns rendered
+/// [Text] into copyable content — which terminal users expect of everything on
+/// screen (four decades of "drag to select, copy" on every character a
+/// terminal draws). So the host enables it around every app root rather than
+/// leaving each app to opt in. There is intentionally no global off switch:
+/// the per-subtree escapes below cover the real cases, and idle selectables
+/// are free (they cost an O(1) registration + one inherited lookup, with the
+/// reading-order walk happening only on a selection event, not per frame).
+///
+/// Its chords defer to the app. Dispatch is deepest-first, so an app's own
+/// Ctrl+A / Ctrl+C / Esc bindings sit deeper in the chain and win; this acts
+/// only as the outermost fallback (just above the runApp exit guard), and its
+/// Ctrl+C / Esc / Shift+Arrow bindings bubble when nothing is selected. An app
+/// that wants different selection behavior (auto-copy, a scroll controller, a
+/// change callback) nests its own [SelectionArea], which shadows this one for
+/// its subtree; a subtree opts out entirely with [SelectionArea.disabled] or
+/// `Text(allowSelect: false)`.
+///
+/// Deliberately scoped to the app root: floating host layers (the runtime
+/// error overlay, the debug shell, toasts, menus) are separate overlay
+/// entries and keep their own selection context.
+class DefaultRootSelection extends StatelessWidget {
+  const DefaultRootSelection({super.key, required this.child});
+
+  /// The app root to make selectable.
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => SelectionArea(child: child);
+}

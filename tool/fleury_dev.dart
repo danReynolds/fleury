@@ -1222,6 +1222,9 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       case 'paint-gate':
         await benchmarkPaintGate(rest);
         return;
+      case 'selection-gate':
+        await benchmarkSelectionGate(rest);
+        return;
       case 'gates':
         await benchmarkGates(rest);
         return;
@@ -1638,6 +1641,21 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
     ], workingDirectory: profiling);
   }
 
+  /// Active-selection gate. Drives a select-all held over a per-frame-
+  /// repainting grid of selectable Texts and gates on the DETERMINISTIC cells
+  /// a select-all covers (the default-on selection coverage invariant); the
+  /// per-frame µs a held selection adds is reported warn-only (machine-
+  /// dependent, and the underlying allocation is JIT-sink-nondeterministic for
+  /// this path — see bin/selection_gate.dart). Pass `--gate` to fail on a
+  /// coverage drift, `--update-baseline` to rebaseline.
+  Future<void> benchmarkSelectionGate(List<String> args) async {
+    await _run('dart', [
+      'run',
+      'bin/selection_gate.dart',
+      ...args,
+    ], workingDirectory: profiling);
+  }
+
   /// Runs the fast, self-contained regression gates in sequence and prints a
   /// pass/fail summary (does not stop on the first failure, so one command
   /// reports the whole board). Exits non-zero if any gate failed. The heavier
@@ -1660,6 +1678,11 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
         '--gate',
       ]),
       (name: 'paint-gate', cmd: ['run', 'bin/paint_gate.dart', '--gate']),
+      (name: 'selection-gate', cmd: [
+        'run',
+        'bin/selection_gate.dart',
+        '--gate',
+      ]),
     ];
     final results = <({String name, bool ok, int ms})>[];
     for (final gate in fast) {
@@ -6657,6 +6680,9 @@ void _printBenchmarkUsage() {
   );
   stdout.writeln(
     '  paint-gate [--gate]     Repaint-boundary counters (paint-walk pruning)',
+  );
+  stdout.writeln(
+    '  selection-gate [--gate] Active select-all coverage (cost warn-only)',
   );
   stdout.writeln('');
   stdout.writeln(
