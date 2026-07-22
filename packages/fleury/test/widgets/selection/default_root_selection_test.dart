@@ -97,10 +97,18 @@ void main() {
       tester.render(size: _size);
 
       tester.press(KeySequence.ctrl.a);
-
-      // The app binding is deeper in the chain than the root default, so it
-      // fires and consumes the chord; the default never sees it.
       expect(appHits, 1);
+
+      // Prove the default select-all was actually SUPPRESSED (not that both
+      // fired): the app binding is deeper in the chain, consumes the chord, and
+      // the root default never sees it — so nothing is selected and a following
+      // Ctrl+C copies nothing.
+      tester.press(KeySequence.ctrl.c);
+      expect(
+        tester.clipboard.readInProcess(),
+        isNull,
+        reason: 'the root select-all never ran, so there is nothing to copy',
+      );
     });
 
     testWidgets('Ctrl+C with nothing selected does not write an empty copy', (

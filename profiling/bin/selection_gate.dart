@@ -11,10 +11,16 @@
 //
 // GATED AXIS — deterministic, zero drift: the number of cells a select-all
 // covers over the grid. It is a pure function of the fixture, so it fails on
-// ANY drift. It protects the core default-on invariant: every rendered Text
-// registers as selectable and a select-all reaches all of them. A regression
-// that silently stops registering some Texts (a broken DefaultRootSelection
-// wrap, an attachToSelection change) drops the count and fails here.
+// ANY drift. It protects the SELECTABLE-REGISTRATION invariant that default-on
+// selection rests on: every rendered Text attaches to the ambient selection
+// scope and a select-all reaches all of them. A regression in
+// `attachToSelection` / SelectionScope registration that silently drops some
+// Texts drops the count and fails here. (The run_app / DefaultRootSelection
+// WIRING — that the host actually installs the scope around every app root —
+// is covered by the widget tests in default_root_selection_test.dart, which
+// pump through the tester's real DefaultRootSelection wrap; this gate drives a
+// SelectionScope directly so it can hold a large selection without an input
+// stack.)
 //
 // WARN-ONLY — per-frame cost: the µs/frame a held selection ADDS versus the
 // same grid with no selection (min across interleaved rounds to shed noise).
@@ -27,7 +33,8 @@
 // CI. It is reported so a gross regression is visible; the deterministic
 // coverage axis is what fails the build.
 //
-//   dart run bin/selection_gate.dart [--gate] [--update-baseline] [--frames=N]
+//   dart run bin/selection_gate.dart [--gate] [--update-baseline]
+//       [--frames=N] [--rounds=N] [--warmup=N]
 //
 // Exit codes: 0 pass, 1 regression, 64 usage/setup error.
 
@@ -113,6 +120,11 @@ Future<void> main(List<String> args) async {
       exitCode = 64;
       return;
     }
+  }
+  if (frames < 1 || rounds < 1 || warmup < 0) {
+    stderr.writeln('selection_gate: --frames/--rounds must be >= 1, --warmup >= 0.');
+    exitCode = 64;
+    return;
   }
 
   const renderer = AnsiRenderer();
