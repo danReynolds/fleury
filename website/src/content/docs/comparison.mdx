@@ -19,8 +19,8 @@ excellent frameworks; this is the particular combination Fleury is built for.
     reload, and a broad widget library. Write it like Flutter; run it in a terminal.
   </Card>
   <Card title="A UI that agents can read" icon="seti:default">
-    Semantics-consuming surfaces maintain a graph of roles, state, and typed
-    actions, so tests assert on *meaning* and AI agents drive the UI instead of
+    Semantics-consuming surfaces maintain a semantic tree of roles, state, and
+    typed actions, so tests assert on *meaning* and AI agents drive the UI instead of
     scraping it.
   </Card>
   <Card title="One app, terminal or browser" icon="laptop">
@@ -49,7 +49,7 @@ That foundation is why the widget set runs deep — charts (`Gauge`, `Sparkline`
 `LineChart`, `BarChart`, `Histogram`, `Heatmap`), virtualized data (`DataTable`,
 `TreeTable`), document viewers (`CodeView`, `MarkdownView`, `JsonView`,
 `DiffView`), and surfaces shaped for agent and dev tooling (`MessageList`,
-`PatchReview`, `CommandPalette`, `TraceTimeline`). Fifty-plus widgets in the box,
+`PatchReview`, `CommandPalette`, `TraceTimeline`). Eighty-plus widgets in the box,
 each composable like any other. Tab through a few — real widgets, running live;
 click into one and use it (type, arrow, select):
 
@@ -67,7 +67,7 @@ into real apps in the [showcases](/fleury/showcases/).
 
 ### A UI built for agents and tests
 
-On agent-reachable and browser surfaces, Fleury maintains a **semantic graph**
+On agent-reachable and browser surfaces, Fleury maintains a **semantic tree**
 alongside the visual tree and updates it when semantics or painted coverage
 change. Tests materialize a snapshot when `tester.semantics()` asks, and a plain
 terminal run does the same only when a debug consumer asks. Meaningful content
@@ -79,7 +79,7 @@ with concrete actions like `activate`, `submit`, `select`, `increment`, and `cop
 
 Tests assert on *meaning* — "row 3 is selected", "the CPU gauge reads 0.62" — and
 survive a re-theme, a layout change, or a port to the browser. An AI agent reads
-the graph and drives the UI through those actions instead of scraping ANSI and
+the tree and drives the UI through those actions instead of scraping ANSI and
 guessing keystrokes — point any
 [Model Context Protocol](https://modelcontextprotocol.io) host at the app, no
 agent-specific integration to write. It's produced by the core, runs alongside the visual frame
@@ -147,11 +147,68 @@ plainly — or the most common in the space. It makes it the right fit for *this
 job: a real, retained UI framework that spans the terminal and the browser from
 one codebase.
 
+## How Fleury compares
+
+A factual snapshot of where Fleury sits among today's TUI frameworks — what you
+can build with each, how each is put together, and where the others lead. Every
+peer cell is checked against that project's own docs and releases (July 2026);
+corrections welcome.
+
+{/* Sources — hot reload/browser/devtools/images/testing: Textual textual.textualize.io + textual-serve; Bubble Tea github.com/charmbracelet/bubbletea (+ discussion #300, #1374); Ratatui ratatui.rs + ratatui-image + ratzilla; Ink github.com/vadimdemedes/ink (issue #159, ink-testing-library, ink-picture); OpenTUI github.com/anomalyco/opentui (PR #446, issue #92); nocterm github.com/Norbert515/nocterm + pub.dev changelog + HN 46886038. Component counts: Fleury 80+ (widget reference, ~88 pages), Textual ~40 (widget gallery), nocterm 45+ (nocterm.dev). Single-binary: native compile = Dart AOT / Go / Rust; ◐ = PyInstaller / Node SEA / Bun compile. */}
+
+<div class="compare-block">
+
+**Capabilities** — what you can build with it. Hover the marked cells for detail.
+
+<div class="wide-table">
+
+| Capability | **Fleury** | nocterm | OpenTUI | Textual | Bubble Tea | Ratatui | Ink |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| **AI-agent drivable** (MCP) | ✅ | — | — | — | — | — | — |
+| **Screen-reader accessible** | <span class="ct" tabindex="0" data-tip="Fleury's semantic tree drives an ARIA accessibility DOM on the web surface; the same tree powers agents and tests.">✅</span> | — | — | — | — | — | <span class="ct" tabindex="0" data-tip="A recent terminal screen-reader text layer.">◐</span> |
+| **Stateful hot reload** | ✅ | ✅ | <span class="ct" tabindex="0" data-tip="Not an officially documented feature; Bun's React Fast Refresh may apply to the React binding.">◐</span> | <span class="ct" tabindex="0" data-tip="CSS/TCSS reloads live; Python code changes still need a restart.">◐</span> | — | — | — |
+| **Runs in the browser** | <span class="ct" tabindex="0" data-tip="Client-side (dart2js) plus a fleury serve stream.">✅</span> | <span class="ct" tabindex="0" data-tip="Client-side, experimental.">◐</span> | <span class="ct" tabindex="0" data-tip="In the browser via the community Gridland project (a canvas renderer); a first-party WASM build is future research.">◐</span> | <span class="ct" tabindex="0" data-tip="Server-side: the app runs on a server and streams to the browser.">✅</span> | <span class="ct" tabindex="0" data-tip="No official browser target — only community Go-to-WASM proofs of concept.">—</span> | <span class="ct" tabindex="0" data-tip="Via the community ratzilla crate (WebAssembly).">◐</span> | <span class="ct" tabindex="0" data-tip="Via the community ink-web project.">◐</span> |
+| **Terminal images** (Kitty·iTerm2·Sixel) | ✅ | <span class="ct" tabindex="0" data-tip="Kitty, Sixel, and iTerm2 protocols built in, with a Unicode-block fallback.">✅</span> | <span class="ct" tabindex="0" data-tip="Rasterizes graphics to cells (incl. 3D) — no image protocols.">—</span> | <span class="ct" tabindex="0" data-tip="Via the third-party textual-image package.">◐</span> | <span class="ct" tabindex="0" data-tip="Detects Sixel capability but doesn't render images.">—</span> | <span class="ct" tabindex="0" data-tip="Via the third-party ratatui-image crate.">◐</span> | <span class="ct" tabindex="0" data-tip="Via the third-party ink-picture package.">◐</span> |
+| **Component library** | <span class="ct" tabindex="0" data-tip="80+ widgets built into the framework.">✅</span> | ✅ | ✅ | ✅ | <span class="ct" tabindex="0" data-tip="Via the official Bubbles companion library.">◐</span> | <span class="ct" tabindex="0" data-tip="Display widgets built in; text input & richer controls via community crates.">◐</span> | <span class="ct" tabindex="0" data-tip="Core primitives plus a large third-party ink-* ecosystem.">◐</span> |
+| **Single-binary distribution** | ✅ | ✅ | <span class="ct" tabindex="0" data-tip="Via Bun's standalone-executable compile.">◐</span> | <span class="ct" tabindex="0" data-tip="Via a third-party bundler (PyInstaller), not a native compile.">◐</span> | ✅ | ✅ | <span class="ct" tabindex="0" data-tip="Via Node's built-in Single Executable Applications, not a native compile.">◐</span> |
+| Advanced graphics / 3D | — | — | <span class="ct" tabindex="0" data-tip="A Three.js renderer that rasterizes to cells.">✅</span> | — | — | — | — |
+
+</div>
+
+</div>
+
+<div class="compare-block">
+
+**Under the hood** — how each framework is built.
+
+<div class="wide-table">
+
+| | **Fleury** | nocterm | OpenTUI | Textual | Bubble Tea | Ratatui | Ink |
+|---|---|---|---|---|---|---|---|
+| Language | Dart | Dart | TS / Zig | Python | Go | Rust | JS |
+| Model | Retained framework | Retained framework | Retained (React/Solid) | Retained (CSS DOM) | Elm (MVU) | Immediate-mode *(library)* | Retained (React) |
+| Familiar if you know… | Flutter | Flutter | React / Solid | the web (CSS) | Elm | immediate-mode GUIs | React |
+| State / reactivity | `setState` + Listenable | `setState` + Riverpod | hooks / signals | reactive attributes | immutable Model | you own it | React hooks |
+| Styling | props + theme | props | props | CSS (TCSS) | Lip Gloss | Style structs | props |
+| Rendering | retained tree → cell diff | cell diff | Zig core + shadow-buffer diff | compositor + spatial map | Cursed Renderer (cell diff) | double-buffer diff | reconciler diff |
+
+</div>
+
+</div>
+
+Two capabilities carry Fleury's edge — **agents** and **accessibility** both fall
+out of a single semantic tree, a pairing no other framework here offers. Hot reload,
+browser, and images it leads or ties; components put it in the batteries-included
+camp, with the largest built-in set. Where it doesn't win: OpenTUI's terminal 3D,
+Rust and Go idle leaner, and — most of all — maturity.
+
 ## When to pick something else
 
-Fleury is one good option among several, and the right tool depends on your stack
-and what you value. Reach for a peer when its strengths line up with yours:
+Fleury is one good option among several. Reach for a peer when its strengths line
+up with yours:
 
+- **nocterm** if you want the same Flutter-in-Dart model in a simpler,
+  terminal-focused package, with first-party Riverpod and Bloc integrations.
 - **Ratatui** if you're in Rust and want maximum control with an immediate-mode
   model and a mature ecosystem.
 - **Textual** if you're in Python and want a batteries-included framework with a
@@ -165,8 +222,7 @@ and what you value. Reach for a peer when its strengths line up with yours:
 The flip side of that bet: Dart's terminal ecosystem is young — fewer libraries
 and fewer examples to crib from than Go, Rust, or Python have. Fleury is also
 pre-1.0: the API is still settling, and it's distributed as a Git dependency
-today. If you need a
-long-stable, widely-deployed framework right now, one of the above may fit
-better. If the retained model, the batteries-included widgets, the agent-facing
-semantics, and the web target are what you're after, that's exactly the gap
-Fleury fills.
+today. If you need a long-stable, widely-deployed framework right now, one of the
+above may fit better. If the retained model, the batteries-included widgets, the
+agent- and accessibility-facing semantics, and the web target are what you're
+after, that's exactly the gap Fleury fills.

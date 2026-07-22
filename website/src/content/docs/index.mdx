@@ -3,7 +3,7 @@ title: Fleury
 description: A fast, retained-mode UI framework for the terminal — and the browser.
 template: splash
 hero:
-  tagline: A fast, retained-mode UI framework for the terminal — and the browser. One widget tree, two surfaces, and a semantic graph agents can drive.
+  tagline: A fast, retained-mode UI framework for the terminal — and the browser. One widget tree, two surfaces, and a semantic tree agents can drive.
   actions:
     - text: Get started
       link: /fleury/getting-started/
@@ -74,31 +74,35 @@ terminal. [How that works →](/fleury/architecture/serving-and-embedding/)
 ## Why Fleury
 
 <CardGrid>
-  <FeatureCard icon="puzzle" title="A real widget tree, for cells" href="/fleury/architecture/core-and-targets/" cta="How it fits together">
-    Widgets, elements, render objects, and a semantics tree — incremental
-    rebuilds, layout, and paint over a grid of cells instead of pixels. An idle
-    app emits nothing.
+  <FeatureCard icon="puzzle" title="A Real Widget Tree, for Cells" href="/fleury/architecture/core-and-targets/" cta="How it fits together">
+    A widget, element, and render tree with a real layout engine — painting to a
+    grid of cells, not pixels. Rebuilds stay on the dirty subtree, so an idle app
+    emits nothing.
   </FeatureCard>
-  <FeatureCard icon="open-book" title="Built for agents" href="/fleury/guides/driving-with-agents/" cta="Drive it with an agent">
-    AI agents and tests operate the real UI over the Model Context Protocol — by
-    its roles, state, and actions, not by screen-scraping. No server code to write.
+  <FeatureCard icon="open-book" title="Built for Agents" href="/fleury/guides/driving-with-agents/" cta="Drive it with an agent">
+    Every widget publishes its role, state, and actions to a live semantic tree.
+    Agents drive your app through it over MCP — and your tests assert on the same
+    tree — instead of scraping the screen. Nothing extra to wire up.
   </FeatureCard>
-  <FeatureCard icon="laptop" title="One app, two surfaces" href="/fleury/architecture/serving-and-embedding/" cta="Serving & embedding">
-    The same app renders to a real terminal *or* the browser — embedded with
-    dart2js or previewed with <code>fleury serve</code>. A parity oracle keeps
-    the two surfaces honest.
+  <FeatureCard icon="laptop" title="One App, Multiple Targets" href="/fleury/architecture/serving-and-embedding/" cta="Serving & embedding">
+    The same widget tree renders natively to a terminal, or to the browser —
+    compiled in with dart2js, or streamed live by <code>fleury serve</code>. A
+    parity oracle diffs the targets so they can't drift.
   </FeatureCard>
-  <FeatureCard icon="rocket" title="A dev loop like Flutter's" href="/fleury/guides/hot-reload/" cta="Hot reload">
-    Stateful hot reload, rare in the terminal — save and your running app
-    updates in place, state intact. Plus a built-in debug shell and a headless
-    test harness.
+  <FeatureCard icon="rocket" title="Fast Development & Debugging" href="/fleury/guides/hot-reload/" cta="Hot reload">
+    Stateful hot reload on save — rare in a terminal — so a running app picks up
+    your edits in place, state intact. And a debug shell in every dev run:
+    Ctrl+G for frame timings, paint-flash, the live semantic tree, logs and
+    errors — right there, even over SSH.
   </FeatureCard>
 </CardGrid>
 
+<p class="home-more"><a href="/fleury/comparison/">Read the full case for Fleury — and how it compares →</a></p>
+
 ## See it in action
 
-Three complete apps, each built entirely from Fleury widgets and **running live
-in your browser** — open one and use your keyboard and mouse.
+Three complete apps, each built only from Fleury widgets and **running live in
+your browser**. Open one and drive it with your keyboard and mouse.
 
 <CardGrid>
   <LinkCard
@@ -125,9 +129,9 @@ in your browser** — open one and use your keyboard and mouse.
 
 ## How it works
 
-*One widget tree, two surfaces* rests on a retained-mode
-engine that turns your widgets into cells and paints them wherever you point it:
-a terminal, a browser, a streamed session. These pages are the tour.
+*One widget tree, two surfaces* rests on a retained-mode engine: it turns your
+widgets into cells and paints them wherever you point it — a terminal, a
+browser, a streamed session. These two pages walk the whole pipeline.
 
 <CardGrid>
   <LinkCard title="Architecture" href="/fleury/architecture/overview/" description="The retained four-tree pipeline, the platform-neutral core, and the targets that paint a cell grid to a terminal or a browser." />
