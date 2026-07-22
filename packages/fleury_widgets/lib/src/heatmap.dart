@@ -101,6 +101,7 @@ class Heatmap extends StatelessWidget {
                 grid,
                 Text(
                   '░▒▓█  ${_fmtHeat(stats.min)} – ${_fmtHeat(stats.max)}',
+                  allowSelect: false, // chart legend, not selectable text
                   style: theme.mutedStyle,
                 ),
               ],

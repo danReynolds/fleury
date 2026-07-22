@@ -245,7 +245,7 @@ class _SelectState<T> extends State<Select<T>> {
             'selectedKey': widget.value,
             'selectedOptionLabel': _currentLabel,
           }),
-          child: Text(text, style: style),
+          child: Text(text, allowSelect: false, style: style),
         ),
       );
     }
@@ -309,7 +309,7 @@ class _SelectState<T> extends State<Select<T>> {
             focusNode: _triggerFocus,
             autofocus: widget.autofocus,
             onKey: _onTriggerKey,
-            child: Text(text, style: style),
+            child: Text(text, allowSelect: false, style: style),
           ),
         ),
       ),
@@ -594,9 +594,9 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
               setState(() => _highlightedIndex = index);
               _toggle(index);
             },
-            child: Text(text, style: style),
+            child: Text(text, allowSelect: false, style: style),
           )
-        : Text(text, style: style);
+        : Text(text, allowSelect: false, style: style);
     return Semantics(
       role: SemanticRole.checkbox,
       label: safeLabel,
