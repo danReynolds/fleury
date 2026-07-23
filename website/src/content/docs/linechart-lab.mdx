@@ -1,0 +1,39 @@
+---
+title: LineChart rendering lab
+description: "Live side-by-side of the LineChart rendering options — 1px vs 2px braille, solid octant, and gradient area — to compare what looks best."
+---
+
+import FleuryExample from '../../components/FleuryExample.astro';
+
+Same data, four ways — all live in your browser. Compare the line weights and
+markers to decide the flagship look.
+
+## Braille line — 1px hairline
+
+The original thin stroke. Highest resolution, but reads as a dotted trail in a
+sparse mono font.
+
+<FleuryExample id="linechart.lab.braille1" cols={58} rows={15} />
+
+## Braille line — 2px band
+
+The same braille, drawn one pixel thicker so the dots fill into a continuous
+band. Portable default; heavier in a dense font.
+
+<FleuryExample id="linechart.lab.braille2" cols={58} rows={15} />
+
+## Octant line — solid
+
+Unicode 16 octant glyphs: a solid, gap-free line at braille resolution. Needs a
+Unicode-16 font (this site ships JuliaMono) or a kitty/Ghostty terminal.
+
+<FleuryExample id="linechart.lab.octant" cols={58} rows={15} />
+
+## Gradient area — a separate `AreaChart`
+
+The filled look is different enough that it's its own widget, `AreaChart`
+(sharing `LineChart`'s engine under the hood). A solid, gradient-shaded fill
+of block columns — the most striking, and uniquely universal: block glyphs
+render solid in any font.
+
+<FleuryExample id="areachart.basic" cols={58} rows={15} />

@@ -39,6 +39,7 @@ import 'package:fleury/src/remote/buffered_browser_input.dart';
 import 'package:fleury/src/remote/remote_client_asset.dart';
 import 'package:fleury/src/remote/remote_protocol.dart';
 import 'package:fleury/src/remote/serve_index_html.dart';
+import 'package:fleury/src/remote/serve_mono_font_asset.dart';
 import 'package:fleury/src/remote/shell_init.dart';
 import 'package:fleury/src/remote/spawn.dart';
 import 'package:fleury/src/remote/unix_socket_transport.dart';
@@ -916,8 +917,8 @@ void _pumpBytes({
   );
 }
 
-/// Serves the index page and the embedded client bundle. Everything else
-/// 404s — the serve surface is exactly two files.
+/// Serves the index page, the embedded client bundle, and the embedded mono
+/// font. Everything else 404s — the serve surface is exactly these three files.
 Future<void> _serveStaticAsset(HttpRequest req) async {
   final path = req.uri.path;
   if (path == serveClientJsPath) {
@@ -930,6 +931,17 @@ Future<void> _serveStaticAsset(HttpRequest req) async {
     // let a browser serve a stale client against a freshly restarted server.
     req.response.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
     req.response.add(remoteClientJs());
+    await req.response.close();
+    return;
+  }
+  if (path == serveMonoFontPath) {
+    req.response.headers.contentType = ContentType('font', 'woff2');
+    // Static across restarts; safe to cache. (Content is version-stable.)
+    req.response.headers.set(
+      HttpHeaders.cacheControlHeader,
+      'public, max-age=604800',
+    );
+    req.response.add(serveMonoFontBytes());
     await req.response.close();
     return;
   }

@@ -5,20 +5,21 @@ import 'package:fleury/fleury_core.dart';
 import 'glyphs.dart';
 import 'sub_cell_buffer.dart';
 
-/// A 2×2-pixel-per-cell drawing surface that renders as Unicode block-
-/// element quadrants. Sits between `HalfBlockBuffer` (1×2) and
-/// `BrailleBuffer` (2×4) in resolution, with the visual character of
-/// solid blocks. Wide font coverage (the quadrant glyphs are part of
-/// the Block Elements range that's existed for decades).
+/// A 2×3-pixel-per-cell drawing surface rendering as Unicode **sextant** block
+/// glyphs (`U+1FB00..U+1FB3B`, "Symbols for Legacy Computing", Unicode 13.0).
+/// A **solid, gap-free** tier that sits between `QuadrantBuffer` (2×2) and
+/// `OctantBuffer` (2×4): more vertical resolution than quadrants with much
+/// wider support than octants (five-plus years of adoption; drawn natively by
+/// kitty and foot, and shipped by many monospace fonts). A good default
+/// "solid" tier when octants can't be assumed.
 ///
-/// Bit layout per cell:
+/// Bit layout per cell (`bit = row * 2 + col`):
 ///
-///     UL  UR    bit 0  bit 1
-///     LL  LR    bit 2  bit 3
-///
-/// All 16 combinations have a dedicated Unicode glyph.
-class QuadrantBuffer implements SubCellBuffer {
-  QuadrantBuffer(this.cols, this.rows)
+///     b0 b1
+///     b2 b3
+///     b4 b5
+class SextantBuffer implements SubCellBuffer {
+  SextantBuffer(this.cols, this.rows)
     : _bits = Uint8List(cols * rows),
       _colors = List<Color?>.filled(cols * rows, null);
 
@@ -30,46 +31,21 @@ class QuadrantBuffer implements SubCellBuffer {
   @override
   int get pixelWidth => cols * 2;
   @override
-  int get pixelHeight => rows * 2;
+  int get pixelHeight => rows * 3;
   @override
   bool get isStippled => false;
 
-  // Index = (UL << 0) | (UR << 1) | (LL << 2) | (LR << 3).
-  static const _glyphs = [
-    ' ', // 0000
-    '▘', // 0001 UL
-    '▝', // 0010 UR
-    '▀', // 0011 UL+UR (upper half)
-    '▖', // 0100 LL
-    '▌', // 0101 UL+LL (left half)
-    '▞', // 0110 UR+LL (diagonal /)
-    '▛', // 0111 UL+UR+LL
-    '▗', // 1000 LR
-    '▚', // 1001 UL+LR (diagonal \)
-    '▐', // 1010 UR+LR (right half)
-    '▜', // 1011 UL+UR+LR
-    '▄', // 1100 LL+LR (lower half)
-    '▙', // 1101 UL+LL+LR
-    '▟', // 1110 UR+LL+LR
-    '█', // 1111 all
-  ];
-
-  /// Lights a single pixel at `(px, py)`. Pixels outside the grid are
-  /// silently clipped. Most-recently-set color on a cell wins.
   @override
   void setPixel(int px, int py, [Color? color]) {
     if (px < 0 || px >= pixelWidth || py < 0 || py >= pixelHeight) return;
     final cellCol = px >> 1;
-    final cellRow = py >> 1;
-    final dotPx = px - (cellCol << 1);
-    final dotPy = py - (cellRow << 1);
-    final bit = dotPx + (dotPy << 1); // 0:UL 1:UR 2:LL 3:LR
+    final cellRow = py ~/ 3;
+    final bit = (py - cellRow * 3) * 2 + (px - (cellCol << 1));
     final idx = cellRow * cols + cellCol;
     _bits[idx] |= 1 << bit;
     if (color != null) _colors[idx] = color;
   }
 
-  /// Bresenham line in pixel space.
   @override
   void drawLine(int x0, int y0, int x1, int y1, [Color? color]) {
     var x = x0;
@@ -94,7 +70,6 @@ class QuadrantBuffer implements SubCellBuffer {
     }
   }
 
-  /// Writes the populated cells of this buffer into [target] at [offset].
   @override
   void writeTo(
     CellBuffer target,
@@ -114,8 +89,8 @@ class QuadrantBuffer implements SubCellBuffer {
         target.writeGrapheme(
           CellOffset(offset.col + c, offset.row + r),
           glyphTier == GlyphTier.ascii
-              ? densityGlyph(glyphTier, _bitCount(bits), 4)
-              : _glyphs[bits],
+              ? densityGlyph(glyphTier, subCellBitCount(bits), 6)
+              : String.fromCharCode(_sextantGlyphs[bits]),
           style: style,
         );
       }
@@ -123,12 +98,17 @@ class QuadrantBuffer implements SubCellBuffer {
   }
 }
 
-int _bitCount(int value) {
-  var count = 0;
-  var remaining = value;
-  while (remaining != 0) {
-    count += remaining & 1;
-    remaining >>= 1;
-  }
-  return count;
-}
+// Maps a 6-bit sextant cell mask to a codepoint. The 60 assigned sextants
+// (U+1FB00..U+1FB3B) plus the reused space / left-half / right-half / full
+// block glyphs cover all 64 patterns exactly. Generated from the Unicode 13
+// NamesList (BLOCK SEXTANT-… position naming).
+const List<int> _sextantGlyphs = <int>[
+  0x0020, 0x1FB00, 0x1FB01, 0x1FB02, 0x1FB03, 0x1FB04, 0x1FB05, 0x1FB06, //
+  0x1FB07, 0x1FB08, 0x1FB09, 0x1FB0A, 0x1FB0B, 0x1FB0C, 0x1FB0D, 0x1FB0E, //
+  0x1FB0F, 0x1FB10, 0x1FB11, 0x1FB12, 0x1FB13, 0x258C, 0x1FB14, 0x1FB15, //
+  0x1FB16, 0x1FB17, 0x1FB18, 0x1FB19, 0x1FB1A, 0x1FB1B, 0x1FB1C, 0x1FB1D, //
+  0x1FB1E, 0x1FB1F, 0x1FB20, 0x1FB21, 0x1FB22, 0x1FB23, 0x1FB24, 0x1FB25, //
+  0x1FB26, 0x1FB27, 0x2590, 0x1FB28, 0x1FB29, 0x1FB2A, 0x1FB2B, 0x1FB2C, //
+  0x1FB2D, 0x1FB2E, 0x1FB2F, 0x1FB30, 0x1FB31, 0x1FB32, 0x1FB33, 0x1FB34, //
+  0x1FB35, 0x1FB36, 0x1FB37, 0x1FB38, 0x1FB39, 0x1FB3A, 0x1FB3B, 0x2588, //
+];

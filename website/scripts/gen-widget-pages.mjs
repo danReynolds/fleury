@@ -212,8 +212,17 @@ function assertExportedWidgetCoverage(entries) {
     const parent = api[name]?.extends?.replace(/<.*>$/, '');
     return parent ? isWidget(parent, seen) : false;
   };
+  // Widgets intentionally shipped without a generated reference page —
+  // behavioral wrappers with no standalone demo. Keep this list tiny and
+  // justified; a widget users pick and configure should get a page instead.
+  const undocumentedWidgets = new Set([
+    // A which-key popup: wraps a child and reacts to the leader-key dispatcher;
+    // nothing to demo in isolation (see KeyBindings introspection).
+    'WhichKey',
+  ]);
   const exportedWidgets = [...exported]
     .filter((name) => api[name] && !api[name].abstract && isWidget(name))
+    .filter((name) => !undocumentedWidgets.has(name))
     .sort();
   const missing = exportedWidgets
     .filter((name) => !byWidget.has(name))
@@ -327,7 +336,13 @@ const all = JSON.parse(readFileSync(MANIFEST, 'utf8'));
 // 'Home' = the landing-hero example, mounted directly on the home page (no
 // catalog entry). 'Showcases' = full apps, their own section.
 const widgets = all.filter(
-  (e) => e.category !== 'Showcases' && e.category !== 'Home'
+  (e) =>
+    e.category !== 'Showcases' &&
+    e.category !== 'Home' &&
+    // '.lab.*' ids are extra comparison examples embedded on hand-written pages
+    // (e.g. the LineChart rendering lab); they ship in the bundle to be mounted
+    // there, but aren't canonical per-widget reference pages.
+    !String(e.id ?? '').includes('.lab.')
 );
 const showcases = all.filter((e) => e.category === 'Showcases');
 

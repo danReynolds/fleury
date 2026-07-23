@@ -192,7 +192,9 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     widget: 'LineChart',
     category: 'Charts & meters',
     blurb:
-        'A braille line/area/scatter chart with axes, legend, and references.',
+        'A multi-series line (or scatter) chart with sub-cell braille '
+        'rendering, axes, legend, and references. For a filled look, see '
+        'AreaChart.',
     cols: 60,
     rows: 16,
     code: '''LineChart(
@@ -214,6 +216,137 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
               <(num, num)>[for (var i = 0; i < data.length; i++) (i, data[i])],
               label: 'load',
               color: _theme.colorScheme.primary,
+            ),
+          ],
+          showAxes: true,
+          showLegend: true,
+          yRange: const (0, 100),
+        ),
+      ),
+    ),
+  ),
+  // --- LineChart rendering-option lab: compare line weights + markers ------
+  ExampleInfo(
+    id: 'linechart.lab.braille1',
+    widget: 'LineChart',
+    category: 'Charts & meters',
+    blurb: 'Braille line, 1px hairline (thin).',
+    cols: 58,
+    rows: 15,
+    code: 'LineChart(marker: CanvasMarker.braille, strokeWidth: 1, ...)',
+    builder: () => _framed(
+      _LiveSeries(
+        length: 40,
+        min: 0,
+        max: 100,
+        builder: (data) => LineChart(
+          series: <LineSeries>[
+            LineSeries(
+              <(num, num)>[for (var i = 0; i < data.length; i++) (i, data[i])],
+              label: 'load',
+              color: _theme.colorScheme.primary,
+            ),
+          ],
+          strokeWidth: 1,
+          showAxes: true,
+          showLegend: true,
+          yRange: const (0, 100),
+        ),
+      ),
+    ),
+  ),
+  ExampleInfo(
+    id: 'linechart.lab.braille2',
+    widget: 'LineChart',
+    category: 'Charts & meters',
+    blurb: 'Braille line, 2px band (current default).',
+    cols: 58,
+    rows: 15,
+    code: 'LineChart(marker: CanvasMarker.braille, strokeWidth: 2, ...)',
+    builder: () => _framed(
+      _LiveSeries(
+        length: 40,
+        min: 0,
+        max: 100,
+        builder: (data) => LineChart(
+          series: <LineSeries>[
+            LineSeries(
+              <(num, num)>[for (var i = 0; i < data.length; i++) (i, data[i])],
+              label: 'load',
+              color: _theme.colorScheme.primary,
+            ),
+          ],
+          strokeWidth: 2,
+          showAxes: true,
+          showLegend: true,
+          yRange: const (0, 100),
+        ),
+      ),
+    ),
+  ),
+  ExampleInfo(
+    id: 'linechart.lab.octant',
+    widget: 'LineChart',
+    category: 'Charts & meters',
+    blurb: 'Octant line — solid, crispest (Unicode 16).',
+    cols: 58,
+    rows: 15,
+    code: 'LineChart(marker: CanvasMarker.octant, ...)',
+    builder: () => _framed(
+      _LiveSeries(
+        length: 40,
+        min: 0,
+        max: 100,
+        builder: (data) => LineChart(
+          series: <LineSeries>[
+            LineSeries(
+              <(num, num)>[for (var i = 0; i < data.length; i++) (i, data[i])],
+              label: 'load',
+              color: _theme.colorScheme.primary,
+            ),
+          ],
+          marker: CanvasMarker.octant,
+          showAxes: true,
+          showLegend: true,
+          yRange: const (0, 100),
+        ),
+      ),
+    ),
+  ),
+  ExampleInfo(
+    id: 'areachart.basic',
+    widget: 'AreaChart',
+    category: 'Charts & meters',
+    blurb: 'A gradient-filled area chart — the filled sibling of LineChart.',
+    cols: 58,
+    rows: 15,
+    code: '''AreaChart(
+  series: <AreaSeries>[
+    AreaSeries(
+      points,
+      label: 'load',
+      gradient: [cs.success, cs.warning, cs.error],
+    ),
+  ],
+  showAxes: true,
+  showLegend: true,
+  yRange: const (0, 100),
+)''',
+    builder: () => _framed(
+      _LiveSeries(
+        length: 40,
+        min: 0,
+        max: 100,
+        builder: (data) => AreaChart(
+          series: <AreaSeries>[
+            AreaSeries(
+              <(num, num)>[for (var i = 0; i < data.length; i++) (i, data[i])],
+              label: 'load',
+              gradient: <Color>[
+                _theme.colorScheme.success,
+                _theme.colorScheme.warning,
+                _theme.colorScheme.error,
+              ],
             ),
           ],
           showAxes: true,
