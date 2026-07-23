@@ -355,10 +355,24 @@ GlyphTier detectGlyphTierFromEnvironment(Map<String, String> environment) {
 }
 
 /// Detects maximum color fidelity from conventional terminal environment.
+///
+/// Order: `NO_COLOR` wins outright; then an explicit `FLEURY_COLOR_DEPTH`
+/// override (`none`/`16`/`256`/`truecolor`) — the escape hatch for a
+/// lying/misconfigured terminal and for deterministic recordings; then
+/// `COLORTERM`/`TERM`; then `CLICOLOR_FORCE`/`CLICOLOR` when there is no `TERM`.
 ColorMode detectColorModeFromEnvironment(Map<String, String> environment) {
   // NO_COLOR wins outright (https://no-color.org): any non-empty value
-  // disables color, even over CLICOLOR_FORCE.
+  // disables color, even over CLICOLOR_FORCE and FLEURY_COLOR_DEPTH — matching
+  // prompt_toolkit, which also lets NO_COLOR win over its depth override.
   if ((environment['NO_COLOR'] ?? '').isNotEmpty) return ColorMode.none;
+
+  // Explicit Fleury override. Same precedence idea as FLEURY_GLYPH_TIER: an
+  // explicit value beats auto-detection (a terminal that claims truecolor but
+  // renders it badly, a 256 terminal pinned to 16, or a forced depth in a
+  // recording/CI run). `FleuryTester` already pins depth for goldens; this is
+  // the user-facing counterpart.
+  final override = _parseColorDepthOverride(environment['FLEURY_COLOR_DEPTH']);
+  if (override != null) return override;
 
   final colorterm = environment['COLORTERM']?.toLowerCase() ?? '';
   final term = environment['TERM']?.toLowerCase() ?? '';
@@ -367,11 +381,32 @@ ColorMode detectColorModeFromEnvironment(Map<String, String> environment) {
   }
   if (term.contains('256')) return ColorMode.indexed256;
   if (term.isNotEmpty) return ColorMode.ansi16;
-  if ((environment['CLICOLOR_FORCE'] ?? '0') != '0') {
-    // No TERM, but the caller insists on color.
+  // No TERM, but the caller insists on color: CLICOLOR_FORCE, or a bare
+  // non-zero CLICOLOR (the colorprofile/CLICOLOR convention).
+  if ((environment['CLICOLOR_FORCE'] ?? '0') != '0' ||
+      (environment['CLICOLOR'] ?? '0') != '0') {
     return ColorMode.ansi16;
   }
   return ColorMode.none;
+}
+
+/// Parses a `FLEURY_COLOR_DEPTH` value into a [ColorMode], or null when unset
+/// or unrecognized. Case-insensitive; accepts friendly aliases.
+ColorMode? _parseColorDepthOverride(String? raw) {
+  switch (raw?.toLowerCase().trim()) {
+    case 'none' || 'mono' || 'monochrome' || '1':
+      return ColorMode.none;
+    case '16' || 'ansi' || 'ansi16' || '4':
+      return ColorMode.ansi16;
+    case '256' || 'indexed' || 'indexed256' || '8':
+      return ColorMode.indexed256;
+    case 'truecolor' || 'true' || '24bit' || '24-bit' || 'rgb' || '24':
+      return ColorMode.truecolor;
+    case null || '':
+      return null;
+    default:
+      return null;
+  }
 }
 
 /// Detects the best known image protocol from terminal environment.

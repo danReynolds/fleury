@@ -7,8 +7,21 @@ import 'package:fleury_widgets/fleury_widgets.dart';
 
 import 'sample_image.dart';
 import 'story.dart';
+import 'theme_gallery.dart';
 
 final List<Story> storybookStories = _perWidgetStories(<Story>[
+  Story(
+    id: 'theme.gallery',
+    title: 'Themes',
+    category: 'Core',
+    description:
+        'Every built-in palette — Nord, Dracula, Gruvbox, Solarized (dark + '
+        'light), Catppuccin Mocha, Tokyo Night, One Dark — rendered on sample '
+        'widgets so you can see each theme at a glance. Scroll to compare.',
+    widgets: const <String>['Themes'],
+    initialHeight: 24,
+    builder: (context) => const ThemeGallery(),
+  ),
   Story(
     id: 'core.layout-text',
     title: 'Core Layout and Text',

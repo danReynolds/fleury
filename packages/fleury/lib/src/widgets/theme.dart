@@ -346,4 +346,28 @@ extension FleuryThemeContext on BuildContext {
   /// dependency on the same InheritedWidget — equivalent to
   /// [theme]`.colorScheme`.
   ColorScheme get colors => Theme.of(this).colorScheme;
+
+  /// Picks [light] or [dark] by the ambient [ThemeData.brightness] — the
+  /// reusable form of the `theme.brightness == Brightness.dark ? … : …`
+  /// branch, which is the single most common theming choice. Works for any
+  /// type (a [Color], a [CellStyle], a whole widget). Establishes a theme
+  /// dependency (via [theme]).
+  ///
+  /// ```dart
+  /// final line = context.adaptive(light: Colors.black, dark: Colors.white);
+  /// ```
+  ///
+  /// Because Fleury deliberately does not probe the terminal background,
+  /// [ThemeData.brightness] is the app's *declared* intent, not a detected
+  /// fact — so this resolves the app's choice, it does not guess the terminal.
+  T adaptive<T>({required T light, required T dark}) =>
+      theme.brightness.pick(light: light, dark: dark);
+}
+
+/// Picks a value by [Brightness], for the context-free cases (theme
+/// construction, render objects) where [FleuryThemeContext.adaptive] can't
+/// reach. This is Fleury's analog of Lip Gloss's `LightDark`.
+extension BrightnessPick on Brightness {
+  T pick<T>({required T light, required T dark}) =>
+      this == Brightness.dark ? dark : light;
 }
