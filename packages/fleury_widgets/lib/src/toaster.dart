@@ -202,7 +202,7 @@ class _ToasterState extends State<Toaster> {
   }
 
   Widget _buildLayer() {
-    return Align(
+    final Widget layer = Align(
       alignment: widget.alignment,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -242,6 +242,8 @@ class _ToasterState extends State<Toaster> {
         ],
       ),
     );
+    // styled component, not selectable text (the app child stays selectable)
+    return SelectionArea.disabled(child: layer);
   }
 
   SemanticState _toastSemanticState(_Toast toast) {

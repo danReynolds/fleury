@@ -107,60 +107,62 @@ class _FocusableControlState extends State<_FocusableControl>
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.enabled) {
-      return Semantics(
-        role: widget.semanticRole,
-        label: widget.semanticLabel,
-        value: widget.semanticValue,
-        selected: widget.semanticSelected,
-        checked: widget.semanticChecked,
-        enabled: false,
-        child: widget.builder(false, false),
-      );
-    }
-
-    return Semantics(
-      role: widget.semanticRole,
-      label: widget.semanticLabel,
-      value: widget.semanticValue,
-      focused: _node.hasFocus,
-      selected: widget.semanticSelected,
-      checked: widget.semanticChecked,
-      enabled: true,
-      actions: {
-        SemanticAction.focus,
-        SemanticAction.activate,
-        if (widget.onSetValue != null) SemanticAction.setValue,
-      },
-      onAction: (action) {
-        switch (action) {
-          case SemanticAction.focus:
-            _node.requestFocus();
-            return;
-          case SemanticAction.activate:
-            _node.requestFocus();
-            widget.onActivate!();
-            return;
-          case _:
-            return;
-        }
-      },
-      onSetValue: widget.onSetValue,
-      child: GestureDetector(
-        // A click focuses the control and activates it, so pointer users get
-        // the same affordance as keyboard users.
-        onTap: () {
-          _node.requestFocus();
-          widget.onActivate!();
-        },
-        child: Focus(
-          focusNode: _node,
-          autofocus: widget.autofocus,
-          onKey: _onKey,
-          child: widget.builder(_node.hasFocus, true),
-        ),
-      ),
-    );
+    final Widget content = !widget.enabled
+        ? Semantics(
+            role: widget.semanticRole,
+            label: widget.semanticLabel,
+            value: widget.semanticValue,
+            selected: widget.semanticSelected,
+            checked: widget.semanticChecked,
+            enabled: false,
+            child: widget.builder(false, false),
+          )
+        : Semantics(
+            role: widget.semanticRole,
+            label: widget.semanticLabel,
+            value: widget.semanticValue,
+            focused: _node.hasFocus,
+            selected: widget.semanticSelected,
+            checked: widget.semanticChecked,
+            enabled: true,
+            actions: {
+              SemanticAction.focus,
+              SemanticAction.activate,
+              if (widget.onSetValue != null) SemanticAction.setValue,
+            },
+            onAction: (action) {
+              switch (action) {
+                case SemanticAction.focus:
+                  _node.requestFocus();
+                  return;
+                case SemanticAction.activate:
+                  _node.requestFocus();
+                  widget.onActivate!();
+                  return;
+                case _:
+                  return;
+              }
+            },
+            onSetValue: widget.onSetValue,
+            child: GestureDetector(
+              // A click focuses the control and activates it, so pointer users
+              // get the same affordance as keyboard users.
+              onTap: () {
+                _node.requestFocus();
+                widget.onActivate!();
+              },
+              child: Focus(
+                focusNode: _node,
+                autofocus: widget.autofocus,
+                onKey: _onKey,
+                child: widget.builder(_node.hasFocus, true),
+              ),
+            ),
+          );
+    // A form control is a styled, interactive component — not selectable text.
+    // Opt its label out of the ambient text selection, the way a browser makes
+    // `<button>` text non-selectable. Standalone Text stays selectable.
+    return SelectionArea.disabled(child: content);
   }
 }
 
@@ -662,7 +664,13 @@ class Button extends StatelessWidget {
         role: SemanticRole.button,
         label: label,
         enabled: false,
-        child: Text(content, style: widgetTheme.resolveDisabled(theme)),
+        // A control is a styled component, not selectable text (like a disabled
+        // `<button>`). The enabled path opts out via _FocusableControl.
+        child: Text(
+          content,
+          allowSelect: false,
+          style: widgetTheme.resolveDisabled(theme),
+        ),
       );
     }
     final base = CellStyle(foreground: _color(variant, theme.colorScheme));

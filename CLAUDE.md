@@ -26,6 +26,7 @@ tolerance to clear red.
 | --- | --- |
 | `lib/src/rendering/**`, `ansi_renderer.dart`, cell paint | `benchmark wire-gate` **and** `benchmark alloc-gate --gate` **and** `benchmark paint-gate --gate` |
 | `lib/src/widgets/framework.dart`, reconcile/build/layout, per-frame path (incl. `overlay.dart`, `list_view.dart`, repaint boundaries) | `benchmark alloc-gate --gate` **and** `benchmark paint-gate --gate` |
+| `lib/src/widgets/selection/**`, `selectable_text_mixin.dart`, the default-on selection wrap in `run_app.dart` | `benchmark selection-gate --gate` |
 | `lib/src/terminal/terminal_image_encoder.dart` | `benchmark image-bench --gate` |
 | `lib/src/remote/**`, `lib/src/serve/**`, plan/semantics wire | `benchmark serve-wire-live` **and** `benchmark serve-semantics-gate` |
 | `web/remote_client.dart` and its imports | `benchmark bundle-size --gate` |

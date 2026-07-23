@@ -72,9 +72,7 @@ class Panel extends StatelessWidget {
       child: Container(
         border: BoxBorder(
           style: theme.borderStyle,
-          cellStyle: focused
-              ? CellStyle(foreground: accent)
-              : theme.mutedStyle,
+          cellStyle: focused ? CellStyle(foreground: accent) : theme.mutedStyle,
         ),
         padding: const EdgeInsets.symmetric(horizontal: 1),
         child: Column(
@@ -83,7 +81,9 @@ class Panel extends StatelessWidget {
           children: <Widget>[
             Row(
               children: <Widget>[
-                Text(title, style: titleStyle),
+                // Panel title is chrome, not selectable text; the child stays
+                // selectable.
+                Text(title, allowSelect: false, style: titleStyle),
                 const Expanded(child: SizedBox.shrink()),
                 if (trailing != null) trailing!,
               ],
