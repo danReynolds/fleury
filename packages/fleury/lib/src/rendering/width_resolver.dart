@@ -196,7 +196,23 @@ final class DefaultWidthResolver implements WidthResolver {
     if (r == 0x2601) return true; // ☁
     if (r == 0x2614) return true; // ☔
     if (r == 0x2615) return true; // ☕
-    if (r >= 0x2700 && r <= 0x27BF) return true; // Dingbats (mostly wide)
+    // Dingbats (U+2700–U+27BF) are a MIX of presentations, not "mostly wide":
+    // only the Emoji_Presentation=Yes code points below render as 2-column emoji
+    // by default. The rest — ✓ U+2713, ✗ U+2717, ✎/✏ pencils, ✂ scissors,
+    // ✈ plane — default to TEXT presentation and are 1 cell wide. Widening the
+    // whole block modeled those at 2, so on a terminal that renders them at 1
+    // every following cell on the row shifted one column left (garbled diff /
+    // scroll). Classify by Unicode presentation, not by the block.
+    if (r == 0x2705) return true; // ✅
+    if (r >= 0x270A && r <= 0x270B) return true; // ✊ ✋
+    if (r == 0x2728) return true; // ✨
+    if (r == 0x274C) return true; // ❌
+    if (r == 0x274E) return true; // ❎
+    if (r >= 0x2753 && r <= 0x2755) return true; // ❓ ❔ ❕
+    if (r == 0x2757) return true; // ❗
+    if (r >= 0x2795 && r <= 0x2797) return true; // ➕ ➖ ➗
+    if (r == 0x27B0) return true; // ➰
+    if (r == 0x27BF) return true; // ➿
     return false;
   }
 

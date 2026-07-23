@@ -20,7 +20,9 @@ void main() {
       expect(output, contains('Deploy Console'));
       expect(output, contains('primary'));
       expect(output, contains('Deploy'));
-      expect(output, contains('success'));
+      // The ✓ status glyph is a text-presentation dingbat (width 1); it renders
+      // without desyncing the row now that the width resolver classifies it.
+      expect(output, contains('✓ success'));
     });
   });
 }

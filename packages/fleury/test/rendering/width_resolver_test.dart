@@ -89,6 +89,46 @@ void main() {
     });
   });
 
+  group('widthOfGrapheme — dingbats (U+2700–U+27BF presentation split)', () {
+    test('text-presentation dingbats are width 1', () {
+      // Emoji_Presentation=No: default to text, so 1 cell. ✓/✗ are the most
+      // common TUI status glyphs; widening them desynced the cell diff against
+      // terminals that render them at 1 (garbled scrolling in the storybook).
+      for (final g in ['✓', '✗', '✎', '✏', '✂', '✈', '✉', '✒', '✍', '✁']) {
+        expect(resolver.widthOfGrapheme(g, standard), 1, reason: 'g=$g');
+      }
+    });
+
+    test('emoji-presentation dingbats stay width 2', () {
+      // Emoji_Presentation=Yes: render as 2-column emoji by default, so the
+      // narrowing above must not catch them.
+      for (final g in [
+        '✅',
+        '✊',
+        '✋',
+        '✨',
+        '❌',
+        '❎',
+        '❓',
+        '❔',
+        '❕',
+        '❗',
+        '➕',
+        '➖',
+        '➗',
+        '➰',
+        '➿',
+      ]) {
+        expect(resolver.widthOfGrapheme(g, standard), 2, reason: 'g=$g');
+      }
+    });
+
+    test('emoji disabled by profile narrows even wide dingbats', () {
+      const noEmoji = TerminalProfile(emojiIsWide: false);
+      expect(resolver.widthOfGrapheme('✅', noEmoji), 1);
+    });
+  });
+
   group('widthOfGrapheme — zero width', () {
     test('combining mark alone has width 0', () {
       // U+0301 alone — combining acute. (Real text would have a base char,

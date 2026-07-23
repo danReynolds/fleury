@@ -97,15 +97,15 @@ class _ThemeSample extends StatelessWidget {
             style: CellStyle(foreground: cs.foreground),
           ),
           const SizedBox(height: 1),
-          // Status colours as plain words — no ✓/⚠/ℹ glyphs: those are
-          // ambiguous/emoji-presentation width (terminals disagree on 1 vs 2
-          // cells), which desyncs the cell diff and garbles the frame.
+          // Status glyphs: ✓/✗ are text-presentation dingbats (1 cell) and
+          // ⚠/ℹ likewise resolve to 1 — the width resolver classifies them
+          // correctly, so they no longer desync the cell diff.
           Wrap(
             children: <Widget>[
-              Text('success   ', style: CellStyle(foreground: cs.success)),
-              Text('warning   ', style: CellStyle(foreground: cs.warning)),
-              Text('error   ', style: CellStyle(foreground: cs.error)),
-              Text('info', style: CellStyle(foreground: cs.info)),
+              Text('✓ success   ', style: CellStyle(foreground: cs.success)),
+              Text('⚠ warning   ', style: CellStyle(foreground: cs.warning)),
+              Text('✗ error   ', style: CellStyle(foreground: cs.error)),
+              Text('ℹ info', style: CellStyle(foreground: cs.info)),
             ],
           ),
         ],
