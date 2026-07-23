@@ -504,6 +504,7 @@ bool _looksLikeWidgetExport(String symbol) {
   const excludedNames = <String>{
     'ApprovalDecision',
     'ApprovalRequest',
+    'AreaSeries',
     'Bar',
     'ButtonVariant',
     'CalendarWeekStart',
