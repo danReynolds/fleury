@@ -30,6 +30,8 @@ class WhichKey extends StatefulWidget {
     this.maxCompletions = 12,
   });
 
+  /// The app (or subtree) the popup overlays. It shows through unchanged
+  /// until a key sequence is pending, then the popup floats above it.
   final Widget child;
 
   /// How long a sequence must stay pending before the popup appears. Keeps

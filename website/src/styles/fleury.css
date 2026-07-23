@@ -926,3 +926,102 @@ img.site-logo {
   color: var(--sl-color-gray-3);
   margin-bottom: 0.4rem;
 }
+
+/* ── Wide tables (framework comparison) ─────────────────────────────────────*/
+/* Scoped to tables wrapped in `.wide-table`: let the table use the full content
+   width and wrap cells to fit, instead of cramping or scrolling. overflow stays
+   visible so the hover popovers (see .ct) can escape the cell. Other tables
+   (key bindings, etc.) are untouched. */
+.wide-table {
+  overflow: visible;
+  margin: 1rem 0;
+}
+.wide-table > table {
+  width: 100%;
+  table-layout: auto;
+}
+/* Cells wrap to fit the column instead of forcing horizontal scroll. The
+   symbol columns (✅/◐/—) stay narrow; the label and description columns take
+   the slack and wrap to a second line as needed. */
+.wide-table th,
+.wide-table td {
+  white-space: normal;
+  padding-inline: 0.55rem;
+  vertical-align: top;
+}
+/* Keep the framework columns tight and centered so the checkmarks line up. */
+.wide-table th:not(:first-child),
+.wide-table td:not(:first-child) {
+  text-align: center;
+}
+
+/* ── Comparison-table framing (the How-Fleury-compares page) ────────────────*/
+.compare-block {
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.7rem;
+  background: var(--sl-color-gray-6);
+  padding: 1rem 1.25rem 1.2rem;
+  margin: 1.75rem 0;
+}
+.compare-block > :first-child {
+  margin-top: 0;
+}
+.compare-block .wide-table {
+  margin: 0.85rem 0 0;
+}
+/* ── Comparison-cell hover notes ────────────────────────────────────────────*/
+/* Marked cells (a nuanced ✅, a ◐, or a —) carry their detail in data-tip="" and
+   reveal it as a styled popover on hover or keyboard/tap focus. The native
+   title="" tooltip we had before was invisible-until-delay and unreadable; this
+   shows instantly. The cell is the positioning context and nothing clips the
+   popover (see .wide-table overflow above). */
+.ct {
+  position: relative;
+  cursor: help;
+  border-bottom: 1px dotted var(--sl-color-gray-4);
+}
+.ct::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  width: max-content;
+  max-width: 15rem;
+  white-space: normal;
+  text-align: left;
+  font-size: 0.78rem;
+  font-weight: 400;
+  line-height: 1.45;
+  padding: 0.45rem 0.6rem;
+  border-radius: 0.45rem;
+  background: var(--sl-color-black);
+  color: var(--sl-color-white);
+  border: 1px solid var(--sl-color-gray-5);
+  box-shadow: 0 8px 24px -10px rgba(0, 0, 0, 0.7);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s ease;
+  pointer-events: none;
+}
+.ct:hover::after,
+.ct:focus::after {
+  opacity: 1;
+  visibility: visible;
+}
+/* The right-hand framework columns anchor the popover to the cell's right edge
+   so it opens leftward and never spills past the table. */
+td:nth-last-child(-n + 2) .ct::after,
+th:nth-last-child(-n + 2) .ct::after {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+/* Homepage "read the full case" link under the Why-Fleury pillars. */
+.home-more {
+  text-align: center;
+  margin-top: 1.4rem;
+  font-size: var(--sl-text-lg);
+}
