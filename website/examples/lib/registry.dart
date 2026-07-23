@@ -192,20 +192,12 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     widget: 'LineChart',
     category: 'Charts & meters',
     blurb:
-        'A gradient-filled area chart (also does line + scatter) with axes, '
-        'legend, and references.',
+        'A braille line/area/scatter chart with axes, legend, and references.',
     cols: 60,
     rows: 16,
     code: '''LineChart(
   series: <LineSeries>[
-    LineSeries(
-      points,
-      label: 'load',
-      type: LineType.area,
-      // Vertical fill gradient, bottom → top: a solid, gradient-shaded
-      // region instead of a stippled braille wash.
-      gradient: [cs.success, cs.warning, cs.error],
-    ),
+    LineSeries(points, label: 'load', color: theme.colorScheme.primary),
   ],
   showAxes: true,
   showLegend: true,
@@ -224,7 +216,6 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
               color: _theme.colorScheme.primary,
             ),
           ],
-          marker: CanvasMarker.octant,
           showAxes: true,
           showLegend: true,
           yRange: const (0, 100),

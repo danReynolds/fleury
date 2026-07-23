@@ -3,7 +3,6 @@ import 'dart:typed_data';
 import 'package:fleury/fleury_core.dart';
 
 import 'glyphs.dart';
-import 'sub_cell_buffer.dart';
 
 /// A 1×2-pixel-per-cell drawing surface that renders as Unicode block
 /// elements (` ` / `▀` / `▄` / `█`). Lower sub-cell resolution than
@@ -17,7 +16,7 @@ import 'sub_cell_buffer.dart';
 ///     bot    bit 1
 ///
 /// Glyph table: 0 → ` `, 1 → `▀`, 2 → `▄`, 3 → `█`.
-class HalfBlockBuffer implements SubCellBuffer {
+class HalfBlockBuffer {
   HalfBlockBuffer(this.cols, this.rows)
     : _bits = Uint8List(cols * rows),
       _colors = List<Color?>.filled(cols * rows, null);
@@ -27,19 +26,14 @@ class HalfBlockBuffer implements SubCellBuffer {
   final Uint8List _bits;
   final List<Color?> _colors;
 
-  @override
   int get pixelWidth => cols;
-  @override
   int get pixelHeight => rows * 2;
-  @override
-  bool get isStippled => false;
 
   static const _glyphs = [' ', '▀', '▄', '█'];
 
   /// Lights a single pixel at `(px, py)`. Pixels outside the grid are
   /// silently clipped. The most-recently-set color on a cell wins when
   /// multiple lines cross it (matching `BrailleBuffer`'s behaviour).
-  @override
   void setPixel(int px, int py, [Color? color]) {
     if (px < 0 || px >= pixelWidth || py < 0 || py >= pixelHeight) return;
     final cellRow = py >> 1;
@@ -50,7 +44,6 @@ class HalfBlockBuffer implements SubCellBuffer {
   }
 
   /// Bresenham line in pixel space.
-  @override
   void drawLine(int x0, int y0, int x1, int y1, [Color? color]) {
     var x = x0;
     var y = y0;
@@ -76,7 +69,6 @@ class HalfBlockBuffer implements SubCellBuffer {
 
   /// Writes the populated cells of this buffer into [target] at [offset].
   /// Cells with no lit pixels are left untouched.
-  @override
   void writeTo(
     CellBuffer target,
     CellOffset offset,

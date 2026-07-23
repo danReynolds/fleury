@@ -352,32 +352,6 @@ void main() {
       );
     });
 
-    testWidgets('line chart / gradient area (btop look)', (tester) {
-      tester.pumpWidget(
-        SizedBox(
-          width: 30,
-          height: 8,
-          child: LineChart(
-            series: const [
-              LineSeries(
-                [(0, 1), (2, 6), (4, 3), (6, 8), (8, 4), (10, 9)],
-                type: LineType.area,
-                gradient: [
-                  RgbColor(0, 200, 100),
-                  RgbColor(240, 190, 40),
-                  RgbColor(255, 90, 90),
-                ],
-              ),
-            ],
-          ),
-        ),
-      );
-      expect(
-        tester.renderToString(size: const CellSize(30, 8)),
-        matchesGolden('viz/line_chart_gradient_area.txt'),
-      );
-    });
-
     testWidgets('line chart / reference lines + threshold color', (tester) {
       tester.pumpWidget(
         SizedBox(

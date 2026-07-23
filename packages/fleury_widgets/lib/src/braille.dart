@@ -3,7 +3,6 @@ import 'dart:typed_data';
 import 'package:fleury/fleury_core.dart';
 
 import 'glyphs.dart';
-import 'sub_cell_buffer.dart';
 
 /// A 2×4-pixel-per-cell drawing surface that renders as Unicode braille
 /// patterns (`U+2800..U+28FF`). Internal helper used by `Canvas` and
@@ -17,7 +16,7 @@ import 'sub_cell_buffer.dart';
 ///     dot 7  dot 8      bit 6  bit 7
 ///
 /// Glyph at offset N = `U+2800 + N`, where N is the OR of set bits.
-class BrailleBuffer implements SubCellBuffer {
+class BrailleBuffer {
   BrailleBuffer(this.cols, this.rows)
     : _dots = Uint8List(cols * rows),
       _colors = List<Color?>.filled(cols * rows, null);
@@ -27,12 +26,8 @@ class BrailleBuffer implements SubCellBuffer {
   final Uint8List _dots;
   final List<Color?> _colors;
 
-  @override
   int get pixelWidth => cols * 2;
-  @override
   int get pixelHeight => rows * 4;
-  @override
-  bool get isStippled => true;
 
   static int _bitFor(int px, int py) {
     if (px == 0) {
@@ -46,7 +41,6 @@ class BrailleBuffer implements SubCellBuffer {
   /// Lights a single pixel at `(px, py)`. Pixels outside the grid are
   /// silently clipped. The most-recently-set color on a cell wins when
   /// multiple lines cross it (matching Ratatui's behaviour).
-  @override
   void setPixel(int px, int py, [Color? color]) {
     if (px < 0 || px >= pixelWidth || py < 0 || py >= pixelHeight) return;
     final cellCol = px >> 1;
@@ -59,7 +53,6 @@ class BrailleBuffer implements SubCellBuffer {
   }
 
   /// Bresenham line in pixel space.
-  @override
   void drawLine(int x0, int y0, int x1, int y1, [Color? color]) {
     var x = x0;
     var y = y0;
@@ -85,7 +78,6 @@ class BrailleBuffer implements SubCellBuffer {
 
   /// Writes the populated cells of this buffer into [target] at [offset].
   /// Cells with no dots are left untouched.
-  @override
   void writeTo(
     CellBuffer target,
     CellOffset offset,
