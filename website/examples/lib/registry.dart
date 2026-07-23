@@ -1139,6 +1139,46 @@ TextArea(
     ),
   ),
   ExampleInfo(
+    id: 'whichkey.basic',
+    widget: 'WhichKey',
+    category: 'Navigation & overlays',
+    blurb:
+        'A which-key popup: press the leader (Space) and the shortcuts that '
+        'continue the sequence appear.',
+    cols: 44,
+    rows: 8,
+    interactive: true,
+    code: '''KeyBindings(
+  bindings: <KeyBinding>[
+    KeyBinding(KeySequence.space.f, label: 'Find file', onTrigger: findFile),
+    KeyBinding(KeySequence.space.b, label: 'Buffers', onTrigger: buffers),
+    KeyBinding(KeySequence.space.g, label: 'Git', onTrigger: git),
+  ],
+  child: WhichKey(
+    child: Focus(autofocus: true, child: editor),
+  ),
+)''',
+    builder: () => _framed(
+      KeyBindings(
+        bindings: <KeyBinding>[
+          KeyBinding(KeySequence.space.f, label: 'Find file', onTrigger: () {}),
+          KeyBinding(KeySequence.space.b, label: 'Buffers', onTrigger: () {}),
+          KeyBinding(KeySequence.space.g, label: 'Git', onTrigger: () {}),
+        ],
+        // Zero delay so the popup appears the instant Space is pressed in the
+        // demo; real apps keep the default (a short delay hides it for fast
+        // completions).
+        child: const WhichKey(
+          showDelay: Duration.zero,
+          child: Focus(
+            autofocus: true,
+            child: Text('Press Space, then a key'),
+          ),
+        ),
+      ),
+    ),
+  ),
+  ExampleInfo(
     id: 'commandpalette.basic',
     widget: 'CommandPalette',
     category: 'Navigation & overlays',

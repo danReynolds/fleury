@@ -169,7 +169,7 @@ class TokenMeter extends StatelessWidget {
         _tokenText(displayLabel, usage, width: width, percent: percent) +
         statusSuffix;
 
-    return Semantics(
+    final Widget meter = Semantics(
       role: SemanticRole.tokenMeter,
       label: displayLabel,
       value: used == null
@@ -198,6 +198,8 @@ class TokenMeter extends StatelessWidget {
         allowSelect: false,
       ),
     );
+    // styled component, not selectable text
+    return SelectionArea.disabled(child: meter);
   }
 }
 
@@ -248,7 +250,7 @@ class ModelStatusBar extends StatelessWidget {
       queueDepth: info.queueDepth,
     );
 
-    return Semantics(
+    final Widget bar = Semantics(
       role: SemanticRole.modelStatus,
       label: _sanitizeStatusText(label),
       value: info.status.name,
@@ -279,6 +281,8 @@ class ModelStatusBar extends StatelessWidget {
         ],
       ),
     );
+    // styled component, not selectable text
+    return SelectionArea.disabled(child: bar);
   }
 }
 

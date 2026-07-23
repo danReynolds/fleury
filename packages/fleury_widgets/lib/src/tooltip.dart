@@ -58,7 +58,7 @@ class _TooltipState extends State<Tooltip> {
             label: widget.semanticLabel,
             value: _safeMessage,
             state: const SemanticState({'tooltipVisible': true}),
-            child: Text(widget.message),
+            child: Text(widget.message, allowSelect: false),
           ),
         ),
       ),

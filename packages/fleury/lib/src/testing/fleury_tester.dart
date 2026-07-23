@@ -49,6 +49,7 @@ import '../widgets/framework.dart';
 import '../widgets/media_query.dart';
 import '../widgets/overlay.dart';
 import '../widgets/pointer.dart';
+import '../widgets/selection/selection_area.dart';
 import '../widgets/tui_binding.dart';
 import 'finders.dart';
 
@@ -193,8 +194,11 @@ class FleuryTester {
   late final BuildOwner _owner;
   Element? _root;
   Widget _currentUserWidget = const EmptyBox();
+  // Mirror runApp: the app root is wrapped in the host's default text
+  // selection ([DefaultRootSelection]), so rendered Text is drag-selectable and
+  // Ctrl+A / Ctrl+C-copyable under test exactly as in production.
   late final OverlayEntry _userEntry = OverlayEntry(
-    builder: (_) => _currentUserWidget,
+    builder: (_) => DefaultRootSelection(child: _currentUserWidget),
   );
   bool _disposed = false;
 

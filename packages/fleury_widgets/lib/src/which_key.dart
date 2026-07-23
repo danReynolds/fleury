@@ -30,6 +30,8 @@ class WhichKey extends StatefulWidget {
     this.maxCompletions = 12,
   });
 
+  /// The app (or subtree) the popup overlays. It shows through unchanged
+  /// until a key sequence is pending, then the popup floats above it.
   final Widget child;
 
   /// How long a sequence must stay pending before the popup appears. Keeps
@@ -120,15 +122,18 @@ class _WhichKeyState extends State<WhichKey> {
     return Stack(
       children: [
         widget.child,
-        Align(
-          alignment: Alignment.bottomLeft,
-          child: Panel(
-            title: pending.prefix.hintLabel,
-            expandChild: false,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: rows,
+        // styled component, not selectable text (the app child stays selectable)
+        SelectionArea.disabled(
+          child: Align(
+            alignment: Alignment.bottomLeft,
+            child: Panel(
+              title: pending.prefix.hintLabel,
+              expandChild: false,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: rows,
+              ),
             ),
           ),
         ),

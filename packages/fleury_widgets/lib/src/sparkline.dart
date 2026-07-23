@@ -87,7 +87,11 @@ class Sparkline extends StatelessWidget {
                     glyphTier: MediaQuery.glyphTierOf(context),
                   ),
                 ),
-                Text(' ${_formatSparkValue(latest)}', style: theme.mutedStyle),
+                Text(
+                  ' ${_formatSparkValue(latest)}',
+                  allowSelect: false, // chart label, not selectable text
+                  style: theme.mutedStyle,
+                ),
               ],
             )
           : _RawSparkline(

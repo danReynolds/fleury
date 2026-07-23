@@ -176,6 +176,9 @@ class ApprovalPrompt extends StatelessWidget {
         ),
       ),
     );
+    // NB: no blanket opt-out here. The Dialog title and the Buttons are chrome
+    // and opt out on their own; the message / subject / details are CONTENT the
+    // user may want to select and copy (the command, path, etc.).
   }
 }
 

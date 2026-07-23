@@ -140,7 +140,11 @@ class CalendarHeatmap extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
                 grid,
-                Text('·░▒▓█  less – more', style: theme.mutedStyle),
+                Text(
+                  '·░▒▓█  less – more',
+                  allowSelect: false, // chart legend, not selectable text
+                  style: theme.mutedStyle,
+                ),
               ],
             )
           : grid,

@@ -1,9 +1,9 @@
 ---
 title: Fleury
-description: A retained-mode UI framework for the terminal — and the browser.
+description: A fast, retained-mode UI framework for the terminal — and the browser.
 template: splash
 hero:
-  tagline: A retained-mode UI framework for the terminal — and the browser. One widget tree, two surfaces, and a semantic graph agents can drive.
+  tagline: A fast, retained-mode UI framework for the terminal — and the browser. One widget tree, two surfaces, and a semantic tree agents can drive.
   actions:
     - text: Get started
       link: /fleury/getting-started/
@@ -66,64 +66,43 @@ BarChart(
 <FleuryExample slot="demo-2" id="barchart.basic" cols={52} rows={12} surfaceTheme="site" />
 </HomeSplit>
 
-None of these are screenshots — each is a real Fleury widget tree, compiled to
-JavaScript with `dart2js` and running live in your browser: the clock ticks, the
-bars stream, and the table responds to your clicks. Tab through them in the title
-bar, or watch them cycle. The same reusable widget trees also run behind a
-native terminal entrypoint.
-
-That same widget tree is also *agent-first*: meaningful content and interactive
-widgets contribute roles, values, state, and supported actions, while
-layout-only structure can be folded away. An AI agent can therefore **drive**
-your app instead of screen-scraping it. Point any [Model Context
-Protocol](https://modelcontextprotocol.io) host — Claude included — at a Fleury
-app and it reads the UI by meaning and operates it through those actions. No
-ANSI parsing or guessed keystrokes, and no agent-specific app integration: it is
-the same semantic model your tests and accessibility use.
-
-```sh
-fleury_mcp -- dart run bin/run_app.dart
-```
-
-[Drive it with an agent (MCP) →](/fleury/guides/driving-with-agents/)
-
-And dropping it into *your* page is the fun part: hand Fleury a host element and a
-widget tree, and a `dart2js` bundle does the rest — no iframe, no backend, no
-screenshot. Every live demo on this site is one line like this:
-
-```dart
-mountApp(() => const Dashboard(), into: appHost);
-```
-
-[Embed Fleury in any page →](/fleury/architecture/serving-and-embedding/)
+None of these are screenshots — each is a real Fleury widget tree compiled to
+JavaScript with `dart2js`, running live in your browser: the clock ticks, the
+bars stream, the table takes your clicks. The same trees also run native in a
+terminal. [How that works →](/fleury/architecture/serving-and-embedding/)
 
 ## Why Fleury
 
 <CardGrid>
-  <FeatureCard icon="puzzle" title="A real widget tree, for cells" href="/fleury/architecture/core-and-targets/" cta="How it fits together">
-    Widgets, elements, render objects, and a semantics tree — incremental
-    rebuilds, layout, and paint over a grid of cells instead of pixels. With
-    stateful hot reload on save, out of the box.
+  <FeatureCard icon="puzzle" title="A Real Widget Tree, for Cells" href="/fleury/architecture/core-and-targets/" cta="How it fits together">
+    A widget, element, and render tree with a real layout engine — painting to a
+    grid of cells, not pixels. Rebuilds stay on the dirty subtree, so an idle app
+    emits nothing.
   </FeatureCard>
-  <FeatureCard icon="open-book" title="Built for agents" href="/fleury/guides/driving-with-agents/" cta="Drive it with an agent">
-    AI agents and tests operate the real UI over the Model Context Protocol — by
-    its roles, state, and actions, not by screen-scraping. No server code to write.
+  <FeatureCard icon="open-book" title="Built for Agents" href="/fleury/guides/driving-with-agents/" cta="Drive it with an agent">
+    Every widget publishes its role, state, and actions to a live semantic tree.
+    Agents drive your app through it over MCP — and your tests assert on the same
+    tree — instead of scraping the screen. Nothing extra to wire up.
   </FeatureCard>
-  <FeatureCard icon="laptop" title="One app, two surfaces" href="/fleury/architecture/serving-and-embedding/" cta="Serving & embedding">
-    The same app renders to a real terminal *or* the browser — embedded with
-    dart2js or previewed with <code>fleury serve</code>. A parity oracle keeps
-    the two surfaces honest.
+  <FeatureCard icon="laptop" title="One App, Multiple Targets" href="/fleury/architecture/serving-and-embedding/" cta="Serving & embedding">
+    The same widget tree renders natively to a terminal, or to the browser —
+    compiled in with dart2js, or streamed live by <code>fleury serve</code>. A
+    parity oracle diffs the targets so they can't drift.
   </FeatureCard>
-  <FeatureCard icon="rocket" title="Fast, and measured" href="/fleury/architecture/performance/" cta="The numbers">
-    Dirty-subtree rebuilds and cell-level diffs — an idle app emits nothing.
-    Virtualized data widgets, and a benchmark suite with regression gates in CI.
+  <FeatureCard icon="rocket" title="Fast Development & Debugging" href="/fleury/guides/hot-reload/" cta="Hot reload">
+    Stateful hot reload on save — rare in a terminal — so a running app picks up
+    your edits in place, state intact. And a debug shell in every dev run:
+    Ctrl+G for frame timings, paint-flash, the live semantic tree, logs and
+    errors — right there, even over SSH.
   </FeatureCard>
 </CardGrid>
 
+<p class="home-more"><a href="/fleury/comparison/">Read the full case for Fleury — and how it compares →</a></p>
+
 ## See it in action
 
-Three complete apps, each built entirely from Fleury widgets and **running live
-in your browser** — open one and use your keyboard and mouse.
+Three complete apps, each built only from Fleury widgets and **running live in
+your browser**. Open one and drive it with your keyboard and mouse.
 
 <CardGrid>
   <LinkCard
@@ -150,9 +129,9 @@ in your browser** — open one and use your keyboard and mouse.
 
 ## How it works
 
-*One widget tree, two surfaces* rests on a retained-mode
-engine that turns your widgets into cells and paints them wherever you point it:
-a terminal, a browser, a streamed session. These pages are the tour.
+*One widget tree, two surfaces* rests on a retained-mode engine: it turns your
+widgets into cells and paints them wherever you point it — a terminal, a
+browser, a streamed session. These two pages walk the whole pipeline.
 
 <CardGrid>
   <LinkCard title="Architecture" href="/fleury/architecture/overview/" description="The retained four-tree pipeline, the platform-neutral core, and the targets that paint a cell grid to a terminal or a browser." />

@@ -407,7 +407,7 @@ class _ColorPickerState extends State<ColorPicker>
       ],
     );
     if (!enabled) {
-      return Semantics(
+      final Widget picker = Semantics(
         role: SemanticRole.list,
         label: widget.semanticLabel,
         value: selectedColor == null
@@ -427,8 +427,10 @@ class _ColorPickerState extends State<ColorPicker>
         }),
         child: body,
       );
+      // styled component, not selectable text
+      return SelectionArea.disabled(child: picker);
     }
-    return Semantics(
+    final Widget picker = Semantics(
       role: SemanticRole.list,
       label: widget.semanticLabel,
       value: selectedColor == null
@@ -461,6 +463,8 @@ class _ColorPickerState extends State<ColorPicker>
         ),
       ),
     );
+    // styled component, not selectable text
+    return SelectionArea.disabled(child: picker);
   }
 
   String _colorLabel(Color color, int index) {
