@@ -34,6 +34,7 @@ class KeyHintBar extends StatelessWidget {
     this.maxBindings = 12,
     this.separator = ' · ',
     this.style = CellStyle.empty,
+    this.keyStyle,
     this.globalBindings = const [],
   });
 
@@ -45,8 +46,14 @@ class KeyHintBar extends StatelessWidget {
   /// Separator between bindings. Default: `' · '`.
   final String separator;
 
-  /// Style applied to the entire rendered text.
+  /// Style applied to the description text (and separators / `+N` marker).
   final CellStyle style;
+
+  /// Style for the `[key chord]` portion of each hint, so the chord reads
+  /// distinctly from its description (Terminal.Gui's "Hot" idea, for a
+  /// keyboard-first bar). Defaults to the theme's focus colour, bold, layered
+  /// on [style].
+  final CellStyle? keyStyle;
 
   /// Bindings from `runApp`'s `globalBindings` parameter. Pass these
   /// in explicitly so the hint bar can show them; the framework
@@ -75,13 +82,44 @@ class KeyHintBar extends StatelessWidget {
     // with a trailing "+N" instead of clipping a label mid-word. Under an
     // unbounded width (maxCols == null) everything shows — the Text sizes to
     // content, so LayoutBuilder doesn't collapse.
+    final resolvedKeyStyle =
+        keyStyle ??
+        style.merge(CellStyle(foreground: context.colors.focus, bold: true));
     return LayoutBuilder(
-      builder: (context, constraints) => Text(
+      builder: (context, constraints) => _styledBar(
         _fit(segments, total, constraints.maxCols),
-        style: style,
-        softWrap: false,
+        resolvedKeyStyle,
       ),
     );
+  }
+
+  /// Renders [text] with each `[chord]` run in [keyStyle] and everything else
+  /// (descriptions, separators, the `+N` marker) in [style]. Splits on the
+  /// literal brackets the segments were built with, so the fitted width is
+  /// unchanged — only the colouring differs.
+  Widget _styledBar(String text, CellStyle keyStyle) {
+    final spans = <TextSpan>[];
+    var cursor = 0;
+    while (cursor < text.length) {
+      final open = text.indexOf('[', cursor);
+      if (open < 0) {
+        spans.add(TextSpan(text: text.substring(cursor), style: style));
+        break;
+      }
+      if (open > cursor) {
+        spans.add(TextSpan(text: text.substring(cursor, open), style: style));
+      }
+      final close = text.indexOf(']', open);
+      if (close < 0) {
+        spans.add(TextSpan(text: text.substring(open), style: style));
+        break;
+      }
+      spans.add(
+        TextSpan(text: text.substring(open, close + 1), style: keyStyle),
+      );
+      cursor = close + 1;
+    }
+    return RichText(text: TextSpan(children: spans), softWrap: false);
   }
 
   /// Renders the largest prefix of whole bindings (highest-priority first) that

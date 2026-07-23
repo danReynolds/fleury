@@ -382,6 +382,7 @@ export 'src/widgets/theme_palettes.dart' show NamedTheme, ThemePalettes;
 export 'src/widgets/theme.dart'
     show
         Brightness,
+        BrightnessPick,
         ColorScheme,
         DefaultTextStyle,
         FleuryThemeContext,
