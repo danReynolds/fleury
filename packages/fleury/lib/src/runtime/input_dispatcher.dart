@@ -29,7 +29,11 @@ class InputDispatcher {
     this.pointerRouter,
     this.sequenceTimeout = const Duration(milliseconds: 500),
     List<KeyBinding> globalBindings = const [],
-  }) : _globalBindings = globalBindings;
+  }) : _globalBindings = globalBindings {
+    // Let the widget tree abandon a pending sequence (a which-key popup's
+    // close control) by routing the notifier's cancel back to us.
+    pendingSequenceNotifier.onCancel = cancelPending;
+  }
 
   /// The focus manager whose chain this dispatcher walks.
   final FocusManager focusManager;
@@ -82,6 +86,16 @@ class InputDispatcher {
 
   /// Whether a sequence is currently pending. Useful for tests.
   bool get hasPendingSequence => _pending != null;
+
+  /// Abandons an in-flight sequence as if the user pressed Esc: held events
+  /// replay (a shorter binding fires, a text-owed char reaches the field) and
+  /// the pending state clears, dropping any which-key popup. No-op when
+  /// nothing is pending. The widget tree reaches this via
+  /// [KeyBindings.cancelPending] → [PendingSequenceNotifier.cancel].
+  void cancelPending() {
+    _checkNotDisposed();
+    _cancelPendingAndRedispatchHeld();
+  }
 
   /// Builds the public snapshot: the held prefix plus every live next step
   /// (the completions a which-key popup lists).

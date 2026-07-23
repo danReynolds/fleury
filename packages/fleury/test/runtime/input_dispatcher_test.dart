@@ -1045,6 +1045,75 @@ void main() {
       expect(h.dispatcher.hasPendingSequence, isFalse);
     });
   });
+
+  group('cancelPending (a which-key close control)', () {
+    test('abandons a held pure prefix, firing nothing', () {
+      final calls = <String>[];
+      final h = _TestHarness();
+      h.mountRoot(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeySequence.d.k, onTrigger: () => calls.add('dk')),
+          ],
+          child: const Focus(autofocus: true, child: EmptyBox()),
+        ),
+      );
+
+      h.dispatch(_char('d'));
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+
+      h.dispatcher.cancelPending();
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+      expect(calls, isEmpty, reason: 'a pure prefix commits nothing');
+    });
+
+    test('commits a deferred shorter binding, exactly as Esc would', () {
+      final calls = <String>[];
+      final h = _TestHarness();
+      h.mountRoot(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeySequence.d, onTrigger: () => calls.add('d')),
+            KeyBinding(KeySequence.d.k, onTrigger: () => calls.add('dk')),
+          ],
+          child: const Focus(autofocus: true, child: EmptyBox()),
+        ),
+      );
+
+      h.dispatch(_char('d'));
+      expect(calls, isEmpty, reason: 'direct .d deferred while .d.k is live');
+
+      h.dispatcher.cancelPending();
+      expect(calls, ['d'], reason: 'the held prefix replays, like Esc/timeout');
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+
+    test('is a no-op when no sequence is in flight', () {
+      final h = _TestHarness();
+      h.mountRoot(const Focus(autofocus: true, child: EmptyBox()));
+
+      h.dispatcher.cancelPending(); // must not throw
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+
+    test('the widget-tree route (notifier.cancel) reaches the dispatcher', () {
+      // What KeyBindings.cancelPending(context) ultimately calls: the scope
+      // hands out this notifier, and the dispatcher wires its cancel in.
+      final h = _TestHarness();
+      h.mountRoot(
+        KeyBindings(
+          bindings: [KeyBinding(KeySequence.d.k, onTrigger: () {})],
+          child: const Focus(autofocus: true, child: EmptyBox()),
+        ),
+      );
+
+      h.dispatch(_char('d'));
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+
+      h.dispatcher.pendingSequenceNotifier.cancel();
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+  });
 }
 
 /// Test-only builder widget (not exported by the package; needed for

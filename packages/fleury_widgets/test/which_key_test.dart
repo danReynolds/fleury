@@ -6,6 +6,29 @@ import 'package:test/test.dart';
 String _render(FleuryTester tester) =>
     tester.renderToString(size: const CellSize(40, 14), emptyMark: ' ');
 
+/// Locates a single-cell [glyph] in a rendered grid, so a test can click it.
+({int col, int row})? _findGlyph(String rendered, String glyph) {
+  final lines = rendered.split('\n');
+  for (var row = 0; row < lines.length; row++) {
+    final col = lines[row].indexOf(glyph);
+    if (col >= 0) return (col: col, row: row);
+  }
+  return null;
+}
+
+MouseEvent _down(int col, int row) => MouseEvent(
+  kind: MouseEventKind.down,
+  button: MouseButton.left,
+  col: col,
+  row: row,
+);
+MouseEvent _up(int col, int row) => MouseEvent(
+  kind: MouseEventKind.up,
+  button: MouseButton.left,
+  col: col,
+  row: row,
+);
+
 Widget _app({Duration showDelay = Duration.zero}) => WhichKey(
   showDelay: showDelay,
   child: KeyBindings(
@@ -79,6 +102,30 @@ void main() {
         emptyMark: ' ',
       );
       expect(out, contains('+15 more'), reason: '20 completions, cap 5');
+    });
+
+    testWidgets('offers both dismiss affordances, and the close glyph '
+        'cancels the sequence on click', (tester) {
+      tester.pumpWidget(_app());
+      tester.render();
+
+      tester.press(KeySequence.space);
+      final shown = _render(tester);
+      expect(shown, contains('Find file'));
+      expect(shown, contains('esc'), reason: 'the keyboard dismiss hint');
+
+      final close = _findGlyph(shown, '✕');
+      expect(close, isNotNull, reason: 'the popup renders a close control');
+
+      // Clicking it abandons the pending sequence, exactly as Esc would.
+      tester.sendMouse(_down(close!.col, close.row));
+      tester.sendMouse(_up(close.col, close.row));
+
+      expect(
+        _render(tester),
+        isNot(contains('Find file')),
+        reason: 'the click cancelled the pending sequence',
+      );
     });
 
     testWidgets('a non-zero delay suppresses a fast sequence', (tester) async {

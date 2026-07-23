@@ -95,6 +95,9 @@ class _WhichKeyState extends State<WhichKey> {
       foreground: theme.colorScheme.primary,
       bold: true,
     );
+    // A clickable close glyph, ASCII-safe on limited terminals.
+    final closeGlyph =
+        MediaQuery.glyphTierOf(context) == GlyphTier.ascii ? 'x' : '✕';
     final labeled = [
       for (final completion in pending.completions)
         if (completion.binding.label != null) completion,
@@ -126,13 +129,35 @@ class _WhichKeyState extends State<WhichKey> {
         SelectionArea.disabled(
           child: Align(
             alignment: Alignment.bottomLeft,
-            child: Panel(
-              title: pending.prefix.hintLabel,
-              expandChild: false,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: rows,
+            // A floating popup composites over whatever's painted beneath it, so
+            // it must paint its own opaque background or the app content bleeds
+            // through the panel. Surface is the same fill the Navigator gives a
+            // modal; this popup floats a bare Panel, so it supplies its own.
+            child: Surface(
+              child: Panel(
+                title: pending.prefix.hintLabel,
+                // Dismiss affordances: the keyboard hint (Esc, or any
+                // non-continuing key) plus a clickable close for pointer users.
+                // Both abandon the in-flight sequence, which drops the popup.
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('esc ', style: CellStyle(dim: true)),
+                    GestureDetector(
+                      onTap: () => KeyBindings.cancelPending(context),
+                      child: Text(
+                        closeGlyph,
+                        style: CellStyle(foreground: theme.colorScheme.primary),
+                      ),
+                    ),
+                  ],
+                ),
+                expandChild: false,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: rows,
+                ),
               ),
             ),
           ),
