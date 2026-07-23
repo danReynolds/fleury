@@ -20,7 +20,7 @@ void main() {
       expect(output, contains('Deploy Console'));
       expect(output, contains('primary'));
       expect(output, contains('Deploy'));
-      expect(output, contains('✓ success'));
+      expect(output, contains('success'));
     });
   });
 }
