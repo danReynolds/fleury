@@ -527,7 +527,7 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
     final enabled = _enabled;
     final focused = enabled && _focusNode.hasFocus;
     final child = widget.options.isEmpty
-        ? Text(widget.emptyLabel, style: theme.mutedStyle)
+        ? Text(widget.emptyLabel, allowSelect: false, style: theme.mutedStyle)
         : Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

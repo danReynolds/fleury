@@ -111,7 +111,9 @@ void main() {
       var appHits = 0;
       tester.pumpWidget(
         KeyBindings(
-          bindings: [KeyBinding(KeySequence.ctrl.a, onTrigger: () => appHits++)],
+          bindings: [
+            KeyBinding(KeySequence.ctrl.a, onTrigger: () => appHits++),
+          ],
           child: const Text('hello world'),
         ),
       );

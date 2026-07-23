@@ -58,7 +58,11 @@ class Dialog extends StatelessWidget {
             children: [
               // Dialog title is chrome, not selectable text; the child stays
               // selectable.
-              Text(t, allowSelect: false, style: titleStyle ?? theme.focusedStyle),
+              Text(
+                t,
+                allowSelect: false,
+                style: titleStyle ?? theme.focusedStyle,
+              ),
               const SizedBox(height: 1),
               child,
             ],

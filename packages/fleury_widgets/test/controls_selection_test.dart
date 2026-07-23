@@ -8,12 +8,24 @@ import 'package:fleury_test/fleury_test.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
 import 'package:test/test.dart';
 
-MouseEvent _d(int c, int r) =>
-    MouseEvent(kind: MouseEventKind.down, button: MouseButton.left, col: c, row: r);
-MouseEvent _m(int c, int r) =>
-    MouseEvent(kind: MouseEventKind.drag, button: MouseButton.left, col: c, row: r);
-MouseEvent _u(int c, int r) =>
-    MouseEvent(kind: MouseEventKind.up, button: MouseButton.left, col: c, row: r);
+MouseEvent _d(int c, int r) => MouseEvent(
+  kind: MouseEventKind.down,
+  button: MouseButton.left,
+  col: c,
+  row: r,
+);
+MouseEvent _m(int c, int r) => MouseEvent(
+  kind: MouseEventKind.drag,
+  button: MouseButton.left,
+  col: c,
+  row: r,
+);
+MouseEvent _u(int c, int r) => MouseEvent(
+  kind: MouseEventKind.up,
+  button: MouseButton.left,
+  col: c,
+  row: r,
+);
 
 void _dragAcross(FleuryTester tester, int toCol) {
   tester.sendMouse(_d(0, 0));

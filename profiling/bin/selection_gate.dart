@@ -122,7 +122,8 @@ Future<void> main(List<String> args) async {
     }
   }
   if (frames < 1 || rounds < 1 || warmup < 0) {
-    stderr.writeln('selection_gate: --frames/--rounds must be >= 1, --warmup >= 0.');
+    stderr.writeln(
+        'selection_gate: --frames/--rounds must be >= 1, --warmup >= 0.');
     exitCode = 64;
     return;
   }
@@ -159,8 +160,8 @@ Future<void> main(List<String> args) async {
   }
 
   void selectAll() => delegate.dispatchSelectionEvent(
-    const SelectionGranularEvent(granularity: SelectionGranularity.all),
-  );
+        const SelectionGranularEvent(granularity: SelectionGranularity.all),
+      );
 
   // Settle layout + register every selectable, and warm both paths (with and
   // without a selection) so neither round owns cold code.

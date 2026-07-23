@@ -380,7 +380,7 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
             child: GestureDetector(
               onTap: () => _node.requestFocus(),
               // A stepper is a styled control, not selectable text.
-        child: SelectionArea.disabled(child: body()),
+              child: SelectionArea.disabled(child: body()),
             ),
           ),
         ),

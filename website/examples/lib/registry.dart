@@ -221,14 +221,10 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
             LineSeries(
               <(num, num)>[for (var i = 0; i < data.length; i++) (i, data[i])],
               label: 'load',
-              type: LineType.area,
-              gradient: <Color>[
-                _theme.colorScheme.success,
-                _theme.colorScheme.warning,
-                _theme.colorScheme.error,
-              ],
+              color: _theme.colorScheme.primary,
             ),
           ],
+          marker: CanvasMarker.octant,
           showAxes: true,
           showLegend: true,
           yRange: const (0, 100),

@@ -72,9 +72,7 @@ class Panel extends StatelessWidget {
       child: Container(
         border: BoxBorder(
           style: theme.borderStyle,
-          cellStyle: focused
-              ? CellStyle(foreground: accent)
-              : theme.mutedStyle,
+          cellStyle: focused ? CellStyle(foreground: accent) : theme.mutedStyle,
         ),
         padding: const EdgeInsets.symmetric(horizontal: 1),
         child: Column(
