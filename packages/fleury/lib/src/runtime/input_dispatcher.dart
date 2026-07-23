@@ -38,8 +38,14 @@ class InputDispatcher {
   /// Null when pointer routing isn't installed.
   final PointerRouter? pointerRouter;
 
-  /// How long to wait for a second key after a sequence's first chord
-  /// matches before redispatching the first key as a normal event.
+  /// How long to wait, after a sequence's prefix matches, before committing it
+  /// as-is (vim's `timeoutlen`). This only bites an AMBIGUOUS prefix — one
+  /// where a shorter binding also completes here (`g` vs `gg`) or a held
+  /// printable is owed to a focused text field: on expiry that shorter binding
+  /// fires / the char is delivered. A PURE prefix (nothing completes on the
+  /// held keys — vim operator-pending `d`, a `Space` leader) has nothing to
+  /// commit, so it does NOT time out: it stays pending until the next key or
+  /// Esc, keeping a which-key popup on screen. See [_onTimeout].
   final Duration sequenceTimeout;
 
   /// Bindings to consult after the focus chain ignores an event.
@@ -344,19 +350,31 @@ class InputDispatcher {
     _replayHeld(pending);
   }
 
-  /// Replays events held by a cancelled/timed-out sequence. Text-origin
-  /// steps are owed to the focused text claimant first — replaying them
-  /// direct-only would silently eat the typed character; only unclaimed
-  /// ones fall through to direct key dispatch. Key-origin steps replay
-  /// direct-only so the same prefix cannot immediately re-arm pending.
-  void _replayHeld(_PendingSequence pending) {
+  /// Replays events held by a cancelled/timed-out sequence, and reports
+  /// whether replaying committed anything. Text-origin steps are owed to the
+  /// focused text claimant first — replaying them direct-only would silently
+  /// eat the typed character; only unclaimed ones fall through to direct key
+  /// dispatch. Key-origin steps replay direct-only so the same prefix cannot
+  /// immediately re-arm pending.
+  ///
+  /// The return value is what lets [_onTimeout] tell an ambiguous prefix (a
+  /// shorter binding or a held char owed to a field commits here) from a PURE
+  /// prefix (nothing commits) without predicting it: it just tries, and a
+  /// `false` means the held events landed nowhere.
+  bool _replayHeld(_PendingSequence pending) {
+    var committed = false;
     for (var i = 0; i < pending.events.length; i++) {
       final text = pending.texts[i];
       if (text != null && _deliverText(text) == KeyEventResult.handled) {
+        committed = true;
         continue;
       }
-      _dispatchPlain(pending.events[i], allowSequenceStart: false);
+      if (_dispatchPlain(pending.events[i], allowSequenceStart: false) ==
+          KeyEventResult.handled) {
+        committed = true;
+      }
     }
+    return committed;
   }
 
   /// Offers [text] to each [TextInputClaimant] up the focus chain until
@@ -554,11 +572,33 @@ class InputDispatcher {
     _timer = Timer(sequenceTimeout, _onTimeout);
   }
 
+  /// The sequence-timeout timer fired. `sequenceTimeout` exists to resolve the
+  /// vim `timeoutlen` ambiguity — a shorter binding that completes on the held
+  /// prefix (`g`) versus a longer one still being typed (`gg`) — so on expiry
+  /// we try to commit the held prefix as if the sequence ended here. If that
+  /// commits something (a deferred shorter binding fires, or a held printable
+  /// owed to a focused text field is delivered), the sequence is resolved.
+  ///
+  /// If nothing commits, this is a PURE prefix — vim operator-pending `d`, a
+  /// `Space` leader — with nothing to fall back to. It must NOT self-destruct
+  /// on a timer: we keep it pending (with no timer re-armed) so a which-key
+  /// popup stays on screen while the user reads it and can still complete it —
+  /// or Esc / any other key cancels it. This matches which-key.nvim / emacs.
+  /// The pending state is left untouched in that case (not cleared and
+  /// restored), so the pending-sequence notifier never round-trips through
+  /// null and the popup doesn't flicker.
   void _onTimeout() {
     final pending = _pending;
     if (pending == null) return;
-    _clearPending();
-    _replayHeld(pending);
+    // The one-shot timer has fired; drop the handle before replaying so a
+    // committing handler sees a clean timer slot.
+    _timer = null;
+    // Replay with the pending state still set — the replay path
+    // (_deliverText / direct-only _dispatchPlain) never reads _pending, so a
+    // pure prefix that commits nothing can stay held without a null blip.
+    if (_replayHeld(pending)) {
+      _clearPending();
+    }
   }
 
   void _clearPending() {

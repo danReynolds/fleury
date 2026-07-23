@@ -112,6 +112,46 @@ class _ClaimLogState extends State<_ClaimLog>
   }
 }
 
+/// A focused text claimant that DECLINES every printable (returns `ignored`),
+/// like a vim NORMAL surface: the char is offered, refused, and falls through
+/// to key dispatch. Used to exercise a pure prefix that arms over a text
+/// field yet is owed nothing.
+class _DecliningField extends StatefulWidget {
+  const _DecliningField();
+
+  @override
+  State<_DecliningField> createState() => _DecliningFieldState();
+}
+
+class _DecliningFieldState extends State<_DecliningField>
+    implements TextInputClaimant {
+  late final FocusNode _node;
+
+  @override
+  void initState() {
+    super.initState();
+    _node = FocusNode(debugLabel: 'declining')..textInputClaimant = this;
+  }
+
+  @override
+  KeyEventResult onTextInput(String text) => KeyEventResult.ignored;
+
+  @override
+  KeyEventResult onPaste(String text) => KeyEventResult.ignored;
+
+  @override
+  void dispose() {
+    _node.textInputClaimant = null;
+    _node.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(focusNode: _node, autofocus: true, child: const EmptyBox());
+  }
+}
+
 void main() {
   group('InputDispatcher lifecycle', () {
     test('dispose clears pending state and blocks further dispatch', () {
@@ -907,6 +947,101 @@ void main() {
       // (which has a binding).
       h.dispatch(_char('z'));
       expect(calls, ['z']);
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+  });
+
+  group('Pure-prefix hold-open (which-key discoverability)', () {
+    test('a pure prefix holds pending past the timeout, then still completes',
+        () async {
+      // `.d.k` with NO shorter `.d` binding: pressing `d` opens a prefix that
+      // commits nothing on its own. It must NOT self-cancel on the sequence
+      // timer — a which-key popup rests on it — yet stays completable. (An
+      // ambiguous `.d` + `.d.k` still fires bare `.d` on timeout; see the
+      // "coexisting .d and .d.k" test.)
+      final calls = <String>[];
+      final h = _TestHarness();
+      h.mountRoot(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeySequence.d.k, onTrigger: () => calls.add('dk')),
+          ],
+          child: const Focus(autofocus: true, child: EmptyBox()),
+        ),
+      );
+
+      h.dispatch(_char('d'));
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+
+      // Well past the 50ms harness timeout: still pending, nothing fired.
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(calls, isEmpty, reason: 'a pure prefix commits nothing on timeout');
+      expect(
+        h.dispatcher.hasPendingSequence,
+        isTrue,
+        reason: 'the prefix holds open instead of self-cancelling',
+      );
+
+      // The follow-up completes the sequence after the wait.
+      h.dispatch(_char('k'));
+      expect(calls, ['dk']);
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+
+    test('a held-open pure prefix still cancels cleanly on a breaking key',
+        () async {
+      final calls = <String>[];
+      final h = _TestHarness();
+      h.mountRoot(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeySequence.d.k, onTrigger: () => calls.add('dk')),
+            KeyBinding(KeyCode.char('z'), onTrigger: () => calls.add('z')),
+          ],
+          child: const Focus(autofocus: true, child: EmptyBox()),
+        ),
+      );
+
+      h.dispatch(_char('d'));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+
+      // A non-extending key breaks the held prefix: replay `d` (no binding,
+      // inert), then dispatch `z`.
+      h.dispatch(_char('z'));
+      expect(calls, ['z']);
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+
+    test(
+        'a pure prefix over a DECLINING text field (vim NORMAL) holds open '
+        'without eating the char', () async {
+      // The vim-NORMAL scenario at the dispatcher level: a focused claimant
+      // declines printables, so `d` routes to `.d.k` as a command and arms a
+      // prefix. On timeout nothing commits — the field refused the char — so
+      // the prefix holds instead of the keystroke being silently swallowed.
+      // (Contrast test 16l, where an ACCEPTING field is owed the char and the
+      // timeout does deliver it.)
+      final h = _TestHarness();
+      h.mountRoot(
+        KeyBindings(
+          bindings: [KeyBinding(KeySequence.d.k, onTrigger: () {})],
+          child: const _DecliningField(),
+        ),
+      );
+
+      h.dispatcher.dispatch(const TextInputEvent('d'));
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(
+        h.dispatcher.hasPendingSequence,
+        isTrue,
+        reason: 'declined text left a pure prefix — it holds open',
+      );
+
+      // Still completable: the second step finishes `.d.k`.
+      h.dispatcher.dispatch(const TextInputEvent('k'));
       expect(h.dispatcher.hasPendingSequence, isFalse);
     });
   });
