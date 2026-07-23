@@ -120,15 +120,18 @@ class _WhichKeyState extends State<WhichKey> {
     return Stack(
       children: [
         widget.child,
-        Align(
-          alignment: Alignment.bottomLeft,
-          child: Panel(
-            title: pending.prefix.hintLabel,
-            expandChild: false,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: rows,
+        // styled component, not selectable text (the app child stays selectable)
+        SelectionArea.disabled(
+          child: Align(
+            alignment: Alignment.bottomLeft,
+            child: Panel(
+              title: pending.prefix.hintLabel,
+              expandChild: false,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: rows,
+              ),
             ),
           ),
         ),

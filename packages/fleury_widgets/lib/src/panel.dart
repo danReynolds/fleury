@@ -83,7 +83,9 @@ class Panel extends StatelessWidget {
           children: <Widget>[
             Row(
               children: <Widget>[
-                Text(title, style: titleStyle),
+                // Panel title is chrome, not selectable text; the child stays
+                // selectable.
+                Text(title, allowSelect: false, style: titleStyle),
                 const Expanded(child: SizedBox.shrink()),
                 if (trailing != null) trailing!,
               ],

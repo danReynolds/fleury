@@ -75,11 +75,14 @@ class KeyHintBar extends StatelessWidget {
     // with a trailing "+N" instead of clipping a label mid-word. Under an
     // unbounded width (maxCols == null) everything shows — the Text sizes to
     // content, so LayoutBuilder doesn't collapse.
-    return LayoutBuilder(
-      builder: (context, constraints) => Text(
-        _fit(segments, total, constraints.maxCols),
-        style: style,
-        softWrap: false,
+    // styled component, not selectable text
+    return SelectionArea.disabled(
+      child: LayoutBuilder(
+        builder: (context, constraints) => Text(
+          _fit(segments, total, constraints.maxCols),
+          style: style,
+          softWrap: false,
+        ),
       ),
     );
   }

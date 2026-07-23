@@ -90,7 +90,7 @@ class ApprovalPrompt extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final approveFocused = _autofocusApprove;
-    return Semantics(
+    final Widget prompt = Semantics(
       role: SemanticRole.approval,
       label: request.title,
       value: request.subject,
@@ -176,6 +176,8 @@ class ApprovalPrompt extends StatelessWidget {
         ),
       ),
     );
+    // styled component, not selectable text
+    return SelectionArea.disabled(child: prompt);
   }
 }
 
