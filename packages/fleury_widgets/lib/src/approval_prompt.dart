@@ -90,7 +90,7 @@ class ApprovalPrompt extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final approveFocused = _autofocusApprove;
-    final Widget prompt = Semantics(
+    return Semantics(
       role: SemanticRole.approval,
       label: request.title,
       value: request.subject,
@@ -176,8 +176,9 @@ class ApprovalPrompt extends StatelessWidget {
         ),
       ),
     );
-    // styled component, not selectable text
-    return SelectionArea.disabled(child: prompt);
+    // NB: no blanket opt-out here. The Dialog title and the Buttons are chrome
+    // and opt out on their own; the message / subject / details are CONTENT the
+    // user may want to select and copy (the command, path, etc.).
   }
 }
 

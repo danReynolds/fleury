@@ -8,7 +8,11 @@ import 'package:fleury_widgets/fleury_widgets.dart';
 // ignore: implementation_imports
 import 'package:fleury_widgets/src/half_block_buffer.dart';
 // ignore: implementation_imports
+import 'package:fleury_widgets/src/octant_buffer.dart';
+// ignore: implementation_imports
 import 'package:fleury_widgets/src/quadrant_buffer.dart';
+// ignore: implementation_imports
+import 'package:fleury_widgets/src/sextant_buffer.dart';
 import 'package:test/test.dart';
 
 class _DotAt implements CanvasPainter {
@@ -202,6 +206,75 @@ void main() {
       final buf = tester.render(size: const CellSize(1, 1));
       // (0, 1) → upper-left quadrant → ▘.
       expect(buf.atColRow(0, 0).grapheme, '▘');
+    });
+  });
+
+  group('SextantBuffer', () {
+    test('pixelWidth/pixelHeight: 2×3 per cell', () {
+      final b = SextantBuffer(3, 4);
+      expect(b.pixelWidth, 6);
+      expect(b.pixelHeight, 12);
+      expect(b.isStippled, isFalse);
+    });
+
+    test('full cell → █; a single pixel → a sextant glyph', () {
+      final full = SextantBuffer(1, 1);
+      for (var y = 0; y < 3; y++) {
+        for (var x = 0; x < 2; x++) {
+          full.setPixel(x, y);
+        }
+      }
+      final fb = CellBuffer(const CellSize(1, 1));
+      full.writeTo(fb, CellOffset.zero, CellStyle.empty);
+      expect(fb.atColRow(0, 0).grapheme, '█');
+
+      final one = SextantBuffer(1, 1)..setPixel(0, 0); // top-left → SEXTANT-1
+      final ob = CellBuffer(const CellSize(1, 1));
+      one.writeTo(ob, CellOffset.zero, CellStyle.empty);
+      expect(ob.atColRow(0, 0).grapheme, String.fromCharCode(0x1FB00));
+    });
+  });
+
+  group('OctantBuffer', () {
+    test('pixelWidth/pixelHeight: 2×4 per cell', () {
+      final b = OctantBuffer(3, 4);
+      expect(b.pixelWidth, 6);
+      expect(b.pixelHeight, 16);
+      expect(b.isStippled, isFalse);
+    });
+
+    test('full cell → █; a mid-left pixel → an octant glyph', () {
+      final full = OctantBuffer(1, 1);
+      for (var y = 0; y < 4; y++) {
+        for (var x = 0; x < 2; x++) {
+          full.setPixel(x, y);
+        }
+      }
+      final fb = CellBuffer(const CellSize(1, 1));
+      full.writeTo(fb, CellOffset.zero, CellStyle.empty);
+      expect(fb.atColRow(0, 0).grapheme, '█');
+
+      // (px=0, py=1) → bit 2 → BLOCK OCTANT-3 (U+1CD00).
+      final one = OctantBuffer(1, 1)..setPixel(0, 1);
+      final ob = CellBuffer(const CellSize(1, 1));
+      one.writeTo(ob, CellOffset.zero, CellStyle.empty);
+      expect(ob.atColRow(0, 0).grapheme, String.fromCharCode(0x1CD00));
+    });
+
+    test('no lit cell ever renders as blank', () {
+      // Every non-empty mask must map to a non-space glyph (superset fallback).
+      for (var y = 0; y < 4; y++) {
+        for (var x = 0; x < 2; x++) {
+          final b = OctantBuffer(1, 1)..setPixel(x, y);
+          final buf = CellBuffer(const CellSize(1, 1));
+          b.writeTo(buf, CellOffset.zero, CellStyle.empty);
+          expect(
+            buf.atColRow(0, 0).grapheme,
+            isNot(' '),
+            reason: 'pixel ($x,$y) must light a visible glyph',
+          );
+        }
+      }
     });
   });
 }

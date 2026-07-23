@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:fleury/fleury_core.dart';
 
 import 'glyphs.dart';
+import 'sub_cell_buffer.dart';
 
 /// A 2×2-pixel-per-cell drawing surface that renders as Unicode block-
 /// element quadrants. Sits between `HalfBlockBuffer` (1×2) and
@@ -16,7 +17,7 @@ import 'glyphs.dart';
 ///     LL  LR    bit 2  bit 3
 ///
 /// All 16 combinations have a dedicated Unicode glyph.
-class QuadrantBuffer {
+class QuadrantBuffer implements SubCellBuffer {
   QuadrantBuffer(this.cols, this.rows)
     : _bits = Uint8List(cols * rows),
       _colors = List<Color?>.filled(cols * rows, null);
@@ -26,8 +27,12 @@ class QuadrantBuffer {
   final Uint8List _bits;
   final List<Color?> _colors;
 
+  @override
   int get pixelWidth => cols * 2;
+  @override
   int get pixelHeight => rows * 2;
+  @override
+  bool get isStippled => false;
 
   // Index = (UL << 0) | (UR << 1) | (LL << 2) | (LR << 3).
   static const _glyphs = [
@@ -51,6 +56,7 @@ class QuadrantBuffer {
 
   /// Lights a single pixel at `(px, py)`. Pixels outside the grid are
   /// silently clipped. Most-recently-set color on a cell wins.
+  @override
   void setPixel(int px, int py, [Color? color]) {
     if (px < 0 || px >= pixelWidth || py < 0 || py >= pixelHeight) return;
     final cellCol = px >> 1;
@@ -64,6 +70,7 @@ class QuadrantBuffer {
   }
 
   /// Bresenham line in pixel space.
+  @override
   void drawLine(int x0, int y0, int x1, int y1, [Color? color]) {
     var x = x0;
     var y = y0;
@@ -88,6 +95,7 @@ class QuadrantBuffer {
   }
 
   /// Writes the populated cells of this buffer into [target] at [offset].
+  @override
   void writeTo(
     CellBuffer target,
     CellOffset offset,
