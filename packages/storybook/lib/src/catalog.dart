@@ -70,7 +70,9 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
         'light), Catppuccin Mocha, Tokyo Night, One Dark — on a slice of real '
         'widgets. Use the Theme dropdown to switch palettes.',
     widgets: const <String>['Themes'],
-    initialHeight: 24,
+    // Tall enough that the stacked (narrow-pane) layout shows both panes and
+    // the legend without scrolling.
+    initialHeight: 32,
     builder: (context) => const ThemeGallery(),
   ),
   Story(
