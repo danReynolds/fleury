@@ -2,7 +2,10 @@ import 'package:fleury/fleury_core.dart';
 
 import 'braille.dart';
 import 'half_block_buffer.dart';
+import 'octant_buffer.dart';
 import 'quadrant_buffer.dart';
+import 'sextant_buffer.dart';
+import 'sub_cell_buffer.dart';
 
 /// Logical drawing extents for a [Canvas]. Logical Y increases upward,
 /// like a math plot; the canvas flips it when mapping to terminal pixels.
@@ -67,7 +70,32 @@ enum CanvasMarker {
   /// Elements range. Middle ground — solid-block look at 2× the
   /// horizontal resolution of [halfBlock].
   quadrant,
+
+  /// 2×3 pixels per cell using Unicode *sextant* glyphs (`U+1FB00..`,
+  /// Symbols for Legacy Computing, Unicode 13). Solid look at higher
+  /// vertical resolution than [quadrant], with broad support — kitty and
+  /// foot draw them natively and many monospace fonts ship them.
+  sextant,
+
+  /// 2×4 pixels per cell using Unicode *octant* glyphs (`U+1CD00..`,
+  /// Unicode 16). Braille's resolution with a solid, gap-free look — the
+  /// crispest tier — but newer: needs a Unicode-16-aware font (Cascadia
+  /// Code, JuliaMono) or a terminal that draws box glyphs natively
+  /// (kitty ≥ 0.40, Ghostty). Falls back gracefully elsewhere only if the
+  /// caller picks another tier.
+  octant,
 }
+
+/// Builds the sub-cell buffer for [marker] at the given cell dimensions.
+/// Shared by [Canvas] and `LineChart` so both select a tier identically.
+SubCellBuffer subCellBufferFor(CanvasMarker marker, int cols, int rows) =>
+    switch (marker) {
+      CanvasMarker.braille => BrailleBuffer(cols, rows),
+      CanvasMarker.halfBlock => HalfBlockBuffer(cols, rows),
+      CanvasMarker.quadrant => QuadrantBuffer(cols, rows),
+      CanvasMarker.sextant => SextantBuffer(cols, rows),
+      CanvasMarker.octant => OctantBuffer(cols, rows),
+    };
 
 /// A sub-cell drawing surface for custom plots, diagrams, and markers.
 ///
@@ -259,26 +287,11 @@ class RenderCanvas extends RenderObject {
     CellRect? clipRect,
   }) {
     if (size.cols == 0 || size.rows == 0) return;
-    switch (_marker) {
-      case CanvasMarker.braille:
-        final buf = BrailleBuffer(size.cols, size.rows);
-        _painter.paint(_BrailleCtx(buf, _bounds));
-        buf.writeTo(buffer, offset, _defaultStyle, glyphTier: _glyphTier);
-      case CanvasMarker.halfBlock:
-        final buf = HalfBlockBuffer(size.cols, size.rows);
-        _painter.paint(_HalfBlockCtx(buf, _bounds));
-        buf.writeTo(buffer, offset, _defaultStyle, glyphTier: _glyphTier);
-      case CanvasMarker.quadrant:
-        final buf = QuadrantBuffer(size.cols, size.rows);
-        _painter.paint(_QuadrantCtx(buf, _bounds));
-        buf.writeTo(buffer, offset, _defaultStyle, glyphTier: _glyphTier);
-    }
+    final buf = subCellBufferFor(_marker, size.cols, size.rows);
+    _painter.paint(_SubCellCtx(buf, _bounds));
+    buf.writeTo(buffer, offset, _defaultStyle, glyphTier: _glyphTier);
   }
 }
-
-// Per-marker contexts. Each carries its own buffer instance so type
-// stays specific (no shared interface needed across packages). The
-// to-pixel math is identical apart from the pixelWidth/Height source.
 
 (int, int) _toPixel(CanvasBounds b, double x, double y, int pw, int ph) {
   final tx = (x - b.minX) / (b.maxX - b.minX);
@@ -286,69 +299,12 @@ class RenderCanvas extends RenderObject {
   return ((tx * (pw - 1)).round(), ((1 - ty) * (ph - 1)).round());
 }
 
-class _BrailleCtx implements CanvasContext {
-  _BrailleCtx(this._buf, this._bounds);
-  final BrailleBuffer _buf;
-  final CanvasBounds _bounds;
-  @override
-  void drawDot(double x, double y, {Color? color}) {
-    final (px, py) = _toPixel(_bounds, x, y, _buf.pixelWidth, _buf.pixelHeight);
-    _buf.setPixel(px, py, color);
-  }
-
-  @override
-  void drawLine(double x1, double y1, double x2, double y2, {Color? color}) {
-    final (px1, py1) = _toPixel(
-      _bounds,
-      x1,
-      y1,
-      _buf.pixelWidth,
-      _buf.pixelHeight,
-    );
-    final (px2, py2) = _toPixel(
-      _bounds,
-      x2,
-      y2,
-      _buf.pixelWidth,
-      _buf.pixelHeight,
-    );
-    _buf.drawLine(px1, py1, px2, py2, color);
-  }
-}
-
-class _HalfBlockCtx implements CanvasContext {
-  _HalfBlockCtx(this._buf, this._bounds);
-  final HalfBlockBuffer _buf;
-  final CanvasBounds _bounds;
-  @override
-  void drawDot(double x, double y, {Color? color}) {
-    final (px, py) = _toPixel(_bounds, x, y, _buf.pixelWidth, _buf.pixelHeight);
-    _buf.setPixel(px, py, color);
-  }
-
-  @override
-  void drawLine(double x1, double y1, double x2, double y2, {Color? color}) {
-    final (px1, py1) = _toPixel(
-      _bounds,
-      x1,
-      y1,
-      _buf.pixelWidth,
-      _buf.pixelHeight,
-    );
-    final (px2, py2) = _toPixel(
-      _bounds,
-      x2,
-      y2,
-      _buf.pixelWidth,
-      _buf.pixelHeight,
-    );
-    _buf.drawLine(px1, py1, px2, py2, color);
-  }
-}
-
-class _QuadrantCtx implements CanvasContext {
-  _QuadrantCtx(this._buf, this._bounds);
-  final QuadrantBuffer _buf;
+/// Maps a painter's logical draw calls onto any [SubCellBuffer] tier. The
+/// to-pixel math is identical across tiers — only the buffer's
+/// pixelWidth/Height differ — so one context serves all markers.
+class _SubCellCtx implements CanvasContext {
+  _SubCellCtx(this._buf, this._bounds);
+  final SubCellBuffer _buf;
   final CanvasBounds _bounds;
   @override
   void drawDot(double x, double y, {Color? color}) {

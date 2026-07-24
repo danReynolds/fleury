@@ -146,6 +146,7 @@ export 'src/form.dart'
 export 'src/gauge.dart' show Gauge;
 export 'src/heatmap.dart' show Heatmap;
 export 'src/histogram.dart' show Histogram;
+export 'src/area_chart.dart' show AreaChart, AreaSeries;
 export 'src/line_chart.dart'
     show
         LineChart,
