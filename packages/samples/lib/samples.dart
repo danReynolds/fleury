@@ -8,5 +8,7 @@ library;
 export 'src/agent_tui.dart' show AgentApp;
 export 'src/dashboard.dart' show DashboardApp;
 export 'src/debug_playground.dart' show DebugPlaygroundApp;
+export 'src/editor.dart'
+    show EditorApp, EditorModel, EditorPersonality, VimMode;
 export 'src/file_manager.dart' show FileManagerApp;
 export 'src/scaffold.dart' show SampleScaffold, fleurySampleTheme;

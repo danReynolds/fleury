@@ -29,7 +29,11 @@ class InputDispatcher {
     this.pointerRouter,
     this.sequenceTimeout = const Duration(milliseconds: 500),
     List<KeyBinding> globalBindings = const [],
-  }) : _globalBindings = globalBindings;
+  }) : _globalBindings = globalBindings {
+    // Let the widget tree abandon a pending sequence (a which-key popup's
+    // close control) by routing the notifier's cancel back to us.
+    pendingSequenceNotifier.onCancel = cancelPending;
+  }
 
   /// The focus manager whose chain this dispatcher walks.
   final FocusManager focusManager;
@@ -38,8 +42,14 @@ class InputDispatcher {
   /// Null when pointer routing isn't installed.
   final PointerRouter? pointerRouter;
 
-  /// How long to wait for a second key after a sequence's first chord
-  /// matches before redispatching the first key as a normal event.
+  /// How long to wait, after a sequence's prefix matches, before committing it
+  /// as-is (vim's `timeoutlen`). This only bites an AMBIGUOUS prefix — one
+  /// where a shorter binding also completes here (`g` vs `gg`) or a held
+  /// printable is owed to a focused text field: on expiry that shorter binding
+  /// fires / the char is delivered. A PURE prefix (nothing completes on the
+  /// held keys — vim operator-pending `d`, a `Space` leader) has nothing to
+  /// commit, so it does NOT time out: it stays pending until the next key or
+  /// Esc, keeping a which-key popup on screen. See [_onTimeout].
   final Duration sequenceTimeout;
 
   /// Bindings to consult after the focus chain ignores an event.
@@ -74,8 +84,28 @@ class InputDispatcher {
     pendingSequenceNotifier.value = value == null ? null : _snapshotFor(value);
   }
 
+  /// True while [_onTimeout] commits a held prefix: the state is still set but
+  /// is being torn down.
+  bool _committingPending = false;
+
+  /// The pending sequence a NEW input event may match against — null while a
+  /// commit is in flight, so a binding that dispatches input from its handler
+  /// cannot re-complete or re-replay the sequence being torn down.
+  _PendingSequence? get _matchablePending =>
+      _committingPending ? null : _pending;
+
   /// Whether a sequence is currently pending. Useful for tests.
   bool get hasPendingSequence => _pending != null;
+
+  /// Abandons an in-flight sequence as if the user pressed Esc: held events
+  /// replay (a shorter binding fires, a text-owed char reaches the field) and
+  /// the pending state clears, dropping any which-key popup. No-op when
+  /// nothing is pending. The widget tree reaches this via
+  /// [KeyBindings.cancelPending] → [PendingSequenceNotifier.cancel].
+  void cancelPending() {
+    _checkNotDisposed();
+    _cancelPendingAndRedispatchHeld();
+  }
 
   /// Builds the public snapshot: the held prefix plus every live next step
   /// (the completions a which-key popup lists).
@@ -186,7 +216,7 @@ class InputDispatcher {
     // otherwise every event arrives as `down`.)
     if (event.type == KeyEventType.up) return KeyEventResult.ignored;
     // 1. Pending sequence handling.
-    if (_pending != null) {
+    if (_matchablePending != null) {
       final result = _tryPendingSequence(event, textOrigin: textOrigin);
       if (result != null) return result;
       // Sequence cancelled; the held events were replayed. The current
@@ -289,7 +319,7 @@ class InputDispatcher {
   /// sequence cancels it — replaying the held keys direct-only — and is
   /// then delivered as ordinary text.
   KeyEventResult _dispatchText(TextInputEvent event) {
-    if (_pending != null) {
+    if (_matchablePending != null) {
       final keyEvent = _keyEventForText(event.text);
       if (keyEvent != null) {
         final result = _tryPendingSequence(keyEvent, textOrigin: event.text);
@@ -319,7 +349,7 @@ class InputDispatcher {
   /// one paste transaction, while non-text controls that claim single typed
   /// trigger characters should ignore pasted blobs.
   KeyEventResult _dispatchPaste(PasteEvent event) {
-    if (_pending != null) {
+    if (_matchablePending != null) {
       _cancelPendingAndRedispatchHeld();
     }
     return _deliverPaste(event);
@@ -331,7 +361,7 @@ class InputDispatcher {
   /// events do not fall through to key bindings. Any pending leader sequence is
   /// canceled first because the user's text-editing interaction broke it.
   KeyEventResult _dispatchComposition(TextCompositionEvent event) {
-    if (_pending != null) {
+    if (_matchablePending != null) {
       _cancelPendingAndRedispatchHeld();
     }
     return _deliverComposition(event);
@@ -344,19 +374,31 @@ class InputDispatcher {
     _replayHeld(pending);
   }
 
-  /// Replays events held by a cancelled/timed-out sequence. Text-origin
-  /// steps are owed to the focused text claimant first — replaying them
-  /// direct-only would silently eat the typed character; only unclaimed
-  /// ones fall through to direct key dispatch. Key-origin steps replay
-  /// direct-only so the same prefix cannot immediately re-arm pending.
-  void _replayHeld(_PendingSequence pending) {
+  /// Replays events held by a cancelled/timed-out sequence, and reports
+  /// whether replaying committed anything. Text-origin steps are owed to the
+  /// focused text claimant first — replaying them direct-only would silently
+  /// eat the typed character; only unclaimed ones fall through to direct key
+  /// dispatch. Key-origin steps replay direct-only so the same prefix cannot
+  /// immediately re-arm pending.
+  ///
+  /// The return value is what lets [_onTimeout] tell an ambiguous prefix (a
+  /// shorter binding or a held char owed to a field commits here) from a PURE
+  /// prefix (nothing commits) without predicting it: it just tries, and a
+  /// `false` means the held events landed nowhere.
+  bool _replayHeld(_PendingSequence pending) {
+    var committed = false;
     for (var i = 0; i < pending.events.length; i++) {
       final text = pending.texts[i];
       if (text != null && _deliverText(text) == KeyEventResult.handled) {
+        committed = true;
         continue;
       }
-      _dispatchPlain(pending.events[i], allowSequenceStart: false);
+      if (_dispatchPlain(pending.events[i], allowSequenceStart: false) ==
+          KeyEventResult.handled) {
+        committed = true;
+      }
     }
+    return committed;
   }
 
   /// Offers [text] to each [TextInputClaimant] up the focus chain until
@@ -554,11 +596,47 @@ class InputDispatcher {
     _timer = Timer(sequenceTimeout, _onTimeout);
   }
 
+  /// The sequence-timeout timer fired. `sequenceTimeout` exists to resolve the
+  /// vim `timeoutlen` ambiguity — a shorter binding that completes on the held
+  /// prefix (`g`) versus a longer one still being typed (`gg`) — so on expiry
+  /// we try to commit the held prefix as if the sequence ended here. If that
+  /// commits something (a deferred shorter binding fires, or a held printable
+  /// owed to a focused text field is delivered), the sequence is resolved.
+  ///
+  /// If nothing commits, this is a PURE prefix — vim operator-pending `d`, a
+  /// `Space` leader — with nothing to fall back to. It must NOT self-destruct
+  /// on a timer: we keep it pending (with no timer re-armed) so a which-key
+  /// popup stays on screen while the user reads it and can still complete it —
+  /// or Esc / any other key cancels it. This matches which-key.nvim / emacs.
+  /// The pending state is left untouched in that case (not cleared and
+  /// restored), so the pending-sequence notifier never round-trips through
+  /// null and the popup doesn't flicker.
   void _onTimeout() {
     final pending = _pending;
     if (pending == null) return;
-    _clearPending();
-    _replayHeld(pending);
+    // The one-shot timer has fired; drop the handle before replaying so a
+    // committing handler sees a clean timer slot.
+    _timer = null;
+    // Replay with the pending state still set — the replay path
+    // (_deliverText / direct-only _dispatchPlain) never reads _pending, so a
+    // pure prefix that commits nothing can stay held without a null blip.
+    //
+    // But a binding the replay FIRES may synchronously dispatch more input,
+    // and that nested dispatch must not match against the sequence we are
+    // tearing down (it would re-complete or re-replay it). Hold the state
+    // inert for the duration — the moral equivalent of the clear-then-replay
+    // this replaced, without the notifier round-trip through null.
+    _committingPending = true;
+    final bool committed;
+    try {
+      committed = _replayHeld(pending);
+    } finally {
+      _committingPending = false;
+    }
+    // Clear only what we actually committed: a handler that dispatched during
+    // the replay may have legitimately opened a NEW sequence, and that one is
+    // not ours to discard.
+    if (committed && identical(_pending, pending)) _clearPending();
   }
 
   void _clearPending() {
@@ -573,6 +651,10 @@ class InputDispatcher {
     if (_disposed) return;
     _disposed = true;
     _clearPending();
+    // Unhook before disposing: this both drops the notifier's reference back
+    // to us and makes a late `cancel()` (a click racing teardown) a silent
+    // no-op instead of a disposed-dispatcher throw.
+    pendingSequenceNotifier.onCancel = null;
     pendingSequenceNotifier.dispose();
   }
 

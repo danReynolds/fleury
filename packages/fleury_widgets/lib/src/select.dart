@@ -807,70 +807,74 @@ class _SelectListState<T> extends State<_SelectList<T>> {
           focusNode: _focus,
           autofocus: true,
           onKey: _onKey,
-          child: Container(
-            border: BoxBorder(style: widget.borderStyle),
-            child: SizedBox(
-              width: width,
-              height: widget.options.length,
-              child: ListView.builder(
-                controller: _list,
-                selectionActive: true,
-                itemCount: widget.options.length,
-                itemBuilder: (_, i, selected) {
-                  final option = widget.options[i];
-                  // A width-1 marker keeps every row aligned and within the
-                  // computed panel width (a width-2 glyph would wrap).
-                  final marker = i == widget.appliedIndex ? '• ' : '  ';
-                  final safeLabel = sanitizeOptionLabel(option.label);
-                  final text = '$marker$safeLabel';
-                  final row = option.enabled
-                      ? GestureDetector(
-                          onTap: () => _pick(i),
-                          child: Text(
-                            text,
-                            style: selected
-                                ? widget.selectionStyle
-                                : CellStyle.empty,
-                          ),
-                        )
-                      : Text(text, style: widget.mutedStyle);
-                  return Semantics(
-                    role: SemanticRole.menuItem,
-                    label: safeLabel,
-                    value: option.value,
-                    enabled: option.enabled,
-                    focused: _focus.hasFocus && selected,
-                    selected: selected,
-                    checked: i == widget.appliedIndex,
-                    actions: option.enabled
-                        ? const <SemanticAction>{
-                            SemanticAction.select,
-                            SemanticAction.activate,
-                          }
-                        : const <SemanticAction>{},
-                    state: SemanticState({
-                      'menuDepth': 0,
-                      'menuItemIndex': i,
-                      'menuItemPosition': i + 1,
-                      'menuItemCount': widget.options.length,
-                      'entryKind': 'option',
-                      'applied': i == widget.appliedIndex,
-                    }),
-                    onAction: (action) {
-                      if (!option.enabled) return;
-                      switch (action) {
-                        case SemanticAction.select:
-                        case SemanticAction.activate:
-                          _list.selectedIndex = i;
-                          _pick(i);
-                          return;
-                        case _:
-                          return;
-                      }
-                    },
-                    child: row,
-                  );
-                },
+          // A floating popup paints its own opaque background (Surface) so the
+          // app underneath doesn't bleed through its frame.
+          child: Surface(
+            child: Container(
+              border: BoxBorder(style: widget.borderStyle),
+              child: SizedBox(
+                width: width,
+                height: widget.options.length,
+                child: ListView.builder(
+                  controller: _list,
+                  selectionActive: true,
+                  itemCount: widget.options.length,
+                  itemBuilder: (_, i, selected) {
+                    final option = widget.options[i];
+                    // A width-1 marker keeps every row aligned and within the
+                    // computed panel width (a width-2 glyph would wrap).
+                    final marker = i == widget.appliedIndex ? '• ' : '  ';
+                    final safeLabel = sanitizeOptionLabel(option.label);
+                    final text = '$marker$safeLabel';
+                    final row = option.enabled
+                        ? GestureDetector(
+                            onTap: () => _pick(i),
+                            child: Text(
+                              text,
+                              style: selected
+                                  ? widget.selectionStyle
+                                  : CellStyle.empty,
+                            ),
+                          )
+                        : Text(text, style: widget.mutedStyle);
+                    return Semantics(
+                      role: SemanticRole.menuItem,
+                      label: safeLabel,
+                      value: option.value,
+                      enabled: option.enabled,
+                      focused: _focus.hasFocus && selected,
+                      selected: selected,
+                      checked: i == widget.appliedIndex,
+                      actions: option.enabled
+                          ? const <SemanticAction>{
+                              SemanticAction.select,
+                              SemanticAction.activate,
+                            }
+                          : const <SemanticAction>{},
+                      state: SemanticState({
+                        'menuDepth': 0,
+                        'menuItemIndex': i,
+                        'menuItemPosition': i + 1,
+                        'menuItemCount': widget.options.length,
+                        'entryKind': 'option',
+                        'applied': i == widget.appliedIndex,
+                      }),
+                      onAction: (action) {
+                        if (!option.enabled) return;
+                        switch (action) {
+                          case SemanticAction.select:
+                          case SemanticAction.activate:
+                            _list.selectedIndex = i;
+                            _pick(i);
+                            return;
+                          case _:
+                            return;
+                        }
+                      },
+                      child: row,
+                    );
+                  },
+                ),
               ),
             ),
           ),
