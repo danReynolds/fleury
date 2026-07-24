@@ -128,6 +128,53 @@ void main() {
       );
     });
 
+    testWidgets('the popup is opaque — app content does not bleed through', (
+      tester,
+    ) {
+      // A floating overlay composites over whatever is painted beneath it, so
+      // it must paint its own background (Surface). Put a wall of text behind
+      // the popup: the blanks inside its frame must stay blank, not show the
+      // wall through them.
+      tester.pumpWidget(
+        WhichKey(
+          showDelay: Duration.zero,
+          child: KeyBindings(
+            bindings: [
+              KeyBinding(
+                KeySequence.space.f,
+                label: 'Find file',
+                onTrigger: () {},
+              ),
+            ],
+            child: Focus(
+              autofocus: true,
+              child: Column(
+                children: [for (var i = 0; i < 14; i++) Text('X' * 40)],
+              ),
+            ),
+          ),
+        ),
+      );
+      tester.render();
+      tester.press(KeySequence.space);
+
+      final out = _render(tester);
+      expect(out, contains('Find file'), reason: 'popup is up');
+
+      // The title row pads between the prefix and the trailing hint — those
+      // cells are inside the frame, so the wall must not show there.
+      final title = out.split('\n').firstWhere((line) => line.contains('esc'));
+      final gap = title.substring(
+        title.indexOf('Space') + 'Space'.length,
+        title.indexOf('esc'),
+      );
+      expect(
+        gap,
+        isNot(contains('X')),
+        reason: 'the wall behind bled through the popup frame',
+      );
+    });
+
     testWidgets('a non-zero delay suppresses a fast sequence', (tester) async {
       tester.pumpWidget(_app(showDelay: const Duration(milliseconds: 40)));
       tester.render();

@@ -96,8 +96,9 @@ class _WhichKeyState extends State<WhichKey> {
       bold: true,
     );
     // A clickable close glyph, ASCII-safe on limited terminals.
-    final closeGlyph =
-        MediaQuery.glyphTierOf(context) == GlyphTier.ascii ? 'x' : '✕';
+    final closeGlyph = MediaQuery.glyphTierOf(context) == GlyphTier.ascii
+        ? 'x'
+        : '✕';
     final labeled = [
       for (final completion in pending.completions)
         if (completion.binding.label != null) completion,

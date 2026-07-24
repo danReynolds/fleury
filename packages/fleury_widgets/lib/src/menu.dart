@@ -490,71 +490,75 @@ class _MenuBodyState extends State<_MenuBody> {
           onKey: _onKey,
           child: Anchor(
             link: _selfLink,
-            child: Container(
-              border: BoxBorder(style: widget.borderStyle),
-              child: SizedBox(
-                width: width,
-                height: widget.entries.length,
-                child: ListView.builder(
-                  controller: _list,
-                  selectionActive: true,
-                  itemCount: widget.entries.length,
-                  itemBuilder: (_, i, selected) {
-                    final entry = widget.entries[i];
-                    switch (entry) {
-                      case MenuSeparator():
-                        return Text('─' * width, style: widget.mutedStyle);
-                      case MenuItem(:final label, :final enabled):
-                        final sel = enabled && selected;
-                        final child = Text(
-                          _rowText(
-                            sanitizeOptionLabel(label),
-                            selected: sel,
-                            isSub: false,
-                            hasIndicator: hasSubmenu,
-                            width: width,
-                          ),
-                          style: !enabled
-                              ? widget.mutedStyle
-                              : sel
-                              ? widget.selectionStyle
-                              : CellStyle.empty,
-                        );
-                        return _semanticMenuItem(
-                          entry: entry,
-                          index: i,
-                          selected: selected,
-                          child: child,
-                        );
-                      case SubMenu(:final label, :final enabled):
-                        final sel = enabled && selected;
-                        final child = Text(
-                          _rowText(
-                            sanitizeOptionLabel(label),
-                            selected: sel,
-                            isSub: true,
-                            hasIndicator: hasSubmenu,
-                            width: width,
-                          ),
-                          style: !enabled
-                              ? widget.mutedStyle
-                              : sel
-                              ? widget.selectionStyle
-                              : CellStyle.empty,
-                        );
-                        final item = _semanticMenuItem(
-                          entry: entry,
-                          index: i,
-                          selected: selected,
-                          child: child,
-                        );
-                        // Anchor the selected submenu row so its child panel
-                        // opens aligned to it (not the panel corner).
-                        return sel
-                            ? Anchor(link: _submenuAnchor, child: item)
-                            : item;
-                    }
-                  },
+            // A floating popup paints its own opaque background (Surface) so the
+            // app underneath doesn't bleed through its frame.
+            child: Surface(
+              child: Container(
+                border: BoxBorder(style: widget.borderStyle),
+                child: SizedBox(
+                  width: width,
+                  height: widget.entries.length,
+                  child: ListView.builder(
+                    controller: _list,
+                    selectionActive: true,
+                    itemCount: widget.entries.length,
+                    itemBuilder: (_, i, selected) {
+                      final entry = widget.entries[i];
+                      switch (entry) {
+                        case MenuSeparator():
+                          return Text('─' * width, style: widget.mutedStyle);
+                        case MenuItem(:final label, :final enabled):
+                          final sel = enabled && selected;
+                          final child = Text(
+                            _rowText(
+                              sanitizeOptionLabel(label),
+                              selected: sel,
+                              isSub: false,
+                              hasIndicator: hasSubmenu,
+                              width: width,
+                            ),
+                            style: !enabled
+                                ? widget.mutedStyle
+                                : sel
+                                ? widget.selectionStyle
+                                : CellStyle.empty,
+                          );
+                          return _semanticMenuItem(
+                            entry: entry,
+                            index: i,
+                            selected: selected,
+                            child: child,
+                          );
+                        case SubMenu(:final label, :final enabled):
+                          final sel = enabled && selected;
+                          final child = Text(
+                            _rowText(
+                              sanitizeOptionLabel(label),
+                              selected: sel,
+                              isSub: true,
+                              hasIndicator: hasSubmenu,
+                              width: width,
+                            ),
+                            style: !enabled
+                                ? widget.mutedStyle
+                                : sel
+                                ? widget.selectionStyle
+                                : CellStyle.empty,
+                          );
+                          final item = _semanticMenuItem(
+                            entry: entry,
+                            index: i,
+                            selected: selected,
+                            child: child,
+                          );
+                          // Anchor the selected submenu row so its child panel
+                          // opens aligned to it (not the panel corner).
+                          return sel
+                              ? Anchor(link: _submenuAnchor, child: item)
+                              : item;
+                      }
+                    },
+                  ),
                 ),
               ),
             ),
