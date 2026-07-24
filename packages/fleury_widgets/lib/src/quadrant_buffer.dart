@@ -31,8 +31,6 @@ class QuadrantBuffer implements SubCellBuffer {
   int get pixelWidth => cols * 2;
   @override
   int get pixelHeight => rows * 2;
-  @override
-  bool get isStippled => false;
 
   // Index = (UL << 0) | (UR << 1) | (LL << 2) | (LR << 3).
   static const _glyphs = [

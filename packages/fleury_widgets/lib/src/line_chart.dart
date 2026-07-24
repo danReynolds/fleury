@@ -531,8 +531,15 @@ SemanticState _lineChartSemanticState({
   final safeCursorIndex = cursorXs.isEmpty
       ? 0
       : cursorIndex.clamp(0, cursorXs.length - 1);
+  // Describe what is actually rendered rather than which widget wrapped it:
+  // a chart whose every series is filled IS an area chart, and AreaChart
+  // reaches this code by delegating to LineChart.
+  final chartType =
+      series.isNotEmpty && series.every((s) => s.type == LineType.area)
+      ? 'area'
+      : 'line';
   return SemanticState({
-    'chartType': 'line',
+    'chartType': chartType,
     'chartSeriesCount': series.length,
     'chartPointCount': pointCount,
     'chartXMin': xMin,
@@ -876,7 +883,12 @@ class RenderLineChart extends RenderObject {
       xmax = xmin + 1;
     }
     if (ymax == ymin) {
-      ymax = ymin + 1;
+      // Pad symmetrically so a constant series sits mid-plot. Padding only
+      // upward pins it to the baseline, where an area fill has zero height and
+      // renders completely blank — the chart's own autoscale would be what
+      // made the data invisible.
+      ymin -= 0.5;
+      ymax += 0.5;
     }
 
     // Grid first, so braille paints over it where they overlap.
@@ -1252,10 +1264,32 @@ class RenderLineChart extends RenderObject {
     if (span <= 0) return;
     final xspan = xmax - xmin;
     final totalEighths = plotRows * 8;
+    // A one-point series spans no segment for _sampleSeriesY to interpolate
+    // across, so fill just the column holding it — the area counterpart of the
+    // dot LineChart draws for a lone point.
+    var soloColumn = -1;
+    double? soloY;
+    if (s.points.length == 1) {
+      final (soloX, soloValue) = s.points.first;
+      final x = soloX.toDouble();
+      final value = soloValue.toDouble();
+      if (!x.isFinite || !value.isFinite || x < xmin || x > xmax) return;
+      soloY = value;
+      soloColumn = xspan <= 0
+          ? 0
+          : (((x - xmin) / xspan) * plotCols).floor().clamp(0, plotCols - 1);
+    }
     for (var c = 0; c < plotCols; c++) {
-      // Sample the series at the horizontal center of this column.
-      final xAt = xmin + (plotCols == 1 ? 0.5 : (c + 0.5) / plotCols) * xspan;
-      final y = _sampleSeriesY(s.points, xAt);
+      final double? y;
+      final solo = soloY;
+      if (solo != null) {
+        if (c != soloColumn) continue;
+        y = solo;
+      } else {
+        // Sample the series at the horizontal center of this column.
+        final xAt = xmin + (plotCols == 1 ? 0.5 : (c + 0.5) / plotCols) * xspan;
+        y = _sampleSeriesY(s.points, xAt);
+      }
       if (y == null || !y.isFinite) continue;
       final hEighths = (((y - ymin) / span).clamp(0.0, 1.0) * totalEighths)
           .round();

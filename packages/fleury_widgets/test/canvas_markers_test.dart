@@ -214,7 +214,6 @@ void main() {
       final b = SextantBuffer(3, 4);
       expect(b.pixelWidth, 6);
       expect(b.pixelHeight, 12);
-      expect(b.isStippled, isFalse);
     });
 
     test('full cell → █; a single pixel → a sextant glyph', () {
@@ -240,7 +239,6 @@ void main() {
       final b = OctantBuffer(3, 4);
       expect(b.pixelWidth, 6);
       expect(b.pixelHeight, 16);
-      expect(b.isStippled, isFalse);
     });
 
     test('full cell → █; a mid-left pixel → an octant glyph', () {

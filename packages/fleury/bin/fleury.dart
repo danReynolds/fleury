@@ -919,6 +919,24 @@ void _pumpBytes({
 
 /// Serves the index page, the embedded client bundle, and the embedded mono
 /// font. Everything else 404s — the serve surface is exactly these three files.
+/// Entity tag for the embedded font, computed once per process.
+///
+/// The bytes are static for the life of the binary, but the URL is not
+/// versioned — so an upgraded Fleury would otherwise keep handing a returning
+/// browser the previous subset until its cache entry expired. A validator lets
+/// the response be revalidated instead of blindly reused.
+String? _monoFontETagCache;
+
+String _monoFontETag() =>
+    _monoFontETagCache ??= () {
+      // FNV-1a over the subset; no crypto dependency needed for a cache tag.
+      var hash = 0xcbf29ce484222325;
+      for (final byte in serveMonoFontBytes()) {
+        hash = (hash ^ byte) * 0x100000001b3;
+      }
+      return '"${hash.toUnsigned(64).toRadixString(16)}"';
+    }();
+
 Future<void> _serveStaticAsset(HttpRequest req) async {
   final path = req.uri.path;
   if (path == serveClientJsPath) {
@@ -935,12 +953,18 @@ Future<void> _serveStaticAsset(HttpRequest req) async {
     return;
   }
   if (path == serveMonoFontPath) {
+    final etag = _monoFontETag();
+    req.response.headers.set(HttpHeaders.etagHeader, etag);
+    // The URL carries no version, so revalidate rather than reuse blindly: a
+    // matching tag costs a 304, and an upgraded subset is picked up at once
+    // instead of being pinned until a max-age elapsed.
+    req.response.headers.set(HttpHeaders.cacheControlHeader, 'no-cache');
+    if (req.headers.value(HttpHeaders.ifNoneMatchHeader) == etag) {
+      req.response.statusCode = HttpStatus.notModified;
+      await req.response.close();
+      return;
+    }
     req.response.headers.contentType = ContentType('font', 'woff2');
-    // Static across restarts; safe to cache. (Content is version-stable.)
-    req.response.headers.set(
-      HttpHeaders.cacheControlHeader,
-      'public, max-age=604800',
-    );
     req.response.add(serveMonoFontBytes());
     await req.response.close();
     return;

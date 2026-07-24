@@ -329,19 +329,23 @@ void main() {
         ),
       );
       final buf = tester.render(size: const CellSize(30, 8));
-      // y=0.5 with autoscale (0.5,1.5): t=0, py = (1-0)*(8*4-1) = 31 → cell row 7.
-      // So only row 7 should hold braille; rows 0..6 should be empty.
-      for (var r = 0; r < 7; r++) {
+      // A constant series autoscales to a range padded symmetrically about the
+      // value, so it sits mid-plot. Assert the property rather than a fixed row
+      // index: exactly one row carries braille, which IS "no vertical smear".
+      final brailleRows = <int>{};
+      for (var r = 0; r < 8; r++) {
         for (var c = 0; c < 30; c++) {
           final g = buf.atColRow(c, r).grapheme;
           if (g == null) continue;
-          expect(
-            g.codeUnitAt(0) >= 0x2800 && g.codeUnitAt(0) <= 0x28FF,
-            isFalse,
-            reason: 'no braille should appear at row $r, col $c',
-          );
+          final code = g.codeUnitAt(0);
+          if (code >= 0x2800 && code <= 0x28FF) brailleRows.add(r);
         }
       }
+      expect(
+        brailleRows,
+        hasLength(1),
+        reason: 'a flat line must occupy one row; got rows $brailleRows',
+      );
     });
 
     // ----- Edge cases -----------------------------------------------------

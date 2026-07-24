@@ -31,8 +31,6 @@ class BrailleBuffer implements SubCellBuffer {
   int get pixelWidth => cols * 2;
   @override
   int get pixelHeight => rows * 4;
-  @override
-  bool get isStippled => true;
 
   static int _bitFor(int px, int py) {
     if (px == 0) {

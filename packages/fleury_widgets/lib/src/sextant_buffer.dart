@@ -32,8 +32,6 @@ class SextantBuffer implements SubCellBuffer {
   int get pixelWidth => cols * 2;
   @override
   int get pixelHeight => rows * 3;
-  @override
-  bool get isStippled => false;
 
   @override
   void setPixel(int px, int py, [Color? color]) {

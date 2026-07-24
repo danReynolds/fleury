@@ -109,11 +109,14 @@ class AreaChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fallback =
-        palette ?? <Color>[Theme.of(context).colorScheme.primary];
+    // An empty palette falls back to the theme color instead of indexing an
+    // empty list — LineChart treats `palette: []` the same way.
+    final configured = palette;
+    final fallback = (configured == null || configured.isEmpty)
+        ? <Color>[Theme.of(context).colorScheme.primary]
+        : configured;
     var autoIdx = 0;
-    Color nextFallback() =>
-        fallback[fallback.isEmpty ? 0 : autoIdx++ % fallback.length];
+    Color nextFallback() => fallback[autoIdx++ % fallback.length];
     return LineChart(
       series: <LineSeries>[
         for (final s in series)
@@ -121,7 +124,11 @@ class AreaChart extends StatelessWidget {
             s.points,
             label: s.label,
             type: LineType.area,
-            gradient: s.gradient ?? <Color>[s.color ?? nextFallback()],
+            // An empty gradient would fall through to LineChart's braille area
+            // path, breaking this widget's solid-block fill contract.
+            gradient: (s.gradient?.isNotEmpty ?? false)
+                ? s.gradient
+                : <Color>[s.color ?? nextFallback()],
           ),
       ],
       xRange: xRange,

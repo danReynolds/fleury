@@ -685,14 +685,16 @@ img.site-logo {
    JuliaMono draws them near-solid (and ships the Unicode 16 octants). This is
    a Fleury subset (~77 KB, down from ~1 MB) — Latin + box-drawing + block
    elements + braille + sextants + octants, the glyph ranges the widgets use.
-   Regenerate with pyftsubset; see docs. */
+   Regenerate with pyftsubset; see docs. Named "FleuryMono" because a subset is
+   a Modified Version under the OFL, which reserves the name "JuliaMono" for the
+   original; see public/fonts/JuliaMono-OFL.txt. */
 @font-face {
-  font-family: 'JuliaMono';
+  font-family: 'FleuryMono';
   font-display: swap;
-  src: url('/fleury/fonts/JuliaMono-fleury.woff2') format('woff2');
+  src: url('/fleury/fonts/fleury-mono.woff2') format('woff2');
 }
 .fleury-host {
-  font-family: 'JuliaMono', var(--sl-font-mono, ui-monospace, monospace);
+  font-family: 'FleuryMono', var(--sl-font-mono, ui-monospace, monospace);
   font-size: 14px;
   line-height: 1.25;
   color: #c8d3e0;

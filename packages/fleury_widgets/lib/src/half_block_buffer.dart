@@ -31,8 +31,6 @@ class HalfBlockBuffer implements SubCellBuffer {
   int get pixelWidth => cols;
   @override
   int get pixelHeight => rows * 2;
-  @override
-  bool get isStippled => false;
 
   static const _glyphs = [' ', '▀', '▄', '█'];
 

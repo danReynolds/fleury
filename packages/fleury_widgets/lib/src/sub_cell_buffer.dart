@@ -16,11 +16,6 @@ abstract interface class SubCellBuffer {
   /// Pixel rows down the whole buffer (`rows × pixelsPerCellY`).
   int get pixelHeight;
 
-  /// Whether this tier renders as separated dots (braille) rather than solid
-  /// blocks. A solid tier already reads as a continuous one-pixel line;
-  /// a stippled one benefits from being drawn thicker.
-  bool get isStippled;
-
   /// Lights the pixel at `(px, py)`; out-of-range pixels are clipped.
   /// The most-recently-set color on a cell wins.
   void setPixel(int px, int py, [Color? color]);
