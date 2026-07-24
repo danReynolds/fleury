@@ -33,9 +33,15 @@ const _options = <SelectOption<String>>[
 
 /// Controlled host: holds the value and reports picks.
 class _Host extends StatefulWidget {
-  const _Host({this.initial, this.onPick, this.options = _options});
+  const _Host({
+    this.initial,
+    this.onPick,
+    this.onHighlight,
+    this.options = _options,
+  });
   final String? initial;
   final void Function(String)? onPick;
+  final void Function(String)? onHighlight;
   final List<SelectOption<String>> options;
   @override
   State<_Host> createState() => _HostState();
@@ -60,6 +66,7 @@ class _HostState extends State<_Host> {
         setState(() => value = v);
         widget.onPick?.call(v);
       },
+      onHighlightChanged: widget.onHighlight,
     );
   }
 }
@@ -225,6 +232,42 @@ void main() {
       final out = _screen(tester);
       expect(out.contains('Red'), isTrue, reason: 'value unchanged');
       expect(out.contains('Blue'), isFalse, reason: 'list closed');
+    });
+
+    testWidgets('arrowing the open list live-previews the highlight', (tester) {
+      final previews = <String>[];
+      String? picked;
+      tester.pumpWidget(
+        _Host(
+          initial: 'red',
+          onPick: (v) => picked = v,
+          onHighlight: previews.add,
+        ),
+      );
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // open at Red
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // -> Green
+      expect(previews, <String>['green'], reason: 'preview without committing');
+      expect(picked, isNull, reason: 'nothing committed until Enter');
+
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // -> Blue
+      expect(previews, <String>['green', 'blue']);
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // commit
+      expect(picked, 'blue');
+    });
+
+    testWidgets('dismissing rewinds the preview to the applied value', (
+      tester,
+    ) {
+      final previews = <String>[];
+      tester.pumpWidget(_Host(initial: 'red', onHighlight: previews.add));
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // open at Red
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // preview Green
+      tester.sendKey(const KeyEvent(KeyCode.escape));
+      expect(
+        previews.last,
+        'red',
+        reason: 'a preview must not outlive the dropdown that drove it',
+      );
     });
 
     testWidgets('the open list marks the currently-selected option', (tester) {
