@@ -29,9 +29,35 @@ final class TuiFrameLoop {
 
   final RenderDamageTracker? _renderDamage;
 
+  /// Enables the debug oracle asserting that frame damage covers every changed
+  /// cell (see [_damageCoversChanges]).
+  ///
+  /// Opt-in rather than always-on under `assert`: the check is O(cells) per
+  /// frame, and benchmarks run with asserts enabled, so leaving it on would tax
+  /// the very gates that guard this path. Tests exercising damage flip it on.
+  static bool debugCheckDamageCoverage = false;
+
   CellBuffer? _frontBuffer;
   CellBuffer? _backBuffer;
   var _requireFullRepaint = true;
+
+  // Paint damage of the render that produced the currently SHOWN front buffer,
+  // plus the render in flight (promoted to "shown" on commit).
+  //
+  // [render] clears the back buffer WITHOUT damage tracking, so every cell the
+  // shown frame painted that this frame does not repaint silently becomes empty
+  // — a real change (content -> empty) carrying no paint damage of its own. A
+  // retained presenter only re-applies damaged rows, so those cells keep stale
+  // content: the ghost left behind when animated content moves or shrinks.
+  //
+  // Unioning the shown frame's painted set into this frame's damage restores the
+  // invariant that damage covers every changed cell. It is exact, not merely
+  // conservative: `shown \ current` IS the vacated set, and a cell painted in
+  // neither frame was empty in both, so the union adds nothing else.
+  CellRect? _shownPaintBounds;
+  Set<int>? _shownPaintRows;
+  CellRect? _pendingPaintBounds;
+  Set<int>? _pendingPaintRows;
 
   /// Drops the buffer pool and forces the next frame to repaint from scratch.
   ///
@@ -41,6 +67,10 @@ final class TuiFrameLoop {
     _frontBuffer = null;
     _backBuffer = null;
     _requireFullRepaint = true;
+    _shownPaintBounds = null;
+    _shownPaintRows = null;
+    _pendingPaintBounds = null;
+    _pendingPaintRows = null;
   }
 
   /// Forces the next rendered frame to be presented as a full repaint.
@@ -71,6 +101,10 @@ final class TuiFrameLoop {
       _frontBuffer = CellBuffer(size);
       _backBuffer = CellBuffer(size);
       _requireFullRepaint = true;
+      // A resized frame repaints fully; a painted set from the old geometry
+      // would only carry stale row indexes into the union.
+      _shownPaintBounds = null;
+      _shownPaintRows = null;
     }
 
     final previous = _frontBuffer!;
@@ -83,13 +117,34 @@ final class TuiFrameLoop {
     paint(next);
 
     _renderDamage?.takeVisualChange();
+    final paintBounds = next.takeDamageBounds();
+    final paintRows = next.takeDamageRows();
+    // Keep THIS frame's own painted set (not the union) for the next frame's
+    // union — promoting the union instead would accumulate without bound.
+    _pendingPaintBounds = paintBounds;
+    _pendingPaintRows = paintRows;
+    // Only complete a BOUNDED claim. A null bounds means "this frame did not
+    // track what it mutated" — presenters already answer that with a full diff,
+    // which catches vacated cells on its own. Unioning there would be actively
+    // wrong: it would turn "unknown" into a bounded set and make the presenter
+    // trust it, silently dropping untracked writes outside that set.
     final damage = TuiFrameDamage(
       fullRepaint: _requireFullRepaint,
       requiresFullDiff: _renderDamage?.takeRequiresFullDiff() ?? true,
-      paintDamageBounds: next.takeDamageBounds(),
-      paintDamageRows: next.takeDamageRows(),
+      paintDamageBounds: paintBounds == null
+          ? null
+          : _unionBounds(paintBounds, _shownPaintBounds),
+      paintDamageRows: paintBounds == null
+          ? paintRows
+          : _unionRows(paintRows, _shownPaintRows),
     );
     _requireFullRepaint = false;
+    assert(
+      !debugCheckDamageCoverage || _damageCoversChanges(previous, next, damage),
+      'frame damage does not cover every changed cell: a retained presenter '
+      'only re-applies damaged rows, so the uncovered cells will keep stale '
+      'content on screen',
+    );
 
     return TuiRenderedFrame._(
       previous: previous,
@@ -103,6 +158,56 @@ final class TuiFrameLoop {
   void commit(TuiRenderedFrame frame) {
     _backBuffer = frame.previous;
     _frontBuffer = frame.next;
+    // What is on screen is now what this frame painted, so that becomes the
+    // set the next frame must union against. An uncommitted (dropped) frame
+    // deliberately leaves this alone: the screen still shows the older frame.
+    _shownPaintBounds = _pendingPaintBounds;
+    _shownPaintRows = _pendingPaintRows;
+  }
+
+  /// Whether [damage] accounts for every cell that differs between the shown
+  /// frame and the new one — the contract every retained presenter relies on.
+  ///
+  /// A presenter re-applies only damaged rows and assumes the rest still match
+  /// what is on screen. An uncovered change is therefore invisible to it and
+  /// stays stale until something unrelated dirties that row.
+  static bool _damageCoversChanges(
+    CellBuffer previous,
+    CellBuffer next,
+    TuiFrameDamage damage,
+  ) {
+    // These modes tell presenters to diff or repaint everything, so they cover
+    // any change by construction.
+    if (damage.fullRepaint ||
+        damage.requiresFullDiff ||
+        damage.diffBounds == null ||
+        previous.size != next.size) {
+      return true;
+    }
+    final dirty = damage.dirtyRowsFor(next.size);
+    if (dirty.isFull) return true;
+    final covered = dirty.rows.toSet();
+    for (var row = 0; row < next.size.rows; row++) {
+      if (covered.contains(row)) continue;
+      for (var col = 0; col < next.size.cols; col++) {
+        if (previous.atColRow(col, row) != next.atColRow(col, row)) return false;
+      }
+    }
+    return true;
+  }
+
+  static CellRect? _unionBounds(CellRect? current, CellRect? shown) {
+    if (current == null) return shown;
+    if (shown == null) return current;
+    return current.union(shown);
+  }
+
+  /// [current] arrives fresh from `takeDamageRows()`, so an empty counterpart
+  /// lets the union reuse a set instead of allocating a per-frame copy.
+  static Set<int> _unionRows(Set<int> current, Set<int>? shown) {
+    if (shown == null || shown.isEmpty) return current;
+    if (current.isEmpty) return shown;
+    return <int>{...current, ...shown};
   }
 }
 

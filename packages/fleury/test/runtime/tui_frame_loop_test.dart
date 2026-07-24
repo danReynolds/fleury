@@ -226,4 +226,105 @@ void main() {
       expect(rows.dirtyRowCount, 4);
     });
   });
+
+  group('vacated cell damage', () {
+    const size = CellSize(6, 4);
+
+    test('rows that shrinking content vacated are damaged', () {
+      final loop = TuiFrameLoop(renderDamage: RenderDamageTracker());
+      final first = loop.render(
+        size: size,
+        paint: (buffer) {
+          buffer.writeText(const CellOffset(0, 0), 'aaaa');
+          buffer.writeText(const CellOffset(0, 1), 'bbbb');
+          buffer.writeText(const CellOffset(0, 2), 'cccc');
+          buffer.writeText(const CellOffset(0, 3), 'dddd');
+        },
+      )!;
+      loop.commit(first);
+
+      // Content shrinks to the top two rows. Nothing repaints rows 2-3, so the
+      // untracked buffer clear is what empties them — and that is precisely the
+      // change paint damage cannot see on its own.
+      final second = loop.render(
+        size: size,
+        paint: (buffer) {
+          buffer.writeText(const CellOffset(0, 0), 'aaaa');
+          buffer.writeText(const CellOffset(0, 1), 'bbbb');
+        },
+      )!;
+
+      expect(
+        second.damage.dirtyRowsFor(size).rows,
+        containsAll(<int>[2, 3]),
+        reason: 'a retained presenter leaves rows 2-3 stale otherwise',
+      );
+    });
+
+    test('unchanged content does not widen damage past what it painted', () {
+      final loop = TuiFrameLoop(renderDamage: RenderDamageTracker());
+      final first = loop.render(
+        size: size,
+        paint: (buffer) => buffer.writeText(const CellOffset(0, 1), 'hello'),
+      )!;
+      loop.commit(first);
+
+      final second = loop.render(
+        size: size,
+        paint: (buffer) => buffer.writeText(const CellOffset(0, 1), 'hullo'),
+      )!;
+
+      // Nothing was vacated, so the union must add nothing: steady-state
+      // repainting stays exactly as narrow as it was.
+      expect(second.damage.dirtyRowsFor(size).rows, <int>[1]);
+    });
+
+    test('a frame that tracked nothing keeps its damage unbounded', () {
+      final loop = TuiFrameLoop(renderDamage: RenderDamageTracker());
+      final first = loop.render(
+        size: size,
+        paint: (buffer) => buffer.writeText(const CellOffset(0, 0), 'aaaa'),
+      )!;
+      loop.commit(first);
+
+      final second = loop.render(
+        size: size,
+        paint: (buffer) => buffer.withoutDamageTracking(
+          () => buffer.writeText(const CellOffset(0, 3), 'zzzz'),
+        ),
+      )!;
+
+      // Null bounds mean "this frame did not track what it mutated", and
+      // presenters answer that with a full diff. Completing it from the shown
+      // frame's painted set would bound a claim they then trust, dropping the
+      // untracked write on row 3.
+      expect(second.damage.diffBounds, isNull);
+    });
+
+    test('the damage oracle holds as content moves, shrinks and grows', () {
+      TuiFrameLoop.debugCheckDamageCoverage = true;
+      addTearDown(() => TuiFrameLoop.debugCheckDamageCoverage = false);
+      final loop = TuiFrameLoop(renderDamage: RenderDamageTracker());
+
+      void paintRows(List<int> rows) {
+        final frame = loop.render(
+          size: size,
+          paint: (buffer) {
+            for (final row in rows) {
+              buffer.writeText(CellOffset(0, row), 'xxxx');
+            }
+          },
+        )!;
+        loop.commit(frame);
+      }
+
+      // Each render asserts damage covers every changed cell; an uncovered
+      // vacated row throws instead of silently ghosting.
+      paintRows([0, 1, 2, 3]);
+      paintRows([2, 3]); // shrink
+      paintRows([0]); // move up
+      paintRows([0, 1, 2, 3]); // grow back
+      paintRows([]); // clear entirely
+    });
+  });
 }
