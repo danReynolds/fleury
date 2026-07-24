@@ -84,6 +84,16 @@ class InputDispatcher {
     pendingSequenceNotifier.value = value == null ? null : _snapshotFor(value);
   }
 
+  /// True while [_onTimeout] commits a held prefix: the state is still set but
+  /// is being torn down.
+  bool _committingPending = false;
+
+  /// The pending sequence a NEW input event may match against — null while a
+  /// commit is in flight, so a binding that dispatches input from its handler
+  /// cannot re-complete or re-replay the sequence being torn down.
+  _PendingSequence? get _matchablePending =>
+      _committingPending ? null : _pending;
+
   /// Whether a sequence is currently pending. Useful for tests.
   bool get hasPendingSequence => _pending != null;
 
@@ -206,7 +216,7 @@ class InputDispatcher {
     // otherwise every event arrives as `down`.)
     if (event.type == KeyEventType.up) return KeyEventResult.ignored;
     // 1. Pending sequence handling.
-    if (_pending != null) {
+    if (_matchablePending != null) {
       final result = _tryPendingSequence(event, textOrigin: textOrigin);
       if (result != null) return result;
       // Sequence cancelled; the held events were replayed. The current
@@ -309,7 +319,7 @@ class InputDispatcher {
   /// sequence cancels it — replaying the held keys direct-only — and is
   /// then delivered as ordinary text.
   KeyEventResult _dispatchText(TextInputEvent event) {
-    if (_pending != null) {
+    if (_matchablePending != null) {
       final keyEvent = _keyEventForText(event.text);
       if (keyEvent != null) {
         final result = _tryPendingSequence(keyEvent, textOrigin: event.text);
@@ -339,7 +349,7 @@ class InputDispatcher {
   /// one paste transaction, while non-text controls that claim single typed
   /// trigger characters should ignore pasted blobs.
   KeyEventResult _dispatchPaste(PasteEvent event) {
-    if (_pending != null) {
+    if (_matchablePending != null) {
       _cancelPendingAndRedispatchHeld();
     }
     return _deliverPaste(event);
@@ -351,7 +361,7 @@ class InputDispatcher {
   /// events do not fall through to key bindings. Any pending leader sequence is
   /// canceled first because the user's text-editing interaction broke it.
   KeyEventResult _dispatchComposition(TextCompositionEvent event) {
-    if (_pending != null) {
+    if (_matchablePending != null) {
       _cancelPendingAndRedispatchHeld();
     }
     return _deliverComposition(event);
@@ -610,9 +620,23 @@ class InputDispatcher {
     // Replay with the pending state still set — the replay path
     // (_deliverText / direct-only _dispatchPlain) never reads _pending, so a
     // pure prefix that commits nothing can stay held without a null blip.
-    if (_replayHeld(pending)) {
-      _clearPending();
+    //
+    // But a binding the replay FIRES may synchronously dispatch more input,
+    // and that nested dispatch must not match against the sequence we are
+    // tearing down (it would re-complete or re-replay it). Hold the state
+    // inert for the duration — the moral equivalent of the clear-then-replay
+    // this replaced, without the notifier round-trip through null.
+    _committingPending = true;
+    final bool committed;
+    try {
+      committed = _replayHeld(pending);
+    } finally {
+      _committingPending = false;
     }
+    // Clear only what we actually committed: a handler that dispatched during
+    // the replay may have legitimately opened a NEW sequence, and that one is
+    // not ours to discard.
+    if (committed && identical(_pending, pending)) _clearPending();
   }
 
   void _clearPending() {
@@ -627,6 +651,10 @@ class InputDispatcher {
     if (_disposed) return;
     _disposed = true;
     _clearPending();
+    // Unhook before disposing: this both drops the notifier's reference back
+    // to us and makes a late `cancel()` (a click racing teardown) a silent
+    // no-op instead of a disposed-dispatcher throw.
+    pendingSequenceNotifier.onCancel = null;
     pendingSequenceNotifier.dispose();
   }
 
