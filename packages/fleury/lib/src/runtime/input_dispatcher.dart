@@ -88,6 +88,11 @@ class InputDispatcher {
   /// is being torn down.
   bool _committingPending = false;
 
+  /// How many binding handlers this dispatcher has invoked. Only differences
+  /// are meaningful (see [_fire] / [_replayHeld]); it may wrap in a very
+  /// long-lived session, which is harmless for that use.
+  int _firedCount = 0;
+
   /// The pending sequence a NEW input event may match against — null while a
   /// commit is in flight, so a binding that dispatches input from its handler
   /// cannot re-complete or re-replay the sequence being torn down.
@@ -296,12 +301,17 @@ class InputDispatcher {
   /// [events], and returns the propagation decision. The handler may call
   /// `event.bubble()` to let the event continue propagating; otherwise it's
   /// consumed.
-  static KeyEventResult _fire(
+  KeyEventResult _fire(
     KeyBinding binding,
     KeySequence sequence,
     List<KeyEvent> events,
   ) {
     final wrapped = KeyBindingEvent(KeySequenceMatch(sequence, events));
+    // Count the INVOCATION, not the result: a handler that runs and then
+    // calls `bubble()` reports `ignored` so ancestors get a turn, but its
+    // action already happened. [_onTimeout] needs "did anything run", so a
+    // bubbling shorter binding can't leave a prefix held open after it fired.
+    _firedCount++;
     binding.onEvent(wrapped);
     return wrapped.isBubbling ? KeyEventResult.ignored : KeyEventResult.handled;
   }
@@ -385,20 +395,24 @@ class InputDispatcher {
   /// shorter binding or a held char owed to a field commits here) from a PURE
   /// prefix (nothing commits) without predicting it: it just tries, and a
   /// `false` means the held events landed nowhere.
+  ///
+  /// "Landed" means a handler RAN or text was DELIVERED — not that the result
+  /// was `handled`. A binding that fires and then calls `bubble()` reports
+  /// `ignored`, but its action already happened; treating that as "nothing
+  /// committed" would hold the prefix open past an action the user already
+  /// got, and let the next key fire the longer binding too.
   bool _replayHeld(_PendingSequence pending) {
-    var committed = false;
+    final firedBefore = _firedCount;
+    var delivered = false;
     for (var i = 0; i < pending.events.length; i++) {
       final text = pending.texts[i];
       if (text != null && _deliverText(text) == KeyEventResult.handled) {
-        committed = true;
+        delivered = true;
         continue;
       }
-      if (_dispatchPlain(pending.events[i], allowSequenceStart: false) ==
-          KeyEventResult.handled) {
-        committed = true;
-      }
+      _dispatchPlain(pending.events[i], allowSequenceStart: false);
     }
-    return committed;
+    return delivered || _firedCount != firedBefore;
   }
 
   /// Offers [text] to each [TextInputClaimant] up the focus chain until

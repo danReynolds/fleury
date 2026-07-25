@@ -1053,6 +1053,47 @@ void main() {
     });
   });
 
+  group('timeout-commit counts handler runs, not results', () {
+    test('a shorter binding that fires then bubbles still resolves the '
+        'prefix', () async {
+      // `bubble()` reports `ignored` so ancestors get a turn — but the
+      // handler ALREADY RAN. If the commit only believed `handled`, the
+      // prefix would stay held after the action fired, and the next key would
+      // fire the longer binding too: one intent, two actions.
+      final calls = <String>[];
+      final h = _TestHarness();
+      h.mountRoot(
+        KeyBindings(
+          bindings: [
+            KeyBinding.event(
+              KeySequence.d,
+              onEvent: (e) {
+                calls.add('d');
+                e.bubble();
+              },
+            ),
+            KeyBinding(KeySequence.d.k, onTrigger: () => calls.add('dk')),
+          ],
+          child: const Focus(autofocus: true, child: EmptyBox()),
+        ),
+      );
+
+      h.dispatch(_char('d'));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      expect(calls, ['d'], reason: 'the bubbling handler ran');
+      expect(
+        h.dispatcher.hasPendingSequence,
+        isFalse,
+        reason: 'it ran, so the prefix is resolved — not still held',
+      );
+
+      // A following k is just a fresh key, NOT the tail of `.d.k`.
+      h.dispatch(_char('k'));
+      expect(calls, ['d'], reason: 'dk must not fire off the stale prefix');
+    });
+  });
+
   group('timeout-commit re-entrancy', () {
     test('a handler dispatching during the commit cannot re-enter the '
         'sequence being torn down', () async {
