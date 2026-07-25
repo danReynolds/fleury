@@ -3,6 +3,7 @@ import '../terminal/capabilities.dart';
 import 'cell.dart';
 import 'cell_buffer.dart';
 import 'scroll_detection.dart';
+import 'width_resolver.dart';
 
 /// A destination for ANSI bytes. Production wiring sends them to stdout via
 /// `IoSinkAnsiSink`; tests capture them with [StringAnsiSink].
@@ -397,7 +398,25 @@ final class AnsiRenderer {
       // columns wide. Wide chars (`isWide`) are unambiguous (both sides agree on
       // 2) and ASCII is unambiguous (1), so neither needs pinning; the rest do
       // only when the terminal is (or is assumed) ambiguous-as-wide.
-      final needsWidthPin = ambiguousCharsAreWide && !isWide && !isAscii;
+      //
+      // Two independent reasons to pin, because they fail on opposite
+      // terminals. The ambiguous case is probed: it only bites where the probe
+      // said "wide", and there it covers every non-ASCII narrow cell. The
+      // uncertain case is NOT probed and cannot be — emoji width is negotiated
+      // between terminal and font — so it pins wherever it appears, including
+      // over glyphs we model as wide (a terminal that draws them narrow
+      // desyncs just as badly in the other direction).
+      //
+      // Without the second clause a modern terminal, where the probe answers
+      // "narrow", ran with containment switched off entirely: any error in the
+      // width tables shifted every later cell on the row instead of smudging
+      // one glyph. That is precisely how a single wrong Dingbats range garbled
+      // whole frames. Emoji never appear in the long contiguous runs that make
+      // pinning expensive (those are box-drawing, which stays on the probed
+      // path), so the cost here is a few cursor moves on rows that carry one.
+      final needsWidthPin =
+          (ambiguousCharsAreWide && !isWide && !isAscii) ||
+          (!isAscii && hasUncertainWidth(grapheme));
       if ((cursorCol != null && cursorCol! >= size.cols) || needsWidthPin) {
         cursorRow = null;
         cursorCol = null;
