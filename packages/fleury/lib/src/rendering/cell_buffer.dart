@@ -54,6 +54,25 @@ final class CellBuffer {
   int _dmgBottom = 0;
   final Set<int> _damageRows = <int>{};
   var _damageSuppressionDepth = 0;
+  // Rows this buffer has written since the last [clear] — its COVERAGE, which
+  // is a different question from its damage.
+  //
+  // Damage answers "what must the presenter re-examine"; coverage answers "what
+  // did this frame reconstruct". They diverge exactly where a repaint boundary
+  // blits a cached subtree: the copy rebuilds those cells but deliberately does
+  // not want them re-scanned, so it writes under [withoutDamageTracking].
+  // Coverage still records it, because the cells ARE occupied.
+  //
+  // Suppression must not reach this, or a blitted row looks abandoned. It must
+  // also never over-report: the frame loop reads it as "reconstructed" for the
+  // new buffer and as "may hold content" for the shown one, and only the exact
+  // written-row set is safe in both roles.
+  final Set<int> _coverageRows = <int>{};
+  var _hasCoverage = false;
+  int _covLeft = 0;
+  int _covTop = 0;
+  int _covRight = 0;
+  int _covBottom = 0;
 
   CellSize get size => _size;
 
@@ -152,6 +171,7 @@ final class CellBuffer {
   /// Clears every cell back to [Cell.empty].
   void clear() {
     _recordDamageRect(0, 0, _size.cols, _size.rows);
+    _resetCoverage();
     _cells.fillRange(0, _cells.length, const Cell.empty());
     _images.clear();
     _imagePlacements.clear();
@@ -174,6 +194,8 @@ final class CellBuffer {
     _cells.setRange(0, retained, _cells, rows * cols);
     _cells.fillRange(retained, _cells.length, const Cell.empty());
     _recordDamageRect(0, 0, _size.cols, _size.rows);
+    // Both ranges above rewrite every row, so coverage really is full here.
+    _recordCoverageRect(0, 0, _size.cols, _size.rows);
   }
 
   /// Resizes the buffer to [newSize], discarding any existing content.
@@ -188,6 +210,7 @@ final class CellBuffer {
     _images.clear();
     _imagePlacements.clear();
     _hasDamage = false;
+    _resetCoverage();
     _recordDamageRect(0, 0, newSize.cols, newSize.rows);
   }
 
@@ -237,6 +260,7 @@ final class CellBuffer {
     final dstRow0 = destOffset.row;
     final srcStride = source._size.cols;
     _recordDamageRect(dstCol0, dstRow0, cols, rows);
+    _recordCoverageRect(dstCol0, dstRow0, cols, rows);
 
     // Placements live off-grid, so carry them explicitly. The region-aware
     // compositor preserves the original fit box while accumulating source
@@ -434,6 +458,7 @@ final class CellBuffer {
     if (width == 0) return 0;
     // Include adjacent cells because writing can evict wide-cell neighbors.
     _recordDamageRect(col - 1, row, width + 2, 1);
+    _recordCoverageRect(col, row, width, 1);
 
     final base = row * _size.cols + col;
 
@@ -703,6 +728,7 @@ final class CellBuffer {
     // leading at col-1 or a continuation at col+cols, which sit outside the
     // region proper — the same reason grapheme writes damage col-1..col+width+1.
     if (recordDamage) _recordDamageRect(col - 1, row, cols + 2, rows);
+    _recordCoverageRect(col, row, cols, rows);
     if (!markOverlayCells) return;
     for (var r = row; r < row + rows; r++) {
       final base = r * _size.cols;
@@ -773,6 +799,70 @@ final class CellBuffer {
 
   bool _containsColRow(int col, int row) =>
       col >= 0 && row >= 0 && col < _size.cols && row < _size.rows;
+
+  /// Rows [previous] covered that this buffer does not — the rows whose
+  /// content the new frame abandoned.
+  ///
+  /// Every frame clears its buffer before painting, so a row the shown frame
+  /// wrote and this one never touches is now empty: a real change that carries
+  /// no damage of its own, because nothing wrote there to record any. Those are
+  /// the cells that would otherwise stay on screen as ghosts.
+  ///
+  /// Returns null when nothing was abandoned, so the steady state allocates
+  /// nothing.
+  Set<int>? rowsVacatedFrom(CellBuffer previous) {
+    if (previous._coverageRows.isEmpty) return null;
+    Set<int>? vacated;
+    for (final row in previous._coverageRows) {
+      if (_coverageRows.contains(row)) continue;
+      (vacated ??= <int>{}).add(row);
+    }
+    return vacated;
+  }
+
+  /// Bounds of everything this buffer has written since the last [clear].
+  CellRect? get coverageBounds => _hasCoverage
+      ? CellRect.fromLTWH(
+          _covLeft,
+          _covTop,
+          _covRight - _covLeft,
+          _covBottom - _covTop,
+        )
+      : null;
+
+  void _resetCoverage() {
+    _coverageRows.clear();
+    _hasCoverage = false;
+  }
+
+  /// Records a content write for [rowsVacatedFrom], independent of damage.
+  ///
+  /// Deliberately outside every gate [_recordDamageRect] applies: a suppressed
+  /// write still reconstructs its cells, and treating it as unwritten is what
+  /// makes a blitted row look abandoned.
+  void _recordCoverageRect(int col, int row, int cols, int rows) {
+    if (cols <= 0 || rows <= 0) return;
+    final left = col < 0 ? 0 : col;
+    final top = row < 0 ? 0 : row;
+    final right = col + cols > _size.cols ? _size.cols : col + cols;
+    final bottom = row + rows > _size.rows ? _size.rows : row + rows;
+    if (left >= right || top >= bottom) return;
+    if (!_hasCoverage) {
+      _hasCoverage = true;
+      _covLeft = left;
+      _covTop = top;
+      _covRight = right;
+      _covBottom = bottom;
+    } else {
+      if (left < _covLeft) _covLeft = left;
+      if (top < _covTop) _covTop = top;
+      if (right > _covRight) _covRight = right;
+      if (bottom > _covBottom) _covBottom = bottom;
+    }
+    for (var coveredRow = top; coveredRow < bottom; coveredRow++) {
+      _coverageRows.add(coveredRow);
+    }
+  }
 
   void _recordDamageRect(int col, int row, int cols, int rows) {
     if (!_damageTrackingEnabled ||

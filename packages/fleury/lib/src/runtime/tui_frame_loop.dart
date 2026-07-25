@@ -29,6 +29,14 @@ final class TuiFrameLoop {
 
   final RenderDamageTracker? _renderDamage;
 
+  /// Enables the debug oracle asserting that frame damage covers every changed
+  /// cell (see [_damageCoversChanges]).
+  ///
+  /// Opt-in rather than always-on under `assert`: the check is O(cells) per
+  /// frame, and benchmarks run with asserts enabled, so leaving it on would tax
+  /// the very gates that guard this path. Tests exercising damage flip it on.
+  static bool debugCheckDamageCoverage = false;
+
   CellBuffer? _frontBuffer;
   CellBuffer? _backBuffer;
   var _requireFullRepaint = true;
@@ -83,13 +91,41 @@ final class TuiFrameLoop {
     paint(next);
 
     _renderDamage?.takeVisualChange();
+    var damageBounds = next.takeDamageBounds();
+    // takeDamageRows hands back a fresh set, so widening it below cannot reach
+    // any state the buffer still owns.
+    final damageRows = next.takeDamageRows();
+    // Only ever COMPLETE a bounded claim. Null bounds mean "this frame did not
+    // track what it mutated"; presenters answer that with a full diff, which
+    // finds vacated cells on its own. Bounding it here would turn "unknown"
+    // into a narrow claim they then trust, dropping untracked writes.
+    if (damageBounds != null) {
+      // Rows the shown frame's content occupied and this one never rebuilt are
+      // empty now — a change with no damage of its own, since nothing wrote
+      // there to record any.
+      final vacated = next.rowsVacatedFrom(previous);
+      if (vacated != null) {
+        damageRows.addAll(vacated);
+        damageBounds = _includeVacated(
+          damageBounds,
+          previous.coverageBounds,
+          vacated,
+        );
+      }
+    }
     final damage = TuiFrameDamage(
       fullRepaint: _requireFullRepaint,
       requiresFullDiff: _renderDamage?.takeRequiresFullDiff() ?? true,
-      paintDamageBounds: next.takeDamageBounds(),
-      paintDamageRows: next.takeDamageRows(),
+      paintDamageBounds: damageBounds,
+      paintDamageRows: damageRows,
     );
     _requireFullRepaint = false;
+    assert(
+      !debugCheckDamageCoverage || _damageCoversChanges(previous, next, damage),
+      'frame damage does not cover every changed cell: a retained presenter '
+      'only re-applies damaged rows, so the uncovered cells will keep stale '
+      'content on screen',
+    );
 
     return TuiRenderedFrame._(
       previous: previous,
@@ -103,6 +139,75 @@ final class TuiFrameLoop {
   void commit(TuiRenderedFrame frame) {
     _backBuffer = frame.previous;
     _frontBuffer = frame.next;
+  }
+
+  /// Whether [damage] accounts for every cell that differs between the shown
+  /// frame and the new one — the contract every retained presenter relies on.
+  ///
+  /// Checks BOTH shapes a presenter consumes, because they can disagree: the
+  /// DOM and wire surfaces re-apply whole dirty ROWS, while the ANSI renderer
+  /// scans only the cells inside [TuiFrameDamage.diffBounds]. Damage that
+  /// satisfies one and not the other still ghosts on the surface it missed.
+  static bool _damageCoversChanges(
+    CellBuffer previous,
+    CellBuffer next,
+    TuiFrameDamage damage,
+  ) {
+    // These modes tell presenters to diff or repaint everything, so they cover
+    // any change by construction.
+    final bounds = damage.diffBounds;
+    if (damage.fullRepaint ||
+        damage.requiresFullDiff ||
+        bounds == null ||
+        previous.size != next.size) {
+      return true;
+    }
+    final dirty = damage.dirtyRowsFor(next.size);
+    final rows = dirty.isFull ? null : dirty.rows.toSet();
+    for (var row = 0; row < next.size.rows; row++) {
+      final rowIsDirty = rows == null || rows.contains(row);
+      final rowInBounds = row >= bounds.top && row < bounds.bottom;
+      // Nothing to prove for a row both shapes already claim.
+      if (rowIsDirty && rowInBounds && bounds.left == 0 &&
+          bounds.right == next.size.cols) {
+        continue;
+      }
+      for (var col = 0; col < next.size.cols; col++) {
+        if (previous.atColRow(col, row) == next.atColRow(col, row)) continue;
+        if (!rowIsDirty) return false;
+        if (!rowInBounds || col < bounds.left || col >= bounds.right) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  /// Widens [paintBounds] to reach the cells [vacatedRows] abandoned.
+  ///
+  /// Those cells can only lie where the shown frame wrote, so its coverage
+  /// supplies the column span — far tighter than assuming the full row width.
+  static CellRect _includeVacated(
+    CellRect paintBounds,
+    CellRect? previousCoverage,
+    Set<int> vacatedRows,
+  ) {
+    if (previousCoverage == null) return paintBounds;
+    var top = previousCoverage.bottom;
+    var bottom = previousCoverage.top;
+    for (final row in vacatedRows) {
+      if (row < top) top = row;
+      if (row + 1 > bottom) bottom = row + 1;
+    }
+    if (top >= bottom) return paintBounds;
+    return paintBounds.union(
+      CellRect.fromLTWH(
+        previousCoverage.left,
+        top,
+        previousCoverage.size.cols,
+        bottom - top,
+      ),
+    );
   }
 }
 
