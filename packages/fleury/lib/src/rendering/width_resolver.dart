@@ -90,6 +90,25 @@ final class DefaultWidthResolver implements WidthResolver {
 
     if (_isZeroWidth(base)) return 0;
 
+    // A presentation selector (UTS #51) switches the base between text and
+    // emoji presentation, which changes how wide the terminal draws it. This is
+    // a RULE over the cluster, not a table row per code point — it holds for
+    // every emoji-capable base, so it covers the whole VS16 family a
+    // block-by-block table keeps missing: ⭐️ ❤️ ☑️ ⚠️ each measured 1 before
+    // this while every terminal draws them at 2.
+    //
+    // Scanned on the same iterator that produced the base, so there is no
+    // second pass; for the common single-rune cluster the loop exits at once.
+    while (iterator.moveNext()) {
+      final r = iterator.current;
+      if (r == 0xFE0F) {
+        // VS16 — emoji presentation.
+        if (profile.emojiIsWide) return 2;
+        break; // Emoji disabled: fall back to the base's own rules.
+      }
+      if (r == 0xFE0E) return 1; // VS15 — text presentation is always narrow.
+    }
+
     if (profile.emojiIsWide && _isEmojiPresentation(base)) return 2;
     if (_isWide(base)) return 2;
     if (profile.ambiguousIsWide && _isAmbiguous(base)) return 2;
@@ -112,6 +131,17 @@ final class DefaultWidthResolver implements WidthResolver {
     }
     if (asciiPrefix == len) return len;
 
+    // The code unit that ended the run may be an Extend belonging to the LAST
+    // ASCII character's cluster — '1' + VS16 + U+20E3 (1️⃣) is a single cluster
+    // with an ASCII base. Peeling that base off measures the two halves
+    // separately and loses the cluster's real width, so hand the last ASCII
+    // character back to the grapheme path. (The fast path's premise — one ASCII
+    // code unit is one width-1 cluster — is only true when nothing combines
+    // onto it.)
+    if (asciiPrefix > 0 && _isExtender(text.codeUnitAt(asciiPrefix))) {
+      asciiPrefix--;
+    }
+
     // Mixed text: count the ASCII prefix at width 1/char, then fall
     // back to grapheme iteration for the rest.
     var total = asciiPrefix;
@@ -127,6 +157,16 @@ final class DefaultWidthResolver implements WidthResolver {
   // Pragmatic excerpts from UAX #11. Full ranges would be ~300 entries; the
   // sets below cover what real terminal text actually contains. Long-tail
   // ranges can be added when concrete test cases demand them.
+
+  /// Code units that attach to a preceding base instead of starting their own
+  /// cluster. Only the ranges that can follow an ASCII base matter here — this
+  /// guards [widthOfText]'s fast path, nothing else.
+  bool _isExtender(int c) =>
+      (c >= 0x0300 && c <= 0x036F) || // combining diacriticals
+      (c >= 0x20D0 && c <= 0x20FF) || // marks for symbols (incl. keycap U+20E3)
+      (c >= 0xFE00 && c <= 0xFE0F) || // variation selectors
+      (c >= 0xFE20 && c <= 0xFE2F) || // combining half marks
+      c == 0x200D; // ZWJ
 
   bool _isZeroWidth(int r) {
     // C0 / C1 controls are zero-width (and should already have been replaced
@@ -226,4 +266,46 @@ final class DefaultWidthResolver implements WidthResolver {
     if (r >= 0x2500 && r <= 0x25FF) return true; // box drawing & block
     return false;
   }
+}
+
+/// Whether a terminal's *rendered* width for [grapheme] is genuinely likely to
+/// disagree with the width model — i.e. whether getting this glyph wrong is a
+/// live risk rather than a theoretical one.
+///
+/// True for the emoji-capable clusters, where terminals and fonts really do
+/// differ: an explicit presentation selector or ZWJ, the emoji planes, and the
+/// Misc-Symbols/Dingbats block (where ✓ ✗ ☀ live — the block whose
+/// misclassification desynced whole frames). False for ASCII and CJK, where
+/// every implementation agrees, and false for box drawing, blocks, geometric
+/// shapes and arrows: those are UAX #11 Ambiguous, answered by the startup
+/// probe, and they appear in long runs where pinning would cost real bytes.
+///
+/// The renderer uses this to decide whether to pin each following cell to an
+/// absolute column. That containment is what keeps a width disagreement a local
+/// cosmetic artifact instead of shifting every subsequent cell on the row —
+/// the difference between a smudged glyph and a garbled frame.
+bool hasUncertainWidth(String grapheme) {
+  if (grapheme.isEmpty) return false;
+  // Single-code-unit fast path, allocation-free: this is called per dirty
+  // non-ASCII cell, and box-drawing runs would otherwise pay a runes iterator
+  // per cell to be told what a range check answers. Only true clusters
+  // (surrogate pairs, ZWJ sequences, selectors) need the walk below.
+  if (grapheme.length == 1) {
+    final c = grapheme.codeUnitAt(0);
+    if (c >= 0x20 && c <= 0x7E) return false; // ASCII is certain
+    return c >= 0x2600 && c <= 0x27BF; // misc symbols & dingbats
+  }
+  final iterator = grapheme.runes.iterator;
+  if (!iterator.moveNext()) return false;
+  final base = iterator.current;
+  if (base >= 0x2600 && base <= 0x27BF) return true; // misc symbols, dingbats
+  if (base >= 0x1F000 && base <= 0x1FAFF) return true; // emoji planes
+  if (base >= 0x1F1E6 && base <= 0x1F1FF) return true; // regional indicators
+  while (iterator.moveNext()) {
+    final r = iterator.current;
+    // A presentation selector or ZWJ means the cluster's rendering is
+    // font-negotiated, which is exactly where implementations diverge.
+    if (r == 0xFE0E || r == 0xFE0F || r == 0x200D) return true;
+  }
+  return false;
 }
