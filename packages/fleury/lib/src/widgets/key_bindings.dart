@@ -117,6 +117,17 @@ final class PendingSequenceNotifier with ChangeNotifier {
     _value = next;
     notifyListeners();
   }
+
+  /// Framework-only: the dispatcher installs its pending-cancel here so a
+  /// which-key popup's close control can abandon the in-flight sequence from
+  /// the widget tree (the value flows dispatcher→tree; this flows the cancel
+  /// request tree→dispatcher). Apps go through [KeyBindings.cancelPending].
+  VoidCallback? onCancel;
+
+  /// Requests cancellation of the in-flight sequence, as if the user pressed
+  /// Esc. No-op when nothing is pending or the dispatcher hasn't wired a
+  /// handler.
+  void cancel() => onCancel?.call();
 }
 
 /// Shares the runtime [PendingSequenceNotifier] with the widget tree.
@@ -424,6 +435,16 @@ class KeyBindings extends StatefulWidget {
       .dependOnInheritedWidgetOfExactType<PendingSequenceScope>()
       ?.notifier
       .value;
+
+  /// Cancels the in-flight sequence [pendingOf] reports, as if the user
+  /// pressed Esc — for a which-key popup's close control or any custom
+  /// dismiss affordance. No-op when nothing is pending or no
+  /// [PendingSequenceScope] is installed. Reads the scope WITHOUT a rebuild
+  /// dependency (it's an action, not a value read).
+  static void cancelPending(BuildContext context) => context
+      .getInheritedWidgetOfExactType<PendingSequenceScope>()
+      ?.notifier
+      .cancel();
 
   @override
   State<KeyBindings> createState() => _KeyBindingsState();

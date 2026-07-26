@@ -195,7 +195,17 @@ Nine rules, normative:
 6. **Sequences keep RFC 0008 dispatch:** vim-style precedence (a direct
    `.d` waits while `.d.d` is live), per-dispatcher `sequenceTimeout`
    (default 500 ms), cancel/timeout replays held events with text-origin
-   steps owed to the focused text claimant first.
+   steps owed to the focused text claimant first. **`sequenceTimeout` is
+   `timeoutlen`, not a self-destruct:** it only commits an *ambiguous*
+   prefix — one where a shorter binding also completes (`g` vs `gg`) or a
+   held printable is owed to a focused field. A *pure* prefix (nothing
+   completes on the held keys — operator-pending `.d`, a `Space` leader)
+   commits nothing, so it does **not** time out: it stays pending until the
+   next key or Esc, so a which-key popup rests on it while the user reads it
+   (matching which-key.nvim / emacs). The dispatcher decides by *trying* the
+   commit on expiry and holding open only when the replay lands nowhere — no
+   prediction, and the pending notifier never blips so the popup doesn't
+   flicker.
 7. **Shadowing is honest, two ways.** Bare printables are claimed by a
    focused editable before bindings (unchanged). New: on terminals that
    cannot report super/meta, bindings requiring them are inert **and**

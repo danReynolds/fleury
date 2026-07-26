@@ -424,4 +424,35 @@ void main() {
       expect(node.actions, contains(SemanticAction.dismiss));
     });
   });
+  testWidgets('a toast is opaque — app content does not bleed through it', (
+    tester,
+  ) {
+    // A toast floats in an OverlayEntry, compositing over the app. Without its
+    // own background the wall of X's behind it shows through the frame.
+    late BuildContext ctx;
+    tester.pumpWidget(
+      Toaster(
+        child: Column(
+          children: [
+            _Capture((c) => ctx = c),
+            for (var i = 0; i < 8; i++) Text('X' * 20),
+          ],
+        ),
+      ),
+    );
+    tester.pump();
+    Toaster.show(ctx, 'Saved');
+    tester.pump();
+
+    final row = _screen(
+      tester,
+    ).split('\n').firstWhere((line) => line.contains('Saved'));
+    // The toast is bottom-right aligned; cells between the frame edge and the
+    // message are inside the toast, so the wall must not show there.
+    expect(
+      row.substring(row.indexOf('Saved')),
+      isNot(contains('X')),
+      reason: 'the wall behind bled through the toast',
+    );
+  });
 }
