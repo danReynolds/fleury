@@ -80,12 +80,14 @@ void main() {
       );
     });
 
-    test('emoji disabled by profile fall back to base-char rules', () {
+    test('emoji disabled by profile only affects non-Wide emoji', () {
       const noEmoji = TerminalProfile(emojiIsWide: false);
-      // 🙂 (U+1F642) is outside our _isWide ranges (it's in U+1F300+ which
-      // is only covered by the emoji table), so disabling emojiIsWide
-      // makes it fall through to width 1.
-      expect(resolver.widthOfGrapheme('🙂', noEmoji), 1);
+      // UAX #11 ED4 folds Emoji_Presentation=Yes into East Asian Wide, so most
+      // emoji are Wide by the standard and the flag cannot narrow them...
+      expect(resolver.widthOfGrapheme('🙂', noEmoji), 2);
+      // ...but Regional_Indicator is explicitly EXCLUDED from that amendment,
+      // so flags are the set the flag actually governs.
+      expect(resolver.widthOfGrapheme('\u{1F1FA}\u{1F1F8}', noEmoji), 1);
     });
   });
 
@@ -123,9 +125,13 @@ void main() {
       }
     });
 
-    test('emoji disabled by profile narrows even wide dingbats', () {
+    test('emoji-presentation dingbats are Wide by the standard itself', () {
+      // Not merely "emoji, therefore 2": UAX #11 classifies these as East Asian
+      // Wide outright, so they stay 2 even with emoji handling disabled.
       const noEmoji = TerminalProfile(emojiIsWide: false);
-      expect(resolver.widthOfGrapheme('✅', noEmoji), 1);
+      expect(resolver.widthOfGrapheme('✅', noEmoji), 2);
+      // The text-presentation half of the block stays narrow either way.
+      expect(resolver.widthOfGrapheme('✓', noEmoji), 1);
     });
   });
 
@@ -134,8 +140,10 @@ void main() {
       // These are the most common emoji form there is, and a block-by-block
       // table misses every one of them: each base is text-presentation (1) and
       // only the selector makes it wide. All measured 1 before the rule.
+      // Every base here is East_Asian_Width=N on its own, so a width of 2 can
+      // only come from the selector — ⭐ is deliberately excluded because it is
+      // already Wide and would pass without the rule doing anything.
       for (final g in [
-        '\u{2B50}\u{FE0F}', // ⭐️ star
         '\u{2764}\u{FE0F}', // ❤️ heart
         '\u{2611}\u{FE0F}', // ☑️ ballot box with check
         '\u{26A0}\u{FE0F}', // ⚠️ warning
@@ -153,15 +161,20 @@ void main() {
     });
 
     test('the bare base without a selector keeps its own width', () {
-      // Same code points as the VS16 cases above, unselected — the rule must
-      // not leak onto them.
-      expect(resolver.widthOfGrapheme('\u{2B50}', standard), 1); // ⭐
-      expect(resolver.widthOfGrapheme('\u{2764}', standard), 1); // ❤
+      // Unselected, these fall back to their own East_Asian_Width — the rule
+      // must not leak onto them.
+      expect(resolver.widthOfGrapheme('\u{2764}', standard), 1); // ❤ EAW=N
+      expect(resolver.widthOfGrapheme('\u{26A0}', standard), 1); // ⚠ EAW=N
+      // ...but a base that is Wide in its own right stays 2 without any
+      // selector. UAX #11 ED4 (amended in Unicode 9) folds
+      // Emoji_Presentation=Yes into East Asian Wide, so ⭐ is 2 bare.
+      expect(resolver.widthOfGrapheme('\u{2B50}', standard), 2); // ⭐ EAW=W
     });
 
     test('VS16 respects a profile with emoji disabled', () {
+      // The base must be EAW=N, or it would be wide regardless of the flag.
       const noEmoji = TerminalProfile(emojiIsWide: false);
-      expect(resolver.widthOfGrapheme('\u{2B50}\u{FE0F}', noEmoji), 1);
+      expect(resolver.widthOfGrapheme('\u{2764}\u{FE0F}', noEmoji), 1);
     });
 
     test('a VS16 cluster in mixed text sums correctly', () {

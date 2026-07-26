@@ -1,6 +1,8 @@
 import 'package:characters/characters.dart';
 import 'package:meta/meta.dart';
 
+import 'width_tables.dart';
+
 /// Per-terminal configuration that affects display-width calculations.
 ///
 /// Unicode UAX #11 leaves the width of "ambiguous" characters up to the
@@ -18,8 +20,15 @@ final class TerminalProfile {
   /// is false (narrow).
   final bool ambiguousIsWide;
 
-  /// When true, characters in the standard emoji ranges render as 2
-  /// columns. Default is true — almost every modern emulator does this.
+  /// When true, `Emoji_Presentation` characters render as 2 columns, and a
+  /// VS16 selector promotes its base to 2. Default is true.
+  ///
+  /// Narrower in effect than it sounds: UAX #11 ED4 (amended in Unicode 9)
+  /// folds `Emoji_Presentation=Yes` into East Asian *Wide*, so most emoji are
+  /// already 2 by [DefaultWidthResolver]'s wide table and this flag cannot
+  /// narrow them. What it does govern is the set ED4 explicitly excludes —
+  /// `Regional_Indicator` (flags) — plus the VS16 promotion of an otherwise
+  /// narrow base.
   final bool emojiIsWide;
 
   /// Sensible default for modern terminals: narrow ambiguous, wide emoji.
@@ -61,10 +70,20 @@ abstract interface class WidthResolver {
   }
 }
 
-/// Default width resolver based on Unicode East Asian Width (UAX #11) plus
-/// emoji-aware adjustments. Pragmatic, not exhaustive: covers the ranges
-/// real terminals get wrong if you don't handle them, leaves the long tail
-/// as "narrow."
+/// Default width resolver: East Asian Width (UAX #11) and emoji presentation
+/// (UTS #51), from tables generated over the full Unicode Character Database —
+/// see width_tables.dart. Complete rather than excerpted, so a code point
+/// nobody anticipated still gets the width the standard assigns it instead of
+/// falling through to a guess.
+///
+/// Two things it does NOT get from a table, because neither is a per-code-point
+/// property: presentation selectors (VS15/VS16 act on the whole cluster) and
+/// the cap at 2 cells, which is where the terminal ecosystem converged
+/// regardless of what the data says.
+///
+/// Width is a *model* of what the terminal will draw, never a guarantee — no
+/// protocol exists to ask. Where the model is least certain,
+/// [hasUncertainWidth] tells the renderer to contain the disagreement.
 final class DefaultWidthResolver implements WidthResolver {
   const DefaultWidthResolver();
 
@@ -154,13 +173,18 @@ final class DefaultWidthResolver implements WidthResolver {
 
   // ---- Width tables ------------------------------------------------------
   //
-  // Pragmatic excerpts from UAX #11. Full ranges would be ~300 entries; the
-  // sets below cover what real terminal text actually contains. Long-tail
-  // ranges can be added when concrete test cases demand them.
+  // GENERATED from the Unicode Character Database — see width_tables.dart and
+  // tool/ucd_width_tables.dart. These used to be hand-written "pragmatic
+  // excerpts", which is the one approach no mature width library takes: the
+  // excerpts were wrong for a third of the box-drawing block and classified the
+  // whole Dingbats range as emoji, which desynced entire frames. Deliberate
+  // deviations from the raw UCD live in the generator's `_curate`, documented
+  // there. Do not add ranges here.
 
   /// Code units that attach to a preceding base instead of starting their own
   /// cluster. Only the ranges that can follow an ASCII base matter here — this
-  /// guards [widthOfText]'s fast path, nothing else.
+  /// guards [widthOfText]'s fast path, nothing else. Not UCD-derived: it is a
+  /// cluster-boundary question, not a width one.
   bool _isExtender(int c) =>
       (c >= 0x0300 && c <= 0x036F) || // combining diacriticals
       (c >= 0x20D0 && c <= 0x20FF) || // marks for symbols (incl. keycap U+20E3)
@@ -168,104 +192,35 @@ final class DefaultWidthResolver implements WidthResolver {
       (c >= 0xFE20 && c <= 0xFE2F) || // combining half marks
       c == 0x200D; // ZWJ
 
-  bool _isZeroWidth(int r) {
-    // C0 / C1 controls are zero-width (and should already have been replaced
-    // by the sanitizer; defending against them in the resolver too).
-    if (r < 0x20 || (r >= 0x7F && r <= 0x9F)) return true;
+  bool _isZeroWidth(int r) => _inRanges(zeroWidthRanges, r);
 
-    // Combining marks and modifiers commonly seen at base positions.
-    if (r >= 0x0300 && r <= 0x036F) return true; // Combining Diacriticals
-    if (r >= 0x1AB0 && r <= 0x1AFF) return true; // Combining Diacriticals Ext.
-    if (r >= 0x1DC0 && r <= 0x1DFF) return true; // Combining Diacriticals Sup.
-    if (r >= 0x20D0 && r <= 0x20FF) return true; // Combining Marks for Symbols
-    // Variation selectors (VS1-VS16) are zero-width modifiers. VS16 (0xFE0F) is
-    // the one extend that can immediately follow an ASCII base and NOT already
-    // be covered above, so widthOfText's ASCII fast path — which peels the base
-    // and re-measures the tail as a fresh cluster — would otherwise count the
-    // VS16-based fragment as width 1 (e.g. '1️⃣' measured 2, paints 1).
-    if (r >= 0xFE00 && r <= 0xFE0F) return true; // Variation Selectors
-    if (r >= 0xFE20 && r <= 0xFE2F) return true; // Combining Half Marks
-    if (r == 0x200B || r == 0x200C || r == 0x200D) return true; // ZW{SP,NJ,J}
-    if (r == 0xFEFF) return true; // BOM / ZWNBSP
+  bool _isWide(int r) => _inRanges(wideRanges, r);
 
-    return false;
+  bool _isEmojiPresentation(int r) => _inRanges(emojiPresentationRanges, r);
+
+  bool _isAmbiguous(int r) => _inRanges(ambiguousRanges, r);
+}
+
+/// Binary search over a flat, sorted list of INCLUSIVE `[start, end]` pairs.
+///
+/// Allocation-free and called per non-ASCII grapheme on the layout hot path;
+/// the ASCII fast paths in [DefaultWidthResolver] short-circuit before reaching
+/// any of this, so the common case never pays for it.
+bool _inRanges(List<int> ranges, int r) {
+  var lo = 0;
+  var hi = (ranges.length >> 1) - 1;
+  while (lo <= hi) {
+    final mid = (lo + hi) >> 1;
+    final i = mid << 1;
+    if (r < ranges[i]) {
+      hi = mid - 1;
+    } else if (r > ranges[i + 1]) {
+      lo = mid + 1;
+    } else {
+      return true;
+    }
   }
-
-  bool _isWide(int r) {
-    // Hangul Jamo
-    if (r >= 0x1100 && r <= 0x115F) return true;
-    // CJK Radicals / Kangxi
-    if (r >= 0x2E80 && r <= 0x303E) return true;
-    // Hiragana / Katakana / Bopomofo / Hangul Compat / Kanbun / Extended-A
-    if (r >= 0x3041 && r <= 0x33FF) return true;
-    // CJK Unified Ideographs Extension A
-    if (r >= 0x3400 && r <= 0x4DBF) return true;
-    // CJK Unified Ideographs
-    if (r >= 0x4E00 && r <= 0x9FFF) return true;
-    // Yi Syllables / Radicals
-    if (r >= 0xA000 && r <= 0xA4CF) return true;
-    // Hangul Syllables
-    if (r >= 0xAC00 && r <= 0xD7A3) return true;
-    // CJK Compatibility Ideographs
-    if (r >= 0xF900 && r <= 0xFAFF) return true;
-    // CJK Compatibility Forms / Small Forms / Vertical Forms
-    if (r >= 0xFE30 && r <= 0xFE6F) return true;
-    // Fullwidth Forms (excluding halfwidth shapes)
-    if (r >= 0xFF00 && r <= 0xFF60) return true;
-    if (r >= 0xFFE0 && r <= 0xFFE6) return true;
-    // CJK Unified Ideographs Extension B through F
-    if (r >= 0x20000 && r <= 0x2FFFD) return true;
-    // CJK Unified Ideographs Extension G
-    if (r >= 0x30000 && r <= 0x3FFFD) return true;
-    return false;
-  }
-
-  bool _isEmojiPresentation(int r) {
-    // Common emoji ranges that render as 2-column glyphs by default.
-    // Regional indicators (0x1F1E6-0x1F1FF) form flag emoji as pairs; each
-    // renders 2 columns wide, and widthOfGrapheme keys the whole cluster off
-    // its base rune, so the base must report emoji presentation. Without this a
-    // flag was modeled width-1 and every cell after it on the row shifted left.
-    if (r >= 0x1F1E6 && r <= 0x1F1FF) return true; // Regional indicators (flags)
-    if (r >= 0x1F300 && r <= 0x1F64F) return true; // Misc Symbols & Pictographs
-    if (r >= 0x1F680 && r <= 0x1F6FF) return true; // Transport
-    if (r >= 0x1F900 && r <= 0x1F9FF) return true; // Supplemental Pictographs
-    if (r >= 0x1FA70 && r <= 0x1FAFF) return true; // Symbols & Pictographs Ext.
-    // Single high-traffic emoji not in the contiguous ranges above.
-    if (r == 0x2600) return true; // ☀
-    if (r == 0x2601) return true; // ☁
-    if (r == 0x2614) return true; // ☔
-    if (r == 0x2615) return true; // ☕
-    // Dingbats (U+2700–U+27BF) are a MIX of presentations, not "mostly wide":
-    // only the Emoji_Presentation=Yes code points below render as 2-column emoji
-    // by default. The rest — ✓ U+2713, ✗ U+2717, ✎/✏ pencils, ✂ scissors,
-    // ✈ plane — default to TEXT presentation and are 1 cell wide. Widening the
-    // whole block modeled those at 2, so on a terminal that renders them at 1
-    // every following cell on the row shifted one column left (garbled diff /
-    // scroll). Classify by Unicode presentation, not by the block.
-    if (r == 0x2705) return true; // ✅
-    if (r >= 0x270A && r <= 0x270B) return true; // ✊ ✋
-    if (r == 0x2728) return true; // ✨
-    if (r == 0x274C) return true; // ❌
-    if (r == 0x274E) return true; // ❎
-    if (r >= 0x2753 && r <= 0x2755) return true; // ❓ ❔ ❕
-    if (r == 0x2757) return true; // ❗
-    if (r >= 0x2795 && r <= 0x2797) return true; // ➕ ➖ ➗
-    if (r == 0x27B0) return true; // ➰
-    if (r == 0x27BF) return true; // ➿
-    return false;
-  }
-
-  bool _isAmbiguous(int r) {
-    // Pragmatic ambiguous set: the ranges most likely to differ between
-    // terminals. CJK-aware terminals render these as 2 columns when
-    // `ambiguousIsWide` is true.
-    if (r >= 0x00A1 && r <= 0x00BE) return true; // some Latin-1 supplement
-    if (r >= 0x2010 && r <= 0x205F) return true; // general punctuation
-    if (r >= 0x2160 && r <= 0x217F) return true; // Roman numerals
-    if (r >= 0x2500 && r <= 0x25FF) return true; // box drawing & block
-    return false;
-  }
+  return false;
 }
 
 /// Whether a terminal's *rendered* width for [grapheme] is genuinely likely to
