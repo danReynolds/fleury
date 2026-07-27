@@ -1745,6 +1745,21 @@ TextArea(
     interactive: true,
     builder: () => const AgentApp(),
   ),
+  ExampleInfo(
+    id: 'showcase.editor',
+    widget: 'Text editor',
+    category: 'Showcases',
+    blurb:
+        'One buffer, two editors: a nano-style modeless keymap and a modal vim '
+        'one, swapped live with Ctrl+B — the two ways a TUI teaches its own '
+        'keys.',
+    // The sample sizes itself to the viewport; 80×24 is the classic terminal
+    // and leaves the shortcut bar and status line unclipped in the doc column.
+    cols: 80,
+    rows: 24,
+    interactive: true,
+    builder: () => const EditorApp(),
+  ),
 ];
 
 /// id → builder, derived from [exampleList].
