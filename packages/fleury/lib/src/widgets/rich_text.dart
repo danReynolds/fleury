@@ -140,11 +140,25 @@ class _RawRichTextElement extends LeafRenderObjectElement {
 }
 
 class _Glyph {
-  const _Glyph(this.grapheme, this.width, this.style, {this.isBreak = false});
+  const _Glyph(
+    this.grapheme,
+    this.width,
+    this.style, {
+    this.isBreak = false,
+    this.groupId,
+    this.groupSource,
+  });
   final String grapheme;
   final int width;
   final CellStyle style;
   final bool isBreak;
+
+  /// Non-null when this glyph is one atom of a lowered cluster group; equal
+  /// ids mark atoms of the same source cluster.
+  final int? groupId;
+
+  /// The canonical source cluster, carried on the group's FIRST atom only.
+  final String? groupSource;
 }
 
 /// Lays out and paints a flattened [TextSpan] tree as styled cells, with
@@ -216,16 +230,48 @@ class RenderRichText extends RenderObject
   @override
   CellWidthPolicy get selectionPolicy => _policy;
 
+  int _nextGroupId = 0;
+  List<({int start, int end, String source})> _loweredGroups =
+      const <({int start, int end, String source})>[];
+
+  @override
+  List<({int start, int end, String source})> get loweredGroups =>
+      _loweredGroups;
+
   void _refreshSelectionLines() {
     final out = <String>[];
-    for (final line in _lines) {
+    final groups = <({int start, int end, String source})>[];
+    int? openGroupId;
+    var openStart = 0;
+    String openSource = '';
+    var flatOffset = 0;
+
+    void closeGroup() {
+      if (openGroupId == null) return;
+      groups.add((start: openStart, end: flatOffset, source: openSource));
+      openGroupId = null;
+    }
+
+    for (var lineIndex = 0; lineIndex < _lines.length; lineIndex++) {
+      if (lineIndex > 0) flatOffset++; // the implicit '\n' between lines
       final buf = StringBuffer();
-      for (final g in line) {
+      for (final g in _lines[lineIndex]) {
+        if (g.groupId != openGroupId) {
+          closeGroup();
+          if (g.groupId != null) {
+            openGroupId = g.groupId;
+            openStart = flatOffset;
+            openSource = g.groupSource ?? g.grapheme;
+          }
+        }
         buf.write(g.grapheme);
+        flatOffset += g.grapheme.length;
       }
       out.add(buf.toString());
     }
+    closeGroup();
     _selectionLines = out;
+    _loweredGroups = groups;
   }
 
   set textPolicy(TextPresentationPolicy value) {
@@ -333,13 +379,17 @@ class RenderRichText extends RenderObject
             ),
           );
         } else {
+          final groupId = _nextGroupId++;
           var componentOffset = offset;
-          for (final component in components) {
+          for (var c = 0; c < components.length; c++) {
+            final component = components[c];
             out.add(
               _Glyph(
                 component,
                 _widthResolver.widthOfGrapheme(component, _policy),
                 unitStyles[componentOffset],
+                groupId: groupId,
+                groupSource: c == 0 ? cluster : null,
               ),
             );
             // +1 skips the dropped joiner between components.

@@ -647,6 +647,79 @@ class RenderText extends RenderObject
 
   @override
   CellWidthPolicy get selectionPolicy => _policy;
+
+  // Lowered-group flat ranges, cached against the exact _lines instance
+  // (performLayout builds a new list each time it reflows). Selection ops
+  // are rare; the walk is O(flat text) and only runs for non-identity
+  // projections.
+  List<({int start, int end, String source})>? _loweredGroupsCache;
+  List<String>? _loweredGroupsCacheLines;
+
+  @override
+  List<({int start, int end, String source})> get loweredGroups {
+    if (_projection.isIdentity) {
+      return const <({int start, int end, String source})>[];
+    }
+    if (identical(_loweredGroupsCacheLines, _lines)) {
+      return _loweredGroupsCache!;
+    }
+    final computed = _computeLoweredGroupsFlat();
+    _loweredGroupsCache = computed;
+    _loweredGroupsCacheLines = _lines;
+    return computed;
+  }
+
+  /// Maps each lowered cluster's display range into FLAT-selection space
+  /// (the wrapped lines joined by '\n') by walking the two strings in
+  /// lockstep. The wrap only ever DROPS spaces (at word breaks) and INSERTS
+  /// newlines (word wrap and forced breaks), so alignment is deterministic:
+  /// equal characters advance both cursors, a flat '\n' with no matching
+  /// display character is an inserted break, and an unmatched display space
+  /// was dropped at a wrap.
+  List<({int start, int end, String source})> _computeLoweredGroupsFlat() {
+    final display = _projection.displayText;
+    final flat = selectionLines.join('\n');
+    final out = <({int start, int end, String source})>[];
+    var d = 0;
+    var f = 0;
+
+    // Advances the aligned cursors until the display cursor reaches
+    // [target]; returns the flat cursor there, or null when the flat text
+    // ended first (maxLines truncation).
+    int? flatAt(int target) {
+      while (d < target) {
+        if (f < flat.length && d < display.length && flat[f] == display[d]) {
+          f++;
+          d++;
+        } else if (f < flat.length &&
+            flat[f] == '\n' &&
+            (d >= display.length || display[d] != '\n')) {
+          f++; // inserted line break
+        } else if (d < display.length && display[d] == ' ') {
+          d++; // space dropped at a wrap
+        } else {
+          return null; // flat text ended (truncation) or unexpected shape
+        }
+      }
+      return f;
+    }
+
+    for (final cluster in _projection.changedClusters) {
+      final start = flatAt(cluster.displayRange.start);
+      if (start == null) break;
+      final end = flatAt(cluster.displayRange.end);
+      if (end == null) break;
+      out.add((
+        start: start,
+        end: end,
+        source: _logicalText.substring(
+          cluster.sourceRange.start,
+          cluster.sourceRange.end,
+        ),
+      ));
+    }
+    return out;
+  }
 }
 
 // ---------------------------------------------------------------------------
