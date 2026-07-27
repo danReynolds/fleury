@@ -586,6 +586,11 @@ class _SearchPanelState extends State<SearchPanel> {
           autofocus: widget.autofocus,
           onSubmit: (_) => _activateSelected(),
         ),
+        // Breathing room under the field. Without it the input's frame butts
+        // straight into the match count and the results run on from there, so
+        // the panel reads as one undifferentiated block — the field stops
+        // looking like a field.
+        const SizedBox(height: 1),
         // Match count — the primary "is the filter working?" feedback (fzf,
         // VS Code, k9s all show it).
         Text(
