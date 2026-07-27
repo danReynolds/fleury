@@ -402,13 +402,26 @@ final class TerminalDiagnosis {
   /// something and watching where the cursor went, so they are worth carrying
   /// separately from the rest of the snapshot.
   TerminalDiagnosis withMeasuredWidths(MeasuredGlyphWidths measured) {
+    // A measurement outranks the passive default it was taken to settle. The
+    // driver already resolves ambiguousCharWidth this way at startup; without
+    // the same derivation here the report contradicted itself, printing
+    // "Ambiguous width: wide" (the conservative default, because diagnose never
+    // enters the terminal) directly above a measured 1 cell.
+    final ambiguous = measured.ambiguous;
+    final resolved = ambiguous == null
+        ? capabilities.toCapabilities()
+        : capabilities.toCapabilities().copyWith(
+            ambiguousCharWidth: ambiguous >= 2
+                ? AmbiguousCharWidth.wide
+                : AmbiguousCharWidth.narrow,
+          );
     return TerminalDiagnosis(
       schemaVersion: schemaVersion,
       terminal: terminal,
       environment: environment,
       platform: platform,
       capabilities: TerminalCapabilityReport.fromCapabilities(
-        capabilities.toCapabilities().copyWith(measuredWidths: measured),
+        resolved.copyWith(measuredWidths: measured),
         osc8Hyperlinks: capabilities.osc8Hyperlinks,
       ),
       fallbacks: fallbacks,
