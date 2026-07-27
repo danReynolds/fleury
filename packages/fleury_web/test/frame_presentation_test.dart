@@ -157,6 +157,25 @@ void main() {
       expect(plan.dirtyRowDiffTime.inMicroseconds, greaterThanOrEqualTo(0));
     });
 
+    test('dirty rows resolve once against the plan size', () {
+      final loop = TuiFrameLoop(renderDamage: RenderDamageTracker());
+      const planner = FramePresentationPlanner();
+      const size = CellSize(8, 4);
+      final frame = loop.render(
+        size: size,
+        paint: (buffer) => buffer.writeText(const CellOffset(0, 0), 'hi'),
+      )!;
+      final plan = planner.build(reason: 'first', frame: frame);
+
+      // A full repaint expands to the PLAN's size — the damage carries none.
+      expect(plan.damage, isA<PresentationFullRepaint>());
+      expect(plan.dirtyRows.dirtyRowCount, size.rows);
+      // Resolved once, not per read: a full repaint would otherwise rebuild
+      // this on every consumer touch, and a drag-resize is a stream of them
+      // that no steady-state gate can see.
+      expect(identical(plan.dirtyRows, plan.dirtyRows), isTrue);
+    });
+
     test('unchanged buffers present no rows', () {
       final damage = RenderDamageTracker();
       final loop = TuiFrameLoop(renderDamage: damage);
