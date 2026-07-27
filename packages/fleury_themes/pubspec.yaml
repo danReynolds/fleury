@@ -1,0 +1,22 @@
+name: fleury_themes
+description: Ready-made themes for fleury — Nord, Dracula, Gruvbox, Solarized, Catppuccin, Tokyo Night, One Dark — mapped onto the core ColorScheme roles.
+version: 0.1.0
+repository: https://github.com/danReynolds/fleury/tree/main/packages/fleury_themes
+issue_tracker: https://github.com/danReynolds/fleury/issues
+topics:
+  - tui
+  - terminal
+  - theme
+  - colors
+
+environment:
+  sdk: ^3.10.4
+
+dependencies:
+  # fleury's published API; pubspec_overrides.yaml resolves it from the
+  # monorepo during development.
+  fleury: ^0.1.0
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.26.3
