@@ -33,6 +33,24 @@ import 'package:fleury/fleury_core.dart';
 /// [OverlayEntry], and wrap it in a modal [FocusScope] when it should trap
 /// focus — exactly as the stock overlays do.
 ///
+/// **When to reach for it.** Work down this ladder and stop at the first
+/// rung that fits:
+///
+///  1. A stock overlay fits (`Tooltip`, `Menu`, `Select`, `Toaster`,
+///     `WhichKey`, `CommandPalette`)? Use it — they build on Popup
+///     internally, and you never touch this widget.
+///  2. Modal content the user acts on? `context.present(...)` — the
+///     Navigator supplies the surface, barrier, and focus trap, and
+///     `Dialog` is the frame for that. Don't hand-build modality from
+///     Popup.
+///  3. A custom **non-modal** float you place yourself (a hover card, a
+///     status flyout, a HUD)? This widget, positioned with [Follower],
+///     [Align], or an [OverlayEntry].
+///  4. Just layering your own content (a label over a chart)? A plain
+///     [Stack] — that's layout, not floating. The moment a layer covers
+///     content that keeps painting underneath it, it needs this widget's
+///     fill, or the content bleeds through.
+///
 /// ```dart
 /// // An anchored hint (how Tooltip is built):
 /// Follower(link: link, child: Popup(child: Text('Saved 2 minutes ago')))
