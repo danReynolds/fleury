@@ -1,5 +1,6 @@
 import 'package:fleury/fleury.dart';
 import 'package:fleury_storybook/src/theme_gallery.dart';
+import 'package:fleury_themes/fleury_themes.dart';
 import 'package:fleury_test/fleury_test.dart';
 import 'package:test/test.dart';
 
@@ -59,7 +60,7 @@ void main() {
       final output = tester.renderToString(size: size, emptyMark: ' ');
 
       // The dropdown shows the initially-selected palette...
-      expect(output, contains(ThemePalettes.all.first.name));
+      expect(output, contains(fleuryThemes.first.name));
       // ...and the mock app renders under it: both panes, the services table,
       // a button, and the palette legend.
       expect(output, contains('Deploy Console'));
@@ -109,12 +110,12 @@ void main() {
       expect(output, contains('active'));
       expect(output, contains('at rest'));
       // Brightness is visible — it drives the surface fallback.
-      expect(output, contains(ThemePalettes.all.first.data.brightness.name));
+      expect(output, contains(fleuryThemes.first.data.brightness.name));
     });
 
     testWidgets('the sample wears the selected palette', (tester) {
       tester.pumpWidget(const ThemeGallery());
-      final first = ThemePalettes.all.first.data.colorScheme;
+      final first = fleuryThemes.first.data.colorScheme;
       expect(
         _cellsColored(tester, first.primary, size),
         greaterThan(0),
@@ -126,7 +127,7 @@ void main() {
       tester,
     ) {
       tester.pumpWidget(const ThemeGallery());
-      final themes = ThemePalettes.all;
+      final themes = fleuryThemes;
       final second = themes[1];
 
       // Open the switcher, then move the highlight one down.

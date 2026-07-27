@@ -1,7 +1,8 @@
 import 'package:fleury/fleury.dart';
+import 'package:fleury_themes/fleury_themes.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
 
-/// A styleguide for one built-in [ThemePalettes] theme at a time, with a
+/// A styleguide for one theme from `fleury_themes` at a time, with a
 /// dropdown to switch palettes — the storybook's "Themes" story.
 ///
 /// Two halves, because they answer different questions. A small mock app shows
@@ -14,7 +15,7 @@ import 'package:fleury_widgets/fleury_widgets.dart';
 /// The dropdown live-previews: arrowing through it re-themes everything
 /// immediately, Enter keeps the choice, Esc puts the previous one back.
 class ThemeGallery extends StatefulWidget {
-  const ThemeGallery({super.key, this.themes = ThemePalettes.all});
+  const ThemeGallery({super.key, this.themes = fleuryThemes});
 
   final List<NamedTheme> themes;
 
