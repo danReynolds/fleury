@@ -21,16 +21,12 @@ FramePresentationPlan applyRemotePlan(RemotePlan plan, CellBuffer mirror) {
   ];
   return FramePresentationPlan(
     reason: 'remote',
-    fullRepaint: plan.fullRepaint,
     size: mirror.size,
-    damage: FramePresentationDamage(
-      fullRepaint: plan.fullRepaint,
-      dirtyBounds: null,
-      dirtyRows: dirtyRows,
-      source: plan.fullRepaint
-          ? FrameDamageSource.fullRepaint
-          : FrameDamageSource.paintDamage,
-    ),
+    // The wire carries rows, not bounds, so the changed variant goes out with
+    // no bound at all — legitimately absent, not "nothing changed".
+    damage: plan.fullRepaint
+        ? const PresentationFullRepaint()
+        : PresentationChanged(dirtyRows: dirtyRows, dirtyBounds: null),
     dirtyRowModels: rowModels,
     metricsChanged: false,
     dirtyRowDiffTime: Duration.zero,

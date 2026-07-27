@@ -112,13 +112,10 @@ void main() {
         second.next,
         FramePresentationPlan(
           reason: 'wire-scroll',
-          fullRepaint: false,
           size: size,
-          damage: FramePresentationDamage(
-            fullRepaint: false,
-            dirtyBounds: null,
+          damage: PresentationChanged(
             dirtyRows: TuiDirtyRows.fromRows(const [0, 1, 2], rowCount: 4),
-            source: FrameDamageSource.paintDamage,
+            dirtyBounds: null,
           ),
           // The wire's shape: no model for the blank entering row.
           dirtyRowModels: const [],
