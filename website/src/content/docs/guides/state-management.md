@@ -20,7 +20,9 @@ class _CounterState extends State<Counter> {
 
   @override
   Widget build(BuildContext context) => KeyBindings(
-    bindings: [KeyBinding(KeyChord.space, onEvent: (_) => setState(() => _count++))],
+    bindings: [
+      KeyBinding(KeySequence.space, onTrigger: () => setState(() => _count++)),
+    ],
     child: Text('count: $_count'),
   );
 }

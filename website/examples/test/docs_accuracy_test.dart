@@ -22,6 +22,13 @@ void main() {
         r'the same (?:app|code) runs[^\n]*unchanged',
         caseSensitive: false,
       );
+      // RFC 0018 renamed KeyChord to KeySequence and made `onTrigger` the
+      // common handler; `onEvent` survives only on `KeyBinding.event`. The
+      // compiling mirrors in doc_snippets/ were swept, but prose fences are
+      // hand-copied, so they silently kept teaching the removed API. Match
+      // `KeyBinding(` specifically — `KeyBinding.event(…, onEvent:)` is
+      // correct and must keep passing.
+      final defaultCtorOnEvent = RegExp(r'KeyBinding\([^)\n]*onEvent:');
 
       for (final file in files) {
         final text = file.readAsStringSync();
@@ -29,6 +36,12 @@ void main() {
           ('hard-coded package test count', hardCodedPackageTests),
           ('consumer import from package src', privatePackageImport),
           ('nonexistent `fleury mcp` command', 'fleury mcp'),
+          ('removed KeyChord type (now KeySequence)', 'KeyChord'),
+          (
+            'onEvent on the default KeyBinding constructor (use onTrigger, '
+                'or KeyBinding.event)',
+            defaultCtorOnEvent,
+          ),
           (
             'legacy bundled testing-package import',
             'package:fleury/fleury_test.dart',
