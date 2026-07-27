@@ -23,8 +23,8 @@ void main() {
       expect(rows.isFull, isFalse);
       expect(rows.rows, [1, 6, 11]);
       // The union rect still spans the gap for rect consumers.
-      expect(frame.damage.paintDamageBounds!.top, 1);
-      expect(frame.damage.paintDamageBounds!.bottom, 12);
+      expect(frame.damage.dirtyBounds!.top, 1);
+      expect(frame.damage.dirtyBounds!.bottom, 12);
     });
   });
 
@@ -75,8 +75,9 @@ void main() {
       expect(frame.previous.atColRow(1, 0), const Cell.empty());
       expect(frame.next.atColRow(1, 0).grapheme, 'h');
       expect(frame.damage.fullRepaint, isTrue);
-      expect(frame.damage.requiresFullDiff, isFalse);
-      expect(frame.damage.paintDamageBounds, CellRect.fromLTWH(0, 0, 4, 1));
+      // Exactly the two cells 'hi' occupies — deriving does not inherit the
+      // one-column padding paint's write rect carries for wide-glyph eviction.
+      expect(frame.damage.dirtyBounds, CellRect.fromLTWH(1, 0, 2, 1));
       expect(frame.damage.diffBounds, isNull);
       final rows = frame.damage.dirtyRowsFor(size);
       expect(rows.isFull, isTrue);
@@ -101,8 +102,9 @@ void main() {
       expect(second.previous.atColRow(1, 0).grapheme, 'a');
       expect(second.next.atColRow(1, 0).grapheme, 'b');
       expect(second.damage.fullRepaint, isFalse);
-      expect(second.damage.paintDamageBounds, CellRect.fromLTWH(0, 0, 3, 1));
-      expect(second.damage.diffBounds, CellRect.fromLTWH(0, 0, 3, 1));
+      // Only the one cell that actually differs.
+      expect(second.damage.dirtyBounds, CellRect.fromLTWH(1, 0, 1, 1));
+      expect(second.damage.diffBounds, CellRect.fromLTWH(1, 0, 1, 1));
       final rows = second.damage.dirtyRowsFor(size);
       expect(rows.isFull, isFalse);
       expect(rows.ranges.single.startRow, 0);
@@ -156,10 +158,10 @@ void main() {
       )!;
 
       expect(third.damage.fullRepaint, isFalse);
-      expect(third.damage.diffBounds, CellRect.fromLTWH(0, 0, 3, 1));
+      expect(third.damage.diffBounds, CellRect.fromLTWH(1, 0, 1, 1));
     });
 
-    test('conservative layout damage disables bounded diffs for the frame', () {
+    test('layout damage no longer forces a conservative full diff', () {
       final damage = RenderDamageTracker();
       final loop = TuiFrameLoop(renderDamage: damage);
       final first = loop.render(
@@ -176,11 +178,14 @@ void main() {
         },
       )!;
 
+      // Damage is derived by comparing the buffers, so a layout change is just
+      // another reason cells differ — the comparison sees it either way. The
+      // conservative "diff everything" fallback this used to trigger existed
+      // only because reported damage could not be trusted after a relayout.
       expect(second.damage.fullRepaint, isFalse);
-      expect(second.damage.requiresFullDiff, isTrue);
-      expect(second.damage.paintDamageBounds, CellRect.fromLTWH(0, 0, 3, 1));
-      expect(second.damage.diffBounds, isNull);
-      expect(second.damage.dirtyRowsFor(size).isFull, isTrue);
+      expect(second.damage.dirtyRowsFor(size).isFull, isFalse);
+      expect(second.damage.dirtyRowsFor(size).rows, [0]);
+      expect(second.damage.diffBounds, CellRect.fromLTWH(1, 0, 1, 1));
     });
 
     test('empty sizes do not invoke paint', () {
@@ -224,6 +229,152 @@ void main() {
       expect(rows.ranges[2].endRow, 7);
       expect(rows.rows, [1, 2, 4, 6]);
       expect(rows.dirtyRowCount, 4);
+    });
+  });
+
+  group('derived damage', () {
+    const size = CellSize(6, 4);
+
+    // A repaint boundary rebuilds a cached subtree by blitting it under
+    // withoutDamageTracking: the cells are reconstructed, but nothing is
+    // recorded as damage. Deriving makes that distinction irrelevant — the
+    // comparison sees the resulting content either way.
+    void blit(CellBuffer buffer, int row, String text) =>
+        buffer.withoutDamageTracking(
+          () => buffer.writeText(CellOffset(0, row), text),
+        );
+
+    TuiRenderedFrame paint(
+      TuiFrameLoop loop,
+      List<int> tracked, {
+      List<int> blitted = const [],
+      bool commit = true,
+    }) {
+      final frame = loop.render(
+        size: size,
+        paint: (buffer) {
+          for (final row in tracked) {
+            buffer.writeText(CellOffset(0, row), 'row$row');
+          }
+          for (final row in blitted) {
+            blit(buffer, row, 'row$row');
+          }
+        },
+      )!;
+      if (commit) loop.commit(frame);
+      return frame;
+    }
+
+    test('rows that shrinking content vacated are damaged', () {
+      final loop = TuiFrameLoop(renderDamage: RenderDamageTracker());
+      paint(loop, [0, 1, 2, 3]);
+      final shrunk = paint(loop, [0, 1], commit: false);
+
+      expect(
+        shrunk.damage.dirtyRowsFor(size).rows,
+        containsAll(<int>[2, 3]),
+        reason: 'a retained presenter leaves rows 2-3 stale otherwise',
+      );
+    });
+
+    test('content vacated from behind a cached blit is damaged', () {
+      // The ghost that reported damage cannot see: the frame that most recently
+      // rebuilt row 2 did so with a cache-hit blit, which records nothing. Any
+      // scheme reading "what did paint report" concludes row 2 was never
+      // occupied and leaves the stale text on screen.
+      final loop = TuiFrameLoop(renderDamage: RenderDamageTracker());
+      paint(loop, [0, 2]);
+      final cached = paint(loop, [0], blitted: [2]);
+      expect(
+        cached.damage.dirtyRowsFor(size).rows,
+        isEmpty,
+        reason: 'a cache hit reproduces what is on screen: nothing changed',
+      );
+
+      final abandoned = paint(loop, [0], commit: false);
+      expect(abandoned.next.atColRow(0, 2).grapheme ?? '', '');
+      expect(
+        abandoned.damage.dirtyRowsFor(size).rows,
+        contains(2),
+        reason: 'the abandoned row emptied out and must be repainted',
+      );
+    });
+
+    test('repainting identical content reports nothing dirty', () {
+      // The payoff over reported damage, which marks every row a widget
+      // repainted regardless of whether the output actually differs.
+      final loop = TuiFrameLoop(renderDamage: RenderDamageTracker());
+      paint(loop, [0, 1, 2, 3]);
+      final same = paint(loop, [0, 1, 2, 3], commit: false);
+
+      expect(same.damage.dirtyRowsFor(size).rows, isEmpty);
+      expect(same.damage.diffBounds, isNull);
+    });
+
+    test('only the row whose content differs is dirty', () {
+      final loop = TuiFrameLoop(renderDamage: RenderDamageTracker());
+      paint(loop, [0, 1, 2, 3]);
+      final changed = loop.render(
+        size: size,
+        paint: (buffer) {
+          for (var row = 0; row < 4; row++) {
+            buffer.writeText(
+              CellOffset(0, row),
+              row == 1 ? 'CHNG' : 'row$row',
+            );
+          }
+        },
+      )!;
+
+      expect(changed.damage.dirtyRowsFor(size).rows, <int>[1]);
+    });
+
+    test('an uncommitted frame does not become the reference', () {
+      final loop = TuiFrameLoop(renderDamage: RenderDamageTracker());
+      paint(loop, [0, 2]);
+      paint(loop, [0], commit: false); // rendered, never presented
+      final third = paint(loop, [0], commit: false);
+
+      expect(
+        third.damage.dirtyRowsFor(size).rows,
+        contains(2),
+        reason: 'row 2 is still on screen from the committed frame',
+      );
+    });
+
+    test('a resize presents as a full repaint', () {
+      final loop = TuiFrameLoop(renderDamage: RenderDamageTracker());
+      final first = loop.render(
+        size: const CellSize(6, 8),
+        paint: (buffer) {
+          for (var row = 0; row < 8; row++) {
+            buffer.writeText(CellOffset(0, row), 'xxxx');
+          }
+        },
+      )!;
+      loop.commit(first);
+
+      final shrunk = loop.render(
+        size: const CellSize(6, 3),
+        paint: (buffer) => buffer.writeText(const CellOffset(0, 0), 'xxxx'),
+      )!;
+
+      expect(shrunk.damage.fullRepaint, isTrue);
+      expect(shrunk.damage.dirtyRowsFor(const CellSize(6, 3)).isFull, isTrue);
+    });
+
+    test('damage stays exact as content moves, shrinks and grows', () {
+      final loop = TuiFrameLoop(renderDamage: RenderDamageTracker());
+      paint(loop, [0, 1, 2, 3]);
+
+      expect(paint(loop, [0], blitted: [1, 2, 3]).damage
+          .dirtyRowsFor(size).rows, isEmpty, reason: 'all cache hits');
+      expect(paint(loop, [0]).damage.dirtyRowsFor(size).rows,
+          containsAll(<int>[1, 2, 3]), reason: 'boundaries unmounted');
+      expect(paint(loop, [0, 1, 2, 3]).damage.dirtyRowsFor(size).rows,
+          containsAll(<int>[1, 2, 3]), reason: 'grown back');
+      expect(paint(loop, []).damage.dirtyRowsFor(size).rows,
+          containsAll(<int>[0, 1, 2, 3]), reason: 'cleared entirely');
     });
   });
 }

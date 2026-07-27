@@ -246,7 +246,6 @@ class RenderRepaintBoundary extends RenderObject
     // Snapshot the extent painted last frame BEFORE the repaint recomputes it:
     // cells inside the old box but outside the new one have been vacated, and
     // must be damaged (below) so the bounded presenter diff erases them.
-    final previousBounds = _cacheBounds;
     var repainted = false;
     if (needsPaint) {
       final targetCache = cache;
@@ -344,19 +343,11 @@ class RenderRepaintBoundary extends RenderObject
         clipRect: clipRect,
       );
     }
-    // A repaint whose content shrank, moved, or disappeared leaves ghost cells:
-    // the blit below damages only the NEW box, and diffBounds is a paint-only
-    // superset, so cells the previous frame painted outside the new box are
-    // never revisited. Damage the previous extent too whenever it differs (a
-    // cache-hit can't change content, so restrict to repaints).
-    if (repainted && previousBounds != null && previousBounds != bounds) {
-      buffer.recordDamage(
-        CellRect(
-          offset: offset + previousBounds.offset,
-          size: previousBounds.size,
-        ),
-      );
-    }
+    // Content that shrank, moved or disappeared used to need its previous
+    // extent re-damaged by hand here, because the frame's damage was only ever
+    // as good as what paint declared. The frame loop now derives damage by
+    // comparing the two buffers, so a vacated cell is found by construction —
+    // for this boundary and for anything else that stops painting.
     if (bounds == null) return; // entirely empty cache — nothing to draw
     final cacheForCopy = cache;
     final destOffset = CellOffset(

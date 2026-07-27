@@ -25,7 +25,6 @@ FramePresentationPlan applyRemotePlan(RemotePlan plan, CellBuffer mirror) {
     size: mirror.size,
     damage: FramePresentationDamage(
       fullRepaint: plan.fullRepaint,
-      requiresFullDiff: plan.fullRepaint,
       dirtyBounds: null,
       dirtyRows: dirtyRows,
       source: plan.fullRepaint

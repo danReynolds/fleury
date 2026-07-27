@@ -111,7 +111,9 @@ void main() {
 
       expect(plan.fullRepaint, isFalse);
       expect(plan.damage.source, FrameDamageSource.paintDamage);
-      expect(plan.damage.dirtyBounds, CellRect.fromLTWH(0, 1, 6, 1));
+      // 'hello' -> 'hullo' differs in exactly one cell. Deriving pins the
+      // bounds to that cell instead of the whole row paint happened to touch.
+      expect(plan.damage.dirtyBounds, CellRect.fromLTWH(1, 1, 1, 1));
       expect(plan.damage.dirtyRows.isFull, isFalse);
       expect(plan.damage.dirtyRows.rows, [1]);
       expect(plan.dirtyRowModels, hasLength(1));
@@ -120,7 +122,7 @@ void main() {
       expect(plan.dirtyRowDiffTime, Duration.zero);
     });
 
-    test('conservative damage uses buffer diff to select changed rows', () {
+    test('layout damage still yields the exact changed rows', () {
       final damage = RenderDamageTracker();
       final loop = TuiFrameLoop(renderDamage: damage);
       final first = loop.render(
@@ -148,15 +150,14 @@ void main() {
 
       final plan = planner.build(reason: 'layout', frame: second);
 
-      expect(plan.damage.source, FrameDamageSource.conservativeFullDiff);
-      expect(plan.damage.dirtyBounds, isNull);
+      expect(plan.damage.source, FrameDamageSource.paintDamage);
       expect(plan.damage.dirtyRows.isFull, isFalse);
       expect(plan.damage.dirtyRows.rows, [1]);
       expect(plan.dirtyRowModels.map((row) => row.row), [1]);
       expect(plan.dirtyRowDiffTime.inMicroseconds, greaterThanOrEqualTo(0));
     });
 
-    test('missing paint damage with unchanged buffers presents no rows', () {
+    test('unchanged buffers present no rows', () {
       final damage = RenderDamageTracker();
       final loop = TuiFrameLoop(renderDamage: damage);
       final first = loop.render(size: size, paint: (_) {})!;
@@ -166,13 +167,13 @@ void main() {
       final plan = planner.build(reason: 'idle', frame: second);
 
       expect(plan.fullRepaint, isFalse);
-      expect(plan.damage.source, FrameDamageSource.unboundedFallback);
-      expect(plan.damage.dirtyBounds, isNull);
+      expect(plan.damage.source, FrameDamageSource.paintDamage);
+      expect(plan.damage.dirtyBounds, isNull, reason: 'nothing changed');
       expect(plan.damage.dirtyRows.isEmpty, isTrue);
       expect(plan.dirtyRowModels, isEmpty);
     });
 
-    test('missing paint damage falls back to row diff oracle', () {
+    test('untracked writes are still found, because damage is derived', () {
       final damage = RenderDamageTracker();
       final loop = TuiFrameLoop(renderDamage: damage);
       final first = loop.render(
@@ -201,7 +202,7 @@ void main() {
       )!;
       final plan = planner.build(reason: 'oracle', frame: second);
 
-      expect(plan.damage.source, FrameDamageSource.unboundedFallback);
+      expect(plan.damage.source, FrameDamageSource.paintDamage);
       expect(plan.damage.dirtyRows.isFull, isFalse);
       expect(plan.damage.dirtyRows.ranges, hasLength(2));
       expect(plan.damage.dirtyRows.rows, [0, 2]);

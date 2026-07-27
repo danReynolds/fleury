@@ -13,17 +13,21 @@ typedef TuiFramePaintCallback = void Function(CellBuffer buffer);
 /// consistent:
 ///
 /// 1. allocate front/back buffers for the current viewport;
-/// 2. clear the back buffer without recording damage;
-/// 3. enable paint damage tracking before the framework paints;
-/// 4. collect paint damage plus conservative layout-damage signals;
+/// 2. clear the back buffer;
+/// 3. let the framework paint into it;
+/// 4. DERIVE the frame's damage by comparing it against the shown buffer;
 /// 5. expose the previous/next buffers to the presenter;
 /// 6. swap buffers only after the presenter has consumed the frame.
+///
+/// Step 4 is the load-bearing one. Damage used to be REPORTED — every writer
+/// declared what it touched — which meant any writer that stayed silent made a
+/// real change invisible to the presenter, and stale cells stayed on screen.
+/// Comparing the buffers is ground truth, so nothing can be forgotten.
 final class TuiFrameLoop {
-  /// [renderDamage] should be the runtime's tracker
-  /// (`TuiRuntime.renderDamageTracker`) so layout/conservative-paint
-  /// invalidation from that runtime's render tree reaches this loop's frame
-  /// damage. A loop constructed without one sees no layout-damage signal and
-  /// conservatively treats every frame as requiring a full diff.
+  /// [renderDamage] is the runtime's tracker
+  /// (`TuiRuntime.renderDamageTracker`). The loop drains its per-frame signals
+  /// so they do not leak across frames; it no longer needs them to decide what
+  /// to present, because the frame's damage is derived from the buffers.
   TuiFrameLoop({RenderDamageTracker? renderDamage})
     : _renderDamage = renderDamage;
 
@@ -76,18 +80,26 @@ final class TuiFrameLoop {
     final previous = _frontBuffer!;
     final next = _backBuffer!;
     final bufferPrepareStopwatch = Stopwatch()..start();
-    next.withoutDamageTracking(next.clear);
-    next.resetDamageTracking();
+    // No damage tracking is armed on the frame buffer: nothing reads it. That
+    // leaves _recordDamageRect inert for every write this frame, so paint stops
+    // paying for bookkeeping the presenter no longer consumes. A repaint
+    // boundary still arms tracking on its OWN cache, where the question really
+    // is "what did I paint" rather than "what must be presented".
+    next.clear();
     bufferPrepareStopwatch.stop();
 
     paint(next);
 
     _renderDamage?.takeVisualChange();
+    _renderDamage?.takeRequiresFullDiff();
+    // Damage is DERIVED, not reported: comparing the two buffers is ground
+    // truth, so nothing upstream can under-report by failing to declare what it
+    // touched — and no conservative fallback is needed for when it does.
+    final diff = next.diffAgainst(previous);
     final damage = TuiFrameDamage(
       fullRepaint: _requireFullRepaint,
-      requiresFullDiff: _renderDamage?.takeRequiresFullDiff() ?? true,
-      paintDamageBounds: next.takeDamageBounds(),
-      paintDamageRows: next.takeDamageRows(),
+      dirtyBounds: diff.bounds,
+      dirtyRows: diff.rows,
     );
     _requireFullRepaint = false;
 
@@ -104,6 +116,7 @@ final class TuiFrameLoop {
     _backBuffer = frame.previous;
     _frontBuffer = frame.next;
   }
+
 }
 
 /// One frame produced by [TuiFrameLoop].
@@ -132,52 +145,43 @@ final class TuiRenderedFrame {
   final Duration bufferPrepareTime;
 }
 
-/// Paint damage and conservative full-diff state for one frame.
+/// The exact set of cells that changed in one frame.
 final class TuiFrameDamage {
   const TuiFrameDamage({
     required this.fullRepaint,
-    required this.requiresFullDiff,
-    required this.paintDamageBounds,
-    this.paintDamageRows,
+    required this.dirtyBounds,
+    this.dirtyRows,
   });
 
   /// Whether the presenter should treat this as a full repaint.
+  ///
+  /// Set when there is no comparable previous frame — a cold buffer pool or a
+  /// resize — not as a fallback for damage the loop failed to compute.
   final bool fullRepaint;
 
-  /// Whether layout/conservative damage invalidates paint bounds.
-  final bool requiresFullDiff;
+  /// Bounding rect of every changed cell, or null when nothing changed.
+  final CellRect? dirtyBounds;
 
-  /// Conservative bounds of cells mutated by paint.
-  final CellRect? paintDamageBounds;
-
-  /// The exact rows mutated by paint, when tracked.
+  /// Exactly the rows containing a changed cell.
   ///
-  /// Unlike [paintDamageBounds] (a single union rect), scattered writes stay
-  /// disjoint: five separated dirty rows are five rows here, not the tall
-  /// rect spanning them. Null/empty falls back to the rect.
-  final Set<int>? paintDamageRows;
+  /// Unlike [dirtyBounds] (a single union rect), scattered changes stay
+  /// disjoint: five separated dirty rows are five rows here, not the tall rect
+  /// spanning them.
+  final Set<int>? dirtyRows;
 
-  /// Bounds safe to pass to a diffing presenter.
+  /// Bounds a diffing presenter may safely restrict itself to.
   ///
-  /// A null value means "do not bound the presenter diff"; hosts should pass
-  /// null through to presenters rather than treating it as "no work".
-  CellRect? get diffBounds =>
-      fullRepaint || requiresFullDiff ? null : paintDamageBounds;
+  /// Null on a full repaint (present everything) or when nothing changed;
+  /// [fullRepaint] distinguishes the two.
+  CellRect? get diffBounds => fullRepaint ? null : dirtyBounds;
 
-  /// Converts the current cell-rect damage signal into presenter dirty rows.
-  ///
-  /// This is the Phase 1 adapter from Fleury's current union damage bounds to
-  /// the row-oriented shape a DOM presenter needs. It is intentionally
-  /// conservative: a null [diffBounds] means all rows must be considered dirty,
-  /// not that no rows changed.
+  /// The rows a row-oriented presenter must re-apply.
   TuiDirtyRows dirtyRowsFor(CellSize size) {
-    final bounds = diffBounds;
-    if (bounds == null) return TuiDirtyRows.full(size.rows);
-    final rows = paintDamageRows;
-    if (rows != null && rows.isNotEmpty) {
-      return TuiDirtyRows.fromRows(rows, rowCount: size.rows);
-    }
-    return TuiDirtyRows.range(bounds.top, bounds.bottom, rowCount: size.rows);
+    if (fullRepaint) return TuiDirtyRows.full(size.rows);
+    final rows = dirtyRows;
+    if (rows == null) return TuiDirtyRows.full(size.rows);
+    if (rows.isEmpty) return const TuiDirtyRows.none();
+    return TuiDirtyRows.fromRows(rows, rowCount: size.rows);
   }
 }
 

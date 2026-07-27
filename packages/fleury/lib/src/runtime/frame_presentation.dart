@@ -57,24 +57,21 @@ final class FramePresentationPlan {
 final class FramePresentationDamage {
   const FramePresentationDamage({
     required this.fullRepaint,
-    required this.requiresFullDiff,
     required this.dirtyBounds,
     required this.dirtyRows,
     required this.source,
   });
 
   final bool fullRepaint;
-  final bool requiresFullDiff;
   final CellRect? dirtyBounds;
   final TuiDirtyRows dirtyRows;
   final FrameDamageSource source;
 }
 
 enum FrameDamageSource {
+  /// The frame loop derived the exact changed set by comparing buffers.
   paintDamage,
   fullRepaint,
-  conservativeFullDiff,
-  unboundedFallback,
 
   /// The frame request skipped rendering: no frame work was pending and the
   /// committed front buffer was still exact.
@@ -97,7 +94,6 @@ final class FramePresentationPlanner {
     final dirtyRows = dirtyRowsResult.rows;
     final damage = FramePresentationDamage(
       fullRepaint: runtimeDamage.fullRepaint,
-      requiresFullDiff: runtimeDamage.requiresFullDiff,
       dirtyBounds: runtimeDamage.diffBounds,
       dirtyRows: dirtyRows,
       source: _sourceFor(runtimeDamage),
@@ -155,51 +151,18 @@ final class FramePresentationPlanner {
     return TuiDirtyRows.fromRows(residual, rowCount: rows);
   }
 
-  FrameDamageSource _sourceFor(TuiFrameDamage damage) {
-    if (damage.fullRepaint) return FrameDamageSource.fullRepaint;
-    if (damage.requiresFullDiff) return FrameDamageSource.conservativeFullDiff;
-    if (damage.diffBounds != null) return FrameDamageSource.paintDamage;
-    return FrameDamageSource.unboundedFallback;
-  }
+  FrameDamageSource _sourceFor(TuiFrameDamage damage) =>
+      damage.fullRepaint
+      ? FrameDamageSource.fullRepaint
+      : FrameDamageSource.paintDamage;
 
   _DirtyRowsResult _dirtyRowsForFrame(TuiRenderedFrame frame) {
-    final runtimeDamage = frame.damage;
-    if (runtimeDamage.fullRepaint) {
-      return _DirtyRowsResult(
-        rows: TuiDirtyRows.full(frame.next.size.rows),
-        diffTime: Duration.zero,
-      );
-    }
-    final bounds = runtimeDamage.diffBounds;
-    if (bounds != null) {
-      // dirtyRowsFor prefers the exact painted-row set when the buffer
-      // tracked one, so scattered updates stay scattered instead of being
-      // smeared into the union rect's row span.
-      return _DirtyRowsResult(
-        rows: runtimeDamage.dirtyRowsFor(frame.next.size),
-        diffTime: Duration.zero,
-      );
-    }
-    final diffStopwatch = Stopwatch()..start();
-    final rows = _diffDirtyRows(frame.previous, frame.next);
-    diffStopwatch.stop();
-    return _DirtyRowsResult(rows: rows, diffTime: diffStopwatch.elapsed);
-  }
-
-  TuiDirtyRows _diffDirtyRows(CellBuffer previous, CellBuffer next) {
-    if (previous.size != next.size) return TuiDirtyRows.full(next.size.rows);
-    final cols = next.size.cols;
-    final rows = next.size.rows;
-    final dirtyRows = <int>[];
-    for (var row = 0; row < rows; row++) {
-      for (var col = 0; col < cols; col++) {
-        if (previous.atColRow(col, row) != next.atColRow(col, row)) {
-          dirtyRows.add(row);
-          break;
-        }
-      }
-    }
-    return TuiDirtyRows.fromRows(dirtyRows, rowCount: rows);
+    // The frame loop derives the exact changed set while it still has both
+    // buffers hot, so there is nothing left to discover here.
+    return _DirtyRowsResult(
+      rows: frame.damage.dirtyRowsFor(frame.next.size),
+      diffTime: Duration.zero,
+    );
   }
 }
 
