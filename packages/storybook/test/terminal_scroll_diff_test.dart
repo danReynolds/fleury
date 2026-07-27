@@ -169,7 +169,7 @@ void main() {
         paint: (buf) => tester.owner.renderFrame(tester.root!, buf),
       )!;
       sink.clear();
-      if (frame.damage.fullRepaint) sink.write('\x1B[2J\x1B[H');
+      if (frame.damage is FrameFullRepaint) sink.write('\x1B[2J\x1B[H');
       renderer.renderDiff(
         frame.previous,
         frame.next,

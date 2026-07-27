@@ -68,6 +68,77 @@ void main() {
       );
     });
 
+    test('empties a moved row the plan does not repaint', () {
+      // The wire path can hand the surface a scroll whose ENTERING row has no
+      // row model: a blank entering row equals the shifted mirror's blank, so
+      // the codec emits no patch and nothing rebuilds the element the surface
+      // just moved. The local planner force-adds entering rows and so hides
+      // this — hence a hand-built plan in the wire's shape.
+      final damage = RenderDamageTracker();
+      final loop = TuiFrameLoop(renderDamage: damage);
+      const planner = FramePresentationPlanner();
+      final root = web.document.createElement('div');
+      const size = CellSize(6, 4);
+      final surface = DomGridSurface(root: root, size: size);
+
+      final first = loop.render(
+        size: size,
+        paint: (buffer) {
+          buffer.writeText(const CellOffset(0, 0), 'aaaa');
+          buffer.writeText(const CellOffset(0, 1), 'bbbb');
+          buffer.writeText(const CellOffset(0, 2), 'cccc');
+          buffer.writeText(const CellOffset(0, 3), 'dddd');
+        },
+      )!;
+      surface.present(
+        first.previous,
+        first.next,
+        planner.build(reason: 'initial', frame: first),
+      );
+      loop.commit(first);
+      final movedElement = surface.rowElements[0]; // holds 'aaaa'
+
+      // Everything shifts up one and the entering row is blank.
+      final second = loop.render(
+        size: size,
+        paint: (buffer) {
+          buffer.writeText(const CellOffset(0, 0), 'bbbb');
+          buffer.writeText(const CellOffset(0, 1), 'cccc');
+          buffer.writeText(const CellOffset(0, 2), 'dddd');
+        },
+      )!;
+      surface.present(
+        second.previous,
+        second.next,
+        FramePresentationPlan(
+          reason: 'wire-scroll',
+          fullRepaint: false,
+          size: size,
+          damage: FramePresentationDamage(
+            fullRepaint: false,
+            dirtyBounds: null,
+            dirtyRows: TuiDirtyRows.fromRows(const [0, 1, 2], rowCount: 4),
+            source: FrameDamageSource.paintDamage,
+          ),
+          // The wire's shape: no model for the blank entering row.
+          dirtyRowModels: const [],
+          metricsChanged: false,
+          dirtyRowDiffTime: Duration.zero,
+          spanBuildTime: Duration.zero,
+          scrollUpRows: 1,
+        ),
+      );
+
+      expect(identical(surface.rowElements[3], movedElement), isTrue);
+      expect(
+        movedElement.textContent,
+        isEmpty,
+        reason:
+            'a moved element the plan never repaints must not keep its '
+            'old text on screen',
+      );
+    });
+
     test('configures an aria-hidden retained visual grid', () {
       final root = web.document.createElement('div');
       final surface = DomGridSurface(root: root, size: size);

@@ -140,12 +140,23 @@ final class DomGridSurface implements FrameSurface {
 
   /// Moves the first [count] retained row elements to the bottom of the
   /// grid (document order defines visual position), renumbering `data-row`.
-  /// The moved elements carry stale spans; the plan's residual dirty rows
-  /// cover them.
+  ///
+  /// A moved element is emptied on the way, rather than trusting the plan's
+  /// residual rows to overwrite it. The local planner force-adds every
+  /// entering row for exactly that reason, but the wire path cannot: a scroll
+  /// whose entering row is BLANK produces no patch (blank equals the shifted
+  /// mirror's blank), so nothing rebuilt the moved element and its old text
+  /// stayed on screen until an unrelated change happened to dirty that row.
+  /// Clearing here makes the move self-consistent whatever the plan contains;
+  /// a plan that does cover the row simply overwrites the empty element.
   void _scrollUp(int count) {
     for (var i = 0; i < count; i++) {
       final element = _rows.removeAt(0);
       _rows.add(element);
+      element.callMethodVarArgs<JSAny?>(
+        'replaceChildren'.toJS,
+        const <JSAny?>[],
+      );
       _root.appendChild(element);
     }
     for (var row = 0; row < _rows.length; row++) {

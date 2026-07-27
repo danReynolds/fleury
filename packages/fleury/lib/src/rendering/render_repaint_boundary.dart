@@ -351,13 +351,14 @@ class RenderRepaintBoundary extends RenderObject
       offset.col + bounds.offset.col,
       offset.row + bounds.offset.row,
     );
-    if (repainted) {
-      buffer.copyRectFrom(cacheForCopy, bounds, destOffset);
-    } else {
-      buffer.withoutDamageTracking(
-        () => buffer.copyRectFrom(cacheForCopy, bounds, destOffset),
-      );
-    }
+    // The blit records damage even on a cache hit. It used to be suppressed so
+    // the presenter would not re-scan cells it knew were unchanged — but frame
+    // damage is derived by comparing buffers now, so the frame buffer never
+    // arms tracking and suppressing there does nothing. Where [buffer] IS
+    // armed it is a PARENT boundary's cache, and that parent measures what was
+    // painted into it from this damage: suppressing hid a nested cache-hit
+    // child from its parent's bounds and blanked the row.
+    buffer.copyRectFrom(cacheForCopy, bounds, destOffset);
   }
 
   void _publishSemanticBounds({

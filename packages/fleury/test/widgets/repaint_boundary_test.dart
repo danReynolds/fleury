@@ -1052,7 +1052,7 @@ void main() {
           reason: 'the wide cell is vacated in the new frame',
         );
         expect(
-          narrow.damage.dirtyBounds?.contains(const CellOffset(11, 0)),
+          narrow.damage.diffBounds?.contains(const CellOffset(11, 0)),
           isTrue,
           reason:
               'the vacated cell must be reported so the bounded diff erases '

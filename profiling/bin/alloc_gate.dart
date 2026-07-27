@@ -205,13 +205,19 @@ Future<void> main(List<String> args) async {
         size: size,
         paint: (buffer) => owner.renderFrame(root, buffer),
       )!;
+      // Mirrors AnsiFramePresenter's switch, so the gate keeps measuring the
+      // path production actually takes.
+      final damage = rendered.damage;
       renderer.renderDiff(
         rendered.previous,
         rendered.next,
         sink,
-        dirtyBounds: rendered.damage.diffBounds,
-        scrollUpRows: rendered.damage.scrollUpRows,
-        hasChanges: !rendered.damage.isEmpty,
+        dirtyBounds: damage.diffBounds,
+        scrollUpRows: switch (damage) {
+          FrameScrolled(:final scrollUpRows) => scrollUpRows,
+          FrameFullRepaint() || FrameUnchanged() || FrameChanged() => null,
+        },
+        hasChanges: damage is! FrameUnchanged,
       );
       loop.commit(rendered);
     }

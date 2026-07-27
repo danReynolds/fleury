@@ -100,6 +100,49 @@ final class InlineImagePlacement {
       boxOffsetRow != 0 ||
       cols != boxCols ||
       rows != boxRows;
+
+  /// Value equality over EVERY field.
+  ///
+  /// Load-bearing rather than a convenience: `CellBuffer.diffAgainst` decides
+  /// whether an inline image changed by comparing placement lists, and the
+  /// cells beneath a placement are payload-free overlays that can never show
+  /// the difference. That comparison used to hand-list the fields in TWO
+  /// places (the diff and its test oracle), which is how the fit/box fields
+  /// went uncompared. This operator is now the single list both defer to.
+  ///
+  /// It does NOT extend itself: adding a field to this class means adding it
+  /// here, to [hashCode], and to the one-field-apart table in
+  /// `inline_image_placement_equality_test.dart` (whose count guard you will
+  /// have to bump — deliberately, so the addition is acknowledged, not
+  /// silent).
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is InlineImagePlacement &&
+          other.id == id &&
+          other.col == col &&
+          other.row == row &&
+          other.cols == cols &&
+          other.rows == rows &&
+          other.fit == fit &&
+          other.boxCols == boxCols &&
+          other.boxRows == boxRows &&
+          other.boxOffsetCol == boxOffsetCol &&
+          other.boxOffsetRow == boxOffsetRow;
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    col,
+    row,
+    cols,
+    rows,
+    fit,
+    boxCols,
+    boxRows,
+    boxOffsetCol,
+    boxOffsetRow,
+  );
 }
 
 /// The geometry a fit resolves to: a destination sub-rectangle inside the

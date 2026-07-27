@@ -92,11 +92,14 @@ final class FramePresentationPlanner {
     final runtimeDamage = frame.damage;
     final dirtyRowsResult = _dirtyRowsForFrame(frame);
     final dirtyRows = dirtyRowsResult.rows;
+    final fullRepaint = runtimeDamage is FrameFullRepaint;
     final damage = FramePresentationDamage(
-      fullRepaint: runtimeDamage.fullRepaint,
+      fullRepaint: fullRepaint,
       dirtyBounds: runtimeDamage.diffBounds,
       dirtyRows: dirtyRows,
-      source: _sourceFor(runtimeDamage),
+      source: fullRepaint
+          ? FrameDamageSource.fullRepaint
+          : FrameDamageSource.paintDamage,
     );
 
     // The frame loop already decided whether this is a beneficial scroll, using
@@ -104,7 +107,10 @@ final class FramePresentationPlanner {
     // buffers — and the old trigger (`dirtyRows.isFull`) silently stopped
     // firing once damage became exact, because one unchanged row is enough to
     // make a clean scroll not-full.
-    final scrollUpRows = frame.damage.scrollUpRows;
+    final scrollUpRows = switch (runtimeDamage) {
+      FrameScrolled(:final scrollUpRows) => scrollUpRows,
+      FrameFullRepaint() || FrameUnchanged() || FrameChanged() => null,
+    };
     final rowsToBuild = scrollUpRows == null
         ? dirtyRows
         : _residualScrollRows(frame.previous, frame.next, scrollUpRows);
@@ -115,7 +121,7 @@ final class FramePresentationPlanner {
 
     return FramePresentationPlan(
       reason: reason,
-      fullRepaint: runtimeDamage.fullRepaint,
+      fullRepaint: fullRepaint,
       size: frame.next.size,
       damage: damage,
       dirtyRowModels: dirtyRowModels,
@@ -144,10 +150,6 @@ final class FramePresentationPlanner {
     }
     return TuiDirtyRows.fromRows(residual, rowCount: rows);
   }
-
-  FrameDamageSource _sourceFor(TuiFrameDamage damage) => damage.fullRepaint
-      ? FrameDamageSource.fullRepaint
-      : FrameDamageSource.paintDamage;
 
   _DirtyRowsResult _dirtyRowsForFrame(TuiRenderedFrame frame) {
     // The frame loop derives the exact changed set while it still has both

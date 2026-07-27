@@ -24,8 +24,8 @@ void main() {
       expect(rows.isFull, isFalse);
       expect(rows.rows, [1, 6, 11]);
       // The union rect still spans the gap for rect consumers.
-      expect(frame.damage.dirtyBounds!.top, 1);
-      expect(frame.damage.dirtyBounds!.bottom, 12);
+      expect(frame.damage.diffBounds!.top, 1);
+      expect(frame.damage.diffBounds!.bottom, 12);
     });
   });
 
@@ -75,11 +75,18 @@ void main() {
       expect(frame.next.size, size);
       expect(frame.previous.atColRow(1, 0), const Cell.empty());
       expect(frame.next.atColRow(1, 0).grapheme, 'h');
-      expect(frame.damage.fullRepaint, isTrue);
-      // Exactly the two cells 'hi' occupies — deriving does not inherit the
-      // one-column padding paint's write rect carries for wide-glyph eviction.
-      expect(frame.damage.dirtyBounds, CellRect.fromLTWH(1, 0, 2, 1));
+      // A full repaint carries no bounds: there is nothing to restrict a diff
+      // to, and no second "what it would have been" reading to disagree with.
+      expect(frame.damage, isA<FrameFullRepaint>());
       expect(frame.damage.diffBounds, isNull);
+      // The no-padding property still needs pinning somewhere: deriving does
+      // not inherit the one-column padding paint's write rect carries for
+      // wide-glyph eviction. Assert it on the diff itself, which a full repaint
+      // no longer exposes.
+      expect(
+        frame.next.diffAgainst(frame.previous).bounds,
+        CellRect.fromLTWH(1, 0, 2, 1),
+      );
       final rows = frame.damage.dirtyRowsFor(size);
       expect(rows.isFull, isTrue);
       expect(rows.dirtyRowCount, 2);
@@ -102,10 +109,15 @@ void main() {
 
       expect(second.previous.atColRow(1, 0).grapheme, 'a');
       expect(second.next.atColRow(1, 0).grapheme, 'b');
-      expect(second.damage.fullRepaint, isFalse);
       // Only the one cell that actually differs.
-      expect(second.damage.dirtyBounds, CellRect.fromLTWH(1, 0, 1, 1));
-      expect(second.damage.diffBounds, CellRect.fromLTWH(1, 0, 1, 1));
+      expect(
+        second.damage,
+        isA<FrameChanged>().having(
+          (d) => d.bounds,
+          'bounds',
+          CellRect.fromLTWH(1, 0, 1, 1),
+        ),
+      );
       final rows = second.damage.dirtyRowsFor(size);
       expect(rows.isFull, isFalse);
       expect(rows.ranges.single.startRow, 0);
@@ -129,7 +141,7 @@ void main() {
       )!;
 
       expect(second.previous.atColRow(1, 0), const Cell.empty());
-      expect(second.damage.fullRepaint, isTrue);
+      expect(second.damage, isA<FrameFullRepaint>());
       expect(second.damage.diffBounds, isNull);
     });
 
@@ -148,9 +160,13 @@ void main() {
         paint: (buffer) => buffer.writeText(const CellOffset(1, 0), 'b'),
       )!;
 
-      expect(second.previous.atColRow(1, 0).grapheme, 'a');
-      expect(second.damage.fullRepaint, isTrue);
+      expect(second.damage, isA<FrameFullRepaint>());
       expect(second.damage.diffBounds, isNull);
+      // The shown buffer is blanked to match what a full repaint does to the
+      // screen. Leaving 'a' there would describe a screen that no longer
+      // exists, and an unchanged frame would then re-emit nothing after the
+      // presenter had already wiped it.
+      expect(second.previous.atColRow(1, 0), const Cell.empty());
 
       loop.commit(second);
       final third = loop.render(
@@ -158,9 +174,45 @@ void main() {
         paint: (buffer) => buffer.writeText(const CellOffset(1, 0), 'c'),
       )!;
 
-      expect(third.damage.fullRepaint, isFalse);
+      expect(third.damage, isNot(isA<FrameFullRepaint>()));
       expect(third.damage.diffBounds, CellRect.fromLTWH(1, 0, 1, 1));
     });
+
+    test(
+      'markFullRepaint between render and commit blanks the right buffer',
+      () {
+        // The mark's only plausible callers are hosts and presenter hooks, and
+        // those run mid-present — after render, before commit. In that window
+        // the front buffer is the OUTGOING frame: blanking at mark time blanks
+        // a buffer about to be replaced, and the freshly painted frame becomes
+        // front with its content intact. The blank must happen when the mark is
+        // consumed, not when it is requested.
+        final damage = RenderDamageTracker();
+        final loop = TuiFrameLoop(renderDamage: damage);
+        final first = loop.render(
+          size: size,
+          paint: (buffer) => buffer.writeText(const CellOffset(1, 0), 'a'),
+        )!;
+        loop.commit(first);
+
+        final second = loop.render(
+          size: size,
+          paint: (buffer) => buffer.writeText(const CellOffset(1, 0), 'a'),
+        )!;
+        loop.markFullRepaint(); // mid-present: rendered, not yet committed
+        loop.commit(second);
+
+        final third = loop.render(
+          size: size,
+          paint: (buffer) => buffer.writeText(const CellOffset(1, 0), 'a'),
+        )!;
+        expect(third.damage, isA<FrameFullRepaint>());
+        // The presenter wipes the screen for this frame; a `previous` still
+        // holding 'a' would make the unchanged diff re-emit nothing after the
+        // wipe — a blank screen where content should be.
+        expect(third.previous.atColRow(1, 0), const Cell.empty());
+      },
+    );
 
     test('layout damage no longer forces a conservative full diff', () {
       final damage = RenderDamageTracker();
@@ -183,7 +235,7 @@ void main() {
       // another reason cells differ — the comparison sees it either way. The
       // conservative "diff everything" fallback this used to trigger existed
       // only because reported damage could not be trusted after a relayout.
-      expect(second.damage.fullRepaint, isFalse);
+      expect(second.damage, isNot(isA<FrameFullRepaint>()));
       expect(second.damage.dirtyRowsFor(size).isFull, isFalse);
       expect(second.damage.dirtyRowsFor(size).rows, [0]);
       expect(second.damage.diffBounds, CellRect.fromLTWH(1, 0, 1, 1));
@@ -357,7 +409,7 @@ void main() {
         paint: (buffer) => buffer.writeText(const CellOffset(0, 0), 'xxxx'),
       )!;
 
-      expect(shrunk.damage.fullRepaint, isTrue);
+      expect(shrunk.damage, isA<FrameFullRepaint>());
       expect(shrunk.damage.dirtyRowsFor(const CellSize(6, 3)).isFull, isTrue);
     });
 
@@ -392,7 +444,10 @@ void main() {
         },
       )!;
 
-      expect(scrolled.damage.scrollUpRows, 1);
+      expect(
+        scrolled.damage,
+        isA<FrameScrolled>().having((d) => d.scrollUpRows, 'scrollUpRows', 1),
+      );
 
       // And the gate half: a change too small for scrolling to ever pay
       // (digit-only, ~1 cell/row) must not run detection at all.
@@ -406,7 +461,7 @@ void main() {
           buffer.writeText(const CellOffset(0, 0), 'x');
         },
       )!;
-      expect(tiny.damage.scrollUpRows, isNull);
+      expect(tiny.damage, isNot(isA<FrameScrolled>()));
     });
 
     test('a scroll is still found when a row happens to be unchanged', () {
@@ -444,7 +499,10 @@ void main() {
         isFalse,
         reason: 'precondition: one row is byte-identical',
       );
-      expect(scrolled.damage.scrollUpRows, 1);
+      expect(
+        scrolled.damage,
+        isA<FrameScrolled>().having((d) => d.scrollUpRows, 'scrollUpRows', 1),
+      );
       final plan = planner.build(reason: 'scroll', frame: scrolled);
       expect(plan.scrollUpRows, 1);
       expect(
@@ -455,15 +513,13 @@ void main() {
     });
 
     test('an identical repaint is reported as empty, not as unknown', () {
-      // dirtyBounds is null both for "full repaint" and "nothing changed".
-      // A presenter that reads null as "scan everything" turns the cheapest
-      // possible frame into a whole-screen pass, so isEmpty has to say which.
+      // Distinct variants, so "nothing changed" can no longer be mistaken for
+      // "repaint everything" the way a shared null bounds once allowed.
       final loop = TuiFrameLoop(renderDamage: RenderDamageTracker());
       paint(loop, [0, 1, 2, 3]);
       final same = paint(loop, [0, 1, 2, 3], commit: false);
 
-      expect(same.damage.isEmpty, isTrue);
-      expect(same.damage.fullRepaint, isFalse);
+      expect(same.damage, isA<FrameUnchanged>());
       expect(same.damage.diffBounds, isNull);
     });
 
@@ -544,7 +600,7 @@ void main() {
         place(loop, [1, 2, 3]);
         final again = place(loop, [1, 2, 3], commit: false);
 
-        expect(again.damage.isEmpty, isTrue);
+        expect(again.damage, isA<FrameUnchanged>());
       });
 
       test('moving a placement damages both the old and new rows', () {
