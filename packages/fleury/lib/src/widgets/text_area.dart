@@ -901,7 +901,7 @@ class RenderTextArea extends RenderObject {
     int minLines = 1,
     int? maxLines,
     WidthResolver widthResolver = const DefaultWidthResolver(),
-    TerminalProfile profile = TerminalProfile.standard,
+    CellWidthPolicy profile = CellWidthPolicy.spec,
   }) : _focusNode = focusNode,
        _text = _sanitize(text),
        _selection = selection.normalizeForText(_sanitize(text)),
@@ -929,7 +929,7 @@ class RenderTextArea extends RenderObject {
   int _minLines;
   int? _maxLines;
   final WidthResolver _widthResolver;
-  final TerminalProfile _profile;
+  final CellWidthPolicy _profile;
   int _scrollTop = 0;
   int _scrollLeft = 0;
 

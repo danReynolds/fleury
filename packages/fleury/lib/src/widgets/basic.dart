@@ -58,7 +58,7 @@ final class _EmptyBoxElement extends Element {
 /// The text is sanitized (control codes replaced with U+FFFD) before
 /// reaching the cell buffer, so widget code can safely pass arbitrary
 /// or untrusted strings. Grapheme widths are resolved against the
-/// configured [TerminalProfile].
+/// configured [CellWidthPolicy].
 ///
 /// With [softWrap] true (default), text exceeding the available width
 /// wraps onto additional rows at word boundaries (or hard-breaks
@@ -78,7 +78,7 @@ final class Text extends StatelessWidget implements WidgetUpdatePruner {
     this.maxLines,
     this.overflow = TextOverflow.clip,
     this.textAlign = TextAlign.left,
-    this.profile = TerminalProfile.standard,
+    this.profile = CellWidthPolicy.spec,
     this.allowSelect = true,
   });
 
@@ -108,7 +108,7 @@ final class Text extends StatelessWidget implements WidgetUpdatePruner {
   final TextAlign textAlign;
 
   /// Terminal width profile used to measure grapheme clusters.
-  final TerminalProfile profile;
+  final CellWidthPolicy profile;
 
   /// Whether this Text participates in any ancestor `SelectionArea`'s
   /// selection. Defaults to `true`. Set to `false` for cosmetic
@@ -171,7 +171,7 @@ final class _RawText extends LeafRenderObjectWidget {
   final int? maxLines;
   final TextOverflow overflow;
   final TextAlign textAlign;
-  final TerminalProfile profile;
+  final CellWidthPolicy profile;
   final bool allowSelect;
 
   @override

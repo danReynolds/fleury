@@ -95,7 +95,7 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
   WidthResolver get selectionWidthResolver;
 
   /// Terminal profile passed to [selectionWidthResolver].
-  TerminalProfile get selectionProfile;
+  CellWidthPolicy get selectionProfile;
 
   /// Subclass hook: notify the framework that listener-attached
   /// observers should run. Hosts mixing in `ChangeNotifier` already

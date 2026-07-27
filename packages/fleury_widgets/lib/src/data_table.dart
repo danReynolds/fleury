@@ -1451,7 +1451,7 @@ class RenderDataTable extends RenderObject {
        _onViewport = onViewport;
 
   static const _widthResolver = DefaultWidthResolver();
-  static const _profile = TerminalProfile.standard;
+  static const _profile = CellWidthPolicy.spec;
 
   int _rowCount;
   List<DataTableColumn> _columns;

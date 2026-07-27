@@ -162,11 +162,7 @@ export 'src/rendering/text_sanitizer.dart'
         sanitizeForDisplay,
         sanitizeSingleLine;
 export 'src/rendering/width_resolver.dart'
-    show
-        DefaultWidthResolver,
-        TerminalProfile,
-        WidthResolver,
-        hasUncertainWidth;
+    show DefaultWidthResolver, WidthResolver, hasUncertainWidth;
 
 // Semantics
 export 'src/semantics/accessibility.dart'

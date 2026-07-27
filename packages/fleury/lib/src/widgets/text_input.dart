@@ -1657,7 +1657,7 @@ class RenderTextInput extends RenderObject {
     bool obscureText = false,
     String obscuringCharacter = '•',
     WidthResolver widthResolver = const DefaultWidthResolver(),
-    TerminalProfile profile = TerminalProfile.standard,
+    CellWidthPolicy profile = CellWidthPolicy.spec,
   }) : _focusNode = focusNode,
        _text = sanitizeForDisplay(text),
        _selection = selection.normalizeForText(sanitizeForDisplay(text)),
@@ -1682,7 +1682,7 @@ class RenderTextInput extends RenderObject {
   bool _obscureText;
   String _obscuringCharacter;
   final WidthResolver _widthResolver;
-  final TerminalProfile _profile;
+  final CellWidthPolicy _profile;
   int _scrollLeft = 0;
 
   set focusNode(FocusNode value) {

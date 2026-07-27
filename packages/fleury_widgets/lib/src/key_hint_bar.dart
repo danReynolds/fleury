@@ -134,7 +134,7 @@ class KeyHintBar extends StatelessWidget {
   String _fit(List<String> segments, int total, int? maxCols) {
     if (total == 0) return '';
     const resolver = DefaultWidthResolver();
-    int width(String s) => resolver.widthOfText(s, TerminalProfile.standard);
+    int width(String s) => resolver.widthOfText(s, CellWidthPolicy.spec);
     String withMarker(int k) {
       final hidden = total - k;
       final shown = segments.take(k).join(separator);

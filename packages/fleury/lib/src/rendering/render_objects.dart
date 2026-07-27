@@ -66,7 +66,7 @@ class RenderText extends RenderObject
     TextOverflow overflow = TextOverflow.clip,
     TextAlign textAlign = TextAlign.left,
     WidthResolver widthResolver = const DefaultWidthResolver(),
-    TerminalProfile profile = TerminalProfile.standard,
+    CellWidthPolicy profile = CellWidthPolicy.spec,
   }) : _text = _sanitizePreservingNewlines(text),
        _style = style,
        _softWrap = softWrap,
@@ -94,7 +94,7 @@ class RenderText extends RenderObject
   TextOverflow _overflow;
   TextAlign _textAlign;
   WidthResolver _widthResolver;
-  TerminalProfile _profile;
+  CellWidthPolicy _profile;
   int _intrinsicWidth = 0;
 
   /// Set during layout when [maxLines] cut off real content, so paint
@@ -190,8 +190,8 @@ class RenderText extends RenderObject
     _invalidateLayoutCache();
   }
 
-  TerminalProfile get profile => _profile;
-  set profile(TerminalProfile value) {
+  CellWidthPolicy get profile => _profile;
+  set profile(CellWidthPolicy value) {
     if (_profile == value) return;
     _profile = value;
     _recomputeIntrinsicWidth();
@@ -558,7 +558,7 @@ class RenderText extends RenderObject
   WidthResolver get selectionWidthResolver => _widthResolver;
 
   @override
-  TerminalProfile get selectionProfile => _profile;
+  CellWidthPolicy get selectionProfile => _profile;
 }
 
 // ---------------------------------------------------------------------------

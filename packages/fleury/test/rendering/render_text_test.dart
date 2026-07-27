@@ -280,7 +280,7 @@ void main() {
       final t = RenderText(text: '─');
       // Default profile: box-drawing is ambiguous → narrow.
       expect(t.intrinsicWidth, 1);
-      t.profile = TerminalProfile.cjk;
+      t.profile = CellWidthPolicy.cjk;
       expect(t.intrinsicWidth, 2);
     });
   });

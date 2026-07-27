@@ -102,7 +102,7 @@ void paintCellErrorPresentation(
   // the panel edge instead of overrunning the border, and splits land on
   // grapheme-cluster boundaries (never inside a surrogate pair).
   const resolver = DefaultWidthResolver();
-  const profile = TerminalProfile.standard;
+  const profile = CellWidthPolicy.spec;
   final innerLeft = left + 1;
   final innerWidth = size.cols - 2;
   final innerTop = top + 1;
@@ -175,7 +175,7 @@ String _ellipsize(
   String text,
   int maxCols,
   WidthResolver resolver,
-  TerminalProfile profile,
+  CellWidthPolicy profile,
 ) {
   if (resolver.widthOfText(text, profile) < maxCols) return '$text…';
   final kept = StringBuffer();
@@ -200,7 +200,7 @@ void _paintClippedRun(
   String text,
   CellRect visible,
   WidthResolver resolver,
-  TerminalProfile profile,
+  CellWidthPolicy profile,
 ) {
   var col = startCol;
   final out = StringBuffer();

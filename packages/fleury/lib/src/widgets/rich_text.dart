@@ -161,7 +161,7 @@ class RenderRichText extends RenderObject
     int? maxLines,
     TextOverflow overflow = TextOverflow.clip,
     WidthResolver widthResolver = const DefaultWidthResolver(),
-    TerminalProfile profile = TerminalProfile.standard,
+    CellWidthPolicy profile = CellWidthPolicy.spec,
   }) : _softWrap = softWrap,
        _maxLines = maxLines,
        _overflow = overflow,
@@ -174,7 +174,7 @@ class RenderRichText extends RenderObject
   int? _maxLines;
   TextOverflow _overflow;
   final WidthResolver _widthResolver;
-  final TerminalProfile _profile;
+  final CellWidthPolicy _profile;
 
   late List<_Glyph> _glyphs;
   List<List<_Glyph>> _lines = const [];
@@ -201,7 +201,7 @@ class RenderRichText extends RenderObject
   WidthResolver get selectionWidthResolver => _widthResolver;
 
   @override
-  TerminalProfile get selectionProfile => _profile;
+  CellWidthPolicy get selectionProfile => _profile;
 
   void _refreshSelectionLines() {
     final out = <String>[];

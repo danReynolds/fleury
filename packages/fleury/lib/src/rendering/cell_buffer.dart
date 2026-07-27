@@ -385,7 +385,7 @@ final class CellBuffer {
     String grapheme, {
     CellStyle style = CellStyle.empty,
     WidthResolver widthResolver = const DefaultWidthResolver(),
-    TerminalProfile profile = TerminalProfile.standard,
+    CellWidthPolicy profile = CellWidthPolicy.spec,
   }) {
     if (!_containsColRow(position.col, position.row)) return 0;
     return _writeGraphemeAt(
@@ -406,7 +406,7 @@ final class CellBuffer {
     String grapheme, {
     CellStyle style = CellStyle.empty,
     WidthResolver widthResolver = const DefaultWidthResolver(),
-    TerminalProfile profile = TerminalProfile.standard,
+    CellWidthPolicy profile = CellWidthPolicy.spec,
   }) {
     final width = widthResolver.widthOfGrapheme(grapheme, profile);
     if (width == 0) return 0;
@@ -445,7 +445,7 @@ final class CellBuffer {
     String text, {
     CellStyle style = CellStyle.empty,
     WidthResolver widthResolver = const DefaultWidthResolver(),
-    TerminalProfile profile = TerminalProfile.standard,
+    CellWidthPolicy profile = CellWidthPolicy.spec,
   }) {
     var col = position.col;
     final startCol = col;
