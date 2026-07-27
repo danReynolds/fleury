@@ -60,6 +60,7 @@ import 'focus_traversal.dart';
 import 'error_boundary.dart';
 import 'framework.dart';
 import 'key_bindings.dart';
+import 'selection/selection_area.dart';
 import 'tui_binding.dart';
 
 /// The enter/exit effects (and timing) a route animates with.
@@ -748,9 +749,17 @@ class _RouteHost extends StatelessWidget {
       // painted beneath shows through it (closes the bleed-through leak). A
       // barrierColor, when set, fills the surround over the screen behind;
       // null leaves the surround composited with the route beneath.
+      //
+      // It also gets its OWN selection scope. The app-root scope that makes
+      // text selectable by default sits outside this route, and a modal
+      // FocusScope (below) deliberately cuts the background out of the active
+      // chain — which would otherwise take the root scope's Ctrl+C with it,
+      // leaving a dialog's text selectable-looking but impossible to copy.
+      // Nested SelectionAreas are fine: the innermost one wins, so a route
+      // that brings its own still behaves.
       Widget content = Align(
         alignment: align,
-        child: Surface(child: route.screen),
+        child: Surface(child: DefaultRootSelection(child: route.screen)),
       );
       final barrier = route.barrierColor;
       if (barrier != null) {
