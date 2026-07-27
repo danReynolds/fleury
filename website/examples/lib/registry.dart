@@ -1097,31 +1097,15 @@ TextArea(
     category: 'Navigation & overlays',
     blurb:
         'The floating-chrome composite: an opaque fill, a frame, and '
-        'non-selectable chrome — position it with Follower or Align.',
-    cols: 40,
-    rows: 7,
-    // A wall of text behind the popup makes the point: floating content
-    // composites over the app, and Popup owns every cell it covers.
-    builder: () => _framed(
-      Stack(
-        children: <Widget>[
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              for (var i = 0; i < 5; i++)
-                const Text('Application content behind the popup.'),
-            ],
-          ),
-          Align(
-            alignment: Alignment.center,
-            child: Popup(
-              padding: const EdgeInsets.symmetric(horizontal: 1),
-              child: const Text('An opaque floating layer'),
-            ),
-          ),
-        ],
-      ),
-    ),
+        'non-selectable chrome — position it with Follower or Align. '
+        'Enter opens and closes it; Esc closes.',
+    cols: 44,
+    rows: 9,
+    interactive: true,
+    // Toggling it is the demo: while it's open the wall behind is covered
+    // (Popup owns every cell it draws over), and closing it restores that
+    // content untouched — the popup floats, it doesn't overwrite.
+    builder: () => const _PopupExample(),
   ),
   ExampleInfo(
     id: 'dialog.basic',
@@ -1202,10 +1186,7 @@ TextArea(
         // completions).
         child: const WhichKey(
           showDelay: Duration.zero,
-          child: Focus(
-            autofocus: true,
-            child: Text('Press Space, then a key'),
-          ),
+          child: Focus(autofocus: true, child: Text('Press Space, then a key')),
         ),
       ),
     ),
@@ -1820,6 +1801,72 @@ final class _DocsCanvasPainter extends CanvasPainter {
       previousX = x;
       previousY = y;
     }
+  }
+}
+
+class _PopupExample extends StatefulWidget {
+  const _PopupExample();
+
+  @override
+  State<_PopupExample> createState() => _PopupExampleState();
+}
+
+class _PopupExampleState extends State<_PopupExample> {
+  bool _open = false;
+
+  void _toggle() => setState(() => _open = !_open);
+
+  @override
+  Widget build(BuildContext context) {
+    // The trigger and the wall stay at a fixed position in the tree so the
+    // button keeps focus across a toggle; only the popup layer comes and
+    // goes.
+    final Widget behind = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Button(
+          label: _open ? 'Hide details' : 'Show details',
+          autofocus: true,
+          onPressed: _toggle,
+        ),
+        for (var i = 0; i < 4; i++)
+          const Text('Application content behind the popup.'),
+      ],
+    );
+    return _framed(
+      KeyBindings(
+        bindings: <KeyBinding>[
+          if (_open)
+            KeyBinding(KeySequence.escape, label: 'Close', onTrigger: _toggle),
+        ],
+        child: Stack(
+          children: <Widget>[
+            behind,
+            if (_open)
+              Align(
+                alignment: Alignment.center,
+                child: Popup(
+                  padding: const EdgeInsets.symmetric(horizontal: 1),
+                  // Deliberately ragged: the shorter line leaves interior
+                  // cells the content never writes — exactly the cells that
+                  // would bleed without the fill.
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const <Widget>[
+                      Text('An opaque floating layer'),
+                      Text(
+                        'Esc or the button closes it',
+                        style: CellStyle(dim: true),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
