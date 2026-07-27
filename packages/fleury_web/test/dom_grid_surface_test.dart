@@ -133,7 +133,8 @@ void main() {
       expect(
         movedElement.textContent,
         isEmpty,
-        reason: 'a moved element the plan never repaints must not keep its '
+        reason:
+            'a moved element the plan never repaints must not keep its '
             'old text on screen',
       );
     });

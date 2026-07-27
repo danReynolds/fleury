@@ -13,20 +13,47 @@
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:collection/collection.dart';
 import 'package:fleury/fleury_host.dart';
 import 'package:test/test.dart';
 
 /// Everything a presenter can observe about how a frame renders.
-typedef _Reference = ({Set<int> rows, CellRect? bounds});
+///
+/// All four fields of [CellBufferDiff], not just the two a presenter reads
+/// directly: `dirtyCells` gates whether scroll detection runs at all, and
+/// `hasOverlayCells` is the ONLY thing disqualifying an image frame from
+/// scrolling. A wrong value in either is invisible in the rows and bounds yet
+/// changes what the terminal emits.
+typedef _Reference = ({
+  Set<int> rows,
+  CellRect? bounds,
+  int dirtyCells,
+  bool hasOverlayCells,
+});
 
 /// The obvious, slow answer: scan every cell, then every placement.
 _Reference _referenceDiff(CellBuffer previous, CellBuffer next) {
   final size = next.size;
   final rows = <int>{};
+  var dirtyCells = 0;
   var left = size.cols;
   var right = 0;
   var top = size.rows;
   var bottom = 0;
+
+  // Derived by LOOKING AT CELLS, deliberately unlike the implementation, which
+  // takes the O(1) shortcut of asking whether either buffer holds placements.
+  // Transcribing that shortcut here would make the two agree by construction
+  // and prove nothing about whether the shortcut is sound.
+  var hasOverlayCells = false;
+  for (var row = 0; row < size.rows; row++) {
+    for (var col = 0; col < size.cols; col++) {
+      if (previous.atColRow(col, row).role == CellRole.overlay ||
+          next.atColRow(col, row).role == CellRole.overlay) {
+        hasOverlayCells = true;
+      }
+    }
+  }
 
   void mark(int row, int firstCol, int lastCol) {
     rows.add(row);
@@ -39,6 +66,7 @@ _Reference _referenceDiff(CellBuffer previous, CellBuffer next) {
   for (var row = 0; row < size.rows; row++) {
     for (var col = 0; col < size.cols; col++) {
       if (previous.atColRow(col, row) != next.atColRow(col, row)) {
+        dirtyCells++;
         mark(row, col, col);
       }
     }
@@ -47,34 +75,23 @@ _Reference _referenceDiff(CellBuffer previous, CellBuffer next) {
   // Cells under an image are payload-free overlays, so a placement change can
   // be invisible above. Compare the lists on every field that reaches the fit
   // resolver or the overlay's geometry.
-  bool placementsMatch() {
-    final a = next.imagePlacements;
-    final b = previous.imagePlacements;
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (a[i].id != b[i].id ||
-          a[i].col != b[i].col ||
-          a[i].row != b[i].row ||
-          a[i].cols != b[i].cols ||
-          a[i].rows != b[i].rows ||
-          a[i].fit != b[i].fit ||
-          a[i].boxCols != b[i].boxCols ||
-          a[i].boxRows != b[i].boxRows ||
-          a[i].boxOffsetCol != b[i].boxOffsetCol ||
-          a[i].boxOffsetRow != b[i].boxOffsetRow) {
-        return false;
-      }
-    }
-    return true;
-  }
+  // Whole-value comparison: listing fields here would be a transcription of
+  // the implementation's list, so a field missing from BOTH would be
+  // structurally invisible — which is how the fit/box fields went uncompared.
+  final samePlacements = const ListEquality<InlineImagePlacement>().equals(
+    next.imagePlacements,
+    previous.imagePlacements,
+  );
 
-  if (!placementsMatch()) {
+  if (!samePlacements) {
     for (final list in [next.imagePlacements, previous.imagePlacements]) {
       for (final p in list) {
-        final firstCol = p.col.clamp(0, size.cols - 1);
-        final lastCol = (p.col + p.cols - 1).clamp(0, size.cols - 1);
-        final firstRow = p.row.clamp(0, size.rows - 1);
-        final lastRow = (p.row + p.rows - 1).clamp(0, size.rows - 1);
+        // Placements are always recorded on-grid (writeImageWithId clips), so
+        // this mirrors the implementation's intent without its dead clamps.
+        final firstCol = p.col;
+        final lastCol = p.col + p.cols - 1;
+        final firstRow = p.row;
+        final lastRow = p.row + p.rows - 1;
         for (var row = firstRow; row <= lastRow; row++) {
           mark(row, firstCol, lastCol);
         }
@@ -82,10 +99,19 @@ _Reference _referenceDiff(CellBuffer previous, CellBuffer next) {
     }
   }
 
-  if (rows.isEmpty) return (rows: rows, bounds: null);
+  if (rows.isEmpty) {
+    return (
+      rows: rows,
+      bounds: null,
+      dirtyCells: dirtyCells,
+      hasOverlayCells: hasOverlayCells,
+    );
+  }
   return (
     rows: rows,
     bounds: CellRect.fromLTWH(left, top, right - left, bottom - top),
+    dirtyCells: dirtyCells,
+    hasOverlayCells: hasOverlayCells,
   );
 }
 
@@ -208,6 +234,20 @@ void main() {
             actual.isUnchanged,
             expected.rows.isEmpty,
             reason: 'seed $seed round $round: isUnchanged disagrees',
+          );
+          expect(
+            actual.dirtyCells,
+            expected.dirtyCells,
+            reason:
+                'seed $seed round $round: dirty cell COUNT disagrees — '
+                'this gates whether scroll detection runs at all',
+          );
+          expect(
+            actual.hasOverlayCells,
+            expected.hasOverlayCells,
+            reason:
+                'seed $seed round $round: overlay presence disagrees — '
+                'this is what keeps image frames from being scrolled',
           );
         }
       });

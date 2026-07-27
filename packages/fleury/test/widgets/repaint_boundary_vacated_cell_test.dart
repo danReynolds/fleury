@@ -121,14 +121,19 @@ void main() {
     );
 
     final loop = TuiFrameLoop(renderDamage: tester.owner.renderDamageTracker);
+    var stats = RepaintBoundaryFrameStats.empty;
     TuiRenderedFrame frame() {
+      RepaintBoundaryDebugStats.beginFrame(enabled: true);
       final rendered = loop.render(
         size: size,
         paint: (buffer) => tester.owner.renderFrame(tester.root!, buffer),
       )!;
+      stats = RepaintBoundaryDebugStats.takeFrameStats();
       loop.commit(rendered);
       return rendered;
     }
+
+    addTearDown(() => RepaintBoundaryDebugStats.beginFrame(enabled: false));
 
     tester.pumpWidget(tree);
     final first = frame();
@@ -142,6 +147,20 @@ void main() {
     // a cache hit.
     sibling.currentState!.bump();
     final second = frame();
+
+    // Pin the SHAPE, not just the outcome: if a later change made the whole
+    // frame a cache hit (or made the inner boundary repaint), the assertion
+    // below would still pass while guarding nothing.
+    expect(
+      stats.repaintedCount,
+      greaterThanOrEqualTo(1),
+      reason: 'precondition: the outer boundary repainted',
+    );
+    expect(
+      stats.cachedCount,
+      greaterThanOrEqualTo(1),
+      reason: 'precondition: the inner boundary was a cache hit',
+    );
 
     expect(
       second.next.atColRow(0, 1).grapheme,

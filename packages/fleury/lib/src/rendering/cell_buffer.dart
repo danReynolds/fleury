@@ -769,6 +769,12 @@ final class CellBuffer {
     final rowCount = _size.rows;
     final mine = _cells;
     final theirs = previous._cells;
+    // Overlay cells are written only by [_recordImagePlacement], so the
+    // placement lists answer this without touching a cell. Computed up front
+    // because EVERY return path has to carry it — an unchanged frame that
+    // holds an image is still a frame that must not be scrolled.
+    final hasOverlayCells =
+        _imagePlacements.isNotEmpty || previous._imagePlacements.isNotEmpty;
     Set<int>? rows;
     var dirtyCells = 0;
     var left = cols;
@@ -827,44 +833,34 @@ final class CellBuffer {
     }
 
     final dirty = rows;
-    if (dirty == null) return CellBufferDiff.unchanged;
+    if (dirty == null) {
+      return CellBufferDiff(
+        rows: const <int>{},
+        bounds: null,
+        dirtyCells: 0,
+        hasOverlayCells: hasOverlayCells,
+      );
+    }
     return CellBufferDiff(
       rows: dirty,
       bounds: CellRect.fromLTWH(left, top, right - left, bottom - top),
       dirtyCells: dirtyCells,
-      // Overlay cells are written only by [_recordImagePlacement], so the
-      // placement lists answer this without touching a cell.
-      hasOverlayCells:
-          _imagePlacements.isNotEmpty || previous._imagePlacements.isNotEmpty,
+      hasOverlayCells: hasOverlayCells,
     );
   }
 
   /// Whether two placement lists would render identically.
   ///
-  /// Every field reaching the fit resolver or the overlay geometry counts: the
-  /// same image scrolled inside a clipping viewport keeps its id and visible
-  /// rect while [InlineImagePlacement.boxOffsetRow] moves, and the cells under
-  /// it never change.
+  /// Delegates to [InlineImagePlacement]'s value equality rather than listing
+  /// fields here, so a field added to a placement cannot quietly stop counting
+  /// as a change.
   static bool _placementsMatch(
     List<InlineImagePlacement> a,
     List<InlineImagePlacement> b,
   ) {
     if (a.length != b.length) return false;
     for (var i = 0; i < a.length; i++) {
-      final x = a[i];
-      final y = b[i];
-      if (x.id != y.id ||
-          x.col != y.col ||
-          x.row != y.row ||
-          x.cols != y.cols ||
-          x.rows != y.rows ||
-          x.fit != y.fit ||
-          x.boxCols != y.boxCols ||
-          x.boxRows != y.boxRows ||
-          x.boxOffsetCol != y.boxOffsetCol ||
-          x.boxOffsetRow != y.boxOffsetRow) {
-        return false;
-      }
+      if (a[i] != b[i]) return false;
     }
     return true;
   }
@@ -968,14 +964,6 @@ final class CellBufferDiff {
     required this.dirtyCells,
     required this.hasOverlayCells,
   });
-
-  /// The frames are identical.
-  static const unchanged = CellBufferDiff(
-    rows: <int>{},
-    bounds: null,
-    dirtyCells: 0,
-    hasOverlayCells: false,
-  );
 
   /// The frames cannot be compared (different sizes), so nothing about them is
   /// known. Callers must present a full repaint. A null [bounds] here does NOT

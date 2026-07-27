@@ -153,7 +153,10 @@ final class DomGridSurface implements FrameSurface {
     for (var i = 0; i < count; i++) {
       final element = _rows.removeAt(0);
       _rows.add(element);
-      element.callMethodVarArgs<JSAny?>('replaceChildren'.toJS, const <JSAny?>[]);
+      element.callMethodVarArgs<JSAny?>(
+        'replaceChildren'.toJS,
+        const <JSAny?>[],
+      );
       _root.appendChild(element);
     }
     for (var row = 0; row < _rows.length; row++) {

@@ -79,6 +79,14 @@ void main() {
       // to, and no second "what it would have been" reading to disagree with.
       expect(frame.damage, isA<FrameFullRepaint>());
       expect(frame.damage.diffBounds, isNull);
+      // The no-padding property still needs pinning somewhere: deriving does
+      // not inherit the one-column padding paint's write rect carries for
+      // wide-glyph eviction. Assert it on the diff itself, which a full repaint
+      // no longer exposes.
+      expect(
+        frame.next.diffAgainst(frame.previous).bounds,
+        CellRect.fromLTWH(1, 0, 2, 1),
+      );
       final rows = frame.damage.dirtyRowsFor(size);
       expect(rows.isFull, isTrue);
       expect(rows.dirtyRowCount, 2);
@@ -465,15 +473,13 @@ void main() {
     });
 
     test('an identical repaint is reported as empty, not as unknown', () {
-      // dirtyBounds is null both for "full repaint" and "nothing changed".
-      // A presenter that reads null as "scan everything" turns the cheapest
-      // possible frame into a whole-screen pass, so isEmpty has to say which.
+      // Distinct variants, so "nothing changed" can no longer be mistaken for
+      // "repaint everything" the way a shared null bounds once allowed.
       final loop = TuiFrameLoop(renderDamage: RenderDamageTracker());
       paint(loop, [0, 1, 2, 3]);
       final same = paint(loop, [0, 1, 2, 3], commit: false);
 
       expect(same.damage, isA<FrameUnchanged>());
-      expect(same.damage, isNot(isA<FrameFullRepaint>()));
       expect(same.damage.diffBounds, isNull);
     });
 
