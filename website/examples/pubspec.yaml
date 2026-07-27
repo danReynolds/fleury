@@ -11,6 +11,8 @@ environment:
 dependencies:
   fleury:
     path: ../../packages/fleury
+  fleury_themes:
+    path: ../../packages/fleury_themes
   fleury_widgets:
     path: ../../packages/fleury_widgets
   fleury_web:

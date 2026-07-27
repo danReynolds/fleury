@@ -3,9 +3,32 @@ title: Theming
 description: Style a Fleury app with ThemeData, ColorScheme, and CellStyle.
 ---
 
+import FleuryExample from '../../../components/FleuryExample.astro';
+
 Every Fleury app renders through a `ThemeData`. Widgets read it with
 `Theme.of(context)` — or the `context.theme` and `context.colors` shorthands —
 and style their cells from it, so a single theme drives the whole tree.
+
+## Ready-made themes
+
+Before building one from scratch: `fleury_themes` ships the palettes you
+already know, each a plain `const ThemeData`.
+
+```dart
+import 'package:fleury_themes/fleury_themes.dart';
+
+runApp(const MyApp(), theme: tokyoNight);
+```
+
+Arrow through the list to see each one applied — this is a real Fleury app
+running in your browser, not a screenshot:
+
+<FleuryExample id="themes.gallery" cols={62} rows={18} interactive />
+
+`fleuryThemes` is the whole set with display names, ready to drop into a
+picker. See the
+[package README](https://github.com/danReynolds/fleury/tree/main/packages/fleury_themes)
+for how to write your own — the rest of this guide covers the pieces it uses.
 
 ## Apply a theme
 
