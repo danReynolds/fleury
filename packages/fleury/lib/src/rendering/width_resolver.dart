@@ -1,52 +1,9 @@
 import 'package:characters/characters.dart';
-import 'package:meta/meta.dart';
 
+import 'width_policy.dart';
 import 'width_tables.dart';
 
-/// Per-terminal configuration that affects display-width calculations.
-///
-/// Unicode UAX #11 leaves the width of "ambiguous" characters up to the
-/// emulator. Most modern Unicode terminals render them as narrow (1 cell);
-/// CJK terminals and a few legacy emulators render them as wide (2 cells).
-/// The renderer probes the terminal where it can and falls back to narrow.
-@immutable
-final class TerminalProfile {
-  const TerminalProfile({
-    this.ambiguousIsWide = false,
-    this.emojiIsWide = true,
-  });
-
-  /// When true, UAX #11 Ambiguous characters render as 2 columns. Default
-  /// is false (narrow).
-  final bool ambiguousIsWide;
-
-  /// When true, `Emoji_Presentation` characters render as 2 columns, and a
-  /// VS16 selector promotes its base to 2. Default is true.
-  ///
-  /// Narrower in effect than it sounds: UAX #11 ED4 (amended in Unicode 9)
-  /// folds `Emoji_Presentation=Yes` into East Asian *Wide*, so most emoji are
-  /// already 2 by [DefaultWidthResolver]'s wide table and this flag cannot
-  /// narrow them. What it does govern is the set ED4 explicitly excludes —
-  /// `Regional_Indicator` (flags) — plus the VS16 promotion of an otherwise
-  /// narrow base.
-  final bool emojiIsWide;
-
-  /// Sensible default for modern terminals: narrow ambiguous, wide emoji.
-  static const TerminalProfile standard = TerminalProfile();
-
-  /// Profile for legacy CJK terminals where Ambiguous characters should
-  /// render as 2 columns.
-  static const TerminalProfile cjk = TerminalProfile(ambiguousIsWide: true);
-
-  @override
-  bool operator ==(Object other) =>
-      other is TerminalProfile &&
-      other.ambiguousIsWide == ambiguousIsWide &&
-      other.emojiIsWide == emojiIsWide;
-
-  @override
-  int get hashCode => Object.hash(ambiguousIsWide, emojiIsWide);
-}
+export 'width_policy.dart' show CellWidth, CellWidthPolicy;
 
 /// Returns the number of terminal cells a grapheme cluster occupies.
 ///
@@ -57,14 +14,14 @@ abstract interface class WidthResolver {
   /// Width in cells: 0 for empty/combining-only clusters, 1 for narrow,
   /// 2 for wide. The renderer enforces this by writing a leading cell
   /// followed by `width - 1` continuation cells.
-  int widthOfGrapheme(String grapheme, TerminalProfile profile);
+  int widthOfGrapheme(String grapheme, CellWidthPolicy policy);
 
   /// Sum of widths over all grapheme clusters in [text]. Equivalent to
   /// splitting on grapheme clusters and summing.
-  int widthOfText(String text, TerminalProfile profile) {
+  int widthOfText(String text, CellWidthPolicy policy) {
     var total = 0;
     for (final g in text.characters) {
-      total += widthOfGrapheme(g, profile);
+      total += widthOfGrapheme(g, policy);
     }
     return total;
   }
@@ -88,7 +45,7 @@ final class DefaultWidthResolver implements WidthResolver {
   const DefaultWidthResolver();
 
   @override
-  int widthOfGrapheme(String grapheme, TerminalProfile profile) {
+  int widthOfGrapheme(String grapheme, CellWidthPolicy policy) {
     if (grapheme.isEmpty) return 0;
 
     // ASCII fast path: a single printable ASCII code unit is always
@@ -100,43 +57,93 @@ final class DefaultWidthResolver implements WidthResolver {
       if (c >= 0x20 && c <= 0x7E) return 1;
     }
 
-    // For grapheme clusters built from multiple code points (combining marks,
-    // ZWJ sequences, regional-indicator pairs), use the first base code point
-    // for width and treat the remainder as combining (zero width by default).
+    // One pass over the cluster: the base code point plus the structural
+    // markers that decide which precedence branch answers (RFC 0019 §6.3).
+    // Classifying by CLUSTER KIND is what keeps the width axes bound to the
+    // classes they were measured on — a selector inside a composite must
+    // never leak the simple-sequence answer onto the whole cluster
+    // (`👩‍⚕️` contains FE0F; `emojiVariationSequence: one` may not narrow it).
     final iterator = grapheme.runes.iterator;
     if (!iterator.moveNext()) return 0;
     final base = iterator.current;
-
-    if (_isZeroWidth(base)) return 0;
-
-    // A presentation selector (UTS #51) switches the base between text and
-    // emoji presentation, which changes how wide the terminal draws it. This is
-    // a RULE over the cluster, not a table row per code point — it holds for
-    // every emoji-capable base, so it covers the whole VS16 family a
-    // block-by-block table keeps missing: ⭐️ ❤️ ☑️ ⚠️ each measured 1 before
-    // this while every terminal draws them at 2.
-    //
-    // Scanned on the same iterator that produced the base, so there is no
-    // second pass; for the common single-rune cluster the loop exits at once.
+    var hasZwj = false;
+    var hasKeycap = false;
+    var hasTag = false;
+    var hasModifier = false;
+    var hasCompanion = false;
+    var selector = 0; // First VS15/VS16 in the cluster; first one wins.
     while (iterator.moveNext()) {
       final r = iterator.current;
-      if (r == 0xFE0F) {
-        // VS16 — emoji presentation.
-        if (profile.emojiIsWide) return 2;
-        break; // Emoji disabled: fall back to the base's own rules.
+      if (r == 0x200D) {
+        hasZwj = true;
+      } else if (r == 0x20E3) {
+        hasKeycap = true;
+      } else if (r >= 0xE0020 && r <= 0xE007F) {
+        hasTag = true;
+      } else if (r >= 0x1F3FB && r <= 0x1F3FF) {
+        hasModifier = true;
+      } else if ((r == 0xFE0E || r == 0xFE0F) && selector == 0) {
+        selector = r;
+      } else if (!_isZeroWidth(r)) {
+        // A second spacing code point (e.g. the pairing regional indicator).
+        hasCompanion = true;
       }
-      if (r == 0xFE0E) return 1; // VS15 — text presentation is always narrow.
     }
 
-    if (profile.emojiIsWide && _isEmojiPresentation(base)) return 2;
-    if (_isWide(base)) return 2;
-    if (profile.ambiguousIsWide && _isAmbiguous(base)) return 2;
+    if (_isZeroWidth(base)) return 0; // Combining-only cluster.
 
+    // 1. Recognized emoji ZWJ sequence → composite rule: keyed off the base
+    //    through the same scalar ladder (so the policy's emoji axis applies),
+    //    capped at 2 by construction. P2 lowers these where authorized; until
+    //    then the pin contains the disagreement on summing terminals.
+    if (hasZwj) return _scalarWidth(base, policy);
+
+    // 2. Modifier / flag / keycap / tag sequences → spec-fixed 2, pinned.
+    //    These are their own cluster kinds, deliberately NOT governed by the
+    //    measured axes (nothing probes them), and they are all emoji-rendered
+    //    composites that the field draws two cells wide when supported.
+    final isFlagPair =
+        base >= 0x1F1E6 && base <= 0x1F1FF && hasCompanion;
+    if (hasKeycap || hasTag || hasModifier || isFlagPair) return 2;
+
+    // 3. Simple emoji variation sequence (one base + one selector).
+    if (selector == 0xFE0E) return 1; // VS15: text presentation, narrow.
+    if (selector == 0xFE0F) {
+      // VS16: the axis answers whether the selector PROMOTES width on this
+      // surface. When it does not, the selector is inert and the base keeps
+      // its own scalar width — ❤️ falls to ❤'s 1, but ⭐️ keeps ⭐'s 2 (an
+      // ignoring terminal still draws the bare glyph wide).
+      if (policy.emojiVariationSequence == CellWidth.two) return 2;
+      return _scalarWidth(base, policy);
+    }
+
+    // 4–7. Bare scalar (or unclassified multi-rune cluster: base-keyed).
+    return _scalarWidth(base, policy);
+  }
+
+  /// Branches 4–7 of the precedence ladder, for a single code point:
+  /// emoji-presentation class (policy-governed) → East Asian Wide →
+  /// Ambiguous (policy-governed) → narrow.
+  ///
+  /// The emoji check runs BEFORE the wide table: UAX #11 ED4 folds
+  /// `Emoji_Presentation=Yes` into East Asian Wide, so the emoji class is a
+  /// subset of the wide table and would be unreachable behind it. Checking it
+  /// first is what gives `emojiPresentation: one` real veto power on a
+  /// measured-narrow terminal — while CJK ideographs, which are wide WITHOUT
+  /// being emoji, stay 2 under every policy (RFC 0019 §6.3).
+  int _scalarWidth(int r, CellWidthPolicy policy) {
+    if (_isEmojiPresentation(r)) {
+      return policy.emojiPresentation == CellWidth.two ? 2 : 1;
+    }
+    if (_isWide(r)) return 2;
+    if (_isAmbiguous(r)) {
+      return policy.ambiguous == CellWidth.two ? 2 : 1;
+    }
     return 1;
   }
 
   @override
-  int widthOfText(String text, TerminalProfile profile) {
+  int widthOfText(String text, CellWidthPolicy policy) {
     // Pure-ASCII fast path: every code unit 0x20..0x7E is one
     // single-cell grapheme. Skips the `text.characters` iterator
     // allocation and the per-grapheme range scans entirely. Common
@@ -166,7 +173,7 @@ final class DefaultWidthResolver implements WidthResolver {
     var total = asciiPrefix;
     final rest = text.substring(asciiPrefix);
     for (final g in rest.characters) {
-      total += widthOfGrapheme(g, profile);
+      total += widthOfGrapheme(g, policy);
     }
     return total;
   }

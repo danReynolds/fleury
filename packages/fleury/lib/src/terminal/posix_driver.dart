@@ -162,7 +162,7 @@ class PosixTerminalDriver
 
   /// What the startup probe measured the terminal actually drawing. Reported
   /// through [capabilities] for diagnostics; null fields mean "unmeasured".
-  MeasuredGlyphWidths _measuredGlyphWidths = const MeasuredGlyphWidths();
+  WidthMeasurements _measuredGlyphWidths = const WidthMeasurements.empty();
   bool _wroteEnterSequences = false;
   bool _changedStdin = false;
   bool _nativeRawMode = false;
@@ -305,7 +305,17 @@ class PosixTerminalDriver
     final withWidth = width == null
         ? merged
         : merged.copyWith(ambiguousCharWidth: width);
-    return withWidth.copyWith(measuredWidths: _measuredGlyphWidths);
+    return withWidth.copyWith(
+      measuredWidths: _measuredGlyphWidths,
+      // Fold measurements + FLEURY_* overrides into the one derived policy
+      // every geometry consumer shares (RFC 0019 §6.2). Same inputs as the
+      // ambiguousCharWidth resolution above, so the renderer's pin gate and
+      // the layout policy can never disagree about the evidence.
+      textPolicy: deriveTextPresentationPolicy(
+        measurements: _measuredGlyphWidths,
+        environment: environment,
+      ),
+    );
   }
 
   @override
@@ -503,12 +513,10 @@ class PosixTerminalDriver
       // just ambiguous — same cost as the old single-glyph probe.
       final measured = await probeGlyphWidths(_DriverProbeTransport(this));
       _measuredGlyphWidths = measured;
-      final ambiguous = measured.ambiguous;
-      if (ambiguous != null) {
-        _ambiguousCharWidthOverride = ambiguous >= 2
-            ? AmbiguousCharWidth.wide
-            : AmbiguousCharWidth.narrow;
-      }
+      // Agreement across the ambiguous representatives, or keep the default:
+      // one glyph is a signal, not proof (RFC 0019 §6.1).
+      final ambiguous = ambiguousWidthFromMeasurements(measured);
+      if (ambiguous != null) _ambiguousCharWidthOverride = ambiguous;
     } on Object {
       // Probe failed (no terminal reply, write error, …): keep the `wide`
       // default so ambiguous-wide terminals never garble.

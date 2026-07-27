@@ -14,6 +14,7 @@ import '../semantics/semantics.dart';
 import '../terminal/capabilities.dart';
 import 'align.dart';
 import 'framework.dart';
+import '../rendering/width_policy.dart';
 import 'media_query.dart';
 import 'selection/selectable.dart';
 import 'theme.dart';
@@ -58,7 +59,7 @@ final class _EmptyBoxElement extends Element {
 /// The text is sanitized (control codes replaced with U+FFFD) before
 /// reaching the cell buffer, so widget code can safely pass arbitrary
 /// or untrusted strings. Grapheme widths are resolved against the
-/// configured [TerminalProfile].
+/// configured [CellWidthPolicy].
 ///
 /// With [softWrap] true (default), text exceeding the available width
 /// wraps onto additional rows at word boundaries (or hard-breaks
@@ -78,7 +79,7 @@ final class Text extends StatelessWidget implements WidgetUpdatePruner {
     this.maxLines,
     this.overflow = TextOverflow.clip,
     this.textAlign = TextAlign.left,
-    this.profile = TerminalProfile.standard,
+    this.policy,
     this.allowSelect = true,
   });
 
@@ -107,8 +108,12 @@ final class Text extends StatelessWidget implements WidgetUpdatePruner {
   /// right-anchored key hints.
   final TextAlign textAlign;
 
-  /// Terminal width profile used to measure grapheme clusters.
-  final TerminalProfile profile;
+  /// The text-presentation policy used to measure grapheme clusters. Null
+  /// (the default) resolves the surface's ambient policy from [MediaQuery] —
+  /// derived at startup from the width probe and `FLEURY_*` overrides
+  /// (RFC 0019). Pass an explicit policy only to pin measurement against the
+  /// ambient surface (goldens comparing policies, documentation demos).
+  final TextPresentationPolicy? policy;
 
   /// Whether this Text participates in any ancestor `SelectionArea`'s
   /// selection. Defaults to `true`. Set to `false` for cosmetic
@@ -128,7 +133,7 @@ final class Text extends StatelessWidget implements WidgetUpdatePruner {
         maxLines == other.maxLines &&
         overflow == other.overflow &&
         textAlign == other.textAlign &&
-        profile == other.profile &&
+        policy == other.policy &&
         allowSelect == other.allowSelect;
   }
 
@@ -146,7 +151,7 @@ final class Text extends StatelessWidget implements WidgetUpdatePruner {
         maxLines: maxLines,
         overflow: overflow,
         textAlign: textAlign,
-        profile: profile,
+        policy: (policy ?? MediaQuery.textPolicyOf(context)).widths,
         allowSelect: allowSelect,
       ),
     );
@@ -161,7 +166,7 @@ final class _RawText extends LeafRenderObjectWidget {
     required this.maxLines,
     required this.overflow,
     required this.textAlign,
-    required this.profile,
+    required this.policy,
     required this.allowSelect,
   });
 
@@ -171,7 +176,7 @@ final class _RawText extends LeafRenderObjectWidget {
   final int? maxLines;
   final TextOverflow overflow;
   final TextAlign textAlign;
-  final TerminalProfile profile;
+  final CellWidthPolicy policy;
   final bool allowSelect;
 
   @override
@@ -183,7 +188,7 @@ final class _RawText extends LeafRenderObjectWidget {
       maxLines: maxLines,
       overflow: overflow,
       textAlign: textAlign,
-      profile: profile,
+      policy: policy,
     );
     // Wire the Selectable to the ambient registrar so app-wide
     // selection systems see this text widget. allowSelect == false
@@ -204,7 +209,7 @@ final class _RawText extends LeafRenderObjectWidget {
       ..maxLines = maxLines
       ..overflow = overflow
       ..textAlign = textAlign
-      ..profile = profile;
+      ..policy = policy;
     // If the ambient SelectionScope changed (e.g. a SelectionArea
     // mounted above us) OR allowSelect flipped, re-attach.
     renderObject.attachToSelection(

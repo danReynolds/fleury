@@ -129,7 +129,9 @@ void main() {
       );
 
       final measured = diagnosis.withMeasuredWidths(
-        const MeasuredGlyphWidths(ambiguous: 1),
+        WidthMeasurements.of(
+          const {'boxDrawing': 1, 'greekAlpha': 1, 'degreeSign': 1},
+        ),
       );
       expect(
         measured.capabilities.ambiguousCharWidth,
@@ -140,7 +142,11 @@ void main() {
       // ...and a measurement that says wide keeps it wide.
       expect(
         diagnosis
-            .withMeasuredWidths(const MeasuredGlyphWidths(ambiguous: 2))
+            .withMeasuredWidths(
+              WidthMeasurements.of(
+                const {'boxDrawing': 2, 'greekAlpha': 2, 'degreeSign': 2},
+              ),
+            )
             .capabilities
             .ambiguousCharWidth,
         AmbiguousCharWidth.wide,
@@ -149,7 +155,7 @@ void main() {
       // An absent measurement must not fabricate one.
       expect(
         diagnosis
-            .withMeasuredWidths(const MeasuredGlyphWidths())
+            .withMeasuredWidths(const WidthMeasurements.empty())
             .capabilities
             .ambiguousCharWidth,
         AmbiguousCharWidth.wide,

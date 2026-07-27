@@ -82,8 +82,8 @@ void main() {
     // them would silently change rendering. Each is documented in the
     // generator's `_curate`.
     const resolver = DefaultWidthResolver();
-    const standard = TerminalProfile.standard;
-    const cjk = TerminalProfile.cjk;
+    const standard = CellWidthPolicy.spec;
+    const cjk = CellWidthPolicy.cjk;
 
     // Soft hyphen prints as a visible hyphen, despite being category Cf.
     expect(resolver.widthOfGrapheme('\u{00AD}', standard), 1);

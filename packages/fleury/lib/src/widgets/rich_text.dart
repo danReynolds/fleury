@@ -11,6 +11,7 @@ import '../rendering/selectable_text_mixin.dart';
 import '../rendering/text_sanitizer.dart';
 import '../rendering/width_resolver.dart';
 import 'framework.dart';
+import 'media_query.dart';
 import 'selection/selectable.dart';
 import 'theme.dart';
 
@@ -104,6 +105,7 @@ class _RawRichText extends LeafRenderObjectWidget {
       softWrap: softWrap,
       maxLines: maxLines,
       overflow: overflow,
+      policy: MediaQuery.textPolicyOf(context).widths,
     );
     r.attachToSelection(allowSelect ? SelectionScope.maybeOf(context) : null);
     return r;
@@ -115,7 +117,8 @@ class _RawRichText extends LeafRenderObjectWidget {
       ..setSpan(span, base)
       ..softWrap = softWrap
       ..maxLines = maxLines
-      ..overflow = overflow;
+      ..overflow = overflow
+      ..policy = MediaQuery.textPolicyOf(context).widths;
     r.attachToSelection(allowSelect ? SelectionScope.maybeOf(context) : null);
   }
 
@@ -161,12 +164,12 @@ class RenderRichText extends RenderObject
     int? maxLines,
     TextOverflow overflow = TextOverflow.clip,
     WidthResolver widthResolver = const DefaultWidthResolver(),
-    TerminalProfile profile = TerminalProfile.standard,
+    CellWidthPolicy policy = CellWidthPolicy.spec,
   }) : _softWrap = softWrap,
        _maxLines = maxLines,
        _overflow = overflow,
        _widthResolver = widthResolver,
-       _profile = profile {
+       _policy = policy {
     _glyphs = _flatten(span, base);
   }
 
@@ -174,7 +177,7 @@ class RenderRichText extends RenderObject
   int? _maxLines;
   TextOverflow _overflow;
   final WidthResolver _widthResolver;
-  final TerminalProfile _profile;
+  CellWidthPolicy _policy;
 
   late List<_Glyph> _glyphs;
   List<List<_Glyph>> _lines = const [];
@@ -201,7 +204,7 @@ class RenderRichText extends RenderObject
   WidthResolver get selectionWidthResolver => _widthResolver;
 
   @override
-  TerminalProfile get selectionProfile => _profile;
+  CellWidthPolicy get selectionPolicy => _policy;
 
   void _refreshSelectionLines() {
     final out = <String>[];
@@ -213,6 +216,12 @@ class RenderRichText extends RenderObject
       out.add(buf.toString());
     }
     _selectionLines = out;
+  }
+
+  set policy(CellWidthPolicy value) {
+    if (_policy == value) return;
+    _policy = value;
+    markNeedsLayout();
   }
 
   void setSpan(TextSpan span, CellStyle base) {
@@ -252,7 +261,7 @@ class RenderRichText extends RenderObject
           }
           for (final g in sanitizeForDisplay(paragraph).characters) {
             out.add(
-              _Glyph(g, _widthResolver.widthOfGrapheme(g, _profile), style),
+              _Glyph(g, _widthResolver.widthOfGrapheme(g, _policy), style),
             );
           }
         }
@@ -507,7 +516,7 @@ class RenderRichText extends RenderObject
         g.grapheme,
         style: cellStyle,
         widthResolver: _widthResolver,
-        profile: _profile,
+        policy: _policy,
       );
       col += g.width;
       off += g.grapheme.length;
@@ -517,7 +526,7 @@ class RenderRichText extends RenderObject
         CellOffset(col, row),
         '…',
         widthResolver: _widthResolver,
-        profile: _profile,
+        policy: _policy,
       );
     }
   }

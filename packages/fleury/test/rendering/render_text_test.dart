@@ -276,11 +276,11 @@ void main() {
       expect(stats.skippedCount, greaterThan(0));
     });
 
-    test('setting profile re-measures', () {
+    test('setting the policy re-measures (layout-dirty, not paint-dirty)', () {
       final t = RenderText(text: '─');
-      // Default profile: box-drawing is ambiguous → narrow.
+      // Spec policy: box-drawing is ambiguous → narrow.
       expect(t.intrinsicWidth, 1);
-      t.profile = TerminalProfile.cjk;
+      t.policy = CellWidthPolicy.cjk;
       expect(t.intrinsicWidth, 2);
     });
   });

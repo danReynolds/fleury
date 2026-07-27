@@ -385,7 +385,7 @@ final class CellBuffer {
     String grapheme, {
     CellStyle style = CellStyle.empty,
     WidthResolver widthResolver = const DefaultWidthResolver(),
-    TerminalProfile profile = TerminalProfile.standard,
+    CellWidthPolicy policy = CellWidthPolicy.spec,
   }) {
     if (!_containsColRow(position.col, position.row)) return 0;
     return _writeGraphemeAt(
@@ -394,7 +394,7 @@ final class CellBuffer {
       grapheme,
       style: style,
       widthResolver: widthResolver,
-      profile: profile,
+      policy: policy,
     );
   }
 
@@ -406,9 +406,9 @@ final class CellBuffer {
     String grapheme, {
     CellStyle style = CellStyle.empty,
     WidthResolver widthResolver = const DefaultWidthResolver(),
-    TerminalProfile profile = TerminalProfile.standard,
+    CellWidthPolicy policy = CellWidthPolicy.spec,
   }) {
-    final width = widthResolver.widthOfGrapheme(grapheme, profile);
+    final width = widthResolver.widthOfGrapheme(grapheme, policy);
     if (width == 0) return 0;
     // Include adjacent cells because writing can evict wide-cell neighbors.
     _recordDamageRect(col - 1, row, width + 2, 1);
@@ -445,7 +445,7 @@ final class CellBuffer {
     String text, {
     CellStyle style = CellStyle.empty,
     WidthResolver widthResolver = const DefaultWidthResolver(),
-    TerminalProfile profile = TerminalProfile.standard,
+    CellWidthPolicy policy = CellWidthPolicy.spec,
   }) {
     var col = position.col;
     final startCol = col;
@@ -453,7 +453,7 @@ final class CellBuffer {
     if (row < 0 || row >= _size.rows) return 0;
     for (final grapheme in text.characters) {
       if (col >= _size.cols) break;
-      final width = widthResolver.widthOfGrapheme(grapheme, profile);
+      final width = widthResolver.widthOfGrapheme(grapheme, policy);
       if (width == 0) continue;
       if (col >= 0) {
         _writeGraphemeAt(
@@ -462,7 +462,7 @@ final class CellBuffer {
           grapheme,
           style: style,
           widthResolver: widthResolver,
-          profile: profile,
+          policy: policy,
         );
       }
       col += width;

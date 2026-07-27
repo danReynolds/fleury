@@ -89,7 +89,12 @@ class KeyHintBar extends StatelessWidget {
     return SelectionArea.disabled(
       child: LayoutBuilder(
         builder: (context, constraints) => _styledBar(
-          _fit(segments, total, constraints.maxCols),
+          _fit(
+            segments,
+            total,
+            constraints.maxCols,
+            MediaQuery.textPolicyOf(context).widths,
+          ),
           resolvedKeyStyle,
         ),
       ),
@@ -131,10 +136,18 @@ class KeyHintBar extends StatelessWidget {
   /// counted too. Never clips a label mid-word. Under an unbounded width
   /// ([maxCols] null) it shows everything, with a `+N` only if the cap dropped
   /// some.
-  String _fit(List<String> segments, int total, int? maxCols) {
+  String _fit(
+    List<String> segments,
+    int total,
+    int? maxCols,
+    CellWidthPolicy policy,
+  ) {
     if (total == 0) return '';
+    // Ambient policy, not a spec constant: fitting must measure with the same
+    // widths layout will use, or the bar over/under-fills on a surface whose
+    // policy differs (RFC 0019 §6.3 — one policy per geometry consumer).
     const resolver = DefaultWidthResolver();
-    int width(String s) => resolver.widthOfText(s, TerminalProfile.standard);
+    int width(String s) => resolver.widthOfText(s, policy);
     String withMarker(int k) {
       final hidden = total - k;
       final shown = segments.take(k).join(separator);
