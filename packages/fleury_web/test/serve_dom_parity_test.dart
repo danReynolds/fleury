@@ -38,7 +38,6 @@ FramePresentationPlan _fullPlan(CellBuffer mirror) {
     size: mirror.size,
     damage: FramePresentationDamage(
       fullRepaint: true,
-      requiresFullDiff: true,
       dirtyBounds: null,
       dirtyRows: TuiDirtyRows.full(mirror.size.rows),
       source: FrameDamageSource.fullRepaint,

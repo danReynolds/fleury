@@ -259,6 +259,7 @@ class _TabsState extends State<Tabs> {
                     },
                     child: Text(
                       ' ${widget.tabs[i].label} ',
+                      allowSelect: false, // tab label, not selectable text
                       style: i == active ? activeStyle : inactiveStyle,
                     ),
                   ),

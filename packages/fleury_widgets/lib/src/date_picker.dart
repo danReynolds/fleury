@@ -416,7 +416,7 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
     );
 
     if (!enabled) {
-      return Semantics(
+      final Widget picker = Semantics(
         role: SemanticRole.datePicker,
         label: widget.label,
         value: _formatDate(v),
@@ -435,9 +435,11 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
         }),
         child: body,
       );
+      // styled component, not selectable text
+      return SelectionArea.disabled(child: picker);
     }
 
-    return Semantics(
+    final Widget picker = Semantics(
       role: SemanticRole.datePicker,
       label: widget.label,
       value: _formatDate(v),
@@ -487,6 +489,8 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
         child: GestureDetector(onTap: () => _node.requestFocus(), child: body),
       ),
     );
+    // styled component, not selectable text
+    return SelectionArea.disabled(child: picker);
   }
 }
 

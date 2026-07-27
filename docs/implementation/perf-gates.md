@@ -19,8 +19,8 @@ dart tool/fleury_dev.dart benchmark <gate> [--gate] [--update-baseline]
 
 **Take inventory:** `dart tool/fleury_dev.dart benchmark --help` lists every
 gate. **Run the whole fast suite in one shot** (serve-semantics, image-bench,
-bundle-size, alloc-gate, paint-gate — ~11s measured, with a pass/fail
-summary); CI runs this same suite on every push/PR:
+bundle-size, alloc-gate, paint-gate, selection-gate — ~15s measured, with a
+pass/fail summary); CI runs this same suite on every push/PR:
 
 ```sh
 dart tool/fleury_dev.dart benchmark gates
@@ -36,6 +36,7 @@ The heavier PTY/subprocess gates (`wire-gate`, `serve-wire-live`) are not in the
 | `wire-gate` | Terminal ANSI **output bytes** (SB.1/6/9: startup, dashboard steady-state, untrusted-output encoding) | `lib/src/rendering/ansi_renderer.dart`, cell paint, any diff/cursor/SGR change | ~30s (PTY) | `profiling/wire_gate_baseline.json` |
 | `alloc-gate` | Per-frame **`package:fleury` allocation churn** (build → reconcile → layout → paint → diff) | `lib/src/widgets/framework.dart`, `lib/src/rendering/**`, anything on the per-frame path | ~10s (VM service) | `profiling/alloc_gate_baseline.json` |
 | `paint-gate` | Paint-walk pruning as **exact repaint-boundary counters**: the real `ListView.builder`'s auto-boundaries prune a localized update to one repaint; Overlay entry boundaries engage adaptively (dashboard+floater fixtures — real leaf widgets in bespoke two-entry scaffolding); the **lazy-layer convention** (the real `Toaster` with zero toasts idles pure pass-through: `boundaryCount == 0`); full-invalidate staleness (`cached == 0` when everything is dirty). Paint-phase µs is recorded warn-only (measured with debug stats on — not a clean paint time) and never fails | `lib/src/rendering/**` (esp. `render_repaint_boundary.dart`, cell paint), `lib/src/widgets/overlay.dart`, `lib/src/widgets/list_view.dart`, any widget that mounts overlay entries (toasts, banners, dropdowns) | ~4s (dart-run startup dominates; the measurement is <0.5s) | `profiling/paint_gate_baseline.json` (counters exact, tolerance 0; structural invariants also enforced in-code, even under `--update-baseline`) |
+| `selection-gate` | Default-on text **selection** as the deterministic count of cells a select-all covers over a repainting grid — the coverage invariant (every rendered `Text` registers as selectable and select-all reaches all of them). The per-frame µs a held selection adds is recorded **warn-only** (machine-dependent, and this path's per-frame allocation is JIT-sink-nondeterministic — a hard alloc gate would flap CI ~24×, so cost is surfaced, not gated) | `lib/src/widgets/selection/**`, `selectable_text_mixin.dart`, the default-on wrap in `run_app.dart` | ~4s | `profiling/selection_gate_baseline.json` (coverage exact, tolerance 0) |
 | `image-bench` | Inline-image encoder: **dedup** (0 B/frame static) + **zero-image fast path** (0 B) | `lib/src/terminal/terminal_image_encoder.dart`, `ansi_byte_budget.dart` image category | ~5s | structural (in code) |
 | `serve-semantics-gate` | Semantics wire **anti-cliff**: diff stays flat in tree size (never falls off the 32 KiB DEFLATE cliff) | `lib/src/remote/remote_semantics.dart`, `SemanticsWireEncoder` | ~5s | structural (in code) |
 | `serve-wire-live` | Live `fleury serve` **socket bytes** (plan + semantics) **+ input→paint latency** (G4): the `input-latency` scenario injects keys closed-loop — starting only after the initial paint **quiesces** — and enforces the structural invariant *every key answered by exactly one PLAN within the per-key timeout* (2s default, flag-tunable). A violated run (missed plan, unsolicited plan, dropped socket) is **discarded and retried**; the gate fails only when every run fails, with the message separating a reproducing input-path break from socket/infra drops. Its latency p50/p95 axes are **warn-only** (live-socket wall-clock), and its byte axes start warn-only too — promote them to gated once run-to-run variance is characterized | `lib/src/remote/**`, `lib/src/serve/**`, plan/wire codec, input dispatch on the served path | ~40s (boots serve) | `profiling/serve_wire_live_baseline.json` |
@@ -79,15 +80,19 @@ dart tool/fleury_dev.dart benchmark alloc-gate --update-baseline   # commit the 
 
 CI (`.github/workflows/check.yml`) runs `analyze + test + dart2js smoke` and
 then the fast gate suite (`dart tool/fleury_dev.dart benchmark gates`):
-serve-semantics-gate, image-bench, bundle-size, alloc-gate, paint-gate. A
-regression on those paths fails CI, not just a local run. The CI SDK is
-pinned (see check.yml), which keeps the SDK-sensitive axes stable:
+serve-semantics-gate, image-bench, bundle-size, alloc-gate, paint-gate,
+selection-gate. A regression on those paths fails CI, not just a local run. The
+CI SDK is pinned (see check.yml), which keeps the SDK-sensitive axes stable:
 
 - **`alloc-gate`** has ±10% headroom for machine drift on a fixed SDK. If a
   deliberate SDK bump moves it past tolerance, re-baseline in the bump
   commit — never loosen the tolerance.
 - **`paint-gate`**'s gated axes are exact counters (machine- and
   SDK-independent); its µs axes are warn-only by design.
+- **`selection-gate`** gates one exact counter (select-all coverage, machine-
+  and SDK-independent, tolerance 0); its per-frame µs cost is warn-only, for
+  the same reason as paint-gate's µs — and because this path's allocation is
+  JIT-sink-nondeterministic, so it is surfaced, never gated.
 - **`bundle-size`**'s threshold is deliberately generous to absorb dart2js
   drift across SDK bumps.
 

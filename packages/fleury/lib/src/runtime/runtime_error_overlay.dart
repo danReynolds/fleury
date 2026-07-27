@@ -159,14 +159,20 @@ class _ErrorBanner extends StatelessWidget {
     final prefix = count > 1 ? '⚠ $count errors · ' : '⚠ ';
     return GestureDetector(
       onTap: onDismiss,
-      child: Container(
-        border: const BoxBorder(style: BorderStyle.rounded, cellStyle: _red),
-        padding: const EdgeInsets.symmetric(horizontal: 1),
-        child: Text(
-          '$prefix$firstLine · click to dismiss',
-          style: _red,
-          maxLines: 3,
-          overflow: TextOverflow.ellipsis,
+      // The banner floats over the app, so it paints its own opaque
+      // background — otherwise the content underneath bleeds through the
+      // frame and the error is hard to read. Sitting above the user's Theme,
+      // Surface resolves against [ThemeData.fallback], which is deterministic.
+      child: Surface(
+        child: Container(
+          border: const BoxBorder(style: BorderStyle.rounded, cellStyle: _red),
+          padding: const EdgeInsets.symmetric(horizontal: 1),
+          child: Text(
+            '$prefix$firstLine · click to dismiss',
+            style: _red,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ),
     );

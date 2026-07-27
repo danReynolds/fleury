@@ -298,7 +298,7 @@ class _RangeSliderState extends State<RangeSlider> {
       trackStyle: theme.mutedStyle,
     );
     if (!enabled) {
-      return _decorate(
+      final Widget decorated = _decorate(
         context,
         Semantics(
           role: SemanticRole.slider,
@@ -319,8 +319,10 @@ class _RangeSliderState extends State<RangeSlider> {
           child: slider,
         ),
       );
+      // styled component, not selectable text
+      return SelectionArea.disabled(child: decorated);
     }
-    return _decorate(
+    final Widget decorated = _decorate(
       context,
       Semantics(
         role: SemanticRole.slider,
@@ -386,6 +388,8 @@ class _RangeSliderState extends State<RangeSlider> {
         ),
       ),
     );
+    // styled component, not selectable text
+    return SelectionArea.disabled(child: decorated);
   }
 
   /// Wraps the interactive track with a value readout and endpoint labels when

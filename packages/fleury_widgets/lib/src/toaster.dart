@@ -202,7 +202,7 @@ class _ToasterState extends State<Toaster> {
   }
 
   Widget _buildLayer() {
-    return Align(
+    final Widget layer = Align(
       alignment: widget.alignment,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -231,17 +231,25 @@ class _ToasterState extends State<Toaster> {
                     break;
                 }
               },
-              child: Container(
-                // A normal (neutral) frame — severity lives in the dot, not the
-                // border — with horizontal padding so the content breathes.
-                border: const BoxBorder(style: BorderStyle.rounded),
-                padding: const EdgeInsets.symmetric(horizontal: 1),
-                child: _toastContent(toast),
+              // A toast floats over the app, so it paints its own opaque
+              // background — without Surface the content underneath bleeds
+              // through the frame.
+              child: Surface(
+                child: Container(
+                  // A normal (neutral) frame — severity lives in the dot, not
+                  // the border — with horizontal padding so the content
+                  // breathes.
+                  border: const BoxBorder(style: BorderStyle.rounded),
+                  padding: const EdgeInsets.symmetric(horizontal: 1),
+                  child: _toastContent(toast),
+                ),
               ),
             ),
         ],
       ),
     );
+    // styled component, not selectable text (the app child stays selectable)
+    return SelectionArea.disabled(child: layer);
   }
 
   SemanticState _toastSemanticState(_Toast toast) {

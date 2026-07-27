@@ -148,7 +148,6 @@ void main() {
         size: const CellSize(40, 10),
         damage: FramePresentationDamage(
           fullRepaint: false,
-          requiresFullDiff: false,
           dirtyBounds: null,
           dirtyRows: TuiDirtyRows.fromRows(const [1], rowCount: 10),
           source: FrameDamageSource.paintDamage,
@@ -672,7 +671,6 @@ void main() {
       size: size,
       damage: FramePresentationDamage(
         fullRepaint: true,
-        requiresFullDiff: true,
         dirtyBounds: null,
         dirtyRows: TuiDirtyRows.full(size.rows),
         source: FrameDamageSource.fullRepaint,
@@ -1454,7 +1452,6 @@ FramePresentationPlan _steadyStatePlan(CellSize size, TuiDirtyRows dirtyRows) =>
       size: size,
       damage: FramePresentationDamage(
         fullRepaint: false,
-        requiresFullDiff: false,
         dirtyBounds: null,
         dirtyRows: dirtyRows,
         source: FrameDamageSource.paintDamage,

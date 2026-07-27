@@ -106,6 +106,8 @@ final class AnsiFramePresenter implements FramePresenter {
       next,
       _sink,
       dirtyBounds: frame.damage.diffBounds,
+      scrollUpRows: frame.damage.scrollUpRows,
+      hasChanges: !frame.damage.isEmpty,
       onDirtyCell: debugWatching ? recordDirtyCell : null,
       // Caret positioning must be last: graphics protocols can move the
       // terminal cursor while placing an image. Both trailers remain inside

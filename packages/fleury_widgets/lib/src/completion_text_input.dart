@@ -365,68 +365,72 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
             return;
         }
       },
-      child: Container(
-        border: BoxBorder(style: _borderStyle),
-        child: SizedBox(
-          width: width + 2,
-          height: visible,
-          child: ListView.builder(
-            controller: _list,
-            selectionActive: true,
-            itemCount: options.length,
-            itemBuilder: (_, i, selected) {
-              final option = options[i];
-              final rawDetail = option.detail;
-              final detail = rawDetail == null
-                  ? null
-                  : sanitizeOptionLabel(rawDetail);
-              final optionLabel = sanitizeOptionLabel(option.label);
-              final label = detail == null
-                  ? optionLabel
-                  : '$optionLabel  $detail';
-              return Semantics(
-                role: SemanticRole.menuItem,
-                label: optionLabel,
-                value: option.replacement,
-                hint: detail,
-                focused: _focusNode.hasFocus && selected,
-                selected: selected,
-                actions: const <SemanticAction>{
-                  SemanticAction.select,
-                  SemanticAction.activate,
-                },
-                state: SemanticState({
-                  'rowIndex': i,
-                  'menuItemPosition': i + 1,
-                  'menuItemCount': options.length,
-                  'entryKind': 'completion',
-                  'completionQuery': state.query,
-                  if (option.id != null) 'completionId': option.id,
-                }),
-                onAction: (action) {
-                  switch (action) {
-                    case SemanticAction.select:
-                    case SemanticAction.activate:
+      // A floating popup paints its own opaque background (Surface) so the
+      // app underneath doesn't bleed through its frame.
+      child: Surface(
+        child: Container(
+          border: BoxBorder(style: _borderStyle),
+          child: SizedBox(
+            width: width + 2,
+            height: visible,
+            child: ListView.builder(
+              controller: _list,
+              selectionActive: true,
+              itemCount: options.length,
+              itemBuilder: (_, i, selected) {
+                final option = options[i];
+                final rawDetail = option.detail;
+                final detail = rawDetail == null
+                    ? null
+                    : sanitizeOptionLabel(rawDetail);
+                final optionLabel = sanitizeOptionLabel(option.label);
+                final label = detail == null
+                    ? optionLabel
+                    : '$optionLabel  $detail';
+                return Semantics(
+                  role: SemanticRole.menuItem,
+                  label: optionLabel,
+                  value: option.replacement,
+                  hint: detail,
+                  focused: _focusNode.hasFocus && selected,
+                  selected: selected,
+                  actions: const <SemanticAction>{
+                    SemanticAction.select,
+                    SemanticAction.activate,
+                  },
+                  state: SemanticState({
+                    'rowIndex': i,
+                    'menuItemPosition': i + 1,
+                    'menuItemCount': options.length,
+                    'entryKind': 'completion',
+                    'completionQuery': state.query,
+                    if (option.id != null) 'completionId': option.id,
+                  }),
+                  onAction: (action) {
+                    switch (action) {
+                      case SemanticAction.select:
+                      case SemanticAction.activate:
+                        _list.selectedIndex = i;
+                        _acceptCompletionAt(i);
+                        return;
+                      case _:
+                        return;
+                    }
+                  },
+                  // Click a completion to accept it (same as Tab/Enter).
+                  child: GestureDetector(
+                    onTap: () {
                       _list.selectedIndex = i;
                       _acceptCompletionAt(i);
-                      return;
-                    case _:
-                      return;
-                  }
-                },
-                // Click a completion to accept it (same as Tab/Enter).
-                child: GestureDetector(
-                  onTap: () {
-                    _list.selectedIndex = i;
-                    _acceptCompletionAt(i);
-                  },
-                  child: Text(
-                    '${selected ? '› ' : '  '}$label',
-                    style: selected ? _selectionStyle : CellStyle.empty,
+                    },
+                    child: Text(
+                      '${selected ? '› ' : '  '}$label',
+                      style: selected ? _selectionStyle : CellStyle.empty,
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
         ),
       ),

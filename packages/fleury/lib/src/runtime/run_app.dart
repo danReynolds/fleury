@@ -39,6 +39,7 @@ import '../widgets/focus.dart';
 import '../widgets/framework.dart';
 import '../widgets/key_bindings.dart';
 import '../widgets/overlay.dart';
+import '../widgets/selection/selection_area.dart';
 import 'clipboard.dart';
 import '../terminal/ansi_frame_presenter.dart';
 import '../terminal/terminal_image_encoder.dart';
@@ -1135,13 +1136,23 @@ Future<AppExit> _runAppImpl(
           //     via Focus.of(context).
           //   - Overlay as the floating-layer primitive (direct OverlayEntry
           //     use: tooltips, toasts).
-          // The user's root is otherwise mounted exactly as supplied. App
-          // policy — navigation, theme, commands, and other app-wide scopes —
-          // belongs to FleuryApp or another explicit user shell, not the host.
+          // The user's root is otherwise mounted as supplied, with one host
+          // addition: a default text selection ([DefaultRootSelection]).
+          // Selection is input infrastructure, not app policy — it turns
+          // rendered Text into copyable content, which terminal users expect of
+          // everything on screen — so it belongs with the clipboard / pointer /
+          // focus scopes above, not with FleuryApp's navigation / theme /
+          // command scopes. App-authored bindings win over it (deepest-first
+          // dispatch); a subtree opts out via SelectionArea.disabled /
+          // Text(allowSelect: false). It wraps only the app root, so floating
+          // entries (the error overlay below, toasts, menus) keep their own
+          // selection context.
           // The root entry is created once; rebuilding `buildRoot` only swaps
           // the ambient MediaQuery data when the terminal resizes, preserving
           // the app subtree (and all its state).
-          final rootEntry = OverlayEntry(builder: (_) => root);
+          final rootEntry = OverlayEntry(
+            builder: (_) => DefaultRootSelection(child: root),
+          );
           // A full-screen layer above the app that shows the uncaught-error
           // banner. As its own entry it never touches the app's layout — the
           // app keeps rendering full-screen underneath. Created once so its

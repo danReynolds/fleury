@@ -107,7 +107,9 @@ class _PanelState extends State<Panel> {
             children: <Widget>[
               Row(
                 children: <Widget>[
-                  Text(widget.title, style: titleStyle),
+                  // Panel title is chrome, not selectable text; the child
+                  // stays selectable.
+                  Text(widget.title, allowSelect: false, style: titleStyle),
                   const Expanded(child: SizedBox.shrink()),
                   if (widget.trailing != null) widget.trailing!,
                 ],

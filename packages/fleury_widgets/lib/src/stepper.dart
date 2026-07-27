@@ -316,7 +316,8 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
           'canIncrement': false,
           'canDecrement': false,
         }),
-        child: body(),
+        // A stepper is a styled control, not selectable text.
+        child: SelectionArea.disabled(child: body()),
       );
     }
 
@@ -378,7 +379,8 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
             onScrollDown: () => _nudge(-widget.step),
             child: GestureDetector(
               onTap: () => _node.requestFocus(),
-              child: body(),
+              // A stepper is a styled control, not selectable text.
+              child: SelectionArea.disabled(child: body()),
             ),
           ),
         ),

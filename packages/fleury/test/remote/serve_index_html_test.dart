@@ -4,6 +4,7 @@
 
 import 'package:fleury/src/remote/remote_client_asset.dart';
 import 'package:fleury/src/remote/serve_index_html.dart';
+import 'package:fleury/src/remote/serve_mono_font_asset.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -18,6 +19,18 @@ void main() {
       expect(serveIndexHtml, contains('id="fleury-remote"'));
       expect(serveIndexHtml, contains('<script src="/remote_client.js">'));
       expect(serveClientJsPath, '/remote_client.js');
+    });
+
+    test('ships an embedded subset mono font for the browser surface', () {
+      final bytes = serveMonoFontBytes();
+      // A real, non-trivial woff2 (magic bytes "wOF2").
+      expect(bytes.length, greaterThan(20000));
+      expect(String.fromCharCodes(bytes.take(4)), 'wOF2');
+      // The shell declares and uses it, served locally (no CDN).
+      expect(serveMonoFontPath, '/fleury-mono.woff2');
+      expect(serveIndexHtml, contains('@font-face'));
+      expect(serveIndexHtml, contains('FleuryMono'));
+      expect(serveIndexHtml, contains(serveMonoFontPath));
     });
 
     test('uses deterministic terminal font shaping', () {

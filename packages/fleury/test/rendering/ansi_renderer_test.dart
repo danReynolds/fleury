@@ -262,6 +262,69 @@ void main() {
   });
 
   group('renderDiff — scroll-up row shifts', () {
+    test('scrolls when the caller states the shift alongside exact bounds', () {
+      // The production shape. Callers now supply exact dirtyBounds, and the
+      // renderer used to reach scroll detection ONLY on the unbounded path — so
+      // supplying bounds silently disabled ESC[S and every scroll frame paid
+      // full row rewrites. The existing tests missed it because they all pass a
+      // null dirtyBounds.
+      final prev = CellBuffer(const CellSize(4, 4));
+      final next = CellBuffer(const CellSize(4, 4));
+      for (final (row, text) in [
+        (0, 'aaaa'),
+        (1, 'bbbb'),
+        (2, 'cccc'),
+        (3, 'dddd'),
+      ]) {
+        prev.writeText(CellOffset(0, row), text);
+      }
+      for (final (row, text) in [
+        (0, 'bbbb'),
+        (1, 'cccc'),
+        (2, 'dddd'),
+        (3, 'eeee'),
+      ]) {
+        next.writeText(CellOffset(0, row), text);
+      }
+
+      final bounded = StringAnsiSink();
+      const AnsiRenderer().renderDiff(
+        prev,
+        next,
+        bounded,
+        dirtyBounds: next.diffAgainst(prev).bounds,
+        scrollUpRows: 1,
+      );
+
+      expect(
+        bounded.output,
+        contains('\x1B[S'),
+        reason: 'a stated shift must reach the scroll path even when bounded',
+      );
+
+      // And it must still be cheaper than rewriting the rows.
+      final rewritten = StringAnsiSink();
+      const AnsiRenderer().renderDiff(
+        prev,
+        next,
+        rewritten,
+        dirtyBounds: next.diffAgainst(prev).bounds,
+      );
+      expect(bounded.output.length, lessThan(rewritten.output.length));
+    });
+
+    test('states nothing to do without scanning the screen', () {
+      final prev = CellBuffer(const CellSize(4, 4));
+      final next = CellBuffer(const CellSize(4, 4));
+      prev.writeText(const CellOffset(0, 0), 'aaaa');
+      next.writeText(const CellOffset(0, 0), 'aaaa');
+
+      final sink = StringAnsiSink();
+      const AnsiRenderer().renderDiff(prev, next, sink, hasChanges: false);
+
+      expect(sink.output, isEmpty);
+    });
+
     test('uses terminal scroll for whole-screen upward row shifts', () {
       final prev = CellBuffer(const CellSize(4, 4));
       final next = CellBuffer(const CellSize(4, 4));

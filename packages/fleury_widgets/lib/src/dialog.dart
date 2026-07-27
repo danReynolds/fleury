@@ -56,7 +56,13 @@ class Dialog extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(t, style: titleStyle ?? theme.focusedStyle),
+              // Dialog title is chrome, not selectable text; the child stays
+              // selectable.
+              Text(
+                t,
+                allowSelect: false,
+                style: titleStyle ?? theme.focusedStyle,
+              ),
               const SizedBox(height: 1),
               child,
             ],

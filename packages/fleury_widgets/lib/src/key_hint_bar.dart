@@ -85,10 +85,13 @@ class KeyHintBar extends StatelessWidget {
     final resolvedKeyStyle =
         keyStyle ??
         style.merge(CellStyle(foreground: context.colors.focus, bold: true));
-    return LayoutBuilder(
-      builder: (context, constraints) => _styledBar(
-        _fit(segments, total, constraints.maxCols),
-        resolvedKeyStyle,
+    // Styled chrome, not selectable text.
+    return SelectionArea.disabled(
+      child: LayoutBuilder(
+        builder: (context, constraints) => _styledBar(
+          _fit(segments, total, constraints.maxCols),
+          resolvedKeyStyle,
+        ),
       ),
     );
   }

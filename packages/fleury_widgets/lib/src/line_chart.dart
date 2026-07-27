@@ -1,6 +1,8 @@
 import 'package:fleury/fleury_core.dart';
 
-import 'braille.dart';
+import 'canvas.dart';
+import 'glyphs.dart';
+import 'sub_cell_buffer.dart';
 
 // =====================================================================
 // Palettes
@@ -177,6 +179,7 @@ class LineSeries {
     this.type = LineType.line,
     this.thresholdY,
     this.belowColor,
+    this.gradient,
   });
 
   /// Points in logical (data) space. For [LineType.line] and [LineType.area]
@@ -192,6 +195,17 @@ class LineSeries {
   /// crossing point. [belowColor] falls back to [color] if null.
   final num? thresholdY;
   final Color? belowColor;
+
+  /// Optional vertical color gradient for a [LineType.area] series, given as
+  /// stops ordered **bottom → top** of the plot. When set, the area is
+  /// painted as a *solid, gradient-shaded* fill — the "premium" filled-graph
+  /// look (à la btop) — using block-element columns rather than a stippled
+  /// braille wash, so it reads as a continuous region on every surface.
+  ///
+  /// A single-stop list is a flat solid fill. When a gradient is set, [color]
+  /// and [thresholdY] are ignored for that series (the gradient owns the
+  /// coloring). Ignored entirely for [LineType.line] and [LineType.scatter].
+  final List<Color>? gradient;
 }
 
 // =====================================================================
@@ -228,6 +242,8 @@ class LineChart extends StatefulWidget {
     this.showLegend = false,
     this.yTickCount = 3,
     this.palette,
+    this.marker = CanvasMarker.braille,
+    this.strokeWidth,
     this.xTickFormat,
     this.yTickFormat,
     this.references = const [],
@@ -274,6 +290,22 @@ class LineChart extends StatefulWidget {
   /// explicitly. Defaults to a palette derived from the theme's color
   /// scheme (primary, info, warning, success, error).
   final List<Color>? palette;
+
+  /// Sub-cell rendering tier for the plotted line/scatter (not the gradient
+  /// area fill, which always uses solid block columns). Defaults to
+  /// [CanvasMarker.braille] — highest resolution and universal font support,
+  /// but stippled. For a solid, gap-free line prefer [CanvasMarker.octant]
+  /// (crispest, needs a Unicode-16 font or a kitty/Ghostty terminal),
+  /// [CanvasMarker.sextant] (widely supported solid), or
+  /// [CanvasMarker.quadrant]/[CanvasMarker.halfBlock] (universal, coarser).
+  final CanvasMarker marker;
+
+  /// Line thickness in sub-cell pixels (default `1` — a crisp hairline).
+  /// A higher value (`2`, …) draws the line thicker, which makes a stippled
+  /// [CanvasMarker.braille] line read as a solid band in sparse mono fonts
+  /// (dense fonts and the solid markers don't need it). Does not affect
+  /// scatter points.
+  final int? strokeWidth;
 
   /// Formatter for x-axis tick labels and the crosshair tooltip x value.
   /// Defaults to [TickFormat.number].
@@ -424,6 +456,9 @@ class _LineChartState extends State<LineChart> {
       yTickFormat: widget.yTickFormat ?? TickFormat.number,
       references: widget.references,
       cursorX: cursorX,
+      marker: widget.marker,
+      strokeWidth: widget.strokeWidth,
+      glyphTier: MediaQuery.glyphTierOf(context),
     );
 
     final semantic = Semantics(
@@ -496,8 +531,15 @@ SemanticState _lineChartSemanticState({
   final safeCursorIndex = cursorXs.isEmpty
       ? 0
       : cursorIndex.clamp(0, cursorXs.length - 1);
+  // Describe what is actually rendered rather than which widget wrapped it:
+  // a chart whose every series is filled IS an area chart, and AreaChart
+  // reaches this code by delegating to LineChart.
+  final chartType =
+      series.isNotEmpty && series.every((s) => s.type == LineType.area)
+      ? 'area'
+      : 'line';
   return SemanticState({
-    'chartType': 'line',
+    'chartType': chartType,
     'chartSeriesCount': series.length,
     'chartPointCount': pointCount,
     'chartXMin': xMin,
@@ -561,6 +603,9 @@ class _RawLineChart extends LeafRenderObjectWidget {
     required this.yTickFormat,
     required this.references,
     required this.cursorX,
+    required this.marker,
+    required this.strokeWidth,
+    required this.glyphTier,
   });
 
   final List<LineSeries> series;
@@ -578,6 +623,9 @@ class _RawLineChart extends LeafRenderObjectWidget {
   final TickFormatter yTickFormat;
   final List<ReferenceLine> references;
   final num? cursorX;
+  final CanvasMarker marker;
+  final int? strokeWidth;
+  final GlyphTier glyphTier;
 
   @override
   RenderObject createRenderObject(BuildContext context) => RenderLineChart(
@@ -596,6 +644,9 @@ class _RawLineChart extends LeafRenderObjectWidget {
     yTickFormat: yTickFormat,
     references: references,
     cursorX: cursorX,
+    marker: marker,
+    strokeWidth: strokeWidth,
+    glyphTier: glyphTier,
   );
 
   @override
@@ -618,7 +669,10 @@ class _RawLineChart extends LeafRenderObjectWidget {
       ..xTickFormat = xTickFormat
       ..yTickFormat = yTickFormat
       ..references = references
-      ..cursorX = cursorX;
+      ..cursorX = cursorX
+      ..marker = marker
+      ..strokeWidth = strokeWidth
+      ..glyphTier = glyphTier;
   }
 }
 
@@ -640,6 +694,9 @@ class RenderLineChart extends RenderObject {
     required TickFormatter yTickFormat,
     required List<ReferenceLine> references,
     required num? cursorX,
+    required CanvasMarker marker,
+    required int? strokeWidth,
+    required GlyphTier glyphTier,
   }) : _series = series,
        _xRange = xRange,
        _yRange = yRange,
@@ -654,7 +711,10 @@ class RenderLineChart extends RenderObject {
        _xTickFormat = xTickFormat,
        _yTickFormat = yTickFormat,
        _references = references,
-       _cursorX = cursorX;
+       _cursorX = cursorX,
+       _marker = marker,
+       _strokeWidth = strokeWidth,
+       _glyphTier = glyphTier;
 
   List<LineSeries> _series;
   set series(List<LineSeries> v) {
@@ -761,6 +821,27 @@ class RenderLineChart extends RenderObject {
     markNeedsPaintOnly();
   }
 
+  CanvasMarker _marker;
+  set marker(CanvasMarker v) {
+    if (_marker == v) return;
+    _marker = v;
+    markNeedsPaintOnly();
+  }
+
+  int? _strokeWidth;
+  set strokeWidth(int? v) {
+    if (_strokeWidth == v) return;
+    _strokeWidth = v;
+    markNeedsPaintOnly();
+  }
+
+  GlyphTier _glyphTier;
+  set glyphTier(GlyphTier v) {
+    if (_glyphTier == v) return;
+    _glyphTier = v;
+    markNeedsPaintOnly();
+  }
+
   @override
   CellSize performLayout(CellConstraints constraints) {
     final cols = constraints.hasBoundedWidth ? constraints.maxCols! : 40;
@@ -802,7 +883,12 @@ class RenderLineChart extends RenderObject {
       xmax = xmin + 1;
     }
     if (ymax == ymin) {
-      ymax = ymin + 1;
+      // Pad symmetrically so a constant series sits mid-plot. Padding only
+      // upward pins it to the baseline, where an area fill has zero height and
+      // renders completely blank — the chart's own autoscale would be what
+      // made the data invisible.
+      ymin -= 0.5;
+      ymax += 0.5;
     }
 
     // Grid first, so braille paints over it where they overlap.
@@ -810,12 +896,35 @@ class RenderLineChart extends RenderObject {
       _paintGrid(buffer, offset, plotLeft, plotCols, plotRows);
     }
 
-    final braille = BrailleBuffer(plotCols, plotRows);
-    final pxW = braille.pixelWidth;
-    final pxH = braille.pixelHeight;
+    // Gradient-filled area series render as solid, gradient-shaded block
+    // columns behind the reference lines, cursor, and other series — the
+    // "filled graph" look. Painted just after the grid so everything else
+    // draws on top.
+    for (final s in _series) {
+      final grad = s.gradient;
+      if (grad != null && grad.isNotEmpty && s.type == LineType.area) {
+        _paintGradientArea(
+          buffer,
+          offset,
+          s,
+          grad,
+          plotLeft,
+          plotCols,
+          plotRows,
+          xmin,
+          xmax,
+          ymin,
+          ymax,
+        );
+      }
+    }
+
+    final plot = subCellBufferFor(_marker, plotCols, plotRows);
+    final pxW = plot.pixelWidth;
+    final pxH = plot.pixelHeight;
 
     // Convert logical coordinates to pixel space. Non-finite inputs are
-    // clipped to a sentinel that BrailleBuffer ignores (out-of-bounds).
+    // clipped to a sentinel the buffer ignores (out-of-bounds).
     int toPx(num x) {
       final d = x.toDouble();
       if (!d.isFinite) return -1;
@@ -878,7 +987,12 @@ class RenderLineChart extends RenderObject {
     final resolvedColors = <Color>[];
     var autoIdx = 0;
     for (final s in _series) {
-      if (s.color != null) {
+      final grad = s.gradient;
+      if (grad != null && grad.isNotEmpty) {
+        // A gradient owns the series color; the legend bullet uses its top
+        // stop and it doesn't consume a palette slot.
+        resolvedColors.add(grad.last);
+      } else if (s.color != null) {
         resolvedColors.add(s.color!);
       } else if (_palette.isEmpty) {
         resolvedColors.add(_defaultColor);
@@ -889,6 +1003,12 @@ class RenderLineChart extends RenderObject {
 
     for (var sIdx = 0; sIdx < _series.length; sIdx++) {
       final s = _series[sIdx];
+      // Gradient area series are already painted as solid block columns.
+      if (s.gradient != null &&
+          s.gradient!.isNotEmpty &&
+          s.type == LineType.area) {
+        continue;
+      }
       final above = resolvedColors[sIdx];
       final below = s.belowColor ?? above;
       final ty = s.thresholdY;
@@ -899,7 +1019,7 @@ class RenderLineChart extends RenderObject {
           final color = (ty != null && y.toDouble() < ty.toDouble())
               ? below
               : above;
-          braille.setPixel(toPx(x), toPy(y), color);
+          plot.setPixel(toPx(x), toPy(y), color);
         }
         continue;
       }
@@ -909,7 +1029,7 @@ class RenderLineChart extends RenderObject {
         final color = (ty != null && y.toDouble() < ty.toDouble())
             ? below
             : above;
-        braille.setPixel(toPx(x), toPy(y), color);
+        plot.setPixel(toPx(x), toPy(y), color);
         continue;
       }
 
@@ -917,7 +1037,7 @@ class RenderLineChart extends RenderObject {
         final (x0, y0) = s.points[i - 1];
         final (x1, y1) = s.points[i];
         _drawSegment(
-          braille,
+          plot,
           toPx,
           toPy,
           clip,
@@ -934,10 +1054,11 @@ class RenderLineChart extends RenderObject {
       }
     }
 
-    braille.writeTo(
+    plot.writeTo(
       buffer,
       CellOffset(offset.col + plotLeft, offset.row),
       CellStyle(foreground: _defaultColor),
+      glyphTier: _glyphTier,
     );
 
     // Reference labels paint on top of the data so they stay readable
@@ -985,7 +1106,7 @@ class RenderLineChart extends RenderObject {
   /// and the endpoints straddle it. Area fill is performed per sub-segment
   /// using the same color logic.
   void _drawSegment(
-    BrailleBuffer braille,
+    SubCellBuffer plot,
     int Function(num) toPx,
     int Function(num) toPy,
     _SegmentClip clip,
@@ -1006,7 +1127,7 @@ class RenderLineChart extends RenderObject {
       // No threshold, or both endpoints on the same side of it.
       final color = (ty != null && y0 < ty) ? below : above;
       _drawSegmentSolid(
-        braille,
+        plot,
         toPx,
         toPy,
         clip,
@@ -1028,7 +1149,7 @@ class RenderLineChart extends RenderObject {
     final c0 = y0 < ty ? below : above;
     final c1 = y1 < ty ? below : above;
     _drawSegmentSolid(
-      braille,
+      plot,
       toPx,
       toPy,
       clip,
@@ -1041,7 +1162,7 @@ class RenderLineChart extends RenderObject {
       fillArea,
     );
     _drawSegmentSolid(
-      braille,
+      plot,
       toPx,
       toPy,
       clip,
@@ -1056,7 +1177,7 @@ class RenderLineChart extends RenderObject {
   }
 
   void _drawSegmentSolid(
-    BrailleBuffer braille,
+    SubCellBuffer plot,
     int Function(num) toPx,
     int Function(num) toPy,
     _SegmentClip clip,
@@ -1083,7 +1204,19 @@ class RenderLineChart extends RenderObject {
     final (cx0, cy0, cx1, cy1) = clipped;
     final px0 = toPx(cx0), py0 = toPy(cy0);
     final px1 = toPx(cx1), py1 = toPy(cy1);
-    braille.drawLine(px0, py0, px1, py1, color);
+    plot.drawLine(px0, py0, px1, py1, color);
+    // Line weight (default 1px). A higher [strokeWidth] draws extra passes
+    // offset perpendicular to the segment's dominant axis, so a stippled
+    // braille line fills its cells into a solid band — handy in sparse fonts.
+    final width = _strokeWidth ?? 1;
+    final steep = (py1 - py0).abs() > (px1 - px0).abs();
+    for (var o = 1; o < width; o++) {
+      if (steep) {
+        plot.drawLine(px0 + o, py0, px1 + o, py1, color);
+      } else {
+        plot.drawLine(px0, py0 + o, px1, py1 + o, color);
+      }
+    }
 
     if (!fillArea) return;
     final (a, b) = px0 <= px1
@@ -1093,17 +1226,119 @@ class RenderLineChart extends RenderObject {
     if (dx == 0) {
       final top = py0 < py1 ? py0 : py1;
       for (var py = top; py <= baselinePy; py++) {
-        braille.setPixel(a.$1, py, color);
+        plot.setPixel(a.$1, py, color);
       }
     } else {
       for (var px = a.$1; px <= b.$1; px++) {
         final t = (px - a.$1) / dx;
         final py = (a.$2 + t * (b.$2 - a.$2)).round();
         for (var fillPy = py; fillPy <= baselinePy; fillPy++) {
-          braille.setPixel(px, fillPy, color);
+          plot.setPixel(px, fillPy, color);
         }
       }
     }
+  }
+
+  /// Paints a [LineType.area] series that has a [gradient] as solid, gradient-
+  /// shaded block columns. For each plot column the series value is sampled at
+  /// the column center, the column is filled from the y-min baseline up to
+  /// that height using the `▁▂▃▄▅▆▇█` ramp (a smooth top edge), and every cell
+  /// is colored by its vertical position through [gradient] — stop 0 at the
+  /// baseline, the last stop at the top. Reads as a continuous filled region
+  /// on every surface, with no braille stipple.
+  void _paintGradientArea(
+    CellBuffer buffer,
+    CellOffset offset,
+    LineSeries s,
+    List<Color> gradient,
+    int plotLeft,
+    int plotCols,
+    int plotRows,
+    double xmin,
+    double xmax,
+    double ymin,
+    double ymax,
+  ) {
+    if (plotCols <= 0 || plotRows <= 0) return;
+    final span = ymax - ymin;
+    if (span <= 0) return;
+    final xspan = xmax - xmin;
+    final totalEighths = plotRows * 8;
+    // A one-point series spans no segment for _sampleSeriesY to interpolate
+    // across, so fill just the column holding it — the area counterpart of the
+    // dot LineChart draws for a lone point.
+    var soloColumn = -1;
+    double? soloY;
+    if (s.points.length == 1) {
+      final (soloX, soloValue) = s.points.first;
+      final x = soloX.toDouble();
+      final value = soloValue.toDouble();
+      if (!x.isFinite || !value.isFinite || x < xmin || x > xmax) return;
+      soloY = value;
+      soloColumn = xspan <= 0
+          ? 0
+          : (((x - xmin) / xspan) * plotCols).floor().clamp(0, plotCols - 1);
+    }
+    for (var c = 0; c < plotCols; c++) {
+      final double? y;
+      final solo = soloY;
+      if (solo != null) {
+        if (c != soloColumn) continue;
+        y = solo;
+      } else {
+        // Sample the series at the horizontal center of this column.
+        final xAt = xmin + (plotCols == 1 ? 0.5 : (c + 0.5) / plotCols) * xspan;
+        y = _sampleSeriesY(s.points, xAt);
+      }
+      if (y == null || !y.isFinite) continue;
+      final hEighths = (((y - ymin) / span).clamp(0.0, 1.0) * totalEighths)
+          .round();
+      if (hEighths <= 0) continue;
+      for (var r = 0; r < plotRows; r++) {
+        final rowFromBottom = plotRows - 1 - r;
+        final cellEighths = (hEighths - rowFromBottom * 8).clamp(0, 8);
+        if (cellEighths <= 0) continue;
+        final glyph = verticalLevelGlyph(_glyphTier, cellEighths);
+        if (glyph.isEmpty) continue;
+        final vpos = plotRows == 1 ? 0.0 : rowFromBottom / (plotRows - 1);
+        buffer.writeGrapheme(
+          CellOffset(offset.col + plotLeft + c, offset.row + r),
+          glyph,
+          style: CellStyle(foreground: _gradientAt(gradient, vpos)),
+        );
+      }
+    }
+  }
+
+  /// Linear interpolation of a series' y at logical [x], scanning segments in
+  /// point order. Returns null when [x] lies outside every segment, or the
+  /// containing segment touches missing data (a non-finite endpoint) — so the
+  /// gradient fill breaks at the same gaps the line does.
+  static double? _sampleSeriesY(List<(num, num)> pts, double x) {
+    for (var i = 1; i < pts.length; i++) {
+      final x0 = pts[i - 1].$1.toDouble();
+      final x1 = pts[i].$1.toDouble();
+      final lo = x0 < x1 ? x0 : x1;
+      final hi = x0 < x1 ? x1 : x0;
+      if (x < lo || x > hi) continue;
+      final y0 = pts[i - 1].$2.toDouble();
+      final y1 = pts[i].$2.toDouble();
+      if (!x0.isFinite || !x1.isFinite || !y0.isFinite || !y1.isFinite) {
+        return null;
+      }
+      if (x1 == x0) return y1;
+      return y0 + (x - x0) / (x1 - x0) * (y1 - y0);
+    }
+    return null;
+  }
+
+  /// Samples [stops] (ordered) at [t] in `0..1` with linear RGB interpolation.
+  static Color _gradientAt(List<Color> stops, double t) {
+    if (stops.length == 1) return stops.first;
+    final n = stops.length - 1;
+    final scaled = t.clamp(0.0, 1.0) * n;
+    final i = scaled.floor().clamp(0, n - 1);
+    return stops[i].toRgb().mix(stops[i + 1].toRgb(), scaled - i);
   }
 
   /// Faint dotted gridlines at the min/mid/max ticks on each axis — so
