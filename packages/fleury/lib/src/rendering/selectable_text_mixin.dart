@@ -17,7 +17,7 @@
 // The host provides:
 //   - [selectionBounds]   — paint-time CellRect (null when unpainted)
 //   - [selectionLines]    — flat text per visually-laid-out line
-//   - [selectionWidthResolver] / [selectionProfile] — for grapheme widths
+//   - [selectionWidthResolver] / [selectionPolicy] — for grapheme widths
 //
 // Concrete classes still need `with ChangeNotifier, SelectionRegistrant`
 // to get the registration machinery; the mixin only handles the
@@ -94,8 +94,8 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
   /// screen columns to character offsets.
   WidthResolver get selectionWidthResolver;
 
-  /// Terminal profile passed to [selectionWidthResolver].
-  CellWidthPolicy get selectionProfile;
+  /// Terminal policy passed to [selectionWidthResolver].
+  CellWidthPolicy get selectionPolicy;
 
   /// Subclass hook: notify the framework that listener-attached
   /// observers should run. Hosts mixing in `ChangeNotifier` already
@@ -245,7 +245,7 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
       for (final grapheme in lines[localRow].characters) {
         final w = selectionWidthResolver.widthOfGrapheme(
           grapheme,
-          selectionProfile,
+          selectionPolicy,
         );
         if (targetCol < col + w) {
           return CellOffset(col, newRow);
@@ -273,7 +273,7 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
       for (final grapheme in line.characters) {
         final w = selectionWidthResolver.widthOfGrapheme(
           grapheme,
-          selectionProfile,
+          selectionPolicy,
         );
         if (from.col < col + w) {
           final nextCol = col + w;
@@ -297,7 +297,7 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
       for (final grapheme in line.characters) {
         final w = selectionWidthResolver.widthOfGrapheme(
           grapheme,
-          selectionProfile,
+          selectionPolicy,
         );
         if (from.col < col + w) {
           if (previousStart != null) {
@@ -332,7 +332,7 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
     int? lastStart;
     for (final grapheme in lines[localRow].characters) {
       lastStart = col;
-      col += selectionWidthResolver.widthOfGrapheme(grapheme, selectionProfile);
+      col += selectionWidthResolver.widthOfGrapheme(grapheme, selectionPolicy);
     }
     return lastStart == null
         ? CellOffset(bounds.offset.col, bounds.offset.row + localRow)
@@ -526,7 +526,7 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
     for (final grapheme in lines[localRow].characters) {
       final w = selectionWidthResolver.widthOfGrapheme(
         grapheme,
-        selectionProfile,
+        selectionPolicy,
       );
       if (point.col < col + w) return TextEdgeRelation.inside(off);
       col += w;

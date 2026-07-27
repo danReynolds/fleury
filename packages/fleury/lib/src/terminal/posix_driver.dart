@@ -305,7 +305,17 @@ class PosixTerminalDriver
     final withWidth = width == null
         ? merged
         : merged.copyWith(ambiguousCharWidth: width);
-    return withWidth.copyWith(measuredWidths: _measuredGlyphWidths);
+    return withWidth.copyWith(
+      measuredWidths: _measuredGlyphWidths,
+      // Fold measurements + FLEURY_* overrides into the one derived policy
+      // every geometry consumer shares (RFC 0019 §6.2). Same inputs as the
+      // ambiguousCharWidth resolution above, so the renderer's pin gate and
+      // the layout policy can never disagree about the evidence.
+      textPolicy: deriveTextPresentationPolicy(
+        measurements: _measuredGlyphWidths,
+        environment: environment,
+      ),
+    );
   }
 
   @override

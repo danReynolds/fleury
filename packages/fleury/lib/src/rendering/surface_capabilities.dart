@@ -11,6 +11,8 @@
 
 import 'package:meta/meta.dart';
 
+import 'width_policy.dart';
+
 /// Maximum color fidelity the surface can render.
 ///
 /// Terminals detect this at startup from `$COLORTERM`/`$TERM`; browser
@@ -61,6 +63,7 @@ final class SurfaceCapabilities {
     this.images = InlineImageSupport.none,
     this.hyperlinks = false,
     this.pointer = PointerPrecision.cell,
+    this.textPolicy = TextPresentationPolicy.spec,
   });
 
   final ColorMode colorMode;
@@ -72,12 +75,20 @@ final class SurfaceCapabilities {
 
   final PointerPrecision pointer;
 
+  /// The one effective width/lowering policy for text on this surface
+  /// (RFC 0019 §6.2) — operational values only; provenance stays terminal-side
+  /// so surface equality (and everything keyed on it) never sees diagnostics.
+  /// Serve/web report the spec policy: the browser client draws the model's
+  /// own cell grid, so it agrees with the model by construction.
+  final TextPresentationPolicy textPolicy;
+
   SurfaceCapabilities copyWith({
     ColorMode? colorMode,
     GlyphTier? glyphTier,
     InlineImageSupport? images,
     bool? hyperlinks,
     PointerPrecision? pointer,
+    TextPresentationPolicy? textPolicy,
   }) {
     return SurfaceCapabilities(
       colorMode: colorMode ?? this.colorMode,
@@ -85,6 +96,7 @@ final class SurfaceCapabilities {
       images: images ?? this.images,
       hyperlinks: hyperlinks ?? this.hyperlinks,
       pointer: pointer ?? this.pointer,
+      textPolicy: textPolicy ?? this.textPolicy,
     );
   }
 
@@ -95,12 +107,19 @@ final class SurfaceCapabilities {
         other.glyphTier == glyphTier &&
         other.images == images &&
         other.hyperlinks == hyperlinks &&
-        other.pointer == pointer;
+        other.pointer == pointer &&
+        other.textPolicy == textPolicy;
   }
 
   @override
-  int get hashCode =>
-      Object.hash(colorMode, glyphTier, images, hyperlinks, pointer);
+  int get hashCode => Object.hash(
+    colorMode,
+    glyphTier,
+    images,
+    hyperlinks,
+    pointer,
+    textPolicy,
+  );
 }
 
 /// Implemented by drivers whose surface capabilities come from somewhere

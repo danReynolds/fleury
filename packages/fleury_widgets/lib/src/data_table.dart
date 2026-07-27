@@ -1148,6 +1148,7 @@ class _DataTableRenderWidget extends LeafRenderObjectWidget {
   @override
   RenderObject createRenderObject(BuildContext context) {
     return RenderDataTable(
+      policy: MediaQuery.textPolicyOf(context).widths,
       rowCount: rowCount,
       columns: columns,
       cellBuilder: cellBuilder,
@@ -1168,6 +1169,7 @@ class _DataTableRenderWidget extends LeafRenderObjectWidget {
     covariant RenderDataTable renderObject,
   ) {
     renderObject
+      ..policy = MediaQuery.textPolicyOf(context).widths
       ..rowCount = rowCount
       ..columns = columns
       ..cellBuilder = cellBuilder
@@ -1427,6 +1429,7 @@ class _DataTableElement extends LeafRenderObjectElement
 
 class RenderDataTable extends RenderObject {
   RenderDataTable({
+    CellWidthPolicy policy = CellWidthPolicy.spec,
     required int rowCount,
     required List<DataTableColumn> columns,
     required DataTableCellBuilder cellBuilder,
@@ -1448,10 +1451,20 @@ class RenderDataTable extends RenderObject {
        _headerSeparator = headerSeparator,
        _separatorStyle = separatorStyle,
        _selectedStyle = selectedStyle,
-       _onViewport = onViewport;
+       _onViewport = onViewport,
+       _policy = policy;
 
   static const _widthResolver = DefaultWidthResolver();
-  static const _profile = CellWidthPolicy.spec;
+
+  /// The surface's width policy — ambient, passed in by the widget so column
+  /// measurement agrees with every other geometry consumer (RFC 0019 §6.3).
+  CellWidthPolicy _policy;
+
+  set policy(CellWidthPolicy value) {
+    if (_policy == value) return;
+    _policy = value;
+    markNeedsLayout();
+  }
 
   int _rowCount;
   List<DataTableColumn> _columns;
@@ -1614,7 +1627,7 @@ class RenderDataTable extends RenderObject {
 
   int _titleWidth(String text) {
     final sanitized = sanitizeForDisplay(text);
-    final width = _widthResolver.widthOfText(sanitized, _profile);
+    final width = _widthResolver.widthOfText(sanitized, _policy);
     return width < 1 ? 1 : width;
   }
 
@@ -1754,7 +1767,7 @@ class RenderDataTable extends RenderObject {
       clipped,
       style: style,
       widthResolver: _widthResolver,
-      profile: _profile,
+      policy: _policy,
     );
   }
 
@@ -1767,7 +1780,7 @@ class RenderDataTable extends RenderObject {
     var used = 0;
     final out = StringBuffer();
     for (final grapheme in sanitized.characters) {
-      final next = _widthResolver.widthOfGrapheme(grapheme, _profile);
+      final next = _widthResolver.widthOfGrapheme(grapheme, _policy);
       if (next <= 0) continue;
       if (used + next > width) break;
       out.write(grapheme);

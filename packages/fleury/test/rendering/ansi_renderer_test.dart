@@ -1119,5 +1119,22 @@ void main() {
       // Unchanged behaviour on the legacy/CJK path.
       expect(moves(render('────', ambiguousWide: true)), greaterThan(1));
     });
+
+    test('unknown ambiguous keeps the pin engaged for α (RFC 0019 §6.3)', () {
+      // The §6.1 disagreement fixture (─=1, α=2, °=2) derives the ambiguous
+      // axis `unknown`: layout stays narrow AND ambiguousCharsAreWide keeps
+      // its conservative `true` — which is the state this renderer test
+      // encodes. α is NOT in hasUncertainWidth (it is probed-class chrome,
+      // exempt from the unconditional pin), so ONLY the ambiguous arm covers
+      // it: with the arm engaged, a terminal drawing α two cells wide cannot
+      // shift the text written after it, end to end through the diff.
+      expect(
+        moves(render('αabc', ambiguousWide: true)),
+        greaterThan(1),
+        reason: 'the cell after α must be re-pinned to an absolute column',
+      );
+      // And the evidenced-narrow state (probe agreement) emits compactly.
+      expect(moves(render('αabc', ambiguousWide: false)), 1);
+    });
   });
 }

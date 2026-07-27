@@ -57,6 +57,7 @@ final class TerminalCapabilities {
     this.ambiguousCharWidth = AmbiguousCharWidth.wide,
     this.hyperlinks = false,
     this.measuredWidths = const WidthMeasurements.empty(),
+    this.textPolicy = const ResolvedTextPresentationPolicy(),
   });
 
   /// Conservative default for unknown terminals: 16-color ANSI, alt
@@ -94,6 +95,13 @@ final class TerminalCapabilities {
   /// All-null when the terminal doesn't answer CPR, or the probe was skipped.
   final WidthMeasurements measuredWidths;
 
+  /// The derived width/lowering policy for this terminal, with per-axis
+  /// provenance (RFC 0019 §6.2). Defaults to the spec policy, unevidenced;
+  /// the POSIX driver replaces it after the startup probe, and
+  /// [detectTerminalCapabilitiesFromEnvironment] folds `FLEURY_*` overrides
+  /// in for every driver.
+  final ResolvedTextPresentationPolicy textPolicy;
+
   /// Whether OSC 8 hyperlinks are supported and safe to emit here. Detected
   /// from the environment and SUPPRESSED under tmux (see
   /// [detectHyperlinksFromEnvironment]); default false for unknown terminals.
@@ -110,6 +118,7 @@ final class TerminalCapabilities {
     bool? tmuxPassthrough,
     AmbiguousCharWidth? ambiguousCharWidth,
     WidthMeasurements? measuredWidths,
+    ResolvedTextPresentationPolicy? textPolicy,
     bool? hyperlinks,
   }) => TerminalCapabilities(
     colorMode: colorMode ?? this.colorMode,
@@ -121,6 +130,7 @@ final class TerminalCapabilities {
     tmuxPassthrough: tmuxPassthrough ?? this.tmuxPassthrough,
     ambiguousCharWidth: ambiguousCharWidth ?? this.ambiguousCharWidth,
     measuredWidths: measuredWidths ?? this.measuredWidths,
+    textPolicy: textPolicy ?? this.textPolicy,
     hyperlinks: hyperlinks ?? this.hyperlinks,
   );
 
@@ -159,6 +169,7 @@ TerminalCapabilities detectTerminalCapabilitiesFromEnvironment(
     ambiguousCharWidth:
         detectAmbiguousCharWidthFromEnvironment(environment) ??
         AmbiguousCharWidth.wide,
+    textPolicy: deriveTextPresentationPolicy(environment: environment),
     hyperlinks: detectHyperlinksFromEnvironment(environment),
   );
 }
@@ -661,6 +672,7 @@ extension TerminalSurfaceCapabilities on TerminalCapabilities {
           : InlineImageSupport.placements,
       hyperlinks: hyperlinks,
       pointer: PointerPrecision.cell,
+      textPolicy: textPolicy.policy,
     );
   }
 }

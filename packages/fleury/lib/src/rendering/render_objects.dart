@@ -66,7 +66,7 @@ class RenderText extends RenderObject
     TextOverflow overflow = TextOverflow.clip,
     TextAlign textAlign = TextAlign.left,
     WidthResolver widthResolver = const DefaultWidthResolver(),
-    CellWidthPolicy profile = CellWidthPolicy.spec,
+    CellWidthPolicy policy = CellWidthPolicy.spec,
   }) : _text = _sanitizePreservingNewlines(text),
        _style = style,
        _softWrap = softWrap,
@@ -74,7 +74,7 @@ class RenderText extends RenderObject
        _overflow = overflow,
        _textAlign = textAlign,
        _widthResolver = widthResolver,
-       _profile = profile {
+       _policy = policy {
     _recomputeIntrinsicWidth();
   }
 
@@ -94,7 +94,7 @@ class RenderText extends RenderObject
   TextOverflow _overflow;
   TextAlign _textAlign;
   WidthResolver _widthResolver;
-  CellWidthPolicy _profile;
+  CellWidthPolicy _policy;
   int _intrinsicWidth = 0;
 
   /// Set during layout when [maxLines] cut off real content, so paint
@@ -110,7 +110,7 @@ class RenderText extends RenderObject
   /// (see `benchmark/widgets_benchmarks.dart`); reusing a cached
   /// result across frames when neither the text nor the constraints
   /// changed eliminates ~80% of the steady-state layout cost. Any
-  /// text / softWrap / width-resolver / profile setter that would
+  /// text / softWrap / width-resolver / policy setter that would
   /// change the wrap output also calls [_invalidateLayoutCache].
   CellConstraints? _cachedConstraints;
   CellSize? _cachedSize;
@@ -190,10 +190,10 @@ class RenderText extends RenderObject
     _invalidateLayoutCache();
   }
 
-  CellWidthPolicy get profile => _profile;
-  set profile(CellWidthPolicy value) {
-    if (_profile == value) return;
-    _profile = value;
+  CellWidthPolicy get policy => _policy;
+  set policy(CellWidthPolicy value) {
+    if (_policy == value) return;
+    _policy = value;
     _recomputeIntrinsicWidth();
     _invalidateLayoutCache();
   }
@@ -209,11 +209,11 @@ class RenderText extends RenderObject
   int _measureIntrinsicWidth(String value) {
     if (value.isEmpty) return 0;
     if (!value.contains('\n')) {
-      return _widthResolver.widthOfText(value, _profile);
+      return _widthResolver.widthOfText(value, _policy);
     }
     var widest = 0;
     for (final line in value.split('\n')) {
-      final w = _widthResolver.widthOfText(line, _profile);
+      final w = _widthResolver.widthOfText(line, _policy);
       if (w > widest) widest = w;
     }
     return widest;
@@ -283,7 +283,7 @@ class RenderText extends RenderObject
 
     var maxLineWidth = 0;
     for (final line in _lines) {
-      final w = _widthResolver.widthOfText(line, _profile);
+      final w = _widthResolver.widthOfText(line, _policy);
       if (w > maxLineWidth) maxLineWidth = w;
     }
     final cols = maxCols == null
@@ -366,7 +366,7 @@ class RenderText extends RenderObject
     var lineStartOffset = 0;
     for (var i = 0; i < visibleRows; i++) {
       final isLastVisible = i == visibleRows - 1;
-      final lineWidth = _widthResolver.widthOfText(_lines[i], _profile);
+      final lineWidth = _widthResolver.widthOfText(_lines[i], _policy);
       final clipped = lineWidth > size.cols;
       final ellipsize =
           _overflow == TextOverflow.ellipsis &&
@@ -410,7 +410,7 @@ class RenderText extends RenderObject
     var col = startCol;
     var off = lineStartOffset;
     for (final grapheme in line.characters) {
-      final w = _widthResolver.widthOfGrapheme(grapheme, _profile);
+      final w = _widthResolver.widthOfGrapheme(grapheme, _policy);
       if (col + w > contentMaxCol) break;
       // Cell style is the painting style merged with a selection
       // highlight (inverse) when this grapheme falls inside the
@@ -423,7 +423,7 @@ class RenderText extends RenderObject
         grapheme,
         style: cellStyle,
         widthResolver: _widthResolver,
-        profile: _profile,
+        policy: _policy,
       );
       col += w;
       off += grapheme.length;
@@ -434,7 +434,7 @@ class RenderText extends RenderObject
         '…',
         style: _style,
         widthResolver: _widthResolver,
-        profile: _profile,
+        policy: _policy,
       );
     }
   }
@@ -476,7 +476,7 @@ class RenderText extends RenderObject
         continue;
       }
 
-      final tokenWidth = _widthResolver.widthOfText(token, _profile);
+      final tokenWidth = _widthResolver.widthOfText(token, _policy);
       final needed = isFirstOnLine ? tokenWidth : 1 + tokenWidth;
 
       if (currentWidth + needed <= maxWidth) {
@@ -503,7 +503,7 @@ class RenderText extends RenderObject
       // Long token — hard-break grapheme-by-grapheme. May leave a
       // partial fragment in `current` for the next token to extend.
       for (final g in token.characters) {
-        final w = _widthResolver.widthOfGrapheme(g, _profile);
+        final w = _widthResolver.widthOfGrapheme(g, _policy);
         if (w == 0) {
           current.write(g);
           continue;
@@ -558,7 +558,7 @@ class RenderText extends RenderObject
   WidthResolver get selectionWidthResolver => _widthResolver;
 
   @override
-  CellWidthPolicy get selectionProfile => _profile;
+  CellWidthPolicy get selectionPolicy => _policy;
 }
 
 // ---------------------------------------------------------------------------
