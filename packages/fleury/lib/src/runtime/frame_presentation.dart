@@ -17,7 +17,6 @@ import 'tui_frame_loop.dart';
 final class FramePresentationPlan {
   const FramePresentationPlan({
     required this.reason,
-    required this.fullRepaint,
     required this.size,
     required this.damage,
     required this.dirtyRowModels,
@@ -28,7 +27,6 @@ final class FramePresentationPlan {
   });
 
   final String reason;
-  final bool fullRepaint;
   final CellSize size;
   final FramePresentationDamage damage;
   final List<RowSpanModel> dirtyRowModels;
@@ -45,6 +43,16 @@ final class FramePresentationPlan {
   /// coverage and diff consumers remain exact.
   final int? scrollUpRows;
 
+  /// Whether the presenter must repaint everything.
+  ///
+  /// Derived from [damage], not stored alongside it. This fact used to live in
+  /// three places at once — here, on [FramePresentationDamage], and again as
+  /// its [FramePresentationDamage.source] — all three set from one decision at
+  /// every construction site. Three copies of one fact is three chances to
+  /// disagree, and the copy on the damage was already dead: written at all
+  /// three sites, read by nothing.
+  bool get fullRepaint => damage.source == FrameDamageSource.fullRepaint;
+
   int get dirtyRowCount => damage.dirtyRows.dirtyRowCount;
 
   int get dirtyCellEstimate => dirtyRowCount * size.cols;
@@ -56,15 +64,22 @@ final class FramePresentationPlan {
 /// Damage data normalized for surface presenters.
 final class FramePresentationDamage {
   const FramePresentationDamage({
-    required this.fullRepaint,
     required this.dirtyBounds,
     required this.dirtyRows,
     required this.source,
   });
 
-  final bool fullRepaint;
+  /// A bound a diffing presenter may restrict itself to, when one is known.
+  ///
+  /// Unlike the loop-level damage this is derived from, null here means "no
+  /// bound available", NOT "nothing changed": the wire carries rows, not
+  /// bounds, so a remote frame arrives with real [dirtyRows] and no bounds at
+  /// all. [dirtyRows] is the authoritative account of what changed.
   final CellRect? dirtyBounds;
   final TuiDirtyRows dirtyRows;
+
+  /// Where this damage came from — and, for [FramePresentationPlan], the one
+  /// stored answer to whether the frame is a full repaint.
   final FrameDamageSource source;
 }
 
@@ -94,7 +109,6 @@ final class FramePresentationPlanner {
     final dirtyRows = dirtyRowsResult.rows;
     final fullRepaint = runtimeDamage is FrameFullRepaint;
     final damage = FramePresentationDamage(
-      fullRepaint: fullRepaint,
       dirtyBounds: runtimeDamage.diffBounds,
       dirtyRows: dirtyRows,
       source: fullRepaint
@@ -121,7 +135,6 @@ final class FramePresentationPlanner {
 
     return FramePresentationPlan(
       reason: reason,
-      fullRepaint: fullRepaint,
       size: frame.next.size,
       damage: damage,
       dirtyRowModels: dirtyRowModels,

@@ -21,10 +21,10 @@ FramePresentationPlan applyRemotePlan(RemotePlan plan, CellBuffer mirror) {
   ];
   return FramePresentationPlan(
     reason: 'remote',
-    fullRepaint: plan.fullRepaint,
     size: mirror.size,
     damage: FramePresentationDamage(
-      fullRepaint: plan.fullRepaint,
+      // The wire carries rows, not bounds — legitimately absent, not "nothing
+      // changed". dirtyRows below is the authoritative set.
       dirtyBounds: null,
       dirtyRows: dirtyRows,
       source: plan.fullRepaint

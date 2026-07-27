@@ -459,10 +459,8 @@ final class WireFrameSource implements BrowserFrameSource {
     const builder = CellSpanBuilder();
     return FramePresentationPlan(
       reason: 'resync',
-      fullRepaint: true,
       size: mirror.size,
       damage: FramePresentationDamage(
-        fullRepaint: true,
         dirtyBounds: null,
         dirtyRows: TuiDirtyRows.full(mirror.size.rows),
         source: FrameDamageSource.fullRepaint,

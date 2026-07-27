@@ -144,10 +144,8 @@ void main() {
       next.writeText(const CellOffset(0, 1), 'changed row');
       final plan = FramePresentationPlan(
         reason: 'test',
-        fullRepaint: false,
         size: const CellSize(40, 10),
         damage: FramePresentationDamage(
-          fullRepaint: false,
           dirtyBounds: null,
           dirtyRows: TuiDirtyRows.fromRows(const [1], rowCount: 10),
           source: FrameDamageSource.paintDamage,
@@ -667,10 +665,8 @@ void main() {
   group('inline image shipping', () {
     FramePresentationPlan fullPlan(CellSize size) => FramePresentationPlan(
       reason: 'test',
-      fullRepaint: true,
       size: size,
       damage: FramePresentationDamage(
-        fullRepaint: true,
         dirtyBounds: null,
         dirtyRows: TuiDirtyRows.full(size.rows),
         source: FrameDamageSource.fullRepaint,
@@ -1448,10 +1444,8 @@ final class _LinkProbe extends StatelessWidget {
 FramePresentationPlan _steadyStatePlan(CellSize size, TuiDirtyRows dirtyRows) =>
     FramePresentationPlan(
       reason: 'test',
-      fullRepaint: false,
       size: size,
       damage: FramePresentationDamage(
-        fullRepaint: false,
         dirtyBounds: null,
         dirtyRows: dirtyRows,
         source: FrameDamageSource.paintDamage,

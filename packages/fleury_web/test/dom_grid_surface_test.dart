@@ -112,10 +112,8 @@ void main() {
         second.next,
         FramePresentationPlan(
           reason: 'wire-scroll',
-          fullRepaint: false,
           size: size,
           damage: FramePresentationDamage(
-            fullRepaint: false,
             dirtyBounds: null,
             dirtyRows: TuiDirtyRows.fromRows(const [0, 1, 2], rowCount: 4),
             source: FrameDamageSource.paintDamage,
