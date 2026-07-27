@@ -142,14 +142,26 @@ Future<String> generateWidthTables({
   final classes = Uint8Buffer(_maxCodePoint);
   _applyCategories(unicodeData, classes);
   _applyEastAsianWidth(eaw, classes);
-  final emojiPresentation = _emojiPresentation(emoji);
   _curate(classes);
 
   final tables = <String, List<int>>{
     'zeroWidthRanges': _rangesFor(classes, _zero),
     'wideRanges': _rangesFor(classes, _wide),
     'ambiguousRanges': _rangesFor(classes, _ambiguous),
-    'emojiPresentationRanges': _coalesce(emojiPresentation),
+    'emojiPresentationRanges': _coalesce(
+      _emojiProperty(emoji, 'Emoji_Presentation'),
+    ),
+    // Sequence-parsing properties (RFC 0019 §6.4). Extended_Pictographic is
+    // what UAX #29 GB11 keys ZWJ-sequence clustering on: a ZWJ-delimited
+    // segment whose base carries it is an emoji sequence component; a ZWJ in
+    // text whose neighbours don't (Arabic, Indic) is shaping-significant and
+    // must never be touched by display lowering.
+    'extendedPictographicRanges': _coalesce(
+      _emojiProperty(emoji, 'Extended_Pictographic'),
+    ),
+    // Skin-tone modifiers attach to the preceding base; a component is split
+    // at ZWJ boundaries only, never between a base and its modifier.
+    'emojiModifierRanges': _coalesce(_emojiProperty(emoji, 'Emoji_Modifier')),
   };
 
   final body = StringBuffer();
@@ -284,10 +296,11 @@ void _applyEastAsianWidth(String eaw, Uint8Buffer classes) {
   }
 }
 
-List<int> _emojiPresentation(String emoji) {
+/// Code points carrying [property] in emoji-data.txt, sorted ascending.
+List<int> _emojiProperty(String emoji, String property) {
   final flags = Uint8Buffer(_maxCodePoint);
   for (final entry in _parseRanges(emoji)) {
-    if (entry.value != 'Emoji_Presentation') continue;
+    if (entry.value != property) continue;
     for (var c = entry.start; c <= entry.end; c++) {
       flags[c] = 1;
     }
