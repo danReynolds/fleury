@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 
 import '../foundation/geometry.dart';
+import '../rendering/width_policy.dart';
 import 'capabilities.dart';
 import 'capability_requirements.dart';
 import 'terminal_probe.dart';
@@ -353,6 +354,7 @@ final class TerminalDiagnosis {
     this.unsupportedFeatures = const <String>[],
     this.activeProbes,
     this.compatibility,
+    this.widthPolicy,
   });
 
   final int schemaVersion;
@@ -365,6 +367,10 @@ final class TerminalDiagnosis {
   final List<String> unsupportedFeatures;
   final TerminalProbeReport? activeProbes;
   final TerminalCompatibilityReport? compatibility;
+
+  /// The derived width policy with per-axis provenance — populated by
+  /// [withMeasuredWidths] (i.e. `diagnose --probe`), null otherwise.
+  final ResolvedTextPresentationPolicy? widthPolicy;
 
   TerminalCapabilities get passiveCapabilities => capabilities.toCapabilities();
 
@@ -401,7 +407,10 @@ final class TerminalDiagnosis {
   /// numbers in the report that come from asking the terminal to actually draw
   /// something and watching where the cursor went, so they are worth carrying
   /// separately from the rest of the snapshot.
-  TerminalDiagnosis withMeasuredWidths(WidthMeasurements measured) {
+  TerminalDiagnosis withMeasuredWidths(
+    WidthMeasurements measured, {
+    Map<String, String> environment = const <String, String>{},
+  }) {
     // A measurement outranks the passive default it was taken to settle. The
     // driver resolves ambiguousCharWidth the same way at startup; without the
     // same derivation here the report contradicted itself, printing
@@ -415,7 +424,7 @@ final class TerminalDiagnosis {
     return TerminalDiagnosis(
       schemaVersion: schemaVersion,
       terminal: terminal,
-      environment: environment,
+      environment: this.environment,
       platform: platform,
       capabilities: TerminalCapabilityReport.fromCapabilities(
         resolved.copyWith(measuredWidths: measured),
@@ -426,6 +435,10 @@ final class TerminalDiagnosis {
       unsupportedFeatures: unsupportedFeatures,
       activeProbes: activeProbes,
       compatibility: compatibility,
+      widthPolicy: deriveTextPresentationPolicy(
+        measurements: measured,
+        environment: environment,
+      ),
     );
   }
 
@@ -440,6 +453,7 @@ final class TerminalDiagnosis {
     'unsupportedFeatures': unsupportedFeatures,
     if (activeProbes != null) 'activeProbes': activeProbes!.toJson(),
     if (compatibility != null) 'compatibility': compatibility!.toJson(),
+    if (widthPolicy != null) 'widthPolicy': widthPolicy!.toJson(),
   };
 }
 

@@ -36,6 +36,7 @@ import 'package:fleury/src/cli/create_command.dart';
 import 'package:fleury/src/cli/dart_sdk.dart';
 import 'package:fleury/src/foundation/geometry.dart';
 import 'package:fleury/src/remote/buffered_browser_input.dart';
+import 'package:fleury/src/rendering/width_policy.dart';
 import 'package:fleury/src/remote/remote_client_asset.dart';
 import 'package:fleury/src/remote/remote_protocol.dart';
 import 'package:fleury/src/remote/serve_index_html.dart';
@@ -1685,7 +1686,10 @@ Future<int> _runDiagnose(List<String> args) async {
     final active = await _runActiveTerminalProbes(probeTimeout);
     diagnosis = diagnosis
         .withActiveProbes(active.report)
-        .withMeasuredWidths(active.measuredWidths);
+        .withMeasuredWidths(
+          active.measuredWidths,
+          environment: Platform.environment,
+        );
   }
 
   if (json || jsonOutputPath != null) {
@@ -1787,6 +1791,31 @@ Future<int> _runDiagnose(List<String> args) async {
     final (glyph, width) = batteryEntries[i];
     final branch = i == batteryEntries.length - 1 ? '└' : '├';
     row('  $branch ${glyph.probeClass.name} ${glyph.glyph}', cells(width));
+  }
+  // The derived policy: what layout will actually use, and where each axis's
+  // answer came from (spec default | probe | environment override).
+  final widthPolicy = diagnosis.widthPolicy;
+  if (widthPolicy != null) {
+    final widths = widthPolicy.policy.widths;
+    String axis(WidthAxis a, String value) =>
+        '$value (${widthPolicy.sourceOf(a).name})';
+    row('Width policy', '');
+    row('  ├ ambiguous', axis(WidthAxis.ambiguous, widths.ambiguous.name));
+    row(
+      '  ├ emoji presentation',
+      axis(WidthAxis.emojiPresentation, widths.emojiPresentation.name),
+    );
+    row(
+      '  ├ variation sequence',
+      axis(
+        WidthAxis.emojiVariationSequence,
+        widths.emojiVariationSequence.name,
+      ),
+    );
+    row(
+      '  └ cluster lowering',
+      axis(WidthAxis.lowering, widthPolicy.policy.lowering.name),
+    );
   }
   _writeProbeSection(diagnosis.activeProbes, row);
   _writeCompatibilitySection(diagnosis.compatibility, row);

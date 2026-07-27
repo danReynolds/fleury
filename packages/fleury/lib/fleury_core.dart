@@ -127,6 +127,15 @@ export 'src/rendering/render_object.dart'
         RenderObjectWithChildren,
         RenderObjectWithSingleChild;
 export 'src/rendering/render_repaint_boundary.dart' show RenderRepaintBoundary;
+export 'src/rendering/width_policy.dart'
+    show
+        CellWidth,
+        CellWidthPolicy,
+        ClusterLowering,
+        ResolvedTextPresentationPolicy,
+        TextPresentationPolicy,
+        WidthAxis,
+        WidthDecisionSource;
 export 'src/rendering/surface_capabilities.dart'
     show
         ColorMode,
@@ -209,6 +218,11 @@ export 'src/terminal/capabilities.dart'
         detectImageProtocolFromEnvironment,
         detectTerminalCapabilitiesFromEnvironment,
         detectTerminalMultiplexerFromEnvironment,
+        detectAmbiguousCharWidthFromEnvironment,
+        detectClusterModeFromEnvironment,
+        detectEmojiWidthFromEnvironment,
+        detectVs16WidthFromEnvironment,
+        deriveTextPresentationPolicy,
         parseEnvFlag;
 export 'src/terminal/capability_requirements.dart'
     show
