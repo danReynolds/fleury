@@ -3,7 +3,8 @@ import 'package:characters/characters.dart';
 import 'width_policy.dart';
 import 'width_tables.dart';
 
-export 'width_policy.dart' show CellWidth, CellWidthPolicy;
+export 'width_policy.dart'
+    show CellWidth, CellWidthPolicy, ClusterLowering, TextPresentationPolicy;
 
 /// Returns the number of terminal cells a grapheme cluster occupies.
 ///

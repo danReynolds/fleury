@@ -7,6 +7,7 @@ import '../rendering/cell_buffer.dart';
 import '../rendering/layout.dart';
 import '../rendering/render_object.dart';
 import '../rendering/render_objects.dart' show TextOverflow;
+import '../rendering/emoji_sequence.dart';
 import '../rendering/selectable_text_mixin.dart';
 import '../rendering/text_sanitizer.dart';
 import '../rendering/width_resolver.dart';
@@ -105,7 +106,7 @@ class _RawRichText extends LeafRenderObjectWidget {
       softWrap: softWrap,
       maxLines: maxLines,
       overflow: overflow,
-      policy: MediaQuery.textPolicyOf(context).widths,
+      textPolicy: MediaQuery.textPolicyOf(context),
     );
     r.attachToSelection(allowSelect ? SelectionScope.maybeOf(context) : null);
     return r;
@@ -118,7 +119,7 @@ class _RawRichText extends LeafRenderObjectWidget {
       ..softWrap = softWrap
       ..maxLines = maxLines
       ..overflow = overflow
-      ..policy = MediaQuery.textPolicyOf(context).widths;
+      ..textPolicy = MediaQuery.textPolicyOf(context);
     r.attachToSelection(allowSelect ? SelectionScope.maybeOf(context) : null);
   }
 
@@ -164,12 +165,14 @@ class RenderRichText extends RenderObject
     int? maxLines,
     TextOverflow overflow = TextOverflow.clip,
     WidthResolver widthResolver = const DefaultWidthResolver(),
-    CellWidthPolicy policy = CellWidthPolicy.spec,
+    TextPresentationPolicy textPolicy = TextPresentationPolicy.spec,
   }) : _softWrap = softWrap,
        _maxLines = maxLines,
        _overflow = overflow,
        _widthResolver = widthResolver,
-       _policy = policy {
+       _textPolicy = textPolicy {
+    _span = span;
+    _base = base;
     _glyphs = _flatten(span, base);
   }
 
@@ -177,7 +180,14 @@ class RenderRichText extends RenderObject
   int? _maxLines;
   TextOverflow _overflow;
   final WidthResolver _widthResolver;
-  CellWidthPolicy _policy;
+  TextPresentationPolicy _textPolicy;
+
+  /// Kept so a policy change can re-run flattening (lowering happens there).
+  late TextSpan _span;
+  late CellStyle _base;
+
+  /// Width axes of [_textPolicy] — what every measurement call uses.
+  CellWidthPolicy get _policy => _textPolicy.widths;
 
   late List<_Glyph> _glyphs;
   List<List<_Glyph>> _lines = const [];
@@ -218,13 +228,19 @@ class RenderRichText extends RenderObject
     _selectionLines = out;
   }
 
-  set policy(CellWidthPolicy value) {
-    if (_policy == value) return;
-    _policy = value;
+  set textPolicy(TextPresentationPolicy value) {
+    // Operational equality only (provenance never reaches this layer). Both
+    // axes change geometry, and the lowering decision changes the glyph list
+    // itself, so re-flatten and dirty LAYOUT (property gate 14).
+    if (_textPolicy == value) return;
+    _textPolicy = value;
+    _glyphs = _flatten(_span, _base);
     markNeedsLayout();
   }
 
   void setSpan(TextSpan span, CellStyle base) {
+    _span = span;
+    _base = base;
     _glyphs = _flatten(span, base);
     markNeedsLayout();
   }
@@ -249,6 +265,15 @@ class RenderRichText extends RenderObject
   }
 
   List<_Glyph> _flatten(TextSpan span, CellStyle inherited) {
+    return _textPolicy.lowering == ClusterLowering.split
+        ? _flattenLowered(span, inherited)
+        : _flattenPreserved(span, inherited);
+  }
+
+  /// The byte-identical legacy path: per-span grapheme walk, no detection.
+  /// Every unprobed/preserve surface goes through here unchanged (property
+  /// gate 2).
+  List<_Glyph> _flattenPreserved(TextSpan span, CellStyle inherited) {
     final out = <_Glyph>[];
     void visit(TextSpan s, CellStyle parent) {
       final style = s.style == null ? parent : parent.merge(s.style!);
@@ -275,6 +300,85 @@ class RenderRichText extends RenderObject
     }
 
     visit(span, inherited);
+    return out;
+  }
+
+  /// The lowering path: sequence detection runs across the FLATTENED
+  /// paragraph text, so splitting a logical sequence across compatible
+  /// styled spans changes neither detection nor the result (property gate
+  /// 12) — per-span walking would misparse a cluster that crosses a span
+  /// boundary. Each cluster takes the style in effect at its base; a lowered
+  /// component inherits the style covering that component's own base
+  /// (RFC 0019 §6.4).
+  List<_Glyph> _flattenLowered(TextSpan span, CellStyle inherited) {
+    final out = <_Glyph>[];
+    final paragraphText = StringBuffer();
+    // Style per code unit of paragraphText. Rebuilt at flatten time only —
+    // never per frame — and cleared per paragraph, so the cost is one byte
+    // of style reference per code unit of the longest paragraph.
+    final unitStyles = <CellStyle>[];
+
+    void flushParagraph() {
+      if (paragraphText.isEmpty) return;
+      final text = paragraphText.toString();
+      var offset = 0;
+      for (final cluster in text.characters) {
+        final components = splitEmojiZwjSequence(cluster);
+        if (components == null) {
+          out.add(
+            _Glyph(
+              cluster,
+              _widthResolver.widthOfGrapheme(cluster, _policy),
+              unitStyles[offset],
+            ),
+          );
+        } else {
+          var componentOffset = offset;
+          for (final component in components) {
+            out.add(
+              _Glyph(
+                component,
+                _widthResolver.widthOfGrapheme(component, _policy),
+                unitStyles[componentOffset],
+              ),
+            );
+            // +1 skips the dropped joiner between components.
+            componentOffset += component.length + 1;
+          }
+        }
+        offset += cluster.length;
+      }
+      paragraphText.clear();
+      unitStyles.clear();
+    }
+
+    void visit(TextSpan s, CellStyle parent) {
+      final style = s.style == null ? parent : parent.merge(s.style!);
+      final text = s.text;
+      if (text != null && text.isNotEmpty) {
+        for (final paragraph in _splitKeepingBreaks(text)) {
+          if (paragraph == '\n') {
+            flushParagraph();
+            out.add(_Glyph('\n', 0, style, isBreak: true));
+            continue;
+          }
+          final sanitized = sanitizeForDisplay(paragraph);
+          paragraphText.write(sanitized);
+          for (var i = 0; i < sanitized.length; i++) {
+            unitStyles.add(style);
+          }
+        }
+      }
+      final children = s.children;
+      if (children != null) {
+        for (final child in children) {
+          visit(child, style);
+        }
+      }
+    }
+
+    visit(span, inherited);
+    flushParagraph();
     return out;
   }
 
