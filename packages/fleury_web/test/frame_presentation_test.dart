@@ -86,7 +86,7 @@ void main() {
       expect(plan.reason, 'initial');
       expect(plan.fullRepaint, isTrue);
       expect(plan.size, size);
-      expect(plan.damage.source, FrameDamageSource.fullRepaint);
+      expect(plan.damage, isA<PresentationFullRepaint>());
       expect(plan.damage.dirtyRows.isFull, isTrue);
       expect(plan.dirtyRowModels.map((row) => row.row), [0, 1, 2]);
       expect(plan.dirtyRowDiffTime, Duration.zero);
@@ -110,7 +110,7 @@ void main() {
       final plan = planner.build(reason: 'paint', frame: second);
 
       expect(plan.fullRepaint, isFalse);
-      expect(plan.damage.source, FrameDamageSource.paintDamage);
+      expect(plan.damage, isA<PresentationChanged>());
       // 'hello' -> 'hullo' differs in exactly one cell. Deriving pins the
       // bounds to that cell instead of the whole row paint happened to touch.
       expect(plan.damage.dirtyBounds, CellRect.fromLTWH(1, 1, 1, 1));
@@ -150,7 +150,7 @@ void main() {
 
       final plan = planner.build(reason: 'layout', frame: second);
 
-      expect(plan.damage.source, FrameDamageSource.paintDamage);
+      expect(plan.damage, isA<PresentationChanged>());
       expect(plan.damage.dirtyRows.isFull, isFalse);
       expect(plan.damage.dirtyRows.rows, [1]);
       expect(plan.dirtyRowModels.map((row) => row.row), [1]);
@@ -167,7 +167,7 @@ void main() {
       final plan = planner.build(reason: 'idle', frame: second);
 
       expect(plan.fullRepaint, isFalse);
-      expect(plan.damage.source, FrameDamageSource.paintDamage);
+      expect(plan.damage, isA<PresentationChanged>());
       expect(plan.damage.dirtyBounds, isNull, reason: 'nothing changed');
       expect(plan.damage.dirtyRows.isEmpty, isTrue);
       expect(plan.dirtyRowModels, isEmpty);
@@ -202,7 +202,7 @@ void main() {
       )!;
       final plan = planner.build(reason: 'oracle', frame: second);
 
-      expect(plan.damage.source, FrameDamageSource.paintDamage);
+      expect(plan.damage, isA<PresentationChanged>());
       expect(plan.damage.dirtyRows.isFull, isFalse);
       expect(plan.damage.dirtyRows.ranges, hasLength(2));
       expect(plan.damage.dirtyRows.rows, [0, 2]);

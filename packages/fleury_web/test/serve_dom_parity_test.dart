@@ -35,11 +35,7 @@ FramePresentationPlan _fullPlan(CellBuffer mirror) {
   return FramePresentationPlan(
     reason: 'resync',
     size: mirror.size,
-    damage: FramePresentationDamage(
-      dirtyBounds: null,
-      dirtyRows: TuiDirtyRows.full(mirror.size.rows),
-      source: FrameDamageSource.fullRepaint,
-    ),
+    damage: PresentationFullRepaint(mirror.size),
     dirtyRowModels: [
       for (var r = 0; r < mirror.size.rows; r++) builder.buildRow(mirror, r),
     ],

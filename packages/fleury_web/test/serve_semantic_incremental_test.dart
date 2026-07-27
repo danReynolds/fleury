@@ -67,7 +67,8 @@ void main() {
     expect(
       stats.reusedElementCount,
       1,
-      reason: 'a one-node patch must touch one element; a full rebuild would '
+      reason:
+          'a one-node patch must touch one element; a full rebuild would '
           're-process the whole tree',
     );
     expect(stats.createdElementCount, 0);

@@ -42,6 +42,10 @@ void main() {
       final mirror = CellBuffer(const CellSize(10, 4));
       final presentation = applyRemotePlan(plan, mirror);
       expect(presentation.damage.dirtyRows.isFull, isTrue);
+      // The client side of the derived flag: previously unasserted, so an
+      // inverted `fullRepaint` getter survived this test.
+      expect(presentation.fullRepaint, isTrue);
+      expect(presentation.damage, isA<PresentationFullRepaint>());
       expect(presentation.dirtyRowModels, hasLength(4));
     });
 

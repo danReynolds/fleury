@@ -30,6 +30,8 @@ export 'src/runtime/frame_presentation.dart'
     show
         FrameDamageSource,
         FramePresentationDamage,
+        PresentationFullRepaint,
+        PresentationChanged,
         FramePresentationPlan,
         FramePresentationPlanner;
 export 'src/widgets/framework.dart' show BuildFlushStats;

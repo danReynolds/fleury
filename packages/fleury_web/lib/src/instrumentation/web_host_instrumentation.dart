@@ -317,7 +317,11 @@ final class WebFrameInstrumentation {
       reason: plan.reason,
       coalescedReasons: List.unmodifiable(reasons),
       viewportSize: plan.size,
-      damageSource: plan.damage.source,
+      // Telemetry keeps its own vocabulary (it also reports `none` for frames
+      // that never rendered, which no plan can express).
+      damageSource: plan.fullRepaint
+          ? FrameDamageSource.fullRepaint
+          : FrameDamageSource.paintDamage,
       fullRepaint: plan.fullRepaint,
       metricsChanged: plan.metricsChanged,
       dirtyRowCount: plan.dirtyRowCount,

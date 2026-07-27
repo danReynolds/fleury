@@ -145,10 +145,8 @@ void main() {
       final plan = FramePresentationPlan(
         reason: 'test',
         size: const CellSize(40, 10),
-        damage: FramePresentationDamage(
-          dirtyBounds: null,
+        damage: PresentationChanged(
           dirtyRows: TuiDirtyRows.fromRows(const [1], rowCount: 10),
-          source: FrameDamageSource.paintDamage,
         ),
         dirtyRowModels: const [],
         metricsChanged: false,
@@ -666,11 +664,7 @@ void main() {
     FramePresentationPlan fullPlan(CellSize size) => FramePresentationPlan(
       reason: 'test',
       size: size,
-      damage: FramePresentationDamage(
-        dirtyBounds: null,
-        dirtyRows: TuiDirtyRows.full(size.rows),
-        source: FrameDamageSource.fullRepaint,
-      ),
+      damage: PresentationFullRepaint(size),
       dirtyRowModels: const [],
       metricsChanged: false,
       dirtyRowDiffTime: Duration.zero,
@@ -1445,11 +1439,7 @@ FramePresentationPlan _steadyStatePlan(CellSize size, TuiDirtyRows dirtyRows) =>
     FramePresentationPlan(
       reason: 'test',
       size: size,
-      damage: FramePresentationDamage(
-        dirtyBounds: null,
-        dirtyRows: dirtyRows,
-        source: FrameDamageSource.paintDamage,
-      ),
+      damage: PresentationChanged(dirtyRows: dirtyRows),
       dirtyRowModels: const [],
       metricsChanged: false,
       dirtyRowDiffTime: Duration.zero,
