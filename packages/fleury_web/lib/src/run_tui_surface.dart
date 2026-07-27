@@ -757,7 +757,7 @@ final class _SurfaceFramePresenter implements FramePresenter {
       diff: plan.dirtyRowDiffTime + plan.spanBuildTime,
       dirtyCells: bounds != null
           ? bounds.size.cols * bounds.size.rows
-          : plan.damage.dirtyRows.dirtyRowCount * frame.next.size.cols,
+          : plan.dirtyRows.dirtyRowCount * frame.next.size.cols,
       dirtyBounds: bounds,
     );
   }

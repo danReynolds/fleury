@@ -15,9 +15,9 @@ import 'tui_frame_loop.dart';
 
 /// Presenter-ready frame data computed once by the host.
 final class FramePresentationPlan {
-  const FramePresentationPlan({
+  // Not const: [dirtyRows] is resolved once, lazily, against this plan's size.
+  FramePresentationPlan({
     required this.reason,
-    required this.fullRepaint,
     required this.size,
     required this.damage,
     required this.dirtyRowModels,
@@ -25,10 +25,13 @@ final class FramePresentationPlan {
     required this.dirtyRowDiffTime,
     required this.spanBuildTime,
     this.scrollUpRows,
-  });
+  }) : assert(
+         scrollUpRows == null || damage is! PresentationFullRepaint,
+         'a full repaint rewrites every row, so there is nothing to scroll: '
+         'presenters guard on fullRepaint and would ignore the shift anyway',
+       );
 
   final String reason;
-  final bool fullRepaint;
   final CellSize size;
   final FramePresentationDamage damage;
   final List<RowSpanModel> dirtyRowModels;
@@ -45,7 +48,35 @@ final class FramePresentationPlan {
   /// coverage and diff consumers remain exact.
   final int? scrollUpRows;
 
-  int get dirtyRowCount => damage.dirtyRows.dirtyRowCount;
+  /// Whether the presenter must repaint everything.
+  ///
+  /// Derived from [damage], not stored alongside it. This fact used to live in
+  /// three places at once — here, on the damage, and again as the damage's
+  /// `source` — all three set from one decision at every construction site.
+  /// Three copies of one fact is three chances to disagree, and one of them
+  /// was already dead: written at all three sites, read by nothing.
+  bool get fullRepaint => switch (damage) {
+    PresentationFullRepaint() => true,
+    PresentationChanged() => false,
+  };
+
+  /// The rows a presenter must re-apply, resolved against THIS plan's [size].
+  ///
+  /// Resolved here rather than stored on the damage: a full repaint means
+  /// "every row of the frame being presented", and the frame's size is the
+  /// plan's. Letting the damage carry its own copy of the size would put the
+  /// same fact in two places again — with the damage's copy silently winning
+  /// the row count.
+  late final TuiDirtyRows dirtyRows = switch (damage) {
+    // A full repaint means every row of THIS frame, so it expands here, where
+    // the size lives. Letting the variant answer would mean handing it a size
+    // — and a variant holding a size is the duplicate this type just shed.
+    PresentationFullRepaint() => TuiDirtyRows.full(size.rows),
+    // Already absolute, measured by whoever built the damage.
+    PresentationChanged(:final dirtyRows) => dirtyRows,
+  };
+
+  int get dirtyRowCount => dirtyRows.dirtyRowCount;
 
   int get dirtyCellEstimate => dirtyRowCount * size.cols;
 
@@ -54,27 +85,85 @@ final class FramePresentationPlan {
 }
 
 /// Damage data normalized for surface presenters.
-final class FramePresentationDamage {
-  const FramePresentationDamage({
-    required this.fullRepaint,
-    required this.dirtyBounds,
-    required this.dirtyRows,
-    required this.source,
-  });
+///
+/// Sealed for ONE invariant that flags could not hold: a full repaint always
+/// dirties every row. That pairing used to be restated by hand at every
+/// construction site, and this type is exported host SPI, so the fourth site
+/// was never going to be one of ours. [PresentationFullRepaint] has no rows to
+/// pass — the plan expands them — so the mismatch cannot be written.
+///
+/// What that does and does not protect. [FramePresentationPlan.dirtyRows]
+/// drives the wire's dirty-row hint and semantic coverage, so a full repaint
+/// declaring partial rows used to desync a peer mirror or throw out of
+/// coverage. Which rows a DOM surface actually paints comes from
+/// `dirtyRowModels`, which this type has no say over — though the variant does
+/// reach the DOM indirectly, since [FramePresentationPlan.fullRepaint] gates
+/// its scroll path.
+///
+/// The carve deliberately differs from the loop-level `TuiFrameDamage` it is
+/// built from. There, [dirtyBounds] being absent MEANS "nothing changed", so
+/// the variants discriminate on it. Here a bound is an optional hint that the
+/// wire simply does not carry — a remote frame has real dirty rows and no
+/// bounds — so bounds stay nullable INSIDE the changed variant and the rows
+/// are the authority. Copying the upstream shape literally would have made
+/// "changed, rows known, bounds unknown" inexpressible.
+sealed class FramePresentationDamage {
+  const FramePresentationDamage();
 
-  final bool fullRepaint;
-  final CellRect? dirtyBounds;
-  final TuiDirtyRows dirtyRows;
-  final FrameDamageSource source;
+  /// A bound a diffing presenter may restrict itself to, when one is known.
+  ///
+  /// Null means "no bound available", never "nothing changed".
+  CellRect? get dirtyBounds;
 }
 
+/// Present everything: there was no comparable previous frame, or a host
+/// resynced the surface from scratch.
+final class PresentationFullRepaint extends FramePresentationDamage {
+  const PresentationFullRepaint();
+
+  /// Carries no rows at all: [FramePresentationPlan.dirtyRows] expands this to
+  /// every row of the frame, so a full repaint cannot be handed partial ones.
+  ///
+  /// Degenerate at zero rows: `TuiDirtyRows.full(0)` is empty, so a
+  /// zero-height frame would report a full repaint with nothing dirty. No plan
+  /// is built for an empty size, so this is unreachable in-tree.
+  @override
+  CellRect? get dirtyBounds => null;
+}
+
+/// Present the rows the producer measured; [dirtyBounds] narrows that further
+/// when known.
+final class PresentationChanged extends FramePresentationDamage {
+  const PresentationChanged({
+    required this.dirtyRows,
+    required this.dirtyBounds,
+  });
+
+  /// The rows the producer measured, already absolute. Nothing checks them
+  /// against the plan's size — a producer reporting rows beyond the frame is a
+  /// bug at the producer, and the wire clamps rather than crashes.
+  final TuiDirtyRows dirtyRows;
+
+  /// Required, not defaulted: a site that means to supply a bound and forgets
+  /// should not compile.
+  @override
+  final CellRect? dirtyBounds;
+}
+
+/// How a frame's damage was arrived at — a TELEMETRY vocabulary, not plan
+/// state.
+///
+/// A plan no longer carries one: "is this a full repaint" is answered by the
+/// damage's variant, so storing this alongside it would restore the second
+/// copy this type was flattened to remove. Instrumentation keeps it because it
+/// reports on frames a plan cannot describe (see [none]).
 enum FrameDamageSource {
   /// The frame loop derived the exact changed set by comparing buffers.
   paintDamage,
   fullRepaint,
 
   /// The frame request skipped rendering: no frame work was pending and the
-  /// committed front buffer was still exact.
+  /// committed front buffer was still exact. No plan is built for these.
   none,
 }
 
@@ -93,14 +182,12 @@ final class FramePresentationPlanner {
     final dirtyRowsResult = _dirtyRowsForFrame(frame);
     final dirtyRows = dirtyRowsResult.rows;
     final fullRepaint = runtimeDamage is FrameFullRepaint;
-    final damage = FramePresentationDamage(
-      fullRepaint: fullRepaint,
-      dirtyBounds: runtimeDamage.diffBounds,
-      dirtyRows: dirtyRows,
-      source: fullRepaint
-          ? FrameDamageSource.fullRepaint
-          : FrameDamageSource.paintDamage,
-    );
+    final damage = fullRepaint
+        ? const PresentationFullRepaint()
+        : PresentationChanged(
+            dirtyRows: dirtyRows,
+            dirtyBounds: runtimeDamage.diffBounds,
+          );
 
     // The frame loop already decided whether this is a beneficial scroll, using
     // the counts its diff produced. Re-deriving it here would rescan both
@@ -121,7 +208,6 @@ final class FramePresentationPlanner {
 
     return FramePresentationPlan(
       reason: reason,
-      fullRepaint: fullRepaint,
       size: frame.next.size,
       damage: damage,
       dirtyRowModels: dirtyRowModels,
