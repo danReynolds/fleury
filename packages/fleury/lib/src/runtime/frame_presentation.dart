@@ -99,21 +99,15 @@ final class FramePresentationPlanner {
       source: _sourceFor(runtimeDamage),
     );
 
-    // A full-dirty frame may really be an upward scroll: the shared detector
-    // (the same one the ANSI renderer scrolls with) tells us the retained
-    // rows can be MOVED, leaving only residual rows to rebuild.
-    int? scrollUpRows;
-    var rowsToBuild = dirtyRows;
-    if (!runtimeDamage.fullRepaint &&
-        dirtyRows.isFull &&
-        frame.previous.size == frame.next.size) {
-      final stats = screenDiffStats(frame.previous, frame.next);
-      final shift = detectBeneficialScrollUp(frame.previous, frame.next, stats);
-      if (shift != null) {
-        scrollUpRows = shift;
-        rowsToBuild = _residualScrollRows(frame.previous, frame.next, shift);
-      }
-    }
+    // The frame loop already decided whether this is a beneficial scroll, using
+    // the counts its diff produced. Re-deriving it here would rescan both
+    // buffers — and the old trigger (`dirtyRows.isFull`) silently stopped
+    // firing once damage became exact, because one unchanged row is enough to
+    // make a clean scroll not-full.
+    final scrollUpRows = frame.damage.scrollUpRows;
+    final rowsToBuild = scrollUpRows == null
+        ? dirtyRows
+        : _residualScrollRows(frame.previous, frame.next, scrollUpRows);
 
     final spanBuildStopwatch = Stopwatch()..start();
     final dirtyRowModels = spanBuilder.buildDirtyRows(frame.next, rowsToBuild);
@@ -151,8 +145,7 @@ final class FramePresentationPlanner {
     return TuiDirtyRows.fromRows(residual, rowCount: rows);
   }
 
-  FrameDamageSource _sourceFor(TuiFrameDamage damage) =>
-      damage.fullRepaint
+  FrameDamageSource _sourceFor(TuiFrameDamage damage) => damage.fullRepaint
       ? FrameDamageSource.fullRepaint
       : FrameDamageSource.paintDamage;
 

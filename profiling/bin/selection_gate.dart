@@ -134,20 +134,25 @@ Future<void> main(List<String> args) async {
   final model = _Model();
   final delegate = SelectionContainerDelegate();
   final root = owner.mountRoot(_scenario(model, delegate));
-  var front = CellBuffer(_size);
-  var back = CellBuffer(_size);
+  // Drive the REAL loop rather than re-implementing it, so this gate cannot
+  // drift off the production path when the loop changes.
+  final loop = TuiFrameLoop(renderDamage: owner.renderDamageTracker);
 
   void frame() {
     model.bump();
-    back.withoutDamageTracking(back.clear);
-    back.resetDamageTracking();
-    owner.renderFrame(root, back);
-    back.takeDamageBounds();
-    back.takeDamageRows();
-    renderer.renderDiff(front, back, sink);
-    final tmp = front;
-    front = back;
-    back = tmp;
+    final rendered = loop.render(
+      size: _size,
+      paint: (buffer) => owner.renderFrame(root, buffer),
+    )!;
+    renderer.renderDiff(
+      rendered.previous,
+      rendered.next,
+      sink,
+      dirtyBounds: rendered.damage.diffBounds,
+      scrollUpRows: rendered.damage.scrollUpRows,
+      hasChanges: !rendered.damage.isEmpty,
+    );
+    loop.commit(rendered);
   }
 
   double timeFrames() {

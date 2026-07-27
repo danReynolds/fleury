@@ -1,6 +1,7 @@
 import '../foundation/geometry.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/render_object.dart';
+import '../rendering/scroll_detection.dart';
 
 /// Paints one frame into [buffer].
 typedef TuiFramePaintCallback = void Function(CellBuffer buffer);
@@ -96,10 +97,20 @@ final class TuiFrameLoop {
     // truth, so nothing upstream can under-report by failing to declare what it
     // touched — and no conservative fallback is needed for when it does.
     final diff = next.diffAgainst(previous);
+    // Scroll detection used to ride on "damage is unbounded", which every
+    // relayout published. Exact damage is never unbounded, so the trigger has
+    // to be explicit or the terminal's ESC[S path and the surface's row-shift
+    // both go unreachable. Deciding it here also means the detector reuses the
+    // counts the diff already produced instead of rescanning.
+    final scrollUpRows =
+        (_requireFullRepaint || !diff.isComparable || diff.isUnchanged)
+        ? null
+        : detectBeneficialScrollUp(previous, next, diff.stats);
     final damage = TuiFrameDamage(
-      fullRepaint: _requireFullRepaint,
+      fullRepaint: _requireFullRepaint || !diff.isComparable,
       dirtyBounds: diff.bounds,
       dirtyRows: diff.rows,
+      scrollUpRows: scrollUpRows,
     );
     _requireFullRepaint = false;
 
@@ -116,7 +127,6 @@ final class TuiFrameLoop {
     _backBuffer = frame.previous;
     _frontBuffer = frame.next;
   }
-
 }
 
 /// One frame produced by [TuiFrameLoop].
@@ -150,7 +160,8 @@ final class TuiFrameDamage {
   const TuiFrameDamage({
     required this.fullRepaint,
     required this.dirtyBounds,
-    this.dirtyRows,
+    required this.dirtyRows,
+    this.scrollUpRows,
   });
 
   /// Whether the presenter should treat this as a full repaint.
@@ -166,22 +177,32 @@ final class TuiFrameDamage {
   ///
   /// Unlike [dirtyBounds] (a single union rect), scattered changes stay
   /// disjoint: five separated dirty rows are five rows here, not the tall rect
-  /// spanning them.
-  final Set<int>? dirtyRows;
+  /// spanning them. Required, so it can never disagree with [dirtyBounds] about
+  /// how much changed.
+  final Set<int> dirtyRows;
+
+  /// When non-null, the frame is a beneficial upward scroll by this many rows:
+  /// presenters may shift what they already hold and repaint only the residue.
+  ///
+  /// Computed once here, where both buffers are in hand and the diff has
+  /// already counted the cells the detector needs.
+  final int? scrollUpRows;
+
+  /// Whether anything at all changed.
+  bool get isEmpty => !fullRepaint && dirtyBounds == null;
 
   /// Bounds a diffing presenter may safely restrict itself to.
   ///
   /// Null on a full repaint (present everything) or when nothing changed;
-  /// [fullRepaint] distinguishes the two.
+  /// [fullRepaint] and [isEmpty] distinguish the two. Callers that treat null
+  /// as "scan the whole screen" must check [isEmpty] first.
   CellRect? get diffBounds => fullRepaint ? null : dirtyBounds;
 
   /// The rows a row-oriented presenter must re-apply.
   TuiDirtyRows dirtyRowsFor(CellSize size) {
     if (fullRepaint) return TuiDirtyRows.full(size.rows);
-    final rows = dirtyRows;
-    if (rows == null) return TuiDirtyRows.full(size.rows);
-    if (rows.isEmpty) return const TuiDirtyRows.none();
-    return TuiDirtyRows.fromRows(rows, rowCount: size.rows);
+    if (dirtyRows.isEmpty) return const TuiDirtyRows.none();
+    return TuiDirtyRows.fromRows(dirtyRows, rowCount: size.rows);
   }
 }
 

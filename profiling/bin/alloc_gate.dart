@@ -111,7 +111,7 @@ Widget _scenario(_Model m) {
 /// Sums `package:fleury` accumulated allocation bytes over [work], and returns
 /// the total plus the top classes by bytes (for the diagnostic breakdown).
 Future<({int totalBytes, List<({String name, int bytes, int instances})> top})>
-_measure(
+    _measure(
   VmService service,
   String isolateId, {
   required void Function() work,
@@ -175,12 +175,10 @@ Future<void> main(List<String> args) async {
     exitCode = 64;
     return;
   }
-  final wsUri = server
-      .replace(
-        scheme: 'ws',
-        pathSegments: [...server.pathSegments.where((s) => s.isNotEmpty), 'ws'],
-      )
-      .toString();
+  final wsUri = server.replace(
+    scheme: 'ws',
+    pathSegments: [...server.pathSegments.where((s) => s.isNotEmpty), 'ws'],
+  ).toString();
 
   final service = await vmServiceConnectUri(wsUri);
   try {
@@ -195,27 +193,27 @@ Future<void> main(List<String> args) async {
     final owner = BuildOwner();
     final model = _Model();
     final root = owner.mountRoot(_scenario(model));
-    var front = CellBuffer(size);
-    var back = CellBuffer(size);
+    final loop = TuiFrameLoop(renderDamage: owner.renderDamageTracker);
 
+    // Drive the REAL loop rather than re-implementing it. This gate used to
+    // hand-mirror TuiFrameLoop, and every change to the loop silently moved the
+    // gate off the production path — it was still arming damage tracking and
+    // rendering unbounded long after the loop stopped doing either.
     void frame() {
       model.bump();
-      back.withoutDamageTracking(back.clear);
-      // Mirror TuiFrameLoop exactly: damage tracking is ON during the paint and
-      // the presenter consumes the bounds + rows every frame. Previously the
-      // gate painted with tracking OFF and never called resetDamageTracking, so
-      // _recordDamageRect early-returned — the whole damage-accumulation path
-      // sat outside the measured window, so a reintroduced per-write allocation
-      // of any package:fleury geometry class here would now be caught (dart:core
-      // churn like the takeDamageRows Set stays invisible to this gate).
-      back.resetDamageTracking();
-      owner.renderFrame(root, back);
-      back.takeDamageBounds();
-      back.takeDamageRows();
-      renderer.renderDiff(front, back, sink);
-      final tmp = front;
-      front = back;
-      back = tmp;
+      final rendered = loop.render(
+        size: size,
+        paint: (buffer) => owner.renderFrame(root, buffer),
+      )!;
+      renderer.renderDiff(
+        rendered.previous,
+        rendered.next,
+        sink,
+        dirtyBounds: rendered.damage.diffBounds,
+        scrollUpRows: rendered.damage.scrollUpRows,
+        hasChanges: !rendered.damage.isEmpty,
+      );
+      loop.commit(rendered);
     }
 
     for (var i = 0; i < warmup; i++) {

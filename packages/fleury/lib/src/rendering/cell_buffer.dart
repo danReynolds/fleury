@@ -52,9 +52,8 @@ final class CellBuffer {
   int _dmgTop = 0;
   int _dmgRight = 0;
   int _dmgBottom = 0;
-  final Set<int> _damageRows = <int>{};
   var _damageSuppressionDepth = 0;
-    CellSize get size => _size;
+  CellSize get size => _size;
 
   /// Inline image content placed this frame, deduplicated by content hash.
   /// The cell grid marks each placement's region with [Cell.overlay] cells;
@@ -85,19 +84,9 @@ final class CellBuffer {
   void resetDamageTracking() {
     _damageTrackingEnabled = true;
     _hasDamage = false;
-    _damageRows.clear();
   }
 
   /// Clears and returns the accumulated damage bounds.
-  /// The exact rows written since [resetDamageTracking], independent of the
-  /// single-rect union in [takeDamageBounds]. Scattered writes (disjoint
-  /// rows) stay disjoint here instead of being smeared into one tall rect.
-  Set<int> takeDamageRows() {
-    final result = Set<int>.of(_damageRows);
-    _damageRows.clear();
-    return result;
-  }
-
   CellRect? takeDamageBounds() {
     if (!_hasDamage) return null;
     final result = CellRect.fromLTWH(
@@ -782,13 +771,16 @@ final class CellBuffer {
   /// Cheap enough to run every frame because the inner loop indexes the backing
   /// lists directly: going through `atColRow` spends a bounds check and an index
   /// multiply per cell, twice per comparison, which measures 2.4-4.8x slower.
+  /// It also produces the counts [screenDiffStats] computed separately, so
+  /// scroll detection no longer pays for a second full scan.
   CellBufferDiff diffAgainst(CellBuffer previous) {
-    if (previous._size != _size) return const CellBufferDiff.everything();
+    if (previous._size != _size) return CellBufferDiff.incomparable;
     final cols = _size.cols;
     final rowCount = _size.rows;
     final mine = _cells;
     final theirs = previous._cells;
     Set<int>? rows;
+    var dirtyCells = 0;
     var left = cols;
     var right = 0;
     var top = rowCount;
@@ -800,6 +792,7 @@ final class CellBuffer {
       var last = -1;
       for (var col = 0; col < cols; col++) {
         if (mine[base + col] != theirs[base + col]) {
+          dirtyCells++;
           if (first < 0) first = col;
           last = col;
         }
@@ -813,23 +806,77 @@ final class CellBuffer {
     }
 
     // Inline images live beside the grid, not in it: every cell under a
-    // placement is a payload-free `Cell.overlay`, so swapping an image in the
-    // same rect leaves the cells byte-identical. Deriving from cells alone
-    // would report that frame as unchanged and leave the old image on screen.
-    _diffImagePlacements(previous, (row, first, last) {
-      (rows ??= <int>{}).add(row);
-      if (first < left) left = first;
-      if (last + 1 > right) right = last + 1;
-      if (row < top) top = row;
-      if (row + 1 > bottom) bottom = row + 1;
-    });
+    // placement is a payload-free `Cell.overlay`, so a placement that changed
+    // how it renders — different bytes, or the same bytes fitted differently —
+    // leaves the cells byte-identical. Deriving from cells alone would call
+    // that frame unchanged.
+    if (!_placementsMatch(_imagePlacements, previous._imagePlacements)) {
+      for (var list = 0; list < 2; list++) {
+        final placements = list == 0
+            ? _imagePlacements
+            : previous._imagePlacements;
+        for (final placement in placements) {
+          final firstCol = placement.col < 0 ? 0 : placement.col;
+          final lastCol = placement.col + placement.cols > cols
+              ? cols - 1
+              : placement.col + placement.cols - 1;
+          if (lastCol < firstCol) continue;
+          final firstRow = placement.row < 0 ? 0 : placement.row;
+          final lastRow = placement.row + placement.rows > rowCount
+              ? rowCount - 1
+              : placement.row + placement.rows - 1;
+          for (var row = firstRow; row <= lastRow; row++) {
+            (rows ??= <int>{}).add(row);
+            if (firstCol < left) left = firstCol;
+            if (lastCol + 1 > right) right = lastCol + 1;
+            if (row < top) top = row;
+            if (row + 1 > bottom) bottom = row + 1;
+          }
+        }
+      }
+    }
 
     final dirty = rows;
-    if (dirty == null) return const CellBufferDiff.none();
+    if (dirty == null) return CellBufferDiff.unchanged;
     return CellBufferDiff(
       rows: dirty,
       bounds: CellRect.fromLTWH(left, top, right - left, bottom - top),
+      dirtyCells: dirtyCells,
+      // Overlay cells are written only by [_recordImagePlacement], so the
+      // placement lists answer this without touching a cell.
+      hasOverlayCells:
+          _imagePlacements.isNotEmpty || previous._imagePlacements.isNotEmpty,
     );
+  }
+
+  /// Whether two placement lists would render identically.
+  ///
+  /// Every field reaching the fit resolver or the overlay geometry counts: the
+  /// same image scrolled inside a clipping viewport keeps its id and visible
+  /// rect while [InlineImagePlacement.boxOffsetRow] moves, and the cells under
+  /// it never change.
+  static bool _placementsMatch(
+    List<InlineImagePlacement> a,
+    List<InlineImagePlacement> b,
+  ) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      final x = a[i];
+      final y = b[i];
+      if (x.id != y.id ||
+          x.col != y.col ||
+          x.row != y.row ||
+          x.cols != y.cols ||
+          x.rows != y.rows ||
+          x.fit != y.fit ||
+          x.boxCols != y.boxCols ||
+          x.boxRows != y.boxRows ||
+          x.boxOffsetCol != y.boxOffsetCol ||
+          x.boxOffsetRow != y.boxOffsetRow) {
+        return false;
+      }
+    }
+    return true;
   }
 
   void _recordDamageRect(int col, int row, int cols, int rows) {
@@ -855,9 +902,6 @@ final class CellBuffer {
       if (top < _dmgTop) _dmgTop = top;
       if (right > _dmgRight) _dmgRight = right;
       if (bottom > _dmgBottom) _dmgBottom = bottom;
-    }
-    for (var damagedRow = top; damagedRow < bottom; damagedRow++) {
-      _damageRows.add(damagedRow);
     }
   }
 
@@ -926,59 +970,33 @@ final class CellBuffer {
   }
 }
 
-extension _PlacementDiff on CellBuffer {
-  /// Reports every row covered by a placement that differs between the frames.
-  void _diffImagePlacements(
-    CellBuffer previous,
-    void Function(int row, int firstCol, int lastCol) onRow,
-  ) {
-    final mine = _imagePlacements;
-    final theirs = previous._imagePlacements;
-    if (mine.isEmpty && theirs.isEmpty) return;
-    if (_placementsMatch(mine, theirs)) return;
-    for (final list in [mine, theirs]) {
-      for (final p in list) {
-        final firstCol = p.col < 0 ? 0 : p.col;
-        final lastCol = (p.col + p.cols - 1).clamp(0, _size.cols - 1);
-        if (lastCol < firstCol) continue;
-        final firstRow = p.row < 0 ? 0 : p.row;
-        final lastRow = (p.row + p.rows - 1).clamp(0, _size.rows - 1);
-        for (var row = firstRow; row <= lastRow; row++) {
-          onRow(row, firstCol, lastCol);
-        }
-      }
-    }
-  }
-
-  static bool _placementsMatch(
-    List<InlineImagePlacement> a,
-    List<InlineImagePlacement> b,
-  ) {
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      final x = a[i];
-      final y = b[i];
-      if (x.id != y.id ||
-          x.col != y.col ||
-          x.row != y.row ||
-          x.cols != y.cols ||
-          x.rows != y.rows) {
-        return false;
-      }
-    }
-    return true;
-  }
-}
-
 /// The exact set of cells that differ between two frames.
 final class CellBufferDiff {
-  const CellBufferDiff({required this.rows, required this.bounds});
+  const CellBufferDiff({
+    required this.rows,
+    required this.bounds,
+    required this.dirtyCells,
+    required this.hasOverlayCells,
+  });
 
-  /// Nothing changed.
-  const CellBufferDiff.none() : rows = const <int>{}, bounds = null;
+  /// The frames are identical.
+  static const unchanged = CellBufferDiff(
+    rows: <int>{},
+    bounds: null,
+    dirtyCells: 0,
+    hasOverlayCells: false,
+  );
 
-  /// The buffers are not comparable (a resize); treat everything as changed.
-  const CellBufferDiff.everything() : rows = const <int>{}, bounds = null;
+  /// The frames cannot be compared (different sizes), so nothing about them is
+  /// known. Callers must present a full repaint. A null [bounds] here does NOT
+  /// mean "unchanged" — that ambiguity is why this is a distinct value and not
+  /// just an empty diff.
+  static const incomparable = CellBufferDiff(
+    rows: <int>{},
+    bounds: null,
+    dirtyCells: -1,
+    hasOverlayCells: false,
+  );
 
   /// Rows containing at least one changed cell.
   final Set<int> rows;
@@ -986,5 +1004,19 @@ final class CellBufferDiff {
   /// Bounding rect of every changed cell, or null when nothing changed.
   final CellRect? bounds;
 
-  bool get isEmpty => bounds == null;
+  /// Number of differing cells, or -1 when the frames are [incomparable].
+  final int dirtyCells;
+
+  /// Whether either frame places an inline image, which disqualifies scrolling.
+  final bool hasOverlayCells;
+
+  /// Whether the frames could be compared at all.
+  bool get isComparable => dirtyCells >= 0;
+
+  /// Whether the frames are comparable and identical.
+  bool get isUnchanged => dirtyCells == 0;
+
+  /// The shape [detectBeneficialScrollUp] consumes.
+  ({int dirtyCells, bool hasOverlayCells}) get stats =>
+      (dirtyCells: dirtyCells, hasOverlayCells: hasOverlayCells);
 }

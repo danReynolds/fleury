@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:fleury/fleury_host.dart';
 import 'package:test/test.dart';
 
@@ -318,10 +319,7 @@ void main() {
         size: size,
         paint: (buffer) {
           for (var row = 0; row < 4; row++) {
-            buffer.writeText(
-              CellOffset(0, row),
-              row == 1 ? 'CHNG' : 'row$row',
-            );
+            buffer.writeText(CellOffset(0, row), row == 1 ? 'CHNG' : 'row$row');
           }
         },
       )!;
@@ -363,18 +361,188 @@ void main() {
       expect(shrunk.damage.dirtyRowsFor(const CellSize(6, 3)).isFull, isTrue);
     });
 
+    test('a beneficial scroll is published, not left to be inferred', () {
+      // Regression: scroll detection used to trigger on "damage is unbounded",
+      // which every relayout published. Exact damage is never unbounded, so the
+      // terminal's ESC[S path and the surface's row shift both went unreachable
+      // — with no gate or test to notice.
+      const wide = CellSize(20, 10);
+      final loop = TuiFrameLoop(renderDamage: RenderDamageTracker());
+      final first = loop.render(
+        size: wide,
+        paint: (buffer) {
+          for (var row = 0; row < 10; row++) {
+            buffer.writeText(CellOffset(0, row), 'entry $row');
+          }
+        },
+      )!;
+      loop.commit(first);
+
+      final scrolled = loop.render(
+        size: wide,
+        paint: (buffer) {
+          for (var row = 0; row < 10; row++) {
+            buffer.writeText(CellOffset(0, row), 'entry ${row + 1}');
+          }
+        },
+      )!;
+
+      expect(scrolled.damage.scrollUpRows, 1);
+    });
+
+    test('a scroll is still found when a row happens to be unchanged', () {
+      // The old trigger also required dirtyRows.isFull; one static row (a
+      // header, or an entering row that repeats the last) was enough to lose
+      // the shift and rebuild every row instead.
+      const wide = CellSize(20, 10);
+      final loop = TuiFrameLoop(renderDamage: RenderDamageTracker());
+      const planner = FramePresentationPlanner();
+      final first = loop.render(
+        size: wide,
+        paint: (buffer) {
+          for (var row = 0; row < 10; row++) {
+            buffer.writeText(CellOffset(0, row), 'entry $row');
+          }
+        },
+      )!;
+      loop.commit(first);
+
+      final scrolled = loop.render(
+        size: wide,
+        paint: (buffer) {
+          for (var row = 0; row < 10; row++) {
+            buffer.writeText(
+              CellOffset(0, row),
+              'entry ${row == 9 ? 9 : row + 1}',
+            );
+          }
+        },
+      )!;
+
+      expect(
+        scrolled.damage.dirtyRowsFor(wide).isFull,
+        isFalse,
+        reason: 'precondition: one row is byte-identical',
+      );
+      expect(scrolled.damage.scrollUpRows, 1);
+      final plan = planner.build(reason: 'scroll', frame: scrolled);
+      expect(plan.scrollUpRows, 1);
+      expect(
+        plan.dirtyRowModels,
+        hasLength(1),
+        reason: 'shift what is already there; rebuild only the residue',
+      );
+    });
+
+    test('an identical repaint is reported as empty, not as unknown', () {
+      // dirtyBounds is null both for "full repaint" and "nothing changed".
+      // A presenter that reads null as "scan everything" turns the cheapest
+      // possible frame into a whole-screen pass, so isEmpty has to say which.
+      final loop = TuiFrameLoop(renderDamage: RenderDamageTracker());
+      paint(loop, [0, 1, 2, 3]);
+      final same = paint(loop, [0, 1, 2, 3], commit: false);
+
+      expect(same.damage.isEmpty, isTrue);
+      expect(same.damage.fullRepaint, isFalse);
+      expect(same.damage.diffBounds, isNull);
+    });
+
+    test('incomparable frames are distinguishable from unchanged ones', () {
+      // Both carry no rows and null bounds; only the sentinel tells a caller
+      // that nothing is KNOWN rather than that nothing CHANGED.
+      final small = CellBuffer(const CellSize(4, 2));
+      final large = CellBuffer(const CellSize(8, 4));
+
+      final incomparable = large.diffAgainst(small);
+      expect(incomparable.isComparable, isFalse);
+      expect(incomparable.isUnchanged, isFalse);
+
+      final unchanged = large.diffAgainst(CellBuffer(const CellSize(8, 4)));
+      expect(unchanged.isComparable, isTrue);
+      expect(unchanged.isUnchanged, isTrue);
+    });
+
+    group('inline images', () {
+      // Cells under a placement are payload-free Cell.overlay, so the grid
+      // cannot express any of this and the placement list has to be compared.
+      const box = CellSize(20, 6);
+
+      TuiRenderedFrame place(
+        TuiFrameLoop loop,
+        List<int> bytes, {
+        int row = 0,
+        bool commit = true,
+      }) {
+        final frame = loop.render(
+          size: box,
+          paint: (buffer) => buffer.writeImage(
+            CellOffset(0, row),
+            Uint8List.fromList(bytes),
+            width: 4,
+            height: 2,
+          ),
+        )!;
+        if (commit) loop.commit(frame);
+        return frame;
+      }
+
+      test('swapping the image in place is damage', () {
+        final loop = TuiFrameLoop(renderDamage: RenderDamageTracker());
+        place(loop, [1, 2, 3]);
+        final swapped = place(loop, [9, 9, 9], commit: false);
+
+        expect(
+          swapped.damage.dirtyRowsFor(box).rows,
+          containsAll(<int>[0, 1]),
+          reason: 'same rect, different bytes — the cells are identical',
+        );
+      });
+
+      test('re-placing the same image is not damage', () {
+        final loop = TuiFrameLoop(renderDamage: RenderDamageTracker());
+        place(loop, [1, 2, 3]);
+        final again = place(loop, [1, 2, 3], commit: false);
+
+        expect(again.damage.isEmpty, isTrue);
+      });
+
+      test('moving a placement damages both the old and new rows', () {
+        final loop = TuiFrameLoop(renderDamage: RenderDamageTracker());
+        place(loop, [1, 2, 3]);
+        final moved = place(loop, [1, 2, 3], row: 3, commit: false);
+
+        expect(
+          moved.damage.dirtyRowsFor(box).rows,
+          containsAll(<int>[0, 1, 3, 4]),
+          reason: 'the vacated rows need clearing as much as the new ones',
+        );
+      });
+    });
+
     test('damage stays exact as content moves, shrinks and grows', () {
       final loop = TuiFrameLoop(renderDamage: RenderDamageTracker());
       paint(loop, [0, 1, 2, 3]);
 
-      expect(paint(loop, [0], blitted: [1, 2, 3]).damage
-          .dirtyRowsFor(size).rows, isEmpty, reason: 'all cache hits');
-      expect(paint(loop, [0]).damage.dirtyRowsFor(size).rows,
-          containsAll(<int>[1, 2, 3]), reason: 'boundaries unmounted');
-      expect(paint(loop, [0, 1, 2, 3]).damage.dirtyRowsFor(size).rows,
-          containsAll(<int>[1, 2, 3]), reason: 'grown back');
-      expect(paint(loop, []).damage.dirtyRowsFor(size).rows,
-          containsAll(<int>[0, 1, 2, 3]), reason: 'cleared entirely');
+      expect(
+        paint(loop, [0], blitted: [1, 2, 3]).damage.dirtyRowsFor(size).rows,
+        isEmpty,
+        reason: 'all cache hits',
+      );
+      expect(
+        paint(loop, [0]).damage.dirtyRowsFor(size).rows,
+        containsAll(<int>[1, 2, 3]),
+        reason: 'boundaries unmounted',
+      );
+      expect(
+        paint(loop, [0, 1, 2, 3]).damage.dirtyRowsFor(size).rows,
+        containsAll(<int>[1, 2, 3]),
+        reason: 'grown back',
+      );
+      expect(
+        paint(loop, []).damage.dirtyRowsFor(size).rows,
+        containsAll(<int>[0, 1, 2, 3]),
+        reason: 'cleared entirely',
+      );
     });
   });
 }
