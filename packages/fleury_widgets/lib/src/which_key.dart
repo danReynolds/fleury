@@ -8,7 +8,6 @@ import 'dart:async';
 import 'package:fleury/fleury_core.dart';
 
 import 'panel.dart';
-import 'popup.dart';
 
 /// Wraps [child] and, once the user presses a leader key (`Space`, `Ctrl+X`)
 /// and the dispatcher is holding for the next step, shows a popup listing the
@@ -129,10 +128,9 @@ class _WhichKeyState extends State<WhichKey> {
         widget.child,
         Align(
           alignment: Alignment.bottomLeft,
-          // Popup.bare supplies the float contract — opaque fill + chrome
-          // semantics (the app child stays selectable; this layer is not) —
-          // while the titled Panel draws its own frame.
-          child: Popup.bare(
+          // Container.filled supplies the opaque fill — the titled Panel
+          // draws its own frame, so this layer needs no border of its own.
+          child: Container.filled(
             child: Panel(
               title: pending.prefix.hintLabel,
               // Dismiss affordances: the keyboard hint (Esc, or any

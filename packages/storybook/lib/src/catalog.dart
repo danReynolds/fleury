@@ -272,7 +272,6 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
       'Dialog',
       'Toaster',
       'Tooltip',
-      'Popup',
       'KeyHintBar',
     ],
     initialHeight: 13,
@@ -810,7 +809,8 @@ const Map<String, String> _widgetDescriptions = <String, String>{
   'Row':
       'Horizontal layout composition with expansion and alignment under terminal constraints.',
   'Container':
-      'Framed, padded, colored layout chrome for focused terminal regions.',
+      'Padded, aligned, sized layout chrome — plus .filled and .framed, the '
+      'opaque variants a layer needs when it covers live content.',
   'Padding': 'Cell-accurate spacing around content without manual spacer rows.',
   'SizedBox':
       'Fixed and flexible sizing primitives for stable terminal layouts.',
@@ -861,9 +861,6 @@ const Map<String, String> _widgetDescriptions = <String, String>{
       'Modal-style framed content for confirmations and focused decisions.',
   'Toaster': 'Transient notification host for contextual app feedback.',
   'Tooltip': 'Anchored help text for compact controls.',
-  'Popup':
-      'The floating-chrome composite: opaque fill, frame, and non-selectable '
-      'chrome for anchored or pinned overlays.',
   'KeyHintBar':
       'One-line bar that auto-discovers the active key bindings on the focus '
       'chain and renders their hints.',
@@ -1046,7 +1043,6 @@ const Map<String, String> _widgetUsage = <String, String>{
   'SubMenu': 'Enter opens · → into submenu · Esc closes',
   'Dialog': 'Enter opens · Tab between actions · Esc or a button dismisses',
   'Tooltip': 'Focus the target to reveal',
-  'Popup': 'A static frame — the float contract rendered inline',
   'Toaster': 'Activate a trigger to emit a toast',
   'Tabs': '←/→ to switch tabs · Alt+1..9',
   'TabItem': '←/→ to switch tabs · Alt+1..9',
@@ -1237,16 +1233,52 @@ class _ContainerSpotlight extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 40,
-      height: 7,
-      border: showBorder
-          ? BoxBorder(style: Theme.of(context).borderStyle)
-          : null,
-      padding: const EdgeInsets.all(1),
-      alignment: Alignment.center,
-      color: const AnsiColor(8),
-      child: const Text('Container frames, colors, aligns, and sizes.'),
+    // Three constructors over the same wall of content, so the difference
+    // between them is the difference you can see: the plain Container is
+    // transparent (the wall shows through its padding), .filled paints the
+    // theme surface, .framed adds the theme border on top of that fill.
+    return Stack(
+      children: <Widget>[
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            for (var i = 0; i < 9; i++)
+              const Text('content behind — content behind — content behind'),
+          ],
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Container(
+              width: 34,
+              height: 3,
+              border: showBorder
+                  ? BoxBorder(style: Theme.of(context).borderStyle)
+                  : null,
+              padding: const EdgeInsets.symmetric(horizontal: 1),
+              alignment: Alignment.center,
+              child: const Text('Container — transparent'),
+            ),
+            Container.filled(
+              width: 34,
+              height: 3,
+              border: showBorder
+                  ? BoxBorder(style: Theme.of(context).borderStyle)
+                  : null,
+              padding: const EdgeInsets.symmetric(horizontal: 1),
+              alignment: Alignment.center,
+              child: const Text('Container.filled — opaque'),
+            ),
+            Container.framed(
+              width: 34,
+              height: 3,
+              padding: const EdgeInsets.symmetric(horizontal: 1),
+              alignment: Alignment.center,
+              child: const Text('Container.framed — + border'),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -1922,13 +1954,6 @@ class _OverlayStory extends StatelessWidget {
               ),
             ),
           ],
-        ),
-        'Popup' => Align(
-          alignment: Alignment.center,
-          child: Popup(
-            padding: const EdgeInsets.symmetric(horizontal: 1),
-            child: const Text('An opaque floating layer'),
-          ),
         ),
         'Tooltip' => Tooltip(
           message: 'Focus the button to show this anchored tooltip.',

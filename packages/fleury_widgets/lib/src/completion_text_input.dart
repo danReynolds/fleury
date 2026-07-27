@@ -1,7 +1,6 @@
 import 'package:fleury/fleury_core.dart';
 
 import 'option_label.dart';
-import 'popup.dart';
 
 /// Request passed to a [TextCompletionProvider].
 final class TextCompletionRequest {
@@ -368,7 +367,7 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
       },
       // Popup supplies the float contract: opaque fill, frame, and chrome
       // semantics, so the app underneath can't bleed through.
-      child: Popup(
+      child: Container.framed(
         border: BoxBorder(style: _borderStyle),
         child: SizedBox(
           width: width + 2,

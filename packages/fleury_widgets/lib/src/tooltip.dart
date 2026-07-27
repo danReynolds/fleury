@@ -1,7 +1,5 @@
 import 'package:fleury/fleury_core.dart';
 
-import 'popup.dart';
-
 /// Shows a hint anchored below [child] while focus is anywhere inside it.
 ///
 /// A TUI has no hover, so focus is the trigger: Tab onto the wrapped
@@ -55,7 +53,7 @@ class _TooltipState extends State<Tooltip> {
         link: _link,
         // Popup supplies the float contract: opaque fill, frame, and
         // chrome semantics (the hint text is not ambient-selectable).
-        child: Popup(
+        child: Container.framed(
           border: const BoxBorder(style: BorderStyle.rounded),
           child: Semantics(
             role: SemanticRole.text,

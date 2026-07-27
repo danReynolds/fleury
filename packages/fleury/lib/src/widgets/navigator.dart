@@ -750,7 +750,7 @@ class _RouteHost extends StatelessWidget {
       // null leaves the surround composited with the route beneath.
       Widget content = Align(
         alignment: align,
-        child: Surface(child: route.screen),
+        child: Container.filled(child: route.screen),
       );
       final barrier = route.barrierColor;
       if (barrier != null) {

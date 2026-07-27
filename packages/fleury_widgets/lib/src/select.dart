@@ -1,7 +1,6 @@
 import 'package:fleury/fleury_core.dart';
 
 import 'option_label.dart';
-import 'popup.dart';
 
 /// One choice in a [Select]. A disabled option is shown dimmed and skipped
 /// by arrow navigation and Enter.
@@ -810,7 +809,7 @@ class _SelectListState<T> extends State<_SelectList<T>> {
           onKey: _onKey,
           // Popup supplies the float contract: opaque fill, frame, and chrome
           // semantics, so the app underneath can't bleed through.
-          child: Popup(
+          child: Container.framed(
             border: BoxBorder(style: widget.borderStyle),
             child: SizedBox(
               width: width,

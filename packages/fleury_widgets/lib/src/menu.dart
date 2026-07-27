@@ -1,7 +1,6 @@
 import 'package:fleury/fleury_core.dart';
 
 import 'option_label.dart';
-import 'popup.dart';
 
 /// A row in a [Menu]: a selectable [MenuItem], a nested [SubMenu], or a
 /// [MenuSeparator].
@@ -493,7 +492,7 @@ class _MenuBodyState extends State<_MenuBody> {
             link: _selfLink,
             // Popup supplies the float contract: opaque fill, frame, and chrome
             // semantics, so the app underneath can't bleed through.
-            child: Popup(
+            child: Container.framed(
               border: BoxBorder(style: widget.borderStyle),
               child: SizedBox(
                 width: width,

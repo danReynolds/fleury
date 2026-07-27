@@ -2,8 +2,6 @@ import 'dart:async';
 
 import 'package:fleury/fleury_core.dart';
 
-import 'popup.dart';
-
 /// Semantic level of a toast, driving the color of its status dot. [info] is
 /// neutral (uncolored); the rest color the dot.
 enum ToastSeverity { info, success, warning, error }
@@ -237,7 +235,7 @@ class _ToasterState extends State<Toaster> {
               // chrome semantics). A neutral frame — severity lives in the
               // dot, not the border — with horizontal padding so the content
               // breathes.
-              child: Popup(
+              child: Container.framed(
                 border: const BoxBorder(style: BorderStyle.rounded),
                 padding: const EdgeInsets.symmetric(horizontal: 1),
                 child: _toastContent(toast),

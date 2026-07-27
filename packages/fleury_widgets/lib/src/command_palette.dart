@@ -1,7 +1,6 @@
 import 'dart:async' show unawaited;
 
 import 'package:fleury/fleury_core.dart';
-import 'popup.dart';
 
 /// One entry in a [CommandPalette].
 class Command {
@@ -476,7 +475,7 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
         // highlight, which is a look, not an opacity trick.) Height is bound
         // to the content so the box doesn't stretch to fill the viewport the
         // centering Align hands it.
-        child: Popup(
+        child: Container.framed(
           border: BoxBorder(style: theme.borderStyle),
           child: SizedBox(
             width: widget.width,

@@ -416,7 +416,7 @@ export 'src/widgets/basic.dart'
         SizedBox,
         Spacer,
         Stack,
-        Surface,
+        resolveSurfaceColor,
         Text,
         Wrap;
 export 'src/widgets/framework.dart'

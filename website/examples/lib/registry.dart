@@ -1092,20 +1092,20 @@ TextArea(
     ),
   ),
   ExampleInfo(
-    id: 'popup.basic',
-    widget: 'Popup',
-    category: 'Navigation & overlays',
+    id: 'container.filled',
+    widget: 'Container',
+    category: 'Layout',
     blurb:
-        'The floating-chrome composite: an opaque fill, a frame, and '
-        'non-selectable chrome — position it with Follower or Align. '
-        'Enter opens and closes it; Esc closes.',
+        'Container is transparent by default; .filled paints the theme '
+        'surface and .framed adds the theme border. Enter and Esc toggle a '
+        'framed layer over live content.',
     cols: 44,
-    rows: 9,
+    rows: 11,
     interactive: true,
-    // Toggling it is the demo: while it's open the wall behind is covered
-    // (Popup owns every cell it draws over), and closing it restores that
-    // content untouched — the popup floats, it doesn't overwrite.
-    builder: () => const _PopupExample(),
+    // Toggling is the demo: while the framed layer is open the wall behind
+    // is covered (it owns every cell it draws over), and closing restores
+    // that content untouched — it layers, it doesn't overwrite.
+    builder: () => const _ContainerFillExample(),
   ),
   ExampleInfo(
     id: 'dialog.basic',
@@ -1804,14 +1804,14 @@ final class _DocsCanvasPainter extends CanvasPainter {
   }
 }
 
-class _PopupExample extends StatefulWidget {
-  const _PopupExample();
+class _ContainerFillExample extends StatefulWidget {
+  const _ContainerFillExample();
 
   @override
-  State<_PopupExample> createState() => _PopupExampleState();
+  State<_ContainerFillExample> createState() => _ContainerFillExampleState();
 }
 
-class _PopupExampleState extends State<_PopupExample> {
+class _ContainerFillExampleState extends State<_ContainerFillExample> {
   bool _open = false;
 
   void _toggle() => setState(() => _open = !_open);
@@ -1819,18 +1819,17 @@ class _PopupExampleState extends State<_PopupExample> {
   @override
   Widget build(BuildContext context) {
     // The trigger and the wall stay at a fixed position in the tree so the
-    // button keeps focus across a toggle; only the popup layer comes and
+    // button keeps focus across a toggle; only the framed layer comes and
     // goes.
     final Widget behind = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Button(
-          label: _open ? 'Hide details' : 'Show details',
+          label: _open ? 'Hide layer' : 'Show layer',
           autofocus: true,
           onPressed: _toggle,
         ),
-        for (var i = 0; i < 4; i++)
-          const Text('Application content behind the popup.'),
+        for (var i = 0; i < 6; i++) const Text('live content behind the layer'),
       ],
     );
     return _framed(
@@ -1845,18 +1844,18 @@ class _PopupExampleState extends State<_PopupExample> {
             if (_open)
               Align(
                 alignment: Alignment.center,
-                child: Popup(
+                child: Container.framed(
                   padding: const EdgeInsets.symmetric(horizontal: 1),
                   // Deliberately ragged: the shorter line leaves interior
                   // cells the content never writes — exactly the cells that
-                  // would bleed without the fill.
+                  // would show the wall through an unfilled Container.
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: const <Widget>[
-                      Text('An opaque floating layer'),
+                      Text('Container.framed'),
                       Text(
-                        'Esc or the button closes it',
+                        'opaque fill + theme border',
                         style: CellStyle(dim: true),
                       ),
                     ],

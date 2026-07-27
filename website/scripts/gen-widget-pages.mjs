@@ -524,8 +524,6 @@ const CORE = [
     code: "LayoutBuilder(\n  builder: (context, constraints) =>\n      (constraints.maxCols ?? 0) > 60 ? Wide() : Narrow(),\n)" },
   { slug: 'listenablebuilder', guide: 'state-management', widget: 'ListenableBuilder',
     code: "ListenableBuilder(\n  listenable: model,\n  builder: (context, child) => Text(model.statusLabel),\n)" },
-  { slug: 'container', widget: 'Container',
-    code: "Container(\n  width: 32,\n  padding: const EdgeInsets.symmetric(horizontal: 1),\n  border: BoxBorder(style: BorderStyle.rounded),\n  child: Text('Settings'),\n)" },
   { slug: 'sizedbox', widget: 'SizedBox',
     code: "SizedBox(\n  width: 20,\n  height: 3,\n  child: Text('fixed area'),\n)" },
   { slug: 'padding', widget: 'Padding',
