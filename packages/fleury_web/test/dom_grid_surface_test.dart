@@ -115,6 +115,7 @@ void main() {
           size: size,
           damage: PresentationChanged(
             dirtyRows: TuiDirtyRows.fromRows(const [0, 1, 2], rowCount: 4),
+            dirtyBounds: null,
           ),
           // The wire's shape: no model for the blank entering row.
           dirtyRowModels: const [],

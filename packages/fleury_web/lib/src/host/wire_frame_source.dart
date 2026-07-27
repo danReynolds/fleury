@@ -460,7 +460,7 @@ final class WireFrameSource implements BrowserFrameSource {
     return FramePresentationPlan(
       reason: 'resync',
       size: mirror.size,
-      damage: PresentationFullRepaint(mirror.size),
+      damage: const PresentationFullRepaint(),
       dirtyRowModels: [
         for (var r = 0; r < mirror.size.rows; r++) builder.buildRow(mirror, r),
       ],

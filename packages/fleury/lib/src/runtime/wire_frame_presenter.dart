@@ -47,7 +47,7 @@ final class WireFramePresenter implements FramePresenter {
     // row fallback then reports rowCount x width or zero respectively.
     final dirtyCells = bounds != null
         ? bounds.size.cols * bounds.size.rows
-        : plan.damage.dirtyRows.dirtyRowCount * frame.next.size.cols;
+        : plan.dirtyRows.dirtyRowCount * frame.next.size.cols;
     // On the wire the "diff" phase is building the change plan: the row diff
     // plus span construction. The driver owns the rest of the FrameEvent.
     return FrameDiffStats(

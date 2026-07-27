@@ -25,8 +25,8 @@ FramePresentationPlan applyRemotePlan(RemotePlan plan, CellBuffer mirror) {
     // The wire carries rows, not bounds, so the changed variant goes out with
     // no bound at all — legitimately absent, not "nothing changed".
     damage: plan.fullRepaint
-        ? PresentationFullRepaint(mirror.size)
-        : PresentationChanged(dirtyRows: dirtyRows),
+        ? const PresentationFullRepaint()
+        : PresentationChanged(dirtyRows: dirtyRows, dirtyBounds: null),
     dirtyRowModels: rowModels,
     metricsChanged: false,
     dirtyRowDiffTime: Duration.zero,

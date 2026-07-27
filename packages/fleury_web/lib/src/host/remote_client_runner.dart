@@ -42,7 +42,9 @@ Future<MountedApp?> connectRemoteClient({
     doc.body?.setAttribute('data-fleury-remote-client', _connectedStatus);
     return app;
   } catch (error) {
-    web.console.error('fleury: remote client failed to connect: $error'.toJS);
+    web.console.error(
+      'fleury: remote client failed to connect: $error'.toJS,
+    );
     _surfaceConnectionFailure(host, doc);
     return null;
   }

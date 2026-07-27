@@ -15,7 +15,8 @@ import 'tui_frame_loop.dart';
 
 /// Presenter-ready frame data computed once by the host.
 final class FramePresentationPlan {
-  const FramePresentationPlan({
+  // Not const: [dirtyRows] is resolved once, lazily, against this plan's size.
+  FramePresentationPlan({
     required this.reason,
     required this.size,
     required this.damage,
@@ -50,9 +51,21 @@ final class FramePresentationPlan {
   /// `source` — all three set from one decision at every construction site.
   /// Three copies of one fact is three chances to disagree, and one of them
   /// was already dead: written at all three sites, read by nothing.
-  bool get fullRepaint => damage is PresentationFullRepaint;
+  bool get fullRepaint => switch (damage) {
+    PresentationFullRepaint() => true,
+    PresentationChanged() => false,
+  };
 
-  int get dirtyRowCount => damage.dirtyRows.dirtyRowCount;
+  /// The rows a presenter must re-apply, resolved against THIS plan's [size].
+  ///
+  /// Resolved here rather than stored on the damage: a full repaint means
+  /// "every row of the frame being presented", and the frame's size is the
+  /// plan's. Letting the damage carry its own copy of the size would put the
+  /// same fact in two places again — with the damage's copy silently winning
+  /// the row count.
+  late final TuiDirtyRows dirtyRows = damage.dirtyRowsFor(size);
+
+  int get dirtyRowCount => dirtyRows.dirtyRowCount;
 
   int get dirtyCellEstimate => dirtyRowCount * size.cols;
 
@@ -64,10 +77,15 @@ final class FramePresentationPlan {
 ///
 /// Sealed for ONE invariant that flags could not hold: a full repaint always
 /// dirties every row. That pairing used to be restated by hand at every
-/// construction site — and the type is exported host SPI, so a site that
-/// paired "full repaint" with partial rows would present a partially stale
-/// frame with no error anywhere. [PresentationFullRepaint] computes its rows
-/// instead of accepting them, making the mismatch unrepresentable.
+/// construction site, and this type is exported host SPI, so the fourth site
+/// was never going to be one of ours. [PresentationFullRepaint] has no rows to
+/// pass — [dirtyRowsFor] computes them — so the mismatch cannot be written.
+///
+/// What that does and does not protect: [FramePresentationPlan.dirtyRows]
+/// drives the wire's dirty-row hint and semantic coverage, so a full repaint
+/// declaring partial rows used to desync a peer mirror or throw out of
+/// coverage. It does NOT govern what a DOM surface paints — that reads
+/// `dirtyRowModels`, which this type has no say over.
 ///
 /// The carve deliberately differs from the loop-level `TuiFrameDamage` it is
 /// built from. There, [dirtyBounds] being absent MEANS "nothing changed", so
@@ -79,8 +97,12 @@ final class FramePresentationPlan {
 sealed class FramePresentationDamage {
   const FramePresentationDamage();
 
-  /// The rows a presenter must re-apply. Authoritative.
-  TuiDirtyRows get dirtyRows;
+  /// The rows a presenter must re-apply, for a frame of [size].
+  ///
+  /// Takes the size rather than storing one, so the row count can only ever
+  /// be the presented frame's. Callers should prefer
+  /// [FramePresentationPlan.dirtyRows], which resolves and caches this.
+  TuiDirtyRows dirtyRowsFor(CellSize size);
 
   /// A bound a diffing presenter may restrict itself to, when one is known.
   ///
@@ -91,13 +113,16 @@ sealed class FramePresentationDamage {
 /// Present everything: there was no comparable previous frame, or a host
 /// resynced the surface from scratch.
 final class PresentationFullRepaint extends FramePresentationDamage {
-  const PresentationFullRepaint(this.size);
+  const PresentationFullRepaint();
 
-  final CellSize size;
-
-  /// Computed, not accepted — a full repaint cannot be given partial rows.
+  /// Every row of the presented frame. Computed, never accepted, so a full
+  /// repaint cannot be handed partial rows.
+  ///
+  /// Degenerate at zero rows: `TuiDirtyRows.full(0)` is empty, so a
+  /// zero-height frame reports a full repaint with nothing dirty. No plan is
+  /// built for an empty size, so this is unreachable in-tree.
   @override
-  TuiDirtyRows get dirtyRows => TuiDirtyRows.full(size.rows);
+  TuiDirtyRows dirtyRowsFor(CellSize size) => TuiDirtyRows.full(size.rows);
 
   @override
   CellRect? get dirtyBounds => null;
@@ -105,11 +130,20 @@ final class PresentationFullRepaint extends FramePresentationDamage {
 
 /// Present [dirtyRows]; [dirtyBounds] narrows that further when known.
 final class PresentationChanged extends FramePresentationDamage {
-  const PresentationChanged({required this.dirtyRows, this.dirtyBounds});
+  const PresentationChanged({
+    required TuiDirtyRows dirtyRows,
+    required this.dirtyBounds,
+  }) : _dirtyRows = dirtyRows;
 
+  final TuiDirtyRows _dirtyRows;
+
+  /// The rows the producer measured; [size] is unused because they are already
+  /// absolute.
   @override
-  final TuiDirtyRows dirtyRows;
+  TuiDirtyRows dirtyRowsFor(CellSize size) => _dirtyRows;
 
+  /// Required, not defaulted: a site that means to supply a bound and forgets
+  /// should not compile.
   @override
   final CellRect? dirtyBounds;
 }
@@ -147,7 +181,7 @@ final class FramePresentationPlanner {
     final dirtyRows = dirtyRowsResult.rows;
     final fullRepaint = runtimeDamage is FrameFullRepaint;
     final damage = fullRepaint
-        ? PresentationFullRepaint(frame.next.size)
+        ? const PresentationFullRepaint()
         : PresentationChanged(
             dirtyRows: dirtyRows,
             dirtyBounds: runtimeDamage.diffBounds,

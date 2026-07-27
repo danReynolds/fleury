@@ -38,7 +38,7 @@ void main() {
 
       expect(plan.scrollUpRows, 1);
       // The TRUE damage stays full for semantic consumers...
-      expect(plan.damage.dirtyRows.isFull, isTrue);
+      expect(plan.dirtyRows.isFull, isTrue);
       // ...while the surface only rebuilds the entering row.
       expect(plan.dirtyRowModels.map((row) => row.row), [3]);
     });
@@ -87,7 +87,7 @@ void main() {
       expect(plan.fullRepaint, isTrue);
       expect(plan.size, size);
       expect(plan.damage, isA<PresentationFullRepaint>());
-      expect(plan.damage.dirtyRows.isFull, isTrue);
+      expect(plan.dirtyRows.isFull, isTrue);
       expect(plan.dirtyRowModels.map((row) => row.row), [0, 1, 2]);
       expect(plan.dirtyRowDiffTime, Duration.zero);
       expect(plan.spanBuildTime.inMicroseconds, greaterThanOrEqualTo(0));
@@ -114,8 +114,8 @@ void main() {
       // 'hello' -> 'hullo' differs in exactly one cell. Deriving pins the
       // bounds to that cell instead of the whole row paint happened to touch.
       expect(plan.damage.dirtyBounds, CellRect.fromLTWH(1, 1, 1, 1));
-      expect(plan.damage.dirtyRows.isFull, isFalse);
-      expect(plan.damage.dirtyRows.rows, [1]);
+      expect(plan.dirtyRows.isFull, isFalse);
+      expect(plan.dirtyRows.rows, [1]);
       expect(plan.dirtyRowModels, hasLength(1));
       expect(plan.dirtyRowModels.single.row, 1);
       expect(plan.dirtyRowModels.single.runs.first.text, 'hullo ');
@@ -151,8 +151,8 @@ void main() {
       final plan = planner.build(reason: 'layout', frame: second);
 
       expect(plan.damage, isA<PresentationChanged>());
-      expect(plan.damage.dirtyRows.isFull, isFalse);
-      expect(plan.damage.dirtyRows.rows, [1]);
+      expect(plan.dirtyRows.isFull, isFalse);
+      expect(plan.dirtyRows.rows, [1]);
       expect(plan.dirtyRowModels.map((row) => row.row), [1]);
       expect(plan.dirtyRowDiffTime.inMicroseconds, greaterThanOrEqualTo(0));
     });
@@ -169,7 +169,7 @@ void main() {
       expect(plan.fullRepaint, isFalse);
       expect(plan.damage, isA<PresentationChanged>());
       expect(plan.damage.dirtyBounds, isNull, reason: 'nothing changed');
-      expect(plan.damage.dirtyRows.isEmpty, isTrue);
+      expect(plan.dirtyRows.isEmpty, isTrue);
       expect(plan.dirtyRowModels, isEmpty);
     });
 
@@ -203,9 +203,9 @@ void main() {
       final plan = planner.build(reason: 'oracle', frame: second);
 
       expect(plan.damage, isA<PresentationChanged>());
-      expect(plan.damage.dirtyRows.isFull, isFalse);
-      expect(plan.damage.dirtyRows.ranges, hasLength(2));
-      expect(plan.damage.dirtyRows.rows, [0, 2]);
+      expect(plan.dirtyRows.isFull, isFalse);
+      expect(plan.dirtyRows.ranges, hasLength(2));
+      expect(plan.dirtyRows.rows, [0, 2]);
       expect(plan.dirtyRowModels.map((row) => row.row), [0, 2]);
       expect(plan.dirtyRowDiffTime.inMicroseconds, greaterThanOrEqualTo(0));
     });
