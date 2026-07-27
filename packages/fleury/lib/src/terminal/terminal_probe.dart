@@ -192,33 +192,134 @@ Future<AmbiguousCharWidth?> probeAmbiguousWidth(
   TerminalProbeTransport transport, {
   Duration timeout = const Duration(milliseconds: 150),
 }) async {
-  final List<int> response;
-  try {
-    response = await transport.request(
-      _ambiguousWidthQuery,
-      timeout: timeout,
-    );
-  } on Object {
-    return null;
-  }
-  final column = _cursorReportColumn(response);
-  if (column == null) return null;
-  // The glyph occupied home (column 1). The cursor now rests at the next free
-  // column: 2 when the terminal advanced one cell (narrow), 3 when it advanced
-  // two (wide). Anything below 2 is anomalous (0-width) — treat as narrow.
-  return column >= 3 ? AmbiguousCharWidth.wide : AmbiguousCharWidth.narrow;
+  final measured = await probeGlyphWidths(transport, timeout: timeout);
+  final width = measured.ambiguous;
+  if (width == null) return null;
+  // 1 cell means the terminal drew it narrow, 2 means wide. Anything else is
+  // anomalous — treat as narrow, the near-universal default.
+  return width >= 2 ? AmbiguousCharWidth.wide : AmbiguousCharWidth.narrow;
 }
 
-/// Home, one ambiguous glyph (box-drawing horizontal, UAX #11 Ambiguous),
-/// a Cursor Position Report request, then erase the glyph and re-home. The
-/// trailing Device Attributes query is the transport's stop sentinel.
-const _ambiguousWidthQuery =
-    '\x1B[H─\x1B[6n\x1B[H\x1B[K$_deviceAttributesQuery';
+/// What the terminal ACTUALLY drew for one representative glyph per known
+/// width-disagreement class, in cells, measured rather than assumed.
+///
+/// There is no protocol by which an application can ask a terminal how wide it
+/// will draw something — DECRQM 2027 reports a capability that is known to lie
+/// in both directions, and OSC 66 exists on two emulators. What does work,
+/// everywhere, is what vim's `t_u7` does: draw it and look at where the cursor
+/// ended up. This measures the four classes the field genuinely disagrees on.
+///
+/// A null field means the terminal never answered that measurement (no CPR
+/// support, a timeout, a truncated reply); the caller keeps its default rather
+/// than inventing a number.
+@immutable
+final class MeasuredGlyphWidths {
+  const MeasuredGlyphWidths({
+    this.ambiguous,
+    this.emojiPresentation,
+    this.textPresentation,
+    this.graphemeCluster,
+  });
 
-/// The column from a Cursor Position Report (`ESC [ row ; col R`) in
-/// [responseBytes], or null if none is present. Scans past any other CSI reply
-/// (e.g. the trailing Device Attributes `c`) that shares the buffer.
-int? _cursorReportColumn(List<int> responseBytes) {
+  /// `U+2500` box drawing — UAX #11 Ambiguous. 1 on modern terminals, 2 on
+  /// CJK-configured ones.
+  final int? ambiguous;
+
+  /// `U+2764 U+FE0F` (❤️) — 2 when the terminal honours the VS16 presentation
+  /// selector, 1 when it ignores it. The single biggest disagreement in the
+  /// field: roughly 19 of 30 surveyed terminals draw this at 1.
+  final int? emojiPresentation;
+
+  /// `U+2713` (✓) — a text-presentation dingbat. Expected 1; a 2 here means
+  /// the terminal emoji-fies text-default symbols, which is what made a
+  /// mis-classified Dingbats range garble whole frames.
+  final int? textPresentation;
+
+  /// `U+1F468 ZWJ U+1F469 ZWJ U+1F466` (👨‍👩‍👦) — 2 when the terminal performs
+  /// UAX #29 grapheme clustering, ~6 when it sums each code point separately.
+  final int? graphemeCluster;
+
+  /// Whether every class answered — i.e. the terminal supports CPR and the
+  /// measurements can be trusted as a set.
+  bool get isComplete =>
+      ambiguous != null &&
+      emojiPresentation != null &&
+      textPresentation != null &&
+      graphemeCluster != null;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'ambiguous': ambiguous,
+    'emojiPresentation': emojiPresentation,
+    'textPresentation': textPresentation,
+    'graphemeCluster': graphemeCluster,
+  };
+
+  @override
+  String toString() =>
+      'MeasuredGlyphWidths(ambiguous: $ambiguous, '
+      'emojiPresentation: $emojiPresentation, '
+      'textPresentation: $textPresentation, '
+      'graphemeCluster: $graphemeCluster)';
+}
+
+/// Measures [MeasuredGlyphWidths] in ONE round trip.
+///
+/// Each probe glyph is written at column 1 of the CURRENT line and immediately
+/// followed by a Cursor Position Report request, so the replies arrive in the
+/// same order the glyphs were written; the line is erased afterwards. Safe on
+/// the normal screen as well as the alternate one — it never homes the cursor,
+/// so it cannot overwrite content above the caller's line.
+Future<MeasuredGlyphWidths> probeGlyphWidths(
+  TerminalProbeTransport transport, {
+  Duration timeout = const Duration(milliseconds: 150),
+}) async {
+  final List<int> response;
+  try {
+    response = await transport.request(_glyphWidthQuery, timeout: timeout);
+  } on Object {
+    return const MeasuredGlyphWidths();
+  }
+  final columns = _cursorReportColumns(response);
+  // Each glyph started at column 1, so the reported column is width + 1. A
+  // report below 2 is anomalous (zero advance) and is discarded rather than
+  // recorded as a width of 0.
+  int? widthAt(int index) {
+    if (index >= columns.length) return null;
+    final width = columns[index] - 1;
+    return width >= 1 ? width : null;
+  }
+
+  return MeasuredGlyphWidths(
+    ambiguous: widthAt(0),
+    emojiPresentation: widthAt(1),
+    textPresentation: widthAt(2),
+    graphemeCluster: widthAt(3),
+  );
+}
+
+/// Return to column 1, draw, ask where the cursor landed — once per
+/// disagreement class — then erase the line. The order here defines the order
+/// the replies are read in [probeGlyphWidths]. The trailing Device Attributes
+/// query is the transport's stop sentinel.
+///
+/// Uses `\r` rather than `ESC [ H`: carriage return stays on the CURRENT line,
+/// so this is safe both on the alternate screen (where the driver probes) and
+/// on the normal screen (where `fleury diagnose --probe` does). Homing to the
+/// top-left would overwrite whatever the user already had on screen.
+const _glyphWidthQuery =
+    '\r\u{2500}\x1B[6n' // ambiguous
+    '\r\u{2764}\u{FE0F}\x1B[6n' // emoji presentation (VS16)
+    '\r\u{2713}\x1B[6n' // text presentation
+    '\r\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F466}\x1B[6n' // ZWJ cluster
+    '\r\x1B[K'
+    '$_deviceAttributesQuery';
+
+/// Every column reported by a Cursor Position Report (`ESC [ row ; col R`) in
+/// [responseBytes], in arrival order. Scans past any other CSI reply (e.g. the
+/// trailing Device Attributes `c`) that shares the buffer, so a batched probe
+/// can read one column per glyph it wrote.
+List<int> _cursorReportColumns(List<int> responseBytes) {
+  final columns = <int>[];
   for (var i = 0; i + 1 < responseBytes.length; i++) {
     if (responseBytes[i] != 0x1B || responseBytes[i + 1] != 0x5B) {
       continue; // ESC [
@@ -230,7 +331,7 @@ int? _cursorReportColumn(List<int> responseBytes) {
         responseBytes[j] <= 0x3F) {
       j++; // CSI parameter bytes (digits, ';')
     }
-    if (j >= responseBytes.length) return null; // final byte not arrived
+    if (j >= responseBytes.length) break; // final byte not arrived
     if (responseBytes[j] == 0x52) {
       // 'R' → Cursor Position Report. Parameters are `row;col`.
       final parts = String.fromCharCodes(
@@ -238,7 +339,7 @@ int? _cursorReportColumn(List<int> responseBytes) {
       ).split(';');
       if (parts.length == 2) {
         final col = int.tryParse(parts[1]);
-        if (col != null) return col;
+        if (col != null) columns.add(col);
       }
     }
     // Resume from `j`: the for-loop's `i++` steps to `j`. If `j` is a real CSI
@@ -248,7 +349,7 @@ int? _cursorReportColumn(List<int> responseBytes) {
     // still found. Using `i = j` here would step over that ESC and miss it.
     i = j - 1;
   }
-  return null;
+  return columns;
 }
 
 typedef _ProbeParser =

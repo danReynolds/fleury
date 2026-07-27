@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 
 import '../rendering/surface_capabilities.dart';
+import 'terminal_probe.dart';
 
 export '../rendering/surface_capabilities.dart' show ColorMode, GlyphTier;
 
@@ -54,6 +55,7 @@ final class TerminalCapabilities {
     this.tmuxPassthrough = false,
     this.ambiguousCharWidth = AmbiguousCharWidth.wide,
     this.hyperlinks = false,
+    this.measuredWidths = const MeasuredGlyphWidths(),
   });
 
   /// Conservative default for unknown terminals: 16-color ANSI, alt
@@ -83,6 +85,14 @@ final class TerminalCapabilities {
   /// [AmbiguousCharWidth.wide] until a startup probe confirms otherwise.
   final AmbiguousCharWidth ambiguousCharWidth;
 
+  /// What the startup probe measured this terminal ACTUALLY drawing, per
+  /// width-disagreement class — not what a table or a capability bit claims.
+  ///
+  /// Reported for diagnostics today rather than consumed by layout: the
+  /// numbers have to be trustworthy before they are allowed to move glyphs.
+  /// All-null when the terminal doesn't answer CPR, or the probe was skipped.
+  final MeasuredGlyphWidths measuredWidths;
+
   /// Whether OSC 8 hyperlinks are supported and safe to emit here. Detected
   /// from the environment and SUPPRESSED under tmux (see
   /// [detectHyperlinksFromEnvironment]); default false for unknown terminals.
@@ -98,6 +108,7 @@ final class TerminalCapabilities {
     bool? supportsHidingCursor,
     bool? tmuxPassthrough,
     AmbiguousCharWidth? ambiguousCharWidth,
+    MeasuredGlyphWidths? measuredWidths,
     bool? hyperlinks,
   }) => TerminalCapabilities(
     colorMode: colorMode ?? this.colorMode,
@@ -108,6 +119,7 @@ final class TerminalCapabilities {
     supportsHidingCursor: supportsHidingCursor ?? this.supportsHidingCursor,
     tmuxPassthrough: tmuxPassthrough ?? this.tmuxPassthrough,
     ambiguousCharWidth: ambiguousCharWidth ?? this.ambiguousCharWidth,
+    measuredWidths: measuredWidths ?? this.measuredWidths,
     hyperlinks: hyperlinks ?? this.hyperlinks,
   );
 
@@ -120,6 +132,7 @@ final class TerminalCapabilities {
         'hideCursor=$supportsHidingCursor, '
         'tmuxPassthrough=$tmuxPassthrough, '
         'ambiguousCharWidth=${ambiguousCharWidth.name}, '
+        'measuredWidths=$measuredWidths, '
         'hyperlinks=$hyperlinks)';
   }
 }

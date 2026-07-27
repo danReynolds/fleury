@@ -237,10 +237,12 @@ export 'src/terminal/diagnostics.dart'
         diagnoseTerminal;
 export 'src/terminal/terminal_probe.dart'
     show
+        MeasuredGlyphWidths,
         TerminalProbeReport,
         TerminalProbeResult,
         TerminalProbeStatus,
         TerminalProbeTransport,
+        probeGlyphWidths,
         runTerminalProbeSuite;
 export 'src/input/events.dart'
     show

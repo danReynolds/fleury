@@ -137,6 +137,7 @@ final class TerminalCapabilityReport {
     required this.hideCursor,
     required this.tmuxPassthrough,
     required this.ambiguousCharWidth,
+    this.measuredWidths = const MeasuredGlyphWidths(),
     this.bracketedPaste = 'enabledByDefault',
     this.kittyKeyboard = 'attempted',
     this.mouse = 'availableOptIn',
@@ -164,6 +165,7 @@ final class TerminalCapabilityReport {
          hideCursor: capabilities.supportsHidingCursor,
          tmuxPassthrough: capabilities.tmuxPassthrough,
          ambiguousCharWidth: capabilities.ambiguousCharWidth,
+         measuredWidths: capabilities.measuredWidths,
          osc8Hyperlinks: osc8Hyperlinks,
        );
 
@@ -180,6 +182,11 @@ final class TerminalCapabilityReport {
   final bool tmuxPassthrough;
   final AmbiguousCharWidth ambiguousCharWidth;
 
+  /// Cell widths the startup probe measured this terminal actually drawing.
+  /// The honest answer to "will my glyphs line up here?" — see
+  /// [MeasuredGlyphWidths].
+  final MeasuredGlyphWidths measuredWidths;
+
   TerminalCapabilities toCapabilities() {
     return TerminalCapabilities(
       colorMode: colorMode,
@@ -189,6 +196,7 @@ final class TerminalCapabilityReport {
       supportsHidingCursor: hideCursor,
       tmuxPassthrough: tmuxPassthrough,
       ambiguousCharWidth: ambiguousCharWidth,
+      measuredWidths: measuredWidths,
     );
   }
 
@@ -196,6 +204,7 @@ final class TerminalCapabilityReport {
     'colorMode': colorMode.name,
     'glyphTier': glyphTier.name,
     'ambiguousCharWidth': ambiguousCharWidth.name,
+    'measuredWidths': measuredWidths.toJson(),
     'imageProtocol': imageProtocol.name,
     'alternateScreen': alternateScreen,
     'hideCursor': hideCursor,
@@ -383,6 +392,30 @@ final class TerminalDiagnosis {
         // and must not override the runtime cell-art policy.
         imageKittyProbeUsable: !environment.tmux,
       ),
+    );
+  }
+
+  /// Folds measured glyph widths into [capabilities].
+  ///
+  /// Capability detection is passive and env-derived; these are the only
+  /// numbers in the report that come from asking the terminal to actually draw
+  /// something and watching where the cursor went, so they are worth carrying
+  /// separately from the rest of the snapshot.
+  TerminalDiagnosis withMeasuredWidths(MeasuredGlyphWidths measured) {
+    return TerminalDiagnosis(
+      schemaVersion: schemaVersion,
+      terminal: terminal,
+      environment: environment,
+      platform: platform,
+      capabilities: TerminalCapabilityReport.fromCapabilities(
+        capabilities.toCapabilities().copyWith(measuredWidths: measured),
+        osc8Hyperlinks: capabilities.osc8Hyperlinks,
+      ),
+      fallbacks: fallbacks,
+      warnings: warnings,
+      unsupportedFeatures: unsupportedFeatures,
+      activeProbes: activeProbes,
+      compatibility: compatibility,
     );
   }
 
