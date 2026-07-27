@@ -111,18 +111,24 @@ final class TuiFrameLoop {
     // backpressure coalescing the wire's previous frame is not the loop's,
     // so this decision cannot be handed down; the duplication is confined to
     // genuine scroll frames, where one detector run is small next to encode.)
-    final scrollUpRows =
-        (_requireFullRepaint ||
-            !diff.isComparable ||
-            diff.dirtyCells < size.cols)
-        ? null
-        : detectBeneficialScrollUp(previous, next, diff.stats);
-    final damage = TuiFrameDamage(
-      fullRepaint: _requireFullRepaint || !diff.isComparable,
-      dirtyBounds: diff.bounds,
-      dirtyRows: diff.rows,
-      scrollUpRows: scrollUpRows,
-    );
+    final bounds = diff.bounds;
+    final TuiFrameDamage damage;
+    if (_requireFullRepaint || !diff.isComparable) {
+      damage = const FrameFullRepaint();
+    } else if (bounds == null) {
+      damage = const FrameUnchanged();
+    } else {
+      final scrollUpRows = diff.dirtyCells < size.cols
+          ? null
+          : detectBeneficialScrollUp(previous, next, diff.stats);
+      damage = scrollUpRows == null
+          ? FrameChanged(rows: diff.rows, bounds: bounds)
+          : FrameScrolled(
+              scrollUpRows: scrollUpRows,
+              rows: diff.rows,
+              bounds: bounds,
+            );
+    }
     _requireFullRepaint = false;
 
     return TuiRenderedFrame._(
@@ -166,55 +172,95 @@ final class TuiRenderedFrame {
   final Duration bufferPrepareTime;
 }
 
-/// The exact set of cells that changed in one frame.
-final class TuiFrameDamage {
-  const TuiFrameDamage({
-    required this.fullRepaint,
-    required this.dirtyBounds,
-    required this.dirtyRows,
-    this.scrollUpRows,
-  });
-
-  /// Whether the presenter should treat this as a full repaint.
-  ///
-  /// Set when there is no comparable previous frame — a cold buffer pool or a
-  /// resize — not as a fallback for damage the loop failed to compute.
-  final bool fullRepaint;
-
-  /// Bounding rect of every changed cell, or null when nothing changed.
-  final CellRect? dirtyBounds;
-
-  /// Exactly the rows containing a changed cell.
-  ///
-  /// Unlike [dirtyBounds] (a single union rect), scattered changes stay
-  /// disjoint: five separated dirty rows are five rows here, not the tall rect
-  /// spanning them. Required, so it can never disagree with [dirtyBounds] about
-  /// how much changed.
-  final Set<int> dirtyRows;
-
-  /// When non-null, the frame is a beneficial upward scroll by this many rows:
-  /// presenters may shift what they already hold and repaint only the residue.
-  ///
-  /// Computed once here, where both buffers are in hand and the diff has
-  /// already counted the cells the detector needs.
-  final int? scrollUpRows;
-
-  /// Whether anything at all changed.
-  bool get isEmpty => !fullRepaint && dirtyBounds == null;
-
-  /// Bounds a diffing presenter may safely restrict itself to.
-  ///
-  /// Null on a full repaint (present everything) or when nothing changed;
-  /// [fullRepaint] and [isEmpty] distinguish the two. Callers that treat null
-  /// as "scan the whole screen" must check [isEmpty] first.
-  CellRect? get diffBounds => fullRepaint ? null : dirtyBounds;
+/// What a presenter must do to bring the screen up to date with a frame.
+///
+/// A sealed union rather than flags plus nullable fields, because the flag
+/// shape kept expressing states it did not mean. `dirtyBounds == null` said
+/// both "repaint everything" and "nothing changed" — opposite instructions
+/// told apart only by a documented convention — and `scrollUpRows` was an
+/// optional a consumer could ignore without noticing, which is precisely what
+/// happened: the terminal presenter silently stopped scrolling and every test
+/// still passed. Here the states are distinct types, so a presenter that
+/// switches gets exhaustiveness from the compiler instead of from a convention.
+///
+/// Presenters needing only "which rows" can stay on [dirtyRowsFor] and
+/// [diffBounds] without switching at all.
+sealed class TuiFrameDamage {
+  const TuiFrameDamage();
 
   /// The rows a row-oriented presenter must re-apply.
-  TuiDirtyRows dirtyRowsFor(CellSize size) {
-    if (fullRepaint) return TuiDirtyRows.full(size.rows);
-    if (dirtyRows.isEmpty) return const TuiDirtyRows.none();
-    return TuiDirtyRows.fromRows(dirtyRows, rowCount: size.rows);
-  }
+  TuiDirtyRows dirtyRowsFor(CellSize size);
+
+  /// Bounds a diffing presenter may restrict itself to, or null when no bound
+  /// is useful (everything, or nothing, changed — which variant says which).
+  CellRect? get diffBounds;
+}
+
+/// No comparable previous frame — a cold buffer pool or a resize. Present
+/// everything. Not a fallback for damage the loop failed to compute; the loop
+/// always computes it.
+final class FrameFullRepaint extends TuiFrameDamage {
+  const FrameFullRepaint();
+
+  @override
+  TuiDirtyRows dirtyRowsFor(CellSize size) => TuiDirtyRows.full(size.rows);
+
+  @override
+  CellRect? get diffBounds => null;
+}
+
+/// The two frames render identically. Present nothing.
+final class FrameUnchanged extends TuiFrameDamage {
+  const FrameUnchanged();
+
+  @override
+  TuiDirtyRows dirtyRowsFor(CellSize size) => const TuiDirtyRows.none();
+
+  @override
+  CellRect? get diffBounds => null;
+}
+
+/// Cells changed; [rows] and [bounds] locate them exactly.
+///
+/// [rows] stays disjoint where [bounds] cannot: five separated dirty rows are
+/// five rows here, not the tall rect spanning them.
+final class FrameChanged extends TuiFrameDamage {
+  const FrameChanged({required this.rows, required this.bounds});
+
+  final Set<int> rows;
+  final CellRect bounds;
+
+  @override
+  TuiDirtyRows dirtyRowsFor(CellSize size) =>
+      TuiDirtyRows.fromRows(rows, rowCount: size.rows);
+
+  @override
+  CellRect? get diffBounds => bounds;
+}
+
+/// The frame is a beneficial upward scroll: shift what is already on screen up
+/// by [scrollUpRows], then apply [rows] as the residue.
+///
+/// A distinct variant rather than a nullable field on [FrameChanged] so that a
+/// presenter acting on scrolling cannot quietly omit the case — the omission is
+/// a missing switch arm, not a passing test suite.
+final class FrameScrolled extends TuiFrameDamage {
+  const FrameScrolled({
+    required this.scrollUpRows,
+    required this.rows,
+    required this.bounds,
+  });
+
+  final int scrollUpRows;
+  final Set<int> rows;
+  final CellRect bounds;
+
+  @override
+  TuiDirtyRows dirtyRowsFor(CellSize size) =>
+      TuiDirtyRows.fromRows(rows, rowCount: size.rows);
+
+  @override
+  CellRect? get diffBounds => bounds;
 }
 
 /// Row-oriented damage for presenters.

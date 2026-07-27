@@ -24,8 +24,8 @@ void main() {
       expect(rows.isFull, isFalse);
       expect(rows.rows, [1, 6, 11]);
       // The union rect still spans the gap for rect consumers.
-      expect(frame.damage.dirtyBounds!.top, 1);
-      expect(frame.damage.dirtyBounds!.bottom, 12);
+      expect(frame.damage.diffBounds!.top, 1);
+      expect(frame.damage.diffBounds!.bottom, 12);
     });
   });
 
@@ -75,10 +75,9 @@ void main() {
       expect(frame.next.size, size);
       expect(frame.previous.atColRow(1, 0), const Cell.empty());
       expect(frame.next.atColRow(1, 0).grapheme, 'h');
-      expect(frame.damage.fullRepaint, isTrue);
-      // Exactly the two cells 'hi' occupies — deriving does not inherit the
-      // one-column padding paint's write rect carries for wide-glyph eviction.
-      expect(frame.damage.dirtyBounds, CellRect.fromLTWH(1, 0, 2, 1));
+      // A full repaint carries no bounds: there is nothing to restrict a diff
+      // to, and no second "what it would have been" reading to disagree with.
+      expect(frame.damage, isA<FrameFullRepaint>());
       expect(frame.damage.diffBounds, isNull);
       final rows = frame.damage.dirtyRowsFor(size);
       expect(rows.isFull, isTrue);
@@ -102,10 +101,15 @@ void main() {
 
       expect(second.previous.atColRow(1, 0).grapheme, 'a');
       expect(second.next.atColRow(1, 0).grapheme, 'b');
-      expect(second.damage.fullRepaint, isFalse);
       // Only the one cell that actually differs.
-      expect(second.damage.dirtyBounds, CellRect.fromLTWH(1, 0, 1, 1));
-      expect(second.damage.diffBounds, CellRect.fromLTWH(1, 0, 1, 1));
+      expect(
+        second.damage,
+        isA<FrameChanged>().having(
+          (d) => d.bounds,
+          'bounds',
+          CellRect.fromLTWH(1, 0, 1, 1),
+        ),
+      );
       final rows = second.damage.dirtyRowsFor(size);
       expect(rows.isFull, isFalse);
       expect(rows.ranges.single.startRow, 0);
@@ -129,7 +133,7 @@ void main() {
       )!;
 
       expect(second.previous.atColRow(1, 0), const Cell.empty());
-      expect(second.damage.fullRepaint, isTrue);
+      expect(second.damage, isA<FrameFullRepaint>());
       expect(second.damage.diffBounds, isNull);
     });
 
@@ -149,7 +153,7 @@ void main() {
       )!;
 
       expect(second.previous.atColRow(1, 0).grapheme, 'a');
-      expect(second.damage.fullRepaint, isTrue);
+      expect(second.damage, isA<FrameFullRepaint>());
       expect(second.damage.diffBounds, isNull);
 
       loop.commit(second);
@@ -158,7 +162,7 @@ void main() {
         paint: (buffer) => buffer.writeText(const CellOffset(1, 0), 'c'),
       )!;
 
-      expect(third.damage.fullRepaint, isFalse);
+      expect(third.damage, isNot(isA<FrameFullRepaint>()));
       expect(third.damage.diffBounds, CellRect.fromLTWH(1, 0, 1, 1));
     });
 
@@ -183,7 +187,7 @@ void main() {
       // another reason cells differ — the comparison sees it either way. The
       // conservative "diff everything" fallback this used to trigger existed
       // only because reported damage could not be trusted after a relayout.
-      expect(second.damage.fullRepaint, isFalse);
+      expect(second.damage, isNot(isA<FrameFullRepaint>()));
       expect(second.damage.dirtyRowsFor(size).isFull, isFalse);
       expect(second.damage.dirtyRowsFor(size).rows, [0]);
       expect(second.damage.diffBounds, CellRect.fromLTWH(1, 0, 1, 1));
@@ -357,7 +361,7 @@ void main() {
         paint: (buffer) => buffer.writeText(const CellOffset(0, 0), 'xxxx'),
       )!;
 
-      expect(shrunk.damage.fullRepaint, isTrue);
+      expect(shrunk.damage, isA<FrameFullRepaint>());
       expect(shrunk.damage.dirtyRowsFor(const CellSize(6, 3)).isFull, isTrue);
     });
 
@@ -392,7 +396,10 @@ void main() {
         },
       )!;
 
-      expect(scrolled.damage.scrollUpRows, 1);
+      expect(
+        scrolled.damage,
+        isA<FrameScrolled>().having((d) => d.scrollUpRows, 'scrollUpRows', 1),
+      );
 
       // And the gate half: a change too small for scrolling to ever pay
       // (digit-only, ~1 cell/row) must not run detection at all.
@@ -406,7 +413,7 @@ void main() {
           buffer.writeText(const CellOffset(0, 0), 'x');
         },
       )!;
-      expect(tiny.damage.scrollUpRows, isNull);
+      expect(tiny.damage, isNot(isA<FrameScrolled>()));
     });
 
     test('a scroll is still found when a row happens to be unchanged', () {
@@ -444,7 +451,10 @@ void main() {
         isFalse,
         reason: 'precondition: one row is byte-identical',
       );
-      expect(scrolled.damage.scrollUpRows, 1);
+      expect(
+        scrolled.damage,
+        isA<FrameScrolled>().having((d) => d.scrollUpRows, 'scrollUpRows', 1),
+      );
       final plan = planner.build(reason: 'scroll', frame: scrolled);
       expect(plan.scrollUpRows, 1);
       expect(
@@ -462,8 +472,8 @@ void main() {
       paint(loop, [0, 1, 2, 3]);
       final same = paint(loop, [0, 1, 2, 3], commit: false);
 
-      expect(same.damage.isEmpty, isTrue);
-      expect(same.damage.fullRepaint, isFalse);
+      expect(same.damage, isA<FrameUnchanged>());
+      expect(same.damage, isNot(isA<FrameFullRepaint>()));
       expect(same.damage.diffBounds, isNull);
     });
 
@@ -544,7 +554,7 @@ void main() {
         place(loop, [1, 2, 3]);
         final again = place(loop, [1, 2, 3], commit: false);
 
-        expect(again.damage.isEmpty, isTrue);
+        expect(again.damage, isA<FrameUnchanged>());
       });
 
       test('moving a placement damages both the old and new rows', () {

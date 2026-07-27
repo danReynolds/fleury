@@ -54,6 +54,10 @@ export 'src/runtime/tui_frame_loop.dart'
         TuiDirtyRowRange,
         TuiDirtyRows,
         TuiFrameDamage,
+        FrameFullRepaint,
+        FrameUnchanged,
+        FrameChanged,
+        FrameScrolled,
         TuiFrameLoop,
         TuiFramePaintCallback,
         TuiRenderedFrame;
