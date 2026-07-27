@@ -90,6 +90,76 @@ void main() {
 
     expect(noCaretSink.output, baselineSink.output);
   });
+
+  test('forwards the frame damage scroll decision to the renderer', () {
+    // The seam round one's regressions hid behind: renderer- and loop-level
+    // tests both passed while the presenter forwarded neither signal. Severing
+    // the forwarding (scrollUpRows: null) turns this scroll frame into 5.5x
+    // the bytes with no ESC[S — this test fails on exactly that mutation.
+    const tall = CellSize(20, 10);
+    final sink = StringAnsiSink();
+    final presenter = AnsiFramePresenter(
+      sink: sink,
+      renderer: const AnsiRenderer(synchronizedOutput: false),
+      debug: DebugController(const DebugConfig(enabled: false)),
+    );
+    final loop = TuiFrameLoop();
+    // Rows of distinct repeated letters: a one-row shift dirties ~all cells,
+    // comfortably past the loop's detection gate (a row's worth of change) —
+    // digit-only content like 'entry N' -> 'entry N+1' dirties ~1 cell/row,
+    // which the gate correctly deems not worth scrolling for.
+    String rowText(int row) => String.fromCharCode(0x41 + row) * 12;
+    final first = loop.render(
+      size: tall,
+      paint: (buffer) {
+        for (var row = 0; row < 10; row++) {
+          buffer.writeText(CellOffset(0, row), rowText(row));
+        }
+      },
+    )!;
+    presenter.presentFrame(first, info);
+    loop.commit(first);
+    sink.clear();
+
+    final scrolled = loop.render(
+      size: tall,
+      paint: (buffer) {
+        for (var row = 0; row < 10; row++) {
+          buffer.writeText(CellOffset(0, row), rowText(row + 1));
+        }
+      },
+    )!;
+    presenter.presentFrame(scrolled, info);
+
+    expect(
+      sink.output,
+      contains('\x1B[S'),
+      reason: 'a beneficial scroll must reach the terminal as ESC[S',
+    );
+  });
+
+  test('an identical repaint emits zero bytes end to end', () {
+    // Byte-level pin only: with no caret and no images, an unchanged frame
+    // must produce literally nothing. (The hasChanges forwarding itself is
+    // not observable in bytes for identical frames — the unbounded fallback
+    // also emits nothing, just after a wasted whole-screen scan — so the CPU
+    // half of this seam is pinned at the renderer level instead.)
+    final sink = StringAnsiSink();
+    final presenter = AnsiFramePresenter(
+      sink: sink,
+      renderer: const AnsiRenderer(synchronizedOutput: false),
+      debug: DebugController(const DebugConfig(enabled: false)),
+    );
+    final loop = TuiFrameLoop();
+    final first = _frameFrom(loop, size);
+    presenter.presentFrame(first, info);
+    loop.commit(first);
+    sink.clear();
+
+    presenter.presentFrame(_frameFrom(loop, size), info);
+
+    expect(sink.output, isEmpty);
+  });
 }
 
 TuiRenderedFrame _frame(CellSize size) => _frameFrom(TuiFrameLoop(), size);

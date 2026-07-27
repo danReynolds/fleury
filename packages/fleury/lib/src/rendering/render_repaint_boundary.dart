@@ -243,9 +243,6 @@ class RenderRepaintBoundary extends RenderObject
       needsPaint = true;
     }
 
-    // Snapshot the extent painted last frame BEFORE the repaint recomputes it:
-    // cells inside the old box but outside the new one have been vacated, and
-    // must be damaged (below) so the bounded presenter diff erases them.
     var repainted = false;
     if (needsPaint) {
       final targetCache = cache;

@@ -368,11 +368,16 @@ void main() {
       // — with no gate or test to notice.
       const wide = CellSize(20, 10);
       final loop = TuiFrameLoop(renderDamage: RenderDamageTracker());
+      // Distinct repeated-letter rows: shifting dirties ~all cells, well past
+      // the detection gate. ('entry N' -> 'entry N+1' dirties ~1 cell/row —
+      // below a row's worth of change, which the gate correctly deems not
+      // worth a detector run: scrolling could save at most those few cells.)
+      String rowText(int row) => String.fromCharCode(0x41 + row) * 12;
       final first = loop.render(
         size: wide,
         paint: (buffer) {
           for (var row = 0; row < 10; row++) {
-            buffer.writeText(CellOffset(0, row), 'entry $row');
+            buffer.writeText(CellOffset(0, row), rowText(row));
           }
         },
       )!;
@@ -382,12 +387,26 @@ void main() {
         size: wide,
         paint: (buffer) {
           for (var row = 0; row < 10; row++) {
-            buffer.writeText(CellOffset(0, row), 'entry ${row + 1}');
+            buffer.writeText(CellOffset(0, row), rowText(row + 1));
           }
         },
       )!;
 
       expect(scrolled.damage.scrollUpRows, 1);
+
+      // And the gate half: a change too small for scrolling to ever pay
+      // (digit-only, ~1 cell/row) must not run detection at all.
+      loop.commit(scrolled);
+      final tiny = loop.render(
+        size: wide,
+        paint: (buffer) {
+          for (var row = 0; row < 10; row++) {
+            buffer.writeText(CellOffset(0, row), rowText(row + 1));
+          }
+          buffer.writeText(const CellOffset(0, 0), 'x');
+        },
+      )!;
+      expect(tiny.damage.scrollUpRows, isNull);
     });
 
     test('a scroll is still found when a row happens to be unchanged', () {
@@ -397,11 +416,12 @@ void main() {
       const wide = CellSize(20, 10);
       final loop = TuiFrameLoop(renderDamage: RenderDamageTracker());
       const planner = FramePresentationPlanner();
+      String rowText(int row) => String.fromCharCode(0x41 + row) * 12;
       final first = loop.render(
         size: wide,
         paint: (buffer) {
           for (var row = 0; row < 10; row++) {
-            buffer.writeText(CellOffset(0, row), 'entry $row');
+            buffer.writeText(CellOffset(0, row), rowText(row));
           }
         },
       )!;
@@ -413,7 +433,7 @@ void main() {
           for (var row = 0; row < 10; row++) {
             buffer.writeText(
               CellOffset(0, row),
-              'entry ${row == 9 ? 9 : row + 1}',
+              rowText(row == 9 ? 9 : row + 1),
             );
           }
         },
@@ -460,6 +480,27 @@ void main() {
       final unchanged = large.diffAgainst(CellBuffer(const CellSize(8, 4)));
       expect(unchanged.isComparable, isTrue);
       expect(unchanged.isUnchanged, isTrue);
+
+      // A placement-only change has zero differing CELLS but is a change:
+      // isUnchanged keyed on dirtyCells would freeze in-place image animation
+      // for any consumer that skips work on it.
+      final withImage = CellBuffer(const CellSize(8, 4))
+        ..writeImage(
+          const CellOffset(0, 0),
+          Uint8List.fromList([1, 2, 3]),
+          width: 2,
+          height: 1,
+        );
+      final swapped = CellBuffer(const CellSize(8, 4))
+        ..writeImage(
+          const CellOffset(0, 0),
+          Uint8List.fromList([9, 9, 9]),
+          width: 2,
+          height: 1,
+        );
+      final placementOnly = swapped.diffAgainst(withImage);
+      expect(placementOnly.dirtyCells, 0, reason: 'cells are byte-identical');
+      expect(placementOnly.isUnchanged, isFalse);
     });
 
     group('inline images', () {

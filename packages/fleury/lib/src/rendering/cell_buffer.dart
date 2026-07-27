@@ -113,16 +113,6 @@ final class CellBuffer {
     }
   }
 
-  /// Marks [rect] damaged without touching cell contents.
-  ///
-  /// Used when a region must be revisited by the presenter diff even though
-  /// no write landed there this frame — e.g. a repaint boundary erasing the
-  /// cells a shrunk or moved subtree vacated. Clamped to the grid and subject
-  /// to [withoutDamageTracking] like any write-driven damage.
-  void recordDamage(CellRect rect) {
-    _recordDamageRect(rect.left, rect.top, rect.size.cols, rect.size.rows);
-  }
-
   /// Returns the cell at [position]. Throws if [position] is out of bounds.
   Cell at(CellOffset position) {
     _checkBounds(position);
@@ -1013,8 +1003,14 @@ final class CellBufferDiff {
   /// Whether the frames could be compared at all.
   bool get isComparable => dirtyCells >= 0;
 
-  /// Whether the frames are comparable and identical.
-  bool get isUnchanged => dirtyCells == 0;
+  /// Whether the frames are comparable and render identically.
+  ///
+  /// Keyed on [rows] rather than [dirtyCells]: a placement-only change (an
+  /// image animating in place) has zero differing CELLS but is a change — the
+  /// placement diff contributes rows without counting cells. dirtyCells alone
+  /// would call that frame unchanged, and a consumer skipping presentation on
+  /// it would freeze the image.
+  bool get isUnchanged => isComparable && rows.isEmpty;
 
   /// The shape [detectBeneficialScrollUp] consumes.
   ({int dirtyCells, bool hasOverlayCells}) get stats =>

@@ -102,8 +102,19 @@ final class TuiFrameLoop {
     // to be explicit or the terminal's ESC[S path and the surface's row-shift
     // both go unreachable. Deciding it here also means the detector reuses the
     // counts the diff already produced instead of rescanning.
+    // Detection is gated on at least a full row's worth of changed cells.
+    // The most a scroll can ever save is rewriting [dirtyCells] cells, while
+    // the detector is O(rows^2 x cols) worst case on repeated-row screens —
+    // a uniform grid pattern with one blinking cell measured 18.8x the diff
+    // cost ungated, and any genuine scroll dirties at least a row. (The serve
+    // codec still runs its own detection against its OWN mirror: under
+    // backpressure coalescing the wire's previous frame is not the loop's,
+    // so this decision cannot be handed down; the duplication is confined to
+    // genuine scroll frames, where one detector run is small next to encode.)
     final scrollUpRows =
-        (_requireFullRepaint || !diff.isComparable || diff.isUnchanged)
+        (_requireFullRepaint ||
+            !diff.isComparable ||
+            diff.dirtyCells < size.cols)
         ? null
         : detectBeneficialScrollUp(previous, next, diff.stats);
     final damage = TuiFrameDamage(
