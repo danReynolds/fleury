@@ -49,8 +49,15 @@ final class TuiFrameLoop {
   }
 
   /// Forces the next rendered frame to be presented as a full repaint.
+  ///
+  /// Also blanks the shown buffer, because a full repaint means the presenter
+  /// wipes the screen (the ANSI one writes `ESC[2J`) before drawing. Leaving
+  /// the old content in `previous` describes a screen that no longer exists,
+  /// and the diff then skips every cell that "matches" — clearing the screen
+  /// and re-emitting nothing.
   void markFullRepaint() {
     _requireFullRepaint = true;
+    _frontBuffer?.clear();
   }
 
   /// Whether [render] must run for [size] regardless of runtime dirt.

@@ -160,9 +160,13 @@ void main() {
         paint: (buffer) => buffer.writeText(const CellOffset(1, 0), 'b'),
       )!;
 
-      expect(second.previous.atColRow(1, 0).grapheme, 'a');
       expect(second.damage, isA<FrameFullRepaint>());
       expect(second.damage.diffBounds, isNull);
+      // The shown buffer is blanked to match what a full repaint does to the
+      // screen. Leaving 'a' there would describe a screen that no longer
+      // exists, and an unchanged frame would then re-emit nothing after the
+      // presenter had already wiped it.
+      expect(second.previous.atColRow(1, 0), const Cell.empty());
 
       loop.commit(second);
       final third = loop.render(

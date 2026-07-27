@@ -963,6 +963,7 @@ final class CellBufferDiff {
     required this.bounds,
     required this.dirtyCells,
     required this.hasOverlayCells,
+    this.isComparable = true,
   });
 
   /// The frames cannot be compared (different sizes), so nothing about them is
@@ -972,8 +973,9 @@ final class CellBufferDiff {
   static const incomparable = CellBufferDiff(
     rows: <int>{},
     bounds: null,
-    dirtyCells: -1,
+    dirtyCells: 0,
     hasOverlayCells: false,
+    isComparable: false,
   );
 
   /// Rows containing at least one changed cell.
@@ -982,14 +984,20 @@ final class CellBufferDiff {
   /// Bounding rect of every changed cell, or null when nothing changed.
   final CellRect? bounds;
 
-  /// Number of differing cells, or -1 when the frames are [incomparable].
+  /// Number of differing cells. Always non-negative — "unknown" is carried by
+  /// [isComparable], not by an out-of-band value in this one.
   final int dirtyCells;
 
   /// Whether either frame places an inline image, which disqualifies scrolling.
   final bool hasOverlayCells;
 
   /// Whether the frames could be compared at all.
-  bool get isComparable => dirtyCells >= 0;
+  ///
+  /// A field rather than a magic value in [dirtyCells]: that count is handed
+  /// to scroll detection through [stats], and a sentinel smuggled into a
+  /// number a consumer does arithmetic on is the shape of bug this whole area
+  /// has already produced twice.
+  final bool isComparable;
 
   /// Whether the frames are comparable and render identically.
   ///
