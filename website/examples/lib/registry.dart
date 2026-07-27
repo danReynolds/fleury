@@ -1092,6 +1092,38 @@ TextArea(
     ),
   ),
   ExampleInfo(
+    id: 'popup.basic',
+    widget: 'Popup',
+    category: 'Navigation & overlays',
+    blurb:
+        'The floating-chrome composite: an opaque fill, a frame, and '
+        'non-selectable chrome — position it with Follower or Align.',
+    cols: 40,
+    rows: 7,
+    // A wall of text behind the popup makes the point: floating content
+    // composites over the app, and Popup owns every cell it covers.
+    builder: () => _framed(
+      Stack(
+        children: <Widget>[
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              for (var i = 0; i < 5; i++)
+                const Text('Application content behind the popup.'),
+            ],
+          ),
+          Align(
+            alignment: Alignment.center,
+            child: Popup(
+              padding: const EdgeInsets.symmetric(horizontal: 1),
+              child: const Text('An opaque floating layer'),
+            ),
+          ),
+        ],
+      ),
+    ),
+  ),
+  ExampleInfo(
     id: 'dialog.basic',
     widget: 'Dialog',
     category: 'Navigation & overlays',

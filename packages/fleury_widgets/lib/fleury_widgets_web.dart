@@ -217,6 +217,7 @@ export 'src/patch_review.dart'
         buildPatchReviewFiles,
         exportPatchReviewFile;
 export 'src/panel.dart' show Panel;
+export 'src/popup.dart' show Popup;
 export 'src/password_input.dart' show PasswordInput;
 export 'src/progress_bar.dart' show ProgressBar;
 export 'src/range_slider.dart' show RangeSlider;

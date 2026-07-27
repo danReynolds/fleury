@@ -272,6 +272,7 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
       'Dialog',
       'Toaster',
       'Tooltip',
+      'Popup',
       'KeyHintBar',
     ],
     initialHeight: 13,
@@ -860,6 +861,9 @@ const Map<String, String> _widgetDescriptions = <String, String>{
       'Modal-style framed content for confirmations and focused decisions.',
   'Toaster': 'Transient notification host for contextual app feedback.',
   'Tooltip': 'Anchored help text for compact controls.',
+  'Popup':
+      'The floating-chrome composite: opaque fill, frame, and non-selectable '
+      'chrome for anchored or pinned overlays.',
   'KeyHintBar':
       'One-line bar that auto-discovers the active key bindings on the focus '
       'chain and renders their hints.',
@@ -1042,6 +1046,7 @@ const Map<String, String> _widgetUsage = <String, String>{
   'SubMenu': 'Enter opens · → into submenu · Esc closes',
   'Dialog': 'Enter opens · Tab between actions · Esc or a button dismisses',
   'Tooltip': 'Focus the target to reveal',
+  'Popup': 'A static frame — the float contract rendered inline',
   'Toaster': 'Activate a trigger to emit a toast',
   'Tabs': '←/→ to switch tabs · Alt+1..9',
   'TabItem': '←/→ to switch tabs · Alt+1..9',
@@ -1917,6 +1922,13 @@ class _OverlayStory extends StatelessWidget {
               ),
             ),
           ],
+        ),
+        'Popup' => Align(
+          alignment: Alignment.center,
+          child: Popup(
+            padding: const EdgeInsets.symmetric(horizontal: 1),
+            child: const Text('An opaque floating layer'),
+          ),
         ),
         'Tooltip' => Tooltip(
           message: 'Focus the button to show this anchored tooltip.',
