@@ -1,11 +1,17 @@
 import 'package:fleury/fleury.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
 
-/// Previews one built-in [ThemePalettes] theme at a time on a mock app built
-/// from real widgets, with a dropdown to switch palettes — so you can see how a
-/// theme reads on actual UI, not just swatches. The storybook's "Themes" story.
+/// A styleguide for one built-in [ThemePalettes] theme at a time, with a
+/// dropdown to switch palettes — the storybook's "Themes" story.
 ///
-/// The dropdown live-previews: arrowing through it re-themes the sample
+/// Two halves, because they answer different questions. A small mock app shows
+/// how a theme *reads* on real UI; the labelled reference below it shows what a
+/// theme *controls*. The reference is deliberately exhaustive: every
+/// [ColorScheme] role and every [ThemeData] style field appears with its name
+/// next to it, so a theme author can see the whole surface they own rather than
+/// inferring it from a screenshot.
+///
+/// The dropdown live-previews: arrowing through it re-themes everything
 /// immediately, Enter keeps the choice, Esc puts the previous one back.
 class ThemeGallery extends StatefulWidget {
   const ThemeGallery({super.key, this.themes = ThemePalettes.all});
@@ -51,19 +57,57 @@ class _ThemeGalleryState extends State<ThemeGallery> {
               onHighlightChanged: (i) => setState(() => _shown = i),
               semanticLabel: 'Preview theme',
             ),
+            const Text('   '),
+            Text(
+              selected.data.brightness.name,
+              style: Theme.of(context).mutedStyle,
+            ),
           ],
         ),
-        const SizedBox(height: 1),
-        Theme(data: selected.data, child: const _ThemeSample()),
+        // No gap here: the styleguide's own padding and its first section
+        // heading already supply one, and three stacked blanks read as a bug.
+        Theme(data: selected.data, child: const _ThemeStyleguide()),
       ],
     );
   }
 }
 
-/// A mock app rendered in the ambient theme: two panes of real widgets plus a
-/// legend of the palette's roles and text styles.
-class _ThemeSample extends StatelessWidget {
-  const _ThemeSample();
+/// A section heading in the styleguide. Muted and uppercase so it reads as
+/// chrome rather than as themed content.
+class _Section extends StatelessWidget {
+  const _Section(this.label, {this.note});
+
+  final String label;
+
+  /// What this section is demonstrating, in the theme's own vocabulary.
+  final String? note;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = context.theme.mutedStyle;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const SizedBox(height: 1),
+        Text(label.toUpperCase(), style: muted),
+        if (note != null) Text(note!, style: muted),
+      ],
+    );
+  }
+}
+
+/// A caption under a demo, naming the thing above it.
+class _Caption extends StatelessWidget {
+  const _Caption(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) =>
+      Text('  $text', style: context.theme.mutedStyle);
+}
+
+class _ThemeStyleguide extends StatelessWidget {
+  const _ThemeStyleguide();
 
   @override
   Widget build(BuildContext context) {
@@ -78,6 +122,7 @@ class _ThemeSample extends StatelessWidget {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
+              const _Section('In context', note: 'the same theme on real UI'),
               if (wide)
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -92,8 +137,21 @@ class _ThemeSample extends StatelessWidget {
                 SizedBox(height: 1),
                 _ActivityPane(),
               ],
-              const SizedBox(height: 1),
-              const _PaletteLegend(),
+              // The captions name which pane is which, so the focus chrome
+              // reads as a demonstrated state rather than an accident of
+              // where the cursor happens to be.
+              _Caption(
+                '${wide ? 'left' : 'top'}: active — border + title take '
+                '`focus`',
+              ),
+              _Caption(
+                '${wide ? 'right' : 'below'}: at rest — border takes '
+                '`mutedStyle`',
+              ),
+              const _Caption('both: borderStyle draws the frame'),
+              const _ColourRoles(),
+              const _TextStyles(),
+              const _Controls(),
             ],
           );
         },
@@ -102,7 +160,141 @@ class _ThemeSample extends StatelessWidget {
   }
 }
 
-/// The "active" pane — focused, so its border and title take the theme accent.
+/// Every [ColorScheme] role, named. The nullable roles say so explicitly —
+/// "unset" is a real, deliberate value (it means the terminal's own colour).
+class _ColourRoles extends StatelessWidget {
+  const _ColourRoles();
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = context.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const _Section('Colour roles', note: 'ColorScheme'),
+        Wrap(
+          children: <Widget>[
+            _swatch(context, 'primary', cs.primary),
+            _swatch(context, 'focus', cs.focus),
+            _swatch(context, 'success', cs.success),
+          ],
+        ),
+        Wrap(
+          children: <Widget>[
+            _swatch(context, 'warning', cs.warning),
+            _swatch(context, 'error', cs.error),
+            _swatch(context, 'info', cs.info),
+          ],
+        ),
+        Wrap(
+          children: <Widget>[
+            _swatch(context, 'foreground', cs.foreground),
+            _swatch(context, 'background', cs.background),
+            _swatch(context, 'surface', cs.surface),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _swatch(BuildContext context, String label, Color? color) => Padding(
+    padding: const EdgeInsets.only(right: 2),
+    child: color == null
+        // An unset role is not a missing one: it means "use the terminal's
+        // own", which is the right default for foreground/background.
+        ? Text('· $label unset', style: context.theme.mutedStyle)
+        : Text('▉ $label', style: CellStyle(foreground: color)),
+  );
+}
+
+/// The three [ThemeData] style fields, each shown applied and named after the
+/// field that produced it.
+class _TextStyles extends StatelessWidget {
+  const _TextStyles();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.theme;
+    final cs = context.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const _Section('Text styles', note: 'ThemeData'),
+        // One shape for all four rows so the labels form a column — the
+        // sample is padded to a fixed width rather than each row spacing
+        // itself, which is what threw the alignment off.
+        _sample(context, CellStyle(foreground: cs.foreground), 'unstyled'),
+        _sample(context, theme.mutedStyle, 'mutedStyle'),
+        _sample(context, theme.selectionStyle, 'selectionStyle'),
+        _sample(context, theme.focusedStyle, 'focusedStyle'),
+      ],
+    );
+  }
+
+  /// One style row: the sample in [style], then the field name that produced
+  /// it. The sample is padded to a fixed width so the names align.
+  Widget _sample(BuildContext context, CellStyle style, String field) => Row(
+    children: <Widget>[
+      Text('  the quick brown fox  '.padRight(25), style: style),
+      Text('  $field', style: context.theme.mutedStyle),
+    ],
+  );
+}
+
+/// Widgets whose theming isn't visible in the mock app above: the focus
+/// treatment on an input, control selection, and the raised `surface` fill.
+class _Controls extends StatelessWidget {
+  const _Controls();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const _Section('Controls', note: 'tab in to see focus treatment'),
+        SizedBox(
+          width: 30,
+          child: TextInput(
+            controller: TextEditingController(text: 'search query'),
+            semanticLabel: 'Styleguide input',
+          ),
+        ),
+        // TextInput has no frame of its own: its focus cue is the cursor,
+        // which appears only while focused, and an empty field shows the
+        // placeholder dimmed.
+        const _Caption('TextInput · cursor appears on focus'),
+        Row(
+          children: <Widget>[
+            Checkbox(value: true, onChanged: (_) {}, label: 'checked'),
+            const Text('   '),
+            Checkbox(value: false, onChanged: (_) {}, label: 'unchecked'),
+          ],
+        ),
+        const _Caption('Checkbox · control selection'),
+        const SizedBox(height: 1),
+        // `surface` is the one role with no place in the mock app: it fills
+        // dialogs and popups, which need an opaque backdrop rather than the
+        // terminal's own background.
+        SizedBox(
+          width: 34,
+          child: Surface(
+            child: Padding(
+              padding: const EdgeInsets.all(1),
+              child: Text(
+                'raised surface — dialogs, popups',
+                style: CellStyle(foreground: context.colors.foreground),
+              ),
+            ),
+          ),
+        ),
+        const _Caption('Surface · ColorScheme.surface'),
+      ],
+    );
+  }
+}
+
+/// The "active" pane — focus pinned on, so its border and title take the
+/// theme accent regardless of where real focus is.
 class _ConsolePane extends StatelessWidget {
   const _ConsolePane();
 
@@ -203,7 +395,7 @@ class _ServiceRow extends StatelessWidget {
   }
 }
 
-/// A quieter secondary pane: unfocused, so its chrome stays muted.
+/// A quieter secondary pane: at rest, so its chrome stays muted.
 class _ActivityPane extends StatelessWidget {
   const _ActivityPane();
 
@@ -212,12 +404,23 @@ class _ActivityPane extends StatelessWidget {
     final cs = context.colors;
     return Panel(
       title: 'Activity',
+      focused: false,
       expandChild: false,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          _LogLine(time: '09:24', mark: '✓', text: 'build passed', color: cs.success),
-          _LogLine(time: '09:25', mark: 'ℹ', text: 'pushing image', color: cs.info),
+          _LogLine(
+            time: '09:24',
+            mark: '✓',
+            text: 'build passed',
+            color: cs.success,
+          ),
+          _LogLine(
+            time: '09:25',
+            mark: 'ℹ',
+            text: 'pushing image',
+            color: cs.info,
+          ),
           _LogLine(
             time: '09:26',
             mark: '⚠',
@@ -262,42 +465,4 @@ class _LogLine extends StatelessWidget {
       ],
     );
   }
-}
-
-/// Legend: every colour role, then the three text styles a theme defines.
-class _PaletteLegend extends StatelessWidget {
-  const _PaletteLegend();
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = context.colors;
-    final theme = context.theme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Wrap(
-          children: <Widget>[
-            _swatch('primary', cs.primary),
-            _swatch('focus', cs.focus),
-            _swatch('success', cs.success),
-            _swatch('warning', cs.warning),
-            _swatch('error', cs.error),
-            _swatch('info', cs.info),
-          ],
-        ),
-        Wrap(
-          children: <Widget>[
-            Text('muted  ', style: theme.mutedStyle),
-            Text(' selected ', style: theme.selectionStyle),
-            Text('  focused', style: theme.focusedStyle),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _swatch(String label, Color color) => Padding(
-    padding: const EdgeInsets.only(right: 2),
-    child: Text('▉ $label', style: CellStyle(foreground: color)),
-  );
 }

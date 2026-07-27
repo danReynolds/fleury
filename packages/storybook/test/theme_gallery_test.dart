@@ -72,6 +72,46 @@ void main() {
       expect(output, contains('✓ running'));
     });
 
+    testWidgets('every themeable surface is demonstrated and named', (tester) {
+      // The styleguide's contract: a theme author can see the whole surface
+      // they own. If a ColorScheme role or ThemeData style field is added
+      // without a demo, this fails — which is the point.
+      tester.pumpWidget(const ThemeGallery());
+      final output = tester.renderToString(
+        size: const CellSize(84, 60),
+        emptyMark: ' ',
+      );
+
+      for (final section in ['IN CONTEXT', 'COLOUR ROLES', 'TEXT STYLES', 'CONTROLS']) {
+        expect(output, contains(section), reason: 'missing section: $section');
+      }
+      // Every ColorScheme role, by name.
+      for (final role in [
+        'primary',
+        'focus',
+        'success',
+        'warning',
+        'error',
+        'info',
+        'foreground',
+        'background',
+        'surface',
+      ]) {
+        expect(output, contains(role), reason: 'undemoed colour role: $role');
+      }
+      // Every ThemeData text style, named after the field that produced it.
+      for (final field in ['mutedStyle', 'selectionStyle', 'focusedStyle']) {
+        expect(output, contains(field), reason: 'undemoed style: $field');
+      }
+      // The border style and the two panel focus states are called out, so
+      // the chrome reads as a demonstrated state rather than an accident.
+      expect(output, contains('borderStyle'));
+      expect(output, contains('active'));
+      expect(output, contains('at rest'));
+      // Brightness is visible — it drives the surface fallback.
+      expect(output, contains(ThemePalettes.all.first.data.brightness.name));
+    });
+
     testWidgets('the sample wears the selected palette', (tester) {
       tester.pumpWidget(const ThemeGallery());
       final first = ThemePalettes.all.first.data.colorScheme;
