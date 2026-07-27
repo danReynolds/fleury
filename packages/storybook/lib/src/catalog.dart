@@ -398,6 +398,7 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
     widgets: const <String>[
       'BarChart',
       'LineChart',
+      'AreaChart',
       'Sparkline',
       'Histogram',
       'Heatmap',
@@ -890,6 +891,8 @@ const Map<String, String> _widgetDescriptions = <String, String>{
   'BarChart': 'Stacked and labeled bars for categorical metrics.',
   'LineChart':
       'Series charting with axes, grids, legends, and optional cursor interaction.',
+  'AreaChart':
+      'Filled area charting — solid, gradient- or flat-shaded regions.',
   'Sparkline': 'Tiny trend visualization for dense dashboard rows.',
   'Histogram': 'Distribution view for latency, size, or count samples.',
   'Heatmap': 'Matrix intensity visualization with row and column labels.',
@@ -966,6 +969,7 @@ const Map<String, Map<String, Object?>> _widgetDefaultControls =
       'FormWizardStep': <String, Object?>{'layout': 1},
       'BarChart': <String, Object?>{'mode': 0},
       'LineChart': <String, Object?>{'mode': 0, 'interactive': 1},
+      'AreaChart': <String, Object?>{'mode': 0},
       'Sparkline': <String, Object?>{'mode': 0},
       'Histogram': <String, Object?>{'mode': 1},
       'Heatmap': <String, Object?>{'mode': 1},
@@ -2478,6 +2482,23 @@ class _ChartsStoryState extends State<_ChartsStory>
           showAxes: true,
           showLegend: true,
           showGrid: true,
+          yTickCount: 5,
+        );
+      case 'AreaChart':
+        return AreaChart(
+          series: <AreaSeries>[
+            AreaSeries(
+              framePoints,
+              label: 'frame',
+              gradient: const <Color>[
+                RgbColor(0x2E, 0xE6, 0xA6),
+                RgbColor(0xF4, 0xBE, 0x2C),
+                RgbColor(0xFF, 0x6B, 0x6B),
+              ],
+            ),
+          ],
+          showAxes: true,
+          showLegend: true,
           yTickCount: 5,
         );
       case 'Sparkline':
