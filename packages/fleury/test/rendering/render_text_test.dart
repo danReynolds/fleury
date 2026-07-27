@@ -412,7 +412,12 @@ void main() {
         reason: 'split: three 2-cell atoms — geometry changed, so the setter '
             'must invalidate layout, not merely paint',
       );
-      expect(t.needsLayout, isTrue);
+      // Re-laying out yields the new geometry — the observable form of
+      // layout invalidation (needsLayout itself is @protected).
+      expect(
+        t.layout(const CellConstraints(maxCols: 10)),
+        const CellSize(6, 1),
+      );
     });
 
     test('non-emoji joiners are untouched under split (gate 10)', () {
