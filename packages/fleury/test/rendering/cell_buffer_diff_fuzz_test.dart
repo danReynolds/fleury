@@ -211,7 +211,7 @@ void main() {
             );
             final edits = random.nextInt(4);
             for (var i = 0; i < edits; i++) {
-              buffered(next, random, size);
+              mutateBuffer(next, random, size);
             }
           } else {
             _paintRandom(next, random);
@@ -295,7 +295,7 @@ void main() {
 }
 
 /// One small mutation: overwrite a cell, blank a cell, or move an image.
-void buffered(CellBuffer buffer, Random random, CellSize size) {
+void mutateBuffer(CellBuffer buffer, Random random, CellSize size) {
   final col = random.nextInt(size.cols);
   final row = random.nextInt(size.rows);
   switch (random.nextInt(3)) {

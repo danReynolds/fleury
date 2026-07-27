@@ -50,14 +50,15 @@ final class TuiFrameLoop {
 
   /// Forces the next rendered frame to be presented as a full repaint.
   ///
-  /// Also blanks the shown buffer, because a full repaint means the presenter
-  /// wipes the screen (the ANSI one writes `ESC[2J`) before drawing. Leaving
-  /// the old content in `previous` describes a screen that no longer exists,
-  /// and the diff then skips every cell that "matches" — clearing the screen
-  /// and re-emitting nothing.
+  /// Only the flag is set here; the shown buffer is blanked by [render] when
+  /// the mark is consumed. Blanking at mark time acts on whichever buffer is
+  /// front *right now* — wrong whenever the mark lands between [render] and
+  /// [commit], where the front buffer is the outgoing frame and the freshly
+  /// painted one becomes front with its content intact. It also mutates a
+  /// buffer other consumers alias (the semantics pipeline keeps a reference
+  /// to the last presented buffer). Consume time has neither problem.
   void markFullRepaint() {
     _requireFullRepaint = true;
-    _frontBuffer?.clear();
   }
 
   /// Whether [render] must run for [size] regardless of runtime dirt.
@@ -94,6 +95,14 @@ final class TuiFrameLoop {
     // boundary still arms tracking on its OWN cache, where the question really
     // is "what did I paint" rather than "what must be presented".
     next.clear();
+    // A forced full repaint means the presenter wipes the screen before
+    // drawing, so `previous` must describe that wiped screen — otherwise the
+    // diff skips every cell that "matches" content the wipe just destroyed,
+    // and re-emits nothing. Blanked here, when the mark is consumed, because
+    // this is the one point where `previous` is definitely the buffer the
+    // wipe will invalidate and nothing else can observe the blank (render →
+    // present → commit is synchronous).
+    if (_requireFullRepaint) previous.clear();
     bufferPrepareStopwatch.stop();
 
     paint(next);

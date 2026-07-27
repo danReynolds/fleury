@@ -178,6 +178,42 @@ void main() {
       expect(third.damage.diffBounds, CellRect.fromLTWH(1, 0, 1, 1));
     });
 
+    test(
+      'markFullRepaint between render and commit blanks the right buffer',
+      () {
+        // The mark's only plausible callers are hosts and presenter hooks, and
+        // those run mid-present — after render, before commit. In that window
+        // the front buffer is the OUTGOING frame: blanking at mark time blanks
+        // a buffer about to be replaced, and the freshly painted frame becomes
+        // front with its content intact. The blank must happen when the mark is
+        // consumed, not when it is requested.
+        final damage = RenderDamageTracker();
+        final loop = TuiFrameLoop(renderDamage: damage);
+        final first = loop.render(
+          size: size,
+          paint: (buffer) => buffer.writeText(const CellOffset(1, 0), 'a'),
+        )!;
+        loop.commit(first);
+
+        final second = loop.render(
+          size: size,
+          paint: (buffer) => buffer.writeText(const CellOffset(1, 0), 'a'),
+        )!;
+        loop.markFullRepaint(); // mid-present: rendered, not yet committed
+        loop.commit(second);
+
+        final third = loop.render(
+          size: size,
+          paint: (buffer) => buffer.writeText(const CellOffset(1, 0), 'a'),
+        )!;
+        expect(third.damage, isA<FrameFullRepaint>());
+        // The presenter wipes the screen for this frame; a `previous` still
+        // holding 'a' would make the unchanged diff re-emit nothing after the
+        // wipe — a blank screen where content should be.
+        expect(third.previous.atColRow(1, 0), const Cell.empty());
+      },
+    );
+
     test('layout damage no longer forces a conservative full diff', () {
       final damage = RenderDamageTracker();
       final loop = TuiFrameLoop(renderDamage: damage);

@@ -106,10 +106,15 @@ final class InlineImagePlacement {
   /// Load-bearing rather than a convenience: `CellBuffer.diffAgainst` decides
   /// whether an inline image changed by comparing placement lists, and the
   /// cells beneath a placement are payload-free overlays that can never show
-  /// the difference. That comparison used to hand-list the fields, which meant
-  /// a field added later — or one forgotten in both the comparison and its
-  /// test oracle — silently stopped counting as a change. Comparing the whole
-  /// object makes a new field participate automatically.
+  /// the difference. That comparison used to hand-list the fields in TWO
+  /// places (the diff and its test oracle), which is how the fit/box fields
+  /// went uncompared. This operator is now the single list both defer to.
+  ///
+  /// It does NOT extend itself: adding a field to this class means adding it
+  /// here, to [hashCode], and to the one-field-apart table in
+  /// `inline_image_placement_equality_test.dart` (whose count guard you will
+  /// have to bump — deliberately, so the addition is acknowledged, not
+  /// silent).
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||

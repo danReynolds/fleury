@@ -184,9 +184,13 @@ void main() {
     });
 
     test('the table covers every field the class declares', () {
-      // Guards the guard: a field added to InlineImagePlacement without a case
-      // here would otherwise slip in unnoticed, which is the exact way the
-      // fit/box fields went uncompared in the first place.
+      // Guards the guard — imperfectly. This counts the table's own entries,
+      // so it catches a table entry added without thought, but NOT a field
+      // added to the class while touching neither `==` nor this file (the
+      // historically likely path: a new optional constructor param). That
+      // residual is owned by the doc on `InlineImagePlacement.==`, which
+      // names this table as part of the contract for adding a field. If this
+      // count surprises you, you are the person that doc is talking to.
       expect(_oneFieldApart.keys, hasLength(10));
     });
   });
