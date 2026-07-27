@@ -80,12 +80,145 @@ void main() {
       );
     });
 
-    test('emoji disabled by profile fall back to base-char rules', () {
+    test('emoji disabled by profile only affects non-Wide emoji', () {
       const noEmoji = TerminalProfile(emojiIsWide: false);
-      // 🙂 (U+1F642) is outside our _isWide ranges (it's in U+1F300+ which
-      // is only covered by the emoji table), so disabling emojiIsWide
-      // makes it fall through to width 1.
-      expect(resolver.widthOfGrapheme('🙂', noEmoji), 1);
+      // UAX #11 ED4 folds Emoji_Presentation=Yes into East Asian Wide, so most
+      // emoji are Wide by the standard and the flag cannot narrow them...
+      expect(resolver.widthOfGrapheme('🙂', noEmoji), 2);
+      // ...but Regional_Indicator is explicitly EXCLUDED from that amendment,
+      // so flags are the set the flag actually governs.
+      expect(resolver.widthOfGrapheme('\u{1F1FA}\u{1F1F8}', noEmoji), 1);
+    });
+  });
+
+  group('widthOfGrapheme — dingbats (U+2700–U+27BF presentation split)', () {
+    test('text-presentation dingbats are width 1', () {
+      // Emoji_Presentation=No: default to text, so 1 cell. ✓/✗ are the most
+      // common TUI status glyphs; widening them desynced the cell diff against
+      // terminals that render them at 1 (garbled scrolling in the storybook).
+      for (final g in ['✓', '✗', '✎', '✏', '✂', '✈', '✉', '✒', '✍', '✁']) {
+        expect(resolver.widthOfGrapheme(g, standard), 1, reason: 'g=$g');
+      }
+    });
+
+    test('emoji-presentation dingbats stay width 2', () {
+      // Emoji_Presentation=Yes: render as 2-column emoji by default, so the
+      // narrowing above must not catch them.
+      for (final g in [
+        '✅',
+        '✊',
+        '✋',
+        '✨',
+        '❌',
+        '❎',
+        '❓',
+        '❔',
+        '❕',
+        '❗',
+        '➕',
+        '➖',
+        '➗',
+        '➰',
+        '➿',
+      ]) {
+        expect(resolver.widthOfGrapheme(g, standard), 2, reason: 'g=$g');
+      }
+    });
+
+    test('emoji-presentation dingbats are Wide by the standard itself', () {
+      // Not merely "emoji, therefore 2": UAX #11 classifies these as East Asian
+      // Wide outright, so they stay 2 even with emoji handling disabled.
+      const noEmoji = TerminalProfile(emojiIsWide: false);
+      expect(resolver.widthOfGrapheme('✅', noEmoji), 2);
+      // The text-presentation half of the block stays narrow either way.
+      expect(resolver.widthOfGrapheme('✓', noEmoji), 1);
+    });
+  });
+
+  group('widthOfGrapheme — presentation selectors (UTS #51)', () {
+    test('VS16 gives a text-default base emoji presentation (width 2)', () {
+      // These are the most common emoji form there is, and a block-by-block
+      // table misses every one of them: each base is text-presentation (1) and
+      // only the selector makes it wide. All measured 1 before the rule.
+      // Every base here is East_Asian_Width=N on its own, so a width of 2 can
+      // only come from the selector — ⭐ is deliberately excluded because it is
+      // already Wide and would pass without the rule doing anything.
+      for (final g in [
+        '\u{2764}\u{FE0F}', // ❤️ heart
+        '\u{2611}\u{FE0F}', // ☑️ ballot box with check
+        '\u{26A0}\u{FE0F}', // ⚠️ warning
+        '\u{2708}\u{FE0F}', // ✈️ airplane
+        '\u{270C}\u{FE0F}', // ✌️ victory hand
+      ]) {
+        expect(resolver.widthOfGrapheme(g, standard), 2, reason: 'g=$g');
+      }
+    });
+
+    test('VS15 pins text presentation (width 1)', () {
+      // The mirror case: a base we would otherwise widen is forced narrow.
+      expect(resolver.widthOfGrapheme('\u{2757}\u{FE0E}', standard), 1); // ❗︎
+      expect(resolver.widthOfGrapheme('\u{2714}\u{FE0E}', standard), 1); // ✔︎
+    });
+
+    test('the bare base without a selector keeps its own width', () {
+      // Unselected, these fall back to their own East_Asian_Width — the rule
+      // must not leak onto them.
+      expect(resolver.widthOfGrapheme('\u{2764}', standard), 1); // ❤ EAW=N
+      expect(resolver.widthOfGrapheme('\u{26A0}', standard), 1); // ⚠ EAW=N
+      // ...but a base that is Wide in its own right stays 2 without any
+      // selector. UAX #11 ED4 (amended in Unicode 9) folds
+      // Emoji_Presentation=Yes into East Asian Wide, so ⭐ is 2 bare.
+      expect(resolver.widthOfGrapheme('\u{2B50}', standard), 2); // ⭐ EAW=W
+    });
+
+    test('VS16 respects a profile with emoji disabled', () {
+      // The base must be EAW=N, or it would be wide regardless of the flag.
+      const noEmoji = TerminalProfile(emojiIsWide: false);
+      expect(resolver.widthOfGrapheme('\u{2764}\u{FE0F}', noEmoji), 1);
+    });
+
+    test('a VS16 cluster in mixed text sums correctly', () {
+      // 'ok ' (3) + ⚠️ (2) = 5. Exercises the widthOfText path, where the
+      // ASCII fast path must hand the run back before the cluster.
+      expect(resolver.widthOfText('ok \u{26A0}\u{FE0F}', standard), 5);
+    });
+  });
+
+  group('hasUncertainWidth', () {
+    test('ASCII and CJK are certain', () {
+      for (final g in ['A', ' ', '~', '中', '한', 'あ']) {
+        expect(hasUncertainWidth(g), isFalse, reason: 'g=$g');
+      }
+    });
+
+    test('TUI chrome stays certain so long runs are not pinned', () {
+      // Box drawing, blocks, geometric shapes and arrows are UAX #11 Ambiguous
+      // — answered by the startup probe, and they appear in long contiguous
+      // runs where per-cell pinning would cost real bytes.
+      for (final g in ['─', '│', '╭', '█', '▉', '▁', '●', '→', '←']) {
+        expect(hasUncertainWidth(g), isFalse, reason: 'g=$g');
+      }
+    });
+
+    test('emoji-capable clusters are uncertain', () {
+      for (final g in [
+        '✓', // the dingbat whose misclassification garbled frames
+        '✗',
+        '✅',
+        '⚠', // bare
+        '\u{26A0}\u{FE0F}', // ⚠️ selected
+        '\u{2B50}\u{FE0F}', // ⭐️
+        '🙂',
+        '🚀',
+        '\u{1F1FA}\u{1F1F8}', // 🇺🇸 flag
+        '\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}', // ZWJ family
+      ]) {
+        expect(hasUncertainWidth(g), isTrue, reason: 'g=$g');
+      }
+    });
+
+    test('empty input is certain', () {
+      expect(hasUncertainWidth(''), isFalse);
     });
   });
 
@@ -134,18 +267,20 @@ void main() {
       expect(resolver.widthOfText('go 🚀', standard), 5);
     });
 
-    test('ASCII base + VS16 keycap is not double-counted (fast-path split)', () {
-      // '1' + VS16 + enclosing keycap is one grapheme. widthOfText's ASCII fast
-      // path peels the '1' and re-measures the tail as a fresh cluster whose
-      // base is VS16 (0xFE0F) — which must be zero-width, or the total exceeds
-      // the summed grapheme width by one (measured 2 before the fix).
+    test('ASCII base + VS16 keycap measures as one emoji cluster', () {
+      // '1' + VS16 + enclosing keycap is ONE grapheme with an ASCII base, and
+      // VS16 gives it emoji presentation — 2 cells. widthOfText's ASCII fast
+      // path must not peel the '1' off its cluster, or the two halves get
+      // measured separately and disagree with widthOfGrapheme.
       const keycap = '1\u{FE0F}\u{20E3}'; // 1️⃣
       expect(
         resolver.widthOfText(keycap, standard),
         resolver.widthOfGrapheme(keycap, standard),
         reason: 'widthOfText must equal the summed grapheme width',
       );
-      expect(resolver.widthOfText(keycap, standard), 1);
+      expect(resolver.widthOfText(keycap, standard), 2);
+      // The cluster must not disturb its neighbours' measurement either.
+      expect(resolver.widthOfText('a${keycap}b', standard), 4);
     });
 
     test('a flag emoji in mixed text counts as 2', () {

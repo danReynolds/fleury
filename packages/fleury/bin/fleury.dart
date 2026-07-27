@@ -1682,8 +1682,10 @@ Future<int> _runDiagnose(List<String> args) async {
     stdoutIsTerminal: stdout.hasTerminal,
   );
   if (probe) {
-    final probeReport = await _runActiveTerminalProbes(probeTimeout);
-    diagnosis = diagnosis.withActiveProbes(probeReport);
+    final active = await _runActiveTerminalProbes(probeTimeout);
+    diagnosis = diagnosis
+        .withActiveProbes(active.report)
+        .withMeasuredWidths(active.measuredWidths);
   }
 
   if (json || jsonOutputPath != null) {
@@ -1775,6 +1777,15 @@ Future<int> _runDiagnose(List<String> args) async {
   row('OSC 52 clipboard', capabilities.osc52Clipboard);
   row('OSC 8 hyperlinks', capabilities.osc8Hyperlinks);
   row('tmux passthrough', capabilities.tmuxPassthrough);
+  row('Ambiguous width', capabilities.ambiguousCharWidth.name);
+  // Measured, not detected: what this terminal actually drew. Only populated
+  // with --probe, since it requires a round trip.
+  final measured = capabilities.measuredWidths;
+  String cells(int? width) => width == null ? '(not probed)' : '$width cells';
+  row('  ├ ambiguous ─', cells(measured.ambiguous));
+  row('  ├ VS16 emoji ❤️', cells(measured.emojiPresentation));
+  row('  ├ text dingbat ✓', cells(measured.textPresentation));
+  row('  └ ZWJ cluster 👨‍👩‍👦', cells(measured.graphemeCluster));
   _writeProbeSection(diagnosis.activeProbes, row);
   _writeCompatibilitySection(diagnosis.compatibility, row);
   messages('Fallbacks', diagnosis.fallbacks);
@@ -1798,10 +1809,20 @@ TerminalPlatformReport _diagnosisPlatform() {
   );
 }
 
-Future<TerminalProbeReport> _runActiveTerminalProbes(Duration timeout) async {
+/// The active-probe suite plus the measured glyph widths, collected in the one
+/// raw-mode window so the terminal is only disturbed once.
+typedef _ActiveProbeEvidence = ({
+  TerminalProbeReport report,
+  MeasuredGlyphWidths measuredWidths,
+});
+
+Future<_ActiveProbeEvidence> _runActiveTerminalProbes(Duration timeout) async {
   if (!stdin.hasTerminal || !stdout.hasTerminal) {
-    return TerminalProbeReport.skipped(
-      'Active probes require both stdin and stdout to be terminals.',
+    return (
+      report: TerminalProbeReport.skipped(
+        'Active probes require both stdin and stdout to be terminals.',
+      ),
+      measuredWidths: const MeasuredGlyphWidths(),
     );
   }
 
@@ -1817,10 +1838,22 @@ Future<TerminalProbeReport> _runActiveTerminalProbes(Duration timeout) async {
     changedStdin = true;
 
     transport = _StdioTerminalProbeTransport();
-    return await runTerminalProbeSuite(transport, perProbeTimeout: timeout);
+    final report = await runTerminalProbeSuite(
+      transport,
+      perProbeTimeout: timeout,
+    );
+    // Measure widths on a fresh line and clear it, so the probe glyphs never
+    // land on top of the report the user is about to read.
+    stdout.writeln();
+    final measured = await probeGlyphWidths(transport, timeout: timeout);
+    stdout.write('\r\x1B[K');
+    return (report: report, measuredWidths: measured);
   } on StdinException catch (error) {
-    return TerminalProbeReport.skipped(
-      'Could not enter raw terminal mode for active probes: $error',
+    return (
+      report: TerminalProbeReport.skipped(
+        'Could not enter raw terminal mode for active probes: $error',
+      ),
+      measuredWidths: const MeasuredGlyphWidths(),
     );
   } finally {
     await transport?.close();

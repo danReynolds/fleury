@@ -7,6 +7,7 @@ import 'package:fleury_widgets/fleury_widgets.dart';
 
 import 'sample_image.dart';
 import 'story.dart';
+import 'theme_gallery.dart';
 
 final List<Story> storybookStories = _perWidgetStories(<Story>[
   Story(
@@ -59,6 +60,20 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
       label: context.text('label'),
       selectedWidgetName: context.selectedWidgetName,
     ),
+  ),
+  Story(
+    id: 'theme.gallery',
+    title: 'Themes',
+    category: 'Core',
+    description:
+        'Preview a built-in palette — Nord, Dracula, Gruvbox, Solarized (dark + '
+        'light), Catppuccin Mocha, Tokyo Night, One Dark — on a slice of real '
+        'widgets. Use the Theme dropdown to switch palettes.',
+    widgets: const <String>['Themes'],
+    // Tall enough that the stacked (narrow-pane) layout shows both panes and
+    // the legend without scrolling.
+    initialHeight: 32,
+    builder: (context) => const ThemeGallery(),
   ),
   Story(
     id: 'core.selection-scroll',

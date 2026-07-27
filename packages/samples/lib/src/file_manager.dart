@@ -49,7 +49,6 @@ class _FileManagerBodyState extends State<_FileManagerBody> {
                 flex: 2,
                 child: Panel(
                   title: 'Explorer',
-                  focused: true,
                   // No type-ahead: the footer advertises a bare-printable
                   // quit key ('q'), which a type-ahead tree would swallow.
                   child: Tree<_FsNode>(

@@ -153,7 +153,11 @@ export 'src/rendering/text_sanitizer.dart'
         sanitizeForDisplay,
         sanitizeSingleLine;
 export 'src/rendering/width_resolver.dart'
-    show DefaultWidthResolver, TerminalProfile, WidthResolver;
+    show
+        DefaultWidthResolver,
+        TerminalProfile,
+        WidthResolver,
+        hasUncertainWidth;
 
 // Semantics
 export 'src/semantics/accessibility.dart'
@@ -233,10 +237,12 @@ export 'src/terminal/diagnostics.dart'
         diagnoseTerminal;
 export 'src/terminal/terminal_probe.dart'
     show
+        MeasuredGlyphWidths,
         TerminalProbeReport,
         TerminalProbeResult,
         TerminalProbeStatus,
         TerminalProbeTransport,
+        probeGlyphWidths,
         runTerminalProbeSuite;
 export 'src/input/events.dart'
     show
@@ -378,9 +384,11 @@ export 'src/widgets/text_area.dart' show TextArea;
 export 'src/widgets/text_input.dart'
     show TextClipboardPolicy, TextEditingController, TextInput;
 export 'src/widgets/ticker_mode.dart' show TickerMode;
+export 'src/widgets/theme_palettes.dart' show NamedTheme, ThemePalettes;
 export 'src/widgets/theme.dart'
     show
         Brightness,
+        BrightnessPick,
         ColorScheme,
         DefaultTextStyle,
         FleuryThemeContext,

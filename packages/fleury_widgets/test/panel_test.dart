@@ -67,6 +67,57 @@ void main() {
     expect(rest.atColRow(0, 0).style.foreground, isNot(_accent));
   });
 
+  testWidgets('accents itself while focus is inside it', (tester) {
+    final body = FocusNode(debugLabel: 'body');
+    Widget build() => Theme(
+      data: _theme,
+      child: Panel(
+        title: 'CPU',
+        expandChild: false,
+        child: Focus(focusNode: body, child: const Text('body')),
+      ),
+    );
+
+    tester.pumpWidget(build());
+    expect(
+      tester.render(size: const CellSize(12, 5)).atColRow(0, 0).style.foreground,
+      isNot(_accent),
+      reason: 'at rest the border stays muted',
+    );
+
+    body.requestFocus();
+    final buf = tester.render(size: const CellSize(12, 5));
+    expect(
+      buf.atColRow(0, 0).style.foreground,
+      _accent,
+      reason: 'focus landing inside should accent the pane, unasked',
+    );
+    expect(buf.atColRow(2, 1).style.foreground, _accent, reason: 'title too');
+  });
+
+  testWidgets('an explicit focused pins the chrome against the focus tree', (
+    tester,
+  ) {
+    final body = FocusNode(debugLabel: 'body');
+    tester.pumpWidget(
+      Theme(
+        data: _theme,
+        child: Panel(
+          title: 'CPU',
+          expandChild: false,
+          focused: false,
+          child: Focus(focusNode: body, child: const Text('body')),
+        ),
+      ),
+    );
+    body.requestFocus();
+    expect(
+      tester.render(size: const CellSize(12, 5)).atColRow(0, 0).style.foreground,
+      isNot(_accent),
+      reason: 'an explicit false wins over detected focus',
+    );
+  });
+
   testWidgets('is a semantic region named by the title', (tester) {
     tester.pumpWidget(_panel());
     final region = tester.semantics().single(role: SemanticRole.region);
