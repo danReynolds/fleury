@@ -151,7 +151,7 @@ final class Text extends StatelessWidget implements WidgetUpdatePruner {
         maxLines: maxLines,
         overflow: overflow,
         textAlign: textAlign,
-        policy: (policy ?? MediaQuery.textPolicyOf(context)).widths,
+        policy: policy ?? MediaQuery.textPolicyOf(context),
         allowSelect: allowSelect,
       ),
     );
@@ -176,7 +176,7 @@ final class _RawText extends LeafRenderObjectWidget {
   final int? maxLines;
   final TextOverflow overflow;
   final TextAlign textAlign;
-  final CellWidthPolicy policy;
+  final TextPresentationPolicy policy;
   final bool allowSelect;
 
   @override
@@ -188,7 +188,7 @@ final class _RawText extends LeafRenderObjectWidget {
       maxLines: maxLines,
       overflow: overflow,
       textAlign: textAlign,
-      policy: policy,
+      textPolicy: policy,
     );
     // Wire the Selectable to the ambient registrar so app-wide
     // selection systems see this text widget. allowSelect == false
@@ -209,7 +209,7 @@ final class _RawText extends LeafRenderObjectWidget {
       ..maxLines = maxLines
       ..overflow = overflow
       ..textAlign = textAlign
-      ..policy = policy;
+      ..textPolicy = policy;
     // If the ambient SelectionScope changed (e.g. a SelectionArea
     // mounted above us) OR allowSelect flipped, re-attach.
     renderObject.attachToSelection(
