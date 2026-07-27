@@ -178,139 +178,279 @@ Future<ImageProtocol?> probeImageProtocol(
 /// Actively measures whether the terminal renders East-Asian *Ambiguous*-width
 /// glyphs as one column or two.
 ///
-/// Writes a single ambiguous glyph at the home cell, then a Cursor Position
-/// Report query (`ESC [ 6 n`): the reported column tells us how far the cursor
-/// advanced — 2 (one column past home) means the terminal drew it narrow, 3
-/// means wide. The glyph is erased and a Device Attributes query appended so the
-/// transport stops as soon as the reply lands. Returns null when the terminal
-/// doesn't answer, so the caller keeps its safe (defensive) default. This is the
-/// same cursor-measurement trick vim's `t_u7` uses to auto-set `ambiwidth`.
-///
-/// Must run on the alternate screen (the probe writes to the home cell); the
-/// caller erases it and the first frame repaints over it regardless.
+/// Delegates to the batched [probeGlyphWidths] and answers from the
+/// ambiguous-class representatives under RFC 0019's agreement rule: narrow
+/// only when every representative measured 1, wide only when every one
+/// measured ≥ 2, and null on any disagreement, anomaly, or missing reply — a
+/// single glyph is a signal, not proof, and box drawing in particular is the
+/// character a terminal is most likely to special-case narrow (grids must
+/// work) while rendering the rest of the Ambiguous class wide. Null keeps the
+/// caller's safe (defensive) default. This is the same cursor-measurement
+/// trick vim's `t_u7` uses to auto-set `ambiwidth`.
 Future<AmbiguousCharWidth?> probeAmbiguousWidth(
   TerminalProbeTransport transport, {
   Duration timeout = const Duration(milliseconds: 150),
 }) async {
   final measured = await probeGlyphWidths(transport, timeout: timeout);
-  final width = measured.ambiguous;
-  if (width == null) return null;
-  // 1 cell means the terminal drew it narrow, 2 means wide. Anything else is
-  // anomalous — treat as narrow, the near-universal default.
-  return width >= 2 ? AmbiguousCharWidth.wide : AmbiguousCharWidth.narrow;
+  return ambiguousWidthFromMeasurements(measured);
 }
 
-/// What the terminal ACTUALLY drew for one representative glyph per known
-/// width-disagreement class, in cells, measured rather than assumed.
+/// The agreement-rule derivation shared by [probeAmbiguousWidth], the POSIX
+/// driver, and `fleury diagnose`: one answer for the ambiguous axis, or null
+/// when the evidence doesn't agree.
+AmbiguousCharWidth? ambiguousWidthFromMeasurements(
+  WidthMeasurements measurements,
+) {
+  final widths = measurements.widthsIn(WidthProbeClass.ambiguous);
+  if (widths.isEmpty || widths.any((w) => w == null)) return null;
+  if (widths.every((w) => w == 1)) return AmbiguousCharWidth.narrow;
+  if (widths.every((w) => w! >= 2)) return AmbiguousCharWidth.wide;
+  return null; // Disagreement — conservative, keep the default.
+}
+
+/// The width-disagreement class a probe glyph represents. Classes are
+/// independent: a representative votes only within its own class (RFC 0019
+/// §6.1), so "bare emoji wide, variation sequence narrow" — the common
+/// combination in the field — derives cleanly instead of poisoning agreement.
+enum WidthProbeClass {
+  /// UAX #11 East Asian Ambiguous: 1 on modern terminals, 2 on CJK-configured
+  /// ones.
+  ambiguous,
+
+  /// Bare `Emoji_Presentation` scalars, probed without any selector. Also the
+  /// measured component inputs to the ZWJ summing equation.
+  emojiPresentation,
+
+  /// Simple base + VS16 sequences. The biggest single disagreement in the
+  /// field: roughly 19 of ~30 surveyed terminals draw `❤️` at 1 cell.
+  emojiVariationSequence,
+
+  /// Emoji ZWJ sequences: ≤ 2 when the terminal clusters, component-sum when
+  /// it draws each code point separately.
+  zwjSequence,
+
+  /// Text-presentation dingbats. Diagnostic only — expected 1 everywhere; a 2
+  /// means the terminal emoji-fies text-default symbols, which no policy axis
+  /// models (that tail stays pinned).
+  textPresentation,
+}
+
+/// One glyph in the probe battery: what is written, which class it votes in,
+/// and a stable [id] used in JSON and diagnostics.
+@immutable
+final class WidthProbeGlyph {
+  const WidthProbeGlyph(this.id, this.glyph, this.probeClass);
+
+  final String id;
+  final String glyph;
+  final WidthProbeClass probeClass;
+}
+
+/// The probe battery: several representatives per class, from distinct blocks,
+/// all old and widely deployed — agreement across them is what authorizes an
+/// axis to adapt, and any disagreement leaves the axis unknown (RFC 0019
+/// §6.1). The ZWJ sequences' components are probed bare so summing can be
+/// established by the measured equation
+/// `componentSum ≤ sequenceAdvance ≤ componentSum + zwjCount`
+/// rather than inferred.
+///
+/// Order defines the write order and therefore the CPR reply order.
+const List<WidthProbeGlyph> widthProbeBattery = <WidthProbeGlyph>[
+  // Ambiguous — three different blocks; box drawing alone is the glyph most
+  // likely to be special-cased narrow by an otherwise ambiguous-wide terminal.
+  WidthProbeGlyph('boxDrawing', '\u{2500}', WidthProbeClass.ambiguous), // ─
+  WidthProbeGlyph('greekAlpha', '\u{03B1}', WidthProbeClass.ambiguous), // α
+  WidthProbeGlyph('degreeSign', '\u{00B0}', WidthProbeClass.ambiguous), // °
+  // Bare emoji presentation, including the family components.
+  WidthProbeGlyph(
+    'slightSmile',
+    '\u{1F642}',
+    WidthProbeClass.emojiPresentation,
+  ), // 🙂
+  WidthProbeGlyph(
+    'grinningFace',
+    '\u{1F600}',
+    WidthProbeClass.emojiPresentation,
+  ), // 😀
+  WidthProbeGlyph('man', '\u{1F468}', WidthProbeClass.emojiPresentation), // 👨
+  WidthProbeGlyph(
+    'woman',
+    '\u{1F469}',
+    WidthProbeClass.emojiPresentation,
+  ), // 👩
+  WidthProbeGlyph('boy', '\u{1F466}', WidthProbeClass.emojiPresentation), // 👦
+  // Simple variation sequences (one base + VS16, nothing else).
+  WidthProbeGlyph(
+    'heartVs16',
+    '\u{2764}\u{FE0F}',
+    WidthProbeClass.emojiVariationSequence,
+  ), // ❤️
+  WidthProbeGlyph(
+    'warningVs16',
+    '\u{26A0}\u{FE0F}',
+    WidthProbeClass.emojiVariationSequence,
+  ), // ⚠️
+  WidthProbeGlyph(
+    'medicalVs16',
+    '\u{2695}\u{FE0F}',
+    WidthProbeClass.emojiVariationSequence,
+  ), // ⚕️ — also the second component of the profession sequence below.
+  // ZWJ sequences from two different sequence families.
+  WidthProbeGlyph(
+    'familyZwj',
+    '\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F466}',
+    WidthProbeClass.zwjSequence,
+  ), // 👨‍👩‍👦
+  WidthProbeGlyph(
+    'healthWorkerZwj',
+    '\u{1F469}\u{200D}\u{2695}\u{FE0F}',
+    WidthProbeClass.zwjSequence,
+  ), // 👩‍⚕️
+  // Diagnostic only.
+  WidthProbeGlyph(
+    'checkMark',
+    '\u{2713}',
+    WidthProbeClass.textPresentation,
+  ), // ✓
+];
+
+/// What the terminal ACTUALLY drew for each battery glyph, in cells, measured
+/// rather than assumed — raw observations, parallel to [widthProbeBattery].
 ///
 /// There is no protocol by which an application can ask a terminal how wide it
 /// will draw something — DECRQM 2027 reports a capability that is known to lie
 /// in both directions, and OSC 66 exists on two emulators. What does work,
 /// everywhere, is what vim's `t_u7` does: draw it and look at where the cursor
-/// ended up. This measures the four classes the field genuinely disagrees on.
+/// ended up.
 ///
-/// A null field means the terminal never answered that measurement (no CPR
-/// support, a timeout, a truncated reply); the caller keeps its default rather
-/// than inventing a number.
+/// **The batch is atomic** (RFC 0019 §6.1): CPR replies are ordered but
+/// unlabeled, so a reply count that doesn't match the battery means later
+/// replies can't be attributed safely — the whole battery is discarded
+/// ([WidthMeasurements.empty]) rather than salvaged per-glyph. Judgement
+/// (agreement, anomaly rejection) lives in derivation, not here: a measured
+/// zero advance is recorded as 0 and fails agreement downstream.
 @immutable
-final class MeasuredGlyphWidths {
-  const MeasuredGlyphWidths({
-    this.ambiguous,
-    this.emojiPresentation,
-    this.textPresentation,
-    this.graphemeCluster,
-  });
+final class WidthMeasurements {
+  /// [cellWidths] must be parallel to [widthProbeBattery] (or empty).
+  const WidthMeasurements(this.cellWidths)
+    : assert(
+        cellWidths.length == 0 || cellWidths.length == widthProbeBattery.length,
+        'cellWidths must be empty or parallel to widthProbeBattery',
+      );
 
-  /// `U+2500` box drawing — UAX #11 Ambiguous. 1 on modern terminals, 2 on
-  /// CJK-configured ones.
-  final int? ambiguous;
+  /// No usable measurements: the terminal never answered, or the batch was
+  /// discarded as unattributable.
+  const WidthMeasurements.empty() : cellWidths = const <int?>[];
 
-  /// `U+2764 U+FE0F` (❤️) — 2 when the terminal honours the VS16 presentation
-  /// selector, 1 when it ignores it. The single biggest disagreement in the
-  /// field: roughly 19 of 30 surveyed terminals draw this at 1.
-  final int? emojiPresentation;
+  /// Builds measurements from glyph [id] → width, for tests and fixtures.
+  /// Ids not mentioned measure null.
+  factory WidthMeasurements.of(Map<String, int?> byId) {
+    for (final id in byId.keys) {
+      assert(
+        widthProbeBattery.any((g) => g.id == id),
+        'unknown probe glyph id: $id',
+      );
+    }
+    return WidthMeasurements(
+      List<int?>.unmodifiable(
+        widthProbeBattery.map((g) => byId[g.id]),
+      ),
+    );
+  }
 
-  /// `U+2713` (✓) — a text-presentation dingbat. Expected 1; a 2 here means
-  /// the terminal emoji-fies text-default symbols, which is what made a
-  /// mis-classified Dingbats range garble whole frames.
-  final int? textPresentation;
+  /// Measured advance in cells per battery glyph, or null where unanswered.
+  /// Empty when the whole batch was discarded.
+  final List<int?> cellWidths;
 
-  /// `U+1F468 ZWJ U+1F469 ZWJ U+1F466` (👨‍👩‍👦) — 2 when the terminal performs
-  /// UAX #29 grapheme clustering, ~6 when it sums each code point separately.
-  final int? graphemeCluster;
+  bool get isEmpty => cellWidths.isEmpty;
 
-  /// Whether every class answered — i.e. the terminal supports CPR and the
-  /// measurements can be trusted as a set.
-  bool get isComplete =>
-      ambiguous != null &&
-      emojiPresentation != null &&
-      textPresentation != null &&
-      graphemeCluster != null;
+  /// The measured width of the battery glyph with [id], or null.
+  int? widthOf(String id) {
+    for (var i = 0; i < widthProbeBattery.length; i++) {
+      if (widthProbeBattery[i].id == id) {
+        return i < cellWidths.length ? cellWidths[i] : null;
+      }
+    }
+    return null;
+  }
+
+  /// The measured widths of every representative in [probeClass], in battery
+  /// order. Empty when the batch was discarded.
+  List<int?> widthsIn(WidthProbeClass probeClass) {
+    if (isEmpty) return const <int?>[];
+    final out = <int?>[];
+    for (var i = 0; i < widthProbeBattery.length; i++) {
+      if (widthProbeBattery[i].probeClass == probeClass) {
+        out.add(cellWidths[i]);
+      }
+    }
+    return out;
+  }
+
+  /// Battery glyphs paired with their measurements, for diagnostics.
+  Iterable<(WidthProbeGlyph, int?)> get entries sync* {
+    for (var i = 0; i < widthProbeBattery.length; i++) {
+      yield (widthProbeBattery[i], isEmpty ? null : cellWidths[i]);
+    }
+  }
 
   Map<String, Object?> toJson() => <String, Object?>{
-    'ambiguous': ambiguous,
-    'emojiPresentation': emojiPresentation,
-    'textPresentation': textPresentation,
-    'graphemeCluster': graphemeCluster,
+    for (final (glyph, width) in entries) glyph.id: width,
   };
 
   @override
-  String toString() =>
-      'MeasuredGlyphWidths(ambiguous: $ambiguous, '
-      'emojiPresentation: $emojiPresentation, '
-      'textPresentation: $textPresentation, '
-      'graphemeCluster: $graphemeCluster)';
+  String toString() {
+    if (isEmpty) return 'WidthMeasurements.empty()';
+    final parts = [
+      for (final (glyph, width) in entries) '${glyph.id}: $width',
+    ];
+    return 'WidthMeasurements(${parts.join(', ')})';
+  }
 }
 
-/// Measures [MeasuredGlyphWidths] in ONE round trip.
+/// Measures the whole [widthProbeBattery] in ONE round trip.
 ///
 /// Each probe glyph is written at column 1 of the CURRENT line and immediately
 /// followed by a Cursor Position Report request, so the replies arrive in the
 /// same order the glyphs were written; the line is erased afterwards. Safe on
 /// the normal screen as well as the alternate one — it never homes the cursor,
 /// so it cannot overwrite content above the caller's line.
-Future<MeasuredGlyphWidths> probeGlyphWidths(
+Future<WidthMeasurements> probeGlyphWidths(
   TerminalProbeTransport transport, {
   Duration timeout = const Duration(milliseconds: 150),
 }) async {
   final List<int> response;
   try {
-    response = await transport.request(_glyphWidthQuery, timeout: timeout);
+    response = await transport.request(glyphWidthQuery, timeout: timeout);
   } on Object {
-    return const MeasuredGlyphWidths();
+    return const WidthMeasurements.empty();
   }
   final columns = _cursorReportColumns(response);
-  // Each glyph started at column 1, so the reported column is width + 1. A
-  // report below 2 is anomalous (zero advance) and is discarded rather than
-  // recorded as a width of 0.
-  int? widthAt(int index) {
-    if (index >= columns.length) return null;
-    final width = columns[index] - 1;
-    return width >= 1 ? width : null;
+  // Atomicity: an unexpected reply count means attribution is unsafe.
+  if (columns.length != widthProbeBattery.length) {
+    return const WidthMeasurements.empty();
   }
-
-  return MeasuredGlyphWidths(
-    ambiguous: widthAt(0),
-    emojiPresentation: widthAt(1),
-    textPresentation: widthAt(2),
-    graphemeCluster: widthAt(3),
+  // Each glyph started at column 1, so the reported column is advance + 1.
+  // Recorded raw — a zero or negative-looking advance is kept as measured and
+  // rejected by derivation's agreement rules, not silently repaired here.
+  return WidthMeasurements(
+    List<int?>.unmodifiable(columns.map((c) => c - 1)),
   );
 }
 
-/// Return to column 1, draw, ask where the cursor landed — once per
-/// disagreement class — then erase the line. The order here defines the order
-/// the replies are read in [probeGlyphWidths]. The trailing Device Attributes
+/// Return to column 1, draw, ask where the cursor landed — once per battery
+/// glyph — then erase the line. Built from [widthProbeBattery], so the write
+/// order and the reply order can't drift apart. The trailing Device Attributes
 /// query is the transport's stop sentinel.
 ///
 /// Uses `\r` rather than `ESC [ H`: carriage return stays on the CURRENT line,
 /// so this is safe both on the alternate screen (where the driver probes) and
 /// on the normal screen (where `fleury diagnose --probe` does). Homing to the
-/// top-left would overwrite whatever the user already had on screen.
-const _glyphWidthQuery =
-    '\r\u{2500}\x1B[6n' // ambiguous
-    '\r\u{2764}\u{FE0F}\x1B[6n' // emoji presentation (VS16)
-    '\r\u{2713}\x1B[6n' // text presentation
-    '\r\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F466}\x1B[6n' // ZWJ cluster
+/// top-left would overwrite whatever the user already had on screen. Every
+/// glyph is `\r`-anchored, so widths never accumulate across the line and a
+/// narrow viewport can't wrap mid-battery.
+final String glyphWidthQuery =
+    '${widthProbeBattery.map((g) => '\r${g.glyph}\x1B[6n').join()}'
     '\r\x1B[K'
     '$_deviceAttributesQuery';
 

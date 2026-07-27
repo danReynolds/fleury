@@ -55,7 +55,7 @@ final class TerminalCapabilities {
     this.tmuxPassthrough = false,
     this.ambiguousCharWidth = AmbiguousCharWidth.wide,
     this.hyperlinks = false,
-    this.measuredWidths = const MeasuredGlyphWidths(),
+    this.measuredWidths = const WidthMeasurements.empty(),
   });
 
   /// Conservative default for unknown terminals: 16-color ANSI, alt
@@ -91,7 +91,7 @@ final class TerminalCapabilities {
   /// Reported for diagnostics today rather than consumed by layout: the
   /// numbers have to be trustworthy before they are allowed to move glyphs.
   /// All-null when the terminal doesn't answer CPR, or the probe was skipped.
-  final MeasuredGlyphWidths measuredWidths;
+  final WidthMeasurements measuredWidths;
 
   /// Whether OSC 8 hyperlinks are supported and safe to emit here. Detected
   /// from the environment and SUPPRESSED under tmux (see
@@ -108,7 +108,7 @@ final class TerminalCapabilities {
     bool? supportsHidingCursor,
     bool? tmuxPassthrough,
     AmbiguousCharWidth? ambiguousCharWidth,
-    MeasuredGlyphWidths? measuredWidths,
+    WidthMeasurements? measuredWidths,
     bool? hyperlinks,
   }) => TerminalCapabilities(
     colorMode: colorMode ?? this.colorMode,

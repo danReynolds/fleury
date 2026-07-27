@@ -1782,10 +1782,12 @@ Future<int> _runDiagnose(List<String> args) async {
   // with --probe, since it requires a round trip.
   final measured = capabilities.measuredWidths;
   String cells(int? width) => width == null ? '(not probed)' : '$width cells';
-  row('  ├ ambiguous ─', cells(measured.ambiguous));
-  row('  ├ VS16 emoji ❤️', cells(measured.emojiPresentation));
-  row('  ├ text dingbat ✓', cells(measured.textPresentation));
-  row('  └ ZWJ cluster 👨‍👩‍👦', cells(measured.graphemeCluster));
+  final batteryEntries = measured.entries.toList();
+  for (var i = 0; i < batteryEntries.length; i++) {
+    final (glyph, width) = batteryEntries[i];
+    final branch = i == batteryEntries.length - 1 ? '└' : '├';
+    row('  $branch ${glyph.probeClass.name} ${glyph.glyph}', cells(width));
+  }
   _writeProbeSection(diagnosis.activeProbes, row);
   _writeCompatibilitySection(diagnosis.compatibility, row);
   messages('Fallbacks', diagnosis.fallbacks);
@@ -1813,7 +1815,7 @@ TerminalPlatformReport _diagnosisPlatform() {
 /// raw-mode window so the terminal is only disturbed once.
 typedef _ActiveProbeEvidence = ({
   TerminalProbeReport report,
-  MeasuredGlyphWidths measuredWidths,
+  WidthMeasurements measuredWidths,
 });
 
 Future<_ActiveProbeEvidence> _runActiveTerminalProbes(Duration timeout) async {
@@ -1822,7 +1824,7 @@ Future<_ActiveProbeEvidence> _runActiveTerminalProbes(Duration timeout) async {
       report: TerminalProbeReport.skipped(
         'Active probes require both stdin and stdout to be terminals.',
       ),
-      measuredWidths: const MeasuredGlyphWidths(),
+      measuredWidths: const WidthMeasurements.empty(),
     );
   }
 
@@ -1853,7 +1855,7 @@ Future<_ActiveProbeEvidence> _runActiveTerminalProbes(Duration timeout) async {
       report: TerminalProbeReport.skipped(
         'Could not enter raw terminal mode for active probes: $error',
       ),
-      measuredWidths: const MeasuredGlyphWidths(),
+      measuredWidths: const WidthMeasurements.empty(),
     );
   } finally {
     await transport?.close();

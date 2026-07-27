@@ -162,7 +162,7 @@ class PosixTerminalDriver
 
   /// What the startup probe measured the terminal actually drawing. Reported
   /// through [capabilities] for diagnostics; null fields mean "unmeasured".
-  MeasuredGlyphWidths _measuredGlyphWidths = const MeasuredGlyphWidths();
+  WidthMeasurements _measuredGlyphWidths = const WidthMeasurements.empty();
   bool _wroteEnterSequences = false;
   bool _changedStdin = false;
   bool _nativeRawMode = false;
@@ -503,12 +503,10 @@ class PosixTerminalDriver
       // just ambiguous — same cost as the old single-glyph probe.
       final measured = await probeGlyphWidths(_DriverProbeTransport(this));
       _measuredGlyphWidths = measured;
-      final ambiguous = measured.ambiguous;
-      if (ambiguous != null) {
-        _ambiguousCharWidthOverride = ambiguous >= 2
-            ? AmbiguousCharWidth.wide
-            : AmbiguousCharWidth.narrow;
-      }
+      // Agreement across the ambiguous representatives, or keep the default:
+      // one glyph is a signal, not proof (RFC 0019 §6.1).
+      final ambiguous = ambiguousWidthFromMeasurements(measured);
+      if (ambiguous != null) _ambiguousCharWidthOverride = ambiguous;
     } on Object {
       // Probe failed (no terminal reply, write error, …): keep the `wide`
       // default so ambiguous-wide terminals never garble.

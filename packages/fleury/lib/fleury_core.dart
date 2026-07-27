@@ -237,7 +237,11 @@ export 'src/terminal/diagnostics.dart'
         diagnoseTerminal;
 export 'src/terminal/terminal_probe.dart'
     show
-        MeasuredGlyphWidths,
+        WidthMeasurements,
+        WidthProbeClass,
+        WidthProbeGlyph,
+        widthProbeBattery,
+        ambiguousWidthFromMeasurements,
         TerminalProbeReport,
         TerminalProbeResult,
         TerminalProbeStatus,
