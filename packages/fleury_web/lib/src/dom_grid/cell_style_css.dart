@@ -5,6 +5,30 @@ import 'package:fleury/fleury_host.dart';
 const RgbColor kDefaultForeground = RgbColor(208, 208, 208);
 const RgbColor kDefaultBackground = RgbColor(30, 30, 30);
 
+/// Declarations that make a span cover its whole cell box.
+///
+/// **The rule: anything that paints a background must fill the cell box.**
+///
+/// An `inline` box paints its background over the font's *content* area —
+/// ascent + descent — not the line box. A grid row is a line box, and cell
+/// height is line-height, which is almost always taller than the content area
+/// (14px text in a 17.5px row leaves 0.5px bare at each edge). Every row then
+/// shows a sliver of whatever is behind the grid, and stacked rows read as
+/// horizontal scan lines through any filled region.
+///
+/// This was previously rediscovered and patched per glyph class — first for
+/// box-drawing, then for block elements — each time as a local fix. It is a
+/// property of CSS inline layout, not of any glyph, so it belongs here, once,
+/// applied wherever a background is painted.
+///
+/// `height` is declared twice on purpose. `100%` resolves against the row,
+/// which the live DOM grid sizes explicitly; `1lh` is the line box itself and
+/// needs no help from the parent, so it also covers the static-HTML renderer
+/// whose rows are auto-height. A browser too old for `lh` (pre-2023) ignores
+/// that declaration and keeps the `100%` behaviour.
+const String kFillsCellBoxCss =
+    'display:inline-block;height:100%;height:1lh;vertical-align:top';
+
 /// Converts Fleury cell style into a compact inline CSS declaration.
 String cellStyleToCss(CellStyle style) {
   Color? fg = style.foreground;
@@ -26,7 +50,15 @@ String cellStyleToCss(CellStyle style) {
     // Link-free runs (and links with an explicit fg) are unaffected.
     parts.add('color:${rgbCss(kDefaultForeground)}');
   }
-  if (bg != null) parts.add('background-color:${rgbCss(bg)}');
+  if (bg != null) {
+    parts
+      ..add('background-color:${rgbCss(bg)}')
+      // A painted background must cover the whole cell (see [kFillsCellBoxCss]).
+      // Gated on there being one: a span with nothing to paint gains nothing
+      // from becoming an inline-block, and staying on the plain inline path
+      // keeps the common case cheap.
+      ..add(kFillsCellBoxCss);
+  }
   if (style.bold) parts.add('font-weight:700');
   if (style.dim) parts.add('opacity:.6');
   if (style.italic) parts.add('font-style:italic');
@@ -94,11 +126,9 @@ String boxDrawingCss(CellStyle style, int mask) {
     'linear-gradient(currentColor,currentColor)',
   );
   final parts = <String>[
-    // Fill the whole cell box (not just the inline content area), so the line
-    // reaches the row edges and meets the cells above/below with no gap.
-    'display:inline-block',
-    'height:100%',
-    'vertical-align:top',
+    // A box-drawing line must reach the row edges and meet its neighbours
+    // above and below with no seam — the same rule as any painted cell.
+    kFillsCellBoxCss,
     'color:${rgbCss(fg ?? kDefaultForeground)}',
     if (bg != null) 'background-color:${rgbCss(bg)}',
     'background-image:${images.join(',')}',
