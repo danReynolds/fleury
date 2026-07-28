@@ -11,8 +11,10 @@ and style their cells from it, so a single theme drives the whole tree.
 
 ## Ready-made themes
 
-Before building one from scratch: `fleury_themes` ships the palettes you
-already know, each a plain `const ThemeData`.
+Before building one from scratch, the
+[`fleury_themes`](https://pub.dev/packages/fleury_themes) package ships eight
+community palettes — Nord, Dracula, Gruvbox Dark, Tokyo Night, Catppuccin
+Mocha, One Dark, and Solarized in dark and light:
 
 ```dart
 import 'package:fleury_themes/fleury_themes.dart';
@@ -25,10 +27,14 @@ running in your browser, not a screenshot:
 
 <FleuryExample id="themes.gallery" cols={62} rows={18} interactive />
 
+Each is a plain `const ThemeData`, so it costs nothing at runtime;
 `fleuryThemes` is the whole set with display names, ready to drop into a
-picker. See the
+picker. The
 [package README](https://github.com/danReynolds/fleury/tree/main/packages/fleury_themes)
-for how to write your own — the rest of this guide covers the pieces it uses.
+lists every theme and links its upstream project.
+
+The rest of this guide is what those themes are built from — read on to write
+your own.
 
 ## Apply a theme
 
@@ -66,9 +72,17 @@ wins.
 
 ## ColorScheme
 
-The semantic palette. `foreground`/`background` are the defaults; `primary`,
-`success`, `warning`, `error`, and `info` are the accents widgets reach for
-(gauges, validation, status):
+The semantic palette — nine roles, named for what they *mean* rather than what
+colour they are, so a widget asks for "the error colour" and every theme
+answers:
+
+| Role | Used for |
+| --- | --- |
+| `foreground` / `background` | default text and fill |
+| `surface` | raised fills that must be opaque — dialogs, popups |
+| `primary` | the main accent: active affordances, progress |
+| `focus` | the focused pane or control |
+| `success` `warning` `error` `info` | status |
 
 ```dart
 final scheme = Theme.of(context).colorScheme;
@@ -78,6 +92,20 @@ Text('uh oh', style: CellStyle(foreground: scheme.error));
 
 Colors can be `RgbColor(r, g, b)` for truecolor, `AnsiColor(n)` for a palette
 index, or one of the named `Colors.*` constants.
+
+`foreground`, `background` and `surface` are nullable, and leaving one unset is
+a real choice: it means "use the terminal's own", which is usually right for
+text and background — the user picked their terminal colours. `surface` is the
+exception worth setting, because it backs dialogs and must be opaque enough to
+hide whatever is painted beneath it.
+
+### Colour alone is not a cue
+
+`NO_COLOR` (and any 2-colour terminal) drops colour entirely, but keeps
+attributes — `dim`, `bold`, `inverse`. So a cue carried only by colour vanishes
+for those users, while a cue that *pairs* colour with an attribute survives in
+reduced form. That is why the built-in styles below are attribute-first, and
+why a status indicator should carry a glyph or weight as well as a hue.
 
 ## CellStyle
 
