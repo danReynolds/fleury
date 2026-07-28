@@ -128,16 +128,9 @@ void main() {
       final capture = await _capturePty(
         tempDir,
         'stray-hook',
-        extraArgs: const [
-          '--cols',
-          '60',
-          '--rows',
-          '12',
-          '--resize-sequence',
-          '61x12',
-          '--resize-interval-ms',
-          '3000',
-        ],
+        // No resize: the app ends itself from the frame that emits the stray
+        // lines, so nothing here is timed against the child's startup.
+        extraArgs: const ['--cols', '60', '--rows', '12'],
         fixtureArgs: ['--stray-hook=${hookFile.path}'],
       );
       if (capture == null) return;
