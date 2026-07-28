@@ -278,6 +278,57 @@ void main() {
     },
   );
 
+  test(
+    'web frame scoreboard skips and reports captures it cannot parse',
+    () async {
+      // An archived baseline naming a damage source the schema has since
+      // retired. The input directory is a growing pile of historical runs, so
+      // one unreadable artifact must not take the whole aggregate down with it.
+      _writeCapture(
+        '${tempDir.path}/legacy-damage-source.json',
+        scenarioId: 'normal-80x24',
+        capturedAt: '2026-06-08T01:00:00.000000Z',
+        frames: [
+          _webFrame(
+            totalFrameMicros: 10000,
+            domApplyMicros: 3000,
+            damageSource: 'conservativeFullDiff',
+          ),
+        ],
+      );
+      _writeCapture(
+        '${tempDir.path}/current.json',
+        scenarioId: 'normal-80x24',
+        capturedAt: '2026-06-08T01:05:00.000000Z',
+        frames: [_webFrame(totalFrameMicros: 12000, domApplyMicros: 3200)],
+      );
+
+      final result = await Process.run(Platform.resolvedExecutable, [
+        'run',
+        'tool/web_frame_scoreboard.dart',
+        '--input=${tempDir.path}',
+        '--json',
+      ], workingDirectory: Directory.current.path);
+
+      expect(result.exitCode, 0);
+      final scoreboard =
+          jsonDecode(result.stdout.toString()) as Map<String, Object?>;
+      final scenarios = scoreboard['scenarios'] as List<Object?>;
+      final normal = scenarios
+          .cast<Map<String, Object?>>()
+          .where((s) => s['id'] == 'normal-80x24')
+          .firstOrNull;
+      expect(normal, isNotNull, reason: 'the readable run still aggregates');
+      expect(normal!['runCount'], 1);
+
+      // Skipping is never silent — the file and the reason both surface.
+      final stderrText = result.stderr.toString();
+      expect(stderrText, contains('legacy-damage-source.json'));
+      expect(stderrText, contains('conservativeFullDiff'));
+      expect(stderrText, isNot(contains('current.json')));
+    },
+  );
+
   test('web frame scoreboard rejects empty json output path', () async {
     final result = await Process.run(Platform.resolvedExecutable, [
       'run',
@@ -800,12 +851,13 @@ Map<String, Object?> _webFrame({
   required int domApplyMicros,
   int spanBuildMicros = 1000,
   int semanticApplyMicros = 1000,
+  String damageSource = 'paintDamage',
 }) {
   return <String, Object?>{
     'reason': 'benchmark',
     'coalescedReasons': ['benchmark'],
     'viewport': {'cols': 80, 'rows': 24},
-    'damageSource': 'paintDamage',
+    'damageSource': damageSource,
     'fullRepaint': false,
     'metricsChanged': false,
     'dirtyRowCount': 1,

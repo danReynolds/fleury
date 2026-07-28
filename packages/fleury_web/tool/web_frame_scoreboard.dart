@@ -570,16 +570,45 @@ List<_WebFrameRun> _loadRuns(String inputDir, {required int steadySkipFrames}) {
   final root = Directory(inputDir);
   if (!root.existsSync()) return const [];
   final runs = <_WebFrameRun>[];
+  final unreadable = <String>[];
   for (final entity in root.listSync(recursive: true)) {
     if (entity is! File || !entity.path.endsWith('.json')) continue;
-    final run = _tryLoadRun(entity, steadySkipFrames: steadySkipFrames);
+    final run = _tryLoadRun(
+      entity,
+      steadySkipFrames: steadySkipFrames,
+      onUnreadable: (reason) => unreadable.add('${entity.path}: $reason'),
+    );
     if (run != null) runs.add(run);
+  }
+  // A capture that announces itself as ours but cannot be read is reported,
+  // never dropped in silence: aggregating fewer runs than the directory holds
+  // must not look the same as aggregating all of them.
+  if (unreadable.isNotEmpty) {
+    stderr.writeln(
+      'web-scoreboard: skipped ${unreadable.length} unreadable capture(s):',
+    );
+    for (final entry in unreadable) {
+      stderr.writeln('  $entry');
+    }
   }
   runs.sort((a, b) => a.path.compareTo(b.path));
   return runs;
 }
 
-_WebFrameRun? _tryLoadRun(File file, {required int steadySkipFrames}) {
+/// Loads one capture, or returns null for any file this scoreboard cannot use.
+///
+/// The scan is a recursive sweep of every `.json` under the input directory, so
+/// most rejections are simply "not one of ours" and stay silent. A file that
+/// declares `kind: fleuryWebFrameCapture` and still fails to parse is different
+/// — that is a real capture the scoreboard is dropping, most often an archived
+/// baseline naming a field value the current schema has since retired — and it
+/// is reported through [onUnreadable]. Both cases skip the file: one stale
+/// artifact in a directory of historical runs must not abort the aggregate.
+_WebFrameRun? _tryLoadRun(
+  File file, {
+  required int steadySkipFrames,
+  required void Function(String reason) onUnreadable,
+}) {
   Object? decoded;
   try {
     decoded = jsonDecode(file.readAsStringSync());
@@ -595,12 +624,21 @@ _WebFrameRun? _tryLoadRun(File file, {required int steadySkipFrames}) {
   final scenarioId = _scenarioIdFor(capture, file.path);
   final frameBudgetMs =
       (capture['frameBudgetMs'] as num?)?.toDouble() ?? defaultWebFrameBudgetMs;
-  final parsedFrames = [
-    for (final rawFrame in frames)
-      WebFrameInstrumentation.fromJson(
-        (rawFrame as Map).cast<String, Object?>(),
-      ),
-  ];
+  final List<WebFrameInstrumentation> parsedFrames;
+  try {
+    parsedFrames = [
+      for (final rawFrame in frames)
+        WebFrameInstrumentation.fromJson(
+          (rawFrame as Map).cast<String, Object?>(),
+        ),
+    ];
+  } on FormatException catch (error) {
+    onUnreadable(error.message);
+    return null;
+  } on TypeError {
+    onUnreadable('frame entry was not a JSON object');
+    return null;
+  }
   final summary = WebInstrumentationSummary.fromFrames(
     parsedFrames,
     frameBudgetMs: frameBudgetMs,
