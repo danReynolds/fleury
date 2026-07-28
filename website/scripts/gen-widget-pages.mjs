@@ -334,11 +334,13 @@ function constructorsSection(widget) {
 
 const all = JSON.parse(readFileSync(MANIFEST, 'utf8'));
 // 'Home' = the landing-hero example, mounted directly on the home page (no
-// catalog entry). 'Showcases' = full apps, their own section.
+// catalog entry). 'Showcases' = full apps, their own section. 'Theming' =
+// embeds on the theming guide — they demonstrate a *theme*, which is data
+// rather than a widget, so there is no class to build an API reference from.
+const GUIDE_EMBED_CATEGORIES = new Set(['Showcases', 'Home', 'Theming']);
 const widgets = all.filter(
   (e) =>
-    e.category !== 'Showcases' &&
-    e.category !== 'Home' &&
+    !GUIDE_EMBED_CATEGORIES.has(e.category) &&
     // '.lab.*' ids are extra comparison examples embedded on hand-written pages
     // (e.g. the LineChart rendering lab); they ship in the bundle to be mounted
     // there, but aren't canonical per-widget reference pages.
