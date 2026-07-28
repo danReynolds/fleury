@@ -24,12 +24,7 @@ final class FramePresentationPlan {
     required this.metricsChanged,
     required this.dirtyRowDiffTime,
     required this.spanBuildTime,
-    this.scrollUpRows,
-  }) : assert(
-         scrollUpRows == null || damage is! PresentationFullRepaint,
-         'a full repaint rewrites every row, so there is nothing to scroll: '
-         'presenters guard on fullRepaint and would ignore the shift anyway',
-       );
+  });
 
   final String reason;
   final CellSize size;
@@ -38,15 +33,6 @@ final class FramePresentationPlan {
   final bool metricsChanged;
   final Duration dirtyRowDiffTime;
   final Duration spanBuildTime;
-
-  /// When non-null, the frame is a detected upward scroll: the surface moves
-  /// its first [scrollUpRows] retained row elements to the bottom and then
-  /// applies [dirtyRowModels], which cover only the residual rows (entering
-  /// rows plus rows that changed beyond the shift).
-  ///
-  /// [damage] stays the TRUE dirty set (everything moved), so semantic
-  /// coverage and diff consumers remain exact.
-  final int? scrollUpRows;
 
   /// Whether the presenter must repaint everything.
   ///
@@ -57,7 +43,19 @@ final class FramePresentationPlan {
   /// was already dead: written at all three sites, read by nothing.
   bool get fullRepaint => switch (damage) {
     PresentationFullRepaint() => true,
-    PresentationChanged() => false,
+    PresentationChanged() || PresentationScrolled() => false,
+  };
+
+  /// The upward shift to apply before [dirtyRowModels], when the frame is a
+  /// detected scroll.
+  ///
+  /// Derived, not stored: scroll used to be a nullable field here, which let a
+  /// full repaint carry a shift — a pairing every presenter had to remember to
+  /// ignore, held together by an assert. As a variant of [damage] the pairing
+  /// cannot be written.
+  int? get scrollUpRows => switch (damage) {
+    PresentationScrolled(:final scrollUpRows) => scrollUpRows,
+    PresentationFullRepaint() || PresentationChanged() => null,
   };
 
   /// The rows a presenter must re-apply, resolved against THIS plan's [size].
@@ -74,6 +72,7 @@ final class FramePresentationPlan {
     PresentationFullRepaint() => TuiDirtyRows.full(size.rows),
     // Already absolute, measured by whoever built the damage.
     PresentationChanged(:final dirtyRows) => dirtyRows,
+    PresentationScrolled(:final dirtyRows) => dirtyRows,
   };
 
   int get dirtyRowCount => dirtyRows.dirtyRowCount;
@@ -131,6 +130,32 @@ final class PresentationFullRepaint extends FramePresentationDamage {
   CellRect? get dirtyBounds => null;
 }
 
+/// The frame is a detected upward scroll: shift the surface's first
+/// [scrollUpRows] retained rows to the bottom, then apply the plan's
+/// [FramePresentationPlan.dirtyRowModels] — which cover only the residue
+/// (entering rows plus rows that changed beyond the shift).
+///
+/// [dirtyRows] is NOT the residue. It is the full set of rows a non-shifting
+/// consumer must treat as changed — the wire's dirty-row hint and semantic
+/// coverage read it, and handing them the residue would leave every moved row
+/// unaccounted for. On the planner path this is the diff's exact set; a
+/// client rebuilding from the wire cannot know exactness and reports every
+/// row instead — conservative, never wrong.
+final class PresentationScrolled extends FramePresentationDamage {
+  const PresentationScrolled({
+    required this.scrollUpRows,
+    required this.dirtyRows,
+    required this.dirtyBounds,
+  }) : assert(scrollUpRows > 0, 'a scroll by zero rows is not a scroll');
+
+  final int scrollUpRows;
+
+  final TuiDirtyRows dirtyRows;
+
+  @override
+  final CellRect? dirtyBounds;
+}
+
 /// Present the rows the producer measured; [dirtyBounds] narrows that further
 /// when known.
 final class PresentationChanged extends FramePresentationDamage {
@@ -181,26 +206,31 @@ final class FramePresentationPlanner {
     final runtimeDamage = frame.damage;
     final dirtyRowsResult = _dirtyRowsForFrame(frame);
     final dirtyRows = dirtyRowsResult.rows;
-    final fullRepaint = runtimeDamage is FrameFullRepaint;
-    final damage = fullRepaint
-        ? const PresentationFullRepaint()
-        : PresentationChanged(
-            dirtyRows: dirtyRows,
-            dirtyBounds: runtimeDamage.diffBounds,
-          );
-
-    // The frame loop already decided whether this is a beneficial scroll, using
-    // the counts its diff produced. Re-deriving it here would rescan both
-    // buffers — and the old trigger (`dirtyRows.isFull`) silently stopped
-    // firing once damage became exact, because one unchanged row is enough to
-    // make a clean scroll not-full.
-    final scrollUpRows = switch (runtimeDamage) {
-      FrameScrolled(:final scrollUpRows) => scrollUpRows,
-      FrameFullRepaint() || FrameUnchanged() || FrameChanged() => null,
+    // One construction per loop-damage variant, 1:1. The scroll decision is
+    // the loop's — it had both buffers and the diff's counts in hand.
+    // Re-deriving it here would rescan both buffers, and the old trigger
+    // (`dirtyRows.isFull`) silently stopped firing once damage became exact,
+    // because one unchanged row is enough to make a clean scroll not-full.
+    final damage = switch (runtimeDamage) {
+      FrameFullRepaint() => const PresentationFullRepaint(),
+      FrameUnchanged() || FrameChanged() => PresentationChanged(
+        dirtyRows: dirtyRows,
+        dirtyBounds: runtimeDamage.diffBounds,
+      ),
+      FrameScrolled(:final scrollUpRows) => PresentationScrolled(
+        scrollUpRows: scrollUpRows,
+        dirtyRows: dirtyRows,
+        dirtyBounds: runtimeDamage.diffBounds,
+      ),
     };
-    final rowsToBuild = scrollUpRows == null
-        ? dirtyRows
-        : _residualScrollRows(frame.previous, frame.next, scrollUpRows);
+    final rowsToBuild = switch (damage) {
+      PresentationScrolled(:final scrollUpRows) => _residualScrollRows(
+        frame.previous,
+        frame.next,
+        scrollUpRows,
+      ),
+      PresentationFullRepaint() || PresentationChanged() => dirtyRows,
+    };
 
     final spanBuildStopwatch = Stopwatch()..start();
     final dirtyRowModels = spanBuilder.buildDirtyRows(frame.next, rowsToBuild);
@@ -214,7 +244,6 @@ final class FramePresentationPlanner {
       metricsChanged: metricsChanged,
       dirtyRowDiffTime: dirtyRowsResult.diffTime,
       spanBuildTime: spanBuildStopwatch.elapsed,
-      scrollUpRows: scrollUpRows,
     );
   }
 

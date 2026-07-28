@@ -113,7 +113,8 @@ void main() {
         FramePresentationPlan(
           reason: 'wire-scroll',
           size: size,
-          damage: PresentationChanged(
+          damage: PresentationScrolled(
+            scrollUpRows: 1,
             dirtyRows: TuiDirtyRows.fromRows(const [0, 1, 2], rowCount: 4),
             dirtyBounds: null,
           ),
@@ -122,7 +123,6 @@ void main() {
           metricsChanged: false,
           dirtyRowDiffTime: Duration.zero,
           spanBuildTime: Duration.zero,
-          scrollUpRows: 1,
         ),
       );
 
