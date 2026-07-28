@@ -1,30 +1,21 @@
-// Painted-bounds observation, and anchored floats built on it.
+// Painted-bounds observation — the primitive.
 //
 // Three pieces, one reactive pattern:
 //
-//   BoundsObserver  (widget)   observes its child's painted screen-space
-//                              bounds and publishes them
-//   BoundsNotifier  (state)    holds the observation — `bounds` and
-//                              `visibleBounds` — and notifies on change
-//   consumers                  react to it: `BoundsFollower` repositions its
-//                              child the SAME frame (render-tier); any
-//                              `ListenableBuilder` rebuilds the NEXT frame
-//                              (build-tier, for readouts and derived UI)
+//   BoundsObserver  (widget)  observes its child's painted screen-space
+//                             bounds and publishes them
+//   BoundsNotifier  (state)   holds the observation — `bounds` and
+//                             `visibleBounds` — and notifies on change
+//   consumers                 react: `BoundsAnchor` anchors its child to the
+//                             bounds the SAME frame (render-tier); any
+//                             `ListenableBuilder` rebuilds the NEXT frame
+//                             (build-tier, readouts and derived UI)
 //
-// Anchoring is the first use case, packaged two ways:
-//
-//   Anchored        the everyday composite — wrap the trigger, hand it
-//                   the overlay, flip `visible`; owns its notifier privately
-//   BoundsFollower  the raw float for cross-tree cases (a global command
-//                   opening a flyout on a distant chip, one anchor driving
-//                   several floats) — you own the notifier and both ends
-//
-// Placement is a pair of [Alignment]s: `alignment` names the point on the
-// anchor, `anchorAlignment` the point on the float glued to it (defaulting
-// to the complement — below/left-flush for `bottomLeft`, the dropdown).
-// If the float doesn't fit on screen, the PLACEMENT axis flips to the
-// mirrored side (below -> above) while the alignment axis only clamps —
-// flipping it would silently change the requested look.
+// Anchoring is this primitive's first use case, not its definition — see
+// `anchored.dart` for `Anchored` and the alignment placement math. Anything
+// that needs to know where a widget landed on screen (an inspector
+// highlight, a test, a derived readout) starts here rather than inventing
+// another paint-geometry channel.
 
 import '../foundation/change_notifier.dart';
 import '../foundation/geometry.dart';
@@ -38,7 +29,7 @@ import 'overlay.dart';
 /// The observable: one widget's painted screen-space bounds, live.
 ///
 /// Written by exactly one [BoundsObserver] (debug-asserted); read and
-/// listened to by anything. [BoundsFollower] listens at the render tier and
+/// listened to by anything. [BoundsAnchor] listens at the render tier and
 /// repositions the same frame; a `ListenableBuilder` reacts at the build
 /// tier on the following frame.
 ///
@@ -58,7 +49,7 @@ class BoundsNotifier with ChangeNotifier {
 
   /// The on-screen portion of [bounds] (its intersection with the clip in
   /// effect when it painted), or null when the widget is fully scrolled or
-  /// clipped out of view. [BoundsFollower] hides while this is null.
+  /// clipped out of view. [BoundsAnchor] hides while this is null.
   CellRect? get visibleBounds => _visible;
 
   /// Publishes a new observation. Called by the owning [BoundsObserver];
@@ -182,9 +173,9 @@ class RenderBoundsObserver extends RenderObject
     CellOffset? screenOffset,
     CellRect? clipRect,
   }) {
-    // Screen coordinates: a BoundsFollower positions overlay content from this
-    // rect in root/absolute space, so a scratch-local offset would misplace
-    // dropdowns anchored inside composited subtrees.
+    // Screen coordinates: a BoundsAnchor places overlay content from this rect
+    // in root/absolute space, so a scratch-local offset would misplace floats
+    // anchored inside composited subtrees.
     final bounds = CellRect(offset: screenOffset ?? offset, size: size);
     _notifier.publish(bounds, clip: clipRect);
     if (RetainedPaintGeometryCapture.isActive) {
@@ -212,8 +203,16 @@ class RenderBoundsObserver extends RenderObject
   };
 }
 
-class BoundsFollower extends SingleChildRenderObjectWidget {
-  const BoundsFollower({
+/// Anchors its [child] to bounds observed elsewhere: it repositions the same
+/// frame they move, flips and clamps at the screen edge, and hides entirely
+/// while [BoundsNotifier.visibleBounds] is null — so a float never hovers
+/// over unrelated content after its target scrolls away.
+///
+/// This is the raw, render-tier consumer. For the common case — a float next
+/// to a trigger in the same subtree — use [Anchored], which is a
+/// [BoundsAnchor] with the notifier, observer, and overlay entry pre-wired.
+class BoundsAnchor extends SingleChildRenderObjectWidget {
+  const BoundsAnchor({
     super.key,
     required this.notifier,
     this.gap = 0,
@@ -237,13 +236,13 @@ class BoundsFollower extends SingleChildRenderObjectWidget {
 
   @override
   RenderObject createRenderObject(BuildContext context) =>
-      RenderBoundsFollower(notifier, gap, alignment, anchorAlignment)
-        ..startFollowing();
+      RenderBoundsAnchor(notifier, gap, alignment, anchorAlignment)
+        ..startTracking();
 
   @override
   void updateRenderObject(
     BuildContext context,
-    covariant RenderBoundsFollower renderObject,
+    covariant RenderBoundsAnchor renderObject,
   ) {
     renderObject
       ..notifier = notifier
@@ -253,15 +252,14 @@ class BoundsFollower extends SingleChildRenderObjectWidget {
   }
 
   @override
-  SingleChildRenderObjectElement createElement() =>
-      _BoundsFollowerElement(this);
+  SingleChildRenderObjectElement createElement() => _BoundsAnchorElement(this);
 }
 
 /// Fills its slot and paints its child against the observed bounds; see
-/// [BoundsFollower].
-class RenderBoundsFollower extends RenderObject
+/// [BoundsAnchor].
+class RenderBoundsAnchor extends RenderObject
     implements RenderObjectWithSingleChild {
-  RenderBoundsFollower(
+  RenderBoundsAnchor(
     this._notifier,
     this._gap,
     this._alignment,
@@ -279,25 +277,25 @@ class RenderBoundsFollower extends RenderObject
 
   bool _listening = false;
 
-  /// Begin listening to the anchor's bounds. Called when the widget mounts;
-  /// released by [stopFollowing] on unmount so the notifier — which
-  /// typically outlives any one float — doesn't retain a dead render object.
-  void startFollowing() {
+  /// Begin tracking the observed bounds. Called when the widget mounts;
+  /// released by [stopTracking] on unmount so the notifier — which typically
+  /// outlives any one float — doesn't retain a dead render object.
+  void startTracking() {
     if (_listening) return;
     _listening = true;
     _notifier.addListener(_onBoundsChanged);
   }
 
-  /// Stop following the bounds.
-  void stopFollowing() {
+  /// Stop tracking the observed bounds.
+  void stopTracking() {
     if (!_listening) return;
     _listening = false;
     _notifier.removeListener(_onBoundsChanged);
   }
 
-  /// The anchor moved (or first painted): our placement is stale, so the
-  /// cached paint has to be redone. Position is resolved in [paint] via
-  /// [_placeChild], so this is a visual-only invalidation.
+  /// The observed bounds changed (or first arrived): our placement is stale,
+  /// so the cached paint has to be redone. Position is resolved in [paint]
+  /// via [_placeChild], so this is a visual-only invalidation.
   void _onBoundsChanged() => markNeedsPaintOnly();
 
   int _gap;
@@ -353,12 +351,18 @@ class RenderBoundsFollower extends RenderObject
   }) {
     final c = _child;
     if (c == null) return;
-    // An anchor that is fully scrolled or clipped out of view has nothing to
-    // attach to — hide rather than float over unrelated content.
+    // Bounds fully scrolled or clipped out of view: nothing to anchor to —
+    // hide rather than float over unrelated content.
     if (_notifier.visibleBounds == null) return;
     // Resolve placement at paint time: the observer publishes during its own
-    // paint, which runs before this float's (in-flow content paints below
-    // the overlay), so we read the current frame.
+    // paint, which runs before this float's (in-flow content paints below the
+    // overlay), so we read the current frame's bounds.
+    //
+    // PAINT ORDER: that ordering is what makes tracking same-frame. A
+    // BoundsAnchor painted BEFORE its observed widget (e.g. earlier in a
+    // plain Stack) reads the previous frame's bounds and converges one frame
+    // later — correct, just delayed. Overlays paint last, so the usual case
+    // is always current.
     final placement = _placeChild(c.size);
     _child!.paint(
       buffer,
@@ -389,14 +393,14 @@ class RenderBoundsFollower extends RenderObject
   }
 }
 
-/// Releases the [RenderBoundsFollower]'s anchor subscription when the widget leaves
+/// Releases the [RenderBoundsAnchor]'s anchor subscription when the widget leaves
 /// the tree — the same shape as `_RawTextElement` detaching a Selectable.
-class _BoundsFollowerElement extends SingleChildRenderObjectElement {
-  _BoundsFollowerElement(BoundsFollower super.widget);
+class _BoundsAnchorElement extends SingleChildRenderObjectElement {
+  _BoundsAnchorElement(BoundsAnchor super.widget);
 
   @override
   void unmount() {
-    (renderObject as RenderBoundsFollower).stopFollowing();
+    (renderObject as RenderBoundsAnchor).stopTracking();
     super.unmount();
   }
 }
@@ -564,104 +568,4 @@ CellOffset resolveAnchoredOffset({
   if (left < 0) left = 0;
   if (top < 0) top = 0;
   return CellOffset(left, top);
-}
-
-// ---------------------------------------------------------------------------
-// Anchored
-// ---------------------------------------------------------------------------
-
-/// Floats [overlay] against [child], declaratively.
-///
-/// The composite over [BoundsObserver] + [BoundsFollower]: it owns the
-/// [BoundsNotifier],
-/// inserts and removes the overlay entry as [visible] flips, and releases it
-/// when the widget leaves the tree — the bookkeeping every hand-rolled flyout
-/// otherwise repeats (and occasionally leaks).
-///
-/// ```dart
-/// Anchored(
-///   visible: _showDetails,
-///   alignment: Alignment.bottomLeft,   // below, left edges flush
-///   overlay: Container.framed(child: Text('build 2214')),
-///   child: Button(label: 'Details', onPressed: _toggle),
-/// )
-/// ```
-///
-/// [alignment] names the point on [child]; [anchorAlignment] names the point
-/// on [overlay] that meets it, defaulting to [defaultAnchorAlignment].
-///
-/// Reach past this to [BoundsObserver] + [BoundsFollower] when the two ends have no
-/// common parent — a chip in a toolbar with a flyout opened by a global
-/// command, or one anchor driving several overlays.
-class Anchored extends StatefulWidget {
-  const Anchored({
-    super.key,
-    required this.child,
-    required this.overlay,
-    this.visible = false,
-    this.alignment = Alignment.bottomLeft,
-    this.anchorAlignment,
-    this.gap = 0,
-  });
-
-  /// The widget the overlay is anchored to.
-  final Widget child;
-
-  /// The floating content. Built only while [visible].
-  final Widget overlay;
-
-  /// Whether the overlay is currently shown.
-  final bool visible;
-
-  /// The point on [child] the overlay attaches to.
-  final Alignment alignment;
-
-  /// The point on [overlay] that meets [alignment]. Defaults to
-  /// [defaultAnchorAlignment] of [alignment].
-  final Alignment? anchorAlignment;
-
-  /// Cells of separation along the placement axis.
-  final int gap;
-
-  @override
-  State<Anchored> createState() => _AnchoredState();
-}
-
-class _AnchoredState extends State<Anchored> {
-  final BoundsNotifier _notifier = BoundsNotifier();
-  late final OverlayEntry _entry = OverlayEntry(
-    builder: (_) => BoundsFollower(
-      notifier: _notifier,
-      alignment: widget.alignment,
-      anchorAlignment: widget.anchorAlignment,
-      gap: widget.gap,
-      child: widget.overlay,
-    ),
-  );
-  late final OverlayMount _mount = OverlayMount(
-    entry: _entry,
-    overlay: () => Overlay.maybeOf(context),
-    mountWhen: () => widget.visible,
-  );
-
-  @override
-  void didUpdateWidget(covariant Anchored old) {
-    super.didUpdateWidget(old);
-    // Rebuild the floating content for any config change, and converge
-    // mountedness when `visible` flips.
-    _entry.markNeedsBuild();
-    if (old.visible != widget.visible) _mount.update();
-  }
-
-  @override
-  void dispose() {
-    _mount.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    _mount.update();
-    return BoundsObserver(notifier: _notifier, child: widget.child);
-  }
 }

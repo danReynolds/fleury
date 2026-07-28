@@ -226,7 +226,7 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
     }
     if (_entry == null) {
       final entry = OverlayEntry(
-        builder: (_) => BoundsFollower(notifier: _bounds, child: _suggestions()),
+        builder: (_) => BoundsAnchor(notifier: _bounds, child: _suggestions()),
       );
       _entry = entry;
       Overlay.of(context).insert(entry);

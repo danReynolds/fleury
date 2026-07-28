@@ -287,6 +287,7 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
       'Dialog',
       'Toaster',
       'Tooltip',
+      'Anchored',
       'KeyHintBar',
     ],
     initialHeight: 13,
@@ -876,6 +877,9 @@ const Map<String, String> _widgetDescriptions = <String, String>{
       'Modal-style framed content for confirmations and focused decisions.',
   'Toaster': 'Transient notification host for contextual app feedback.',
   'Tooltip': 'Anchored help text for compact controls.',
+  'Anchored':
+      'Floating content pinned to a trigger, placed by Alignment — press '
+      'Space to toggle, Tab to cycle all nine alignments.',
   'KeyHintBar':
       'One-line bar that auto-discovers the active key bindings on the focus '
       'chain and renders their hints.',
@@ -1061,6 +1065,7 @@ const Map<String, String> _widgetUsage = <String, String>{
   'SubMenu': 'Enter opens · → into submenu · Esc closes',
   'Dialog': 'Enter opens · Tab between actions · Esc or a button dismisses',
   'Tooltip': 'Focus the target to reveal',
+  'Anchored': 'Space toggles the float · Tab cycles alignment',
   'Toaster': 'Activate a trigger to emit a toast',
   'Tabs': '←/→ to switch tabs · Alt+1..9',
   'TabItem': '←/→ to switch tabs · Alt+1..9',
@@ -1937,6 +1942,7 @@ class _OverlayStory extends StatelessWidget {
             ),
           ],
         ),
+        'Anchored' => const _AnchoredSpotlight(),
         'Tooltip' => Tooltip(
           message: 'Focus the button to show this anchored tooltip.',
           child: Button(label: 'Tooltip target', onPressed: () {}),
@@ -3430,3 +3436,90 @@ final _sampleSnapshot = WorkflowSnapshot(
   traceEvents: _sampleTrace,
   logEntries: _sampleLogs,
 );
+
+/// `Anchored` with a live alignment selector: Space toggles the float, Tab
+/// cycles all nine `Alignment` values so the placement rule is visible rather
+/// than described. The trigger sits mid-screen so every direction has room.
+class _AnchoredSpotlight extends StatefulWidget {
+  const _AnchoredSpotlight();
+
+  @override
+  State<_AnchoredSpotlight> createState() => _AnchoredSpotlightState();
+}
+
+class _AnchoredSpotlightState extends State<_AnchoredSpotlight> {
+  static const _alignments = <Alignment>[
+    Alignment.bottomLeft,
+    Alignment.bottomCenter,
+    Alignment.bottomRight,
+    Alignment.centerRight,
+    Alignment.topRight,
+    Alignment.topCenter,
+    Alignment.topLeft,
+    Alignment.centerLeft,
+    Alignment.center,
+  ];
+
+  bool _open = true;
+  int _index = 0;
+
+  Alignment get _alignment => _alignments[_index];
+
+  String get _label => switch (_alignment) {
+    Alignment.topLeft => 'topLeft',
+    Alignment.topCenter => 'topCenter',
+    Alignment.topRight => 'topRight',
+    Alignment.centerLeft => 'centerLeft',
+    Alignment.center => 'center',
+    Alignment.centerRight => 'centerRight',
+    Alignment.bottomLeft => 'bottomLeft',
+    Alignment.bottomCenter => 'bottomCenter',
+    Alignment.bottomRight => 'bottomRight',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return KeyBindings(
+      bindings: <KeyBinding>[
+        KeyBinding(
+          KeySequence.space,
+          label: _open ? 'Hide float' : 'Show float',
+          onTrigger: () => setState(() => _open = !_open),
+        ),
+        KeyBinding(
+          KeySequence.tab,
+          label: 'Next alignment',
+          onTrigger: () =>
+              setState(() => _index = (_index + 1) % _alignments.length),
+        ),
+      ],
+      child: Focus(
+        autofocus: true,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Text('alignment: $_label', style: const CellStyle(bold: true)),
+            const SizedBox(height: 1),
+            Expanded(
+              child: Align(
+                alignment: Alignment.center,
+                child: Anchored(
+                  visible: _open,
+                  alignment: _alignment,
+                  overlay: Surface(
+                    child: Container(
+                      border: BoxBorder(style: Theme.of(context).borderStyle),
+                      padding: const EdgeInsets.symmetric(horizontal: 1),
+                      child: Text('float · $_label'),
+                    ),
+                  ),
+                  child: const Text('[ trigger ]'),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

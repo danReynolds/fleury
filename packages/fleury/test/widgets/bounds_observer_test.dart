@@ -37,7 +37,7 @@ class _Value<T> with ChangeNotifier {
 }
 
 void main() {
-  testWidgets('a mounted BoundsFollower tracks bounds when layout moves them', (
+  testWidgets('a mounted BoundsAnchor tracks bounds when layout moves them', (
     tester,
   ) {
     final chip = BoundsNotifier();
@@ -59,7 +59,7 @@ void main() {
     // never dirties this subtree.
     tester.overlay.insert(
       OverlayEntry(
-        builder: (_) => BoundsFollower(notifier: chip, child: const Text('¤')),
+        builder: (_) => BoundsAnchor(notifier: chip, child: const Text('¤')),
       ),
     );
     tester.pump();
@@ -160,7 +160,7 @@ void main() {
   });
 
   group('consumers', () {
-    testWidgets('BoundsFollower hides while the anchor is clipped out of view', (
+    testWidgets('BoundsAnchor hides while the anchor is clipped out of view', (
       tester,
     ) {
       final chip = BoundsNotifier();
@@ -168,7 +168,7 @@ void main() {
         Stack(
           children: <Widget>[
             const Text('backdrop'),
-            BoundsFollower(notifier: chip, child: const Text('¤')),
+            BoundsAnchor(notifier: chip, child: const Text('¤')),
           ],
         ),
       );
@@ -200,7 +200,7 @@ void main() {
           builder: (context, _) => Stack(
             children: <Widget>[
               BoundsObserver(notifier: chip, child: const Text('@')),
-              if (show.value) BoundsFollower(notifier: chip, child: const Text('¤')),
+              if (show.value) BoundsAnchor(notifier: chip, child: const Text('¤')),
             ],
           ),
         ),

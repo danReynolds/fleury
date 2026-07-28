@@ -35,7 +35,7 @@ void main() {
             padding: const EdgeInsets.only(left: 3, top: 2),
             child: BoundsObserver(notifier: chip, child: const Text('AAAA')),
           ),
-          BoundsFollower(notifier: chip, child: const Text('m')),
+          BoundsAnchor(notifier: chip, child: const Text('m')),
         ],
       ),
     );
@@ -54,7 +54,7 @@ void main() {
           ),
           // A 3-row-tall follower can't fit below an anchor at row 4 in a
           // 6-row screen, so it flips to sit above the anchor.
-          BoundsFollower(
+          BoundsAnchor(
             notifier: chip,
             child: const Column(
               mainAxisSize: MainAxisSize.min,
@@ -80,7 +80,7 @@ void main() {
             padding: const EdgeInsets.only(left: 6),
             child: BoundsObserver(notifier: chip, child: const Text('A')),
           ),
-          BoundsFollower(notifier: chip, child: const Text('wide')), // 4 wide
+          BoundsAnchor(notifier: chip, child: const Text('wide')), // 4 wide
         ],
       ),
     );
@@ -101,7 +101,7 @@ void main() {
                 child: const Text('AAA'),
               ), // (2..5, 1)
             ),
-            BoundsFollower(
+            BoundsAnchor(
               notifier: chip,
               alignment: Alignment.topRight,
               anchorAlignment: Alignment.topLeft,
@@ -129,7 +129,7 @@ void main() {
                 child: const Text('A'),
               ), // (6..7)
             ),
-            BoundsFollower(
+            BoundsAnchor(
               notifier: chip,
               alignment: Alignment.topRight,
               anchorAlignment: Alignment.topLeft,

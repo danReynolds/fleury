@@ -66,7 +66,7 @@ class _DeployConsoleState extends State<DeployConsole> {
       return;
     }
     final entry = OverlayEntry(
-      builder: (context) => BoundsFollower(
+      builder: (context) => BoundsAnchor(
         notifier: _chipBounds, // pinned to the chip, wherever layout puts it
         child: Surface(
           // opaque, or the log bleeds through

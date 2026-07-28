@@ -1208,6 +1208,34 @@ TextArea(
     ),
   ),
   ExampleInfo(
+    id: 'anchored.basic',
+    widget: 'Anchored',
+    category: 'Navigation & overlays',
+    blurb:
+        'Floating content pinned to a trigger, placed by Alignment — the '
+        'declarative way to build dropdowns, flyouts, and hover cards.',
+    cols: 40,
+    rows: 9,
+    interactive: true,
+    builder: () => _framed(
+      Align(
+        alignment: Alignment.center,
+        child: Anchored(
+          visible: true,
+          alignment: Alignment.bottomLeft,
+          overlay: Surface(
+            child: Container(
+              border: BoxBorder(style: _theme.borderStyle),
+              padding: const EdgeInsets.symmetric(horizontal: 1),
+              child: const Text('float'),
+            ),
+          ),
+          child: const Text('[ trigger ]'),
+        ),
+      ),
+    ),
+  ),
+  ExampleInfo(
     id: 'tooltip.basic',
     widget: 'Tooltip',
     category: 'Navigation & overlays',
@@ -2404,8 +2432,41 @@ class _DatePickerExampleState extends State<_DatePickerExample> {
 
 /// Builds a knob-enabled widget from a params map supplied by the docs UI.
 /// Missing or ill-typed keys fall back to the defaults below.
+Alignment _knobAlignment(Object? raw) => switch (raw) {
+  'topLeft' => Alignment.topLeft,
+  'topCenter' => Alignment.topCenter,
+  'topRight' => Alignment.topRight,
+  'centerLeft' => Alignment.centerLeft,
+  'center' => Alignment.center,
+  'centerRight' => Alignment.centerRight,
+  'bottomCenter' => Alignment.bottomCenter,
+  'bottomRight' => Alignment.bottomRight,
+  _ => Alignment.bottomLeft,
+};
+
 final Map<String, Widget Function(Map<String, Object?>)> knobExamples =
     <String, Widget Function(Map<String, Object?>)>{
+      // Anchored: the float's placement is the whole story, so `alignment` is
+      // the headline knob — all nine values, live. The trigger sits centred so
+      // every direction has room to show.
+      'anchored': (p) => _framed(
+        Align(
+          alignment: Alignment.center,
+          child: Anchored(
+            visible: _knobBool(p['visible'], true),
+            alignment: _knobAlignment(p['alignment']),
+            gap: _knobDouble(p['gap'], 0).round(),
+            overlay: Surface(
+              child: Container(
+                border: BoxBorder(style: _theme.borderStyle),
+                padding: const EdgeInsets.symmetric(horizontal: 1),
+                child: const Text('float'),
+              ),
+            ),
+            child: const Text('[ trigger ]'),
+          ),
+        ),
+      ),
       'gauge': (p) => _framed(
         Gauge(
           value: _knobDouble(p['value'], 0.62),

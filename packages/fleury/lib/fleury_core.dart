@@ -411,10 +411,10 @@ export 'src/widgets/theme.dart'
 export 'src/widgets/tui_binding.dart'
     show SingleTickerProviderStateMixin, TuiBinding, TuiBindingScope;
 export 'src/widgets/align.dart' show Align, Alignment, Center, RenderAlign;
-export 'src/widgets/anchor.dart'
+export 'src/widgets/anchored.dart' show Anchored;
+export 'src/widgets/bounds.dart'
     show
-        Anchored,
-        BoundsFollower,
+        BoundsAnchor,
         BoundsNotifier,
         BoundsObserver,
         defaultAnchorAlignment,

@@ -162,7 +162,7 @@ class _SelectState<T> extends State<Select<T>> {
     ); // resolved in-tree, threaded into the overlay
     _priorFocus = manager.focusedNode;
     final entry = OverlayEntry(
-      builder: (_) => BoundsFollower(
+      builder: (_) => BoundsAnchor(
         notifier: _bounds,
         child: _SelectList<T>(
           options: widget.options,
