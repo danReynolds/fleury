@@ -1224,12 +1224,10 @@ TextArea(
         child: Anchored(
           visible: true,
           alignment: Alignment.bottomLeft,
-          overlay: Surface(
-            child: Container(
-              border: BoxBorder(style: _theme.borderStyle),
-              padding: const EdgeInsets.symmetric(horizontal: 1),
-              child: const Text('float'),
-            ),
+          overlay: Container.framed(
+            border: BoxBorder(style: _theme.borderStyle),
+            padding: const EdgeInsets.symmetric(horizontal: 1),
+            child: const Text('float'),
           ),
           child: const Text('[ trigger ]'),
         ),
@@ -1252,6 +1250,22 @@ TextArea(
         child: Button(label: 'Save', autofocus: true, onPressed: () {}),
       ),
     ),
+  ),
+  ExampleInfo(
+    id: 'container.filled',
+    widget: 'Container',
+    category: 'Layout',
+    blurb:
+        'Container is transparent by default; .filled paints the theme '
+        'surface and .framed adds the theme border. Enter and Esc toggle a '
+        'framed layer over live content.',
+    cols: 44,
+    rows: 11,
+    interactive: true,
+    // Toggling is the demo: while the framed layer is open the wall behind
+    // is covered (it owns every cell it draws over), and closing restores
+    // that content untouched — it layers, it doesn't overwrite.
+    builder: () => const _ContainerFillExample(),
   ),
   ExampleInfo(
     id: 'dialog.basic',
@@ -1332,10 +1346,7 @@ TextArea(
         // completions).
         child: const WhichKey(
           showDelay: Duration.zero,
-          child: Focus(
-            autofocus: true,
-            child: Text('Press Space, then a key'),
-          ),
+          child: Focus(autofocus: true, child: Text('Press Space, then a key')),
         ),
       ),
     ),
@@ -1784,8 +1795,7 @@ TextArea(
     cols: 38,
     rows: 14,
     code: _customThemeSource,
-    builder: () =>
-        const Theme(data: _customTheme, child: _ThemePreview()),
+    builder: () => const Theme(data: _customTheme, child: _ThemePreview()),
   ),
   ExampleInfo(
     id: 'themes.gallery',
@@ -1978,6 +1988,71 @@ final class _DocsCanvasPainter extends CanvasPainter {
       previousX = x;
       previousY = y;
     }
+  }
+}
+
+class _ContainerFillExample extends StatefulWidget {
+  const _ContainerFillExample();
+
+  @override
+  State<_ContainerFillExample> createState() => _ContainerFillExampleState();
+}
+
+class _ContainerFillExampleState extends State<_ContainerFillExample> {
+  bool _open = false;
+
+  void _toggle() => setState(() => _open = !_open);
+
+  @override
+  Widget build(BuildContext context) {
+    // The trigger and the wall stay at a fixed position in the tree so the
+    // button keeps focus across a toggle; only the framed layer comes and
+    // goes.
+    final Widget behind = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Button(
+          label: _open ? 'Hide layer' : 'Show layer',
+          autofocus: true,
+          onPressed: _toggle,
+        ),
+        for (var i = 0; i < 6; i++) const Text('live content behind the layer'),
+      ],
+    );
+    return _framed(
+      KeyBindings(
+        bindings: <KeyBinding>[
+          if (_open)
+            KeyBinding(KeySequence.escape, label: 'Close', onTrigger: _toggle),
+        ],
+        child: Stack(
+          children: <Widget>[
+            behind,
+            if (_open)
+              Align(
+                alignment: Alignment.center,
+                child: Container.framed(
+                  padding: const EdgeInsets.symmetric(horizontal: 1),
+                  // Deliberately ragged: the shorter line leaves interior
+                  // cells the content never writes — exactly the cells that
+                  // would show the wall through an unfilled Container.
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const <Widget>[
+                      Text('Container.framed'),
+                      Text(
+                        'opaque fill + theme border',
+                        style: CellStyle(dim: true),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -2485,12 +2560,10 @@ final Map<String, Widget Function(Map<String, Object?>)> knobExamples =
             visible: _knobBool(p['visible'], true),
             alignment: _knobAlignment(p['alignment']),
             gap: _knobDouble(p['gap'], 0).round(),
-            overlay: Surface(
-              child: Container(
-                border: BoxBorder(style: _theme.borderStyle),
-                padding: const EdgeInsets.symmetric(horizontal: 1),
-                child: const Text('float'),
-              ),
+            overlay: Container.framed(
+              border: BoxBorder(style: _theme.borderStyle),
+              padding: const EdgeInsets.symmetric(horizontal: 1),
+              child: const Text('float'),
             ),
             child: const Text('[ trigger ]'),
           ),
@@ -2736,7 +2809,6 @@ class _LiveSeriesState extends State<_LiveSeries>
   Widget build(BuildContext context) => widget.builder(_data);
 }
 
-
 /// Live theme picker for the docs site: pick a theme on the left, see it
 /// applied to a small slice of UI on the right.
 class _ThemePickerExample extends StatefulWidget {
@@ -2778,7 +2850,9 @@ class _ThemePickerExampleState extends State<_ThemePickerExample> {
             itemBuilder: (context, i, activeSelected) {
               final selected = i == index;
               return Text(
-                selected ? '> ${fleuryThemes[i].name}' : '  ${fleuryThemes[i].name}',
+                selected
+                    ? '> ${fleuryThemes[i].name}'
+                    : '  ${fleuryThemes[i].name}',
                 style: selected
                     ? Theme.of(context).selectionStyle
                     : CellStyle.empty,
@@ -2890,7 +2964,10 @@ class _ThemePreview extends StatelessWidget {
           const SizedBox(height: 1),
           Wrap(
             children: <Widget>[
-              Text('\u2589 primary  ', style: CellStyle(foreground: cs.primary)),
+              Text(
+                '\u2589 primary  ',
+                style: CellStyle(foreground: cs.primary),
+              ),
               Text('\u2589 focus', style: CellStyle(foreground: cs.focus)),
             ],
           ),

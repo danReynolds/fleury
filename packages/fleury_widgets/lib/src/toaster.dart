@@ -231,25 +231,22 @@ class _ToasterState extends State<Toaster> {
                     break;
                 }
               },
-              // A toast floats over the app, so it paints its own opaque
-              // background — without Surface the content underneath bleeds
-              // through the frame.
-              child: Surface(
-                child: Container(
-                  // A normal (neutral) frame — severity lives in the dot, not
-                  // the border — with horizontal padding so the content
-                  // breathes.
-                  border: const BoxBorder(style: BorderStyle.rounded),
-                  padding: const EdgeInsets.symmetric(horizontal: 1),
-                  child: _toastContent(toast),
-                ),
+              // Popup supplies the float contract (opaque fill, frame,
+              // chrome semantics). A neutral frame — severity lives in the
+              // dot, not the border — with horizontal padding so the content
+              // breathes.
+              child: Container.framed(
+                border: const BoxBorder(style: BorderStyle.rounded),
+                padding: const EdgeInsets.symmetric(horizontal: 1),
+                child: _toastContent(toast),
               ),
             ),
         ],
       ),
     );
-    // styled component, not selectable text (the app child stays selectable)
-    return SelectionArea.disabled(child: layer);
+    // Each toast is a Popup, which already carries the chrome semantics
+    // (non-selectable); the layer itself has no text of its own.
+    return layer;
   }
 
   SemanticState _toastSemanticState(_Toast toast) {

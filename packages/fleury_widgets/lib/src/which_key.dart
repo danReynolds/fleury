@@ -126,39 +126,34 @@ class _WhichKeyState extends State<WhichKey> {
     return Stack(
       children: [
         widget.child,
-        // styled component, not selectable text (the app child stays selectable)
-        SelectionArea.disabled(
-          child: Align(
-            alignment: Alignment.bottomLeft,
-            // A floating popup composites over whatever's painted beneath it, so
-            // it must paint its own opaque background or the app content bleeds
-            // through the panel. Surface is the same fill the Navigator gives a
-            // modal; this popup floats a bare Panel, so it supplies its own.
-            child: Surface(
-              child: Panel(
-                title: pending.prefix.hintLabel,
-                // Dismiss affordances: the keyboard hint (Esc, or any
-                // non-continuing key) plus a clickable close for pointer users.
-                // Both abandon the in-flight sequence, which drops the popup.
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('esc ', style: CellStyle(dim: true)),
-                    GestureDetector(
-                      onTap: () => KeyBindings.cancelPending(context),
-                      child: Text(
-                        closeGlyph,
-                        style: CellStyle(foreground: theme.colorScheme.primary),
-                      ),
+        Align(
+          alignment: Alignment.bottomLeft,
+          // Container.filled supplies the opaque fill — the titled Panel
+          // draws its own frame, so this layer needs no border of its own.
+          child: Container.filled(
+            child: Panel(
+              title: pending.prefix.hintLabel,
+              // Dismiss affordances: the keyboard hint (Esc, or any
+              // non-continuing key) plus a clickable close for pointer users.
+              // Both abandon the in-flight sequence, which drops the popup.
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('esc ', style: CellStyle(dim: true)),
+                  GestureDetector(
+                    onTap: () => KeyBindings.cancelPending(context),
+                    child: Text(
+                      closeGlyph,
+                      style: CellStyle(foreground: theme.colorScheme.primary),
                     ),
-                  ],
-                ),
-                expandChild: false,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: rows,
-                ),
+                  ),
+                ],
+              ),
+              expandChild: false,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: rows,
               ),
             ),
           ),

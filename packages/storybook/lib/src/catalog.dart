@@ -829,7 +829,8 @@ const Map<String, String> _widgetDescriptions = <String, String>{
   'Row':
       'Horizontal layout composition with expansion and alignment under terminal constraints.',
   'Container':
-      'Framed, padded, colored layout chrome for focused terminal regions.',
+      'Padded, aligned, sized layout chrome — plus .filled and .framed, the '
+      'opaque variants a layer needs when it covers live content.',
   'Padding': 'Cell-accurate spacing around content without manual spacer rows.',
   'SizedBox':
       'Fixed and flexible sizing primitives for stable terminal layouts.',
@@ -1259,16 +1260,52 @@ class _ContainerSpotlight extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 40,
-      height: 7,
-      border: showBorder
-          ? BoxBorder(style: Theme.of(context).borderStyle)
-          : null,
-      padding: const EdgeInsets.all(1),
-      alignment: Alignment.center,
-      color: const AnsiColor(8),
-      child: const Text('Container frames, colors, aligns, and sizes.'),
+    // Three constructors over the same wall of content, so the difference
+    // between them is the difference you can see: the plain Container is
+    // transparent (the wall shows through its padding), .filled paints the
+    // theme surface, .framed adds the theme border on top of that fill.
+    return Stack(
+      children: <Widget>[
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            for (var i = 0; i < 9; i++)
+              const Text('content behind — content behind — content behind'),
+          ],
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Container(
+              width: 34,
+              height: 3,
+              border: showBorder
+                  ? BoxBorder(style: Theme.of(context).borderStyle)
+                  : null,
+              padding: const EdgeInsets.symmetric(horizontal: 1),
+              alignment: Alignment.center,
+              child: const Text('Container — transparent'),
+            ),
+            Container.filled(
+              width: 34,
+              height: 3,
+              border: showBorder
+                  ? BoxBorder(style: Theme.of(context).borderStyle)
+                  : null,
+              padding: const EdgeInsets.symmetric(horizontal: 1),
+              alignment: Alignment.center,
+              child: const Text('Container.filled — opaque'),
+            ),
+            Container.framed(
+              width: 34,
+              height: 3,
+              padding: const EdgeInsets.symmetric(horizontal: 1),
+              alignment: Alignment.center,
+              child: const Text('Container.framed — + border'),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -3509,12 +3546,10 @@ class _AnchoredSpotlightState extends State<_AnchoredSpotlight> {
                 child: Anchored(
                   visible: _open,
                   alignment: _alignment,
-                  overlay: Surface(
-                    child: Container(
-                      border: BoxBorder(style: Theme.of(context).borderStyle),
-                      padding: const EdgeInsets.symmetric(horizontal: 1),
-                      child: Text('float · $_label'),
-                    ),
+                  overlay: Container.framed(
+                    border: BoxBorder(style: Theme.of(context).borderStyle),
+                    padding: const EdgeInsets.symmetric(horizontal: 1),
+                    child: Text('float · $_label'),
                   ),
                   child: const Text('[ trigger ]'),
                 ),
