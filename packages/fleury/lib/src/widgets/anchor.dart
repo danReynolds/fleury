@@ -6,6 +6,7 @@
 // autocomplete, and tooltips. Mirrors Flutter's LayerLink +
 // CompositedTransformTarget/Follower, at cell resolution.
 
+import '../foundation/change_notifier.dart';
 import '../foundation/geometry.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/layout.dart';
@@ -14,10 +15,25 @@ import 'framework.dart';
 
 /// Shared handle linking an [Anchor] to its [Follower]. The anchor writes
 /// its absolute painted [rect] each paint; the follower reads it.
-class AnchorLink {
+class AnchorLink with ChangeNotifier {
+  CellRect? _rect;
+
   /// The anchor's painted bounds in absolute cell coordinates, or null
   /// before the anchor has painted (or after it leaves the tree).
-  CellRect? rect;
+  ///
+  /// Assigning a *different* rect notifies listeners, so a [Follower] whose
+  /// own subtree is clean still repaints when the thing it is pinned to
+  /// moves. Without that, a mounted follower keeps its cached paint at the
+  /// old position — visible whenever an anchor reflows while a float is
+  /// open, and invisible to a whole-tree re-render (which repaints the
+  /// follower anyway). Equal rects are dropped, so a static anchor
+  /// re-recording the same bounds each paint costs nothing.
+  CellRect? get rect => _rect;
+  set rect(CellRect? value) {
+    if (value == _rect) return;
+    _rect = value;
+    notifyListeners();
+  }
 }
 
 /// Records its [child]'s painted rect into [link] — the trigger a
@@ -140,7 +156,7 @@ class Follower extends SingleChildRenderObjectWidget {
 
   @override
   RenderObject createRenderObject(BuildContext context) =>
-      RenderFollower(link, gap, placement);
+      RenderFollower(link, gap, placement)..startTrackingAnchor();
 
   @override
   void updateRenderObject(
@@ -152,6 +168,9 @@ class Follower extends SingleChildRenderObjectWidget {
       ..gap = gap
       ..placement = placement;
   }
+
+  @override
+  SingleChildRenderObjectElement createElement() => _FollowerElement(this);
 }
 
 /// Fills its slot and paints its child at the anchor's rect; see [Follower].
@@ -162,9 +181,34 @@ class RenderFollower extends RenderObject
   AnchorLink _link;
   set link(AnchorLink value) {
     if (identical(_link, value)) return;
+    _link.removeListener(_onAnchorMoved);
     _link = value;
+    if (_listening) _link.addListener(_onAnchorMoved);
     markNeedsLayout();
   }
+
+  bool _listening = false;
+
+  /// Begin observing the anchor. Called when the widget mounts; released by
+  /// [stopTrackingAnchor] on unmount so the link — which typically outlives
+  /// any one follower — doesn't retain a dead render object.
+  void startTrackingAnchor() {
+    if (_listening) return;
+    _listening = true;
+    _link.addListener(_onAnchorMoved);
+  }
+
+  /// Stop observing the anchor.
+  void stopTrackingAnchor() {
+    if (!_listening) return;
+    _listening = false;
+    _link.removeListener(_onAnchorMoved);
+  }
+
+  /// The anchor moved (or first painted): our placement is stale, so the
+  /// cached paint has to be redone. Position is resolved in [paint] via
+  /// [_placeChild], so this is a visual-only invalidation.
+  void _onAnchorMoved() => markNeedsPaintOnly();
 
   int _gap;
   set gap(int value) {
@@ -263,5 +307,17 @@ class RenderFollower extends RenderObject
     if (top + childSize.rows > h) top = h - childSize.rows;
     if (top < 0) top = 0;
     return CellOffset(left, top);
+  }
+}
+
+/// Releases the [RenderFollower]'s anchor subscription when the widget leaves
+/// the tree — the same shape as `_RawTextElement` detaching a Selectable.
+class _FollowerElement extends SingleChildRenderObjectElement {
+  _FollowerElement(Follower super.widget);
+
+  @override
+  void unmount() {
+    (renderObject as RenderFollower).stopTrackingAnchor();
+    super.unmount();
   }
 }
