@@ -745,7 +745,7 @@ class _RouteHost extends StatelessWidget {
     if (align == null) {
       screen = route.screen;
     } else {
-      // Modal: the presented content sits on an opaque Surface so nothing
+      // Modal: the presented content sits on an opaque fill so nothing
       // painted beneath shows through it (closes the bleed-through leak). A
       // barrierColor, when set, fills the surround over the screen behind;
       // null leaves the surround composited with the route beneath.
@@ -1016,7 +1016,7 @@ extension NavigatorContext on BuildContext {
       Navigator.of(this).pushAndClear<T>(screen, transition: transition);
 
   /// Presents [screen] as a modal over the current screen (centered by
-  /// default), on an opaque [Surface]. Dismiss with [pop]. [barrierColor]
+  /// default), on an opaque fill. Dismiss with [pop]. [barrierColor]
   /// fills the surround; [barrierDismissible] (default true) controls Esc.
   Future<T?> present<T>(
     Widget screen, {
