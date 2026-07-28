@@ -28,7 +28,19 @@ void main() {
       // hand-copied, so they silently kept teaching the removed API. Match
       // `KeyBinding(` specifically — `KeyBinding.event(…, onEvent:)` is
       // correct and must keep passing.
-      final defaultCtorOnEvent = RegExp(r'KeyBinding\([^)\n]*onEvent:');
+      //
+      // `[^)]` (newlines allowed, via dotAll on the argument run) catches the
+      // wrapped form too, which is how docs usually write a binding with a
+      // label:
+      //
+      //     KeyBinding(
+      //       KeySequence.ctrl.s,
+      //       onEvent: (_) => save(),   // ← still caught
+      //     )
+      final defaultCtorOnEvent = RegExp(
+        r'KeyBinding\([^)]*onEvent:',
+        dotAll: true,
+      );
 
       for (final file in files) {
         final text = file.readAsStringSync();
