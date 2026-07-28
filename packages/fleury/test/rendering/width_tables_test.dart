@@ -24,24 +24,28 @@ import 'package:fleury/src/rendering/width_tables.dart';
 import 'package:test/test.dart';
 
 void main() {
-  test('committed width tables are in sync with the generator', () async {
-    // test/rendering/ -> packages/fleury -> packages -> repo root
-    final repoRoot = Directory.current.parent.parent.path;
-    final result = await Process.run('dart', [
-      'run',
-      'tool/fleury_dev.dart',
-      'build-width-tables',
-      '--check',
-    ], workingDirectory: repoRoot);
-    expect(
-      result.exitCode,
-      0,
-      reason:
-          'width tables are stale or hand-edited — run '
-          '`dart run tool/fleury_dev.dart build-width-tables`.\n'
-          '${result.stdout}\n${result.stderr}',
-    );
-  }, timeout: const Timeout(Duration(seconds: 60)));
+  test(
+    'committed width tables are in sync with the generator',
+    () async {
+      // test/rendering/ -> packages/fleury -> packages -> repo root
+      final repoRoot = Directory.current.parent.parent.path;
+      final result = await Process.run('dart', [
+        'run',
+        'tool/fleury_dev.dart',
+        'build-width-tables',
+        '--check',
+      ], workingDirectory: repoRoot);
+      expect(
+        result.exitCode,
+        0,
+        reason:
+            'width tables are stale or hand-edited — run '
+            '`dart run tool/fleury_dev.dart build-width-tables`.\n'
+            '${result.stdout}\n${result.stderr}',
+      );
+    },
+    timeout: const Timeout(Duration(seconds: 60)),
+  );
 
   test('tables are well-formed: sorted, coalesced, non-overlapping', () {
     // Guards the binary search's precondition. A generator bug that emitted
@@ -63,7 +67,8 @@ void main() {
         expect(
           start,
           greaterThan(previousEnd + 1),
-          reason: '$name: range at $i touches or overlaps the previous one — '
+          reason:
+              '$name: range at $i touches or overlaps the previous one — '
               'it should have been coalesced',
         );
         expect(end, lessThan(0x110000), reason: '$name: out of range at $i');

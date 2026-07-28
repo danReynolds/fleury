@@ -376,21 +376,18 @@ ClusterLowering? detectClusterModeFromEnvironment(
   };
 }
 
-CellWidth? _cellWidthFromEnv(String? raw) => switch (raw?.toLowerCase().trim()) {
-  'narrow' => CellWidth.one,
-  'wide' => CellWidth.two,
-  _ => null,
-};
+CellWidth? _cellWidthFromEnv(String? raw) =>
+    switch (raw?.toLowerCase().trim()) {
+      'narrow' => CellWidth.one,
+      'wide' => CellWidth.two,
+      _ => null,
+    };
 
 /// The emoji ZWJ sequences in the probe battery, with their bare-probed
 /// component ids and joiner counts — the inputs to the summing inequality.
 const List<({String sequenceId, List<String> componentIds, int zwjCount})>
 _zwjProbeSequences = [
-  (
-    sequenceId: 'familyZwj',
-    componentIds: ['man', 'woman', 'boy'],
-    zwjCount: 2,
-  ),
+  (sequenceId: 'familyZwj', componentIds: ['man', 'woman', 'boy'], zwjCount: 2),
   (
     sequenceId: 'healthWorkerZwj',
     componentIds: ['woman', 'medicalVs16'],

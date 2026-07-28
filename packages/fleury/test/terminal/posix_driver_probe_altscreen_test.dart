@@ -85,10 +85,7 @@ class _TerminalStdin implements Stdin {
 Future<String> _enterAndCapture(TerminalMode mode) async {
   final out = _TerminalStdout();
   final input = _TerminalStdin();
-  final driver = PosixTerminalDriver(
-    stdinOverride: input,
-    stdoutOverride: out,
-  );
+  final driver = PosixTerminalDriver(stdinOverride: input, stdoutOverride: out);
   await driver.enter(mode);
   await driver.restore();
   await input.close();

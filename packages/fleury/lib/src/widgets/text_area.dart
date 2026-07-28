@@ -939,6 +939,7 @@ class RenderTextArea extends RenderObject {
     _policy = value;
     markNeedsLayout();
   }
+
   int _scrollTop = 0;
   int _scrollLeft = 0;
 

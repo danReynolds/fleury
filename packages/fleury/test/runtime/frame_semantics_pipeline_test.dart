@@ -160,7 +160,9 @@ void main() {
       pipeline.onFramePresented(_renderFrame(), null);
       pipeline.flushNow('t1');
       expect(
-        presenter.presented.last.nodeById(const SemanticNodeId('contrib'))?.label,
+        presenter.presented.last
+            .nodeById(const SemanticNodeId('contrib'))
+            ?.label,
         'A',
       );
 
@@ -183,7 +185,8 @@ void main() {
       expect(
         contribNode?.label,
         'B',
-        reason: 'the untracked contributor must reflect its live state, not a '
+        reason:
+            'the untracked contributor must reflect its live state, not a '
             'stale retained node',
       );
       final leafNode = presenter.presented.last.nodeById(

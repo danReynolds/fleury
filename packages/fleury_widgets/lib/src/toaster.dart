@@ -138,12 +138,12 @@ class _ToasterState extends State<Toaster> {
   // boundaries engaged and tax every app-dirty frame with a full-screen
   // cache write + blit for an empty layer.
   late final OverlayEntry _entry = OverlayEntry(builder: (_) => _buildLayer());
-  late final OverlayEntryMountSync _entrySync = OverlayEntryMountSync(
+  late final OverlayMount _entrySync = OverlayMount(
     entry: _entry,
     // Guard mounted: after unmount the context is defunct, and the ancestor
     // walk would throw rather than return null.
-    resolveOverlay: () => mounted ? Overlay.maybeOf(context) : null,
-    shouldMount: () => mounted && _toasts.isNotEmpty,
+    overlay: () => mounted ? Overlay.maybeOf(context) : null,
+    mountWhen: () => mounted && _toasts.isNotEmpty,
   );
 
   @override
@@ -171,7 +171,7 @@ class _ToasterState extends State<Toaster> {
     // Synchronous (not the microtask path): show() runs from event/timer
     // contexts where setState is already legal, and the toast should be on
     // screen by the very next pump.
-    _entrySync.syncNow();
+    _entrySync.updateNow();
     _refresh();
     final binding = _binding;
     if (binding == null) return;
@@ -190,7 +190,7 @@ class _ToasterState extends State<Toaster> {
     final ticker = toast.timer;
     toast.timer = null;
     scheduleMicrotask(() => ticker?.dispose());
-    _entrySync.syncNow(); // last toast gone → the layer entry unmounts
+    _entrySync.updateNow(); // last toast gone → the layer entry unmounts
     _refresh();
   }
 

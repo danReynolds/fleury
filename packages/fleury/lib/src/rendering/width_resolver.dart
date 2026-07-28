@@ -103,8 +103,7 @@ final class DefaultWidthResolver implements WidthResolver {
     //    These are their own cluster kinds, deliberately NOT governed by the
     //    measured axes (nothing probes them), and they are all emoji-rendered
     //    composites that the field draws two cells wide when supported.
-    final isFlagPair =
-        base >= 0x1F1E6 && base <= 0x1F1FF && hasCompanion;
+    final isFlagPair = base >= 0x1F1E6 && base <= 0x1F1FF && hasCompanion;
     if (hasKeycap || hasTag || hasModifier || isFlagPair) return 2;
 
     // 3. Simple emoji variation sequence (one base + one selector).

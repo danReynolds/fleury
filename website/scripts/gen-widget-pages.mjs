@@ -35,7 +35,13 @@ const LAYOUT_COMPONENT = '../../../components/WidgetLayout.astro';
 
 // Widgets that get an interactive props playground instead of a static example.
 // The slug must match a key in registry.dart's `knobExamples`.
-const KNOB_WIDGETS = new Set(['gauge', 'progressbar', 'histogram', 'heatmap']);
+const KNOB_WIDGETS = new Set([
+  'gauge',
+  'progressbar',
+  'histogram',
+  'heatmap',
+  'anchored',
+]);
 
 // Curated extra usage examples, shown as a tabbed group under "## Usage" for
 // widgets where a few variations are worth showing. Hand-written against the
@@ -219,6 +225,12 @@ function assertExportedWidgetCoverage(entries) {
     // A which-key popup: wraps a child and reacts to the leader-key dispatcher;
     // nothing to demo in isolation (see KeyBindings introspection).
     'WhichKey',
+    // The bounds primitive underneath Anchored. BoundsObserver renders
+    // nothing of its own (it publishes its child's painted bounds), and
+    // BoundsAnchor only positions once a live observer feeds it. Deep-dive
+    // APIs for cross-tree cases; the catalogue documents Anchored.
+    'BoundsObserver',
+    'BoundsAnchor',
   ]);
   const exportedWidgets = [...exported]
     .filter((name) => api[name] && !api[name].abstract && isWidget(name))

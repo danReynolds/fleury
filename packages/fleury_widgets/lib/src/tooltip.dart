@@ -30,7 +30,7 @@ class Tooltip extends StatefulWidget {
 }
 
 class _TooltipState extends State<Tooltip> {
-  final AnchorLink _link = AnchorLink();
+  final BoundsNotifier _bounds = BoundsNotifier();
   OverlayEntry? _entry;
 
   // Set when Esc dismisses the tip while the trigger keeps focus; cleared when
@@ -49,10 +49,10 @@ class _TooltipState extends State<Tooltip> {
   void _show() {
     if (_entry != null) return;
     final entry = OverlayEntry(
-      builder: (_) => Follower(
-        link: _link,
-        // Popup supplies the float contract: opaque fill, frame, and
-        // chrome semantics (the hint text is not ambient-selectable).
+      builder: (_) => BoundsAnchor(
+        notifier: _bounds,
+        // Container.framed supplies the float's skin: an opaque fill so the
+        // app beneath doesn't bleed through, plus the frame.
         child: Container.framed(
           border: const BoxBorder(style: BorderStyle.rounded),
           child: Semantics(
@@ -60,7 +60,7 @@ class _TooltipState extends State<Tooltip> {
             label: widget.semanticLabel,
             value: _safeMessage,
             state: const SemanticState({'tooltipVisible': true}),
-            child: Text(widget.message),
+            child: Text(widget.message, allowSelect: false),
           ),
         ),
       ),
@@ -119,7 +119,7 @@ class _TooltipState extends State<Tooltip> {
               hideFromHintBar: true,
             ),
           ],
-          child: Anchor(link: _link, child: widget.child),
+          child: BoundsObserver(notifier: _bounds, child: widget.child),
         ),
       ),
     );

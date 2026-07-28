@@ -37,37 +37,58 @@ List<int> _batteryReply(List<int> ambiguous) {
 
 void main() {
   group('probeAmbiguousWidth', () {
-    test('reports narrow when every representative advanced one column', () async {
-      final transport = _FakeTransport(_batteryReply(<int>[2, 2, 2]));
-      expect(await probeAmbiguousWidth(transport), AmbiguousCharWidth.narrow);
-      expect(
-        transport.sent,
-        allOf(contains('─'), contains('α'), contains('°'), contains('\x1B[6n')),
-        reason: 'ambiguous agreement spans three blocks — box drawing alone '
-            'is the glyph most likely to be special-cased narrow',
-      );
-    });
+    test(
+      'reports narrow when every representative advanced one column',
+      () async {
+        final transport = _FakeTransport(_batteryReply(<int>[2, 2, 2]));
+        expect(await probeAmbiguousWidth(transport), AmbiguousCharWidth.narrow);
+        expect(
+          transport.sent,
+          allOf(
+            contains('─'),
+            contains('α'),
+            contains('°'),
+            contains('\x1B[6n'),
+          ),
+          reason:
+              'ambiguous agreement spans three blocks — box drawing alone '
+              'is the glyph most likely to be special-cased narrow',
+        );
+      },
+    );
 
-    test('reports wide when every representative advanced two columns', () async {
-      expect(
-        await probeAmbiguousWidth(_FakeTransport(_batteryReply(<int>[3, 3, 3]))),
-        AmbiguousCharWidth.wide,
-      );
-    });
+    test(
+      'reports wide when every representative advanced two columns',
+      () async {
+        expect(
+          await probeAmbiguousWidth(
+            _FakeTransport(_batteryReply(<int>[3, 3, 3])),
+          ),
+          AmbiguousCharWidth.wide,
+        );
+      },
+    );
 
-    test('disagreement across representatives yields null, not a guess', () async {
-      // The RFC 0019 §6.1 fixture: ─ narrow while α and ° measure wide — a
-      // terminal that special-cases box drawing. Agreement fails; the caller
-      // keeps the conservative default (wide → the renderer pin stays on).
-      expect(
-        await probeAmbiguousWidth(_FakeTransport(_batteryReply(<int>[2, 3, 3]))),
-        isNull,
-      );
-    });
+    test(
+      'disagreement across representatives yields null, not a guess',
+      () async {
+        // The RFC 0019 §6.1 fixture: ─ narrow while α and ° measure wide — a
+        // terminal that special-cases box drawing. Agreement fails; the caller
+        // keeps the conservative default (wide → the renderer pin stays on).
+        expect(
+          await probeAmbiguousWidth(
+            _FakeTransport(_batteryReply(<int>[2, 3, 3])),
+          ),
+          isNull,
+        );
+      },
+    );
 
     test('an anomalous zero advance fails agreement', () async {
       expect(
-        await probeAmbiguousWidth(_FakeTransport(_batteryReply(<int>[1, 2, 2]))),
+        await probeAmbiguousWidth(
+          _FakeTransport(_batteryReply(<int>[1, 2, 2])),
+        ),
         isNull,
         reason: 'a zero-advance measurement is recorded raw and rejected here',
       );
@@ -88,7 +109,10 @@ void main() {
       // A malformed CSI whose parameter run is terminated by the NEXT escape:
       // the parser must not step over that second ESC. Guards the
       // `_cursorReportColumns` `i = j - 1` resume fix.
-      final reply = <int>[...'\x1B[9'.codeUnits, ..._batteryReply(<int>[2, 2, 2])];
+      final reply = <int>[
+        ...'\x1B[9'.codeUnits,
+        ..._batteryReply(<int>[2, 2, 2]),
+      ];
       expect(
         await probeAmbiguousWidth(_FakeTransport(reply)),
         AmbiguousCharWidth.narrow,
@@ -96,10 +120,7 @@ void main() {
     });
 
     test('returns null on no reply (timeout)', () async {
-      expect(
-        await probeAmbiguousWidth(_FakeTransport(const <int>[])),
-        isNull,
-      );
+      expect(await probeAmbiguousWidth(_FakeTransport(const <int>[])), isNull);
     });
 
     test('swallows a transport failure and reports null', () async {
@@ -111,17 +132,21 @@ void main() {
     test('derives from measurements without a transport', () {
       expect(
         ambiguousWidthFromMeasurements(
-          WidthMeasurements.of(
-            const {'boxDrawing': 1, 'greekAlpha': 1, 'degreeSign': 1},
-          ),
+          WidthMeasurements.of(const {
+            'boxDrawing': 1,
+            'greekAlpha': 1,
+            'degreeSign': 1,
+          }),
         ),
         AmbiguousCharWidth.narrow,
       );
       expect(
         ambiguousWidthFromMeasurements(
-          WidthMeasurements.of(
-            const {'boxDrawing': 2, 'greekAlpha': 2, 'degreeSign': 2},
-          ),
+          WidthMeasurements.of(const {
+            'boxDrawing': 2,
+            'greekAlpha': 2,
+            'degreeSign': 2,
+          }),
         ),
         AmbiguousCharWidth.wide,
       );
@@ -156,9 +181,9 @@ void main() {
 
     test('flows through detectTerminalCapabilitiesFromEnvironment', () {
       expect(
-        detectTerminalCapabilitiesFromEnvironment(
-          const {'FLEURY_AMBIGUOUS_WIDTH': 'narrow'},
-        ).ambiguousCharWidth,
+        detectTerminalCapabilitiesFromEnvironment(const {
+          'FLEURY_AMBIGUOUS_WIDTH': 'narrow',
+        }).ambiguousCharWidth,
         AmbiguousCharWidth.narrow,
       );
       expect(

@@ -129,9 +129,11 @@ void main() {
       );
 
       final measured = diagnosis.withMeasuredWidths(
-        WidthMeasurements.of(
-          const {'boxDrawing': 1, 'greekAlpha': 1, 'degreeSign': 1},
-        ),
+        WidthMeasurements.of(const {
+          'boxDrawing': 1,
+          'greekAlpha': 1,
+          'degreeSign': 1,
+        }),
       );
       expect(
         measured.capabilities.ambiguousCharWidth,
@@ -143,9 +145,11 @@ void main() {
       expect(
         diagnosis
             .withMeasuredWidths(
-              WidthMeasurements.of(
-                const {'boxDrawing': 2, 'greekAlpha': 2, 'degreeSign': 2},
-              ),
+              WidthMeasurements.of(const {
+                'boxDrawing': 2,
+                'greekAlpha': 2,
+                'degreeSign': 2,
+              }),
             )
             .capabilities
             .ambiguousCharWidth,

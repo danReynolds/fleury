@@ -26,16 +26,16 @@ import 'package:test/test.dart';
 
 void main() {
   testWidgets('follower sits just below the anchor', (tester) {
-    final link = AnchorLink();
+    final chip = BoundsNotifier();
     tester.pumpWidget(
       Stack(
         children: [
           // Anchor a 4x1 box at (3, 2).
           Padding(
             padding: const EdgeInsets.only(left: 3, top: 2),
-            child: Anchor(link: link, child: const Text('AAAA')),
+            child: BoundsObserver(notifier: chip, child: const Text('AAAA')),
           ),
-          Follower(link: link, child: const Text('m')),
+          BoundsAnchor(notifier: chip, child: const Text('m')),
         ],
       ),
     );
@@ -44,18 +44,18 @@ void main() {
   });
 
   testWidgets('follower flips above the anchor near the bottom edge', (tester) {
-    final link = AnchorLink();
+    final chip = BoundsNotifier();
     tester.pumpWidget(
       Stack(
         children: [
           Padding(
             padding: const EdgeInsets.only(top: 4),
-            child: Anchor(link: link, child: const Text('A')),
+            child: BoundsObserver(notifier: chip, child: const Text('A')),
           ),
           // A 3-row-tall follower can't fit below an anchor at row 4 in a
           // 6-row screen, so it flips to sit above the anchor.
-          Follower(
-            link: link,
+          BoundsAnchor(
+            notifier: chip,
             child: const Column(
               mainAxisSize: MainAxisSize.min,
               children: [Text('x'), Text('y'), Text('z')],
@@ -71,16 +71,16 @@ void main() {
   });
 
   testWidgets('follower clamps horizontally to stay on screen', (tester) {
-    final link = AnchorLink();
+    final chip = BoundsNotifier();
     tester.pumpWidget(
       Stack(
         children: [
           // Anchor near the right edge of an 8-wide screen.
           Padding(
             padding: const EdgeInsets.only(left: 6),
-            child: Anchor(link: link, child: const Text('A')),
+            child: BoundsObserver(notifier: chip, child: const Text('A')),
           ),
-          Follower(link: link, child: const Text('wide')), // 4 wide
+          BoundsAnchor(notifier: chip, child: const Text('wide')), // 4 wide
         ],
       ),
     );
@@ -90,17 +90,21 @@ void main() {
 
   group('right placement', () {
     testWidgets('sits to the right of the anchor, top-aligned', (tester) {
-      final link = AnchorLink();
+      final chip = BoundsNotifier();
       tester.pumpWidget(
         Stack(
           children: [
             Padding(
               padding: const EdgeInsets.only(left: 2, top: 1),
-              child: Anchor(link: link, child: const Text('AAA')), // (2..5, 1)
+              child: BoundsObserver(
+                notifier: chip,
+                child: const Text('AAA'),
+              ), // (2..5, 1)
             ),
-            Follower(
-              link: link,
-              placement: FollowerPlacement.right,
+            BoundsAnchor(
+              notifier: chip,
+              alignment: Alignment.topRight,
+              anchorAlignment: Alignment.topLeft,
               child: const Text('m'),
             ),
           ],
@@ -113,18 +117,22 @@ void main() {
     testWidgets('flips to the left when it would overflow the right edge', (
       tester,
     ) {
-      final link = AnchorLink();
+      final chip = BoundsNotifier();
       tester.pumpWidget(
         Stack(
           children: [
             // Anchor 'A' near the right edge of an 8-wide screen.
             Padding(
               padding: const EdgeInsets.only(left: 6),
-              child: Anchor(link: link, child: const Text('A')), // (6..7)
+              child: BoundsObserver(
+                notifier: chip,
+                child: const Text('A'),
+              ), // (6..7)
             ),
-            Follower(
-              link: link,
-              placement: FollowerPlacement.right,
+            BoundsAnchor(
+              notifier: chip,
+              alignment: Alignment.topRight,
+              anchorAlignment: Alignment.topLeft,
               child: const Text('xyz'), // 3 wide
             ),
           ],
