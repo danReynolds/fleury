@@ -74,21 +74,42 @@ policy; wrap it in a group when it has multiple controls.
 ## App-wide shortcuts
 
 For shortcuts that should work regardless of what's focused, wrap a region in
-`KeyBindings`. Each `KeyBinding` pairs a `KeyChord` with a handler and a label
-(used by command surfaces and help):
+`KeyBindings`. Each `KeyBinding` pairs a `KeySequence` with a handler and a
+label (used by command surfaces and help):
 
 ```dart
 KeyBindings(
   bindings: [
-    KeyBinding(KeyChord.ctrl.s, label: 'Save', onEvent: (_) => save()),
-    KeyBinding(KeyChord.escape, label: 'Close', onEvent: (_) => close()),
+    KeyBinding(KeySequence.ctrl.s, label: 'Save', onTrigger: save),
+    KeyBinding(KeySequence.escape, label: 'Close', onTrigger: close),
   ],
   child: app,
 );
 ```
 
-`KeyChord` has the common chords built in (`KeyChord.enter`, `.escape`, `.tab`)
-and a `ctrl` / `alt` / `shift` builder for combinations (`KeyChord.ctrl.s`).
+`KeySequence` has the common keys built in (`KeySequence.enter`, `.escape`,
+`.tab`) and a `ctrl` / `alt` / `shift` builder for combinations
+(`KeySequence.ctrl.s`). Because the leading type is inferred, you can drop it
+and write the dot shorthand — `KeyBinding(.ctrl.s, onTrigger: save)`.
+
+A sequence can be more than one keypress. Chain further keys to get vim- or
+emacs-style commands, and a leader key falls out of the same syntax:
+
+```dart
+KeyBinding(KeySequence.g.g, label: 'Go to top', onTrigger: gotoTop),
+KeyBinding(KeySequence.ctrl.x.ctrl.s, label: 'Save', onTrigger: save),
+KeyBinding(KeySequence.space.f, label: 'Find file', onTrigger: findFile),
+```
+
+`onTrigger` takes no arguments — the common case. When a handler needs the
+event itself (to inspect what matched, or to let it keep propagating with
+`event.bubble()`), use `KeyBinding.event` instead:
+
+```dart
+KeyBinding.event(KeySequence.escape, onEvent: (event) {
+  if (!close()) event.bubble(); // not ours — let an ancestor handle it
+}),
+```
 
 **One key to watch:** inside `FleuryApp(home: ...)` (or another explicit
 `Navigator`), `Esc` already pops the current route by default. If you also bind

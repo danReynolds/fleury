@@ -1,6 +1,6 @@
 # RFC 0018: The Key Binding Surface
 
-**Status:** Accepted — design converged in maintainer review 2026-07-20; implementation pending
+**Status:** Implemented — design converged in maintainer review 2026-07-20, then shipped across PRs #157 (core redesign), #160 (`activeOf` / `pendingOf`, `WhichKey`, `tester.press`) and #162 (the `samples/editor` proving ground). See §12.1 for errata.
 **Date:** 2026-07-20
 **Supersedes:** the authoring surface of RFC 0008 (`KeyChord`, `KeyBinding` constructors, `KeyEvent` shape). The dispatch architecture of RFC 0008 §7 (precedence, modal scopes, text-input claim order, central `InputDispatcher`) carries forward unchanged.
 **Prerequisite:** Dart ≥ 3.10 (dot shorthands — already required by the current tree).
@@ -425,6 +425,15 @@ additive discovery/ergonomics surfaces. `resolveActiveKeyBindings`
 (the resolution logic behind `activeOf`) already ships and powers the
 hint bar. The `samples/editor` proving ground (§13) also lands with
 that follow-up, since its which-key demo depends on `pendingOf`.
+
+> **Shipped.** That follow-up landed as #160 and the `samples/editor` proving
+> ground as #162. Implementing the editor forced one dispatch change not
+> anticipated here: a *pure* prefix (one where no shorter binding completes —
+> operator-pending `d`, a leader) no longer cancels when `sequenceTimeout`
+> expires, because there is nothing to commit and a which-key popup rests on
+> it. `sequenceTimeout` now only resolves an *ambiguous* prefix, exactly as
+> vim's `timeoutlen` does. The only §13 scope still open is the website guide
+> embed.
 
 Not on the hot paint path, so paint/alloc gates are unaffected; `check`
 plus the serve gates above cover it.

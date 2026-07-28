@@ -77,7 +77,7 @@ CommandScope(
       id: const CommandId('navigation.open-detail'),
       title: 'Open detail',
       category: 'Navigation',
-      shortcuts: [KeyChord.ctrl.o],
+      shortcuts: [KeySequence.ctrl.o],
       semanticAction: SemanticAction.navigate,
       run: (command) {
         final source = command.buildContext;

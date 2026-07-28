@@ -1,8 +1,15 @@
 # RFC 0008: Input Dispatch for fleury
 
-**Status:** Revised (incorporates peer review)
+**Status:** Revised (incorporates peer review) — **authoring surface superseded by [RFC 0018](0018-key-binding-surface.md)**
 **Date:** 2026-05-17
 **Supersedes:** the input subsystem framing in RFC 0007 §6.5
+**Superseded by:** RFC 0018, for the authoring surface only. The `KeyChord`
+type, the `KeyBinding` constructors, and the `KeyEvent` shape below are
+**historical** — `KeyChord` is now `KeySequence`, and the common handler is
+`onTrigger`. The *dispatch architecture* in §7 (precedence, modal scopes,
+text-input claim order, the central `InputDispatcher`) carries forward
+unchanged and is still current. Left as written: this is the record of what
+was decided in May 2026, not a guide to today's API.
 **Decision point for:** P1 implementation order
 
 ## 1. Summary

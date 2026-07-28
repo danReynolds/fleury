@@ -51,9 +51,9 @@ class _CounterAppState extends State<CounterApp> {
     return KeyBindings(
       bindings: [
         KeyBinding(
-          KeyChord.space,
+          KeySequence.space,
           label: 'Increment',
-          onEvent: (_) => setState(() => _count++),
+          onTrigger: () => setState(() => _count++),
         ),
       ],
       child: Center(
@@ -140,7 +140,7 @@ The table is intentionally boring: most of the muscle memory is valid.
 | `AnimatedBuilder` | `ListenableBuilder` | Rebuild from any `Listenable`: an `Animation`, a `ChangeNotifier`, or another notifier. |
 | `TweenAnimationBuilder` | `AnimationBuilder` | Animate a value toward a new target when it changes. |
 | `SingleChildScrollView` | `ScrollView` | A scrollable viewport around one child. |
-| `Shortcuts` / `Actions` / `Intent` | `KeyBindings` / `KeyChord` | A key chord maps directly to a callback; no `Intent` layer. |
+| `Shortcuts` / `Actions` / `Intent` | `KeyBindings` / `KeySequence` | A key sequence maps directly to a callback; no `Intent` layer. |
 
 `EdgeInsets` keeps the familiar constructors (`all`, `symmetric`, `only`), but
 the values are cells:
@@ -195,8 +195,8 @@ Flutter's `Shortcuts` / `Actions` stack is intentionally simpler in Fleury:
 ```dart
 KeyBindings(
   bindings: [
-    KeyBinding(KeyChord.ctrl.s, label: 'Save', onEvent: (_) => save()),
-    KeyBinding(KeyChord.escape, label: 'Cancel', onEvent: (_) => cancel()),
+    KeyBinding(KeySequence.ctrl.s, label: 'Save', onTrigger: save),
+    KeyBinding(KeySequence.escape, label: 'Cancel', onTrigger: cancel),
   ],
   child: editor,
 )
