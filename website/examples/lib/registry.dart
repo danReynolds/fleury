@@ -7,6 +7,7 @@ import 'dart:math';
 
 import 'package:fleury/fleury_core.dart';
 import 'package:fleury_samples/samples.dart';
+import 'package:fleury_themes/fleury_themes.dart';
 import 'package:fleury_widgets/fleury_widgets_web.dart';
 
 /// Builds the root widget for one live example.
@@ -1208,6 +1209,32 @@ TextArea(
     ),
   ),
   ExampleInfo(
+    id: 'anchored.basic',
+    widget: 'Anchored',
+    category: 'Navigation & overlays',
+    blurb:
+        'Floating content pinned to a trigger, placed by Alignment — the '
+        'declarative way to build dropdowns, flyouts, and hover cards.',
+    cols: 40,
+    rows: 9,
+    interactive: true,
+    builder: () => _framed(
+      Align(
+        alignment: Alignment.center,
+        child: Anchored(
+          visible: true,
+          alignment: Alignment.bottomLeft,
+          overlay: Container.framed(
+            border: BoxBorder(style: _theme.borderStyle),
+            padding: const EdgeInsets.symmetric(horizontal: 1),
+            child: const Text('float'),
+          ),
+          child: const Text('[ trigger ]'),
+        ),
+      ),
+    ),
+  ),
+  ExampleInfo(
     id: 'tooltip.basic',
     widget: 'Tooltip',
     category: 'Navigation & overlays',
@@ -1223,6 +1250,22 @@ TextArea(
         child: Button(label: 'Save', autofocus: true, onPressed: () {}),
       ),
     ),
+  ),
+  ExampleInfo(
+    id: 'container.filled',
+    widget: 'Container',
+    category: 'Layout',
+    blurb:
+        'Container is transparent by default; .filled paints the theme '
+        'surface and .framed adds the theme border. Enter and Esc toggle a '
+        'framed layer over live content.',
+    cols: 44,
+    rows: 11,
+    interactive: true,
+    // Toggling is the demo: while the framed layer is open the wall behind
+    // is covered (it owns every cell it draws over), and closing restores
+    // that content untouched — it layers, it doesn't overwrite.
+    builder: () => const _ContainerFillExample(),
   ),
   ExampleInfo(
     id: 'dialog.basic',
@@ -1303,10 +1346,7 @@ TextArea(
         // completions).
         child: const WhichKey(
           showDelay: Duration.zero,
-          child: Focus(
-            autofocus: true,
-            child: Text('Press Space, then a key'),
-          ),
+          child: Focus(autofocus: true, child: Text('Press Space, then a key')),
         ),
       ),
     ),
@@ -1745,6 +1785,33 @@ TextArea(
     interactive: true,
     builder: () => const AgentApp(),
   ),
+  ExampleInfo(
+    id: 'themes.custom',
+    widget: 'Themes',
+    category: 'Theming',
+    blurb:
+        'One hand-written ThemeData, applied to the same preview the community '
+        'themes use.',
+    cols: 38,
+    rows: 14,
+    code: _customThemeSource,
+    builder: () => const Theme(data: _customTheme, child: _ThemePreview()),
+  ),
+  ExampleInfo(
+    id: 'themes.gallery',
+    widget: 'Themes',
+    category: 'Theming',
+    blurb:
+        'Every theme in fleury_themes, on a slice of real UI. Arrow through '
+        'the picker to switch.',
+    cols: 62,
+    rows: 18,
+    interactive: true,
+    code: '''import 'package:fleury_themes/fleury_themes.dart';
+
+runApp(const MyApp(), theme: tokyoNight);''',
+    builder: () => const _ThemePickerExample(),
+  ),
 ];
 
 /// id → builder, derived from [exampleList].
@@ -1921,6 +1988,71 @@ final class _DocsCanvasPainter extends CanvasPainter {
       previousX = x;
       previousY = y;
     }
+  }
+}
+
+class _ContainerFillExample extends StatefulWidget {
+  const _ContainerFillExample();
+
+  @override
+  State<_ContainerFillExample> createState() => _ContainerFillExampleState();
+}
+
+class _ContainerFillExampleState extends State<_ContainerFillExample> {
+  bool _open = false;
+
+  void _toggle() => setState(() => _open = !_open);
+
+  @override
+  Widget build(BuildContext context) {
+    // The trigger and the wall stay at a fixed position in the tree so the
+    // button keeps focus across a toggle; only the framed layer comes and
+    // goes.
+    final Widget behind = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Button(
+          label: _open ? 'Hide layer' : 'Show layer',
+          autofocus: true,
+          onPressed: _toggle,
+        ),
+        for (var i = 0; i < 6; i++) const Text('live content behind the layer'),
+      ],
+    );
+    return _framed(
+      KeyBindings(
+        bindings: <KeyBinding>[
+          if (_open)
+            KeyBinding(KeySequence.escape, label: 'Close', onTrigger: _toggle),
+        ],
+        child: Stack(
+          children: <Widget>[
+            behind,
+            if (_open)
+              Align(
+                alignment: Alignment.center,
+                child: Container.framed(
+                  padding: const EdgeInsets.symmetric(horizontal: 1),
+                  // Deliberately ragged: the shorter line leaves interior
+                  // cells the content never writes — exactly the cells that
+                  // would show the wall through an unfilled Container.
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const <Widget>[
+                      Text('Container.framed'),
+                      Text(
+                        'opaque fill + theme border',
+                        style: CellStyle(dim: true),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -2404,8 +2536,39 @@ class _DatePickerExampleState extends State<_DatePickerExample> {
 
 /// Builds a knob-enabled widget from a params map supplied by the docs UI.
 /// Missing or ill-typed keys fall back to the defaults below.
+Alignment _knobAlignment(Object? raw) => switch (raw) {
+  'topLeft' => Alignment.topLeft,
+  'topCenter' => Alignment.topCenter,
+  'topRight' => Alignment.topRight,
+  'centerLeft' => Alignment.centerLeft,
+  'center' => Alignment.center,
+  'centerRight' => Alignment.centerRight,
+  'bottomCenter' => Alignment.bottomCenter,
+  'bottomRight' => Alignment.bottomRight,
+  _ => Alignment.bottomLeft,
+};
+
 final Map<String, Widget Function(Map<String, Object?>)> knobExamples =
     <String, Widget Function(Map<String, Object?>)>{
+      // Anchored: the float's placement is the whole story, so `alignment` is
+      // the headline knob — all nine values, live. The trigger sits centred so
+      // every direction has room to show.
+      'anchored': (p) => _framed(
+        Align(
+          alignment: Alignment.center,
+          child: Anchored(
+            visible: _knobBool(p['visible'], true),
+            alignment: _knobAlignment(p['alignment']),
+            gap: _knobDouble(p['gap'], 0).round(),
+            overlay: Container.framed(
+              border: BoxBorder(style: _theme.borderStyle),
+              padding: const EdgeInsets.symmetric(horizontal: 1),
+              child: const Text('float'),
+            ),
+            child: const Text('[ trigger ]'),
+          ),
+        ),
+      ),
       'gauge': (p) => _framed(
         Gauge(
           value: _knobDouble(p['value'], 0.62),
@@ -2644,4 +2807,172 @@ class _LiveSeriesState extends State<_LiveSeries>
 
   @override
   Widget build(BuildContext context) => widget.builder(_data);
+}
+
+/// Live theme picker for the docs site: pick a theme on the left, see it
+/// applied to a small slice of UI on the right.
+class _ThemePickerExample extends StatefulWidget {
+  const _ThemePickerExample();
+
+  @override
+  State<_ThemePickerExample> createState() => _ThemePickerExampleState();
+}
+
+class _ThemePickerExampleState extends State<_ThemePickerExample> {
+  final ListController _list = ListController(selectedIndex: 0);
+
+  @override
+  void initState() {
+    super.initState();
+    // The preview follows the highlight, so arrowing the list re-themes
+    // immediately — no separate "apply" step in a docs embed.
+    _list.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _list.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final index = (_list.selectedIndex ?? 0).clamp(0, fleuryThemes.length - 1);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        SizedBox(
+          width: 20,
+          child: ListView.builder(
+            controller: _list,
+            itemCount: fleuryThemes.length,
+            autofocus: true,
+            itemBuilder: (context, i, activeSelected) {
+              final selected = i == index;
+              return Text(
+                selected
+                    ? '> ${fleuryThemes[i].name}'
+                    : '  ${fleuryThemes[i].name}',
+                style: selected
+                    ? Theme.of(context).selectionStyle
+                    : CellStyle.empty,
+              );
+            },
+          ),
+        ),
+        const SizedBox(width: 2),
+        Expanded(
+          child: Theme(
+            data: fleuryThemes[index].data,
+            child: const _ThemePreview(),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A hand-written theme for the "creating a theme" guide section.
+///
+/// Deliberately small: the nine roles it actually needs, the three text styles,
+/// and a border style — enough to be a real theme, short enough to read beside
+/// its own render. Kept in sync with [_customThemeSource] by a test.
+const ThemeData _customTheme = ThemeData(
+  brightness: Brightness.dark,
+  colorScheme: ColorScheme(
+    background: RgbColor(0x1C, 0x18, 0x14),
+    foreground: RgbColor(0xEB, 0xDB, 0xB2),
+    surface: RgbColor(0x2A, 0x24, 0x1E),
+    primary: RgbColor(0xE8, 0xA3, 0x3D),
+    focus: RgbColor(0xF2, 0xC5, 0x5C),
+    success: RgbColor(0x8E, 0xC0, 0x7C),
+    warning: RgbColor(0xE8, 0xA3, 0x3D),
+    error: RgbColor(0xE5, 0x6B, 0x5B),
+    info: RgbColor(0x83, 0xA5, 0x98),
+  ),
+  mutedStyle: CellStyle(dim: true),
+  selectionStyle: CellStyle(inverse: true),
+  focusedStyle: CellStyle(bold: true),
+  borderStyle: BorderStyle.rounded,
+);
+
+/// The literal source of [_customTheme], shown beside its render on the
+/// theming guide. A test asserts the two agree, so the page cannot drift into
+/// showing code that is not what produced the picture.
+const String _customThemeSource = '''
+const amber = ThemeData(
+  brightness: Brightness.dark,
+  colorScheme: ColorScheme(
+    background: RgbColor(0x1C, 0x18, 0x14),
+    foreground: RgbColor(0xEB, 0xDB, 0xB2),
+    surface: RgbColor(0x2A, 0x24, 0x1E),
+    primary: RgbColor(0xE8, 0xA3, 0x3D),
+    focus: RgbColor(0xF2, 0xC5, 0x5C),
+    success: RgbColor(0x8E, 0xC0, 0x7C),
+    warning: RgbColor(0xE8, 0xA3, 0x3D),
+    error: RgbColor(0xE5, 0x6B, 0x5B),
+    info: RgbColor(0x83, 0xA5, 0x98),
+  ),
+  mutedStyle: CellStyle(dim: true),
+  selectionStyle: CellStyle(inverse: true),
+  focusedStyle: CellStyle(bold: true),
+  borderStyle: BorderStyle.rounded,
+);
+
+runApp(const MyApp(), theme: amber);''';
+
+/// Exposed for the drift test in test/theme_source_parity_test.dart.
+ThemeData get customThemeForTest => _customTheme;
+String get customThemeSourceForTest => _customThemeSource;
+
+/// A compact slice of UI: enough surfaces that a theme's character shows.
+class _ThemePreview extends StatelessWidget {
+  const _ThemePreview();
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = context.colors;
+    final theme = context.theme;
+    return Container(
+      color: cs.background,
+      padding: const EdgeInsets.all(1),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'Deploy Console',
+            style: CellStyle(foreground: cs.foreground, bold: true),
+          ),
+          Text('one app, two surfaces', style: theme.mutedStyle),
+          const SizedBox(height: 1),
+          Text('  api-gateway  running  42%', style: theme.selectionStyle),
+          Text(
+            '  worker-01    running  18%',
+            style: CellStyle(foreground: cs.foreground),
+          ),
+          const SizedBox(height: 1),
+          ProgressBar(value: 0.62),
+          const SizedBox(height: 1),
+          Wrap(
+            children: <Widget>[
+              Text('success  ', style: CellStyle(foreground: cs.success)),
+              Text('warning  ', style: CellStyle(foreground: cs.warning)),
+              Text('error  ', style: CellStyle(foreground: cs.error)),
+              Text('info', style: CellStyle(foreground: cs.info)),
+            ],
+          ),
+          const SizedBox(height: 1),
+          Wrap(
+            children: <Widget>[
+              Text(
+                '\u2589 primary  ',
+                style: CellStyle(foreground: cs.primary),
+              ),
+              Text('\u2589 focus', style: CellStyle(foreground: cs.focus)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }

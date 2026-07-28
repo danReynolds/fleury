@@ -14,7 +14,7 @@ void main() {
       paint: (buffer) => buffer.writeText(CellOffset.zero, 'x'),
     );
     expect(frame, isNotNull);
-    expect(frame!.damage.fullRepaint, isTrue);
+    expect(frame!.damage, isA<FrameFullRepaint>());
 
     final rows = TuiDirtyRows.full(2);
     expect(rows.rows, [0, 1]);

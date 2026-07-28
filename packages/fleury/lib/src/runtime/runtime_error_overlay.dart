@@ -163,7 +163,7 @@ class _ErrorBanner extends StatelessWidget {
       // background — otherwise the content underneath bleeds through the
       // frame and the error is hard to read. Sitting above the user's Theme,
       // Surface resolves against [ThemeData.fallback], which is deterministic.
-      child: Surface(
+      child: Container.filled(
         child: Container(
           border: const BoxBorder(style: BorderStyle.rounded, cellStyle: _red),
           padding: const EdgeInsets.symmetric(horizontal: 1),

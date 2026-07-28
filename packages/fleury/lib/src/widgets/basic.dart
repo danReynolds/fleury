@@ -14,6 +14,7 @@ import '../semantics/semantics.dart';
 import '../terminal/capabilities.dart';
 import 'align.dart';
 import 'framework.dart';
+import '../rendering/width_policy.dart';
 import 'media_query.dart';
 import 'selection/selectable.dart';
 import 'theme.dart';
@@ -58,7 +59,7 @@ final class _EmptyBoxElement extends Element {
 /// The text is sanitized (control codes replaced with U+FFFD) before
 /// reaching the cell buffer, so widget code can safely pass arbitrary
 /// or untrusted strings. Grapheme widths are resolved against the
-/// configured [TerminalProfile].
+/// configured [CellWidthPolicy].
 ///
 /// With [softWrap] true (default), text exceeding the available width
 /// wraps onto additional rows at word boundaries (or hard-breaks
@@ -78,7 +79,7 @@ final class Text extends StatelessWidget implements WidgetUpdatePruner {
     this.maxLines,
     this.overflow = TextOverflow.clip,
     this.textAlign = TextAlign.left,
-    this.profile = TerminalProfile.standard,
+    this.policy,
     this.allowSelect = true,
   });
 
@@ -107,8 +108,12 @@ final class Text extends StatelessWidget implements WidgetUpdatePruner {
   /// right-anchored key hints.
   final TextAlign textAlign;
 
-  /// Terminal width profile used to measure grapheme clusters.
-  final TerminalProfile profile;
+  /// The text-presentation policy used to measure grapheme clusters. Null
+  /// (the default) resolves the surface's ambient policy from [MediaQuery] —
+  /// derived at startup from the width probe and `FLEURY_*` overrides
+  /// (RFC 0019). Pass an explicit policy only to pin measurement against the
+  /// ambient surface (goldens comparing policies, documentation demos).
+  final TextPresentationPolicy? policy;
 
   /// Whether this Text participates in any ancestor `SelectionArea`'s
   /// selection. Defaults to `true`. Set to `false` for cosmetic
@@ -128,7 +133,7 @@ final class Text extends StatelessWidget implements WidgetUpdatePruner {
         maxLines == other.maxLines &&
         overflow == other.overflow &&
         textAlign == other.textAlign &&
-        profile == other.profile &&
+        policy == other.policy &&
         allowSelect == other.allowSelect;
   }
 
@@ -146,7 +151,7 @@ final class Text extends StatelessWidget implements WidgetUpdatePruner {
         maxLines: maxLines,
         overflow: overflow,
         textAlign: textAlign,
-        profile: profile,
+        policy: policy ?? MediaQuery.textPolicyOf(context),
         allowSelect: allowSelect,
       ),
     );
@@ -161,7 +166,7 @@ final class _RawText extends LeafRenderObjectWidget {
     required this.maxLines,
     required this.overflow,
     required this.textAlign,
-    required this.profile,
+    required this.policy,
     required this.allowSelect,
   });
 
@@ -171,7 +176,7 @@ final class _RawText extends LeafRenderObjectWidget {
   final int? maxLines;
   final TextOverflow overflow;
   final TextAlign textAlign;
-  final TerminalProfile profile;
+  final TextPresentationPolicy policy;
   final bool allowSelect;
 
   @override
@@ -183,7 +188,7 @@ final class _RawText extends LeafRenderObjectWidget {
       maxLines: maxLines,
       overflow: overflow,
       textAlign: textAlign,
-      profile: profile,
+      textPolicy: policy,
     );
     // Wire the Selectable to the ambient registrar so app-wide
     // selection systems see this text widget. allowSelect == false
@@ -204,7 +209,7 @@ final class _RawText extends LeafRenderObjectWidget {
       ..maxLines = maxLines
       ..overflow = overflow
       ..textAlign = textAlign
-      ..profile = profile;
+      ..textPolicy = policy;
     // If the ambient SelectionScope changed (e.g. a SelectionArea
     // mounted above us) OR allowSelect flipped, re-attach.
     renderObject.attachToSelection(
@@ -698,7 +703,62 @@ final class Container extends StatelessWidget {
     this.border,
     this.color,
     this.child,
-  });
+  }) : _themedFill = false,
+       _themedBorder = false;
+
+  /// A container that paints an **opaque** background: [color] when given,
+  /// otherwise the theme's [ColorScheme.surface] (falling back to a
+  /// brightness-appropriate default when the scheme leaves it unset).
+  ///
+  /// Reach for this whenever a layer covers content that keeps painting
+  /// underneath it. Cells are not auto-cleared, so a layer that doesn't
+  /// paint every cell it covers lets the content below show through the
+  /// gaps — the plain [Container] constructor leaves `color` null precisely
+  /// so it can be laid over an already-styled background.
+  const Container.filled({
+    super.key,
+    this.alignment,
+    this.width,
+    this.height,
+    this.padding,
+    this.margin,
+    this.border,
+    this.color,
+    this.child,
+  }) : _themedFill = true,
+       _themedBorder = false;
+
+  /// Filled **and** framed: [Container.filled]'s opaque background plus a
+  /// [border] — the theme's [ThemeData.borderStyle] unless you pass one.
+  ///
+  /// This is the standard skin for floating chrome (tooltips, menus,
+  /// dropdowns, toasts), which needs both halves: the frame to read as a
+  /// distinct layer, and the fill so the app beneath doesn't bleed through
+  /// it. Note it is filled as well as framed — that is the point.
+  ///
+  /// It is only a skin: it does not position itself and has no opinion on
+  /// focus or selection. Anchor it with `Follower`, pin it with `Align`,
+  /// mount it in an `OverlayEntry`, and mark it non-selectable with
+  /// `SelectionArea.disabled` when its text is chrome rather than content.
+  const Container.framed({
+    super.key,
+    this.alignment,
+    this.width,
+    this.height,
+    this.padding,
+    this.margin,
+    this.border,
+    this.color,
+    this.child,
+  }) : _themedFill = true,
+       _themedBorder = true;
+
+  /// Resolve [color] from the theme when it is null (set by [filled] and
+  /// [framed]).
+  final bool _themedFill;
+
+  /// Resolve [border] from the theme when it is null (set by [framed]).
+  final bool _themedBorder;
 
   /// How the [child] is positioned inside the container's content
   /// area (after padding, inside the border). null means "stretch the
@@ -745,11 +805,15 @@ final class Container extends StatelessWidget {
     if (p != null) {
       result = Padding(padding: p, child: result);
     }
-    final fill = color;
+    final fill = color ?? (_themedFill ? resolveSurfaceColor(context) : null);
     if (fill != null) {
       result = _FilledBox(color: fill, child: result);
     }
-    final b = border;
+    final b =
+        border ??
+        (_themedBorder
+            ? BoxBorder(style: Theme.of(context).borderStyle)
+            : null);
     if (b != null) {
       result = _Border(border: b, child: result);
     }
@@ -764,32 +828,19 @@ final class Container extends StatelessWidget {
   }
 }
 
-/// An opaque, theme-aware background that fills its slot — the terminal analog
-/// of a card or sheet. Put screen or dialog content on a [Surface] and nothing
-/// painted beneath shows through; [NavigatorState.present] wraps presented
-/// content in one by default, so a modal is never see-through.
+/// The theme's opaque surface fill: [ColorScheme.surface], else a concrete
+/// brightness-appropriate default.
 ///
-/// The fill resolves to [color], else [ColorScheme.surface], else a concrete
-/// brightness-appropriate default — always opaque, unlike
-/// [ColorScheme.background] (nullable = the terminal default, i.e. transparent).
-class Surface extends StatelessWidget {
-  const Surface({super.key, this.color, this.child});
-
-  /// Explicit fill. When null, resolves from the theme (see the class doc).
-  final Color? color;
-  final Widget? child;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = context.theme;
-    final fill =
-        color ??
-        theme.colorScheme.surface ??
-        (theme.brightness == Brightness.dark
-            ? const RgbColor(0x12, 0x12, 0x14)
-            : const RgbColor(0xF2, 0xF2, 0xF4));
-    return _FilledBox(color: fill, child: child);
-  }
+/// Always opaque, unlike [ColorScheme.background] (nullable = the terminal
+/// default, i.e. transparent). [Container.filled] and [Container.framed] use
+/// this; call it directly only when you need the colour itself rather than a
+/// widget that paints it.
+Color resolveSurfaceColor(BuildContext context) {
+  final theme = context.theme;
+  return theme.colorScheme.surface ??
+      (theme.brightness == Brightness.dark
+          ? const RgbColor(0x12, 0x12, 0x14)
+          : const RgbColor(0xF2, 0xF2, 0xF4));
 }
 
 class _FilledBox extends SingleChildRenderObjectWidget {

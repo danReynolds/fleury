@@ -42,6 +42,7 @@ import '../terminal/capability_requirements.dart';
 import '../input/events.dart';
 import 'focus.dart';
 import 'framework.dart';
+import 'media_query.dart';
 import 'tui_binding.dart';
 
 /// How an editable text widget should treat copy/cut operations.
@@ -1608,6 +1609,7 @@ class _TextInputDisplay extends LeafRenderObjectWidget {
   RenderObject createRenderObject(BuildContext context) {
     return RenderTextInput(
       focusNode: focusNode,
+      policy: MediaQuery.textPolicyOf(context).widths,
       text: text,
       selection: selection,
       placeholder: placeholder,
@@ -1627,6 +1629,7 @@ class _TextInputDisplay extends LeafRenderObjectWidget {
   ) {
     renderObject
       ..focusNode = focusNode
+      ..policy = MediaQuery.textPolicyOf(context).widths
       ..text = text
       ..selection = selection
       ..placeholder = placeholder
@@ -1657,7 +1660,7 @@ class RenderTextInput extends RenderObject {
     bool obscureText = false,
     String obscuringCharacter = '•',
     WidthResolver widthResolver = const DefaultWidthResolver(),
-    TerminalProfile profile = TerminalProfile.standard,
+    CellWidthPolicy policy = CellWidthPolicy.spec,
   }) : _focusNode = focusNode,
        _text = sanitizeForDisplay(text),
        _selection = selection.normalizeForText(sanitizeForDisplay(text)),
@@ -1669,7 +1672,7 @@ class RenderTextInput extends RenderObject {
        _obscureText = obscureText,
        _obscuringCharacter = obscuringCharacter,
        _widthResolver = widthResolver,
-       _profile = profile;
+       _policy = policy;
 
   FocusNode _focusNode;
   String _text;
@@ -1682,7 +1685,14 @@ class RenderTextInput extends RenderObject {
   bool _obscureText;
   String _obscuringCharacter;
   final WidthResolver _widthResolver;
-  final TerminalProfile _profile;
+  CellWidthPolicy _policy;
+
+  set policy(CellWidthPolicy value) {
+    if (_policy == value) return;
+    _policy = value;
+    markNeedsLayout();
+  }
+
   int _scrollLeft = 0;
 
   set focusNode(FocusNode value) {
@@ -1766,7 +1776,7 @@ class RenderTextInput extends RenderObject {
 
   int get _intrinsicWidth {
     if (_text.isEmpty && _placeholder.isNotEmpty) {
-      return _widthResolver.widthOfText(_placeholder, _profile);
+      return _widthResolver.widthOfText(_placeholder, _policy);
     }
     var width = 0;
     for (final grapheme in _text.characters) {
@@ -1779,7 +1789,7 @@ class RenderTextInput extends RenderObject {
       _obscureText ? _obscuringCharacter : grapheme;
 
   int _displayWidthOf(String grapheme) {
-    return _widthResolver.widthOfGrapheme(_displayGrapheme(grapheme), _profile);
+    return _widthResolver.widthOfGrapheme(_displayGrapheme(grapheme), _policy);
   }
 
   int _displayCellForTextOffset(int textOffset) {
@@ -1857,7 +1867,7 @@ class RenderTextInput extends RenderObject {
       var first = true;
       for (final grapheme in _placeholder.characters) {
         if (col >= maxCol) break;
-        final width = _widthResolver.widthOfGrapheme(grapheme, _profile);
+        final width = _widthResolver.widthOfGrapheme(grapheme, _policy);
         if (col + width > maxCol) break;
         final style = (first && _cursorVisible)
             ? _placeholderStyle.merge(_cursorStyle)
@@ -1867,9 +1877,9 @@ class RenderTextInput extends RenderObject {
           grapheme,
           style: style,
           widthResolver: _widthResolver,
-          profile: _profile,
+          policy: _policy,
         );
-        col += _widthResolver.widthOfGrapheme(grapheme, _profile);
+        col += _widthResolver.widthOfGrapheme(grapheme, _policy);
         first = false;
       }
       return;
@@ -1889,7 +1899,7 @@ class RenderTextInput extends RenderObject {
       final graphemeStart = codeUnitOffset;
       final graphemeEnd = codeUnitOffset + grapheme.length;
       final displayed = _displayGrapheme(grapheme);
-      final displayWidth = _widthResolver.widthOfGrapheme(displayed, _profile);
+      final displayWidth = _widthResolver.widthOfGrapheme(displayed, _policy);
       final displayStart = displayCell;
       final displayEnd = displayStart + displayWidth;
       codeUnitOffset = graphemeEnd;
@@ -1919,7 +1929,7 @@ class RenderTextInput extends RenderObject {
         displayed,
         style: cellStyle,
         widthResolver: _widthResolver,
-        profile: _profile,
+        policy: _policy,
       );
       if (atCursor) paintedCursor = true;
     }

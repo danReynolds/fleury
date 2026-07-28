@@ -569,6 +569,13 @@ bool _looksLikeWidgetExport(String symbol) {
     // mid-sequence, which a static story snapshot can't reproduce. Covered by
     // its own widget test instead.
     'WhichKey',
+    // The bounds primitive: BoundsObserver is invisible by design (it only
+    // publishes its child's painted bounds), and BoundsAnchor needs a live
+    // observer feeding it before it renders anywhere meaningful. Both are
+    // deep-dive APIs — app code reaches for Anchored, which has a story.
+    // Covered by bounds_observer_test.dart.
+    'BoundsObserver',
+    'BoundsAnchor',
     'WorkflowSnapshot',
     'WorkflowSummary',
   };

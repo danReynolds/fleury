@@ -586,6 +586,11 @@ class _SearchPanelState extends State<SearchPanel> {
           autofocus: widget.autofocus,
           onSubmit: (_) => _activateSelected(),
         ),
+        // Breathing room under the field. Without it the input's frame butts
+        // straight into the match count and the results run on from there, so
+        // the panel reads as one undifferentiated block — the field stops
+        // looking like a field.
+        const SizedBox(height: 1),
         // Match count — the primary "is the filter working?" feedback (fzf,
         // VS Code, k9s all show it).
         Text(
@@ -618,14 +623,35 @@ class _SearchPanelState extends State<SearchPanel> {
 
     return KeyBindings(
       bindings: [
-        KeyBinding(
+        // Arrow up/down drive the results selection when the *query* is focused
+        // (fzf-style: filter and navigate without leaving the field). When the
+        // *results list* is focused, an arrow that reaches this ancestor came
+        // from the list's top/bottom edge — the ListView consumes interior
+        // moves and only bubbles (`EdgeBehavior.bubble`) at a boundary — so
+        // bubble it on, letting directional focus traversal carry focus back
+        // out (up to the query, or past the panel) instead of clamping and
+        // swallowing the key. Regressed to a plain clamp in the RFC 0018
+        // binding-constructor pass; restored here via the event form.
+        KeyBinding.event(
           KeyCode.arrowUp,
-          onTrigger: () => _move(-1),
+          onEvent: (event) {
+            if (_resultsFocusNode.hasFocus) {
+              event.bubble();
+            } else {
+              _move(-1);
+            }
+          },
           hideFromHintBar: true,
         ),
-        KeyBinding(
+        KeyBinding.event(
           KeyCode.arrowDown,
-          onTrigger: () => _move(1),
+          onEvent: (event) {
+            if (_resultsFocusNode.hasFocus) {
+              event.bubble();
+            } else {
+              _move(1);
+            }
+          },
           hideFromHintBar: true,
         ),
       ],

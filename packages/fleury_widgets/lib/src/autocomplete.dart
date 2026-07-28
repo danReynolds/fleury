@@ -96,7 +96,7 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
   bool _ownsController = false;
   bool _ownsFocusNode = false;
 
-  final AnchorLink _link = AnchorLink();
+  final BoundsNotifier _bounds = BoundsNotifier();
   final ListController _list = ListController(selectedIndex: 0);
   FocusManager? _manager;
   OverlayEntry? _entry;
@@ -226,7 +226,7 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
     }
     if (_entry == null) {
       final entry = OverlayEntry(
-        builder: (_) => Follower(link: _link, child: _suggestions()),
+        builder: (_) => BoundsAnchor(notifier: _bounds, child: _suggestions()),
       );
       _entry = entry;
       Overlay.of(context).insert(entry);
@@ -446,8 +446,8 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
           hideFromHintBar: true,
         ),
       ],
-      child: Anchor(
-        link: _link,
+      child: BoundsObserver(
+        notifier: _bounds,
         child: TextInput(
           controller: _controller,
           focusNode: _focusNode,

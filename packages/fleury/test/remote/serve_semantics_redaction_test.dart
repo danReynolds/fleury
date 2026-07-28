@@ -75,7 +75,8 @@ void main() {
     expect(
       encoder.lastFlattenedNodeCount,
       2,
-      reason: 'a 2-node change must redact exactly the 2 changed nodes — a '
+      reason:
+          'a 2-node change must redact exactly the 2 changed nodes — a '
           'revert to full-tree redaction every frame (O(tree)) trips this',
     );
     // Guard the asymptote too, independent of the exact count: nowhere near the
@@ -151,7 +152,8 @@ void main() {
       expect(
         () => encoder.encodeTree(t, update: owner.update(t)),
         returnsNormally,
-        reason: 'the O(changed) patch diverged from the full flatten on a '
+        reason:
+            'the O(changed) patch diverged from the full flatten on a '
             'duplicate id (the oracle fired)',
       );
     }

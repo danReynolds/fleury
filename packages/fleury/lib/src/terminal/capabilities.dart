@@ -1,6 +1,8 @@
 import 'package:meta/meta.dart';
 
 import '../rendering/surface_capabilities.dart';
+import '../rendering/width_policy.dart';
+import 'terminal_probe.dart';
 
 export '../rendering/surface_capabilities.dart' show ColorMode, GlyphTier;
 
@@ -54,6 +56,8 @@ final class TerminalCapabilities {
     this.tmuxPassthrough = false,
     this.ambiguousCharWidth = AmbiguousCharWidth.wide,
     this.hyperlinks = false,
+    this.measuredWidths = const WidthMeasurements.empty(),
+    this.textPolicy = const ResolvedTextPresentationPolicy(),
   });
 
   /// Conservative default for unknown terminals: 16-color ANSI, alt
@@ -83,6 +87,21 @@ final class TerminalCapabilities {
   /// [AmbiguousCharWidth.wide] until a startup probe confirms otherwise.
   final AmbiguousCharWidth ambiguousCharWidth;
 
+  /// What the startup probe measured this terminal ACTUALLY drawing, per
+  /// width-disagreement class — not what a table or a capability bit claims.
+  ///
+  /// Reported for diagnostics today rather than consumed by layout: the
+  /// numbers have to be trustworthy before they are allowed to move glyphs.
+  /// All-null when the terminal doesn't answer CPR, or the probe was skipped.
+  final WidthMeasurements measuredWidths;
+
+  /// The derived width/lowering policy for this terminal, with per-axis
+  /// provenance (RFC 0019 §6.2). Defaults to the spec policy, unevidenced;
+  /// the POSIX driver replaces it after the startup probe, and
+  /// [detectTerminalCapabilitiesFromEnvironment] folds `FLEURY_*` overrides
+  /// in for every driver.
+  final ResolvedTextPresentationPolicy textPolicy;
+
   /// Whether OSC 8 hyperlinks are supported and safe to emit here. Detected
   /// from the environment and SUPPRESSED under tmux (see
   /// [detectHyperlinksFromEnvironment]); default false for unknown terminals.
@@ -98,6 +117,8 @@ final class TerminalCapabilities {
     bool? supportsHidingCursor,
     bool? tmuxPassthrough,
     AmbiguousCharWidth? ambiguousCharWidth,
+    WidthMeasurements? measuredWidths,
+    ResolvedTextPresentationPolicy? textPolicy,
     bool? hyperlinks,
   }) => TerminalCapabilities(
     colorMode: colorMode ?? this.colorMode,
@@ -108,6 +129,8 @@ final class TerminalCapabilities {
     supportsHidingCursor: supportsHidingCursor ?? this.supportsHidingCursor,
     tmuxPassthrough: tmuxPassthrough ?? this.tmuxPassthrough,
     ambiguousCharWidth: ambiguousCharWidth ?? this.ambiguousCharWidth,
+    measuredWidths: measuredWidths ?? this.measuredWidths,
+    textPolicy: textPolicy ?? this.textPolicy,
     hyperlinks: hyperlinks ?? this.hyperlinks,
   );
 
@@ -120,6 +143,7 @@ final class TerminalCapabilities {
         'hideCursor=$supportsHidingCursor, '
         'tmuxPassthrough=$tmuxPassthrough, '
         'ambiguousCharWidth=${ambiguousCharWidth.name}, '
+        'measuredWidths=$measuredWidths, '
         'hyperlinks=$hyperlinks)';
   }
 }
@@ -145,6 +169,7 @@ TerminalCapabilities detectTerminalCapabilitiesFromEnvironment(
     ambiguousCharWidth:
         detectAmbiguousCharWidthFromEnvironment(environment) ??
         AmbiguousCharWidth.wide,
+    textPolicy: deriveTextPresentationPolicy(environment: environment),
     hyperlinks: detectHyperlinksFromEnvironment(environment),
   );
 }
@@ -325,6 +350,193 @@ AmbiguousCharWidth? detectAmbiguousCharWidthFromEnvironment(
   };
 }
 
+/// `FLEURY_EMOJI_WIDTH=narrow|wide` — explicit override for the bare
+/// emoji-presentation width axis. Null when unset or unrecognized.
+CellWidth? detectEmojiWidthFromEnvironment(Map<String, String> environment) =>
+    _cellWidthFromEnv(environment['FLEURY_EMOJI_WIDTH']);
+
+/// `FLEURY_VS16_WIDTH=narrow|wide` — explicit override for the simple emoji
+/// variation-sequence axis. Independent of [detectEmojiWidthFromEnvironment]:
+/// "bare emoji wide, sequence narrow" is the common combination in the field
+/// and must be expressible (RFC 0019 §6.6). The env name keeps the operator
+/// term of art; the policy axis is named for the sequence.
+CellWidth? detectVs16WidthFromEnvironment(Map<String, String> environment) =>
+    _cellWidthFromEnv(environment['FLEURY_VS16_WIDTH']);
+
+/// `FLEURY_CLUSTER_MODE=joined|split` — explicit override for emoji ZWJ
+/// lowering. `split` may force lowering past incomplete probe confidence.
+ClusterLowering? detectClusterModeFromEnvironment(
+  Map<String, String> environment,
+) {
+  final value = environment['FLEURY_CLUSTER_MODE']?.toLowerCase().trim();
+  return switch (value) {
+    'joined' => ClusterLowering.preserve,
+    'split' => ClusterLowering.split,
+    _ => null,
+  };
+}
+
+CellWidth? _cellWidthFromEnv(String? raw) =>
+    switch (raw?.toLowerCase().trim()) {
+      'narrow' => CellWidth.one,
+      'wide' => CellWidth.two,
+      _ => null,
+    };
+
+/// The emoji ZWJ sequences in the probe battery, with their bare-probed
+/// component ids and joiner counts — the inputs to the summing inequality.
+const List<({String sequenceId, List<String> componentIds, int zwjCount})>
+_zwjProbeSequences = [
+  (sequenceId: 'familyZwj', componentIds: ['man', 'woman', 'boy'], zwjCount: 2),
+  (
+    sequenceId: 'healthWorkerZwj',
+    componentIds: ['woman', 'medicalVs16'],
+    zwjCount: 1,
+  ),
+];
+
+/// Folds probe [measurements] and environment overrides into the one derived
+/// [ResolvedTextPresentationPolicy] every geometry consumer shares
+/// (RFC 0019 §6.2).
+///
+/// Per axis: an explicit `FLEURY_*` override wins outright; else agreeing
+/// probe measurements decide; else the spec default stands and the axis is
+/// recorded as [WidthDecisionSource.spec] — the `unknown` state, which
+/// conservative consumers treat as "keep the safety net engaged".
+///
+/// Lowering follows RFC 0019 §6.4's two-step authorization: the observation
+/// must be *summed* for every probed sequence (the measured inequality
+/// `componentSum ≤ advance ≤ componentSum + zwjCount`), AND the width policy
+/// must predict every measured component — otherwise splitting would trade
+/// the joiner error for a component near-miss, so the action stays
+/// [ClusterLowering.preserve] and the pin covers the sequence. A confidently
+/// *joined* observation also records probe provenance: "this terminal
+/// clusters" is evidence, not a default.
+ResolvedTextPresentationPolicy deriveTextPresentationPolicy({
+  WidthMeasurements measurements = const WidthMeasurements.empty(),
+  Map<String, String> environment = const <String, String>{},
+}) {
+  final decisions = <WidthAxis, WidthDecisionSource>{};
+
+  CellWidth? agreement(WidthProbeClass probeClass) {
+    final widths = measurements.widthsIn(probeClass);
+    if (widths.isEmpty || widths.any((w) => w == null)) return null;
+    if (widths.every((w) => w == 1)) return CellWidth.one;
+    if (widths.every((w) => w! >= 2)) return CellWidth.two;
+    return null; // Disagreement — unknown, never a guess.
+  }
+
+  CellWidth resolveAxis(
+    WidthAxis axis,
+    CellWidth? override,
+    WidthProbeClass probeClass,
+    CellWidth specDefault,
+  ) {
+    if (override != null) {
+      decisions[axis] = WidthDecisionSource.environment;
+      return override;
+    }
+    final measured = agreement(probeClass);
+    if (measured != null) {
+      decisions[axis] = WidthDecisionSource.probe;
+      return measured;
+    }
+    return specDefault;
+  }
+
+  final ambiguousOverride = switch (detectAmbiguousCharWidthFromEnvironment(
+    environment,
+  )) {
+    AmbiguousCharWidth.narrow => CellWidth.one,
+    AmbiguousCharWidth.wide => CellWidth.two,
+    null => null,
+  };
+  final widths = CellWidthPolicy(
+    ambiguous: resolveAxis(
+      WidthAxis.ambiguous,
+      ambiguousOverride,
+      WidthProbeClass.ambiguous,
+      CellWidth.one,
+    ),
+    emojiPresentation: resolveAxis(
+      WidthAxis.emojiPresentation,
+      detectEmojiWidthFromEnvironment(environment),
+      WidthProbeClass.emojiPresentation,
+      CellWidth.two,
+    ),
+    emojiVariationSequence: resolveAxis(
+      WidthAxis.emojiVariationSequence,
+      detectVs16WidthFromEnvironment(environment),
+      WidthProbeClass.emojiVariationSequence,
+      CellWidth.two,
+    ),
+  );
+
+  var lowering = ClusterLowering.preserve;
+  final loweringOverride = detectClusterModeFromEnvironment(environment);
+  if (loweringOverride != null) {
+    lowering = loweringOverride;
+    decisions[WidthAxis.lowering] = WidthDecisionSource.environment;
+  } else {
+    final derived = _deriveLowering(measurements, widths);
+    if (derived != null) {
+      lowering = derived;
+      decisions[WidthAxis.lowering] = WidthDecisionSource.probe;
+    }
+  }
+
+  return ResolvedTextPresentationPolicy(
+    policy: TextPresentationPolicy(widths: widths, lowering: lowering),
+    decisions: Map.unmodifiable(decisions),
+  );
+}
+
+/// The measured lowering observation → action, or null when unknown.
+ClusterLowering? _deriveLowering(
+  WidthMeasurements measurements,
+  CellWidthPolicy widths,
+) {
+  if (measurements.isEmpty) return null;
+
+  int predictedCells(String componentId) {
+    final glyph = widthProbeBattery.firstWhere((g) => g.id == componentId);
+    final axis = glyph.probeClass == WidthProbeClass.emojiVariationSequence
+        ? widths.emojiVariationSequence
+        : widths.emojiPresentation;
+    return axis == CellWidth.two ? 2 : 1;
+  }
+
+  var allJoined = true;
+  var allSummed = true;
+  var componentsPredicted = true;
+  for (final sequence in _zwjProbeSequences) {
+    final advance = measurements.widthOf(sequence.sequenceId);
+    if (advance == null) return null;
+    final components = [
+      for (final id in sequence.componentIds) measurements.widthOf(id),
+    ];
+    if (components.any((c) => c == null)) return null;
+    final componentSum = components.fold<int>(0, (a, b) => a + b!);
+
+    if (advance > 2) allJoined = false;
+    final summed =
+        componentSum <= advance && advance <= componentSum + sequence.zwjCount;
+    if (!summed) allSummed = false;
+
+    for (var i = 0; i < components.length; i++) {
+      if (components[i] != predictedCells(sequence.componentIds[i])) {
+        componentsPredicted = false;
+      }
+    }
+  }
+
+  if (allJoined) return ClusterLowering.preserve;
+  if (allSummed && componentsPredicted) return ClusterLowering.split;
+  // Summed but unpredicted components, or mixed joining across sequences:
+  // unknown. Preserve without probe provenance — the pin keeps covering it.
+  return null;
+}
+
 /// Detects whether Unicode drawing glyphs are safe to use, or output should
 /// stay 7-bit ASCII.
 ///
@@ -355,10 +567,24 @@ GlyphTier detectGlyphTierFromEnvironment(Map<String, String> environment) {
 }
 
 /// Detects maximum color fidelity from conventional terminal environment.
+///
+/// Order: `NO_COLOR` wins outright; then an explicit `FLEURY_COLOR_DEPTH`
+/// override (`none`/`16`/`256`/`truecolor`) — the escape hatch for a
+/// lying/misconfigured terminal and for deterministic recordings; then
+/// `COLORTERM`/`TERM`; then `CLICOLOR_FORCE`/`CLICOLOR` when there is no `TERM`.
 ColorMode detectColorModeFromEnvironment(Map<String, String> environment) {
   // NO_COLOR wins outright (https://no-color.org): any non-empty value
-  // disables color, even over CLICOLOR_FORCE.
+  // disables color, even over CLICOLOR_FORCE and FLEURY_COLOR_DEPTH — matching
+  // prompt_toolkit, which also lets NO_COLOR win over its depth override.
   if ((environment['NO_COLOR'] ?? '').isNotEmpty) return ColorMode.none;
+
+  // Explicit Fleury override. Same precedence idea as FLEURY_GLYPH_TIER: an
+  // explicit value beats auto-detection (a terminal that claims truecolor but
+  // renders it badly, a 256 terminal pinned to 16, or a forced depth in a
+  // recording/CI run). `FleuryTester` already pins depth for goldens; this is
+  // the user-facing counterpart.
+  final override = _parseColorDepthOverride(environment['FLEURY_COLOR_DEPTH']);
+  if (override != null) return override;
 
   final colorterm = environment['COLORTERM']?.toLowerCase() ?? '';
   final term = environment['TERM']?.toLowerCase() ?? '';
@@ -367,11 +593,32 @@ ColorMode detectColorModeFromEnvironment(Map<String, String> environment) {
   }
   if (term.contains('256')) return ColorMode.indexed256;
   if (term.isNotEmpty) return ColorMode.ansi16;
-  if ((environment['CLICOLOR_FORCE'] ?? '0') != '0') {
-    // No TERM, but the caller insists on color.
+  // No TERM, but the caller insists on color: CLICOLOR_FORCE, or a bare
+  // non-zero CLICOLOR (the colorprofile/CLICOLOR convention).
+  if ((environment['CLICOLOR_FORCE'] ?? '0') != '0' ||
+      (environment['CLICOLOR'] ?? '0') != '0') {
     return ColorMode.ansi16;
   }
   return ColorMode.none;
+}
+
+/// Parses a `FLEURY_COLOR_DEPTH` value into a [ColorMode], or null when unset
+/// or unrecognized. Case-insensitive; accepts friendly aliases.
+ColorMode? _parseColorDepthOverride(String? raw) {
+  switch (raw?.toLowerCase().trim()) {
+    case 'none' || 'mono' || 'monochrome' || '1':
+      return ColorMode.none;
+    case '16' || 'ansi' || 'ansi16' || '4':
+      return ColorMode.ansi16;
+    case '256' || 'indexed' || 'indexed256' || '8':
+      return ColorMode.indexed256;
+    case 'truecolor' || 'true' || '24bit' || '24-bit' || 'rgb' || '24':
+      return ColorMode.truecolor;
+    case null || '':
+      return null;
+    default:
+      return null;
+  }
 }
 
 /// Detects the best known image protocol from terminal environment.
@@ -422,6 +669,7 @@ extension TerminalSurfaceCapabilities on TerminalCapabilities {
           : InlineImageSupport.placements,
       hyperlinks: hyperlinks,
       pointer: PointerPrecision.cell,
+      textPolicy: textPolicy.policy,
     );
   }
 }

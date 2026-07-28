@@ -26,12 +26,12 @@ void main() {
       frames: [
         _webFrame(
           totalFrameMicros: 10000,
-          dirtyRowDiffMicros: 800,
+          spanBuildMicros: 800,
           domApplyMicros: 500,
         ),
         _webFrame(
           totalFrameMicros: 14000,
-          dirtyRowDiffMicros: 5000,
+          spanBuildMicros: 5000,
           domApplyMicros: 900,
         ),
       ],
@@ -48,11 +48,11 @@ void main() {
     final json =
         jsonDecode(jsonResult.stdout.toString()) as Map<String, Object?>;
     expect(json['kind'], 'fleuryWebFrameSummary');
-    expect(json['dominantP95Slice'], 'dirtyRowDiffMs');
+    expect(json['dominantP95Slice'], 'spanBuildMs');
     final timings = json['timings'] as Map<String, Object?>;
-    final dirtyRowDiff = timings['dirtyRowDiffMs'] as Map<String, Object?>;
-    expect(dirtyRowDiff['p95'], 5.0);
-    expect(dirtyRowDiff['max'], 5.0);
+    final spanBuild = timings['spanBuildMs'] as Map<String, Object?>;
+    expect(spanBuild['p95'], 5.0);
+    expect(spanBuild['max'], 5.0);
 
     final markdownPath = '${tempDir.path}/report.md';
     final markdownResult = await Process.run(Platform.resolvedExecutable, [
@@ -68,19 +68,26 @@ void main() {
       reason: markdownResult.stderr.toString(),
     );
     final markdown = File(markdownPath).readAsStringSync();
-    expect(markdown, contains('dirtyRowDiffMs'));
-    expect(markdown, contains('dirtyRowDiffMs | 5.80 ms | 0.80 ms | 5.00 ms'));
+    expect(markdown, contains('spanBuildMs | 5.80 ms | 0.80 ms | 5.00 ms'));
+    expect(
+      markdown,
+      isNot(contains('dirtyRowDiffMs')),
+      reason: 'the planner no longer has a row-diff phase to report',
+    );
   });
 
   test(
-    'web frame report accepts old captures without row diff timing',
+    'web frame report ignores the legacy row-diff key in old captures',
     () async {
       final capturePath = '${tempDir.path}/old-capture.json';
       _writeCapture(
         capturePath,
         frames: [
-          _webFrame(totalFrameMicros: 10000, domApplyMicros: 500),
-        ].map((frame) => frame..remove('dirtyRowDiffMicros')).toList(),
+          // Captures from before the planner stopped diffing rows carry the
+          // key with real values; the tool must parse them and drop it.
+          _webFrame(totalFrameMicros: 10000, domApplyMicros: 500)
+            ..['dirtyRowDiffMicros'] = 800,
+        ],
       );
 
       final result = await Process.run(Platform.resolvedExecutable, [
@@ -93,8 +100,11 @@ void main() {
       expect(result.exitCode, 0, reason: result.stderr.toString());
       final json = jsonDecode(result.stdout.toString()) as Map<String, Object?>;
       final timings = json['timings'] as Map<String, Object?>;
-      final dirtyRowDiff = timings['dirtyRowDiffMs'] as Map<String, Object?>;
-      expect(dirtyRowDiff['p95'], 0.0);
+      expect(
+        timings.containsKey('dirtyRowDiffMs'),
+        isFalse,
+        reason: 'a legacy key is ignored, not resurrected',
+      );
       final runtimeBuild = timings['runtimeBuildMs'] as Map<String, Object?>;
       expect(runtimeBuild['sampleCount'], 0);
 
@@ -237,7 +247,7 @@ void _writeCapture(String path, {required List<Map<String, Object?>> frames}) {
 Map<String, Object?> _webFrame({
   required int totalFrameMicros,
   required int domApplyMicros,
-  int dirtyRowDiffMicros = 0,
+  int spanBuildMicros = 700,
   int semanticApplyMicros = 600,
 }) {
   return <String, Object?>{
@@ -264,8 +274,7 @@ Map<String, Object?> _webFrame({
     'semanticFallbackNodeCount': 0,
     'semanticUncoveredCellCount': 0,
     'runtimeRenderMicros': 1000,
-    'dirtyRowDiffMicros': dirtyRowDiffMicros,
-    'spanBuildMicros': 700,
+    'spanBuildMicros': spanBuildMicros,
     'domApplyMicros': domApplyMicros,
     'semanticApplyMicros': semanticApplyMicros,
     'totalFrameMicros': totalFrameMicros,

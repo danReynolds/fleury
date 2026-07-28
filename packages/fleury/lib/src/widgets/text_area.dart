@@ -31,6 +31,7 @@ import '../semantics/semantics.dart';
 import '../input/events.dart';
 import 'focus.dart';
 import 'framework.dart';
+import 'media_query.dart';
 import 'text_input.dart'
     show TextClipboardPolicy, TextEditingController, textClipboardSemanticState;
 import 'tui_binding.dart';
@@ -813,6 +814,7 @@ class _TextAreaDisplay extends LeafRenderObjectWidget {
   @override
   RenderObject createRenderObject(BuildContext context) => RenderTextArea(
     focusNode: focusNode,
+    policy: MediaQuery.textPolicyOf(context).widths,
     text: text,
     selection: selection,
     placeholder: placeholder,
@@ -831,6 +833,7 @@ class _TextAreaDisplay extends LeafRenderObjectWidget {
   ) {
     renderObject
       ..focusNode = focusNode
+      ..policy = MediaQuery.textPolicyOf(context).widths
       ..text = text
       ..selection = selection
       ..placeholder = placeholder
@@ -901,7 +904,7 @@ class RenderTextArea extends RenderObject {
     int minLines = 1,
     int? maxLines,
     WidthResolver widthResolver = const DefaultWidthResolver(),
-    TerminalProfile profile = TerminalProfile.standard,
+    CellWidthPolicy policy = CellWidthPolicy.spec,
   }) : _focusNode = focusNode,
        _text = _sanitize(text),
        _selection = selection.normalizeForText(_sanitize(text)),
@@ -913,7 +916,7 @@ class RenderTextArea extends RenderObject {
        _minLines = minLines,
        _maxLines = maxLines,
        _widthResolver = widthResolver,
-       _profile = profile;
+       _policy = policy;
 
   static String _sanitize(String value) =>
       value.split('\n').map(sanitizeForDisplay).join('\n');
@@ -929,7 +932,14 @@ class RenderTextArea extends RenderObject {
   int _minLines;
   int? _maxLines;
   final WidthResolver _widthResolver;
-  final TerminalProfile _profile;
+  CellWidthPolicy _policy;
+
+  set policy(CellWidthPolicy value) {
+    if (_policy == value) return;
+    _policy = value;
+    markNeedsLayout();
+  }
+
   int _scrollTop = 0;
   int _scrollLeft = 0;
 
@@ -1043,7 +1053,7 @@ class RenderTextArea extends RenderObject {
     final lines = _showPlaceholder ? _linesOf(_placeholder) : _lines;
     var widest = 0;
     for (final line in lines) {
-      final w = _widthResolver.widthOfText(line, _profile);
+      final w = _widthResolver.widthOfText(line, _policy);
       if (w > widest) widest = w;
     }
     final cols = constraints.hasBoundedWidth ? constraints.maxCols! : widest;
@@ -1082,7 +1092,7 @@ class RenderTextArea extends RenderObject {
   }
 
   int _lineDisplayWidth(String line) =>
-      _widthResolver.widthOfText(line, _profile);
+      _widthResolver.widthOfText(line, _policy);
 
   int _displayCellForLineOffset(String line, int textOffset) {
     var cell = 0;
@@ -1090,7 +1100,7 @@ class RenderTextArea extends RenderObject {
     for (final grapheme in line.characters) {
       if (textOffset <= codeUnitOffset) return cell;
       codeUnitOffset += grapheme.length;
-      cell += _widthResolver.widthOfGrapheme(grapheme, _profile);
+      cell += _widthResolver.widthOfGrapheme(grapheme, _policy);
       if (textOffset <= codeUnitOffset) return cell;
     }
     return cell;
@@ -1100,7 +1110,7 @@ class RenderTextArea extends RenderObject {
     if (cellOffset <= 0) return 0;
     var cell = 0;
     for (final grapheme in line.characters) {
-      final next = cell + _widthResolver.widthOfGrapheme(grapheme, _profile);
+      final next = cell + _widthResolver.widthOfGrapheme(grapheme, _policy);
       if (cellOffset <= cell) return cell;
       if (cellOffset < next) return next;
       cell = next;
@@ -1168,7 +1178,7 @@ class RenderTextArea extends RenderObject {
         var first = r == 0;
         for (final g in phLines[r].characters) {
           if (col >= maxCol) break;
-          final width = _widthResolver.widthOfGrapheme(g, _profile);
+          final width = _widthResolver.widthOfGrapheme(g, _policy);
           if (col + width > maxCol) break;
           final st = (first && _cursorVisible)
               ? _placeholderStyle.merge(_cursorStyle)
@@ -1178,9 +1188,9 @@ class RenderTextArea extends RenderObject {
             g,
             style: st,
             widthResolver: _widthResolver,
-            profile: _profile,
+            policy: _policy,
           );
-          col += _widthResolver.widthOfGrapheme(g, _profile);
+          col += _widthResolver.widthOfGrapheme(g, _policy);
           first = false;
         }
       }
@@ -1210,7 +1220,7 @@ class RenderTextArea extends RenderObject {
       for (final g in line.characters) {
         final globalStart = lineStartOffset + cu;
         final globalEnd = globalStart + g.length;
-        final width = _widthResolver.widthOfGrapheme(g, _profile);
+        final width = _widthResolver.widthOfGrapheme(g, _policy);
         final displayStart = displayCell;
         final displayEnd = displayStart + width;
         cu += g.length;
@@ -1235,7 +1245,7 @@ class RenderTextArea extends RenderObject {
           g,
           style: st,
           widthResolver: _widthResolver,
-          profile: _profile,
+          policy: _policy,
         );
         if (atCursor) paintedCursor = true;
       }

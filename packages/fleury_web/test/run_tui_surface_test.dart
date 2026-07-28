@@ -893,7 +893,6 @@ void main() {
       expect(frame.runtimeBuildTime, greaterThanOrEqualTo(Duration.zero));
       expect(frame.runtimeLayoutTime, greaterThanOrEqualTo(Duration.zero));
       expect(frame.runtimePaintTime, greaterThanOrEqualTo(Duration.zero));
-      expect(frame.dirtyRowDiffTime, Duration.zero);
       expect(frame.spanBuildTime, greaterThanOrEqualTo(Duration.zero));
       expect(frame.domApplyTime, greaterThanOrEqualTo(Duration.zero));
       expect(frame.semanticApplyTime, greaterThanOrEqualTo(Duration.zero));

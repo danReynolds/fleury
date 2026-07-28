@@ -7,6 +7,7 @@ import 'package:fleury_widgets/fleury_widgets.dart';
 
 import 'sample_image.dart';
 import 'story.dart';
+import 'theme_gallery.dart';
 
 final List<Story> storybookStories = _perWidgetStories(<Story>[
   Story(
@@ -59,6 +60,23 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
       label: context.text('label'),
       selectedWidgetName: context.selectedWidgetName,
     ),
+  ),
+  Story(
+    id: 'theme.gallery',
+    title: 'Themes',
+    category: 'Core',
+    description:
+        'A styleguide for each built-in palette — Nord, Dracula, Gruvbox, '
+        'Solarized (dark + light), Catppuccin Mocha, Tokyo Night, One Dark. '
+        'The top half shows the theme on real UI; below it every ColorScheme '
+        'role and ThemeData style field is demonstrated and named, so a theme '
+        'author can see the whole surface they control. Use the Theme '
+        'dropdown to switch palettes — it re-themes as you arrow through it.',
+    widgets: const <String>['Themes'],
+    // Tall enough for the stacked (narrow-pane) layout: both panes plus the
+    // three labelled reference sections.
+    initialHeight: 56,
+    builder: (context) => const ThemeGallery(),
   ),
   Story(
     id: 'core.selection-scroll',
@@ -272,6 +290,7 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
       'Dialog',
       'Toaster',
       'Tooltip',
+      'Anchored',
       'KeyHintBar',
     ],
     initialHeight: 13,
@@ -810,7 +829,8 @@ const Map<String, String> _widgetDescriptions = <String, String>{
   'Row':
       'Horizontal layout composition with expansion and alignment under terminal constraints.',
   'Container':
-      'Framed, padded, colored layout chrome for focused terminal regions.',
+      'Padded, aligned, sized layout chrome — plus .filled and .framed, the '
+      'opaque variants a layer needs when it covers live content.',
   'Padding': 'Cell-accurate spacing around content without manual spacer rows.',
   'SizedBox':
       'Fixed and flexible sizing primitives for stable terminal layouts.',
@@ -861,6 +881,9 @@ const Map<String, String> _widgetDescriptions = <String, String>{
       'Modal-style framed content for confirmations and focused decisions.',
   'Toaster': 'Transient notification host for contextual app feedback.',
   'Tooltip': 'Anchored help text for compact controls.',
+  'Anchored':
+      'Floating content pinned to a trigger, placed by Alignment — press '
+      'Space to toggle, Tab to cycle all nine alignments.',
   'KeyHintBar':
       'One-line bar that auto-discovers the active key bindings on the focus '
       'chain and renders their hints.',
@@ -1046,6 +1069,7 @@ const Map<String, String> _widgetUsage = <String, String>{
   'SubMenu': 'Enter opens · → into submenu · Esc closes',
   'Dialog': 'Enter opens · Tab between actions · Esc or a button dismisses',
   'Tooltip': 'Focus the target to reveal',
+  'Anchored': 'Space toggles the float · Tab cycles alignment',
   'Toaster': 'Activate a trigger to emit a toast',
   'Tabs': '←/→ to switch tabs · Alt+1..9',
   'TabItem': '←/→ to switch tabs · Alt+1..9',
@@ -1236,16 +1260,52 @@ class _ContainerSpotlight extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 40,
-      height: 7,
-      border: showBorder
-          ? BoxBorder(style: Theme.of(context).borderStyle)
-          : null,
-      padding: const EdgeInsets.all(1),
-      alignment: Alignment.center,
-      color: const AnsiColor(8),
-      child: const Text('Container frames, colors, aligns, and sizes.'),
+    // Three constructors over the same wall of content, so the difference
+    // between them is the difference you can see: the plain Container is
+    // transparent (the wall shows through its padding), .filled paints the
+    // theme surface, .framed adds the theme border on top of that fill.
+    return Stack(
+      children: <Widget>[
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            for (var i = 0; i < 9; i++)
+              const Text('content behind — content behind — content behind'),
+          ],
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Container(
+              width: 34,
+              height: 3,
+              border: showBorder
+                  ? BoxBorder(style: Theme.of(context).borderStyle)
+                  : null,
+              padding: const EdgeInsets.symmetric(horizontal: 1),
+              alignment: Alignment.center,
+              child: const Text('Container — transparent'),
+            ),
+            Container.filled(
+              width: 34,
+              height: 3,
+              border: showBorder
+                  ? BoxBorder(style: Theme.of(context).borderStyle)
+                  : null,
+              padding: const EdgeInsets.symmetric(horizontal: 1),
+              alignment: Alignment.center,
+              child: const Text('Container.filled — opaque'),
+            ),
+            Container.framed(
+              width: 34,
+              height: 3,
+              padding: const EdgeInsets.symmetric(horizontal: 1),
+              alignment: Alignment.center,
+              child: const Text('Container.framed — + border'),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -1922,6 +1982,7 @@ class _OverlayStory extends StatelessWidget {
             ),
           ],
         ),
+        'Anchored' => const _AnchoredSpotlight(),
         'Tooltip' => Tooltip(
           message: 'Focus the button to show this anchored tooltip.',
           child: Button(label: 'Tooltip target', onPressed: () {}),
@@ -3415,3 +3476,88 @@ final _sampleSnapshot = WorkflowSnapshot(
   traceEvents: _sampleTrace,
   logEntries: _sampleLogs,
 );
+
+/// `Anchored` with a live alignment selector: Space toggles the float, Tab
+/// cycles all nine `Alignment` values so the placement rule is visible rather
+/// than described. The trigger sits mid-screen so every direction has room.
+class _AnchoredSpotlight extends StatefulWidget {
+  const _AnchoredSpotlight();
+
+  @override
+  State<_AnchoredSpotlight> createState() => _AnchoredSpotlightState();
+}
+
+class _AnchoredSpotlightState extends State<_AnchoredSpotlight> {
+  static const _alignments = <Alignment>[
+    Alignment.bottomLeft,
+    Alignment.bottomCenter,
+    Alignment.bottomRight,
+    Alignment.centerRight,
+    Alignment.topRight,
+    Alignment.topCenter,
+    Alignment.topLeft,
+    Alignment.centerLeft,
+    Alignment.center,
+  ];
+
+  bool _open = true;
+  int _index = 0;
+
+  Alignment get _alignment => _alignments[_index];
+
+  String get _label => switch (_alignment) {
+    Alignment.topLeft => 'topLeft',
+    Alignment.topCenter => 'topCenter',
+    Alignment.topRight => 'topRight',
+    Alignment.centerLeft => 'centerLeft',
+    Alignment.center => 'center',
+    Alignment.centerRight => 'centerRight',
+    Alignment.bottomLeft => 'bottomLeft',
+    Alignment.bottomCenter => 'bottomCenter',
+    Alignment.bottomRight => 'bottomRight',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return KeyBindings(
+      bindings: <KeyBinding>[
+        KeyBinding(
+          KeySequence.space,
+          label: _open ? 'Hide float' : 'Show float',
+          onTrigger: () => setState(() => _open = !_open),
+        ),
+        KeyBinding(
+          KeySequence.tab,
+          label: 'Next alignment',
+          onTrigger: () =>
+              setState(() => _index = (_index + 1) % _alignments.length),
+        ),
+      ],
+      child: Focus(
+        autofocus: true,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Text('alignment: $_label', style: const CellStyle(bold: true)),
+            const SizedBox(height: 1),
+            Expanded(
+              child: Align(
+                alignment: Alignment.center,
+                child: Anchored(
+                  visible: _open,
+                  alignment: _alignment,
+                  overlay: Container.framed(
+                    border: BoxBorder(style: Theme.of(context).borderStyle),
+                    padding: const EdgeInsets.symmetric(horizontal: 1),
+                    child: Text('float · $_label'),
+                  ),
+                  child: const Text('[ trigger ]'),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

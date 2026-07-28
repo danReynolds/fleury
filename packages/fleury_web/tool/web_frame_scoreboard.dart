@@ -416,7 +416,6 @@ String _markdown(Map<String, Object?> scoreboard, {required String inputDir}) {
     'Build p95',
     'Layout p95',
     'Paint p95',
-    'Row diff p95',
     'Span p95',
     'DOM p95',
     'Semantic p95',
@@ -476,7 +475,6 @@ String _markdown(Map<String, Object?> scoreboard, {required String inputDir}) {
       '${_metricCell(scenario, 'runtimeBuildP95Ms', _fmtMs)} | '
       '${_metricCell(scenario, 'runtimeLayoutP95Ms', _fmtMs)} | '
       '${_metricCell(scenario, 'runtimePaintP95Ms', _fmtMs)} | '
-      '${_metricCell(scenario, 'dirtyRowDiffP95Ms', _fmtMs)} | '
       '${_metricCell(scenario, 'spanBuildP95Ms', _fmtMs)} | '
       '${_metricCell(scenario, 'domApplyP95Ms', _fmtMs)} | '
       '${_metricCell(scenario, 'semanticApplyP95Ms', _fmtMs)} | '
@@ -674,7 +672,6 @@ final class _WebFrameRun {
   double? get runtimeBuildP95Ms => _optionalTimingP95('runtimeBuildMs');
   double? get runtimeLayoutP95Ms => _optionalTimingP95('runtimeLayoutMs');
   double? get runtimePaintP95Ms => _optionalTimingP95('runtimePaintMs');
-  double get dirtyRowDiffP95Ms => _timingP95('dirtyRowDiffMs');
   double get spanBuildP95Ms => _timingP95('spanBuildMs');
   double get domApplyP95Ms => _timingP95('domApplyMs');
   double get semanticApplyP95Ms => _timingP95('semanticApplyMs');
@@ -791,7 +788,6 @@ final class _ScenarioAggregate {
       'runtimeBuildP95Ms': _metric(runs.map((run) => run.runtimeBuildP95Ms)),
       'runtimeLayoutP95Ms': _metric(runs.map((run) => run.runtimeLayoutP95Ms)),
       'runtimePaintP95Ms': _metric(runs.map((run) => run.runtimePaintP95Ms)),
-      'dirtyRowDiffP95Ms': _metric(runs.map((run) => run.dirtyRowDiffP95Ms)),
       'spanBuildP95Ms': _metric(runs.map((run) => run.spanBuildP95Ms)),
       'domApplyP95Ms': _metric(runs.map((run) => run.domApplyP95Ms)),
       'semanticApplyP95Ms': _metric(runs.map((run) => run.semanticApplyP95Ms)),
@@ -852,7 +848,6 @@ final class _ScenarioAggregate {
             'runtimeBuildP95Ms': run.runtimeBuildP95Ms,
             'runtimeLayoutP95Ms': run.runtimeLayoutP95Ms,
             'runtimePaintP95Ms': run.runtimePaintP95Ms,
-            'dirtyRowDiffP95Ms': run.dirtyRowDiffP95Ms,
             'spanBuildP95Ms': run.spanBuildP95Ms,
             'domApplyP95Ms': run.domApplyP95Ms,
             'semanticApplyP95Ms': run.semanticApplyP95Ms,
