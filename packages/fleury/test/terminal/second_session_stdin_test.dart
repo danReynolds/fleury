@@ -99,11 +99,10 @@ void main() {
       // dangling stdin subscription).
       final fixture =
           '${Directory.current.path}/test/fixtures/second_session_stdin_fixture.dart';
-      final process = await Process.start(
-        Platform.resolvedExecutable,
-        <String>['run', fixture],
-        workingDirectory: Directory.current.path,
-      );
+      final process = await Process.start(Platform.resolvedExecutable, <String>[
+        'run',
+        fixture,
+      ], workingDirectory: Directory.current.path);
       // Keep the child's stdin OPEN (never write/close, never EOF) so a leaked
       // stdin subscription would keep its event loop alive and hang — exiting
       // proves session one released it on restore.

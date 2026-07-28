@@ -118,7 +118,7 @@ class _MenuState extends State<Menu> {
       context,
     ); // resolved in-tree, threaded into the overlay
     final entry = OverlayEntry(
-      builder: (_) => Follower(
+      builder: (_) => AnchoredTo(
         link: _link,
         child: _MenuBody(
           entries: widget.items,
@@ -353,9 +353,10 @@ class _MenuBodyState extends State<_MenuBody> {
     final overlay = Overlay.of(context);
     final manager = Focus.of(context);
     final entry = OverlayEntry(
-      builder: (_) => Follower(
+      builder: (_) => AnchoredTo(
         link: _submenuAnchor,
-        placement: FollowerPlacement.right,
+        alignment: Alignment.topRight,
+        anchorAlignment: Alignment.topLeft,
         gap: 1,
         child: _MenuBody(
           entries: sub.items,

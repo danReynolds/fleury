@@ -338,7 +338,7 @@ void main() {
       Widget frame(EdgeInsets padding) => Stack(
         children: [
           Padding(padding: padding, child: boundary),
-          Follower(link: link, child: const Text('m')),
+          AnchoredTo(link: link, child: const Text('m')),
         ],
       );
 

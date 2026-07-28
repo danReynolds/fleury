@@ -49,7 +49,7 @@ class _TooltipState extends State<Tooltip> {
   void _show() {
     if (_entry != null) return;
     final entry = OverlayEntry(
-      builder: (_) => Follower(
+      builder: (_) => AnchoredTo(
         link: _link,
         // A floating popup composites over the app, so it paints its own
         // opaque background — without Surface the content underneath shows

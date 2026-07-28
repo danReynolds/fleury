@@ -35,7 +35,7 @@ void main() {
             padding: const EdgeInsets.only(left: 3, top: 2),
             child: Anchor(link: link, child: const Text('AAAA')),
           ),
-          Follower(link: link, child: const Text('m')),
+          AnchoredTo(link: link, child: const Text('m')),
         ],
       ),
     );
@@ -54,7 +54,7 @@ void main() {
           ),
           // A 3-row-tall follower can't fit below an anchor at row 4 in a
           // 6-row screen, so it flips to sit above the anchor.
-          Follower(
+          AnchoredTo(
             link: link,
             child: const Column(
               mainAxisSize: MainAxisSize.min,
@@ -80,7 +80,7 @@ void main() {
             padding: const EdgeInsets.only(left: 6),
             child: Anchor(link: link, child: const Text('A')),
           ),
-          Follower(link: link, child: const Text('wide')), // 4 wide
+          AnchoredTo(link: link, child: const Text('wide')), // 4 wide
         ],
       ),
     );
@@ -98,9 +98,10 @@ void main() {
               padding: const EdgeInsets.only(left: 2, top: 1),
               child: Anchor(link: link, child: const Text('AAA')), // (2..5, 1)
             ),
-            Follower(
+            AnchoredTo(
               link: link,
-              placement: FollowerPlacement.right,
+              alignment: Alignment.topRight,
+              anchorAlignment: Alignment.topLeft,
               child: const Text('m'),
             ),
           ],
@@ -122,9 +123,10 @@ void main() {
               padding: const EdgeInsets.only(left: 6),
               child: Anchor(link: link, child: const Text('A')), // (6..7)
             ),
-            Follower(
+            AnchoredTo(
               link: link,
-              placement: FollowerPlacement.right,
+              alignment: Alignment.topRight,
+              anchorAlignment: Alignment.topLeft,
               child: const Text('xyz'), // 3 wide
             ),
           ],

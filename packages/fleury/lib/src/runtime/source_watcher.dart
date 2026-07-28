@@ -149,8 +149,7 @@ class SourceWatcher {
   /// Test seam: builds the per-root watcher.
   final Watcher Function(String path) watcherFactory;
 
-  static Watcher _defaultWatcherFactory(String path) =>
-      DirectoryWatcher(path);
+  static Watcher _defaultWatcherFactory(String path) => DirectoryWatcher(path);
 
   final List<StreamSubscription<WatchEvent>> _subscriptions = [];
   final Set<String> _pending = {};

@@ -50,9 +50,7 @@ final class CellWidthPolicy {
   static const CellWidthPolicy spec = CellWidthPolicy();
 
   /// Legacy/CJK terminals: ambiguous renders two cells.
-  static const CellWidthPolicy cjk = CellWidthPolicy(
-    ambiguous: CellWidth.two,
-  );
+  static const CellWidthPolicy cjk = CellWidthPolicy(ambiguous: CellWidth.two);
 
   @override
   bool operator ==(Object other) =>
@@ -112,7 +110,12 @@ final class TextPresentationPolicy {
 }
 
 /// One decided axis of the policy, for provenance.
-enum WidthAxis { ambiguous, emojiPresentation, emojiVariationSequence, lowering }
+enum WidthAxis {
+  ambiguous,
+  emojiPresentation,
+  emojiVariationSequence,
+  lowering,
+}
 
 /// Where an axis's value came from. Diagnostic only — never part of policy
 /// equality or cache keys.

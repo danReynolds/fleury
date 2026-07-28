@@ -136,45 +136,45 @@ class OverlayEntry extends ChangeNotifier {
 /// Actual mountedness is derived from the entry's overlay attachment each
 /// pass — never stored — so the helper cannot desync from the overlay's
 /// lifecycle: a pass that finds no overlay (teardown, not yet mounted)
-/// simply returns, and any later [sync] retries with nothing to repair.
+/// simply returns, and any later [update] retries with nothing to repair.
 /// The helper assumes it is the entry's only mount owner; don't also
 /// insert/remove the entry by hand.
 ///
 /// The entry is always inserted ON TOP (no above/below anchor), on purpose:
 /// a lazily-mounted layer surfaces above whatever the app has stacked —
 /// an error banner must show over an opaque takeover entry, not under it.
-class OverlayEntryMountSync {
-  OverlayEntryMountSync({
-    required OverlayState? Function() resolveOverlay,
+class OverlayMount {
+  OverlayMount({
     required this.entry,
-    required bool Function() shouldMount,
-  }) : _resolveOverlay = resolveOverlay,
-       _shouldMount = shouldMount;
+    required OverlayState? Function() overlay,
+    required bool Function() mountWhen,
+  }) : _overlay = overlay,
+       _mountWhen = mountWhen;
 
   /// The entry whose mountedness this helper owns.
   final OverlayEntry entry;
 
-  final OverlayState? Function() _resolveOverlay;
-  final bool Function() _shouldMount;
+  final OverlayState? Function() _overlay;
+  final bool Function() _mountWhen;
   final List<Listenable> _attached = <Listenable>[];
-  bool _syncPending = false;
+  bool _updatePending = false;
   bool _disposed = false;
 
   /// Requests convergence a microtask from now.
   ///
   /// Coalesced: any number of calls before the microtask runs produce one
-  /// pass, and the pass re-reads [shouldMount] — so a burst (an error storm,
+  /// pass, and the pass re-reads [mountWhen] — so a burst (an error storm,
   /// a report immediately dismissed) converges once, on the final state.
   /// The deferral makes this safe to call from anywhere, including mid-frame
   /// notifications (a contained render error reported during paint): frame
   /// bodies are fully synchronous, so the microtask runs strictly after the
-  /// frame — never a setState-during-build. Use [syncNow] only from call
+  /// frame — never a setState-during-build. Use [updateNow] only from call
   /// sites where a synchronous setState is already legal.
-  void sync() {
-    if (_disposed || _syncPending) return;
-    _syncPending = true;
+  void update() {
+    if (_disposed || _updatePending) return;
+    _updatePending = true;
     scheduleMicrotask(() {
-      _syncPending = false;
+      _updatePending = false;
       if (_disposed) return;
       _converge();
     });
@@ -185,15 +185,15 @@ class OverlayEntryMountSync {
   /// For call sites where a synchronous `setState` is already legal (an
   /// event handler, a ticker callback) and same-turn mounting is the
   /// expected UX — a toast should be on screen by the very next pump.
-  void syncNow() {
+  void updateNow() {
     if (_disposed) return;
     _converge();
   }
 
-  /// Wires [sync] to [listenable]'s notifications; undone by [dispose].
+  /// Wires [update] to [listenable]'s notifications; undone by [dispose].
   void attachTo(Listenable listenable) {
     if (_disposed) return;
-    listenable.addListener(sync);
+    listenable.addListener(update);
     _attached.add(listenable);
   }
 
@@ -203,18 +203,18 @@ class OverlayEntryMountSync {
     if (_disposed) return;
     _disposed = true;
     for (final listenable in _attached) {
-      listenable.removeListener(sync);
+      listenable.removeListener(update);
     }
     _attached.clear();
     entry.remove(); // no-op when not mounted
   }
 
   void _converge() {
-    final overlay = _resolveOverlay();
+    final overlay = _overlay();
     if (overlay == null) return;
     // Derived, not stored: the entry's attachment IS the mounted state.
     final mounted = entry._state != null;
-    final desired = _shouldMount();
+    final desired = _mountWhen();
     if (desired == mounted) return;
     if (desired) {
       overlay.insert(entry);

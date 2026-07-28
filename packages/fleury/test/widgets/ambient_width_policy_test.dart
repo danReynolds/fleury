@@ -40,15 +40,14 @@ void main() {
       expect(
         buffer.atColRow(1, 0).grapheme,
         'X',
-        reason: 'a narrow-emoji surface lays the smiley out in ONE cell, so '
+        reason:
+            'a narrow-emoji surface lays the smiley out in ONE cell, so '
             'X lands in column 1',
       );
     });
 
     testWidgets('the spec default keeps emoji at two cells', (tester) {
-      tester.pumpWidget(
-        const Row(children: <Widget>[Text('🙂'), Text('X')]),
-      );
+      tester.pumpWidget(const Row(children: <Widget>[Text('🙂'), Text('X')]));
       final buffer = tester.render(size: const CellSize(20, 4));
       expect(
         buffer.atColRow(2, 0).grapheme,
@@ -95,7 +94,8 @@ void main() {
       expect(
         buffer.atColRow(1, 0).grapheme,
         'X',
-        reason: 'every geometry consumer shares the one surface policy — an '
+        reason:
+            'every geometry consumer shares the one surface policy — an '
             'ambient Text beside a spec RichText would disagree internally, '
             'which is worse than disagreeing with the terminal',
       );

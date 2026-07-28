@@ -40,17 +40,15 @@ void main() {
             },
             <String, Object?>{
               'name': 'http',
-              'rootUri':
-                  Uri.directory(
-                    '${temp.path}/cache/hosted/pub.dev/http-1.0.0',
-                  ).toString(),
+              'rootUri': Uri.directory(
+                '${temp.path}/cache/hosted/pub.dev/http-1.0.0',
+              ).toString(),
             },
             <String, Object?>{
               'name': 'fleury',
-              'rootUri':
-                  Uri.directory(
-                    '${temp.path}/cache/git/fleury-abc123/packages/fleury',
-                  ).toString(),
+              'rootUri': Uri.directory(
+                '${temp.path}/cache/git/fleury-abc123/packages/fleury',
+              ).toString(),
             },
           ],
         },
@@ -108,7 +106,10 @@ void main() {
         pubCachePath: '${temp.path}/cache',
       );
       expect(roots, isNotNull);
-      expect(roots!.directories, contains(Directory('${temp.path}/app/lib').path));
+      expect(
+        roots!.directories,
+        contains(Directory('${temp.path}/app/lib').path),
+      );
     });
 
     test('resolve walks up to the nearest ancestor package_config '
@@ -125,38 +126,44 @@ void main() {
         pubCachePath: '${temp.path}/cache',
       );
       expect(roots, isNotNull);
-      expect(roots!.directories, contains(Directory('${temp.path}/app/lib').path));
+      expect(
+        roots!.directories,
+        contains(Directory('${temp.path}/app/lib').path),
+      );
     });
   });
 
   group('SourceWatcher', () {
-    test('coalesces a burst into one batch and filters non-dart files', () async {
-      final fake = _FakeWatcher('/app/lib');
-      final batches = <Set<String>>[];
-      final watcher = SourceWatcher(
-        roots: DevSourceRoots(directories: ['/app/lib']),
-        onChanged: batches.add,
-        debounce: const Duration(milliseconds: 20),
-        watcherFactory: (_) => fake,
-      )..start();
+    test(
+      'coalesces a burst into one batch and filters non-dart files',
+      () async {
+        final fake = _FakeWatcher('/app/lib');
+        final batches = <Set<String>>[];
+        final watcher = SourceWatcher(
+          roots: DevSourceRoots(directories: ['/app/lib']),
+          onChanged: batches.add,
+          debounce: const Duration(milliseconds: 20),
+          watcherFactory: (_) => fake,
+        )..start();
 
-      fake.emit('/app/lib/a.dart');
-      fake.emit('/app/lib/b.dart');
-      fake.emit('/app/lib/notes.md'); // filtered
-      fake.emit('/app/lib/a.dart'); // deduped
+        fake.emit('/app/lib/a.dart');
+        fake.emit('/app/lib/b.dart');
+        fake.emit('/app/lib/notes.md'); // filtered
+        fake.emit('/app/lib/a.dart'); // deduped
 
-      await Future<void>.delayed(const Duration(milliseconds: 60));
-      expect(batches, hasLength(1));
-      expect(batches.single, {'/app/lib/a.dart', '/app/lib/b.dart'});
+        await Future<void>.delayed(const Duration(milliseconds: 60));
+        expect(batches, hasLength(1));
+        expect(batches.single, {'/app/lib/a.dart', '/app/lib/b.dart'});
 
-      // A later save starts a fresh batch.
-      fake.emit('/app/lib/c.dart');
-      await Future<void>.delayed(const Duration(milliseconds: 60));
-      expect(batches, hasLength(2));
-      expect(batches.last, {'/app/lib/c.dart'});
+        // A later save starts a fresh batch.
+        fake.emit('/app/lib/c.dart');
+        await Future<void>.delayed(const Duration(milliseconds: 60));
+        expect(batches, hasLength(2));
+        expect(batches.last, {'/app/lib/c.dart'});
 
-      await watcher.dispose();
-    });
+        await watcher.dispose();
+      },
+    );
 
     test('dispose stops pending batches and further events', () async {
       final fake = _FakeWatcher('/app/lib');

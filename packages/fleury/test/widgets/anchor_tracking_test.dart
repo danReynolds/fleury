@@ -75,7 +75,7 @@ void main() {
     // never dirties this subtree.
     tester.overlay.insert(
       OverlayEntry(
-        builder: (_) => Follower(link: link, child: const Text('¤')),
+        builder: (_) => AnchoredTo(link: link, child: const Text('¤')),
       ),
     );
     tester.pump();
@@ -122,7 +122,7 @@ void main() {
     tester.render(size: _size);
     tester.overlay.insert(
       OverlayEntry(
-        builder: (_) => Follower(link: link, child: const Text('¤')),
+        builder: (_) => AnchoredTo(link: link, child: const Text('¤')),
       ),
     );
     tester.pump();
@@ -184,7 +184,7 @@ void main() {
           builder: (context, _) => Stack(
             children: <Widget>[
               Anchor(link: link, child: const Text('@')),
-              if (show.value) Follower(link: link, child: const Text('¤')),
+              if (show.value) AnchoredTo(link: link, child: const Text('¤')),
             ],
           ),
         ),

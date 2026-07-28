@@ -345,7 +345,7 @@ export 'src/widgets/layout_builder.dart'
     show LayoutBuilder, LayoutWidgetBuilder;
 export 'src/widgets/media_query.dart' show MediaQuery, MediaQueryData;
 export 'src/widgets/overlay.dart'
-    show Overlay, OverlayEntry, OverlayEntryMountSync, OverlayState;
+    show Overlay, OverlayEntry, OverlayMount, OverlayState;
 export 'src/widgets/repaint_boundary.dart' show RepaintBoundary;
 export 'src/widgets/rich_text.dart' show RichText, TextSpan;
 export 'src/widgets/pointer.dart'
@@ -412,7 +412,13 @@ export 'src/widgets/tui_binding.dart'
     show SingleTickerProviderStateMixin, TuiBinding, TuiBindingScope;
 export 'src/widgets/align.dart' show Align, Alignment, Center, RenderAlign;
 export 'src/widgets/anchor.dart'
-    show Anchor, AnchorLink, Follower, FollowerPlacement;
+    show
+        Anchor,
+        AnchorLink,
+        Anchored,
+        AnchoredTo,
+        defaultAnchorAlignment,
+        resolveAnchoredOffset;
 export 'src/widgets/async.dart'
     show
         AsyncSnapshot,

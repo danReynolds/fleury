@@ -32,10 +32,7 @@ void main() {
 
       // Home; open link; 'a','b' (one shared style, no SGR — link-only style
       // is visually empty); close at frame end.
-      expect(
-        sink.output,
-        '\x1B[H${osc8Open('https://x')}ab$osc8Close',
-      );
+      expect(sink.output, '\x1B[H${osc8Open('https://x')}ab$osc8Close');
     });
 
     test('a link change mid-row closes the old link and opens the new', () {
@@ -107,8 +104,7 @@ void main() {
   });
 
   group('OSC 8 link safety', () {
-    test('gap rewrite bails rather than leak the open link onto plain cells',
-        () {
+    test('gap rewrite bails rather than leak the open link onto plain cells', () {
       // Dirty linked 'a' at col 0, unchanged plain 'b','c' at 1-2, dirty 'd' at
       // col 3. Without the bail the gap rewrite would print 'bc' while link x
       // is open — leaking it. With the bail it falls back to a cursor move, so
@@ -138,24 +134,32 @@ void main() {
       );
     });
 
-    test('a cursor jump keeps a same-link run open without painting the gap',
-        () {
-      // Linked 'a' at 0 and linked 'p' at 15 (same URI); cells 1-14 unchanged.
-      // The link stays open across the jump (one open, one close), and the
-      // skipped cells are never written — so they cannot be linked.
-      final prev = CellBuffer(const CellSize(20, 1));
-      final next = CellBuffer(const CellSize(20, 1));
-      const style = CellStyle(linkUri: 'https://x');
-      next.writeGrapheme(const CellOffset(0, 0), 'a', style: style);
-      next.writeGrapheme(const CellOffset(15, 0), 'p', style: style);
-      final sink = StringAnsiSink();
+    test(
+      'a cursor jump keeps a same-link run open without painting the gap',
+      () {
+        // Linked 'a' at 0 and linked 'p' at 15 (same URI); cells 1-14 unchanged.
+        // The link stays open across the jump (one open, one close), and the
+        // skipped cells are never written — so they cannot be linked.
+        final prev = CellBuffer(const CellSize(20, 1));
+        final next = CellBuffer(const CellSize(20, 1));
+        const style = CellStyle(linkUri: 'https://x');
+        next.writeGrapheme(const CellOffset(0, 0), 'a', style: style);
+        next.writeGrapheme(const CellOffset(15, 0), 'p', style: style);
+        final sink = StringAnsiSink();
 
-      linker.renderDiff(prev, next, sink);
+        linker.renderDiff(prev, next, sink);
 
-      expect(sink.output, '\x1B[H${osc8Open('https://x')}a\x1B[14Cp$osc8Close');
-      expect('\x1B]8'.allMatches(sink.output).length, 2,
-          reason: 'exactly one open + one close across the whole jump');
-    });
+        expect(
+          sink.output,
+          '\x1B[H${osc8Open('https://x')}a\x1B[14Cp$osc8Close',
+        );
+        expect(
+          '\x1B]8'.allMatches(sink.output).length,
+          2,
+          reason: 'exactly one open + one close across the whole jump',
+        );
+      },
+    );
 
     test('a cursor jump to an unlinked cell closes before the destination', () {
       // Linked 'a' at 0, plain 'p' at 15. The close lands before 'p', and the
@@ -210,8 +214,11 @@ void main() {
       renderer.renderDiff(prev, build(withLinks: true), linkedSink);
       renderer.renderDiff(prev, build(withLinks: false), plainSink);
 
-      expect(linkedSink.output, isNot(contains('\x1B]8')),
-          reason: 'no OSC 8 bytes when hyperlinks is disabled');
+      expect(
+        linkedSink.output,
+        isNot(contains('\x1B]8')),
+        reason: 'no OSC 8 bytes when hyperlinks is disabled',
+      );
       expect(
         linkedSink.output,
         plainSink.output,

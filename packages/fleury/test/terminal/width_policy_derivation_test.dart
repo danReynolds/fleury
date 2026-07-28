@@ -24,31 +24,48 @@ WidthMeasurements _measure(Map<String, int> byId, {int fallback = 1}) =>
 /// kitty/Ghostty-family: ambiguous narrow, emoji wide, VS16 honoured, ZWJ
 /// clustered.
 final _joining = _measure(const {
-  'slightSmile': 2, 'grinningFace': 2, 'man': 2, 'woman': 2, 'boy': 2,
-  'heartVs16': 2, 'warningVs16': 2, 'medicalVs16': 2,
-  'familyZwj': 2, 'healthWorkerZwj': 2,
+  'slightSmile': 2,
+  'grinningFace': 2,
+  'man': 2,
+  'woman': 2,
+  'boy': 2,
+  'heartVs16': 2,
+  'warningVs16': 2,
+  'medicalVs16': 2,
+  'familyZwj': 2,
+  'healthWorkerZwj': 2,
 });
 
 /// Warp / Apple Terminal family (measured live): wide emoji, VS16 honoured,
 /// summed with paid joiners — family 2+2+2 + 2 joiners = 8.
 final _warp = _measure(const {
-  'slightSmile': 2, 'grinningFace': 2, 'man': 2, 'woman': 2, 'boy': 2,
-  'heartVs16': 2, 'warningVs16': 2, 'medicalVs16': 2,
-  'familyZwj': 8, 'healthWorkerZwj': 5,
+  'slightSmile': 2,
+  'grinningFace': 2,
+  'man': 2,
+  'woman': 2,
+  'boy': 2,
+  'heartVs16': 2,
+  'warningVs16': 2,
+  'medicalVs16': 2,
+  'familyZwj': 8,
+  'healthWorkerZwj': 5,
 });
 
 /// Terminal A (measured live): everything emoji-ish narrow, summed, free
 /// joiners — family 1+1+1 = 3.
-final _terminalA = _measure(const {
-  'familyZwj': 3, 'healthWorkerZwj': 2,
-});
+final _terminalA = _measure(const {'familyZwj': 3, 'healthWorkerZwj': 2});
 
 /// VS Code / VTE family: wide emoji, VS16 ignored (sequences measure 1),
 /// summed with free joiners — family 2+2+2 = 6; profession = woman 2 +
 /// medical sequence drawn 1 = 3.
 final _vscode = _measure(const {
-  'slightSmile': 2, 'grinningFace': 2, 'man': 2, 'woman': 2, 'boy': 2,
-  'familyZwj': 6, 'healthWorkerZwj': 3,
+  'slightSmile': 2,
+  'grinningFace': 2,
+  'man': 2,
+  'woman': 2,
+  'boy': 2,
+  'familyZwj': 6,
+  'healthWorkerZwj': 3,
 });
 
 void main() {
@@ -68,7 +85,8 @@ void main() {
       expect(
         resolved.sourceOf(WidthAxis.emojiPresentation),
         WidthDecisionSource.probe,
-        reason: 'same value as spec, but now measured — evidence matters to '
+        reason:
+            'same value as spec, but now measured — evidence matters to '
             'conservative gates even when the number does not change',
       );
     });
@@ -105,15 +123,14 @@ void main() {
 
     test('a wide ambiguous agreement flips layout to two cells', () {
       final resolved = deriveTextPresentationPolicy(
-        measurements: _measure(
-          const {'boxDrawing': 2, 'greekAlpha': 2, 'degreeSign': 2},
-        ),
+        measurements: _measure(const {
+          'boxDrawing': 2,
+          'greekAlpha': 2,
+          'degreeSign': 2,
+        }),
       );
       expect(resolved.policy.widths.ambiguous, CellWidth.two);
-      expect(
-        resolved.sourceOf(WidthAxis.ambiguous),
-        WidthDecisionSource.probe,
-      );
+      expect(resolved.sourceOf(WidthAxis.ambiguous), WidthDecisionSource.probe);
     });
   });
 
@@ -131,10 +148,7 @@ void main() {
     test('Warp: summed with paid joiners, components predicted → split', () {
       final resolved = deriveTextPresentationPolicy(measurements: _warp);
       expect(resolved.policy.lowering, ClusterLowering.split);
-      expect(
-        resolved.sourceOf(WidthAxis.lowering),
-        WidthDecisionSource.probe,
-      );
+      expect(resolved.sourceOf(WidthAxis.lowering), WidthDecisionSource.probe);
     });
 
     test('terminal A: summed narrow components → split', () {
@@ -142,27 +156,40 @@ void main() {
       expect(resolved.policy.lowering, ClusterLowering.split);
     });
 
-    test('VS Code family: summed, mixed component widths predicted → split', () {
-      // woman measures 2 (predicted by emojiPresentation: two); the medical
-      // sequence measures 1 (predicted by emojiVariationSequence: one). The
-      // per-class prediction is what authorizes the split.
-      final resolved = deriveTextPresentationPolicy(measurements: _vscode);
-      expect(resolved.policy.lowering, ClusterLowering.split);
-    });
+    test(
+      'VS Code family: summed, mixed component widths predicted → split',
+      () {
+        // woman measures 2 (predicted by emojiPresentation: two); the medical
+        // sequence measures 1 (predicted by emojiVariationSequence: one). The
+        // per-class prediction is what authorizes the split.
+        final resolved = deriveTextPresentationPolicy(measurements: _vscode);
+        expect(resolved.policy.lowering, ClusterLowering.split);
+      },
+    );
 
-    test('mixed joining across sequences is unknown → preserve, unevidenced', () {
-      // Joins the profession but sums the family — neither purely joined nor
-      // purely summed. RFC 0019 §6.1: unknown, no adaptation.
-      final resolved = deriveTextPresentationPolicy(
-        measurements: _measure(const {
-          'slightSmile': 2, 'grinningFace': 2, 'man': 2, 'woman': 2, 'boy': 2,
-          'heartVs16': 2, 'warningVs16': 2, 'medicalVs16': 2,
-          'familyZwj': 6, 'healthWorkerZwj': 2,
-        }),
-      );
-      expect(resolved.policy.lowering, ClusterLowering.preserve);
-      expect(resolved.isEvidenced(WidthAxis.lowering), isFalse);
-    });
+    test(
+      'mixed joining across sequences is unknown → preserve, unevidenced',
+      () {
+        // Joins the profession but sums the family — neither purely joined nor
+        // purely summed. RFC 0019 §6.1: unknown, no adaptation.
+        final resolved = deriveTextPresentationPolicy(
+          measurements: _measure(const {
+            'slightSmile': 2,
+            'grinningFace': 2,
+            'man': 2,
+            'woman': 2,
+            'boy': 2,
+            'heartVs16': 2,
+            'warningVs16': 2,
+            'medicalVs16': 2,
+            'familyZwj': 6,
+            'healthWorkerZwj': 2,
+          }),
+        );
+        expect(resolved.policy.lowering, ClusterLowering.preserve);
+        expect(resolved.isEvidenced(WidthAxis.lowering), isFalse);
+      },
+    );
 
     test('summed but unpredicted components → preserve (split soundness)', () {
       // The reviewer counterexample: components 1,2,2 sum to 5 — genuinely
@@ -171,10 +198,16 @@ void main() {
       // against a drawn 5, so it is not authorized.
       final resolved = deriveTextPresentationPolicy(
         measurements: _measure(const {
-          'slightSmile': 2, 'grinningFace': 2,
-          'man': 1, 'woman': 2, 'boy': 2,
-          'heartVs16': 2, 'warningVs16': 2, 'medicalVs16': 2,
-          'familyZwj': 5, 'healthWorkerZwj': 5,
+          'slightSmile': 2,
+          'grinningFace': 2,
+          'man': 1,
+          'woman': 2,
+          'boy': 2,
+          'heartVs16': 2,
+          'warningVs16': 2,
+          'medicalVs16': 2,
+          'familyZwj': 5,
+          'healthWorkerZwj': 5,
         }),
       );
       expect(resolved.policy.lowering, ClusterLowering.preserve);
