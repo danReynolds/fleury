@@ -115,7 +115,9 @@ void main() {
           size: size,
           damage: PresentationScrolled(
             scrollUpRows: 1,
-            dirtyRows: TuiDirtyRows.fromRows(const [0, 1, 2], rowCount: 4),
+            // As the adapter builds it: conservative-full, because a client
+            // cannot know which moved rows ended identical.
+            dirtyRows: TuiDirtyRows.full(4),
             dirtyBounds: null,
           ),
           // The wire's shape: no model for the blank entering row.

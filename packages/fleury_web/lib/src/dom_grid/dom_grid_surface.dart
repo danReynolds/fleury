@@ -62,9 +62,11 @@ final class DomGridSurface implements FrameSurface {
     _presentCount += 1;
     if (plan.size != _size) resize(plan.size);
     // Scroll is a variant, not a flag: a full repaint structurally cannot
-    // carry a shift, and the variant asserts the shift is positive. Only the
-    // bound against this surface's actual retained row count stays here,
-    // because only the surface knows it.
+    // carry a shift. Positivity is asserted on the variant in debug builds
+    // and — since asserts are stripped from the dart2js client — enforced in
+    // release by decodeRemotePlan's 1..rows-1 validation; a zero shift would
+    // no-op regardless. Only the bound against this surface's actual retained
+    // row count stays here, because only the surface knows it.
     if (plan.damage case PresentationScrolled(
       :final scrollUpRows,
     ) when scrollUpRows < _rows.length) {

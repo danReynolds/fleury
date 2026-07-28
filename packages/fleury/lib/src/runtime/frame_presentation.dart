@@ -140,7 +140,8 @@ final class PresentationFullRepaint extends FramePresentationDamage {
 /// coverage read it, and handing them the residue would leave every moved row
 /// unaccounted for. On the planner path this is the diff's exact set; a
 /// client rebuilding from the wire cannot know exactness and reports every
-/// row instead — conservative, never wrong.
+/// row instead — conservative, never wrong. As with [PresentationChanged],
+/// nothing checks the rows against the plan's size.
 final class PresentationScrolled extends FramePresentationDamage {
   const PresentationScrolled({
     required this.scrollUpRows,
