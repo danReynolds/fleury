@@ -278,13 +278,11 @@ class _Controls extends StatelessWidget {
         // terminal's own background.
         SizedBox(
           width: 34,
-          child: Surface(
-            child: Padding(
-              padding: const EdgeInsets.all(1),
-              child: Text(
-                'raised surface — dialogs, popups',
-                style: CellStyle(foreground: context.colors.foreground),
-              ),
+          child: Container.filled(
+            padding: const EdgeInsets.all(1),
+            child: Text(
+              'raised surface — dialogs, popups',
+              style: CellStyle(foreground: context.colors.foreground),
             ),
           ),
         ),
