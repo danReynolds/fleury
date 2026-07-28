@@ -48,10 +48,12 @@ final class WireFramePresenter implements FramePresenter {
     final dirtyCells = bounds != null
         ? bounds.size.cols * bounds.size.rows
         : plan.dirtyRows.dirtyRowCount * frame.next.size.cols;
-    // On the wire the "diff" phase is building the change plan: the row diff
-    // plus span construction. The driver owns the rest of the FrameEvent.
+    // On the wire the "diff" phase is building the change plan — span
+    // construction. (Rows arrive exact from the loop's derived damage; there
+    // is no row-diff step left to time.) The driver owns the rest of the
+    // FrameEvent.
     return FrameDiffStats(
-      diff: plan.dirtyRowDiffTime + plan.spanBuildTime,
+      diff: plan.spanBuildTime,
       dirtyCells: dirtyCells,
       dirtyBounds: bounds,
     );

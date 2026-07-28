@@ -504,11 +504,30 @@ void main() {
         isA<FrameScrolled>().having((d) => d.scrollUpRows, 'scrollUpRows', 1),
       );
       final plan = planner.build(reason: 'scroll', frame: scrolled);
+      // Scroll is a damage VARIANT, not a plan field: the shift rides with the
+      // rows it relates to, and a full repaint structurally cannot carry one.
       expect(plan.scrollUpRows, 1);
+      expect(
+        plan.damage,
+        isA<PresentationScrolled>().having(
+          (d) => d.scrollUpRows,
+          'scrollUpRows',
+          1,
+        ),
+      );
       expect(
         plan.dirtyRowModels,
         hasLength(1),
         reason: 'shift what is already there; rebuild only the residue',
+      );
+      // The variant's rows stay the TRUE set — everything that moved — while
+      // the models cover only the residue. The wire's dirty-row hint and
+      // semantic coverage read the former; handing them the residue would
+      // leave every moved row unaccounted for.
+      expect(
+        plan.dirtyRows.dirtyRowCount,
+        greaterThan(plan.dirtyRowModels.length),
+        reason: 'true dirty set covers moved rows, not just the residue',
       );
     });
 

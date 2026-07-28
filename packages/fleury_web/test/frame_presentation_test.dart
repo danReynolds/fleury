@@ -89,7 +89,6 @@ void main() {
       expect(plan.damage, isA<PresentationFullRepaint>());
       expect(plan.dirtyRows.isFull, isTrue);
       expect(plan.dirtyRowModels.map((row) => row.row), [0, 1, 2]);
-      expect(plan.dirtyRowDiffTime, Duration.zero);
       expect(plan.spanBuildTime.inMicroseconds, greaterThanOrEqualTo(0));
     });
 
@@ -119,7 +118,6 @@ void main() {
       expect(plan.dirtyRowModels, hasLength(1));
       expect(plan.dirtyRowModels.single.row, 1);
       expect(plan.dirtyRowModels.single.runs.first.text, 'hullo ');
-      expect(plan.dirtyRowDiffTime, Duration.zero);
     });
 
     test('layout damage still yields the exact changed rows', () {
@@ -154,7 +152,6 @@ void main() {
       expect(plan.dirtyRows.isFull, isFalse);
       expect(plan.dirtyRows.rows, [1]);
       expect(plan.dirtyRowModels.map((row) => row.row), [1]);
-      expect(plan.dirtyRowDiffTime.inMicroseconds, greaterThanOrEqualTo(0));
     });
 
     test('dirty rows resolve once against the plan size', () {
@@ -226,7 +223,6 @@ void main() {
       expect(plan.dirtyRows.ranges, hasLength(2));
       expect(plan.dirtyRows.rows, [0, 2]);
       expect(plan.dirtyRowModels.map((row) => row.row), [0, 2]);
-      expect(plan.dirtyRowDiffTime.inMicroseconds, greaterThanOrEqualTo(0));
     });
 
     test('metricsChanged is carried into the plan', () {

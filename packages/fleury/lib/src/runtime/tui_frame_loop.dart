@@ -265,7 +265,7 @@ final class FrameScrolled extends TuiFrameDamage {
     required this.scrollUpRows,
     required this.rows,
     required this.bounds,
-  });
+  }) : assert(scrollUpRows > 0, 'a scroll by zero rows is not a scroll');
 
   final int scrollUpRows;
   final Set<int> rows;
