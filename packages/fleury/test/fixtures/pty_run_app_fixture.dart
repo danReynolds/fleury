@@ -40,19 +40,14 @@ Future<void> main(List<String> args) async {
   final hookArg = args.where((a) => a.startsWith('--stray-hook=')).firstOrNull;
   if (hookArg != null) {
     final hookFile = File(hookArg.substring('--stray-hook='.length));
-    Timer(const Duration(milliseconds: 300), () {
-      print('HOOKED-PRINT');
-      _nativeWrite('HOOKED-NATIVE\n');
-    });
     _exitWith(
       await runApp(
-        const _PtySmokeApp(label: 'PTY-HOOK-MODE'),
+        const _StrayHookApp(),
         enableHotReload: false,
         onStrayOutput: (line) => hookFile.writeAsStringSync(
           '${line.source.name}:${line.text}\n',
           mode: FileMode.append,
         ),
-        onEvent: (event) => event is ResizeEvent ? const ExitRequested() : null,
       ),
     );
   }
@@ -108,6 +103,43 @@ class _StrayOutputAppState extends State<_StrayOutputApp> {
       });
     }
     return const _PtySmokeApp(label: 'PTY-STRAY-MODE');
+  }
+}
+
+/// Emits the hook's stray output once the first frame is presented, then ends
+/// the session from that same proof point.
+///
+/// Both halves used to be timed against the wall clock: a 300ms startup timer
+/// wrote the lines, and a harness resize at 3000ms was what made the app exit.
+/// Startup has to beat that resize — `dart run` JIT-compiles the fixture, and
+/// terminal capability probes add more — and when it does not, the new size is
+/// absorbed as the app's initial size instead of arriving as a ResizeEvent, so
+/// nothing ever requests exit and the child runs to the harness timeout.
+class _StrayHookApp extends StatefulWidget {
+  const _StrayHookApp();
+
+  @override
+  State<_StrayHookApp> createState() => _StrayHookAppState();
+}
+
+class _StrayHookAppState extends State<_StrayHookApp> {
+  var _scheduled = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_scheduled) {
+      _scheduled = true;
+      // Both classes of stray writer, as in _StrayOutputApp: a zone-visible
+      // Dart print and a zone-INvisible raw descriptor write.
+      TuiBinding.of(context).addPostFrameCallback((_) {
+        print('HOOKED-PRINT');
+        _nativeWrite('HOOKED-NATIVE\n');
+        if (!requestExit()) {
+          throw StateError('Stray-hook proof completed without an active app.');
+        }
+      });
+    }
+    return const _PtySmokeApp(label: 'PTY-HOOK-MODE');
   }
 }
 
