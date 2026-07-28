@@ -255,7 +255,14 @@ final class FrameChanged extends TuiFrameDamage {
 }
 
 /// The frame is a beneficial upward scroll: shift what is already on screen up
-/// by [scrollUpRows], then apply [rows] as the residue.
+/// by [scrollUpRows], then repaint the residue.
+///
+/// [rows] is NOT that residue — it is the TRUE dirty set, every row the shift
+/// moves. Consumers that do not shift (the wire's dirty-row hint, semantic
+/// coverage) need all of them, and a presenter that does shift derives the
+/// smaller residual set itself, as `FramePresentationPlanner` does. Handing
+/// the residue here instead would leave every moved row unaccounted for
+/// everywhere else.
 ///
 /// A distinct variant rather than a nullable field on [FrameChanged] so that a
 /// presenter acting on scrolling cannot quietly omit the case — the omission is

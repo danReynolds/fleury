@@ -7,9 +7,17 @@ import 'package:fleury/fleury_host.dart';
 /// builder the in-browser host uses — so the served frame renders
 /// identically to a local one.
 FramePresentationPlan applyRemotePlan(RemotePlan plan, CellBuffer mirror) {
-  if (plan.size != mirror.size) {
-    // Caller resized the mirror; treat as a full repaint of the new size.
-  }
+  // The caller owns resizing: WireFrameSource reallocates the mirror at the
+  // new size (and resizes the surface) BEFORE handing the plan here, so a
+  // mismatch means the mirror was not prepared. Patches would then be clamped
+  // into a wrongly-sized buffer and render silently wrong, which is why this
+  // states the precondition instead of pretending to handle it.
+  assert(
+    plan.size == mirror.size,
+    'mirror must be resized to the plan before applying it: '
+    'plan ${plan.size.cols}x${plan.size.rows} vs '
+    'mirror ${mirror.size.cols}x${mirror.size.rows}',
+  );
   final touched = applyRemotePlanToBuffer(plan, mirror);
   final dirtyRows = plan.fullRepaint
       ? TuiDirtyRows.full(mirror.size.rows)
