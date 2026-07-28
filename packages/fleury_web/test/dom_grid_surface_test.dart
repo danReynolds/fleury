@@ -113,8 +113,11 @@ void main() {
         FramePresentationPlan(
           reason: 'wire-scroll',
           size: size,
-          damage: PresentationChanged(
-            dirtyRows: TuiDirtyRows.fromRows(const [0, 1, 2], rowCount: 4),
+          damage: PresentationScrolled(
+            scrollUpRows: 1,
+            // As the adapter builds it: conservative-full, because a client
+            // cannot know which moved rows ended identical.
+            dirtyRows: TuiDirtyRows.full(4),
             dirtyBounds: null,
           ),
           // The wire's shape: no model for the blank entering row.
@@ -122,7 +125,6 @@ void main() {
           metricsChanged: false,
           dirtyRowDiffTime: Duration.zero,
           spanBuildTime: Duration.zero,
-          scrollUpRows: 1,
         ),
       );
 

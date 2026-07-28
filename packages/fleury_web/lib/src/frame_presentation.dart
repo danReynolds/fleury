@@ -12,6 +12,7 @@ export 'package:fleury/fleury_host.dart'
         FramePresentationDamage,
         PresentationFullRepaint,
         PresentationChanged,
+        PresentationScrolled,
         FramePresentationPlan,
         FramePresentationPlanner;
 
