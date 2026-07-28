@@ -262,8 +262,10 @@ oracles around the places drift would be subtle:
 
 - **Renderer equivalence:** ANSI diff output must reproduce the same visible
   buffer as a full repaint.
-- **Frame presentation tests:** bounded paint damage, conservative full diffs,
-  row-diff fallback, and scroll residual rows are tested directly.
+- **Frame presentation tests:** bounded paint damage, full repaints, and
+  scroll residual rows are tested directly. (The conservative full-diff and
+  row-diff fallbacks these tests once covered no longer exist: damage is
+  derived exactly, so there is nothing to fall back from.)
 - **Transport parity:** a server-produced frame must survive the wire and
   reconstruct the same client mirror buffer, including scroll and overlay cases.
 - **DOM parity:** the retained DOM rendered from a remote mirror must match the

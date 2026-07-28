@@ -151,7 +151,6 @@ void main() {
         ),
         dirtyRowModels: const [],
         metricsChanged: false,
-        dirtyRowDiffTime: Duration.zero,
         spanBuildTime: Duration.zero,
       );
       driver.presentFrame(prev, next, plan);
@@ -668,7 +667,6 @@ void main() {
       damage: const PresentationFullRepaint(),
       dirtyRowModels: const [],
       metricsChanged: false,
-      dirtyRowDiffTime: Duration.zero,
       spanBuildTime: Duration.zero,
     );
 
@@ -1443,6 +1441,5 @@ FramePresentationPlan _steadyStatePlan(CellSize size, TuiDirtyRows dirtyRows) =>
       damage: PresentationChanged(dirtyRows: dirtyRows, dirtyBounds: null),
       dirtyRowModels: const [],
       metricsChanged: false,
-      dirtyRowDiffTime: Duration.zero,
       spanBuildTime: Duration.zero,
     );

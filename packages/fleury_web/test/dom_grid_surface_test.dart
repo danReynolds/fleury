@@ -123,7 +123,6 @@ void main() {
           // The wire's shape: no model for the blank entering row.
           dirtyRowModels: const [],
           metricsChanged: false,
-          dirtyRowDiffTime: Duration.zero,
           spanBuildTime: Duration.zero,
         ),
       );

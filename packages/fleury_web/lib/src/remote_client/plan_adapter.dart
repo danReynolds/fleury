@@ -41,7 +41,6 @@ FramePresentationPlan applyRemotePlan(RemotePlan plan, CellBuffer mirror) {
     },
     dirtyRowModels: rowModels,
     metricsChanged: false,
-    dirtyRowDiffTime: Duration.zero,
     spanBuildTime: Duration.zero,
   );
 }
