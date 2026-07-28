@@ -1775,6 +1775,19 @@ TextArea(
     builder: () => const AgentApp(),
   ),
   ExampleInfo(
+    id: 'themes.custom',
+    widget: 'Themes',
+    category: 'Theming',
+    blurb:
+        'One hand-written ThemeData, applied to the same preview the community '
+        'themes use.',
+    cols: 38,
+    rows: 14,
+    code: _customThemeSource,
+    builder: () =>
+        const Theme(data: _customTheme, child: _ThemePreview()),
+  ),
+  ExampleInfo(
     id: 'themes.gallery',
     widget: 'Themes',
     category: 'Theming',
@@ -2784,6 +2797,59 @@ class _ThemePickerExampleState extends State<_ThemePickerExample> {
     );
   }
 }
+
+/// A hand-written theme for the "creating a theme" guide section.
+///
+/// Deliberately small: the nine roles it actually needs, the three text styles,
+/// and a border style — enough to be a real theme, short enough to read beside
+/// its own render. Kept in sync with [_customThemeSource] by a test.
+const ThemeData _customTheme = ThemeData(
+  brightness: Brightness.dark,
+  colorScheme: ColorScheme(
+    background: RgbColor(0x1C, 0x18, 0x14),
+    foreground: RgbColor(0xEB, 0xDB, 0xB2),
+    surface: RgbColor(0x2A, 0x24, 0x1E),
+    primary: RgbColor(0xE8, 0xA3, 0x3D),
+    focus: RgbColor(0xF2, 0xC5, 0x5C),
+    success: RgbColor(0x8E, 0xC0, 0x7C),
+    warning: RgbColor(0xE8, 0xA3, 0x3D),
+    error: RgbColor(0xE5, 0x6B, 0x5B),
+    info: RgbColor(0x83, 0xA5, 0x98),
+  ),
+  mutedStyle: CellStyle(dim: true),
+  selectionStyle: CellStyle(inverse: true),
+  focusedStyle: CellStyle(bold: true),
+  borderStyle: BorderStyle.rounded,
+);
+
+/// The literal source of [_customTheme], shown beside its render on the
+/// theming guide. A test asserts the two agree, so the page cannot drift into
+/// showing code that is not what produced the picture.
+const String _customThemeSource = '''
+const amber = ThemeData(
+  brightness: Brightness.dark,
+  colorScheme: ColorScheme(
+    background: RgbColor(0x1C, 0x18, 0x14),
+    foreground: RgbColor(0xEB, 0xDB, 0xB2),
+    surface: RgbColor(0x2A, 0x24, 0x1E),
+    primary: RgbColor(0xE8, 0xA3, 0x3D),
+    focus: RgbColor(0xF2, 0xC5, 0x5C),
+    success: RgbColor(0x8E, 0xC0, 0x7C),
+    warning: RgbColor(0xE8, 0xA3, 0x3D),
+    error: RgbColor(0xE5, 0x6B, 0x5B),
+    info: RgbColor(0x83, 0xA5, 0x98),
+  ),
+  mutedStyle: CellStyle(dim: true),
+  selectionStyle: CellStyle(inverse: true),
+  focusedStyle: CellStyle(bold: true),
+  borderStyle: BorderStyle.rounded,
+);
+
+runApp(const MyApp(), theme: amber);''';
+
+/// Exposed for the drift test in test/theme_source_parity_test.dart.
+ThemeData get customThemeForTest => _customTheme;
+String get customThemeSourceForTest => _customThemeSource;
 
 /// A compact slice of UI: enough surfaces that a theme's character shows.
 class _ThemePreview extends StatelessWidget {
