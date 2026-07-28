@@ -36,6 +36,7 @@ class Select<T> extends StatefulWidget {
     required this.options,
     required this.value,
     required this.onChanged,
+    this.onHighlightChanged,
     this.placeholder = 'Select…',
     this.focusNode,
     this.autofocus = false,
@@ -50,6 +51,15 @@ class Select<T> extends StatefulWidget {
 
   /// Called when the user picks an enabled option; null disables the picker.
   final void Function(T value)? onChanged;
+
+  /// Called as the highlight moves through the open list, before anything is
+  /// committed — use it to live-preview the highlighted option, the way theme,
+  /// font and colour pickers show you the choice while you arrow through it.
+  ///
+  /// Fires again with the applied [value] when the list is dismissed without a
+  /// pick (Esc, click-away), so a preview never outlives the dropdown that
+  /// drove it. [onChanged] still reports the commit.
+  final void Function(T value)? onHighlightChanged;
 
   /// Text shown when [value] is null.
   final String placeholder;
@@ -72,7 +82,7 @@ class Select<T> extends StatefulWidget {
 }
 
 class _SelectState<T> extends State<Select<T>> {
-  final AnchorLink _link = AnchorLink();
+  final BoundsNotifier _bounds = BoundsNotifier();
   late FocusNode _triggerFocus;
   bool _ownsFocus = false;
   OverlayEntry? _entry;
@@ -152,8 +162,8 @@ class _SelectState<T> extends State<Select<T>> {
     ); // resolved in-tree, threaded into the overlay
     _priorFocus = manager.focusedNode;
     final entry = OverlayEntry(
-      builder: (_) => Follower(
-        link: _link,
+      builder: (_) => BoundsAnchor(
+        notifier: _bounds,
         child: _SelectList<T>(
           options: widget.options,
           semanticLabel: widget.semanticLabel,
@@ -162,11 +172,18 @@ class _SelectState<T> extends State<Select<T>> {
           selectionStyle: theme.selectionStyle,
           mutedStyle: theme.mutedStyle,
           borderStyle: theme.borderStyle,
+          onHighlighted: widget.onHighlightChanged,
           onPicked: (value) {
             _close();
             widget.onChanged?.call(value);
           },
-          onDismiss: _close,
+          onDismiss: () {
+            _close();
+            // Undo any live preview the list drove, so dismissing leaves the
+            // consumer showing `value` again rather than the last highlight.
+            final applied = widget.value;
+            if (applied != null) widget.onHighlightChanged?.call(applied);
+          },
         ),
       ),
     );
@@ -231,8 +248,8 @@ class _SelectState<T> extends State<Select<T>> {
         : CellStyle.empty;
     final text = '$_currentLabel ${_isOpen ? '▴' : '▾'}';
     if (!enabled) {
-      return Anchor(
-        link: _link,
+      return BoundsObserver(
+        notifier: _bounds,
         child: Semantics(
           role: SemanticRole.button,
           label: widget.semanticLabel ?? _currentLabel,
@@ -249,8 +266,8 @@ class _SelectState<T> extends State<Select<T>> {
         ),
       );
     }
-    return Anchor(
-      link: _link,
+    return BoundsObserver(
+      notifier: _bounds,
       child: Semantics(
         role: SemanticRole.button,
         label: widget.semanticLabel ?? _currentLabel,
@@ -650,6 +667,7 @@ class _SelectList<T> extends StatefulWidget {
     required this.borderStyle,
     required this.onPicked,
     required this.onDismiss,
+    this.onHighlighted,
   });
 
   final List<SelectOption<T>> options;
@@ -661,6 +679,7 @@ class _SelectList<T> extends StatefulWidget {
   final BorderStyle borderStyle;
   final void Function(T value) onPicked;
   final void Function() onDismiss;
+  final void Function(T value)? onHighlighted;
 
   @override
   State<_SelectList<T>> createState() => _SelectListState<T>();
@@ -671,6 +690,29 @@ class _SelectListState<T> extends State<_SelectList<T>> {
     selectedIndex: widget.initialIndex,
   );
   final FocusNode _focus = FocusNode(debugLabel: 'select-list');
+  int? _reportedIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.onHighlighted != null) {
+      _reportedIndex = _list.selectedIndex;
+      _list.addListener(_reportHighlight);
+    }
+  }
+
+  /// Forward highlight moves to the live-preview callback. Hung off the
+  /// controller rather than each key handler so every path that moves the
+  /// highlight — arrows, Home/End, typeahead, hover, click — reports alike.
+  /// [ListController] is a ChangeNotifier that also fires for scroll changes,
+  /// hence the guard on the index actually landing somewhere new and enabled.
+  void _reportHighlight() {
+    final i = _list.selectedIndex;
+    if (i == null || i == _reportedIndex) return;
+    if (i < 0 || i >= widget.options.length || !_enabled(i)) return;
+    _reportedIndex = i;
+    widget.onHighlighted!(widget.options[i].value);
+  }
 
   bool _enabled(int i) => widget.options[i].enabled;
 
@@ -757,6 +799,7 @@ class _SelectListState<T> extends State<_SelectList<T>> {
 
   @override
   void dispose() {
+    _list.removeListener(_reportHighlight);
     _list.dispose();
     _focus.dispose();
     super.dispose();
@@ -807,74 +850,72 @@ class _SelectListState<T> extends State<_SelectList<T>> {
           focusNode: _focus,
           autofocus: true,
           onKey: _onKey,
-          // A floating popup paints its own opaque background (Surface) so the
-          // app underneath doesn't bleed through its frame.
-          child: Surface(
-            child: Container(
-              border: BoxBorder(style: widget.borderStyle),
-              child: SizedBox(
-                width: width,
-                height: widget.options.length,
-                child: ListView.builder(
-                  controller: _list,
-                  selectionActive: true,
-                  itemCount: widget.options.length,
-                  itemBuilder: (_, i, selected) {
-                    final option = widget.options[i];
-                    // A width-1 marker keeps every row aligned and within the
-                    // computed panel width (a width-2 glyph would wrap).
-                    final marker = i == widget.appliedIndex ? '• ' : '  ';
-                    final safeLabel = sanitizeOptionLabel(option.label);
-                    final text = '$marker$safeLabel';
-                    final row = option.enabled
-                        ? GestureDetector(
-                            onTap: () => _pick(i),
-                            child: Text(
-                              text,
-                              style: selected
-                                  ? widget.selectionStyle
-                                  : CellStyle.empty,
-                            ),
-                          )
-                        : Text(text, style: widget.mutedStyle);
-                    return Semantics(
-                      role: SemanticRole.menuItem,
-                      label: safeLabel,
-                      value: option.value,
-                      enabled: option.enabled,
-                      focused: _focus.hasFocus && selected,
-                      selected: selected,
-                      checked: i == widget.appliedIndex,
-                      actions: option.enabled
-                          ? const <SemanticAction>{
-                              SemanticAction.select,
-                              SemanticAction.activate,
-                            }
-                          : const <SemanticAction>{},
-                      state: SemanticState({
-                        'menuDepth': 0,
-                        'menuItemIndex': i,
-                        'menuItemPosition': i + 1,
-                        'menuItemCount': widget.options.length,
-                        'entryKind': 'option',
-                        'applied': i == widget.appliedIndex,
-                      }),
-                      onAction: (action) {
-                        if (!option.enabled) return;
-                        switch (action) {
-                          case SemanticAction.select:
-                          case SemanticAction.activate:
-                            _list.selectedIndex = i;
-                            _pick(i);
-                            return;
-                          case _:
-                            return;
-                        }
-                      },
-                      child: row,
-                    );
-                  },
-                ),
+          // Popup supplies the float contract: opaque fill, frame, and chrome
+          // semantics, so the app underneath can't bleed through.
+          child: Container.framed(
+            border: BoxBorder(style: widget.borderStyle),
+            child: SizedBox(
+              width: width,
+              height: widget.options.length,
+              child: ListView.builder(
+                controller: _list,
+                selectionActive: true,
+                itemCount: widget.options.length,
+                itemBuilder: (_, i, selected) {
+                  final option = widget.options[i];
+                  // A width-1 marker keeps every row aligned and within the
+                  // computed panel width (a width-2 glyph would wrap).
+                  final marker = i == widget.appliedIndex ? '• ' : '  ';
+                  final safeLabel = sanitizeOptionLabel(option.label);
+                  final text = '$marker$safeLabel';
+                  final row = option.enabled
+                      ? GestureDetector(
+                          onTap: () => _pick(i),
+                          child: Text(
+                            text,
+                            style: selected
+                                ? widget.selectionStyle
+                                : CellStyle.empty,
+                          ),
+                        )
+                      : Text(text, style: widget.mutedStyle);
+                  return Semantics(
+                    role: SemanticRole.menuItem,
+                    label: safeLabel,
+                    value: option.value,
+                    enabled: option.enabled,
+                    focused: _focus.hasFocus && selected,
+                    selected: selected,
+                    checked: i == widget.appliedIndex,
+                    actions: option.enabled
+                        ? const <SemanticAction>{
+                            SemanticAction.select,
+                            SemanticAction.activate,
+                          }
+                        : const <SemanticAction>{},
+                    state: SemanticState({
+                      'menuDepth': 0,
+                      'menuItemIndex': i,
+                      'menuItemPosition': i + 1,
+                      'menuItemCount': widget.options.length,
+                      'entryKind': 'option',
+                      'applied': i == widget.appliedIndex,
+                    }),
+                    onAction: (action) {
+                      if (!option.enabled) return;
+                      switch (action) {
+                        case SemanticAction.select:
+                        case SemanticAction.activate:
+                          _list.selectedIndex = i;
+                          _pick(i);
+                          return;
+                        case _:
+                          return;
+                      }
+                    },
+                    child: row,
+                  );
+                },
               ),
             ),
           ),

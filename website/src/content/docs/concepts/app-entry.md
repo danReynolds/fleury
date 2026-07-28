@@ -16,7 +16,7 @@ as a local preview/debug bridge. It is not another widget-tree entry point.
 
 The default. Lives in `package:fleury/fleury.dart` and drives a real terminal:
 
-```dart
+```dart title="bin/run_app.dart"
 import 'package:fleury/fleury.dart';
 
 void main() => runApp(
@@ -128,7 +128,7 @@ with `dart2js` and call `mountApp` from `package:fleury_web/fleury_web.dart`.
 It paints into a retained DOM cell grid and — this is the part that matters for
 agents and accessibility — mirrors the tree into a **semantic DOM** by default:
 
-```dart
+```dart title="web/main.dart"
 import 'package:fleury/fleury_core.dart';
 import 'package:fleury_web/fleury_web.dart';
 import 'package:web/web.dart' as web;

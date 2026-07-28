@@ -158,10 +158,7 @@ class HotReloadController {
           jsonEncode({'ok': true}),
         );
       });
-      developer.registerExtension('ext.fleury.restart', (
-        method,
-        params,
-      ) async {
+      developer.registerExtension('ext.fleury.restart', (method, params) async {
         // Invoked on the app; relayed as an event so the dev bootstrap (a
         // service client) can orchestrate the teardown + respawn. A no-op
         // without a bootstrap session.

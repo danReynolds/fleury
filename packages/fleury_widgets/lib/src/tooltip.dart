@@ -30,7 +30,7 @@ class Tooltip extends StatefulWidget {
 }
 
 class _TooltipState extends State<Tooltip> {
-  final AnchorLink _link = AnchorLink();
+  final BoundsNotifier _bounds = BoundsNotifier();
   OverlayEntry? _entry;
 
   // Set when Esc dismisses the tip while the trigger keeps focus; cleared when
@@ -49,21 +49,18 @@ class _TooltipState extends State<Tooltip> {
   void _show() {
     if (_entry != null) return;
     final entry = OverlayEntry(
-      builder: (_) => Follower(
-        link: _link,
-        // A floating popup composites over the app, so it paints its own
-        // opaque background — without Surface the content underneath shows
-        // through the frame.
-        child: Surface(
-          child: Container(
-            border: const BoxBorder(style: BorderStyle.rounded),
-            child: Semantics(
-              role: SemanticRole.text,
-              label: widget.semanticLabel,
-              value: _safeMessage,
-              state: const SemanticState({'tooltipVisible': true}),
-              child: Text(widget.message, allowSelect: false),
-            ),
+      builder: (_) => BoundsAnchor(
+        notifier: _bounds,
+        // Container.framed supplies the float's skin: an opaque fill so the
+        // app beneath doesn't bleed through, plus the frame.
+        child: Container.framed(
+          border: const BoxBorder(style: BorderStyle.rounded),
+          child: Semantics(
+            role: SemanticRole.text,
+            label: widget.semanticLabel,
+            value: _safeMessage,
+            state: const SemanticState({'tooltipVisible': true}),
+            child: Text(widget.message, allowSelect: false),
           ),
         ),
       ),
@@ -122,7 +119,7 @@ class _TooltipState extends State<Tooltip> {
               hideFromHintBar: true,
             ),
           ],
-          child: Anchor(link: _link, child: widget.child),
+          child: BoundsObserver(notifier: _bounds, child: widget.child),
         ),
       ),
     );

@@ -138,12 +138,12 @@ class _ToasterState extends State<Toaster> {
   // boundaries engaged and tax every app-dirty frame with a full-screen
   // cache write + blit for an empty layer.
   late final OverlayEntry _entry = OverlayEntry(builder: (_) => _buildLayer());
-  late final OverlayEntryMountSync _entrySync = OverlayEntryMountSync(
+  late final OverlayMount _entrySync = OverlayMount(
     entry: _entry,
     // Guard mounted: after unmount the context is defunct, and the ancestor
     // walk would throw rather than return null.
-    resolveOverlay: () => mounted ? Overlay.maybeOf(context) : null,
-    shouldMount: () => mounted && _toasts.isNotEmpty,
+    overlay: () => mounted ? Overlay.maybeOf(context) : null,
+    mountWhen: () => mounted && _toasts.isNotEmpty,
   );
 
   @override
@@ -171,7 +171,7 @@ class _ToasterState extends State<Toaster> {
     // Synchronous (not the microtask path): show() runs from event/timer
     // contexts where setState is already legal, and the toast should be on
     // screen by the very next pump.
-    _entrySync.syncNow();
+    _entrySync.updateNow();
     _refresh();
     final binding = _binding;
     if (binding == null) return;
@@ -190,7 +190,7 @@ class _ToasterState extends State<Toaster> {
     final ticker = toast.timer;
     toast.timer = null;
     scheduleMicrotask(() => ticker?.dispose());
-    _entrySync.syncNow(); // last toast gone → the layer entry unmounts
+    _entrySync.updateNow(); // last toast gone → the layer entry unmounts
     _refresh();
   }
 
@@ -231,25 +231,22 @@ class _ToasterState extends State<Toaster> {
                     break;
                 }
               },
-              // A toast floats over the app, so it paints its own opaque
-              // background — without Surface the content underneath bleeds
-              // through the frame.
-              child: Surface(
-                child: Container(
-                  // A normal (neutral) frame — severity lives in the dot, not
-                  // the border — with horizontal padding so the content
-                  // breathes.
-                  border: const BoxBorder(style: BorderStyle.rounded),
-                  padding: const EdgeInsets.symmetric(horizontal: 1),
-                  child: _toastContent(toast),
-                ),
+              // Popup supplies the float contract (opaque fill, frame,
+              // chrome semantics). A neutral frame — severity lives in the
+              // dot, not the border — with horizontal padding so the content
+              // breathes.
+              child: Container.framed(
+                border: const BoxBorder(style: BorderStyle.rounded),
+                padding: const EdgeInsets.symmetric(horizontal: 1),
+                child: _toastContent(toast),
               ),
             ),
         ],
       ),
     );
-    // styled component, not selectable text (the app child stays selectable)
-    return SelectionArea.disabled(child: layer);
+    // Each toast is a Popup, which already carries the chrome semantics
+    // (non-selectable); the layer itself has no text of its own.
+    return layer;
   }
 
   SemanticState _toastSemanticState(_Toast toast) {

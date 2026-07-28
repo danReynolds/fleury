@@ -121,10 +121,7 @@ void main() {
         'https://base',
         reason: 'other leaves link unset -> inherit this',
       );
-      expect(
-        const CellStyle().merge(overrideSet).linkUri,
-        'https://override',
-      );
+      expect(const CellStyle().merge(overrideSet).linkUri, 'https://override');
     });
 
     test('copyWith preserves link when not overridden', () {

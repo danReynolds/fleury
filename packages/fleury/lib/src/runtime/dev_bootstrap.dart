@@ -194,36 +194,33 @@ final class DevBootstrap {
     var started = false;
     final startGate = Completer<void>();
     unawaited(
-      runZonedGuarded(
-        () async {
-          try {
-            started = await supervisor._superviseFirstChild();
-          } finally {
-            // A throw above must still release the caller: un-started, it
-            // falls through to the classic path (and _dispose reaps any
-            // half-spawned child).
-            startGate.complete();
+      runZonedGuarded(() async {
+        try {
+          started = await supervisor._superviseFirstChild();
+        } finally {
+          // A throw above must still release the caller: un-started, it
+          // falls through to the classic path (and _dispose reaps any
+          // half-spawned child).
+          startGate.complete();
+        }
+        if (!started) return;
+        try {
+          await supervisor._superviseForever();
+        } catch (error, stack) {
+          // The loop never returns normally; reaching here means the
+          // supervisor itself broke while owning the session. Nobody else
+          // watches the child now — end the session restored rather than
+          // hang a terminal with no owner.
+          _debugLog('supervisor loop died: $error\n$stack');
+          final child = supervisor._child;
+          if (child != null) {
+            child.kill(ProcessSignal.sigkill);
+            await child.exitCode;
           }
-          if (!started) return;
-          try {
-            await supervisor._superviseForever();
-          } catch (error, stack) {
-            // The loop never returns normally; reaching here means the
-            // supervisor itself broke while owning the session. Nobody else
-            // watches the child now — end the session restored rather than
-            // hang a terminal with no owner.
-            _debugLog('supervisor loop died: $error\n$stack');
-            final child = supervisor._child;
-            if (child != null) {
-              child.kill(ProcessSignal.sigkill);
-              await child.exitCode;
-            }
-            await supervisor._emergencyTtyRestore();
-            exit(70);
-          }
-        },
-        (error, stack) => _debugLog('uncaught: $error\n$stack'),
-      ),
+          await supervisor._emergencyTtyRestore();
+          exit(70);
+        }
+      }, (error, stack) => _debugLog('uncaught: $error\n$stack')),
     );
     await startGate.future;
     if (!started) {
@@ -681,11 +678,9 @@ final class DevBootstrap {
       await stdout.flush();
     } catch (_) {}
     try {
-      final proc = await Process.start(
-        'stty',
-        const ['sane'],
-        mode: ProcessStartMode.inheritStdio,
-      );
+      final proc = await Process.start('stty', const [
+        'sane',
+      ], mode: ProcessStartMode.inheritStdio);
       await proc.exitCode.timeout(const Duration(seconds: 2));
     } catch (_) {}
   }

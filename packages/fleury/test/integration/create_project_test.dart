@@ -283,36 +283,41 @@ dependency_overrides:
     () async {
       final profilingRoot = '$repoRoot/profiling';
       final outBase = '${tempDir.path}/created_app_pty';
-      final capture = await Process.run(Platform.resolvedExecutable, <String>[
-        'run',
-        '$profilingRoot/capture_pty.dart',
-        '--out',
-        outBase,
-        '--timeout',
-        '30',
-        '--cols',
-        '70',
-        '--rows',
-        '14',
-        '--input-hex',
-        '0d',
-        '--input-after-output-ms',
-        '1000',
-        '--interrupt-after-output-ms',
-        '2200',
-        '--',
+      final capture = await Process.run(
         Platform.resolvedExecutable,
-        'bin/run_app.dart',
-      ], workingDirectory: project.path, environment: {
-        ...Platform.environment,
-        // Pin this test to the classic single-process run: its subject is
-        // the scaffold contract (first frame, input, restore, exit codes).
-        // Under the dev supervisor the VM-service banner becomes the PTY's
-        // first output, which shifts the scripted `--*-after-output-ms`
-        // timers into the child's JIT warmup. Supervised operation has its
-        // own end-to-end coverage in dev_bootstrap_pty_test.dart.
-        'FLEURY_HOT_RELOAD': '0',
-      });
+        <String>[
+          'run',
+          '$profilingRoot/capture_pty.dart',
+          '--out',
+          outBase,
+          '--timeout',
+          '30',
+          '--cols',
+          '70',
+          '--rows',
+          '14',
+          '--input-hex',
+          '0d',
+          '--input-after-output-ms',
+          '1000',
+          '--interrupt-after-output-ms',
+          '2200',
+          '--',
+          Platform.resolvedExecutable,
+          'bin/run_app.dart',
+        ],
+        workingDirectory: project.path,
+        environment: {
+          ...Platform.environment,
+          // Pin this test to the classic single-process run: its subject is
+          // the scaffold contract (first frame, input, restore, exit codes).
+          // Under the dev supervisor the VM-service banner becomes the PTY's
+          // first output, which shifts the scripted `--*-after-output-ms`
+          // timers into the child's JIT warmup. Supervised operation has its
+          // own end-to-end coverage in dev_bootstrap_pty_test.dart.
+          'FLEURY_HOT_RELOAD': '0',
+        },
+      );
 
       expect(
         capture.exitCode,

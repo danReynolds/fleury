@@ -468,14 +468,14 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
           'visibleRangeStart': visibleRangeStart,
           'visibleRangeEnd': visibleRangeEnd,
         }),
-        child: Container(
-          // Keep the floating palette opaque: every interior line is rendered
-          // full-width (rows pad their label region, spacers/footer are spaces)
-          // so no cell is left unwritten for the content beneath to bleed
-          // through. No interior padding — a 1-col inset would itself be
-          // unwritten (and bleed); the row marker ("› "/"  ") supplies the
-          // left gutter instead. Height is bound to the content so the box
-          // doesn't stretch to fill the viewport the centering Align hands it.
+        // Popup makes the floating palette opaque the same way every other
+        // stock overlay does, so interior lines don't have to be hand-padded
+        // to full width to keep the content beneath from bleeding through.
+        // (Rows still pad via `_fitWidth` — that spans the selection
+        // highlight, which is a look, not an opacity trick.) Height is bound
+        // to the content so the box doesn't stretch to fill the viewport the
+        // centering Align hands it.
+        child: Container.framed(
           border: BoxBorder(style: theme.borderStyle),
           child: SizedBox(
             width: widget.width,
@@ -483,24 +483,14 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Back the field with a full-width blank so the area past the
-                // query text stays opaque (a TextInput only paints the cells it
-                // occupies). The field paints on top of the spaces.
-                Stack(
-                  children: [
-                    Text(' ' * widget.width),
-                    TextInput(
-                      controller: _query,
-                      focusNode: _queryFocus,
-                      placeholder: widget.placeholder,
-                      autofocus: true,
-                      onSubmit: (_) => _invoke(),
-                    ),
-                  ],
+                TextInput(
+                  controller: _query,
+                  focusNode: _queryFocus,
+                  placeholder: widget.placeholder,
+                  autofocus: true,
+                  onSubmit: (_) => _invoke(),
                 ),
-                // Blank spacer rows are written as full-width spaces, not an
-                // empty SizedBox, so they too stay opaque over the content.
-                Text(' ' * widget.width),
+                const SizedBox(height: 1),
                 SizedBox(
                   height: visible,
                   child: _filtered.isEmpty
@@ -525,7 +515,7 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
                         ),
                 ),
                 if (hasDescriptions) ...[
-                  Text(' ' * widget.width),
+                  const SizedBox(height: 1),
                   SizedBox(
                     height: 1,
                     child: Text(

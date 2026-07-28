@@ -191,18 +191,19 @@ final class DomRowFactory {
     return true;
   }
 
-  /// CSS that lays a block-element cell out as a full-cell inline-block so its
-  /// background fills the entire cell box (no row-boundary gap), while the glyph
-  /// still paints the sub-cell pixels over it.
+  /// CSS for a block-element cell.
+  ///
+  /// Filling the cell box comes from the shared rule ([kFillsCellBoxCss], via
+  /// the style CSS, since these runs always carry a background). What is
+  /// specific here is the *width*: block glyphs paint sub-cell pixels, so the
+  /// box is pinned to an exact device-snapped multiple of the cell width and
+  /// clipped, or the pixels drift off the grid and tile with visible seams.
   String _blockFillCss(
     CellSpanRun run,
     DomRowReplacementStats? stats,
     MeasuredCellBox metrics,
   ) =>
-      'display:inline-block'
-      ';width:${_cssPx(run.widthCols * metrics.cssCellWidth)}'
-      ';height:100%'
-      ';vertical-align:top'
+      'width:${_cssPx(run.widthCols * metrics.cssCellWidth)}'
       ';overflow:hidden'
       ';${_styleCssFor(run.style, stats)}';
 

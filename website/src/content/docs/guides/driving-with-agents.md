@@ -21,7 +21,7 @@ widgets already contribute meaningful semantics; layout-only structure may be
 folded out of the graph. `runApp` already speaks the remote wire a host connects
 over, so the app is drivable the moment it runs.
 
-```dart
+```dart title="main.dart"
 import 'package:fleury/fleury.dart';
 
 void main() => runApp(const CounterApp());

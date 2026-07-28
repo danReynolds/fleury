@@ -738,7 +738,7 @@ void main() {
     });
   });
 
-  group('OverlayEntryMountSync', () {
+  group('OverlayMount', () {
     testWidgets('a burst of syncs converges in one pass', (tester) async {
       final overlayKey = GlobalKey<OverlayState>();
       tester.pumpWidget(
@@ -748,15 +748,15 @@ void main() {
         ),
       );
       var wanted = true;
-      final sync = OverlayEntryMountSync(
+      final sync = OverlayMount(
         entry: OverlayEntry(builder: (_) => const Text('layer')),
-        resolveOverlay: () => overlayKey.currentState,
-        shouldMount: () => wanted,
+        overlay: () => overlayKey.currentState,
+        mountWhen: () => wanted,
       );
       sync
-        ..sync()
-        ..sync()
-        ..sync();
+        ..update()
+        ..update()
+        ..update();
       expect(
         overlayKey.currentState!.entries,
         hasLength(1),
@@ -771,9 +771,9 @@ void main() {
       // The pass re-reads the predicate: a mount request immediately
       // retracted converges on the final (unmounted) state.
       wanted = false;
-      sync.sync();
+      sync.update();
       wanted = true;
-      sync.sync(); // coalesced with the pending pass
+      sync.update(); // coalesced with the pending pass
       await Future<void>.delayed(Duration.zero);
       expect(overlayKey.currentState!.entries, hasLength(2));
     });
@@ -789,12 +789,12 @@ void main() {
         ),
       );
       var resolvable = false;
-      final sync = OverlayEntryMountSync(
+      final sync = OverlayMount(
         entry: OverlayEntry(builder: (_) => const Text('layer')),
-        resolveOverlay: () => resolvable ? overlayKey.currentState : null,
-        shouldMount: () => true,
+        overlay: () => resolvable ? overlayKey.currentState : null,
+        mountWhen: () => true,
       );
-      sync.sync();
+      sync.update();
       await Future<void>.delayed(Duration.zero);
       expect(
         overlayKey.currentState!.entries,
@@ -805,7 +805,7 @@ void main() {
       // Self-healing: mountedness is derived from the entry's attachment,
       // not stored, so nothing desynced — the next sync simply converges.
       resolvable = true;
-      sync.sync();
+      sync.update();
       await Future<void>.delayed(Duration.zero);
       expect(overlayKey.currentState!.entries, hasLength(2));
     });
@@ -822,13 +822,13 @@ void main() {
       );
       var wanted = true;
       final notifier = _TestNotifier();
-      final sync = OverlayEntryMountSync(
+      final sync = OverlayMount(
         entry: OverlayEntry(builder: (_) => const Text('layer')),
-        resolveOverlay: () => overlayKey.currentState,
-        shouldMount: () => wanted,
+        overlay: () => overlayKey.currentState,
+        mountWhen: () => wanted,
       )..attachTo(notifier);
 
-      sync.syncNow();
+      sync.updateNow();
       expect(
         overlayKey.currentState!.entries,
         hasLength(2),
@@ -841,7 +841,7 @@ void main() {
       expect(overlayKey.currentState!.entries, hasLength(1));
 
       wanted = true;
-      sync.syncNow();
+      sync.updateNow();
       expect(overlayKey.currentState!.entries, hasLength(2));
 
       sync.dispose();

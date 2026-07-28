@@ -381,7 +381,8 @@ void main() {
       expect(
         damage!.contains(const CellOffset(10, 0)),
         isTrue,
-        reason: 'the evicted lead at col 10 must be damaged for the bounded diff',
+        reason:
+            'the evicted lead at col 10 must be damaged for the bounded diff',
       );
     });
 

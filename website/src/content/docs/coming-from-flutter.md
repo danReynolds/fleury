@@ -29,7 +29,7 @@ structured terminal/browser surfaces.
 
 If you can read this Flutter-style counter, you can read Fleury:
 
-```dart
+```dart title="main.dart"
 import 'package:fleury/fleury.dart';
 
 void main() => runApp(
@@ -91,7 +91,7 @@ the same widget tree, but different host entrypoints:
 
 For a browser embed, the entrypoint is a tiny web file:
 
-```dart
+```dart title="web/main.dart"
 import 'package:fleury/fleury_core.dart';
 import 'package:fleury_web/fleury_web.dart';
 import 'package:web/web.dart' as web;

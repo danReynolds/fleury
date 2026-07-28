@@ -127,6 +127,15 @@ export 'src/rendering/render_object.dart'
         RenderObjectWithChildren,
         RenderObjectWithSingleChild;
 export 'src/rendering/render_repaint_boundary.dart' show RenderRepaintBoundary;
+export 'src/rendering/width_policy.dart'
+    show
+        CellWidth,
+        CellWidthPolicy,
+        ClusterLowering,
+        ResolvedTextPresentationPolicy,
+        TextPresentationPolicy,
+        WidthAxis,
+        WidthDecisionSource;
 export 'src/rendering/surface_capabilities.dart'
     show
         ColorMode,
@@ -153,7 +162,7 @@ export 'src/rendering/text_sanitizer.dart'
         sanitizeForDisplay,
         sanitizeSingleLine;
 export 'src/rendering/width_resolver.dart'
-    show DefaultWidthResolver, TerminalProfile, WidthResolver;
+    show DefaultWidthResolver, WidthResolver, hasUncertainWidth;
 
 // Semantics
 export 'src/semantics/accessibility.dart'
@@ -205,6 +214,11 @@ export 'src/terminal/capabilities.dart'
         detectImageProtocolFromEnvironment,
         detectTerminalCapabilitiesFromEnvironment,
         detectTerminalMultiplexerFromEnvironment,
+        detectAmbiguousCharWidthFromEnvironment,
+        detectClusterModeFromEnvironment,
+        detectEmojiWidthFromEnvironment,
+        detectVs16WidthFromEnvironment,
+        deriveTextPresentationPolicy,
         parseEnvFlag;
 export 'src/terminal/capability_requirements.dart'
     show
@@ -233,10 +247,16 @@ export 'src/terminal/diagnostics.dart'
         diagnoseTerminal;
 export 'src/terminal/terminal_probe.dart'
     show
+        WidthMeasurements,
+        WidthProbeClass,
+        WidthProbeGlyph,
+        widthProbeBattery,
+        ambiguousWidthFromMeasurements,
         TerminalProbeReport,
         TerminalProbeResult,
         TerminalProbeStatus,
         TerminalProbeTransport,
+        probeGlyphWidths,
         runTerminalProbeSuite;
 export 'src/input/events.dart'
     show
@@ -325,7 +345,7 @@ export 'src/widgets/layout_builder.dart'
     show LayoutBuilder, LayoutWidgetBuilder;
 export 'src/widgets/media_query.dart' show MediaQuery, MediaQueryData;
 export 'src/widgets/overlay.dart'
-    show Overlay, OverlayEntry, OverlayEntryMountSync, OverlayState;
+    show Overlay, OverlayEntry, OverlayMount, OverlayState;
 export 'src/widgets/repaint_boundary.dart' show RepaintBoundary;
 export 'src/widgets/rich_text.dart' show RichText, TextSpan;
 export 'src/widgets/pointer.dart'
@@ -381,6 +401,7 @@ export 'src/widgets/ticker_mode.dart' show TickerMode;
 export 'src/widgets/theme.dart'
     show
         Brightness,
+        BrightnessPick,
         ColorScheme,
         DefaultTextStyle,
         FleuryThemeContext,
@@ -389,8 +410,14 @@ export 'src/widgets/theme.dart'
 export 'src/widgets/tui_binding.dart'
     show SingleTickerProviderStateMixin, TuiBinding, TuiBindingScope;
 export 'src/widgets/align.dart' show Align, Alignment, Center, RenderAlign;
-export 'src/widgets/anchor.dart'
-    show Anchor, AnchorLink, Follower, FollowerPlacement;
+export 'src/widgets/anchored.dart' show Anchored;
+export 'src/widgets/bounds.dart'
+    show
+        BoundsAnchor,
+        BoundsNotifier,
+        BoundsObserver,
+        defaultAnchorAlignment,
+        resolveAnchoredOffset;
 export 'src/widgets/async.dart'
     show
         AsyncSnapshot,
@@ -416,7 +443,7 @@ export 'src/widgets/basic.dart'
         SizedBox,
         Spacer,
         Stack,
-        Surface,
+        resolveSurfaceColor,
         Text,
         Wrap;
 export 'src/widgets/framework.dart'

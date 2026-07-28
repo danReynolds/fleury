@@ -15,7 +15,7 @@ import 'ansi_renderer.dart';
 ///   - [sgr]:     `CSI … m` — style set/reset (color, bold, inverse, …).
 ///   - [cursor]:  CSI cursor moves/positioning (`A`/`B`/`C`/`D`, `H`/`f`,
 ///                and related row/column positioning commands).
-///   - [sync]:    `CSI ? 2026 h/l` — the per-frame synchronized-output
+///   - [update]:    `CSI ? 2026 h/l` — the per-frame synchronized-output
 ///                wrapper.
 ///   - [session]: session lifecycle private-mode toggles — alt screen
 ///                (1049), cursor visibility (25), bracketed paste (2004),
@@ -129,12 +129,12 @@ class AnsiByteBreakdown {
         // envelope), OSC 1337 (ESC ], iTerm2). Consume through the string
         // terminator (ST `ESC \` or BEL) as one run. Non-image OSC (clipboard
         // 52, hyperlink 8) stays 'other'.
-        if (intro == 0x5F /* _ APC */ || intro == 0x50 /* P DCS */) {
+        if (intro == 0x5F /* _ APC */ || intro == 0x50 /* P DCS */ ) {
           i = _consumeStringEscape(data, i + 1, n);
           image += i - start;
           continue;
         }
-        if (intro == 0x5D /* ] OSC */) {
+        if (intro == 0x5D /* ] OSC */ ) {
           final isImage = _oscIsImage(data, i + 1, n);
           i = _consumeStringEscape(data, i + 1, n);
           if (isImage) {

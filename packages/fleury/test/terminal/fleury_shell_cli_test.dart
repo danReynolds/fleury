@@ -25,10 +25,7 @@ void main() {
           2,
           reason: 'stdout:\n${result.stdout}\nstderr:\n${result.stderr}',
         );
-        expect(
-          result.stderr.toString(),
-          contains('stdin is not a terminal'),
-        );
+        expect(result.stderr.toString(), contains('stdin is not a terminal'));
         // The refusal happens before the socket bind, so no session artifacts
         // are left behind.
         expect(Directory('${tempDir.path}/.fleury').existsSync(), isFalse);

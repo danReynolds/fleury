@@ -80,7 +80,7 @@ class Scrollbar extends StatefulWidget {
 
 /// Holder for a [Scrollbar]'s painted geometry: the render object writes
 /// it each paint, the drag handler reads it to map a pointer row → scroll
-/// fraction (the same write-at-paint / read-elsewhere idiom as AnchorLink).
+/// fraction (the same write-at-paint / read-elsewhere idiom as BoundsNotifier).
 class _ScrollbarGeometry {
   int top = 0;
   int height = 0;

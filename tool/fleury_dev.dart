@@ -29,6 +29,9 @@ Future<void> main(List<String> rawArgs) async {
     case 'build-remote-client':
       await runner.buildRemoteClient(args);
       return;
+    case 'build-width-tables':
+      await runner.buildWidthTables(args);
+      return;
     case 'demo':
       await runner.demoApp();
       return;
@@ -174,6 +177,9 @@ void _printUsage() {
     '  check [--quick]               Analyze and test local packages',
   );
   stdout.writeln('  coverage [options]            Run package coverage floors');
+  stdout.writeln(
+    '  build-width-tables [--check]  Regenerate renderer width tables from the UCD',
+  );
   stdout.writeln('  demo                          Run the integrated demo app');
   stdout.writeln(
     '  storybook [command/options]   Run, inspect, verify, or snapshot storybook',
@@ -333,6 +339,7 @@ class _Runner {
   String get fleury => '$root/packages/fleury';
   String get fleuryTest => '$root/packages/fleury_test';
   String get widgets => '$root/packages/fleury_widgets';
+  String get themes => '$root/packages/fleury_themes';
   String get web => '$root/packages/fleury_web';
   String get git => '$root/packages/fleury_git';
   String get demo => '$root/packages/fleury_example_console';
@@ -347,6 +354,7 @@ class _Runner {
       fleury,
       fleuryTest,
       widgets,
+      themes,
       web,
       git,
       demo,
@@ -375,6 +383,7 @@ class _Runner {
       fleury,
       fleuryTest,
       widgets,
+      themes,
       git,
       demo,
       storybook,
@@ -419,6 +428,7 @@ class _Runner {
       // other package's tests inherit a non-UTC clock.
       environment: const {'TZ': 'America/New_York'},
     );
+    await _run('dart', ['test'], workingDirectory: themes);
     await _run('dart', ['test'], workingDirectory: git);
     await _run('dart', [
       'test',
@@ -476,6 +486,7 @@ class _Runner {
       fleury,
       fleuryTest,
       widgets,
+      themes,
       git,
       demo,
       storybook,
@@ -505,6 +516,28 @@ class _Runner {
   /// (packages/fleury/lib/src/remote/remote_client_asset.dart). The
   /// freshness test fails if this is stale; run it after touching the
   /// remote-client source.
+  /// Regenerates the renderer's character-width tables from the Unicode
+  /// Character Database.
+  ///
+  /// SPAWNS tool/ucd_width_tables.dart rather than importing it — this file has
+  /// to stay a single self-contained script, because it is the bootstrap
+  /// launcher and must run before the workspace has package resolution
+  /// (dev_cli_contract_test copies it alone into a temp dir). Same shape as
+  /// [buildRemoteClient] shelling out to `dart compile`.
+  ///
+  /// `--check` verifies the committed tables offline; regenerating needs the
+  /// network.
+  Future<void> buildWidthTables(List<String> args) async {
+    final result = await Process.run(Platform.resolvedExecutable, <String>[
+      'run',
+      '$root/tool/ucd_width_tables.dart',
+      ...args.where((a) => a == '--check'),
+    ], workingDirectory: root);
+    stdout.write(result.stdout);
+    stderr.write(result.stderr);
+    if (result.exitCode != 0) exit(result.exitCode);
+  }
+
   Future<void> buildRemoteClient(List<String> args) async {
     final check = args.contains('--check');
     final tmp = '$root/.dart_tool/remote_client.js';

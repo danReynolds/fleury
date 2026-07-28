@@ -3,14 +3,23 @@ name: docs
 on:
   push:
     branches: [main]
+  # Build (not deploy) on PRs as well. The docs build has its own failure modes
+  # that `fleury_dev check` does not cover — page generation asserts every
+  # examples-registry entry resolves to a documented Dart API, so a new example
+  # can break the site while every test and gate stays green. Running only on
+  # push to main meant that surfaced *after* merge, with main's docs left
+  # broken until someone noticed.
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  # Per-ref so PR builds don't serialize behind each other or behind a deploy.
+  group: pages-${{ github.ref }}
+  # Never cancel a deploy mid-flight; superseded PR builds are fine to drop.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
@@ -34,6 +43,9 @@ jobs:
 
   deploy:
     needs: build
+    # Publish only from main. A PR build proves the site compiles; it must not
+    # replace what is live.
+    if: github.event_name != 'pull_request'
     permissions:
       pages: write
       id-token: write

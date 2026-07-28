@@ -69,16 +69,36 @@ class _HostState extends State<_Host> {
       // same child wrapped in place under the same Row.
       return switch (phase) {
         0 => Row(children: [probe, const Text('b')]),
-        1 => Row(children: [const Text('a'), Center(child: probe)]),
-        _ => Row(children: [const Text('z'), Center(child: probe)]),
+        1 => Row(
+          children: [
+            const Text('a'),
+            Center(child: probe),
+          ],
+        ),
+        _ => Row(
+          children: [
+            const Text('z'),
+            Center(child: probe),
+          ],
+        ),
       };
     }
     // Finding framework.dart:596 — frame 0 nested under a wrapper at slot 0;
     // frame 1 reclaimed by a new wrapper at slot 1 after slot 0's subtree
     // was deactivated earlier in the same reconcile.
     return phase == 0
-        ? Row(children: [Center(child: probe), const Text('b')])
-        : Row(children: [const Text('a'), Align(child: probe)]);
+        ? Row(
+            children: [
+              Center(child: probe),
+              const Text('b'),
+            ],
+          )
+        : Row(
+            children: [
+              const Text('a'),
+              Align(child: probe),
+            ],
+          );
   }
 }
 
@@ -132,7 +152,12 @@ class _DuplicateHostState extends State<_DuplicateHost> {
   Widget build(BuildContext context) {
     final probe = _Probe(key: widget.probeKey);
     return duplicated
-        ? Row(children: [Center(child: probe), _Probe(key: widget.probeKey)])
+        ? Row(
+            children: [
+              Center(child: probe),
+              _Probe(key: widget.probeKey),
+            ],
+          )
         : Row(children: [probe, const Text('x')]);
   }
 }
@@ -156,7 +181,12 @@ class _MirrorDuplicateHostState extends State<_MirrorDuplicateHost> {
   Widget build(BuildContext context) {
     final probe = _Probe(key: widget.probeKey);
     return duplicated
-        ? Row(children: [probe, Center(child: _Probe(key: widget.probeKey))])
+        ? Row(
+            children: [
+              probe,
+              Center(child: _Probe(key: widget.probeKey)),
+            ],
+          )
         : Row(children: [probe, const Text('x')]);
   }
 }
@@ -164,9 +194,7 @@ class _MirrorDuplicateHostState extends State<_MirrorDuplicateHost> {
 void main() {
   setUp(_ProbeState.reset);
 
-  testWidgets('wrapping a GlobalKey child in place keeps its State', (
-    tester,
-  ) {
+  testWidgets('wrapping a GlobalKey child in place keeps its State', (tester) {
     final hostKey = GlobalKey<_HostState>();
     final probeKey = GlobalKey<_ProbeState>();
     tester.pumpWidget(
@@ -181,8 +209,11 @@ void main() {
       0,
       reason: 'in-place wrap must relocate, not dispose, the keyed State',
     );
-    expect(_ProbeState.deactivateCount, 1,
-        reason: 'one deactivate per move, not a second from stale cleanup');
+    expect(
+      _ProbeState.deactivateCount,
+      1,
+      reason: 'one deactivate per move, not a second from stale cleanup',
+    );
     expect(probeKey.currentState, isNotNull);
 
     hostKey.currentState!.advance();
@@ -216,55 +247,57 @@ void main() {
   });
 
   testWidgets(
-      'a keyed child inflated and wrapped across two passes of one flush '
-      'is a move, not a duplicate', (tester) {
-    final hostKey = GlobalKey<_TwoPassHostState>();
-    final probeKey = GlobalKey<_ProbeState>();
-    tester.pumpWidget(_TwoPassHost(key: hostKey, probeKey: probeKey));
-    expect(_ProbeState.initCount, 0);
+    'a keyed child inflated and wrapped across two passes of one flush '
+    'is a move, not a duplicate',
+    (tester) {
+      final hostKey = GlobalKey<_TwoPassHostState>();
+      final probeKey = GlobalKey<_ProbeState>();
+      tester.pumpWidget(_TwoPassHost(key: hostKey, probeKey: probeKey));
+      expect(_ProbeState.initCount, 0);
 
-    // One pump, two passes: pass 1 inflates the keyed child (claims the
-    // key); its initState setState re-dirties the host; pass 2 of the SAME
-    // flush wraps the child — a legitimate sequential move.
-    hostKey.currentState!.show();
-    tester.pump();
-    expect(_ProbeState.initCount, 1,
-        reason: 'the same State must survive the second pass');
-    expect(_ProbeState.disposeCount, 0);
-    expect(probeKey.currentState, isNotNull);
-  });
+      // One pump, two passes: pass 1 inflates the keyed child (claims the
+      // key); its initState setState re-dirties the host; pass 2 of the SAME
+      // flush wraps the child — a legitimate sequential move.
+      hostKey.currentState!.show();
+      tester.pump();
+      expect(
+        _ProbeState.initCount,
+        1,
+        reason: 'the same State must survive the second pass',
+      );
+      expect(_ProbeState.disposeCount, 0);
+      expect(probeKey.currentState, isNotNull);
+    },
+  );
 
   testWidgets(
-      'a real duplicate GlobalKey nested under a new sibling throws the '
-      'designed error instead of corrupting the tree', (tester) {
-    final hostKey = GlobalKey<_DuplicateHostState>();
-    final probeKey = GlobalKey<_ProbeState>();
-    tester.pumpWidget(_DuplicateHost(key: hostKey, probeKey: probeKey));
+    'a real duplicate GlobalKey nested under a new sibling throws the '
+    'designed error instead of corrupting the tree',
+    (tester) {
+      final hostKey = GlobalKey<_DuplicateHostState>();
+      final probeKey = GlobalKey<_ProbeState>();
+      tester.pumpWidget(_DuplicateHost(key: hostKey, probeKey: probeKey));
 
-    hostKey.currentState!.advance();
-    expect(
-      tester.pump,
-      throwsA(
-        isA<StateError>().having(
-          (e) => e.message,
-          'message',
-          contains('Duplicate GlobalKey'),
+      hostKey.currentState!.advance();
+      expect(
+        tester.pump,
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('Duplicate GlobalKey'),
+          ),
         ),
-      ),
-      reason: 'one element committed at two positions must fail loudly',
-    );
-  });
+        reason: 'one element committed at two positions must fail loudly',
+      );
+    },
+  );
 
-  testWidgets(
-      'a real duplicate whose bare occurrence precedes the nested one '
-      'throws the designed error at commit, not a corrupt adopt', (
-    tester,
-  ) {
+  testWidgets('a real duplicate whose bare occurrence precedes the nested one '
+      'throws the designed error at commit, not a corrupt adopt', (tester) {
     final hostKey = GlobalKey<_MirrorDuplicateHostState>();
     final probeKey = GlobalKey<_ProbeState>();
-    tester.pumpWidget(
-      _MirrorDuplicateHost(key: hostKey, probeKey: probeKey),
-    );
+    tester.pumpWidget(_MirrorDuplicateHost(key: hostKey, probeKey: probeKey));
 
     hostKey.currentState!.advance();
     expect(
