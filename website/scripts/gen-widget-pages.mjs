@@ -671,6 +671,7 @@ const SAMPLE_FILES = {
   dashboard: 'dashboard.dart',
   files: 'file_manager.dart',
   agent: 'agent_tui.dart',
+  editor: 'editor.dart',
 };
 const SHOWCASE_COMPONENT = '../../../components/ShowcaseWidgets.astro';
 const SHOWCASE_STAGE_COMPONENT = '../../../components/ShowcaseStage.astro';
@@ -702,6 +703,21 @@ const SHOWCASE_GOALS = {
     'layout and color. And because it is an ordinary Fleury tree, the same UI is ' +
     'inspectable as a semantic graph — so a test, or another agent, can read it. ' +
     'See [Built for agents](/fleury/architecture/agents-and-semantics/).',
+  editor:
+    'One buffer, two editors. The same text, the same widget tree — but ' +
+    'Ctrl+B swaps the entire keymap between a nano-style modeless one and a ' +
+    'modal vim one, live.\n\n' +
+    'It exists to show the two opposite ways a terminal app teaches its own ' +
+    'keys, both of which Fleury gives you for free. nano shows everything ' +
+    'always: the shortcut bar along the bottom is a `KeyHintBar`, which reads ' +
+    'the live bindings through `KeyBindings.activeOf` — no list to maintain. ' +
+    'vim reveals on demand: press `d`, `g` or the `Space` leader and pause, ' +
+    'and the which-key popup (`WhichKey`, fed by `KeyBindings.pendingOf`) ' +
+    'lists what can come next.\n\n' +
+    'The modal behaviour underneath is ordinary app state. In vim NORMAL the ' +
+    'editor declines typed text, so printables route to `KeyBindings` as ' +
+    'commands; in INSERT it claims them. See ' +
+    '[Focus & keyboard](/fleury/guides/focus-and-keyboard/).',
 };
 
 // One concrete interaction invitation per showcase, shown right above the live
@@ -717,6 +733,10 @@ const SHOWCASE_TRY = {
   agent:
     '*Try it: type a message in the prompt (or just press Enter) and the ' +
     'next turn streams in.*',
+  editor:
+    '*Try it: press Ctrl+B to switch between nano and vim — the whole ' +
+    'shortcut bar changes with it. Then, in vim, press `d` and pause to see ' +
+    'which-key list `dd`, `dw` and `d$`.*',
 };
 
 // Catalog widget name → { slug, category }, for the "widgets used" links.

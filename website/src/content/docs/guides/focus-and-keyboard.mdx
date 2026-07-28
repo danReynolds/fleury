@@ -3,6 +3,8 @@ title: Focus & keyboard
 description: Handle key events, manage focus, and register app-wide shortcuts.
 ---
 
+import FleuryExample from '../../../components/FleuryExample.astro';
+
 Fleury routes every key event to the focused part of the tree. Most widgets —
 inputs, lists, trees, tables — manage their own focus and keys, so much of the
 time you write nothing. This guide is for when you don't, and the first question
@@ -110,6 +112,44 @@ KeyBinding.event(KeySequence.escape, onEvent: (event) {
   if (!close()) event.bubble(); // not ours — let an ancestor handle it
 }),
 ```
+
+## Let the app teach its own keys
+
+Bindings carry a `label`, and two accessors read the *live* set — so a
+discoverability surface is a widget you drop in, not a list you maintain in
+parallel with the bindings.
+
+`KeyBindings.activeOf(context)` gives every binding currently in scope. That is
+what `KeyHintBar` renders: a nano-style bar that always shows what is
+available, and updates itself when the bindings change.
+
+```dart
+KeyHintBar()   // reads activeOf — nothing to keep in sync
+```
+
+`KeyBindings.pendingOf(context)` gives the sequence the user is *partway
+through* typing, plus the keys that would continue it. `WhichKey` renders that
+as a popup — the vim/Spacemacs idiom, where multi-key commands stay hidden
+until you start one:
+
+```dart
+WhichKey(child: app)   // reads pendingOf — appears mid-sequence
+```
+
+A prefix with nothing to fall back to (vim's operator-pending `d`, a `Space`
+leader) stays pending until you finish it or press `Esc`, so the popup waits
+while you read it.
+
+The editor sample below runs both. It is one buffer and one widget tree, with
+two keymaps swapped live — press **Ctrl+B**:
+
+<FleuryExample id="showcase.editor" cols={80} rows={24} interactive />
+
+In **nano** every command is a Ctrl-chord and the bar along the bottom lists
+them all. Press Ctrl+B for **vim** and the bar collapses to a sparse hint —
+then press `d`, `g`, or `Space` and pause to see which-key reveal what can
+follow. Same tree, same bindings API; only the keymap and the surface reading
+it differ. [Full source and walkthrough](/fleury/showcases/editor/).
 
 **One key to watch:** inside `FleuryApp(home: ...)` (or another explicit
 `Navigator`), `Esc` already pops the current route by default. If you also bind
