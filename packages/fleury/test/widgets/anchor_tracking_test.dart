@@ -201,5 +201,63 @@ void main() {
         reason: 'unmounting released it — the link outlives any one follower',
       );
     });
+
+    testWidgets('swapping the link moves the subscription with it', (tester) {
+      // The `link` setter unsubscribes from the old link and subscribes to
+      // the new one — logic no other test exercises, and a leak here would
+      // leave a follower tracking a stale anchor forever.
+      final first = AnchorLink();
+      final second = AnchorLink();
+      final useSecond = _Value<bool>(false);
+
+      tester.pumpWidget(
+        ListenableBuilder(
+          listenable: useSecond,
+          builder: (context, _) => Stack(
+            children: <Widget>[
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Anchor(link: first, child: const Text('A')),
+                  const Text('filler'),
+                  Anchor(link: second, child: const Text('B')),
+                ],
+              ),
+              Follower(
+                link: useSecond.value ? second : first,
+                child: const Text('¤'),
+              ),
+            ],
+          ),
+        ),
+      );
+      tester.render(size: _size);
+      expect(first.hasListeners, isTrue, reason: 'subscribed to the first');
+      expect(second.hasListeners, isFalse);
+
+      final onFirst = _find(tester, '¤')!;
+      final anchorB = _find(tester, 'B')!;
+
+      useSecond.value = true;
+      tester.pump();
+      tester.render(size: _size);
+
+      expect(
+        first.hasListeners,
+        isFalse,
+        reason:
+            'the old link was released — otherwise it leaks a listener '
+            'and keeps waking a follower that no longer tracks it',
+      );
+      expect(second.hasListeners, isTrue, reason: 'moved to the new link');
+
+      final onSecond = _find(tester, '¤')!;
+      expect(onSecond.row, isNot(onFirst.row), reason: 'it actually moved');
+      expect(
+        onSecond.row,
+        anchorB.row + 1,
+        reason: 'now placed against the second anchor',
+      );
+    });
   });
 }
