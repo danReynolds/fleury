@@ -22,7 +22,6 @@ final class FramePresentationPlan {
     required this.damage,
     required this.dirtyRowModels,
     required this.metricsChanged,
-    required this.dirtyRowDiffTime,
     required this.spanBuildTime,
   });
 
@@ -31,7 +30,6 @@ final class FramePresentationPlan {
   final FramePresentationDamage damage;
   final List<RowSpanModel> dirtyRowModels;
   final bool metricsChanged;
-  final Duration dirtyRowDiffTime;
   final Duration spanBuildTime;
 
   /// Whether the presenter must repaint everything.
@@ -205,8 +203,7 @@ final class FramePresentationPlanner {
     bool metricsChanged = false,
   }) {
     final runtimeDamage = frame.damage;
-    final dirtyRowsResult = _dirtyRowsForFrame(frame);
-    final dirtyRows = dirtyRowsResult.rows;
+    final dirtyRows = frame.damage.dirtyRowsFor(frame.next.size);
     // One construction per loop-damage variant, 1:1. The scroll decision is
     // the loop's — it had both buffers and the diff's counts in hand.
     // Re-deriving it here would rescan both buffers, and the old trigger
@@ -243,7 +240,6 @@ final class FramePresentationPlanner {
       damage: damage,
       dirtyRowModels: dirtyRowModels,
       metricsChanged: metricsChanged,
-      dirtyRowDiffTime: dirtyRowsResult.diffTime,
       spanBuildTime: spanBuildStopwatch.elapsed,
     );
   }
@@ -266,20 +262,4 @@ final class FramePresentationPlanner {
     }
     return TuiDirtyRows.fromRows(residual, rowCount: rows);
   }
-
-  _DirtyRowsResult _dirtyRowsForFrame(TuiRenderedFrame frame) {
-    // The frame loop derives the exact changed set while it still has both
-    // buffers hot, so there is nothing left to discover here.
-    return _DirtyRowsResult(
-      rows: frame.damage.dirtyRowsFor(frame.next.size),
-      diffTime: Duration.zero,
-    );
-  }
-}
-
-final class _DirtyRowsResult {
-  const _DirtyRowsResult({required this.rows, required this.diffTime});
-
-  final TuiDirtyRows rows;
-  final Duration diffTime;
 }

@@ -465,7 +465,6 @@ final class WireFrameSource implements BrowserFrameSource {
         for (var r = 0; r < mirror.size.rows; r++) builder.buildRow(mirror, r),
       ],
       metricsChanged: false,
-      dirtyRowDiffTime: Duration.zero,
       spanBuildTime: Duration.zero,
     );
   }

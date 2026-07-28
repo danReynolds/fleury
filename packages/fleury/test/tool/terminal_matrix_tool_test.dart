@@ -287,12 +287,12 @@ void main() {
           'frames': [
             _webFrame(
               totalFrameMicros: 10000,
-              dirtyRowDiffMicros: 800,
+              spanBuildMicros: 800,
               domApplyMicros: 3000,
             ),
             _webFrame(
               totalFrameMicros: 22000,
-              dirtyRowDiffMicros: 1500,
+              spanBuildMicros: 1500,
               domApplyMicros: 12000,
             ),
           ],
@@ -314,8 +314,8 @@ void main() {
       expect(summary['overBudgetFrameCount'], 1);
       expect(summary['dominantP95Slice'], 'domApplyMs');
       final timings = summary['timings'] as Map<String, Object?>;
-      final dirtyRowDiff = timings['dirtyRowDiffMs'] as Map<String, Object?>;
-      expect(dirtyRowDiff['p95'], 1.5);
+      final spanBuild = timings['spanBuildMs'] as Map<String, Object?>;
+      expect(spanBuild['p95'], 1.5);
       final browserMetrics = summary['browserMetrics'] as Map<String, Object?>;
       expect(browserMetrics['domNodeCount'], 128);
 
@@ -372,7 +372,7 @@ void main() {
       );
       final markdown = File(outputPath).readAsStringSync();
       expect(markdown, contains('Fleury Web Frame'));
-      expect(markdown, contains('dirtyRowDiffMs'));
+      expect(markdown, contains('spanBuildMs'));
       expect(markdown, contains('domApplyMs'));
       expect(markdown, contains('## Browser Metrics'));
       expect(markdown, contains('DOM nodes'));
@@ -2275,7 +2275,7 @@ void _writeEntry(Directory directory, String name, Map<String, Object?> entry) {
 Map<String, Object?> _webFrame({
   required int totalFrameMicros,
   required int domApplyMicros,
-  int dirtyRowDiffMicros = 0,
+  int spanBuildMicros = 700,
   int semanticFallbackNodeCount = 0,
   int semanticUncoveredCellCount = 0,
 }) {
@@ -2303,8 +2303,7 @@ Map<String, Object?> _webFrame({
     'semanticFallbackNodeCount': semanticFallbackNodeCount,
     'semanticUncoveredCellCount': semanticUncoveredCellCount,
     'runtimeRenderMicros': 3000,
-    'dirtyRowDiffMicros': dirtyRowDiffMicros,
-    'spanBuildMicros': 1000,
+    'spanBuildMicros': spanBuildMicros,
     'domApplyMicros': domApplyMicros,
     'semanticApplyMicros': 1000,
     'totalFrameMicros': totalFrameMicros,

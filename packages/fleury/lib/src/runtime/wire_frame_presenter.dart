@@ -51,7 +51,7 @@ final class WireFramePresenter implements FramePresenter {
     // On the wire the "diff" phase is building the change plan: the row diff
     // plus span construction. The driver owns the rest of the FrameEvent.
     return FrameDiffStats(
-      diff: plan.dirtyRowDiffTime + plan.spanBuildTime,
+      diff: plan.spanBuildTime,
       dirtyCells: dirtyCells,
       dirtyBounds: bounds,
     );

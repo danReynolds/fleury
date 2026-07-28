@@ -40,12 +40,12 @@ void main() {
       frames: [
         _webFrame(
           totalFrameMicros: 10000,
-          dirtyRowDiffMicros: 400,
+          spanBuildMicros: 400,
           domApplyMicros: 3000,
         ),
         _webFrame(
           totalFrameMicros: 20000,
-          dirtyRowDiffMicros: 800,
+          spanBuildMicros: 800,
           domApplyMicros: 5000,
         ),
       ],
@@ -70,12 +70,12 @@ void main() {
       frames: [
         _webFrame(
           totalFrameMicros: 14000,
-          dirtyRowDiffMicros: 600,
+          spanBuildMicros: 600,
           domApplyMicros: 4000,
         ),
         _webFrame(
           totalFrameMicros: 18000,
-          dirtyRowDiffMicros: 1200,
+          spanBuildMicros: 1200,
           domApplyMicros: 6000,
         ),
       ],
@@ -128,8 +128,8 @@ void main() {
     final steadyTotalFrame =
         scenario['steadyTotalFrameP95Ms'] as Map<String, Object?>;
     expect(steadyTotalFrame['median'], 19.0);
-    final dirtyRowDiff = scenario['dirtyRowDiffP95Ms'] as Map<String, Object?>;
-    expect(dirtyRowDiff['median'], 1.0);
+    final spanBuild = scenario['spanBuildP95Ms'] as Map<String, Object?>;
+    expect(spanBuild['median'], 1.0);
     final browserDomNodes =
         scenario['browserDomNodeCount'] as Map<String, Object?>;
     expect(browserDomNodes['median'], 120.0);
@@ -159,7 +159,12 @@ void main() {
     expect(markdown, contains('Layout p95'));
     expect(markdown, contains('Paint p95'));
     expect(markdown, contains('4 / 2<br>+2 extra'));
-    expect(markdown, contains('Row diff p95'));
+    expect(markdown, contains('Span p95'));
+    expect(
+      markdown,
+      isNot(contains('Row diff p95')),
+      reason: 'the planner no longer has a row-diff phase to report',
+    );
     expect(markdown, contains('Run Env'));
     expect(markdown, contains('1 signature'));
     expect(markdown, contains('DOM nodes'));
@@ -793,7 +798,7 @@ Map<String, Object?> _runEnvironment({String chromeBrowser = 'Chrome/126'}) {
 Map<String, Object?> _webFrame({
   required int totalFrameMicros,
   required int domApplyMicros,
-  int dirtyRowDiffMicros = 0,
+  int spanBuildMicros = 1000,
   int semanticApplyMicros = 1000,
 }) {
   return <String, Object?>{
@@ -823,8 +828,7 @@ Map<String, Object?> _webFrame({
     'runtimeBuildMicros': 500,
     'runtimeLayoutMicros': 750,
     'runtimePaintMicros': 1750,
-    'dirtyRowDiffMicros': dirtyRowDiffMicros,
-    'spanBuildMicros': 1000,
+    'spanBuildMicros': spanBuildMicros,
     'domApplyMicros': domApplyMicros,
     'semanticApplyMicros': semanticApplyMicros,
     'totalFrameMicros': totalFrameMicros,

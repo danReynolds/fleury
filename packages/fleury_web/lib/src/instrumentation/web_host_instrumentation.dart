@@ -273,7 +273,6 @@ final class WebFrameInstrumentation {
     this.runtimeBuildTime = Duration.zero,
     this.runtimeLayoutTime = Duration.zero,
     this.runtimePaintTime = Duration.zero,
-    this.dirtyRowDiffTime = Duration.zero,
     required this.spanBuildTime,
     required this.domApplyTime,
     this.semanticTreeBuildTime = Duration.zero,
@@ -298,7 +297,6 @@ final class WebFrameInstrumentation {
     Duration runtimeBuildTime = Duration.zero,
     Duration runtimeLayoutTime = Duration.zero,
     Duration runtimePaintTime = Duration.zero,
-    Duration dirtyRowDiffTime = Duration.zero,
     required Duration spanBuildTime,
     required Duration domApplyTime,
     Duration semanticTreeBuildTime = Duration.zero,
@@ -354,7 +352,6 @@ final class WebFrameInstrumentation {
       runtimeBuildTime: runtimeBuildTime,
       runtimeLayoutTime: runtimeLayoutTime,
       runtimePaintTime: runtimePaintTime,
-      dirtyRowDiffTime: dirtyRowDiffTime,
       spanBuildTime: spanBuildTime,
       domApplyTime: domApplyTime,
       semanticTreeBuildTime: semanticTreeBuildTime,
@@ -472,7 +469,6 @@ final class WebFrameInstrumentation {
       runtimeBuildTime: _readOptionalMicros(json, 'runtimeBuildMicros'),
       runtimeLayoutTime: _readOptionalMicros(json, 'runtimeLayoutMicros'),
       runtimePaintTime: _readOptionalMicros(json, 'runtimePaintMicros'),
-      dirtyRowDiffTime: _readOptionalMicros(json, 'dirtyRowDiffMicros'),
       spanBuildTime: _readMicros(json, 'spanBuildMicros'),
       domApplyTime: _readMicros(json, 'domApplyMicros'),
       semanticTreeBuildTime: _readOptionalMicros(
@@ -533,7 +529,6 @@ final class WebFrameInstrumentation {
   final Duration runtimeBuildTime;
   final Duration runtimeLayoutTime;
   final Duration runtimePaintTime;
-  final Duration dirtyRowDiffTime;
   final Duration spanBuildTime;
   final Duration domApplyTime;
   final Duration semanticTreeBuildTime;
@@ -586,7 +581,6 @@ final class WebFrameInstrumentation {
       'runtimeBuildMicros': runtimeBuildTime.inMicroseconds,
       'runtimeLayoutMicros': runtimeLayoutTime.inMicroseconds,
       'runtimePaintMicros': runtimePaintTime.inMicroseconds,
-      'dirtyRowDiffMicros': dirtyRowDiffTime.inMicroseconds,
       'spanBuildMicros': spanBuildTime.inMicroseconds,
       'domApplyMicros': domApplyTime.inMicroseconds,
       'semanticTreeBuildMicros': semanticTreeBuildTime.inMicroseconds,
@@ -642,9 +636,6 @@ final class WebInstrumentationSummary {
       ),
       'runtimePaintMs': WebMetricSummary.fromDurations(
         runtimePhaseTimedFrames.map((frame) => frame.runtimePaintTime),
-      ),
-      'dirtyRowDiffMs': WebMetricSummary.fromDurations(
-        captured.map((frame) => frame.dirtyRowDiffTime),
       ),
       'spanBuildMs': WebMetricSummary.fromDurations(
         captured.map((frame) => frame.spanBuildTime),
@@ -1009,7 +1000,6 @@ String _dominantP95Slice(Map<String, WebMetricSummary> timings) {
       'runtimePaintMs',
     ] else
       'runtimeRenderMs',
-    'dirtyRowDiffMs',
     'spanBuildMs',
     'domApplyMs',
     'semanticApplyMs',
