@@ -164,4 +164,111 @@ void main() {
       expect(tester.clipboard.readInProcess(), isNull);
     });
   });
+  group('modal routes get their own selection scope', () {
+    // A presented route is a modal FocusScope, which cuts the background out
+    // of the active chain — taking the app-root selection scope's Ctrl+C with
+    // it. Without a scope of its own the text highlighted but never copied.
+    testWidgets('text presented in a modal route can be selected AND copied', (
+      tester,
+    ) {
+      BuildContext? home;
+      tester.pumpWidget(
+        Navigator(
+          home: _CaptureContext(
+            sink: (context) => home = context,
+            child: const Focus(autofocus: true, child: Text('app behind')),
+          ),
+        ),
+      );
+      tester.render(size: _modalSize);
+
+      home!.present<void>(
+        const Text('error: exit code 517'),
+        transition: RouteTransition.none,
+      );
+      tester.pump();
+
+      final at = _find(tester, 'error:');
+      expect(at, isNotNull, reason: 'the route is up');
+      _dragSelect(tester, fromCol: at!.col, toCol: at.col + 20, row: at.row);
+      expect(
+        tester.render(size: _modalSize).atColRow(at.col, at.row).style.inverse,
+        isTrue,
+        reason: 'the drag highlighted it',
+      );
+
+      tester.press(KeySequence.ctrl.c);
+      expect(tester.clipboard.readInProcess(), 'error: exit code 517');
+    });
+
+    testWidgets('Esc clears a held selection first, then dismisses', (tester) {
+      BuildContext? home;
+      tester.pumpWidget(
+        Navigator(
+          home: _CaptureContext(
+            sink: (context) => home = context,
+            child: const Focus(autofocus: true, child: Text('app behind')),
+          ),
+        ),
+      );
+      tester.render(size: _modalSize);
+      home!.present<void>(
+        const Text('error: exit code 517'),
+        transition: RouteTransition.none,
+      );
+      tester.pump();
+
+      final at = _find(tester, 'error:')!;
+      _dragSelect(tester, fromCol: at.col, toCol: at.col + 8, row: at.row);
+
+      // First Esc clears the selection (the innermost thing Esc can back out
+      // of) and consumes the key; the route stays. The second finds nothing
+      // selected, bubbles, and pops — the same two-step contract Ctrl+C uses.
+      tester.press(KeySequence.escape);
+      tester.pump();
+      expect(
+        _find(tester, 'error:'),
+        isNotNull,
+        reason: 'the first Esc cleared the selection, not the route',
+      );
+      expect(
+        tester.render(size: _modalSize).atColRow(at.col, at.row).style.inverse,
+        isFalse,
+        reason: 'the selection is gone',
+      );
+
+      tester.press(KeySequence.escape);
+      tester.pump();
+      expect(_find(tester, 'error:'), isNull, reason: 'the second Esc popped');
+    });
+  });
+}
+
+const _modalSize = CellSize(44, 8);
+
+/// First (col,row) where [needle] starts in the rendered buffer, or null.
+({int col, int row})? _find(FleuryTester tester, String needle) {
+  final buf = tester.render(size: _modalSize);
+  for (var r = 0; r < _modalSize.rows; r++) {
+    final sb = StringBuffer();
+    for (var c = 0; c < _modalSize.cols; c++) {
+      sb.write(buf.atColRow(c, r).grapheme ?? ' ');
+    }
+    final i = sb.toString().indexOf(needle);
+    if (i >= 0) return (col: i, row: r);
+  }
+  return null;
+}
+
+class _CaptureContext extends StatelessWidget {
+  const _CaptureContext({required this.sink, required this.child});
+
+  final void Function(BuildContext) sink;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    sink(context);
+    return child;
+  }
 }

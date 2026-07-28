@@ -60,6 +60,7 @@ import 'focus_traversal.dart';
 import 'error_boundary.dart';
 import 'framework.dart';
 import 'key_bindings.dart';
+import 'selection/selection_area.dart';
 import 'tui_binding.dart';
 
 /// The enter/exit effects (and timing) a route animates with.
@@ -175,7 +176,7 @@ class _Route {
   /// For a modal ([presentAlignment] != null): a fill painted over the screen
   /// behind, around the presented content. null leaves the surround composited
   /// with the route beneath. (The content itself always sits on an opaque
-  /// [Surface], so it never shows through regardless of this.)
+  /// opaque fill, so it never shows through regardless of this.)
   final Color? barrierColor;
 
   /// For a modal: whether Esc / a dismiss action pops it. Default true; set
@@ -379,7 +380,7 @@ class NavigatorState extends State<Navigator> {
   /// the stack of the navigator it's presented on — present on a nested
   /// navigator for a pane-scoped modal, or the root for an app-wide one.
   ///
-  /// The presented [screen] is placed on an opaque [Surface] automatically, so
+  /// The presented [screen] is placed on an opaque fill automatically, so
   /// nothing painted beneath shows through it — a modal is never see-through.
   /// [barrierColor] optionally fills the surround (over the screen behind);
   /// null leaves it composited. [barrierDismissible] (default true) controls
@@ -744,13 +745,23 @@ class _RouteHost extends StatelessWidget {
     if (align == null) {
       screen = route.screen;
     } else {
-      // Modal: the presented content sits on an opaque Surface so nothing
+      // Modal: the presented content sits on an opaque fill so nothing
       // painted beneath shows through it (closes the bleed-through leak). A
       // barrierColor, when set, fills the surround over the screen behind;
       // null leaves the surround composited with the route beneath.
+      //
+      // It also gets its OWN selection scope. The app-root scope that makes
+      // text selectable by default sits outside this route, and a modal
+      // FocusScope (below) deliberately cuts the background out of the active
+      // chain — which would otherwise take the root scope's Ctrl+C with it,
+      // leaving a dialog's text selectable-looking but impossible to copy.
+      // Nested SelectionAreas are fine: the innermost one wins, so a route
+      // that brings its own still behaves.
       Widget content = Align(
         alignment: align,
-        child: Container.filled(child: route.screen),
+        child: Container.filled(
+          child: DefaultRootSelection(child: route.screen),
+        ),
       );
       final barrier = route.barrierColor;
       if (barrier != null) {
@@ -1005,7 +1016,7 @@ extension NavigatorContext on BuildContext {
       Navigator.of(this).pushAndClear<T>(screen, transition: transition);
 
   /// Presents [screen] as a modal over the current screen (centered by
-  /// default), on an opaque [Surface]. Dismiss with [pop]. [barrierColor]
+  /// default), on an opaque fill. Dismiss with [pop]. [barrierColor]
   /// fills the surround; [barrierDismissible] (default true) controls Esc.
   Future<T?> present<T>(
     Widget screen, {
