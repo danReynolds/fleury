@@ -4,33 +4,60 @@ description: Style a Fleury app with ThemeData, ColorScheme, and CellStyle.
 ---
 
 import FleuryExample from '../../../components/FleuryExample.astro';
+import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
 
-Every Fleury app renders through a `ThemeData`. Widgets read it with
-`Theme.of(context)` — or the `context.theme` and `context.colors` shorthands —
-and style their cells from it, so a single theme drives the whole tree.
+Every Fleury app renders through a theme — a single value, sitting above your
+widget tree, that widgets read to decide how their cells look.
 
-## Ready-made themes
-
-Before building one from scratch: `fleury_themes` ships the palettes you
-already know, each a plain `const ThemeData`.
+The thing worth knowing up front is that widgets ask a theme for *roles* rather
+than colours: the error colour, the muted text style, the accent for whatever
+is focused. Keeping the colours in one place is what lets you swap a theme and
+restyle the whole app at once, and lets the same widget tree look right on a
+light terminal, a dark one, or in a browser.
 
 ```dart
-import 'package:fleury_themes/fleury_themes.dart';
-
-runApp(const MyApp(), theme: tokyoNight);
+runApp(const MyApp(), theme: nord);
 ```
 
-Arrow through the list to see each one applied — this is a real Fleury app
-running in your browser, not a screenshot:
+The rest of this guide covers what goes in that second argument: writing a
+theme, and the ready-made ones you can use instead.
 
-<FleuryExample id="themes.gallery" cols={62} rows={18} interactive />
+## Creating a theme
 
-`fleuryThemes` is the whole set with display names, ready to drop into a
-picker. See the
-[package README](https://github.com/danReynolds/fleury/tree/main/packages/fleury_themes)
-for how to write your own — the rest of this guide covers the pieces it uses.
+A theme is a plain `const` value you fill in. Here is a complete one, and the
+app it produces:
 
-## Apply a theme
+<CodeDemoSplit file="amber_theme.dart">
+<Fragment slot="code">
+```dart
+const amber = ThemeData(
+  brightness: Brightness.dark,
+  colorScheme: ColorScheme(
+    background: RgbColor(0x1C, 0x18, 0x14),
+    foreground: RgbColor(0xEB, 0xDB, 0xB2),
+    surface: RgbColor(0x2A, 0x24, 0x1E),
+    primary: RgbColor(0xE8, 0xA3, 0x3D),
+    focus: RgbColor(0xF2, 0xC5, 0x5C),
+    success: RgbColor(0x8E, 0xC0, 0x7C),
+    warning: RgbColor(0xE8, 0xA3, 0x3D),
+    error: RgbColor(0xE5, 0x6B, 0x5B),
+    info: RgbColor(0x83, 0xA5, 0x98),
+  ),
+  mutedStyle: CellStyle(dim: true),
+  selectionStyle: CellStyle(inverse: true),
+  focusedStyle: CellStyle(bold: true),
+  borderStyle: BorderStyle.rounded,
+);
+
+runApp(const MyApp(), theme: amber);
+```
+</Fragment>
+<FleuryExample slot="demo" id="themes.custom" cols={38} rows={14} surfaceTheme="site" />
+</CodeDemoSplit>
+
+Every part of that is explained below.
+
+### Apply a theme
 
 For an app-wide theme, pass `theme` to `FleuryApp`. The theme sits above the
 app's Navigator, so the home screen, pushed screens, and presented dialogs all
@@ -64,11 +91,19 @@ Use `Theme(data:, child:)` when only one subtree should differ from the app
 theme, such as a high-contrast preview or a branded panel. The nearest Theme
 wins.
 
-## ColorScheme
+### ColorScheme
 
-The semantic palette. `foreground`/`background` are the defaults; `primary`,
-`success`, `warning`, `error`, and `info` are the accents widgets reach for
-(gauges, validation, status):
+The semantic palette — nine roles, named for what they *mean* rather than what
+colour they are, so a widget asks for "the error colour" and every theme
+answers:
+
+| Role | Used for |
+| --- | --- |
+| `foreground` / `background` | default text and fill |
+| `surface` | raised fills that must be opaque — dialogs, popups |
+| `primary` | the main accent: active affordances, progress |
+| `focus` | the focused pane or control |
+| `success` `warning` `error` `info` | status |
 
 ```dart
 final scheme = Theme.of(context).colorScheme;
@@ -79,7 +114,21 @@ Text('uh oh', style: CellStyle(foreground: scheme.error));
 Colors can be `RgbColor(r, g, b)` for truecolor, `AnsiColor(n)` for a palette
 index, or one of the named `Colors.*` constants.
 
-## CellStyle
+`foreground`, `background` and `surface` are nullable, and leaving one unset is
+a real choice: it means "use the terminal's own", which is usually right for
+text and background — the user picked their terminal colours. `surface` is the
+exception worth setting, because it backs dialogs and must be opaque enough to
+hide whatever is painted beneath it.
+
+#### Colour alone is not a cue
+
+`NO_COLOR` (and any 2-colour terminal) drops colour entirely, but keeps
+attributes — `dim`, `bold`, `inverse`. So a cue carried only by colour vanishes
+for those users, while a cue that *pairs* colour with an attribute survives in
+reduced form. That is why the built-in styles below are attribute-first, and
+why a status indicator should carry a glyph or weight as well as a hue.
+
+### CellStyle
 
 A cell's appearance: foreground/background plus terminal attributes.
 
@@ -95,7 +144,7 @@ const CellStyle(
 `textStyle` (the default), `mutedStyle` (secondary text), `selectionStyle`
 (highlighted rows), and `focusedStyle` (the focused control).
 
-## Multiple styles in one line: RichText
+### Multiple styles in one line: RichText
 
 A `Text` carries a single `CellStyle`. To mix styles within one run — a bold word
 in a sentence, a colored token in a log line — use `RichText` with a tree of
@@ -113,7 +162,32 @@ RichText(
 )
 ```
 
-## Painting backgrounds
+### Painting backgrounds
 
 Backgrounds aren't auto-painted. To fill a region with the theme background, wrap
 it in a `Container(color: theme.colorScheme.background, child: …)`.
+
+## Community themes
+
+If you would rather not start from scratch,
+[`fleury_themes`](https://github.com/danReynolds/fleury/tree/main/packages/fleury_themes)
+ships eight community palettes mapped onto the roles above — Nord, Dracula,
+Gruvbox Dark, Tokyo Night, Catppuccin Mocha, One Dark, and Solarized in dark
+and light.
+
+```dart
+import 'package:fleury_themes/fleury_themes.dart';
+
+runApp(const MyApp(), theme: tokyoNight);
+```
+
+Arrow through the list to see each one applied — a real Fleury app running in
+your browser, not a screenshot:
+
+<FleuryExample id="themes.gallery" cols={62} rows={18} interactive />
+
+Each is a plain `const ThemeData`, so it costs nothing at runtime, and
+`fleuryThemes` is the whole set with display names, ready to drop into a
+picker. The
+[package README](https://github.com/danReynolds/fleury/tree/main/packages/fleury_themes)
+lists every theme with a link to its upstream project.
