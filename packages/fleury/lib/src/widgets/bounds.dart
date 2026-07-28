@@ -24,7 +24,6 @@ import '../rendering/layout.dart';
 import '../rendering/render_object.dart';
 import 'align.dart' show Alignment;
 import 'framework.dart';
-import 'overlay.dart';
 
 /// The observable: one widget's painted screen-space bounds, live.
 ///
