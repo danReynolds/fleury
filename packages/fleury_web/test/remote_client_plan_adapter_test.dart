@@ -23,7 +23,7 @@ void main() {
       final presentation = applyRemotePlan(plan, mirror);
 
       expect(presentation.fullRepaint, isFalse);
-      expect(presentation.damage.dirtyRows.rows, [2, 4]);
+      expect(presentation.dirtyRows.rows, [2, 4]);
       // The mirror now holds the content; dirty rows have span models.
       expect(_rowText(mirror, 2), 'second row');
       expect(_rowText(mirror, 4), 'fifth-ish');
@@ -41,7 +41,11 @@ void main() {
       final plan = buildRemotePlan(prev, next, fullRepaint: true);
       final mirror = CellBuffer(const CellSize(10, 4));
       final presentation = applyRemotePlan(plan, mirror);
-      expect(presentation.damage.dirtyRows.isFull, isTrue);
+      expect(presentation.dirtyRows.isFull, isTrue);
+      // The client side of the derived flag: previously unasserted, so an
+      // inverted `fullRepaint` getter survived this test.
+      expect(presentation.fullRepaint, isTrue);
+      expect(presentation.damage, isA<PresentationFullRepaint>());
       expect(presentation.dirtyRowModels, hasLength(4));
     });
 
@@ -81,6 +85,19 @@ void main() {
         mirror.writeText(CellOffset(0, r), line(r));
       }
       final presentation = applyRemotePlan(plan, mirror);
+      // The scrolled variant, with conservative-full dirty rows: the wire
+      // ships only the residual patches, and a client cannot know which moved
+      // rows ended identical — so it must report all of them, never the
+      // residue mislabelled as the whole. The wire's dirty-row hint and
+      // semantic coverage would otherwise lose every moved row.
+      expect(
+        presentation.damage,
+        isA<PresentationScrolled>().having(
+          (d) => d.dirtyRows.isFull,
+          'dirtyRows.isFull',
+          isTrue,
+        ),
+      );
       expect(
         presentation.scrollUpRows,
         1,

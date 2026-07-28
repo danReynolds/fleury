@@ -1,0 +1,58 @@
+THIRD-PARTY NOTICES — fleury_themes
+===================================
+
+This package contains colour values derived from the community colour schemes
+listed below. Each remains the work of its respective authors and is included
+here with attribution. The mapping of each palette onto Fleury's nine
+ColorScheme roles is this package's own work.
+
+No upstream source code is vendored — only published colour values.
+
+Anyone redistributing this package should confirm these notices remain
+accurate for the version they ship.
+
+
+Nord
+----
+Homepage: https://www.nordtheme.com
+Source:   https://github.com/nordtheme/nord
+Authors:  Sven Greb and contributors
+
+
+Dracula
+-------
+Homepage: https://draculatheme.com
+Source:   https://github.com/dracula/dracula-theme
+Authors:  Zeno Rocha and contributors
+
+
+Gruvbox
+-------
+Source:   https://github.com/morhetz/gruvbox
+Authors:  Pavel Pertsev and contributors
+
+
+Solarized (dark and light)
+--------------------------
+Homepage: https://ethanschoonover.com/solarized
+Source:   https://github.com/altercation/solarized
+Author:   Ethan Schoonover
+
+
+Catppuccin (Mocha flavour)
+--------------------------
+Homepage: https://catppuccin.com
+Source:   https://github.com/catppuccin/catppuccin
+Authors:  The Catppuccin organization and contributors
+
+
+Tokyo Night
+-----------
+Source:   https://github.com/folke/tokyonight.nvim
+Authors:  Folke Lemaitre and contributors
+
+
+One Dark
+--------
+Source:   https://github.com/atom/one-dark-syntax
+Authors:  GitHub, Inc. and contributors

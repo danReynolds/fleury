@@ -16,7 +16,6 @@ void main() {
       runtimeMaxDirtyElements: 2,
       runtimeLayoutMs: 0.4,
       runtimePaintMs: 1.1,
-      dirtyRowDiffMs: 0.9,
       domApplyMs: 3.5,
       semanticTreeBuildMs: 0.4,
       semanticCoverageMs: 0.5,
@@ -52,7 +51,6 @@ void main() {
     expect(copy.runtimeMaxDirtyElementCount, 2);
     expect(copy.runtimeLayoutTime.inMicroseconds, 400);
     expect(copy.runtimePaintTime.inMicroseconds, 1100);
-    expect(copy.dirtyRowDiffTime.inMicroseconds, 900);
     expect(copy.semanticTreeBuildTime.inMicroseconds, 400);
     expect(copy.semanticCoverageTime.inMicroseconds, 500);
     expect(copy.semanticDiffTime.inMicroseconds, 600);
@@ -77,8 +75,7 @@ void main() {
         ..remove('runtimeRebuiltElementCount')
         ..remove('runtimeMaxDirtyElementCount')
         ..remove('runtimeLayoutMicros')
-        ..remove('runtimePaintMicros')
-        ..remove('dirtyRowDiffMicros');
+        ..remove('runtimePaintMicros');
 
       final copy = WebFrameInstrumentation.fromJson(json);
 
@@ -90,7 +87,6 @@ void main() {
       expect(copy.runtimeMaxDirtyElementCount, 0);
       expect(copy.runtimeLayoutTime, Duration.zero);
       expect(copy.runtimePaintTime, Duration.zero);
-      expect(copy.dirtyRowDiffTime, Duration.zero);
     },
   );
 
@@ -106,7 +102,6 @@ void main() {
         runtimeMaxDirtyElements: 2,
         runtimeLayoutMs: 0.3,
         runtimePaintMs: 1.5,
-        dirtyRowDiffMs: 0.7,
         spanBuildMs: 1,
         domApplyMs: 3,
         semanticTreeBuildMs: 0.2,
@@ -130,7 +125,6 @@ void main() {
         runtimeMaxDirtyElements: 3,
         runtimeLayoutMs: 0.6,
         runtimePaintMs: 3.0,
-        dirtyRowDiffMs: 1.5,
         spanBuildMs: 2,
         domApplyMs: 12,
         semanticTreeBuildMs: 0.4,
@@ -163,7 +157,11 @@ void main() {
     expect(summary.timings['runtimeLayoutMs']!.p95, 0.6);
     expect(summary.timings['runtimePaintMs']!.sampleCount, 2);
     expect(summary.timings['runtimePaintMs']!.p95, 3.0);
-    expect(summary.timings['dirtyRowDiffMs']!.p95, 1.5);
+    expect(
+      summary.timings.containsKey('dirtyRowDiffMs'),
+      isFalse,
+      reason: 'the planner no longer has a row-diff phase to summarize',
+    );
     expect(summary.timings['semanticTreeBuildMs']!.p95, 0.4);
     expect(summary.timings['semanticPresenterMs']!.p95, 1.0);
     expect(summary.counts['runtimeBuildPasses']!.total, 3);
@@ -185,7 +183,6 @@ void main() {
         runtimeBuildMs: 0.5,
         runtimeLayoutMs: 1.0,
         runtimePaintMs: 4.0,
-        dirtyRowDiffMs: 0.6,
         spanBuildMs: 0.8,
         domApplyMs: 2.0,
         semanticApplyMs: 1.5,
@@ -200,7 +197,6 @@ void main() {
         _frame(
             runtimeRenderMs: 6,
             runtimeBufferPrepareMs: 0.4,
-            dirtyRowDiffMs: 0.6,
             spanBuildMs: 0.8,
             domApplyMs: 2.0,
             semanticApplyMs: 1.5,
@@ -276,7 +272,6 @@ WebFrameInstrumentation _frame({
   int runtimeMaxDirtyElements = 0,
   double runtimeLayoutMs = 0,
   double runtimePaintMs = 0,
-  double dirtyRowDiffMs = 0,
   double spanBuildMs = 0.1,
   double domApplyMs = 0.1,
   double semanticTreeBuildMs = 0,
@@ -332,7 +327,6 @@ WebFrameInstrumentation _frame({
     runtimeBuildTime: _ms(runtimeBuildMs),
     runtimeLayoutTime: _ms(runtimeLayoutMs),
     runtimePaintTime: _ms(runtimePaintMs),
-    dirtyRowDiffTime: _ms(dirtyRowDiffMs),
     spanBuildTime: _ms(spanBuildMs),
     domApplyTime: _ms(domApplyMs),
     semanticTreeBuildTime: _ms(semanticTreeBuildMs),

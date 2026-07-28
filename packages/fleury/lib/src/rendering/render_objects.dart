@@ -14,6 +14,7 @@ import 'edge_insets.dart';
 import 'layout.dart';
 import 'render_object.dart';
 import 'selectable_text_mixin.dart';
+import 'text_projection.dart';
 import 'text_sanitizer.dart';
 import 'width_resolver.dart';
 
@@ -66,15 +67,17 @@ class RenderText extends RenderObject
     TextOverflow overflow = TextOverflow.clip,
     TextAlign textAlign = TextAlign.left,
     WidthResolver widthResolver = const DefaultWidthResolver(),
-    CellWidthPolicy policy = CellWidthPolicy.spec,
-  }) : _text = _sanitizePreservingNewlines(text),
+    TextPresentationPolicy textPolicy = TextPresentationPolicy.spec,
+  }) : _logicalText = _sanitizePreservingNewlines(text),
        _style = style,
        _softWrap = softWrap,
        _maxLines = maxLines,
        _overflow = overflow,
        _textAlign = textAlign,
        _widthResolver = widthResolver,
-       _policy = policy {
+       _textPolicy = textPolicy {
+    _projection = projectText(_logicalText, policy: _textPolicy);
+    _text = _projection.displayText;
     _recomputeIntrinsicWidth();
   }
 
@@ -87,15 +90,35 @@ class RenderText extends RenderObject
     return value.split('\n').map(sanitizeForDisplay).join('\n');
   }
 
-  String _text;
+  /// Canonical (post-sanitization) text — what [text], copy, and semantics
+  /// answer with. Geometry never reads it directly.
+  String _logicalText;
+
+  /// The display projection of [_logicalText] under [_textPolicy] — the
+  /// per-render-object memo (RFC 0019 §6.4): recomputed only when the logical
+  /// text or the operational policy changes, never per frame. Identity (same
+  /// string object, zero mappings) unless lowering is authorized AND the text
+  /// contains a recognized emoji ZWJ sequence.
+  late TextProjection _projection;
+
+  /// What layout measures, wrap breaks, and paint draws:
+  /// `_projection.displayText`. Every geometry path in this class operates on
+  /// this string, so display offsets (selection hit testing, painting) are
+  /// consistent by construction; the projection maps them back to
+  /// [_logicalText] where data leaves the geometry world.
+  late String _text;
+
   CellStyle _style;
   bool _softWrap;
   int? _maxLines;
   TextOverflow _overflow;
   TextAlign _textAlign;
   WidthResolver _widthResolver;
-  CellWidthPolicy _policy;
+  TextPresentationPolicy _textPolicy;
   int _intrinsicWidth = 0;
+
+  /// Width axes of [_textPolicy] — the value every measurement call uses.
+  CellWidthPolicy get _policy => _textPolicy.widths;
 
   /// Set during layout when [maxLines] cut off real content, so paint
   /// knows the last visible line should be ellipsized.
@@ -121,20 +144,25 @@ class RenderText extends RenderObject
     markNeedsLayout();
   }
 
-  String get text => _text;
+  /// The canonical logical text (RFC 0019 decision 3): what was set, not what
+  /// is painted. The display form lives in [_text] via [_projection].
+  String get text => _logicalText;
   set text(String value) {
     final sanitized = _sanitizePreservingNewlines(value);
-    if (sanitized == _text) return;
-    final nextIntrinsicWidth = _measureIntrinsicWidth(sanitized);
-    if (_canReuseCurrentSingleLineLayout(sanitized, nextIntrinsicWidth)) {
-      _text = sanitized;
+    if (sanitized == _logicalText) return;
+    _logicalText = sanitized;
+    _projection = projectText(sanitized, policy: _textPolicy);
+    final display = _projection.displayText;
+    final nextIntrinsicWidth = _measureIntrinsicWidth(display);
+    if (_canReuseCurrentSingleLineLayout(display, nextIntrinsicWidth)) {
+      _text = display;
       _intrinsicWidth = nextIntrinsicWidth;
-      _lines = <String>[sanitized];
+      _lines = <String>[display];
       _moreLinesTruncated = false;
       markNeedsPaintOnly();
       return;
     }
-    _text = sanitized;
+    _text = display;
     _intrinsicWidth = nextIntrinsicWidth;
     _invalidateLayoutCache();
   }
@@ -190,10 +218,17 @@ class RenderText extends RenderObject
     _invalidateLayoutCache();
   }
 
-  CellWidthPolicy get policy => _policy;
-  set policy(CellWidthPolicy value) {
-    if (_policy == value) return;
-    _policy = value;
+  TextPresentationPolicy get textPolicy => _textPolicy;
+  set textPolicy(TextPresentationPolicy value) {
+    // Operational equality only — provenance never reaches this layer, so a
+    // re-derived policy with identical geometry is a no-op (RFC 0019
+    // decision 17). A real change dirties LAYOUT, not merely paint
+    // (property gate 14): both the width axes and the lowering decision
+    // change which cells the text occupies.
+    if (_textPolicy == value) return;
+    _textPolicy = value;
+    _projection = projectText(_logicalText, policy: value);
+    _text = _projection.displayText;
     _recomputeIntrinsicWidth();
     _invalidateLayoutCache();
   }
@@ -448,13 +483,20 @@ class RenderText extends RenderObject
     if (maxWidth <= 0) return <String>[''];
     final lines = <String>[];
     final paragraphs = text.split('\n');
+    var paragraphStart = 0;
     for (var p = 0; p < paragraphs.length; p++) {
-      _wrapParagraph(paragraphs[p], maxWidth, lines);
+      _wrapParagraph(paragraphs[p], maxWidth, lines, paragraphStart);
+      paragraphStart += paragraphs[p].length + 1;
     }
     return lines;
   }
 
-  void _wrapParagraph(String text, int maxWidth, List<String> out) {
+  void _wrapParagraph(
+    String text,
+    int maxWidth,
+    List<String> out,
+    int paragraphStart,
+  ) {
     if (text.isEmpty) {
       out.add('');
       return;
@@ -462,8 +504,11 @@ class RenderText extends RenderObject
     final tokens = text.split(' ');
     final current = StringBuffer();
     var currentWidth = 0;
+    var tokenStart = paragraphStart;
 
     for (final token in tokens) {
+      final tokenGlobalStart = tokenStart;
+      tokenStart += token.length + 1;
       final isFirstOnLine = currentWidth == 0;
       if (token.isEmpty) {
         // Empty token comes from consecutive spaces. Honor it as a
@@ -500,31 +545,74 @@ class RenderText extends RenderObject
         currentWidth = tokenWidth;
         continue;
       }
-      // Long token — hard-break grapheme-by-grapheme. May leave a
+      // Long token — hard-break at unit boundaries. A unit is one grapheme,
+      // or one whole lowered cluster group: the atoms of one source grapheme
+      // stay on one line when the group fits, and break apart only when the
+      // group alone exceeds the line (RFC 0019 decision 15). May leave a
       // partial fragment in `current` for the next token to extend.
-      for (final g in token.characters) {
-        final w = _widthResolver.widthOfGrapheme(g, _policy);
+      for (final unit in _breakUnits(token, tokenGlobalStart, maxWidth)) {
+        final w = _widthResolver.widthOfText(unit, _policy);
         if (w == 0) {
-          current.write(g);
+          current.write(unit);
           continue;
         }
         if (currentWidth + w > maxWidth) {
           out.add(current.toString());
           current.clear();
           currentWidth = 0;
-          // A single grapheme wider than maxWidth gets its own row;
-          // paint clipping will trim what doesn't fit.
+          // A single unit wider than maxWidth gets its own row; paint
+          // clipping will trim what doesn't fit.
           if (w > maxWidth) {
-            out.add(g);
+            out.add(unit);
             continue;
           }
         }
-        current.write(g);
+        current.write(unit);
         currentWidth += w;
       }
     }
 
     out.add(current.toString());
+  }
+
+  /// The hard-break units of [token], whose display offsets start at
+  /// [globalStart]: single graphemes, except that a lowered cluster group
+  /// travels as one unbreakable unit while it fits [maxWidth] — and as its
+  /// individual atoms (each ≤ 2 cells, so each always placeable) when the
+  /// group alone exceeds the line.
+  ///
+  /// Identity projections take the allocation-free grapheme path; this list
+  /// materializes only on the already-cold path of an overlong token in
+  /// lowered text.
+  Iterable<String> _breakUnits(String token, int globalStart, int maxWidth) {
+    if (_projection.isIdentity) return token.characters;
+    final units = <String>[];
+    var i = 0;
+    while (i < token.length) {
+      final group = _projection.clusterAtDisplay(globalStart + i);
+      if (group != null && group.displayRange.start == globalStart + i) {
+        final length = group.displayRange.end - group.displayRange.start;
+        final groupText = token.substring(i, i + length);
+        if (_widthResolver.widthOfText(groupText, _policy) <= maxWidth) {
+          units.add(groupText);
+        } else {
+          for (final atom in group.displayAtomRanges) {
+            units.add(
+              token.substring(
+                i + (atom.start - group.displayRange.start),
+                i + (atom.end - group.displayRange.start),
+              ),
+            );
+          }
+        }
+        i += length;
+      } else {
+        final grapheme = token.substring(i).characters.first;
+        units.add(grapheme);
+        i += grapheme.length;
+      }
+    }
+    return units;
   }
 
   // ----- Selectable adapters -----------------------------------------
@@ -559,6 +647,79 @@ class RenderText extends RenderObject
 
   @override
   CellWidthPolicy get selectionPolicy => _policy;
+
+  // Lowered-group flat ranges, cached against the exact _lines instance
+  // (performLayout builds a new list each time it reflows). Selection ops
+  // are rare; the walk is O(flat text) and only runs for non-identity
+  // projections.
+  List<({int start, int end, String source})>? _loweredGroupsCache;
+  List<String>? _loweredGroupsCacheLines;
+
+  @override
+  List<({int start, int end, String source})> get loweredGroups {
+    if (_projection.isIdentity) {
+      return const <({int start, int end, String source})>[];
+    }
+    if (identical(_loweredGroupsCacheLines, _lines)) {
+      return _loweredGroupsCache!;
+    }
+    final computed = _computeLoweredGroupsFlat();
+    _loweredGroupsCache = computed;
+    _loweredGroupsCacheLines = _lines;
+    return computed;
+  }
+
+  /// Maps each lowered cluster's display range into FLAT-selection space
+  /// (the wrapped lines joined by '\n') by walking the two strings in
+  /// lockstep. The wrap only ever DROPS spaces (at word breaks) and INSERTS
+  /// newlines (word wrap and forced breaks), so alignment is deterministic:
+  /// equal characters advance both cursors, a flat '\n' with no matching
+  /// display character is an inserted break, and an unmatched display space
+  /// was dropped at a wrap.
+  List<({int start, int end, String source})> _computeLoweredGroupsFlat() {
+    final display = _projection.displayText;
+    final flat = selectionLines.join('\n');
+    final out = <({int start, int end, String source})>[];
+    var d = 0;
+    var f = 0;
+
+    // Advances the aligned cursors until the display cursor reaches
+    // [target]; returns the flat cursor there, or null when the flat text
+    // ended first (maxLines truncation).
+    int? flatAt(int target) {
+      while (d < target) {
+        if (f < flat.length && d < display.length && flat[f] == display[d]) {
+          f++;
+          d++;
+        } else if (f < flat.length &&
+            flat[f] == '\n' &&
+            (d >= display.length || display[d] != '\n')) {
+          f++; // inserted line break
+        } else if (d < display.length && display[d] == ' ') {
+          d++; // space dropped at a wrap
+        } else {
+          return null; // flat text ended (truncation) or unexpected shape
+        }
+      }
+      return f;
+    }
+
+    for (final cluster in _projection.changedClusters) {
+      final start = flatAt(cluster.displayRange.start);
+      if (start == null) break;
+      final end = flatAt(cluster.displayRange.end);
+      if (end == null) break;
+      out.add((
+        start: start,
+        end: end,
+        source: _logicalText.substring(
+          cluster.sourceRange.start,
+          cluster.sourceRange.end,
+        ),
+      ));
+    }
+    return out;
+  }
 }
 
 // ---------------------------------------------------------------------------
