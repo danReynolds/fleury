@@ -413,10 +413,10 @@ export 'src/widgets/tui_binding.dart'
 export 'src/widgets/align.dart' show Align, Alignment, Center, RenderAlign;
 export 'src/widgets/anchor.dart'
     show
-        Anchor,
-        AnchorLink,
         Anchored,
         AnchoredTo,
+        BoundsNotifier,
+        BoundsObserver,
         defaultAnchorAlignment,
         resolveAnchoredOffset;
 export 'src/widgets/async.dart'

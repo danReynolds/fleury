@@ -184,7 +184,7 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
   bool _ownsCompletion = false;
   bool _ownsFocusNode = false;
 
-  final AnchorLink _link = AnchorLink();
+  final BoundsNotifier _bounds = BoundsNotifier();
   final ListController _list = ListController(selectedIndex: 0);
   FocusManager? _manager;
   OverlayEntry? _entry;
@@ -296,7 +296,7 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
     }
     if (_entry == null) {
       final entry = OverlayEntry(
-        builder: (_) => AnchoredTo(link: _link, child: _suggestions()),
+        builder: (_) => AnchoredTo(bounds: _bounds, child: _suggestions()),
       );
       _entry = entry;
       Overlay.of(context).insert(entry);
@@ -455,8 +455,8 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
     final theme = Theme.of(context);
     _selectionStyle = theme.selectionStyle;
     _borderStyle = theme.borderStyle;
-    return Anchor(
-      link: _link,
+    return BoundsObserver(
+      bounds: _bounds,
       child: TextInput(
         controller: _controller,
         focusNode: _focusNode,

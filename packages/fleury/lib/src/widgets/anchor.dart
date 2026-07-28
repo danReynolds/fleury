@@ -1,26 +1,30 @@
-// Anchored floats — one root, three grammatical forms, each form a role:
+// Painted-bounds observation, and anchored floats built on it.
 //
-//   Anchor      (noun)        marks the FIXED widget floats attach to
-//   Anchored    (participle)  the composite: child + overlay, self-contained
-//   AnchoredTo  (+ `to`)      the raw floating side; `to` points at `link:`
+// Three pieces, one reactive pattern:
 //
-// `Anchored` is the everyday widget: wrap the trigger, hand it the overlay,
-// flip `visible`. It owns the [AnchorLink] internally.
+//   BoundsObserver  (widget)   observes its child's painted screen-space
+//                              bounds and publishes them
+//   BoundsNotifier  (state)    holds the observation — `bounds` and
+//                              `visibleBounds` — and notifies on change
+//   consumers                  react to it: `AnchoredTo` repositions its
+//                              child the SAME frame (render-tier); any
+//                              `ListenableBuilder` rebuilds the NEXT frame
+//                              (build-tier, for readouts and derived UI)
 //
-// The raw pair exists for when the two ends have no common parent (a global
-// command opening a flyout on some distant chip, one anchor driving several
-// floats): put [Anchor] around the fixed widget, [AnchoredTo] around the
-// float — usually inside an [OverlayEntry] — and share an [AnchorLink].
-// The link carries the anchor's painted rect and notifies when it moves, so
-// a mounted float tracks its anchor across reflows.
+// Anchoring is the first use case, packaged two ways:
+//
+//   Anchored     the everyday composite — wrap the trigger, hand it the
+//                overlay, flip `visible`; owns its BoundsNotifier privately
+//   AnchoredTo   the raw float for cross-tree cases (a global command
+//                opening a flyout on a distant chip, one anchor driving
+//                several floats) — you own the notifier and both ends
 //
 // Placement is a pair of [Alignment]s: `alignment` names the point on the
 // anchor, `anchorAlignment` the point on the float glued to it (defaulting
 // to the complement — below/left-flush for `bottomLeft`, the dropdown).
 // If the float doesn't fit on screen, the PLACEMENT axis flips to the
 // mirrored side (below -> above) while the alignment axis only clamps —
-// flipping it would silently change the requested look. Mirrors Flutter's LayerLink/CompositedTransform*, at cell
-// resolution, under one vocabulary.
+// flipping it would silently change the requested look.
 
 import '../foundation/change_notifier.dart';
 import '../foundation/geometry.dart';
@@ -31,59 +35,129 @@ import 'align.dart' show Alignment;
 import 'framework.dart';
 import 'overlay.dart';
 
-/// Shared handle linking an [Anchor] to its [AnchoredTo]. The anchor writes
-/// its absolute painted [rect] each paint; the follower reads it.
-class AnchorLink with ChangeNotifier {
-  CellRect? _rect;
+/// The observable: one widget's painted screen-space bounds, live.
+///
+/// Written by exactly one [BoundsObserver] (debug-asserted); read and
+/// listened to by anything. [AnchoredTo] listens at the render tier and
+/// repositions the same frame; a `ListenableBuilder` reacts at the build
+/// tier on the following frame.
+///
+/// Publishing a *different* value notifies listeners, so a consumer whose
+/// own subtree is clean still reacts when the observed widget moves.
+/// Equal values are dropped, so a static widget re-publishing identical
+/// bounds every paint costs one comparison.
+class BoundsNotifier with ChangeNotifier {
+  CellRect? _bounds;
+  CellRect? _visible;
+  Object? _writer;
 
-  /// The anchor's painted bounds in absolute cell coordinates, or null
-  /// before the anchor has painted (or after it leaves the tree).
-  ///
-  /// Assigning a *different* rect notifies listeners, so an [AnchoredTo] whose
-  /// own subtree is clean still repaints when the thing it is pinned to
-  /// moves. Without that, a mounted follower keeps its cached paint at the
-  /// old position — visible whenever an anchor reflows while a float is
-  /// open, and invisible to a whole-tree re-render (which repaints the
-  /// follower anyway). Equal rects are dropped, so a static anchor
-  /// re-recording the same bounds each paint costs nothing.
-  CellRect? get rect => _rect;
-  set rect(CellRect? value) {
-    if (value == _rect) return;
-    _rect = value;
+  /// The full painted bounds in absolute cell coordinates — including any
+  /// portion scrolled out of view — or null before the widget first paints
+  /// and after it leaves the tree.
+  CellRect? get bounds => _bounds;
+
+  /// The on-screen portion of [bounds] (its intersection with the clip in
+  /// effect when it painted), or null when the widget is fully scrolled or
+  /// clipped out of view. [AnchoredTo] hides while this is null.
+  CellRect? get visibleBounds => _visible;
+
+  /// Publishes a new observation. Called by the owning [BoundsObserver];
+  /// not intended for app code.
+  void publish(CellRect? bounds, {CellRect? clip}) {
+    final visible = bounds == null
+        ? null
+        : (clip == null ? bounds : clip.intersect(bounds));
+    if (bounds == _bounds && visible == _visible) return;
+    _bounds = bounds;
+    _visible = visible;
     notifyListeners();
+  }
+
+  /// Debug-enforces the single-writer contract: a notifier observed by two
+  /// [BoundsObserver]s would silently carry whichever painted last.
+  void claimWriter(Object writer) {
+    assert(() {
+      if (_writer != null && !identical(_writer, writer)) {
+        throw StateError(
+          'This BoundsNotifier already has a BoundsObserver. A notifier '
+          'carries ONE widget\'s bounds — create one per observed widget.',
+        );
+      }
+      return true;
+    }());
+    _writer = writer;
+  }
+
+  /// Releases the writer claim (observer unmounted or switched notifier).
+  void releaseWriter(Object writer) {
+    if (identical(_writer, writer)) _writer = null;
   }
 }
 
-/// Records its [child]'s painted rect into [link] — the trigger a
-/// [AnchoredTo] positions against (a button, a list row, a text span).
-/// Layout-transparent: reports the child's size unchanged.
-class Anchor extends SingleChildRenderObjectWidget {
-  const Anchor({super.key, required this.link, required Widget super.child});
+/// The observer: publishes its child's painted bounds into [bounds] every
+/// paint. Layout- and paint-transparent — the child renders unchanged.
+class BoundsObserver extends SingleChildRenderObjectWidget {
+  const BoundsObserver({
+    super.key,
+    required this.bounds,
+    required Widget super.child,
+  });
 
-  final AnchorLink link;
+  /// The notifier this observer publishes into. One observer per notifier
+  /// (debug-asserted).
+  final BoundsNotifier bounds;
 
   @override
-  RenderObject createRenderObject(BuildContext context) => RenderAnchor(link);
+  RenderObject createRenderObject(BuildContext context) =>
+      RenderBoundsObserver(bounds);
 
   @override
   void updateRenderObject(
     BuildContext context,
-    covariant RenderAnchor renderObject,
+    covariant RenderBoundsObserver renderObject,
   ) {
-    renderObject.link = link;
+    renderObject.bounds = bounds;
+  }
+
+  @override
+  SingleChildRenderObjectElement createElement() =>
+      _BoundsObserverElement(this);
+}
+
+/// Clears the observation and releases the writer claim when the observer
+/// leaves the tree, so a notifier that outlives it reports "unpainted"
+/// instead of a stale rect.
+class _BoundsObserverElement extends SingleChildRenderObjectElement {
+  _BoundsObserverElement(BoundsObserver super.widget);
+
+  @override
+  void unmount() {
+    (renderObject as RenderBoundsObserver).detachFromBounds();
+    super.unmount();
   }
 }
 
-/// Records its child's painted rect into an [AnchorLink]; see [Anchor].
-class RenderAnchor extends RenderObject implements RenderObjectWithSingleChild {
-  RenderAnchor(this._link);
+/// Publishes its child's painted bounds; see [BoundsObserver].
+class RenderBoundsObserver extends RenderObject
+    implements RenderObjectWithSingleChild {
+  RenderBoundsObserver(this._bounds) {
+    _bounds.claimWriter(this);
+  }
 
-  AnchorLink _link;
-  set link(AnchorLink value) {
-    if (identical(_link, value)) return;
-    _link.rect = null;
-    _link = value;
+  BoundsNotifier _bounds;
+  set bounds(BoundsNotifier value) {
+    if (identical(_bounds, value)) return;
+    _bounds.publish(null);
+    _bounds.releaseWriter(this);
+    _bounds = value;
+    _bounds.claimWriter(this);
     markNeedsPaintOnly();
+  }
+
+  /// Called on unmount: the widget is gone, so the observation is too.
+  void detachFromBounds() {
+    _bounds.publish(null);
+    _bounds.releaseWriter(this);
   }
 
   RenderObject? _child;
@@ -112,7 +186,7 @@ class RenderAnchor extends RenderObject implements RenderObjectWithSingleChild {
     // rect in root/absolute space, so a scratch-local offset would misplace
     // dropdowns anchored inside composited subtrees.
     final bounds = CellRect(offset: screenOffset ?? offset, size: size);
-    _link.rect = bounds;
+    _bounds.publish(bounds, clip: clipRect);
     if (RetainedPaintGeometryCapture.isActive) {
       RetainedPaintGeometryCapture.record(
         _replayBounds,
@@ -129,25 +203,27 @@ class RenderAnchor extends RenderObject implements RenderObjectWithSingleChild {
   }
 
   // Stable callback retained by repaint boundaries. It deliberately reads the
-  // current link so swapping AnchorLink invalidates once without keeping the
-  // old link alive in a cached closure.
+  // current notifier so swapping notifiers invalidates once without keeping
+  // the old one alive in a cached closure. The clip rides along so
+  // visibleBounds stays truthful under cached paints.
   // ignore: prefer_function_declarations_over_variables
-  late final RetainedPaintGeometryCallback _replayBounds = (bounds, _) {
-    _link.rect = bounds;
+  late final RetainedPaintGeometryCallback _replayBounds = (bounds, clip) {
+    _bounds.publish(bounds, clip: clip);
   };
 }
 
 class AnchoredTo extends SingleChildRenderObjectWidget {
   const AnchoredTo({
     super.key,
-    required this.link,
+    required this.bounds,
     this.gap = 0,
     this.alignment = Alignment.bottomLeft,
     this.anchorAlignment,
     required Widget super.child,
   });
 
-  final AnchorLink link;
+  /// The observed bounds this float positions against.
+  final BoundsNotifier bounds;
 
   /// Cells of separation along the placement axis.
   final int gap;
@@ -161,7 +237,7 @@ class AnchoredTo extends SingleChildRenderObjectWidget {
 
   @override
   RenderObject createRenderObject(BuildContext context) =>
-      RenderAnchoredTo(link, gap, alignment, anchorAlignment)
+      RenderAnchoredTo(bounds, gap, alignment, anchorAlignment)
         ..startTrackingAnchor();
 
   @override
@@ -170,7 +246,7 @@ class AnchoredTo extends SingleChildRenderObjectWidget {
     covariant RenderAnchoredTo renderObject,
   ) {
     renderObject
-      ..link = link
+      ..bounds = bounds
       ..gap = gap
       ..alignment = alignment
       ..anchorAlignment = anchorAlignment;
@@ -184,37 +260,37 @@ class AnchoredTo extends SingleChildRenderObjectWidget {
 class RenderAnchoredTo extends RenderObject
     implements RenderObjectWithSingleChild {
   RenderAnchoredTo(
-    this._link,
+    this._bounds,
     this._gap,
     this._alignment,
     this._anchorAlignment,
   );
 
-  AnchorLink _link;
-  set link(AnchorLink value) {
-    if (identical(_link, value)) return;
-    _link.removeListener(_onAnchorMoved);
-    _link = value;
-    if (_listening) _link.addListener(_onAnchorMoved);
+  BoundsNotifier _bounds;
+  set bounds(BoundsNotifier value) {
+    if (identical(_bounds, value)) return;
+    _bounds.removeListener(_onAnchorMoved);
+    _bounds = value;
+    if (_listening) _bounds.addListener(_onAnchorMoved);
     markNeedsLayout();
   }
 
   bool _listening = false;
 
-  /// Begin observing the anchor. Called when the widget mounts; released by
-  /// [stopTrackingAnchor] on unmount so the link — which typically outlives
-  /// any one follower — doesn't retain a dead render object.
+  /// Begin listening to the anchor's bounds. Called when the widget mounts;
+  /// released by [stopTrackingAnchor] on unmount so the notifier — which
+  /// typically outlives any one float — doesn't retain a dead render object.
   void startTrackingAnchor() {
     if (_listening) return;
     _listening = true;
-    _link.addListener(_onAnchorMoved);
+    _bounds.addListener(_onAnchorMoved);
   }
 
   /// Stop observing the anchor.
   void stopTrackingAnchor() {
     if (!_listening) return;
     _listening = false;
-    _link.removeListener(_onAnchorMoved);
+    _bounds.removeListener(_onAnchorMoved);
   }
 
   /// The anchor moved (or first painted): our placement is stale, so the
@@ -275,9 +351,12 @@ class RenderAnchoredTo extends RenderObject
   }) {
     final c = _child;
     if (c == null) return;
-    // Resolve placement at paint time: the anchor records its rect during
-    // its own paint, which runs before this follower's (anchors sit below
-    // followers in the overlay/stack order), so we read the current frame.
+    // An anchor that is fully scrolled or clipped out of view has nothing to
+    // attach to — hide rather than float over unrelated content.
+    if (_bounds.visibleBounds == null) return;
+    // Resolve placement at paint time: the observer publishes during its own
+    // paint, which runs before this float's (in-flow content paints below
+    // the overlay), so we read the current frame.
     final placement = _placeChild(c.size);
     _child!.paint(
       buffer,
@@ -288,7 +367,7 @@ class RenderAnchoredTo extends RenderObject
   }
 
   CellOffset _placeChild(CellSize childSize) {
-    final r = _link.rect;
+    final r = _bounds.bounds;
     if (r == null) return CellOffset.zero;
     // Gap pushes the layer away along whichever axis it sits outside on.
     final gapped = _gap == 0
@@ -491,7 +570,8 @@ CellOffset resolveAnchoredOffset({
 
 /// Floats [overlay] against [child], declaratively.
 ///
-/// The composite over [Anchor] + [AnchoredTo]: it owns the [AnchorLink],
+/// The composite over [BoundsObserver] + [AnchoredTo]: it owns the
+/// [BoundsNotifier],
 /// inserts and removes the overlay entry as [visible] flips, and releases it
 /// when the widget leaves the tree — the bookkeeping every hand-rolled flyout
 /// otherwise repeats (and occasionally leaks).
@@ -508,7 +588,7 @@ CellOffset resolveAnchoredOffset({
 /// [alignment] names the point on [child]; [anchorAlignment] names the point
 /// on [overlay] that meets it, defaulting to [defaultAnchorAlignment].
 ///
-/// Reach past this to [Anchor] + [AnchoredTo] when the two ends have no
+/// Reach past this to [BoundsObserver] + [AnchoredTo] when the two ends have no
 /// common parent — a chip in a toolbar with a flyout opened by a global
 /// command, or one anchor driving several overlays.
 class Anchored extends StatefulWidget {
@@ -546,10 +626,10 @@ class Anchored extends StatefulWidget {
 }
 
 class _AnchoredState extends State<Anchored> {
-  final AnchorLink _link = AnchorLink();
+  final BoundsNotifier _bounds = BoundsNotifier();
   late final OverlayEntry _entry = OverlayEntry(
     builder: (_) => AnchoredTo(
-      link: _link,
+      bounds: _bounds,
       alignment: widget.alignment,
       anchorAlignment: widget.anchorAlignment,
       gap: widget.gap,
@@ -580,6 +660,6 @@ class _AnchoredState extends State<Anchored> {
   @override
   Widget build(BuildContext context) {
     _mount.update();
-    return Anchor(link: _link, child: widget.child);
+    return BoundsObserver(bounds: _bounds, child: widget.child);
   }
 }

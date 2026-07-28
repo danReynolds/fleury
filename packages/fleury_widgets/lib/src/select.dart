@@ -82,7 +82,7 @@ class Select<T> extends StatefulWidget {
 }
 
 class _SelectState<T> extends State<Select<T>> {
-  final AnchorLink _link = AnchorLink();
+  final BoundsNotifier _bounds = BoundsNotifier();
   late FocusNode _triggerFocus;
   bool _ownsFocus = false;
   OverlayEntry? _entry;
@@ -163,7 +163,7 @@ class _SelectState<T> extends State<Select<T>> {
     _priorFocus = manager.focusedNode;
     final entry = OverlayEntry(
       builder: (_) => AnchoredTo(
-        link: _link,
+        bounds: _bounds,
         child: _SelectList<T>(
           options: widget.options,
           semanticLabel: widget.semanticLabel,
@@ -248,8 +248,8 @@ class _SelectState<T> extends State<Select<T>> {
         : CellStyle.empty;
     final text = '$_currentLabel ${_isOpen ? '▴' : '▾'}';
     if (!enabled) {
-      return Anchor(
-        link: _link,
+      return BoundsObserver(
+        bounds: _bounds,
         child: Semantics(
           role: SemanticRole.button,
           label: widget.semanticLabel ?? _currentLabel,
@@ -266,8 +266,8 @@ class _SelectState<T> extends State<Select<T>> {
         ),
       );
     }
-    return Anchor(
-      link: _link,
+    return BoundsObserver(
+      bounds: _bounds,
       child: Semantics(
         role: SemanticRole.button,
         label: widget.semanticLabel ?? _currentLabel,

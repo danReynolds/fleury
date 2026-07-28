@@ -330,21 +330,21 @@ void main() {
     testWidgets('cached anchor geometry keeps its follower attached on move', (
       tester,
     ) {
-      final link = AnchorLink();
+      final chip = BoundsNotifier();
       final boundary = RepaintBoundary(
-        child: Anchor(link: link, child: const Text('A')),
+        child: BoundsObserver(bounds: chip, child: const Text('A')),
       );
 
       Widget frame(EdgeInsets padding) => Stack(
         children: [
           Padding(padding: padding, child: boundary),
-          AnchoredTo(link: link, child: const Text('m')),
+          AnchoredTo(bounds: chip, child: const Text('m')),
         ],
       );
 
       tester.pumpWidget(frame(const EdgeInsets.only(left: 1, top: 1)));
       tester.render(size: const CellSize(12, 6));
-      expect(link.rect, CellRect.fromLTWH(1, 1, 1, 1));
+      expect(chip.bounds, CellRect.fromLTWH(1, 1, 1, 1));
 
       tester.pumpWidget(frame(const EdgeInsets.only(left: 4, top: 2)));
       RepaintBoundaryDebugStats.beginFrame(enabled: true);
@@ -352,7 +352,7 @@ void main() {
       final stats = RepaintBoundaryDebugStats.takeFrameStats();
 
       expect(stats.cachedCount, 1, reason: 'the anchor paint was skipped');
-      expect(link.rect, CellRect.fromLTWH(4, 2, 1, 1));
+      expect(chip.bounds, CellRect.fromLTWH(4, 2, 1, 1));
       expect(moved.atColRow(4, 3).grapheme, 'm');
     });
 

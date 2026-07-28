@@ -30,7 +30,7 @@ class Tooltip extends StatefulWidget {
 }
 
 class _TooltipState extends State<Tooltip> {
-  final AnchorLink _link = AnchorLink();
+  final BoundsNotifier _bounds = BoundsNotifier();
   OverlayEntry? _entry;
 
   // Set when Esc dismisses the tip while the trigger keeps focus; cleared when
@@ -50,7 +50,7 @@ class _TooltipState extends State<Tooltip> {
     if (_entry != null) return;
     final entry = OverlayEntry(
       builder: (_) => AnchoredTo(
-        link: _link,
+        bounds: _bounds,
         // A floating popup composites over the app, so it paints its own
         // opaque background — without Surface the content underneath shows
         // through the frame.
@@ -122,7 +122,7 @@ class _TooltipState extends State<Tooltip> {
               hideFromHintBar: true,
             ),
           ],
-          child: Anchor(link: _link, child: widget.child),
+          child: BoundsObserver(bounds: _bounds, child: widget.child),
         ),
       ),
     );

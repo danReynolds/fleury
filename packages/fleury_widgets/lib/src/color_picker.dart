@@ -85,7 +85,7 @@ class _ColorPickerState extends State<ColorPicker>
   bool _wasFocused = false;
 
   /// Anchor + overlay for the `#` hex-entry popover.
-  final AnchorLink _link = AnchorLink();
+  final BoundsNotifier _bounds = BoundsNotifier();
   OverlayEntry? _hexEntry;
 
   bool get _enabled => widget.onChanged != null;
@@ -270,7 +270,7 @@ class _ColorPickerState extends State<ColorPicker>
     final theme = Theme.of(context);
     final entry = OverlayEntry(
       builder: (_) => AnchoredTo(
-        link: _link,
+        bounds: _bounds,
         child: _HexEntry(
           initial: widget.value.toRgb(),
           background: theme.colorScheme.background,
@@ -453,8 +453,8 @@ class _ColorPickerState extends State<ColorPicker>
         focusNode: _node,
         autofocus: widget.autofocus,
         onKey: _onKey,
-        child: Anchor(
-          link: _link,
+        child: BoundsObserver(
+          bounds: _bounds,
           child: GestureDetector(
             onTap: () => _node.requestFocus(),
             child: body,

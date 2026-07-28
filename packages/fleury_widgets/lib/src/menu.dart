@@ -94,7 +94,7 @@ class Menu extends StatefulWidget {
 }
 
 class _MenuState extends State<Menu> {
-  final AnchorLink _link = AnchorLink();
+  final BoundsNotifier _bounds = BoundsNotifier();
   final FocusNode _triggerFocus = FocusNode(debugLabel: 'menu-trigger');
   OverlayEntry? _entry;
   FocusNode? _priorFocus;
@@ -119,7 +119,7 @@ class _MenuState extends State<Menu> {
     ); // resolved in-tree, threaded into the overlay
     final entry = OverlayEntry(
       builder: (_) => AnchoredTo(
-        link: _link,
+        bounds: _bounds,
         child: _MenuBody(
           entries: widget.items,
           semanticLabel: widget.semanticLabel,
@@ -160,8 +160,8 @@ class _MenuState extends State<Menu> {
   @override
   Widget build(BuildContext context) {
     Focus.maybeOf(context); // Rebuild trigger semantics when focus moves.
-    return Anchor(
-      link: _link,
+    return BoundsObserver(
+      bounds: _bounds,
       child: Semantics(
         role: SemanticRole.button,
         label: widget.semanticLabel,
@@ -260,10 +260,10 @@ class _MenuBodyState extends State<_MenuBody> {
     selectedIndex: _firstSelectable(),
   );
   final FocusNode _focus = FocusNode(debugLabel: 'menu');
-  final AnchorLink _selfLink = AnchorLink();
+  final BoundsNotifier _selfBounds = BoundsNotifier();
   // Anchors the currently-selected submenu row so its child panel opens beside
   // *that row*, not the panel's top corner.
-  final AnchorLink _submenuAnchor = AnchorLink();
+  final BoundsNotifier _submenuAnchor = BoundsNotifier();
   OverlayEntry? _childEntry;
 
   bool _selectable(int i) {
@@ -354,7 +354,7 @@ class _MenuBodyState extends State<_MenuBody> {
     final manager = Focus.of(context);
     final entry = OverlayEntry(
       builder: (_) => AnchoredTo(
-        link: _submenuAnchor,
+        bounds: _submenuAnchor,
         alignment: Alignment.topRight,
         anchorAlignment: Alignment.topLeft,
         gap: 1,
@@ -489,8 +489,8 @@ class _MenuBodyState extends State<_MenuBody> {
           focusNode: _focus,
           autofocus: true,
           onKey: _onKey,
-          child: Anchor(
-            link: _selfLink,
+          child: BoundsObserver(
+            bounds: _selfBounds,
             // A floating popup paints its own opaque background (Surface) so the
             // app underneath doesn't bleed through its frame.
             child: Surface(
@@ -555,7 +555,10 @@ class _MenuBodyState extends State<_MenuBody> {
                           // Anchor the selected submenu row so its child panel
                           // opens aligned to it (not the panel corner).
                           return sel
-                              ? Anchor(link: _submenuAnchor, child: item)
+                              ? BoundsObserver(
+                                  bounds: _submenuAnchor,
+                                  child: item,
+                                )
                               : item;
                       }
                     },
