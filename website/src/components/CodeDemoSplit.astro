@@ -1,0 +1,46 @@
+---
+// One source file beside the thing it renders — for guides that show a
+// complete, real snippet and its live output at the same time.
+//
+//   <CodeDemoSplit file="amber_theme.dart">
+//     <Fragment slot="code"> ```dart … ``` </Fragment>
+//     <FleuryExample slot="demo" id="…" />
+//   </CodeDemoSplit>
+//
+// Deliberately not HomeSplit: that is the landing hero, tuned for a one-liner
+// beside a wide demo — equal columns, a fixed stage height so crossfading
+// slides don't jump, and carousel chrome. A guide snippet is the opposite
+// shape (tall narrow code, small demo), and forcing it through those
+// constraints clipped the code and left the demo adrift in dead space.
+//
+// Here the columns are sized to what each side actually needs, the demo pins
+// to the top so it never floats, and the whole thing stacks under a narrow
+// viewport. Styling lives in src/styles/fleury.css.
+interface Props {
+  /** Filename shown in the title bar, e.g. "amber_theme.dart". */
+  file: string;
+  /** Label over the code pane. */
+  codeLabel?: string;
+  /** Label over the demo pane. */
+  demoLabel?: string;
+}
+const { file, codeLabel = 'You write', demoLabel = 'Fleury renders' } =
+  Astro.props;
+---
+
+<figure class="code-demo">
+  <div class="code-demo-bar">
+    <span class="code-demo-file">{file}</span>
+    <span class="code-demo-live"><span class="code-demo-pulse"></span>live</span>
+  </div>
+  <div class="code-demo-body">
+    <div class="code-demo-pane code-demo-code">
+      <span class="code-demo-tag">{codeLabel}</span>
+      <slot name="code" />
+    </div>
+    <div class="code-demo-pane code-demo-demo">
+      <span class="code-demo-tag">{demoLabel}</span>
+      <div class="code-demo-demo-inner"><slot name="demo" /></div>
+    </div>
+  </div>
+</figure>
