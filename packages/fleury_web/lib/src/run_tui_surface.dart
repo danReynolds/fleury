@@ -754,10 +754,10 @@ final class _SurfaceFramePresenter implements FramePresenter {
     final plan = info.plan!;
     final bounds = plan.damage.dirtyBounds;
     return FrameDiffStats(
-      diff: plan.dirtyRowDiffTime + plan.spanBuildTime,
+      diff: plan.spanBuildTime,
       dirtyCells: bounds != null
           ? bounds.size.cols * bounds.size.rows
-          : plan.damage.dirtyRows.dirtyRowCount * frame.next.size.cols,
+          : plan.dirtyRows.dirtyRowCount * frame.next.size.cols,
       dirtyBounds: bounds,
     );
   }
@@ -784,7 +784,6 @@ final class _SurfaceFramePresenter implements FramePresenter {
         runtimeBuildTime: info.phaseBuild,
         runtimeLayoutTime: info.phaseLayout,
         runtimePaintTime: info.phasePaint,
-        dirtyRowDiffTime: info.plan!.dirtyRowDiffTime,
         spanBuildTime: info.plan!.spanBuildTime,
         domApplyTime: _domApplyTime,
         semanticFocusSyncTime: _semanticFocusSyncTime,

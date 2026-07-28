@@ -1,7 +1,8 @@
 # RFC 0019: Width Policy and Display Lowering
 
-**Status:** Accepted — design converged 2026-07-27 through two peer-review
-rounds; P1 implementation starting.
+**Status:** Implemented — P1 (measured width policy, PR #175) and P2
+(source-preserving display lowering, PR #176) shipped 2026-07-27. P3 (declare
+tier) remains future work.
 **Date:** 2026-07-27
 **Decision point for:** what Fleury does when its width model and the
 terminal's rendering disagree — the failure class behind the storybook

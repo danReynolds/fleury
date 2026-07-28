@@ -7,6 +7,7 @@ import 'dart:math';
 
 import 'package:fleury/fleury_core.dart';
 import 'package:fleury_samples/samples.dart';
+import 'package:fleury_themes/fleury_themes.dart';
 import 'package:fleury_widgets/fleury_widgets_web.dart';
 
 /// Builds the root widget for one live example.
@@ -1773,6 +1774,21 @@ TextArea(
     interactive: true,
     builder: () => const AgentApp(),
   ),
+  ExampleInfo(
+    id: 'themes.gallery',
+    widget: 'Themes',
+    category: 'Theming',
+    blurb:
+        'Every theme in fleury_themes, on a slice of real UI. Arrow through '
+        'the picker to switch.',
+    cols: 62,
+    rows: 18,
+    interactive: true,
+    code: '''import 'package:fleury_themes/fleury_themes.dart';
+
+runApp(const MyApp(), theme: tokyoNight);''',
+    builder: () => const _ThemePickerExample(),
+  ),
 ];
 
 /// id → builder, derived from [exampleList].
@@ -2705,4 +2721,115 @@ class _LiveSeriesState extends State<_LiveSeries>
 
   @override
   Widget build(BuildContext context) => widget.builder(_data);
+}
+
+
+/// Live theme picker for the docs site: pick a theme on the left, see it
+/// applied to a small slice of UI on the right.
+class _ThemePickerExample extends StatefulWidget {
+  const _ThemePickerExample();
+
+  @override
+  State<_ThemePickerExample> createState() => _ThemePickerExampleState();
+}
+
+class _ThemePickerExampleState extends State<_ThemePickerExample> {
+  final ListController _list = ListController(selectedIndex: 0);
+
+  @override
+  void initState() {
+    super.initState();
+    // The preview follows the highlight, so arrowing the list re-themes
+    // immediately — no separate "apply" step in a docs embed.
+    _list.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _list.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final index = (_list.selectedIndex ?? 0).clamp(0, fleuryThemes.length - 1);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        SizedBox(
+          width: 20,
+          child: ListView.builder(
+            controller: _list,
+            itemCount: fleuryThemes.length,
+            autofocus: true,
+            itemBuilder: (context, i, activeSelected) {
+              final selected = i == index;
+              return Text(
+                selected ? '> ${fleuryThemes[i].name}' : '  ${fleuryThemes[i].name}',
+                style: selected
+                    ? Theme.of(context).selectionStyle
+                    : CellStyle.empty,
+              );
+            },
+          ),
+        ),
+        const SizedBox(width: 2),
+        Expanded(
+          child: Theme(
+            data: fleuryThemes[index].data,
+            child: const _ThemePreview(),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A compact slice of UI: enough surfaces that a theme's character shows.
+class _ThemePreview extends StatelessWidget {
+  const _ThemePreview();
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = context.colors;
+    final theme = context.theme;
+    return Container(
+      color: cs.background,
+      padding: const EdgeInsets.all(1),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'Deploy Console',
+            style: CellStyle(foreground: cs.foreground, bold: true),
+          ),
+          Text('one app, two surfaces', style: theme.mutedStyle),
+          const SizedBox(height: 1),
+          Text('  api-gateway  running  42%', style: theme.selectionStyle),
+          Text(
+            '  worker-01    running  18%',
+            style: CellStyle(foreground: cs.foreground),
+          ),
+          const SizedBox(height: 1),
+          ProgressBar(value: 0.62),
+          const SizedBox(height: 1),
+          Wrap(
+            children: <Widget>[
+              Text('success  ', style: CellStyle(foreground: cs.success)),
+              Text('warning  ', style: CellStyle(foreground: cs.warning)),
+              Text('error  ', style: CellStyle(foreground: cs.error)),
+              Text('info', style: CellStyle(foreground: cs.info)),
+            ],
+          ),
+          const SizedBox(height: 1),
+          Wrap(
+            children: <Widget>[
+              Text('\u2589 primary  ', style: CellStyle(foreground: cs.primary)),
+              Text('\u2589 focus', style: CellStyle(foreground: cs.focus)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }

@@ -30,6 +30,9 @@ export 'src/runtime/frame_presentation.dart'
     show
         FrameDamageSource,
         FramePresentationDamage,
+        PresentationFullRepaint,
+        PresentationChanged,
+        PresentationScrolled,
         FramePresentationPlan,
         FramePresentationPlanner;
 export 'src/widgets/framework.dart' show BuildFlushStats;
@@ -54,6 +57,10 @@ export 'src/runtime/tui_frame_loop.dart'
         TuiDirtyRowRange,
         TuiDirtyRows,
         TuiFrameDamage,
+        FrameFullRepaint,
+        FrameUnchanged,
+        FrameChanged,
+        FrameScrolled,
         TuiFrameLoop,
         TuiFramePaintCallback,
         TuiRenderedFrame;

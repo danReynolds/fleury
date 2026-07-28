@@ -99,4 +99,73 @@ void main() {
           'presenter keeps BBBB/CCCC on screen otherwise',
     );
   });
+
+  testWidgets('a nested cache-hit boundary survives an outer repaint', (
+    tester,
+  ) {
+    // The outer boundary repaints into its OWN cache while the inner one is a
+    // cache hit and blits into that cache. Suppressing damage on that blit is
+    // right for the frame buffer (the presenter should not re-scan unchanged
+    // cells) but wrong for a parent cache: the parent measures what was
+    // painted into it from exactly that damage, so a suppressed blit makes the
+    // inner child invisible to the parent's cache bounds and the row blanks.
+    const size = CellSize(12, 2);
+    final sibling = GlobalKey<_CounterState>();
+    final tree = RepaintBoundary(
+      child: Column(
+        children: [
+          _Counter(key: sibling),
+          const RepaintBoundary(child: Text('STATIC')),
+        ],
+      ),
+    );
+
+    final loop = TuiFrameLoop(renderDamage: tester.owner.renderDamageTracker);
+    var stats = RepaintBoundaryFrameStats.empty;
+    TuiRenderedFrame frame() {
+      RepaintBoundaryDebugStats.beginFrame(enabled: true);
+      final rendered = loop.render(
+        size: size,
+        paint: (buffer) => tester.owner.renderFrame(tester.root!, buffer),
+      )!;
+      stats = RepaintBoundaryDebugStats.takeFrameStats();
+      loop.commit(rendered);
+      return rendered;
+    }
+
+    addTearDown(() => RepaintBoundaryDebugStats.beginFrame(enabled: false));
+
+    tester.pumpWidget(tree);
+    final first = frame();
+    expect(
+      first.next.atColRow(0, 1).grapheme,
+      'S',
+      reason: 'precondition: the inner boundary painted on frame 1',
+    );
+
+    // Only the sibling changes: the outer boundary repaints, the inner one is
+    // a cache hit.
+    sibling.currentState!.bump();
+    final second = frame();
+
+    // Pin the SHAPE, not just the outcome: if a later change made the whole
+    // frame a cache hit (or made the inner boundary repaint), the assertion
+    // below would still pass while guarding nothing.
+    expect(
+      stats.repaintedCount,
+      greaterThanOrEqualTo(1),
+      reason: 'precondition: the outer boundary repainted',
+    );
+    expect(
+      stats.cachedCount,
+      greaterThanOrEqualTo(1),
+      reason: 'precondition: the inner boundary was a cache hit',
+    );
+
+    expect(
+      second.next.atColRow(0, 1).grapheme,
+      'S',
+      reason: 'the cached inner boundary must survive the outer repaint',
+    );
+  });
 }

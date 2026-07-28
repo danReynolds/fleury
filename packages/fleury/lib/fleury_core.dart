@@ -398,7 +398,6 @@ export 'src/widgets/text_area.dart' show TextArea;
 export 'src/widgets/text_input.dart'
     show TextClipboardPolicy, TextEditingController, TextInput;
 export 'src/widgets/ticker_mode.dart' show TickerMode;
-export 'src/widgets/theme_palettes.dart' show NamedTheme, ThemePalettes;
 export 'src/widgets/theme.dart'
     show
         Brightness,

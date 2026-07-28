@@ -3,7 +3,8 @@ import 'package:characters/characters.dart';
 import 'width_policy.dart';
 import 'width_tables.dart';
 
-export 'width_policy.dart' show CellWidth, CellWidthPolicy;
+export 'width_policy.dart'
+    show CellWidth, CellWidthPolicy, ClusterLowering, TextPresentationPolicy;
 
 /// Returns the number of terminal cells a grapheme cluster occupies.
 ///
@@ -198,21 +199,23 @@ final class DefaultWidthResolver implements WidthResolver {
       (c >= 0xFE20 && c <= 0xFE2F) || // combining half marks
       c == 0x200D; // ZWJ
 
-  bool _isZeroWidth(int r) => _inRanges(zeroWidthRanges, r);
+  bool _isZeroWidth(int r) => widthRangesContain(zeroWidthRanges, r);
 
-  bool _isWide(int r) => _inRanges(wideRanges, r);
+  bool _isWide(int r) => widthRangesContain(wideRanges, r);
 
-  bool _isEmojiPresentation(int r) => _inRanges(emojiPresentationRanges, r);
+  bool _isEmojiPresentation(int r) => widthRangesContain(emojiPresentationRanges, r);
 
-  bool _isAmbiguous(int r) => _inRanges(ambiguousRanges, r);
+  bool _isAmbiguous(int r) => widthRangesContain(ambiguousRanges, r);
 }
 
-/// Binary search over a flat, sorted list of INCLUSIVE `[start, end]` pairs.
+/// Binary search over a flat, sorted list of INCLUSIVE `[start, end]` pairs —
+/// the shape every generated table in width_tables.dart uses.
 ///
 /// Allocation-free and called per non-ASCII grapheme on the layout hot path;
 /// the ASCII fast paths in [DefaultWidthResolver] short-circuit before reaching
-/// any of this, so the common case never pays for it.
-bool _inRanges(List<int> ranges, int r) {
+/// any of this, so the common case never pays for it. Public because the emoji
+/// sequence parser (emoji_sequence.dart) searches the same tables.
+bool widthRangesContain(List<int> ranges, int r) {
   var lo = 0;
   var hi = (ranges.length >> 1) - 1;
   while (lo <= hi) {

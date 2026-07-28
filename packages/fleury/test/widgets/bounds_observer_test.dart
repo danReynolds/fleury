@@ -200,7 +200,8 @@ void main() {
           builder: (context, _) => Stack(
             children: <Widget>[
               BoundsObserver(notifier: chip, child: const Text('@')),
-              if (show.value) BoundsAnchor(notifier: chip, child: const Text('¤')),
+              if (show.value)
+                BoundsAnchor(notifier: chip, child: const Text('¤')),
             ],
           ),
         ),
@@ -252,6 +253,65 @@ void main() {
       tester.pump();
       tester.render(size: _size);
       expect(chip.bounds, isNotNull);
+    });
+    testWidgets('swapping the notifier moves the subscription with it', (
+      tester,
+    ) {
+      // The `notifier` setter unsubscribes from the old notifier and
+      // subscribes to the new one — logic no other test exercises, and a leak
+      // here would leave a float tracking bounds it no longer follows.
+      final first = BoundsNotifier();
+      final second = BoundsNotifier();
+      final useSecond = _Value<bool>(false);
+
+      tester.pumpWidget(
+        ListenableBuilder(
+          listenable: useSecond,
+          builder: (context, _) => Stack(
+            children: <Widget>[
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  BoundsObserver(notifier: first, child: const Text('A')),
+                  const Text('filler'),
+                  BoundsObserver(notifier: second, child: const Text('B')),
+                ],
+              ),
+              BoundsAnchor(
+                notifier: useSecond.value ? second : first,
+                child: const Text('¤'),
+              ),
+            ],
+          ),
+        ),
+      );
+      tester.render(size: _size);
+      expect(first.hasListeners, isTrue, reason: 'subscribed to the first');
+      expect(second.hasListeners, isFalse);
+
+      final onFirst = _find(tester, '¤')!;
+      final anchorB = _find(tester, 'B')!;
+
+      useSecond.value = true;
+      tester.pump();
+      tester.render(size: _size);
+
+      expect(
+        first.hasListeners,
+        isFalse,
+        reason:
+            'the old notifier was released — otherwise it leaks a '
+            'listener and keeps waking a float that no longer follows it',
+      );
+      expect(second.hasListeners, isTrue, reason: 'moved to the new notifier');
+
+      final onSecond = _find(tester, '¤')!;
+      expect(onSecond.row, isNot(onFirst.row), reason: 'it actually moved');
+      expect(
+        onSecond.row,
+        anchorB.row + 1,
+        reason: 'now placed against the second observed widget',
+      );
     });
   });
 }

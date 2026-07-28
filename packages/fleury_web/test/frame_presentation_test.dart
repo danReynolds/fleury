@@ -38,7 +38,7 @@ void main() {
 
       expect(plan.scrollUpRows, 1);
       // The TRUE damage stays full for semantic consumers...
-      expect(plan.damage.dirtyRows.isFull, isTrue);
+      expect(plan.dirtyRows.isFull, isTrue);
       // ...while the surface only rebuilds the entering row.
       expect(plan.dirtyRowModels.map((row) => row.row), [3]);
     });
@@ -86,10 +86,9 @@ void main() {
       expect(plan.reason, 'initial');
       expect(plan.fullRepaint, isTrue);
       expect(plan.size, size);
-      expect(plan.damage.source, FrameDamageSource.fullRepaint);
-      expect(plan.damage.dirtyRows.isFull, isTrue);
+      expect(plan.damage, isA<PresentationFullRepaint>());
+      expect(plan.dirtyRows.isFull, isTrue);
       expect(plan.dirtyRowModels.map((row) => row.row), [0, 1, 2]);
-      expect(plan.dirtyRowDiffTime, Duration.zero);
       expect(plan.spanBuildTime.inMicroseconds, greaterThanOrEqualTo(0));
     });
 
@@ -110,16 +109,15 @@ void main() {
       final plan = planner.build(reason: 'paint', frame: second);
 
       expect(plan.fullRepaint, isFalse);
-      expect(plan.damage.source, FrameDamageSource.paintDamage);
+      expect(plan.damage, isA<PresentationChanged>());
       // 'hello' -> 'hullo' differs in exactly one cell. Deriving pins the
       // bounds to that cell instead of the whole row paint happened to touch.
       expect(plan.damage.dirtyBounds, CellRect.fromLTWH(1, 1, 1, 1));
-      expect(plan.damage.dirtyRows.isFull, isFalse);
-      expect(plan.damage.dirtyRows.rows, [1]);
+      expect(plan.dirtyRows.isFull, isFalse);
+      expect(plan.dirtyRows.rows, [1]);
       expect(plan.dirtyRowModels, hasLength(1));
       expect(plan.dirtyRowModels.single.row, 1);
       expect(plan.dirtyRowModels.single.runs.first.text, 'hullo ');
-      expect(plan.dirtyRowDiffTime, Duration.zero);
     });
 
     test('layout damage still yields the exact changed rows', () {
@@ -150,11 +148,29 @@ void main() {
 
       final plan = planner.build(reason: 'layout', frame: second);
 
-      expect(plan.damage.source, FrameDamageSource.paintDamage);
-      expect(plan.damage.dirtyRows.isFull, isFalse);
-      expect(plan.damage.dirtyRows.rows, [1]);
+      expect(plan.damage, isA<PresentationChanged>());
+      expect(plan.dirtyRows.isFull, isFalse);
+      expect(plan.dirtyRows.rows, [1]);
       expect(plan.dirtyRowModels.map((row) => row.row), [1]);
-      expect(plan.dirtyRowDiffTime.inMicroseconds, greaterThanOrEqualTo(0));
+    });
+
+    test('dirty rows resolve once against the plan size', () {
+      final loop = TuiFrameLoop(renderDamage: RenderDamageTracker());
+      const planner = FramePresentationPlanner();
+      const size = CellSize(8, 4);
+      final frame = loop.render(
+        size: size,
+        paint: (buffer) => buffer.writeText(const CellOffset(0, 0), 'hi'),
+      )!;
+      final plan = planner.build(reason: 'first', frame: frame);
+
+      // A full repaint expands to the PLAN's size — the damage carries none.
+      expect(plan.damage, isA<PresentationFullRepaint>());
+      expect(plan.dirtyRows.dirtyRowCount, size.rows);
+      // Resolved once, not per read: a full repaint would otherwise rebuild
+      // this on every consumer touch, and a drag-resize is a stream of them
+      // that no steady-state gate can see.
+      expect(identical(plan.dirtyRows, plan.dirtyRows), isTrue);
     });
 
     test('unchanged buffers present no rows', () {
@@ -167,9 +183,9 @@ void main() {
       final plan = planner.build(reason: 'idle', frame: second);
 
       expect(plan.fullRepaint, isFalse);
-      expect(plan.damage.source, FrameDamageSource.paintDamage);
+      expect(plan.damage, isA<PresentationChanged>());
       expect(plan.damage.dirtyBounds, isNull, reason: 'nothing changed');
-      expect(plan.damage.dirtyRows.isEmpty, isTrue);
+      expect(plan.dirtyRows.isEmpty, isTrue);
       expect(plan.dirtyRowModels, isEmpty);
     });
 
@@ -202,12 +218,11 @@ void main() {
       )!;
       final plan = planner.build(reason: 'oracle', frame: second);
 
-      expect(plan.damage.source, FrameDamageSource.paintDamage);
-      expect(plan.damage.dirtyRows.isFull, isFalse);
-      expect(plan.damage.dirtyRows.ranges, hasLength(2));
-      expect(plan.damage.dirtyRows.rows, [0, 2]);
+      expect(plan.damage, isA<PresentationChanged>());
+      expect(plan.dirtyRows.isFull, isFalse);
+      expect(plan.dirtyRows.ranges, hasLength(2));
+      expect(plan.dirtyRows.rows, [0, 2]);
       expect(plan.dirtyRowModels.map((row) => row.row), [0, 2]);
-      expect(plan.dirtyRowDiffTime.inMicroseconds, greaterThanOrEqualTo(0));
     });
 
     test('metricsChanged is carried into the plan', () {

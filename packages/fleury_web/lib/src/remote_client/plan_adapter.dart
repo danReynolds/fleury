@@ -21,20 +21,26 @@ FramePresentationPlan applyRemotePlan(RemotePlan plan, CellBuffer mirror) {
   ];
   return FramePresentationPlan(
     reason: 'remote',
-    fullRepaint: plan.fullRepaint,
     size: mirror.size,
-    damage: FramePresentationDamage(
-      fullRepaint: plan.fullRepaint,
-      dirtyBounds: null,
-      dirtyRows: dirtyRows,
-      source: plan.fullRepaint
-          ? FrameDamageSource.fullRepaint
-          : FrameDamageSource.paintDamage,
-    ),
+    // The wire carries rows, not bounds, so no variant here gets a bound —
+    // legitimately absent, not "nothing changed". A scrolled frame's dirty
+    // rows are conservative-full: the wire ships only the residual patches,
+    // and a client cannot know which moved rows ended up identical, so it
+    // reports all of them rather than mislabel the residue as the whole.
+    damage: switch ((plan.fullRepaint, plan.scrollUpRows)) {
+      (true, _) => const PresentationFullRepaint(),
+      (false, final shift?) => PresentationScrolled(
+        scrollUpRows: shift,
+        dirtyRows: TuiDirtyRows.full(mirror.size.rows),
+        dirtyBounds: null,
+      ),
+      (false, null) => PresentationChanged(
+        dirtyRows: dirtyRows,
+        dirtyBounds: null,
+      ),
+    },
     dirtyRowModels: rowModels,
     metricsChanged: false,
-    dirtyRowDiffTime: Duration.zero,
     spanBuildTime: Duration.zero,
-    scrollUpRows: plan.scrollUpRows,
   );
 }
