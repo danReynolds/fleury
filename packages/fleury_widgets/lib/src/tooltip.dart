@@ -49,8 +49,8 @@ class _TooltipState extends State<Tooltip> {
   void _show() {
     if (_entry != null) return;
     final entry = OverlayEntry(
-      builder: (_) => AnchoredTo(
-        bounds: _bounds,
+      builder: (_) => BoundsFollower(
+        notifier: _bounds,
         // A floating popup composites over the app, so it paints its own
         // opaque background — without Surface the content underneath shows
         // through the frame.
@@ -122,7 +122,7 @@ class _TooltipState extends State<Tooltip> {
               hideFromHintBar: true,
             ),
           ],
-          child: BoundsObserver(bounds: _bounds, child: widget.child),
+          child: BoundsObserver(notifier: _bounds, child: widget.child),
         ),
       ),
     );

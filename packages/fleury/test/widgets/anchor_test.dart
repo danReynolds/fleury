@@ -33,9 +33,9 @@ void main() {
           // Anchor a 4x1 box at (3, 2).
           Padding(
             padding: const EdgeInsets.only(left: 3, top: 2),
-            child: BoundsObserver(bounds: chip, child: const Text('AAAA')),
+            child: BoundsObserver(notifier: chip, child: const Text('AAAA')),
           ),
-          AnchoredTo(bounds: chip, child: const Text('m')),
+          BoundsFollower(notifier: chip, child: const Text('m')),
         ],
       ),
     );
@@ -50,12 +50,12 @@ void main() {
         children: [
           Padding(
             padding: const EdgeInsets.only(top: 4),
-            child: BoundsObserver(bounds: chip, child: const Text('A')),
+            child: BoundsObserver(notifier: chip, child: const Text('A')),
           ),
           // A 3-row-tall follower can't fit below an anchor at row 4 in a
           // 6-row screen, so it flips to sit above the anchor.
-          AnchoredTo(
-            bounds: chip,
+          BoundsFollower(
+            notifier: chip,
             child: const Column(
               mainAxisSize: MainAxisSize.min,
               children: [Text('x'), Text('y'), Text('z')],
@@ -78,9 +78,9 @@ void main() {
           // Anchor near the right edge of an 8-wide screen.
           Padding(
             padding: const EdgeInsets.only(left: 6),
-            child: BoundsObserver(bounds: chip, child: const Text('A')),
+            child: BoundsObserver(notifier: chip, child: const Text('A')),
           ),
-          AnchoredTo(bounds: chip, child: const Text('wide')), // 4 wide
+          BoundsFollower(notifier: chip, child: const Text('wide')), // 4 wide
         ],
       ),
     );
@@ -97,12 +97,12 @@ void main() {
             Padding(
               padding: const EdgeInsets.only(left: 2, top: 1),
               child: BoundsObserver(
-                bounds: chip,
+                notifier: chip,
                 child: const Text('AAA'),
               ), // (2..5, 1)
             ),
-            AnchoredTo(
-              bounds: chip,
+            BoundsFollower(
+              notifier: chip,
               alignment: Alignment.topRight,
               anchorAlignment: Alignment.topLeft,
               child: const Text('m'),
@@ -125,12 +125,12 @@ void main() {
             Padding(
               padding: const EdgeInsets.only(left: 6),
               child: BoundsObserver(
-                bounds: chip,
+                notifier: chip,
                 child: const Text('A'),
               ), // (6..7)
             ),
-            AnchoredTo(
-              bounds: chip,
+            BoundsFollower(
+              notifier: chip,
               alignment: Alignment.topRight,
               anchorAlignment: Alignment.topLeft,
               child: const Text('xyz'), // 3 wide

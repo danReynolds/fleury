@@ -414,7 +414,7 @@ export 'src/widgets/align.dart' show Align, Alignment, Center, RenderAlign;
 export 'src/widgets/anchor.dart'
     show
         Anchored,
-        AnchoredTo,
+        BoundsFollower,
         BoundsNotifier,
         BoundsObserver,
         defaultAnchorAlignment,

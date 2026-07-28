@@ -118,8 +118,8 @@ class _MenuState extends State<Menu> {
       context,
     ); // resolved in-tree, threaded into the overlay
     final entry = OverlayEntry(
-      builder: (_) => AnchoredTo(
-        bounds: _bounds,
+      builder: (_) => BoundsFollower(
+        notifier: _bounds,
         child: _MenuBody(
           entries: widget.items,
           semanticLabel: widget.semanticLabel,
@@ -161,7 +161,7 @@ class _MenuState extends State<Menu> {
   Widget build(BuildContext context) {
     Focus.maybeOf(context); // Rebuild trigger semantics when focus moves.
     return BoundsObserver(
-      bounds: _bounds,
+      notifier: _bounds,
       child: Semantics(
         role: SemanticRole.button,
         label: widget.semanticLabel,
@@ -353,8 +353,8 @@ class _MenuBodyState extends State<_MenuBody> {
     final overlay = Overlay.of(context);
     final manager = Focus.of(context);
     final entry = OverlayEntry(
-      builder: (_) => AnchoredTo(
-        bounds: _submenuAnchor,
+      builder: (_) => BoundsFollower(
+        notifier: _submenuAnchor,
         alignment: Alignment.topRight,
         anchorAlignment: Alignment.topLeft,
         gap: 1,
@@ -490,7 +490,7 @@ class _MenuBodyState extends State<_MenuBody> {
           autofocus: true,
           onKey: _onKey,
           child: BoundsObserver(
-            bounds: _selfBounds,
+            notifier: _selfBounds,
             // A floating popup paints its own opaque background (Surface) so the
             // app underneath doesn't bleed through its frame.
             child: Surface(
@@ -556,7 +556,7 @@ class _MenuBodyState extends State<_MenuBody> {
                           // opens aligned to it (not the panel corner).
                           return sel
                               ? BoundsObserver(
-                                  bounds: _submenuAnchor,
+                                  notifier: _submenuAnchor,
                                   child: item,
                                 )
                               : item;

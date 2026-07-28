@@ -269,8 +269,8 @@ class _ColorPickerState extends State<ColorPicker>
     final overlay = Overlay.of(context);
     final theme = Theme.of(context);
     final entry = OverlayEntry(
-      builder: (_) => AnchoredTo(
-        bounds: _bounds,
+      builder: (_) => BoundsFollower(
+        notifier: _bounds,
         child: _HexEntry(
           initial: widget.value.toRgb(),
           background: theme.colorScheme.background,
@@ -454,7 +454,7 @@ class _ColorPickerState extends State<ColorPicker>
         autofocus: widget.autofocus,
         onKey: _onKey,
         child: BoundsObserver(
-          bounds: _bounds,
+          notifier: _bounds,
           child: GestureDetector(
             onTap: () => _node.requestFocus(),
             child: body,

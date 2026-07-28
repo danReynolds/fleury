@@ -162,8 +162,8 @@ class _SelectState<T> extends State<Select<T>> {
     ); // resolved in-tree, threaded into the overlay
     _priorFocus = manager.focusedNode;
     final entry = OverlayEntry(
-      builder: (_) => AnchoredTo(
-        bounds: _bounds,
+      builder: (_) => BoundsFollower(
+        notifier: _bounds,
         child: _SelectList<T>(
           options: widget.options,
           semanticLabel: widget.semanticLabel,
@@ -249,7 +249,7 @@ class _SelectState<T> extends State<Select<T>> {
     final text = '$_currentLabel ${_isOpen ? '▴' : '▾'}';
     if (!enabled) {
       return BoundsObserver(
-        bounds: _bounds,
+        notifier: _bounds,
         child: Semantics(
           role: SemanticRole.button,
           label: widget.semanticLabel ?? _currentLabel,
@@ -267,7 +267,7 @@ class _SelectState<T> extends State<Select<T>> {
       );
     }
     return BoundsObserver(
-      bounds: _bounds,
+      notifier: _bounds,
       child: Semantics(
         role: SemanticRole.button,
         label: widget.semanticLabel ?? _currentLabel,

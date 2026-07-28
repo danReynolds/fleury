@@ -37,7 +37,7 @@ class _Value<T> with ChangeNotifier {
 }
 
 void main() {
-  testWidgets('a mounted AnchoredTo tracks bounds when layout moves them', (
+  testWidgets('a mounted BoundsFollower tracks bounds when layout moves them', (
     tester,
   ) {
     final chip = BoundsNotifier();
@@ -48,7 +48,7 @@ void main() {
         builder: (context, _) => Row(
           children: <Widget>[
             Text(label.value),
-            BoundsObserver(bounds: chip, child: const Text('@')),
+            BoundsObserver(notifier: chip, child: const Text('@')),
           ],
         ),
       ),
@@ -59,7 +59,7 @@ void main() {
     // never dirties this subtree.
     tester.overlay.insert(
       OverlayEntry(
-        builder: (_) => AnchoredTo(bounds: chip, child: const Text('¤')),
+        builder: (_) => BoundsFollower(notifier: chip, child: const Text('¤')),
       ),
     );
     tester.pump();
@@ -160,7 +160,7 @@ void main() {
   });
 
   group('consumers', () {
-    testWidgets('AnchoredTo hides while the anchor is clipped out of view', (
+    testWidgets('BoundsFollower hides while the anchor is clipped out of view', (
       tester,
     ) {
       final chip = BoundsNotifier();
@@ -168,7 +168,7 @@ void main() {
         Stack(
           children: <Widget>[
             const Text('backdrop'),
-            AnchoredTo(bounds: chip, child: const Text('¤')),
+            BoundsFollower(notifier: chip, child: const Text('¤')),
           ],
         ),
       );
@@ -199,8 +199,8 @@ void main() {
           listenable: show,
           builder: (context, _) => Stack(
             children: <Widget>[
-              BoundsObserver(bounds: chip, child: const Text('@')),
-              if (show.value) AnchoredTo(bounds: chip, child: const Text('¤')),
+              BoundsObserver(notifier: chip, child: const Text('@')),
+              if (show.value) BoundsFollower(notifier: chip, child: const Text('¤')),
             ],
           ),
         ),
@@ -227,7 +227,7 @@ void main() {
           builder: (context, _) => Stack(
             children: <Widget>[
               if (show.value)
-                BoundsObserver(bounds: chip, child: const Text('@')),
+                BoundsObserver(notifier: chip, child: const Text('@')),
               const Text('backdrop'),
             ],
           ),

@@ -332,13 +332,13 @@ void main() {
     ) {
       final chip = BoundsNotifier();
       final boundary = RepaintBoundary(
-        child: BoundsObserver(bounds: chip, child: const Text('A')),
+        child: BoundsObserver(notifier: chip, child: const Text('A')),
       );
 
       Widget frame(EdgeInsets padding) => Stack(
         children: [
           Padding(padding: padding, child: boundary),
-          AnchoredTo(bounds: chip, child: const Text('m')),
+          BoundsFollower(notifier: chip, child: const Text('m')),
         ],
       );
 

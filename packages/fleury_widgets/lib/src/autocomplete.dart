@@ -226,7 +226,7 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
     }
     if (_entry == null) {
       final entry = OverlayEntry(
-        builder: (_) => AnchoredTo(bounds: _bounds, child: _suggestions()),
+        builder: (_) => BoundsFollower(notifier: _bounds, child: _suggestions()),
       );
       _entry = entry;
       Overlay.of(context).insert(entry);
@@ -447,7 +447,7 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
         ),
       ],
       child: BoundsObserver(
-        bounds: _bounds,
+        notifier: _bounds,
         child: TextInput(
           controller: _controller,
           focusNode: _focusNode,
