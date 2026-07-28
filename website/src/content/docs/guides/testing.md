@@ -28,7 +28,7 @@ from [Getting started](/fleury/getting-started/) so the app and `fleury_test` re
 the same Git checkout. After the packages are published together, replace the
 Git entry with `fleury_test: ^0.1.0` and remove that temporary override.
 
-```dart
+```dart title="test/app_test.dart"
 import 'package:fleury/fleury.dart';
 import 'package:fleury_test/fleury_test.dart';
 import 'package:test/test.dart';
