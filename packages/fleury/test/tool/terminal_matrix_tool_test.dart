@@ -2275,7 +2275,7 @@ void _writeEntry(Directory directory, String name, Map<String, Object?> entry) {
 Map<String, Object?> _webFrame({
   required int totalFrameMicros,
   required int domApplyMicros,
-  int spanBuildMicros = 700,
+  int spanBuildMicros = 1000,
   int semanticFallbackNodeCount = 0,
   int semanticUncoveredCellCount = 0,
 }) {
