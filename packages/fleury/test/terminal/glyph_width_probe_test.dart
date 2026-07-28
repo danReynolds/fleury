@@ -131,19 +131,21 @@ void main() {
       expect(measured.widthsIn(WidthProbeClass.ambiguous), <int?>[1, 1, 1]);
     });
 
-    test('terminal A fixture: narrow emoji, free joiners, no clustering',
-        () async {
-      // Measured live 2026-07-27: every emoji 1 cell, VS16 ignored, family
-      // summed to 3. The profession sequence sums to 2 (1 + 1, joiners free).
-      final measured = await probeGlyphWidths(
-        _FakeTransport(
-          _reply(_columnsFor({'familyZwj': 3, 'healthWorkerZwj': 2})),
-        ),
-      );
-      expect(measured.widthOf('slightSmile'), 1);
-      expect(measured.widthOf('heartVs16'), 1);
-      expect(measured.widthsIn(WidthProbeClass.zwjSequence), <int?>[3, 2]);
-    });
+    test(
+      'terminal A fixture: narrow emoji, free joiners, no clustering',
+      () async {
+        // Measured live 2026-07-27: every emoji 1 cell, VS16 ignored, family
+        // summed to 3. The profession sequence sums to 2 (1 + 1, joiners free).
+        final measured = await probeGlyphWidths(
+          _FakeTransport(
+            _reply(_columnsFor({'familyZwj': 3, 'healthWorkerZwj': 2})),
+          ),
+        );
+        expect(measured.widthOf('slightSmile'), 1);
+        expect(measured.widthOf('heartVs16'), 1);
+        expect(measured.widthsIn(WidthProbeClass.zwjSequence), <int?>[3, 2]);
+      },
+    );
 
     test('Warp fixture: wide emoji, paid joiners, no clustering', () async {
       // Measured live 2026-07-27: family = 8 — 2+2+2 plus one column per ZWJ.
@@ -211,23 +213,25 @@ void main() {
       expect(measured.isEmpty, isTrue);
     });
 
-    test('stays on the current line, CR-anchored per glyph, and erases it',
-        () async {
-      final transport = _FakeTransport(_reply(_columnsFor(const {})));
-      await probeGlyphWidths(transport);
-      final sent = transport.sent!;
-      // Carriage return, never ESC[H: homing would overwrite whatever the
-      // user already had on screen, which matters because `fleury diagnose
-      // --probe` runs this on the NORMAL screen, not the alternate one.
-      expect(sent, isNot(contains('\x1B[H')));
-      // Every glyph returns to column 1 first — widths never accumulate, so
-      // a narrow viewport can't wrap mid-battery — and the line is cleared.
-      for (final glyph in widthProbeBattery) {
-        expect(sent, contains('\r${glyph.glyph}\x1B[6n'));
-      }
-      expect(sent, contains('\x1B[K'));
-      expect('\x1B[6n'.allMatches(sent).length, widthProbeBattery.length);
-    });
+    test(
+      'stays on the current line, CR-anchored per glyph, and erases it',
+      () async {
+        final transport = _FakeTransport(_reply(_columnsFor(const {})));
+        await probeGlyphWidths(transport);
+        final sent = transport.sent!;
+        // Carriage return, never ESC[H: homing would overwrite whatever the
+        // user already had on screen, which matters because `fleury diagnose
+        // --probe` runs this on the NORMAL screen, not the alternate one.
+        expect(sent, isNot(contains('\x1B[H')));
+        // Every glyph returns to column 1 first — widths never accumulate, so
+        // a narrow viewport can't wrap mid-battery — and the line is cleared.
+        for (final glyph in widthProbeBattery) {
+          expect(sent, contains('\r${glyph.glyph}\x1B[6n'));
+        }
+        expect(sent, contains('\x1B[K'));
+        expect('\x1B[6n'.allMatches(sent).length, widthProbeBattery.length);
+      },
+    );
 
     test('is a single round trip', () async {
       var requests = 0;
@@ -249,10 +253,7 @@ void main() {
       expect(measured.widthOf('boxDrawing'), 1);
       expect(measured.widthOf('greekAlpha'), 2);
       expect(measured.widthOf('degreeSign'), isNull);
-      expect(
-        measured.widthsIn(WidthProbeClass.ambiguous),
-        <int?>[1, 2, null],
-      );
+      expect(measured.widthsIn(WidthProbeClass.ambiguous), <int?>[1, 2, null]);
     });
   });
 }

@@ -214,7 +214,10 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeySequence.shift.char('1'), onTrigger: () => fired = true),
+            KeyBinding(
+              KeySequence.shift.char('1'),
+              onTrigger: () => fired = true,
+            ),
           ],
           child: const Focus(autofocus: true, child: Text('x')),
         ),

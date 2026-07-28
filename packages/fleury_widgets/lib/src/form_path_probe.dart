@@ -11,5 +11,4 @@ String? probeFormPathExistence({
   required bool requireFile,
   required bool requireDirectory,
   required String label,
-}) =>
-    null;
+}) => null;

@@ -35,7 +35,13 @@ const LAYOUT_COMPONENT = '../../../components/WidgetLayout.astro';
 
 // Widgets that get an interactive props playground instead of a static example.
 // The slug must match a key in registry.dart's `knobExamples`.
-const KNOB_WIDGETS = new Set(['gauge', 'progressbar', 'histogram', 'heatmap']);
+const KNOB_WIDGETS = new Set([
+  'gauge',
+  'progressbar',
+  'histogram',
+  'heatmap',
+  'anchored',
+]);
 
 // Curated extra usage examples, shown as a tabbed group under "## Usage" for
 // widgets where a few variations are worth showing. Hand-written against the
@@ -219,6 +225,12 @@ function assertExportedWidgetCoverage(entries) {
     // A which-key popup: wraps a child and reacts to the leader-key dispatcher;
     // nothing to demo in isolation (see KeyBindings introspection).
     'WhichKey',
+    // The bounds primitive underneath Anchored. BoundsObserver renders
+    // nothing of its own (it publishes its child's painted bounds), and
+    // BoundsAnchor only positions once a live observer feeds it. Deep-dive
+    // APIs for cross-tree cases; the catalogue documents Anchored.
+    'BoundsObserver',
+    'BoundsAnchor',
   ]);
   const exportedWidgets = [...exported]
     .filter((name) => api[name] && !api[name].abstract && isWidget(name))
@@ -334,11 +346,13 @@ function constructorsSection(widget) {
 
 const all = JSON.parse(readFileSync(MANIFEST, 'utf8'));
 // 'Home' = the landing-hero example, mounted directly on the home page (no
-// catalog entry). 'Showcases' = full apps, their own section.
+// catalog entry). 'Showcases' = full apps, their own section. 'Theming' =
+// embeds on the theming guide — they demonstrate a *theme*, which is data
+// rather than a widget, so there is no class to build an API reference from.
+const GUIDE_EMBED_CATEGORIES = new Set(['Showcases', 'Home', 'Theming']);
 const widgets = all.filter(
   (e) =>
-    e.category !== 'Showcases' &&
-    e.category !== 'Home' &&
+    !GUIDE_EMBED_CATEGORIES.has(e.category) &&
     // '.lab.*' ids are extra comparison examples embedded on hand-written pages
     // (e.g. the LineChart rendering lab); they ship in the bundle to be mounted
     // there, but aren't canonical per-widget reference pages.
@@ -539,8 +553,6 @@ const CORE = [
     code: "LayoutBuilder(\n  builder: (context, constraints) =>\n      (constraints.maxCols ?? 0) > 60 ? Wide() : Narrow(),\n)" },
   { slug: 'listenablebuilder', guide: 'state-management', widget: 'ListenableBuilder',
     code: "ListenableBuilder(\n  listenable: model,\n  builder: (context, child) => Text(model.statusLabel),\n)" },
-  { slug: 'container', widget: 'Container',
-    code: "Container(\n  width: 32,\n  padding: const EdgeInsets.symmetric(horizontal: 1),\n  border: BoxBorder(style: BorderStyle.rounded),\n  child: Text('Settings'),\n)" },
   { slug: 'sizedbox', widget: 'SizedBox',
     code: "SizedBox(\n  width: 20,\n  height: 3,\n  child: Text('fixed area'),\n)" },
   { slug: 'padding', widget: 'Padding',

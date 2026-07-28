@@ -19,9 +19,7 @@ void main() {
   );
 
   /// VS-Code-family policy: bare emoji wide, the VS16 sequence inert.
-  const inertVs16 = CellWidthPolicy(
-    emojiVariationSequence: CellWidth.one,
-  );
+  const inertVs16 = CellWidthPolicy(emojiVariationSequence: CellWidth.one);
 
   group('widthOfGrapheme — narrow', () {
     test('ASCII letters and digits are width 1', () {
@@ -182,10 +180,7 @@ void main() {
       expect(resolver.widthOfGrapheme('\u{1F1EF}\u{1F1F5}', spec), 2); // 🇯🇵
       // Composite kinds are deliberately not governed by the measured axes —
       // nothing probes them; the pin covers them (RFC 0019 §6.3 branch 2).
-      expect(
-        resolver.widthOfGrapheme('\u{1F1FA}\u{1F1F8}', narrowEmoji),
-        2,
-      );
+      expect(resolver.widthOfGrapheme('\u{1F1FA}\u{1F1F8}', narrowEmoji), 2);
     });
 
     test('a LONE regional indicator is a bare scalar (branch 4)', () {

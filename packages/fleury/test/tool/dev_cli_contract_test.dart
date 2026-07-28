@@ -115,10 +115,7 @@ void main() {
         final check = await _runTool(['--dry-run', 'check', '--quick']);
         expect(check.exitCode, 0, reason: check.stderr.toString());
         expect(check.stdout, contains('(packages/fleury) dart analyze'));
-        expect(
-          check.stdout,
-          contains('(packages/fleury_test) dart analyze'),
-        );
+        expect(check.stdout, contains('(packages/fleury_test) dart analyze'));
         expect(check.stdout, contains('(packages/fleury_test) dart test'));
         expect(
           check.stdout,

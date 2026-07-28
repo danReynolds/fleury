@@ -1,4 +1,5 @@
 import 'package:fleury/fleury.dart';
+import 'package:fleury/src/widgets/rich_text.dart' show RenderRichText;
 import '../support/harness.dart';
 import 'package:test/test.dart';
 
@@ -131,5 +132,99 @@ void main() {
     );
     final buf = tester.render(size: const CellSize(4, 1));
     expect(buf.atColRow(0, 0).style.foreground, const AnsiColor(4));
+  });
+
+  group('RenderRichText display lowering (RFC 0019 P2.3, gate 12)', () {
+    const family = '\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F466}'; // 👨‍👩‍👦
+    const split = TextPresentationPolicy(lowering: ClusterLowering.split);
+    const bold = CellStyle(bold: true);
+
+    CellBuffer paintRich(TextSpan span, TextPresentationPolicy policy, int cols) {
+      final r = RenderRichText(
+        span: span,
+        base: CellStyle.empty,
+        textPolicy: policy,
+      )..layout(CellConstraints(maxCols: cols));
+      final buf = CellBuffer(CellSize(cols, 2));
+      r.paint(buf, CellOffset.zero);
+      return buf;
+    }
+
+    test('a single-span sequence lowers to atoms under split', () {
+      final buf = paintRich(const TextSpan(text: family), split, 8);
+      // _row writes a space per continuation cell: three 2-cell atoms.
+      expect(_row(buf, 0), '\u{1F468} \u{1F469} \u{1F466}');
+    });
+
+    test('span invariance: a sequence split across spans lowers identically',
+        () {
+      // The same logical sequence, arriving as two adjacent spans — detection
+      // runs on the flattened paragraph, so the span boundary changes nothing
+      // (property gate 12; per-span walking would misparse this).
+      final buf = paintRich(
+        const TextSpan(
+          children: [
+            TextSpan(text: '\u{1F468}\u{200D}'),
+            TextSpan(text: '\u{1F469}\u{200D}\u{1F466}'),
+          ],
+        ),
+        split,
+        8,
+      );
+      expect(_row(buf, 0), '\u{1F468} \u{1F469} \u{1F466}');
+    });
+
+    test('a lowered component inherits the style covering its own base', () {
+      // First component styled by span 1, later components by span 2.
+      final r = RenderRichText(
+        span: const TextSpan(
+          children: [
+            TextSpan(text: '\u{1F468}\u{200D}', style: bold),
+            TextSpan(text: '\u{1F469}\u{200D}\u{1F466}'),
+          ],
+        ),
+        base: CellStyle.empty,
+        textPolicy: split,
+      )..layout(const CellConstraints(maxCols: 8));
+      final buf = CellBuffer(const CellSize(8, 1));
+      r.paint(buf, CellOffset.zero);
+      expect(buf.atColRow(0, 0).style.bold, isTrue, reason: '👨 from span 1');
+      expect(buf.atColRow(2, 0).style.bold, isFalse, reason: '👩 from span 2');
+    });
+
+    test('preserve keeps the per-span walk byte-identical (gate 2)', () {
+      // Under the spec policy the legacy path runs: the cross-span sequence
+      // stays exactly as it renders today (two clusters, base-keyed widths).
+      final spec = paintRich(
+        const TextSpan(
+          children: [
+            TextSpan(text: '\u{1F468}\u{200D}'),
+            TextSpan(text: '\u{1F469}\u{200D}\u{1F466}'),
+          ],
+        ),
+        TextPresentationPolicy.spec,
+        10,
+      );
+      final single = paintRich(
+        const TextSpan(text: 'x'),
+        TextPresentationPolicy.spec,
+        10,
+      );
+      expect(single, isNotNull);
+      // The two-cluster rendering occupies 4 cells (2 + 2), not 6.
+      expect(spec.atColRow(0, 0).grapheme, isNotNull);
+      expect(spec.atColRow(4, 0).role, CellRole.empty);
+    });
+
+    test('non-emoji joiners flatten unchanged under split (gate 10)', () {
+      const arabic = '\u{0644}\u{200D}\u{0627}';
+      final lowered = paintRich(const TextSpan(text: arabic), split, 6);
+      final preserved = paintRich(
+        const TextSpan(text: arabic),
+        TextPresentationPolicy.spec,
+        6,
+      );
+      expect(_row(lowered, 0), _row(preserved, 0));
+    });
   });
 }

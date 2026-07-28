@@ -61,6 +61,20 @@ const examplesBundle = '/fleury/fleury-examples.js';
         { name: 'cellWidth', type: 'range', min: 2, max: 6, step: 1, default: 3 },
         { name: 'showLegend', type: 'bool', default: true },
       ],
+      anchored: [
+        {
+          name: 'alignment',
+          type: 'select',
+          default: 'bottomLeft',
+          options: [
+            'bottomLeft', 'bottomCenter', 'bottomRight',
+            'centerLeft', 'center', 'centerRight',
+            'topLeft', 'topCenter', 'topRight',
+          ],
+        },
+        { name: 'visible', type: 'bool', default: true },
+        { name: 'gap', type: 'range', min: 0, max: 3, step: 1, default: 0 },
+      ],
     };
 
     const fmt = (spec, v) =>
@@ -113,6 +127,21 @@ const examplesBundle = '/fleury/fleury-examples.js';
         input.checked = !!params[spec.name];
         input.addEventListener('change', () => {
           params[spec.name] = input.checked;
+          onChange();
+        });
+        row.appendChild(input);
+      } else if (spec.type === 'select') {
+        const input = document.createElement('select');
+        input.className = 'fleury-knob-select';
+        for (const option of spec.options) {
+          const el = document.createElement('option');
+          el.value = option;
+          el.textContent = option;
+          if (option === params[spec.name]) el.selected = true;
+          input.appendChild(el);
+        }
+        input.addEventListener('change', () => {
+          params[spec.name] = input.value;
           onChange();
         });
         row.appendChild(input);

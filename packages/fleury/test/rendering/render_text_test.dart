@@ -280,7 +280,7 @@ void main() {
       final t = RenderText(text: '─');
       // Spec policy: box-drawing is ambiguous → narrow.
       expect(t.intrinsicWidth, 1);
-      t.policy = CellWidthPolicy.cjk;
+      t.textPolicy = const TextPresentationPolicy(widths: CellWidthPolicy.cjk);
       expect(t.intrinsicWidth, 2);
     });
   });
@@ -351,6 +351,81 @@ void main() {
       t.paint(buf, CellOffset.zero);
       // Content remains below the single kept line, so it ellipsizes.
       expect(_rowContent(buf, 0), 'aaaa…');
+    });
+  });
+
+  group('RenderText display lowering (RFC 0019 P2.3)', () {
+    const family = '\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F466}'; // 👨‍👩‍👦
+    const split = TextPresentationPolicy(lowering: ClusterLowering.split);
+
+    test('text stays canonical; geometry measures the display form', () {
+      final t = RenderText(text: 'a $family', textPolicy: split);
+      expect(t.text, 'a $family', reason: 'the logical text is what was set');
+      // Display: 'a ' (2) + three 2-cell atoms = 8 cells, not the joined
+      // cluster's 2+2 = 4.
+      expect(t.intrinsicWidth, 8);
+    });
+
+    test('preserve policy leaves geometry identical to before', () {
+      final t = RenderText(text: 'a $family');
+      expect(t.intrinsicWidth, 4, reason: 'joined cluster measures 2');
+    });
+
+    test('paint draws the atoms; the buffer never sees a joiner', () {
+      final t = RenderText(text: family, textPolicy: split)
+        ..layout(const CellConstraints(maxCols: 10));
+      final buf = CellBuffer(const CellSize(6, 1));
+      t.paint(buf, CellOffset.zero);
+      expect(_rowContent(buf, 0), '\u{1F468}\u{1F469}\u{1F466}');
+    });
+
+    test('a lowered group stays on one line when it fits (decision 15)', () {
+      // Unbroken token: 'x' + family atoms (6 cells) = 7 cells. At maxCols 6
+      // the hard-break must move the WHOLE group to line 2, not slice it.
+      final t = RenderText(text: 'x$family', textPolicy: split)
+        ..layout(const CellConstraints(maxCols: 6));
+      final buf = CellBuffer(const CellSize(6, 2));
+      t.paint(buf, CellOffset.zero);
+      expect(_rowContent(buf, 0), 'x·····');
+      expect(_rowContent(buf, 1), '\u{1F468}\u{1F469}\u{1F466}');
+    });
+
+    test('a group wider than the line breaks at atom boundaries only', () {
+      // Group alone is 6 cells; at maxCols 4 it cannot fit any line, so a
+      // forced component break applies — two atoms (4 cells), then one.
+      final t = RenderText(text: family, textPolicy: split)
+        ..layout(const CellConstraints(maxCols: 4));
+      final buf = CellBuffer(const CellSize(4, 2));
+      t.paint(buf, CellOffset.zero);
+      expect(_rowContent(buf, 0), '\u{1F468}\u{1F469}');
+      expect(_rowContent(buf, 1), '\u{1F466}··');
+    });
+
+    test('policy change re-projects and dirties layout (gate 14)', () {
+      final t = RenderText(text: family)
+        ..layout(const CellConstraints(maxCols: 10));
+      expect(t.intrinsicWidth, 2, reason: 'preserve: joined cluster');
+      t.textPolicy = split;
+      expect(
+        t.intrinsicWidth,
+        6,
+        reason: 'split: three 2-cell atoms — geometry changed, so the setter '
+            'must invalidate layout, not merely paint',
+      );
+      // Re-laying out yields the new geometry — the observable form of
+      // layout invalidation (needsLayout itself is @protected).
+      expect(
+        t.layout(const CellConstraints(maxCols: 10)),
+        const CellSize(6, 1),
+      );
+    });
+
+    test('non-emoji joiners are untouched under split (gate 10)', () {
+      const arabic = '\u{0644}\u{200D}\u{0627}';
+      final a = RenderText(text: arabic, textPolicy: split);
+      final b = RenderText(text: arabic);
+      expect(a.intrinsicWidth, b.intrinsicWidth);
+      expect(a.text, arabic);
     });
   });
 }

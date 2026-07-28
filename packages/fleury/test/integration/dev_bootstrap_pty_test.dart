@@ -37,18 +37,20 @@ void main() {
     } catch (_) {}
   });
 
-  test('plain dart run gets save-to-reload and hot restart',
-      // pub get + JIT warmup + reload/restart phases legitimately take a
-      // while; the tag-level 30s default is for lean PTY captures.
-      timeout: const Timeout(Duration(minutes: 4)), () async {
-    final packageRoot = Directory.current;
-    final repoRoot = _findRepoRoot(packageRoot);
-    final appDir = Directory('${tempDir.path}/tempapp')
-      ..createSync(recursive: true);
+  test(
+    'plain dart run gets save-to-reload and hot restart',
+    // pub get + JIT warmup + reload/restart phases legitimately take a
+    // while; the tag-level 30s default is for lean PTY captures.
+    timeout: const Timeout(Duration(minutes: 4)),
+    () async {
+      final packageRoot = Directory.current;
+      final repoRoot = _findRepoRoot(packageRoot);
+      final appDir = Directory('${tempDir.path}/tempapp')
+        ..createSync(recursive: true);
 
-    // ── A minimal app that renders a live value and an initState-captured
-    //    copy of it — the pair that distinguishes reload from restart. ──────
-    File('${appDir.path}/pubspec.yaml').writeAsStringSync('''
+      // ── A minimal app that renders a live value and an initState-captured
+      //    copy of it — the pair that distinguishes reload from restart. ──────
+      File('${appDir.path}/pubspec.yaml').writeAsStringSync('''
 name: tempapp
 environment:
   sdk: ^3.9.0
@@ -56,10 +58,12 @@ dependencies:
   fleury:
     path: ${packageRoot.path}
 ''');
-    Directory('${appDir.path}/lib').createSync();
-    Directory('${appDir.path}/bin').createSync();
-    File('${appDir.path}/lib/marker.dart').writeAsStringSync(_marker('ALPHA'));
-    File('${appDir.path}/bin/main.dart').writeAsStringSync('''
+      Directory('${appDir.path}/lib').createSync();
+      Directory('${appDir.path}/bin').createSync();
+      File(
+        '${appDir.path}/lib/marker.dart',
+      ).writeAsStringSync(_marker('ALPHA'));
+      File('${appDir.path}/bin/main.dart').writeAsStringSync('''
 import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:io';
@@ -112,196 +116,200 @@ Future<void> main() async {
 }
 ''');
 
-    final pubGet = await Process.run(Platform.resolvedExecutable, const [
-      'pub',
-      'get',
-      '--no-example',
-    ], workingDirectory: appDir.path);
-    expect(pubGet.exitCode, 0, reason: '${pubGet.stdout}\n${pubGet.stderr}');
+      final pubGet = await Process.run(Platform.resolvedExecutable, const [
+        'pub',
+        'get',
+        '--no-example',
+      ], workingDirectory: appDir.path);
+      expect(pubGet.exitCode, 0, reason: '${pubGet.stdout}\n${pubGet.stderr}');
 
-    // ── Run it under a real PTY via the repo's capture helper. ─────────────
-    final svcFile = File('${tempDir.path}/svc-uri');
-    final outBase = '${tempDir.path}/cap';
-    final process = await Process.start(
-      Platform.resolvedExecutable,
-      [
-        '${repoRoot.path}/profiling/capture_pty.dart',
-        '--out',
-        outBase,
-        '--timeout',
-        '150',
-        '--',
+      // ── Run it under a real PTY via the repo's capture helper. ─────────────
+      final svcFile = File('${tempDir.path}/svc-uri');
+      final outBase = '${tempDir.path}/cap';
+      final process = await Process.start(
         Platform.resolvedExecutable,
-        'bin/main.dart',
-      ],
-      workingDirectory: appDir.path,
-      environment: {
-        'FLEURY_TEST_SVC_OUT': svcFile.path,
-        'FLEURY_DEV_BOOTSTRAP_LOG': '${tempDir.path}/bootstrap.log',
-      },
-    );
-    final stderrBuf = StringBuffer();
-    process.stderr.transform(utf8.decoder).listen(stderrBuf.write);
-    final stdoutBuf = StringBuffer();
-    process.stdout.transform(utf8.decoder).listen(stdoutBuf.write);
-    var exited = false;
-    final exitFuture = process.exitCode.then((c) {
-      exited = true;
-      return c;
-    });
+        [
+          '${repoRoot.path}/profiling/capture_pty.dart',
+          '--out',
+          outBase,
+          '--timeout',
+          '150',
+          '--',
+          Platform.resolvedExecutable,
+          'bin/main.dart',
+        ],
+        workingDirectory: appDir.path,
+        environment: {
+          'FLEURY_TEST_SVC_OUT': svcFile.path,
+          'FLEURY_DEV_BOOTSTRAP_LOG': '${tempDir.path}/bootstrap.log',
+        },
+      );
+      final stderrBuf = StringBuffer();
+      process.stderr.transform(utf8.decoder).listen(stderrBuf.write);
+      final stdoutBuf = StringBuffer();
+      process.stdout.transform(utf8.decoder).listen(stdoutBuf.write);
+      var exited = false;
+      final exitFuture = process.exitCode.then((c) {
+        exited = true;
+        return c;
+      });
 
-    void dumpDiagnostics(String phase) {
-      final bin = File('$outBase.bin');
-      final json = File('$outBase.json');
-      printOnFailure('=== phase: $phase ===');
-      printOnFailure('capture_pty stderr: $stderrBuf');
-      printOnFailure('capture_pty stdout: $stdoutBuf');
-      if (json.existsSync()) {
-        printOnFailure('metadata: ${json.readAsStringSync()}');
-      }
-      if (bin.existsSync()) {
-        final bytes = latin1.decode(bin.readAsBytesSync());
-        printOnFailure(
-          'pty tail:\n${bytes.substring(bytes.length < 4000 ? 0 : bytes.length - 4000)}',
-        );
-      }
-      final log = File('${tempDir.path}/bootstrap.log');
-      if (log.existsSync()) {
-        printOnFailure('bootstrap log:\n${log.readAsStringSync()}');
-      }
-    }
-
-    VmService? vm;
-    try {
-      // ── The bootstrap self-enabled the service. ──────────────────────────
-      final uri = await _waitFor(() async {
-        if (exited) {
-          fail(
-            'app exited early\nstderr: $stderrBuf\nstdout: $stdoutBuf',
+      void dumpDiagnostics(String phase) {
+        final bin = File('$outBase.bin');
+        final json = File('$outBase.json');
+        printOnFailure('=== phase: $phase ===');
+        printOnFailure('capture_pty stderr: $stderrBuf');
+        printOnFailure('capture_pty stdout: $stdoutBuf');
+        if (json.existsSync()) {
+          printOnFailure('metadata: ${json.readAsStringSync()}');
+        }
+        if (bin.existsSync()) {
+          final bytes = latin1.decode(bin.readAsBytesSync());
+          printOnFailure(
+            'pty tail:\n${bytes.substring(bytes.length < 4000 ? 0 : bytes.length - 4000)}',
           );
         }
-        return svcFile.existsSync() ? svcFile.readAsStringSync() : null;
-      }, timeout: const Duration(seconds: 30), what: 'VM service URI');
-      if (uri == null) {
-        // openpty unavailable (sandboxed CI shells) — the helper reports it
-        // on stderr before any capture output exists.
-        if (stderrBuf.toString().contains('openpty failed')) {
-          markTestSkipped('PTY unavailable: ${stderrBuf.toString().trim()}');
-          return;
+        final log = File('${tempDir.path}/bootstrap.log');
+        if (log.existsSync()) {
+          printOnFailure('bootstrap log:\n${log.readAsStringSync()}');
         }
-        fail('no service URI\nstderr: $stderrBuf\nstdout: $stdoutBuf');
       }
 
-      vm = await vmServiceConnectUri(_wsUri(uri));
-
-      // ── The supervised child's own service; drive its main isolate. ──────
-      final firstChildId = await _findMainIsolate(vm);
-      expect(firstChildId, isNotNull, reason: 'child main isolate not found');
-
-      // ── Hot reload: edit a watched source file; nothing else. ────────────
-      File('${appDir.path}/lib/marker.dart')
-          .writeAsStringSync(_marker('BETA'));
-      // The first reload of a fresh isolate group revalidates every library
-      // in it — allow generous time, polling the bootstrap's log for the
-      // completion line rather than guessing.
-      final reloadDone = await _waitFor(
-        () async {
-          final log = File('${tempDir.path}/bootstrap.log');
-          if (!log.existsSync()) return null;
-          final text = log.readAsStringSync();
-          return text.contains('reload: done') ? text : null;
-        },
-        timeout: const Duration(seconds: 45),
-        what: 'reload completion',
-      );
-      if (reloadDone == null) {
-        dumpDiagnostics('reload never completed');
-        fail('reload never completed');
-      }
-      expect(reloadDone, contains('success=true'));
-      await Future<void>.delayed(const Duration(seconds: 1));
-
-      // ── Hot restart via the service extension: the child process exits
-      //    and the supervisor spawns a fresh one with a NEW service URI. ─────
-      final firstUri = uri;
+      VmService? vm;
       try {
-        await vm.callServiceExtension(
-          'ext.fleury.restart',
-          isolateId: firstChildId,
+        // ── The bootstrap self-enabled the service. ──────────────────────────
+        final uri = await _waitFor(
+          () async {
+            if (exited) {
+              fail('app exited early\nstderr: $stderrBuf\nstdout: $stdoutBuf');
+            }
+            return svcFile.existsSync() ? svcFile.readAsStringSync() : null;
+          },
+          timeout: const Duration(seconds: 30),
+          what: 'VM service URI',
         );
-      } catch (error) {
-        dumpDiagnostics('restart call failed: $error');
-        rethrow;
+        if (uri == null) {
+          // openpty unavailable (sandboxed CI shells) — the helper reports it
+          // on stderr before any capture output exists.
+          if (stderrBuf.toString().contains('openpty failed')) {
+            markTestSkipped('PTY unavailable: ${stderrBuf.toString().trim()}');
+            return;
+          }
+          fail('no service URI\nstderr: $stderrBuf\nstdout: $stdoutBuf');
+        }
+
+        vm = await vmServiceConnectUri(_wsUri(uri));
+
+        // ── The supervised child's own service; drive its main isolate. ──────
+        final firstChildId = await _findMainIsolate(vm);
+        expect(firstChildId, isNotNull, reason: 'child main isolate not found');
+
+        // ── Hot reload: edit a watched source file; nothing else. ────────────
+        File(
+          '${appDir.path}/lib/marker.dart',
+        ).writeAsStringSync(_marker('BETA'));
+        // The first reload of a fresh isolate group revalidates every library
+        // in it — allow generous time, polling the bootstrap's log for the
+        // completion line rather than guessing.
+        final reloadDone = await _waitFor(
+          () async {
+            final log = File('${tempDir.path}/bootstrap.log');
+            if (!log.existsSync()) return null;
+            final text = log.readAsStringSync();
+            return text.contains('reload: done') ? text : null;
+          },
+          timeout: const Duration(seconds: 45),
+          what: 'reload completion',
+        );
+        if (reloadDone == null) {
+          dumpDiagnostics('reload never completed');
+          fail('reload never completed');
+        }
+        expect(reloadDone, contains('success=true'));
+        await Future<void>.delayed(const Duration(seconds: 1));
+
+        // ── Hot restart via the service extension: the child process exits
+        //    and the supervisor spawns a fresh one with a NEW service URI. ─────
+        final firstUri = uri;
+        try {
+          await vm.callServiceExtension(
+            'ext.fleury.restart',
+            isolateId: firstChildId,
+          );
+        } catch (error) {
+          dumpDiagnostics('restart call failed: $error');
+          rethrow;
+        }
+        try {
+          await vm.dispose(); // The old process is going away.
+        } catch (_) {}
+        vm = null;
+        final secondUri = await _waitFor(
+          () async {
+            if (!svcFile.existsSync()) return null;
+            final now = svcFile.readAsStringSync();
+            return (now.isNotEmpty && now != firstUri) ? now : null;
+          },
+          timeout: const Duration(seconds: 30),
+          what: 'respawned child service',
+        );
+        if (secondUri == null) {
+          dumpDiagnostics('no fresh child after restart');
+          fail('no fresh child after restart');
+        }
+        vm = await vmServiceConnectUri(_wsUri(secondUri));
+        final secondChildId = await _findMainIsolate(vm);
+        expect(secondChildId, isNotNull, reason: 'restarted main not found');
+        // Let the fresh app paint its first frame.
+        await Future<void>.delayed(const Duration(seconds: 2));
+
+        // ── Clean shutdown; exit code propagates through the supervisor. ─────
+        await vm.callServiceExtension(
+          'ext.fleury.shutdown',
+          isolateId: secondChildId!,
+        );
+        final exitCode = await exitFuture.timeout(const Duration(seconds: 20));
+        expect(exitCode, 0, reason: 'stderr: $stderrBuf\nstdout: $stdoutBuf');
+      } finally {
+        try {
+          vm?.dispose();
+        } catch (_) {}
+        if (!exited) process.kill(ProcessSignal.sigkill);
       }
-      try {
-        await vm.dispose(); // The old process is going away.
-      } catch (_) {}
-      vm = null;
-      final secondUri = await _waitFor(
-        () async {
-          if (!svcFile.existsSync()) return null;
-          final now = svcFile.readAsStringSync();
-          return (now.isNotEmpty && now != firstUri) ? now : null;
-        },
-        timeout: const Duration(seconds: 30),
-        what: 'respawned child service',
+
+      // ── The captured byte stream tells the whole story in order. ───────────
+      final metadata =
+          jsonDecode(File('$outBase.json').readAsStringSync())
+              as Map<String, Object?>;
+      expect(metadata['timedOut'], isFalse);
+      expect(metadata['exitCode'], 0);
+      final output = latin1.decode(File('$outBase.bin').readAsBytesSync());
+
+      final liveAlpha = output.indexOf('live:MARK-ALPHA');
+      final bootAlpha = output.indexOf('boot:MARK-ALPHA');
+      final liveBeta = output.indexOf('live:MARK-BETA');
+      final bootBeta = output.indexOf('boot:MARK-BETA');
+      expect(liveAlpha, greaterThanOrEqualTo(0), reason: 'first frame missing');
+      expect(bootAlpha, greaterThanOrEqualTo(0), reason: 'first frame missing');
+      expect(
+        liveBeta,
+        greaterThan(liveAlpha),
+        reason: 'hot reload never repainted the edited value:\n$output',
       );
-      if (secondUri == null) {
-        dumpDiagnostics('no fresh child after restart');
-        fail('no fresh child after restart');
-      }
-      vm = await vmServiceConnectUri(_wsUri(secondUri));
-      final secondChildId = await _findMainIsolate(vm);
-      expect(secondChildId, isNotNull, reason: 'restarted main not found');
-      // Let the fresh app paint its first frame.
-      await Future<void>.delayed(const Duration(seconds: 2));
-
-      // ── Clean shutdown; exit code propagates through the supervisor. ─────
-      await vm.callServiceExtension(
-        'ext.fleury.shutdown',
-        isolateId: secondChildId!,
+      expect(
+        bootBeta,
+        greaterThan(liveBeta),
+        reason:
+            'hot restart never re-ran initState (boot value stayed ALPHA):\n'
+            '$output',
       );
-      final exitCode = await exitFuture.timeout(const Duration(seconds: 20));
-      expect(exitCode, 0, reason: 'stderr: $stderrBuf\nstdout: $stdoutBuf');
-    } finally {
-      try {
-        vm?.dispose();
-      } catch (_) {}
-      if (!exited) process.kill(ProcessSignal.sigkill);
-    }
-
-    // ── The captured byte stream tells the whole story in order. ───────────
-    final metadata =
-        jsonDecode(File('$outBase.json').readAsStringSync())
-            as Map<String, Object?>;
-    expect(metadata['timedOut'], isFalse);
-    expect(metadata['exitCode'], 0);
-    final output = latin1.decode(File('$outBase.bin').readAsBytesSync());
-
-    final liveAlpha = output.indexOf('live:MARK-ALPHA');
-    final bootAlpha = output.indexOf('boot:MARK-ALPHA');
-    final liveBeta = output.indexOf('live:MARK-BETA');
-    final bootBeta = output.indexOf('boot:MARK-BETA');
-    expect(liveAlpha, greaterThanOrEqualTo(0), reason: 'first frame missing');
-    expect(bootAlpha, greaterThanOrEqualTo(0), reason: 'first frame missing');
-    expect(
-      liveBeta,
-      greaterThan(liveAlpha),
-      reason: 'hot reload never repainted the edited value:\n$output',
-    );
-    expect(
-      bootBeta,
-      greaterThan(liveBeta),
-      reason:
-          'hot restart never re-ran initState (boot value stayed ALPHA):\n'
-          '$output',
-    );
-    // Reload preserved state: the boot line still said ALPHA when the live
-    // line already said BETA — i.e. boot:BETA appears only after the restart.
-    expect(output.substring(0, bootBeta), contains('boot:MARK-ALPHA'));
-    // The session ended with the terminal restored (alt-screen exit).
-    expect(output, contains('\x1b[?1049l'));
-  });
+      // Reload preserved state: the boot line still said ALPHA when the live
+      // line already said BETA — i.e. boot:BETA appears only after the restart.
+      expect(output.substring(0, bootBeta), contains('boot:MARK-ALPHA'));
+      // The session ended with the terminal restored (alt-screen exit).
+      expect(output, contains('\x1b[?1049l'));
+    },
+  );
 }
 
 String _marker(String value) => "String greeting() => 'MARK-$value';\n";

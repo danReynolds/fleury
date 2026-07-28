@@ -95,8 +95,9 @@ final class FrameDiffStats {
     this.dirtySpans,
   });
 
-  /// Time computing this surface's change set (ANSI cell diff; wire row diff +
-  /// span build).
+  /// Time computing this surface's change set (ANSI cell diff; wire/web span
+  /// build — dirty rows arrive exact from the loop, so span construction is
+  /// the whole phase there).
   final Duration diff;
 
   /// Changed-cell count, or null if the surface can't cheaply tally it — the

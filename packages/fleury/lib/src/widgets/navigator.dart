@@ -53,7 +53,7 @@ import '../rendering/render_object.dart';
 import '../semantics/semantics.dart';
 import '../input/events.dart';
 import 'align.dart' show Align, Alignment;
-import 'basic.dart' show Container, Surface;
+import 'basic.dart' show Container;
 import 'effects.dart';
 import 'focus.dart';
 import 'focus_traversal.dart';
@@ -176,7 +176,7 @@ class _Route {
   /// For a modal ([presentAlignment] != null): a fill painted over the screen
   /// behind, around the presented content. null leaves the surround composited
   /// with the route beneath. (The content itself always sits on an opaque
-  /// [Surface], so it never shows through regardless of this.)
+  /// opaque fill, so it never shows through regardless of this.)
   final Color? barrierColor;
 
   /// For a modal: whether Esc / a dismiss action pops it. Default true; set
@@ -380,7 +380,7 @@ class NavigatorState extends State<Navigator> {
   /// the stack of the navigator it's presented on — present on a nested
   /// navigator for a pane-scoped modal, or the root for an app-wide one.
   ///
-  /// The presented [screen] is placed on an opaque [Surface] automatically, so
+  /// The presented [screen] is placed on an opaque fill automatically, so
   /// nothing painted beneath shows through it — a modal is never see-through.
   /// [barrierColor] optionally fills the surround (over the screen behind);
   /// null leaves it composited. [barrierDismissible] (default true) controls
@@ -759,7 +759,9 @@ class _RouteHost extends StatelessWidget {
       // that brings its own still behaves.
       Widget content = Align(
         alignment: align,
-        child: Surface(child: DefaultRootSelection(child: route.screen)),
+        child: Container.filled(
+          child: DefaultRootSelection(child: route.screen),
+        ),
       );
       final barrier = route.barrierColor;
       if (barrier != null) {

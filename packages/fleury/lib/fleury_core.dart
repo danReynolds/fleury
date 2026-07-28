@@ -345,7 +345,7 @@ export 'src/widgets/layout_builder.dart'
     show LayoutBuilder, LayoutWidgetBuilder;
 export 'src/widgets/media_query.dart' show MediaQuery, MediaQueryData;
 export 'src/widgets/overlay.dart'
-    show Overlay, OverlayEntry, OverlayEntryMountSync, OverlayState;
+    show Overlay, OverlayEntry, OverlayMount, OverlayState;
 export 'src/widgets/repaint_boundary.dart' show RepaintBoundary;
 export 'src/widgets/rich_text.dart' show RichText, TextSpan;
 export 'src/widgets/pointer.dart'
@@ -398,7 +398,6 @@ export 'src/widgets/text_area.dart' show TextArea;
 export 'src/widgets/text_input.dart'
     show TextClipboardPolicy, TextEditingController, TextInput;
 export 'src/widgets/ticker_mode.dart' show TickerMode;
-export 'src/widgets/theme_palettes.dart' show NamedTheme, ThemePalettes;
 export 'src/widgets/theme.dart'
     show
         Brightness,
@@ -411,8 +410,14 @@ export 'src/widgets/theme.dart'
 export 'src/widgets/tui_binding.dart'
     show SingleTickerProviderStateMixin, TuiBinding, TuiBindingScope;
 export 'src/widgets/align.dart' show Align, Alignment, Center, RenderAlign;
-export 'src/widgets/anchor.dart'
-    show Anchor, AnchorLink, Follower, FollowerPlacement;
+export 'src/widgets/anchored.dart' show Anchored;
+export 'src/widgets/bounds.dart'
+    show
+        BoundsAnchor,
+        BoundsNotifier,
+        BoundsObserver,
+        defaultAnchorAlignment,
+        resolveAnchoredOffset;
 export 'src/widgets/async.dart'
     show
         AsyncSnapshot,
@@ -438,7 +443,7 @@ export 'src/widgets/basic.dart'
         SizedBox,
         Spacer,
         Stack,
-        Surface,
+        resolveSurfaceColor,
         Text,
         Wrap;
 export 'src/widgets/framework.dart'

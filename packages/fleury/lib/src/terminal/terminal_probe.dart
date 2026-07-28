@@ -352,9 +352,7 @@ final class WidthMeasurements {
       );
     }
     return WidthMeasurements(
-      List<int?>.unmodifiable(
-        widthProbeBattery.map((g) => byId[g.id]),
-      ),
+      List<int?>.unmodifiable(widthProbeBattery.map((g) => byId[g.id])),
     );
   }
 
@@ -401,9 +399,7 @@ final class WidthMeasurements {
   @override
   String toString() {
     if (isEmpty) return 'WidthMeasurements.empty()';
-    final parts = [
-      for (final (glyph, width) in entries) '${glyph.id}: $width',
-    ];
+    final parts = [for (final (glyph, width) in entries) '${glyph.id}: $width'];
     return 'WidthMeasurements(${parts.join(', ')})';
   }
 }
@@ -433,9 +429,7 @@ Future<WidthMeasurements> probeGlyphWidths(
   // Each glyph started at column 1, so the reported column is advance + 1.
   // Recorded raw — a zero or negative-looking advance is kept as measured and
   // rejected by derivation's agreement rules, not silently repaired here.
-  return WidthMeasurements(
-    List<int?>.unmodifiable(columns.map((c) => c - 1)),
-  );
+  return WidthMeasurements(List<int?>.unmodifiable(columns.map((c) => c - 1)));
 }
 
 /// Return to column 1, draw, ask where the cursor landed — once per battery

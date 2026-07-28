@@ -1168,10 +1168,10 @@ Future<AppExit> _runAppImpl(
           final errorEntry = OverlayEntry(
             builder: (_) => RuntimeErrorOverlay(reporter: errorReporter),
           );
-          OverlayEntryMountSync(
+          OverlayMount(
             entry: errorEntry,
-            resolveOverlay: () => overlayKey.currentState,
-            shouldMount: () => errorReporter.current != null,
+            overlay: () => overlayKey.currentState,
+            mountWhen: () => errorReporter.current != null,
           ).attachTo(errorReporter);
           // The shared scope stack (see buildTuiRoot). The native host supplies
           // every layer — captured-output buffer and the debug shell included.

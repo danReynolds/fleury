@@ -1692,6 +1692,7 @@ class RenderTextInput extends RenderObject {
     _policy = value;
     markNeedsLayout();
   }
+
   int _scrollLeft = 0;
 
   set focusNode(FocusNode value) {

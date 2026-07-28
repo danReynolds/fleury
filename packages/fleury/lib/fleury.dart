@@ -37,8 +37,7 @@ export 'src/rendering/io_sink_ansi_sink.dart' show IoSinkAnsiSink;
 export 'src/runtime/hot_reload.dart' show HotReloadController;
 export 'src/runtime/output_capture.dart' show LogBuffer, LogLine, LogSource;
 export 'src/runtime/system_clipboard.dart' show SystemClipboard;
-export 'src/debug/debug_state.dart'
-    show DebugConfig, DebugMode, DebugPanelSide;
+export 'src/debug/debug_state.dart' show DebugConfig, DebugMode, DebugPanelSide;
 export 'src/runtime/run_app.dart'
     show
         AppExit,
