@@ -53,7 +53,7 @@ import '../rendering/render_object.dart';
 import '../semantics/semantics.dart';
 import '../input/events.dart';
 import 'align.dart' show Align, Alignment;
-import 'basic.dart' show Container, Surface;
+import 'basic.dart' show Container;
 import 'effects.dart';
 import 'focus.dart';
 import 'focus_traversal.dart';
@@ -750,7 +750,7 @@ class _RouteHost extends StatelessWidget {
       // null leaves the surround composited with the route beneath.
       Widget content = Align(
         alignment: align,
-        child: Surface(child: route.screen),
+        child: Container.filled(child: route.screen),
       );
       final barrier = route.barrierColor;
       if (barrier != null) {

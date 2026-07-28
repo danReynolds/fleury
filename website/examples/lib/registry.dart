@@ -1226,6 +1226,22 @@ TextArea(
     ),
   ),
   ExampleInfo(
+    id: 'container.filled',
+    widget: 'Container',
+    category: 'Layout',
+    blurb:
+        'Container is transparent by default; .filled paints the theme '
+        'surface and .framed adds the theme border. Enter and Esc toggle a '
+        'framed layer over live content.',
+    cols: 44,
+    rows: 11,
+    interactive: true,
+    // Toggling is the demo: while the framed layer is open the wall behind
+    // is covered (it owns every cell it draws over), and closing restores
+    // that content untouched — it layers, it doesn't overwrite.
+    builder: () => const _ContainerFillExample(),
+  ),
+  ExampleInfo(
     id: 'dialog.basic',
     widget: 'Dialog',
     category: 'Navigation & overlays',
@@ -1304,10 +1320,7 @@ TextArea(
         // completions).
         child: const WhichKey(
           showDelay: Duration.zero,
-          child: Focus(
-            autofocus: true,
-            child: Text('Press Space, then a key'),
-          ),
+          child: Focus(autofocus: true, child: Text('Press Space, then a key')),
         ),
       ),
     ),
@@ -1950,6 +1963,71 @@ final class _DocsCanvasPainter extends CanvasPainter {
       previousX = x;
       previousY = y;
     }
+  }
+}
+
+class _ContainerFillExample extends StatefulWidget {
+  const _ContainerFillExample();
+
+  @override
+  State<_ContainerFillExample> createState() => _ContainerFillExampleState();
+}
+
+class _ContainerFillExampleState extends State<_ContainerFillExample> {
+  bool _open = false;
+
+  void _toggle() => setState(() => _open = !_open);
+
+  @override
+  Widget build(BuildContext context) {
+    // The trigger and the wall stay at a fixed position in the tree so the
+    // button keeps focus across a toggle; only the framed layer comes and
+    // goes.
+    final Widget behind = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Button(
+          label: _open ? 'Hide layer' : 'Show layer',
+          autofocus: true,
+          onPressed: _toggle,
+        ),
+        for (var i = 0; i < 6; i++) const Text('live content behind the layer'),
+      ],
+    );
+    return _framed(
+      KeyBindings(
+        bindings: <KeyBinding>[
+          if (_open)
+            KeyBinding(KeySequence.escape, label: 'Close', onTrigger: _toggle),
+        ],
+        child: Stack(
+          children: <Widget>[
+            behind,
+            if (_open)
+              Align(
+                alignment: Alignment.center,
+                child: Container.framed(
+                  padding: const EdgeInsets.symmetric(horizontal: 1),
+                  // Deliberately ragged: the shorter line leaves interior
+                  // cells the content never writes — exactly the cells that
+                  // would show the wall through an unfilled Container.
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const <Widget>[
+                      Text('Container.framed'),
+                      Text(
+                        'opaque fill + theme border',
+                        style: CellStyle(dim: true),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

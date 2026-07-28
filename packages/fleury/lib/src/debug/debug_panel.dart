@@ -163,7 +163,7 @@ class _DebugPanelState extends State<DebugPanel> {
         // detectors paint later (deeper), so they stay on top and keep
         // working.
         return AbsorbPointer(
-          child: Surface(
+          child: Container.filled(
             color: const RgbColor(20, 22, 28),
             child: Container(
               border: const BoxBorder(

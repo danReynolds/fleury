@@ -51,19 +51,16 @@ class _TooltipState extends State<Tooltip> {
     final entry = OverlayEntry(
       builder: (_) => Follower(
         link: _link,
-        // A floating popup composites over the app, so it paints its own
-        // opaque background — without Surface the content underneath shows
-        // through the frame.
-        child: Surface(
-          child: Container(
-            border: const BoxBorder(style: BorderStyle.rounded),
-            child: Semantics(
-              role: SemanticRole.text,
-              label: widget.semanticLabel,
-              value: _safeMessage,
-              state: const SemanticState({'tooltipVisible': true}),
-              child: Text(widget.message, allowSelect: false),
-            ),
+        // Popup supplies the float contract: opaque fill, frame, and
+        // chrome semantics (the hint text is not ambient-selectable).
+        child: Container.framed(
+          border: const BoxBorder(style: BorderStyle.rounded),
+          child: Semantics(
+            role: SemanticRole.text,
+            label: widget.semanticLabel,
+            value: _safeMessage,
+            state: const SemanticState({'tooltipVisible': true}),
+            child: Text(widget.message),
           ),
         ),
       ),
