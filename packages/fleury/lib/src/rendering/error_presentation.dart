@@ -102,7 +102,7 @@ void paintCellErrorPresentation(
   // the panel edge instead of overrunning the border, and splits land on
   // grapheme-cluster boundaries (never inside a surrogate pair).
   const resolver = DefaultWidthResolver();
-  const profile = TerminalProfile.standard;
+  const policy = CellWidthPolicy.spec;
   final innerLeft = left + 1;
   final innerWidth = size.cols - 2;
   final innerTop = top + 1;
@@ -122,7 +122,7 @@ void paintCellErrorPresentation(
   var lineWidth = 0;
   while (words.isNotEmpty && lines.length < innerRows) {
     final word = words.first;
-    final wordWidth = resolver.widthOfText(word, profile);
+    final wordWidth = resolver.widthOfText(word, policy);
     final sep = lineWidth == 0 ? 0 : 1;
     if (lineWidth + sep + wordWidth <= innerWidth) {
       if (sep == 1) line.write(' ');
@@ -137,7 +137,7 @@ void paintCellErrorPresentation(
       var headWidth = 0;
       var filling = true;
       for (final g in word.characters) {
-        final gw = resolver.widthOfGrapheme(g, profile);
+        final gw = resolver.widthOfGrapheme(g, policy);
         if (filling && headWidth + gw <= innerWidth) {
           head.write(g);
           headWidth += gw;
@@ -163,9 +163,9 @@ void paintCellErrorPresentation(
     if (row < visible.top || row >= visible.bottom) continue;
     var text = lines[i];
     if (i == lines.length - 1 && overflowed) {
-      text = _ellipsize(text, innerWidth, resolver, profile);
+      text = _ellipsize(text, innerWidth, resolver, policy);
     }
-    _paintClippedRun(buffer, row, innerLeft, text, visible, resolver, profile);
+    _paintClippedRun(buffer, row, innerLeft, text, visible, resolver, policy);
   }
 }
 
@@ -175,13 +175,13 @@ String _ellipsize(
   String text,
   int maxCols,
   WidthResolver resolver,
-  TerminalProfile profile,
+  CellWidthPolicy policy,
 ) {
-  if (resolver.widthOfText(text, profile) < maxCols) return '$text…';
+  if (resolver.widthOfText(text, policy) < maxCols) return '$text…';
   final kept = StringBuffer();
   var width = 0;
   for (final g in text.characters) {
-    final gw = resolver.widthOfGrapheme(g, profile);
+    final gw = resolver.widthOfGrapheme(g, policy);
     if (width + gw > maxCols - 1) break; // leave a cell for the ellipsis
     kept.write(g);
     width += gw;
@@ -200,14 +200,14 @@ void _paintClippedRun(
   String text,
   CellRect visible,
   WidthResolver resolver,
-  TerminalProfile profile,
+  CellWidthPolicy policy,
 ) {
   var col = startCol;
   final out = StringBuffer();
   var outCol = startCol;
   var started = false;
   for (final g in text.characters) {
-    final gw = resolver.widthOfGrapheme(g, profile);
+    final gw = resolver.widthOfGrapheme(g, policy);
     if (col >= visible.left && col + gw <= visible.right) {
       if (!started) {
         outCol = col;

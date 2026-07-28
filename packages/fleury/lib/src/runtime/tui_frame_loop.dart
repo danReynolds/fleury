@@ -1,6 +1,7 @@
 import '../foundation/geometry.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/render_object.dart';
+import '../rendering/scroll_detection.dart';
 
 /// Paints one frame into [buffer].
 typedef TuiFramePaintCallback = void Function(CellBuffer buffer);
@@ -13,17 +14,21 @@ typedef TuiFramePaintCallback = void Function(CellBuffer buffer);
 /// consistent:
 ///
 /// 1. allocate front/back buffers for the current viewport;
-/// 2. clear the back buffer without recording damage;
-/// 3. enable paint damage tracking before the framework paints;
-/// 4. collect paint damage plus conservative layout-damage signals;
+/// 2. clear the back buffer;
+/// 3. let the framework paint into it;
+/// 4. DERIVE the frame's damage by comparing it against the shown buffer;
 /// 5. expose the previous/next buffers to the presenter;
 /// 6. swap buffers only after the presenter has consumed the frame.
+///
+/// Step 4 is the load-bearing one. Damage used to be REPORTED — every writer
+/// declared what it touched — which meant any writer that stayed silent made a
+/// real change invisible to the presenter, and stale cells stayed on screen.
+/// Comparing the buffers is ground truth, so nothing can be forgotten.
 final class TuiFrameLoop {
-  /// [renderDamage] should be the runtime's tracker
-  /// (`TuiRuntime.renderDamageTracker`) so layout/conservative-paint
-  /// invalidation from that runtime's render tree reaches this loop's frame
-  /// damage. A loop constructed without one sees no layout-damage signal and
-  /// conservatively treats every frame as requiring a full diff.
+  /// [renderDamage] is the runtime's tracker
+  /// (`TuiRuntime.renderDamageTracker`). The loop drains its per-frame signals
+  /// so they do not leak across frames; it no longer needs them to decide what
+  /// to present, because the frame's damage is derived from the buffers.
   TuiFrameLoop({RenderDamageTracker? renderDamage})
     : _renderDamage = renderDamage;
 
@@ -44,6 +49,14 @@ final class TuiFrameLoop {
   }
 
   /// Forces the next rendered frame to be presented as a full repaint.
+  ///
+  /// Only the flag is set here; the shown buffer is blanked by [render] when
+  /// the mark is consumed. Blanking at mark time acts on whichever buffer is
+  /// front *right now* — wrong whenever the mark lands between [render] and
+  /// [commit], where the front buffer is the outgoing frame and the freshly
+  /// painted one becomes front with its content intact. It also mutates a
+  /// buffer other consumers alias (the semantics pipeline keeps a reference
+  /// to the last presented buffer). Consume time has neither problem.
   void markFullRepaint() {
     _requireFullRepaint = true;
   }
@@ -76,19 +89,62 @@ final class TuiFrameLoop {
     final previous = _frontBuffer!;
     final next = _backBuffer!;
     final bufferPrepareStopwatch = Stopwatch()..start();
-    next.withoutDamageTracking(next.clear);
-    next.resetDamageTracking();
+    // No damage tracking is armed on the frame buffer: nothing reads it. That
+    // leaves _recordDamageRect inert for every write this frame, so paint stops
+    // paying for bookkeeping the presenter no longer consumes. A repaint
+    // boundary still arms tracking on its OWN cache, where the question really
+    // is "what did I paint" rather than "what must be presented".
+    next.clear();
+    // A forced full repaint means the presenter wipes the screen before
+    // drawing, so `previous` must describe that wiped screen — otherwise the
+    // diff skips every cell that "matches" content the wipe just destroyed,
+    // and re-emits nothing. Blanked here, when the mark is consumed, because
+    // this is the one point where `previous` is definitely the buffer the
+    // wipe will invalidate and nothing else can observe the blank (render →
+    // present → commit is synchronous).
+    if (_requireFullRepaint) previous.clear();
     bufferPrepareStopwatch.stop();
 
     paint(next);
 
     _renderDamage?.takeVisualChange();
-    final damage = TuiFrameDamage(
-      fullRepaint: _requireFullRepaint,
-      requiresFullDiff: _renderDamage?.takeRequiresFullDiff() ?? true,
-      paintDamageBounds: next.takeDamageBounds(),
-      paintDamageRows: next.takeDamageRows(),
-    );
+    _renderDamage?.takeRequiresFullDiff();
+    // Damage is DERIVED, not reported: comparing the two buffers is ground
+    // truth, so nothing upstream can under-report by failing to declare what it
+    // touched — and no conservative fallback is needed for when it does.
+    final diff = next.diffAgainst(previous);
+    // Scroll detection used to ride on "damage is unbounded", which every
+    // relayout published. Exact damage is never unbounded, so the trigger has
+    // to be explicit or the terminal's ESC[S path and the surface's row-shift
+    // both go unreachable. Deciding it here also means the detector reuses the
+    // counts the diff already produced instead of rescanning.
+    // Detection is gated on at least a full row's worth of changed cells.
+    // The most a scroll can ever save is rewriting [dirtyCells] cells, while
+    // the detector is O(rows^2 x cols) worst case on repeated-row screens —
+    // a uniform grid pattern with one blinking cell measured 18.8x the diff
+    // cost ungated, and any genuine scroll dirties at least a row. (The serve
+    // codec still runs its own detection against its OWN mirror: under
+    // backpressure coalescing the wire's previous frame is not the loop's,
+    // so this decision cannot be handed down; the duplication is confined to
+    // genuine scroll frames, where one detector run is small next to encode.)
+    final bounds = diff.bounds;
+    final TuiFrameDamage damage;
+    if (_requireFullRepaint || !diff.isComparable) {
+      damage = const FrameFullRepaint();
+    } else if (bounds == null) {
+      damage = const FrameUnchanged();
+    } else {
+      final scrollUpRows = diff.dirtyCells < size.cols
+          ? null
+          : detectBeneficialScrollUp(previous, next, diff.stats);
+      damage = scrollUpRows == null
+          ? FrameChanged(rows: diff.rows, bounds: bounds)
+          : FrameScrolled(
+              scrollUpRows: scrollUpRows,
+              rows: diff.rows,
+              bounds: bounds,
+            );
+    }
     _requireFullRepaint = false;
 
     return TuiRenderedFrame._(
@@ -132,53 +188,95 @@ final class TuiRenderedFrame {
   final Duration bufferPrepareTime;
 }
 
-/// Paint damage and conservative full-diff state for one frame.
-final class TuiFrameDamage {
-  const TuiFrameDamage({
-    required this.fullRepaint,
-    required this.requiresFullDiff,
-    required this.paintDamageBounds,
-    this.paintDamageRows,
-  });
+/// What a presenter must do to bring the screen up to date with a frame.
+///
+/// A sealed union rather than flags plus nullable fields, because the flag
+/// shape kept expressing states it did not mean. `dirtyBounds == null` said
+/// both "repaint everything" and "nothing changed" — opposite instructions
+/// told apart only by a documented convention — and `scrollUpRows` was an
+/// optional a consumer could ignore without noticing, which is precisely what
+/// happened: the terminal presenter silently stopped scrolling and every test
+/// still passed. Here the states are distinct types, so a presenter that
+/// switches gets exhaustiveness from the compiler instead of from a convention.
+///
+/// Presenters needing only "which rows" can stay on [dirtyRowsFor] and
+/// [diffBounds] without switching at all.
+sealed class TuiFrameDamage {
+  const TuiFrameDamage();
 
-  /// Whether the presenter should treat this as a full repaint.
-  final bool fullRepaint;
+  /// The rows a row-oriented presenter must re-apply.
+  TuiDirtyRows dirtyRowsFor(CellSize size);
 
-  /// Whether layout/conservative damage invalidates paint bounds.
-  final bool requiresFullDiff;
+  /// Bounds a diffing presenter may restrict itself to, or null when no bound
+  /// is useful (everything, or nothing, changed — which variant says which).
+  CellRect? get diffBounds;
+}
 
-  /// Conservative bounds of cells mutated by paint.
-  final CellRect? paintDamageBounds;
+/// No comparable previous frame — a cold buffer pool or a resize. Present
+/// everything. Not a fallback for damage the loop failed to compute; the loop
+/// always computes it.
+final class FrameFullRepaint extends TuiFrameDamage {
+  const FrameFullRepaint();
 
-  /// The exact rows mutated by paint, when tracked.
-  ///
-  /// Unlike [paintDamageBounds] (a single union rect), scattered writes stay
-  /// disjoint: five separated dirty rows are five rows here, not the tall
-  /// rect spanning them. Null/empty falls back to the rect.
-  final Set<int>? paintDamageRows;
+  @override
+  TuiDirtyRows dirtyRowsFor(CellSize size) => TuiDirtyRows.full(size.rows);
 
-  /// Bounds safe to pass to a diffing presenter.
-  ///
-  /// A null value means "do not bound the presenter diff"; hosts should pass
-  /// null through to presenters rather than treating it as "no work".
-  CellRect? get diffBounds =>
-      fullRepaint || requiresFullDiff ? null : paintDamageBounds;
+  @override
+  CellRect? get diffBounds => null;
+}
 
-  /// Converts the current cell-rect damage signal into presenter dirty rows.
-  ///
-  /// This is the Phase 1 adapter from Fleury's current union damage bounds to
-  /// the row-oriented shape a DOM presenter needs. It is intentionally
-  /// conservative: a null [diffBounds] means all rows must be considered dirty,
-  /// not that no rows changed.
-  TuiDirtyRows dirtyRowsFor(CellSize size) {
-    final bounds = diffBounds;
-    if (bounds == null) return TuiDirtyRows.full(size.rows);
-    final rows = paintDamageRows;
-    if (rows != null && rows.isNotEmpty) {
-      return TuiDirtyRows.fromRows(rows, rowCount: size.rows);
-    }
-    return TuiDirtyRows.range(bounds.top, bounds.bottom, rowCount: size.rows);
-  }
+/// The two frames render identically. Present nothing.
+final class FrameUnchanged extends TuiFrameDamage {
+  const FrameUnchanged();
+
+  @override
+  TuiDirtyRows dirtyRowsFor(CellSize size) => const TuiDirtyRows.none();
+
+  @override
+  CellRect? get diffBounds => null;
+}
+
+/// Cells changed; [rows] and [bounds] locate them exactly.
+///
+/// [rows] stays disjoint where [bounds] cannot: five separated dirty rows are
+/// five rows here, not the tall rect spanning them.
+final class FrameChanged extends TuiFrameDamage {
+  const FrameChanged({required this.rows, required this.bounds});
+
+  final Set<int> rows;
+  final CellRect bounds;
+
+  @override
+  TuiDirtyRows dirtyRowsFor(CellSize size) =>
+      TuiDirtyRows.fromRows(rows, rowCount: size.rows);
+
+  @override
+  CellRect? get diffBounds => bounds;
+}
+
+/// The frame is a beneficial upward scroll: shift what is already on screen up
+/// by [scrollUpRows], then apply [rows] as the residue.
+///
+/// A distinct variant rather than a nullable field on [FrameChanged] so that a
+/// presenter acting on scrolling cannot quietly omit the case — the omission is
+/// a missing switch arm, not a passing test suite.
+final class FrameScrolled extends TuiFrameDamage {
+  const FrameScrolled({
+    required this.scrollUpRows,
+    required this.rows,
+    required this.bounds,
+  }) : assert(scrollUpRows > 0, 'a scroll by zero rows is not a scroll');
+
+  final int scrollUpRows;
+  final Set<int> rows;
+  final CellRect bounds;
+
+  @override
+  TuiDirtyRows dirtyRowsFor(CellSize size) =>
+      TuiDirtyRows.fromRows(rows, rowCount: size.rows);
+
+  @override
+  CellRect? get diffBounds => bounds;
 }
 
 /// Row-oriented damage for presenters.

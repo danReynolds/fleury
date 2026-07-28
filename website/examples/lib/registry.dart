@@ -7,6 +7,7 @@ import 'dart:math';
 
 import 'package:fleury/fleury_core.dart';
 import 'package:fleury_samples/samples.dart';
+import 'package:fleury_themes/fleury_themes.dart';
 import 'package:fleury_widgets/fleury_widgets_web.dart';
 
 /// Builds the root widget for one live example.
@@ -192,7 +193,9 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
     widget: 'LineChart',
     category: 'Charts & meters',
     blurb:
-        'A braille line/area/scatter chart with axes, legend, and references.',
+        'A multi-series line (or scatter) chart with sub-cell braille '
+        'rendering, axes, legend, and references. For a filled look, see '
+        'AreaChart.',
     cols: 60,
     rows: 16,
     code: '''LineChart(
@@ -214,6 +217,137 @@ final List<ExampleInfo> exampleList = <ExampleInfo>[
               <(num, num)>[for (var i = 0; i < data.length; i++) (i, data[i])],
               label: 'load',
               color: _theme.colorScheme.primary,
+            ),
+          ],
+          showAxes: true,
+          showLegend: true,
+          yRange: const (0, 100),
+        ),
+      ),
+    ),
+  ),
+  // --- LineChart rendering-option lab: compare line weights + markers ------
+  ExampleInfo(
+    id: 'linechart.lab.braille1',
+    widget: 'LineChart',
+    category: 'Charts & meters',
+    blurb: 'Braille line, 1px hairline (thin).',
+    cols: 58,
+    rows: 15,
+    code: 'LineChart(marker: CanvasMarker.braille, strokeWidth: 1, ...)',
+    builder: () => _framed(
+      _LiveSeries(
+        length: 40,
+        min: 0,
+        max: 100,
+        builder: (data) => LineChart(
+          series: <LineSeries>[
+            LineSeries(
+              <(num, num)>[for (var i = 0; i < data.length; i++) (i, data[i])],
+              label: 'load',
+              color: _theme.colorScheme.primary,
+            ),
+          ],
+          strokeWidth: 1,
+          showAxes: true,
+          showLegend: true,
+          yRange: const (0, 100),
+        ),
+      ),
+    ),
+  ),
+  ExampleInfo(
+    id: 'linechart.lab.braille2',
+    widget: 'LineChart',
+    category: 'Charts & meters',
+    blurb: 'Braille line, 2px band (current default).',
+    cols: 58,
+    rows: 15,
+    code: 'LineChart(marker: CanvasMarker.braille, strokeWidth: 2, ...)',
+    builder: () => _framed(
+      _LiveSeries(
+        length: 40,
+        min: 0,
+        max: 100,
+        builder: (data) => LineChart(
+          series: <LineSeries>[
+            LineSeries(
+              <(num, num)>[for (var i = 0; i < data.length; i++) (i, data[i])],
+              label: 'load',
+              color: _theme.colorScheme.primary,
+            ),
+          ],
+          strokeWidth: 2,
+          showAxes: true,
+          showLegend: true,
+          yRange: const (0, 100),
+        ),
+      ),
+    ),
+  ),
+  ExampleInfo(
+    id: 'linechart.lab.octant',
+    widget: 'LineChart',
+    category: 'Charts & meters',
+    blurb: 'Octant line — solid, crispest (Unicode 16).',
+    cols: 58,
+    rows: 15,
+    code: 'LineChart(marker: CanvasMarker.octant, ...)',
+    builder: () => _framed(
+      _LiveSeries(
+        length: 40,
+        min: 0,
+        max: 100,
+        builder: (data) => LineChart(
+          series: <LineSeries>[
+            LineSeries(
+              <(num, num)>[for (var i = 0; i < data.length; i++) (i, data[i])],
+              label: 'load',
+              color: _theme.colorScheme.primary,
+            ),
+          ],
+          marker: CanvasMarker.octant,
+          showAxes: true,
+          showLegend: true,
+          yRange: const (0, 100),
+        ),
+      ),
+    ),
+  ),
+  ExampleInfo(
+    id: 'areachart.basic',
+    widget: 'AreaChart',
+    category: 'Charts & meters',
+    blurb: 'A gradient-filled area chart — the filled sibling of LineChart.',
+    cols: 58,
+    rows: 15,
+    code: '''AreaChart(
+  series: <AreaSeries>[
+    AreaSeries(
+      points,
+      label: 'load',
+      gradient: [cs.success, cs.warning, cs.error],
+    ),
+  ],
+  showAxes: true,
+  showLegend: true,
+  yRange: const (0, 100),
+)''',
+    builder: () => _framed(
+      _LiveSeries(
+        length: 40,
+        min: 0,
+        max: 100,
+        builder: (data) => AreaChart(
+          series: <AreaSeries>[
+            AreaSeries(
+              <(num, num)>[for (var i = 0; i < data.length; i++) (i, data[i])],
+              label: 'load',
+              gradient: <Color>[
+                _theme.colorScheme.success,
+                _theme.colorScheme.warning,
+                _theme.colorScheme.error,
+              ],
             ),
           ],
           showAxes: true,
@@ -1625,6 +1759,21 @@ TextArea(
     interactive: true,
     builder: () => const AgentApp(),
   ),
+  ExampleInfo(
+    id: 'themes.gallery',
+    widget: 'Themes',
+    category: 'Theming',
+    blurb:
+        'Every theme in fleury_themes, on a slice of real UI. Arrow through '
+        'the picker to switch.',
+    cols: 62,
+    rows: 18,
+    interactive: true,
+    code: '''import 'package:fleury_themes/fleury_themes.dart';
+
+runApp(const MyApp(), theme: tokyoNight);''',
+    builder: () => const _ThemePickerExample(),
+  ),
 ];
 
 /// id → builder, derived from [exampleList].
@@ -2589,4 +2738,115 @@ class _LiveSeriesState extends State<_LiveSeries>
 
   @override
   Widget build(BuildContext context) => widget.builder(_data);
+}
+
+
+/// Live theme picker for the docs site: pick a theme on the left, see it
+/// applied to a small slice of UI on the right.
+class _ThemePickerExample extends StatefulWidget {
+  const _ThemePickerExample();
+
+  @override
+  State<_ThemePickerExample> createState() => _ThemePickerExampleState();
+}
+
+class _ThemePickerExampleState extends State<_ThemePickerExample> {
+  final ListController _list = ListController(selectedIndex: 0);
+
+  @override
+  void initState() {
+    super.initState();
+    // The preview follows the highlight, so arrowing the list re-themes
+    // immediately — no separate "apply" step in a docs embed.
+    _list.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _list.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final index = (_list.selectedIndex ?? 0).clamp(0, fleuryThemes.length - 1);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        SizedBox(
+          width: 20,
+          child: ListView.builder(
+            controller: _list,
+            itemCount: fleuryThemes.length,
+            autofocus: true,
+            itemBuilder: (context, i, activeSelected) {
+              final selected = i == index;
+              return Text(
+                selected ? '> ${fleuryThemes[i].name}' : '  ${fleuryThemes[i].name}',
+                style: selected
+                    ? Theme.of(context).selectionStyle
+                    : CellStyle.empty,
+              );
+            },
+          ),
+        ),
+        const SizedBox(width: 2),
+        Expanded(
+          child: Theme(
+            data: fleuryThemes[index].data,
+            child: const _ThemePreview(),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A compact slice of UI: enough surfaces that a theme's character shows.
+class _ThemePreview extends StatelessWidget {
+  const _ThemePreview();
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = context.colors;
+    final theme = context.theme;
+    return Container(
+      color: cs.background,
+      padding: const EdgeInsets.all(1),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'Deploy Console',
+            style: CellStyle(foreground: cs.foreground, bold: true),
+          ),
+          Text('one app, two surfaces', style: theme.mutedStyle),
+          const SizedBox(height: 1),
+          Text('  api-gateway  running  42%', style: theme.selectionStyle),
+          Text(
+            '  worker-01    running  18%',
+            style: CellStyle(foreground: cs.foreground),
+          ),
+          const SizedBox(height: 1),
+          ProgressBar(value: 0.62),
+          const SizedBox(height: 1),
+          Wrap(
+            children: <Widget>[
+              Text('success  ', style: CellStyle(foreground: cs.success)),
+              Text('warning  ', style: CellStyle(foreground: cs.warning)),
+              Text('error  ', style: CellStyle(foreground: cs.error)),
+              Text('info', style: CellStyle(foreground: cs.info)),
+            ],
+          ),
+          const SizedBox(height: 1),
+          Wrap(
+            children: <Widget>[
+              Text('\u2589 primary  ', style: CellStyle(foreground: cs.primary)),
+              Text('\u2589 focus', style: CellStyle(foreground: cs.focus)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }

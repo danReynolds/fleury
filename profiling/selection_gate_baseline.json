@@ -1,8 +1,8 @@
 {
   "selectedCells": 2528,
-  "baseUsPerFrame": 262.92,
-  "activeUsPerFrame": 360.355,
-  "addedUsPerFrame": 97.435,
+  "baseUsPerFrame": 170.695,
+  "activeUsPerFrame": 250.815,
+  "addedUsPerFrame": 80.12,
   "frames": 200,
   "rounds": 10
 }

@@ -1,5 +1,6 @@
 import '../foundation/geometry.dart';
 import '../rendering/surface_capabilities.dart';
+import '../rendering/width_policy.dart';
 import 'framework.dart';
 
 /// Ambient information about the rendering surface: its [size] in cells
@@ -94,6 +95,13 @@ class MediaQuery extends InheritedWidget {
   /// no MediaQuery in scope (the common test + modern-terminal default).
   static GlyphTier glyphTierOf(BuildContext context) =>
       maybeOf(context)?.glyphTier ?? GlyphTier.unicode;
+
+  /// The effective text-presentation policy for this surface (RFC 0019).
+  /// Returns [TextPresentationPolicy.spec] when there is no MediaQuery in
+  /// scope — the unprobed/test default, byte-identical to pre-policy
+  /// behaviour.
+  static TextPresentationPolicy textPolicyOf(BuildContext context) =>
+      maybeOf(context)?.capabilities.textPolicy ?? TextPresentationPolicy.spec;
 
   /// How the surface renders inline raster images. Returns
   /// [InlineImageSupport.none] when there's no MediaQuery — the

@@ -63,7 +63,20 @@ final class AnsiFramePresenter implements FramePresenter {
     final next = frame.next;
     final debugWatching = info.debugWatching;
 
-    if (frame.damage.fullRepaint) {
+    // One switch decides everything this frame needs from its damage, so a new
+    // variant cannot be silently ignored the way an optional field could be.
+    final damage = frame.damage;
+    final isFullRepaint = damage is FrameFullRepaint;
+    final scrollUpRows = switch (damage) {
+      FrameScrolled(:final scrollUpRows) => scrollUpRows,
+      FrameFullRepaint() || FrameUnchanged() || FrameChanged() => null,
+    };
+    final hasChanges = switch (damage) {
+      FrameUnchanged() => false,
+      FrameFullRepaint() || FrameChanged() || FrameScrolled() => true,
+    };
+
+    if (isFullRepaint) {
       // Clear screen + home so any stale content (from the alt-screen
       // switch, terminal scrollback, or a previous size) doesn't leak.
       _sink.write('\x1B[2J\x1B[H');
@@ -95,17 +108,15 @@ final class AnsiFramePresenter implements FramePresenter {
     // one synchronized-output frame; the encoder diffs placements itself,
     // so an unchanged image contributes zero bytes.
     final imageTrailer =
-        _imageEncoder?.encodeFrame(
-          next,
-          fullRepaint: frame.damage.fullRepaint,
-        ) ??
-        '';
+        _imageEncoder?.encodeFrame(next, fullRepaint: isFullRepaint) ?? '';
     final caretTrailer = _caretPositionSequence(_readCaret?.call(), next.size);
     _renderer.renderDiff(
       prev,
       next,
       _sink,
-      dirtyBounds: frame.damage.diffBounds,
+      dirtyBounds: damage.diffBounds,
+      scrollUpRows: scrollUpRows,
+      hasChanges: hasChanges,
       onDirtyCell: debugWatching ? recordDirtyCell : null,
       // Caret positioning must be last: graphics protocols can move the
       // terminal cursor while placing an image. Both trailers remain inside

@@ -34,20 +34,12 @@ FramePresentationPlan _fullPlan(CellBuffer mirror) {
   const builder = CellSpanBuilder();
   return FramePresentationPlan(
     reason: 'resync',
-    fullRepaint: true,
     size: mirror.size,
-    damage: FramePresentationDamage(
-      fullRepaint: true,
-      requiresFullDiff: true,
-      dirtyBounds: null,
-      dirtyRows: TuiDirtyRows.full(mirror.size.rows),
-      source: FrameDamageSource.fullRepaint,
-    ),
+    damage: const PresentationFullRepaint(),
     dirtyRowModels: [
       for (var r = 0; r < mirror.size.rows; r++) builder.buildRow(mirror, r),
     ],
     metricsChanged: false,
-    dirtyRowDiffTime: Duration.zero,
     spanBuildTime: Duration.zero,
   );
 }

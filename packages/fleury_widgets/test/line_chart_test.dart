@@ -329,19 +329,23 @@ void main() {
         ),
       );
       final buf = tester.render(size: const CellSize(30, 8));
-      // y=0.5 with autoscale (0.5,1.5): t=0, py = (1-0)*(8*4-1) = 31 → cell row 7.
-      // So only row 7 should hold braille; rows 0..6 should be empty.
-      for (var r = 0; r < 7; r++) {
+      // A constant series autoscales to a range padded symmetrically about the
+      // value, so it sits mid-plot. Assert the property rather than a fixed row
+      // index: exactly one row carries braille, which IS "no vertical smear".
+      final brailleRows = <int>{};
+      for (var r = 0; r < 8; r++) {
         for (var c = 0; c < 30; c++) {
           final g = buf.atColRow(c, r).grapheme;
           if (g == null) continue;
-          expect(
-            g.codeUnitAt(0) >= 0x2800 && g.codeUnitAt(0) <= 0x28FF,
-            isFalse,
-            reason: 'no braille should appear at row $r, col $c',
-          );
+          final code = g.codeUnitAt(0);
+          if (code >= 0x2800 && code <= 0x28FF) brailleRows.add(r);
         }
       }
+      expect(
+        brailleRows,
+        hasLength(1),
+        reason: 'a flat line must occupy one row; got rows $brailleRows',
+      );
     });
 
     // ----- Edge cases -----------------------------------------------------
@@ -1642,6 +1646,141 @@ void main() {
         isTrue,
         reason: 'area should fill all the way to the baseline',
       );
+    });
+
+    // ---- Gradient area (btop look) + solid-line marker ladder ------------
+
+    testWidgets('gradient area fills with solid block columns, not braille', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        LineChart(
+          series: const [
+            LineSeries(
+              [(0, 2), (1, 8), (2, 4), (3, 9), (4, 3)],
+              type: LineType.area,
+              gradient: [
+                RgbColor(0, 200, 100),
+                RgbColor(240, 190, 40),
+                RgbColor(255, 90, 90),
+              ],
+            ),
+          ],
+          showAxes: false,
+          yRange: (0, 10),
+        ),
+      );
+      final buf = tester.render(size: const CellSize(24, 8));
+      var braille = 0;
+      var blocks = 0;
+      final colors = <Color>{};
+      for (var r = 0; r < 8; r++) {
+        for (var c = 0; c < 24; c++) {
+          final cell = buf.atColRow(c, r);
+          final g = cell.grapheme;
+          if (g == null || g.isEmpty) continue;
+          final cp = g.runes.first;
+          if (cp >= 0x2800 && cp <= 0x28FF) braille++;
+          if (cp >= 0x2581 && cp <= 0x2588) {
+            // vertical eighth blocks ▁..█
+            blocks++;
+            final fg = cell.style.foreground;
+            if (fg != null) colors.add(fg);
+          }
+        }
+      }
+      expect(braille, 0, reason: 'a gradient area must not use braille');
+      expect(
+        blocks,
+        greaterThan(8),
+        reason: 'the area should be filled with solid block columns',
+      );
+      expect(
+        colors.length,
+        greaterThan(1),
+        reason: 'the vertical gradient should produce more than one color',
+      );
+    });
+
+    testWidgets('octant marker draws a solid line with octant glyphs', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        LineChart(
+          series: const [
+            LineSeries([(0, 0), (1, 6), (2, 2), (3, 8), (4, 3), (5, 7)]),
+          ],
+          marker: CanvasMarker.octant,
+          showAxes: false,
+          yRange: (0, 8),
+        ),
+      );
+      final buf = tester.render(size: const CellSize(28, 8));
+      var braille = 0;
+      var octants = 0;
+      for (var r = 0; r < 8; r++) {
+        for (var c = 0; c < 28; c++) {
+          final g = buf.atColRow(c, r).grapheme;
+          if (g == null || g.isEmpty) continue;
+          final cp = g.runes.first;
+          if (cp >= 0x2800 && cp <= 0x28FF) braille++;
+          if (cp >= 0x1CD00 && cp <= 0x1CDE5) octants++;
+        }
+      }
+      expect(braille, 0, reason: 'the octant tier must not emit braille');
+      expect(
+        octants,
+        greaterThan(0),
+        reason: 'expected at least one U+1CD00 octant glyph',
+      );
+    });
+
+    testWidgets('sextant marker emits sextant glyphs, no braille', (tester) {
+      tester.pumpWidget(
+        LineChart(
+          series: const [
+            LineSeries([(0, 0), (1, 6), (2, 2), (3, 8), (4, 3), (5, 7)]),
+          ],
+          marker: CanvasMarker.sextant,
+          showAxes: false,
+          yRange: (0, 8),
+        ),
+      );
+      final buf = tester.render(size: const CellSize(28, 8));
+      var braille = 0;
+      var sextants = 0;
+      for (var r = 0; r < 8; r++) {
+        for (var c = 0; c < 28; c++) {
+          final g = buf.atColRow(c, r).grapheme;
+          if (g == null || g.isEmpty) continue;
+          final cp = g.runes.first;
+          if (cp >= 0x2800 && cp <= 0x28FF) braille++;
+          if (cp >= 0x1FB00 && cp <= 0x1FB3B) sextants++;
+        }
+      }
+      expect(braille, 0);
+      expect(
+        sextants,
+        greaterThan(0),
+        reason: 'expected at least one U+1FB00 sextant glyph',
+      );
+    });
+
+    testWidgets('gradient is ignored for a non-area (line) series', (tester) {
+      tester.pumpWidget(
+        LineChart(
+          series: const [
+            LineSeries(
+              [(0, 0), (1, 6), (2, 2), (3, 8)],
+              gradient: [RgbColor(0, 200, 100), RgbColor(255, 90, 90)],
+            ),
+          ],
+          showAxes: false,
+          yRange: (0, 8),
+        ),
+      );
+      // A line-type series ignores the gradient and still draws braille.
+      expect(_hasBraille(tester, 24, 8), isTrue);
     });
   });
 }

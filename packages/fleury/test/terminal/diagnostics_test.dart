@@ -110,6 +110,58 @@ void main() {
       expect(restored.tmuxPassthrough, isTrue);
     });
 
+    test('a measured ambiguous width overrides the passive default', () {
+      // Regression: diagnose never enters the terminal, so ambiguousCharWidth
+      // stayed at its conservative `wide` default while the probe measured 1
+      // cell — the report printed both, contradicting itself in one table.
+      const environment = <String, String>{'TERM': 'xterm-256color'};
+      final diagnosis = diagnoseTerminal(
+        FakeTerminalDriver(
+          size: const CellSize(80, 24),
+          capabilities: detectTerminalCapabilitiesFromEnvironment(environment),
+        ),
+        environment: environment,
+      );
+      expect(
+        diagnosis.capabilities.ambiguousCharWidth,
+        AmbiguousCharWidth.wide,
+        reason: 'passive default before any measurement',
+      );
+
+      final measured = diagnosis.withMeasuredWidths(
+        WidthMeasurements.of(
+          const {'boxDrawing': 1, 'greekAlpha': 1, 'degreeSign': 1},
+        ),
+      );
+      expect(
+        measured.capabilities.ambiguousCharWidth,
+        AmbiguousCharWidth.narrow,
+        reason: 'the measurement settles what the default was guessing at',
+      );
+
+      // ...and a measurement that says wide keeps it wide.
+      expect(
+        diagnosis
+            .withMeasuredWidths(
+              WidthMeasurements.of(
+                const {'boxDrawing': 2, 'greekAlpha': 2, 'degreeSign': 2},
+              ),
+            )
+            .capabilities
+            .ambiguousCharWidth,
+        AmbiguousCharWidth.wide,
+      );
+
+      // An absent measurement must not fabricate one.
+      expect(
+        diagnosis
+            .withMeasuredWidths(const WidthMeasurements.empty())
+            .capabilities
+            .ambiguousCharWidth,
+        AmbiguousCharWidth.wide,
+      );
+    });
+
     test('diagnoses the multiplexer image fallback explicitly', () {
       const environment = <String, String>{
         'TERM': 'tmux-256color',

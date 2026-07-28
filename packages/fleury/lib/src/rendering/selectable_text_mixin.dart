@@ -17,7 +17,7 @@
 // The host provides:
 //   - [selectionBounds]   — paint-time CellRect (null when unpainted)
 //   - [selectionLines]    — flat text per visually-laid-out line
-//   - [selectionWidthResolver] / [selectionProfile] — for grapheme widths
+//   - [selectionWidthResolver] / [selectionPolicy] — for grapheme widths
 //
 // Concrete classes still need `with ChangeNotifier, SelectionRegistrant`
 // to get the registration machinery; the mixin only handles the
@@ -94,8 +94,8 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
   /// screen columns to character offsets.
   WidthResolver get selectionWidthResolver;
 
-  /// Terminal profile passed to [selectionWidthResolver].
-  TerminalProfile get selectionProfile;
+  /// Terminal policy passed to [selectionWidthResolver].
+  CellWidthPolicy get selectionPolicy;
 
   /// Subclass hook: notify the framework that listener-attached
   /// observers should run. Hosts mixing in `ChangeNotifier` already
@@ -150,6 +150,32 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
     final range = getSelectionRange();
     if (range == null) return false;
     return off >= range.start && off < range.end;
+  }
+
+  /// Lowered cluster groups in FLAT-TEXT coordinates, ascending and
+  /// non-overlapping, each carrying its canonical source cluster
+  /// (RFC 0019 §6.4). Default: none — hosts without display lowering pay
+  /// nothing.
+  ///
+  /// Selection treats each group atomically: [getSelectionRange] snaps an
+  /// endpoint that falls strictly inside a group outward to its boundary, so
+  /// crossing any atom selects the whole logical cluster and no endpoint can
+  /// rest inside a source cluster (decision 14); [getSelectedContent] splices
+  /// the source cluster over the group's flat range, so copy returns the
+  /// joined form exactly once — even when a forced component break put a
+  /// line break between the group's atoms.
+  List<({int start, int end, String source})> get loweredGroups =>
+      const <({int start, int end, String source})>[];
+
+  ({int start, int end}) _snapToLoweredGroups(int start, int end) {
+    var s = start;
+    var e = end;
+    for (final group in loweredGroups) {
+      if (group.start >= e) break;
+      if (s > group.start && s < group.end) s = group.start;
+      if (e > group.start && e < group.end) e = group.end;
+    }
+    return (start: s, end: e);
   }
 
   @override
@@ -245,7 +271,7 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
       for (final grapheme in lines[localRow].characters) {
         final w = selectionWidthResolver.widthOfGrapheme(
           grapheme,
-          selectionProfile,
+          selectionPolicy,
         );
         if (targetCol < col + w) {
           return CellOffset(col, newRow);
@@ -273,7 +299,7 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
       for (final grapheme in line.characters) {
         final w = selectionWidthResolver.widthOfGrapheme(
           grapheme,
-          selectionProfile,
+          selectionPolicy,
         );
         if (from.col < col + w) {
           final nextCol = col + w;
@@ -297,7 +323,7 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
       for (final grapheme in line.characters) {
         final w = selectionWidthResolver.widthOfGrapheme(
           grapheme,
-          selectionProfile,
+          selectionPolicy,
         );
         if (from.col < col + w) {
           if (previousStart != null) {
@@ -332,7 +358,7 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
     int? lastStart;
     for (final grapheme in lines[localRow].characters) {
       lastStart = col;
-      col += selectionWidthResolver.widthOfGrapheme(grapheme, selectionProfile);
+      col += selectionWidthResolver.widthOfGrapheme(grapheme, selectionPolicy);
     }
     return lastStart == null
         ? CellOffset(bounds.offset.col, bounds.offset.row + localRow)
@@ -433,9 +459,27 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
   SelectedContent? getSelectedContent() {
     final range = getSelectionRange();
     if (range == null || range.start == range.end) return null;
-    return SelectedContent(
-      plainText: _flatText().substring(range.start, range.end),
-    );
+    final flat = _flatText();
+    final groups = loweredGroups;
+    if (groups.isEmpty) {
+      return SelectedContent(plainText: flat.substring(range.start, range.end));
+    }
+    // Copy answers from SOURCE (RFC 0019 decision 3): each lowered group's
+    // flat range — which may contain a forced line break between atoms — is
+    // spliced back to its canonical joined cluster, exactly once. The range
+    // is already group-snapped by getSelectionRange, so groups intersecting
+    // it are fully contained.
+    final out = StringBuffer();
+    var cursor = range.start;
+    for (final group in groups) {
+      if (group.end <= range.start) continue;
+      if (group.start >= range.end) break;
+      out.write(flat.substring(cursor, group.start));
+      out.write(group.source);
+      cursor = group.end;
+    }
+    out.write(flat.substring(cursor, range.end));
+    return SelectedContent(plainText: out.toString());
   }
 
   @override
@@ -462,7 +506,14 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
     final sOff = resolve(s, e);
     final eOff = resolve(e, s);
     if (sOff == eOff) return null;
-    return sOff < eOff ? (start: sOff, end: eOff) : (start: eOff, end: sOff);
+    final ordered = sOff < eOff
+        ? (start: sOff, end: eOff)
+        : (start: eOff, end: sOff);
+    // Atomic lowered groups: an endpoint strictly inside one snaps outward,
+    // so painting, copy, and geometry all see the whole logical cluster
+    // (single choke point — isOffsetSelected and getSelectedContent both
+    // route through here).
+    return _snapToLoweredGroups(ordered.start, ordered.end);
   }
 
   TextEdgeRelation _relateScreenPoint(CellOffset point) {
@@ -526,7 +577,7 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
     for (final grapheme in lines[localRow].characters) {
       final w = selectionWidthResolver.widthOfGrapheme(
         grapheme,
-        selectionProfile,
+        selectionPolicy,
       );
       if (point.col < col + w) return TextEdgeRelation.inside(off);
       col += w;

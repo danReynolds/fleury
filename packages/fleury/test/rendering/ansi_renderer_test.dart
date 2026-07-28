@@ -262,6 +262,69 @@ void main() {
   });
 
   group('renderDiff — scroll-up row shifts', () {
+    test('scrolls when the caller states the shift alongside exact bounds', () {
+      // The production shape. Callers now supply exact dirtyBounds, and the
+      // renderer used to reach scroll detection ONLY on the unbounded path — so
+      // supplying bounds silently disabled ESC[S and every scroll frame paid
+      // full row rewrites. The existing tests missed it because they all pass a
+      // null dirtyBounds.
+      final prev = CellBuffer(const CellSize(4, 4));
+      final next = CellBuffer(const CellSize(4, 4));
+      for (final (row, text) in [
+        (0, 'aaaa'),
+        (1, 'bbbb'),
+        (2, 'cccc'),
+        (3, 'dddd'),
+      ]) {
+        prev.writeText(CellOffset(0, row), text);
+      }
+      for (final (row, text) in [
+        (0, 'bbbb'),
+        (1, 'cccc'),
+        (2, 'dddd'),
+        (3, 'eeee'),
+      ]) {
+        next.writeText(CellOffset(0, row), text);
+      }
+
+      final bounded = StringAnsiSink();
+      const AnsiRenderer().renderDiff(
+        prev,
+        next,
+        bounded,
+        dirtyBounds: next.diffAgainst(prev).bounds,
+        scrollUpRows: 1,
+      );
+
+      expect(
+        bounded.output,
+        contains('\x1B[S'),
+        reason: 'a stated shift must reach the scroll path even when bounded',
+      );
+
+      // And it must still be cheaper than rewriting the rows.
+      final rewritten = StringAnsiSink();
+      const AnsiRenderer().renderDiff(
+        prev,
+        next,
+        rewritten,
+        dirtyBounds: next.diffAgainst(prev).bounds,
+      );
+      expect(bounded.output.length, lessThan(rewritten.output.length));
+    });
+
+    test('states nothing to do without scanning the screen', () {
+      final prev = CellBuffer(const CellSize(4, 4));
+      final next = CellBuffer(const CellSize(4, 4));
+      prev.writeText(const CellOffset(0, 0), 'aaaa');
+      next.writeText(const CellOffset(0, 0), 'aaaa');
+
+      final sink = StringAnsiSink();
+      const AnsiRenderer().renderDiff(prev, next, sink, hasChanges: false);
+
+      expect(sink.output, isEmpty);
+    });
+
     test('uses terminal scroll for whole-screen upward row shifts', () {
       final prev = CellBuffer(const CellSize(4, 4));
       final next = CellBuffer(const CellSize(4, 4));
@@ -1011,6 +1074,67 @@ void main() {
         trailer: 'T',
       );
       expect(sink.output.endsWith('T'), isTrue);
+    });
+  });
+
+  group('renderDiff — width-disagreement containment', () {
+    // No styles are written, so every escape in the output is a cursor move.
+    int moves(String out) => '['.allMatches(out).length;
+
+    String render(String text, {required bool ambiguousWide}) {
+      final prev = CellBuffer(const CellSize(8, 1));
+      final next = CellBuffer(const CellSize(8, 1));
+      next.writeText(const CellOffset(0, 0), text);
+      final sink = StringAnsiSink();
+      AnsiRenderer(
+        synchronizedOutput: false,
+        ambiguousCharsAreWide: ambiguousWide,
+      ).renderDiff(prev, next, sink);
+      return sink.output;
+    }
+
+    test('a probed-narrow terminal writes ASCII and chrome as one run', () {
+      // The common case: nothing here can disagree, so the run stays compact.
+      expect(moves(render('abcd', ambiguousWide: false)), 1);
+      expect(moves(render('────', ambiguousWide: false)), 1);
+      expect(moves(render('████', ambiguousWide: false)), 1);
+    });
+
+    test('an emoji-capable glyph pins the rest of the row', () {
+      // Containment does NOT depend on the ambiguous probe: emoji width is
+      // negotiated with the font, so it cannot be probed and must be pinned
+      // wherever it appears. Before this, a probed-narrow terminal ran with
+      // containment off entirely and a single mis-modelled glyph shifted every
+      // later cell on the row — how one wrong Dingbats range garbled frames.
+      expect(
+        moves(render('✓abc', ambiguousWide: false)),
+        greaterThan(1),
+        reason: 'the cell after ✓ must be re-pinned to an absolute column',
+      );
+      expect(moves(render('⚠️ab', ambiguousWide: false)), greaterThan(1));
+      expect(moves(render('🚀ab', ambiguousWide: false)), greaterThan(1));
+    });
+
+    test('a probed-wide terminal still pins every non-ASCII cell', () {
+      // Unchanged behaviour on the legacy/CJK path.
+      expect(moves(render('────', ambiguousWide: true)), greaterThan(1));
+    });
+
+    test('unknown ambiguous keeps the pin engaged for α (RFC 0019 §6.3)', () {
+      // The §6.1 disagreement fixture (─=1, α=2, °=2) derives the ambiguous
+      // axis `unknown`: layout stays narrow AND ambiguousCharsAreWide keeps
+      // its conservative `true` — which is the state this renderer test
+      // encodes. α is NOT in hasUncertainWidth (it is probed-class chrome,
+      // exempt from the unconditional pin), so ONLY the ambiguous arm covers
+      // it: with the arm engaged, a terminal drawing α two cells wide cannot
+      // shift the text written after it, end to end through the diff.
+      expect(
+        moves(render('αabc', ambiguousWide: true)),
+        greaterThan(1),
+        reason: 'the cell after α must be re-pinned to an absolute column',
+      );
+      // And the evidenced-narrow state (probe agreement) emits compactly.
+      expect(moves(render('αabc', ambiguousWide: false)), 1);
     });
   });
 }

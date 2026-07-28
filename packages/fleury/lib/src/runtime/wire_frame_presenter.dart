@@ -42,18 +42,18 @@ final class WireFramePresenter implements FramePresenter {
     final plan = info.plan!;
     final bounds = plan.damage.dirtyBounds;
     // The wire path works in rows/spans, not a per-cell tally. Prefer the
-    // dirty bounding box; when it's absent — the COMMON case, since any
-    // markNeedsLayout publishes requiresFullDiff and nulls diffBounds — fall
-    // back to the plan's own per-row diff (dirtyRowCount × width), not the
-    // full viewport: the planner ran a real row diff for exactly these
-    // frames, so a one-row change reports ~one row, not a full screen.
+    // dirty bounding box; damage is derived, so it is absent only on a full
+    // repaint (no comparable previous frame) or when nothing changed — the
+    // row fallback then reports rowCount x width or zero respectively.
     final dirtyCells = bounds != null
         ? bounds.size.cols * bounds.size.rows
-        : plan.damage.dirtyRows.dirtyRowCount * frame.next.size.cols;
-    // On the wire the "diff" phase is building the change plan: the row diff
-    // plus span construction. The driver owns the rest of the FrameEvent.
+        : plan.dirtyRows.dirtyRowCount * frame.next.size.cols;
+    // On the wire the "diff" phase is building the change plan — span
+    // construction. (Rows arrive exact from the loop's derived damage; there
+    // is no row-diff step left to time.) The driver owns the rest of the
+    // FrameEvent.
     return FrameDiffStats(
-      diff: plan.dirtyRowDiffTime + plan.spanBuildTime,
+      diff: plan.spanBuildTime,
       dirtyCells: dirtyCells,
       dirtyBounds: bounds,
     );

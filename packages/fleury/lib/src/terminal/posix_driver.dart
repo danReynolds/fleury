@@ -159,6 +159,10 @@ class PosixTerminalDriver
   // ambiguous glyphs; a confirmed `narrow` lets the renderer drop the
   // defensive per-cell repositioning [capabilities] otherwise assumes.
   AmbiguousCharWidth? _ambiguousCharWidthOverride;
+
+  /// What the startup probe measured the terminal actually drawing. Reported
+  /// through [capabilities] for diagnostics; null fields mean "unmeasured".
+  WidthMeasurements _measuredGlyphWidths = const WidthMeasurements.empty();
   bool _wroteEnterSequences = false;
   bool _changedStdin = false;
   bool _nativeRawMode = false;
@@ -298,7 +302,20 @@ class PosixTerminalDriver
             ),
           );
     final width = _ambiguousCharWidthOverride;
-    return width == null ? merged : merged.copyWith(ambiguousCharWidth: width);
+    final withWidth = width == null
+        ? merged
+        : merged.copyWith(ambiguousCharWidth: width);
+    return withWidth.copyWith(
+      measuredWidths: _measuredGlyphWidths,
+      // Fold measurements + FLEURY_* overrides into the one derived policy
+      // every geometry consumer shares (RFC 0019 §6.2). Same inputs as the
+      // ambiguousCharWidth resolution above, so the renderer's pin gate and
+      // the layout policy can never disagree about the evidence.
+      textPolicy: deriveTextPresentationPolicy(
+        measurements: _measuredGlyphWidths,
+        environment: environment,
+      ),
+    );
   }
 
   @override
@@ -492,8 +509,14 @@ class PosixTerminalDriver
     // skip the round trip and the stray probe glyph.
     if (detectGlyphTierFromEnvironment(env) == GlyphTier.ascii) return;
     try {
-      final detected = await probeAmbiguousWidth(_DriverProbeTransport(this));
-      if (detected != null) _ambiguousCharWidthOverride = detected;
+      // One round trip measures every width class the field disagrees on, not
+      // just ambiguous — same cost as the old single-glyph probe.
+      final measured = await probeGlyphWidths(_DriverProbeTransport(this));
+      _measuredGlyphWidths = measured;
+      // Agreement across the ambiguous representatives, or keep the default:
+      // one glyph is a signal, not proof (RFC 0019 §6.1).
+      final ambiguous = ambiguousWidthFromMeasurements(measured);
+      if (ambiguous != null) _ambiguousCharWidthOverride = ambiguous;
     } on Object {
       // Probe failed (no terminal reply, write error, …): keep the `wide`
       // default so ambiguous-wide terminals never garble.

@@ -36,9 +36,11 @@ import 'package:fleury/src/cli/create_command.dart';
 import 'package:fleury/src/cli/dart_sdk.dart';
 import 'package:fleury/src/foundation/geometry.dart';
 import 'package:fleury/src/remote/buffered_browser_input.dart';
+import 'package:fleury/src/rendering/width_policy.dart';
 import 'package:fleury/src/remote/remote_client_asset.dart';
 import 'package:fleury/src/remote/remote_protocol.dart';
 import 'package:fleury/src/remote/serve_index_html.dart';
+import 'package:fleury/src/remote/serve_mono_font_asset.dart';
 import 'package:fleury/src/remote/shell_init.dart';
 import 'package:fleury/src/remote/spawn.dart';
 import 'package:fleury/src/remote/unix_socket_transport.dart';
@@ -916,8 +918,26 @@ void _pumpBytes({
   );
 }
 
-/// Serves the index page and the embedded client bundle. Everything else
-/// 404s — the serve surface is exactly two files.
+/// Serves the index page, the embedded client bundle, and the embedded mono
+/// font. Everything else 404s — the serve surface is exactly these three files.
+/// Entity tag for the embedded font, computed once per process.
+///
+/// The bytes are static for the life of the binary, but the URL is not
+/// versioned — so an upgraded Fleury would otherwise keep handing a returning
+/// browser the previous subset until its cache entry expired. A validator lets
+/// the response be revalidated instead of blindly reused.
+String? _monoFontETagCache;
+
+String _monoFontETag() =>
+    _monoFontETagCache ??= () {
+      // FNV-1a over the subset; no crypto dependency needed for a cache tag.
+      var hash = 0xcbf29ce484222325;
+      for (final byte in serveMonoFontBytes()) {
+        hash = (hash ^ byte) * 0x100000001b3;
+      }
+      return '"${hash.toUnsigned(64).toRadixString(16)}"';
+    }();
+
 Future<void> _serveStaticAsset(HttpRequest req) async {
   final path = req.uri.path;
   if (path == serveClientJsPath) {
@@ -930,6 +950,23 @@ Future<void> _serveStaticAsset(HttpRequest req) async {
     // let a browser serve a stale client against a freshly restarted server.
     req.response.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
     req.response.add(remoteClientJs());
+    await req.response.close();
+    return;
+  }
+  if (path == serveMonoFontPath) {
+    final etag = _monoFontETag();
+    req.response.headers.set(HttpHeaders.etagHeader, etag);
+    // The URL carries no version, so revalidate rather than reuse blindly: a
+    // matching tag costs a 304, and an upgraded subset is picked up at once
+    // instead of being pinned until a max-age elapsed.
+    req.response.headers.set(HttpHeaders.cacheControlHeader, 'no-cache');
+    if (req.headers.value(HttpHeaders.ifNoneMatchHeader) == etag) {
+      req.response.statusCode = HttpStatus.notModified;
+      await req.response.close();
+      return;
+    }
+    req.response.headers.contentType = ContentType('font', 'woff2');
+    req.response.add(serveMonoFontBytes());
     await req.response.close();
     return;
   }
@@ -1646,8 +1683,13 @@ Future<int> _runDiagnose(List<String> args) async {
     stdoutIsTerminal: stdout.hasTerminal,
   );
   if (probe) {
-    final probeReport = await _runActiveTerminalProbes(probeTimeout);
-    diagnosis = diagnosis.withActiveProbes(probeReport);
+    final active = await _runActiveTerminalProbes(probeTimeout);
+    diagnosis = diagnosis
+        .withActiveProbes(active.report)
+        .withMeasuredWidths(
+          active.measuredWidths,
+          environment: Platform.environment,
+        );
   }
 
   if (json || jsonOutputPath != null) {
@@ -1739,6 +1781,42 @@ Future<int> _runDiagnose(List<String> args) async {
   row('OSC 52 clipboard', capabilities.osc52Clipboard);
   row('OSC 8 hyperlinks', capabilities.osc8Hyperlinks);
   row('tmux passthrough', capabilities.tmuxPassthrough);
+  row('Ambiguous width', capabilities.ambiguousCharWidth.name);
+  // Measured, not detected: what this terminal actually drew. Only populated
+  // with --probe, since it requires a round trip.
+  final measured = capabilities.measuredWidths;
+  String cells(int? width) => width == null ? '(not probed)' : '$width cells';
+  final batteryEntries = measured.entries.toList();
+  for (var i = 0; i < batteryEntries.length; i++) {
+    final (glyph, width) = batteryEntries[i];
+    final branch = i == batteryEntries.length - 1 ? '└' : '├';
+    row('  $branch ${glyph.probeClass.name} ${glyph.glyph}', cells(width));
+  }
+  // The derived policy: what layout will actually use, and where each axis's
+  // answer came from (spec default | probe | environment override).
+  final widthPolicy = diagnosis.widthPolicy;
+  if (widthPolicy != null) {
+    final widths = widthPolicy.policy.widths;
+    String axis(WidthAxis a, String value) =>
+        '$value (${widthPolicy.sourceOf(a).name})';
+    row('Width policy', '');
+    row('  ├ ambiguous', axis(WidthAxis.ambiguous, widths.ambiguous.name));
+    row(
+      '  ├ emoji presentation',
+      axis(WidthAxis.emojiPresentation, widths.emojiPresentation.name),
+    );
+    row(
+      '  ├ variation sequence',
+      axis(
+        WidthAxis.emojiVariationSequence,
+        widths.emojiVariationSequence.name,
+      ),
+    );
+    row(
+      '  └ cluster lowering',
+      axis(WidthAxis.lowering, widthPolicy.policy.lowering.name),
+    );
+  }
   _writeProbeSection(diagnosis.activeProbes, row);
   _writeCompatibilitySection(diagnosis.compatibility, row);
   messages('Fallbacks', diagnosis.fallbacks);
@@ -1762,10 +1840,20 @@ TerminalPlatformReport _diagnosisPlatform() {
   );
 }
 
-Future<TerminalProbeReport> _runActiveTerminalProbes(Duration timeout) async {
+/// The active-probe suite plus the measured glyph widths, collected in the one
+/// raw-mode window so the terminal is only disturbed once.
+typedef _ActiveProbeEvidence = ({
+  TerminalProbeReport report,
+  WidthMeasurements measuredWidths,
+});
+
+Future<_ActiveProbeEvidence> _runActiveTerminalProbes(Duration timeout) async {
   if (!stdin.hasTerminal || !stdout.hasTerminal) {
-    return TerminalProbeReport.skipped(
-      'Active probes require both stdin and stdout to be terminals.',
+    return (
+      report: TerminalProbeReport.skipped(
+        'Active probes require both stdin and stdout to be terminals.',
+      ),
+      measuredWidths: const WidthMeasurements.empty(),
     );
   }
 
@@ -1781,10 +1869,22 @@ Future<TerminalProbeReport> _runActiveTerminalProbes(Duration timeout) async {
     changedStdin = true;
 
     transport = _StdioTerminalProbeTransport();
-    return await runTerminalProbeSuite(transport, perProbeTimeout: timeout);
+    final report = await runTerminalProbeSuite(
+      transport,
+      perProbeTimeout: timeout,
+    );
+    // Measure widths on a fresh line and clear it, so the probe glyphs never
+    // land on top of the report the user is about to read.
+    stdout.writeln();
+    final measured = await probeGlyphWidths(transport, timeout: timeout);
+    stdout.write('\r\x1B[K');
+    return (report: report, measuredWidths: measured);
   } on StdinException catch (error) {
-    return TerminalProbeReport.skipped(
-      'Could not enter raw terminal mode for active probes: $error',
+    return (
+      report: TerminalProbeReport.skipped(
+        'Could not enter raw terminal mode for active probes: $error',
+      ),
+      measuredWidths: const WidthMeasurements.empty(),
     );
   } finally {
     await transport?.close();

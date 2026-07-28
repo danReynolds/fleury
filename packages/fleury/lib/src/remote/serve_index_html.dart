@@ -10,6 +10,12 @@
 /// Path the serve HTTP handler serves the compiled client bundle at.
 const String serveClientJsPath = '/remote_client.js';
 
+/// Path the serve HTTP handler serves the embedded subset-JuliaMono woff2 at.
+/// The browser surface renders cells as text, so a braille/octant-dense mono
+/// (rather than the system Menlo/Consolas, which stipples braille) makes
+/// charts and canvas render crisp.
+const String serveMonoFontPath = '/fleury-mono.woff2';
+
 const String serveIndexHtml = r'''
 <!doctype html>
 <html lang="en">
@@ -17,10 +23,18 @@ const String serveIndexHtml = r'''
   <meta charset="utf-8" />
   <title>fleury serve</title>
   <style>
+    /* Braille/octant-dense mono shipped inside the binary (see
+       serve_mono_font_asset.dart) so charts and canvas render crisp instead
+       of stippled; falls back to the system mono if it fails to load. */
+    @font-face {
+      font-family: "FleuryMono";
+      font-display: swap;
+      src: url("/fleury-mono.woff2") format("woff2");
+    }
     html, body { margin: 0; padding: 0; height: 100%; background: #0e0f13; }
     #fleury-remote {
       width: 100vw; height: 100vh; box-sizing: border-box; padding: 6px;
-      font: 13px/1.2 Menlo, Consolas, "DejaVu Sans Mono", monospace;
+      font: 13px/1.2 "FleuryMono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
       color: #c8d3e0; white-space: pre; overflow: hidden;
       font-kerning: none; font-variant-ligatures: none;
       font-feature-settings: "liga" 0, "clig" 0;

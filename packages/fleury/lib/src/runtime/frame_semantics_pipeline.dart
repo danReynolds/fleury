@@ -126,7 +126,7 @@ final class FrameSemanticsPipeline {
   void onFramePresented(TuiRenderedFrame frame, FramePresentationPlan? plan) {
     if (_disposed) return;
     _lastPresentedBuffer = frame.next;
-    final dirtyRows = plan?.damage.dirtyRows;
+    final dirtyRows = plan?.dirtyRows;
     if (dirtyRows == null) {
       _pendingCoverageFull = true;
     } else if (!_dirtyRowsUnchanged(frame.previous, frame.next, dirtyRows)) {

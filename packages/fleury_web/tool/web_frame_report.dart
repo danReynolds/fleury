@@ -309,7 +309,6 @@ const _timingOrder = <String>[
   'runtimeBuildMs',
   'runtimeLayoutMs',
   'runtimePaintMs',
-  'dirtyRowDiffMs',
   'spanBuildMs',
   'domApplyMs',
   'semanticTreeBuildMs',

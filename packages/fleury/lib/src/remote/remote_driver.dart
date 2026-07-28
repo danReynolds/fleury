@@ -266,7 +266,7 @@ final class RemoteTerminalDriver
       // damage ships an incomplete plan and desyncs the peer's mirror until
       // the next full repaint. buildRemotePlan's debug oracle makes that
       // loud in dev/CI; release trusts the planner.
-      dirtyRows: plan.damage.dirtyRows,
+      dirtyRows: plan.dirtyRows,
       // Serialize OSC 8 links only when the peer negotiated v>=4 (RFC 0017
       // §5). A pre-v4 peer gets bit-6-clear, byte-identical-to-v3 output even
       // if a cell carries a link, so a stale client can't misalign on a URI it

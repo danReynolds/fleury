@@ -3,6 +3,7 @@ import '../terminal/capabilities.dart';
 import 'cell.dart';
 import 'cell_buffer.dart';
 import 'scroll_detection.dart';
+import 'width_resolver.dart';
 
 /// A destination for ANSI bytes. Production wiring sends them to stdout via
 /// `IoSinkAnsiSink`; tests capture them with [StringAnsiSink].
@@ -131,11 +132,16 @@ final class AnsiRenderer {
   /// [StringBuffer] and flushed to [sink] in a single `write` call.
   /// This reduces per-frame `sink.write` calls (and the IOSink queue
   /// operations they trigger downstream) from O(dirty cells) to one.
-  /// [dirtyBounds], when provided, must conservatively contain every cell that
-  /// can differ between [previous] and [next]. The renderer then scans only
-  /// that rectangle and skips whole-screen passes (diff stats, scroll
-  /// detection). Pass null whenever layout, removal, scrolling, or any other
-  /// unsafe mutation can change cells outside the known painted region.
+  /// [dirtyBounds], when provided, must contain every cell that differs between
+  /// [previous] and [next]; the renderer scans only that rectangle. Pass null
+  /// only when the changed region is genuinely unknown.
+  ///
+  /// [scrollUpRows] and [hasChanges] are stated rather than inferred. The
+  /// renderer used to guess both from `dirtyBounds == null`, which quietly tied
+  /// the ESC[S scroll path to damage being unbounded: once callers began
+  /// supplying exact bounds, scrolling silently stopped happening and identical
+  /// frames were re-scanned whole-screen. Callers that know the answer must say
+  /// so.
   ///
   /// [trailer] is appended verbatim after the cell diff, inside the same
   /// synchronized-output frame — the terminal image encoder's escape bytes
@@ -147,6 +153,8 @@ final class AnsiRenderer {
     CellBuffer next,
     AnsiSink sink, {
     CellRect? dirtyBounds,
+    int? scrollUpRows,
+    bool hasChanges = true,
     void Function(int col, int row)? onDirtyCell,
     String trailer = '',
   }) {
@@ -155,6 +163,16 @@ final class AnsiRenderer {
       'AnsiRenderer.renderDiff: buffer sizes differ '
       '(previous=${previous.size}, next=${next.size}).',
     );
+    if (!hasChanges) {
+      // Nothing differs. Emitting the trailer is still required: an animation
+      // can swap image bytes without touching a cell.
+      if (trailer.isNotEmpty) sink.write(_wrapSync(trailer));
+      return;
+    }
+    if (scrollUpRows != null && scrollUpRows > 0) {
+      _renderScrollUp(previous, next, sink, scrollUpRows, onDirtyCell, trailer);
+      return;
+    }
     final diffBounds = dirtyBounds?.intersect(
       CellRect(offset: CellOffset.zero, size: next.size),
     );
@@ -181,24 +199,9 @@ final class AnsiRenderer {
       if (trailer.isNotEmpty) sink.write(_wrapSync(trailer));
       return;
     }
-
-    final size = next.size;
-    final scrollUpRows = detectBeneficialScrollUp(previous, next, screenStats);
-    if (scrollUpRows != null) {
-      final scrolledPrevious = CellBuffer(size);
-      scrolledPrevious.copyRectFrom(
-        previous,
-        CellRect(
-          offset: CellOffset(0, scrollUpRows),
-          size: CellSize(size.cols, size.rows - scrollUpRows),
-        ),
-        const CellOffset(0, 0),
-      );
-      final buf = StringBuffer();
-      buf.write(_scrollUp(scrollUpRows));
-      _appendCellDiff(scrolledPrevious, next, buf, onDirtyCell: onDirtyCell);
-      buf.write(trailer);
-      sink.write(_wrapSync(buf.toString()));
+    final detected = detectBeneficialScrollUp(previous, next, screenStats);
+    if (detected != null) {
+      _renderScrollUp(previous, next, sink, detected, onDirtyCell, trailer);
       return;
     }
 
@@ -210,6 +213,33 @@ final class AnsiRenderer {
       onDirtyCell: onDirtyCell,
     );
     if (!anyDirty && trailer.isEmpty) return;
+    buf.write(trailer);
+    sink.write(_wrapSync(buf.toString()));
+  }
+
+  /// Shifts what the terminal already shows up by [scrollUpRows] with ESC[S,
+  /// then patches only the residue.
+  void _renderScrollUp(
+    CellBuffer previous,
+    CellBuffer next,
+    AnsiSink sink,
+    int scrollUpRows,
+    void Function(int col, int row)? onDirtyCell,
+    String trailer,
+  ) {
+    final size = next.size;
+    final scrolledPrevious = CellBuffer(size);
+    scrolledPrevious.copyRectFrom(
+      previous,
+      CellRect(
+        offset: CellOffset(0, scrollUpRows),
+        size: CellSize(size.cols, size.rows - scrollUpRows),
+      ),
+      const CellOffset(0, 0),
+    );
+    final buf = StringBuffer();
+    buf.write(_scrollUp(scrollUpRows));
+    _appendCellDiff(scrolledPrevious, next, buf, onDirtyCell: onDirtyCell);
     buf.write(trailer);
     sink.write(_wrapSync(buf.toString()));
   }
@@ -397,7 +427,25 @@ final class AnsiRenderer {
       // columns wide. Wide chars (`isWide`) are unambiguous (both sides agree on
       // 2) and ASCII is unambiguous (1), so neither needs pinning; the rest do
       // only when the terminal is (or is assumed) ambiguous-as-wide.
-      final needsWidthPin = ambiguousCharsAreWide && !isWide && !isAscii;
+      //
+      // Two independent reasons to pin, because they fail on opposite
+      // terminals. The ambiguous case is probed: it only bites where the probe
+      // said "wide", and there it covers every non-ASCII narrow cell. The
+      // uncertain case is NOT probed and cannot be — emoji width is negotiated
+      // between terminal and font — so it pins wherever it appears, including
+      // over glyphs we model as wide (a terminal that draws them narrow
+      // desyncs just as badly in the other direction).
+      //
+      // Without the second clause a modern terminal, where the probe answers
+      // "narrow", ran with containment switched off entirely: any error in the
+      // width tables shifted every later cell on the row instead of smudging
+      // one glyph. That is precisely how a single wrong Dingbats range garbled
+      // whole frames. Emoji never appear in the long contiguous runs that make
+      // pinning expensive (those are box-drawing, which stays on the probed
+      // path), so the cost here is a few cursor moves on rows that carry one.
+      final needsWidthPin =
+          (ambiguousCharsAreWide && !isWide && !isAscii) ||
+          (!isAscii && hasUncertainWidth(grapheme));
       if ((cursorCol != null && cursorCol! >= size.cols) || needsWidthPin) {
         cursorRow = null;
         cursorCol = null;

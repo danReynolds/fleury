@@ -52,9 +52,7 @@ final class CellBuffer {
   int _dmgTop = 0;
   int _dmgRight = 0;
   int _dmgBottom = 0;
-  final Set<int> _damageRows = <int>{};
   var _damageSuppressionDepth = 0;
-
   CellSize get size => _size;
 
   /// Inline image content placed this frame, deduplicated by content hash.
@@ -86,19 +84,9 @@ final class CellBuffer {
   void resetDamageTracking() {
     _damageTrackingEnabled = true;
     _hasDamage = false;
-    _damageRows.clear();
   }
 
   /// Clears and returns the accumulated damage bounds.
-  /// The exact rows written since [resetDamageTracking], independent of the
-  /// single-rect union in [takeDamageBounds]. Scattered writes (disjoint
-  /// rows) stay disjoint here instead of being smeared into one tall rect.
-  Set<int> takeDamageRows() {
-    final result = Set<int>.of(_damageRows);
-    _damageRows.clear();
-    return result;
-  }
-
   CellRect? takeDamageBounds() {
     if (!_hasDamage) return null;
     final result = CellRect.fromLTWH(
@@ -123,16 +111,6 @@ final class CellBuffer {
     } finally {
       _damageSuppressionDepth -= 1;
     }
-  }
-
-  /// Marks [rect] damaged without touching cell contents.
-  ///
-  /// Used when a region must be revisited by the presenter diff even though
-  /// no write landed there this frame — e.g. a repaint boundary erasing the
-  /// cells a shrunk or moved subtree vacated. Clamped to the grid and subject
-  /// to [withoutDamageTracking] like any write-driven damage.
-  void recordDamage(CellRect rect) {
-    _recordDamageRect(rect.left, rect.top, rect.size.cols, rect.size.rows);
   }
 
   /// Returns the cell at [position]. Throws if [position] is out of bounds.
@@ -407,7 +385,7 @@ final class CellBuffer {
     String grapheme, {
     CellStyle style = CellStyle.empty,
     WidthResolver widthResolver = const DefaultWidthResolver(),
-    TerminalProfile profile = TerminalProfile.standard,
+    CellWidthPolicy policy = CellWidthPolicy.spec,
   }) {
     if (!_containsColRow(position.col, position.row)) return 0;
     return _writeGraphemeAt(
@@ -416,7 +394,7 @@ final class CellBuffer {
       grapheme,
       style: style,
       widthResolver: widthResolver,
-      profile: profile,
+      policy: policy,
     );
   }
 
@@ -428,9 +406,9 @@ final class CellBuffer {
     String grapheme, {
     CellStyle style = CellStyle.empty,
     WidthResolver widthResolver = const DefaultWidthResolver(),
-    TerminalProfile profile = TerminalProfile.standard,
+    CellWidthPolicy policy = CellWidthPolicy.spec,
   }) {
-    final width = widthResolver.widthOfGrapheme(grapheme, profile);
+    final width = widthResolver.widthOfGrapheme(grapheme, policy);
     if (width == 0) return 0;
     // Include adjacent cells because writing can evict wide-cell neighbors.
     _recordDamageRect(col - 1, row, width + 2, 1);
@@ -467,7 +445,7 @@ final class CellBuffer {
     String text, {
     CellStyle style = CellStyle.empty,
     WidthResolver widthResolver = const DefaultWidthResolver(),
-    TerminalProfile profile = TerminalProfile.standard,
+    CellWidthPolicy policy = CellWidthPolicy.spec,
   }) {
     var col = position.col;
     final startCol = col;
@@ -475,7 +453,7 @@ final class CellBuffer {
     if (row < 0 || row >= _size.rows) return 0;
     for (final grapheme in text.characters) {
       if (col >= _size.cols) break;
-      final width = widthResolver.widthOfGrapheme(grapheme, profile);
+      final width = widthResolver.widthOfGrapheme(grapheme, policy);
       if (width == 0) continue;
       if (col >= 0) {
         _writeGraphemeAt(
@@ -484,7 +462,7 @@ final class CellBuffer {
           grapheme,
           style: style,
           widthResolver: widthResolver,
-          profile: profile,
+          policy: policy,
         );
       }
       col += width;
@@ -774,6 +752,119 @@ final class CellBuffer {
   bool _containsColRow(int col, int row) =>
       col >= 0 && row >= 0 && col < _size.cols && row < _size.rows;
 
+  /// The exact difference between this buffer and [previous].
+  ///
+  /// This is the ground truth a retained presenter needs, COMPUTED rather than
+  /// reported. Nothing upstream has to declare what it touched, so nothing can
+  /// forget to — which is the entire class of bug reported damage is prone to.
+  ///
+  /// Cheap enough to run every frame because the inner loop indexes the backing
+  /// lists directly: going through `atColRow` spends a bounds check and an index
+  /// multiply per cell, twice per comparison, which measures 2.4-4.8x slower.
+  /// It also produces the counts [screenDiffStats] computed separately, so
+  /// scroll detection no longer pays for a second full scan.
+  CellBufferDiff diffAgainst(CellBuffer previous) {
+    if (previous._size != _size) return CellBufferDiff.incomparable;
+    final cols = _size.cols;
+    final rowCount = _size.rows;
+    final mine = _cells;
+    final theirs = previous._cells;
+    // Overlay cells are written only by [_recordImagePlacement], so the
+    // placement lists answer this without touching a cell. Computed up front
+    // because EVERY return path has to carry it — an unchanged frame that
+    // holds an image is still a frame that must not be scrolled.
+    final hasOverlayCells =
+        _imagePlacements.isNotEmpty || previous._imagePlacements.isNotEmpty;
+    Set<int>? rows;
+    var dirtyCells = 0;
+    var left = cols;
+    var right = 0;
+    var top = rowCount;
+    var bottom = 0;
+
+    for (var row = 0; row < rowCount; row++) {
+      final base = row * cols;
+      var first = -1;
+      var last = -1;
+      for (var col = 0; col < cols; col++) {
+        if (mine[base + col] != theirs[base + col]) {
+          dirtyCells++;
+          if (first < 0) first = col;
+          last = col;
+        }
+      }
+      if (first < 0) continue;
+      (rows ??= <int>{}).add(row);
+      if (first < left) left = first;
+      if (last + 1 > right) right = last + 1;
+      if (row < top) top = row;
+      if (row + 1 > bottom) bottom = row + 1;
+    }
+
+    // Inline images live beside the grid, not in it: every cell under a
+    // placement is a payload-free `Cell.overlay`, so a placement that changed
+    // how it renders — different bytes, or the same bytes fitted differently —
+    // leaves the cells byte-identical. Deriving from cells alone would call
+    // that frame unchanged.
+    if (!_placementsMatch(_imagePlacements, previous._imagePlacements)) {
+      for (var list = 0; list < 2; list++) {
+        final placements = list == 0
+            ? _imagePlacements
+            : previous._imagePlacements;
+        for (final placement in placements) {
+          final firstCol = placement.col < 0 ? 0 : placement.col;
+          final lastCol = placement.col + placement.cols > cols
+              ? cols - 1
+              : placement.col + placement.cols - 1;
+          if (lastCol < firstCol) continue;
+          final firstRow = placement.row < 0 ? 0 : placement.row;
+          final lastRow = placement.row + placement.rows > rowCount
+              ? rowCount - 1
+              : placement.row + placement.rows - 1;
+          for (var row = firstRow; row <= lastRow; row++) {
+            (rows ??= <int>{}).add(row);
+            if (firstCol < left) left = firstCol;
+            if (lastCol + 1 > right) right = lastCol + 1;
+            if (row < top) top = row;
+            if (row + 1 > bottom) bottom = row + 1;
+          }
+        }
+      }
+    }
+
+    final dirty = rows;
+    if (dirty == null) {
+      return CellBufferDiff(
+        rows: const <int>{},
+        bounds: null,
+        dirtyCells: 0,
+        hasOverlayCells: hasOverlayCells,
+      );
+    }
+    return CellBufferDiff(
+      rows: dirty,
+      bounds: CellRect.fromLTWH(left, top, right - left, bottom - top),
+      dirtyCells: dirtyCells,
+      hasOverlayCells: hasOverlayCells,
+    );
+  }
+
+  /// Whether two placement lists would render identically.
+  ///
+  /// Delegates to [InlineImagePlacement]'s value equality rather than listing
+  /// fields here, so a field added to a placement cannot quietly stop counting
+  /// as a change.
+  static bool _placementsMatch(
+    List<InlineImagePlacement> a,
+    List<InlineImagePlacement> b,
+  ) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
   void _recordDamageRect(int col, int row, int cols, int rows) {
     if (!_damageTrackingEnabled ||
         _damageSuppressionDepth > 0 ||
@@ -797,9 +888,6 @@ final class CellBuffer {
       if (top < _dmgTop) _dmgTop = top;
       if (right > _dmgRight) _dmgRight = right;
       if (bottom > _dmgBottom) _dmgBottom = bottom;
-    }
-    for (var damagedRow = top; damagedRow < bottom; damagedRow++) {
-      _damageRows.add(damagedRow);
     }
   }
 
@@ -866,4 +954,61 @@ final class CellBuffer {
     }
     return buf.toString();
   }
+}
+
+/// The exact set of cells that differ between two frames.
+final class CellBufferDiff {
+  const CellBufferDiff({
+    required this.rows,
+    required this.bounds,
+    required this.dirtyCells,
+    required this.hasOverlayCells,
+    this.isComparable = true,
+  });
+
+  /// The frames cannot be compared (different sizes), so nothing about them is
+  /// known. Callers must present a full repaint. A null [bounds] here does NOT
+  /// mean "unchanged" — that ambiguity is why this is a distinct value and not
+  /// just an empty diff.
+  static const incomparable = CellBufferDiff(
+    rows: <int>{},
+    bounds: null,
+    dirtyCells: 0,
+    hasOverlayCells: false,
+    isComparable: false,
+  );
+
+  /// Rows containing at least one changed cell.
+  final Set<int> rows;
+
+  /// Bounding rect of every changed cell, or null when nothing changed.
+  final CellRect? bounds;
+
+  /// Number of differing cells. Always non-negative — "unknown" is carried by
+  /// [isComparable], not by an out-of-band value in this one.
+  final int dirtyCells;
+
+  /// Whether either frame places an inline image, which disqualifies scrolling.
+  final bool hasOverlayCells;
+
+  /// Whether the frames could be compared at all.
+  ///
+  /// A field rather than a magic value in [dirtyCells]: that count is handed
+  /// to scroll detection through [stats], and a sentinel smuggled into a
+  /// number a consumer does arithmetic on is the shape of bug this whole area
+  /// has already produced twice.
+  final bool isComparable;
+
+  /// Whether the frames are comparable and render identically.
+  ///
+  /// Keyed on [rows] rather than [dirtyCells]: a placement-only change (an
+  /// image animating in place) has zero differing CELLS but is a change — the
+  /// placement diff contributes rows without counting cells. dirtyCells alone
+  /// would call that frame unchanged, and a consumer skipping presentation on
+  /// it would freeze the image.
+  bool get isUnchanged => isComparable && rows.isEmpty;
+
+  /// The shape [detectBeneficialScrollUp] consumes.
+  ({int dirtyCells, bool hasOverlayCells}) get stats =>
+      (dirtyCells: dirtyCells, hasOverlayCells: hasOverlayCells);
 }
