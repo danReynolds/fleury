@@ -1000,7 +1000,7 @@ Map<String, String> _parseParams(String body) {
   return out;
 }
 
-// Debug response payload: 4-byte LE seq, 1-byte kind length, kind bytes,
+// Debug response payload: 4-byte BE seq, 1-byte kind length, kind bytes,
 // then the raw JSON document — avoids JSON-escaping the (potentially large)
 // document into an envelope.
 Uint8List _encodeDebugRequest(DebugRequestFrame f) {
@@ -1025,10 +1025,7 @@ List<int> _encodeDebugKind(String kind) {
 Uint8List _encodeDebugResponse(DebugResponseFrame f) {
   final kind = _encodeDebugKind(f.kind);
   final out = BytesBuilder(copy: false)
-    ..addByte(f.seq & 0xFF)
-    ..addByte((f.seq >> 8) & 0xFF)
-    ..addByte((f.seq >> 16) & 0xFF)
-    ..addByte((f.seq >> 24) & 0xFF)
+    ..add((ByteData(4)..setUint32(0, f.seq)).buffer.asUint8List())
     ..addByte(kind.length)
     ..add(kind)
     ..add(f.json);
@@ -1039,8 +1036,7 @@ DebugResponseFrame _decodeDebugResponse(Uint8List payload) {
   if (payload.length < 5) {
     throw const RemoteProtocolException('DEBUG_RESPONSE: short payload.');
   }
-  final seq =
-      payload[0] | (payload[1] << 8) | (payload[2] << 16) | (payload[3] << 24);
+  final seq = ByteData.sublistView(payload, 0, 4).getUint32(0);
   final kindLen = payload[4];
   if (payload.length < 5 + kindLen) {
     throw const RemoteProtocolException('DEBUG_RESPONSE: truncated kind.');

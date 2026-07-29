@@ -211,4 +211,112 @@ void main() {
       tmp.deleteSync(recursive: true);
     },
   );
+
+  test(
+    'continued sends into a stalled peer fail closed at the hard byte bound',
+    () async {
+      await start(highWaterMark: 64 * 1024);
+      final peerSubscription = accepted.listen((_) {});
+      peerSubscription.pause();
+      final incomingDone = Completer<void>();
+      final incomingError = Completer<Object>();
+      var incomingErrorCount = 0;
+      final incomingSubscription = transport.incoming.listen(
+        (_) {},
+        onError: (Object error, StackTrace _) {
+          incomingErrorCount++;
+          if (!incomingError.isCompleted) incomingError.complete(error);
+        },
+        onDone: incomingDone.complete,
+      );
+
+      // One maximum legal INLINE_IMAGE payload occupies 16 MiB plus the
+      // five-byte frame header. Three fit below the 64 MiB transport ceiling;
+      // the fourth must reset the session instead of retaining another frame
+      // or selectively dropping a diff-bearing frame.
+      const id = 'x';
+      final image = Uint8List(maxRemoteImageFramePayloadLength - 2 - id.length);
+      transport.send(InlineImageFrame(id, image));
+      expect(transport.isSendBacklogged, isTrue);
+      final drainFuture = transport.sendDrained;
+
+      transport.send(InlineImageFrame(id, image));
+      transport.send(InlineImageFrame(id, image));
+      transport.send(InlineImageFrame(id, image));
+
+      final error = await incomingError.future.timeout(
+        const Duration(seconds: 5),
+      );
+      expect(error, isA<StateError>());
+      expect('$error', contains('4096 frames / 67108864 bytes'));
+      expect('$error', contains('terminated instead of dropping a frame'));
+
+      expect(transport.isSendBacklogged, isFalse);
+      await drainFuture.timeout(const Duration(seconds: 5));
+      await incomingDone.future.timeout(const Duration(seconds: 5));
+      expect(incomingErrorCount, 1);
+      await transport.close().timeout(const Duration(seconds: 5));
+
+      await incomingSubscription.cancel();
+      await peerSubscription.cancel();
+      try {
+        await accepted.close();
+      } catch (_) {}
+      await server.close();
+      tmp.deleteSync(recursive: true);
+    },
+  );
+
+  test(
+    'tiny-frame flood is count-bounded and settles the stalled session',
+    () async {
+      await start(highWaterMark: 64 * 1024);
+      final peerSubscription = accepted.listen((_) {});
+      peerSubscription.pause();
+      final incomingDone = Completer<void>();
+      final incomingError = Completer<Object>();
+      var incomingErrorCount = 0;
+      final incomingSubscription = transport.incoming.listen(
+        (_) {},
+        onError: (Object error, StackTrace _) {
+          incomingErrorCount++;
+          if (!incomingError.isCompleted) incomingError.complete(error);
+        },
+        onDone: incomingDone.complete,
+      );
+
+      // Prime a genuinely stalled flush, then stay far below the byte ceiling
+      // while filling the independent frame-object budget.
+      transport.send(
+        OutputFrame(Uint8List(maxRemoteDocumentFramePayloadLength)),
+      );
+      expect(transport.isSendBacklogged, isTrue);
+      final drainFuture = transport.sendDrained;
+      final empty = Uint8List(0);
+      for (var index = 0; index < 4095; index++) {
+        transport.send(DebugResponseFrame(index, 'x', empty));
+      }
+      transport.send(DebugResponseFrame(4095, 'x', empty));
+
+      final error = await incomingError.future.timeout(
+        const Duration(seconds: 5),
+      );
+      expect(error, isA<StateError>());
+      expect('$error', contains('4097 frames'));
+      expect('$error', contains('hard limits of 4096 frames'));
+      expect(transport.isSendBacklogged, isFalse);
+      await drainFuture.timeout(const Duration(seconds: 5));
+      await incomingDone.future.timeout(const Duration(seconds: 5));
+      expect(incomingErrorCount, 1);
+      await transport.close().timeout(const Duration(seconds: 5));
+
+      await incomingSubscription.cancel();
+      await peerSubscription.cancel();
+      try {
+        await accepted.close();
+      } catch (_) {}
+      await server.close();
+      tmp.deleteSync(recursive: true);
+    },
+  );
 }

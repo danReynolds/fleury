@@ -588,6 +588,15 @@ void main() {
       expect(f.json, isEmpty);
     });
 
+    test('DEBUG_RESPONSE seq uses the protocol big-endian byte order', () {
+      final wire = encodeFrame(
+        DebugResponseFrame(0x01020304, 'logs', Uint8List(0)),
+      );
+
+      // Five-byte frame envelope, then the response sequence.
+      expect(wire.sublist(5, 9), const [0x01, 0x02, 0x03, 0x04]);
+    });
+
     test('DEBUG_RESPONSE uses the UTF-8 byte length for a Unicode kind', () {
       final json = Uint8List.fromList('[]'.codeUnits);
       final wire = encodeFrame(DebugResponseFrame(11, 'résumé', json));

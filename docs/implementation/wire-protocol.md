@@ -46,6 +46,13 @@ All multi-byte values are big-endian.
 Five bytes of overhead per frame, so out-of-band events (a resize) travel
 cleanly beside the input byte stream instead of being smuggled inside ANSI.
 
+The producer and decoder share the same payload limits: 16 MiB globally,
+64 KiB for control frames, 1 MiB for input, and 8 MiB for document frames;
+INLINE_IMAGE alone may use the 16 MiB global maximum.
+The Unix-socket sender separately caps pending output at 64 MiB and 4096
+frames; crossing either bound fails the session closed without dropping an
+individual diff-bearing frame.
+
 ## Protocol version
 
 The latest structured-host version is **6** (`remoteProtocolVersion`). It is
