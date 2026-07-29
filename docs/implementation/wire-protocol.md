@@ -21,9 +21,16 @@ shim** — prelaunch fleury ships no migration or compat layers. The supported,
 stable integration points are the framework API and the semantic / agent
 surfaces, not the raw wire.
 
-This holds because the browser client bundle is **embedded in the fleury
-binary**: a server and the client it serves always ship from the **same fleury
-build**, so the two never need to negotiate encodings across versions.
+The legal cross-package entry points are
+`package:fleury/fleury_wire.dart` for platform-neutral frames and codecs, plus
+`package:fleury/fleury_wire_io.dart` when a peer needs the Unix-socket
+transport; their names and library docs make this unstable tier explicit. The
+browser client bundle is
+**embedded in the Fleury binary**, so a server and the client it serves ship
+from the same build. Separately launched first-party peers, notably
+`fleury_mcp`, must resolve a matching Fleury build and reject an echoed INIT
+version mismatch. That check prevents silent misdecoding; it is not a
+cross-version compatibility promise.
 
 ## Frame envelope
 
@@ -41,7 +48,7 @@ cleanly beside the input byte stream instead of being smuggled inside ANSI.
 
 ## Protocol version
 
-The latest structured-host version is **5** (`remoteProtocolVersion`). It is
+The latest structured-host version is **6** (`remoteProtocolVersion`). It is
 carried in the INIT handshake as `v=<n>`; `fleury shell` deliberately
 negotiates **v1** (`remoteAnsiProtocolVersion`) because it is the active ANSI
 terminal host.
@@ -53,6 +60,7 @@ terminal host.
 | v3 | SEMANTIC_ACTION_RESULT, and the app-side INIT echo (app → peer) so the client can detect version skew. |
 | v4 | Optional OSC 8 link in the PLAN cell-style entry: spare set-mask bit 6 flags "has link" and, when set, a varint-prefixed UTF-8 URI rides after the two mask bytes (before the colors). Version-gated — a link-free style leaves bit 6 clear and writes no URI, so link-free frames stay byte-identical to v3, and the app emits links only to a peer that negotiated v>=4. |
 | v5 | Original-box geometry for clipped inline-image placements in PLAN: plan flag bit 2 declares four varints after each placement (`boxCols`, `boxRows`, `boxOffsetCol`, `boxOffsetRow`). Version-gated — the app emits the fields only to a peer that negotiated v>=5; an absent flag decodes as an unclipped legacy placement. |
+| v6 | Optional app-issued target token on SEMANTIC_ACTION. A first-party peer echoes it for positional ids only after the app echoes the exact matching protocol version; any skew rejects the session. The app also fails closed when the claim is absent or no longer matches. Stable-id actions omit the extension and retain their exact v5 payload. |
 
 ## Frame types
 
@@ -70,7 +78,7 @@ frame, so test harnesses can inject either side. "Peer" is `serve` / `shell`;
 | `0x12` | PLAN | App → Peer | Binary presentation plan — the structured host's per-frame output driving a visual surface. |
 | `0x13` | SEMANTICS | App → Peer | UTF-8 JSON semantic snapshot of the rendered frame (accessibility + agent drivability). |
 | `0x14` | INPUT_EVENT | Peer → App | Structured `TuiEvent` (key / mouse / paste / resize / composition) — the structured input path that replaces raw INPUT. |
-| `0x15` | SEMANTIC_ACTION | Peer → App | The peer activates a node in its accessible tree (screen reader / agent driving semantics, not the visual grid). |
+| `0x15` | SEMANTIC_ACTION | Peer → App | The peer activates a node in its accessible tree (screen reader / agent driving semantics, not the visual grid). Since v6, positional ids carry the app-issued target token observed by the peer so a recycled id cannot silently target another mounted contributor, and role/label/advertised-action changes on a reused contributor also invalidate the claim. |
 | `0x16` | INLINE_IMAGE | App → Peer | One inline image (browser surface), keyed by content-hash id; sent once before the first PLAN that places it, then referenced by id so bytes ride the wire only once. |
 | `0x17` | CLIPBOARD_WRITE | App → Peer | Place text on the peer's (the user's) clipboard; answered by CLIPBOARD_RESULT. |
 | `0x18` | CLIPBOARD_RESULT | Peer → App | Outcome of a CLIPBOARD_WRITE: written / denied / unavailable. |
@@ -83,16 +91,17 @@ frame, so test harnesses can inject either side. "Peer" is `serve` / `shell`;
 
 One rule, in two halves:
 
-1. **Additive changes are safe and require no version bump.** *New frame types*
-   and *optional trailing payload fields* are additive: a decoder skips unknown
-   type discriminators and tolerates absent trailing fields, so peers one
-   version apart interoperate. An older peer simply ignores a frame or field it
-   doesn't know; a newer peer degrades to not showing that capability.
+1. **Only explicitly tolerant changes are additive.** New frame types require
+   no version bump because a decoder skips unknown type discriminators. A
+   trailing payload field is additive only when the older decoder already
+   tolerates trailing data; a newer decoder tolerating an absent field is only
+   half of the compatibility requirement.
 
-2. **Encoding changes are version-gated.** Changing the *cell or enum encoding
-   inside an existing frame* is a breaking change: it requires a **version bump**
-   and matching peers. This is safe precisely because of the same-build
-   invariant above — server and client are never mismatched in practice.
+2. **Other encoding changes are version-gated.** Changing the cell/enum
+   encoding inside an existing frame, or appending data an older decoder would
+   reject, requires a version bump and an emission gate. The embedded browser
+   has a same-build invariant; separately launched first-party peers enforce
+   lockstep through the echoed INIT version.
 
 Worked examples:
 
@@ -118,3 +127,9 @@ Worked examples:
   older app readable. A v5 app emits the flag only to v5 peers; for a v4 peer it
   keeps full placements on the legacy shape and omits clipped placements rather
   than rendering a silently mis-fitted image.
+- v6's semantic target token is a version-gated trailing extension to
+  SEMANTIC_ACTION. A stable-id action omits the extension entirely and is
+  byte-identical to v5. A first-party peer sends a positional-id action only
+  after the app echoes the exact matching protocol version (currently v6).
+  Any version skew fails the session closed because a mismatched app cannot
+  safely verify or decode the action.

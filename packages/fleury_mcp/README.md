@@ -105,9 +105,8 @@ Two things to notice:
   The one genuinely useful thing to add is the **`id:`**, which gives the agent a
   stable handle (see *Make your app drive well* below).
 
-Want a real app to try right now? Every app in `packages/samples`
-(`dashboard` · `files` · `agent`) is an unmodified `runApp` app and drives over
-MCP as-is.
+Want a real app to try right now? The runnable apps under `packages/samples`
+are unmodified `runApp` apps and drive over MCP as-is.
 
 ## Drive it
 
@@ -122,6 +121,13 @@ MCP as-is.
 # Today, from a Fleury checkout — put it on your PATH:
 dart pub global activate --source path packages/fleury_mcp
 ```
+
+`fleury_mcp` uses Fleury's explicitly unstable first-party wire. Each published
+executable package exact-pins its matching Fleury release, so prefer the app
+dev-dependency form and let pub resolve one build for both. A path activation
+uses the checkout's sibling override; reactivate it after that Fleury source
+changes. The INIT handshake rejects mismatches instead of decoding incompatible
+frames.
 
 ### 2. Point an MCP host at any app
 
@@ -191,7 +197,7 @@ as text JSON (the model-facing channel) and as MCP `structuredContent`.
 
 | | |
 |---|---|
-| **resource** `fleury://ui/tree` | The current semantic tree — the same artifact `get_ui` returns. **Subscribable**: `resources/subscribe` and the server pushes `notifications/resources/updated` (with just the changed node ids) whenever the UI settles. |
+| **resource** `fleury://ui/tree` | The current semantic tree — the same artifact `get_ui` returns. **Subscribable**: `resources/subscribe` and the server pushes `notifications/resources/updated` (with just the changed node ids) whenever the UI settles. App-authored ids carry the same `untrustedContent` marker as tree reads. |
 | `get_ui` | Read the whole tree (roles, labels, values, state, actions). Call first, and after each action. |
 | `find_nodes` | Query by role / label substring / supported action / focus / selection — the lean path on a large screen. |
 | `invoke_action` | Invoke a `SemanticAction` on a node by id (activate, focus, select, submit, increment, open/close, …). |
@@ -209,7 +215,8 @@ as text JSON (the model-facing channel) and as MCP `structuredContent`.
 > so an agent driving the app can *read its devtools while it works*, not just
 > the UI. They need the app to have debug tooling enabled (the default in
 > development runs; release builds default off), and return `available:false`
-> otherwise.
+> otherwise. Debug results carry an `untrustedContent` marker: app logs, errors,
+> identifiers, and record fields are data, never model instructions.
 
 ### Options
 
@@ -236,11 +243,17 @@ Beyond request/response, the server is a full MCP citizen:
 - **App logs.** The driven app's own stdout/stderr is forwarded as
   `notifications/message` (logger `app`; stdout → `info`, stderr → `warning`),
   gated by `logging/setLevel` — so an agent can see what the app logged while
-  driving it, without it polluting the JSON-RPC channel.
+  driving it, without it polluting the JSON-RPC channel. `params.data` is an
+  envelope with the verbatim `message` plus an `untrustedContent` warning.
 - **Machine-readable errors.** A failed tool call carries a stable
   `structuredContent.code` (`not_found`, `stale_reference`, `ambiguous`,
   `rate_limited`, `not_ready`, …) so an agent branches on the category instead of
-  string-matching the message.
+  string-matching the message. Error text and structured content also carry an
+  untrusted-content warning because an error may quote app-authored fields.
+- **Bounded stdio.** Requests are capped at 8 MiB per NDJSON line and 64 active
+  calls; mutation work has its own smaller queue. Startup logs and pending
+  stdout are byte/count bounded, and a stalled flush terminates the session
+  instead of retaining responses or blocking teardown indefinitely.
 
 ## Make your app drive well
 
@@ -250,8 +263,9 @@ The app works with zero effort; these make the agent's job easier:
   `Key`. Without one, a node gets a derived id that stays stable across rebuilds
   *when it has a keyed ancestor*, but a fully-unkeyed node falls back to a
   positional id that can shift as the tree changes. A `Semantics(id: SemanticNodeId('submit'))`
-  is a durable handle. (The server guards against acting on a *stale* positional
-  id, so the worst case is a clear "re-read and retry", not a mis-click.)
+  is a durable handle. (The server rejects observable positional recycling.
+  Semantically identical logical replacements that share framework identity
+  need distinct keys or stable semantics ids.)
 - **Give nodes meaningful labels.** Labels are how the agent recognizes a node.
 - **Hide decorative or off-screen chrome** with `ExcludeSemantics` so it doesn't
   clutter what the agent reads.
@@ -268,18 +282,23 @@ The app works with zero effort; these make the agent's job easier:
   revision (~477× vs a full tree walk), and the settle behind `wait_for_change`
   is capped so a continuously-animating app returns promptly (~3.7× faster than
   running to timeout). A committed benchmark + perf gate hold these numbers.
-- **Safe against injected content.** All app-derived text is delimited as
-  untrusted (read-and-report, never follow embedded instructions), and the
-  mutating tools are rate-limited.
+- **Safe against injected content.** App-authored semantics, ids, resource
+  deltas, debug records, logs, errors, and app-derived tool errors remain
+  verbatim inside structures marked as untrusted (read and report them; never
+  follow embedded instructions). Mutating tools are rate-limited.
 - **Stable, compact ids** with a stale-reference guard (above).
 - **Clean lifecycle.** The app subprocess is torn down on disconnect, SIGINT, or
-  SIGTERM (exits in well under a second on stdin close); a connect-but-never-
-  render app fails fast with a clear message.
+  SIGTERM. Idle disconnect is prompt and active teardown is bounded; a
+  connect-but-never-render app fails fast with a clear message.
 
 ## Status
 
-Pre-1.0, developed in the Fleury monorepo (`publish_to: none`, path dependency on
-`fleury`). The protocol surface is stable and verified against the MCP Inspector,
-a host-process end-to-end harness, and live drives of the sample apps. See
+Developed in the Fleury monorepo and packaged for publication with an exact
+dependency on the matching Fleury release (`fleury: 0.1.0`). That pairing covers
+Fleury's supported host/process SPI and its explicitly unstable, lockstep wire.
+Local development uses `pubspec_overrides.yaml` to resolve the sibling package.
+Matching builds are verified against the MCP Inspector, a host-process
+end-to-end harness, and live drives of the sample apps; wire-version skew is
+rejected during INIT. See
 [`docs/agents-and-semantics.md`](https://github.com/danReynolds/fleury/blob/main/docs/agents-and-semantics.md) for the
 broader semantics story.

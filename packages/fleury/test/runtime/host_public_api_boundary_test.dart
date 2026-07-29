@@ -31,15 +31,64 @@ void main() {
     scheduler.requestFrame('host-smoke');
 
     final semanticsOwner = SemanticsOwner();
+    const positionalTarget = SemanticNode(
+      id: SemanticNodeId('element-1'),
+      role: SemanticRole.button,
+      actions: {SemanticAction.activate},
+      actionTargetToken: 'element.1',
+    );
     final update = semanticsOwner.update(
       SemanticTree(
         root: const SemanticNode(
           id: SemanticNodeId('root'),
           role: SemanticRole.app,
+          children: [positionalTarget],
         ),
       ),
     );
-    expect(update.added, {const SemanticNodeId('root')});
+    expect(update.added, {
+      const SemanticNodeId('root'),
+      const SemanticNodeId('element-1'),
+    });
+    expect(positionalTarget.actionTargetToken, 'element.1');
+
+    void debugHandler(int seq, String kind, int limit) {}
+    void actionHandler(
+      SemanticNodeId id,
+      SemanticAction action,
+      Object? value, {
+      String? targetToken,
+    }) {}
+    const clipboardStatus = RemoteClipboardStatus.unavailable;
+    RemoteSurfaceSink? sink;
+    expect(debugHandler, isA<RemoteDebugRequestHandler>());
+    expect(actionHandler, isA<RemoteSemanticActionHandler>());
+    expect(clipboardStatus, RemoteClipboardStatus.unavailable);
+    expect(sink, isNull);
+  });
+
+  test('raw wire types stay out of the stable host barrels', () {
+    final hostText = File('lib/fleury_host.dart').readAsStringSync();
+    final hostIoText = File('lib/fleury_host_io.dart').readAsStringSync();
+    final wireText = File('lib/fleury_wire.dart').readAsStringSync();
+    final wireIoText = File('lib/fleury_wire_io.dart').readAsStringSync();
+
+    for (final symbol in <String>[
+      'RemoteFrame',
+      'FrameDecoder',
+      'RemotePlan',
+      'RemoteFrameTransport',
+      'SemanticsWireEncoder',
+    ]) {
+      expect(
+        hostText,
+        isNot(contains(symbol)),
+        reason: '$symbol belongs to the explicitly unstable wire barrel.',
+      );
+      expect(wireText, contains(symbol));
+    }
+    expect(hostIoText, isNot(contains('UnixSocketFrameTransport')));
+    expect(wireIoText, contains('UnixSocketFrameTransport'));
   });
 
   test('host-only symbols stay out of app-facing core exports', () {

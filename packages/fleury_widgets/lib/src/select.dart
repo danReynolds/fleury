@@ -27,9 +27,9 @@ final class SelectOption<T> {
 /// trapped in the open list and returns to the trigger on close.
 ///
 /// Controlled: hold [value] yourself and update it from [onChanged]. Built
-/// on the anchored-overlay primitive ([Anchor] + [Follower]) so it floats
-/// over everything and flips/clamps to stay on screen. Passing null for
-/// [onChanged] disables the picker.
+/// on the [Anchored] overlay primitive so it floats over everything and
+/// flips/clamps to stay on screen. Passing null for [onChanged] disables the
+/// picker.
 class Select<T> extends StatefulWidget {
   const Select({
     super.key,

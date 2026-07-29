@@ -9,9 +9,9 @@ library;
 
 import 'dart:typed_data';
 
-import 'package:fleury/fleury_host.dart'
-    show InlineImageCachePolicy, InlineImageFit;
-import 'package:fleury/src/remote/remote_codec.dart' show ImagePlacement;
+import 'package:fleury/fleury_host.dart' show InlineImageFit;
+import 'package:fleury/fleury_wire.dart'
+    show ImagePlacement, InlineImageCachePolicy;
 import 'package:fleury_web/src/metrics/cell_metrics.dart';
 import 'package:fleury_web/src/dom_grid/inline_image_overlay.dart';
 import 'package:fleury_web/src/metrics/dom_cell_metrics.dart';

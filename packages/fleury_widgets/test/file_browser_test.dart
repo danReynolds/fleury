@@ -99,6 +99,30 @@ void main() {
     expect(row.state['viewIndex'], 0);
   });
 
+  test('query filtering does not match the shared parent directory', () {
+    final parent = ['', 'tmp', 'deploy-project'].join(Platform.pathSeparator);
+    final entries = [
+      FileBrowserEntry(
+        path: '$parent${Platform.pathSeparator}alpha.txt',
+        name: 'alpha.txt',
+        type: FileBrowserEntryType.file,
+      ),
+      FileBrowserEntry(
+        path: '$parent${Platform.pathSeparator}deploy.log',
+        name: 'deploy.log',
+        type: FileBrowserEntryType.file,
+      ),
+    ];
+
+    expect(
+      buildFileBrowserEntryOrder(
+        entries,
+        filter: const FileBrowserFilterDescriptor(query: 'deploy'),
+      ),
+      [1],
+    );
+  });
+
   testWidgets('Enter opens directories and activates files', (tester) {
     final dir = _scratchDir();
     FileBrowserEntry? activated;

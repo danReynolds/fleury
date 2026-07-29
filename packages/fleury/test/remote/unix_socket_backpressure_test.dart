@@ -12,8 +12,8 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:fleury/fleury_host.dart';
-import 'package:fleury/src/remote/unix_socket_transport.dart';
+import 'package:fleury/fleury_wire.dart';
+import 'package:fleury/fleury_wire_io.dart';
 import 'package:test/test.dart';
 
 Future<void> _pump() => Future<void>.delayed(const Duration(milliseconds: 5));

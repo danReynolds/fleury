@@ -20,6 +20,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_wire.dart';
 import 'package:fleury_mcp/fleury_mcp.dart';
 import 'package:fleury_mcp/src/value_schema.dart';
 
@@ -215,7 +216,10 @@ Map<String, Object?> lookupCost(SemanticInspectionSnapshot s) {
 /// the win is capped << uncapped. Durations are scaled small to keep the bench
 /// quick while preserving the contrast.
 Future<Map<String, Object?>> settleLatency() async {
-  Future<double> measure({required Duration cap, required Duration timeout}) async {
+  Future<double> measure({
+    required Duration cap,
+    required Duration timeout,
+  }) async {
     final transport = _BenchTransport();
     final bridge = FleuryAppBridge(transport)..start();
     final encoder = SemanticsWireEncoder();
@@ -237,9 +241,23 @@ Future<Map<String, Object?>> settleLatency() async {
       if (bytes != null) transport.add(SemanticsFrame(bytes));
     }
 
+    // The bridge is an exact-version wire peer. Complete the same INIT echo
+    // required of a real app before feeding the first semantic frame; otherwise
+    // this fixture measures fail-closed negotiation instead of settle latency.
+    transport.add(
+      const InitFrame(
+        size: CellSize(80, 24),
+        colorMode: ColorMode.truecolor,
+        imageProtocol: ImageProtocol.halfBlock,
+        tmuxPassthrough: false,
+      ),
+    );
     push();
     await bridge.ready;
-    final ticker = Timer.periodic(const Duration(milliseconds: 8), (_) => push());
+    final ticker = Timer.periodic(
+      const Duration(milliseconds: 8),
+      (_) => push(),
+    );
     final sw = Stopwatch()..start();
     await bridge.settle(
       sinceRevision: bridge.revision,
@@ -267,7 +285,7 @@ Future<Map<String, Object?>> settleLatency() async {
 
 // ---- a minimal in-memory transport for the settle bench --------------------
 
-class _BenchTransport 
+class _BenchTransport
     with SynchronousSendTransport
     implements RemoteFrameTransport {
   final StreamController<RemoteFrame> _in = StreamController<RemoteFrame>();
@@ -284,9 +302,13 @@ class _BenchTransport
 
 Future<void> main(List<String> args) async {
   final json = args.contains('--json');
-  final rows = int.tryParse(
+  final rows =
+      int.tryParse(
         args
-            .firstWhere((a) => a.startsWith('--rows='), orElse: () => '--rows=80')
+            .firstWhere(
+              (a) => a.startsWith('--rows='),
+              orElse: () => '--rows=80',
+            )
             .split('=')
             .last,
       ) ??
@@ -315,24 +337,36 @@ Future<void> main(List<String> args) async {
   String ms(Object? v) => (v as num).toStringAsFixed(0);
   String us(Object? v) => (v as num).toStringAsFixed(2);
 
-  stdout.writeln('MCP benchmarks — dashboard of $rows rows '
-      '(${dashboard.nodeCount} nodes)\n');
+  stdout.writeln(
+    'MCP benchmarks — dashboard of $rows rows '
+    '(${dashboard.nodeCount} nodes)\n',
+  );
   stdout.writeln('WS-1  delta push vs full re-read');
   stdout.writeln('  full get_ui re-read : ${d['fullReadBytes']} B');
-  stdout.writeln('  delta notification  : ${d['deltaNotifyBytes']} B  '
-      '(${pct(d['deltaPctOfFull'])}% of a full re-read)');
-  stdout.writeln('  delta + read 1 node : ${d['actWithDeltaBytes']} B  '
-      '(${pct(d['actPctOfFull'])}% of a full re-read)\n');
+  stdout.writeln(
+    '  delta notification  : ${d['deltaNotifyBytes']} B  '
+    '(${pct(d['deltaPctOfFull'])}% of a full re-read)',
+  );
+  stdout.writeln(
+    '  delta + read 1 node : ${d['actWithDeltaBytes']} B  '
+    '(${pct(d['actPctOfFull'])}% of a full re-read)\n',
+  );
   stdout.writeln('WS-9/WS-4  typed-affordance + untrusted-marker overhead');
   stdout.writeln('  get_ui baseline     : ${a['baselineBytes']} B');
-  stdout.writeln('  + affordances       : ${a['withAffordancesBytes']} B  '
-      '(+${pct(a['overheadPct'])}%)\n');
+  stdout.writeln(
+    '  + affordances       : ${a['withAffordancesBytes']} B  '
+    '(+${pct(a['overheadPct'])}%)\n',
+  );
   stdout.writeln('WS-7  node lookup (per call) — cached index vs full re-walk');
   stdout.writeln('  full re-walk (old)  : ${us(lu['fullWalkUs'])} us');
-  stdout.writeln('  cached index (new)  : ${us(lu['indexedUs'])} us  '
-      '(${pct(lu['speedup'])}x faster)\n');
+  stdout.writeln(
+    '  cached index (new)  : ${us(lu['indexedUs'])} us  '
+    '(${pct(lu['speedup'])}x faster)\n',
+  );
   stdout.writeln('WS-2  capped settle on a ticking app');
   stdout.writeln('  uncapped (old)      : ${ms(st['uncappedMs'])} ms');
-  stdout.writeln('  capped (new)        : ${ms(st['cappedMs'])} ms  '
-      '(${pct(st['speedup'])}x faster)');
+  stdout.writeln(
+    '  capped (new)        : ${ms(st['cappedMs'])} ms  '
+    '(${pct(st['speedup'])}x faster)',
+  );
 }

@@ -770,7 +770,7 @@ for (const e of showcases) {
       // with the run command + source link in the right-side rail beside it.
       `${SHOWCASE_GOALS[slug] ?? e.blurb}\n\n` +
       (SHOWCASE_TRY[slug] ? `${SHOWCASE_TRY[slug]}\n\n` : '') +
-      `<ShowcaseStage runCmd="fleury dev samples ${slug}"` +
+      `<ShowcaseStage runCmd="dart run packages/samples/bin/samples.dart ${slug}"` +
       (file
         ? ` sourceFile="${file}" sourceUrl="${REPO}/packages/samples/lib/src/${file}"`
         : '') +
@@ -785,9 +785,10 @@ for (const e of showcases) {
 }
 const showIndex =
   `---\ntitle: Showcases\ndescription: Full Fleury apps, each running live in your browser.\n---\n\n` +
-  `Three complete apps, each built entirely from Fleury widgets and **running ` +
+  `${showcases.length} complete apps, each built entirely from Fleury widgets and **running ` +
   `live in your browser** — open one and use your keyboard and mouse. Each is ` +
-  `also a runnable native sample: \`fleury dev samples <app>\`.\n\n` +
+  `also runnable from a Fleury framework checkout with ` +
+  `\`dart run packages/samples/bin/samples.dart <app>\`.\n\n` +
   showcases
     .map((e) => `- [${e.widget}](/fleury/showcases/${e.id.split('.')[1]}/) — ${e.blurb}`)
     .join('\n') +

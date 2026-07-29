@@ -549,7 +549,12 @@ final class RemoteTerminalDriver
         // The peer activated a node in its accessible DOM; invoke it on the
         // live tree (only on the structured path, like the other v2 input).
         if (_active && wantsPresentationPlans) {
-          _onSemanticAction?.call(f.id, f.action, f.value);
+          _onSemanticAction?.call(
+            f.id,
+            f.action,
+            f.value,
+            targetToken: f.targetToken,
+          );
         }
       case DebugRequestFrame f:
         if (_active) _onDebugRequest?.call(f.seq, f.kind, f.limit);

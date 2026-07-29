@@ -1,17 +1,27 @@
 import 'dart:typed_data';
 
 import '../foundation/geometry.dart';
-import '../remote/remote_protocol.dart' show RemoteClipboardStatus;
 import '../rendering/cell_buffer.dart';
 import '../semantics/semantics.dart';
 import '../semantics/semantics_owner.dart' show SemanticTreeUpdate;
 import 'frame_presentation.dart';
 
+/// How a peer handled an app-requested clipboard write.
+enum RemoteClipboardStatus { written, denied, unavailable }
+
 /// Handles an inbound semantic-action request from the peer (the browser or an
 /// agent activating a node in its accessible DOM). [value] is the optional
 /// payload carried by [SemanticAction.setValue]; null for every other action.
+/// [targetToken] is the opaque app-issued token the peer observed for the
+/// target. Dispatchers use it to reject a recycled positional id; stable ids
+/// may omit it.
 typedef RemoteSemanticActionHandler =
-    void Function(SemanticNodeId id, SemanticAction action, Object? value);
+    void Function(
+      SemanticNodeId id,
+      SemanticAction action,
+      Object? value, {
+      String? targetToken,
+    });
 
 /// Handles an inbound debug query from the peer (an agent bridge or a future
 /// browser DevTools panel asking for recent frame stats / error records).

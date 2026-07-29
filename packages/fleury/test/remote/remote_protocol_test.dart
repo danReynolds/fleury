@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_wire.dart';
 import 'package:test/test.dart';
 
 void main() {

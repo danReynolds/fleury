@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:test/test.dart';
 
 void main() {
-  test('remote session internals stay out of public libraries', () {
+  test('raw remote session contracts stay out of stable libraries', () {
     final publicLibraries = <String>[
       'lib/fleury.dart',
       'lib/fleury_core.dart',
@@ -50,5 +50,26 @@ void main() {
 
     final core = File('lib/fleury_core.dart').readAsStringSync();
     expect(core, contains('TerminalDriver'));
+
+    final host = File('lib/fleury_host.dart').readAsStringSync();
+    final wire = File('lib/fleury_wire.dart').readAsStringSync();
+    for (final symbol in <String>[
+      'RemoteFrameTransport',
+      'RemoteProtocolException',
+      'RemotePlan',
+      'SemanticsWireEncoder',
+    ]) {
+      expect(host, isNot(contains(symbol)));
+      expect(
+        wire,
+        contains(symbol),
+        reason: '$symbol should be available only from the unstable wire API.',
+      );
+    }
+    expect(
+      wire,
+      contains('explicitly unstable'),
+      reason: 'the public raw-wire entry point must state its stability.',
+    );
   });
 }

@@ -15,7 +15,7 @@ part that knows about ANSI bytes, DOM nodes, or sockets.
 
 ## The core is `dart:io`-free
 
-The core never mentions a terminal. The two libraries that make it up compile to
+The core never mentions a terminal. The platform-neutral libraries compile to
 JavaScript:
 
 - **`package:fleury/fleury_core.dart`** — the framework primitives: widgets,
@@ -23,6 +23,11 @@ JavaScript:
 - **`package:fleury/fleury_host.dart`** — the **host SPI**: it re-exports the
   core plus the runtime seams a target plugs into (frame scheduler, input
   dispatcher, frame-presentation hooks, semantics owner).
+- **`package:fleury/fleury_wire.dart`** — the explicitly unstable frame,
+  codec, and transport contracts used by first-party browser and agent peers.
+  It is public so those packages never reach through `src/`, but it is a
+  lockstep surface for matching Fleury builds, not part of the supported host
+  SPI.
 
 Neither touches `dart:io` (nor, transitively, `dart:ffi`). That is what makes the
 browser targets possible at all — the same widget code that runs in a terminal
@@ -84,15 +89,15 @@ That gives a simple rule for any code that might run in the browser:
 
 ## Package map
 
-Keyed by the import you write. The first three are libraries of the one `fleury`
-package — each row adds to the one above it; `fleury_widgets` and `fleury_web` are
-separate packages.
+Keyed by the import you write. The first four are libraries of the one `fleury`
+package; `fleury_widgets` and `fleury_web` are separate packages.
 
 | Import | What it adds | Web-safe? |
 |--------|--------------|-----------|
 | `fleury/fleury_core.dart` | framework primitives and the cell model | ✅ |
 | `fleury/fleury_host.dart` | the above, plus the host SPI a target plugs into | ✅ |
-| `fleury/fleury.dart` | the above, plus the native runtime: `runApp`, terminal drivers, `serve`, file/process/log | ❌ — pulls in `dart:io` |
+| `fleury/fleury_wire.dart` | explicitly unstable remote frames/codecs/transports for matching first-party peers | ✅ |
+| `fleury/fleury.dart` | core + stable host SPI + the native runtime: `runApp`, terminal drivers, `serve`, file/process/log | ❌ — pulls in `dart:io` |
 | `fleury_widgets` | the widget library | ✅ mostly — a few native-only |
 | `fleury_web` | the web/DOM target and the served browser client | ✅ — compiled with dart2js |
 

@@ -123,7 +123,7 @@ class OverlayEntry extends ChangeNotifier {
 }
 
 /// Converges an [OverlayEntry]'s mountedness onto a predicate: mounted while
-/// [shouldMount] returns true, removed while it returns false.
+/// `mountWhen` returns true, removed while it returns false.
 ///
 /// This is the lazy-layer primitive for entries that exist up front (so
 /// their subtree state survives) but should only be MOUNTED while they have
