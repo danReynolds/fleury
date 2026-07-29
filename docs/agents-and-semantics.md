@@ -120,9 +120,18 @@ stable one with no app effort: a node under a keyed ancestor (a list row's `Key`
 say) keeps its id across rebuilds *and reorders*, because the id folds in its
 ancestor key chain rather than its raw position. A fully unkeyed node falls back
 to a positional id — and those *can* shift as the tree changes, so the server
-guards them: if a positional node's fingerprint (role + label + actions) changed
-since the agent last read it, the action fails safe with a `stale_reference`
-error instead of mis-targeting. Pinning `Semantics(id: SemanticNodeId('submit'))` on the nodes
+guards them: if a positional node's app-issued target token changed since the
+agent last read it, the action fails safe with a `stale_reference` error instead
+of mis-targeting. The token survives value, focus, busy-state, and ticking
+updates to the same logical element; it rotates when the mounted contributor or
+the target's role, label, or advertised actions change, and when a synthesized
+target disappears and returns. A semantically identical update with the same
+widget `runtimeType` and `Key` is the same logical element under Fleury's
+reconciliation contract, so use a distinct `Key` or stable `Semantics.id` when
+those configurations are different logical targets. Controls with frequently
+changing labels should also use a stable id rather than making each label
+transition a new positional lease.
+Pinning `Semantics(id: SemanticNodeId('submit'))` on the nodes
 that matter gives the agent a durable handle and sidesteps the guard entirely.
 
 So that the agent isn't guessing which ids are durable, `get_ui` and `find_nodes`

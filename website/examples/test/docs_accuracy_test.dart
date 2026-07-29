@@ -41,6 +41,9 @@ void main() {
         r'KeyBinding\([^)]*onEvent:',
         dotAll: true,
       );
+      final rawStringSemanticId = RegExp(
+        r'''Semantics\s*\(\s*id:\s*(?:const\s+)?['"]''',
+      );
 
       for (final file in files) {
         final text = file.readAsStringSync();
@@ -53,6 +56,10 @@ void main() {
             'onEvent on the default KeyBinding constructor (use onTrigger, '
                 'or KeyBinding.event)',
             defaultCtorOnEvent,
+          ),
+          (
+            'raw String passed as Semantics.id (use SemanticNodeId)',
+            rawStringSemanticId,
           ),
           (
             'legacy bundled testing-package import',
@@ -139,6 +146,60 @@ void main() {
         '$snippet\n$sharedTree',
         isNot(contains("package:fleury_widgets/fleury_widgets.dart")),
       );
+    });
+
+    test('fleury_web README embeds the compile-checked mountApp example', () {
+      final readme = File(
+        p.join(repo.path, 'packages/fleury_web/README.md'),
+      ).readAsStringSync();
+      final compiledSnippet = File(
+        p.join(repo.path, 'website/examples/doc_snippets/web_app_shell.dart'),
+      ).readAsStringSync();
+      final firstImport = compiledSnippet.indexOf(
+        "import 'package:fleury/fleury_core.dart';",
+      );
+
+      expect(firstImport, isNonNegative);
+      expect(
+        _firstDartFence(readme).trim(),
+        compiledSnippet.substring(firstImport).trim(),
+      );
+    });
+
+    test('agent guide uses typed semantic ids in inline examples', () {
+      final guide = File(
+        p.join(
+          repo.path,
+          'website/src/content/docs/guides/driving-with-agents.md',
+        ),
+      ).readAsStringSync();
+      final compiledSnippet = File(
+        p.join(
+          repo.path,
+          'website/examples/doc_snippets/semantic_actions.dart',
+        ),
+      ).readAsStringSync();
+
+      expect(
+        guide,
+        contains("Semantics(id: const SemanticNodeId('submit'), …)"),
+      );
+      expect(
+        RegExp(r'''Semantics\s*\(\s*id:\s*(?:const\s+)?['"]''').hasMatch(guide),
+        isFalse,
+      );
+      expect(compiledSnippet, contains("id: SemanticNodeId('save')"));
+    });
+
+    test('fleury_mcp README matches its publishable package boundary', () {
+      final readme = File(
+        p.join(repo.path, 'packages/fleury_mcp/README.md'),
+      ).readAsStringSync();
+
+      expect(readme, contains('fleury: 0.1.0'));
+      expect(readme, contains('pubspec_overrides.yaml'));
+      expect(readme, isNot(contains('publish_to: none')));
+      expect(readme, isNot(contains('path dependency on')));
     });
 
     test('getting started follows the generated project contract', () {
@@ -283,6 +344,8 @@ List<File> _publicDocs(Directory repo) {
     File(p.join(repo.path, 'packages/fleury_widgets/README.md')),
     File(p.join(repo.path, 'packages/fleury_web/README.md')),
     File(p.join(repo.path, 'packages/fleury_mcp/README.md')),
+    File(p.join(repo.path, 'packages/fleury_test/README.md')),
+    File(p.join(repo.path, 'packages/fleury_themes/README.md')),
     for (final name in const <String>[
       'architecture.md',
       'architecture-overview.md',
@@ -301,6 +364,14 @@ List<File> _publicDocs(Directory repo) {
         ),
   ];
   return files.where((file) => file.existsSync()).toList(growable: false);
+}
+
+String _firstDartFence(String markdown) {
+  final match = RegExp(r'```dart[^\n]*\n([\s\S]*?)\n```').firstMatch(markdown);
+  if (match == null) {
+    throw StateError('No Dart code fence found.');
+  }
+  return match.group(1)!;
 }
 
 extension on String {

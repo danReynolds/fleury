@@ -73,10 +73,10 @@ Audited against a hostile or stalled peer. State after this work:
 | Surface | Status |
 | --- | --- |
 | WebSocket origin validation | present (`_isAllowedWebSocketOrigin`, configurable `--allow-origin`) |
-| Frame payload cap | 64 MiB; decoder rejects oversize, never blocks |
+| Frame payload cap | 16 MiB global maximum with tighter per-type caps; decoder rejects oversize, never blocks |
 | Malformed-frame rejection | typed `RemoteCodecException`; 500-iteration fuzz |
 | Grid-size DoS (OOM) | **fixed** — peer sizes clamped to 4000×4000 on INIT/RESIZE/structured-resize |
-| Slow-consumer DoS (unbounded buffer) | **fixed** — `addStream` backpressure both directions |
+| Slow-consumer DoS (unbounded buffer) | **fixed** — relay `addStream` backpressure plus a 64 MiB / 4096-frame app-socket output ceiling; overflow tears down the session |
 | Single-session enforcement | bridge drops 2nd app; serve drops 2nd browser |
 | Codec sign/assert robustness | **fixed** — negative-varint, null-key-event, out-of-range-color all guarded (fuzz-found) |
 
@@ -266,7 +266,7 @@ patch whose node dropped a required field made the final
 initial `jsonDecode`, not the reconstruction — so a malformed/hostile patch
 could take down the decode path. Now caught and rejected. Also capped
 reconstruction depth (`maxSemanticTreeDepth = 1024`): `_nest` had only a cycle
-guard, so a deep *acyclic* `childIds` chain inside the 64 MiB payload cap could
+guard, so a deep *acyclic* `childIds` chain inside the 16 MiB payload cap could
 still overflow the stack; it now prunes. A deeper-than-cap chain and the fuzz
 both pass (tree-or-null, never a throw).
 

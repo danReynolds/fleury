@@ -1,4 +1,5 @@
 import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_wire.dart';
 import 'package:fleury_web/src/remote_client/plan_adapter.dart';
 import 'package:test/test.dart';
 

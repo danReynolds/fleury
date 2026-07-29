@@ -83,6 +83,7 @@ const Set<String> _semanticWireScalarFields = <String>{
   'bounds',
   'actions',
   'state',
+  'actionTargetToken',
 };
 
 /// The set of node ids whose wire form may have changed since the last
@@ -692,7 +693,10 @@ Map<String, Map<String, Object?>> _flatten(SemanticInspectionNode root) {
 /// [SemanticInspectionNode.flattenLiveNode] for the same node, so the snapshot
 /// and live-tree paths agree on the wire.
 Map<String, Object?> _flattenNode(SemanticInspectionNode node) {
-  final json = node.toScalarJson(includeBounds: true);
+  final json = node.toScalarJson(
+    includeBounds: true,
+    includeActionTargetToken: true,
+  );
   if (node.children.isNotEmpty) {
     json['childIds'] = <String>[for (final c in node.children) c.id];
   }
@@ -949,6 +953,13 @@ final class SemanticsWireDecoder {
       if (normalizedChildIds.any((id) => !_semanticWireIdIsValid(id))) {
         return null;
       }
+    }
+    final actionTargetToken = value['actionTargetToken'];
+    if (actionTargetToken != null &&
+        (actionTargetToken is! String ||
+            actionTargetToken.isEmpty ||
+            utf8.encode(actionTargetToken).length > 64)) {
+      return null;
     }
     final node = <String, Object?>{
       for (final entry in value.entries)

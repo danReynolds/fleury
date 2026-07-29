@@ -1,9 +1,12 @@
-/// Fleury host SPI.
+/// Fleury's supported, platform-neutral host SPI.
 ///
 /// Import this when building a platform host for Fleury rather than an
 /// application UI. The library re-exports `fleury_core.dart` plus the
 /// host-facing runtime, damage, and semantic-update contracts that native and
 /// browser runners need to mount, render, present, and mirror a Fleury tree.
+///
+/// The remote frame protocol and codecs are intentionally not part of this
+/// stable host surface. First-party lockstep peers import `fleury_wire.dart`.
 ///
 /// This library is still platform-neutral and free of `dart:io`.
 library;
@@ -96,72 +99,3 @@ export 'src/semantics/semantics.dart'
         SemanticDirtyTracker,
         SemanticsElement,
         invokeSemanticActionFromElement;
-
-// The remote-render wire: the frame protocol, semantic codec, and transport
-// interface a host uses to drive a Fleury app over a connection (and a
-// browser/agent host uses to mirror it). Platform-neutral; `dart:io` transports
-// live in `fleury_host_io.dart`.
-export 'src/remote/remote_protocol.dart'
-    show
-        ByeFrame,
-        CaretFrame,
-        ClipboardResultFrame,
-        ClipboardWriteFrame,
-        DebugRequestFrame,
-        DebugResponseFrame,
-        FrameDecoder,
-        FrameType,
-        InitFrame,
-        InlineImageFrame,
-        InputEventFrame,
-        InputFrame,
-        OutputFrame,
-        PlanFrame,
-        RemoteClipboardStatus,
-        RemoteFrame,
-        RemoteProtocolException,
-        ResizeFrame,
-        SemanticActionFrame,
-        SemanticActionResultFrame,
-        SemanticsFrame,
-        defaultMaxRemoteFramePayloadLength,
-        maxRemoteControlFramePayloadLength,
-        maxRemoteDocumentFramePayloadLength,
-        maxRemoteImageFramePayloadLength,
-        maxRemoteInputFramePayloadLength,
-        maxRemoteDebugResponseJsonLength,
-        encodeFrame,
-        remoteFramePayloadLimit,
-        remoteProtocolVersion;
-export 'src/remote/inline_image_cache.dart'
-    show
-        InlineImageCacheLedger,
-        InlineImageCachePolicy,
-        defaultInlineImageCachePolicy;
-export 'src/remote/remote_codec.dart'
-    show
-        ImagePlacement,
-        RemoteCodecException,
-        RemotePatchRun,
-        RemotePlan,
-        RemoteRowPatch,
-        applyRemotePlanToBuffer,
-        buildRemotePlan,
-        decodeInputEvent,
-        decodeRemotePlan,
-        decodeSemanticAction,
-        encodeInputEvent,
-        encodeRemotePlan,
-        encodeSemanticAction,
-        maxRemoteSemanticNodeIdBytes;
-export 'src/remote/remote_semantics.dart'
-    show
-        SemanticWireDelta,
-        SemanticsWireDecoder,
-        SemanticsWireEncoder,
-        maxSemanticTreeDepth,
-        maxSemanticWireEdges,
-        maxSemanticWireNodes,
-        semanticsWireVersion;
-export 'src/remote/remote_transport.dart'
-    show RemoteFrameTransport, SynchronousSendTransport;

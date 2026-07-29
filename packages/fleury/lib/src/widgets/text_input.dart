@@ -644,11 +644,13 @@ class TextInput extends StatefulWidget {
   ///
   /// When null, obscured fields default to [TextClipboardPolicy.redacted] and
   /// normal fields default to [TextClipboardPolicy.allowed]. An explicit value
-  /// overrides that default in both directions: setting [allowed] on an
-  /// [obscureText] field deliberately opts its plaintext into the system
+  /// overrides that default in both directions: setting
+  /// [TextClipboardPolicy.allowed] on an [obscureText] field deliberately opts
+  /// its plaintext into the system
   /// clipboard (copy/cut) and the cross-field kill ring alike — kill is not
-  /// stricter than copy. Leave it null (or set [redacted]) to keep a password
-  /// field's content out of both.
+  /// stricter than copy. Leave it null (or set
+  /// [TextClipboardPolicy.redacted]) to keep a password field's content out of
+  /// both.
   final TextClipboardPolicy? clipboardPolicy;
 
   /// Optional command/submission history for Up/Down navigation.

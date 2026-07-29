@@ -1167,6 +1167,7 @@ Uint8List encodeSemanticAction(
   SemanticNodeId id,
   SemanticAction action, {
   Object? value,
+  String? targetToken,
 }) {
   final w = _Writer();
   w.vstr(
@@ -1177,13 +1178,20 @@ Uint8List encodeSemanticAction(
   w.vstr(action.name);
   w.boolean(value != null);
   if (value != null) w.vstr(jsonEncode(value));
+  if (targetToken != null) {
+    // Deliberately omit even the presence byte when absent: stable-id actions
+    // then retain their exact pre-v6 payload and remain readable by older
+    // peers. Callers must version-gate the non-null extension.
+    w.boolean(true);
+    w.vstr(targetToken, maxBytes: 64, field: 'semantic action target token');
+  }
   return w.take();
 }
 
 /// Decodes a semantic-action request. Throws [RemoteCodecException] on an
 /// unrecognized action name (e.g. a peer on a newer protocol) or a malformed
 /// payload so the caller rejects it rather than misinterpreting it.
-({SemanticNodeId id, SemanticAction action, Object? value})
+({SemanticNodeId id, SemanticAction action, Object? value, String? targetToken})
 decodeSemanticAction(Uint8List bytes) {
   final r = _Reader(bytes);
   final id = r.vstr(
@@ -1205,10 +1213,26 @@ decodeSemanticAction(Uint8List bytes) {
       throw const RemoteCodecException('invalid setValue payload JSON');
     }
   }
+  String? targetToken;
+  // Version-gated after the v3 value field. Its complete absence keeps
+  // stable-id actions byte-compatible with older peers; positional ids fail
+  // closed at dispatch when a peer cannot supply the claim.
+  if (r.hasMore && r.boolean()) {
+    targetToken = r.vstr(
+      maxBytes: 64,
+      field: 'semantic action target token',
+      allowMalformed: false,
+    );
+  }
   r.expectEnd();
   for (final action in SemanticAction.values) {
     if (action.name == actionName) {
-      return (id: SemanticNodeId(id), action: action, value: value);
+      return (
+        id: SemanticNodeId(id),
+        action: action,
+        value: value,
+        targetToken: targetToken,
+      );
     }
   }
   throw RemoteCodecException('unknown semantic action "$actionName"');

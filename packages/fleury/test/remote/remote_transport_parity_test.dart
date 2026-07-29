@@ -11,6 +11,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_wire.dart';
 import 'package:test/test.dart';
 
 String _render(CellBuffer b) {
@@ -225,12 +226,28 @@ void main() {
       const frame = SemanticActionFrame(
         SemanticNodeId('btn:save'),
         SemanticAction.activate,
+        targetToken: 'element.3',
       );
       final out = (FrameDecoder()..feed(encodeFrame(frame))).drain().single;
       expect(out, isA<SemanticActionFrame>());
       final decoded = out as SemanticActionFrame;
       expect(decoded.id, const SemanticNodeId('btn:save'));
       expect(decoded.action, SemanticAction.activate);
+      expect(decoded.targetToken, 'element.3');
+    });
+
+    test('a stable-id semantic action retains its pre-v6 byte shape', () {
+      final encoded = encodeSemanticAction(
+        const SemanticNodeId('x'),
+        SemanticAction.activate,
+      );
+
+      expect(encoded, <int>[1, 0x78, 8, ...utf8.encode('activate'), 0]);
+      final decoded = decodeSemanticAction(encoded);
+      expect(decoded.id, const SemanticNodeId('x'));
+      expect(decoded.action, SemanticAction.activate);
+      expect(decoded.value, isNull);
+      expect(decoded.targetToken, isNull);
     });
 
     test('an unknown semantic action is rejected, not misread', () {

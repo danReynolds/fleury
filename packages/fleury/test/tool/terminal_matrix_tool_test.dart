@@ -260,6 +260,7 @@ void main() {
       tempDir = Directory.systemTemp.createTempSync(
         'fleury_benchmark_web_report_tool_test_',
       );
+      _writeWebFrameCapture(tempDir);
     });
 
     tearDown(() {
@@ -268,36 +269,6 @@ void main() {
 
     test('summarizes retained DOM web frame captures', () async {
       final inputPath = '${tempDir.path}/web-frames.json';
-      final outputPath = '${tempDir.path}/web-frames.md';
-      File(inputPath).writeAsStringSync(
-        jsonEncode({
-          'schemaVersion': 1,
-          'kind': 'fleuryWebFrameCapture',
-          'browserMetrics': {
-            'layoutDurationMs': 1.5,
-            'recalcStyleDurationMs': 2.25,
-            'scriptDurationMs': 3.75,
-            'taskDurationMs': 7.5,
-            'jsHeapUsedBytes': 1048576,
-            'jsHeapTotalBytes': 2097152,
-            'domDocumentCount': 1,
-            'domNodeCount': 128,
-            'jsEventListenerCount': 9,
-          },
-          'frames': [
-            _webFrame(
-              totalFrameMicros: 10000,
-              spanBuildMicros: 800,
-              domApplyMicros: 3000,
-            ),
-            _webFrame(
-              totalFrameMicros: 22000,
-              spanBuildMicros: 1500,
-              domApplyMicros: 12000,
-            ),
-          ],
-        }),
-      );
 
       final jsonResult = await _runTool([
         'benchmark',
@@ -318,7 +289,10 @@ void main() {
       expect(spanBuild['p95'], 1.5);
       final browserMetrics = summary['browserMetrics'] as Map<String, Object?>;
       expect(browserMetrics['domNodeCount'], 128);
+    });
 
+    test('accepts passing retained DOM web frame gates', () async {
+      final inputPath = '${tempDir.path}/web-frames.json';
       final passingGate = await _runTool([
         'benchmark',
         'web-report',
@@ -335,7 +309,10 @@ void main() {
       final passingSummary = _jsonObject(passingGate.stdout);
       expect(passingSummary['strictPass'], isTrue);
       expect(passingSummary['gates'] as List<Object?>, hasLength(4));
+    });
 
+    test('rejects failing retained DOM web frame gates', () async {
+      final inputPath = '${tempDir.path}/web-frames.json';
       final failingGate = await _runTool([
         'benchmark',
         'web-report',
@@ -356,7 +333,11 @@ void main() {
               .having((gate) => gate['passed'], 'passed', isFalse),
         ),
       );
+    });
 
+    test('writes retained DOM web frame Markdown', () async {
+      final inputPath = '${tempDir.path}/web-frames.json';
+      final outputPath = '${tempDir.path}/web-frames.md';
       final markdownResult = await _runTool([
         'benchmark',
         'web-report',
@@ -2270,6 +2251,38 @@ void _writeEntry(Directory directory, String name, Map<String, Object?> entry) {
   File(
     '${directory.path}/$name',
   ).writeAsStringSync('${encoder.convert(entry)}\n');
+}
+
+void _writeWebFrameCapture(Directory directory) {
+  File('${directory.path}/web-frames.json').writeAsStringSync(
+    jsonEncode({
+      'schemaVersion': 1,
+      'kind': 'fleuryWebFrameCapture',
+      'browserMetrics': {
+        'layoutDurationMs': 1.5,
+        'recalcStyleDurationMs': 2.25,
+        'scriptDurationMs': 3.75,
+        'taskDurationMs': 7.5,
+        'jsHeapUsedBytes': 1048576,
+        'jsHeapTotalBytes': 2097152,
+        'domDocumentCount': 1,
+        'domNodeCount': 128,
+        'jsEventListenerCount': 9,
+      },
+      'frames': [
+        _webFrame(
+          totalFrameMicros: 10000,
+          spanBuildMicros: 800,
+          domApplyMicros: 3000,
+        ),
+        _webFrame(
+          totalFrameMicros: 22000,
+          spanBuildMicros: 1500,
+          domApplyMicros: 12000,
+        ),
+      ],
+    }),
+  );
 }
 
 Map<String, Object?> _webFrame({

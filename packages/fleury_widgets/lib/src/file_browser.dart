@@ -663,7 +663,6 @@ Map<String, Object?> _selectedEntryState(FileBrowserEntry entry) {
 bool _entryMatches(FileBrowserEntry entry, String query) {
   final text = [
     entry.name,
-    entry.path,
     entry.type.name,
   ].map(_sanitizeFileText).join(' ').toLowerCase();
   return text.contains(query) || _isSubsequence(query, text);

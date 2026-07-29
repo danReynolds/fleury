@@ -1003,7 +1003,7 @@ Future<AppExit> _runAppImpl(
           // action against the live tree and re-render, completing the
           // semantics round trip (presentSemantics ships the tree out, this
           // brings activations back). Mirrors the in-browser host.
-          negotiatedSink.onSemanticAction = (id, action, value) {
+          negotiatedSink.onSemanticAction = (id, action, value, {targetToken}) {
             if (pendingSemanticActions >= _maxPendingRemoteSemanticActions) {
               // Queue one marker behind every earlier admitted action. RESULT
               // has no sequence number, so sending this immediately would put
@@ -1060,8 +1060,21 @@ Future<AppExit> _runAppImpl(
                 // both paths. Deferred into the link (not fired at arrival) so
                 // it reflects the tree AFTER the prior action mutated it.
                 semanticsPipeline?.flushPendingNow('semantic-action');
+                final liveTree = SemanticTree.fromElement(root);
+                if (isPositionalSemanticId(id.value)) {
+                  final liveNode = liveTree.nodeById(id);
+                  if (targetToken == null ||
+                      liveNode?.actionTargetToken != targetToken) {
+                    negotiatedSink.presentSemanticActionResult(
+                      id,
+                      action,
+                      SemanticActionInvocationStatus.notFound,
+                    );
+                    return;
+                  }
+                }
                 final result = await invokeSemanticActionFromElement(
-                  tree: SemanticTree.fromElement(root),
+                  tree: liveTree,
                   id: id,
                   action: action,
                   value: value,
