@@ -2,6 +2,17 @@
 
 **Status:** Implemented — design converged in maintainer review 2026-07-20, then shipped across PRs #157 (core redesign), #160 (`activeOf` / `pendingOf`, `WhichKey`, `tester.press`) and #162 (the `samples/editor` proving ground). See §12.1 for errata.
 **Date:** 2026-07-20
+**Amended by [RFC 0020](0020-keyboard-lifecycle-and-kitty.md)** (accepted
+2026-08-03): bindings no longer fire on keyboard auto-repeat by default
+(`includeRepeats:` opts in; repeat-reliant framework bindings — focus
+traversal, selection extension — are marked in the same change); handlers
+always receive the event (`onTrigger: (e) => …`); `KeyBinding.any` becomes the
+`aliases:` parameter and `KeyBinding.event` is folded into the unnamed
+constructor; `Focus.onKey` is removed in favor of `KeyDetector`; sequence
+lifecycle corners (Esc-cancel as a non-competing side effect, no prefix replay
+on cancellation, repeat/timeout/scope-exit rules) are pinned by RFC 0020 §14.4.
+This RFC's matching model, precedence, DSL, and hint/which-key surfaces carry
+forward unchanged.
 **Supersedes:** the authoring surface of RFC 0008 (`KeyChord`, `KeyBinding` constructors, `KeyEvent` shape). The dispatch architecture of RFC 0008 §7 (precedence, modal scopes, text-input claim order, central `InputDispatcher`) carries forward unchanged.
 **Prerequisite:** Dart ≥ 3.10 (dot shorthands — already required by the current tree).
 
