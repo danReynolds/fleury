@@ -750,6 +750,43 @@ void main() {
       expect(decoded, event);
     });
 
+    test('RFC 0020 fields ride the trailing extension and round-trip', () {
+      const positional = KeyEvent(
+        KeyCode.char('z'),
+        position: KeyPosition.w,
+        type: KeyEventType.up,
+      );
+      expect(decodeInputEvent(encodeInputEvent(positional)), positional);
+
+      const synthesizedOnly = KeyEvent(KeyCode.leftShift, synthesized: true);
+      expect(
+        decodeInputEvent(encodeInputEvent(synthesizedOnly)),
+        synthesizedOnly,
+      );
+    });
+
+    test('default RFC 0020 fields add no bytes (old-peer compatibility)', () {
+      // A default-fields event must encode without the trailing extension so
+      // pre-0020 decoders — which reject unread trailing bytes — still
+      // accept it. The wire proof: the extension adds exactly two bytes.
+      const plain = KeyEvent(KeyCode.enter);
+      const extended = KeyEvent(KeyCode.enter, synthesized: true);
+      expect(
+        encodeInputEvent(extended).length,
+        encodeInputEvent(plain).length + 2,
+      );
+    });
+
+    test('extended vocabulary specials round-trip by index', () {
+      const event = KeyEvent(KeyCode.mediaPlayPause);
+      expect(decodeInputEvent(encodeInputEvent(event)), event);
+      const keypad = KeyEvent(
+        KeyCode.keypadEnter,
+        position: KeyPosition.numpadEnter,
+      );
+      expect(decodeInputEvent(encodeInputEvent(keypad)), keypad);
+    });
+
     test('all carried event kinds round-trip (seeded)', () {
       final rng = Random(0xC0DEC);
       for (var iter = 0; iter < 200; iter++) {

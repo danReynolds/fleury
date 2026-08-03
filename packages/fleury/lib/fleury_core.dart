@@ -265,6 +265,8 @@ export 'src/input/events.dart'
         KeyEvent,
         KeyEventType,
         KeyModifier,
+        KeyPosition,
+        KeySelector,
         KeySequence,
         KeySequenceChain,
         MouseButton,

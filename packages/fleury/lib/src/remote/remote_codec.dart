@@ -1043,6 +1043,15 @@ Uint8List encodeInputEvent(TuiEvent event) {
       }
       _writeModifiers(w, e.modifiers);
       w.u8(e.type.index);
+      // RFC 0020 positional identity + synthesized flag ride as an optional
+      // trailing extension, like segmented-paste metadata: absent for
+      // default values, so pre-0020 events stay byte-identical and old
+      // decoders never see the fields. KeyPosition.index is append-only by
+      // contract (events.dart) so the +1-biased wire value stays stable.
+      if (e.position != null || e.synthesized) {
+        w.u8(e.position == null ? 0 : e.position!.index + 1);
+        w.boolean(e.synthesized);
+      }
     case TextInputEvent e:
       w.u8(_evText);
       w.str(e.text);
@@ -1110,7 +1119,23 @@ TuiEvent decodeInputEvent(Uint8List bytes) {
       }
       final mods = _readModifiers(r);
       final type = r.enumValue(KeyEventType.values);
-      event = KeyEvent(code, modifiers: mods, type: type);
+      KeyPosition? position;
+      var synthesized = false;
+      if (r.hasMore) {
+        final raw = r.u8();
+        if (raw > KeyPosition.values.length) {
+          throw RemoteCodecException('unknown key position value $raw');
+        }
+        position = raw == 0 ? null : KeyPosition.values[raw - 1];
+        synthesized = r.boolean();
+      }
+      event = KeyEvent(
+        code,
+        modifiers: mods,
+        type: type,
+        position: position,
+        synthesized: synthesized,
+      );
     case _evText:
       event = TextInputEvent(r.str());
     case _evComposition:
