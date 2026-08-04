@@ -77,6 +77,11 @@ class InputParser {
   /// arbitrary-precision integers forever without a final byte.
   final int maxCsiSequenceLength;
 
+  /// Monotonic receipt clock and per-source counter for [InputBatch]
+  /// stamping. Timing is diagnostics data, excluded from batch equality.
+  final Stopwatch _clock = Stopwatch()..start();
+  int _nextSequence = 0;
+
   /// Target bytes retained for one bracketed-paste segment.
   ///
   /// Larger pastes are emitted as multiple [PasteEvent]s, preserving all input
@@ -627,7 +632,23 @@ class InputParser {
       }
       if (!_isUnicodeScalar(cp) || !_kittyAssociatedTextIsValid()) return;
       final text = _kittyAssociatedText() ?? String.fromCharCode(cp);
-      sink.add(TextInputEvent(text));
+      // The report carried key identity AND produced text — one physical
+      // fact, one correlated batch (RFC 0020 §5). This is where positional
+      // identity survives for printables; the pre-batch pipeline threw the
+      // key half away.
+      sink.add(
+        InputBatch(
+          key: KeyEvent(
+            KeyCode.char(String.fromCharCode(codepoint)),
+            modifiers: modifiers,
+            type: type,
+            position: position,
+          ),
+          committedText: text,
+          timeStamp: _clock.elapsed,
+          sequence: _nextSequence++,
+        ),
+      );
       return;
     }
 

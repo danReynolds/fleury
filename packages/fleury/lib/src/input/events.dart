@@ -1894,6 +1894,61 @@ final class KeyEvent extends TuiEvent {
   }
 }
 
+/// One normalized input packet: a key event, committed text, or both —
+/// RFC 0020 §5's batch model.
+///
+/// A batch exists wherever key identity and produced text arrive as one
+/// physical report and their correlation must survive transport: a Kitty
+/// lifecycle-mode printable (`CSI 97;1;97 u` is the A key *and* the text
+/// "a"), a DOM keydown paired with its input event, the wire, and the test
+/// driver. Bare [KeyEvent]/[TextInputEvent] values remain valid stream
+/// elements — a bare event is semantically a one-payload batch; the
+/// dispatcher normalizes at entry.
+///
+/// [timeStamp] is monotonic receipt time at the source; [sequence] is a
+/// per-source counter. Both are diagnostics/timing data, deliberately
+/// excluded from [==] — batch identity is its payload, and timing in
+/// equality would poison test assertions and event dedup (RFC 0020 §23,
+/// the timestamp deferral).
+@immutable
+final class InputBatch extends TuiEvent {
+  const InputBatch({
+    this.key,
+    this.committedText,
+    this.timeStamp = Duration.zero,
+    this.sequence = 0,
+  }) : assert(
+         key != null || committedText != null,
+         'a batch carries a key, text, or both — never neither',
+       );
+
+  /// The key half, when the report carried key identity.
+  final KeyEvent? key;
+
+  /// The committed text half, when the report produced text.
+  final String? committedText;
+
+  /// Monotonic receipt time at the emitting source.
+  final Duration timeStamp;
+
+  /// Per-source ordering counter.
+  final int sequence;
+
+  @override
+  bool operator ==(Object other) =>
+      other is InputBatch &&
+      other.key == key &&
+      other.committedText == committedText;
+
+  @override
+  int get hashCode => Object.hash(InputBatch, key, committedText);
+
+  @override
+  String toString() =>
+      'InputBatch(${key ?? ''}${key != null && committedText != null ? ' + ' : ''}'
+      '${committedText != null ? '"$committedText"' : ''})';
+}
+
 /// One or more graphemes of typed text. The driver accumulates UTF-8
 /// continuation bytes before emitting so consumers always get a
 /// valid string.

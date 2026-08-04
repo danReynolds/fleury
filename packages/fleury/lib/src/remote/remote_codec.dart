@@ -998,6 +998,7 @@ Set<int> applyRemotePlanToBuffer(RemotePlan plan, CellBuffer mirror) {
 
 const int _evKey = 1;
 const int _evText = 2;
+const int _evBatch = 8;
 
 // [KeyEvent.code] payload discriminants within an _evKey record.
 const int _keyKindSpecial = 0;
@@ -1024,6 +1025,56 @@ Set<KeyModifier> _readModifiers(_Reader r) {
   };
 }
 
+/// The key-code discriminant + code + modifiers + type — the stable v1 key
+/// payload, shared by the bare [_evKey] shape and the nested batch shape.
+void _writeKeyPayload(_Writer w, KeyEvent e) {
+  final special = e.code.special;
+  if (special != null) {
+    w.u8(_keyKindSpecial);
+    w.u8(special.index);
+  } else {
+    w.u8(_keyKindChar);
+    w.str(e.code.character!);
+  }
+  _writeModifiers(w, e.modifiers);
+  w.u8(e.type.index);
+}
+
+/// The RFC 0020 extension pair (position, synthesized). Bare key events
+/// write it only when non-default (old-peer byte compatibility); the batch
+/// shape — a new tag old peers never receive — always writes it.
+void _writeKeyExtension(_Writer w, KeyEvent e) {
+  w.u8(e.position == null ? 0 : e.position!.index + 1);
+  w.boolean(e.synthesized);
+}
+
+KeyCode _readKeyCode(_Reader r) {
+  final kind = r.u8();
+  switch (kind) {
+    case _keyKindSpecial:
+      return KeyCode.forSpecial(r.enumValue(SpecialKey.values));
+    case _keyKindChar:
+      final char = r.str();
+      if (char.isEmpty) {
+        throw const RemoteCodecException(
+          'key event character must be non-empty',
+        );
+      }
+      return KeyCode.char(char);
+    default:
+      throw RemoteCodecException('unknown key code kind $kind');
+  }
+}
+
+(KeyPosition?, bool) _readKeyExtension(_Reader r) {
+  final raw = r.u8();
+  if (raw > KeyPosition.values.length) {
+    throw RemoteCodecException('unknown key position value $raw');
+  }
+  final position = raw == 0 ? null : KeyPosition.values[raw - 1];
+  return (position, r.boolean());
+}
+
 /// Encodes a [TuiEvent] to wire bytes. Throws [RemoteCodecException] for an
 /// event kind not carried by the serve protocol.
 Uint8List encodeInputEvent(TuiEvent event) {
@@ -1031,27 +1082,29 @@ Uint8List encodeInputEvent(TuiEvent event) {
   switch (event) {
     case KeyEvent e:
       w.u8(_evKey);
-      // The code is one of two kinds; a leading discriminant picks the
-      // payload shape (special-key enum index vs UTF-8 character).
-      final special = e.code.special;
-      if (special != null) {
-        w.u8(_keyKindSpecial);
-        w.u8(special.index);
-      } else {
-        w.u8(_keyKindChar);
-        w.str(e.code.character!);
-      }
-      _writeModifiers(w, e.modifiers);
-      w.u8(e.type.index);
+      _writeKeyPayload(w, e);
       // RFC 0020 positional identity + synthesized flag ride as an optional
       // trailing extension, like segmented-paste metadata: absent for
       // default values, so pre-0020 events stay byte-identical and old
       // decoders never see the fields. KeyPosition.index is append-only by
       // contract (events.dart) so the +1-biased wire value stays stable.
       if (e.position != null || e.synthesized) {
-        w.u8(e.position == null ? 0 : e.position!.index + 1);
-        w.boolean(e.synthesized);
+        _writeKeyExtension(w, e);
       }
+    case InputBatch e:
+      // RFC 0020 §5: the correlated key+text unit. A new tag, so it is only
+      // sent to peers whose handshake accepted this protocol revision; old
+      // peers keep receiving split KeyEvent/TextInputEvent traffic.
+      w.u8(_evBatch);
+      w.boolean(e.key != null);
+      if (e.key != null) {
+        _writeKeyPayload(w, e.key!);
+        _writeKeyExtension(w, e.key!);
+      }
+      w.boolean(e.committedText != null);
+      if (e.committedText != null) w.str(e.committedText!);
+      w.varint(e.timeStamp.inMicroseconds);
+      w.varint(e.sequence);
     case TextInputEvent e:
       w.u8(_evText);
       w.str(e.text);
@@ -1101,33 +1154,13 @@ TuiEvent decodeInputEvent(Uint8List bytes) {
   final TuiEvent event;
   switch (tag) {
     case _evKey:
-      final kind = r.u8();
-      final KeyCode code;
-      switch (kind) {
-        case _keyKindSpecial:
-          code = KeyCode.forSpecial(r.enumValue(SpecialKey.values));
-        case _keyKindChar:
-          final char = r.str();
-          if (char.isEmpty) {
-            throw const RemoteCodecException(
-              'key event character must be non-empty',
-            );
-          }
-          code = KeyCode.char(char);
-        default:
-          throw RemoteCodecException('unknown key code kind $kind');
-      }
+      final code = _readKeyCode(r);
       final mods = _readModifiers(r);
       final type = r.enumValue(KeyEventType.values);
       KeyPosition? position;
       var synthesized = false;
       if (r.hasMore) {
-        final raw = r.u8();
-        if (raw > KeyPosition.values.length) {
-          throw RemoteCodecException('unknown key position value $raw');
-        }
-        position = raw == 0 ? null : KeyPosition.values[raw - 1];
-        synthesized = r.boolean();
+        (position, synthesized) = _readKeyExtension(r);
       }
       event = KeyEvent(
         code,
@@ -1135,6 +1168,33 @@ TuiEvent decodeInputEvent(Uint8List bytes) {
         type: type,
         position: position,
         synthesized: synthesized,
+      );
+    case _evBatch:
+      KeyEvent? key;
+      if (r.boolean()) {
+        final code = _readKeyCode(r);
+        final mods = _readModifiers(r);
+        final type = r.enumValue(KeyEventType.values);
+        final (position, synthesized) = _readKeyExtension(r);
+        key = KeyEvent(
+          code,
+          modifiers: mods,
+          type: type,
+          position: position,
+          synthesized: synthesized,
+        );
+      }
+      final text = r.boolean() ? r.str() : null;
+      if (key == null && text == null) {
+        throw const RemoteCodecException('batch carries neither key nor text');
+      }
+      final timeStampMicros = r.varint();
+      final sequence = r.varint();
+      event = InputBatch(
+        key: key,
+        committedText: text,
+        timeStamp: Duration(microseconds: timeStampMicros),
+        sequence: sequence,
       );
     case _evText:
       event = TextInputEvent(r.str());

@@ -689,24 +689,69 @@ void main() {
     });
 
     group('text-producing chords (flag 8 / report-all scenarios)', () {
-      test('an unmodified printable in CSI-u form is plain text', () {
-        expect(_parse(csiu('97')).single, const TextInputEvent('a'));
+      // A CSI-u printable is one physical report carrying key identity AND
+      // text — it parses to a correlated InputBatch (RFC 0020 §5), so the
+      // key half (with its position) survives alongside the committed text.
+      test('an unmodified printable in CSI-u form is a correlated batch', () {
+        expect(
+          _parse(csiu('97')).single,
+          const InputBatch(
+            key: KeyEvent(KeyCode.char('a')),
+            committedText: 'a',
+          ),
+        );
       });
 
       test('Shift + letter prefers the reported shifted codepoint', () {
         // key group "97:65" (a→A); mods 2 (shift).
-        expect(_parse(csiu('97:65;2')).single, const TextInputEvent('A'));
+        expect(
+          _parse(csiu('97:65;2')).single,
+          const InputBatch(
+            key: KeyEvent(
+              KeyCode.char('a'),
+              modifiers: {KeyModifier.shift},
+            ),
+            committedText: 'A',
+          ),
+        );
       });
 
       test('the associated-text field is used when present', () {
         // codepoint 97, no modifiers, associated text 233 (é).
-        expect(_parse(csiu('97;1;233')).single, const TextInputEvent('é'));
+        expect(
+          _parse(csiu('97;1;233')).single,
+          const InputBatch(
+            key: KeyEvent(KeyCode.char('a')),
+            committedText: 'é',
+          ),
+        );
       });
 
       test('an empty shifted sub-param never becomes NUL text', () {
         // `97::119;2` — shift held, shifted field absent (empty → 0), base
         // present. The 0 means "absent", not codepoint 0.
-        expect(_parse(csiu('97::119;2')).single, const TextInputEvent('a'));
+        expect(
+          _parse(csiu('97::119;2')).single,
+          const InputBatch(
+            key: KeyEvent(
+              KeyCode.char('a'),
+              modifiers: {KeyModifier.shift},
+              position: KeyPosition.w,
+            ),
+            committedText: 'a',
+          ),
+        );
+      });
+
+      test('a printable down keeps its base-layout position in the batch', () {
+        // AZERTY 'z' cap at QWERTY-W: primary 122, base 119, text 'z'.
+        expect(
+          _parse(csiu('122::119')).single,
+          const InputBatch(
+            key: KeyEvent(KeyCode.char('z'), position: KeyPosition.w),
+            committedText: 'z',
+          ),
+        );
       });
     });
 

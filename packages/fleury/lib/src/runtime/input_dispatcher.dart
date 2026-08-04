@@ -142,6 +142,23 @@ class InputDispatcher {
   /// handles them outside the dispatcher.
   KeyEventResult dispatch(TuiEvent event) {
     _checkNotDisposed();
+    if (event is InputBatch) {
+      // A correlated key+text report (RFC 0020 §5). Interim routing until
+      // the P2 lane machinery lands: preserve today's semantics exactly —
+      // the text half drives the text-claimant / character-binding path,
+      // and a key half accompanied by text is NOT separately dispatched
+      // (printables never reached key dispatch pre-batch either). The §6
+      // key-walk-before-text interlock replaces this in P4.
+      final text = event.committedText;
+      if (text != null) {
+        return _dispatchText(TextInputEvent(text));
+      }
+      final key = event.key;
+      if (key != null) {
+        return _dispatchKeyEvent(key);
+      }
+      return KeyEventResult.ignored;
+    }
     if (event is TextInputEvent) {
       return _dispatchText(event);
     }

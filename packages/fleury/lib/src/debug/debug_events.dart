@@ -187,6 +187,19 @@ final class InputDebugEvent extends DebugEvent {
         kind: 'text',
         summary: '${text.length} chars',
       ),
+      InputBatch(:final key, :final committedText) => InputDebugEvent(
+        kind: 'batch',
+        summary: [
+          if (key != null)
+            [
+              if (key.modifiers.isNotEmpty)
+                key.modifiers.map((modifier) => modifier.name).join('+'),
+              key.code.special?.name ?? key.code.character!,
+              if (key.type != KeyEventType.down) key.type.name,
+            ].join('+'),
+          if (committedText != null) '"$committedText"',
+        ].join(' '),
+      ),
       TextCompositionEvent(:final kind, :final text) => InputDebugEvent(
         kind: 'composition',
         summary: text == null ? kind.name : '${kind.name}:${text.length} chars',

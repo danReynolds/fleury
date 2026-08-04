@@ -192,6 +192,12 @@ TraceMap _serializeEvent(TuiEvent event) => switch (event) {
     'modifiers': _modifierNames(event.modifiers),
   },
   TextInputEvent() => {'type': 'text', 'text': event.text},
+  InputBatch() => {
+    'type': 'batch',
+    if (event.key case final key?) 'keyEventType': key.type.name,
+    if (event.key?.code.character case final char?) 'char': char,
+    if (event.committedText case final text?) 'text': text,
+  },
   SignalEvent() => {'type': 'signal', 'signal': event.signal.name},
   TextCompositionEvent() => {
     'type': 'composition',

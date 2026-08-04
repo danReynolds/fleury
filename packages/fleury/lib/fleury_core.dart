@@ -261,6 +261,7 @@ export 'src/terminal/terminal_probe.dart'
 export 'src/input/events.dart'
     show
         AppSignal,
+        InputBatch,
         KeyCode,
         KeyEvent,
         KeyEventType,

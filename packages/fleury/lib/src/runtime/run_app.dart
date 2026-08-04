@@ -1468,6 +1468,10 @@ String _frameReasonForEvent(TuiEvent event) {
   return switch (event) {
     ResizeEvent() => 'resize',
     KeyEvent(:final code) => 'key:${code.special?.name ?? code.character!}',
+    InputBatch(:final key) =>
+      key != null
+          ? 'key:${key.code.special?.name ?? key.code.character!}'
+          : 'text-input',
     TextInputEvent() => 'text-input',
     TextCompositionEvent(:final kind) => 'text-composition:${kind.name}',
     PasteEvent() => 'paste',

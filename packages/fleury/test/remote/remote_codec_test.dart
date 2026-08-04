@@ -787,6 +787,29 @@ void main() {
       expect(decodeInputEvent(encodeInputEvent(keypad)), keypad);
     });
 
+    test('correlated batches round-trip, timing preserved on the wire', () {
+      const batch = InputBatch(
+        key: KeyEvent(
+          KeyCode.char('z'),
+          modifiers: {KeyModifier.shift},
+          position: KeyPosition.w,
+        ),
+        committedText: 'Z',
+        timeStamp: Duration(microseconds: 123456),
+        sequence: 42,
+      );
+      final decoded = decodeInputEvent(encodeInputEvent(batch)) as InputBatch;
+      expect(decoded, batch); // == is payload-only…
+      expect(decoded.timeStamp, batch.timeStamp); // …but timing still rides
+      expect(decoded.sequence, batch.sequence);
+
+      const textOnly = InputBatch(committedText: 'é');
+      expect(decodeInputEvent(encodeInputEvent(textOnly)), textOnly);
+
+      const keyOnly = InputBatch(key: KeyEvent(KeyCode.f13));
+      expect(decodeInputEvent(encodeInputEvent(keyOnly)), keyOnly);
+    });
+
     test('all carried event kinds round-trip (seeded)', () {
       final rng = Random(0xC0DEC);
       for (var iter = 0; iter < 200; iter++) {
