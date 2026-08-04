@@ -1103,8 +1103,13 @@ Uint8List encodeInputEvent(TuiEvent event) {
       }
       w.boolean(e.committedText != null);
       if (e.committedText != null) w.str(e.committedText!);
-      w.varint(e.timeStamp.inMicroseconds);
-      w.varint(e.sequence);
+      // Timestamp as whole-seconds + micros-remainder u32 pair: varint would
+      // overflow the reader at ~36 minutes of monotonic clock, and dart2js
+      // (the serve client — a real batch encoder come P3) cannot shift-encode
+      // values ≥ 2^32. Two u32s are JS-safe and good for 136 years.
+      w.u32(e.timeStamp.inSeconds);
+      w.u32(e.timeStamp.inMicroseconds % Duration.microsecondsPerSecond);
+      w.u32(e.sequence);
     case TextInputEvent e:
       w.u8(_evText);
       w.str(e.text);
@@ -1188,12 +1193,16 @@ TuiEvent decodeInputEvent(Uint8List bytes) {
       if (key == null && text == null) {
         throw const RemoteCodecException('batch carries neither key nor text');
       }
-      final timeStampMicros = r.varint();
-      final sequence = r.varint();
+      final seconds = r.u32();
+      final micros = r.u32();
+      if (micros >= Duration.microsecondsPerSecond) {
+        throw const RemoteCodecException('batch timestamp remainder overflow');
+      }
+      final sequence = r.u32();
       event = InputBatch(
         key: key,
         committedText: text,
-        timeStamp: Duration(microseconds: timeStampMicros),
+        timeStamp: Duration(seconds: seconds, microseconds: micros),
         sequence: sequence,
       );
     case _evText:

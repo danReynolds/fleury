@@ -179,6 +179,70 @@ void main() {
     });
   });
 
+  group('InputBatch dispatch (RFC 0020 P1d interim routing)', () {
+    test('the text half reaches the focused text claimant', () {
+      final events = <String>[];
+      final h = _TestHarness();
+      h.mountRoot(_ClaimLog(events: events));
+      final result = h.dispatcher.dispatch(
+        const InputBatch(
+          key: KeyEvent(KeyCode.char('a')),
+          committedText: 'a',
+        ),
+      );
+      expect(result, KeyEventResult.handled);
+      expect(events, ['text:a']);
+    });
+
+    test('a text-bearing batch does not also key-dispatch its key half', () {
+      // Pre-batch, a CSI-u printable was text-only: a character binding on
+      // 'a' fires via the text fallback when unclaimed, and must fire ONCE.
+      var fired = 0;
+      final h = _TestHarness(
+        globalBindings: [
+          KeyBinding(KeyCode.a, onTrigger: () => fired++),
+        ],
+      );
+      h.mountRoot(const EmptyBox());
+      h.dispatcher.dispatch(
+        const InputBatch(key: KeyEvent(KeyCode.char('a')), committedText: 'a'),
+      );
+      expect(fired, 1);
+    });
+
+    test('a key-only up batch is fenced from bindings', () {
+      var fired = 0;
+      final h = _TestHarness(
+        globalBindings: [
+          KeyBinding(KeyCode.a, onTrigger: () => fired++),
+        ],
+      );
+      h.mountRoot(const EmptyBox());
+      final result = h.dispatcher.dispatch(
+        const InputBatch(
+          key: KeyEvent(KeyCode.char('a'), type: KeyEventType.up),
+        ),
+      );
+      expect(result, KeyEventResult.ignored);
+      expect(fired, 0);
+    });
+
+    test('a key-only down batch reaches key dispatch', () {
+      var fired = 0;
+      final h = _TestHarness(
+        globalBindings: [
+          KeyBinding(KeyCode.f13, onTrigger: () => fired++),
+        ],
+      );
+      h.mountRoot(const EmptyBox());
+      final result = h.dispatcher.dispatch(
+        const InputBatch(key: KeyEvent(KeyCode.f13)),
+      );
+      expect(result, KeyEventResult.handled);
+      expect(fired, 1);
+    });
+  });
+
   group('Acceptance tests — focus chain bubble-up', () {
     test('1. Focused child binding handles a key before parent', () {
       final calls = <String>[];

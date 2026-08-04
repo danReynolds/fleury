@@ -1,3 +1,4 @@
+import 'package:characters/characters.dart';
 import 'package:meta/meta.dart';
 
 import '../foundation/geometry.dart';
@@ -442,8 +443,10 @@ abstract final class KeySelector {
   static KeySelector parse(String id) {
     if (id.startsWith('chr:')) {
       final char = id.substring(4);
-      if (char.isEmpty) {
-        throw const FormatException('chr: selector needs a character');
+      if (char.isEmpty || char.characters.length != 1) {
+        throw FormatException(
+          'chr: selector needs exactly one character, got "$char"',
+        );
       }
       return KeyCode.char(char);
     }

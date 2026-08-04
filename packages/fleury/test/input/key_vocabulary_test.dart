@@ -252,4 +252,34 @@ void main() {
       );
     });
   });
+
+  group('InputBatch equality is payload-only', () {
+    test('timing differences never break equality or hashing', () {
+      const a = InputBatch(
+        key: KeyEvent(KeyCode.char('a')),
+        committedText: 'a',
+        timeStamp: Duration(seconds: 1),
+        sequence: 7,
+      );
+      const b = InputBatch(
+        key: KeyEvent(KeyCode.char('a')),
+        committedText: 'a',
+        timeStamp: Duration(hours: 2),
+        sequence: 900,
+      );
+      expect(a, b);
+      expect(a.hashCode, b.hashCode);
+    });
+
+    test('payload differences do break equality', () {
+      const a = InputBatch(key: KeyEvent(KeyCode.char('a')));
+      const b = InputBatch(key: KeyEvent(KeyCode.char('b')));
+      const c = InputBatch(
+        key: KeyEvent(KeyCode.char('a')),
+        committedText: 'a',
+      );
+      expect(a, isNot(b));
+      expect(a, isNot(c));
+    });
+  });
 }

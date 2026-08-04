@@ -177,6 +177,8 @@ final class _StartupEventBuffer {
       TextCompositionEvent(:final text) => text,
       PasteEvent(:final text) => text,
       KeyEvent(:final code) => code.character,
+      InputBatch(:final committedText, :final key) =>
+        committedText ?? key?.code.character,
       _ => null,
     };
     return text == null ? 0 : utf8.encode(text).length;
@@ -646,13 +648,25 @@ Future<AppExit> _runAppImpl(
         scheduleFrame('debug-key');
         return;
       }
+      // A correlated batch's text half takes the same debug-hotkey route the
+      // bare TextInputEvent shape did for identical wire input.
+      if (event is InputBatch &&
+          event.committedText != null &&
+          tryConsumeDebugText(
+            debugController,
+            TextInputEvent(event.committedText!),
+          )) {
+        scheduleFrame('debug-key');
+        return;
+      }
 
       KeyEventResult dispatchResult = KeyEventResult.ignored;
       if (event is KeyEvent ||
           event is TextInputEvent ||
           event is TextCompositionEvent ||
           event is PasteEvent ||
-          event is MouseEvent) {
+          event is MouseEvent ||
+          event is InputBatch) {
         dispatchResult = dispatcher.dispatch(event);
         semanticsPipeline?.markSemanticsDirty();
       }

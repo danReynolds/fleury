@@ -344,6 +344,40 @@ void main() {
       }
     });
 
+    test('a correlated InputBatch reaches the focused text field', () async {
+      // Pins the RFC 0020 P1d loop seam: the terminal parser emits batches
+      // for lifecycle printables, and the event pump's dispatch gate must
+      // route them (the milestone review caught this dropping typed text).
+      final controller = TextEditingController();
+      final driver = _LifecycleFaultDriver(
+        enterEvent: const InputBatch(
+          key: KeyEvent(KeyCode.char('a'), position: KeyPosition.q),
+          committedText: 'a',
+        ),
+      );
+      try {
+        final future = runApp(
+          TextInput(
+            controller: controller,
+            autofocus: true,
+            enableBlink: false,
+          ),
+          driver: driver,
+          enableHotReload: false,
+        );
+        await _settle();
+        expect(controller.text, 'a');
+
+        driver.enqueue(
+          const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+        );
+        await future.timeout(const Duration(seconds: 2));
+      } finally {
+        controller.dispose();
+        await driver.dispose();
+      }
+    });
+
     test('drains enter-time text before a buffered input EOF exits', () async {
       final controller = TextEditingController();
       final driver = _LifecycleFaultDriver(

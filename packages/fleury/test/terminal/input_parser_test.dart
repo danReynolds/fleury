@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/src/input/key_tables.dart';
 import 'package:test/test.dart';
 
 /// Captures events into a list for assertion.
@@ -752,6 +753,75 @@ void main() {
             committedText: 'z',
           ),
         );
+      });
+
+      test('a printable repeat is a batch whose key half says repeat', () {
+        // P2's repeat-without-down repair keys off exact phase retention.
+        expect(
+          _parse(csiu('97;1:2')).single,
+          const InputBatch(
+            key: KeyEvent(KeyCode.char('a'), type: KeyEventType.repeat),
+            committedText: 'a',
+          ),
+        );
+      });
+
+      test('a shift-only release retains its modifiers', () {
+        // Release A while Shift held: `97:65;2:3` — the up must carry
+        // {shift} so P2's press records see symmetric down/up state.
+        expect(
+          _parse(csiu('97:65;2:3')).single,
+          const KeyEvent(
+            KeyCode.char('a'),
+            modifiers: {KeyModifier.shift},
+            type: KeyEventType.up,
+          ),
+        );
+      });
+
+      test('a key-0 repeat re-emits its text (auto-repeat types)', () {
+        expect(_parse(csiu('0;1:2;233')).single, const TextInputEvent('é'));
+      });
+
+      test('control codes in associated text are rejected', () {
+        // The spec forbids control codes in the text field; CR/ESC must not
+        // smuggle into the text lane (`0;1;13` would otherwise type "\r").
+        expect(_parse(csiu('0;1;13')), isEmpty);
+        expect(_parse(csiu('97;1;27')), isEmpty);
+      });
+
+      test('a batch report fragmented across feeds parses whole', () {
+        final parser = InputParser();
+        final sink = _ListSink();
+        final bytes = [0x1B, 0x5B, ...'122::119;1u'.codeUnits];
+        for (final b in bytes) {
+          parser.feed([b], sink);
+        }
+        expect(
+          sink.events.single,
+          const InputBatch(
+            key: KeyEvent(KeyCode.char('z'), position: KeyPosition.w),
+            committedText: 'z',
+          ),
+        );
+      });
+
+      test('the unmapped-PUA drop holds across the whole block', () {
+        // Sweep the functional PUA block: every mapped codepoint yields a
+        // KeyEvent; every unmapped one yields nothing — never text.
+        for (var cp = 0xE000; cp <= 0xF8FF; cp += 7) {
+          final events = _parse(csiu('$cp'));
+          if (kittyFunctionalKeys.containsKey(cp) ||
+              cp == 13 ||
+              cp == 9 ||
+              cp == 27 ||
+              cp == 8 ||
+              cp == 127) {
+            expect(events.single, isA<KeyEvent>(), reason: 'cp $cp');
+          } else {
+            expect(events, isEmpty, reason: 'cp $cp');
+          }
+        }
       });
     });
 

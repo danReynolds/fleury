@@ -474,6 +474,8 @@ class InputParser {
         sink.add(const KeyEvent(KeyCode.arrowRight));
       case 0x44: // 'D'
         sink.add(const KeyEvent(KeyCode.arrowLeft));
+      case 0x45: // 'E' — KP_BEGIN (keypad 5 with NumLock off)
+        sink.add(const KeyEvent(KeyCode.keypadBegin));
       case 0x48: // 'H'
         sink.add(const KeyEvent(KeyCode.home));
       case 0x46: // 'F'
@@ -537,6 +539,7 @@ class InputParser {
       0x42 => KeyCode.arrowDown,
       0x43 => KeyCode.arrowRight,
       0x44 => KeyCode.arrowLeft,
+      0x45 => KeyCode.keypadBegin, // KP_BEGIN's legacy form (`CSI 1 E`)
       0x48 => KeyCode.home,
       0x46 => KeyCode.end,
       0x50 => KeyCode.f1,
@@ -616,6 +619,7 @@ class InputParser {
         sink.add(
           KeyEvent(
             KeyCode.char(String.fromCharCode(codepoint)),
+            modifiers: modifiers,
             type: KeyEventType.up,
             position: position,
           ),
@@ -696,7 +700,11 @@ class InputParser {
 
   bool _kittyAssociatedTextIsValid() {
     if (_csiGroups.length < 3) return true;
-    return _csiGroups[2].every(_isUnicodeScalar);
+    // The spec forbids control codes in associated text; a terminal (or
+    // spoofed peer) sending them must not smuggle CR/ESC into the text lane.
+    return _csiGroups[2].every(
+      (cp) => _isUnicodeScalar(cp) && cp >= 0x20 && cp != 0x7F,
+    );
   }
 
   bool _isUnicodeScalar(int value) =>
