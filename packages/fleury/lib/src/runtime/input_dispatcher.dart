@@ -34,6 +34,7 @@ class InputDispatcher {
     // Let the widget tree abandon a pending sequence (a which-key popup's
     // close control) by routing the notifier's cancel back to us.
     pendingSequenceNotifier.onCancel = cancelPending;
+    focusManager.addListener(_onFocusChanged);
   }
 
   /// The focus manager whose chain this dispatcher walks.
@@ -279,10 +280,56 @@ class InputDispatcher {
   /// Under the legacy capability profile the regularizer is a passthrough,
   /// so this is a no-op cost on the typing path with no observers.
   void _regularizeAndObserve(KeyEvent event) {
+    // Genuinely zero-cost when unused: a release-less source tracks no
+    // press records, so with nobody observing there is nothing to compute
+    // and nothing to allocate on the typing path (RFC 0020 §19).
+    if (!keyboardSession.capabilities.supportsHeldState &&
+        _keyObservers.isEmpty) {
+      return;
+    }
     final regularized = keyboardSession.ingest(event);
     if (_keyObservers.isEmpty) return;
     for (final e in regularized.events) {
       _notifyKeyObservers(e);
+    }
+  }
+
+  /// Applies confirmed keyboard capabilities, routing any recovery releases
+  /// a downgrade produces to the observation lane.
+  ///
+  /// The seam exists so callers never reach into [keyboardSession] directly
+  /// and drop those releases: losing held-state support mid-session clears
+  /// the press records, and every open observer press must be closed with
+  /// it or `KeyBinding.hold`'s one-end-per-start contract breaks (§10).
+  void updateKeyboardCapabilities(KeyboardCapabilities capabilities) {
+    _checkNotDisposed();
+    final releases = keyboardSession.updateCapabilities(capabilities);
+    for (final release in releases) {
+      _notifyKeyObservers(release);
+    }
+  }
+
+  /// Replaces the input session (driver swap, reconnect): recovers held
+  /// keys through the observation lane, drops pending edges, and bumps
+  /// `sessionGeneration` so sampled consumers can invalidate.
+  void replaceKeyboardSession() {
+    _checkNotDisposed();
+    final releases = keyboardSession.replaceSession();
+    for (final release in releases) {
+      _notifyKeyObservers(release);
+    }
+  }
+
+  /// Focus moved: an observer whose anchor just left the active chain must
+  /// close its open presses NOW, not whenever the next key happens to
+  /// arrive. Push-to-talk over a modal is the case that makes the
+  /// difference user-visible (§10, §14.5).
+  void _onFocusChanged() {
+    if (_keyObservers.isEmpty || _disposed) return;
+    final chain = focusManager.activeChain();
+    for (final registration in List.of(_keyObservers)) {
+      if (registration._removed) continue;
+      registration._projectScopeChange(chain);
     }
   }
 
@@ -751,6 +798,7 @@ class InputDispatcher {
   /// `runApp` during teardown.
   void dispose() {
     if (_disposed) return;
+    focusManager.removeListener(_onFocusChanged);
     _disposed = true;
     // Teardown is authority loss (RFC 0020 §6): recover held keys so every
     // observer's stream closes its open presses (one up per down, always).
@@ -821,6 +869,15 @@ final class KeyPhaseObserverRegistration {
       case KeyEventType.up:
         if (_seen.remove(id) != null) _observer(event);
     }
+  }
+
+  /// Focus changed: close open presses if this registration's anchor is no
+  /// longer in the active chain. An app-wide observer (null anchor) never
+  /// leaves scope.
+  void _projectScopeChange(List<FocusNode> chain) {
+    final anchor = _anchor;
+    if (anchor == null) return;
+    if (!chain.contains(anchor)) _exitScope();
   }
 
   void _exitScope() {

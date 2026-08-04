@@ -307,7 +307,13 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
       }
       return;
     }
-    if (tuiEvent.type == KeyEventType.down) {
+    if (tuiEvent.type != KeyEventType.up) {
+      // Repeats re-open the press too. A sweep (Meta tap, tab hide, blur)
+      // closes presses the user may still be physically holding; the
+      // session's repeat-without-down repair re-opens its record on the
+      // next auto-repeat, so this side must re-open in lockstep or the
+      // eventual real keyup finds nothing to close and the key wedges as
+      // permanently held (RFC 0020 §22's stuck-key criterion).
       _openPresses[_pressIdentity(event)] = tuiEvent;
     }
     _emit(tuiEvent);
@@ -316,9 +322,22 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
   void _handleKeyUp(web.Event raw) {
     final event = raw as web.KeyboardEvent;
     if (event.key == 'Meta') {
-      // The swallow can also eat releases of keys pressed BEFORE Meta went
-      // down. Sweep conservatively: a key genuinely still held re-appears
-      // via auto-repeat and the session's repeat-without-down repair.
+      // Meta's OWN release is physical and must be reported as such — a
+      // synthesized one could never complete a `nextKey` capture (§6's
+      // taxonomy), making Cmd unbindable in a rebind UI. Emit it first,
+      // then sweep the rest: the swallow can also eat releases of keys
+      // pressed BEFORE Meta went down, and a key genuinely still held
+      // re-appears via auto-repeat and the session's repair.
+      final metaDown = _openPresses.remove(_pressIdentity(event));
+      if (metaDown != null) {
+        _emit(
+          KeyEvent(
+            metaDown.code,
+            type: KeyEventType.up,
+            position: metaDown.position,
+          ),
+        );
+      }
       _sweepOpenPresses();
       return;
     }

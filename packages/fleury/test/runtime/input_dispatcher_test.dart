@@ -338,12 +338,46 @@ void main() {
 
       h.dispatcher.dispatch(down('w')); // in scope: observed
       nodeB.requestFocus(); // scope exit while held
-      h.dispatcher.dispatch(down('x')); // triggers projection; not observed
+      // The end fires AT the focus change — not lazily on the next key.
+      // Push-to-talk over a modal is the case that makes this visible: the
+      // mic must close when the dialog opens, not whenever something else
+      // is typed (RFC 0020 §10, §14.5).
+      expect(phases(log), ['w:down', 'w:up*']);
+
+      h.dispatcher.dispatch(down('x')); // out of scope: not observed
       expect(phases(log), ['w:down', 'w:up*']);
 
       nodeA.requestFocus();
       h.dispatcher.dispatch(down('y')); // back in scope
       expect(phases(log), ['w:down', 'w:up*', 'y:down']);
+    });
+
+    test('a capability downgrade routes recovery releases to observers', () {
+      final h = fullCaps();
+      final log = <KeyEvent>[];
+      h.dispatcher.addKeyObserver(log.add);
+      h.dispatcher.dispatch(down('w'));
+      // Losing held-state support mid-session (a negotiated rollback)
+      // clears the press records; every open observer press must close
+      // with them, or hold's one-end-per-start contract breaks.
+      h.dispatcher.updateKeyboardCapabilities(KeyboardCapabilities.legacy);
+      expect(phases(log), ['w:down', 'w:up*']);
+    });
+
+    test('replacing the session recovers presses and bumps the '
+        'generation', () {
+      final h = fullCaps();
+      final log = <KeyEvent>[];
+      h.dispatcher.addKeyObserver(log.add);
+      h.dispatcher.dispatch(down('w'));
+      final before = h.dispatcher.keyboardSession.sessionGeneration;
+      h.dispatcher.replaceKeyboardSession();
+      expect(phases(log), ['w:down', 'w:up*']);
+      expect(
+        h.dispatcher.keyboardSession.sessionGeneration,
+        before + 1,
+        reason: 'sampled consumers key invalidation off this',
+      );
     });
   });
 

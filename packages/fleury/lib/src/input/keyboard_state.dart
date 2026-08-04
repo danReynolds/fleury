@@ -231,15 +231,36 @@ final class KeyboardSession {
   /// session tracks nothing and repairs nothing — a release-less source's
   /// fresh downs are fresh presses, never "duplicates" (the test-harness
   /// and legacy-terminal profile).
+  /// The map key of the held record [event] refers to, or null when nothing
+  /// matching is held.
+  ///
+  /// Positional identity is optional **per event** even on a confirmed
+  /// surface (RFC 0020 §4: flag 4 is "can send"; the DOM reports
+  /// `Unidentified`), so the same physical key can arrive with a position
+  /// once and without it the next time. Exact keying alone would then open
+  /// a second record for a key already held and leave the first one
+  /// unclosable — a silent stuck key. Fall back to §13.3's degradation so a
+  /// mismatched pair still closes the press it opened.
+  Object? _lookupHeld(KeyEvent event) {
+    final exact = event.position ?? event.code;
+    if (_held.containsKey(exact)) return exact;
+    for (final MapEntry(key: id, value: record) in _held.entries) {
+      if (record.matches(event.position ?? event.code)) return id;
+      if (record.code == event.code) return id;
+    }
+    return null;
+  }
+
   RegularizedKey ingest(KeyEvent event) {
     if (!_capabilities.supportsHeldState) {
       return RegularizedKey._([event]);
     }
     final record = _PressRecord(event.code, event.position);
     final id = record.identity;
+    final heldId = _lookupHeld(event);
     switch (event.type) {
       case KeyEventType.down:
-        if (_held.containsKey(id)) {
+        if (heldId != null) {
           // Duplicate down while held: demote. State already says held.
           final demoted = KeyEvent(
             event.code,
@@ -255,7 +276,7 @@ final class KeyboardSession {
         _dirtySinceLatch = true;
         return RegularizedKey._([event]);
       case KeyEventType.repeat:
-        if (!_held.containsKey(id)) {
+        if (heldId == null) {
           // Repeat without down: the down physically happened and was
           // missed. Repair with a synthesized, command-eligible down.
           _held[id] = record;
@@ -272,7 +293,9 @@ final class KeyboardSession {
         }
         return RegularizedKey._([event]);
       case KeyEventType.up:
-        final held = _held.remove(id);
+        // Close the record this release refers to, by ITS identity — which
+        // may differ from this event's when position reporting is uneven.
+        final held = heldId == null ? null : _held.remove(heldId);
         if (held != null) {
           _pendingUps.add(held);
           _dirtySinceLatch = true;
@@ -326,12 +349,16 @@ final class KeyboardSession {
         return _latched;
       }
       // Quiet frame after an edgeful one: same held state, edges expired.
+      // A distinct ordinal, because the CONTENT differs — a consumer
+      // memoizing "already handled ordinal N" must not confuse the edgeful
+      // snapshot with its expired successor.
+      _frameNumber++;
       _latched = KeyboardSnapshot._(
         _latched._held,
         const [],
         const [],
         _sessionGeneration,
-        _latched.frameNumber,
+        _frameNumber,
       );
       return _latched;
     }

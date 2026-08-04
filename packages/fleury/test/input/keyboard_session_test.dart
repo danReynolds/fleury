@@ -127,11 +127,15 @@ void main() {
     test('the latch is stable and allocation-free when quiet', () {
       final session = full();
       session.ingest(_down('a'));
-      session.publishLatch();
+      final edgeful = session.publishLatch();
       final quiet1 = session.publishLatch(); // expires edges (new instance)
       final quiet2 = session.publishLatch(); // fully quiet: cached
       expect(identical(quiet1, quiet2), isTrue);
       expect(quiet1.isHeld(KeyCode.a), isTrue);
+      // Different content ⇒ different ordinal: a consumer memoizing
+      // "already handled frame N" must not mistake the expired successor
+      // for the edgeful snapshot.
+      expect(quiet1.frameNumber, isNot(edgeful.frameNumber));
     });
 
     test('a paused consumer gets no backlog', () {
@@ -160,6 +164,37 @@ void main() {
       expect(snap.isHeld(const KeyCode.char('z')), isTrue);
       expect(snap.isHeld(KeyPosition.z), isFalse);
       expect(snap.positionsPressed, {KeyPosition.w});
+    });
+
+    test('uneven position reporting still closes the press it opened', () {
+      // Position is optional PER EVENT even on a confirmed surface (§4:
+      // flag 4 is "can send"; the DOM reports 'Unidentified'). A down with
+      // a position closed by an up without one — and the reverse — must
+      // not split into two records and wedge the key as held.
+      final session = KeyboardSession(
+        capabilities: KeyboardCapabilities.full,
+      );
+      session.ingest(_down('w', position: KeyPosition.w));
+      session.ingest(_up('w')); // same key, position omitted
+      var snap = session.publishLatch();
+      expect(snap.pressed, isEmpty, reason: 'positionless up closed it');
+      expect(snap.isHeld(KeyPosition.w), isFalse);
+
+      session.ingest(_down('a'));
+      session.ingest(_up('a', position: KeyPosition.a)); // reverse mismatch
+      snap = session.publishLatch();
+      expect(snap.pressed, isEmpty);
+    });
+
+    test('a positionless duplicate down does not open a second record', () {
+      final session = KeyboardSession(
+        capabilities: KeyboardCapabilities.full,
+      );
+      session.ingest(_down('w', position: KeyPosition.w));
+      final regularized = session.ingest(_down('w')); // no position
+      expect(regularized.events.single.type, KeyEventType.repeat);
+      session.ingest(_up('w', position: KeyPosition.w));
+      expect(session.publishLatch().pressed, isEmpty);
     });
 
     test('a positionless press degrades one-way to the US twin', () {

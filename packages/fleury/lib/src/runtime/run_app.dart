@@ -674,6 +674,10 @@ Future<AppExit> _runAppImpl(
       // Ctrl+C exits only when the app did not handle it first. Structured
       // browser sessions are exempt because browser Cmd+C maps to Ctrl+C.
       if (event is KeyEvent &&
+          // Once per physical press: a release always dispatches as
+          // `ignored` (the fence), so without this an app that handled the
+          // press would still exit on the up (RFC 0020 §6).
+          event.type != KeyEventType.up &&
           event.code.character == 'c' &&
           event.hasCtrl &&
           dispatchResult != KeyEventResult.handled &&
@@ -969,7 +973,7 @@ Future<AppExit> _runAppImpl(
         // (RFC 0020 §5.7). AFTER enter: a remote driver only knows its
         // peer's protocol once the INIT handshake has landed.
         if (usedDriver is KeyboardCapabilitiesDriver) {
-          dispatcher.keyboardSession.updateCapabilities(
+          dispatcher.updateKeyboardCapabilities(
             (usedDriver as KeyboardCapabilitiesDriver).keyboardCapabilities,
           );
         }
@@ -1255,7 +1259,7 @@ Future<AppExit> _runAppImpl(
             // frames are produced): publish the keyboard latch so every
             // read within this frame — tickers included — agrees, and
             // edges expire on schedule (RFC 0020 §5.6).
-            onBeforeFrame: (_) => dispatcher.keyboardSession.publishLatch(),
+            onLatchInput: dispatcher.keyboardSession.publishLatch,
             // Remote drivers surface their transport's send backlog;
             // the frame program defers production while the peer stalls
             // (structured AND v1-byte modes — dropped bytes are never

@@ -595,7 +595,7 @@ class FleuryTester {
 
   set keyboardCapabilities(KeyboardCapabilities value) {
     _assertNotDisposed('keyboardCapabilities');
-    _dispatcher.keyboardSession.updateCapabilities(value);
+    _dispatcher.updateKeyboardCapabilities(value);
   }
 
   /// Dispatches a correlated [InputBatch], as a lifecycle-mode terminal or
