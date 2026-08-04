@@ -259,37 +259,57 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
       ? event.code
       : 'key:${event.key}';
 
+  /// Whether the browser's default action must be allowed to run so the
+  /// textarea produces the `input` event carrying this key's committed text.
+  ///
+  /// Plain and Shift-only printables are text-producing: RFC 0020 has the
+  /// source emit their key half for lifecycle tracking, but the text itself
+  /// still arrives through the input channel (§11 — "keydown never inserts
+  /// text; the browser's input events stay authoritative for IME and
+  /// dead-key correctness"). Calling `preventDefault()` on those keydowns
+  /// would suppress the insertion, the `input` event, and therefore ALL
+  /// typing on this surface.
+  static bool _needsBrowserTextDefault(
+    web.KeyboardEvent event,
+    KeyEvent mapped,
+  ) =>
+      mapped.code.isCharacter &&
+      !event.ctrlKey &&
+      !event.altKey &&
+      !event.metaKey;
+
   void _handleKeyDown(web.Event raw) {
     final event = raw as web.KeyboardEvent;
     final tuiEvent = keyEventFromBrowser(event);
     if (tuiEvent == null) return;
-    if (tuiEvent is KeyEvent) {
-      if (event.metaKey && !_isModifierKey(event.key)) {
-        // macOS browsers swallow keyup for non-modifier keys while Cmd is
-        // held (cross-engine, RFC 0020 §10): keys under Meta get press-only
-        // semantics — the down, then an immediate synthesized release —
-        // rather than an unclosable press. Hold durations under Meta are
-        // undefined by contract.
-        raw.preventDefault();
-        _emit(tuiEvent);
-        if (tuiEvent.type == KeyEventType.down) {
-          _emit(
-            KeyEvent(
-              tuiEvent.code,
-              modifiers: tuiEvent.modifiers,
-              type: KeyEventType.up,
-              position: tuiEvent.position,
-              synthesized: true,
-            ),
-          );
-        }
-        return;
-      }
+
+    // Special keys and shortcut chords are ours; text-producing printables
+    // keep their default action (see above).
+    if (!_needsBrowserTextDefault(event, tuiEvent)) raw.preventDefault();
+
+    if (event.metaKey && !_isModifierKey(event.key)) {
+      // macOS browsers swallow keyup for non-modifier keys while Cmd is
+      // held (cross-engine, RFC 0020 §10): keys under Meta get press-only
+      // semantics — the down, then an immediate synthesized release —
+      // rather than an unclosable press. Hold durations under Meta are
+      // undefined by contract.
+      _emit(tuiEvent);
       if (tuiEvent.type == KeyEventType.down) {
-        _openPresses[_pressIdentity(event)] = tuiEvent;
+        _emit(
+          KeyEvent(
+            tuiEvent.code,
+            modifiers: tuiEvent.modifiers,
+            type: KeyEventType.up,
+            position: tuiEvent.position,
+            synthesized: true,
+          ),
+        );
       }
+      return;
     }
-    raw.preventDefault();
+    if (tuiEvent.type == KeyEventType.down) {
+      _openPresses[_pressIdentity(event)] = tuiEvent;
+    }
     _emit(tuiEvent);
   }
 
@@ -304,7 +324,8 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     }
     final down = _openPresses.remove(_pressIdentity(event));
     if (down == null) return; // press-only'd, or downed before attach
-    raw.preventDefault();
+    // No preventDefault: a keyup has no text-producing default action, and
+    // suppressing it could only interfere with the input channel.
     _emit(
       KeyEvent(
         // Down-time identity: layout/modifier state may have changed
