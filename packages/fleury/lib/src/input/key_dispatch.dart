@@ -38,8 +38,7 @@ abstract final class KeyDispatchContext {
   static final List<KeyDispatchFrame> _stack = [];
 
   /// The innermost live frame, or null outside any dispatch.
-  static KeyDispatchFrame? get current =>
-      _stack.isEmpty ? null : _stack.last;
+  static KeyDispatchFrame? get current => _stack.isEmpty ? null : _stack.last;
 
   /// Runs [body] inside a new dispatch frame and reports whether an
   /// entitled consumer consumed within it.

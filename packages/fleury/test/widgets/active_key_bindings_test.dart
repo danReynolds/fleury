@@ -7,16 +7,17 @@ void main() {
     'resolves live unshadowed aliases in dispatch order as immutable values',
     (tester) {
       final down = KeyCode.arrowDown;
-      final next = KeyBinding.any(
-        [KeyCode.char('j'), down],
+      final next = KeyBinding(
+        KeyCode.char('j'),
+        aliases: [down],
         label: 'Next',
-        onTrigger: () {},
+        onTrigger: (_) {},
       );
-      final scroll = KeyBinding(down, label: 'Scroll', onTrigger: () {});
+      final scroll = KeyBinding(down, label: 'Scroll', onTrigger: (_) {});
       final quit = KeyBinding(
         KeyCode.char('q'),
         label: 'Quit',
-        onTrigger: () {},
+        onTrigger: (_) {},
       );
 
       tester.pumpWidget(
@@ -48,15 +49,16 @@ void main() {
   testWidgets('omits printable aliases claimed by focused text input', (
     tester,
   ) {
-    final mixed = KeyBinding.any(
-      [KeyCode.char('j'), KeyCode.arrowDown],
+    final mixed = KeyBinding(
+      KeyCode.char('j'),
+      aliases: [KeyCode.arrowDown],
       label: 'Next',
-      onTrigger: () {},
+      onTrigger: (_) {},
     );
     final printable = KeyBinding(
       KeyCode.char('?'),
       label: 'Help',
-      onTrigger: () {},
+      onTrigger: (_) {},
     );
 
     tester.pumpWidget(

@@ -182,8 +182,9 @@ final class RegularizedKey {
 /// accumulation, and snapshot publication. Owned by the input dispatcher;
 /// one per running app.
 final class KeyboardSession {
-  KeyboardSession({KeyboardCapabilities capabilities = KeyboardCapabilities.legacy})
-    : _capabilities = capabilities;
+  KeyboardSession({
+    KeyboardCapabilities capabilities = KeyboardCapabilities.legacy,
+  }) : _capabilities = capabilities;
 
   KeyboardCapabilities _capabilities;
   KeyboardCapabilities get capabilities => _capabilities;

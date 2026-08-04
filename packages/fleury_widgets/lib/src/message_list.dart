@@ -472,7 +472,7 @@ class _MessageListState extends State<MessageList> {
           KeyBinding(
             KeySequence.ctrl.c,
             label: 'Copy message',
-            onTrigger: () => unawaited(_copySelection()),
+            onTrigger: (_) => unawaited(_copySelection()),
           ),
         ],
         child: list,

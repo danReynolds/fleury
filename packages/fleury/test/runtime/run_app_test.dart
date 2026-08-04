@@ -1492,7 +1492,7 @@ class _ClipboardCopyApp extends StatelessWidget {
         KeyBinding(
           KeySequence.ctrl.y,
           label: 'copy',
-          onTrigger: () {
+          onTrigger: (_) {
             unawaited(
               ClipboardScope.of(context).writeWithReport(
                 'clip-me',

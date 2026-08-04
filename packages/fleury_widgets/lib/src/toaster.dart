@@ -322,7 +322,7 @@ class _ToasterState extends State<Toaster> {
       for (final toast in actionable)
         KeyBinding(
           toast.action!.key,
-          onTrigger: () {
+          onTrigger: (_) {
             _activateAction(toast);
           },
           hideFromHintBar: true,
@@ -332,9 +332,9 @@ class _ToasterState extends State<Toaster> {
       // so a modal/menu that uses Esc consumes it first; it only fires here
       // when a toast is showing and nothing inner handled it.
       if (_toasts.isNotEmpty)
-        KeyBinding.event(
+        KeyBinding(
           KeySequence.escape,
-          onEvent: (event) {
+          onTrigger: (event) {
             if (_toasts.isEmpty) {
               event.bubble();
               return;

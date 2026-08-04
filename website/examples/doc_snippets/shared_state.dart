@@ -52,9 +52,9 @@ class _ShopAppState extends State<ShopApp> {
       bindings: [
         KeyBinding(
           const KeyCode.char('a'),
-          onTrigger: () => _cart.add('Item ${_cart.count + 1}'),
+          onTrigger: (_) => _cart.add('Item ${_cart.count + 1}'),
         ),
-        KeyBinding(const KeyCode.char('c'), onTrigger: () => _cart.clear()),
+        KeyBinding(const KeyCode.char('c'), onTrigger: (_) => _cart.clear()),
       ],
       child: Padding(
         padding: const EdgeInsets.all(1),

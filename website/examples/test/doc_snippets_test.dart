@@ -18,17 +18,17 @@ import '../doc_snippets/getting_started_app.dart' as getting_started;
 /// fails. See `doc_snippets/README.md` for the convention.
 void main() {
   test('doc_snippets analyze cleanly against the real API', () {
-    final result = Process.runSync(
-      'dart',
-      const ['analyze', 'doc_snippets'],
-      workingDirectory: Directory.current.path,
-    );
+    final result = Process.runSync('dart', const [
+      'analyze',
+      'doc_snippets',
+    ], workingDirectory: Directory.current.path);
     printOnFailure(result.stdout.toString());
     printOnFailure(result.stderr.toString());
     expect(
       result.exitCode,
       0,
-      reason: 'A docs code snippet no longer compiles. Update the program under '
+      reason:
+          'A docs code snippet no longer compiles. Update the program under '
           'doc_snippets/ AND the prose in website/src/content/docs that mirrors '
           'it.',
     );

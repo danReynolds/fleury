@@ -424,7 +424,7 @@ void main() {
     final controller = DataTableController();
     var quits = 0;
     Widget host({required bool typeahead}) => KeyBindings(
-      bindings: [KeyBinding(KeySequence.q, onTrigger: () => quits += 1)],
+      bindings: [KeyBinding(KeySequence.q, onTrigger: (_) => quits += 1)],
       child: DataTable(
         rowCount: 5,
         columns: _columns(),

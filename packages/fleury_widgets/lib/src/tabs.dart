@@ -290,7 +290,7 @@ class _TabsState extends State<Tabs> {
         for (var i = 0; i < widget.tabs.length && i < 9; i++)
           KeyBinding(
             KeySequence.alt.char('${i + 1}'),
-            onTrigger: () {
+            onTrigger: (_) {
               _controller.index = i;
             },
             hideFromHintBar: true,
@@ -300,12 +300,12 @@ class _TabsState extends State<Tabs> {
         // while focus is deep inside panel content.
         KeyBinding(
           KeySequence.ctrl.pageUp,
-          onTrigger: () => _controller.previous(),
+          onTrigger: (_) => _controller.previous(),
           hideFromHintBar: true,
         ),
         KeyBinding(
           KeySequence.ctrl.pageDown,
-          onTrigger: () => _controller.next(),
+          onTrigger: (_) => _controller.next(),
           hideFromHintBar: true,
         ),
       ],

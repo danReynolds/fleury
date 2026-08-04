@@ -60,8 +60,9 @@ final class RemoteTerminalDriver
   /// can be relayed (P6 adds the explicit capability handshake for foreign
   /// peers).
   @override
-  KeyboardCapabilities get keyboardCapabilities =>
-      _protocolVersion >= 2 ? KeyboardCapabilities.full : KeyboardCapabilities.legacy;
+  KeyboardCapabilities get keyboardCapabilities => _protocolVersion >= 2
+      ? KeyboardCapabilities.full
+      : KeyboardCapabilities.legacy;
   RemoteTerminalDriver(
     this._transport, {
     InlineImageCachePolicy imageCachePolicy = defaultInlineImageCachePolicy,

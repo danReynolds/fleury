@@ -26,12 +26,12 @@ class _CounterAppState extends State<CounterApp> {
         KeyBinding(
           KeySequence.space,
           label: 'Increment',
-          onTrigger: () => setState(() => _count++),
+          onTrigger: (_) => setState(() => _count++),
         ),
         KeyBinding(
           KeySequence.enter,
           label: 'Details',
-          onTrigger: () => unawaited(context.push<void>(const DetailScreen())),
+          onTrigger: (_) => unawaited(context.push<void>(const DetailScreen())),
         ),
       ],
       child: Center(
@@ -58,7 +58,7 @@ class DetailScreen extends StatelessWidget {
         KeyBinding(
           KeySequence.escape,
           label: 'Close',
-          onTrigger: () => context.pop(),
+          onTrigger: (_) => context.pop(),
         ),
       ],
       child: Reveal(

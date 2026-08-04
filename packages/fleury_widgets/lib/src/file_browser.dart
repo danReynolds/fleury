@@ -502,7 +502,7 @@ class _FileBrowserState extends State<FileBrowser> {
           KeyBinding(
             KeySequence.ctrl.c,
             label: 'Copy file path',
-            onTrigger: () => unawaited(_copySelection()),
+            onTrigger: (_) => unawaited(_copySelection()),
           ),
         ],
         child: body,

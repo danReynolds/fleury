@@ -193,89 +193,110 @@ class KeyBindingEvent {
   void bubble() => _shouldBubble = true;
 }
 
-/// A zero-argument binding action — the common case, invoked when the
-/// binding matches. The event is consumed. For propagation control or to
-/// read the match, use [KeyBinding.event] with a [KeyBindingHandler].
-typedef KeyBindingTrigger = void Function();
-
-/// An event-aware binding handler. Synchronous; async work scheduled inside
-/// runs after the dispatch decision, so propagation must be expressed
-/// synchronously via [KeyBindingEvent.bubble].
+/// A binding action, invoked when the binding matches. The event is
+/// consumed unless the handler calls [KeyBindingEvent.bubble].
+///
+/// Handlers always receive the event (RFC 0020 §14.1) — one signature for
+/// every binding, with propagation control always to hand. Tear-offs
+/// declare the parameter: `onTrigger: (_) => save()`.
+///
+/// Synchronous with respect to the dispatch decision: async work scheduled
+/// inside runs after it, so propagation must be expressed synchronously.
 typedef KeyBindingHandler = void Function(KeyBindingEvent event);
 
 // ===========================================================================
 // KeyBinding
 // ===========================================================================
 
-/// One key binding: a [KeySequence] (or several aliases that all fire the
+/// One key binding: a [KeySequence] (plus optional [aliases] that fire the
 /// same action), a handler, an optional hint-bar label, and an enabled flag.
 ///
-/// **Common case** — a zero-argument [onTrigger]:
-///
 /// ```dart
-/// KeyBinding(.ctrl.s, onTrigger: save, label: 'Save')
+/// KeyBinding(.ctrl.s, onTrigger: (_) => save(), label: 'Save')
+/// KeyBinding(.g.g, onTrigger: (_) => top(), label: 'Top')
 /// ```
 ///
-/// **Event-aware** — [KeyBinding.event] for propagation control or reading
-/// the match:
+/// **Aliases** — several spellings, one action, one hint entry. The primary
+/// sequence is canonical for the hint bar:
 ///
 /// ```dart
-/// KeyBinding.event(.escape, onEvent: (e) { if (!close()) e.bubble(); })
+/// KeyBinding(.j, aliases: [.down], onTrigger: (_) => next(), label: 'Next')
 /// ```
 ///
-/// **Aliases** — [KeyBinding.any]: several spellings, one action, one hint
-/// entry. The first sequence is canonical for the hint bar:
+/// **Auto-repeat** — a binding fires once per physical press by default;
+/// holding `Ctrl+S` must not re-save. Movement-style bindings opt in:
 ///
 /// ```dart
-/// KeyBinding.any([.j, .down], onTrigger: next, label: 'Next')
+/// KeyBinding(.j, includeRepeats: true, onTrigger: (_) => next())
+/// ```
+///
+/// Where the surface cannot distinguish auto-repeat from a fresh press
+/// (legacy terminals, plain printables outside lifecycle mode) suppression
+/// is best-effort — the event simply arrives untagged and fires.
+///
+/// **Propagation** — a match consumes; [KeyBindingEvent.bubble] opts out:
+///
+/// ```dart
+/// KeyBinding(.escape, onTrigger: (e) { if (!close()) e.bubble(); })
 /// ```
 final class KeyBinding {
-  /// Bind a single sequence to a zero-argument action.
+  /// Bind a sequence (plus any [aliases]) to an action.
   KeyBinding(
     KeySequence sequence, {
-    required KeyBindingTrigger onTrigger,
+    required this.onTrigger,
+    List<KeySequence> aliases = const <KeySequence>[],
+    this.includeRepeats = false,
     this.label,
     this.enabled = true,
     this.hideFromHintBar = false,
-  }) : sequences = [sequence],
-       onEvent = _triggerHandler(onTrigger);
+  }) : sequences = [sequence, ...aliases],
+       onHoldStart = null,
+       onHoldEnd = null;
 
-  /// Bind a single sequence to an event-aware handler.
-  KeyBinding.event(
-    KeySequence sequence, {
-    required this.onEvent,
+  /// Bind a key to the *duration* of a press: [onHoldStart] on the down,
+  /// [onHoldEnd] on its release — push-to-talk, hold-to-peek.
+  ///
+  /// Not a long-press: there is no threshold and no latency. Every keyboard
+  /// press is a hold of some duration, so the start fires immediately and a
+  /// brief tap is simply a brief hold (RFC 0020 §14.5).
+  ///
+  /// Exactly one end per start, always: the pairing rides the observation
+  /// lane, so it survives command-lane consumption, and the end is
+  /// synthesized on scope exit or authority loss (modal open, blur,
+  /// disconnect). Inert where the surface reports no held state — never
+  /// silently a toggle; branch on
+  /// `Keyboard.of(context).capabilities.supportsHeldState` for a fallback.
+  KeyBinding.hold(
+    KeySequence key, {
+    required KeyBindingHandler this.onHoldStart,
+    required KeyBindingHandler this.onHoldEnd,
     this.label,
     this.enabled = true,
     this.hideFromHintBar = false,
-  }) : sequences = [sequence];
-
-  /// Bind several alias sequences that all fire the same action. Provide
-  /// exactly one of [onTrigger] or [onEvent]. The first sequence is the
-  /// canonical one shown in the hint bar.
-  KeyBinding.any(
-    this.sequences, {
-    KeyBindingTrigger? onTrigger,
-    KeyBindingHandler? onEvent,
-    this.label,
-    this.enabled = true,
-    this.hideFromHintBar = false,
-  }) : assert(sequences.isNotEmpty, 'aliases list must be non-empty'),
-       assert(
-         (onTrigger == null) != (onEvent == null),
-         'provide exactly one of onTrigger / onEvent',
+  }) : assert(
+         key.stepCount == 1,
+         'a hold brackets one key press, not a multi-step sequence',
        ),
-       onEvent = onEvent ?? _triggerHandler(onTrigger!);
+       sequences = [key],
+       onTrigger = null,
+       includeRepeats = false;
 
-  static KeyBindingHandler _triggerHandler(KeyBindingTrigger onTrigger) =>
-      (_) => onTrigger();
-
-  /// The sequence(s) this binding matches. Any firing triggers [onEvent].
+  /// The sequence(s) this binding matches. Any firing triggers [onTrigger].
   /// The first is always canonical for hint-bar display.
   final List<KeySequence> sequences;
 
-  /// Handler invoked when the binding matches. `onTrigger` bindings wrap
-  /// their callback here; the dispatcher always calls this.
-  final KeyBindingHandler onEvent;
+  /// Handler invoked when the binding matches; null for a hold binding.
+  final KeyBindingHandler? onTrigger;
+
+  /// Press-duration handlers, non-null exactly for [KeyBinding.hold].
+  final KeyBindingHandler? onHoldStart;
+  final KeyBindingHandler? onHoldEnd;
+
+  /// Whether this binding also fires on keyboard auto-repeat.
+  final bool includeRepeats;
+
+  /// Whether this binding brackets a press rather than firing on it.
+  bool get isHold => onHoldStart != null;
 
   /// Short label shown by `KeyHintBar`. When null, the bar synthesises one
   /// from the primary sequence's [KeySequence.hintLabel]. A binding with

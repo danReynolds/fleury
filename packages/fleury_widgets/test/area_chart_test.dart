@@ -53,10 +53,12 @@ void main() {
       tester.pumpWidget(
         AreaChart(
           series: const [
-            AreaSeries(
-              [(0, 2), (1, 8), (2, 4), (3, 9)],
-              color: RgbColor(0, 200, 100),
-            ),
+            AreaSeries([
+              (0, 2),
+              (1, 8),
+              (2, 4),
+              (3, 9),
+            ], color: RgbColor(0, 200, 100)),
           ],
           showAxes: false,
           yRange: (0, 10),

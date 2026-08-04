@@ -117,10 +117,7 @@ void main() {
               ),
             ),
           ),
-          const KeyEvent(
-            KeyCode.leftShift,
-            position: KeyPosition.shiftLeft,
-          ),
+          const KeyEvent(KeyCode.leftShift, position: KeyPosition.shiftLeft),
         );
         // No position → no sided identity → untrackable, skipped.
         expect(
@@ -292,15 +289,12 @@ void main() {
     expect(special.defaultPrevented, isTrue);
 
     // The key halves were still emitted for lifecycle tracking.
-    expect(
-      events.whereType<KeyEvent>().map((e) => e.code).toList(),
-      const [
-        KeyCode.char('a'),
-        KeyCode.char('a'),
-        KeyCode.char('s'),
-        KeyCode.arrowLeft,
-      ],
-    );
+    expect(events.whereType<KeyEvent>().map((e) => e.code).toList(), const [
+      KeyCode.char('a'),
+      KeyCode.char('a'),
+      KeyCode.char('s'),
+      KeyCode.arrowLeft,
+    ]);
   });
 
   test('DomInputSource emits keyboard, composition, text, paste, pointer, and '

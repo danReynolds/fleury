@@ -58,7 +58,7 @@ class _SignupFormState extends State<SignupForm> {
     // per-field "touched" state for earlier feedback).
     final showErrors = _submitted;
     return KeyBindings(
-      bindings: [KeyBinding(KeySequence.ctrl.s, onTrigger: () => _submit())],
+      bindings: [KeyBinding(KeySequence.ctrl.s, onTrigger: (_) => _submit())],
       child: Padding(
         padding: const EdgeInsets.all(1),
         child: Column(

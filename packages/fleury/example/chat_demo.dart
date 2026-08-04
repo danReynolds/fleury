@@ -105,12 +105,12 @@ class _ChatAppState extends State<ChatApp> {
         KeyBinding(
           KeyCode.f1,
           label: 'help',
-          onTrigger: () => _showHelp(context),
+          onTrigger: (_) => _showHelp(context),
         ),
         KeyBinding(
           KeySequence.ctrl.k,
           label: 'switch channel',
-          onTrigger: () => _showCommandPalette(context),
+          onTrigger: (_) => _showCommandPalette(context),
         ),
       ],
       child: FocusTraversalGroup(
@@ -338,12 +338,12 @@ class _CommandPaletteState extends State<_CommandPalette> {
       bindings: [
         KeyBinding(
           KeyCode.arrowUp,
-          onTrigger: () => _move(-1),
+          onTrigger: (_) => _move(-1),
           hideFromHintBar: true,
         ),
         KeyBinding(
           KeyCode.arrowDown,
-          onTrigger: () => _move(1),
+          onTrigger: (_) => _move(1),
           hideFromHintBar: true,
         ),
       ],

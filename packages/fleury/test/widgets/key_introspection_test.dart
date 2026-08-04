@@ -36,9 +36,13 @@ void main() {
             KeyBinding(
               KeySequence.space.f,
               label: 'Find file',
-              onTrigger: () {},
+              onTrigger: (_) {},
             ),
-            KeyBinding(KeySequence.space.b, label: 'Buffers', onTrigger: () {}),
+            KeyBinding(
+              KeySequence.space.b,
+              label: 'Buffers',
+              onTrigger: (_) {},
+            ),
           ],
           child: _PendingProbe(
             onBuild: (p) => pending = p,
@@ -74,7 +78,7 @@ void main() {
             KeyBinding(
               KeySequence.space.f,
               label: 'Find file',
-              onTrigger: () {},
+              onTrigger: (_) {},
             ),
           ],
           child: _PendingProbe(
@@ -99,7 +103,7 @@ void main() {
             KeyBinding(
               KeySequence.ctrl.x.ctrl.s,
               label: 'Save',
-              onTrigger: () {},
+              onTrigger: (_) {},
             ),
           ],
           child: _PendingProbe(
@@ -130,11 +134,11 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeySequence.ctrl.s, label: 'Save', onTrigger: () {}),
-            KeyBinding(KeyCode.enter, label: 'Open', onTrigger: () {}),
+            KeyBinding(KeySequence.ctrl.s, label: 'Save', onTrigger: (_) {}),
+            KeyBinding(KeyCode.enter, label: 'Open', onTrigger: (_) {}),
             KeyBinding(
               KeyCode.char('z'),
-              onTrigger: () {},
+              onTrigger: (_) {},
             ), // unlabeled — hidden
           ],
           child: _ActiveProbe(
@@ -160,17 +164,17 @@ void main() {
             KeyBinding(
               KeyCode.enter,
               label: 'e',
-              onTrigger: () => fired.add('enter'),
+              onTrigger: (_) => fired.add('enter'),
             ),
             KeyBinding(
               KeySequence.ctrl.s,
               label: 's',
-              onTrigger: () => fired.add('save'),
+              onTrigger: (_) => fired.add('save'),
             ),
             KeyBinding(
               KeySequence.g.g,
               label: 'gg',
-              onTrigger: () => fired.add('gg'),
+              onTrigger: (_) => fired.add('gg'),
             ),
           ],
           child: const Focus(autofocus: true, child: Text('x')),
@@ -192,7 +196,10 @@ void main() {
           // A bare `a` binding must NOT fire while the field is focused — the
           // press routes as text, exactly as a terminal delivers it.
           bindings: [
-            KeyBinding(KeyCode.char('a'), onTrigger: () => bindingFired = true),
+            KeyBinding(
+              KeyCode.char('a'),
+              onTrigger: (_) => bindingFired = true,
+            ),
           ],
           child: TextInput(controller: controller, autofocus: true),
         ),
@@ -216,7 +223,7 @@ void main() {
           bindings: [
             KeyBinding(
               KeySequence.shift.char('1'),
-              onTrigger: () => fired = true,
+              onTrigger: (_) => fired = true,
             ),
           ],
           child: const Focus(autofocus: true, child: Text('x')),

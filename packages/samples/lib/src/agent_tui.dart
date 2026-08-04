@@ -90,8 +90,9 @@ class _AgentBodyState extends State<_AgentBody>
   }
 
   void _startTurn({String? typedPrompt, bool auto = false}) {
-    final turn =
-        _turnIndex < _script.length ? _script[_turnIndex] : _fallbackTurn;
+    final turn = _turnIndex < _script.length
+        ? _script[_turnIndex]
+        : _fallbackTurn;
     _turnIndex++;
     final prompt = typedPrompt ?? turn.prompt;
     setState(() {
@@ -132,19 +133,31 @@ class _AgentBodyState extends State<_AgentBody>
       children: <Widget>[
         Row(
           children: <Widget>[
-            Text('✻ ',
-                style:
-                    CellStyle(foreground: theme.colorScheme.primary, bold: true)),
-            Text('Fleury Code',
-                style: CellStyle(
-                    bold: true, foreground: theme.colorScheme.foreground)),
+            Text(
+              '✻ ',
+              style: CellStyle(
+                foreground: theme.colorScheme.primary,
+                bold: true,
+              ),
+            ),
+            Text(
+              'Fleury Code',
+              style: CellStyle(
+                bold: true,
+                foreground: theme.colorScheme.foreground,
+              ),
+            ),
             const Expanded(child: SizedBox.shrink()),
-            Text('~/my-app',
-                style: CellStyle(foreground: theme.colorScheme.info)),
+            Text(
+              '~/my-app',
+              style: CellStyle(foreground: theme.colorScheme.info),
+            ),
           ],
         ),
-        Text('  scripted demo · press Enter to advance the session',
-            style: theme.mutedStyle),
+        Text(
+          '  scripted demo · press Enter to advance the session',
+          style: theme.mutedStyle,
+        ),
       ],
     );
   }
@@ -160,9 +173,10 @@ class _AgentBodyState extends State<_AgentBody>
       padding: const EdgeInsets.symmetric(horizontal: 1),
       child: Row(
         children: <Widget>[
-          Text('› ',
-              style:
-                  CellStyle(foreground: theme.colorScheme.primary, bold: true)),
+          Text(
+            '› ',
+            style: CellStyle(foreground: theme.colorScheme.primary, bold: true),
+          ),
           Expanded(
             child: TextInput(
               controller: _input,
@@ -189,9 +203,10 @@ class _AgentBodyState extends State<_AgentBody>
         Text(
           _working ? '⋯ working   ' : '⏵ ready   ',
           style: CellStyle(
-              foreground: _working
-                  ? theme.colorScheme.warning
-                  : theme.colorScheme.success),
+            foreground: _working
+                ? theme.colorScheme.warning
+                : theme.colorScheme.success,
+          ),
         ),
         Text('q quit', style: theme.mutedStyle),
       ],
@@ -210,8 +225,11 @@ sealed class _Block {
 }
 
 /// `⏺ ` accent bullet + a body that wraps with a hanging indent.
-Widget _bulleted(ThemeData theme, String body,
-    {CellStyle style = CellStyle.empty}) {
+Widget _bulleted(
+  ThemeData theme,
+  String body, {
+  CellStyle style = CellStyle.empty,
+}) {
   return Row(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: <Widget>[
@@ -235,13 +253,18 @@ class _UserBlock extends _Block {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text('› ',
-              style:
-                  CellStyle(foreground: theme.colorScheme.primary, bold: true)),
+          Text(
+            '› ',
+            style: CellStyle(foreground: theme.colorScheme.primary, bold: true),
+          ),
           Expanded(
-            child: Text(text,
-                style: CellStyle(
-                    bold: true, foreground: theme.colorScheme.foreground)),
+            child: Text(
+              text,
+              style: CellStyle(
+                bold: true,
+                foreground: theme.colorScheme.foreground,
+              ),
+            ),
           ),
         ],
       ),
@@ -275,16 +298,18 @@ class _ToolBlock extends _Block {
 
   @override
   Widget build(BuildContext context, ThemeData theme) {
-    final lines =
-        result == null ? const <String>[] : result!.split('\n');
+    final lines = result == null ? const <String>[] : result!.split('\n');
     return Padding(
       padding: const EdgeInsets.only(top: 1),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          _bulleted(theme, title,
-              style: CellStyle(foreground: theme.colorScheme.foreground)),
+          _bulleted(
+            theme,
+            title,
+            style: CellStyle(foreground: theme.colorScheme.foreground),
+          ),
           for (var i = 0; i < lines.length; i++)
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -316,18 +341,26 @@ class _TodoBlock extends _Block {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          _bulleted(theme, 'Update Todos',
-              style: CellStyle(foreground: theme.colorScheme.foreground)),
+          _bulleted(
+            theme,
+            'Update Todos',
+            style: CellStyle(foreground: theme.colorScheme.foreground),
+          ),
           for (var i = 0; i < items.length; i++)
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(i == 0 ? '  ⎿  ' : '     ', style: theme.mutedStyle),
-                Text('${_glyph(items[i].$1)} ',
-                    style: _todoStyle(theme, items[i].$1)),
+                Text(
+                  '${_glyph(items[i].$1)} ',
+                  style: _todoStyle(theme, items[i].$1),
+                ),
                 Expanded(
-                    child: Text(items[i].$2,
-                        style: _todoStyle(theme, items[i].$1))),
+                  child: Text(
+                    items[i].$2,
+                    style: _todoStyle(theme, items[i].$1),
+                  ),
+                ),
               ],
             ),
         ],
@@ -336,17 +369,19 @@ class _TodoBlock extends _Block {
   }
 
   static String _glyph(_Todo t) => switch (t) {
-        _Todo.done => '☒',
-        _Todo.active => '▶',
-        _Todo.pending => '☐',
-      };
+    _Todo.done => '☒',
+    _Todo.active => '▶',
+    _Todo.pending => '☐',
+  };
 
   static CellStyle _todoStyle(ThemeData theme, _Todo t) => switch (t) {
-        _Todo.done => theme.mutedStyle,
-        _Todo.active =>
-          CellStyle(foreground: theme.colorScheme.primary, bold: true),
-        _Todo.pending => CellStyle(foreground: theme.colorScheme.foreground),
-      };
+    _Todo.done => theme.mutedStyle,
+    _Todo.active => CellStyle(
+      foreground: theme.colorScheme.primary,
+      bold: true,
+    ),
+    _Todo.pending => CellStyle(foreground: theme.colorScheme.foreground),
+  };
 }
 
 enum _DiffKind { add, del, ctx }
@@ -375,8 +410,11 @@ class _DiffBlock extends _Block {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          _bulleted(theme, title,
-              style: CellStyle(foreground: theme.colorScheme.foreground)),
+          _bulleted(
+            theme,
+            title,
+            style: CellStyle(foreground: theme.colorScheme.foreground),
+          ),
           Padding(
             padding: const EdgeInsets.only(left: 5, top: 0),
             child: Column(
@@ -429,8 +467,9 @@ final List<_Turn> _script = <_Turn>[
     'Add a --version flag to the CLI that prints the package version.',
     <_Block>[
       _SayBlock(
-          "I'll add a `--version` flag. Let me see how the CLI parses arguments "
-          'and where the version comes from before touching anything.'),
+        "I'll add a `--version` flag. Let me see how the CLI parses arguments "
+        'and where the version comes from before touching anything.',
+      ),
       _TodoBlock(const <(_Todo, String)>[
         (_Todo.active, 'Inspect CLI argument parsing'),
         (_Todo.pending, 'Read the version from pubspec'),
@@ -439,26 +478,25 @@ final List<_Turn> _script = <_Turn>[
         (_Todo.pending, 'Run the test suite'),
       ]),
       _ToolBlock('Read(lib/main.dart)', result: 'Read 48 lines'),
-      _ToolBlock('Read(pubspec.yaml)',
-          result: 'Read 14 lines · version: 1.4.0'),
-      _SayBlock(
-          'Found it — `main()` switches on `args[0]`, and the version lives in '
-          'pubspec.yaml. I\'ll read it at build time and intercept `--version` '
-          'before the switch so it works no matter the subcommand.'),
-      _DiffBlock(
-        'Update(lib/main.dart)',
-        const <_Diff>[
-          _Diff('1', _DiffKind.ctx, "import 'dart:io';"),
-          _Diff('2', _DiffKind.add, "import 'src/version.dart';"),
-          _Diff('', _DiffKind.ctx, ''),
-          _Diff('8', _DiffKind.ctx, 'Future<void> main(List<String> args) {'),
-          _Diff('9', _DiffKind.add, "  if (args.contains('--version')) {"),
-          _Diff('10', _DiffKind.add, '    stdout.writeln(packageVersion);'),
-          _Diff('11', _DiffKind.add, '    return;'),
-          _Diff('12', _DiffKind.add, '  }'),
-        ],
-        'Updated lib/main.dart with 6 additions',
+      _ToolBlock(
+        'Read(pubspec.yaml)',
+        result: 'Read 14 lines · version: 1.4.0',
       ),
+      _SayBlock(
+        'Found it — `main()` switches on `args[0]`, and the version lives in '
+        'pubspec.yaml. I\'ll read it at build time and intercept `--version` '
+        'before the switch so it works no matter the subcommand.',
+      ),
+      _DiffBlock('Update(lib/main.dart)', const <_Diff>[
+        _Diff('1', _DiffKind.ctx, "import 'dart:io';"),
+        _Diff('2', _DiffKind.add, "import 'src/version.dart';"),
+        _Diff('', _DiffKind.ctx, ''),
+        _Diff('8', _DiffKind.ctx, 'Future<void> main(List<String> args) {'),
+        _Diff('9', _DiffKind.add, "  if (args.contains('--version')) {"),
+        _Diff('10', _DiffKind.add, '    stdout.writeln(packageVersion);'),
+        _Diff('11', _DiffKind.add, '    return;'),
+        _Diff('12', _DiffKind.add, '  }'),
+      ], 'Updated lib/main.dart with 6 additions'),
       _TodoBlock(const <(_Todo, String)>[
         (_Todo.done, 'Inspect CLI argument parsing'),
         (_Todo.done, 'Read the version from pubspec'),
@@ -467,39 +505,39 @@ final List<_Turn> _script = <_Turn>[
         (_Todo.pending, 'Run the test suite'),
       ]),
       _SayBlock(
-          'Done — `my-app --version` now prints `1.4.0`. Want me to add a test '
-          'to lock it in?'),
+        'Done — `my-app --version` now prints `1.4.0`. Want me to add a test '
+        'to lock it in?',
+      ),
     ],
   ),
-  _Turn(
-    'Yes, add a test and run it.',
-    <_Block>[
-      _SayBlock(
-          'Adding a test that runs the CLI with `--version`, captures stdout, '
-          'and asserts the version string.'),
-      _ToolBlock('Write(test/version_test.dart)', result: 'Wrote 18 lines'),
-      _ToolBlock('Bash(dart test ./test)',
-          result: 'Running tests…\n00:01 +13: All tests passed!'),
-      _TodoBlock(const <(_Todo, String)>[
-        (_Todo.done, 'Inspect CLI argument parsing'),
-        (_Todo.done, 'Read the version from pubspec'),
-        (_Todo.done, 'Handle the --version flag'),
-        (_Todo.done, 'Add a regression test'),
-        (_Todo.done, 'Run the test suite'),
-      ]),
-      _SayBlock(
-          'All 13 tests pass, including the new `--version` test. The flag is '
-          'implemented, wired before the subcommand switch, and covered. ✓'),
-    ],
-  ),
+  _Turn('Yes, add a test and run it.', <_Block>[
+    _SayBlock(
+      'Adding a test that runs the CLI with `--version`, captures stdout, '
+      'and asserts the version string.',
+    ),
+    _ToolBlock('Write(test/version_test.dart)', result: 'Wrote 18 lines'),
+    _ToolBlock(
+      'Bash(dart test ./test)',
+      result: 'Running tests…\n00:01 +13: All tests passed!',
+    ),
+    _TodoBlock(const <(_Todo, String)>[
+      (_Todo.done, 'Inspect CLI argument parsing'),
+      (_Todo.done, 'Read the version from pubspec'),
+      (_Todo.done, 'Handle the --version flag'),
+      (_Todo.done, 'Add a regression test'),
+      (_Todo.done, 'Run the test suite'),
+    ]),
+    _SayBlock(
+      'All 13 tests pass, including the new `--version` test. The flag is '
+      'implemented, wired before the subcommand switch, and covered. ✓',
+    ),
+  ]),
 ];
 
-final _Turn _fallbackTurn = _Turn(
-  '(scripted demo — type anything)',
-  <_Block>[
-    _SayBlock(
-        "That's the end of this scripted demo. In a real session this is where "
-        "I'd plan, edit, and verify your next request — streaming the work as "
-        'it happens.'),
-  ],
-);
+final _Turn _fallbackTurn = _Turn('(scripted demo — type anything)', <_Block>[
+  _SayBlock(
+    "That's the end of this scripted demo. In a real session this is where "
+    "I'd plan, edit, and verify your next request — streaming the work as "
+    'it happens.',
+  ),
+]);

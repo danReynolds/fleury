@@ -12,6 +12,12 @@
 ///   type_text / press_key tools.
 library;
 
-export 'src/app_bridge.dart' show BridgeLog, FleuryAppBridge, FleuryAppBridgeException;
+export 'src/app_bridge.dart'
+    show BridgeLog, FleuryAppBridge, FleuryAppBridgeException;
 export 'src/mcp_server.dart'
-    show McpServer, mcpProtocolVersion, mcpServerName, mcpServerVersion, runMcpServer;
+    show
+        McpServer,
+        mcpProtocolVersion,
+        mcpServerName,
+        mcpServerVersion,
+        runMcpServer;

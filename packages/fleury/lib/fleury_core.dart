@@ -338,7 +338,6 @@ export 'src/widgets/key_bindings.dart'
         KeyBinding,
         KeyBindingEvent,
         KeyBindingHandler,
-        KeyBindingTrigger,
         KeyBindings,
         KeyCompletion,
         KeySequenceMatch,

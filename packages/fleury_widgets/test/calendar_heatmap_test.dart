@@ -348,34 +348,32 @@ void main() {
       skip: _dstSkip,
     );
 
-    testWidgets(
-      'spring-forward day count is not truncated by the 23h day',
-      (tester) {
-        // America/New_York spring-forward is Mar 8 2026 (a 23h civil day). A
-        // range spanning it must still count every calendar day; the old
-        // difference().inDays swallowed the short day and under-reported.
-        tester.pumpWidget(
-          SizedBox(
-            width: 20,
-            height: 8,
-            child: CalendarHeatmap(
-              semanticLabel: 'Activity',
-              start: DateTime(2026, 3, 7),
-              end: DateTime(2026, 3, 10),
-              values: const {},
-              cellWidth: 1,
-            ),
+    testWidgets('spring-forward day count is not truncated by the 23h day', (
+      tester,
+    ) {
+      // America/New_York spring-forward is Mar 8 2026 (a 23h civil day). A
+      // range spanning it must still count every calendar day; the old
+      // difference().inDays swallowed the short day and under-reported.
+      tester.pumpWidget(
+        SizedBox(
+          width: 20,
+          height: 8,
+          child: CalendarHeatmap(
+            semanticLabel: 'Activity',
+            start: DateTime(2026, 3, 7),
+            end: DateTime(2026, 3, 10),
+            values: const {},
+            cellWidth: 1,
           ),
-        );
-        final chart = tester.semantics().single(
-          role: SemanticRole.chart,
-          label: 'Activity',
-        );
-        // Mar 7, 8, 9, 10 inclusive = 4 calendar days.
-        expect(chart.state.chartPointCount, 4);
-      },
-      skip: _dstSkip,
-    );
+        ),
+      );
+      final chart = tester.semantics().single(
+        role: SemanticRole.chart,
+        label: 'Activity',
+      );
+      // Mar 7, 8, 9, 10 inclusive = 4 calendar days.
+      expect(chart.state.chartPointCount, 4);
+    }, skip: _dstSkip);
 
     testWidgets('zero-day window renders nothing safely', (tester) {
       final d = DateTime(2024, 1, 1);

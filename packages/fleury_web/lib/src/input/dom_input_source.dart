@@ -736,9 +736,7 @@ KeyEvent? keyEventFromBrowser(web.KeyboardEvent event) {
   final key = event.key;
   if (key == 'Dead' || key == 'Unidentified' || key.isEmpty) return null;
 
-  final position = event.code.isEmpty
-      ? null
-      : positionByDomCode[event.code];
+  final position = event.code.isEmpty ? null : positionByDomCode[event.code];
 
   final keyCode = _keyCodeFor(key);
   final modifiers = _modifiersFromKeyboard(event);

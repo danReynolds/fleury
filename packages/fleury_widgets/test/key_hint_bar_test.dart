@@ -12,7 +12,7 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyCode.char('q'), onTrigger: () {}, label: 'Quit'),
+            KeyBinding(KeyCode.char('q'), onTrigger: (_) {}, label: 'Quit'),
           ],
           child: const Column(
             children: [
@@ -30,11 +30,11 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyCode.char('q'), onTrigger: () {}, label: 'outer'),
+            KeyBinding(KeyCode.char('q'), onTrigger: (_) {}, label: 'outer'),
           ],
           child: KeyBindings(
             bindings: [
-              KeyBinding(KeyCode.char('q'), onTrigger: () {}, label: 'inner'),
+              KeyBinding(KeyCode.char('q'), onTrigger: (_) {}, label: 'inner'),
             ],
             child: const Column(
               children: [
@@ -55,20 +55,20 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyCode.char('a'), onTrigger: () {}),
+            KeyBinding(KeyCode.char('a'), onTrigger: (_) {}),
             KeyBinding(
               KeyCode.char('b'),
-              onTrigger: () {},
+              onTrigger: (_) {},
               label: 'hidden',
               hideFromHintBar: true,
             ),
             KeyBinding(
               KeyCode.char('c'),
-              onTrigger: () {},
+              onTrigger: (_) {},
               label: 'off',
               enabled: false,
             ),
-            KeyBinding(KeyCode.char('d'), onTrigger: () {}, label: 'shown'),
+            KeyBinding(KeyCode.char('d'), onTrigger: (_) {}, label: 'shown'),
           ],
           child: const Column(
             children: [
@@ -121,10 +121,11 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding.any(
-              [KeyCode.arrowUp, KeyCode.arrowDown],
+            KeyBinding(
+              KeyCode.arrowUp,
+              aliases: [KeyCode.arrowDown],
               label: 'move',
-              onTrigger: () {},
+              onTrigger: (_) {},
             ),
           ],
           child: const Column(
@@ -144,7 +145,7 @@ void main() {
         KeyBindings(
           bindings: [
             for (var i = 0; i < 6; i++)
-              KeyBinding(KeyCode.char('$i'), label: 'act$i', onTrigger: () {}),
+              KeyBinding(KeyCode.char('$i'), label: 'act$i', onTrigger: (_) {}),
           ],
           child: const Column(
             children: [
@@ -171,7 +172,7 @@ void main() {
         KeyBindings(
           bindings: [
             for (var i = 0; i < 4; i++)
-              KeyBinding(KeyCode.char('$i'), label: 'act$i', onTrigger: () {}),
+              KeyBinding(KeyCode.char('$i'), label: 'act$i', onTrigger: (_) {}),
           ],
           // A non-Expanded bar in a Row receives an unbounded width.
           child: Row(
@@ -197,7 +198,7 @@ void main() {
               KeyBinding(
                 KeyCode.char(String.fromCharCode(97 + i)),
                 label: 'a$i',
-                onTrigger: () {},
+                onTrigger: (_) {},
               ),
           ],
           child: const Column(

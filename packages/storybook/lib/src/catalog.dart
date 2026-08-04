@@ -1890,11 +1890,11 @@ class _OverlayStory extends StatelessWidget {
         ),
         'KeyHintBar' => KeyBindings(
           bindings: <KeyBinding>[
-            KeyBinding(KeySequence.ctrl.k, onTrigger: () {}, label: 'palette'),
-            KeyBinding(KeyCode.char('?'), onTrigger: () {}, label: 'help'),
+            KeyBinding(KeySequence.ctrl.k, onTrigger: (_) {}, label: 'palette'),
+            KeyBinding(KeyCode.char('?'), onTrigger: (_) {}, label: 'help'),
             KeyBinding(
               KeySequence.ctrl.s,
-              onTrigger: () {},
+              onTrigger: (_) {},
               label: 'hidden binding',
               hideFromHintBar: true,
             ),
@@ -3524,12 +3524,12 @@ class _AnchoredSpotlightState extends State<_AnchoredSpotlight> {
         KeyBinding(
           KeySequence.space,
           label: _open ? 'Hide float' : 'Show float',
-          onTrigger: () => setState(() => _open = !_open),
+          onTrigger: (_) => setState(() => _open = !_open),
         ),
         KeyBinding(
           KeySequence.tab,
           label: 'Next alignment',
-          onTrigger: () =>
+          onTrigger: (_) =>
               setState(() => _index = (_index + 1) % _alignments.length),
         ),
       ],

@@ -644,7 +644,7 @@ class _TraceTimelineState extends State<TraceTimeline> {
           KeyBinding(
             KeySequence.ctrl.c,
             label: 'Copy trace event',
-            onTrigger: () => unawaited(_copySelection()),
+            onTrigger: (_) => unawaited(_copySelection()),
           ),
         ],
         child: list,

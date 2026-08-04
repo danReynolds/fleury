@@ -35,10 +35,7 @@ int _cellsColored(FleuryTester tester, Color color, CellSize size) {
 
 /// Click at a screen cell (press + release), the way a user opens the picker.
 void _click(FleuryTester tester, ({int col, int row}) at) {
-  for (final kind in <MouseEventKind>[
-    MouseEventKind.down,
-    MouseEventKind.up,
-  ]) {
+  for (final kind in <MouseEventKind>[MouseEventKind.down, MouseEventKind.up]) {
     tester.sendMouse(
       MouseEvent(
         kind: kind,
@@ -83,7 +80,12 @@ void main() {
         emptyMark: ' ',
       );
 
-      for (final section in ['IN CONTEXT', 'COLOUR ROLES', 'TEXT STYLES', 'CONTROLS']) {
+      for (final section in [
+        'IN CONTEXT',
+        'COLOUR ROLES',
+        'TEXT STYLES',
+        'CONTROLS',
+      ]) {
         expect(output, contains(section), reason: 'missing section: $section');
       }
       // Every ColorScheme role, by name.
@@ -137,7 +139,8 @@ void main() {
       expect(
         _cellsColored(tester, second.data.colorScheme.primary, size),
         greaterThan(0),
-        reason: 'the highlighted palette should paint the sample immediately, '
+        reason:
+            'the highlighted palette should paint the sample immediately, '
             'before any Enter',
       );
 

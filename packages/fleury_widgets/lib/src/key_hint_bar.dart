@@ -17,7 +17,7 @@ import 'package:fleury/fleury_core.dart';
 /// missing "no affordance" the plain-`Text` bar lacked). Pinning ubiquitous
 /// globals like quit/help ahead of locals is a deliberate non-goal for now —
 /// it would break the contiguous prefix + single trailing marker. A binding
-/// bound to several aliases (`KeyBinding.any([↑, ↓], …)`) renders a
+/// bound to several aliases (`KeyBinding(↑, aliases: [↓], …)`) renders a
 /// **combined** label — `[↑↓] move`, not just `[↑] move`.
 ///
 /// Filtering rules:

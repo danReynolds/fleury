@@ -631,7 +631,7 @@ class _PatchReviewState extends State<PatchReview> {
           KeyBinding(
             KeySequence.ctrl.c,
             label: 'Copy patch file',
-            onTrigger: () => unawaited(_copySelection()),
+            onTrigger: (_) => unawaited(_copySelection()),
           ),
         ],
         child: fileList,

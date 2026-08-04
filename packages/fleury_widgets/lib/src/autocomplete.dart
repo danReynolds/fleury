@@ -384,9 +384,9 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
     _borderStyle = theme.borderStyle;
     return KeyBindings(
       bindings: [
-        KeyBinding.event(
+        KeyBinding(
           KeySequence.up,
-          onEvent: (event) {
+          onTrigger: (event) {
             if (_entry == null) {
               event.bubble();
               return;
@@ -395,9 +395,9 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
           },
           hideFromHintBar: true,
         ),
-        KeyBinding.event(
+        KeyBinding(
           KeySequence.down,
-          onEvent: (event) {
+          onTrigger: (event) {
             if (_entry == null) {
               event.bubble();
               return;
@@ -406,9 +406,9 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
           },
           hideFromHintBar: true,
         ),
-        KeyBinding.event(
+        KeyBinding(
           KeySequence.escape,
-          onEvent: (event) {
+          onTrigger: (event) {
             if (_entry == null) {
               event.bubble();
               return;
@@ -420,9 +420,9 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
         // TextInput's local keymap intentionally leaves Enter unresolved so
         // this binding can accept a visible suggestion or bubble when the menu
         // is closed. A dismissed menu must never submit a hidden row.
-        KeyBinding.event(
+        KeyBinding(
           KeySequence.enter,
-          onEvent: (event) {
+          onTrigger: (event) {
             if (_entry == null) {
               event.bubble();
               return;
@@ -434,9 +434,9 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
         // Tab accepts the highlighted suggestion when the menu is open — the
         // dominant shell/fzf completion convention. When closed, Tab bubbles
         // so it still moves focus between widgets.
-        KeyBinding.event(
+        KeyBinding(
           KeySequence.tab,
-          onEvent: (event) {
+          onTrigger: (event) {
             if (_entry == null) {
               event.bubble();
               return;

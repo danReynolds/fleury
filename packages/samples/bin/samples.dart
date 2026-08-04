@@ -58,7 +58,7 @@ Future<void> main(List<String> args) async {
 /// built-in unhandled-Ctrl+C escape hatch.)
 Widget withQuitKey(Widget app) => KeyBindings(
   bindings: [
-    KeyBinding(KeySequence.q, onTrigger: () => requestExit(), label: 'Quit'),
+    KeyBinding(KeySequence.q, onTrigger: (_) => requestExit(), label: 'Quit'),
   ],
   child: app,
 );

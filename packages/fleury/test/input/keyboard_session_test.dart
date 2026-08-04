@@ -154,9 +154,7 @@ void main() {
 
   group('per-press identity matching (§13.3)', () {
     test('a positional press matches position-first, never twin-fallback', () {
-      final session = KeyboardSession(
-        capabilities: KeyboardCapabilities.full,
-      );
+      final session = KeyboardSession(capabilities: KeyboardCapabilities.full);
       // AZERTY: the QWERTY-W spot types 'z'.
       session.ingest(_down('z', position: KeyPosition.w));
       final snap = session.publishLatch();
@@ -171,9 +169,7 @@ void main() {
       // flag 4 is "can send"; the DOM reports 'Unidentified'). A down with
       // a position closed by an up without one — and the reverse — must
       // not split into two records and wedge the key as held.
-      final session = KeyboardSession(
-        capabilities: KeyboardCapabilities.full,
-      );
+      final session = KeyboardSession(capabilities: KeyboardCapabilities.full);
       session.ingest(_down('w', position: KeyPosition.w));
       session.ingest(_up('w')); // same key, position omitted
       var snap = session.publishLatch();
@@ -187,9 +183,7 @@ void main() {
     });
 
     test('a positionless duplicate down does not open a second record', () {
-      final session = KeyboardSession(
-        capabilities: KeyboardCapabilities.full,
-      );
+      final session = KeyboardSession(capabilities: KeyboardCapabilities.full);
       session.ingest(_down('w', position: KeyPosition.w));
       final regularized = session.ingest(_down('w')); // no position
       expect(regularized.events.single.type, KeyEventType.repeat);
@@ -198,9 +192,7 @@ void main() {
     });
 
     test('a positionless press degrades one-way to the US twin', () {
-      final session = KeyboardSession(
-        capabilities: KeyboardCapabilities.full,
-      );
+      final session = KeyboardSession(capabilities: KeyboardCapabilities.full);
       session.ingest(_down('w'));
       final snap = session.publishLatch();
       expect(snap.isHeld(KeyPosition.w), isTrue); // twin degradation
@@ -241,9 +233,7 @@ void main() {
     test('a capability downgrade recovers held keys', () {
       final session = full();
       session.ingest(_down('a'));
-      final releases = session.updateCapabilities(
-        KeyboardCapabilities.legacy,
-      );
+      final releases = session.updateCapabilities(KeyboardCapabilities.legacy);
       expect(releases, hasLength(1));
       expect(session.publishLatch().pressed, isEmpty);
     });

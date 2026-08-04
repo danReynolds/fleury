@@ -817,7 +817,7 @@ class _MarkdownViewState extends State<MarkdownView> {
           KeyBinding(
             KeySequence.ctrl.c,
             label: 'Copy markdown selection',
-            onTrigger: () => unawaited(_copySelection()),
+            onTrigger: (_) => unawaited(_copySelection()),
           ),
         ],
         child: list,

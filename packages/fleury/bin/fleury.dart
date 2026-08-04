@@ -928,15 +928,14 @@ void _pumpBytes({
 /// the response be revalidated instead of blindly reused.
 String? _monoFontETagCache;
 
-String _monoFontETag() =>
-    _monoFontETagCache ??= () {
-      // FNV-1a over the subset; no crypto dependency needed for a cache tag.
-      var hash = 0xcbf29ce484222325;
-      for (final byte in serveMonoFontBytes()) {
-        hash = (hash ^ byte) * 0x100000001b3;
-      }
-      return '"${hash.toUnsigned(64).toRadixString(16)}"';
-    }();
+String _monoFontETag() => _monoFontETagCache ??= () {
+  // FNV-1a over the subset; no crypto dependency needed for a cache tag.
+  var hash = 0xcbf29ce484222325;
+  for (final byte in serveMonoFontBytes()) {
+    hash = (hash ^ byte) * 0x100000001b3;
+  }
+  return '"${hash.toUnsigned(64).toRadixString(16)}"';
+}();
 
 Future<void> _serveStaticAsset(HttpRequest req) async {
   final path = req.uri.path;

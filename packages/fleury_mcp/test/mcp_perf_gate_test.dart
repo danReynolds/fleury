@@ -22,45 +22,53 @@ void main() {
       expect(
         d['deltaPctOfFull'] as num,
         lessThan(2.0),
-        reason: 'delta notify (${d['deltaNotifyBytes']}B) vs full '
+        reason:
+            'delta notify (${d['deltaNotifyBytes']}B) vs full '
             '(${d['fullReadBytes']}B) must stay far below a full re-read',
       );
       // Even acting on the change (delta + reading the one node) stays <5%.
       expect(d['actPctOfFull'] as num, lessThan(5.0));
     });
 
-    test('WS-9/WS-4: typed-affordance + untrusted marker overhead stays small',
-        () {
-      final a = affordanceOverhead(dashboard);
-      // Baseline ~2.4%. Gate at 10% so a future schema bloat is caught before it
-      // meaningfully grows every get_ui.
-      expect(
-        a['overheadPct'] as num,
-        lessThan(10.0),
-        reason: 'valueSchema + untrustedContent added '
-            '${a['overheadBytes']}B (+${a['overheadPct']}%)',
-      );
-    });
+    test(
+      'WS-9/WS-4: typed-affordance + untrusted marker overhead stays small',
+      () {
+        final a = affordanceOverhead(dashboard);
+        // Baseline ~2.4%. Gate at 10% so a future schema bloat is caught before it
+        // meaningfully grows every get_ui.
+        expect(
+          a['overheadPct'] as num,
+          lessThan(10.0),
+          reason:
+              'valueSchema + untrustedContent added '
+              '${a['overheadBytes']}B (+${a['overheadPct']}%)',
+        );
+      },
+    );
 
-    test('WS-2: capped settle beats the uncapped (old) latency on a ticking app',
-        () async {
-      final st = await settleLatency();
-      // Relative assertions — robust to absolute CI timing. Baseline ~3.7x.
-      expect(
-        st['cappedMs'] as num,
-        lessThan((st['uncappedMs'] as num) * 0.7),
-        reason: 'capped ${st['cappedMs']}ms must beat uncapped '
-            '${st['uncappedMs']}ms (the never-close case)',
-      );
-      expect(st['speedup'] as num, greaterThan(1.5));
-    });
+    test(
+      'WS-2: capped settle beats the uncapped (old) latency on a ticking app',
+      () async {
+        final st = await settleLatency();
+        // Relative assertions — robust to absolute CI timing. Baseline ~3.7x.
+        expect(
+          st['cappedMs'] as num,
+          lessThan((st['uncappedMs'] as num) * 0.7),
+          reason:
+              'capped ${st['cappedMs']}ms must beat uncapped '
+              '${st['uncappedMs']}ms (the never-close case)',
+        );
+        expect(st['speedup'] as num, greaterThan(1.5));
+      },
+    );
 
     test('WS-7: the cached id index is far cheaper than a full re-walk', () {
       final lu = lookupCost(dashboard);
       expect(
         lu['indexedUs'] as num,
         lessThan((lu['fullWalkUs'] as num) * 0.5),
-        reason: 'cached nodeById ${lu['indexedUs']}us must beat the full '
+        reason:
+            'cached nodeById ${lu['indexedUs']}us must beat the full '
             're-walk ${lu['fullWalkUs']}us',
       );
       // And the flattened node list is cached per snapshot (identity) — repeated

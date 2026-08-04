@@ -42,7 +42,7 @@ class _AppState extends State<_App> {
       bindings: [
         KeyBinding(
           KeyCode.char('t'),
-          onTrigger: () => setState(() => _count++),
+          onTrigger: (_) => setState(() => _count++),
         ),
       ],
       child: Focus(
@@ -77,7 +77,7 @@ class _ImageAppState extends State<_ImageApp> {
       bindings: [
         KeyBinding(
           KeyCode.char('i'),
-          onTrigger: () => setState(() => _generation++),
+          onTrigger: (_) => setState(() => _generation++),
         ),
       ],
       child: Focus(autofocus: true, child: _ImageProbe(_generation)),
@@ -148,7 +148,7 @@ class _PostFrameAppState extends State<_PostFrameApp> {
       bindings: [
         KeyBinding(
           KeyCode.char('t'),
-          onTrigger: () => setState(() => _count++),
+          onTrigger: (_) => setState(() => _count++),
         ),
       ],
       child: Focus(autofocus: true, child: Text('count: $_count')),
@@ -177,7 +177,11 @@ void main() {
     // The peer stalls; the app keeps absorbing state changes.
     transport.stall();
     for (var i = 0; i < 3; i++) {
-      transport.emit(const InputEventFrame(InputBatch(key: KeyEvent(KeyCode.char('t')), committedText: 't')));
+      transport.emit(
+        const InputEventFrame(
+          InputBatch(key: KeyEvent(KeyCode.char('t')), committedText: 't'),
+        ),
+      );
       await _settle();
     }
     expect(
@@ -231,9 +235,17 @@ void main() {
       final before = semantics().length;
 
       transport.stall();
-      transport.emit(const InputEventFrame(InputBatch(key: KeyEvent(KeyCode.char('t')), committedText: 't')));
+      transport.emit(
+        const InputEventFrame(
+          InputBatch(key: KeyEvent(KeyCode.char('t')), committedText: 't'),
+        ),
+      );
       await _settle();
-      transport.emit(const InputEventFrame(InputBatch(key: KeyEvent(KeyCode.char('t')), committedText: 't')));
+      transport.emit(
+        const InputEventFrame(
+          InputBatch(key: KeyEvent(KeyCode.char('t')), committedText: 't'),
+        ),
+      );
       await _settle();
       expect(semantics().length, before, reason: 'no semantics while stalled');
 
@@ -281,9 +293,17 @@ void main() {
 
     transport.stall();
     // Two generations advance during the stall; only the last may ship.
-    transport.emit(const InputEventFrame(InputBatch(key: KeyEvent(KeyCode.char('i')), committedText: 'i')));
+    transport.emit(
+      const InputEventFrame(
+        InputBatch(key: KeyEvent(KeyCode.char('i')), committedText: 'i'),
+      ),
+    );
     await _settle();
-    transport.emit(const InputEventFrame(InputBatch(key: KeyEvent(KeyCode.char('i')), committedText: 'i')));
+    transport.emit(
+      const InputEventFrame(
+        InputBatch(key: KeyEvent(KeyCode.char('i')), committedText: 'i'),
+      ),
+    );
     await _settle();
     expect(
       transport.sent.whereType<InlineImageFrame>().length,
@@ -340,7 +360,11 @@ void main() {
     const newSize = CellSize(60, 8);
     transport.emit(const ResizeFrame(newSize));
     await _settle();
-    transport.emit(const InputEventFrame(InputBatch(key: KeyEvent(KeyCode.char('t')), committedText: 't')));
+    transport.emit(
+      const InputEventFrame(
+        InputBatch(key: KeyEvent(KeyCode.char('t')), committedText: 't'),
+      ),
+    );
     await _settle();
     expect(plans().length, before, reason: 'resize is deferred too');
 
@@ -386,7 +410,11 @@ void main() {
     expect(baseline, greaterThan(0));
 
     transport.stall();
-    transport.emit(const InputEventFrame(InputBatch(key: KeyEvent(KeyCode.char('t')), committedText: 't')));
+    transport.emit(
+      const InputEventFrame(
+        InputBatch(key: KeyEvent(KeyCode.char('t')), committedText: 't'),
+      ),
+    );
     await _settle();
     expect(
       postFrameRuns,

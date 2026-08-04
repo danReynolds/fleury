@@ -85,7 +85,7 @@ class _AppState extends State<_App> {
       bindings: [
         KeyBinding(
           KeyCode.char('t'),
-          onTrigger: () => setState(() => _count++),
+          onTrigger: (_) => setState(() => _count++),
         ),
       ],
       child: Focus(
@@ -151,7 +151,11 @@ void main() {
     }
 
     // --- 2. A value-only change ships a patch, not a second full frame.
-    transport.emit(const InputEventFrame(InputBatch(key: KeyEvent(KeyCode.char('t')), committedText: 't')));
+    transport.emit(
+      const InputEventFrame(
+        InputBatch(key: KeyEvent(KeyCode.char('t')), committedText: 't'),
+      ),
+    );
     await _settle();
     expect(semantics(), hasLength(2));
     final patch = _decodeEnvelope(semantics()[1]);

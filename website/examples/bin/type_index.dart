@@ -53,12 +53,12 @@ void main(List<String> args) {
 
 /// The declared name of a public type declaration, or null for non-types.
 String? _typeName(CompilationUnitMember decl) => switch (decl) {
-      ClassDeclaration d => d.name.lexeme,
-      EnumDeclaration d => d.name.lexeme,
-      MixinDeclaration d => d.name.lexeme,
-      // ignore: experimental_member_use
-      ExtensionTypeDeclaration d => d.name.lexeme,
-      ClassTypeAlias d => d.name.lexeme,
-      TypeAlias d => d.name.lexeme,
-      _ => null,
-    };
+  ClassDeclaration d => d.name.lexeme,
+  EnumDeclaration d => d.name.lexeme,
+  MixinDeclaration d => d.name.lexeme,
+  // ignore: experimental_member_use
+  ExtensionTypeDeclaration d => d.name.lexeme,
+  ClassTypeAlias d => d.name.lexeme,
+  TypeAlias d => d.name.lexeme,
+  _ => null,
+};

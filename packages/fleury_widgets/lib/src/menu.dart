@@ -118,7 +118,8 @@ class _MenuState extends State<Menu> {
       context,
     ); // resolved in-tree, threaded into the overlay
     final entry = OverlayEntry(
-      builder: (_) => BoundsAnchor(notifier: _bounds,
+      builder: (_) => BoundsAnchor(
+        notifier: _bounds,
         child: _MenuBody(
           entries: widget.items,
           semanticLabel: widget.semanticLabel,
@@ -159,7 +160,8 @@ class _MenuState extends State<Menu> {
   @override
   Widget build(BuildContext context) {
     Focus.maybeOf(context); // Rebuild trigger semantics when focus moves.
-    return BoundsObserver(notifier: _bounds,
+    return BoundsObserver(
+      notifier: _bounds,
       child: Semantics(
         role: SemanticRole.button,
         label: widget.semanticLabel,
@@ -351,7 +353,8 @@ class _MenuBodyState extends State<_MenuBody> {
     final overlay = Overlay.of(context);
     final manager = Focus.of(context);
     final entry = OverlayEntry(
-      builder: (_) => BoundsAnchor(notifier: _submenuAnchor,
+      builder: (_) => BoundsAnchor(
+        notifier: _submenuAnchor,
         alignment: Alignment.topRight,
         anchorAlignment: Alignment.topLeft,
         gap: 1,
@@ -486,7 +489,8 @@ class _MenuBodyState extends State<_MenuBody> {
           focusNode: _focus,
           autofocus: true,
           onKey: _onKey,
-          child: BoundsObserver(notifier: _selfBounds,
+          child: BoundsObserver(
+            notifier: _selfBounds,
             // Popup supplies the float contract: opaque fill, frame, and chrome
             // semantics, so the app underneath can't bleed through.
             child: Container.framed(
@@ -550,7 +554,10 @@ class _MenuBodyState extends State<_MenuBody> {
                         // Anchor the selected submenu row so its child panel
                         // opens aligned to it (not the panel corner).
                         return sel
-                            ? BoundsObserver(notifier: _submenuAnchor, child: item)
+                            ? BoundsObserver(
+                                notifier: _submenuAnchor,
+                                child: item,
+                              )
                             : item;
                     }
                   },

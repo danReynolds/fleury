@@ -15,7 +15,9 @@ import 'package:web/web.dart' as web;
 final class _FailingFrameSource implements BrowserFrameSource {
   @override
   Future<MountedApp> start(BrowserHostComponents components) async {
-    throw StateError('fleury serve connection closed before it opened: ws://x/');
+    throw StateError(
+      'fleury serve connection closed before it opened: ws://x/',
+    );
   }
 }
 
@@ -50,7 +52,10 @@ void main() {
 
   test('a failed connect surfaces an error and a retry affordance, not a stuck '
       '"connecting…"', () async {
-    final app = await connectRemoteClient(host: host, source: _FailingFrameSource());
+    final app = await connectRemoteClient(
+      host: host,
+      source: _FailingFrameSource(),
+    );
     expect(app, isNull);
 
     // The serve page's #status observer only leaves "connecting…" when this
@@ -67,18 +72,20 @@ void main() {
     expect(banner!.textContent!.toLowerCase(), contains('retry'));
   });
 
-  test('a successful connect marks the page connected with no error banner',
-      () async {
-    final app = await connectRemoteClient(
-      host: host,
-      source: _SucceedingFrameSource(),
-    );
-    addTearDown(() async => app?.dispose());
+  test(
+    'a successful connect marks the page connected with no error banner',
+    () async {
+      final app = await connectRemoteClient(
+        host: host,
+        source: _SucceedingFrameSource(),
+      );
+      addTearDown(() async => app?.dispose());
 
-    expect(
-      web.document.body!.getAttribute('data-fleury-remote-client'),
-      'connected',
-    );
-    expect(host.querySelector('[data-fleury-connection-error]'), isNull);
-  });
+      expect(
+        web.document.body!.getAttribute('data-fleury-remote-client'),
+        'connected',
+      );
+      expect(host.querySelector('[data-fleury-connection-error]'), isNull);
+    },
+  );
 }

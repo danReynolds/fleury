@@ -395,7 +395,7 @@ class _TaskGraphState extends State<TaskGraph> {
           KeyBinding(
             KeySequence.ctrl.c,
             label: 'Copy task',
-            onTrigger: () => unawaited(_copySelection()),
+            onTrigger: (_) => unawaited(_copySelection()),
           ),
         ],
         child: list,

@@ -29,51 +29,57 @@ class _Capture extends StatelessWidget {
 
 void main() {
   testWidgets(
-      'Toaster.show from a build context above a child Toaster throws without '
-      'an app-wide Toaster (the Dialog-story crash)', (tester) {
-    late BuildContext storyBuildContext;
-    tester.pumpWidget(
-      _Capture((context) {
-        // Same shape as _OverlayStory.build: this context is the parent of the
-        // Toaster it returns, so it has no Toaster ancestor of its own.
-        storyBuildContext = context;
-        return const Toaster(child: Text('story body'));
-      }),
-    );
-    tester.render(size: const CellSize(40, 10));
+    'Toaster.show from a build context above a child Toaster throws without '
+    'an app-wide Toaster (the Dialog-story crash)',
+    (tester) {
+      late BuildContext storyBuildContext;
+      tester.pumpWidget(
+        _Capture((context) {
+          // Same shape as _OverlayStory.build: this context is the parent of the
+          // Toaster it returns, so it has no Toaster ancestor of its own.
+          storyBuildContext = context;
+          return const Toaster(child: Text('story body'));
+        }),
+      );
+      tester.render(size: const CellSize(40, 10));
 
-    expect(
-      () => Toaster.show(storyBuildContext, 'Dialog result: cancelled'),
-      throwsA(isA<StateError>()),
-      reason: 'reproduces the unhandled exception that crashed the session',
-    );
-  });
+      expect(
+        () => Toaster.show(storyBuildContext, 'Dialog result: cancelled'),
+        throwsA(isA<StateError>()),
+        reason: 'reproduces the unhandled exception that crashed the session',
+      );
+    },
+  );
 
   testWidgets(
-      'an app-wide Toaster above the story build context resolves the call',
-      (tester) {
-    late BuildContext storyBuildContext;
-    Object? thrown;
-    tester.pumpWidget(
-      // The StorybookApp fix: a Toaster wrapping the whole app, above every
-      // story's build context.
-      _Capture((outer) {
-        return Toaster(
-          child: _Capture((context) {
-            storyBuildContext = context;
-            return const Toaster(child: Text('story body'));
-          }),
-        );
-      }),
-    );
-    tester.render(size: const CellSize(40, 10));
+    'an app-wide Toaster above the story build context resolves the call',
+    (tester) {
+      late BuildContext storyBuildContext;
+      Object? thrown;
+      tester.pumpWidget(
+        // The StorybookApp fix: a Toaster wrapping the whole app, above every
+        // story's build context.
+        _Capture((outer) {
+          return Toaster(
+            child: _Capture((context) {
+              storyBuildContext = context;
+              return const Toaster(child: Text('story body'));
+            }),
+          );
+        }),
+      );
+      tester.render(size: const CellSize(40, 10));
 
-    try {
-      Toaster.show(storyBuildContext, 'Dialog result: cancelled');
-    } catch (e) {
-      thrown = e;
-    }
-    expect(thrown, isNull,
-        reason: 'app-wide Toaster resolves the story build context');
-  });
+      try {
+        Toaster.show(storyBuildContext, 'Dialog result: cancelled');
+      } catch (e) {
+        thrown = e;
+      }
+      expect(
+        thrown,
+        isNull,
+        reason: 'app-wide Toaster resolves the story build context',
+      );
+    },
+  );
 }

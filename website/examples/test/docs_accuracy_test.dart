@@ -26,7 +26,7 @@ void main() {
       // common handler; `onEvent` survives only on `KeyBinding.event`. The
       // compiling mirrors in doc_snippets/ were swept, but prose fences are
       // hand-copied, so they silently kept teaching the removed API. Match
-      // `KeyBinding(` specifically — `KeyBinding.event(…, onEvent:)` is
+      // `KeyBinding(` specifically — `KeyBinding(…, onTrigger:)` is
       // correct and must keep passing.
       //
       // `[^)]` (newlines allowed, via dotAll on the argument run) catches the
@@ -35,10 +35,10 @@ void main() {
       //
       //     KeyBinding(
       //       KeySequence.ctrl.s,
-      //       onEvent: (_) => save(),   // ← still caught
+      //       onTrigger: (_) => save(),   // ← still caught
       //     )
       final defaultCtorOnEvent = RegExp(
-        r'KeyBinding\([^)]*onEvent:',
+        r'KeyBinding\([^)]*onTrigger:',
         dotAll: true,
       );
 

@@ -58,7 +58,8 @@ void main() {
       expect(
         tester.clipboard.readInProcess(),
         _family,
-        reason: 'crossing any atoms selects the logical cluster; copy is the '
+        reason:
+            'crossing any atoms selects the logical cluster; copy is the '
             'SOURCE, joiners included, exactly once',
       );
     });
@@ -104,7 +105,8 @@ void main() {
         expect(
           buf.atColRow(col, 0).style.inverse,
           isTrue,
-          reason: 'atom cell $col must be highlighted — no endpoint can rest '
+          reason:
+              'atom cell $col must be highlighted — no endpoint can rest '
               'inside the source cluster',
         );
       }

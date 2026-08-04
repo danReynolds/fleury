@@ -672,7 +672,7 @@ class _JsonViewState extends State<JsonView> {
           KeyBinding(
             KeySequence.ctrl.c,
             label: 'Copy JSON node',
-            onTrigger: () => unawaited(_copySelection(rows)),
+            onTrigger: (_) => unawaited(_copySelection(rows)),
           ),
         ],
         child: list,

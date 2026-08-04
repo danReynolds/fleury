@@ -447,7 +447,7 @@ class InputDispatcher {
     // action already happened. [_onTimeout] needs "did anything run", so a
     // bubbling shorter binding can't leave a prefix held open after it fired.
     _firedCount++;
-    binding.onEvent(wrapped);
+    binding.onTrigger!(wrapped);
     return wrapped.isBubbling ? KeyEventResult.ignored : KeyEventResult.handled;
   }
 
@@ -837,7 +837,11 @@ class InputDispatcher {
 /// never mutates session state: the session stays the honest physical
 /// record while each observer gets a scope-consistent projection.
 final class KeyPhaseObserverRegistration {
-  KeyPhaseObserverRegistration._(this._dispatcher, this._observer, this._anchor);
+  KeyPhaseObserverRegistration._(
+    this._dispatcher,
+    this._observer,
+    this._anchor,
+  );
 
   final InputDispatcher _dispatcher;
   final void Function(KeyEvent event) _observer;

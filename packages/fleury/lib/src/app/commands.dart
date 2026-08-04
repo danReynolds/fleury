@@ -404,11 +404,12 @@ class _CommandScopeState extends State<CommandScope> {
       );
       if (!command.visible(context)) continue;
       bindings.add(
-        KeyBinding.any(
-          command.shortcuts,
+        KeyBinding(
+          command.shortcuts.first,
+          aliases: command.shortcuts.skip(1).toList(),
           label: command.title,
           enabled: command.enabled(context),
-          onTrigger: () {
+          onTrigger: (_) {
             unawaited(registry.invoke(command.id, buildContext: this.context));
           },
         ),

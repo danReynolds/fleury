@@ -120,8 +120,8 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyCode.char(' '), onTrigger: () => spaceFired++),
-            KeyBinding(KeyCode.enter, onTrigger: () => enterFired++),
+            KeyBinding(KeyCode.char(' '), onTrigger: (_) => spaceFired++),
+            KeyBinding(KeyCode.enter, onTrigger: (_) => enterFired++),
           ],
           child: const Text('app'),
         ),
@@ -146,7 +146,7 @@ void main() {
           bindings: [
             KeyBinding(
               KeyCode.char('q'),
-              onTrigger: () => fired++,
+              onTrigger: (_) => fired++,
               label: 'quit',
             ),
           ],

@@ -646,12 +646,7 @@ class FleuryTester {
         'position has no US twin; construct the KeyEvent explicitly',
       );
     }
-    return KeyEvent(
-      twin,
-      type: type,
-      modifiers: modifiers,
-      position: position,
-    );
+    return KeyEvent(twin, type: type, modifiers: modifiers, position: position);
   }
 
   /// Dispatches a [MouseEvent] (e.g. a left-button click for

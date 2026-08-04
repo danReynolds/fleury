@@ -216,7 +216,7 @@ const _maxPendingRemoteSemanticActions = 64;
 /// restored — so the caller owns process-exit semantics:
 ///
 /// ```dart
-/// final exit = await runApp(app, onEvent: (event) {
+/// final exit = await runApp(app, onTrigger: (event) {
 ///   if (event is SignalEvent) {
 ///     beginShutdown(event.signal);        // async teardown → requestExit()
 ///     return const EventHandled();        // claim it: don't die yet

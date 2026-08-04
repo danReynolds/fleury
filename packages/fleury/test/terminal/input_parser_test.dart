@@ -708,10 +708,7 @@ void main() {
         expect(
           _parse(csiu('97:65;2')).single,
           const InputBatch(
-            key: KeyEvent(
-              KeyCode.char('a'),
-              modifiers: {KeyModifier.shift},
-            ),
+            key: KeyEvent(KeyCode.char('a'), modifiers: {KeyModifier.shift}),
             committedText: 'A',
           ),
         );
@@ -861,13 +858,16 @@ void main() {
         );
       });
 
-      test('an unmapped base codepoint leaves position null, never guessed', () {
-        // Base 233 ('é') is no US-101 key.
-        expect(
-          _parse(csiu('101::233;5')).single,
-          const KeyEvent(KeyCode.char('e'), modifiers: {KeyModifier.ctrl}),
-        );
-      });
+      test(
+        'an unmapped base codepoint leaves position null, never guessed',
+        () {
+          // Base 233 ('é') is no US-101 key.
+          expect(
+            _parse(csiu('101::233;5')).single,
+            const KeyEvent(KeyCode.char('e'), modifiers: {KeyModifier.ctrl}),
+          );
+        },
+      );
     });
 
     group('functional vocabulary (PUA table)', () {
@@ -895,10 +895,7 @@ void main() {
       });
 
       test('media and lock keys decode', () {
-        expect(
-          _parse(csiu('57428')).single,
-          const KeyEvent(KeyCode.mediaPlay),
-        );
+        expect(_parse(csiu('57428')).single, const KeyEvent(KeyCode.mediaPlay));
         expect(_parse(csiu('57358')).single, const KeyEvent(KeyCode.capsLock));
       });
 

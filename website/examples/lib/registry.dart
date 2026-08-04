@@ -1290,17 +1290,17 @@ TextArea(
     rows: 6,
     code: '''KeyBindings(
   bindings: <KeyBinding>[
-    KeyBinding.event(KeyCode.char('s'), label: 'Save', onEvent: save),
-    KeyBinding.event(KeyCode.char('q'), label: 'Quit', onEvent: quit),
+    KeyBinding(KeyCode.char('s'), label: 'Save', onTrigger: save),
+    KeyBinding(KeyCode.char('q'), label: 'Quit', onTrigger: quit),
   ],
   child: const KeyHintBar(),
 )''',
     builder: () => _framed(
       KeyBindings(
         bindings: <KeyBinding>[
-          KeyBinding(KeyCode.char('s'), label: 'Save', onTrigger: () {}),
-          KeyBinding(KeyCode.char('r'), label: 'Run', onTrigger: () {}),
-          KeyBinding(KeyCode.char('q'), label: 'Quit', onTrigger: () {}),
+          KeyBinding(KeyCode.char('s'), label: 'Save', onTrigger: (_) {}),
+          KeyBinding(KeyCode.char('r'), label: 'Run', onTrigger: (_) {}),
+          KeyBinding(KeyCode.char('q'), label: 'Quit', onTrigger: (_) {}),
         ],
         child: const Column(
           mainAxisSize: MainAxisSize.min,
@@ -1326,9 +1326,9 @@ TextArea(
     interactive: true,
     code: '''KeyBindings(
   bindings: <KeyBinding>[
-    KeyBinding(KeySequence.space.f, label: 'Find file', onTrigger: findFile),
-    KeyBinding(KeySequence.space.b, label: 'Buffers', onTrigger: buffers),
-    KeyBinding(KeySequence.space.g, label: 'Git', onTrigger: git),
+    KeyBinding(KeySequence.space.f, label: 'Find file', onTrigger: (_) => findFile()),
+    KeyBinding(KeySequence.space.b, label: 'Buffers', onTrigger: (_) => buffers()),
+    KeyBinding(KeySequence.space.g, label: 'Git', onTrigger: (_) => git()),
   ],
   child: WhichKey(
     child: Focus(autofocus: true, child: editor),
@@ -1337,9 +1337,13 @@ TextArea(
     builder: () => _framed(
       KeyBindings(
         bindings: <KeyBinding>[
-          KeyBinding(KeySequence.space.f, label: 'Find file', onTrigger: () {}),
-          KeyBinding(KeySequence.space.b, label: 'Buffers', onTrigger: () {}),
-          KeyBinding(KeySequence.space.g, label: 'Git', onTrigger: () {}),
+          KeyBinding(
+            KeySequence.space.f,
+            label: 'Find file',
+            onTrigger: (_) {},
+          ),
+          KeyBinding(KeySequence.space.b, label: 'Buffers', onTrigger: (_) {}),
+          KeyBinding(KeySequence.space.g, label: 'Git', onTrigger: (_) {}),
         ],
         // Zero delay so the popup appears the instant Space is pressed in the
         // demo; real apps keep the default (a short delay hides it for fast
@@ -1885,7 +1889,7 @@ import 'package:fleury/fleury.dart';
 void main() => runApp(
       KeyBindings(
         bindings: [
-          KeyBinding(KeySequence.q, onTrigger: () => requestExit(), label: 'Quit'),
+          KeyBinding(KeySequence.q, onTrigger: (_) => requestExit(), label: 'Quit'),
         ],
         child: const CounterApp(),
       ),
@@ -2038,7 +2042,11 @@ class _ContainerFillExampleState extends State<_ContainerFillExample> {
       KeyBindings(
         bindings: <KeyBinding>[
           if (_open)
-            KeyBinding(KeySequence.escape, label: 'Close', onTrigger: _toggle),
+            KeyBinding(
+              KeySequence.escape,
+              label: 'Close',
+              onTrigger: (_) => _toggle(),
+            ),
         ],
         child: Stack(
           children: <Widget>[

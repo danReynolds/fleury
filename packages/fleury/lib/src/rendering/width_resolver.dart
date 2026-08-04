@@ -203,7 +203,8 @@ final class DefaultWidthResolver implements WidthResolver {
 
   bool _isWide(int r) => widthRangesContain(wideRanges, r);
 
-  bool _isEmojiPresentation(int r) => widthRangesContain(emojiPresentationRanges, r);
+  bool _isEmojiPresentation(int r) =>
+      widthRangesContain(emojiPresentationRanges, r);
 
   bool _isAmbiguous(int r) => widthRangesContain(ambiguousRanges, r);
 }

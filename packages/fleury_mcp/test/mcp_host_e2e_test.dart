@@ -128,8 +128,9 @@ void main() {
         'capabilities': <String, Object?>{},
         'clientInfo': <String, Object?>{'name': 'e2e-host', 'version': '1'},
       });
-      final caps = (init['result'] as Map<String, Object?>)['capabilities']
-          as Map<String, Object?>;
+      final caps =
+          (init['result'] as Map<String, Object?>)['capabilities']
+              as Map<String, Object?>;
       expect(caps.containsKey('logging'), isTrue);
       client.notify('notifications/initialized');
 
@@ -176,7 +177,8 @@ final class _McpStdioClient {
           final message = jsonDecode(line) as Map<String, Object?>;
           // A response carries an id we're awaiting; anything else with a method
           // is a server-initiated notification (e.g. notifications/message).
-          if (message.containsKey('id') && _pending.containsKey(message['id'])) {
+          if (message.containsKey('id') &&
+              _pending.containsKey(message['id'])) {
             _pending.remove(message['id'])!.complete(message);
           } else if (message['method'] != null) {
             notifications.add(message);
