@@ -469,17 +469,23 @@ void main() {
             children: [
               SizedBox(
                 width: 6,
-                child: Focus(
-                  focusNode: a,
-                  autofocus: true,
-                  onKey: (e) {
-                    if (e.code == KeyCode.tab) {
-                      consumed++;
-                      return KeyEventResult.handled;
-                    }
-                    return KeyEventResult.ignored;
+                child: KeyDetector(
+                  onKey: (event) {
+                    if (((e) {
+                          if (e.code == KeyCode.tab) {
+                            consumed++;
+                            return KeyEventResult.handled;
+                          }
+                          return KeyEventResult.ignored;
+                        })(event) ==
+                        KeyEventResult.handled)
+                      event.consume();
                   },
-                  child: const Text('A'),
+                  child: Focus(
+                    focusNode: a,
+                    autofocus: true,
+                    child: const Text('A'),
+                  ),
                 ),
               ),
               SizedBox(

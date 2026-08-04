@@ -544,15 +544,18 @@ class _Counter extends StatefulWidget {
 class _CounterState extends State<_Counter> {
   int _count = 0;
   @override
-  Widget build(BuildContext context) => Focus(
-    focusNode: widget.focusNode,
-    onKey: (e) {
-      if (e.code == KeyCode.enter) {
-        setState(() => _count++);
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
+  Widget build(BuildContext context) => KeyDetector(
+    onKey: (event) {
+      if (((e) {
+            if (e.code == KeyCode.enter) {
+              setState(() => _count++);
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          })(event) ==
+          KeyEventResult.handled)
+        event.consume();
     },
-    child: Text('count=$_count'),
+    child: Focus(focusNode: widget.focusNode, child: Text('count=$_count')),
   );
 }

@@ -82,49 +82,53 @@ class _HotReloadDemoState extends State<HotReloadDemo> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Focus(
-      autofocus: true,
-      onKey: _onKey,
-      child: Padding(
-        padding: const EdgeInsets.all(1),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              _title,
-              style: CellStyle(
-                bold: true,
-                foreground: const AnsiColor(15),
-                background: _titleColor,
+    return KeyDetector(
+      onKey: (event) {
+        if ((_onKey)(event) == KeyEventResult.handled) event.consume();
+      },
+      child: Focus(
+        autofocus: true,
+        child: Padding(
+          padding: const EdgeInsets.all(1),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                _title,
+                style: CellStyle(
+                  bold: true,
+                  foreground: const AnsiColor(15),
+                  background: _titleColor,
+                ),
               ),
-            ),
-            const SizedBox(height: 1),
-            // EDIT ME ↓ — switch this whole block out for a Row,
-            // a different widget tree, etc.
-            Text('count: $_count', style: const CellStyle(bold: true)),
-            const SizedBox(height: 1),
-            // A handmade bar so this example needs only fleury — no
-            // fleury_widgets dependency. Real apps would just drop in
-            // `ProgressBar(value: _count / _max)`.
-            Text(_renderBar(_count / _max, 30)),
-            const SizedBox(height: 1),
-            Text(
-              '←/→: −$_step / +$_step    ctrl+c: quit',
-              style: theme.mutedStyle,
-            ),
-            const SizedBox(height: 2),
-            Text(
-              'edit the constants marked EDIT ME in this file, save, '
-              'and watch this app update without restarting',
-              style: theme.mutedStyle,
-            ),
-            Text(
-              'counter survives the reload — try +1 a few times before editing',
-              style: theme.mutedStyle,
-            ),
-            const SizedBox(height: 1),
-            Text('ctrl+c quits', style: theme.mutedStyle),
-          ],
+              const SizedBox(height: 1),
+              // EDIT ME ↓ — switch this whole block out for a Row,
+              // a different widget tree, etc.
+              Text('count: $_count', style: const CellStyle(bold: true)),
+              const SizedBox(height: 1),
+              // A handmade bar so this example needs only fleury — no
+              // fleury_widgets dependency. Real apps would just drop in
+              // `ProgressBar(value: _count / _max)`.
+              Text(_renderBar(_count / _max, 30)),
+              const SizedBox(height: 1),
+              Text(
+                '←/→: −$_step / +$_step    ctrl+c: quit',
+                style: theme.mutedStyle,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'edit the constants marked EDIT ME in this file, save, '
+                'and watch this app update without restarting',
+                style: theme.mutedStyle,
+              ),
+              Text(
+                'counter survives the reload — try +1 a few times before editing',
+                style: theme.mutedStyle,
+              ),
+              const SizedBox(height: 1),
+              Text('ctrl+c quits', style: theme.mutedStyle),
+            ],
+          ),
         ),
       ),
     );

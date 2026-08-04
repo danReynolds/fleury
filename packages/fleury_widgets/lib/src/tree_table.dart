@@ -1412,41 +1412,47 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
 
     Widget list = rows.isEmpty
         ? Text('  (empty)', style: emptyStyle)
-        : Focus(
-            canRequestFocus: false,
-            onKey: (event) => switch (event.code) {
-              KeyCode.arrowRight => _expandOrEnter(rows),
-              KeyCode.arrowLeft => _collapseOrParent(rows),
-              _ => KeyEventResult.ignored,
+        : KeyDetector(
+            onKey: (event) {
+              if (((event) => switch (event.code) {
+                    KeyCode.arrowRight => _expandOrEnter(rows),
+                    KeyCode.arrowLeft => _collapseOrParent(rows),
+                    _ => KeyEventResult.ignored,
+                  })(event) ==
+                  KeyEventResult.handled)
+                event.consume();
             },
-            child: ListView.builder(
-              controller: _controller._listController,
-              focusNode: _focusNode,
-              autofocus: widget.autofocus,
-              itemCount: rows.length,
-              onActivate: (_) => _activateSelected(rows),
-              itemBuilder: (context, index, activeSelected) {
-                final row = rows[index];
-                final selected = index == _controller.selectedIndex;
-                return _TreeTableRowWidget<T>(
-                  row: row,
-                  rowIndex: index,
-                  columns: widget.columns,
-                  treeColumnId: _treeColumnId,
-                  cellBuilder: widget.cellBuilder,
-                  selected: selected,
-                  activeSelection: activeSelected,
-                  expanded: _isVisiblyExpanded(rows, index),
-                  selectedStyle: selectedStyle,
-                  columnSpacing: widget.columnSpacing,
-                  onSelectEnabled: widget.onSelect != null,
-                  copyEnabled: copyEnabled,
-                  onOpen: () => _openRow(rows, index),
-                  onClose: () => _collapseRow(rows, index),
-                  onActivate: () => _activateRow(rows, index),
-                  onCopy: () => _copyRow(rows, index),
-                );
-              },
+            child: Focus(
+              canRequestFocus: false,
+              child: ListView.builder(
+                controller: _controller._listController,
+                focusNode: _focusNode,
+                autofocus: widget.autofocus,
+                itemCount: rows.length,
+                onActivate: (_) => _activateSelected(rows),
+                itemBuilder: (context, index, activeSelected) {
+                  final row = rows[index];
+                  final selected = index == _controller.selectedIndex;
+                  return _TreeTableRowWidget<T>(
+                    row: row,
+                    rowIndex: index,
+                    columns: widget.columns,
+                    treeColumnId: _treeColumnId,
+                    cellBuilder: widget.cellBuilder,
+                    selected: selected,
+                    activeSelection: activeSelected,
+                    expanded: _isVisiblyExpanded(rows, index),
+                    selectedStyle: selectedStyle,
+                    columnSpacing: widget.columnSpacing,
+                    onSelectEnabled: widget.onSelect != null,
+                    copyEnabled: copyEnabled,
+                    onOpen: () => _openRow(rows, index),
+                    onClose: () => _collapseRow(rows, index),
+                    onActivate: () => _activateRow(rows, index),
+                    onCopy: () => _copyRow(rows, index),
+                  );
+                },
+              ),
             ),
           );
 

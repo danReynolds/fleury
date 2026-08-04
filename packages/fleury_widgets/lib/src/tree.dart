@@ -285,49 +285,55 @@ class _TreeState<T> extends State<Tree<T>> {
         if (_list.selectedIndex != null) 'selectedIndex': _list.selectedIndex,
         if (_selected != null) 'selectedKey': _selected!.key,
       }),
-      child: Focus(
-        canRequestFocus: false,
+      child: KeyDetector(
         onKey: (event) {
-          switch (event.code) {
-            case KeyCode.arrowRight:
-              return _expandOrEnter();
-            case KeyCode.arrowLeft:
-              return _collapseOrParent();
-            default:
-              final ch = event.code.character;
-              if (widget.typeahead &&
-                  ch != null &&
-                  ch.length == 1 &&
-                  ch.codeUnitAt(0) >= 0x21 &&
-                  !event.hasCtrl &&
-                  !event.hasAlt) {
-                return _typeahead(ch);
-              }
-              return KeyEventResult.ignored;
-          }
+          if (((KeyEvent event) {
+                switch (event.code) {
+                  case KeyCode.arrowRight:
+                    return _expandOrEnter();
+                  case KeyCode.arrowLeft:
+                    return _collapseOrParent();
+                  default:
+                    final ch = event.code.character;
+                    if (widget.typeahead &&
+                        ch != null &&
+                        ch.length == 1 &&
+                        ch.codeUnitAt(0) >= 0x21 &&
+                        !event.hasCtrl &&
+                        !event.hasAlt) {
+                      return _typeahead(ch);
+                    }
+                    return KeyEventResult.ignored;
+                }
+              })(event) ==
+              KeyEventResult.handled)
+            event.consume();
         },
-        child: ListView.builder(
-          controller: _list,
-          focusNode: _focusNode,
-          autofocus: widget.autofocus,
-          itemCount: _flat.length,
-          onActivate: _onEnter,
-          itemBuilder: (context, i, activeSelected) {
-            final row = _flat[i];
-            final selected = i == _list.selectedIndex;
-            return _TreeRowWidget<T>(
-              row: row,
-              rowIndex: i,
-              selected: selected,
-              activeSelection: activeSelected,
-              expanded: _expanded.contains(row.node),
-              selectedStyle: selectedStyle,
-              hasOnSelect: widget.onSelect != null,
-              onOpen: () => _openRow(i),
-              onClose: () => _closeRow(i),
-              onActivate: () => _activateRow(i),
-            );
-          },
+        child: Focus(
+          canRequestFocus: false,
+          child: ListView.builder(
+            controller: _list,
+            focusNode: _focusNode,
+            autofocus: widget.autofocus,
+            itemCount: _flat.length,
+            onActivate: _onEnter,
+            itemBuilder: (context, i, activeSelected) {
+              final row = _flat[i];
+              final selected = i == _list.selectedIndex;
+              return _TreeRowWidget<T>(
+                row: row,
+                rowIndex: i,
+                selected: selected,
+                activeSelection: activeSelected,
+                expanded: _expanded.contains(row.node),
+                selectedStyle: selectedStyle,
+                hasOnSelect: widget.onSelect != null,
+                onOpen: () => _openRow(i),
+                onClose: () => _closeRow(i),
+                onActivate: () => _activateRow(i),
+              );
+            },
+          ),
         ),
       ),
     );

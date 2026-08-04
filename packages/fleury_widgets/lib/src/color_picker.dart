@@ -449,15 +449,19 @@ class _ColorPickerState extends State<ColorPicker>
           'selectedColorKind': _colorKind(selectedColor),
         },
       }),
-      child: Focus(
-        focusNode: _node,
-        autofocus: widget.autofocus,
-        onKey: _onKey,
-        child: BoundsObserver(
-          notifier: _bounds,
-          child: GestureDetector(
-            onTap: () => _node.requestFocus(),
-            child: body,
+      child: KeyDetector(
+        onKey: (event) {
+          if ((_onKey)(event) == KeyEventResult.handled) event.consume();
+        },
+        child: Focus(
+          focusNode: _node,
+          autofocus: widget.autofocus,
+          child: BoundsObserver(
+            notifier: _bounds,
+            child: GestureDetector(
+              onTap: () => _node.requestFocus(),
+              child: body,
+            ),
           ),
         ),
       ),

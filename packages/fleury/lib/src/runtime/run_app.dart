@@ -38,6 +38,7 @@ import '../terminal/terminal_driver.dart';
 import '../widgets/focus.dart';
 import '../widgets/framework.dart';
 import '../widgets/key_bindings.dart';
+import '../widgets/keyboard.dart';
 import '../widgets/overlay.dart';
 import '../widgets/selection/selection_area.dart';
 import 'clipboard.dart';
@@ -490,6 +491,9 @@ Future<AppExit> _runAppImpl(
     sequenceTimeout: sequenceTimeout,
     globalBindings: globalBindings,
   );
+  // Publishes the session keyboard to `Keyboard.of` (capabilities reactive,
+  // sampled state not — RFC 0020 §15).
+  final keyboardNotifier = KeyboardStateNotifier(dispatcher);
   // Optional byte telemetry: set FLEURY_BYTE_TELEMETRY=1 to wrap the live
   // output sink and print a per-frame byte budget on exit. Aggregate mode
   // (no per-frame list) so a long session stays bounded; zero cost when off.
@@ -976,6 +980,7 @@ Future<AppExit> _runAppImpl(
           dispatcher.updateKeyboardCapabilities(
             (usedDriver as KeyboardCapabilitiesDriver).keyboardCapabilities,
           );
+          keyboardNotifier.notifyCapabilitiesChanged();
         }
         // The ambiguous-width probe has now run (inside enter()); build the
         // renderer with the confirmed width mode. A terminal that draws
@@ -1220,6 +1225,7 @@ Future<AppExit> _runAppImpl(
             logBuffer: logBuffer,
             debugController: debugController,
             pendingSequenceNotifier: dispatcher.pendingSequenceNotifier,
+            keyboardNotifier: keyboardNotifier,
           );
           final activeSurfaceSink = surfaceSink;
           // The clipboard is a host service shared via ClipboardScope in

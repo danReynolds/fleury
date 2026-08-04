@@ -1396,19 +1396,24 @@ class _SelectionScrollStoryState extends State<_SelectionScrollStory> {
   Widget build(BuildContext context) {
     final listPane = SizedBox(
       width: 36,
-      child: Focus(
-        canRequestFocus: false,
-        skipTraversal: true,
-        onKey: _handleListKey,
-        child: ListView.builder(
-          controller: _list,
-          itemCount: 20,
-          autofocus: true,
-          itemBuilder: (context, index, selected) => Text(
-            '${selected ? '>' : ' '} Lazy row ${index + 1}',
-            style: selected
-                ? Theme.of(context).selectionStyle
-                : CellStyle.empty,
+      child: KeyDetector(
+        onKey: (event) {
+          if ((_handleListKey)(event) == KeyEventResult.handled)
+            event.consume();
+        },
+        child: Focus(
+          canRequestFocus: false,
+          skipTraversal: true,
+          child: ListView.builder(
+            controller: _list,
+            itemCount: 20,
+            autofocus: true,
+            itemBuilder: (context, index, selected) => Text(
+              '${selected ? '>' : ' '} Lazy row ${index + 1}',
+              style: selected
+                  ? Theme.of(context).selectionStyle
+                  : CellStyle.empty,
+            ),
           ),
         ),
       ),

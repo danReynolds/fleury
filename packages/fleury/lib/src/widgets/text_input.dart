@@ -42,6 +42,7 @@ import '../terminal/capability_requirements.dart';
 import '../input/events.dart';
 import 'focus.dart';
 import 'framework.dart';
+import 'keyboard.dart';
 import 'media_query.dart';
 import 'tui_binding.dart';
 
@@ -1273,6 +1274,12 @@ class _TextInputState extends State<TextInput>
     }
   }
 
+  /// Detector adapter: editing keys the field handles are consumed;
+  /// anything else falls through to bindings above it.
+  void _detectKey(KeyEvent event) {
+    if (_handleKey(event) == KeyEventResult.handled) event.consume();
+  }
+
   KeyEventResult _handleKey(KeyEvent event) {
     if (!widget.enabled) return KeyEventResult.ignored;
     final action = widget.keymap.resolve(event);
@@ -1550,30 +1557,32 @@ class _TextInputState extends State<TextInput>
       }),
       onAction: _handleSemanticAction,
       onSetValue: _handleSemanticSetValue,
-      child: Focus(
-        focusNode: _focusNode,
-        autofocus: widget.autofocus && widget.enabled,
-        // canRequestFocus is deliberately NOT passed: the enabled ↔
-        // focusability sync applies only to a node this state OWNS (see the
-        // `_ownsFocusNode` guard in didUpdateWidget) — a caller-provided
-        // node's flags belong to the caller, and a non-null value here
-        // would make the Focus widget overwrite them on every rebuild.
-        onKey: _handleKey,
-        child: _TextInputDisplay(
+      child: KeyDetector(
+        onKey: _detectKey,
+        child: Focus(
           focusNode: _focusNode,
-          text: _controller.text,
-          selection: _controller.selection,
-          placeholder: widget.placeholder,
-          placeholderStyle: widget.enabled
-              ? widget.placeholderStyle
-              : widget.placeholderStyle.merge(const CellStyle(dim: true)),
-          style: widget.enabled
-              ? widget.style
-              : widget.style.merge(const CellStyle(dim: true)),
-          cursorStyle: widget.cursorStyle,
-          cursorVisible: cursorVisible,
-          obscureText: widget.obscureText,
-          obscuringCharacter: widget.obscuringCharacter,
+          autofocus: widget.autofocus && widget.enabled,
+          // canRequestFocus is deliberately NOT passed: the enabled ↔
+          // focusability sync applies only to a node this state OWNS (see the
+          // `_ownsFocusNode` guard in didUpdateWidget) — a caller-provided
+          // node's flags belong to the caller, and a non-null value here
+          // would make the Focus widget overwrite them on every rebuild.
+          child: _TextInputDisplay(
+            focusNode: _focusNode,
+            text: _controller.text,
+            selection: _controller.selection,
+            placeholder: widget.placeholder,
+            placeholderStyle: widget.enabled
+                ? widget.placeholderStyle
+                : widget.placeholderStyle.merge(const CellStyle(dim: true)),
+            style: widget.enabled
+                ? widget.style
+                : widget.style.merge(const CellStyle(dim: true)),
+            cursorStyle: widget.cursorStyle,
+            cursorVisible: cursorVisible,
+            obscureText: widget.obscureText,
+            obscuringCharacter: widget.obscuringCharacter,
+          ),
         ),
       ),
     );

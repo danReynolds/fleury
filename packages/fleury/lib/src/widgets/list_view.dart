@@ -38,6 +38,7 @@ import 'basic.dart';
 import 'repaint_boundary.dart';
 import 'focus.dart';
 import 'framework.dart';
+import 'keyboard.dart';
 import 'pointer.dart';
 import 'scrollbar.dart';
 
@@ -735,6 +736,12 @@ class _ListViewState extends State<ListView> {
     }
   }
 
+  /// Detector adapter: the list consumes only the navigation it can
+  /// act on, so an edge key falls through to an ancestor.
+  void _detectKey(KeyEvent event) {
+    if (_handleKey(event) == KeyEventResult.handled) event.consume();
+  }
+
   KeyEventResult _handleKey(KeyEvent event) {
     final code = event.code;
     final count = widget.effectiveItemCount;
@@ -846,88 +853,90 @@ class _ListViewState extends State<ListView> {
       router: PointerRouterScope.maybeOf(context),
       onScrollUp: () => _scrollBy(-1),
       onScrollDown: () => _scrollBy(1),
-      child: Focus(
-        focusNode: _focusNode,
-        autofocus: widget.autofocus,
-        onKey: _handleKey,
-        child: _ListSelectionHost(
+      child: KeyDetector(
+        onKey: _detectKey,
+        child: Focus(
           focusNode: _focusNode,
-          selectionActive: widget.selectionActive,
-          builder: (context, active) {
-            if (widget.children != null) {
-              // Eager: build all children upfront, render object picks the
-              // visible window. Each is made tappable for pointer selection,
-              // then wrapped in a RepaintBoundary so one item's change repaints
-              // only that item (boundary outermost = Flutter parity; it replays
-              // the item's pointer + semantic regions on cache-hit).
-              return _ListViewBody(
-                controller: _controller,
-                children: <Widget>[
-                  for (var i = 0; i < widget.children!.length; i++)
-                    _maybeBoundary(
-                      GestureDetector(
-                        onTapDown: (_, _) => _handleItemTap(i),
-                        child: widget.children![i],
+          autofocus: widget.autofocus,
+          child: _ListSelectionHost(
+            focusNode: _focusNode,
+            selectionActive: widget.selectionActive,
+            builder: (context, active) {
+              if (widget.children != null) {
+                // Eager: build all children upfront, render object picks the
+                // visible window. Each is made tappable for pointer selection,
+                // then wrapped in a RepaintBoundary so one item's change repaints
+                // only that item (boundary outermost = Flutter parity; it replays
+                // the item's pointer + semantic regions on cache-hit).
+                return _ListViewBody(
+                  controller: _controller,
+                  children: <Widget>[
+                    for (var i = 0; i < widget.children!.length; i++)
+                      _maybeBoundary(
+                        GestureDetector(
+                          onTapDown: (_, _) => _handleItemTap(i),
+                          child: widget.children![i],
+                        ),
                       ),
-                    ),
-                ],
-              );
-            }
-
-            // Lazy: builder + count. Item subtrees are mounted on demand by
-            // the render object during layout; wrap each so a press selects it.
-            // `.separated` composes a non-selectable separator into the row
-            // block below its item — the press target stays the item only (a
-            // click on the separator does nothing), and separators never enter
-            // the index math because they are sub-parts of an item's block.
-            final separatorBuilder = widget.separatorBuilder;
-            final itemCount = widget.itemCount!;
-            return _LazyListBody(
-              controller: _controller,
-              itemCount: itemCount,
-              dataRevision: _dataRevision,
-              itemKeyBuilder: widget.itemKeyBuilder,
-              findChildIndexCallback: widget.findChildIndexCallback,
-              itemBuilder: (context, index, itemActive) {
-                final built = widget.itemBuilder!(context, index, itemActive);
-                // No separator after the last item, when none was requested, or
-                // when the builder returns null for this gap.
-                final separator =
-                    separatorBuilder == null || index >= itemCount - 1
-                    ? null
-                    : separatorBuilder(context, index);
-                final content = separator == null
-                    ? built
-                    : Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [built, separator],
-                      );
-                // The GestureDetector wraps the WHOLE block (not the item
-                // alone): the lazy list threads screenOffset to item roots, so
-                // the tap region lands at the item's true screen row even when
-                // a tall block overflows the viewport and its inner Column
-                // paints through the clip path (which drops screenOffset for its
-                // own children). A tap on a separator row therefore selects the
-                // item it trails.
-                //
-                // With the RepaintBoundary outermost, the boundary becomes the
-                // block's render root — it passes the threaded screenOffset
-                // through on repaint and replays the tap region at that same
-                // screenOffset on cache-hit, so a scrolled-but-unchanged item
-                // blits its cached cells at the new row AND its tap region
-                // follows. Caching a lazy row across scroll is the bigger win
-                // here; the eager path only saved localized in-place updates.
-                return _maybeBoundary(
-                  GestureDetector(
-                    onTapDown: (_, _) => _handleItemTap(index),
-                    child: content,
-                  ),
+                  ],
                 );
-              },
-              selectedIndex: selected,
-              selectionActive: active,
-            );
-          },
+              }
+
+              // Lazy: builder + count. Item subtrees are mounted on demand by
+              // the render object during layout; wrap each so a press selects it.
+              // `.separated` composes a non-selectable separator into the row
+              // block below its item — the press target stays the item only (a
+              // click on the separator does nothing), and separators never enter
+              // the index math because they are sub-parts of an item's block.
+              final separatorBuilder = widget.separatorBuilder;
+              final itemCount = widget.itemCount!;
+              return _LazyListBody(
+                controller: _controller,
+                itemCount: itemCount,
+                dataRevision: _dataRevision,
+                itemKeyBuilder: widget.itemKeyBuilder,
+                findChildIndexCallback: widget.findChildIndexCallback,
+                itemBuilder: (context, index, itemActive) {
+                  final built = widget.itemBuilder!(context, index, itemActive);
+                  // No separator after the last item, when none was requested, or
+                  // when the builder returns null for this gap.
+                  final separator =
+                      separatorBuilder == null || index >= itemCount - 1
+                      ? null
+                      : separatorBuilder(context, index);
+                  final content = separator == null
+                      ? built
+                      : Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [built, separator],
+                        );
+                  // The GestureDetector wraps the WHOLE block (not the item
+                  // alone): the lazy list threads screenOffset to item roots, so
+                  // the tap region lands at the item's true screen row even when
+                  // a tall block overflows the viewport and its inner Column
+                  // paints through the clip path (which drops screenOffset for its
+                  // own children). A tap on a separator row therefore selects the
+                  // item it trails.
+                  //
+                  // With the RepaintBoundary outermost, the boundary becomes the
+                  // block's render root — it passes the threaded screenOffset
+                  // through on repaint and replays the tap region at that same
+                  // screenOffset on cache-hit, so a scrolled-but-unchanged item
+                  // blits its cached cells at the new row AND its tap region
+                  // follows. Caching a lazy row across scroll is the bigger win
+                  // here; the eager path only saved localized in-place updates.
+                  return _maybeBoundary(
+                    GestureDetector(
+                      onTapDown: (_, _) => _handleItemTap(index),
+                      child: content,
+                    ),
+                  );
+                },
+                selectedIndex: selected,
+                selectionActive: active,
+              );
+            },
+          ),
         ),
       ),
     );

@@ -955,38 +955,42 @@ class _DataTableState extends State<DataTable> {
     );
     return FocusWithin(
       onFocusChange: _onFocusWithinChange,
-      child: Focus(
-        focusNode: _focusNode,
-        autofocus: widget.autofocus,
-        onKey: _onKey,
-        // Wheel over the table scrolls the row window by moving the selection
-        // (the window follows the selected row; selection changes don't fire
-        // onSelect, so scrolling never triggers a row action).
-        child: PointerScrollListener(
-          router: PointerRouterScope.maybeOf(context),
-          onScrollUp: () => _scrollBy(-1),
-          onScrollDown: () => _scrollBy(1),
-          child: GestureDetector(
-            onTapDownWithModifiers: (col, row, modifiers) {
-              _pendingPointerHit = _hitTestPointer(col, row, modifiers);
-            },
-            onTap: () {
-              final hit = _pendingPointerHit;
-              _pendingPointerHit = null;
-              if (hit == null) return;
-              _focusNode.requestFocus();
-              if (widget.selectionMode == DataTableSelectionMode.cell &&
-                  hit.columnIndex != null) {
-                _controller.selectCell(
-                  hit.rowIndex,
-                  hit.columnIndex!,
-                  extend: hit.extend,
-                );
-              } else {
-                _controller.selectedIndex = hit.rowIndex;
-              }
-            },
-            child: table,
+      child: KeyDetector(
+        onKey: (event) {
+          if (_onKey(event) == KeyEventResult.handled) event.consume();
+        },
+        child: Focus(
+          focusNode: _focusNode,
+          autofocus: widget.autofocus,
+          // Wheel over the table scrolls the row window by moving the selection
+          // (the window follows the selected row; selection changes don't fire
+          // onSelect, so scrolling never triggers a row action).
+          child: PointerScrollListener(
+            router: PointerRouterScope.maybeOf(context),
+            onScrollUp: () => _scrollBy(-1),
+            onScrollDown: () => _scrollBy(1),
+            child: GestureDetector(
+              onTapDownWithModifiers: (col, row, modifiers) {
+                _pendingPointerHit = _hitTestPointer(col, row, modifiers);
+              },
+              onTap: () {
+                final hit = _pendingPointerHit;
+                _pendingPointerHit = null;
+                if (hit == null) return;
+                _focusNode.requestFocus();
+                if (widget.selectionMode == DataTableSelectionMode.cell &&
+                    hit.columnIndex != null) {
+                  _controller.selectCell(
+                    hit.rowIndex,
+                    hit.columnIndex!,
+                    extend: hit.extend,
+                  );
+                } else {
+                  _controller.selectedIndex = hit.rowIndex;
+                }
+              },
+              child: table,
+            ),
           ),
         ),
       ),

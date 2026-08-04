@@ -190,6 +190,7 @@ Future<MountedApp> runTuiSurface(
   // §5.7): keyup, positional `code`, and per-key printable reporting need
   // no negotiation.
   inputDispatcher.updateKeyboardCapabilities(KeyboardCapabilities.full);
+  final keyboardNotifier = KeyboardStateNotifier(inputDispatcher);
   final semanticsOwner = semanticPresenter == null ? null : SemanticsOwner();
   final pendingInput = <TuiEvent>[];
   final pendingSemanticActions = <_PendingSemanticAction>[];
@@ -259,6 +260,7 @@ Future<MountedApp> runTuiSurface(
     logBuffer: null,
     debugController: null,
     pendingSequenceNotifier: inputDispatcher.pendingSequenceNotifier,
+    keyboardNotifier: keyboardNotifier,
   );
 
   if (semanticPresenter != null) {

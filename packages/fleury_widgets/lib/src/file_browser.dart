@@ -465,32 +465,37 @@ class _FileBrowserState extends State<FileBrowser> {
         ? Text('  $_error', style: const CellStyle(dim: true))
         : order.isEmpty
         ? const Text('  (empty)', style: CellStyle(dim: true))
-        : Focus(
-            canRequestFocus: false,
-            onKey: _onNavigationKey,
-            child: ListView.builder(
-              controller: _controller._listController,
-              focusNode: _focusNode,
-              autofocus: widget.autofocus,
-              itemCount: order.length,
-              onActivate: (_) => _activateSelected(),
-              itemBuilder: (context, viewIndex, activeSelected) {
-                final sourceIndex = order[viewIndex];
-                final selected = viewIndex == _controller.selectedIndex;
-                return _FileBrowserRow(
-                  entry: _entries[sourceIndex],
-                  sourceIndex: sourceIndex,
-                  viewIndex: viewIndex,
-                  selected: selected,
-                  activeSelection: activeSelected,
-                  copyEnabled: copyEnabled,
-                  canActivate:
-                      widget.onActivate != null ||
-                      _entries[sourceIndex].isDirectory,
-                  onOpen: () => _activateEntryAt(viewIndex),
-                  onCopy: () => _copyEntryAt(viewIndex),
-                );
-              },
+        : KeyDetector(
+            onKey: (event) {
+              if ((_onNavigationKey)(event) == KeyEventResult.handled)
+                event.consume();
+            },
+            child: Focus(
+              canRequestFocus: false,
+              child: ListView.builder(
+                controller: _controller._listController,
+                focusNode: _focusNode,
+                autofocus: widget.autofocus,
+                itemCount: order.length,
+                onActivate: (_) => _activateSelected(),
+                itemBuilder: (context, viewIndex, activeSelected) {
+                  final sourceIndex = order[viewIndex];
+                  final selected = viewIndex == _controller.selectedIndex;
+                  return _FileBrowserRow(
+                    entry: _entries[sourceIndex],
+                    sourceIndex: sourceIndex,
+                    viewIndex: viewIndex,
+                    selected: selected,
+                    activeSelection: activeSelected,
+                    copyEnabled: copyEnabled,
+                    canActivate:
+                        widget.onActivate != null ||
+                        _entries[sourceIndex].isDirectory,
+                    onOpen: () => _activateEntryAt(viewIndex),
+                    onCopy: () => _copyEntryAt(viewIndex),
+                  );
+                },
+              ),
             ),
           );
 

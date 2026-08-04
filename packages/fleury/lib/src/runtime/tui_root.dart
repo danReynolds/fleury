@@ -21,6 +21,7 @@ import '../rendering/surface_capabilities.dart';
 import '../widgets/clipboard_scope.dart';
 import '../widgets/focus.dart';
 import '../widgets/key_bindings.dart';
+import '../widgets/keyboard.dart';
 import '../widgets/framework.dart';
 import '../widgets/media_query.dart';
 import '../widgets/output_capture_view.dart';
@@ -57,6 +58,10 @@ Widget buildTuiRoot({
   // (a which-key widget) can read it. Null in hosts that route input without
   // an `InputDispatcher`.
   required PendingSequenceNotifier? pendingSequenceNotifier,
+  // Publishes the session keyboard (capabilities + the frame-latched
+  // snapshot) to `Keyboard.of`. Null in hosts that route input without an
+  // `InputDispatcher`.
+  required KeyboardStateNotifier? keyboardNotifier,
 }) {
   // The Overlay is the innermost shared layer; the app root and any floating
   // host entries live inside it. Entry repaint boundaries stay on
@@ -79,6 +84,11 @@ Widget buildTuiRoot({
   // app or console widget can reach it via KeyBindings.pendingOf.
   if (pendingSequenceNotifier != null) {
     tree = PendingSequenceScope(notifier: pendingSequenceNotifier, child: tree);
+  }
+  // The keyboard sits beside it: capability reads are reactive through this
+  // scope, sampled reads are not (RFC 0020 §15).
+  if (keyboardNotifier != null) {
+    tree = KeyboardScope(notifier: keyboardNotifier, child: tree);
   }
   // Host services (clipboard) and the ambient frameworks (media, focus,
   // pointer) wrap everything, so the app and the debug console alike can

@@ -7,7 +7,7 @@
 //   2. FOCUS CHAIN, deepest first:
 //      a. Direct match on a KeyBindings binding (binding wins).
 //      b. Sequence-start match on a KeyBindings binding (begin pending).
-//      c. Focus.onKey fallback (returns handled? consumed).
+//      c. KeyDetector floor (consumes via KeyEvent.consume()).
 //      Modal FocusScope boundaries stop the walk.
 //   3. GLOBALS (skipped if a modal scope set suppressGlobals).
 //   4. IGNORED.
@@ -18,7 +18,9 @@ import 'package:characters/characters.dart';
 
 import '../input/events.dart';
 import '../input/keyboard_state.dart';
+import '../input/key_dispatch.dart';
 import '../widgets/focus.dart';
+import '../widgets/framework.dart';
 import '../widgets/key_bindings.dart';
 import '../widgets/pointer.dart';
 
@@ -177,6 +179,10 @@ class InputDispatcher {
       // replaces the routing half in P4.
       final key = event.key;
       if (key != null) _regularizeAndObserve(key);
+      // Stage 4: an armed capture takes the whole batch — key AND text —
+      // ahead of every routed lane, but only AFTER the session and the
+      // observation lane have seen it (a hold in flight must still end).
+      if (key != null && _tryCapture(key)) return KeyEventResult.handled;
       final text = event.committedText;
       if (text != null) {
         return _dispatchText(TextInputEvent(text));
@@ -200,6 +206,7 @@ class InputDispatcher {
     }
     if (event is KeyEvent) {
       _regularizeAndObserve(event);
+      if (_tryCapture(event)) return KeyEventResult.handled;
       // Interim P3 routing (replaced by the §6 key-walk interlock in P4):
       // where printables arrive as key events (reportsPrintableKeys — the
       // DOM source), an unmodified/shift-only printable down or repeat is
@@ -319,6 +326,85 @@ class InputDispatcher {
       _notifyKeyObservers(release);
     }
   }
+
+  // --- The capture gate (RFC 0020 §6 stage 4, §15) ------------------------
+
+  Completer<KeyEvent?>? _capture;
+  Element? _captureContext;
+
+  /// Whether a `Keyboard.nextKey` capture is armed.
+  bool get hasPendingCapture => _capture != null;
+
+  /// Arms a one-shot capture, completing with the next user-originated key
+  /// press — or null if [context] unmounts first.
+  ///
+  /// Scope-tied by signature: the caller cannot forget to cancel, and a
+  /// capture can never outlive the UI that started it and silently eat the
+  /// app's input.
+  Future<KeyEvent?> captureNextKey(BuildContext context) {
+    _checkNotDisposed();
+    assert(
+      _capture == null,
+      'A Keyboard.nextKey() capture is already pending. Exactly one awaiter '
+      'at a time: a second would race the first for the same keypress.',
+    );
+    final completer = Completer<KeyEvent?>();
+    _capture = completer;
+    _captureContext = context is Element ? context : null;
+    return completer.future;
+  }
+
+  /// Completes an armed capture, or reports that this event isn't one it
+  /// can take. Returns true when the batch's routed lanes must be skipped.
+  bool _tryCapture(KeyEvent event) {
+    final completer = _capture;
+    if (completer == null) return false;
+    // The context that armed it is gone: the UI moved on, so the capture
+    // does too rather than eating this key (§15's null contract).
+    final origin = _captureContext;
+    if (origin != null && !origin.mounted) {
+      _capture = null;
+      _captureContext = null;
+      completer.complete(null);
+      return false;
+    }
+    // Recovery events are Fleury's, not the user's: a blur that closes a
+    // held Ctrl must not "choose" Ctrl for a rebind row.
+    if (event.synthesized) return false;
+    if (event.type == KeyEventType.up) {
+      // A lone modifier's release completes the capture (so sprint-on-Shift
+      // stays bindable); every other release is just the tail of a press
+      // the awaiter already saw or didn't want.
+      if (!_isLoneModifierKey(event.code)) return false;
+    } else if (event.type == KeyEventType.repeat) {
+      return false; // one press, not its auto-repeat
+    } else if (_isLoneModifierKey(event.code)) {
+      // Wait for the chord: a modifier DOWN may still be joined by a key.
+      return false;
+    }
+    _capture = null;
+    _captureContext = null;
+    completer.complete(event);
+    return true;
+  }
+
+  static bool _isLoneModifierKey(KeyCode code) => switch (code.special) {
+    SpecialKey.leftShift ||
+    SpecialKey.rightShift ||
+    SpecialKey.leftControl ||
+    SpecialKey.rightControl ||
+    SpecialKey.leftAlt ||
+    SpecialKey.rightAlt ||
+    SpecialKey.leftSuper ||
+    SpecialKey.rightSuper ||
+    SpecialKey.leftHyper ||
+    SpecialKey.rightHyper ||
+    SpecialKey.leftMeta ||
+    SpecialKey.rightMeta ||
+    SpecialKey.isoLevel3Shift ||
+    SpecialKey.isoLevel5Shift => true,
+    _ => false,
+  };
 
   /// Focus moved: an observer whose anchor just left the active chain must
   /// close its open presses NOW, not whenever the next key happens to
@@ -656,11 +742,12 @@ class InputDispatcher {
         }
       }
 
-      // Focus.onKey fallback. Skip when this node belongs to a
-      // KeyBindings (its onKey is null) — only direct Focus widgets
-      // populate onKey.
-      final handler = node.onKey;
-      if (handler != null && handler(event) == KeyEventResult.handled) {
+      // KeyDetector floor (RFC 0020 §17): a detector on this node peeks at
+      // the event and consumes only what it uses. Propagate-by-default, so
+      // an unconsumed key continues up the chain.
+      final detector = node.keyDetector;
+      if (detector != null &&
+          KeyDispatchContext.run(() => detector(event), entitled: true)) {
         return KeyEventResult.handled;
       }
     }
@@ -799,6 +886,11 @@ class InputDispatcher {
   void dispose() {
     if (_disposed) return;
     focusManager.removeListener(_onFocusChanged);
+    // An armed capture cannot outlive the dispatcher: complete it with the
+    // documented null rather than leaving an awaiter hanging forever.
+    _capture?.complete(null);
+    _capture = null;
+    _captureContext = null;
     _disposed = true;
     // Teardown is authority loss (RFC 0020 §6): recover held keys so every
     // observer's stream closes its open presses (one up per down, always).

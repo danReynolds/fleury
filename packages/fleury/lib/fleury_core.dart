@@ -332,6 +332,8 @@ export 'src/widgets/focus_traversal.dart'
     show FocusTraversalGroup, TraversalDirection, nearestFocusableInDirection;
 export 'src/widgets/inherited_notifier.dart' show InheritedNotifier;
 export 'src/widgets/intrinsic.dart' show IntrinsicHeight, IntrinsicWidth;
+export 'src/widgets/keyboard.dart'
+    show Keyboard, KeyboardScope, KeyboardStateNotifier, KeyDetector;
 export 'src/widgets/key_bindings.dart'
     show
         ActiveKeyBinding,
