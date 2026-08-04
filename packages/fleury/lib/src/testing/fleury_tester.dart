@@ -46,6 +46,7 @@ import '../runtime/clipboard.dart';
 import '../widgets/clipboard_scope.dart';
 import '../widgets/focus.dart';
 import '../widgets/key_bindings.dart';
+import '../widgets/keyboard.dart';
 import '../widgets/framework.dart';
 import '../widgets/media_query.dart';
 import '../widgets/overlay.dart';
@@ -107,6 +108,7 @@ class FleuryTester {
       focusManager: _focusManager,
       pointerRouter: _pointerRouter,
     );
+    _keyboardNotifier = KeyboardStateNotifier(_dispatcher);
     // Match the runtime: render an error panel for a thrown build()
     // rather than letting the exception escape the test harness. Per-owner,
     // so a test customizing hooks can't leak into the next test.
@@ -192,6 +194,7 @@ class FleuryTester {
   final FocusManager _focusManager;
   final PointerRouter _pointerRouter = PointerRouter();
   late final InputDispatcher _dispatcher;
+  late final KeyboardStateNotifier _keyboardNotifier;
   late final BuildOwner _owner;
   Element? _root;
   Widget _currentUserWidget = const EmptyBox();
@@ -596,6 +599,7 @@ class FleuryTester {
   set keyboardCapabilities(KeyboardCapabilities value) {
     _assertNotDisposed('keyboardCapabilities');
     _dispatcher.updateKeyboardCapabilities(value);
+    _keyboardNotifier.notifyCapabilitiesChanged();
   }
 
   /// Dispatches a correlated [InputBatch], as a lifecycle-mode terminal or
@@ -957,16 +961,19 @@ class FleuryTester {
               clipboard: clipboard,
               // Mirror runApp's host scopes: share the dispatcher's pending
               // state so KeyBindings.pendingOf / WhichKey work under test.
-              child: PendingSequenceScope(
-                notifier: _dispatcher.pendingSequenceNotifier,
-                // Opt out of entry repaint boundaries. The harness overlay is
-                // usually single-entry (pass-through anyway under adaptive
-                // engagement), but a test that floats extra entries — a menu,
-                // a toast — would otherwise engage harness-owned boundaries
-                // and skew the boundary stats and paint counts under test.
-                child: Overlay(
-                  initialEntries: [_userEntry],
-                  addRepaintBoundaries: false,
+              child: KeyboardScope(
+                notifier: _keyboardNotifier,
+                child: PendingSequenceScope(
+                  notifier: _dispatcher.pendingSequenceNotifier,
+                  // Opt out of entry repaint boundaries. The harness overlay is
+                  // usually single-entry (pass-through anyway under adaptive
+                  // engagement), but a test that floats extra entries — a menu,
+                  // a toast — would otherwise engage harness-owned boundaries
+                  // and skew the boundary stats and paint counts under test.
+                  child: Overlay(
+                    initialEntries: [_userEntry],
+                    addRepaintBoundaries: false,
+                  ),
                 ),
               ),
             ),

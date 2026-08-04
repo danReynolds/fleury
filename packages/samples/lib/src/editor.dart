@@ -520,21 +520,25 @@ class _EditorBodyState extends State<_EditorBody> implements TextInputClaimant {
       KeyCode.h,
       aliases: [KeyCode.arrowLeft],
       onTrigger: (_) => _model.moveLeft(),
+      includeRepeats: true,
     ),
     KeyBinding(
       KeyCode.l,
       aliases: [KeyCode.arrowRight],
       onTrigger: (_) => _model.moveRight(),
+      includeRepeats: true,
     ),
     KeyBinding(
       KeyCode.k,
       aliases: [KeyCode.arrowUp],
       onTrigger: (_) => _model.moveUp(),
+      includeRepeats: true,
     ),
     KeyBinding(
       KeyCode.j,
       aliases: [KeyCode.arrowDown],
       onTrigger: (_) => _model.moveDown(),
+      includeRepeats: true,
     ),
     KeyBinding(KeyCode.w, onTrigger: (_) => _model.wordForward()),
     KeyBinding(KeyCode.b, onTrigger: (_) => _model.wordBack()),
@@ -639,10 +643,26 @@ class _EditorBodyState extends State<_EditorBody> implements TextInputClaimant {
   // Non-text editing keys shared by nano and vim INSERT (they arrive as key
   // events, so they route here regardless of the text claim).
   List<KeyBinding> _editingKeys() => [
-    KeyBinding(KeyCode.arrowLeft, onTrigger: (_) => _model.moveLeft()),
-    KeyBinding(KeyCode.arrowRight, onTrigger: (_) => _model.moveRight()),
-    KeyBinding(KeyCode.arrowUp, onTrigger: (_) => _model.moveUp()),
-    KeyBinding(KeyCode.arrowDown, onTrigger: (_) => _model.moveDown()),
+    KeyBinding(
+      KeyCode.arrowLeft,
+      onTrigger: (_) => _model.moveLeft(),
+      includeRepeats: true,
+    ),
+    KeyBinding(
+      KeyCode.arrowRight,
+      onTrigger: (_) => _model.moveRight(),
+      includeRepeats: true,
+    ),
+    KeyBinding(
+      KeyCode.arrowUp,
+      onTrigger: (_) => _model.moveUp(),
+      includeRepeats: true,
+    ),
+    KeyBinding(
+      KeyCode.arrowDown,
+      onTrigger: (_) => _model.moveDown(),
+      includeRepeats: true,
+    ),
     KeyBinding(KeyCode.home, onTrigger: (_) => _model.lineStart()),
     KeyBinding(KeyCode.end, onTrigger: (_) => _model.lineEnd()),
     KeyBinding(KeyCode.enter, onTrigger: (_) => _model.newline()),

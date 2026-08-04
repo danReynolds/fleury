@@ -24,8 +24,10 @@ import 'package:meta/meta.dart';
 import '../foundation/change_notifier.dart';
 import '../foundation/collections.dart';
 import '../input/events.dart';
+import '../runtime/input_dispatcher.dart';
 import 'focus.dart';
 import 'framework.dart';
+import 'keyboard.dart';
 import 'inherited_notifier.dart';
 
 // The pattern vocabulary a binding is written in lives in events.dart
@@ -428,9 +430,29 @@ List<ActiveKeyBinding> resolveActiveKeyBindings(
 /// bindings it carries are consulted by the `InputDispatcher` when a
 /// `KeyEvent` reaches this node's spot in the chain.
 class KeyBindings extends StatefulWidget {
-  const KeyBindings({super.key, required this.bindings, required this.child});
+  const KeyBindings({
+    super.key,
+    required this.bindings,
+    this.modal = false,
+    required this.child,
+  });
 
   final List<KeyBinding> bindings;
+
+  /// Whether unmatched keys stop at this scope (RFC 0020 §14.3).
+  ///
+  /// A dialog binds y/n/Esc; a fat-fingered `j` matches nothing, and with
+  /// `modal: false` it would sail past into the app behind. There is no
+  /// handler in which to intercept that — the whole problem is that no
+  /// handler runs — so the policy belongs to the scope, not to a row.
+  ///
+  /// `modal: true` blocks ancestor scopes AND suppresses globals, extending
+  /// the focus system's existing modality to the key lane. A Navigator
+  /// modal route sets it implicitly, so routed dialogs write nothing.
+  /// Per-key passthrough is a binding at THIS scope that matches and calls
+  /// [KeyBindingEvent.bubble].
+  final bool modal;
+
   final Widget child;
 
   /// The discoverable bindings active in [context]'s focus context — hint
@@ -474,8 +496,27 @@ class KeyBindings extends StatefulWidget {
 class _KeyBindingsState extends State<KeyBindings> implements KeyBindingSource {
   late final FocusNode _node;
 
+  /// Observation-lane registration, present only while this scope declares
+  /// at least one [KeyBinding.hold] (RFC 0020 §14.5).
+  ///
+  /// Holds live on the observation lane rather than the command lane so
+  /// their pairing survives everything that can eat a command: a descendant
+  /// consuming the key, a modal boundary, an armed capture. That is what
+  /// makes "exactly one end per start" hold — including the synthesized end
+  /// the projector delivers when this scope leaves the active chain
+  /// (modal-open) or the session loses authority (blur, disconnect).
+  KeyPhaseObserverRegistration? _holdObserver;
+
+  /// Keys currently held open by this scope's hold bindings, mapped to the
+  /// binding that opened them, so an end pairs to the binding that saw the
+  /// down even if the widget rebuilt in between.
+  final Map<KeyCode, KeyBinding> _openHolds = {};
+
   @override
   List<KeyBinding> get activeBindings => widget.bindings;
+
+  @override
+  bool get isModalScope => widget.modal;
 
   @override
   void initState() {
@@ -485,6 +526,56 @@ class _KeyBindingsState extends State<KeyBindings> implements KeyBindingSource {
       skipTraversal: true,
       debugLabel: 'KeyBindings',
     )..bindingSource = this;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncHoldObserver();
+  }
+
+  bool get _hasHolds => widget.bindings.any((b) => b.isHold);
+
+  void _syncHoldObserver() {
+    final dispatcher = KeyboardScope.maybeDispatcherOf(context);
+    if (dispatcher == null) return;
+    // Inert where the surface cannot report releases: registering would
+    // fire starts that could never be paired with an end (§14.5).
+    final supported = dispatcher.keyboardSession.capabilities.supportsHeldState;
+    if (_hasHolds && supported && _holdObserver == null) {
+      _holdObserver = dispatcher.addKeyObserver(_observeHold, anchor: _node);
+    } else if ((!_hasHolds || !supported) && _holdObserver != null) {
+      _holdObserver!.remove();
+      _holdObserver = null;
+      _openHolds.clear();
+    }
+  }
+
+  /// The observation-lane callback: opens a hold on a matching down and
+  /// closes it on the paired up (physical or synthesized). Repeats are
+  /// meaningless to a hold — the key is already down.
+  void _observeHold(KeyEvent event) {
+    switch (event.type) {
+      case KeyEventType.down:
+        if (_openHolds.containsKey(event.code)) return;
+        for (final binding in widget.bindings) {
+          if (!binding.isHold || !binding.enabled) continue;
+          if (!binding.sequences.first.matches(event)) continue;
+          _openHolds[event.code] = binding;
+          binding.onHoldStart!(
+            KeyBindingEvent(KeySequenceMatch(binding.sequences.first, [event])),
+          );
+          return;
+        }
+      case KeyEventType.repeat:
+        return;
+      case KeyEventType.up:
+        final binding = _openHolds.remove(event.code);
+        if (binding == null) return;
+        binding.onHoldEnd!(
+          KeyBindingEvent(KeySequenceMatch(binding.sequences.first, [event])),
+        );
+    }
   }
 
   @override
@@ -503,6 +594,7 @@ class _KeyBindingsState extends State<KeyBindings> implements KeyBindingSource {
     if (_hintContentChanged(oldWidget.bindings, widget.bindings)) {
       Focus.maybeOf(context)?.notifyBindingsChanged();
     }
+    _syncHoldObserver();
   }
 
   static bool _hintContentChanged(List<KeyBinding> a, List<KeyBinding> b) {
@@ -523,6 +615,11 @@ class _KeyBindingsState extends State<KeyBindings> implements KeyBindingSource {
 
   @override
   void dispose() {
+    // Removing the registration synthesizes an end for anything still open
+    // (the projector's scope-exit path), so a hold can never outlive its
+    // scope with the action left running.
+    _holdObserver?.remove();
+    _openHolds.clear();
     _node.bindingSource = null;
     _node.dispose();
     super.dispose();
@@ -530,6 +627,11 @@ class _KeyBindingsState extends State<KeyBindings> implements KeyBindingSource {
 
   @override
   Widget build(BuildContext context) {
+    // Modality is enforced by the dispatcher (via [isModalScope]), NOT by
+    // wrapping in a modal FocusScope: that would truncate the focus chain
+    // at this node, leaving a boundary binding that calls `bubble()` with
+    // no ancestors to reach — and that bubble is exactly §14.3's per-key
+    // passthrough.
     return Focus(focusNode: _node, child: widget.child);
   }
 }

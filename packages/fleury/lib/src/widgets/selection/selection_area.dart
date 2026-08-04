@@ -575,18 +575,26 @@ class _SelectionAreaState extends State<SelectionArea> {
           KeyBinding(
             KeySequence.shift.left,
             onTrigger: (e) => _extendCursor(-1, 0, e),
+            // Held Shift+arrow extends continuously (§21.1's sweep).
+            includeRepeats: true,
           ),
           KeyBinding(
             KeySequence.shift.right,
             onTrigger: (e) => _extendCursor(1, 0, e),
+            // Held Shift+arrow extends continuously (§21.1's sweep).
+            includeRepeats: true,
           ),
           KeyBinding(
             KeySequence.shift.up,
             onTrigger: (e) => _extendCursor(0, -1, e),
+            // Held Shift+arrow extends continuously (§21.1's sweep).
+            includeRepeats: true,
           ),
           KeyBinding(
             KeySequence.shift.down,
             onTrigger: (e) => _extendCursor(0, 1, e),
+            // Held Shift+arrow extends continuously (§21.1's sweep).
+            includeRepeats: true,
           ),
           KeyBinding(
             KeySequence.shift.home,

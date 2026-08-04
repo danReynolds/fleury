@@ -82,6 +82,13 @@ abstract interface class KeyBindingSource {
   /// The bindings this source currently contributes. May change over
   /// time as the source rebuilds.
   List<KeyBinding> get activeBindings;
+
+  /// Whether unmatched keys stop at this scope (RFC 0020 §14.3).
+  ///
+  /// Enforced by the dispatcher rather than by truncating the focus chain,
+  /// so a binding here that matches and calls `bubble()` still has
+  /// ancestors to reach — that bubble IS the per-key passthrough.
+  bool get isModalScope;
 }
 
 /// Marker interface for widgets that consume insertable text input

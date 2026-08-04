@@ -715,6 +715,9 @@ class InputDispatcher {
 
     for (final node in focusManager.activeChain()) {
       final source = node.bindingSource;
+      // Whether a binding AT this node fired and chose to bubble — the
+      // deliberate per-key passthrough that a modal boundary must honour.
+      var bubbledHere = false;
       if (source != null) {
         if (allowSequenceStart) {
           final seqsHere = <KeyBinding>[];
@@ -730,6 +733,7 @@ class InputDispatcher {
               // KeyEventResult.ignored — continue walking ancestors so
               // an outer binding for the same sequence gets a chance.
               if (result == KeyEventResult.handled) return result;
+              bubbledHere = true;
             }
           }
         } else {
@@ -738,6 +742,7 @@ class InputDispatcher {
           if (hit != null) {
             final result = _fire(hit.binding, hit.sequence, [event]);
             if (result == KeyEventResult.handled) return result;
+            bubbledHere = true;
           }
         }
       }
@@ -749,6 +754,17 @@ class InputDispatcher {
       if (detector != null &&
           KeyDispatchContext.run(() => detector(event), entitled: true)) {
         return KeyEventResult.handled;
+      }
+
+      // Modal boundary (§14.3): nothing at this scope claimed the key, so
+      // the unmatched remainder stops here — ancestors and globals never
+      // see it. Reaching this point means no binding here matched, OR one
+      // matched and bubbled; a bubble is the deliberate per-key
+      // passthrough, so it must NOT be trapped.
+      if (source != null && source.isModalScope && !bubbledHere) {
+        // Globals are suppressed with everything else: a modal surface
+        // traps the unmatched remainder completely.
+        return KeyEventResult.ignored;
       }
     }
 
@@ -780,6 +796,17 @@ class InputDispatcher {
     return KeyEventResult.ignored;
   }
 
+  /// Whether [binding] is eligible for [event]'s phase (RFC 0020 §14.2).
+  ///
+  /// Repeat policy is evaluated PER EVENT on the phase tag, never through a
+  /// capability bit — which is what makes it honest per key class. Where a
+  /// surface tags repeats (chords and functional keys at the default kitty
+  /// tier; everything under lifecycle mode / the DOM) a default binding
+  /// skips them, so holding Ctrl+S saves once. Where it cannot tag them the
+  /// event simply arrives as a fresh `down` and fires, exactly as before.
+  static bool _phaseEligible(KeyBinding binding, KeyEvent event) =>
+      event.type != KeyEventType.repeat || binding.includeRepeats;
+
   /// Scans [bindings] for an enabled, single-step sequence that matches
   /// [event] directly. Returns the first hit (binding + the specific alias
   /// that matched), or null.
@@ -789,6 +816,8 @@ class InputDispatcher {
   ) {
     for (final binding in bindings) {
       if (!binding.enabled) continue;
+      if (binding.isHold) continue; // holds ride the observation lane
+      if (!_phaseEligible(binding, event)) continue;
       for (final sequence in binding.sequences) {
         if (sequence.isSequence) continue;
         if (sequence.matches(event)) {
@@ -808,6 +837,10 @@ class InputDispatcher {
   ) {
     for (final binding in bindings) {
       if (!binding.enabled) continue;
+      if (binding.isHold) continue;
+      // A repeat never ADVANCES or starts a sequence (§14.4): holding `g`
+      // must not arm `gg`.
+      if (event.type == KeyEventType.repeat) continue;
       for (final sequence in binding.sequences) {
         if (!sequence.isSequence) continue;
         if (sequence.matchesStepAt(0, event)) {

@@ -78,6 +78,11 @@ class FocusTraversalGroup extends StatelessWidget {
             }
           },
           hideFromHintBar: true,
+          // Held arrows/Tab move continuously — the repeat-reliant class
+          // RFC 0020 §21.1's sweep exists for. Without this, holding an
+          // arrow would advance focus once on any surface that tags
+          // auto-repeat (every kitty-family terminal at the default tier).
+          includeRepeats: true,
         ),
         KeyBinding(
           KeySequence.right,
@@ -88,6 +93,11 @@ class FocusTraversalGroup extends StatelessWidget {
             }
           },
           hideFromHintBar: true,
+          // Held arrows/Tab move continuously — the repeat-reliant class
+          // RFC 0020 §21.1's sweep exists for. Without this, holding an
+          // arrow would advance focus once on any surface that tags
+          // auto-repeat (every kitty-family terminal at the default tier).
+          includeRepeats: true,
         ),
         KeyBinding(
           KeySequence.up,
@@ -98,6 +108,11 @@ class FocusTraversalGroup extends StatelessWidget {
             }
           },
           hideFromHintBar: true,
+          // Held arrows/Tab move continuously — the repeat-reliant class
+          // RFC 0020 §21.1's sweep exists for. Without this, holding an
+          // arrow would advance focus once on any surface that tags
+          // auto-repeat (every kitty-family terminal at the default tier).
+          includeRepeats: true,
         ),
         KeyBinding(
           KeySequence.down,
@@ -108,6 +123,11 @@ class FocusTraversalGroup extends StatelessWidget {
             }
           },
           hideFromHintBar: true,
+          // Held arrows/Tab move continuously — the repeat-reliant class
+          // RFC 0020 §21.1's sweep exists for. Without this, holding an
+          // arrow would advance focus once on any surface that tags
+          // auto-repeat (every kitty-family terminal at the default tier).
+          includeRepeats: true,
         ),
         KeyBinding(
           KeySequence.tab,
@@ -115,6 +135,11 @@ class FocusTraversalGroup extends StatelessWidget {
             if (!Focus.of(context).focusNext()) event.bubble();
           },
           hideFromHintBar: true,
+          // Held arrows/Tab move continuously — the repeat-reliant class
+          // RFC 0020 §21.1's sweep exists for. Without this, holding an
+          // arrow would advance focus once on any surface that tags
+          // auto-repeat (every kitty-family terminal at the default tier).
+          includeRepeats: true,
         ),
         KeyBinding(
           KeySequence.shiftTab,
@@ -122,6 +147,11 @@ class FocusTraversalGroup extends StatelessWidget {
             if (!Focus.of(context).focusPrevious()) event.bubble();
           },
           hideFromHintBar: true,
+          // Held arrows/Tab move continuously — the repeat-reliant class
+          // RFC 0020 §21.1's sweep exists for. Without this, holding an
+          // arrow would advance focus once on any surface that tags
+          // auto-repeat (every kitty-family terminal at the default tier).
+          includeRepeats: true,
         ),
       ],
       child: child,

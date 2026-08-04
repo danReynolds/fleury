@@ -155,6 +155,14 @@ final class KeyboardScope extends InheritedNotifier<KeyboardStateNotifier> {
     required super.notifier,
     required super.child,
   });
+
+  /// Framework-internal: the dispatcher owning this surface's input lanes,
+  /// or null outside a running app. Non-subscribing — a widget reaching for
+  /// the observation lane must not rebuild on capability changes.
+  static InputDispatcher? maybeDispatcherOf(BuildContext context) => context
+      .getInheritedWidgetOfExactType<KeyboardScope>()
+      ?.notifier
+      ?.dispatcher;
 }
 
 /// Conditional, widget-internal key handling — the framework's floor.
