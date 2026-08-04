@@ -719,7 +719,7 @@ void _coherenceOracle() {
     expect(contained, contains('layout-boom'), reason: 'panel on the wire');
 
     // Recover: the 'f' binding heals the subtree.
-    transport.emit(const InputEventFrame(KeyEvent(KeyCode.char('f'))));
+    transport.emit(const InputEventFrame(InputBatch(key: KeyEvent(KeyCode.char('f')), committedText: 'f')));
     await Future<void>.delayed(const Duration(milliseconds: 20));
 
     mirrorText();

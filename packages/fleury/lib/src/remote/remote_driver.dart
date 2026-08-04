@@ -11,6 +11,7 @@ import 'dart:io' show Platform;
 import 'dart:typed_data';
 
 import '../foundation/geometry.dart';
+import '../input/keyboard_state.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/surface_capabilities.dart';
 import '../runtime/frame_presentation.dart';
@@ -50,7 +51,17 @@ final class RemoteTerminalDriver
         TerminalDriver,
         RemoteSurfaceSink,
         SurfaceCapabilitiesProvider,
-        OutputFlowControl {
+        OutputFlowControl,
+        KeyboardCapabilitiesDriver {
+  /// A structured browser peer (protocol v2+) is Fleury's own DOM client —
+  /// the codecs are version-locked to the same build — so its keyboard has
+  /// the DOM surface's full lifecycle. A v1 peer is a real terminal relay
+  /// (`fleury shell`): conservative press-only until P5 negotiation data
+  /// can be relayed (P6 adds the explicit capability handshake for foreign
+  /// peers).
+  @override
+  KeyboardCapabilities get keyboardCapabilities =>
+      _protocolVersion >= 2 ? KeyboardCapabilities.full : KeyboardCapabilities.legacy;
   RemoteTerminalDriver(
     this._transport, {
     InlineImageCachePolicy imageCachePolicy = defaultInlineImageCachePolicy,

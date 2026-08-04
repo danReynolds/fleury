@@ -64,7 +64,59 @@ const browserInputTraceFixtures = <TraceMap>[
         'keyEventType': 'down',
         'modifiers': <String>['ctrl', 'shift'],
       },
+      // RFC 0020 Meta regime: keys under Meta are press-only — macOS
+      // browsers swallow their keyup, so the source closes the press
+      // immediately with a synthesized release.
+      {
+        'type': 'key',
+        'char': 'z',
+        'keyEventType': 'up',
+        'modifiers': <String>['ctrl', 'shift'],
+        'synthesized': true,
+      },
     ],
+  },
+  {
+    'name': 'printable lifecycle: key half plus text, then a paired keyup',
+    'browserEvents': <TraceMap>[
+      {
+        'target': 'textArea',
+        'event': 'keydown',
+        'key': 'z',
+        'code': 'KeyW', // AZERTY: the QWERTY-W spot types 'z'
+      },
+      {
+        'target': 'textArea',
+        'event': 'input',
+        'inputType': 'insertText',
+        'data': 'z',
+      },
+      {'target': 'textArea', 'event': 'keyup', 'key': 'z', 'code': 'KeyW'},
+    ],
+    'expectedFleuryEvents': <TraceMap>[
+      {
+        'type': 'key',
+        'char': 'z',
+        'keyEventType': 'down',
+        'modifiers': <String>[],
+        'position': 'w',
+      },
+      {'type': 'text', 'text': 'z'},
+      {
+        'type': 'key',
+        'char': 'z',
+        'keyEventType': 'up',
+        'modifiers': <String>[],
+        'position': 'w',
+      },
+    ],
+  },
+  {
+    'name': 'an unpaired keyup is ignored (downed before attach)',
+    'browserEvents': <TraceMap>[
+      {'target': 'textArea', 'event': 'keyup', 'key': 'x', 'code': 'KeyX'},
+    ],
+    'expectedFleuryEvents': <TraceMap>[],
   },
   {
     'name': 'AltGraph printable text stays on input channel',

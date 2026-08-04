@@ -151,7 +151,7 @@ void main() {
     }
 
     // --- 2. A value-only change ships a patch, not a second full frame.
-    transport.emit(const InputEventFrame(KeyEvent(KeyCode.char('t'))));
+    transport.emit(const InputEventFrame(InputBatch(key: KeyEvent(KeyCode.char('t')), committedText: 't')));
     await _settle();
     expect(semantics(), hasLength(2));
     final patch = _decodeEnvelope(semantics()[1]);

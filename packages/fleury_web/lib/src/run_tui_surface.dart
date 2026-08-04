@@ -186,6 +186,12 @@ Future<MountedApp> runTuiSurface(
     focusManager: focusManager,
     pointerRouter: pointerRouter,
   );
+  // The DOM surface has full keyboard lifecycle unconditionally (RFC 0020
+  // §5.7): keyup, positional `code`, and per-key printable reporting need
+  // no negotiation.
+  inputDispatcher.keyboardSession.updateCapabilities(
+    KeyboardCapabilities.full,
+  );
   final semanticsOwner = semanticPresenter == null ? null : SemanticsOwner();
   final pendingInput = <TuiEvent>[];
   final pendingSemanticActions = <_PendingSemanticAction>[];
@@ -352,6 +358,9 @@ Future<MountedApp> runTuiSurface(
         inputDispatcher.dispatch(event);
       }
     }
+    // Frame start, input drained: publish the keyboard latch (RFC 0020
+    // §5.6) so sampled reads within this frame agree and edges expire.
+    inputDispatcher.keyboardSession.publishLatch();
     if (pendingSemanticActions.isNotEmpty) {
       semanticsPipeline?.markSemanticsDirty();
       final actions = List<_PendingSemanticAction>.of(pendingSemanticActions);

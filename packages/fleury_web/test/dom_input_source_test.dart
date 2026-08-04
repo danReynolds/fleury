@@ -41,13 +41,98 @@ void main() {
       );
     });
 
-    test('leaves plain printable text to the input channel', () {
+    test('a plain printable is the lifecycle key half (text still rides '
+        'the input channel)', () {
+      // RFC 0020 P3: printables emit key events for held-state tracking;
+      // committed text arrives separately and the dispatcher keeps the
+      // unmodified key half out of the command lane.
       expect(
         keyEventFromBrowser(
-          web.KeyboardEvent('keydown', web.KeyboardEventInit(key: 'a')),
+          web.KeyboardEvent(
+            'keydown',
+            web.KeyboardEventInit(key: 'a', code: 'KeyA'),
+          ),
         ),
-        isNull,
+        const KeyEvent(KeyCode.char('a'), position: KeyPosition.a),
       );
+    });
+
+    group('RFC 0020 lifecycle mapping', () {
+      test('positions ride every mapped event; Unidentified stays null', () {
+        expect(
+          keyEventFromBrowser(
+            web.KeyboardEvent(
+              'keydown',
+              web.KeyboardEventInit(key: 'z', code: 'KeyW'),
+            ),
+          ),
+          // AZERTY: the QWERTY-W spot types 'z'.
+          const KeyEvent(KeyCode.char('z'), position: KeyPosition.w),
+        );
+        expect(
+          keyEventFromBrowser(
+            web.KeyboardEvent(
+              'keydown',
+              web.KeyboardEventInit(key: 'ArrowUp', code: 'ArrowUp'),
+            ),
+          ),
+          const KeyEvent(KeyCode.arrowUp, position: KeyPosition.arrowUp),
+        );
+        expect(
+          keyEventFromBrowser(
+            web.KeyboardEvent(
+              'keydown',
+              web.KeyboardEventInit(key: 'q', code: 'Unidentified'),
+            ),
+          ),
+          const KeyEvent(KeyCode.char('q')),
+        );
+      });
+
+      test('shifted printables carry the base letter plus the modifier', () {
+        expect(
+          keyEventFromBrowser(
+            web.KeyboardEvent(
+              'keydown',
+              web.KeyboardEventInit(key: 'A', code: 'KeyA', shiftKey: true),
+            ),
+          ),
+          const KeyEvent(
+            KeyCode.char('a'),
+            modifiers: {KeyModifier.shift},
+            position: KeyPosition.a,
+          ),
+        );
+      });
+
+      test('lone modifier keys are sided keys via their position', () {
+        expect(
+          keyEventFromBrowser(
+            web.KeyboardEvent(
+              'keydown',
+              web.KeyboardEventInit(
+                key: 'Shift',
+                code: 'ShiftLeft',
+                shiftKey: true,
+              ),
+            ),
+          ),
+          const KeyEvent(
+            KeyCode.leftShift,
+            position: KeyPosition.shiftLeft,
+          ),
+        );
+        // No position → no sided identity → untrackable, skipped.
+        expect(
+          keyEventFromBrowser(
+            web.KeyboardEvent(
+              'keydown',
+              web.KeyboardEventInit(key: 'Shift', code: ''),
+            ),
+          ),
+          isNull,
+        );
+      });
     });
 
     test('normalizes Meta printable shortcuts to Fleury Ctrl shortcuts', () {

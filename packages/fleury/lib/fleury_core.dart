@@ -284,6 +284,13 @@ export 'src/input/events.dart'
         TextCompositionEventKind,
         TextInputEvent,
         TuiEvent;
+export 'src/input/key_tables.dart'
+    show
+        kittyCodepointOf,
+        kittyFunctionalKeys,
+        positionByDomCode,
+        positionBySpecial,
+        positionByUsCodepoint;
 export 'src/input/keyboard_state.dart'
     show KeyboardCapabilities, KeyboardSnapshot;
 export 'src/terminal/fake_driver.dart' show FakeTerminalDriver;

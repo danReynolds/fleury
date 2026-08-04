@@ -199,6 +199,18 @@ class InputDispatcher {
     }
     if (event is KeyEvent) {
       _regularizeAndObserve(event);
+      // Interim P3 routing (replaced by the §6 key-walk interlock in P4):
+      // where printables arrive as key events (reportsPrintableKeys — the
+      // DOM source), an unmodified/shift-only printable down or repeat is
+      // owed to the text lane; its committed text arrives separately (the
+      // `input` channel) and drives the claimant/character path. Command-
+      // dispatching the key half too would fire character bindings twice.
+      if (keyboardSession.capabilities.reportsPrintableKeys &&
+          event.code.isCharacter &&
+          event.type != KeyEventType.up &&
+          event.modifiers.every((m) => m == KeyModifier.shift)) {
+        return KeyEventResult.ignored;
+      }
       return _dispatchKeyEvent(event);
     }
     return KeyEventResult.ignored;

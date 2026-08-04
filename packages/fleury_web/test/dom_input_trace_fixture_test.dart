@@ -64,12 +64,13 @@ void _dispatchTraceEvent({
 }) {
   final target = _string(event, 'target') == 'host' ? host : textArea;
   switch (_string(event, 'event')) {
-    case 'keydown':
+    case 'keydown' || 'keyup':
       target.dispatchEvent(
         web.KeyboardEvent(
-          'keydown',
+          _string(event, 'event'),
           web.KeyboardEventInit(
             key: _string(event, 'key'),
+            code: event['code'] as String? ?? '',
             ctrlKey: _bool(event, 'ctrlKey'),
             shiftKey: _bool(event, 'shiftKey'),
             altKey: _bool(event, 'altKey'),
@@ -190,6 +191,8 @@ TraceMap _serializeEvent(TuiEvent event) => switch (event) {
     if (event.code.character case final char?) 'char': char,
     'keyEventType': event.type.name,
     'modifiers': _modifierNames(event.modifiers),
+    if (event.position case final position?) 'position': position.name,
+    if (event.synthesized) 'synthesized': true,
   },
   TextInputEvent() => {'type': 'text', 'text': event.text},
   InputBatch() => {

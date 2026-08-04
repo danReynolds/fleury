@@ -490,14 +490,6 @@ Future<AppExit> _runAppImpl(
     sequenceTimeout: sequenceTimeout,
     globalBindings: globalBindings,
   );
-  // Confirmed keyboard capabilities, from drivers that declare them (the
-  // DOM surface, a negotiated terminal — P3/P5); everything else stays on
-  // the conservative press-only profile (RFC 0020 §5.7).
-  if (usedDriver is KeyboardCapabilitiesDriver) {
-    dispatcher.keyboardSession.updateCapabilities(
-      (usedDriver as KeyboardCapabilitiesDriver).keyboardCapabilities,
-    );
-  }
   // Optional byte telemetry: set FLEURY_BYTE_TELEMETRY=1 to wrap the live
   // output sink and print a per-frame byte budget on exit. Aggregate mode
   // (no per-frame list) so a long session stays bounded; zero cost when off.
@@ -973,6 +965,14 @@ Future<AppExit> _runAppImpl(
         runtimeMarkers?.mark('terminal.enter.end');
         final startupOverflow = startupEvents.overflowError;
         if (startupOverflow != null) throw startupOverflow;
+        // Confirmed keyboard capabilities, from drivers that declare them
+        // (RFC 0020 §5.7). AFTER enter: a remote driver only knows its
+        // peer's protocol once the INIT handshake has landed.
+        if (usedDriver is KeyboardCapabilitiesDriver) {
+          dispatcher.keyboardSession.updateCapabilities(
+            (usedDriver as KeyboardCapabilitiesDriver).keyboardCapabilities,
+          );
+        }
         // The ambiguous-width probe has now run (inside enter()); build the
         // renderer with the confirmed width mode. A terminal that draws
         // ambiguous glyphs one column wide drops the defensive per-cell
