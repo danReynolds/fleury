@@ -37,6 +37,7 @@
 import 'dart:convert';
 
 import '../input/events.dart';
+import '../input/key_tables.dart';
 
 /// Sink interface used by the parser to emit events. The terminal
 /// driver supplies the real implementation (typically a
@@ -544,8 +545,10 @@ class InputParser {
     }
   }
 
-  /// Decodes a Kitty keyboard report (`CSI codepoint ; mods[:event] [; text] u`)
-  /// into the matching key or text event.
+  /// Decodes a full Kitty keyboard report
+  /// (`CSI key[:shifted[:base]] ; mods[:event] [; text] u`) into the
+  /// matching key or text event (RFC 0020 §8.7 — the complete grammar, not
+  /// a showcase subset).
   void _emitKittyKey(TuiEventSink sink) {
     final codepoint = _groupValue(0);
     if (codepoint == null || !_isUnicodeScalar(codepoint)) return;
@@ -557,24 +560,69 @@ class InputParser {
       if (_csiGroups[1].length >= 2) type = _eventType(_csiGroups[1][1]);
     }
 
-    // Special chords carry their classic control codepoint even in CSI-u
-    // form — this is the disambiguation win (lone Esc, Ctrl+I vs Tab,
-    // Ctrl+M vs Enter all become distinct, modifier-bearing events).
-    final kc = _kittyFunctionalKey(codepoint);
-    if (kc != null) {
-      sink.add(KeyEvent(kc, modifiers: modifiers, type: type));
+    // Base-layout alternate (flag 4): third sub-param of the key group.
+    // Empty sub-params parse as 0, which the protocol also uses for
+    // "absent" — never a real key. Positional identity is per-event data;
+    // an unmapped base codepoint leaves it null rather than guessing.
+    KeyPosition? position;
+    if (_csiGroups[0].length >= 3 && _csiGroups[0][2] > 0) {
+      position = positionByUsCodepoint[_csiGroups[0][2]];
+    }
+
+    // Key number 0: text with no key identity (IME/OS-produced text).
+    // Emit the associated text alone — no invented KeyCode, no state
+    // (RFC 0020 §6, text-only batches).
+    if (codepoint == 0) {
+      if (!_kittyAssociatedTextIsValid()) return;
+      final text = _kittyAssociatedText();
+      if (text != null && text.isNotEmpty && type != KeyEventType.up) {
+        sink.add(TextInputEvent(text));
+      }
       return;
     }
 
+    // Special chords carry their classic control codepoint even in CSI-u
+    // form — this is the disambiguation win (lone Esc, Ctrl+I vs Tab,
+    // Ctrl+M vs Enter all become distinct, modifier-bearing events). The
+    // functional PUA table extends this to the complete vocabulary,
+    // including lone modifier keys and the keypad — KP Enter is
+    // [KeyCode.keypadEnter], deliberately distinct from Enter (§8.7:
+    // nothing silently folded).
+    final kc = _kittyFunctionalKey(codepoint);
+    if (kc != null) {
+      sink.add(
+        KeyEvent(kc, modifiers: modifiers, type: type, position: position),
+      );
+      return;
+    }
+
+    // A well-formed functional codepoint outside the mapped table (the PUA
+    // block 57344–63743) is diagnosable unsupported input — never text
+    // (§8.7). Dropping beats emitting private-use garbage as typing.
+    if (codepoint >= 0xE000 && codepoint <= 0xF8FF) return;
+
     // A text-producing key with no actionable modifier (only Shift, or
-    // none) is plain input. Releases never produce text.
+    // none) is plain input on down/repeat. Its release is a key event with
+    // no text — phase retention (§8.7): the dispatcher fences `up` from
+    // commands; the regularizer and observation lanes consume it.
     final actionable = modifiers.any((m) => m != KeyModifier.shift);
     if (!actionable) {
-      if (type == KeyEventType.up) return;
+      if (type == KeyEventType.up) {
+        sink.add(
+          KeyEvent(
+            KeyCode.char(String.fromCharCode(codepoint)),
+            type: KeyEventType.up,
+            position: position,
+          ),
+        );
+        return;
+      }
       var cp = codepoint;
       // Prefer the shifted codepoint the terminal reports (group 0's
-      // second sub-param) when Shift is held.
-      if (modifiers.contains(KeyModifier.shift) && _csiGroups[0].length >= 2) {
+      // second sub-param) when Shift is held. 0 means absent.
+      if (modifiers.contains(KeyModifier.shift) &&
+          _csiGroups[0].length >= 2 &&
+          _csiGroups[0][1] > 0) {
         cp = _csiGroups[0][1];
       }
       if (!_isUnicodeScalar(cp) || !_kittyAssociatedTextIsValid()) return;
@@ -584,12 +632,15 @@ class InputParser {
     }
 
     // A modified key (Ctrl/Alt/Super/Meta + key): report the base
-    // character so bindings like Ctrl+C match regardless of layout.
+    // character so bindings like Ctrl+C match regardless of layout. The
+    // base-layout position rides along — it is the §13.3 non-Latin
+    // matching fallback's data source (Ctrl+С carrying base 'c').
     sink.add(
       KeyEvent(
         KeyCode.char(String.fromCharCode(codepoint)),
         modifiers: modifiers,
         type: type,
+        position: position,
       ),
     );
   }
@@ -600,13 +651,20 @@ class InputParser {
     _ => KeyEventType.down,
   };
 
-  KeyCode? _kittyFunctionalKey(int cp) => switch (cp) {
-    13 || 57414 => KeyCode.enter, // Enter, KP Enter
-    9 => KeyCode.tab,
-    27 => KeyCode.escape,
-    8 || 127 => KeyCode.backspace,
-    _ => null,
-  };
+  KeyCode? _kittyFunctionalKey(int cp) {
+    switch (cp) {
+      case 13:
+        return KeyCode.enter;
+      case 9:
+        return KeyCode.tab;
+      case 27:
+        return KeyCode.escape;
+      case 8 || 127:
+        return KeyCode.backspace;
+    }
+    final special = kittyFunctionalKeys[cp];
+    return special == null ? null : KeyCode.forSpecial(special);
+  }
 
   /// The associated-text field (group 2, colon-separated codepoints), only
   /// present when the terminal was asked to report text. Null otherwise.
