@@ -4,6 +4,7 @@ import 'package:meta/meta.dart';
 
 import '../foundation/geometry.dart';
 import '../input/events.dart';
+import '../input/keyboard_state.dart';
 import '../runtime/remote_surface_sink.dart';
 import 'capabilities.dart';
 
@@ -137,6 +138,18 @@ abstract interface class TerminalDriver {
 /// diff base stays at the last frame the peer actually received, and the
 /// resumed frame ships one coalesced patch. Local terminal drivers don't
 /// implement this (a blocking stdout already applies backpressure).
+/// Optional driver extension: declares the keyboard's confirmed semantic
+/// capabilities (RFC 0020 §5.7). Drivers that don't implement it report the
+/// conservative press-only profile. Follows the [TerminalHandoffDriver]
+/// opt-in pattern so the base interface stays stable.
+abstract interface class KeyboardCapabilitiesDriver {
+  /// What this surface's keyboard has been CONFIRMED to guarantee — never
+  /// what was requested. A terminal projects negotiated flags (P5); the DOM
+  /// surface is unconditionally full; a remote driver relays its peer's
+  /// declaration (P6).
+  KeyboardCapabilities get keyboardCapabilities;
+}
+
 abstract interface class OutputFlowControl {
   /// True while unsent output exceeds the channel's high-water mark.
   bool get isOutputBacklogged;

@@ -490,6 +490,14 @@ Future<AppExit> _runAppImpl(
     sequenceTimeout: sequenceTimeout,
     globalBindings: globalBindings,
   );
+  // Confirmed keyboard capabilities, from drivers that declare them (the
+  // DOM surface, a negotiated terminal — P3/P5); everything else stays on
+  // the conservative press-only profile (RFC 0020 §5.7).
+  if (usedDriver is KeyboardCapabilitiesDriver) {
+    dispatcher.keyboardSession.updateCapabilities(
+      (usedDriver as KeyboardCapabilitiesDriver).keyboardCapabilities,
+    );
+  }
   // Optional byte telemetry: set FLEURY_BYTE_TELEMETRY=1 to wrap the live
   // output sink and print a per-frame byte budget on exit. Aggregate mode
   // (no per-frame list) so a long session stays bounded; zero cost when off.
@@ -1243,6 +1251,11 @@ Future<AppExit> _runAppImpl(
             runtime: runtime,
             frameLoop: frameLoop,
             readViewport: () => FrameViewportSnapshot(usedDriver.size),
+            // Frame start, after input drained (events are pumped before
+            // frames are produced): publish the keyboard latch so every
+            // read within this frame — tickers included — agrees, and
+            // edges expire on schedule (RFC 0020 §5.6).
+            onBeforeFrame: (_) => dispatcher.keyboardSession.publishLatch(),
             // Remote drivers surface their transport's send backlog;
             // the frame program defers production while the peer stalls
             // (structured AND v1-byte modes — dropped bytes are never

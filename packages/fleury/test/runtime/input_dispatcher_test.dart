@@ -243,6 +243,110 @@ void main() {
     });
   });
 
+  group('observation lane projection (RFC 0020 §10)', () {
+    List<String> phases(List<KeyEvent> log) => [
+      for (final e in log)
+        '${e.code.character ?? e.code.special!.name}:${e.type.name}'
+        '${e.synthesized ? '*' : ''}',
+    ];
+
+    _TestHarness fullCaps() {
+      final h = _TestHarness();
+      h.dispatcher.keyboardSession.updateCapabilities(
+        KeyboardCapabilities.full,
+      );
+      h.mountRoot(const EmptyBox());
+      return h;
+    }
+
+    KeyEvent down(String c) => KeyEvent(KeyCode.char(c));
+    KeyEvent up(String c) =>
+        KeyEvent(KeyCode.char(c), type: KeyEventType.up);
+    KeyEvent repeat(String c) =>
+        KeyEvent(KeyCode.char(c), type: KeyEventType.repeat);
+
+    test('an app-wide observer sees the full regularized phase stream', () {
+      final h = fullCaps();
+      final log = <KeyEvent>[];
+      h.dispatcher.addKeyObserver(log.add);
+      h.dispatcher.dispatch(down('a'));
+      h.dispatcher.dispatch(repeat('a'));
+      h.dispatcher.dispatch(up('a'));
+      expect(phases(log), ['a:down', 'a:repeat', 'a:up']);
+    });
+
+    test('phase repair reaches observers (repeat-without-down)', () {
+      final h = fullCaps();
+      final log = <KeyEvent>[];
+      h.dispatcher.addKeyObserver(log.add);
+      h.dispatcher.dispatch(repeat('a'));
+      expect(phases(log), ['a:down*', 'a:repeat']);
+    });
+
+    test('an observer registered mid-press hears nothing until a fresh '
+        'press (no phantom phases)', () {
+      final h = fullCaps();
+      h.dispatcher.dispatch(down('a'));
+      final log = <KeyEvent>[];
+      h.dispatcher.addKeyObserver(log.add);
+      h.dispatcher.dispatch(repeat('a'));
+      h.dispatcher.dispatch(up('a'));
+      expect(log, isEmpty);
+      h.dispatcher.dispatch(down('a'));
+      expect(phases(log), ['a:down']);
+    });
+
+    test('removal mid-press closes open presses with a synthesized up', () {
+      final h = fullCaps();
+      final log = <KeyEvent>[];
+      final registration = h.dispatcher.addKeyObserver(log.add);
+      h.dispatcher.dispatch(down('w'));
+      registration.remove();
+      expect(phases(log), ['w:down', 'w:up*']);
+      // Removed registrations observe nothing further.
+      h.dispatcher.dispatch(down('x'));
+      expect(log, hasLength(2));
+    });
+
+    test('dispatcher disposal closes open presses (authority loss)', () {
+      final h = fullCaps();
+      final log = <KeyEvent>[];
+      h.dispatcher.addKeyObserver(log.add);
+      h.dispatcher.dispatch(down('w'));
+      h.dispatcher.dispose();
+      expect(phases(log), ['w:down', 'w:up*']);
+    });
+
+    test('a scope-anchored observer projects on focus exit', () {
+      final h = fullCaps();
+      final nodeA = FocusNode(debugLabel: 'a');
+      final nodeB = FocusNode(debugLabel: 'b');
+      addTearDown(() {
+        nodeA.dispose();
+        nodeB.dispose();
+      });
+      h.mountRoot(
+        Column(
+          children: [
+            Focus(focusNode: nodeA, autofocus: true, child: const EmptyBox()),
+            Focus(focusNode: nodeB, child: const EmptyBox()),
+          ],
+        ),
+      );
+      final log = <KeyEvent>[];
+      h.dispatcher.addKeyObserver(log.add, anchor: nodeA);
+
+      h.dispatcher.dispatch(down('w')); // in scope: observed
+      nodeB.requestFocus(); // scope exit while held
+      h.dispatcher.dispatch(down('x')); // triggers projection; not observed
+      expect(phases(log), ['w:down', 'w:up*']);
+
+      nodeA.requestFocus();
+      h.dispatcher.dispatch(down('y')); // back in scope
+      expect(phases(log), ['w:down', 'w:up*', 'y:down']);
+    });
+  });
+
   group('Acceptance tests — focus chain bubble-up', () {
     test('1. Focused child binding handles a key before parent', () {
       final calls = <String>[];

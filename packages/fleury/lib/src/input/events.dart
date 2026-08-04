@@ -2,6 +2,7 @@ import 'package:characters/characters.dart';
 import 'package:meta/meta.dart';
 
 import '../foundation/geometry.dart';
+import 'key_dispatch.dart';
 
 /// The non-character keys a terminal can report, as an enumerable set.
 ///
@@ -1826,6 +1827,16 @@ final class KeyEvent extends TuiEvent {
   /// phase from the source. Provenance for diagnostics; the dispatch rules
   /// for each synthesis origin are the taxonomy table's, not the flag's.
   final bool synthesized;
+
+  /// Stops this event's propagation to shallower scopes (RFC 0020 §17.2).
+  ///
+  /// Valid only during the live synchronous dispatch of this event to an
+  /// entitled consumer — a [KeyDetector] `onKey` callback. Anywhere else
+  /// (observation, a stored event, after an `await`) it is a debug-mode
+  /// error and a release-mode no-op. Binding handlers control propagation
+  /// with `KeyBindingEvent.bubble()` instead; entitlement lives on the
+  /// dispatch context, never on the event object.
+  void consume() => KeyDispatchContext.consumeCurrent();
 
   /// Whether this event is [selector]'s key, by identity alone.
   ///

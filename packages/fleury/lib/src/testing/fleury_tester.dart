@@ -40,6 +40,7 @@ import '../semantics/accessibility.dart';
 import '../semantics/inspection.dart';
 import '../semantics/semantics.dart';
 import '../input/events.dart';
+import '../input/keyboard_state.dart';
 import '../widgets/basic.dart';
 import '../runtime/clipboard.dart';
 import '../widgets/clipboard_scope.dart';
@@ -581,6 +582,76 @@ class FleuryTester {
     _assertNotDisposed('paste');
     _dispatcher.dispatch(PasteEvent(text));
     _owner.flushBuild();
+  }
+
+  // ---- RFC 0020 lifecycle driving --------------------------------------
+
+  /// The confirmed keyboard capabilities the session runs under. Defaults
+  /// to the press-only legacy profile, so the existing down-only test
+  /// corpus keeps meaning what it meant. Set [KeyboardCapabilities.full]
+  /// to drive held-state scenarios.
+  KeyboardCapabilities get keyboardCapabilities =>
+      _dispatcher.keyboardSession.capabilities;
+
+  set keyboardCapabilities(KeyboardCapabilities value) {
+    _assertNotDisposed('keyboardCapabilities');
+    _dispatcher.keyboardSession.updateCapabilities(value);
+  }
+
+  /// Dispatches a correlated [InputBatch], as a lifecycle-mode terminal or
+  /// the DOM source emits for printables.
+  void sendBatch(InputBatch batch) {
+    _assertNotDisposed('sendBatch');
+    _dispatcher.dispatch(batch);
+    _owner.flushBuild();
+  }
+
+  /// Presses [key] down (without releasing) — the start of a held-key
+  /// scenario. Requires [keyboardCapabilities] with held-state support for
+  /// the session to track it.
+  void holdKey(KeySelector key, {Set<KeyModifier> modifiers = const {}}) {
+    _assertNotDisposed('holdKey');
+    _dispatcher.dispatch(_lifecycleEvent(key, KeyEventType.down, modifiers));
+    _owner.flushBuild();
+  }
+
+  /// Releases a key previously pressed with [holdKey].
+  void releaseKey(KeySelector key, {Set<KeyModifier> modifiers = const {}}) {
+    _assertNotDisposed('releaseKey');
+    _dispatcher.dispatch(_lifecycleEvent(key, KeyEventType.up, modifiers));
+    _owner.flushBuild();
+  }
+
+  /// Publishes the frame latch, as the frame driver does at frame start.
+  /// Sampled state ([KeyboardSnapshot]) observes input only after a latch.
+  KeyboardSnapshot latchFrame() {
+    _assertNotDisposed('latchFrame');
+    return _dispatcher.keyboardSession.publishLatch();
+  }
+
+  static KeyEvent _lifecycleEvent(
+    KeySelector key,
+    KeyEventType type,
+    Set<KeyModifier> modifiers,
+  ) {
+    if (key is KeyCode) {
+      return KeyEvent(key, type: type, modifiers: modifiers);
+    }
+    final position = key as KeyPosition;
+    final twin = position.usTwin;
+    if (twin == null) {
+      throw ArgumentError.value(
+        key,
+        'key',
+        'position has no US twin; construct the KeyEvent explicitly',
+      );
+    }
+    return KeyEvent(
+      twin,
+      type: type,
+      modifiers: modifiers,
+      position: position,
+    );
   }
 
   /// Dispatches a [MouseEvent] (e.g. a left-button click for

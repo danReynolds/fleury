@@ -284,6 +284,8 @@ export 'src/input/events.dart'
         TextCompositionEventKind,
         TextInputEvent,
         TuiEvent;
+export 'src/input/keyboard_state.dart'
+    show KeyboardCapabilities, KeyboardSnapshot;
 export 'src/terminal/fake_driver.dart' show FakeTerminalDriver;
 export 'src/terminal/input_parser.dart' show InputParser, TuiEventSink;
 export 'src/runtime/remote_surface_sink.dart'

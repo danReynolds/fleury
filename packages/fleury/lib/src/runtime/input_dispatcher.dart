@@ -17,6 +17,7 @@ import 'dart:async';
 import 'package:characters/characters.dart';
 
 import '../input/events.dart';
+import '../input/keyboard_state.dart';
 import '../widgets/focus.dart';
 import '../widgets/key_bindings.dart';
 import '../widgets/pointer.dart';
@@ -37,6 +38,29 @@ class InputDispatcher {
 
   /// The focus manager whose chain this dispatcher walks.
   final FocusManager focusManager;
+
+  /// The canonical session keyboard (RFC 0020 §6): press records, phase
+  /// repair, frame edges, capabilities. Fed by [dispatch]; latched once per
+  /// frame by the frame driver; read by the sampling surface (P4's
+  /// `Keyboard`) and this dispatcher's observation lane.
+  final KeyboardSession keyboardSession = KeyboardSession();
+
+  /// Framework-internal observation-lane registrations (RFC 0020 §5.5's
+  /// internal lane; `KeyBinding.hold` and the keyboard inspector consume
+  /// it). Empty for ordinary apps — the zero-observer path is one check.
+  final List<KeyPhaseObserverRegistration> _keyObservers = [];
+
+  /// Registers [observer] on the observation lane, scoped to the active
+  /// focus subtree of [anchor] (null = app-wide). Framework-internal.
+  KeyPhaseObserverRegistration addKeyObserver(
+    void Function(KeyEvent event) observer, {
+    FocusNode? anchor,
+  }) {
+    _checkNotDisposed();
+    final registration = KeyPhaseObserverRegistration._(this, observer, anchor);
+    _keyObservers.add(registration);
+    return registration;
+  }
 
   /// Routes mouse events to widget pointer regions (taps, hover, scroll).
   /// Null when pointer routing isn't installed.
@@ -143,17 +167,19 @@ class InputDispatcher {
   KeyEventResult dispatch(TuiEvent event) {
     _checkNotDisposed();
     if (event is InputBatch) {
-      // A correlated key+text report (RFC 0020 §5). Interim routing until
-      // the P2 lane machinery lands: preserve today's semantics exactly —
-      // the text half drives the text-claimant / character-binding path,
-      // and a key half accompanied by text is NOT separately dispatched
-      // (printables never reached key dispatch pre-batch either). The §6
-      // key-walk-before-text interlock replaces this in P4.
+      // A correlated key+text report (RFC 0020 §5). The key half feeds the
+      // session/observation lanes (stage 2-3); routing then preserves
+      // today's semantics — the text half drives the text-claimant /
+      // character-binding path, and a text-bearing key half is NOT
+      // separately command-dispatched (printables never reached key
+      // dispatch pre-batch either). The §6 key-walk-before-text interlock
+      // replaces the routing half in P4.
+      final key = event.key;
+      if (key != null) _regularizeAndObserve(key);
       final text = event.committedText;
       if (text != null) {
         return _dispatchText(TextInputEvent(text));
       }
-      final key = event.key;
       if (key != null) {
         return _dispatchKeyEvent(key);
       }
@@ -172,6 +198,7 @@ class InputDispatcher {
       return _dispatchMouse(event);
     }
     if (event is KeyEvent) {
+      _regularizeAndObserve(event);
       return _dispatchKeyEvent(event);
     }
     return KeyEventResult.ignored;
@@ -228,6 +255,38 @@ class InputDispatcher {
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
+  }
+
+  /// Stage 2-3 of the batch pipeline (RFC 0020 §6): feed the session
+  /// regularizer, then project the regularized stream to active observers.
+  ///
+  /// The command lane deliberately still receives the RAW event during this
+  /// interim (repair-downs would double-fire with today's fire-on-repeat
+  /// binding default; §12's `includeRepeats` flip in P4 makes the
+  /// regularized stream safe for commands, and dispatch switches then).
+  /// Under the legacy capability profile the regularizer is a passthrough,
+  /// so this is a no-op cost on the typing path with no observers.
+  void _regularizeAndObserve(KeyEvent event) {
+    final regularized = keyboardSession.ingest(event);
+    if (_keyObservers.isEmpty) return;
+    for (final e in regularized.events) {
+      _notifyKeyObservers(e);
+    }
+  }
+
+  /// Delivers [event] to every scope-active observer, applying each
+  /// registration's projection (RFC 0020 §10's observer-level contract):
+  /// entering scope mid-press yields no phantom up; leaving scope while a
+  /// seen key is held yields exactly one observer-local synthesized up;
+  /// phases for downs an observer never saw are suppressed.
+  void _notifyKeyObservers(KeyEvent event) {
+    // Routing snapshot: registrations captured before callbacks run.
+    final registrations = List.of(_keyObservers);
+    final chain = focusManager.activeChain();
+    for (final registration in registrations) {
+      if (registration._removed) continue;
+      registration._project(event, chain);
+    }
   }
 
   KeyEventResult _dispatchKeyEvent(KeyEvent event, {String? textOrigin}) {
@@ -681,6 +740,16 @@ class InputDispatcher {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    // Teardown is authority loss (RFC 0020 §6): recover held keys so every
+    // observer's stream closes its open presses (one up per down, always).
+    final releases = keyboardSession.loseAuthority();
+    for (final release in releases) {
+      _notifyKeyObservers(release);
+    }
+    for (final registration in List.of(_keyObservers)) {
+      registration._exitScope();
+    }
+    _keyObservers.clear();
     _clearPending();
     // Unhook before disposing: this both drops the notifier's reference back
     // to us and makes a late `cancel()` (a click racing teardown) a silent
@@ -693,6 +762,79 @@ class InputDispatcher {
     if (_disposed) {
       throw StateError('InputDispatcher has been disposed.');
     }
+  }
+}
+
+/// One observation-lane registration and its scope projection (RFC 0020
+/// §10's observer-level stream contract). Framework-internal: created via
+/// [InputDispatcher.addKeyObserver], consumed by `KeyBinding.hold` and the
+/// keyboard inspector.
+///
+/// The projector guarantees, per registration: every observed `up` was
+/// preceded by this observer's own observed `down`, and every observed
+/// `down` is followed by exactly one `up` — physical, or synthesized when
+/// the observer leaves scope (or is removed) while a seen key is held. It
+/// never mutates session state: the session stays the honest physical
+/// record while each observer gets a scope-consistent projection.
+final class KeyPhaseObserverRegistration {
+  KeyPhaseObserverRegistration._(this._dispatcher, this._observer, this._anchor);
+
+  final InputDispatcher _dispatcher;
+  final void Function(KeyEvent event) _observer;
+  final FocusNode? _anchor;
+
+  /// Presses this observer has seen the down for, by physical identity.
+  final Map<Object, KeyEvent> _seen = {};
+  bool _removed = false;
+
+  void _project(KeyEvent event, List<FocusNode> chain) {
+    final anchor = _anchor;
+    final active = anchor == null || chain.contains(anchor);
+    if (!active) {
+      // Scope exit: close open presses with observer-local synthesized
+      // releases; the current event is not observed (its down, if any,
+      // belongs to whoever is in scope now).
+      _exitScope();
+      return;
+    }
+    final id = event.position ?? event.code;
+    switch (event.type) {
+      case KeyEventType.down:
+        _seen[id] = event;
+        _observer(event);
+      case KeyEventType.repeat:
+        // Repeats for downs never seen are suppressed — an observer that
+        // entered scope mid-press hears nothing until a fresh press.
+        if (_seen.containsKey(id)) _observer(event);
+      case KeyEventType.up:
+        if (_seen.remove(id) != null) _observer(event);
+    }
+  }
+
+  void _exitScope() {
+    if (_seen.isEmpty) return;
+    final open = List.of(_seen.values);
+    _seen.clear();
+    for (final down in open) {
+      _observer(
+        KeyEvent(
+          down.code,
+          type: KeyEventType.up,
+          position: down.position,
+          synthesized: true,
+        ),
+      );
+    }
+  }
+
+  /// Unregisters. Open presses are closed first (synthesized releases) so
+  /// the one-up-per-down contract holds through removal — a disposing hold
+  /// widget receives its end callback before detaching.
+  void remove() {
+    if (_removed) return;
+    _removed = true;
+    _exitScope();
+    _dispatcher._keyObservers.remove(this);
   }
 }
 
