@@ -486,7 +486,15 @@ Future<(_RunMetrics?, _LatencyFailure?)> _captureLatencyRun(
     final plansBefore = planBytes.length;
     planWaiter = Completer<double>();
     final sentAt = sw.elapsedMicroseconds / 1000.0;
-    ws.add(encodeFrame(const InputEventFrame(KeyEvent(KeyCode.char('k')))));
+    ws.add(
+      encodeFrame(
+        // The faithful v2-client shape (RFC 0020 P3): a printable is a
+        // correlated key+text batch; the text half drives the app.
+        const InputEventFrame(
+          InputBatch(key: KeyEvent(KeyCode.char('k')), committedText: 'k'),
+        ),
+      ),
+    );
     final arrival = await awaitPlan(keyTimeout);
     if (arrival == null) {
       final infra = socketDown;
