@@ -81,7 +81,7 @@ class _FrameBuilderState extends State<FrameBuilder> {
   }
 
   bool _resolveMuted() =>
-      !TickerMode.enabledOf(context) ||
+      !TickerMode.of(context) ||
       TuiBinding.of(context).animationPolicy == AnimationPolicy.disabled;
 
   void _disposeTicker() {

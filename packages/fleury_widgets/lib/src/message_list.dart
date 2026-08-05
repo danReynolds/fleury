@@ -353,7 +353,7 @@ class _MessageListState extends State<MessageList> {
     return _itemIndexByKey[key];
   }
 
-  void _onFocusWithinChange(bool focused) {
+  void _onFocusDetectorChange(bool focused) {
     if (_focusedWithin == focused) return;
     setState(() {
       _focusedWithin = focused;
@@ -479,8 +479,8 @@ class _MessageListState extends State<MessageList> {
       );
     }
 
-    return FocusWithin(
-      onFocusChange: _onFocusWithinChange,
+    return FocusDetector(
+      onFocusChange: _onFocusDetectorChange,
       child: Semantics(
         role: SemanticRole.messageList,
         label: widget.semanticLabel,

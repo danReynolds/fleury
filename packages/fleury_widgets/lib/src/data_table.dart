@@ -706,7 +706,7 @@ class _DataTableState extends State<DataTable> {
 
   void _onChange() => setState(() {});
 
-  void _onFocusWithinChange(bool focused) => setState(() {});
+  void _onFocusDetectorChange(bool focused) => setState(() {});
 
   @override
   void dispose() {
@@ -973,8 +973,8 @@ class _DataTableState extends State<DataTable> {
       onSemanticAction: _handleSemanticAction,
       onSemanticSetValue: _handleSemanticSetValue,
     );
-    return FocusWithin(
-      onFocusChange: _onFocusWithinChange,
+    return FocusDetector(
+      onFocusChange: _onFocusDetectorChange,
       child: KeyDetector(
         onKey: (event) {
           if (_onKey(event) == KeyEventResult.handled) event.consume();

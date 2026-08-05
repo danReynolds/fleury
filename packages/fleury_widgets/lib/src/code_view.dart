@@ -424,7 +424,7 @@ class _CodeViewState extends State<CodeView> {
 
   void _onControllerChange() => setState(() {});
 
-  void _onFocusWithinChange(bool focused) {
+  void _onFocusDetectorChange(bool focused) {
     if (_focusedWithin == focused) return;
     setState(() {
       _focusedWithin = focused;
@@ -544,8 +544,8 @@ class _CodeViewState extends State<CodeView> {
       );
     }
 
-    return FocusWithin(
-      onFocusChange: _onFocusWithinChange,
+    return FocusDetector(
+      onFocusChange: _onFocusDetectorChange,
       child: Semantics(
         role: SemanticRole.code,
         label: widget.semanticLabel,

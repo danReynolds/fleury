@@ -487,7 +487,7 @@ class _LineChartState extends State<LineChart> {
     );
 
     if (!widget.interactive) return semantic;
-    return FocusWithin(
+    return FocusDetector(
       onFocusChange: (has) {
         if (!mounted) return;
         setState(() => _focused = has);

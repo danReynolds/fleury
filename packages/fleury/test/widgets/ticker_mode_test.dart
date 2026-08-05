@@ -112,7 +112,7 @@ void main() {
       owner.mountRoot(
         _Builder(
           builder: (ctx) {
-            observed = TickerMode.enabledOf(ctx);
+            observed = TickerMode.of(ctx);
             return const Text('t');
           },
         ),
@@ -128,7 +128,7 @@ void main() {
           enabled: false,
           child: _Builder(
             builder: (ctx) {
-              observed = TickerMode.enabledOf(ctx);
+              observed = TickerMode.of(ctx);
               return const Text('t');
             },
           ),

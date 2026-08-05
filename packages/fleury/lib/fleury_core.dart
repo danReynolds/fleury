@@ -325,7 +325,7 @@ export 'src/widgets/focus.dart'
         FocusOnKeyCallback,
         FocusScope,
         FocusScopeRef,
-        FocusWithin,
+        FocusDetector,
         KeyBindingSource,
         KeyEventResult,
         PasteEventClaimant,

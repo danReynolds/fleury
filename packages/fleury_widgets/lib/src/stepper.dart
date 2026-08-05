@@ -364,7 +364,7 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
         final next = coerceSemanticNum(payload);
         if (next != null) _jump(next);
       },
-      child: FocusWithin(
+      child: FocusDetector(
         onFocusChange: _handleFocusChange,
         child: KeyDetector(
           onKey: (event) {

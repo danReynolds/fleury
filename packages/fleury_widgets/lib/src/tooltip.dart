@@ -5,7 +5,7 @@ import 'package:fleury/fleury_core.dart';
 /// A TUI has no hover, so focus is the trigger: Tab onto the wrapped
 /// widget (or a focusable within it) and the [message] floats beneath it
 /// via the [Anchored] primitive; move focus away and it disappears. Built on
-/// [FocusWithin], so it tracks descendant focus — wrap a button or field and
+/// [FocusDetector], so it tracks descendant focus — wrap a button or field and
 /// it just works.
 class Tooltip extends StatefulWidget {
   const Tooltip({
@@ -100,7 +100,7 @@ class _TooltipState extends State<Tooltip> {
       value: _safeMessage,
       hint: _safeMessage,
       state: SemanticState({'tooltipVisible': _entry != null}),
-      child: FocusWithin(
+      child: FocusDetector(
         onFocusChange: _onFocusChange,
         child: KeyBindings(
           bindings: <KeyBinding>[

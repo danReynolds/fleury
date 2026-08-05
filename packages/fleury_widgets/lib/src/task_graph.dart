@@ -287,7 +287,7 @@ class _TaskGraphState extends State<TaskGraph> {
     _controller.selectedIndex = nextIndex;
   }
 
-  void _onFocusWithinChange(bool focused) {
+  void _onFocusDetectorChange(bool focused) {
     if (_focusedWithin == focused) return;
     setState(() {
       _focusedWithin = focused;
@@ -403,8 +403,8 @@ class _TaskGraphState extends State<TaskGraph> {
     }
 
     final counts = _statusCounts(widget.nodes);
-    return FocusWithin(
-      onFocusChange: _onFocusWithinChange,
+    return FocusDetector(
+      onFocusChange: _onFocusDetectorChange,
       child: Semantics(
         role: SemanticRole.taskGraph,
         label: widget.semanticLabel,

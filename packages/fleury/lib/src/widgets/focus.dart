@@ -235,7 +235,7 @@ class FocusNode {
   /// The [BuildContext] of the `Focus` that owns this node, or null when
   /// the node isn't attached. Mirrors Flutter's `FocusNode.context`; lets
   /// a widget ask whether focus sits within its subtree — see
-  /// [FocusWithin].
+  /// [FocusDetector].
   BuildContext? get context => _element;
 
   /// The nearest enclosing [FocusScope]'s reference, if any.
@@ -1672,19 +1672,21 @@ class _ExcludeFocusMarkerElement extends ComponentElement {
 }
 
 // ---------------------------------------------------------------------------
-// FocusWithin
+// FocusDetector
 // ---------------------------------------------------------------------------
 
 /// Reports when keyboard focus enters or leaves its subtree.
 ///
 /// [onFocusChange] fires with `true` when the focused node becomes this
-/// subtree (or any descendant), and `false` when it leaves — the
+/// subtree (or any descendant), and `false` when it leaves. It also fires
+/// on mount when focus is ALREADY within, so a consumer never has to assume
+/// an initial value — the
 /// descendant-inclusive focus signal that powers focus-reactive chrome:
 /// a tooltip that appears while its target is focused, an active-pane
 /// highlight, a section that styles itself when something inside has
 /// focus. (For a rebuild, call `setState` from the callback.)
-class FocusWithin extends StatefulWidget {
-  const FocusWithin({
+class FocusDetector extends StatefulWidget {
+  const FocusDetector({
     super.key,
     required this.onFocusChange,
     required this.child,
@@ -1694,10 +1696,10 @@ class FocusWithin extends StatefulWidget {
   final Widget child;
 
   @override
-  State<FocusWithin> createState() => _FocusWithinState();
+  State<FocusDetector> createState() => _FocusDetectorState();
 }
 
-class _FocusWithinState extends State<FocusWithin> {
+class _FocusDetectorState extends State<FocusDetector> {
   FocusManager? _manager;
   bool _within = false;
 
@@ -1710,6 +1712,12 @@ class _FocusWithinState extends State<FocusWithin> {
       _manager = manager;
       _manager?.addListener(_onFocusChange);
     }
+    // Report the state we mount INTO, not only later transitions. Without
+    // this a consumer that derives behaviour from focus (a focus-gated
+    // TickerMode) has to guess an initial value, and a scene whose child
+    // autofocuses during this same mount would miss the notification
+    // entirely — the listener above is registered after that focus lands.
+    _onFocusChange();
   }
 
   void _onFocusChange() {
@@ -1720,12 +1728,12 @@ class _FocusWithinState extends State<FocusWithin> {
   }
 
   /// Walks up from the focused node's context; focus is within us when
-  /// our state is its nearest enclosing [FocusWithin] (so for nested
-  /// FocusWithins the innermost one owns the focus).
+  /// our state is its nearest enclosing [FocusDetector] (so for nested
+  /// FocusDetectors the innermost one owns the focus).
   bool _computeWithin() {
     final ctx = _manager?.focusedNode?.context;
     if (ctx == null) return false;
-    return identical(ctx.findAncestorStateOfType<_FocusWithinState>(), this);
+    return identical(ctx.findAncestorStateOfType<_FocusDetectorState>(), this);
   }
 
   @override

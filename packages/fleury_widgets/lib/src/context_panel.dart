@@ -347,7 +347,7 @@ class _ContextPanelState extends State<ContextPanel> {
     _controller.selectedIndex = nextIndex;
   }
 
-  void _onFocusWithinChange(bool focused) {
+  void _onFocusDetectorChange(bool focused) {
     if (_focusedWithin == focused) return;
     setState(() {
       _focusedWithin = focused;
@@ -495,8 +495,8 @@ class _ContextPanelState extends State<ContextPanel> {
       ],
     );
 
-    return FocusWithin(
-      onFocusChange: _onFocusWithinChange,
+    return FocusDetector(
+      onFocusChange: _onFocusDetectorChange,
       child: Semantics(
         role: SemanticRole.contextPanel,
         label: _sanitizeContextText(widget.label),

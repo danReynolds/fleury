@@ -487,7 +487,7 @@ class _PatchReviewState extends State<PatchReview> {
     _controller.selectedIndex = nextIndex;
   }
 
-  void _onFocusWithinChange(bool focused) {
+  void _onFocusDetectorChange(bool focused) {
     if (_focusedWithin == focused) return;
     setState(() {
       _focusedWithin = focused;
@@ -660,8 +660,8 @@ class _PatchReviewState extends State<PatchReview> {
       ]);
     }
 
-    return FocusWithin(
-      onFocusChange: _onFocusWithinChange,
+    return FocusDetector(
+      onFocusChange: _onFocusDetectorChange,
       child: Semantics(
         role: SemanticRole.patchReview,
         label: _sanitizePatchText(widget.label),

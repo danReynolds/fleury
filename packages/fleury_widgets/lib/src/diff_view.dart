@@ -476,7 +476,7 @@ class _DiffViewState extends State<DiffView> {
 
   void _onControllerChange() => setState(() {});
 
-  void _onFocusWithinChange(bool focused) {
+  void _onFocusDetectorChange(bool focused) {
     if (_focusedWithin == focused) return;
     setState(() {
       _focusedWithin = focused;
@@ -595,8 +595,8 @@ class _DiffViewState extends State<DiffView> {
       );
     }
 
-    return FocusWithin(
-      onFocusChange: _onFocusWithinChange,
+    return FocusDetector(
+      onFocusChange: _onFocusDetectorChange,
       child: Semantics(
         role: SemanticRole.diff,
         label: widget.semanticLabel,

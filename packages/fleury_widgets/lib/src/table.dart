@@ -254,7 +254,7 @@ class _TableState extends State<Table> {
 
   void _onChange() => setState(() {});
 
-  void _onFocusWithinChange(bool focused) {
+  void _onFocusDetectorChange(bool focused) {
     if (!_interactive) return;
     setState(() {});
   }
@@ -410,8 +410,8 @@ class _TableState extends State<Table> {
       child: body,
     );
     if (!_interactive) return table;
-    return FocusWithin(
-      onFocusChange: _onFocusWithinChange,
+    return FocusDetector(
+      onFocusChange: _onFocusDetectorChange,
       child: KeyDetector(
         onKey: (event) {
           if ((_onKey)(event) == KeyEventResult.handled) event.consume();

@@ -63,10 +63,6 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
   /// toggle rather than a hold (see [_supportsHeldControls]).
   bool _thrustLatched = false;
 
-  /// Whether the playfield currently holds focus. Sampled controls keep
-  /// reporting physical truth when it does not, so the simulation pauses.
-  bool _interactive = true;
-
   bool get _reducedMotion => _motionPolicy != AnimationPolicy.enabled;
 
   @override
@@ -81,7 +77,7 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
     // and stays still under reduced/disabled policies. TickerMode still
     // suspends a hidden route. Reveal/Animate independently obey the policy.
     final ticker = _ticker ??= binding.createTicker(_onTick);
-    final tickerModeEnabled = TickerMode.enabledOf(context);
+    final tickerModeEnabled = TickerMode.of(context);
     if (ticker.muted && tickerModeEnabled) {
       // A muted ticker keeps its own elapsed clock current. Re-anchor our
       // frame delta before unmuting so a hidden route does not catch up.
@@ -296,30 +292,24 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
     // mid-session, the control scheme and its legend follow.
     return KeyBindings(
       bindings: _bindings(),
-      child: FocusWithin(
-        // Sampled input is surface-wide, not focus-scoped, so a game must
-        // stop its own simulation when focus leaves — otherwise the ship
-        // flies while the user types in a dialog. Muting (rather than
-        // stopping) keeps the ticker's clock anchored.
-        onFocusChange: (focused) {
-          if (_interactive == focused) return;
-          setState(() => _interactive = focused);
-        },
-        child: TickerMode(
-          enabled: _interactive,
-          child: Focus(
-            autofocus: true,
-            debugLabel: 'neon-asteroids',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                _hud(size),
-                const SizedBox(height: 1),
-                Expanded(child: _playfield(size)),
-                const SizedBox(height: 1),
-                _controls(size),
-              ],
-            ),
+      // Sampled input is surface-wide, so a scene that keeps ticking while
+      // focus is elsewhere acts on keys meant for whatever took focus.
+      // Gating the SIMULATION is the fix — a paused ship neither thrusts
+      // nor drifts into a rock. Stacks with the route-visibility TickerMode
+      // read in didChangeDependencies: hidden OR unfocused means muted.
+      child: TickerMode.whileFocused(
+        child: Focus(
+          autofocus: true,
+          debugLabel: 'neon-asteroids',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              _hud(size),
+              const SizedBox(height: 1),
+              Expanded(child: _playfield(size)),
+              const SizedBox(height: 1),
+              _controls(size),
+            ],
           ),
         ),
       ),

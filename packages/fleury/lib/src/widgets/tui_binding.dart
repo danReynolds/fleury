@@ -212,7 +212,7 @@ mixin SingleTickerProviderStateMixin<T extends StatefulWidget> on State<T>
   }
 
   bool _resolveMuted() {
-    final modeEnabled = TickerMode.enabledOf(context);
+    final modeEnabled = TickerMode.of(context);
     final binding = TuiBinding.of(context);
     final policyAllows = binding.animationPolicy != AnimationPolicy.disabled;
     return !(modeEnabled && policyAllows);
