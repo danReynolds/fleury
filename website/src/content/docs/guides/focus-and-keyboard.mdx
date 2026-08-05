@@ -141,8 +141,13 @@ press Z, not W.
 ### Not every terminal reports releases
 
 "Is this key held" needs key *releases*, and plain terminal input has none — a
-terminal sends bytes on press and nothing on let-go. Fleury negotiates the Kitty
-keyboard protocol to get them where it can, and tells you what it got:
+terminal sends bytes on press and nothing on let-go. Fleury asks every terminal
+for them automatically; there is no flag to set and nothing to opt into. A
+terminal that only partly supports the protocol is negotiated back down before
+your app sees a keystroke, so asking can never cost the user their ability to
+type.
+
+What you do have to handle is a terminal that simply cannot do it:
 
 ```dart
 // Capability reads ARE reactive and legal in build: this rebuilds when a

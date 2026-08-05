@@ -63,7 +63,7 @@ final class TerminalMode {
     this.hideCursor = true,
     this.resetStyleOnExit = true,
     this.bracketedPaste = true,
-    this.keyboardProtocol = KeyboardProtocolMode.disambiguated,
+    this.keyboardProtocol = KeyboardProtocolMode.lifecycle,
     this.focusReporting = true,
     this.mouse = false,
     this.mouseMotion = false,

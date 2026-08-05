@@ -856,8 +856,12 @@ doubled or lost, no release ever fires a command.
 11. The floor is `KeyDetector` (propagate-by-default), replacing `Focus.onKey`;
     the release fence stands everywhere; the floor's keyspace is
     tier-dependent and `reportsPrintableKeys` says so.
-12. `lifecycle` stays opt-in permanently absent a future RFC with general-app
-    evidence; restoration honesty is "every observable exit" plus documented
+12. ~~`lifecycle` stays opt-in permanently absent a future RFC with general-app
+    evidence~~ — **AMENDED 2026-08-05 (§26.1).** `lifecycle` is the DEFAULT:
+    negotiation is transactional, so asking for it cannot leave a session unable
+    to type, and the opt-in predated that machinery. The automatic upgrade holds
+    back only inside a multiplexer, where a raw query is not a reliable
+    statement about the host terminal; restoration honesty is "every observable exit" plus documented
     `reset`; blur on terminals is opportunistic-1004 + watchdog, not a
     guarantee; macOS-web Meta keys are press-only.
 13. Rejected along the way (each with its round recorded in the session
@@ -947,3 +951,34 @@ and there was none.
 - `InputBatch` is the correlated shape on terminals; the browser surface
   keeps the split keydown/input pair, which the dispatcher normalizes. Both
   are supported deliberately — a bare event is a one-payload batch.
+
+### 26.1 Amendment — `lifecycle` is the default (2026-08-05)
+
+Decision 12 made the full tier opt-in. Dogfooding overturned it, on a question
+the RFC never asked: *should a dashboard and a game both work out of the box?*
+
+They should, and two facts say the opt-in was vestigial:
+
+- **The two-surface promise already broke here.** On the browser surface
+  releases are free — `KeyboardCapabilities.full`, no negotiation, no flag. The
+  same app on a terminal had to opt in, for a reason that is an implementation
+  detail of one surface. Fleury's own pitch says that does not happen.
+- **The risk the opt-in guarded is now handled.** Decision 12 was taken before
+  P5's transactional negotiation existed: a terminal honouring flag 8 without 16
+  is rolled back to the safe tier and re-probed *before the app sees a
+  keystroke*. Conservatism that predates its own mitigation is just cost.
+
+Peers split exactly along the library/framework line — crossterm hands you
+`PushKeyboardEnhancementFlags` to call yourself, Bubble Tea v2 has
+`WithKeyboardEnhancements()`, Textual parses the protocol but never enables it;
+while Bevy, Godot, and Flame never ask, because their platform always delivers
+releases. Fleury is a framework, and the comparison that binds is Flutter,
+which never asks.
+
+**What stays cautious:** inside a multiplexer the automatic upgrade stops at
+the safe tier. A raw query there is not a reliable statement about the host
+terminal — tmux may answer for itself, forward to a host that answers
+differently, or accept the flags and fail to translate the enhanced input back
+— and this is the one tier where being wrong costs the user their ability to
+type. `FLEURY_KEYBOARD=lifecycle` still forces it for a deployment that knows
+better, and the same variable caps it for one that misbehaves.

@@ -752,15 +752,11 @@ class PosixTerminalDriver
   /// one a bug report can be asked to set. Applied here rather than at the
   /// negotiation step so the PUSH itself is capped, not just the verdict.
   TerminalMode _effectiveMode(TerminalMode mode) {
-    final requested = Platform.environment['FLEURY_KEYBOARD'];
-    if (requested == null || requested.isEmpty) return mode;
-    final override = switch (requested.toLowerCase()) {
-      'legacy' || 'off' || 'none' => KeyboardProtocolMode.legacy,
-      'disambiguated' || 'default' => KeyboardProtocolMode.disambiguated,
-      'lifecycle' || 'full' => KeyboardProtocolMode.lifecycle,
-      _ => null,
-    };
-    if (override == null || override == mode.keyboardProtocol) return mode;
+    final tier = resolveKeyboardTier(
+      requested: mode.keyboardProtocol,
+      environment: Platform.environment,
+    );
+    if (tier == mode.keyboardProtocol) return mode;
     return TerminalMode(
       rawInput: mode.rawInput,
       alternateScreen: mode.alternateScreen,
@@ -768,7 +764,7 @@ class PosixTerminalDriver
       resetStyleOnExit: mode.resetStyleOnExit,
       bracketedPaste: mode.bracketedPaste,
       focusReporting: mode.focusReporting,
-      keyboardProtocol: override,
+      keyboardProtocol: tier,
       mouse: mode.mouse,
       mouseMotion: mode.mouseMotion,
     );
@@ -1368,4 +1364,39 @@ int _probeReplyPrefixEnd(List<int> buf) {
     }
   }
   return i;
+}
+
+/// The keyboard tier this session actually pushes, from what the app asked for
+/// and what the environment says.
+///
+/// Two rules, both about *pushing* rather than about the verdict — the flags
+/// have to be capped before they go out, not after:
+///
+///  * `FLEURY_KEYBOARD=legacy|disambiguated|lifecycle` wins outright. It is the
+///    lever a support channel can pull on a deployed binary, and the one a bug
+///    report can be asked to set.
+///  * Otherwise the default (`lifecycle`) is capped to the safe tier inside a
+///    MULTIPLEXER. A raw query is not a reliable statement about the host
+///    terminal there — the same reasoning the image probe uses — and tmux may
+///    answer for itself, forward to a host that answers differently, or accept
+///    the flags and fail to translate the enhanced input back. Lifecycle is the
+///    one tier where being wrong costs the user their ability to type, so the
+///    automatic upgrade holds back. An app that knows its deployment handles
+///    the protocol can still force it through the env var.
+KeyboardProtocolMode resolveKeyboardTier({
+  required KeyboardProtocolMode requested,
+  required Map<String, String> environment,
+}) {
+  final override = switch (environment['FLEURY_KEYBOARD']?.toLowerCase()) {
+    'legacy' || 'off' || 'none' => KeyboardProtocolMode.legacy,
+    'disambiguated' || 'default' => KeyboardProtocolMode.disambiguated,
+    'lifecycle' || 'full' => KeyboardProtocolMode.lifecycle,
+    _ => null,
+  };
+  if (override != null) return override;
+  if (requested == KeyboardProtocolMode.lifecycle &&
+      detectTerminalMultiplexerFromEnvironment(environment)) {
+    return KeyboardProtocolMode.disambiguated;
+  }
+  return requested;
 }

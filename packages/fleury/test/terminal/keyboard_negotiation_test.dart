@@ -2,6 +2,7 @@
 // the restoration hygiene that keeps a pushed mode from leaking.
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/src/terminal/posix_driver.dart';
 import 'package:fleury/src/terminal/terminal_probe.dart';
 import 'package:fleury/src/terminal/terminal_sequences.dart';
 import 'package:test/test.dart';
@@ -11,17 +12,29 @@ TerminalMode _mode(KeyboardProtocolMode protocol) =>
 
 void main() {
   group('protocol tiers', () {
-    test('the default tier requests disambiguation AND event types', () {
+    test('the DEFAULT asks for everything the terminal can safely give', () {
+      // A dashboard and a game both work out of the box: neither declares a
+      // keyboard tier, and negotiation is what makes that safe — a terminal
+      // that honours only part of the request is rolled back before the app
+      // sees a keystroke, so asking for more can never cost the user their
+      // ability to type.
+      expect(
+        const TerminalMode().keyboardProtocol,
+        KeyboardProtocolMode.lifecycle,
+      );
+      expect(
+        TerminalMode.interactive.keyboardProtocol,
+        KeyboardProtocolMode.lifecycle,
+      );
+    });
+
+    test('the safe tier requests disambiguation AND event types', () {
       // Flag 2 is what makes a binding fire once per physical press instead
       // of once per auto-repeat, for every key the terminal already
       // escape-codes (chords, arrows, function keys). It costs nothing on
       // the text path: printable presses and repeats still arrive as
       // ordinary bytes.
       expect(KeyboardProtocolMode.disambiguated.requestedFlags, 1 | 2);
-      expect(
-        const TerminalMode().keyboardProtocol,
-        KeyboardProtocolMode.disambiguated,
-      );
     });
 
     test('lifecycle requests all five progressive flags', () {
@@ -50,7 +63,7 @@ void main() {
         _mode(KeyboardProtocolMode.disambiguated),
       );
       final altScreen = enter.indexOf('\x1B[?1049h');
-      final push = enter.indexOf('\x1B[>3u');
+      final push = enter.indexOf('\x1B[>');
       expect(altScreen, isNonNegative);
       expect(push, isNonNegative);
       expect(push, greaterThan(altScreen));
@@ -79,7 +92,10 @@ void main() {
     });
 
     test('a session with no alt screen still brackets its flags', () {
-      const inline = TerminalMode(alternateScreen: false);
+      const inline = TerminalMode(
+        alternateScreen: false,
+        keyboardProtocol: KeyboardProtocolMode.disambiguated,
+      );
       expect(buildTerminalEnterSequences(inline), contains('\x1B[>3u'));
       expect(buildTerminalExitSequences(inline), contains('\x1B[<1u'));
     });
@@ -159,6 +175,77 @@ void main() {
       // in the exit sequences could never fully unwind.
       expect(kittyKeyboardRuntimeQuery, isNot(contains('>')));
       expect(kittyKeyboardRuntimeQuery, startsWith('\x1B[?u'));
+    });
+  });
+
+  group('tier resolution — what actually gets pushed', () {
+    KeyboardProtocolMode resolve({
+      KeyboardProtocolMode requested = KeyboardProtocolMode.lifecycle,
+      Map<String, String> env = const {},
+    }) => resolveKeyboardTier(requested: requested, environment: env);
+
+    test('a plain session gets the full tier without asking', () {
+      expect(resolve(), KeyboardProtocolMode.lifecycle);
+    });
+
+    test('a multiplexer caps the AUTOMATIC upgrade at the safe tier', () {
+      // A raw query is not a reliable statement about the host terminal
+      // through tmux, and lifecycle is the one tier where guessing wrong costs
+      // the user their ability to type.
+      for (final env in [
+        {'TMUX': '/tmp/tmux-501/default,123,0'},
+        {'STY': '4242.pts-0.host'},
+        {'ZELLIJ': '0'},
+        {'TERM': 'screen-256color'},
+      ]) {
+        expect(
+          resolve(env: env),
+          KeyboardProtocolMode.disambiguated,
+          reason: 'env $env should hold back',
+        );
+      }
+    });
+
+    test('a multiplexer does not cap a tier the app did not raise', () {
+      // Only the automatic upgrade is cautious; an explicit lower tier is
+      // already the app's decision and passes through untouched.
+      expect(
+        resolve(
+          requested: KeyboardProtocolMode.disambiguated,
+          env: const {'TMUX': 'x'},
+        ),
+        KeyboardProtocolMode.disambiguated,
+      );
+      expect(
+        resolve(
+          requested: KeyboardProtocolMode.legacy,
+          env: const {'TMUX': 'x'},
+        ),
+        KeyboardProtocolMode.legacy,
+      );
+    });
+
+    test('the env override wins outright, including inside a multiplexer', () {
+      // The lever a support channel pulls on a deployed binary.
+      expect(
+        resolve(env: const {'FLEURY_KEYBOARD': 'legacy'}),
+        KeyboardProtocolMode.legacy,
+      );
+      expect(
+        resolve(env: const {'TMUX': 'x', 'FLEURY_KEYBOARD': 'lifecycle'}),
+        KeyboardProtocolMode.lifecycle,
+      );
+      expect(
+        resolve(env: const {'FLEURY_KEYBOARD': 'off'}),
+        KeyboardProtocolMode.legacy,
+      );
+    });
+
+    test('an unrecognized override value is ignored, not obeyed', () {
+      expect(
+        resolve(env: const {'FLEURY_KEYBOARD': 'yes-please'}),
+        KeyboardProtocolMode.lifecycle,
+      );
     });
   });
 }
