@@ -52,7 +52,25 @@ Future<void> main(List<String> args) async {
 
   await runApp(
     FleuryApp(title: 'Fleury $name sample', home: withQuitKey(entry.$2())),
-    mode: const TerminalMode(mouse: true),
+    // The showcases exist to demo what Fleury can do, and two of them —
+    // `asteroids` (hold-to-thrust, sampled every tick) and `sprite` (Space
+    // held down to draw) — need real key RELEASES, which plain terminal input
+    // does not have. That is the `lifecycle` tier.
+    //
+    // It stays opt-in for ordinary apps (RFC 0020 §24, decision 12): it asks
+    // the terminal to stop sending text and to re-supply it as key events, so
+    // an app takes it deliberately or not at all. A showcase is exactly the
+    // app that should take it — without this, every capable terminal still
+    // reports press-only and the samples silently demo their LEGACY fallback
+    // schemes instead of the feature.
+    //
+    // Negotiation is transactional: a terminal that honours only part of the
+    // request is rolled back to the safe tier before the app sees a keystroke,
+    // so this cannot leave a session unable to type.
+    mode: const TerminalMode(
+      mouse: true,
+      keyboardProtocol: KeyboardProtocolMode.lifecycle,
+    ),
   );
 }
 
