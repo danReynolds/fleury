@@ -7,130 +7,255 @@ import FleuryExample from '../../../components/FleuryExample.astro';
 
 Fleury routes every key event to the focused part of the tree. Most widgets —
 inputs, lists, trees, tables — manage their own focus and keys, so much of the
-time you write nothing. This guide is for when you don't, and the first question
-is *which tool* — pick by **scope**:
+time you write nothing. This guide is for when you don't.
 
-| Use | When | Scope |
-|---|---|---|
-| **`KeyBindings`** | App- or screen-wide shortcuts (`Ctrl+S`, `Ctrl+P`, quit) that should fire regardless of what's focused | Ambient — matches while its subtree is mounted |
-| **`Focus`** | A widget handles keys *only while it's focused* (a custom list navigator, a canvas) | Local — active on focus |
-| **`FocusNode`** | You need to *drive* or *read* focus imperatively — move it (`Tab` between panes), check `hasFocus`, or wire a `Panel`'s accent | A handle you hold and pass to a widget |
+One rule decides almost everything:
 
-Reach for **`KeyBindings`** first — most shortcuts are ambient. They compose: a
-pane can hold a `FocusNode`, wrap its body in a `Focus` for while-focused keys,
-and still sit under an app-level `KeyBindings` for global shortcuts.
+> **`KeyBindings` matches gestures. `Keyboard` reads keys.**
 
-## Handle keys with Focus
+React to a press → declare a binding. Ask "is this key down *right now*" inside
+a game tick → sample the keyboard. Those are different questions, and the API
+keeps them apart on purpose: a binding is data the framework can render (the
+hint bar, which-key, devtools all read your binding list), while sampled state
+is a value you pull once a frame and never subscribe to.
 
-`Focus` makes a subtree focusable and gives you an `onKey` callback. Return
-`KeyEventResult.handled` to consume the event, or `.ignored` to let it bubble:
+| Use | When |
+|---|---|
+| **`KeyBindings`** | Commands: `Ctrl+S`, `q` to quit, `gg`, a Space leader. The default and by far the common case. |
+| **`Keyboard.of(context).snapshot`** | Continuous input read from a ticker — movement, thrust, anything where "held" matters. |
+| **`Keyboard.nextKey(context)`** | Await exactly one keypress: a rebind row, vim's `m<letter>`, press-any-key. |
+| **`KeyDetector`** | Conditional handling *inside a reusable widget* — a scroll region, a terminal pane. The floor, not the authoring surface. |
+| **`Focus` / `FocusNode`** | Make something focusable, or drive focus imperatively. |
 
-```dart
-Focus(
-  autofocus: true,
-  onKey: (KeyEvent event) {
-    switch (event.keyCode) {
-      case KeyCode.arrowUp:
-        _move(-1);
-        return KeyEventResult.handled;
-      case KeyCode.arrowDown:
-        _move(1);
-        return KeyEventResult.handled;
-      default:
-        return KeyEventResult.ignored;
-    }
-  },
-  child: _list,
-);
-```
+## Commands
 
-A `KeyEvent` carries `keyCode` (a `KeyCode` like `enter`, `escape`, `tab`, the
-arrows), the modifier flags `hasCtrl` / `hasAlt` / `hasShift`, and — for a
-modifier chord — a `char` holding the base key (Ctrl+S → `char: 's'`). Plain
-typed text is *not* a `KeyEvent`: printable and Unicode input arrives as a
-`TextInputEvent` that the text widgets consume, so `Focus(onKey:)` sees keys and
-chords, not character entry.
-
-```dart
-if (event.hasCtrl && event.char == 's') save();
-```
-
-## Manage focus explicitly
-
-Create a `FocusNode` in `initState`, attach it, and dispose it:
-
-```dart
-final _node = FocusNode(debugLabel: 'editor');
-// ...
-_node.requestFocus();      // take focus
-final hasIt = _node.hasFocus;
-// ...
-_node.dispose();
-```
-
-Inside a `FleuryApp(home: ...)` route or an explicit
-`FocusTraversalGroup`, `Tab` / `Shift+Tab` move between focusable nodes. A bare
-widget passed directly to `runApp` has the focus manager but no traversal
-policy; wrap it in a group when it has multiple controls.
-
-## App-wide shortcuts
-
-For shortcuts that should work regardless of what's focused, wrap a region in
-`KeyBindings`. Each `KeyBinding` pairs a `KeySequence` with a handler and a
-label (used by command surfaces and help):
+Wrap a region in `KeyBindings`. Each `KeyBinding` pairs a key with a handler and
+a label — the label is what discoverability surfaces render, so writing one is
+how your app teaches itself.
 
 ```dart
 KeyBindings(
   bindings: [
-    KeyBinding(KeySequence.ctrl.s, label: 'Save', onTrigger: save),
-    KeyBinding(KeySequence.escape, label: 'Close', onTrigger: close),
+    KeyBinding(KeySequence.ctrl.s, label: 'Save', onTrigger: (_) => _save()),
+    KeyBinding(KeyCode.q, label: 'Quit', onTrigger: (_) => _quit()),
+    // Multi-step sequences: vim's `gg`, emacs' `C-x C-s`, a Space leader.
+    KeyBinding(KeySequence.g.g, label: 'Top', onTrigger: (_) => _gotoTop()),
+    KeyBinding(
+      KeySequence.space.f,
+      label: 'Find file',
+      onTrigger: (_) => _findFile(),
+    ),
   ],
-  child: app,
+  child: child,
 );
 ```
 
-`KeySequence` has the common keys built in (`KeySequence.enter`, `.escape`,
-`.tab`) and a `ctrl` / `alt` / `shift` builder for combinations
-(`KeySequence.ctrl.s`). Because the leading type is inferred, you can drop it
-and write the dot shorthand — `KeyBinding(.ctrl.s, onTrigger: save)`.
+Because the leading type is inferred you can drop it and write the dot shorthand
+— `KeyBinding(.ctrl.s, ...)`.
 
-A sequence can be more than one keypress. Chain further keys to get vim- or
-emacs-style commands, and a leader key falls out of the same syntax:
+Bindings match **deepest-first**: the innermost scope that declares a key wins,
+so a pane can shadow an app-wide shortcut without either side knowing about the
+other.
 
-```dart
-KeyBinding(KeySequence.g.g, label: 'Go to top', onTrigger: gotoTop),
-KeyBinding(KeySequence.ctrl.x.ctrl.s, label: 'Save', onTrigger: save),
-KeyBinding(KeySequence.space.f, label: 'Find file', onTrigger: findFile),
-```
-
-`onTrigger` takes no arguments — the common case. When a handler needs the
-event itself (to inspect what matched, or to let it keep propagating with
-`event.bubble()`), use `KeyBinding.event` instead:
+### Aliases, repeats, and declining
 
 ```dart
-KeyBinding.event(KeySequence.escape, onEvent: (event) {
-  if (!close()) event.bubble(); // not ours — let an ancestor handle it
-}),
+// One command, several keys — one row in the hint bar, not three.
+KeyBinding(
+  KeyCode.j,
+  aliases: [KeyCode.arrowDown],
+  label: 'Down',
+  // Movement is the repeat-reliant class: holding the key should keep
+  // moving. Everything else fires once per physical press.
+  includeRepeats: true,
+  onTrigger: (_) => _moveDown(),
+),
+// A handler always receives the event, so it can decline: bubble() hands
+// the key to an ancestor binding instead of consuming it.
+KeyBinding(
+  KeyCode.escape,
+  label: 'Close',
+  onTrigger: (event) {
+    if (!_close()) event.bubble(); // not ours after all
+  },
+),
 ```
+
+**A binding fires once per physical press, not once per auto-repeat.** Holding
+`Ctrl+S` saves once. Opt into repeats only where holding the key genuinely
+means "keep going" — cursor movement, scrolling, a value stepper.
+
+### Modal scopes
+
+A dialog should not let the app's shortcuts fire behind it. `modal: true` stops
+the walk at that scope:
+
+```dart
+KeyBindings(
+  modal: true,
+  bindings: [
+    KeyBinding(KeyCode.y, label: 'Yes', onTrigger: (_) => onAnswer(true)),
+    KeyBinding(KeyCode.n, label: 'No', onTrigger: (_) => onAnswer(false)),
+    KeyBinding(KeyCode.escape, label: 'Cancel', onTrigger: (_) => onAnswer(false)),
+  ],
+  child: const Focus(autofocus: true, child: Text('Delete this file? y/n')),
+);
+```
+
+## Sampled input — games and simulations
+
+A game loop does not want a callback per keypress; it wants to know what is held
+*at this instant*. Read a snapshot from your ticker:
+
+```dart
+late final _keyboard = Keyboard.of(context); // safe to cache
+
+void _tick(Duration elapsed) {
+  // ONE immutable read for the whole frame, so every step below agrees
+  // about what was held.
+  final keys = _keyboard.snapshot;
+  if (keys.isHeld(KeyPosition.a)) _heading -= 0.1;
+  if (keys.isHeld(KeyPosition.d)) _heading += 0.1;
+  if (keys.isHeld(KeyPosition.w)) _accelerate();
+  // An EDGE, not a level: a tap that starts and ends between two frames is
+  // still reported, so a quick shot is never swallowed.
+  if (keys.wasPressed(KeyCode.space)) _fire();
+}
+```
+
+`snapshot` is deliberately **not** reactive — reading it in `build()` throws in
+debug, because `build` is not re-run when a key goes down and a value read there
+would be stale by construction. Sample it where you use it.
+
+### Positions vs letters
+
+`KeyPosition.w` names a **spot on the keyboard**, not the letter W. WASD is a
+shape — the same three keys sit under the same fingers on AZERTY, where they are
+capped Z, Q, S, D. Use `KeyPosition` for spatial controls and `KeyCode` for
+mnemonic ones (`q` for quit means the letter Q, wherever it lives).
+
+Hint surfaces resolve a position to the cap the user actually has, learning it
+from the terminal where the protocol reports it — so an AZERTY player is told to
+press Z, not W.
+
+### Not every terminal reports releases
+
+"Is this key held" needs key *releases*, and plain terminal input has none — a
+terminal sends bytes on press and nothing on let-go. Fleury negotiates the Kitty
+keyboard protocol to get them where it can, and tells you what it got:
+
+```dart
+// Capability reads ARE reactive and legal in build: this rebuilds when a
+// terminal finishes negotiating, so the control scheme upgrades itself.
+final canHold = Keyboard.of(context).capabilities.supportsHeldState;
+```
+
+Where `supportsHeldState` is false, every sampled query reads empty — an
+accumulating set with no releases is a lying set. Branch on it and offer a
+*different* control scheme (a tap-toggle instead of hold-to-thrust) rather than
+a broken version of the same one. Commands work everywhere and need no branch.
+
+## Hold — push-to-talk
+
+For a key whose *duration* is the command:
+
+```dart
+KeyBinding.hold(
+  KeyCode.space,
+  label: 'Peek at logs',
+  onHoldStart: (_) => onPeek(true),
+  onHoldEnd: (_) => onPeek(false),
+),
+```
+
+There is no long-press threshold: the start fires on the down, immediately.
+Holds need releases too, so gate them on `supportsHeldState` the same way.
+
+## Awaiting one key
+
+Some prompts take *any* key — a rebind row, vim's `m<letter>`. Declaring 26
+bindings would be a lie; await one instead:
+
+```dart
+final key = await Keyboard.nextKey(context);
+if (key == null) return;                 // the UI went away
+if (key.code == KeyCode.escape) return;  // cancelled
+// A spatial control wants the SPOT; a mnemonic one wants the letter.
+apply(key.position ?? key.code);
+```
+
+While it is pending it outranks every other lane, so the app's own bindings
+cannot steal the key you are waiting for. It is scope-tied by signature: if the
+context unmounts the future completes `null`, so a capture can never outlive its
+UI and quietly eat the app's input.
+
+## The floor: KeyDetector
+
+Reach for a detector when the handling is genuinely internal to a reusable
+widget — a scroll region, a bridge, a terminal pane forwarding raw keys:
+
+```dart
+KeyDetector(
+  onKey: (event) {
+    final delta = switch (event.code) {
+      KeyCode.arrowDown => 1,
+      KeyCode.arrowUp => -1,
+      _ => 0,
+    };
+    if (delta != 0 && canScroll(delta)) event.consume(); // mine
+  },
+  child: child,
+);
+```
+
+**A detector propagates by default** — the inverse of a binding, on purpose. A
+binding *declared* a match, so consuming is its meaning; a detector is peeking,
+so observing is the base state. Forget to consume and your key visibly does
+double duty while you test it, instead of silently starving an ancestor.
+
+Prefer `KeyBindings` in app code: bindings are data the hint bar and which-key
+can read, and a closure is not.
+
+## Focus
+
+```dart
+final _node = FocusNode(debugLabel: 'editor');
+_node.requestFocus();
+final hasIt = _node.hasFocus;
+_node.dispose();
+```
+
+To react when focus enters or leaves a whole subtree — pause a simulation, dim a
+panel, stop a cursor blinking — wrap it in `FocusDetector`:
+
+```dart
+FocusDetector(
+  onFocusChange: (hasFocus) => setState(() => _active = hasFocus),
+  child: Focus(focusNode: _node, child: body),
+);
+```
+
+Inside a `FleuryApp(home: ...)` route or an explicit `FocusTraversalGroup`,
+`Tab` / `Shift+Tab` move between focusable nodes. A bare widget passed directly
+to `runApp` has the focus manager but no traversal policy; wrap it in a group
+when it has multiple controls.
 
 ## Let the app teach its own keys
 
-Bindings carry a `label`, and two accessors read the *live* set — so a
-discoverability surface is a widget you drop in, not a list you maintain in
-parallel with the bindings.
+Two accessors read the *live* binding set, so a discoverability surface is a
+widget you drop in, not a list you maintain in parallel.
 
-`KeyBindings.activeOf(context)` gives every binding currently in scope. That is
-what `KeyHintBar` renders: a nano-style bar that always shows what is
-available, and updates itself when the bindings change.
+`KeyBindings.activeOf(context)` gives every binding currently in scope — what
+`KeyHintBar` renders, updating itself when the bindings change:
 
 ```dart
 KeyHintBar()   // reads activeOf — nothing to keep in sync
 ```
 
 `KeyBindings.pendingOf(context)` gives the sequence the user is *partway
-through* typing, plus the keys that would continue it. `WhichKey` renders that
-as a popup — the vim/Spacemacs idiom, where multi-key commands stay hidden
-until you start one:
+through* typing, plus the keys that would continue it. `WhichKey` renders that as
+a popup — the vim/Spacemacs idiom, where multi-key commands stay hidden until you
+start one:
 
 ```dart
 WhichKey(child: app)   // reads pendingOf — appears mid-sequence
@@ -153,7 +278,14 @@ it differ. [Full source and walkthrough](/fleury/showcases/editor/).
 
 **One key to watch:** inside `FleuryApp(home: ...)` (or another explicit
 `Navigator`), `Esc` already pops the current route by default. If you also bind
-it — above, or in a `Focus` — be deliberate about which should win; to intercept
-the pop rather than race it, reach for a `PopScope` (see
+it, be deliberate about which should win; to intercept the pop rather than race
+it, reach for a `PopScope` (see
 [Navigation](/fleury/guides/navigation/#guarding-back)).
 
+## Typed text is not a key event
+
+Printable input arrives as text, not as a `KeyEvent` — the text widgets claim it.
+That is why `q` can quit your app while a focused text field keeps typing `q`:
+the field claims the character first, and only unclaimed text falls through to
+your bindings. You get this for free; it is worth knowing when a shortcut
+"stops working" inside an input.

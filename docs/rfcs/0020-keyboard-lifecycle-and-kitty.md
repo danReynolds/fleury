@@ -1,11 +1,12 @@
 # RFC 0020: Keyboard Lifecycle, the Kitty Protocol, and the Key-Input DX
 
-**Status:** Accepted 2026-08-03 — implementation pending; §24's showcase
-validation gate must pass before this RFC is frozen.
+**Status:** FROZEN 2026-08-05. Implemented across P1–P7; §24's showcase
+validation gate passed with no design change required (see §26).
 **Dates:** drafted 2026-07-29; revised 2026-07-30 (peer review); finalized
 2026-08-03 after five persona-review rounds, a naming poll, and a four-lens
 assumption-challenge review (implementation-vs-code, adversarial semantics,
-platform reality, forward compatibility). §25 records every decision.
+platform reality, forward compatibility); implemented and frozen 2026-08-05.
+§25 records every decision; §26 records what building it changed.
 **Amends:** RFC 0008's input dispatch pipeline; RFC 0018's `KeyEvent` model,
 repeat behavior (§21.1), handler signature, and constructor set (`.any`,
 `.event`, `Focus.onKey` removed — §21). RFC 0018's sequence semantics are
@@ -671,13 +672,18 @@ contract. (5) **modal editor** — bindings-list-swap modes, `.d.d`/`.g.g`/
 leader, `nextKey` as `getchar()` for marks (`_marks[k.code]`). (6) **arcade
 game** — positional controls sampled in a fixed-step tick (`wasPressed`
 survives sub-frame taps), suppression idiom, capability-branched tap-toggle
-legacy scheme on a positional binding, `FocusWithin`+`TickerMode` pause.
+legacy scheme on a positional binding, `FocusDetector`+`TickerMode(enabled:)`
+pause.
 (7) **rebind screen** — `nextKey`, spatial-vs-mnemonic rows choosing
 `k.position ?? k.code` vs `k.code`, `.id` persistence, `labelFor` truth.
 (8) **reusable scroll pane** — detector conditional consumption, boundary
 fall-through. (9) **embedded terminal pane** — detector consume-everything
-with one prefix key, gated on `reportsPrintableKeys`. The full source of these
-lives with the docs and doubles as the DX acceptance fixture (§24 P7).
+with one prefix key, gated on `reportsPrintableKeys`. The compile-checked home of this surface is
+`website/examples/doc_snippets/keyboard_tour.dart` (analyzed on every CI run,
+and mirrored by the Focus & keyboard guide); the scenarios themselves are
+exercised by `packages/samples` — (5) by `editor`, (6) by `neon_asteroids`,
+and the repeat/hold pair by `ansi_sprite_studio` — which is the DX acceptance
+fixture §24 P7 gates on.
 
 ## 19. Performance
 
@@ -697,7 +703,7 @@ input pipeline is currently uncovered by any gate — that ends here.
 
 | | |
 |---|---|
-| **unchanged** | `KeyBindings` scoping/precedence, the gesture DSL, sequences (semantics completed §14.4), hint bar/which-key, text-claims-printables, `FocusWithin`, `TickerMode`, IME/paste paths |
+| **unchanged** | `KeyBindings` scoping/precedence, the gesture DSL, sequences (semantics completed §14.4), hint bar/which-key, text-claims-printables, focus-change detection and `TickerMode` (renamed to `FocusDetector` / plain `enabled:` during implementation — behaviour unchanged), IME/paste paths |
 | **new** | `KeyDetector`, `Keyboard` handle (capabilities/snapshot/`nextKey`/`layout`), `KeyBinding.hold`, `aliases:`/`includeRepeats:`/`modal:`, `KeyPosition`, `KeySelector`, `KeyEvent.consume/.matches/.position/.synthesized`, `InputBatch`, `cancelPending`, lone-modifier vocabulary, `KeyboardProtocolMode`, capability set, layout labels |
 | **removed** | `Focus.onKey` (→ `KeyDetector`), `KeyBinding.any` (→ `aliases:`), `KeyBinding.event` (→ handlers always take the event), `TerminalMode.kittyKeyboard` bool (→ mode enum) |
 | **changed** | bindings no longer fire on auto-repeat by default (§21.1); handler signature takes the event |
@@ -865,3 +871,79 @@ doubled or lost, no release ever fires a command.
     direction inversion); scope-behavior enums (translucent = per-binding
     bubble); `alternates:` naming (kitty term collision); focus-aware base
     tickers.
+
+## 26. P7 — what building it changed
+
+The gate's question was: **do the showcases read better, or do remaining
+quality issues justify further key-DX adjustment?**
+
+**Answer: no further adjustment justified.** Every defect the phases surfaced
+was the implementation failing to do what this document already specified —
+not the specification being wrong. No decision in §25 was reopened, and no
+public name changed after P4.
+
+That distinction is the finding. A design that survives seven phases of
+contact with real apps without a single reversal is not automatically a good
+design, but a design that had to be reversed would have been a clear signal,
+and there was none.
+
+### What the showcases proved
+
+- **`neon_asteroids`** (sampled + positional). The tick reads as one immutable
+  snapshot and three boolean queries; `wasPressed` is what keeps a sub-frame
+  tap from being swallowed. It ORs a positional and a logical alternative by
+  hand (`isHeld(_leftKey) || isHeld(KeyCode.arrowLeft)`) where a binding would
+  have used `aliases:`. Considered and **left alone**: the same expression
+  already mixes in pointer state, so no keyboard-only combinator would have
+  collapsed it, and the `||` is the clearest thing on the line.
+- **`samples/editor`** (modal + sequences + capture). The modal flip stayed a
+  `TextInputClaimant` decision rather than anything key-DX — NORMAL declines
+  text, so a printable routes as a command. Marks (`m<letter>`) are the case a
+  declared sequence structurally cannot express, and are what `nextKey` is for.
+- **`ansi_sprite_studio`** (repeat + hold). `includeRepeats: true` on the
+  cursor keys is the repeat-reliant class the default policy exists to exclude
+  everywhere else. Space became hold-to-draw where the surface reports
+  releases, and stayed tap-to-paint where it does not — the §7.6 capability
+  branch, in an app that is not a game.
+- **`file_manager`, `dashboard`, `debug_playground`** (passes). Between them
+  they need one binding, none, and none: focus traversal and widget-internal
+  handling cover the rest. Worth recording — the key-DX surface is not
+  something every Fleury app has to touch.
+
+### Defects the gate caught
+
+1. **`nextKey` ignored text-borne printables.** The capture gate was consulted
+   on the key and batch paths, not the text path — so on every terminal that
+   reports printables only as bytes, it ignored exactly the keys it waits for
+   and let them fire ordinary bindings instead. Decision 9 already said
+   "text-derived on legacy". Root cause: **`nextKey` had no test at all**, a
+   public API shipped unexercised. Now has a contract file per lane.
+2. **A learned layout label never reached the screen** — the dispatcher's
+   zero-cost fast path skipped session ingest on release-less surfaces, but
+   position and release reporting are independent capabilities; and nothing
+   republished when a cap became known.
+3. **Positional and logical labels disagreed on casing** (`[q] Quit
+   [W] Thrust`).
+4. **The diagnostic measured the wrong thing** — `CSI ? u` reports flags
+   currently in force, and a terminal at a prompt has pushed nothing, so
+   `diagnose --probe` answered 0 for every emulator. It now pushes, reads
+   back, and pops.
+5. **Three allocation defects on the input path**, found by the gate built to
+   look for them (§19): a logically-constant step rebuilt per call, a value
+   type not interned, and a batched printable walking the binding chain twice.
+   485 → 208 B/key.
+
+### Amendments folded in during implementation
+
+- `KeyboardCapabilities.fromKittyFlags` is the single definition of the §5.7
+  projection, shared by the local driver, the `fleury shell` relay, and the
+  diagnostic.
+- §9's layout labels resolve through `KeyboardLayout`, which learns from flag-4
+  reports and falls back to bundled tables; `Keyboard.of(context)` is reactive
+  to learning as well as to capabilities.
+- §11's peer declaration is `keyboard=<bits>` on INIT, carrying semantic
+  guarantees rather than Kitty flags so a browser peer can declare lifecycle
+  support it has no flags for.
+- `InputBatch` is the correlated shape on terminals; the browser surface
+  keeps the split keydown/input pair, which the dispatcher normalizes. Both
+  are supported deliberately — a bare event is a one-payload batch.

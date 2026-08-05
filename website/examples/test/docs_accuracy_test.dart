@@ -22,23 +22,26 @@ void main() {
         r'the same (?:app|code) runs[^\n]*unchanged',
         caseSensitive: false,
       );
-      // RFC 0018 renamed KeyChord to KeySequence and made `onTrigger` the
-      // common handler; `onEvent` survives only on `KeyBinding.event`. The
-      // compiling mirrors in doc_snippets/ were swept, but prose fences are
-      // hand-copied, so they silently kept teaching the removed API. Match
-      // `KeyBinding(` specifically — `KeyBinding(…, onTrigger:)` is
-      // correct and must keep passing.
+      // RFC 0018 renamed KeyChord to KeySequence; RFC 0020 then deleted
+      // `KeyBinding.event` and `onEvent:` outright — a handler ALWAYS takes
+      // the event now. The compiling mirrors in doc_snippets/ get swept, but
+      // prose fences are hand-copied, so they silently keep teaching removed
+      // APIs.
       //
-      // `[^)]` (newlines allowed, via dotAll on the argument run) catches the
-      // wrapped form too, which is how docs usually write a binding with a
-      // label:
+      // Anchored on `KeyBinding` so that `runApp(…, onEvent:)` — a real and
+      // unrelated hook — is not flagged. `[^)]*` with dotAll catches the
+      // wrapped form docs usually write:
       //
       //     KeyBinding(
       //       KeySequence.ctrl.s,
-      //       onTrigger: (_) => save(),   // ← still caught
+      //       onEvent: (event) => save(),   // ← caught
       //     )
-      final defaultCtorOnEvent = RegExp(
-        r'KeyBinding\([^)]*onTrigger:',
+      //
+      // (This guard used to match `onTrigger:` while its label named
+      // `onEvent`, so it flagged the CORRECT form and could never catch the
+      // removed one.)
+      final removedBindingHandler = RegExp(
+        r'KeyBinding(\.event)?\([^)]*onEvent:',
         dotAll: true,
       );
       final rawStringSemanticId = RegExp(
@@ -53,9 +56,9 @@ void main() {
           ('nonexistent `fleury mcp` command', 'fleury mcp'),
           ('removed KeyChord type (now KeySequence)', 'KeyChord'),
           (
-            'onEvent on the default KeyBinding constructor (use onTrigger, '
-                'or KeyBinding.event)',
-            defaultCtorOnEvent,
+            'onEvent:/KeyBinding.event — removed in RFC 0020; a handler '
+                'always takes the event (use onTrigger:)',
+            removedBindingHandler,
           ),
           (
             'raw String passed as Semantics.id (use SemanticNodeId)',
