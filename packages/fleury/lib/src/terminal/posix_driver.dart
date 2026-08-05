@@ -407,7 +407,7 @@ class PosixTerminalDriver
           // until every owed DA terminator lands (then replay real input after
           // the last one), rather than parsing the reply as keystrokes.
           _probeBuffer.addAll(bytes);
-          if (_daReplyEndN(_probeBuffer, _daRepliesPending) >= 0) {
+          if (daReplyEndN(_probeBuffer, _daRepliesPending) >= 0) {
             _finishLateProbeDrain();
           } else if (_probeBuffer.length > _maxProbeBufferBytes) {
             // A terminal spraying without a DA terminator: a real reply is
@@ -474,27 +474,11 @@ class PosixTerminalDriver
   /// successful negotiation.
   int? _confirmedKeyboardFlags;
 
-  /// The tier actually in force. Starts at the requested tier and is
-  /// lowered by a rollback (§8.3).
-  KeyboardProtocolMode _activeKeyboardMode = KeyboardProtocolMode.legacy;
-
   @override
   KeyboardCapabilities get keyboardCapabilities {
     final flags = _confirmedKeyboardFlags;
     if (flags == null) return KeyboardCapabilities.legacy;
-    final eventTypes = flags & 0x02 != 0;
-    final allKeys = flags & 0x08 != 0;
-    final alternates = flags & 0x04 != 0;
-    // Semantic guarantees, not raw flags (§5.7). Held state needs event
-    // types AND all-keys-as-escapes: with flag 2 alone an ordinary
-    // printable still arrives as a plain byte, so it has no release to
-    // pair and no press record to keep.
-    return KeyboardCapabilities(
-      supportsHeldState: eventTypes && allKeys,
-      distinguishesRepeats: eventTypes,
-      supportsPositions: eventTypes && allKeys && alternates,
-      reportsPrintableKeys: allKeys,
-    );
+    return KeyboardCapabilities.fromKittyFlags(flags);
   }
 
   /// Negotiates the keyboard protocol: push (already done by the enter
@@ -512,7 +496,6 @@ class PosixTerminalDriver
     // Escape hatch for a terminal where the query itself misbehaves.
     final flag = Platform.environment['FLEURY_KEYBOARD_PROBE'];
     if (flag == '0' || flag == 'false') return;
-    _activeKeyboardMode = effective.keyboardProtocol;
     int? flags;
     try {
       flags = await probeKeyboardFlags(_DriverProbeTransport(this));
@@ -537,7 +520,6 @@ class PosixTerminalDriver
         '\x1B[>${KeyboardProtocolMode.disambiguated.requestedFlags}u',
       );
       await _stdout.flush();
-      _activeKeyboardMode = KeyboardProtocolMode.disambiguated;
       int? after;
       try {
         after = await probeKeyboardFlags(_DriverProbeTransport(this));
@@ -644,7 +626,7 @@ class PosixTerminalDriver
   /// probe queries, so their graphics/cursor replies are already in and the
   /// wait can stop.
   bool _probeReplyComplete() =>
-      _daReplyEndN(_probeBuffer, _daRepliesPending) >= 0;
+      daReplyEndN(_probeBuffer, _daRepliesPending) >= 0;
 
   /// Replays real keystrokes that arrived during the probe window. Everything
   /// the terminal captured after the LAST owed Device-Attributes reply is user
@@ -654,7 +636,7 @@ class PosixTerminalDriver
   /// replies than owed have landed (a slow link, or a timeout), keep diverting
   /// until the rest arrive rather than parsing a straggling reply as keystrokes.
   void _replayPostProbeInput() {
-    final tailStart = _daReplyEndN(_probeBuffer, _daRepliesPending);
+    final tailStart = daReplyEndN(_probeBuffer, _daRepliesPending);
     if (tailStart >= 0) {
       // Every owed DA reply landed within the probe window — everything after
       // the last one is real input; feed that tail to the parser.
@@ -683,7 +665,7 @@ class PosixTerminalDriver
     _drainingLateProbe = false;
     final buf = _probeBuffer;
     _probeBuffer = <int>[];
-    final tailStart = _daReplyEndN(buf, _daRepliesPending);
+    final tailStart = daReplyEndN(buf, _daRepliesPending);
     _daRepliesPending = 0;
     if (tailStart >= 0 && tailStart < buf.length) {
       _parser.feed(buf.sublist(tailStart), _sink);
@@ -1343,35 +1325,6 @@ class _DriverProbeTransport implements TerminalProbeTransport {
       _driver._probing = false;
     }
   }
-}
-
-/// Index just past the [n]-th Device-Attributes reply's `c` terminator in [buf],
-/// or -1 if fewer than [n] are present yet. A DA reply is `ESC [` then CSI
-/// parameter/intermediate bytes (0x20–0x3F) then the final byte `c` (0x63).
-/// Requiring valid CSI bytes before the `c` stops a stray 0x63 in unrelated
-/// content (or a user keystroke that leaked in) from being mistaken for the
-/// terminator. Counting to [n] keeps the probe-completion sentinel unambiguous
-/// across a multi-probe startup sequence: the wait and the post-probe replay
-/// both key off the LAST owed reply, not an earlier probe's straggler. [n] <= 0
-/// returns 0 (nothing owed → the whole buffer is real input).
-int _daReplyEndN(List<int> buf, int n) {
-  if (n <= 0) return 0;
-  var seen = 0;
-  for (var i = 0; i + 1 < buf.length; i++) {
-    if (buf[i] != 0x1B || buf[i + 1] != 0x5B) continue; // ESC [
-    var j = i + 2;
-    while (j < buf.length && buf[j] >= 0x20 && buf[j] <= 0x3F) {
-      j++; // CSI parameter / intermediate bytes
-    }
-    if (j >= buf.length) return -1; // final byte not arrived yet
-    if (buf[j] == 0x63) {
-      // 'c' final byte → Device Attributes.
-      seen++;
-      if (seen >= n) return j + 1;
-    }
-    i = j; // step past this CSI final byte and keep scanning
-  }
-  return -1;
 }
 
 /// Index in [buf] where real post-probe input begins, skipping a LEADING

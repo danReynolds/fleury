@@ -53,16 +53,21 @@ final class RemoteTerminalDriver
         SurfaceCapabilitiesProvider,
         OutputFlowControl,
         KeyboardCapabilitiesDriver {
-  /// A structured browser peer (protocol v2+) is Fleury's own DOM client —
-  /// the codecs are version-locked to the same build — so its keyboard has
-  /// the DOM surface's full lifecycle. A v1 peer is a real terminal relay
-  /// (`fleury shell`): conservative press-only until P5 negotiation data
-  /// can be relayed (P6 adds the explicit capability handshake for foreign
-  /// peers).
+  /// What the peer DECLARED in its INIT (RFC 0020 §11) — never an inference
+  /// from [_protocolVersion].
+  ///
+  /// The version says the codecs match; it says nothing about the keyboard on
+  /// the far end. Two `fleury shell` relays at the identical wire version, one
+  /// in front of Ghostty and one in front of Terminal.app, have completely
+  /// different keyboards, and only the relay itself can know which. A peer
+  /// that declares nothing gets the conservative press-only reading — which
+  /// is exactly right, because a peer that cannot say what it supports has
+  /// not confirmed anything.
   @override
-  KeyboardCapabilities get keyboardCapabilities => _protocolVersion >= 2
-      ? KeyboardCapabilities.full
-      : KeyboardCapabilities.legacy;
+  KeyboardCapabilities get keyboardCapabilities =>
+      _peerKeyboard ?? KeyboardCapabilities.legacy;
+
+  KeyboardCapabilities? _peerKeyboard;
   RemoteTerminalDriver(
     this._transport, {
     InlineImageCachePolicy imageCachePolicy = defaultInlineImageCachePolicy,
@@ -476,6 +481,7 @@ final class RemoteTerminalDriver
         _handshakeReceived = true;
         _size = _clampSize(f.size);
         _protocolVersion = f.protocolVersion;
+        _peerKeyboard = f.keyboard;
         _capabilities = TerminalCapabilities(
           colorMode: f.colorMode,
           glyphTier: f.glyphTier,
@@ -525,6 +531,7 @@ final class RemoteTerminalDriver
               // value drives no link decision; restating what the peer sent
               // keeps a link-free echo byte-flat (false emits no `hyperlinks=`).
               hyperlinks: f.hyperlinks,
+              keyboard: f.keyboard,
             ),
           );
         }

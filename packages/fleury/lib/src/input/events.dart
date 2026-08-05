@@ -186,6 +186,23 @@ final class KeyCode extends KeySequence implements KeySelector {
     return code;
   }
 
+  /// Looks up the canonical instance for a printable [character].
+  ///
+  /// The twin of [forSpecial], for construction from a character held in a
+  /// variable (the terminal parser, the DOM source, the wire codec). Every
+  /// key event on every surface goes through one of the two, and a const
+  /// constructor cannot canonicalize a runtime string — so without this a
+  /// printable key allocated a fresh code per press, repeat, and release.
+  ///
+  /// Falls back to constructing for anything outside printable ASCII
+  /// (non-Latin layouts, emoji): correctness first, interning where it pays.
+  static KeyCode forCharacter(String character) {
+    if (character.length != 1) return KeyCode.char(character);
+    final unit = character.codeUnitAt(0);
+    if (unit < 0x20 || unit > 0x7E) return KeyCode.char(character);
+    return _byAscii[unit - 0x20];
+  }
+
   /// The printable character, or null for a special key.
   final String? character;
 
@@ -365,6 +382,13 @@ final class KeyCode extends KeySequence implements KeySelector {
   );
 
   /// Canonical instances indexed by [SpecialKey.index] for [forSpecial].
+  /// Canonical printable codes for ASCII 0x20..0x7E, indexed by
+  /// `codeUnit - 0x20`. See [forCharacter].
+  static final List<KeyCode> _byAscii = [
+    for (var unit = 0x20; unit <= 0x7E; unit++)
+      KeyCode.char(String.fromCharCode(unit)),
+  ];
+
   static const List<KeyCode> _bySpecial = [
     enter, tab, backspace, escape, //
     arrowUp, arrowDown, arrowLeft, arrowRight, //
@@ -449,7 +473,7 @@ abstract final class KeySelector {
           'chr: selector needs exactly one character, got "$char"',
         );
       }
-      return KeyCode.char(char);
+      return KeyCode.forCharacter(char);
     }
     if (id.startsWith('key:')) {
       final name = id.substring(4);
@@ -680,23 +704,17 @@ enum KeyPosition implements KeySelector, KeySequence {
   @override
   _KeyStep _stepAt(int index) {
     assert(index == 0, 'a KeyPosition is a single step');
-    return _KeyStep(this);
+    // Canonical per value: a position's one-step form never varies, and
+    // `matches`/`hintLabel` both route through here on every dispatched key.
+    // Rebuilding it made a positional binding allocate once per key event.
+    return _stepByPosition[this.index];
   }
-
-  @override
-  bool get isSequence => false;
 
   @override
   String get hintLabel => _stepAt(0).label;
 
   @override
   bool matches(KeyEvent event) => _stepAt(0).matches(event);
-
-  @override
-  bool matchesStepAt(int index, KeyEvent event) => index == 0 && matches(event);
-
-  @override
-  String? stepLabelAt(int index) => index == 0 ? hintLabel : null;
 
   @override
   bool isPrefixOf(KeySequence other) =>
@@ -1213,6 +1231,12 @@ extension PendingKeySequenceChain on PendingKeySequence {
 // Framework-internal step access consumed by [InputDispatcher].
 // ---------------------------------------------------------------------------
 
+/// Canonical one-step forms, indexed by [KeyPosition.index]. Built once so
+/// per-key matching never allocates (see [KeyPosition._stepAt]).
+final List<_KeyStep> _stepByPosition = [
+  for (final position in KeyPosition.values) _KeyStep(position),
+];
+
 /// **Framework-internal.** Lets the [InputDispatcher] walk a sequence
 /// step-by-step without exposing the step layout. Not a stable public API —
 /// app code should treat these as private.
@@ -1231,6 +1255,19 @@ extension $KeySequenceInternal on KeySequence {
   String? stepLabelAt(int index) {
     if (index < 0 || index >= stepCount) return null;
     return _stepAt(index).label;
+  }
+
+  /// The positional atoms in this sequence, by step index.
+  ///
+  /// Empty for an all-logical sequence (the common case), which is what lets
+  /// a layout-aware renderer skip substitution entirely.
+  Map<int, KeyPosition> get positionalSteps {
+    final out = <int, KeyPosition>{};
+    for (var index = 0; index < stepCount; index++) {
+      final selector = _stepAt(index).selector;
+      if (selector is KeyPosition) out[index] = selector;
+    }
+    return out;
   }
 
   /// The events a terminal would emit for this sequence: a bare printable

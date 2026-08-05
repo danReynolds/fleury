@@ -238,6 +238,10 @@ final class WireFrameSource implements BrowserFrameSource {
           // its MarkdownText gate produce a linkUri that the v4 wire then
           // carries. Without it links render underlined-but-not-clickable.
           hyperlinks: true,
+          // The DOM surface reports keydown/keyup for every key with a
+          // physical `code`, so it declares the full lifecycle outright
+          // (RFC 0020 §11) — never inferred from the protocol version.
+          keyboard: KeyboardCapabilities.full,
           protocolVersion: remoteProtocolVersion,
         ),
       ),

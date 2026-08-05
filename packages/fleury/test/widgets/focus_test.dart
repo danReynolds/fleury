@@ -169,12 +169,8 @@ void main() {
           manager: manager,
           child: KeyDetector(
             onKey: (event) {
-              if (((e) {
-                    received.add('inner:${e.code.character}');
-                    return KeyEventResult.handled;
-                  })(event) ==
-                  KeyEventResult.handled)
-                event.consume();
+              received.add('inner:${event.code.character}');
+              event.consume();
             },
             child: Focus(
               focusNode: node,
@@ -199,22 +195,13 @@ void main() {
           manager: manager,
           child: KeyDetector(
             onKey: (event) {
-              if (((e) {
-                    received.add('outer:${e.code.character}');
-                    return KeyEventResult.handled;
-                  })(event) ==
-                  KeyEventResult.handled)
-                event.consume();
+              received.add('outer:${event.code.character}');
+              event.consume();
             },
             child: Focus(
               child: KeyDetector(
                 onKey: (event) {
-                  if (((e) {
-                        received.add('inner:${e.code.character}');
-                        return KeyEventResult.ignored;
-                      })(event) ==
-                      KeyEventResult.handled)
-                    event.consume();
+                  received.add('inner:${event.code.character}');
                 },
                 child: Focus(autofocus: true, child: const EmptyBox()),
               ),
@@ -237,22 +224,14 @@ void main() {
           manager: manager,
           child: KeyDetector(
             onKey: (event) {
-              if (((e) {
-                    received.add('outer:${e.code.character}');
-                    return KeyEventResult.handled;
-                  })(event) ==
-                  KeyEventResult.handled)
-                event.consume();
+              received.add('outer:${event.code.character}');
+              event.consume();
             },
             child: Focus(
               child: KeyDetector(
                 onKey: (event) {
-                  if (((e) {
-                        received.add('inner:${e.code.character}');
-                        return KeyEventResult.handled;
-                      })(event) ==
-                      KeyEventResult.handled)
-                    event.consume();
+                  received.add('inner:${event.code.character}');
+                  event.consume();
                 },
                 child: Focus(autofocus: true, child: const EmptyBox()),
               ),
@@ -277,23 +256,14 @@ void main() {
           manager: manager,
           child: KeyDetector(
             onKey: (event) {
-              if (((e) {
-                    received.add('app');
-                    return KeyEventResult.handled;
-                  })(event) ==
-                  KeyEventResult.handled)
-                event.consume();
+              received.add('app');
+              event.consume();
             },
             child: Focus(
               child: FocusScope(
                 child: KeyDetector(
                   onKey: (event) {
-                    if (((e) {
-                          received.add('inner');
-                          return KeyEventResult.ignored;
-                        })(event) ==
-                        KeyEventResult.handled)
-                      event.consume();
+                    received.add('inner');
                   },
                   child: Focus(autofocus: true, child: const EmptyBox()),
                 ),
@@ -317,24 +287,15 @@ void main() {
           manager: manager,
           child: KeyDetector(
             onKey: (event) {
-              if (((e) {
-                    received.add('app');
-                    return KeyEventResult.handled;
-                  })(event) ==
-                  KeyEventResult.handled)
-                event.consume();
+              received.add('app');
+              event.consume();
             },
             child: Focus(
               child: FocusScope(
                 modal: true,
                 child: KeyDetector(
                   onKey: (event) {
-                    if (((e) {
-                          received.add('inner');
-                          return KeyEventResult.ignored;
-                        })(event) ==
-                        KeyEventResult.handled)
-                      event.consume();
+                    received.add('inner');
                   },
                   child: Focus(autofocus: true, child: const EmptyBox()),
                 ),
@@ -468,12 +429,8 @@ void main() {
         child: show
             ? KeyDetector(
                 onKey: (event) {
-                  if (((e) {
-                        hits++;
-                        return KeyEventResult.handled;
-                      })(event) ==
-                      KeyEventResult.handled)
-                    event.consume();
+                  hits++;
+                  event.consume();
                 },
                 child: Focus(
                   child: KeyDetector(

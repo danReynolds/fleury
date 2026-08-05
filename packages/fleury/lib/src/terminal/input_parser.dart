@@ -332,7 +332,7 @@ class InputParser {
       // Alt + printable.
       sink.add(
         KeyEvent(
-          KeyCode.char(String.fromCharCode(byte)),
+          KeyCode.forCharacter(String.fromCharCode(byte)),
           modifiers: const {KeyModifier.alt},
         ),
       );
@@ -629,7 +629,7 @@ class InputParser {
       if (type == KeyEventType.up) {
         sink.add(
           KeyEvent(
-            KeyCode.char(String.fromCharCode(codepoint)),
+            KeyCode.forCharacter(String.fromCharCode(codepoint)),
             modifiers: modifiers,
             type: KeyEventType.up,
             position: position,
@@ -654,7 +654,7 @@ class InputParser {
       sink.add(
         InputBatch(
           key: KeyEvent(
-            KeyCode.char(String.fromCharCode(codepoint)),
+            KeyCode.forCharacter(String.fromCharCode(codepoint)),
             modifiers: modifiers,
             type: type,
             position: position,
@@ -673,7 +673,7 @@ class InputParser {
     // matching fallback's data source (Ctrl+С carrying base 'c').
     sink.add(
       KeyEvent(
-        KeyCode.char(String.fromCharCode(codepoint)),
+        KeyCode.forCharacter(String.fromCharCode(codepoint)),
         modifiers: modifiers,
         type: type,
         position: position,

@@ -639,13 +639,12 @@ class _JsonViewState extends State<JsonView> {
     final copyEnabled = widget.copySelection && rows.isNotEmpty;
     Widget list = KeyDetector(
       onKey: (event) {
-        if (((event) => switch (event.code) {
-              KeyCode.arrowRight => _expandOrEnter(rows),
-              KeyCode.arrowLeft => _collapseOrParent(rows),
-              _ => KeyEventResult.ignored,
-            })(event) ==
-            KeyEventResult.handled)
-          event.consume();
+        final handled = switch (event.code) {
+          KeyCode.arrowRight => _expandOrEnter(rows),
+          KeyCode.arrowLeft => _collapseOrParent(rows),
+          _ => KeyEventResult.ignored,
+        };
+        if (handled == KeyEventResult.handled) event.consume();
       },
       child: Focus(
         canRequestFocus: false,

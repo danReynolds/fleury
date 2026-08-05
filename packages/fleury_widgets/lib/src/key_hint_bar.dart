@@ -64,6 +64,9 @@ class KeyHintBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final manager = Focus.maybeOf(context);
     if (manager == null) return const EmptyBox();
+    // Positional bindings name a SPOT, not a cap. Ask the keyboard what that
+    // spot is actually labelled before telling anyone to press it (§9).
+    final layout = Keyboard.of(context).layout;
     final hints = resolveActiveKeyBindings(
       manager,
       globalBindings: globalBindings,
@@ -76,7 +79,7 @@ class KeyHintBar extends StatelessWidget {
     final total = hints.length;
     final segments = [
       for (final h in hints.take(maxBindings))
-        '[${h.sequenceLabel}] ${h.binding.displayLabel}',
+        '[${h.labelWith(layout)}] ${h.binding.displayLabel}',
     ];
     // Fit whole bindings to the width the bar is actually given, degrading
     // with a trailing "+N" instead of clipping a label mid-word. Under an

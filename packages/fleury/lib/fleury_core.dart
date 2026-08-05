@@ -292,6 +292,8 @@ export 'src/input/key_tables.dart'
         positionByDomCode,
         positionBySpecial,
         positionByUsCodepoint;
+export 'src/input/keyboard_layout.dart'
+    show KeyLabel, KeyLabelSource, KeyboardLayout, bundledKeyboardLayouts;
 export 'src/input/keyboard_state.dart'
     show KeyboardCapabilities, KeyboardSnapshot;
 export 'src/terminal/fake_driver.dart' show FakeTerminalDriver;
@@ -324,7 +326,6 @@ export 'src/widgets/focus.dart'
         FocusManager,
         FocusManagerScope,
         FocusNode,
-        FocusOnKeyCallback,
         FocusScope,
         FocusScopeRef,
         FocusDetector,

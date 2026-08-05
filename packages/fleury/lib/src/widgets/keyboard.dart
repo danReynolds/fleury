@@ -11,6 +11,7 @@
 
 import '../foundation/change_notifier.dart';
 import '../input/events.dart';
+import '../input/keyboard_layout.dart';
 import '../input/keyboard_state.dart';
 import '../runtime/input_dispatcher.dart';
 import 'focus.dart';
@@ -48,6 +49,20 @@ final class Keyboard {
   /// `build()`; reading it there is what subscribes the widget to
   /// negotiation and reconnect.
   KeyboardCapabilities get capabilities => _session.capabilities;
+
+  /// What this keyboard's keys are capped with, for rendering a positional
+  /// control honestly (RFC 0020 §9).
+  ///
+  /// `KeyPosition.w` is a SPOT; showing it as "W" to someone on AZERTY
+  /// names a key that is not under that finger. Ask the layout instead:
+  ///
+  /// ```dart
+  /// final label = Keyboard.of(context).layout.labelFor(KeyPosition.w);
+  /// Text(label?.text ?? 'key at ${KeyPosition.w.name}');
+  /// ```
+  ///
+  /// Null means genuinely unknown — render the position, never a guess.
+  KeyboardLayout get layout => _session.layout;
 
   /// The frame-latched view of what is held (RFC 0020 §5.6): immutable for
   /// the whole frame, so every read within one tick agrees.
@@ -118,7 +133,7 @@ final class Keyboard {
         'tree in a KeyboardScope.',
       );
     }
-    return Keyboard._(scope.notifier!.session);
+    return Keyboard._(scope.notifier.session);
   }
 
   static InputDispatcher _dispatcherOf(BuildContext context) {
@@ -128,7 +143,7 @@ final class Keyboard {
     if (scope == null) {
       throw StateError('Keyboard.nextKey() found no KeyboardScope.');
     }
-    return scope.notifier!.dispatcher;
+    return scope.notifier.dispatcher;
   }
 }
 
@@ -162,7 +177,7 @@ final class KeyboardScope extends InheritedNotifier<KeyboardStateNotifier> {
   static InputDispatcher? maybeDispatcherOf(BuildContext context) => context
       .getInheritedWidgetOfExactType<KeyboardScope>()
       ?.notifier
-      ?.dispatcher;
+      .dispatcher;
 }
 
 /// Conditional, widget-internal key handling — the framework's floor.

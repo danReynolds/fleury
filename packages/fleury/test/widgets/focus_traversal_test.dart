@@ -471,15 +471,10 @@ void main() {
                 width: 6,
                 child: KeyDetector(
                   onKey: (event) {
-                    if (((e) {
-                          if (e.code == KeyCode.tab) {
-                            consumed++;
-                            return KeyEventResult.handled;
-                          }
-                          return KeyEventResult.ignored;
-                        })(event) ==
-                        KeyEventResult.handled)
+                    if (event.code == KeyCode.tab) {
+                      consumed++;
                       event.consume();
+                    }
                   },
                   child: Focus(
                     focusNode: a,

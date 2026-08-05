@@ -765,7 +765,7 @@ KeyEvent? keyEventFromBrowser(web.KeyboardEvent event) {
   final shortcut = event.ctrlKey || event.altKey || event.metaKey;
   if (shortcut && key.length == 1) {
     return KeyEvent(
-      KeyCode.char(_shortcutChar(key)),
+      KeyCode.forCharacter(_shortcutChar(key)),
       modifiers: _shortcutModifiersFromKeyboard(event),
       type: type,
       position: position,
@@ -777,7 +777,7 @@ KeyEvent? keyEventFromBrowser(web.KeyboardEvent event) {
   // identity is the lowercase letter (terminal convention: Shift rides the
   // modifier set, the produced character rides the text channel).
   return KeyEvent(
-    KeyCode.char(_shortcutChar(key)),
+    KeyCode.forCharacter(_shortcutChar(key)),
     modifiers: modifiers,
     type: type,
     position: position,

@@ -178,15 +178,7 @@ final class InputDebugEvent extends DebugEvent {
         kind: 'focus',
         summary: focused ? 'window focus in' : 'window focus out',
       ),
-      KeyEvent(:final code, :final modifiers, :final type) => InputDebugEvent(
-        kind: 'key',
-        summary: [
-          if (modifiers.isNotEmpty)
-            modifiers.map((modifier) => modifier.name).join('+'),
-          code.special?.name ?? code.character!,
-          if (type != KeyEventType.down) type.name,
-        ].join('+'),
-      ),
+      KeyEvent() => InputDebugEvent(kind: 'key', summary: _describeKey(event)),
       TextInputEvent(:final text) => InputDebugEvent(
         kind: 'text',
         summary: '${text.length} chars',
@@ -194,13 +186,7 @@ final class InputDebugEvent extends DebugEvent {
       InputBatch(:final key, :final committedText) => InputDebugEvent(
         kind: 'batch',
         summary: [
-          if (key != null)
-            [
-              if (key.modifiers.isNotEmpty)
-                key.modifiers.map((modifier) => modifier.name).join('+'),
-              key.code.special?.name ?? key.code.character!,
-              if (key.type != KeyEventType.down) key.type.name,
-            ].join('+'),
+          if (key != null) _describeKey(key),
           if (committedText != null) '"$committedText"',
         ].join(' '),
       ),
@@ -246,6 +232,28 @@ final class TerminalDebugEvent extends DebugEvent {
 /// When no one is listening, broadcast streams drop events on the
 /// floor — so the cost is one StreamController.add() per frame even
 /// in production. Cheap.
+/// One key event as an inspector line.
+///
+/// Deliberately shows the RFC 0020 facts a summary that reports only
+/// code+modifiers hides, because they are exactly what the hard questions
+/// turn on:
+///
+///   * the PHASE — "my hold never ends" is almost always a surface that
+///     reports no `up`, and a feed showing only downs cannot tell you that;
+///   * the POSITION — a positional binding that silently degraded to its US
+///     twin looks identical to one matching properly until you see whether a
+///     position came through at all;
+///   * SYNTHESIZED — a release the framework invented on authority loss must
+///     never be mistaken for one the user's fingers produced.
+String _describeKey(KeyEvent event) => [
+  if (event.modifiers.isNotEmpty)
+    event.modifiers.map((modifier) => modifier.name).join('+'),
+  event.code.special?.name ?? event.code.character!,
+  if (event.type != KeyEventType.down) event.type.name,
+  if (event.position != null) '@${event.position!.name}',
+  if (event.synthesized) '(synthesized)',
+].join(' ');
+
 final class DebugEvents {
   DebugEvents._();
 

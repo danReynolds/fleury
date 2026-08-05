@@ -22,6 +22,7 @@ import '../semantics/semantics.dart';
 import '../terminal/diagnostics.dart';
 import '../widgets/basic.dart';
 import '../widgets/framework.dart';
+import '../widgets/keyboard.dart';
 import '../widgets/layout_builder.dart';
 import '../widgets/output_capture_view.dart';
 import '../widgets/pointer.dart';
@@ -86,6 +87,9 @@ class _DebugPanelState extends State<DebugPanel> {
   // fits — see [_sparkWidth]. Overwritten before any row reads it.
   int _contentWidth = 28;
 
+  /// Held keys as of the last frame — see the latch in [initState].
+  String _heldLine = '(none)';
+
   @override
   void initState() {
     super.initState();
@@ -93,6 +97,10 @@ class _DebugPanelState extends State<DebugPanel> {
       if (event is! FrameDebugEvent) return;
       _history.add(event.frame);
       if (_history.length > _historySize) _history.removeAt(0);
+      // Sampled key state is NOT reactive and is illegal to read in build
+      // (the handle asserts on it) — so latch it here, in the same
+      // frame-driven callback that feeds the rest of the Live tab.
+      _heldLine = _sampleHeld();
       final now = widget.clock.now.inMilliseconds;
       _frameStamps.add(now);
       while (_frameStamps.isNotEmpty && _frameStamps.first < now - 1000) {
@@ -277,6 +285,9 @@ class _DebugPanelState extends State<DebugPanel> {
       _row('Boundaries', _repaintBoundarySummary(latest.repaintBoundaries)),
       _row('Sources', _sourceSummary(latest.dirtySources)),
       const Text(''),
+      _row('Keyboard', _keyboardSummary()),
+      _row('Held', _heldLine),
+      const Text(''),
       Text(
         widget.controller.paintFlash
             ? '[p] paint-flash: ON'
@@ -285,6 +296,40 @@ class _DebugPanelState extends State<DebugPanel> {
       ),
       ..._monitorRows(),
     ];
+  }
+
+  /// What the surface's keyboard was CONFIRMED to guarantee (RFC 0020 §5.7).
+  ///
+  /// The first thing to check when a hold never ends or a sampled query is
+  /// always empty: on a press-only surface both are correct behaviour, not
+  /// bugs, and nothing else in the shell says so.
+  String _keyboardSummary() {
+    final keyboard = Keyboard.of(context);
+    final caps = keyboard.capabilities;
+    final granted = [
+      if (caps.supportsHeldState) 'held',
+      if (caps.distinguishesRepeats) 'repeats',
+      if (caps.supportsPositions) 'positions',
+      if (caps.reportsPrintableKeys) 'printables',
+    ];
+    final layout = keyboard.layout.tableName;
+    return [
+      granted.isEmpty ? 'press-only (legacy)' : granted.join(' '),
+      if (layout != null) '· layout $layout',
+    ].join(' ');
+  }
+
+  /// Physically-held keys as of the last frame, straight off the session
+  /// record. Sampled outside build (see [initState]); empty on a press-only
+  /// surface, which the Keyboard row above explains.
+  String _sampleHeld() {
+    final snapshot = Keyboard.of(context).snapshot;
+    final held = [
+      for (final position in snapshot.positionsPressed) '@${position.name}',
+      for (final code in snapshot.pressed)
+        code.special?.name ?? code.character!,
+    ];
+    return held.isEmpty ? '(none)' : held.join(' ');
   }
 
   List<Widget> _rebuildsBody() {

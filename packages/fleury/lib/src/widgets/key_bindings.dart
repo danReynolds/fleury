@@ -24,6 +24,7 @@ import 'package:meta/meta.dart';
 import '../foundation/change_notifier.dart';
 import '../foundation/collections.dart';
 import '../input/events.dart';
+import '../input/keyboard_layout.dart';
 import '../runtime/input_dispatcher.dart';
 import 'focus.dart';
 import 'framework.dart';
@@ -340,7 +341,25 @@ final class ActiveKeyBinding {
   final List<KeySequence> sequences;
 
   /// A combined label for all effective aliases, such as `↑↓`.
+  ///
+  /// Positional aliases render their US-QWERTY twin here, because a bare
+  /// value type has no keyboard to ask. Surfaces that CAN ask — anything with
+  /// a `BuildContext` — should call [labelWith] instead, so a `KeyPosition.w`
+  /// control reads `Z` on AZERTY rather than lying (RFC 0020 §9).
   String get sequenceLabel => sequences.map((s) => s.hintLabel).join();
+
+  /// [sequenceLabel] with each positional alias resolved against the caps
+  /// this keyboard actually has.
+  ///
+  /// ```dart
+  /// final layout = Keyboard.of(context).layout;
+  /// Text('[${hint.labelWith(layout)}] ${hint.binding.displayLabel}');
+  /// ```
+  ///
+  /// Identical to [sequenceLabel] for logical bindings, which is every
+  /// binding that does not name a physical spot.
+  String labelWith(KeyboardLayout layout) =>
+      sequences.map(layout.labelForSequence).join();
 }
 
 /// Resolves the discoverable key bindings active in [manager]'s focus context.

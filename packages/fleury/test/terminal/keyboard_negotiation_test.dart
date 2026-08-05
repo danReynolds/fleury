@@ -2,6 +2,7 @@
 // the restoration hygiene that keeps a pushed mode from leaking.
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/src/terminal/terminal_probe.dart';
 import 'package:fleury/src/terminal/terminal_sequences.dart';
 import 'package:test/test.dart';
 
@@ -17,8 +18,10 @@ void main() {
       // the text path: printable presses and repeats still arrive as
       // ordinary bytes.
       expect(KeyboardProtocolMode.disambiguated.requestedFlags, 1 | 2);
-      expect(const TerminalMode().keyboardProtocol,
-          KeyboardProtocolMode.disambiguated);
+      expect(
+        const TerminalMode().keyboardProtocol,
+        KeyboardProtocolMode.disambiguated,
+      );
     });
 
     test('lifecycle requests all five progressive flags', () {
@@ -95,47 +98,6 @@ void main() {
     });
   });
 
-  group('capability projection (§5.7)', () {
-    // Semantic guarantees derived from CONFIRMED flags — never from what
-    // was requested.
-    KeyboardCapabilities project(int flags) {
-      final eventTypes = flags & 0x02 != 0;
-      final allKeys = flags & 0x08 != 0;
-      final alternates = flags & 0x04 != 0;
-      return KeyboardCapabilities(
-        supportsHeldState: eventTypes && allKeys,
-        distinguishesRepeats: eventTypes,
-        supportsPositions: eventTypes && allKeys && alternates,
-        reportsPrintableKeys: allKeys,
-      );
-    }
-
-    test('flag 2 alone does NOT promise held state', () {
-      // Without flag 8 an ordinary printable still arrives as a plain byte:
-      // no release to pair, no press record to keep. Repeat tagging is real
-      // though — that is the default tier's whole win.
-      final caps = project(1 | 2);
-      expect(caps.distinguishesRepeats, isTrue);
-      expect(caps.supportsHeldState, isFalse);
-      expect(caps.reportsPrintableKeys, isFalse);
-      expect(caps.supportsPositions, isFalse);
-    });
-
-    test('held state needs event types AND all-keys-as-escapes', () {
-      expect(project(1 | 2 | 8).supportsHeldState, isTrue);
-      expect(project(1 | 8).supportsHeldState, isFalse, reason: 'no phases');
-    });
-
-    test('positions additionally need alternate keys', () {
-      expect(project(1 | 2 | 8).supportsPositions, isFalse);
-      expect(project(1 | 2 | 4 | 8).supportsPositions, isTrue);
-    });
-
-    test('nothing confirmed projects the conservative default', () {
-      expect(project(0), KeyboardCapabilities.legacy);
-    });
-  });
-
   group('lifecycle commit safety (§8.3)', () {
     // Flag 8 stops the terminal sending text; flag 16 is what re-supplies
     // it. Honouring one without the other leaves the session unable to type
@@ -159,6 +121,44 @@ void main() {
     test('a terminal that honoured only disambiguation is unsafe for '
         'lifecycle', () {
       expect(safe(1), isFalse);
+    });
+  });
+
+  group('the support probe measures SUPPORT, not current state (§8.2)', () {
+    // A terminal at a shell prompt has pushed nothing, so a bare `CSI ? u`
+    // answers 0 on EVERY emulator. Reading that as support says Kitty does
+    // not implement the protocol it invented — and a support matrix built
+    // from it would be uniformly, confidently wrong.
+    test('the diagnostic pushes every flag before reading back', () {
+      expect(kittyKeyboardSupportQuery, contains('\x1B[>31u'));
+      final push = kittyKeyboardSupportQuery.indexOf('\x1B[>31u');
+      final query = kittyKeyboardSupportQuery.indexOf('\x1B[?u');
+      expect(push, isNonNegative);
+      expect(query, greaterThan(push));
+    });
+
+    test('it pops, so the terminal is left exactly as found', () {
+      final query = kittyKeyboardSupportQuery.indexOf('\x1B[?u');
+      final pop = kittyKeyboardSupportQuery.indexOf('\x1B[<1u');
+      expect(pop, greaterThan(query));
+      // An explicit count: a bare `CSI < u` reads as ANSISYSRC on Windows
+      // consoles that drop the private marker.
+      expect(kittyKeyboardSupportQuery, isNot(contains('\x1B[<u')));
+    });
+
+    test('the restore completes before the bracketing DA1', () {
+      // The probe resolves on DA1. A pop after it would leave the terminal in
+      // all-keys mode for however long the caller takes to react.
+      final pop = kittyKeyboardSupportQuery.indexOf('\x1B[<1u');
+      final da1 = kittyKeyboardSupportQuery.indexOf('\x1B[c');
+      expect(da1, greaterThan(pop));
+    });
+
+    test('runtime negotiation does NOT re-push — enter already did', () {
+      // Pushing again there would stack a second entry that the single pop
+      // in the exit sequences could never fully unwind.
+      expect(kittyKeyboardRuntimeQuery, isNot(contains('>')));
+      expect(kittyKeyboardRuntimeQuery, startsWith('\x1B[?u'));
     });
   });
 }

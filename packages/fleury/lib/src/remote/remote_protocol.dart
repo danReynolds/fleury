@@ -138,6 +138,7 @@ import '../runtime/remote_surface_sink.dart' show RemoteClipboardStatus;
 import '../semantics/semantics.dart';
 import '../terminal/capabilities.dart';
 import '../input/events.dart';
+import '../input/keyboard_state.dart';
 import 'remote_codec.dart';
 
 /// Current serve/shell protocol version. Bumped when frame semantics
@@ -292,6 +293,7 @@ final class InitFrame extends RemoteFrame {
     required this.tmuxPassthrough,
     this.images,
     this.hyperlinks = false,
+    this.keyboard,
     this.protocolVersion = remoteProtocolVersion,
   });
 
@@ -318,6 +320,17 @@ final class InitFrame extends RemoteFrame {
   /// which gates whether the wire *serializes* a link at all (v>=4); this gates
   /// whether one is ever *produced*.
   final bool hyperlinks;
+
+  /// What the peer's keyboard has been CONFIRMED to guarantee (RFC 0020
+  /// §11). Optional additive `keyboard=<bits>` INIT param.
+  ///
+  /// Null from a peer that never learned the field — read as "declares
+  /// nothing", which is press-only. A peer's lifecycle support is never
+  /// inferred from [protocolVersion]: version says the codecs match, not
+  /// that the terminal on the far end honoured flag 8. A `fleury shell`
+  /// relay in front of Ghostty and one in front of Terminal.app speak the
+  /// identical wire version and have completely different keyboards.
+  final KeyboardCapabilities? keyboard;
 
   /// Negotiated protocol version. A peer omitting `v` in INIT is read as
   /// v1 (the legacy ANSI host).
@@ -542,6 +555,11 @@ String _encodeInit(InitFrame f) =>
     // link-free INIT stays byte-identical to a peer that never learned the
     // field. Absent ⇒ decoded as false.
     '${f.hyperlinks ? 'hyperlinks=1,' : ''}'
+    // Semantic guarantees, never Kitty flags: a browser peer has no flags,
+    // and the reader must not have to know the far end's protocol to
+    // understand its promises. Omitted when undeclared, so an INIT from a
+    // peer that never learned the field stays byte-identical.
+    '${f.keyboard == null ? '' : 'keyboard=${f.keyboard!.wireBits},'}'
     'v=${f.protocolVersion}';
 
 /// Wire layout: [u16 id length][id utf-8][image bytes...].
@@ -962,6 +980,10 @@ InitFrame _decodeInit(String body) {
       _ => null,
     },
     hyperlinks: params['hyperlinks'] == '1',
+    keyboard: switch (int.tryParse(params['keyboard'] ?? '')) {
+      final bits? => KeyboardCapabilities.fromWireBits(bits),
+      null => null,
+    },
     protocolVersion: int.tryParse(params['v'] ?? '') ?? 1,
   );
 }

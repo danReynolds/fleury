@@ -11,6 +11,7 @@
 import 'package:meta/meta.dart';
 
 import 'events.dart';
+import 'keyboard_layout.dart';
 
 /// What a keyboard surface has been *confirmed* to guarantee (RFC 0020
 /// §5.7): semantic capabilities, never raw protocol flags, projected from
@@ -40,6 +41,44 @@ final class KeyboardCapabilities {
   /// Every printable arrives as a key event (kitty flag 8 / the DOM). The
   /// floor's tier requirement: raw-key consumers of printables (§17.4).
   final bool reportsPrintableKeys;
+
+  /// Projects CONFIRMED Kitty progressive-enhancement flags into semantic
+  /// guarantees (RFC 0020 §5.7) — the one definition of that mapping, so a
+  /// local terminal, a `fleury shell` relay, and a diagnostic can never
+  /// disagree about what a given reply promises.
+  ///
+  /// Held state deliberately needs event types AND all-keys-as-escapes: with
+  /// flag 2 alone an ordinary printable still arrives as a plain byte, so it
+  /// has no release to pair and no press record to keep.
+  factory KeyboardCapabilities.fromKittyFlags(int flags) {
+    final eventTypes = flags & 0x02 != 0;
+    final allKeys = flags & 0x08 != 0;
+    final alternates = flags & 0x04 != 0;
+    return KeyboardCapabilities(
+      supportsHeldState: eventTypes && allKeys,
+      distinguishesRepeats: eventTypes,
+      supportsPositions: eventTypes && allKeys && alternates,
+      reportsPrintableKeys: allKeys,
+    );
+  }
+
+  /// Decodes the remote INIT `keyboard=` declaration (RFC 0020 §11).
+  factory KeyboardCapabilities.fromWireBits(int bits) => KeyboardCapabilities(
+    supportsHeldState: bits & 0x1 != 0,
+    distinguishesRepeats: bits & 0x2 != 0,
+    supportsPositions: bits & 0x4 != 0,
+    reportsPrintableKeys: bits & 0x8 != 0,
+  );
+
+  /// This declaration as remote-wire bits. Semantic guarantees travel, never
+  /// Kitty flags: a browser peer has no flags at all, and a peer that
+  /// negotiated a tier the reader has never heard of still declares exactly
+  /// what it can promise.
+  int get wireBits =>
+      (supportsHeldState ? 0x1 : 0) |
+      (distinguishesRepeats ? 0x2 : 0) |
+      (supportsPositions ? 0x4 : 0) |
+      (reportsPrintableKeys ? 0x8 : 0);
 
   /// The conservative default: press-only, best-effort input.
   static const KeyboardCapabilities legacy = KeyboardCapabilities();
@@ -189,6 +228,13 @@ final class KeyboardSession {
   KeyboardCapabilities _capabilities;
   KeyboardCapabilities get capabilities => _capabilities;
 
+  /// What this keyboard's keys are actually capped with (RFC 0020 §9).
+  ///
+  /// Learns from the stream below: where the terminal reports positional
+  /// identity, every press pairs a physical spot with the character it
+  /// produced — the mapping, observed rather than assumed.
+  final KeyboardLayout layout = KeyboardLayout.learning();
+
   /// Live press records, keyed by physical identity (position when known,
   /// else logical code).
   final Map<Object, _PressRecord> _held = {};
@@ -253,6 +299,10 @@ final class KeyboardSession {
   }
 
   RegularizedKey ingest(KeyEvent event) {
+    // Layout learning is independent of held-state support: a surface can
+    // report positions without releases, and every such report teaches us
+    // one cap.
+    if (event.type == KeyEventType.down) layout.observe(event);
     if (!_capabilities.supportsHeldState) {
       return RegularizedKey._([event]);
     }

@@ -202,7 +202,11 @@ class InputDispatcher {
         }
       }
       if (text != null) {
-        return _dispatchText(TextInputEvent(text));
+        // The key half already walked the routed lanes above.
+        return _dispatchText(
+          TextInputEvent(text),
+          keyAlreadyWalked: key != null && key.type != KeyEventType.up,
+        );
       }
       return KeyEventResult.ignored;
     }
@@ -591,8 +595,11 @@ class InputDispatcher {
   /// even while a text field is focused. Text that instead breaks the
   /// sequence cancels it — replaying the held keys direct-only — and is
   /// then delivered as ordinary text.
-  KeyEventResult _dispatchText(TextInputEvent event) {
-    if (_matchablePending != null) {
+  KeyEventResult _dispatchText(
+    TextInputEvent event, {
+    bool keyAlreadyWalked = false,
+  }) {
+    if (_matchablePending != null && !keyAlreadyWalked) {
       final keyEvent = _keyEventForText(event.text);
       if (keyEvent != null) {
         final result = _tryPendingSequence(keyEvent, textOrigin: event.text);
@@ -607,6 +614,14 @@ class InputDispatcher {
     if (textResult == KeyEventResult.handled) {
       return textResult;
     }
+
+    // Reconstructing a key from text is the LEGACY bridge: on a terminal that
+    // reports printables only as bytes, this is the sole way a `j` binding
+    // can ever match. A batch already offered its real key half to the same
+    // lanes one stage earlier (§6), so doing it again would walk the whole
+    // chain twice per keystroke — with a strictly worse key, since a
+    // text-derived one carries no position.
+    if (keyAlreadyWalked) return KeyEventResult.ignored;
 
     final keyEvent = _keyEventForText(event.text);
     if (keyEvent != null) {
@@ -732,7 +747,7 @@ class InputDispatcher {
     if (!iterator.moveNext()) return null;
     final grapheme = iterator.current;
     if (iterator.moveNext()) return null;
-    return KeyEvent(KeyCode.char(grapheme));
+    return KeyEvent(KeyCode.forCharacter(grapheme));
   }
 
   KeyEventResult _dispatchPlain(

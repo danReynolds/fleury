@@ -1060,7 +1060,7 @@ KeyCode _readKeyCode(_Reader r) {
           'key event character must be non-empty',
         );
       }
-      return KeyCode.char(char);
+      return KeyCode.forCharacter(char);
     default:
       throw RemoteCodecException('unknown key code kind $kind');
   }
