@@ -63,6 +63,11 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
   /// toggle rather than a hold (see [_supportsHeldControls]).
   bool _thrustLatched = false;
 
+  /// Whether focus is inside the playfield. Starts false and is corrected on
+  /// mount by [FocusDetector]'s initial sync, so a scene that never receives
+  /// focus never simulates.
+  bool _focused = false;
+
   bool get _reducedMotion => _motionPolicy != AnimationPolicy.enabled;
 
   @override
@@ -292,24 +297,34 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
     // mid-session, the control scheme and its legend follow.
     return KeyBindings(
       bindings: _bindings(),
-      // Sampled input is surface-wide, so a scene that keeps ticking while
-      // focus is elsewhere acts on keys meant for whatever took focus.
-      // Gating the SIMULATION is the fix — a paused ship neither thrusts
-      // nor drifts into a rock. Stacks with the route-visibility TickerMode
-      // read in didChangeDependencies: hidden OR unfocused means muted.
-      child: TickerMode.whileFocused(
-        child: Focus(
-          autofocus: true,
-          debugLabel: 'neon-asteroids',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              _hud(size),
-              const SizedBox(height: 1),
-              Expanded(child: _playfield(size)),
-              const SizedBox(height: 1),
-              _controls(size),
-            ],
+      // Sampled input is surface-wide: `Keyboard.snapshot` reports what is
+      // physically down, not what is down FOR US. So a scene that keeps
+      // ticking while focus is elsewhere acts on keys meant for whatever
+      // took focus — a game under a command palette steers itself as the
+      // user types. Gating the SIMULATION is the fix rather than blinding
+      // the input: a paused ship neither thrusts nor drifts into a rock.
+      // Stacks with the route-visibility TickerMode read in
+      // didChangeDependencies — hidden OR unfocused means muted.
+      child: FocusDetector(
+        onFocusChange: (focused) {
+          if (_focused == focused) return;
+          setState(() => _focused = focused);
+        },
+        child: TickerMode(
+          enabled: _focused,
+          child: Focus(
+            autofocus: true,
+            debugLabel: 'neon-asteroids',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                _hud(size),
+                const SizedBox(height: 1),
+                Expanded(child: _playfield(size)),
+                const SizedBox(height: 1),
+                _controls(size),
+              ],
+            ),
           ),
         ),
       ),
