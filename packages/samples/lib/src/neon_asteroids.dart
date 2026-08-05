@@ -48,10 +48,11 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
   Duration _lastElapsed = Duration.zero;
   AnimationPolicy _motionPolicy = AnimationPolicy.enabled;
 
-  /// The surface keyboard, sampled once per simulation frame. Safe to cache:
-  /// the lookup is non-subscribing and the handle is stable for the app's
-  /// lifetime (RFC 0020 §15).
-  Keyboard? _keyboard;
+  /// The surface keyboard, sampled once per simulation frame. Resolved in
+  /// [didChangeDependencies] — where inherited lookups belong — so it is
+  /// non-null by the time any tick runs, and re-resolves if capabilities
+  /// change. The handle itself is stable for the app's lifetime (§15).
+  late Keyboard _keyboard;
 
   /// Pointer-driven controls. The keyboard is one SOURCE of input, not the
   /// game's input model — aiming and firing by mouse feed the same channel.
@@ -73,6 +74,7 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
     super.didChangeDependencies();
     final binding = TuiBinding.of(context);
     _motionPolicy = binding.animationPolicy;
+    _keyboard = Keyboard.of(context);
 
     // Gameplay is functional, not decorative, so it keeps its fixed-step clock
     // even when animation is disabled. Attract/game-over motion is decorative
@@ -118,23 +120,19 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
 
     // One immutable read for the whole frame, so every fixed simulation step
     // below agrees about what was held (RFC 0020 §5.6).
-    final keys = _keyboard?.snapshot;
-    final left =
-        (keys?.isHeld(_leftKey) ?? false) ||
-        (keys?.isHeld(KeyCode.arrowLeft) ?? false);
-    final right =
-        (keys?.isHeld(_rightKey) ?? false) ||
-        (keys?.isHeld(KeyCode.arrowRight) ?? false);
+    final keys = _keyboard.snapshot;
+    final left = keys.isHeld(_leftKey) || keys.isHeld(KeyCode.arrowLeft);
+    final right = keys.isHeld(_rightKey) || keys.isHeld(KeyCode.arrowRight);
     final thrust =
-        (keys?.isHeld(_thrustKey) ?? false) ||
-        (keys?.isHeld(KeyCode.arrowUp) ?? false) ||
+        keys.isHeld(_thrustKey) ||
+        keys.isHeld(KeyCode.arrowUp) ||
         _thrustLatched ||
         _pointerThrust;
 
     // An EDGE, not a level: `wasPressed` survives a press+release that lands
     // entirely between two frames, so a quick tap is never swallowed — and it
     // is consumed at exactly one simulation step, so one press is one shot.
-    var fire = (keys?.wasPressed(KeyCode.space) ?? false) || _pointerFire;
+    var fire = keys.wasPressed(KeyCode.space) || _pointerFire;
     _pointerFire = false;
     final steps = _game.advanceWithTimeline(delta, (_) {
       final shoot = fire;
@@ -179,10 +177,10 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
     // this appears if a surface negotiates down mid-session.
     if (!_supportsHeldControls)
       KeyBinding(
-        // Logical, not positional: a surface without held-key support does
-        // not report positions either, so the twin is the only thing that
-        // can match there.
-        KeyCode.w,
+        // The same positional identity the sampled control uses. Where the
+        // surface reports no positions it degrades to the US twin, so one
+        // declaration covers both worlds (§13.3).
+        _thrustKey,
         label: 'Thrust',
         onTrigger: (_) => setState(() => _thrustLatched = !_thrustLatched),
       ),
@@ -192,8 +190,7 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
   /// legacy terminal), holding two directions at once is impossible — the OS
   /// only auto-repeats the most recent key — so the game offers a DIFFERENT
   /// control scheme rather than a worse version of the same one.
-  bool get _supportsHeldControls =>
-      _keyboard?.capabilities.supportsHeldState ?? false;
+  bool get _supportsHeldControls => _keyboard.capabilities.supportsHeldState;
 
   void _clearControls() {
     _pointerThrust = false;
@@ -297,7 +294,6 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
     // Reading capabilities here (not the snapshot) is what subscribes this
     // widget to negotiation: if a surface confirms or loses held-key support
     // mid-session, the control scheme and its legend follow.
-    _keyboard = Keyboard.of(context);
     return KeyBindings(
       bindings: _bindings(),
       child: FocusWithin(

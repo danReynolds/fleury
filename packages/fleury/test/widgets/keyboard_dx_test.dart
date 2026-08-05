@@ -374,4 +374,79 @@ void main() {
       expect(handle.snapshot.wasReleased(KeyPosition.w), isTrue);
     });
   });
+
+  group('positional gestures (§13.3)', () {
+    testWidgets('a positional binding matches by physical key', (tester) {
+      tester.keyboardCapabilities = KeyboardCapabilities.full;
+      var fired = 0;
+      tester.pumpFleuryHome(
+        KeyBindings(
+          bindings: [KeyBinding(KeyPosition.w, onTrigger: (_) => fired++)],
+          child: const Focus(autofocus: true, child: Text('x')),
+        ),
+      );
+      tester.pump();
+
+      // AZERTY: the QWERTY-W spot types 'z'. A LOGICAL binding on .w would
+      // miss this entirely; the positional one is the point.
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('z'), position: KeyPosition.w),
+      );
+      expect(fired, 1);
+
+      // The key that types 'w' on that layout is a different spot.
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('w'), position: KeyPosition.z),
+      );
+      expect(fired, 1, reason: 'same character, different physical key');
+    });
+
+    testWidgets('a positional binding degrades to its US twin', (tester) {
+      // No positional reporting: the same declaration still works, matching
+      // the twin — one identity model, one comparison, shared with sampling.
+      var fired = 0;
+      tester.pumpFleuryHome(
+        KeyBindings(
+          bindings: [KeyBinding(KeyPosition.w, onTrigger: (_) => fired++)],
+          child: const Focus(autofocus: true, child: Text('x')),
+        ),
+      );
+      tester.pump();
+      tester.sendKey(const KeyEvent(KeyCode.w));
+      expect(fired, 1);
+    });
+
+    testWidgets('positional steps compose with modifiers and aliases', (
+      tester,
+    ) {
+      tester.keyboardCapabilities = KeyboardCapabilities.full;
+      var fired = 0;
+      tester.pumpFleuryHome(
+        KeyBindings(
+          bindings: [
+            KeyBinding(
+              KeySequence.ctrl.code(KeyPosition.a),
+              aliases: [KeyPosition.d],
+              onTrigger: (_) => fired++,
+            ),
+          ],
+          child: const Focus(autofocus: true, child: Text('x')),
+        ),
+      );
+      tester.pump();
+
+      tester.sendKey(
+        const KeyEvent(
+          KeyCode.char('q'),
+          modifiers: {KeyModifier.ctrl},
+          position: KeyPosition.a,
+        ),
+      );
+      expect(fired, 1, reason: 'Ctrl + the A position, whatever it types');
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('d'), position: KeyPosition.d),
+      );
+      expect(fired, 2, reason: 'the positional alias fires too');
+    });
+  });
 }

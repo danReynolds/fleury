@@ -129,6 +129,13 @@ class InputDispatcher {
   /// Whether a sequence is currently pending. Useful for tests.
   bool get hasPendingSequence => _pending != null;
 
+  /// The insertion a consumed printable key half owes suppression to
+  /// (§11): on surfaces that report printables as keys AND deliver their
+  /// text separately, consuming the key must drop the matching text — and
+  /// only that one. A non-matching insertion clears it rather than
+  /// swallowing unrelated input.
+  String? _suppressNextText;
+
   /// Abandons an in-flight sequence as if the user pressed Esc: held events
   /// replay (a shorter binding fires, a text-owed char reaches the field) and
   /// the pending state clears, dropping any which-key popup. No-op when
@@ -183,16 +190,28 @@ class InputDispatcher {
       // ahead of every routed lane, but only AFTER the session and the
       // observation lane have seen it (a hold in flight must still end).
       if (key != null && _tryCapture(key)) return KeyEventResult.handled;
+      // Stage 5 BEFORE stage 6 (§6): the key walk runs first, so a binding
+      // can match identity the text half cannot carry — a positional
+      // gesture has no text equivalent. A consumed key suppresses the
+      // batch's text, which is what keeps a character binding from firing
+      // twice for one press.
       final text = event.committedText;
+      if (key != null && key.type != KeyEventType.up) {
+        if (_dispatchKeyEvent(key) == KeyEventResult.handled) {
+          return KeyEventResult.handled;
+        }
+      }
       if (text != null) {
         return _dispatchText(TextInputEvent(text));
-      }
-      if (key != null) {
-        return _dispatchKeyEvent(key);
       }
       return KeyEventResult.ignored;
     }
     if (event is TextInputEvent) {
+      final suppressed = _suppressNextText;
+      if (suppressed != null) {
+        _suppressNextText = null;
+        if (event.text == suppressed) return KeyEventResult.handled;
+      }
       return _dispatchText(event);
     }
     if (event is TextCompositionEvent) {
@@ -207,19 +226,28 @@ class InputDispatcher {
     if (event is KeyEvent) {
       _regularizeAndObserve(event);
       if (_tryCapture(event)) return KeyEventResult.handled;
-      // Interim P3 routing (replaced by the §6 key-walk interlock in P4):
-      // where printables arrive as key events (reportsPrintableKeys — the
-      // DOM source), an unmodified/shift-only printable down or repeat is
-      // owed to the text lane; its committed text arrives separately (the
-      // `input` channel) and drives the claimant/character path. Command-
-      // dispatching the key half too would fire character bindings twice.
-      if (keyboardSession.capabilities.reportsPrintableKeys &&
+      // Stage 5 (§6): the key walk runs before text. Where printables
+      // arrive as key events (reportsPrintableKeys — the DOM source), the
+      // committed text follows as a SEPARATE event, so a key consumed here
+      // must suppress it (§11's keydown/input pairing) — otherwise one
+      // press fires a character binding twice. The walk has to run first
+      // regardless: a positional gesture matches an identity the text half
+      // cannot carry.
+      final splitText =
+          keyboardSession.capabilities.reportsPrintableKeys &&
           event.code.isCharacter &&
           event.type != KeyEventType.up &&
-          event.modifiers.every((m) => m == KeyModifier.shift)) {
+          event.modifiers.every((m) => m == KeyModifier.shift);
+      final result = _dispatchKeyEvent(event);
+      if (splitText) {
+        if (result == KeyEventResult.handled) {
+          // Drop the paired insertion, and only that one.
+          _suppressNextText = event.code.character;
+        }
+        // Unconsumed: the text half still owns it, exactly as before.
         return KeyEventResult.ignored;
       }
-      return _dispatchKeyEvent(event);
+      return result;
     }
     return KeyEventResult.ignored;
   }

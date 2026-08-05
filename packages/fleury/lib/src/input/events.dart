@@ -490,7 +490,7 @@ abstract final class KeySelector {
 /// US-101 twin. Lookup maps are derived in `key_tables.dart`.
 ///
 /// APPEND-ONLY: `KeyPosition.index` is a wire value in the remote codec.
-enum KeyPosition implements KeySelector {
+enum KeyPosition implements KeySelector, KeySequence {
   // Letter cluster.
   a('KeyA', 'a'),
   b('KeyB', 'b'),
@@ -666,6 +666,41 @@ enum KeyPosition implements KeySelector {
 
   @override
   String get selectorId => 'pos:$name';
+
+  // ---- KeySequence: a position is a one-step, unmodified gesture --------
+  //
+  // The same rule [KeyCode] follows (RFC 0018: every code is a valid
+  // one-step sequence), extended to the other identity kind. It is what
+  // makes `KeyBinding(KeyPosition.w, …)` legal — a spatial COMMAND, the
+  // counterpart to sampling a spatial control.
+
+  @override
+  int get stepCount => 1;
+
+  @override
+  _KeyStep _stepAt(int index) {
+    assert(index == 0, 'a KeyPosition is a single step');
+    return _KeyStep(this);
+  }
+
+  @override
+  bool get isSequence => false;
+
+  @override
+  String get hintLabel => _stepAt(0).label;
+
+  @override
+  bool matches(KeyEvent event) => _stepAt(0).matches(event);
+
+  @override
+  bool matchesStepAt(int index, KeyEvent event) => index == 0 && matches(event);
+
+  @override
+  String? stepLabelAt(int index) => index == 0 ? hintLabel : null;
+
+  @override
+  bool isPrefixOf(KeySequence other) =>
+      other.stepCount >= 1 && other.stepLabelAt(0) == hintLabel;
 }
 
 /// A pattern that matches one or more keypresses — the value a [KeyBinding]
@@ -1071,8 +1106,9 @@ extension KeySequenceChain on KeySequence {
   KeySequence char(String character) =>
       _appendAtom(this, KeyCode.char(character));
 
-  /// Append a [KeyCode] held in a variable.
-  KeySequence code(KeyCode keyCode) => _appendAtom(this, keyCode);
+  /// Append a key identity held in a variable — a logical [KeyCode] or a
+  /// physical [KeyPosition].
+  KeySequence code(KeySelector keyCode) => _appendAtom(this, keyCode);
 }
 
 /// Chain getters on a [PendingKeySequence]. Modifier atoms accumulate (still
@@ -1158,8 +1194,9 @@ extension PendingKeySequenceChain on PendingKeySequence {
   /// Close the pending modifiers with a dynamic character atom.
   KeySequence char(String character) => code(KeyCode.char(character));
 
-  /// Close the pending modifiers with a [KeyCode] held in a variable.
-  KeySequence code(KeyCode keyCode) {
+  /// Close the pending modifiers with a key identity held in a variable —
+  /// a logical [KeyCode] or a physical [KeyPosition].
+  KeySequence code(KeySelector keyCode) {
     final step = _KeyStep.build(
       keyCode,
       ctrl: _ctrl,
@@ -1212,7 +1249,7 @@ extension $KeySequenceInternal on KeySequence {
   /// shadowed — they arrive as key events, not text.
   bool get isShadowedByTextInput {
     final step = _stepAt(0);
-    return step.code.isCharacter &&
+    return (step.code?.isCharacter ?? false) &&
         !step.ctrl &&
         !step.alt &&
         !step.superKey &&
@@ -1249,7 +1286,7 @@ final class _ModifiedSequence extends KeySequence {
 @immutable
 final class _KeyStep {
   const _KeyStep(
-    this.code, {
+    this.selector, {
     this.ctrl = false,
     this.alt = false,
     this.shift = false,
@@ -1258,16 +1295,17 @@ final class _KeyStep {
   });
 
   /// Builds a step, folding Shift on a cased letter into the character's
-  /// case so the representation is canonical.
+  /// case so the representation is canonical. A positional atom has no case
+  /// to fold, so it passes straight through.
   factory _KeyStep.build(
-    KeyCode code, {
+    KeySelector code, {
     bool ctrl = false,
     bool alt = false,
     bool shift = false,
     bool superKey = false,
     bool meta = false,
   }) {
-    final ch = code.character;
+    final ch = code is KeyCode ? code.character : null;
     if (ch != null && ch.toLowerCase() != ch.toUpperCase()) {
       // A cased letter: encode Shift as case, never as a flag.
       final shifted = shift || ch != ch.toLowerCase();
@@ -1289,7 +1327,15 @@ final class _KeyStep {
     );
   }
 
-  final KeyCode code;
+  /// The key this step names: a logical [KeyCode] or a physical
+  /// [KeyPosition]. Matching delegates to [KeyEvent.matches], so a
+  /// positional step follows the SAME per-press degradation rule as a
+  /// sampled read — one identity model, one comparison (RFC 0020 §5.3).
+  final KeySelector selector;
+
+  /// The logical code this step names, or null for a positional step.
+  KeyCode? get code => selector is KeyCode ? selector as KeyCode : null;
+
   final bool ctrl;
   final bool alt;
   final bool shift;
@@ -1307,13 +1353,21 @@ final class _KeyStep {
     if (superKey != event.hasSuper) return false;
     if (meta != event.hasMeta) return false;
 
-    final special = code.special;
+    final logical = code;
+    if (logical == null) {
+      // A positional step: identity is the physical key, so there is no
+      // case to fold — Shift compares plainly.
+      if (!event.matches(selector)) return false;
+      return shift == event.hasShift;
+    }
+
+    final special = logical.special;
     if (special != null) {
       if (event.code.special != special) return false;
       return shift == event.hasShift;
     }
 
-    final stepChar = code.character!;
+    final stepChar = logical.character!;
     final eventChar = event.code.character;
     if (eventChar == null) return false;
     if (stepChar.toLowerCase() != eventChar.toLowerCase()) return false;
@@ -1333,12 +1387,29 @@ final class _KeyStep {
   /// terminal reporting delivers (a bare `TextInputEvent` would drop it and
   /// fail to match a shifted binding).
   TuiEvent asInputEvent() {
-    final character = code.character;
+    final logical = code;
+    if (logical == null) {
+      // Positional: emit the US twin plus the position, which is exactly
+      // what a capable surface reports for that physical key.
+      final position = selector as KeyPosition;
+      return KeyEvent(
+        position.usTwin ?? KeyCode.space,
+        position: position,
+        modifiers: {
+          if (ctrl) KeyModifier.ctrl,
+          if (alt) KeyModifier.alt,
+          if (shift) KeyModifier.shift,
+          if (superKey) KeyModifier.superKey,
+          if (meta) KeyModifier.meta,
+        },
+      );
+    }
+    final character = logical.character;
     final bare =
         character != null && !ctrl && !alt && !shift && !superKey && !meta;
     if (bare) return TextInputEvent(character);
     return KeyEvent(
-      code,
+      logical,
       modifiers: {
         if (ctrl) KeyModifier.ctrl,
         if (alt) KeyModifier.alt,
@@ -1351,7 +1422,28 @@ final class _KeyStep {
 
   /// Per-step label: `Ctrl+S`, `↑`, `d`, `Space`, `Shift+G`.
   String get label {
-    final ch = code.character;
+    final logical = code;
+    if (logical == null) {
+      final position = selector as KeyPosition;
+      final mods = <String>[
+        if (ctrl) 'Ctrl',
+        if (alt) 'Alt',
+        if (shift) 'Shift',
+        if (superKey) 'Super',
+        if (meta) 'Meta',
+      ];
+      // The US twin is the honest default; P6's layout table replaces it
+      // with the key the user actually has under that finger.
+      final twin = position.usTwin;
+      final twinChar = twin?.character;
+      final base = twin == null
+          ? position.name
+          : (twin.special != null
+                ? _specialLabel(twin.special!)
+                : (twinChar == ' ' ? 'Space' : twinChar!.toUpperCase()));
+      return mods.isEmpty ? base : '${mods.join('+')}+$base';
+    }
+    final ch = logical.character;
     final isUpperLetter = ch != null && ch != ch.toLowerCase();
     final mods = <String>[
       if (ctrl) 'Ctrl',
@@ -1360,7 +1452,7 @@ final class _KeyStep {
       if (superKey) 'Super',
       if (meta) 'Meta',
     ];
-    final special = code.special;
+    final special = logical.special;
     final String base;
     if (special != null) {
       base = _specialLabel(special);
@@ -1375,7 +1467,7 @@ final class _KeyStep {
   @override
   bool operator ==(Object other) =>
       other is _KeyStep &&
-      other.code == code &&
+      other.selector == selector &&
       other.ctrl == ctrl &&
       other.alt == alt &&
       other.shift == shift &&
@@ -1383,18 +1475,21 @@ final class _KeyStep {
       other.meta == meta;
 
   @override
-  int get hashCode => Object.hash(code, ctrl, alt, shift, superKey, meta);
+  int get hashCode => Object.hash(selector, ctrl, alt, shift, superKey, meta);
 }
 
 /// Reduces built steps to the tightest representation: a lone unmodified
 /// step is just its [KeyCode]; anything else is a [_ModifiedSequence].
 KeySequence _sequenceFromSteps(List<_KeyStep> steps) {
-  if (steps.length == 1 && !steps.first._hasModifiers) return steps.first.code;
+  if (steps.length == 1 && !steps.first._hasModifiers) {
+    final atom = steps.first.selector;
+    if (atom is KeySequence) return atom as KeySequence;
+  }
   return _ModifiedSequence(List<_KeyStep>.unmodifiable(steps));
 }
 
 /// Appends [atom] as a fresh step to [chain]'s steps.
-KeySequence _appendAtom(KeySequence chain, KeyCode atom) =>
+KeySequence _appendAtom(KeySequence chain, KeySelector atom) =>
     _sequenceFromSteps([..._collectSteps(chain), _KeyStep.build(atom)]);
 
 /// Materialises a sequence's steps (construction-time only, not hot).
