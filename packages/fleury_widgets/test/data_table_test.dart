@@ -22,7 +22,12 @@ List<String> _lines(
 
 List<DataTableColumn> _columns() {
   return const [
-    DataTableColumn(id: 'run', title: 'Run', width: FixedColumnWidth(8)),
+    DataTableColumn(
+      id: 'run',
+      title: 'Run',
+      width: FixedColumnWidth(8),
+      sortable: true,
+    ),
     DataTableColumn(id: 'status', title: 'Status', width: FixedColumnWidth(8)),
   ];
 }
@@ -303,22 +308,118 @@ void main() {
       isNot(contains(SemanticAction.activate)),
     );
 
-    // With onSort, a header advertises activate; the sorted column carries the
-    // active direction so an agent can see/toggle it.
+    // With onSort, only an eligible header advertises activate; the sorted
+    // column carries the active direction so an agent can see/toggle it.
     tester.pumpWidget(build(onSort: (id) => sorted = id));
     tester.render(size: const CellSize(24, 6));
     final runHeader = header(tester, 'run');
     expect(runHeader.actions, contains(SemanticAction.activate));
+    expect(runHeader.state['sortable'], isTrue);
     expect(runHeader.state['sortDirection'], 'descending');
-    expect(header(tester, 'status').state['sortDirection'], isNull);
+    final statusHeader = header(tester, 'status');
+    expect(statusHeader.actions, isNot(contains(SemanticAction.activate)));
+    expect(statusHeader.state['sortable'], isFalse);
+    expect(statusHeader.state['sortDirection'], isNull);
 
     await tester.invokeSemanticAction(SemanticAction.activate, node: runHeader);
     expect(sorted, 'run');
-    await tester.invokeSemanticAction(
+    final result = await tester.invokeSemanticAction(
       SemanticAction.activate,
-      node: header(tester, 'status'),
+      node: statusHeader,
     );
-    expect(sorted, 'status');
+    expect(result.completed, isFalse);
+    expect(sorted, 'run');
+  });
+
+  testWidgets('sortable headers paint a stable active-direction slot', (
+    tester,
+  ) {
+    Widget build({String? sortColumnId, DataTableSortDirection? direction}) {
+      return DataTable(
+        rowCount: 1,
+        columns: const [
+          DataTableColumn(
+            id: 'name',
+            title: 'Name',
+            width: IntrinsicColumnWidth(),
+            sortable: true,
+          ),
+          DataTableColumn(id: 'state', title: 'S', width: FixedColumnWidth(1)),
+        ],
+        cellBuilder: (_, column) => column == 'name' ? 'Ada' : 'A',
+        sortColumnId: sortColumnId,
+        sortDirection: direction,
+      );
+    }
+
+    tester.pumpWidget(build());
+    expect(
+      _lines(tester, cols: 8, rows: 3).first,
+      'Name   S',
+      reason: 'the inactive header reserves the same two-cell indicator slot',
+    );
+
+    tester.pumpWidget(
+      build(sortColumnId: 'name', direction: DataTableSortDirection.ascending),
+    );
+    expect(_lines(tester, cols: 8, rows: 3).first, 'Name ▲ S');
+
+    tester.pumpWidget(
+      build(sortColumnId: 'name', direction: DataTableSortDirection.descending),
+    );
+    expect(_lines(tester, cols: 8, rows: 3).first, 'Name ▼ S');
+  });
+
+  testWidgets('clicking only eligible headers requests an app-owned sort', (
+    tester,
+  ) {
+    final sorted = <String>[];
+    tester.pumpWidget(
+      DataTable(
+        rowCount: 2,
+        columns: _columns(),
+        cellBuilder: _cell,
+        onSort: sorted.add,
+      ),
+    );
+    tester.render(size: const CellSize(20, 5));
+
+    tester.sendMouse(
+      const MouseEvent(
+        kind: MouseEventKind.down,
+        button: MouseButton.left,
+        col: 1,
+        row: 0,
+      ),
+    );
+    tester.sendMouse(
+      const MouseEvent(
+        kind: MouseEventKind.up,
+        button: MouseButton.left,
+        col: 1,
+        row: 0,
+      ),
+    );
+    expect(sorted, ['run']);
+    expect(tester.semantics().single(role: SemanticRole.table).focused, isTrue);
+
+    tester.sendMouse(
+      const MouseEvent(
+        kind: MouseEventKind.down,
+        button: MouseButton.left,
+        col: 10,
+        row: 0,
+      ),
+    );
+    tester.sendMouse(
+      const MouseEvent(
+        kind: MouseEventKind.up,
+        button: MouseButton.left,
+        col: 10,
+        row: 0,
+      ),
+    );
+    expect(sorted, ['run']);
   });
 
   testWidgets('renders visible rows only and exposes virtualized semantics', (

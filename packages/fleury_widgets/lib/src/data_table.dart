@@ -389,6 +389,7 @@ final class DataTableColumn {
     this.width = const FlexColumnWidth(),
     this.style = CellStyle.empty,
     this.headerStyle = const CellStyle(bold: true),
+    this.sortable = false,
   });
 
   /// Stable column identifier passed to [DataTableCellBuilder].
@@ -405,6 +406,14 @@ final class DataTableColumn {
 
   /// Style applied to this column's header cell.
   final CellStyle headerStyle;
+
+  /// Whether this header may request an app-owned sort through
+  /// [DataTable.onSort].
+  ///
+  /// Sortability is column-specific even though the callback lives on the
+  /// table: the column declares eligibility, then [DataTable.onSort] receives
+  /// its [id]. The app still owns the data, comparator, and direction toggle.
+  final bool sortable;
 }
 
 /// Builds the text for one [DataTable] cell.
@@ -634,10 +643,13 @@ class DataTable extends StatefulWidget {
   /// App-owned sort direction exposed through semantics.
   final DataTableSortDirection? sortDirection;
 
-  /// Called with a column's id when an agent activates its header cell, so the
-  /// app can (re)sort. The header is custom-painted (no per-cell widget), so
-  /// this is the semantic-layer trigger — the synthetic header cells carry the
-  /// `columnId`. When non-null, header cells advertise `activate`.
+  /// Called with an eligible column's id when its header is clicked or
+  /// semantically activated, so the app can (re)sort.
+  ///
+  /// A column is eligible only when its [DataTableColumn.sortable] flag is
+  /// true. The app owns the data, comparator, and direction toggle; update
+  /// [sortColumnId] and [sortDirection] to paint and expose the resulting sort
+  /// state.
   final void Function(String columnId)? onSort;
 
   /// App-owned filter text exposed through semantics.
@@ -753,7 +765,7 @@ class _DataTableState extends State<DataTable> {
         // A header cell activate is a sort request, not a row selection.
         if (target.state['header'] == true) {
           final columnId = target.state['columnId'];
-          if (widget.onSort != null && columnId is String) {
+          if (columnId is String && _canSortColumn(columnId)) {
             widget.onSort!(columnId);
             return true;
           }
@@ -814,6 +826,14 @@ class _DataTableState extends State<DataTable> {
       rowCount: widget.rowCount,
       columnCount: widget.columns.length,
     );
+  }
+
+  bool _canSortColumn(String columnId) {
+    if (widget.onSort == null) return false;
+    for (final column in widget.columns) {
+      if (column.id == columnId) return column.sortable;
+    }
+    return false;
   }
 
   KeyEventResult _onKey(KeyEvent event) {
@@ -949,7 +969,7 @@ class _DataTableState extends State<DataTable> {
         _visibleRows = viewport.visibleRows < 1 ? 1 : viewport.visibleRows;
       },
       onSelect: widget.onSelect,
-      sortable: widget.onSort != null,
+      sortingEnabled: widget.onSort != null,
       onSemanticAction: _handleSemanticAction,
       onSemanticSetValue: _handleSemanticSetValue,
     );
@@ -978,15 +998,23 @@ class _DataTableState extends State<DataTable> {
                 _pendingPointerHit = null;
                 if (hit == null) return;
                 _focusNode.requestFocus();
+                final sortColumnId = hit.sortColumnId;
+                if (sortColumnId != null) {
+                  if (_canSortColumn(sortColumnId)) {
+                    widget.onSort!(sortColumnId);
+                  }
+                  return;
+                }
+                final rowIndex = hit.rowIndex!;
                 if (widget.selectionMode == DataTableSelectionMode.cell &&
                     hit.columnIndex != null) {
                   _controller.selectCell(
-                    hit.rowIndex,
+                    rowIndex,
                     hit.columnIndex!,
                     extend: hit.extend,
                   );
                 } else {
-                  _controller.selectedIndex = hit.rowIndex;
+                  _controller.selectedIndex = rowIndex;
                 }
               },
               child: table,
@@ -1012,23 +1040,31 @@ class _DataTableState extends State<DataTable> {
     Set<KeyModifier> modifiers,
   ) {
     final rect = _focusNode.rect;
-    if (rect == null || !_viewport.hasBodyRows) return null;
+    if (rect == null) return null;
     final localCol = col - rect.left;
     final localRow = row - rect.top;
-    if (localCol < 0 ||
-        localCol >= _viewport.tableWidth ||
+    if (localCol < 0 || localCol >= _viewport.tableWidth || localRow < 0) {
+      return null;
+    }
+    final columnIndex = _viewport.columnAt(localCol);
+    if (localRow == 0) {
+      if (columnIndex == null) return null;
+      final column = widget.columns[columnIndex];
+      if (!_canSortColumn(column.id)) return null;
+      return _DataTablePointerHit.header(column.id);
+    }
+    if (!_viewport.hasBodyRows ||
         localRow < _viewport.bodyTop ||
         localRow >= _viewport.bodyTop + _viewport.visibleRows) {
       return null;
     }
     final rowIndex = _viewport.visibleFirst + localRow - _viewport.bodyTop;
     if (rowIndex < 0 || rowIndex >= widget.rowCount) return null;
-    final columnIndex = _viewport.columnAt(localCol);
     if (widget.selectionMode == DataTableSelectionMode.cell &&
         columnIndex == null) {
       return null;
     }
-    return _DataTablePointerHit(
+    return _DataTablePointerHit.body(
       rowIndex: rowIndex,
       columnIndex: columnIndex,
       extend: modifiers.contains(KeyModifier.shift),
@@ -1037,15 +1073,22 @@ class _DataTableState extends State<DataTable> {
 }
 
 final class _DataTablePointerHit {
-  const _DataTablePointerHit({
+  const _DataTablePointerHit.body({
     required this.rowIndex,
     required this.columnIndex,
     required this.extend,
-  });
+  }) : sortColumnId = null;
 
-  final int rowIndex;
+  const _DataTablePointerHit.header(String columnId)
+    : rowIndex = null,
+      columnIndex = null,
+      extend = false,
+      sortColumnId = columnId;
+
+  final int? rowIndex;
   final int? columnIndex;
   final bool extend;
+  final String? sortColumnId;
 }
 
 /// Current viewport geometry for a rendered [DataTable].
@@ -1112,7 +1155,7 @@ class _DataTableRenderWidget extends LeafRenderObjectWidget {
     required this.selectedStyle,
     required this.onViewport,
     required this.onSelect,
-    required this.sortable,
+    required this.sortingEnabled,
     required this.onSemanticAction,
     required this.onSemanticSetValue,
     required this.copySelectedRow,
@@ -1138,7 +1181,7 @@ class _DataTableRenderWidget extends LeafRenderObjectWidget {
   final CellStyle selectedStyle;
   final void Function(DataTableViewportMetrics viewport) onViewport;
   final void Function(int rowIndex)? onSelect;
-  final bool sortable;
+  final bool sortingEnabled;
   final FutureOr<bool> Function(SemanticNode target, SemanticAction action)
   onSemanticAction;
   final FutureOr<bool> Function(SemanticNode target, Object? value)
@@ -1163,6 +1206,8 @@ class _DataTableRenderWidget extends LeafRenderObjectWidget {
       headerSeparator: headerSeparator,
       separatorStyle: separatorStyle,
       selectedStyle: selectedStyle,
+      sortColumnId: sortColumnId,
+      sortDirection: sortDirection,
       onViewport: onViewport,
     );
   }
@@ -1184,6 +1229,8 @@ class _DataTableRenderWidget extends LeafRenderObjectWidget {
       ..headerSeparator = headerSeparator
       ..separatorStyle = separatorStyle
       ..selectedStyle = selectedStyle
+      ..sortColumnId = sortColumnId
+      ..sortDirection = sortDirection
       ..onViewport = onViewport;
   }
 
@@ -1300,13 +1347,16 @@ class _DataTableElement extends LeafRenderObjectElement
                 // Activating a sortable column's header asks the app to sort by
                 // it (the app owns the data + the direction toggle).
                 actions: <SemanticAction>{
-                  if (widget.sortable) SemanticAction.activate,
+                  if (widget.sortingEnabled && widget.columns[col].sortable)
+                    SemanticAction.activate,
                 },
                 state: SemanticState({
                   'rowIndex': -1,
                   'columnIndex': col,
                   'columnId': widget.columns[col].id,
                   'header': true,
+                  'sortable':
+                      widget.sortingEnabled && widget.columns[col].sortable,
                   if (widget.sortColumnId == widget.columns[col].id &&
                       widget.sortDirection != null)
                     'sortDirection': widget.sortDirection!.name,
@@ -1444,6 +1494,8 @@ class RenderDataTable extends RenderObject {
     required bool headerSeparator,
     required CellStyle separatorStyle,
     required CellStyle selectedStyle,
+    required String? sortColumnId,
+    required DataTableSortDirection? sortDirection,
     required void Function(DataTableViewportMetrics viewport) onViewport,
   }) : _rowCount = rowCount,
        _columns = columns,
@@ -1455,6 +1507,8 @@ class RenderDataTable extends RenderObject {
        _headerSeparator = headerSeparator,
        _separatorStyle = separatorStyle,
        _selectedStyle = selectedStyle,
+       _sortColumnId = sortColumnId,
+       _sortDirection = sortDirection,
        _onViewport = onViewport,
        _policy = policy;
 
@@ -1480,6 +1534,8 @@ class RenderDataTable extends RenderObject {
   bool _headerSeparator;
   CellStyle _separatorStyle;
   CellStyle _selectedStyle;
+  String? _sortColumnId;
+  DataTableSortDirection? _sortDirection;
   void Function(DataTableViewportMetrics) _onViewport;
 
   List<int> _columnWidths = const [];
@@ -1557,6 +1613,18 @@ class RenderDataTable extends RenderObject {
     markNeedsPaintOnly();
   }
 
+  set sortColumnId(String? value) {
+    if (_sortColumnId == value) return;
+    _sortColumnId = value;
+    markNeedsPaintOnly();
+  }
+
+  set sortDirection(DataTableSortDirection? value) {
+    if (_sortDirection == value) return;
+    _sortDirection = value;
+    markNeedsPaintOnly();
+  }
+
   set onViewport(void Function(DataTableViewportMetrics) value) =>
       _onViewport = value;
 
@@ -1604,7 +1672,9 @@ class RenderDataTable extends RenderObject {
           flexFactors[i] = safeFlex;
           flexTotal += safeFlex;
         default:
-          widths[i] = _titleWidth(_columns[i].title);
+          widths[i] =
+              _titleWidth(_columns[i].title) +
+              (_columns[i].sortable ? _sortIndicatorWidth : 0);
           rigid += widths[i];
       }
     }
@@ -1688,12 +1758,11 @@ class RenderDataTable extends RenderObject {
       x += _columnWidths[col] + _columnSpacing;
     }
     for (var col = 0; col < _columns.length; col++) {
-      _writeCell(
+      _writeHeaderCell(
         buffer,
         offset + CellOffset(colX[col], 0),
-        _columns[col].title,
+        _columns[col],
         _columnWidths[col],
-        _columns[col].headerStyle,
       );
     }
     var bodyTop = 1;
@@ -1738,6 +1807,53 @@ class RenderDataTable extends RenderObject {
           )
         : _selectionRange;
     return range.clamp(rowCount: _rowCount, columnCount: _columns.length);
+  }
+
+  static const int _sortIndicatorWidth = 2;
+
+  void _writeHeaderCell(
+    CellBuffer buffer,
+    CellOffset offset,
+    DataTableColumn column,
+    int width,
+  ) {
+    if (!column.sortable) {
+      _writeCell(buffer, offset, column.title, width, column.headerStyle);
+      return;
+    }
+    final indicator = _sortIndicatorFor(column);
+    if (width < _sortIndicatorWidth) {
+      _writeCell(
+        buffer,
+        offset,
+        indicator ?? column.title,
+        width,
+        column.headerStyle,
+      );
+      return;
+    }
+    _writeCell(
+      buffer,
+      offset,
+      column.title,
+      width - _sortIndicatorWidth,
+      column.headerStyle,
+    );
+    if (indicator == null) return;
+    _safeWrite(
+      buffer,
+      offset + CellOffset(width - 1, 0),
+      indicator,
+      column.headerStyle,
+    );
+  }
+
+  String? _sortIndicatorFor(DataTableColumn column) {
+    if (_sortColumnId != column.id || _sortDirection == null) return null;
+    return switch (_sortDirection!) {
+      DataTableSortDirection.ascending => '▲',
+      DataTableSortDirection.descending => '▼',
+    };
   }
 
   void _writeRule(CellBuffer buffer, CellOffset offset) {

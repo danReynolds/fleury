@@ -2130,7 +2130,7 @@ class _TablesStory extends StatelessWidget {
   static const _columns = <DataTableColumn>[
     DataTableColumn(id: 'name', title: 'Name', width: FlexColumnWidth(2)),
     DataTableColumn(id: 'state', title: 'State'),
-    DataTableColumn(id: 'latency', title: 'P95'),
+    DataTableColumn(id: 'latency', title: 'P95', sortable: true),
   ];
 
   static const _rows = <Map<String, String>>[

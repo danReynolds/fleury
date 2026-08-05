@@ -1,0 +1,29 @@
+schema = 1
+
+[release.fleury]                 # tag fleury-v{version}
+path = "packages/fleury"
+publish = ["pub.dev"]
+
+[release.fleury_mcp]                 # tag fleury_mcp-v{version}
+path = "packages/fleury_mcp"
+publish = ["pub.dev"]
+
+[release.fleury_test]                 # tag fleury_test-v{version}
+path = "packages/fleury_test"
+publish = ["pub.dev"]
+
+[release.fleury_themes]                 # tag fleury_themes-v{version}
+path = "packages/fleury_themes"
+publish = ["pub.dev"]
+
+[release.fleury_web]                 # tag fleury_web-v{version}
+path = "packages/fleury_web"
+publish = ["pub.dev"]
+
+[release.fleury_widgets]                 # tag fleury_widgets-v{version}
+path = "packages/fleury_widgets"
+publish = ["pub.dev"]
+
+# A package here declares an executable. To ship signed binaries
+# too, add "github-release" (and "homebrew") to its publish list,
+# with binary_platforms from: linux-x64, linux-arm64, macos-arm64.

@@ -1805,6 +1805,45 @@ TextArea(
     builder: () => const EditorApp(),
   ),
   ExampleInfo(
+    id: 'showcase.finance',
+    widget: 'Personal finance',
+    category: 'Showcases',
+    blurb:
+        'A realistic local finance workspace with cash-flow and category '
+        'charts, account balances, and a searchable, sortable transaction '
+        'ledger—including an opt-in 2,500-row stress mode.',
+    cols: 108,
+    rows: 46,
+    interactive: true,
+    builder: () => const FinanceApp(),
+  ),
+  ExampleInfo(
+    id: 'showcase.asteroids',
+    widget: 'Neon Asteroids',
+    category: 'Showcases',
+    blurb:
+        'A deterministic real-time arcade game with braille vector rendering, '
+        'fixed-step physics, particles, collisions, screen wrapping, and '
+        'keyboard or pointer flight controls.',
+    cols: 100,
+    rows: 32,
+    interactive: true,
+    builder: () => const NeonAsteroidsApp(),
+  ),
+  ExampleInfo(
+    id: 'showcase.sprite',
+    widget: 'ANSI Sprite Studio',
+    category: 'Showcases',
+    blurb:
+        'A complete cell-art workflow: paint, erase, fill, onion-skin and time '
+        'keyed frames, preview the animation, undo edits, and round-trip a '
+        'portable JSON asset.',
+    cols: 108,
+    rows: 40,
+    interactive: true,
+    builder: () => const AnsiSpriteStudioApp(),
+  ),
+  ExampleInfo(
     id: 'themes.custom',
     widget: 'Themes',
     category: 'Theming',

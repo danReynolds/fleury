@@ -373,6 +373,9 @@ export 'src/widgets/pointer.dart'
         PointerRouter,
         PointerRouterScope,
         PointerScrollListener,
+        PointerDownCallback,
+        PointerDownDetails,
+        PointerModifiedTapCallback,
         PointerTapCallback,
         PointerPositionCallback;
 export 'src/widgets/scroll_view.dart' show ScrollController, ScrollView;
