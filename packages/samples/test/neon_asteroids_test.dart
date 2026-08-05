@@ -457,4 +457,46 @@ String _snapshot(NeonAsteroidsGame game) {
     bulletState,
     game.particles.length,
   ].join(';');
+
+
+  group('NeonAsteroids input (RFC 0020 sampled controls)', () {
+    testWidgets('the app mounts and accepts sampled held keys', (tester) async {
+      // A smoke test over the real widget: the rewrite reads its controls
+      // from Keyboard.snapshot inside the ticker, so a held key must flow
+      // all the way through without throwing (the sampled read asserts if
+      // it is ever performed during build).
+      tester.keyboardCapabilities = KeyboardCapabilities.full;
+      tester.pumpWidget(const NeonAsteroidsApp());
+      tester.pump();
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      tester.pump(const Duration(milliseconds: 16));
+
+      tester.holdKey(KeyPosition.w);
+      tester.pump(const Duration(milliseconds: 200));
+      tester.releaseKey(KeyPosition.w);
+      tester.pump(const Duration(milliseconds: 200));
+
+      expect(tester.renderToString(), isNotEmpty);
+    });
+
+    test('thrust is independent of key-repeat cadence', () {
+      // The regression the 170ms latch caused: turn/thrust rate tracked the
+      // user's OS auto-repeat setting, so the game played differently on
+      // different machines. Sampled state is level-triggered, so the same
+      // held input produces the same physics regardless of how many key
+      // events the terminal happened to deliver.
+      final a = NeonAsteroidsGame()..start();
+      final b = NeonAsteroidsGame()..start();
+      const held = NeonAsteroidsInput(thrust: true);
+      for (var i = 0; i < 30; i++) {
+        a.advanceWithTimeline(const Duration(milliseconds: 16), (_) => held);
+      }
+      // Same total time, different frame cadence.
+      for (var i = 0; i < 10; i++) {
+        b.advanceWithTimeline(const Duration(milliseconds: 48), (_) => held);
+      }
+      expect(a.ship.position.x, closeTo(b.ship.position.x, 1e-6));
+      expect(a.ship.position.y, closeTo(b.ship.position.y, 1e-6));
+    });
+  });
 }

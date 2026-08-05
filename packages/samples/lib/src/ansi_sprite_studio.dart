@@ -72,21 +72,29 @@ class _AnsiSpriteStudioBodyState extends State<_AnsiSpriteStudioBody> {
       KeyCode.arrowLeft,
       hideFromHintBar: true,
       onTrigger: (_) => _model.moveCursor(-1, 0),
+      // Held arrows walk the canvas — the repeat-reliant class.
+      includeRepeats: true,
     ),
     KeyBinding(
       KeyCode.arrowRight,
       hideFromHintBar: true,
       onTrigger: (_) => _model.moveCursor(1, 0),
+      // Held arrows walk the canvas — the repeat-reliant class.
+      includeRepeats: true,
     ),
     KeyBinding(
       KeyCode.arrowUp,
       hideFromHintBar: true,
       onTrigger: (_) => _model.moveCursor(0, -1),
+      // Held arrows walk the canvas — the repeat-reliant class.
+      includeRepeats: true,
     ),
     KeyBinding(
       KeyCode.arrowDown,
       hideFromHintBar: true,
       onTrigger: (_) => _model.moveCursor(0, 1),
+      // Held arrows walk the canvas — the repeat-reliant class.
+      includeRepeats: true,
     ),
     KeyBinding(
       KeyCode.space,

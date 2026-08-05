@@ -34,15 +34,37 @@ class _NeonAsteroidsBody extends StatefulWidget {
 }
 
 class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
+  // Movement is SPATIAL: the hand shape is the design, so these are physical
+  // positions. On AZERTY the W spot is capped Z and the number row is
+  // unshifted — declaring them logically would put "thrust" under the wrong
+  // finger. Fire/pause/restart are MNEMONIC (the player reads them in the
+  // control legend), so those stay logical keys.
+  static const _thrustKey = KeyPosition.w;
+  static const _leftKey = KeyPosition.a;
+  static const _rightKey = KeyPosition.d;
+
   final NeonAsteroidsGame _game = NeonAsteroidsGame();
   Ticker? _ticker;
   Duration _lastElapsed = Duration.zero;
   AnimationPolicy _motionPolicy = AnimationPolicy.enabled;
 
-  int _leftUntilMicros = 0;
-  int _rightUntilMicros = 0;
-  int _thrustUntilMicros = 0;
-  bool _firePending = false;
+  /// The surface keyboard, sampled once per simulation frame. Safe to cache:
+  /// the lookup is non-subscribing and the handle is stable for the app's
+  /// lifetime (RFC 0020 §15).
+  Keyboard? _keyboard;
+
+  /// Pointer-driven controls. The keyboard is one SOURCE of input, not the
+  /// game's input model — aiming and firing by mouse feed the same channel.
+  bool _pointerThrust = false;
+  bool _pointerFire = false;
+
+  /// Legacy fallback: where the surface cannot report held keys, thrust is a
+  /// toggle rather than a hold (see [_supportsHeldControls]).
+  bool _thrustLatched = false;
+
+  /// Whether the playfield currently holds focus. Sampled controls keep
+  /// reporting physical truth when it does not, so the simulation pauses.
+  bool _interactive = true;
 
   bool get _reducedMotion => _motionPolicy != AnimationPolicy.enabled;
 
@@ -94,78 +116,89 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
     _lastElapsed = elapsed;
     if (delta <= Duration.zero) return;
 
-    final fireAvailable = _firePending;
-    var fireConsumed = false;
-    final steps = _game.advanceWithTimeline(delta, (simulationTime) {
-      final micros = simulationTime.inMicroseconds;
-      final fire = fireAvailable && !fireConsumed;
-      if (fire) fireConsumed = true;
+    // One immutable read for the whole frame, so every fixed simulation step
+    // below agrees about what was held (RFC 0020 §5.6).
+    final keys = _keyboard?.snapshot;
+    final left =
+        (keys?.isHeld(_leftKey) ?? false) ||
+        (keys?.isHeld(KeyCode.arrowLeft) ?? false);
+    final right =
+        (keys?.isHeld(_rightKey) ?? false) ||
+        (keys?.isHeld(KeyCode.arrowRight) ?? false);
+    final thrust =
+        (keys?.isHeld(_thrustKey) ?? false) ||
+        (keys?.isHeld(KeyCode.arrowUp) ?? false) ||
+        _thrustLatched ||
+        _pointerThrust;
+
+    // An EDGE, not a level: `wasPressed` survives a press+release that lands
+    // entirely between two frames, so a quick tap is never swallowed — and it
+    // is consumed at exactly one simulation step, so one press is one shot.
+    var fire = (keys?.wasPressed(KeyCode.space) ?? false) || _pointerFire;
+    _pointerFire = false;
+    final steps = _game.advanceWithTimeline(delta, (_) {
+      final shoot = fire;
+      fire = false;
       return NeonAsteroidsInput(
-        rotateLeft: micros < _leftUntilMicros,
-        rotateRight: micros < _rightUntilMicros,
-        thrust: micros < _thrustUntilMicros,
-        fire: fire,
+        rotateLeft: left,
+        rotateRight: right,
+        thrust: thrust,
+        fire: shoot,
       );
     });
-    if (fireConsumed) {
-      _firePending = false;
-    }
     if (_reducedMotion && _game.phase == NeonAsteroidsPhase.gameOver) {
       _ticker?.stop();
     }
     if (steps > 0 && mounted) setState(() {});
   }
 
-  KeyEventResult _onKey(KeyEvent event) {
-    final code = event.code;
+  /// The discrete actions. Movement is NOT here — it is sampled in
+  /// [_onTick], because "is it held right now" is a state question, not an
+  /// event one.
+  List<KeyBinding> _bindings() => [
+    KeyBinding(KeyCode.space, label: 'Fire', onTrigger: (_) => _launchOrFire()),
+    KeyBinding(
+      KeyCode.enter,
+      hideFromHintBar: true,
+      onTrigger: (_) {
+        if (_game.phase == NeonAsteroidsPhase.attract ||
+            _game.phase == NeonAsteroidsPhase.gameOver) {
+          _start();
+        }
+      },
+    ),
+    KeyBinding(
+      KeyCode.p,
+      aliases: [KeyCode.escape],
+      label: 'Pause',
+      onTrigger: (_) => _togglePause(),
+    ),
+    KeyBinding(KeyCode.r, label: 'Restart', onTrigger: (_) => _start()),
+    // Legacy surfaces only: thrust becomes a toggle, because hold-to-thrust
+    // while turning is impossible there. The capability read is reactive, so
+    // this appears if a surface negotiates down mid-session.
+    if (!_supportsHeldControls)
+      KeyBinding(
+        // Logical, not positional: a surface without held-key support does
+        // not report positions either, so the twin is the only thing that
+        // can match there.
+        KeyCode.w,
+        label: 'Thrust',
+        onTrigger: (_) => setState(() => _thrustLatched = !_thrustLatched),
+      ),
+  ];
 
-    if (code == KeyCode.arrowLeft || code == KeyCode.a) {
-      _leftUntilMicros = _latchDeadline;
-      return KeyEventResult.handled;
-    }
-    if (code == KeyCode.arrowRight || code == KeyCode.d) {
-      _rightUntilMicros = _latchDeadline;
-      return KeyEventResult.handled;
-    }
-    if (code == KeyCode.arrowUp || code == KeyCode.w) {
-      _thrustUntilMicros = _latchDeadline;
-      return KeyEventResult.handled;
-    }
-
-    if (code == KeyCode.space) {
-      _launchOrFire();
-      return KeyEventResult.handled;
-    }
-    if (code == KeyCode.enter) {
-      if (_game.phase == NeonAsteroidsPhase.attract ||
-          _game.phase == NeonAsteroidsPhase.gameOver) {
-        _start();
-      }
-      return KeyEventResult.handled;
-    }
-    if (code == KeyCode.p || code == KeyCode.escape) {
-      _togglePause();
-      return KeyEventResult.handled;
-    }
-    if (code == KeyCode.r) {
-      _start();
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
-  }
-
-  // Fleury bindings currently receive key-down/repeat events, not releases.
-  // Repeats renew this short window so controls feel held without getting
-  // stuck after the physical key is released.
-  int get _latchDeadline =>
-      _game.simulationTime.inMicroseconds +
-      const Duration(milliseconds: 170).inMicroseconds;
+  /// Whether this surface reports real held keys. Where it does not (a
+  /// legacy terminal), holding two directions at once is impossible — the OS
+  /// only auto-repeats the most recent key — so the game offers a DIFFERENT
+  /// control scheme rather than a worse version of the same one.
+  bool get _supportsHeldControls =>
+      _keyboard?.capabilities.supportsHeldState ?? false;
 
   void _clearControls() {
-    _leftUntilMicros = 0;
-    _rightUntilMicros = 0;
-    _thrustUntilMicros = 0;
-    _firePending = false;
+    _pointerThrust = false;
+    _pointerFire = false;
+    _thrustLatched = false;
   }
 
   void _start() {
@@ -181,7 +214,9 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
         _game.phase == NeonAsteroidsPhase.gameOver) {
       _start();
     } else if (_game.phase == NeonAsteroidsPhase.playing) {
-      _firePending = true;
+      // Fire is edge-triggered from the snapshot during play; this path is
+      // the pointer/semantic-action entry point.
+      _pointerFire = true;
     }
   }
 
@@ -221,13 +256,13 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
       return;
     }
     _aimAt(details.col, details.row);
-    _firePending = true;
+    _pointerFire = true;
   }
 
   void _pointerDrag(int col, int row) {
     if (_game.phase != NeonAsteroidsPhase.playing) return;
     _aimAt(col, row);
-    _thrustUntilMicros = _latchDeadline;
+    _pointerThrust = true;
   }
 
   void _aimAt(int col, int row) {
@@ -259,22 +294,37 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
-    return KeyDetector(
-      onKey: (event) {
-        if ((_onKey)(event) == KeyEventResult.handled) event.consume();
-      },
-      child: Focus(
-        autofocus: true,
-        debugLabel: 'neon-asteroids',
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            _hud(size),
-            const SizedBox(height: 1),
-            Expanded(child: _playfield(size)),
-            const SizedBox(height: 1),
-            _controls(size),
-          ],
+    // Reading capabilities here (not the snapshot) is what subscribes this
+    // widget to negotiation: if a surface confirms or loses held-key support
+    // mid-session, the control scheme and its legend follow.
+    _keyboard = Keyboard.of(context);
+    return KeyBindings(
+      bindings: _bindings(),
+      child: FocusWithin(
+        // Sampled input is surface-wide, not focus-scoped, so a game must
+        // stop its own simulation when focus leaves — otherwise the ship
+        // flies while the user types in a dialog. Muting (rather than
+        // stopping) keeps the ticker's clock anchored.
+        onFocusChange: (focused) {
+          if (_interactive == focused) return;
+          setState(() => _interactive = focused);
+        },
+        child: TickerMode(
+          enabled: _interactive,
+          child: Focus(
+            autofocus: true,
+            debugLabel: 'neon-asteroids',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                _hud(size),
+                const SizedBox(height: 1),
+                Expanded(child: _playfield(size)),
+                const SizedBox(height: 1),
+                _controls(size),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -393,7 +443,7 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
         onPointerDown: _pointerDown,
         onDragStart: _pointerDrag,
         onDragUpdate: _pointerDrag,
-        onDragEnd: () => _thrustUntilMicros = 0,
+        onDragEnd: () => _pointerThrust = false,
         child: Stack(
           children: <Widget>[
             canvas,
