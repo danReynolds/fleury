@@ -49,6 +49,12 @@ class EditorModel with ChangeNotifier {
   String _clipboard = '';
   String status = '';
 
+  /// Vim marks: a letter → the position `m<letter>` recorded.
+  final Map<String, ({int row, int col})> _marks = {};
+
+  /// The marks set so far, for the status line.
+  Iterable<String> get markNames => _marks.keys.toList()..sort();
+
   List<String> get lines => List<String>.unmodifiable(_lines);
   int get row => _row;
   int get col => _col;
@@ -286,6 +292,31 @@ class EditorModel with ChangeNotifier {
     _changed();
   }
 
+  /// `m<letter>` — records the cursor under a letter.
+  void setMark(String letter) {
+    _marks[letter] = (row: _row, col: _col);
+    flash("mark '$letter set");
+  }
+
+  /// `'<letter>` — jumps to a recorded mark, or says why it cannot.
+  void jumpToMark(String letter) {
+    final mark = _marks[letter];
+    if (mark == null) {
+      flash("mark '$letter is not set");
+      return;
+    }
+    _row = mark.row.clamp(0, _lines.length - 1);
+    _col = mark.col.clamp(0, _maxColAt(_row));
+    _changed();
+    flash("jumped to '$letter");
+  }
+
+  int _maxColAt(int row) {
+    final len = _lines[row].length;
+    final capped = acceptsText ? len : len - 1;
+    return capped < 0 ? 0 : capped;
+  }
+
   void gotoTop() {
     _row = 0;
     _col = 0;
@@ -464,6 +495,29 @@ class _EditorBodyState extends State<_EditorBody> implements TextInputClaimant {
 
   // Nano: modeless. Text inserts directly; every command is a Ctrl-chord, all
   // labeled so the KeyHintBar advertises them.
+  /// Prompts for the single letter that names a mark, then applies [apply].
+  ///
+  /// The whole prompt is four lines because `nextKey` handles the hard parts:
+  /// it outranks every routed lane while pending (so the editor's own `i` and
+  /// Escape bindings do not steal the letter), it is never completed by a
+  /// recovery-synthesized event (a blur must not silently "choose" a mark),
+  /// and it completes null if this widget goes away.
+  Future<void> _awaitMarkLetter(void Function(String letter) apply) async {
+    _model.flash('mark: press a letter (Esc to cancel)');
+    final key = await Keyboard.nextKey(context);
+    if (key == null) return; // unmounted, or the scope went away
+    if (key.code == KeyCode.escape) {
+      _model.flash('');
+      return;
+    }
+    final letter = key.code.character;
+    if (letter == null || !RegExp(r'^[a-zA-Z]$').hasMatch(letter)) {
+      _model.flash('marks are named by a letter');
+      return;
+    }
+    apply(letter);
+  }
+
   List<KeyBinding> _nanoBindings() => [
     KeyBinding(
       KeySequence.ctrl.o,
@@ -597,6 +651,25 @@ class _EditorBodyState extends State<_EditorBody> implements TextInputClaimant {
       KeySequence.d.char(r'$'),
       label: 'delete to end',
       onTrigger: (_) => _model.deleteToLineEnd(),
+    ),
+    // Marks — the case a declared sequence structurally cannot express.
+    //
+    // `m` takes ANY letter as its second step: 26 bindings would be a lie
+    // (they would appear in the hint bar as 26 separate commands), and a
+    // two-step `KeySequence` needs both steps named up front. So `m` is one
+    // binding that then *awaits* one key. `nextKey` is scope-tied by
+    // signature — if this editor unmounts mid-prompt the future completes
+    // null, so the capture can never outlive the UI that started it and eat
+    // the app's input (RFC 0020 §17.2).
+    KeyBinding(
+      KeyCode.m,
+      label: 'set mark',
+      onTrigger: (_) => _awaitMarkLetter(_model.setMark),
+    ),
+    KeyBinding(
+      KeyCode.char("'"),
+      label: 'jump to mark',
+      onTrigger: (_) => _awaitMarkLetter(_model.jumpToMark),
     ),
     // Goto — `gg` top, `G` bottom.
     KeyBinding(

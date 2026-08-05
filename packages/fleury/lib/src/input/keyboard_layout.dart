@@ -77,47 +77,48 @@ final class KeyboardLayout {
   /// Only unmodified, printable reports teach anything — a chord reports
   /// the base key, and a functional key's identity is layout-independent
   /// already.
-  void observe(KeyEvent event) {
+  ///
+  /// Returns true only when this taught something NEW, so the one caller that
+  /// republishes on a change does it once per physical key rather than once
+  /// per keystroke.
+  bool observe(KeyEvent event) {
     final position = event.position;
-    if (position == null) return;
+    if (position == null) return false;
     final character = event.code.character;
-    if (character == null || character.trim().isEmpty) return;
-    if (event.modifiers.isNotEmpty) return;
+    if (character == null || character.trim().isEmpty) return false;
+    if (event.modifiers.isNotEmpty) return false;
+    if (_learned[position] == character) return false;
     _learned[position] = character;
+    return true;
   }
 
   /// The cap for [selector], or null when nothing is known.
+  ///
+  /// Rendered as the key actually produces it — unshifted and uncased. A
+  /// caller that renders a chord uppercases the atom itself, matching how a
+  /// logical step is labelled ([KeySequence.hintLabel]); doing it here would
+  /// make `[q] Quit` and `[W] Thrust` sit side by side in one hint bar.
   ///
   /// A [KeyCode] is already the label — it IS what the cap says — so it
   /// resolves without any layout knowledge.
   KeyLabel? labelFor(KeySelector selector) {
     if (selector is KeyCode) {
       final character = selector.character;
-      if (character != null) {
-        return KeyLabel(
-          character == ' ' ? 'Space' : character.toUpperCase(),
-          KeyLabelSource.learned,
-        );
-      }
-      return null; // a special key: the caller's own label applies
+      if (character == null) return null; // special: the caller's own label
+      return KeyLabel(_render(character), KeyLabelSource.learned);
     }
     if (selector is! KeyPosition) return null;
     final learned = _learned[selector];
     if (learned != null) {
-      return KeyLabel(
-        learned == ' ' ? 'Space' : learned.toUpperCase(),
-        KeyLabelSource.learned,
-      );
+      return KeyLabel(_render(learned), KeyLabelSource.learned);
     }
     final tabled = _table[selector];
-    if (tabled != null) {
-      return KeyLabel(
-        tabled == ' ' ? 'Space' : tabled.toUpperCase(),
-        KeyLabelSource.table,
-      );
-    }
+    if (tabled != null) return KeyLabel(_render(tabled), KeyLabelSource.table);
     return null;
   }
+
+  static String _render(String character) =>
+      character == ' ' ? 'Space' : character;
 
   /// A hint-bar-ready label for [sequence], substituting real caps for any
   /// positional step.
@@ -137,13 +138,14 @@ final class KeyboardLayout {
     for (final entry in positions.entries) {
       final label = labelFor(entry.value);
       if (label == null) continue;
-      // Replace only the atom, preserving any modifier prefix the step's
-      // own label rendered (`Ctrl+W` → `Ctrl+Z`).
+      // Replace only the atom, preserving any modifier prefix the step's own
+      // label rendered (`Ctrl+W` → `Ctrl+Z`) — and matching its casing rule:
+      // a chord uppercases its atom, a bare key does not.
       final original = steps[entry.key];
       final plus = original.lastIndexOf('+');
       steps[entry.key] = plus < 0
           ? label.text
-          : '${original.substring(0, plus + 1)}${label.text}';
+          : '${original.substring(0, plus + 1)}${label.text.toUpperCase()}';
       substituted = true;
     }
     return substituted ? steps.join(' ') : sequence.hintLabel;

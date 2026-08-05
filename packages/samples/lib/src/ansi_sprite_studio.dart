@@ -59,7 +59,10 @@ class _AnsiSpriteStudioBodyState extends State<_AnsiSpriteStudioBody> {
   Widget build(BuildContext context) {
     if (_importing) return _importSurface(context);
     return KeyBindings(
-      bindings: _bindings(),
+      // Reading capabilities here is build-legal AND reactive: when a terminal
+      // finishes negotiating, this rebuilds and the control scheme upgrades
+      // itself (RFC 0020 §7.6).
+      bindings: _bindings(Keyboard.of(context).capabilities),
       child: ListenableBuilder(
         listenable: _model,
         builder: (context, _) => _studioSurface(context),
@@ -67,7 +70,7 @@ class _AnsiSpriteStudioBodyState extends State<_AnsiSpriteStudioBody> {
     );
   }
 
-  List<KeyBinding> _bindings() => <KeyBinding>[
+  List<KeyBinding> _bindings(KeyboardCapabilities keyboard) => <KeyBinding>[
     KeyBinding(
       KeyCode.arrowLeft,
       hideFromHintBar: true,
@@ -96,11 +99,27 @@ class _AnsiSpriteStudioBodyState extends State<_AnsiSpriteStudioBody> {
       // Held arrows walk the canvas — the repeat-reliant class.
       includeRepeats: true,
     ),
-    KeyBinding(
-      KeyCode.space,
-      label: 'paint',
-      onTrigger: (_) => _model.applyAtCursor(),
-    ),
+    // Space is the pen. Where the surface reports releases we can know the
+    // key is still DOWN, so holding it draws continuously as the cursor
+    // moves — the same gesture the mouse has always had, as one undo unit.
+    //
+    // Where it does not, a hold could start and never end, so the studio
+    // takes the honest fallback rather than a broken brush: tap to paint one
+    // cell. Same key, same label position in the hint bar; only the reach
+    // differs.
+    if (keyboard.supportsHeldState)
+      KeyBinding.hold(
+        KeyCode.space,
+        label: 'draw (hold)',
+        onHoldStart: (_) => _model.beginBrushStroke(),
+        onHoldEnd: (_) => _model.endBrushStroke(),
+      )
+    else
+      KeyBinding(
+        KeyCode.space,
+        label: 'paint',
+        onTrigger: (_) => _model.applyAtCursor(),
+      ),
     KeyBinding(
       KeyCode.p,
       label: 'pencil',

@@ -1473,11 +1473,16 @@ final class _KeyStep {
       // with the key the user actually has under that finger.
       final twin = position.usTwin;
       final twinChar = twin?.character;
+      // Same casing rule as a logical atom below: bare renders as the key
+      // produces it, a chord uppercases. Otherwise one hint bar reads
+      // `[q] Quit  [W] Thrust` and the inconsistency looks like a bug.
       final base = twin == null
           ? position.name
           : (twin.special != null
                 ? _specialLabel(twin.special!)
-                : (twinChar == ' ' ? 'Space' : twinChar!.toUpperCase()));
+                : (twinChar == ' '
+                      ? 'Space'
+                      : (mods.isEmpty ? twinChar! : twinChar!.toUpperCase())));
       return mods.isEmpty ? base : '${mods.join('+')}+$base';
     }
     final ch = logical.character;

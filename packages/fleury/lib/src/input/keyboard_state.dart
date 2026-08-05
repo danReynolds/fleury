@@ -228,6 +228,10 @@ final class KeyboardSession {
   KeyboardCapabilities _capabilities;
   KeyboardCapabilities get capabilities => _capabilities;
 
+  /// Called when what this keyboard IS has changed — new capabilities, or a
+  /// newly learned cap. Wired by the runtime to the tree-facing notifier.
+  void Function()? onDescriptionChanged;
+
   /// What this keyboard's keys are actually capped with (RFC 0020 §9).
   ///
   /// Learns from the stream below: where the terminal reports positional
@@ -302,7 +306,13 @@ final class KeyboardSession {
     // Layout learning is independent of held-state support: a surface can
     // report positions without releases, and every such report teaches us
     // one cap.
-    if (event.type == KeyEventType.down) layout.observe(event);
+    if (event.type == KeyEventType.down && layout.observe(event)) {
+      // A newly learned cap changes what every hint surface should render,
+      // and the layout fills in one key at a time — so republish, or the bar
+      // keeps showing the US twin until an unrelated rebuild happens to come
+      // along. Bounded by the physical key count, not the keystroke rate.
+      onDescriptionChanged?.call();
+    }
     if (!_capabilities.supportsHeldState) {
       return RegularizedKey._([event]);
     }

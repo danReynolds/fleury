@@ -35,11 +35,13 @@ import 'inherited_notifier.dart';
 /// ```
 ///
 /// **Reactivity is asymmetric, by design.** Obtaining the handle registers a
-/// dependency on *capability and session* changes only — so a control scheme
-/// branched on [capabilities] rebuilds when a terminal finishes negotiating,
-/// a session reconnects, or a surface downgrades. Key transitions never
+/// dependency on changes to what the keyboard IS — capabilities, session
+/// identity, and newly learned [layout] caps — so a control scheme branched on
+/// [capabilities] rebuilds when a terminal finishes negotiating, and a hint bar
+/// re-renders when a position's real cap becomes known. Key transitions never
 /// notify: an API that cannot notify on input cannot cause an input-rate
-/// rebuild storm (RFC 0020 §15, §19).
+/// rebuild storm (RFC 0020 §15, §19). Layout learning is bounded by the
+/// physical key count, not the keystroke rate.
 final class Keyboard {
   const Keyboard._(this._session);
 
@@ -150,7 +152,12 @@ final class Keyboard {
 /// Publishes the session keyboard to the tree, notifying on capability and
 /// session changes only — never on key transitions (see [Keyboard]).
 final class KeyboardStateNotifier with ChangeNotifier {
-  KeyboardStateNotifier(this.dispatcher);
+  KeyboardStateNotifier(this.dispatcher) {
+    // Layout learning republishes through the same channel capabilities do:
+    // both answer "what is this keyboard", both are build-legal reads, and a
+    // hint bar that asked the layout must hear when the answer improves.
+    dispatcher.keyboardSession.onDescriptionChanged = notifyListeners;
+  }
 
   /// The dispatcher that owns the session and the capture gate.
   final InputDispatcher dispatcher;

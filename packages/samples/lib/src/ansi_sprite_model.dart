@@ -272,6 +272,13 @@ class AnsiSpriteModel with ChangeNotifier {
     if (x == _cursorX && y == _cursorY) return;
     _cursorX = x;
     _cursorY = y;
+    // With the brush down the cursor IS the pen: painting here is what makes
+    // the keyboard stroke the same gesture the mouse already had, and what
+    // keeps the whole drag in one undo unit.
+    if (_brushDown && _applyTool(x, y)) {
+      _strokeChanged = true;
+      _playing = false;
+    }
     notifyListeners();
   }
 
@@ -287,6 +294,35 @@ class AnsiSpriteModel with ChangeNotifier {
   /// Applies the selected tool as one undoable keyboard edit.
   void applyAtCursor() {
     _mutate(() => _applyTool(_cursorX, _cursorY));
+  }
+
+  /// Whether a keyboard brush stroke is in progress — the pen is on the paper
+  /// and the cursor is drawing wherever it goes.
+  bool get brushDown => _brushDown;
+  bool _brushDown = false;
+
+  /// Puts the pen down: paints the current cell and opens ONE undo unit that
+  /// stays open until [endBrushStroke], exactly like a mouse drag.
+  ///
+  /// Driven by a held key, so it exists only where the surface reports
+  /// releases; the studio keeps tap-to-paint for everywhere else.
+  void beginBrushStroke() {
+    if (_brushDown) return;
+    beginStroke();
+    _brushDown = true;
+    if (_applyTool(_cursorX, _cursorY)) {
+      _strokeChanged = true;
+      _playing = false;
+    }
+    notifyListeners();
+  }
+
+  /// Lifts the pen and closes the undo unit.
+  void endBrushStroke() {
+    if (!_brushDown) return;
+    _brushDown = false;
+    endStroke();
+    notifyListeners();
   }
 
   /// Starts one mouse gesture. Every changed cell until [endStroke] is one

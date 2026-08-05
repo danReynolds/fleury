@@ -8,7 +8,7 @@ void main() {
   group('labelFor', () {
     test('a logical key IS its own label — no layout needed', () {
       final layout = KeyboardLayout.learning();
-      expect(layout.labelFor(KeyCode.char('j'))?.text, 'J');
+      expect(layout.labelFor(KeyCode.char('j'))?.text, 'j');
     });
 
     test('an unknown position resolves to nothing, never a guess', () {
@@ -19,8 +19,8 @@ void main() {
 
     test('a bundled table names the cap that is really there', () {
       final azerty = KeyboardLayout.named('fr-azerty');
-      expect(azerty.labelFor(KeyPosition.w)?.text, 'Z');
-      expect(azerty.labelFor(KeyPosition.a)?.text, 'Q');
+      expect(azerty.labelFor(KeyPosition.w)?.text, 'z');
+      expect(azerty.labelFor(KeyPosition.a)?.text, 'q');
       expect(azerty.labelFor(KeyPosition.w)?.source, KeyLabelSource.table);
     });
 
@@ -50,7 +50,7 @@ void main() {
       // The table is an assumption about which layout is in use; a report is
       // this keyboard, right now.
       final layout = KeyboardLayout.named('fr-azerty');
-      expect(layout.labelFor(KeyPosition.w)?.text, 'Z');
+      expect(layout.labelFor(KeyPosition.w)?.text, 'z');
       layout.observe(
         const KeyEvent(KeyCode.char('!'), position: KeyPosition.w),
       );
@@ -95,7 +95,7 @@ void main() {
 
     test('a positional step is substituted', () {
       final layout = KeyboardLayout.named('fr-azerty');
-      expect(layout.labelForSequence(KeyPosition.w), 'Z');
+      expect(layout.labelForSequence(KeyPosition.w), 'z');
     });
 
     test('an unknown position falls back to the US twin, not a blank', () {
@@ -128,7 +128,7 @@ void main() {
       session.ingest(
         const KeyEvent(KeyCode.char('a'), position: KeyPosition.q),
       );
-      expect(session.layout.labelFor(KeyPosition.q)?.text, 'A');
+      expect(session.layout.labelFor(KeyPosition.q)?.text, 'a');
     });
   });
 }

@@ -322,8 +322,16 @@ class InputDispatcher {
     // Genuinely zero-cost when unused: a release-less source tracks no
     // press records, so with nobody observing there is nothing to compute
     // and nothing to allocate on the typing path (RFC 0020 §19).
+    //
+    // A positional report is the exception, because position reporting and
+    // release reporting are INDEPENDENT capabilities — a surface can have one
+    // without the other. Skipping those would mean the layout never learns on
+    // exactly the terminals where a hint bar is otherwise stuck showing US
+    // twins. Costs nothing on the surfaces this fast path was written for:
+    // they carry no position, so they still short-circuit here.
     if (!keyboardSession.capabilities.supportsHeldState &&
-        _keyObservers.isEmpty) {
+        _keyObservers.isEmpty &&
+        event.position == null) {
       return;
     }
     final regularized = keyboardSession.ingest(event);
@@ -599,6 +607,25 @@ class InputDispatcher {
     TextInputEvent event, {
     bool keyAlreadyWalked = false,
   }) {
+    // An armed capture outranks every routed lane — including this one
+    // (§17.2, "text-derived on legacy").
+    //
+    // Where the terminal reports printables only as bytes, a letter reaches
+    // the dispatcher as text and never as a key event. Consulting the capture
+    // gate only on the key path would mean `nextKey` silently ignores exactly
+    // the keys it is usually waiting FOR: vim's `m<letter>`, a rebind row's
+    // chosen character, quoted-insert. Worse than ignoring — the letter would
+    // fall through and fire whatever ordinary binding owns it, so pressing
+    // `a` at a mark prompt would open INSERT.
+    //
+    // Ahead of the pending-sequence check too: a capture is sequence-
+    // bypassing by design, so an awaiter beats a half-typed chord.
+    if (!keyAlreadyWalked && _capture != null) {
+      final captured = _keyEventForText(event.text);
+      if (captured != null && _tryCapture(captured)) {
+        return KeyEventResult.handled;
+      }
+    }
     if (_matchablePending != null && !keyAlreadyWalked) {
       final keyEvent = _keyEventForText(event.text);
       if (keyEvent != null) {

@@ -458,7 +458,6 @@ String _snapshot(NeonAsteroidsGame game) {
     game.particles.length,
   ].join(';');
 
-
   group('NeonAsteroids input (RFC 0020 sampled controls)', () {
     testWidgets('the app mounts and accepts sampled held keys', (tester) async {
       // A smoke test over the real widget: the rewrite reads its controls
