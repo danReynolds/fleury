@@ -639,6 +639,8 @@ final class _PendingSemanticAction {
 String _frameReasonForEvent(TuiEvent event) {
   return switch (event) {
     ResizeEvent() => 'resize',
+    // Terminal-only: the browser reports focus through its own blur path.
+    TerminalFocusEvent() => 'terminal-focus',
     KeyEvent(:final code) => 'key:${code.special?.name ?? code.character!}',
     InputBatch(:final key) =>
       key != null

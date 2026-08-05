@@ -103,8 +103,8 @@ void main() {
     });
 
     test('Kitty keyboard push/pop is categorized as session', () {
-      final b = AnsiByteBreakdown.analyze('\x1B[>1u\x1B[<u');
-      expect(b.session, '\x1B[>1u\x1B[<u'.length);
+      final b = AnsiByteBreakdown.analyze('\x1B[>3u\x1B[<1u');
+      expect(b.session, '\x1B[>3u\x1B[<1u'.length);
       expect(b.other, 0);
     });
 

@@ -21,6 +21,7 @@ import 'package:meta/meta.dart';
 import '../foundation/geometry.dart';
 import 'capabilities.dart';
 import '../input/events.dart';
+import '../input/keyboard_state.dart';
 import 'input_parser.dart';
 import '../runtime/remote_surface_sink.dart';
 import 'terminal_driver.dart';
@@ -35,7 +36,10 @@ import 'terminal_sequences.dart';
 /// it may stop the process before Fleury can restore terminal modes.
 class PosixTerminalDriver
     with TerminalAttentionSequences
-    implements TerminalDriver, TerminalHandoffDriver {
+    implements
+        TerminalDriver,
+        TerminalHandoffDriver,
+        KeyboardCapabilitiesDriver {
   PosixTerminalDriver({
     Stdin? stdinOverride,
     Stdout? stdoutOverride,
@@ -439,6 +443,11 @@ class PosixTerminalDriver
     // (e.g. Kitty graphics under Warp, which masquerades as xterm-256color).
     // Runs before the app renders so the first frame already uses the right
     // protocol; falls back silently when nothing replies.
+    // Negotiation runs with the other startup probes — after the enter
+    // sequences pushed our flags, and on the SAME screen buffer they were
+    // pushed to (§8.1). It never blocks the app: an unanswered query
+    // simply leaves capabilities conservative.
+    await _negotiateKeyboard(mode);
     await _maybeProbeImageProtocol();
     await _maybeProbeAmbiguousWidth(mode.alternateScreen);
 
@@ -461,6 +470,94 @@ class PosixTerminalDriver
   /// cell art. Skipped unless we own a real terminal in raw mode (so the reply
   /// arrives byte-for-byte, not line-buffered) and the environment is
   /// inconclusive; any failure leaves the conservative fallback in place.
+  /// The Kitty flags this terminal CONFIRMED, or null before/without a
+  /// successful negotiation.
+  int? _confirmedKeyboardFlags;
+
+  /// The tier actually in force. Starts at the requested tier and is
+  /// lowered by a rollback (§8.3).
+  KeyboardProtocolMode _activeKeyboardMode = KeyboardProtocolMode.legacy;
+
+  @override
+  KeyboardCapabilities get keyboardCapabilities {
+    final flags = _confirmedKeyboardFlags;
+    if (flags == null) return KeyboardCapabilities.legacy;
+    final eventTypes = flags & 0x02 != 0;
+    final allKeys = flags & 0x08 != 0;
+    final alternates = flags & 0x04 != 0;
+    // Semantic guarantees, not raw flags (§5.7). Held state needs event
+    // types AND all-keys-as-escapes: with flag 2 alone an ordinary
+    // printable still arrives as a plain byte, so it has no release to
+    // pair and no press record to keep.
+    return KeyboardCapabilities(
+      supportsHeldState: eventTypes && allKeys,
+      distinguishesRepeats: eventTypes,
+      supportsPositions: eventTypes && allKeys && alternates,
+      reportsPrintableKeys: allKeys,
+    );
+  }
+
+  /// Negotiates the keyboard protocol: push (already done by the enter
+  /// sequences), ask what stuck, and either commit or roll back.
+  ///
+  /// Rollback matters because a partial answer is not merely "less" — flag
+  /// 8 stops the terminal sending text and flag 16 is what re-supplies it,
+  /// so a terminal honouring 8 without 16 leaves the session unable to type
+  /// at all. Reporting conservative capabilities cannot fix that; only
+  /// leaving the mode can (§8.3).
+  Future<void> _negotiateKeyboard(TerminalMode mode) async {
+    if (!_stdoutIsTerminal || !_changedStdin) return;
+    final effective = _effectiveMode(mode);
+    if (effective.keyboardProtocol == KeyboardProtocolMode.legacy) return;
+    // Escape hatch for a terminal where the query itself misbehaves.
+    final flag = Platform.environment['FLEURY_KEYBOARD_PROBE'];
+    if (flag == '0' || flag == 'false') return;
+    _activeKeyboardMode = effective.keyboardProtocol;
+    int? flags;
+    try {
+      flags = await probeKeyboardFlags(_DriverProbeTransport(this));
+    } on Object {
+      flags = null;
+    } finally {
+      _replayPostProbeInput();
+    }
+    if (flags == null) {
+      // No answer: the terminal does not speak the protocol. Whatever we
+      // pushed was ignored, so there is nothing to roll back — but we
+      // claim nothing either.
+      _confirmedKeyboardFlags = null;
+      return;
+    }
+    if (effective.keyboardProtocol == KeyboardProtocolMode.lifecycle &&
+        !_lifecycleIsSafe(flags)) {
+      // Partial lifecycle: leave the mode before the app sees any input,
+      // and re-establish the safe tier on the SAME screen buffer.
+      _stdout.write(
+        '\x1B[<1u'
+        '\x1B[>${KeyboardProtocolMode.disambiguated.requestedFlags}u',
+      );
+      await _stdout.flush();
+      _activeKeyboardMode = KeyboardProtocolMode.disambiguated;
+      int? after;
+      try {
+        after = await probeKeyboardFlags(_DriverProbeTransport(this));
+      } on Object {
+        after = null;
+      } finally {
+        _replayPostProbeInput();
+      }
+      _confirmedKeyboardFlags = after;
+      return;
+    }
+    _confirmedKeyboardFlags = flags;
+  }
+
+  /// Lifecycle is only safe to keep when text survives it: event types (2),
+  /// all-keys-as-escapes (8) and associated text (16) must ALL be active.
+  /// Flag 4 is an optional positional enhancement.
+  static bool _lifecycleIsSafe(int flags) =>
+      flags & 0x02 != 0 && flags & 0x08 != 0 && flags & 0x10 != 0;
+
   Future<void> _maybeProbeImageProtocol() async {
     if (!_stdoutIsTerminal || !_changedStdin) return;
     // Escape hatch: `FLEURY_IMAGE_PROBE=0` disables the startup query for users
@@ -662,14 +759,45 @@ class PosixTerminalDriver
   /// Builds the mode-entry escape sequence (alt screen, hide cursor,
   /// bracketed paste, Kitty keyboard, mouse), shared by [enter] and resume.
   String _enterSequences(TerminalMode mode) {
-    return buildTerminalEnterSequences(mode);
+    return buildTerminalEnterSequences(_effectiveMode(mode));
+  }
+
+  /// Applies the fleet override before any sequence is built.
+  ///
+  /// `FLEURY_KEYBOARD=legacy|disambiguated|lifecycle` caps (or raises) the
+  /// negotiated tier without touching app code — the lever a support
+  /// channel needs when one terminal in a deployment misbehaves, and the
+  /// one a bug report can be asked to set. Applied here rather than at the
+  /// negotiation step so the PUSH itself is capped, not just the verdict.
+  TerminalMode _effectiveMode(TerminalMode mode) {
+    final requested = Platform.environment['FLEURY_KEYBOARD'];
+    if (requested == null || requested.isEmpty) return mode;
+    final override = switch (requested.toLowerCase()) {
+      'legacy' || 'off' || 'none' => KeyboardProtocolMode.legacy,
+      'disambiguated' || 'default' => KeyboardProtocolMode.disambiguated,
+      'lifecycle' || 'full' => KeyboardProtocolMode.lifecycle,
+      _ => null,
+    };
+    if (override == null || override == mode.keyboardProtocol) return mode;
+    return TerminalMode(
+      rawInput: mode.rawInput,
+      alternateScreen: mode.alternateScreen,
+      hideCursor: mode.hideCursor,
+      resetStyleOnExit: mode.resetStyleOnExit,
+      bracketedPaste: mode.bracketedPaste,
+      focusReporting: mode.focusReporting,
+      keyboardProtocol: override,
+      mouse: mode.mouse,
+      mouseMotion: mode.mouseMotion,
+    );
   }
 
   /// Builds the mode-exit escape sequence, shared by [restore] and
   /// suspend. Disables mouse modes unconditionally (incl. all-motion
   /// 1003) so none leak back to the shell.
   String _exitSequences(TerminalMode mode) {
-    return buildTerminalExitSequences(mode);
+    // Same resolution as entry: what we pop must match what we pushed.
+    return buildTerminalExitSequences(_effectiveMode(mode));
   }
 
   bool _interceptParsedEvent(TuiEvent event) {

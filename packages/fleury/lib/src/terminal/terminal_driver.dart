@@ -8,6 +8,47 @@ import '../input/keyboard_state.dart';
 import '../runtime/remote_surface_sink.dart';
 import 'capabilities.dart';
 
+/// How much of the Kitty keyboard protocol a session negotiates
+/// (RFC 0020 §8).
+///
+/// Each tier is a *request*; what a terminal actually honours is confirmed
+/// by querying and reported through `KeyboardCapabilities`. Nothing here
+/// promises a capability — a terminal that ignores the push silently stays
+/// at whatever it already did.
+enum KeyboardProtocolMode {
+  /// Push nothing. Strict legacy behaviour, for debugging or a terminal
+  /// known to mishandle the protocol.
+  legacy(0),
+
+  /// Flags 1|2 — disambiguate escape codes, and report event types.
+  ///
+  /// The default. Flag 1 makes otherwise-ambiguous chords distinct (lone
+  /// Esc, Ctrl+I vs Tab, Ctrl+M vs Enter, super/meta). Flag 2 adds
+  /// press/repeat/release tags to keys that are ALREADY escape-coded —
+  /// chords, arrows, function keys — which is what lets a binding fire once
+  /// per physical press instead of once per auto-repeat.
+  ///
+  /// Text is untouched: printable presses and repeats still arrive as
+  /// ordinary bytes. Their RELEASES do become escape reports (the spec
+  /// exempts only Enter, Tab and Backspace), which the parser drops and
+  /// which §8.5's spawn bracket keeps out of child processes.
+  disambiguated(1 | 2),
+
+  /// Flags 1|2|4|8|16 — the full lifecycle: every key as an escape code,
+  /// with alternate/base-layout identities and associated text.
+  ///
+  /// Opt-in, and committed only when the terminal confirms 2, 8 AND 16
+  /// (§8.3): flag 8 stops the terminal sending text, and flag 16 is what
+  /// re-supplies it, so honouring one without the other would leave the
+  /// session with no text input at all.
+  lifecycle(1 | 2 | 4 | 8 | 16);
+
+  const KeyboardProtocolMode(this.requestedFlags);
+
+  /// The progressive-enhancement bitset this tier pushes.
+  final int requestedFlags;
+}
+
 /// The set of terminal modes the driver should enable for a TUI session.
 ///
 /// Defaults to the standard interactive TUI configuration (raw input,
@@ -22,7 +63,8 @@ final class TerminalMode {
     this.hideCursor = true,
     this.resetStyleOnExit = true,
     this.bracketedPaste = true,
-    this.kittyKeyboard = true,
+    this.keyboardProtocol = KeyboardProtocolMode.disambiguated,
+    this.focusReporting = true,
     this.mouse = false,
     this.mouseMotion = false,
   });
@@ -41,13 +83,19 @@ final class TerminalMode {
   /// only helps.
   final bool bracketedPaste;
 
-  /// Negotiate the Kitty keyboard protocol (CSI-u) by pushing the
-  /// "disambiguate escape codes" flag on enter and popping it on exit.
-  /// On by default: terminals that support it then report otherwise-
-  /// ambiguous chords (lone Esc, Ctrl+I vs Tab, Ctrl+M vs Enter) and the
-  /// super/meta modifiers unambiguously; terminals that don't silently
-  /// ignore the unknown sequence, so it's safe everywhere.
-  final bool kittyKeyboard;
+  /// Ask the terminal to report window focus changes (DECSET 1004).
+  ///
+  /// On by default and harmless where unsupported (the sequence is
+  /// ignored). Focus-out is what tells the runtime to release keys the user
+  /// is holding, since those releases will land in whatever window took
+  /// focus and this terminal will never report them.
+  final bool focusReporting;
+
+  /// How much of the Kitty keyboard protocol to negotiate (RFC 0020 §8).
+  final KeyboardProtocolMode keyboardProtocol;
+
+  /// Whether any Kitty keyboard flags are pushed at all.
+  bool get kittyKeyboard => keyboardProtocol != KeyboardProtocolMode.legacy;
 
   /// Enable SGR mouse reporting (clicks, drags, wheel). Off by default:
   /// capturing the mouse takes over the terminal's own text selection,

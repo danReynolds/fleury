@@ -42,7 +42,8 @@ SemanticTree _appTree({required int messages, required int tick}) {
                     // Only the last message grows as tokens stream in.
                     ? 'assistant: thinking about step $tick of the plan'
                     : 'turn $m: a settled message line of moderate length',
-                state: SemanticState({'index': m, 'author': m.isEven ? 'user' : 'assistant'}),
+                state: SemanticState(
+                    {'index': m, 'author': m.isEven ? 'user' : 'assistant'}),
               ),
           ],
         ),
@@ -81,9 +82,8 @@ void main(List<String> args) {
     final fullStream = <int>[];
     final diffStream = <int>[];
     final encoder = SemanticsWireEncoder();
-    final nodeCount = _appTree(messages: messages, tick: 0)
-        .toInspectionSnapshot()
-        .nodeCount;
+    final nodeCount =
+        _appTree(messages: messages, tick: 0).toInspectionSnapshot().nodeCount;
     for (var i = 0; i < frames; i++) {
       final tree = _appTree(messages: messages, tick: i);
       fullStream.addAll(_snapshotBytes(tree));
@@ -101,8 +101,10 @@ void main(List<String> args) {
 
   print('');
   print('full = the old full-snapshot-on-change path (deflated /frame).');
-  print('diff = SemanticsWireEncoder: full once, then patches (deflated /frame).');
-  print('The diff is flat in tree size; full goes off the 32 KiB-window cliff.');
+  print(
+      'diff = SemanticsWireEncoder: full once, then patches (deflated /frame).');
+  print(
+      'The diff is flat in tree size; full goes off the 32 KiB-window cliff.');
   print('');
   _cpu();
 }
@@ -141,7 +143,8 @@ void _gate() {
   const maxGrowth = 6.0;
   final ok = large < maxLargeBytes && growth < maxGrowth;
 
-  stdout.writeln('serve semantics gate: diff z/frame — 24-node ${small.round()} '
+  stdout.writeln(
+      'serve semantics gate: diff z/frame — 24-node ${small.round()} '
       'B, 240-node ${large.round()} B (growth ${growth.toStringAsFixed(1)}x)');
   if (ok) {
     stdout.writeln('serve semantics gate: pass — the wire diff is flat in tree '
@@ -184,7 +187,8 @@ void _cpu() {
       ..encode(_appTree(messages: messages, tick: 0).toInspectionSnapshot());
     final deltaEnc = SemanticsWireEncoder()
       ..encode(_appTree(messages: messages, tick: 0).toInspectionSnapshot());
-    final owner = SemanticsOwner()..update(_appTree(messages: messages, tick: 0));
+    final owner = SemanticsOwner()
+      ..update(_appTree(messages: messages, tick: 0));
 
     const iters = 2000;
     for (var i = 0; i < 200; i++) {

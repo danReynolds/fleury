@@ -148,13 +148,13 @@ Future<void> main(List<String> args) async {
     return;
   }
 
-  final baseline = (jsonDecode(baselineFile.readAsStringSync())
-          as Map<String, Object?>)
-      .map((id, axes) => MapEntry(
-            id,
-            (axes as Map<String, Object?>)
-                .map((k, v) => MapEntry(k, (v as num).toDouble())),
-          ));
+  final baseline =
+      (jsonDecode(baselineFile.readAsStringSync()) as Map<String, Object?>)
+          .map((id, axes) => MapEntry(
+                id,
+                (axes as Map<String, Object?>)
+                    .map((k, v) => MapEntry(k, (v as num).toDouble())),
+              ));
 
   var failed = false;
   for (final scenario in _scenarios) {
@@ -268,8 +268,7 @@ bool _checkRelative(
   required double? failUpFraction,
 }) {
   final delta = expected == 0 ? 0.0 : (current - expected) / expected;
-  final summary =
-      '  $axis: ${_fmt(current)} vs baseline ${_fmt(expected)} '
+  final summary = '  $axis: ${_fmt(current)} vs baseline ${_fmt(expected)} '
       '(${delta >= 0 ? '+' : ''}${(delta * 100).toStringAsFixed(1)}%)';
   if (failUpFraction != null && delta > failUpFraction) {
     stdout.writeln('$summary FAIL');
@@ -291,8 +290,7 @@ bool _checkPoints(
   required double failUpPoints,
 }) {
   final delta = current - expected;
-  final summary =
-      '  $axis: ${current.toStringAsFixed(1)} vs baseline '
+  final summary = '  $axis: ${current.toStringAsFixed(1)} vs baseline '
       '${expected.toStringAsFixed(1)} '
       '(${delta >= 0 ? '+' : ''}${delta.toStringAsFixed(1)}pt)';
   if (delta > failUpPoints) {

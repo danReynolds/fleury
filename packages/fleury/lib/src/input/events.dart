@@ -2058,6 +2058,37 @@ final class InputBatch extends TuiEvent {
       '${committedText != null ? '"$committedText"' : ''})';
 }
 
+/// The terminal reporting that its window gained or lost keyboard focus
+/// (DECSET 1004).
+///
+/// Focus LOSS is an authority-loss trigger (RFC 0020 §10): the keys the
+/// user is holding will be released into whatever window took focus, so
+/// this terminal will never report those releases. Without the signal,
+/// every held key stays held forever — `KeyBinding.hold` never ends and
+/// sampled state lies until something else is pressed.
+///
+/// Support is opportunistic: 1004 cannot be queried, tmux forwards it only
+/// with `focus-events on`, and Terminal.app, mosh, screen and conhost have
+/// no support at all. Where it never arrives, the repeat-silence watchdog
+/// is the fallback — see `PosixTerminalDriver`.
+@immutable
+final class TerminalFocusEvent extends TuiEvent {
+  const TerminalFocusEvent({required this.focused});
+
+  /// True for `CSI I` (focus gained), false for `CSI O` (focus lost).
+  final bool focused;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TerminalFocusEvent && other.focused == focused;
+
+  @override
+  int get hashCode => Object.hash(TerminalFocusEvent, focused);
+
+  @override
+  String toString() => 'TerminalFocusEvent(${focused ? 'in' : 'out'})';
+}
+
 /// One or more graphemes of typed text. The driver accumulates UTF-8
 /// continuation bytes before emitting so consumers always get a
 /// valid string.

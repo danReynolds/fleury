@@ -344,6 +344,20 @@ class InputDispatcher {
     }
   }
 
+  /// Releases every held key through the observation lane — the
+  /// authority-loss path (§10) for a surface that will never report the
+  /// real releases: terminal focus loss, suspend, disconnect.
+  ///
+  /// Unlike [replaceKeyboardSession] this keeps the session identity: the
+  /// input source is the same one, it just stopped being able to see the
+  /// keyboard for a while.
+  void recoverHeldKeys() {
+    _checkNotDisposed();
+    for (final release in keyboardSession.loseAuthority()) {
+      _notifyKeyObservers(release);
+    }
+  }
+
   /// Replaces the input session (driver swap, reconnect): recovers held
   /// keys through the observation lane, drops pending edges, and bumps
   /// `sessionGeneration` so sampled consumers can invalidate.

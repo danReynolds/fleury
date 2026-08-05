@@ -159,8 +159,7 @@ void _printTop(
   final filtered = filter == null
       ? members
       : members
-          .where((m) =>
-              (m.classRef?.library?.uri ?? '').contains(filter))
+          .where((m) => (m.classRef?.library?.uri ?? '').contains(filter))
           .toList();
   final ranked = [...filtered]..sort((a, b) => bytes(b).compareTo(bytes(a)));
   stdout.writeln('\ntop $top by $title:');

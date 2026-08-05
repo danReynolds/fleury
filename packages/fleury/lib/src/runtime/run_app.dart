@@ -641,6 +641,16 @@ Future<AppExit> _runAppImpl(
         DebugEvents.emitTerminalDiagnosis(currentTerminalDiagnosis());
       }
 
+      if (event is TerminalFocusEvent) {
+        // Focus left this terminal window: the keys the user is holding
+        // will be released into whatever took focus, so this terminal will
+        // never report them. Recover now (RFC 0020 §10) — otherwise every
+        // held key stays held forever, a hold never ends, and sampled
+        // state lies until something else is pressed.
+        if (!event.focused) dispatcher.recoverHeldKeys();
+        return;
+      }
+
       // Debug-shell hotkeys bypass modal suppression at the same escape-hatch
       // tier as Ctrl+C.
       if (event is KeyEvent && tryConsumeDebugKey(debugController, event)) {
@@ -1517,6 +1527,7 @@ Future<AppExit> _runAppImpl(
 String _frameReasonForEvent(TuiEvent event) {
   return switch (event) {
     ResizeEvent() => 'resize',
+    TerminalFocusEvent() => 'terminal-focus',
     KeyEvent(:final code) => 'key:${code.special?.name ?? code.character!}',
     InputBatch(:final key) =>
       key != null

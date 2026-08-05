@@ -174,6 +174,10 @@ final class InputDebugEvent extends DebugEvent {
 
   factory InputDebugEvent.fromTuiEvent(TuiEvent event) {
     return switch (event) {
+      TerminalFocusEvent(:final focused) => InputDebugEvent(
+        kind: 'focus',
+        summary: focused ? 'window focus in' : 'window focus out',
+      ),
       KeyEvent(:final code, :final modifiers, :final type) => InputDebugEvent(
         kind: 'key',
         summary: [

@@ -282,6 +282,7 @@ export 'src/input/events.dart'
         SpecialKey,
         TextCompositionEvent,
         TextCompositionEventKind,
+        TerminalFocusEvent,
         TextInputEvent,
         TuiEvent;
 export 'src/input/key_tables.dart'
@@ -307,6 +308,7 @@ export 'src/terminal/terminal_driver.dart'
         TerminalAttentionDriver,
         TerminalDriver,
         TerminalHandoffDriver,
+        KeyboardProtocolMode,
         TerminalMode,
         notifyTerminal,
         ringTerminalBell,

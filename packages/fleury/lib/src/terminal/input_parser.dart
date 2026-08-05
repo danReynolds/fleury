@@ -519,6 +519,17 @@ class InputParser {
       return;
     }
 
+    // Focus reporting (DECSET 1004): `CSI I` in, `CSI O` out. Parameterless
+    // by definition, so a params-bearing sequence with the same final is
+    // something else and falls through.
+    if ((finalByte == 0x49 || finalByte == 0x4F) && _csiGroups.length <= 1) {
+      final p = _groupValue(0);
+      if (p == null || p == 0) {
+        sink.add(TerminalFocusEvent(focused: finalByte == 0x49));
+        return;
+      }
+    }
+
     if (finalByte == 0x5A) {
       // 'Z' — back-tab: how legacy (non-kitty) terminals send Shift+Tab.
       // The shift is implied by the final byte itself; merge it with any

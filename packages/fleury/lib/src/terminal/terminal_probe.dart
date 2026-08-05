@@ -175,6 +175,39 @@ Future<ImageProtocol?> probeImageProtocol(
   return result.isConfirmed ? ImageProtocol.kitty : null;
 }
 
+/// Asks the terminal which Kitty keyboard flags are actually active.
+///
+/// Returns the confirmed bitset, or null when the terminal does not support
+/// the protocol (or answered nothing in time). The query is bracketed by a
+/// primary device-attributes request, which every real emulator answers —
+/// so "unsupported" is detected by DA1 arriving WITHOUT a flags reply
+/// rather than by a wall-clock timeout, keeping the verdict independent of
+/// link latency (RFC 0020 §8.2).
+///
+/// Shares [_parseKittyKeyboardStatus] with the diagnostic probe, so runtime
+/// negotiation and `diagnose --probe` can never disagree about what a reply
+/// means.
+Future<int?> probeKeyboardFlags(
+  TerminalProbeTransport transport, {
+  Duration timeout = const Duration(milliseconds: 150),
+}) async {
+  final stopwatch = Stopwatch()..start();
+  final List<int> response;
+  try {
+    response = await transport.request(_kittyKeyboardQuery, timeout: timeout);
+  } on Object {
+    return null;
+  }
+  stopwatch.stop();
+  final result = _parseKittyKeyboardStatus(
+    response,
+    elapsed: stopwatch.elapsed,
+  );
+  if (!result.isConfirmed) return null;
+  final flags = result.details['flags'];
+  return flags is int ? flags : null;
+}
+
 /// Actively measures whether the terminal renders East-Asian *Ambiguous*-width
 /// glyphs as one column or two.
 ///

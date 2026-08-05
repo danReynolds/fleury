@@ -1080,6 +1080,12 @@ KeyCode _readKeyCode(_Reader r) {
 Uint8List encodeInputEvent(TuiEvent event) {
   final w = _Writer();
   switch (event) {
+    case TerminalFocusEvent():
+      // A local terminal window signal, not a peer input event: a remote
+      // peer reports its own focus through its own driver.
+      throw const RemoteCodecException(
+        'terminal focus events are not carried by the serve protocol',
+      );
     case KeyEvent e:
       w.u8(_evKey);
       _writeKeyPayload(w, e);

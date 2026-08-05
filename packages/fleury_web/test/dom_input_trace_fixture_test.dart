@@ -185,6 +185,8 @@ List<TraceMap> _serializeEvents(List<TuiEvent> events) =>
     events.map(_serializeEvent).toList();
 
 TraceMap _serializeEvent(TuiEvent event) => switch (event) {
+  // Terminal-only; the DOM source never produces one.
+  TerminalFocusEvent() => {'type': 'terminal-focus'},
   KeyEvent() => {
     'type': 'key',
     if (event.code.special case final special?) 'keyCode': special.name,
