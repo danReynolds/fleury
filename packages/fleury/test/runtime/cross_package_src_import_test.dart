@@ -1,9 +1,9 @@
 // No sibling package's lib/ may import fleury's src/ internals. The
 // public barrels (fleury_core / fleury_host / fleury_host_io / fleury /
-// fleury_test_support) are the entire supported surface; a src import is a
-// semver-invisible dependency that breaks silently on any internal
-// refactor — exactly how fleury_web ended up built on an unexported
-// wire codec. Test/tool code in publish_to:none packages is exempt.
+// fleury_test_support, plus the explicitly unstable fleury_wire /
+// fleury_wire_io surface for lockstep peers) are the permitted import paths; a
+// src import is a semver-invisible dependency that breaks silently on any
+// internal refactor. Test/tool code in publish_to:none packages is exempt.
 
 import 'dart:io';
 
@@ -44,9 +44,11 @@ void main() {
         isEmpty,
         reason:
             'Import package:fleury/fleury_core.dart (widgets/apps) or '
-            'fleury_host.dart / fleury_host_io.dart (hosts). If a genuinely '
-            'host-facing symbol is missing from a barrel, promote it with a '
-            'show combinator instead of reaching into src/.',
+            'fleury_host.dart / fleury_host_io.dart (stable hosts), or the '
+            'explicitly unstable fleury_wire.dart / fleury_wire_io.dart '
+            '(first-party lockstep peers). If a genuinely host-facing symbol '
+            'is missing from a barrel, promote it with a show combinator '
+            'instead of reaching into src/.',
       );
     });
   }

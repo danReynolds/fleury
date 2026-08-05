@@ -10,6 +10,17 @@ handle and v2 id-polish scoped as follow-ons. See
 [`fleury_mcp` PR #19](https://github.com/danReynolds/fleury/pull/19);
 [decision log](decision-log.md).
 
+> **2026-07-29 follow-up:** the fingerprint safety net described in this
+> historical implementation record has been superseded. Actionable positional
+> nodes now carry an app-issued per-element, per-slot target lease.
+> Browser/MCP/app dispatch fails closed when the contributor remounts, the exact
+> role/label/advertised-action signature changes, or a removed target returns;
+> value/focus/busy/ticking updates retain the lease. Same `runtimeType` + `Key`
+> and the same target signature is one framework identity, so apps distinguish
+> a semantically identical logical replacement with a key or stable
+> `Semantics.id`. This avoids the false positives of the RFC's proposed
+> whole-tree generation.
+
 ## Summary
 
 Two core changes to the semantic layer, surfaced while building the MCP server

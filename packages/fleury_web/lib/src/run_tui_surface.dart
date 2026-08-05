@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:js_interop';
 
 import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_wire.dart' show ImagePlacement;
 
 import 'package:web/web.dart' as web;
 

@@ -10,6 +10,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_wire.dart';
 
 Future<Duration> _connectToFirstPaint(int port) async {
   final sw = Stopwatch()..start();

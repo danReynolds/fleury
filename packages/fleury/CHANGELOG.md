@@ -33,8 +33,23 @@ elements, state, layout) and terminal-native internals.
 - **Semantics, built in** — interactive and content widgets contribute a
   meaningful semantic tree that powers the browser accessibility mirror, the
   testing API, and agent drivability (see the `fleury_mcp` package).
-- **Host SPI** — `fleury_host.dart` / `fleury_host_io.dart` expose the runtime,
-  damage, semantics, and remote-render wire contracts a platform host builds on.
+- **Fail-closed positional actions** — actionable positional nodes carry an
+  app-issued per-element, per-slot target lease. Value/focus/ticking updates
+  retain it; role/label/action changes, target removal, and contributor remount
+  rotate it so a held browser/agent action cannot silently invoke an observably
+  recycled target. A key or stable semantic id distinguishes semantically
+  identical logical replacements that share framework identity.
+- **Host SPI** — `fleury_host.dart` / `fleury_host_io.dart` expose the supported
+  runtime, damage, semantics, and process-lifecycle contracts a platform host
+  builds on.
+- **Lockstep remote wire** — frame, codec, and transport contracts live in the
+  explicitly unstable `fleury_wire.dart` / `fleury_wire_io.dart` entry points
+  for first-party browser and agent peers built against the same Fleury version.
+- **Bounded remote output** — the Unix-socket sender retains at most 64 MiB and
+  4096 pending frames; a stalled peer that exceeds either bound tears down the
+  session cleanly instead of growing the heap or dropping a diff frame.
+- **Wire byte order** — DEBUG_RESPONSE sequence ids now obey the protocol's
+  big-endian integer rule, guarded by an exact-byte test.
 - **Testing** — the companion `fleury_test` package drives apps and asserts on
   the semantic tree without adding test libraries to production dependencies.
 - **Developer CLI** — `fleury create` generates a tested application with a

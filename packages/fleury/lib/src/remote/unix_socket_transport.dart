@@ -77,6 +77,25 @@ final class UnixSocketFrameTransport implements RemoteFrameTransport {
   /// when the peer stalls (the kernel socket buffer sits below this).
   static const int defaultSendHighWaterMark = 256 * 1024;
 
+  /// Absolute ceiling for encoded bytes retained by the send pump.
+  ///
+  /// A structured presentation can legitimately enqueue a complete 32 MiB
+  /// inline-image working set followed by an 8 MiB plan before the frame loop
+  /// gets another chance to observe [isSendBacklogged]. 64 MiB preserves that
+  /// burst (and room for one maximum legal 16 MiB frame) while preventing a
+  /// caller that keeps sending into a stalled peer from growing the queue
+  /// without bound.
+  static const int _maxPendingSendBytes = 64 * 1024 * 1024;
+
+  /// Independent object-count ceiling for tiny frames.
+  ///
+  /// Byte accounting alone does not bound the heap cost of thousands of
+  /// short encoded Uint8Lists. A legitimate presentation emits at most the
+  /// 512-image cache working set plus its plan and small side-channel frames,
+  /// so 4096 leaves generous burst headroom without permitting object-count
+  /// amplification.
+  static const int _maxPendingSendFrames = 4096;
+
   final Socket _socket;
   final FrameDecoder _decoder;
   final StreamController<RemoteFrame> _incoming;
@@ -93,12 +112,14 @@ final class UnixSocketFrameTransport implements RemoteFrameTransport {
   // awaits `flush()` — which completes once the OS accepts the bytes and
   // PENDS while the peer stalls: that pending flush is the backpressure
   // signal. [_pendingSendBytes] counts queued + handed-but-unflushed
-  // bytes.
+  // bytes; [_pendingSendFrames] counts their backing frame objects.
   final List<List<int>> _sendQueue = <List<int>>[];
   int _pendingSendBytes = 0;
+  int _pendingSendFrames = 0;
   bool _pumpRunning = false;
   Future<void>? _pumpFuture;
   Completer<void>? _drained;
+  Future<void>? _abortTeardown;
 
   /// A graceful [close] waits at most this long for the send pump to flush
   /// already-queued frames (the final ByeFrame / plan) before giving up and
@@ -123,8 +144,27 @@ final class UnixSocketFrameTransport implements RemoteFrameTransport {
   void send(RemoteFrame frame) {
     if (_closed) return;
     final bytes = encodeFrame(frame);
+    final nextPendingBytes = _pendingSendBytes + bytes.length;
+    final nextPendingFrames = _pendingSendFrames + 1;
+    if (nextPendingBytes > _maxPendingSendBytes ||
+        nextPendingFrames > _maxPendingSendFrames) {
+      final error = StateError(
+        'UnixSocketFrameTransport pending output would reach '
+        '$nextPendingFrames frames / $nextPendingBytes bytes, exceeding hard '
+        'limits of $_maxPendingSendFrames frames / $_maxPendingSendBytes '
+        'bytes. The session was terminated instead of dropping a frame and '
+        'desynchronizing the peer.',
+      );
+      final stackTrace = StackTrace.current;
+      _abortTeardown = _tearDownPendingOutput(
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return;
+    }
     _sendQueue.add(bytes);
-    _pendingSendBytes += bytes.length;
+    _pendingSendBytes = nextPendingBytes;
+    _pendingSendFrames = nextPendingFrames;
     if (!_pumpRunning) {
       _pumpRunning = true;
       // Kept so a graceful [close] can await the in-flight flush. _sendPump
@@ -134,16 +174,69 @@ final class UnixSocketFrameTransport implements RemoteFrameTransport {
     }
   }
 
+  Future<void> _tearDownPendingOutput({
+    Object? error,
+    StackTrace? stackTrace,
+  }) async {
+    _closed = true;
+    _sendQueue.clear();
+    _pendingSendBytes = 0;
+    _pendingSendFrames = 0;
+    _completeDrained();
+    if (error != null && !_incoming.isClosed) {
+      try {
+        _incoming.addError(error, stackTrace ?? StackTrace.current);
+      } catch (_) {
+        // Teardown still wins if a concurrently closing controller rejects
+        // the diagnostic.
+      }
+    }
+
+    final socketSub = _socketSub;
+    _socketSub = null;
+    Future<void>? socketCancel;
+    try {
+      socketCancel = socketSub?.cancel();
+    } catch (_) {
+      // The socket is already being failed closed.
+    }
+    // Cancel input callbacks before destroy so this transport publishes only
+    // the deliberate overflow diagnostic. Destroy immediately afterward so an
+    // in-flight Socket.flush cannot keep the pump alive. The remainder is
+    // awaited by close(), ensuring the pump cannot race accounting back to a
+    // non-zero state.
+    _socket.destroy();
+    if (socketCancel != null) {
+      try {
+        await socketCancel;
+      } catch (_) {
+        // The socket is already being failed closed.
+      }
+    }
+    final pump = _pumpFuture;
+    if (pump != null) {
+      try {
+        await pump;
+      } catch (_) {
+        // _sendPump currently catches socket failures; retain fail-closed
+        // teardown even if that implementation detail changes.
+      }
+    }
+    if (!_incoming.isClosed) await _incoming.close();
+  }
+
   Future<void> _sendPump() async {
     try {
       while (!_closed && _sendQueue.isNotEmpty) {
         // Hand the whole queue over, then flush. Sends that arrive while
         // the flush pends land in the queue and drive the next lap.
         var handed = 0;
+        var handedFrames = 0;
         try {
           for (final chunk in _sendQueue) {
             _socket.add(chunk);
             handed += chunk.length;
+            handedFrames++;
           }
           _sendQueue.clear();
           await _socket.flush();
@@ -153,10 +246,13 @@ final class UnixSocketFrameTransport implements RemoteFrameTransport {
           // so gated hosts wake instead of waiting on a dead pipe.
           _sendQueue.clear();
           _pendingSendBytes = 0;
+          _pendingSendFrames = 0;
           break;
         }
         _pendingSendBytes -= handed;
         if (_pendingSendBytes < 0) _pendingSendBytes = 0;
+        _pendingSendFrames -= handedFrames;
+        if (_pendingSendFrames < 0) _pendingSendFrames = 0;
       }
     } finally {
       _pumpRunning = false;
@@ -172,19 +268,18 @@ final class UnixSocketFrameTransport implements RemoteFrameTransport {
 
   @override
   Future<void> close() async {
-    if (_closed) return;
+    if (_closed) {
+      await _abortTeardown;
+      return;
+    }
     final backlogged = _pendingSendBytes > sendHighWaterMark;
 
     if (backlogged) {
       // The peer stalled past the high-water mark; a graceful flush could
       // block forever. Reset the connection — undelivered bytes are lost
       // either way once we're closing on a backlog.
-      _closed = true;
-      _completeDrained();
-      await _socketSub?.cancel();
-      _socketSub = null;
-      _socket.destroy();
-      if (!_incoming.isClosed) await _incoming.close();
+      _abortTeardown = _tearDownPendingOutput();
+      await _abortTeardown;
       return;
     }
 
@@ -198,12 +293,8 @@ final class UnixSocketFrameTransport implements RemoteFrameTransport {
       var timedOut = false;
       await pump.timeout(_closeFlushTimeout, onTimeout: () => timedOut = true);
       if (timedOut) {
-        _closed = true;
-        _completeDrained();
-        await _socketSub?.cancel();
-        _socketSub = null;
-        _socket.destroy();
-        if (!_incoming.isClosed) await _incoming.close();
+        _abortTeardown = _tearDownPendingOutput();
+        await _abortTeardown;
         return;
       }
     }

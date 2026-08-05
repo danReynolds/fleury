@@ -9,6 +9,18 @@ structure-generation handle** is a dependency here);
 [`fleury_mcp` PR #19](https://github.com/danReynolds/fleury/pull/19);
 [agent adapter boundary](agent-adapter-boundary.md).
 
+> Historical proposal. The production-hardening plan was completed in June
+> 2026. The residual role/label/action fingerprint gap described below was
+> replaced on 2026-07-29 by app-issued per-element, per-positional-slot leases.
+> A lease survives value/focus/busy/ticking updates, advances on an exact
+> role/label/advertised-action change, is swept when the target disappears, and
+> changes on contributor remount. Same framework identity plus the same target
+> signature remains intentionally indistinguishable; use a `Key` or stable
+> `Semantics.id` for a semantically identical logical replacement. Current peers
+> also require a matching echoed INIT before accepting semantic frames.
+> See [the implementation plan](plan-fleury-mcp-production.md) and
+> [wire protocol](wire-protocol.md) for the current contract.
+
 ## Scope
 
 This RFC is about the **MCP layer's architecture and implementation quality** —
@@ -165,6 +177,12 @@ Each is self-contained and sized for breakout into the implementation plan:
 
 ### WS-2 — Deterministic identity & consistency: structure-generation stamp — **P0**
 
+> Historical design target. The shipped per-element, per-slot lease described
+> in the status note above replaced this whole-tree generation proposal. It
+> closes observable positional recycling without invalidating value/focus ticks;
+> semantically identical replacements sharing framework identity require an
+> app-authored `Key` or stable semantic id.
+
 - **Problem.** Two coupled correctness holes. (a) The role+label fingerprint
   **cannot detect a same-role/same-label node swap** (two "Delete" buttons
   trading positions) — the exact "state divergence" the version-stamp pattern
@@ -239,14 +257,18 @@ Each is self-contained and sized for breakout into the implementation plan:
   positive dims, id presence); size caps; **control-char output sanitization
   already on the `get_ui` path** (`sanitizeForDisplay`).
 - **Need.** A **prompt-injection mitigation distinct from** the control-char pass
-  — delimit/quote/mark app-controlled label/value spans as untrusted *without*
-  corrupting text the agent needs verbatim (a policy design, not a one-line
-  filter; must **not** overload the renderer-shared `sanitizeForDisplay`). Plus a
-  rate-limit / call-budget guard on mutating tools. STDIO keeps auth optional
+  — envelope every model-facing app-authored semantic field/identifier, log,
+  error, and debug record as untrusted *without* corrupting text the agent needs
+  verbatim (a policy design, not a one-line filter; must **not** overload the
+  renderer-shared `sanitizeForDisplay`). Plus both a rate guard and a bounded
+  pending-mutation queue, bounded NDJSON/request admission, and byte/count/time
+  backpressure on startup logs and stdout. STDIO keeps auth optional
   (compliant), so no OAuth.
 - **Depends.** None.
-- **Done-when.** A hostile-label fixture can't inject instructions through
-  `get_ui`; a runaway agent is throttled rather than unbounded.
+- **Done-when.** Hostile app content stays verbatim but marked on UI/resource
+  reads, delta/log notifications, devtools reads, and error paths; a runaway
+  agent is throttled and cannot create an unbounded request, mutation, input,
+  log, or output backlog; stalled stdout cannot hang shutdown.
 - *Refs:* [MCP tools spec (security MUSTs)](https://modelcontextprotocol.io/specification/2025-06-18/server/tools),
   [MCP auth (STDIO)](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization),
   [MCP security checklist](https://github.com/slowmist/MCP-Security-Checklist).
@@ -423,14 +445,17 @@ owned jointly, before M1's MCP-facing work assumes it.
   swap is the *only* hole the fingerprint misses, and that A3's shape-change
   definition (add/remove/reparent/keyed-ancestor change, **not** value ticks)
   bumps at exactly the right granularity — too coarse re-reads every step, too
-  fine misses the swap.
+  fine misses the swap. **Resolved differently:** the shipped scoped lease
+  exact-compares role/label/actions and contributor identity; an identical
+  signature under the same framework identity is app-disambiguated by key/id.
 - **Subscription value at our tree sizes.** Measure end-to-end latency + token
   cost of poll `wait_for_change` vs `subscribe`+push for a ticking dashboard — is
   WS-1 a measurable win or mainly spec-conformance/ergonomics? (Both justify it;
   this sizes it.)
-- **Output sanitization without corrupting labels.** What sanitization neutralizes
-  prompt injection in app-controlled label/value text while preserving labels the
-  agent needs verbatim to act?
+- **Output sanitization without corrupting app content.** What envelope keeps all
+  app-authored semantic fields, identifiers, logs, errors, and debug records
+  explicitly untrusted while preserving the exact bytes an agent needs to
+  diagnose and act?
 - **Settle: action-ack vs observed-generation.** A wire-level action
   acknowledgment is the most deterministic but more invasive; a per-call
   observed-generation is lighter. One, or both?

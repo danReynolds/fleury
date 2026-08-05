@@ -15,7 +15,7 @@ import 'ansi_renderer.dart';
 ///   - [sgr]:     `CSI … m` — style set/reset (color, bold, inverse, …).
 ///   - [cursor]:  CSI cursor moves/positioning (`A`/`B`/`C`/`D`, `H`/`f`,
 ///                and related row/column positioning commands).
-///   - [update]:    `CSI ? 2026 h/l` — the per-frame synchronized-output
+///   - [sync]:      `CSI ? 2026 h/l` — the per-frame synchronized-output
 ///                wrapper.
 ///   - [session]: session lifecycle private-mode toggles — alt screen
 ///                (1049), cursor visibility (25), bracketed paste (2004),

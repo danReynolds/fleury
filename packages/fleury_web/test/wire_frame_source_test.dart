@@ -6,9 +6,11 @@
 @TestOn('browser')
 library;
 
+import 'dart:js_interop';
 import 'dart:typed_data';
 
 import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_wire.dart';
 import 'package:fleury_web/fleury_web.dart';
 import 'package:test/test.dart';
 import 'package:web/web.dart' as web;
@@ -55,6 +57,14 @@ List<RemoteFrame> _decodeAll(List<Uint8List> wire) {
   return decoder.drain().toList();
 }
 
+InitFrame _appInit(int protocolVersion) => InitFrame(
+  size: const CellSize(80, 24),
+  colorMode: ColorMode.truecolor,
+  imageProtocol: ImageProtocol.halfBlock,
+  tmuxPassthrough: false,
+  protocolVersion: protocolVersion,
+);
+
 /// Hand-builds one wire frame: `[typeByte][4-byte big-endian length][payload]`.
 /// Used to synthesize a framed-but-malformed frame — a VALID length header the
 /// decoder consumes, followed by a payload `_decode` rejects (a RECOVERABLE
@@ -78,6 +88,24 @@ void main() {
   late WireFrameSource source;
   late MountedApp mounted;
 
+  ({
+    web.HTMLElement host,
+    BrowserHostComponents components,
+    WireFrameSource source,
+  })
+  attachUnnegotiated() {
+    final host = web.document.createElement('div') as web.HTMLElement;
+    web.document.body!.appendChild(host);
+    final components = BrowserPresentationHost(into: host).assemble();
+    final source = WireFrameSource(url: 'ws://unused-unnegotiated/');
+    final mounted = source.attachComponentsForTest(components);
+    addTearDown(() async {
+      await mounted.dispose();
+      host.remove();
+    });
+    return (host: host, components: components, source: source);
+  }
+
   setUp(() {
     into = web.document.createElement('div') as web.HTMLElement;
     web.document.body!.appendChild(into);
@@ -88,6 +116,7 @@ void main() {
     ).assemble();
     source = WireFrameSource(url: 'ws://unused/');
     mounted = source.attachComponentsForTest(components);
+    source.handleFrameForTest(_appInit(remoteProtocolVersion));
     addTearDown(() async {
       await mounted.dispose();
       into.remove();
@@ -433,6 +462,209 @@ void main() {
     },
   );
 
+  final earlyFrames = <({String label, RemoteFrame Function() build})>[
+    (
+      label: 'SEMANTICS',
+      build: () {
+        final encoder = SemanticsWireEncoder();
+        return SemanticsFrame(
+          encoder.encodeTree(
+            const SemanticTree(
+              root: SemanticNode(
+                id: SemanticNodeId('early-root'),
+                role: SemanticRole.app,
+                children: [
+                  SemanticNode(
+                    id: SemanticNodeId('early-node'),
+                    role: SemanticRole.text,
+                    label: 'Must not present',
+                  ),
+                ],
+              ),
+            ),
+          )!,
+        );
+      },
+    ),
+    (
+      label: 'PLAN',
+      build: () => const PlanFrame(
+        RemotePlan(
+          size: CellSize(2, 1),
+          fullRepaint: true,
+          styleTable: [],
+          patches: [],
+        ),
+      ),
+    ),
+  ];
+  for (final earlyFrame in earlyFrames) {
+    test(
+      '${earlyFrame.label} before echoed INIT tears down before presentation',
+      () {
+        final harness = attachUnnegotiated();
+        harness.components.semanticPresenter!.present(
+          const SemanticTree(
+            root: SemanticNode(
+              id: SemanticNodeId('retained-root'),
+              role: SemanticRole.app,
+              children: [
+                SemanticNode(
+                  id: SemanticNodeId('save'),
+                  role: SemanticRole.button,
+                  label: 'Save',
+                  actions: {SemanticAction.activate},
+                ),
+              ],
+            ),
+          ),
+        );
+        final retainedButton = harness.host.querySelector(
+          '[data-fleury-semantic-id="save"]',
+        )!;
+        var applyReached = false;
+        harness.source.failApplyForTest = (_) {
+          applyReached = true;
+          return false;
+        };
+
+        harness.source.feedBytesForTest(encodeFrame(earlyFrame.build()));
+
+        expect(harness.source.isClosedForTest, isTrue);
+        expect(harness.source.bannerShownForTest, isTrue);
+        expect(harness.host.textContent, contains('wire negotiation failed'));
+        expect(
+          applyReached,
+          isFalse,
+          reason: 'the negotiation gate runs before frame staging/apply',
+        );
+        expect(
+          harness.host.querySelector('[data-fleury-semantic-id="early-node"]'),
+          isNull,
+          reason: 'pre-INIT semantics never reached the DOM presenter',
+        );
+
+        retainedButton.dispatchEvent(
+          web.Event('click', web.EventInit(bubbles: true, cancelable: true)),
+        );
+        harness.source.sendInputForTest(const TextInputEvent('x'));
+        expect(
+          harness.source.sentForTest,
+          isEmpty,
+          reason:
+              'stable-id action and browser input stay inert after teardown',
+        );
+      },
+    );
+  }
+
+  for (final appVersion in <int>[
+    remoteProtocolVersion - 1,
+    remoteProtocolVersion + 1,
+  ]) {
+    test('an echoed INIT at app v$appVersion rejects the browser v'
+        '$remoteProtocolVersion session', () {
+      source.handleFrameForTest(
+        InitFrame(
+          size: const CellSize(80, 24),
+          colorMode: ColorMode.truecolor,
+          imageProtocol: ImageProtocol.halfBlock,
+          tmuxPassthrough: false,
+          protocolVersion: appVersion,
+        ),
+      );
+
+      expect(source.isClosedForTest, isTrue);
+      expect(source.bannerShownForTest, isTrue);
+      expect(into.textContent, contains('wire protocol mismatch'));
+      expect(into.textContent, contains('browser v$remoteProtocolVersion'));
+      expect(into.textContent, contains('app v$appVersion'));
+    });
+  }
+
+  test(
+    'a future-version INIT cannot enable actions or present/send later frames',
+    () {
+      final encoder = SemanticsWireEncoder();
+      SemanticTree tree({
+        required String id,
+        required String label,
+        required String token,
+      }) => SemanticTree(
+        root: SemanticNode(
+          id: const SemanticNodeId('root'),
+          role: SemanticRole.app,
+          children: [
+            SemanticNode(
+              id: SemanticNodeId(id),
+              role: SemanticRole.button,
+              label: label,
+              actions: const {SemanticAction.activate},
+              actionTargetToken: token,
+            ),
+          ],
+        ),
+      );
+
+      source.handleFrameForTest(
+        SemanticsFrame(
+          encoder.encodeTree(
+            tree(id: 'element-7', label: 'Before skew', token: 'element.1'),
+          )!,
+        ),
+      );
+      final staleButton = into.querySelector(
+        '[data-fleury-semantic-id="element-7"]',
+      )!;
+      source.sentForTest.clear();
+
+      // Put the mismatch and a later semantic patch in one decoded batch. The
+      // INIT must tear down synchronously, so the already-buffered patch is
+      // never presented.
+      final appVersion = remoteProtocolVersion + 1;
+      final mismatch = encodeFrame(
+        InitFrame(
+          size: const CellSize(80, 24),
+          colorMode: ColorMode.truecolor,
+          imageProtocol: ImageProtocol.halfBlock,
+          tmuxPassthrough: false,
+          protocolVersion: appVersion,
+        ),
+      );
+      final lateSemantics = encodeFrame(
+        SemanticsFrame(
+          encoder.encodeTree(
+            tree(id: 'element-8', label: 'After skew', token: 'element.2'),
+          )!,
+        ),
+      );
+      source.feedBytesForTest(
+        Uint8List.fromList(<int>[...mismatch, ...lateSemantics]),
+      );
+
+      expect(source.isClosedForTest, isTrue);
+      expect(source.bannerShownForTest, isTrue);
+      expect(
+        into.querySelector('[data-fleury-semantic-id="element-8"]'),
+        isNull,
+        reason: 'a frame queued after the rejected INIT was not presented',
+      );
+
+      // Existing retained DOM handles and browser input are inert after the
+      // mismatch; in particular, v7 must not satisfy the old >=v6 check and
+      // enable a positional action.
+      staleButton.dispatchEvent(
+        web.Event('click', web.EventInit(bubbles: true, cancelable: true)),
+      );
+      source.sendInputForTest(const TextInputEvent('x'));
+      expect(
+        source.sentForTest,
+        isEmpty,
+        reason: 'no semantic action or input was sent after teardown',
+      );
+    },
+  );
+
   test('a failed action result is absorbed (logged), not thrown', () {
     source.handleFrameForTest(
       const SemanticActionResultFrame(
@@ -441,6 +673,272 @@ void main() {
         SemanticActionInvocationStatus.failed,
       ),
     );
+  });
+
+  test('semantic actions echo the DOM target token', () {
+    final encoder = SemanticsWireEncoder();
+    final bytes = encoder.encodeTree(
+      const SemanticTree(
+        root: SemanticNode(
+          id: SemanticNodeId('root'),
+          role: SemanticRole.app,
+          children: [
+            SemanticNode(
+              id: SemanticNodeId('element-7'),
+              role: SemanticRole.button,
+              label: 'Save',
+              actions: {SemanticAction.activate, SemanticAction.focus},
+              actionTargetToken: 'element.1',
+            ),
+          ],
+        ),
+      ),
+    );
+    source.handleFrameForTest(SemanticsFrame(bytes!));
+    source.handleFrameForTest(
+      const InitFrame(
+        size: CellSize(80, 24),
+        colorMode: ColorMode.truecolor,
+        imageProtocol: ImageProtocol.halfBlock,
+        tmuxPassthrough: false,
+        protocolVersion: remoteProtocolVersion,
+      ),
+    );
+    source.sentForTest.clear();
+
+    final button = into.querySelector('[data-fleury-semantic-id="element-7"]')!;
+    button.dispatchEvent(
+      web.Event('click', web.EventInit(bubbles: true, cancelable: true)),
+    );
+
+    final action = _decodeAll(
+      source.sentForTest,
+    ).whereType<SemanticActionFrame>().single;
+    expect(action.id, const SemanticNodeId('element-7'));
+    expect(action.action, SemanticAction.activate);
+    expect(action.targetToken, 'element.1');
+  });
+
+  test(
+    'a semantically identical recycled target detaches stale DOM handles',
+    () {
+      final encoder = SemanticsWireEncoder();
+      SemanticTree tree(String token) => SemanticTree(
+        root: SemanticNode(
+          id: const SemanticNodeId('root'),
+          role: SemanticRole.app,
+          children: [
+            SemanticNode(
+              id: const SemanticNodeId('element-7'),
+              role: SemanticRole.button,
+              label: 'Delete',
+              actions: const {SemanticAction.activate},
+              actionTargetToken: token,
+            ),
+          ],
+        ),
+      );
+
+      source.handleFrameForTest(
+        SemanticsFrame(encoder.encodeTree(tree('element.1'))!),
+      );
+      source.handleFrameForTest(
+        const InitFrame(
+          size: CellSize(80, 24),
+          colorMode: ColorMode.truecolor,
+          imageProtocol: ImageProtocol.halfBlock,
+          tmuxPassthrough: false,
+          protocolVersion: remoteProtocolVersion,
+        ),
+      );
+      final stale = into.querySelector(
+        '[data-fleury-semantic-id="element-7"]',
+      )!;
+
+      source.handleFrameForTest(
+        SemanticsFrame(encoder.encodeTree(tree('element.2'))!),
+      );
+      final replacement = into.querySelector(
+        '[data-fleury-semantic-id="element-7"]',
+      )!;
+      expect(replacement, isNot(same(stale)));
+      expect(stale.isConnected, isFalse);
+      source.sentForTest.clear();
+
+      stale.dispatchEvent(
+        web.Event('click', web.EventInit(bubbles: true, cancelable: true)),
+      );
+      expect(
+        _decodeAll(source.sentForTest).whereType<SemanticActionFrame>(),
+        isEmpty,
+      );
+
+      replacement.dispatchEvent(
+        web.Event('click', web.EventInit(bubbles: true, cancelable: true)),
+      );
+      final action = _decodeAll(
+        source.sentForTest,
+      ).whereType<SemanticActionFrame>().single;
+      expect(action.targetToken, 'element.2');
+    },
+  );
+
+  test(
+    'outbound input and stable actions wait for INIT, then the latest resize '
+    'is synchronized',
+    () {
+      final harness = attachUnnegotiated();
+      harness.components.semanticPresenter!.present(
+        const SemanticTree(
+          root: SemanticNode(
+            id: SemanticNodeId('root'),
+            role: SemanticRole.app,
+            children: [
+              SemanticNode(
+                id: SemanticNodeId('save'),
+                role: SemanticRole.button,
+                label: 'Save',
+                actions: {SemanticAction.activate},
+              ),
+            ],
+          ),
+        ),
+      );
+      final button = harness.host.querySelector(
+        '[data-fleury-semantic-id="save"]',
+      )!;
+
+      harness.host.setAttribute(
+        'style',
+        'position:absolute;width:160px;height:80px;padding:0;'
+            'font-family:monospace;font-size:10px;line-height:10px;',
+      );
+      harness.source.handleObservedResizeForTest();
+      final firstSize = harness.components.surface.size;
+      harness.host.setAttribute(
+        'style',
+        'position:absolute;width:640px;height:240px;padding:0;'
+            'font-family:monospace;font-size:20px;line-height:20px;',
+      );
+      harness.source.handleObservedResizeForTest();
+      final latestSize = harness.components.surface.size;
+      expect(latestSize, isNot(firstSize));
+
+      harness.source.sendInputForTest(const TextInputEvent('before'));
+      button.dispatchEvent(
+        web.Event('click', web.EventInit(bubbles: true, cancelable: true)),
+      );
+      expect(
+        harness.source.sentForTest,
+        isEmpty,
+        reason: 'no non-INIT frame is legal before the exact app echo',
+      );
+
+      harness.source.handleFrameForTest(_appInit(remoteProtocolVersion));
+
+      var sent = _decodeAll(harness.source.sentForTest);
+      expect(sent, hasLength(1));
+      expect(sent.single, isA<ResizeFrame>());
+      expect((sent.single as ResizeFrame).size, latestSize);
+
+      harness.source.sendInputForTest(const TextInputEvent('after'));
+      button.dispatchEvent(
+        web.Event('click', web.EventInit(bubbles: true, cancelable: true)),
+      );
+      sent = _decodeAll(harness.source.sentForTest);
+      expect(
+        sent.whereType<InputEventFrame>().single.event,
+        const TextInputEvent('after'),
+      );
+      expect(
+        sent.whereType<SemanticActionFrame>().single.id,
+        const SemanticNodeId('save'),
+      );
+    },
+  );
+
+  test('positional actions fail closed before the app echoes INIT', () {
+    final harness = attachUnnegotiated();
+    harness.components.semanticPresenter!.present(
+      const SemanticTree(
+        root: SemanticNode(
+          id: SemanticNodeId('root'),
+          role: SemanticRole.app,
+          children: [
+            SemanticNode(
+              id: SemanticNodeId('element-7'),
+              role: SemanticRole.button,
+              label: 'Save',
+              actions: {SemanticAction.activate},
+              actionTargetToken: 'element.1',
+            ),
+          ],
+        ),
+      ),
+    );
+    harness.source.sentForTest.clear();
+
+    final button = harness.host.querySelector(
+      '[data-fleury-semantic-id="element-7"]',
+    )!;
+    button.dispatchEvent(
+      web.Event('click', web.EventInit(bubbles: true, cancelable: true)),
+    );
+
+    expect(
+      _decodeAll(harness.source.sentForTest).whereType<SemanticActionFrame>(),
+      isEmpty,
+    );
+    expect(harness.source.isClosedForTest, isFalse);
+  });
+
+  test('stable-id actions keep the legacy payload on the current wire', () {
+    final encoder = SemanticsWireEncoder();
+    final bytes = encoder.encodeTree(
+      const SemanticTree(
+        root: SemanticNode(
+          id: SemanticNodeId('root'),
+          role: SemanticRole.app,
+          children: [
+            SemanticNode(
+              id: SemanticNodeId('save'),
+              role: SemanticRole.button,
+              label: 'Save',
+              actions: {SemanticAction.activate},
+            ),
+          ],
+        ),
+      ),
+    );
+    source.handleFrameForTest(SemanticsFrame(bytes!));
+    source.handleFrameForTest(
+      const InitFrame(
+        size: CellSize(80, 24),
+        colorMode: ColorMode.truecolor,
+        imageProtocol: ImageProtocol.halfBlock,
+        tmuxPassthrough: false,
+        protocolVersion: remoteProtocolVersion,
+      ),
+    );
+    source.sentForTest.clear();
+
+    final button = into.querySelector('[data-fleury-semantic-id="save"]')!;
+    button.dispatchEvent(
+      web.Event('click', web.EventInit(bubbles: true, cancelable: true)),
+    );
+
+    final action = _decodeAll(
+      source.sentForTest,
+    ).whereType<SemanticActionFrame>().single;
+    expect(action.id, const SemanticNodeId('save'));
+    expect(action.targetToken, isNull);
+    expect(encodeSemanticAction(action.id, action.action), <int>[
+      4,
+      ...'save'.codeUnits,
+      8,
+      ...'activate'.codeUnits,
+      0,
+    ]);
   });
 
   test('a failed image plan does not lose sender-cached bytes', () {
@@ -517,6 +1015,20 @@ void main() {
       expect(source.isClosedForTest, isTrue, reason: 'socket closed');
       expect(source.bannerShownForTest, isTrue, reason: 'reload banner shown');
     });
+
+    test(
+      'a text WebSocket message tears down instead of escaping the callback',
+      () {
+        source.feedMessageDataForTest('not binary Fleury wire data'.toJS);
+
+        expect(source.isClosedForTest, isTrue, reason: 'socket closed');
+        expect(
+          source.bannerShownForTest,
+          isTrue,
+          reason: 'reload banner shown',
+        );
+      },
+    );
 
     test('a single recoverable apply error resyncs, keeping the socket open '
         'with no banner', () {
@@ -631,6 +1143,29 @@ void main() {
       // buffer drained past every malformed frame (no stuck bytes, no spin).
       source.feedBytesForTest(benign);
       expect(appliesReached, 1, reason: 'the valid frame reached apply');
+      expect(source.isClosedForTest, isFalse);
+      expect(source.bannerShownForTest, isFalse);
+    });
+
+    test('a valid frame trailing a recoverable decode error in the same '
+        'message still applies immediately', () {
+      var appliesReached = 0;
+      source.failApplyForTest = (_) {
+        appliesReached++;
+        return false;
+      };
+
+      final malformed = _framedRaw(0x03, 'rows=7'.codeUnits);
+      source.feedBytesForTest(
+        Uint8List.fromList(<int>[...malformed, ...benign]),
+      );
+
+      expect(
+        appliesReached,
+        1,
+        reason:
+            'the valid trailing frame must not wait for another socket message',
+      );
       expect(source.isClosedForTest, isFalse);
       expect(source.bannerShownForTest, isFalse);
     });

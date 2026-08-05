@@ -15,7 +15,10 @@ import '../widgets/framework.dart';
 /// backends, remote/agent mirrors, and durable test selectors — give the node
 /// an explicit [Semantics.id] or a [Key]; the auto-generated fallback
 /// (`element-<hash>`) is snapshot-local and must not be relied on across
-/// frames.
+/// frames. The framework-generated `element-…` namespace and `auto:…` ids
+/// containing a `~` positional segment are reserved; [Semantics.id] rejects
+/// explicit values with those shapes so an app-authored stable id can never be
+/// mistaken for a positional one.
 final class SemanticNodeId {
   const SemanticNodeId(this.value);
 
@@ -512,6 +515,7 @@ final class SemanticNode {
     this.actions = const <SemanticAction>{},
     this.children = const <SemanticNode>[],
     this.state = SemanticState.empty,
+    this.actionTargetToken,
   });
 
   final SemanticNodeId id;
@@ -531,6 +535,27 @@ final class SemanticNode {
   final List<SemanticNode> children;
   final SemanticState state;
 
+  /// Opaque freshness token for an actionable positional [id].
+  ///
+  /// Fleury issues this token from the mounted contributor plus the target's
+  /// exact role, label, and advertised-action signature. It stays stable across
+  /// value/focus/busy/ticking updates, and changes when a different element
+  /// occupies the positional slot, the signature changes, or a synthesized
+  /// target disappears and later returns. A host must echo the token it
+  /// presented when dispatching a positional action; the app then rejects a
+  /// held id if its slot was observably recycled. Stable app/key ids do not need
+  /// a token.
+  ///
+  /// Reconciliation defines the same `runtimeType` + `Key` as one logical
+  /// element. Two configurations with that framework identity and an identical
+  /// role/label/action signature are intentionally indistinguishable here; use
+  /// a distinct [Key] or stable [Semantics.id] when they are different logical
+  /// targets. Prefer a stable id for controls whose label changes frequently.
+  ///
+  /// This is a freshness claim, not a credential. Custom semantic contributors
+  /// should leave it null; collection assigns it to owned positional targets.
+  final String? actionTargetToken;
+
   SemanticNode copyWith({List<SemanticNode>? children, CellRect? bounds}) {
     return SemanticNode(
       id: id,
@@ -549,6 +574,7 @@ final class SemanticNode {
       actions: actions,
       children: children ?? this.children,
       state: state,
+      actionTargetToken: actionTargetToken,
     );
   }
 
@@ -991,8 +1017,9 @@ String? semanticAnchorOf(Element element) {
 /// denote a different logical node when the tree shifts, so a held reference to
 /// it may go stale. Two forms qualify: the `element-<hash>` snapshot-local
 /// fallback, and a derived `auto:…` id carrying a `~` positional segment (see
-/// [semanticAnchorOf]). App-assigned, `key:…`, and fully-keyed `auto:` ids (no
-/// `~`) track their logical node and are stable.
+/// [semanticAnchorOf]). Those shapes are reserved at [Semantics.id] intake.
+/// Other app-assigned ids, `key:…`, and fully-keyed `auto:` ids (no `~`) track
+/// their logical node and are stable.
 ///
 /// Lives beside the encoding so the id scheme has a single owner: consumers that
 /// guard against stale references (e.g. `fleury_mcp`) ask here rather than
@@ -1198,6 +1225,10 @@ final class Semantics extends ProxyWidget {
     required super.child,
   });
 
+  /// Stable app-authored identity.
+  ///
+  /// Must not use the framework-reserved positional shapes `element-…` or an
+  /// `auto:…` value containing `~`.
   final SemanticNodeId? id;
   final SemanticRole role;
   final String? label;
@@ -1300,7 +1331,18 @@ final class SemanticsElement extends ComponentElement
   /// is the only provably correct choice.
   SemanticNodeId get _nodeId {
     final explicitId = widget.id;
-    if (explicitId != null) return explicitId;
+    if (explicitId != null) {
+      if (isPositionalSemanticId(explicitId.value)) {
+        throw ArgumentError.value(
+          explicitId.value,
+          'Semantics.id',
+          'uses a framework-reserved positional semantic id; choose an '
+              'app-owned id that does not start with "element-" and is not '
+              'an "auto:" id containing "~"',
+        );
+      }
+      return explicitId;
+    }
     final key = widget.key;
     if (key != null) {
       return SemanticNodeId(
@@ -1331,7 +1373,11 @@ final class SemanticsElement extends ComponentElement
   }
 
   SemanticNode _buildRetainedLeafSemanticNode() {
-    return buildSemanticNode(const <SemanticNode>[]);
+    return _bindOwnedActionTargetTokens(
+      buildSemanticNode(const <SemanticNode>[]),
+      this,
+      const <SemanticNode>[],
+    );
   }
 
   @override
@@ -1682,7 +1728,11 @@ void _collectInto(
       (element as SemanticChildrenProvider).visitSemanticChildren(
         (child) => _collectInto(child, children, elements),
       );
-      final node = (element as SemanticContributor).buildSemanticNode(children);
+      final node = _bindOwnedActionTargetTokens(
+        (element as SemanticContributor).buildSemanticNode(children),
+        element,
+        children,
+      );
       output.add(node);
       _indexOwnedIds(node, element, children, elements);
       return;
@@ -1696,12 +1746,102 @@ void _collectInto(
   if (element is SemanticContributor) {
     final children = <SemanticNode>[];
     element.visitChildren((child) => _collectInto(child, children, elements));
-    final node = (element as SemanticContributor).buildSemanticNode(children);
+    final node = _bindOwnedActionTargetTokens(
+      (element as SemanticContributor).buildSemanticNode(children),
+      element,
+      children,
+    );
     output.add(node);
     _indexOwnedIds(node, element, children, elements);
   } else {
     element.visitChildren((child) => _collectInto(child, output, elements));
   }
+}
+
+/// Applies one mounted contributor's current action-target token to every
+/// positional actionable node it owns, leaving grafted child contributors'
+/// already-bound subtrees untouched.
+///
+/// The returned nodes are immutable snapshots. Collection compares every
+/// currently owned target's exact role/label/action signature with the
+/// contributor's retained leases, sweeps targets that disappeared, and creates
+/// new token-bearing nodes rather than mutating a previous snapshot.
+SemanticNode _bindOwnedActionTargetTokens(
+  SemanticNode node,
+  Element element,
+  List<SemanticNode> graftedChildren,
+) {
+  final graftedIds = graftedChildren.isEmpty
+      ? const <SemanticNodeId>{}
+      : <SemanticNodeId>{for (final child in graftedChildren) child.id};
+  final signatures = <Object, Object>{};
+
+  void collectSignatures(SemanticNode current) {
+    if (graftedIds.contains(current.id)) return;
+    if (current.actions.isNotEmpty &&
+        isPositionalSemanticId(current.id.value)) {
+      var actionBits = 0;
+      for (final action in current.actions) {
+        actionBits |= 1 << action.index;
+      }
+      signatures[current.id.value] = (
+        current.role.index,
+        current.label,
+        actionBits,
+      );
+    }
+    for (final child in current.children) {
+      collectSignatures(child);
+    }
+  }
+
+  collectSignatures(node);
+  final tokens = elementActionTargetTokens(element, signatures);
+
+  SemanticNode bind(SemanticNode current) {
+    if (graftedIds.contains(current.id)) return current;
+
+    List<SemanticNode>? children;
+    for (var index = 0; index < current.children.length; index++) {
+      final child = current.children[index];
+      final nextChild = bind(child);
+      if (!identical(child, nextChild)) {
+        children ??= current.children.toList(growable: false);
+        children[index] = nextChild;
+      }
+    }
+
+    final targetToken =
+        current.actions.isNotEmpty && isPositionalSemanticId(current.id.value)
+        ? tokens[current.id.value]
+        : null;
+    if (children == null && current.actionTargetToken == targetToken) {
+      return current;
+    }
+    return SemanticNode(
+      id: current.id,
+      role: current.role,
+      label: current.label,
+      value: current.value,
+      hint: current.hint,
+      enabled: current.enabled,
+      focused: current.focused,
+      selected: current.selected,
+      checked: current.checked,
+      expanded: current.expanded,
+      busy: current.busy,
+      validationError: current.validationError,
+      bounds: current.bounds,
+      actions: current.actions,
+      children: children == null
+          ? current.children
+          : List<SemanticNode>.unmodifiable(children),
+      state: current.state,
+      actionTargetToken: targetToken,
+    );
+  }
+
+  return bind(node);
 }
 
 /// Maps every id in [node]'s subtree that [element] *itself* contributed — i.e.

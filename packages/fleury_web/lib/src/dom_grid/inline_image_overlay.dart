@@ -1,7 +1,7 @@
 import 'dart:js_interop';
 import 'dart:typed_data';
 
-import 'package:fleury/fleury_host.dart'
+import 'package:fleury/fleury_wire.dart'
     show
         ImagePlacement,
         InlineImageCacheLedger,

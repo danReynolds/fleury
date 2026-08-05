@@ -257,6 +257,7 @@ bool _semanticNodeEquals(SemanticNode a, SemanticNode b) {
       a.bounds == b.bounds &&
       _setEquals(a.actions, b.actions) &&
       a.state.hasSameValues(b.state) &&
+      a.actionTargetToken == b.actionTargetToken &&
       _hasSameChildOrder(a, b);
 }
 

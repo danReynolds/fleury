@@ -6,10 +6,10 @@ import 'option_label.dart';
 ///
 /// As the user types, options whose display string matches the text
 /// (case-insensitive substring) appear in a dropdown anchored just below
-/// the field — via the [Anchor]/[Follower] primitive, so it floats over
-/// content and stays on screen. The field keeps focus throughout: Up/Down
-/// move the highlight, Enter fills the field with the highlighted option
-/// (and calls [onSelect]), Esc closes the dropdown.
+/// the field via the [Anchored] primitive, so it floats over content and stays
+/// on screen. The field keeps focus throughout: Up/Down move the highlight,
+/// Enter fills the field with the highlighted option (and calls [onSelect]),
+/// Esc closes the dropdown.
 ///
 /// Options can be any type [T]; [displayStringForOption] maps each to the
 /// text shown and matched against (defaults to `toString()`). `onSelect`

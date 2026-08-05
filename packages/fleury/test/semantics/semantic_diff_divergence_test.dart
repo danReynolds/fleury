@@ -13,6 +13,7 @@
 import 'dart:convert';
 
 import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_wire.dart';
 import 'package:test/test.dart';
 
 SemanticTree _tree({

@@ -20,6 +20,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_wire.dart';
 import 'package:fleury_mcp/fleury_mcp.dart';
 import 'package:fleury_mcp/src/value_schema.dart';
 
@@ -240,6 +241,17 @@ Future<Map<String, Object?>> settleLatency() async {
       if (bytes != null) transport.add(SemanticsFrame(bytes));
     }
 
+    // The bridge is an exact-version wire peer. Complete the same INIT echo
+    // required of a real app before feeding the first semantic frame; otherwise
+    // this fixture measures fail-closed negotiation instead of settle latency.
+    transport.add(
+      const InitFrame(
+        size: CellSize(80, 24),
+        colorMode: ColorMode.truecolor,
+        imageProtocol: ImageProtocol.halfBlock,
+        tmuxPassthrough: false,
+      ),
+    );
     push();
     await bridge.ready;
     final ticker = Timer.periodic(

@@ -296,7 +296,11 @@ export 'src/input/keyboard_state.dart'
 export 'src/terminal/fake_driver.dart' show FakeTerminalDriver;
 export 'src/terminal/input_parser.dart' show InputParser, TuiEventSink;
 export 'src/runtime/remote_surface_sink.dart'
-    show RemoteSemanticActionHandler, RemoteSurfaceSink;
+    show
+        RemoteClipboardStatus,
+        RemoteDebugRequestHandler,
+        RemoteSemanticActionHandler,
+        RemoteSurfaceSink;
 export 'src/terminal/terminal_driver.dart'
     show
         OutputFlowControl,

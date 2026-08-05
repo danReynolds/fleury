@@ -137,8 +137,10 @@ void main() {
       bool appLog(Map<String, Object?> n, String needle) {
         if (n['method'] != 'notifications/message') return false;
         final params = n['params'] as Map<String, Object?>;
+        final data = params['data'] as Map<String, Object?>;
         return params['logger'] == 'app' &&
-            '${params['data']}'.contains(needle);
+            '${data['message']}'.contains(needle) &&
+            '${data['untrustedContent']}'.contains('untrusted');
       }
 
       // The app's stdout marker is forwarded at info; its stderr marker at

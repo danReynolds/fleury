@@ -8,6 +8,7 @@
 library;
 
 import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_wire.dart';
 import 'package:fleury_web/src/semantics/semantic_dom_presenter.dart';
 import 'package:test/test.dart';
 import 'package:web/web.dart' as web;

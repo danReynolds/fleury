@@ -13,7 +13,12 @@
 library;
 
 export 'src/app_bridge.dart'
-    show BridgeLog, FleuryAppBridge, FleuryAppBridgeException;
+    show
+        BridgeLog,
+        FleuryAppBridge,
+        FleuryAppBridgeException,
+        FleurySemanticActionBusyException,
+        FleurySemanticActionTimeoutException;
 export 'src/mcp_server.dart'
     show
         McpServer,

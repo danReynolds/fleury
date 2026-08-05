@@ -6,7 +6,7 @@
 // demo instead of as a loose line above it. On narrow viewports the rail wraps
 // below. Styling lives in src/styles/fleury.css.
 interface Props {
-  /** The shell command that runs this app natively, e.g. "fleury dev samples dashboard". */
+  /** The checkout command that runs this app natively, e.g. "dart run packages/samples/bin/samples.dart dashboard". */
   runCmd: string;
   /** The sample's source filename, e.g. "dashboard.dart" (shown as the link label). */
   sourceFile?: string;
@@ -32,7 +32,7 @@ const { runCmd, sourceFile, sourceUrl } = Astro.props;
             <code>{sourceFile}</code>
             <span aria-hidden="true">↗</span>
           </a>
-          <p class="showcase-meta-hint">The whole app — one file.</p>
+          <p class="showcase-meta-hint">Start with the showcase implementation.</p>
         </div>
       )
     }
