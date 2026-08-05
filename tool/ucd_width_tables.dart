@@ -164,7 +164,11 @@ Future<String> generateWidthTables({
     'emojiModifierRanges': _coalesce(_emojiProperty(emoji, 'Emoji_Modifier')),
   };
 
-  final body = StringBuffer();
+  final body = StringBuffer()
+    // Part of the hashed body on purpose: `--check` splits the committed file
+    // on the sentinel and hashes everything after it, so anything the template
+    // adds between the two would make generate and check disagree forever.
+    ..writeln(formatOffMarker);
   tables.forEach((name, ranges) {
     body.writeln(_emitTable(name, ranges));
   });
@@ -204,6 +208,14 @@ $body''';
 /// freshness gate splits on it to recompute the fingerprint over exactly the
 /// bytes the generator hashed.
 const String tablesSentinel = '// ---- tables ----';
+
+/// Keeps `dart format` off the emitted tables.
+///
+/// They are laid out two code-point pairs per line, and the freshness
+/// fingerprint hashes exactly those bytes — so a blanket `dart format` over
+/// the package would rewrite the layout and fail the gate for a change nobody
+/// made, with a diff that looks like a hand-edited table.
+const String formatOffMarker = '// dart format off';
 
 /// The fingerprint the `--check` gate compares. Deliberately covers BOTH the
 /// generator's logic and the emitted data, so either drifting alone is caught.

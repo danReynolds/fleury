@@ -71,6 +71,9 @@ Future<void> main(List<String> args) async {
       mouse: true,
       keyboardProtocol: KeyboardProtocolMode.lifecycle,
     ),
+    // Which sample to run comes from argv, and a dev hot-restart re-runs this
+    // entrypoint — so hand argv over or the respawn lands on the usage banner.
+    args: args,
   );
 }
 

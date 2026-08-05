@@ -243,6 +243,15 @@ const _maxPendingRemoteSemanticActions = 64;
 /// Wrap the root in `FleuryApp(home: ...)` for Fleury's standard navigation
 /// shell, or supply a `Navigator`/custom shell explicitly. Bare single-screen
 /// roots remain valid.
+/// Pass your `main()` argv as [args] if the app reads it: a dev hot-reload
+/// respawn re-runs the entrypoint, and a process cannot portably recover its
+/// own script arguments, so without this the restarted app sees an empty argv
+/// and may show something other than what was asked for.
+///
+/// ```dart
+/// Future<void> main(List<String> args) => runApp(MyApp(), args: args);
+/// ```
+///
 Future<AppExit> runApp(
   Widget root, {
   TerminalDriver? driver,
@@ -256,6 +265,7 @@ Future<AppExit> runApp(
   Duration sequenceTimeout = const Duration(milliseconds: 500),
   DebugConfig debug = const DebugConfig(),
   Duration frameInterval = Duration.zero,
+  List<String> args = const [],
 }) async {
   // Plain `dart run` dev sessions hand the process to the dev supervisor:
   // it re-spawns this same script as a child process with the VM service
@@ -269,7 +279,7 @@ Future<AppExit> runApp(
     driverInjected: driver != null,
     enableHotReload: enableHotReload,
   )) {
-    await DevBootstrap.runOrFallThrough();
+    await DevBootstrap.runOrFallThrough(args: args);
     // Reaching here means this run was ineligible after async checks or the
     // bootstrap could not start; run classically.
   }
