@@ -57,10 +57,13 @@ void main(List<String> args) async {
     signal.watch().listen((_) => _restore(alt: alt, exitCode: 130));
   }
 
-  final sub = stdin.listen(_onBytes);
+  stdin.listen(_onBytes);
   await _reportMasking();
   await _traceKeys(alt: alt);
-  await sub.cancel();
+  // Restore WITHOUT cancelling the subscription first. Cancelling closes the
+  // stdin fd, so the lineMode write that follows fails with EBADF — and it
+  // fails AFTER raw mode was set, leaving the user's shell with no echo and
+  // no line editing. `exit()` tears the subscription down anyway.
   _restore(alt: alt, exitCode: 0);
 }
 
