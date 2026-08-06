@@ -92,9 +92,7 @@ void main() {
       // could never be answered.
       final scene = _scene(
         tester,
-        extraBindings: [
-          KeyBinding(KeySequence.g.g, onTrigger: (_) => {}),
-        ],
+        extraBindings: [KeyBinding(KeySequence.g.g, onTrigger: (_) => {})],
       );
       tester.type('g'); // opens the `g` prefix
       final pending = scene.arm();
@@ -129,9 +127,7 @@ void main() {
     ) async {
       final scene = _scene(tester);
       final pending = scene.arm();
-      tester.sendKey(
-        const KeyEvent(KeyCode.a, type: KeyEventType.repeat),
-      );
+      tester.sendKey(const KeyEvent(KeyCode.a, type: KeyEventType.repeat));
       var done = false;
       unawaited(pending.then((_) => done = true));
       await Future<void>.delayed(Duration.zero);

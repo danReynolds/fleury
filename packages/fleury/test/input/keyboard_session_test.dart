@@ -15,6 +15,7 @@ KeyEvent _repeat(String c) =>
     KeyEvent(KeyCode.char(c), type: KeyEventType.repeat);
 
 void main() {
+  _phaseViolationRecovery();
   group('capability gating (the legacy/test-harness profile)', () {
     test('a release-less source is never "repaired"', () {
       final session = KeyboardSession(); // legacy default
@@ -274,6 +275,75 @@ void main() {
         expect(inner, isTrue);
       }, entitled: true);
       expect(outer, isFalse);
+    });
+  });
+}
+
+void _phaseViolationRecovery() {
+  group('phase-violation suspicion is retired by positive evidence', () {
+    test('two dropped releases, hours apart, must NOT demote', () {
+      // The counter used to be a one-way ratchet: any two duplicate-downs
+      // across a whole session demoted a perfectly honest terminal, with no
+      // path back. A real `:2` or `:3` in between proves the surface DOES
+      // implement phases, which is exactly the evidence that should clear it.
+      final session = KeyboardSession(capabilities: KeyboardCapabilities.full);
+      const a = KeyEvent(KeyCode.a, position: KeyPosition.a);
+
+      // Strike one: a release went missing, so this down lands while held.
+      session.ingest(a);
+      session.ingest(a);
+      expect(session.capabilities.supportsHeldState, isTrue);
+
+      // The terminal then demonstrates it really does report phases.
+      session.ingest(
+        const KeyEvent(
+          KeyCode.a,
+          position: KeyPosition.a,
+          type: KeyEventType.up,
+        ),
+      );
+
+      // Strike two, much later. On a ratcheting counter this demotes.
+      session.ingest(a);
+      session.ingest(a);
+      expect(
+        session.capabilities.supportsHeldState,
+        isTrue,
+        reason:
+            'an honest terminal that proved itself between two dropped '
+            'releases must not be demoted',
+      );
+    });
+
+    test('a real `:2` repeat is positive evidence too', () {
+      // The repeat branch needs its own case: a terminal can prove it honours
+      // phases by marking auto-repeats without ever dropping a release, and
+      // the first version of this fix left that path uncovered.
+      final session = KeyboardSession(capabilities: KeyboardCapabilities.full);
+      const a = KeyEvent(KeyCode.a, position: KeyPosition.a);
+      session.ingest(a);
+      session.ingest(a); // strike one
+      session.ingest(
+        const KeyEvent(
+          KeyCode.a,
+          position: KeyPosition.a,
+          type: KeyEventType.repeat,
+        ),
+      );
+      session.ingest(a); // would be strike two on a ratcheting counter
+      expect(session.capabilities.supportsHeldState, isTrue);
+    });
+
+    test('an unbroken run of duplicate downs still demotes', () {
+      // The recovery path must not disarm the detector: Warp emits bare
+      // presses for every auto-repeat and never a phase, so nothing ever
+      // clears the count.
+      final session = KeyboardSession(capabilities: KeyboardCapabilities.full);
+      const a = KeyEvent(KeyCode.a, position: KeyPosition.a);
+      session.ingest(a);
+      session.ingest(a);
+      session.ingest(a);
+      expect(session.capabilities.supportsHeldState, isFalse);
     });
   });
 }

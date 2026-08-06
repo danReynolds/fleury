@@ -404,6 +404,14 @@ final class KeyboardSession {
         _dirtySinceLatch = true;
         return RegularizedKey._([event]);
       case KeyEventType.repeat:
+        // Positive evidence, and the only kind that exists: the parser
+        // produces `repeat` and `up` ONLY from an explicit `:2` / `:3`
+        // sub-parameter, so either one proves this surface really does
+        // implement phases. That retires whatever suspicion earlier dropped
+        // bytes accumulated — without it the counter is a one-way ratchet and
+        // a long session on an honest terminal demotes itself over two
+        // unrelated lost releases.
+        if (!event.synthesized) _phaseViolations = 0;
         if (heldId == null) {
           // Repeat without down: the down physically happened and was
           // missed. Repair with a synthesized, command-eligible down.
@@ -421,6 +429,14 @@ final class KeyboardSession {
         }
         return RegularizedKey._([event]);
       case KeyEventType.up:
+        // Positive evidence, and the only kind that exists: the parser
+        // produces `repeat` and `up` ONLY from an explicit `:2` / `:3`
+        // sub-parameter, so either one proves this surface really does
+        // implement phases. That retires whatever suspicion earlier dropped
+        // bytes accumulated — without it the counter is a one-way ratchet and
+        // a long session on an honest terminal demotes itself over two
+        // unrelated lost releases.
+        if (!event.synthesized) _phaseViolations = 0;
         // Close the record this release refers to, by ITS identity — which
         // may differ from this event's when position reporting is uneven.
         final held = heldId == null ? null : _held.remove(heldId);
