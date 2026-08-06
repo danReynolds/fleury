@@ -299,28 +299,49 @@ large pile of unreviewed local captures.
 
 ## Kitty keyboard protocol — measured 2026-08-06 (macOS 15, RFC 0020)
 
-Captured with `fleury diagnose --probe --json-output=…` run **inside each
-emulator**, non-interactively. The probe pushes the full flag set, queries, and
-restores, so this measures *support*, not whatever happened to be in force.
+Flag columns captured with `fleury diagnose --probe --json-output=…` run
+**inside each emulator**, non-interactively. The probe pushes the full flag
+set, queries, and restores, so it measures what a terminal *claims*, not
+whatever happened to be in force.
 
-| Terminal | TERM | Flags | Lifecycle safe | Held state | Positions |
+The **Delivers** column is different, and was added after a terminal claimed a
+flag it does not implement. It comes from `packages/fleury/bin/keytrace.dart`:
+hold a key, release it, and read the bytes. Only that answers whether the
+claim is true.
+
+| Terminal | TERM | Flags | Lifecycle safe | Delivers phases | Positions |
 |---|---|---|---|---|---|
 | Ghostty | `xterm-ghostty` | 31 | yes | yes | yes |
 | iTerm2 | `xterm-256color` | 31 | yes | yes | yes |
 | kitty | `xterm-kitty` | 31 | yes | yes | yes |
-| Warp | `xterm-256color` | 31 | yes | yes | yes |
+| Warp | `xterm-256color` | 31 | yes | **NO** ¹ | yes |
 | Terminal.app | `xterm-256color` | — | no | no | no |
 | WezTerm | `xterm-256color` | — | no | no | no |
 
-**Four of six honour all five progressive-enhancement flags**, so `isHeld`,
-`KeyBinding.hold`, and positional gestures are live on them with no
-configuration.
+¹ **Warp claims flag 2 and emits no event types for text keys.** Verified by
+byte capture on 2026-08-06, inline *and* in the alternate screen: holding `a`
+produces seven identical `CSI 97;1;97 u` — press plus six auto-repeats, none
+marked `:2` — and nothing at all on release. Lone modifiers DO carry a phase
+(`CSI 57442;5:1 u` for left-ctrl), so the machinery exists and is missing for
+ordinary keys. Warp masks undefined flags correctly (push bit 32, get `0`
+back), so its `31` is a sincere claim rather than a blind echo — which makes
+this a genuine Warp bug. No upstream report exists; Warp's own docs list
+"detecting key release events" as supported. Consequence: every held key
+sticks down forever until `KeyboardSession`'s duplicate-down detector demotes
+the surface to press-only.
+
+**Three of six actually deliver phases**, so `isHeld` and `KeyBinding.hold`
+are live there with no configuration. Warp needs a press-driven fallback like
+any legacy terminal.
 
 Two results correct assumptions made earlier in RFC 0020's development:
 
-- **Warp supports it fully.** It was assumed not to, by analogy with its
-  well-known lack of OSC 8 hyperlink support. Those are unrelated features and
-  the analogy was wrong.
+- **Warp was assumed unsupported, then measured as fully supporting, and is
+  in fact neither.** The original assumption came by analogy with its lack of
+  OSC 8 support — a wrong analogy. The correction over-swung, because the
+  probe was read as a capability report when it only ever proved that Warp
+  answers a query. The lesson is in the Delivers column: a claim is not a
+  measurement.
 - **WezTerm reports no support.** It documents the protocol, but
   `enable_kitty_keyboard` is config-gated and off by default, so a stock
   install behaves as a legacy terminal. This is a configuration finding, not a

@@ -2111,8 +2111,11 @@ final class InputBatch extends TuiEvent {
 ///
 /// Support is opportunistic: 1004 cannot be queried, tmux forwards it only
 /// with `focus-events on`, and Terminal.app, mosh, screen and conhost have
-/// no support at all. Where it never arrives, the repeat-silence watchdog
-/// is the fallback — see `PosixTerminalDriver`.
+/// no support at all. Where it never arrives there is NO fallback: a key held
+/// across a focus change stays held until that key is next pressed, at which
+/// point `KeyboardSession`'s duplicate-down repair clears it. RFC 0020 §8.6
+/// specifies a repeat-silence watchdog to close this; it has never been
+/// built, and this comment used to claim otherwise.
 @immutable
 final class TerminalFocusEvent extends TuiEvent {
   const TerminalFocusEvent({required this.focused});

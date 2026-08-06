@@ -16,8 +16,9 @@ String buildTerminalEnterSequences(TerminalMode mode) {
   if (mode.bracketedPaste) buf.write('\x1B[?2004h');
   // Focus reporting (DECSET 1004). Opportunistic: it cannot be queried, so
   // we enable it and use what arrives. Where it flows, focus-out is the
-  // authority-loss signal that keeps held keys from wedging (RFC 0020
-  // §8.6); where it doesn't, the watchdog covers the common case.
+  // authority-loss signal that keeps held keys from wedging (RFC 0020 §8.6);
+  // where it doesn't, nothing covers it — the watchdog this comment used to
+  // credit was specified and never implemented.
   if (mode.focusReporting) buf.write('\x1B[?1004h');
   // Push this tier's Kitty flags. MUST come after the alt-screen switch
   // above: the protocol mandates a separate flag stack per screen buffer,

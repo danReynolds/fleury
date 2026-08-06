@@ -346,11 +346,36 @@ all finals. Esc-disambiguation timers stay armed unless event-types were
 Blur-synthesized releases on terminals require DECSET 1004, which is
 unqueryable, default-unforwarded by tmux (`focus-events`), and absent on
 Terminal.app/mosh/screen/conhost. Policy: enable 1004 opportunistically at both
-tiers and treat `CSI I/O` as authority where it flows; additionally run a
-**repeat-silence watchdog** for held non-modifier keys (OS auto-repeat stops
-the instant focus leaves), with its two documented holes — users with
-auto-repeat disabled, and lone modifiers, which never repeat. "App blur" is
+tiers and treat `CSI I/O` as authority where it flows. "App blur" is
 kitty-tier opportunism, not a guarantee; the docs say which.
+
+**The repeat-silence watchdog specified here was never implemented**, and this
+section previously described it as though it had been. Two code comments
+repeated the claim. What follows is the reasoning, kept because the idea keeps
+suggesting itself.
+
+The proposal: OS auto-repeat stops the instant focus leaves, so silence from a
+held key implies the hold is over. Two uses, with opposite economics:
+
+1. **As a substitute for phase reporting** — emulating held state on a
+   terminal that never sends releases. *Rejected.* macOS waits ~500 ms before
+   the first auto-repeat, so within that window there is no signal to
+   distinguish a tap from a hold. A watchdog conservative enough not to end a
+   real hold would report a tapped key as held for over half a second, which
+   is unusable for exactly the controls that want held state. Phase-less
+   surfaces demote to press-only instead (§6.4), and apps pair every sampled
+   control with a press-driven binding.
+2. **As a backstop for a hold wedged by focus loss**, on a surface that DOES
+   report phases and where 1004 never arrived. *Still valid, still unbuilt.*
+   Here the maths inverts: the watchdog can only ever END a hold that would
+   otherwise last forever, so a wrong guess costs one re-press while the
+   absence costs a permanently stuck key. Its two holes remain — users with
+   auto-repeat disabled, and lone modifiers, which never repeat.
+
+Until (2) exists, a key held across a focus change on a 1004-less terminal
+stays held until the next press of that key. `KeyboardSession`'s duplicate-down
+repair then clears it, so the wedge is bounded by the next keystroke rather
+than by the session.
 
 ### 8.7 Parser completeness
 
@@ -752,7 +777,7 @@ sessionGeneration; identity — AZERTY ownership (positional sample + suppressio
 AltGr never-Ctrl+Alt, Turkish İ; capabilities — reactivity rebuilds the
 branch, transactional rollback preserves text entry, legacy honesty asserts,
 confirmed-not-requested; terminal — escape-ordering regression, explicit-count
-pop, spawn bracket, SIGTSTP/SIGCONT, watchdog, chaos-exit records; web —
+pop, spawn bracket, SIGTSTP/SIGCONT, chaos-exit records; web —
 Meta-regime, keydown/input pairing, blur sweep; holds — pairing under
 consumption/modality/capture, both-fire order, inert-on-legacy; sequences —
 §14.4 lifecycle incl. Esc side-effect and detector-consumed-key pending
@@ -803,8 +828,10 @@ doubled or lost, no release ever fires a command.
   rewritten** (latch deleted, positional controls, suppression idiom, legacy
   scheme, focus pause).
 - **P5 — kitty negotiation** (Part I): tier 1|2 + default-tier query,
-  transactional lifecycle, ordering tests, spawn bracket, SIGTSTP/CONT, 1004 +
-  watchdog, chaos-exit suite.
+  transactional lifecycle, ordering tests, spawn bracket, SIGTSTP/CONT, 1004,
+  chaos-exit suite. (The §8.6 watchdog was listed here and never built — see
+  that section for why one of its two uses is rejected outright and the other
+  is still open.)
 - **P6 — parity + tooling**: remote round-trip, keyboard inspector (internal
   lane), layout tables + learning + `labelFor`, input-path gate, probe-generated
   support matrix.
@@ -862,8 +889,9 @@ doubled or lost, no release ever fires a command.
     to type, and the opt-in predated that machinery. The automatic upgrade holds
     back only inside a multiplexer, where a raw query is not a reliable
     statement about the host terminal; restoration honesty is "every observable exit" plus documented
-    `reset`; blur on terminals is opportunistic-1004 + watchdog, not a
-    guarantee; macOS-web Meta keys are press-only.
+    `reset`; blur on terminals is opportunistic-1004 ALONE — the watchdog that
+    was to back it up was never built (§8.6) — so it is not a guarantee;
+    macOS-web Meta keys are press-only.
 13. Rejected along the way (each with its round recorded in the session
     notes): phase predicates on bindings; releases via the focus hook; a
     public observation widget as the games API; focus-scoped sampling; a
