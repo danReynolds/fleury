@@ -5,6 +5,7 @@ import 'package:fleury_test/fleury_test.dart';
 import 'package:test/test.dart';
 
 void main() {
+  _inputTests();
   group('NeonAsteroidsGame', () {
     test(
       'the same recorded input is independent of rendered frame cadence',
@@ -319,37 +320,45 @@ void main() {
       viewportSize: viewport,
     );
 
+    testWidgets(
+      'on a press-only surface, EVERY movement control works',
+      (t) {
+        // The hole that shipped: only thrust had a press-driven fallback, so on
+        // a terminal with no held-key reporting the ship thrusted once and then
+        // could neither steer nor stop. Sampled controls are dead there by
+        // definition — `isHeld` is false forever — so each one needs a binding.
+        t.keyboardCapabilities = KeyboardCapabilities.legacy;
+        t.pumpWidget(const NeonAsteroidsApp());
+        t.sendKey(const KeyEvent(KeyCode.space));
+        t.pump(const Duration(milliseconds: 250));
 
-    testWidgets('on a press-only surface, EVERY movement control works', (t) {
-      // The hole that shipped: only thrust had a press-driven fallback, so on
-      // a terminal with no held-key reporting the ship thrusted once and then
-      // could neither steer nor stop. Sampled controls are dead there by
-      // definition — `isHeld` is false forever — so each one needs a binding.
-      t.keyboardCapabilities = KeyboardCapabilities.legacy;
-      t.pumpWidget(const NeonAsteroidsApp());
-      t.sendKey(const KeyEvent(KeyCode.space));
-      t.pump(const Duration(milliseconds: 250));
+        final hints = t.renderToString(size: viewport);
+        for (final label in ['Turn left', 'Turn right', 'Brake', 'Thrust']) {
+          expect(
+            _activeBindingLabels(t),
+            contains(label),
+            reason:
+                '$label must be reachable without held-key reporting'
+                ' (hints: $hints)',
+          );
+        }
+      },
+      viewportSize: viewport,
+    );
 
-      final hints = t.renderToString(size: viewport);
-      for (final label in ['Turn left', 'Turn right', 'Brake', 'Thrust']) {
-        expect(
-          _activeBindingLabels(t),
-          contains(label),
-          reason: '$label must be reachable without held-key reporting'
-              ' (hints: $hints)',
-        );
-      }
-    }, viewportSize: viewport);
-
-    testWidgets('a capable surface does NOT declare the fallback bindings', (t) {
-      // The sampled path owns movement there; duplicating it as bindings would
-      // put "Turn left" in the hint bar of a game that steers by holding.
-      t.keyboardCapabilities = KeyboardCapabilities.full;
-      t.pumpWidget(const NeonAsteroidsApp());
-      t.sendKey(const KeyEvent(KeyCode.space));
-      t.pump(const Duration(milliseconds: 250));
-      expect(_activeBindingLabels(t), isNot(contains('Turn left')));
-    }, viewportSize: viewport);
+    testWidgets(
+      'a capable surface does NOT declare the fallback bindings',
+      (t) {
+        // The sampled path owns movement there; duplicating it as bindings would
+        // put "Turn left" in the hint bar of a game that steers by holding.
+        t.keyboardCapabilities = KeyboardCapabilities.full;
+        t.pumpWidget(const NeonAsteroidsApp());
+        t.sendKey(const KeyEvent(KeyCode.space));
+        t.pump(const Duration(milliseconds: 250));
+        expect(_activeBindingLabels(t), isNot(contains('Turn left')));
+      },
+      viewportSize: viewport,
+    );
 
     testWidgets(
       'clicking the paused playfield resumes without resetting the run',
@@ -489,7 +498,12 @@ String _snapshot(NeonAsteroidsGame game) {
     bulletState,
     game.particles.length,
   ].join(';');
+}
 
+/// Registered from [main]. These groups were authored inside _snapshot's
+/// body, after its `return`, so they never ran — a dead-code warning was
+/// the only sign, and the suite reported green the whole time.
+void _inputTests() {
   group('NeonAsteroids input (RFC 0020 sampled controls)', () {
     testWidgets('the app mounts and accepts sampled held keys', (tester) async {
       // A smoke test over the real widget: the rewrite reads its controls
@@ -574,5 +588,6 @@ String _snapshot(NeonAsteroidsGame game) {
 
 /// Labels of every key binding active in the focused context.
 List<String> _activeBindingLabels(FleuryTester t) => [
-  for (final b in resolveActiveKeyBindings(t.focusManager)) b.binding.displayLabel,
+  for (final b in resolveActiveKeyBindings(t.focusManager))
+    b.binding.displayLabel,
 ];
