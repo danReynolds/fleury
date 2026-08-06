@@ -12,7 +12,7 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyCode.char('q'), onTrigger: () {}, label: 'Quit'),
+            KeyBinding(KeyCode.char('q'), onTrigger: (_) {}, label: 'Quit'),
           ],
           child: const Column(
             children: [
@@ -30,11 +30,11 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyCode.char('q'), onTrigger: () {}, label: 'outer'),
+            KeyBinding(KeyCode.char('q'), onTrigger: (_) {}, label: 'outer'),
           ],
           child: KeyBindings(
             bindings: [
-              KeyBinding(KeyCode.char('q'), onTrigger: () {}, label: 'inner'),
+              KeyBinding(KeyCode.char('q'), onTrigger: (_) {}, label: 'inner'),
             ],
             child: const Column(
               children: [
@@ -55,20 +55,20 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyCode.char('a'), onTrigger: () {}),
+            KeyBinding(KeyCode.char('a'), onTrigger: (_) {}),
             KeyBinding(
               KeyCode.char('b'),
-              onTrigger: () {},
+              onTrigger: (_) {},
               label: 'hidden',
               hideFromHintBar: true,
             ),
             KeyBinding(
               KeyCode.char('c'),
-              onTrigger: () {},
+              onTrigger: (_) {},
               label: 'off',
               enabled: false,
             ),
-            KeyBinding(KeyCode.char('d'), onTrigger: () {}, label: 'shown'),
+            KeyBinding(KeyCode.char('d'), onTrigger: (_) {}, label: 'shown'),
           ],
           child: const Column(
             children: [
@@ -121,10 +121,11 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding.any(
-              [KeyCode.arrowUp, KeyCode.arrowDown],
+            KeyBinding(
+              KeyCode.arrowUp,
+              aliases: [KeyCode.arrowDown],
               label: 'move',
-              onTrigger: () {},
+              onTrigger: (_) {},
             ),
           ],
           child: const Column(
@@ -144,7 +145,7 @@ void main() {
         KeyBindings(
           bindings: [
             for (var i = 0; i < 6; i++)
-              KeyBinding(KeyCode.char('$i'), label: 'act$i', onTrigger: () {}),
+              KeyBinding(KeyCode.char('$i'), label: 'act$i', onTrigger: (_) {}),
           ],
           child: const Column(
             children: [
@@ -171,7 +172,7 @@ void main() {
         KeyBindings(
           bindings: [
             for (var i = 0; i < 4; i++)
-              KeyBinding(KeyCode.char('$i'), label: 'act$i', onTrigger: () {}),
+              KeyBinding(KeyCode.char('$i'), label: 'act$i', onTrigger: (_) {}),
           ],
           // A non-Expanded bar in a Row receives an unbounded width.
           child: Row(
@@ -197,7 +198,7 @@ void main() {
               KeyBinding(
                 KeyCode.char(String.fromCharCode(97 + i)),
                 label: 'a$i',
-                onTrigger: () {},
+                onTrigger: (_) {},
               ),
           ],
           child: const Column(
@@ -211,6 +212,76 @@ void main() {
       // 20 bindings, cap 12 — even at a very wide width the 8 beyond the cap
       // show as "+8" rather than silently vanishing.
       expect(_render(tester, cols: 200), contains('+8'));
+    });
+  });
+
+  group('layout-honest labels (RFC 0020 §9)', () {
+    testWidgets('an unknown layout falls back to the US twin', (tester) {
+      // Degraded but actionable. A blank hint helps nobody, and the US name
+      // is what the position is documented as.
+      tester.pumpWidget(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeyPosition.w, onTrigger: (_) {}, label: 'Thrust'),
+          ],
+          child: const Column(
+            children: [
+              Expanded(child: Focus(autofocus: true, child: Text('Body'))),
+              KeyHintBar(),
+            ],
+          ),
+        ),
+      );
+      expect(_render(tester), contains('[w] Thrust'));
+    });
+
+    testWidgets('once the terminal reports a position, the REAL cap shows', (
+      tester,
+    ) {
+      // The bar exists to tell people what to press, so it must not be the
+      // thing that misleads them: on AZERTY the key at QWERTY-W is capped Z.
+      tester.pumpWidget(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeyPosition.w, onTrigger: (_) {}, label: 'Thrust'),
+          ],
+          child: const Column(
+            children: [
+              Expanded(child: Focus(autofocus: true, child: Text('Body'))),
+              KeyHintBar(),
+            ],
+          ),
+        ),
+      );
+      expect(_render(tester), contains('[w] Thrust'));
+
+      // A press that carries positional identity IS the mapping, observed.
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('z'), position: KeyPosition.w),
+      );
+      tester.pump();
+      expect(_render(tester), contains('[z] Thrust'));
+      expect(_render(tester), isNot(contains('[w] Thrust')));
+    });
+
+    testWidgets('a logical binding is never rewritten', (tester) {
+      // Only positions are spots. `q` IS the cap, on every layout.
+      tester.pumpWidget(
+        KeyBindings(
+          bindings: [KeyBinding(KeyCode.q, onTrigger: (_) {}, label: 'Quit')],
+          child: const Column(
+            children: [
+              Expanded(child: Focus(autofocus: true, child: Text('Body'))),
+              KeyHintBar(),
+            ],
+          ),
+        ),
+      );
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('a'), position: KeyPosition.q),
+      );
+      tester.pump();
+      expect(_render(tester), contains('[q] Quit'));
     });
   });
 }

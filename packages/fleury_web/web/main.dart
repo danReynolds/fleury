@@ -50,31 +50,35 @@ class _DemoState extends State<_Demo> {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Focus(
-        autofocus: true,
-        onKey: _onKey,
-        child: Container(
-          border: const BoxBorder(
-            style: BorderStyle.rounded,
-            cellStyle: CellStyle(foreground: AnsiColor(4)),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              const Text(
-                'fleury · live in your browser',
-                style: CellStyle(bold: true),
-              ),
-              const Text(''),
-              Text(
-                'count  $count',
-                style: const CellStyle(foreground: AnsiColor(4), bold: true),
-              ),
-              const Text(''),
-              const Text('↑ / ↓  to change', style: CellStyle(dim: true)),
-            ],
+      child: KeyDetector(
+        onKey: (event) {
+          if (_onKey(event) == KeyEventResult.handled) event.consume();
+        },
+        child: Focus(
+          autofocus: true,
+          child: Container(
+            border: const BoxBorder(
+              style: BorderStyle.rounded,
+              cellStyle: CellStyle(foreground: AnsiColor(4)),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                const Text(
+                  'fleury · live in your browser',
+                  style: CellStyle(bold: true),
+                ),
+                const Text(''),
+                Text(
+                  'count  $count',
+                  style: const CellStyle(foreground: AnsiColor(4), bold: true),
+                ),
+                const Text(''),
+                const Text('↑ / ↓  to change', style: CellStyle(dim: true)),
+              ],
+            ),
           ),
         ),
       ),

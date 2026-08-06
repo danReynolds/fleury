@@ -65,7 +65,7 @@ class _ShowcaseAppState extends State<_ShowcaseApp> {
         KeyBinding(
           KeyCode.char(' '),
           label: 'bump progress',
-          onTrigger: () => _bumpProgress(),
+          onTrigger: (_) => _bumpProgress(),
         ),
       ],
       child: Container(

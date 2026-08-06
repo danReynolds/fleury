@@ -163,4 +163,71 @@ void main() {
       tester.press(KeyCode.escape); // cancel the pending sequence + its timer
     });
   });
+
+  group('vim marks — the nextKey case (RFC 0020 §17.2)', () {
+    testWidgets('m<letter> records a position and \'<letter> returns to it', (
+      tester,
+    ) async {
+      tester.pumpWidget(const EditorApp());
+      tester.render(size: _size);
+      tester.press(KeySequence.ctrl.b); // → vim NORMAL
+
+      tester.press(KeyCode.char('G')); // last line
+      tester.press(KeyCode.m);
+      await tester.settle();
+      // The prompt is live: this letter is captured, NOT matched against the
+      // editor's own `a` (append) binding — nextKey outranks the routed lanes.
+      tester.press(KeyCode.a);
+      await tester.settle();
+      tester.render(size: _size);
+      expect(_render(tester), contains("mark 'a set"));
+      expect(
+        _render(tester),
+        isNot(contains('INSERT')),
+        reason: "the `a` append binding must not have fired",
+      );
+
+      tester.press(KeySequence.g.g); // back to the top
+      tester.press(KeyCode.char("'"));
+      await tester.settle();
+      tester.press(KeyCode.a);
+      await tester.settle();
+      tester.render(size: _size);
+      expect(_render(tester), contains("jumped to 'a"));
+    });
+
+    testWidgets('Escape cancels the prompt without setting anything', (
+      tester,
+    ) async {
+      tester.pumpWidget(const EditorApp());
+      tester.render(size: _size);
+      tester.press(KeySequence.ctrl.b);
+      tester.press(KeyCode.m);
+      await tester.settle();
+      tester.press(KeyCode.escape);
+      await tester.settle();
+      tester.render(size: _size);
+      expect(_render(tester), isNot(contains('mark')));
+
+      // And the editor is still usable: Escape was consumed by the prompt,
+      // not left to also flip a mode.
+      tester.press(KeyCode.i);
+      tester.render(size: _size);
+      expect(_render(tester), contains('INSERT'));
+    });
+
+    testWidgets('an unset mark says so instead of jumping somewhere wrong', (
+      tester,
+    ) async {
+      tester.pumpWidget(const EditorApp());
+      tester.render(size: _size);
+      tester.press(KeySequence.ctrl.b);
+      tester.press(KeyCode.char("'"));
+      await tester.settle();
+      tester.press(KeyCode.z);
+      await tester.settle();
+      tester.render(size: _size);
+      expect(_render(tester), contains("mark 'z is not set"));
+    });
+  });
 }

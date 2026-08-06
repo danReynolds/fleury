@@ -80,7 +80,11 @@ void main() {
 
     tester.pumpWidget(build());
     expect(
-      tester.render(size: const CellSize(12, 5)).atColRow(0, 0).style.foreground,
+      tester
+          .render(size: const CellSize(12, 5))
+          .atColRow(0, 0)
+          .style
+          .foreground,
       isNot(_accent),
       reason: 'at rest the border stays muted',
     );
@@ -112,7 +116,11 @@ void main() {
     );
     body.requestFocus();
     expect(
-      tester.render(size: const CellSize(12, 5)).atColRow(0, 0).style.foreground,
+      tester
+          .render(size: const CellSize(12, 5))
+          .atColRow(0, 0)
+          .style
+          .foreground,
       isNot(_accent),
       reason: 'an explicit false wins over detected focus',
     );

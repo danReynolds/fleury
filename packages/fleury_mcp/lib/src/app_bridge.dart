@@ -1,10 +1,12 @@
 // Bridges a running Fleury app to an out-of-process agent.
 //
-// The MCP server is a *peer* on the same structured wire `fleury serve` speaks
-// (`package:fleury/fleury_host_io.dart`): it sends an INIT handshake, receives the
-// app's semantic snapshots (as SEMANTICS patch frames), and sends back
-// SEMANTIC_ACTION / INPUT_EVENT frames to drive the UI. It ignores the visual
-// PLAN/IMAGE frames entirely — an agent reads meaning, not cells.
+// The MCP server is a *peer* on the explicitly unstable, lockstep wire that
+// `fleury serve` speaks (`package:fleury/fleury_wire.dart`, with
+// `fleury_wire_io.dart` supplying its Unix-socket transport): it sends an INIT
+// handshake, receives the app's semantic snapshots (as SEMANTICS patch
+// frames), and sends back SEMANTIC_ACTION / INPUT_EVENT frames to drive the UI.
+// It ignores the visual PLAN/IMAGE frames entirely — an agent reads meaning,
+// not cells.
 //
 // [FleuryAppBridge] is the protocol half: hand it any [RemoteFrameTransport]
 // and it maintains the live semantic tree and exposes invoke/type/press. The
@@ -16,10 +18,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-// The host SPI: semantics + the remote-render wire (frame protocol, codec,
-// transport) + the Unix-socket transport — the same public surface a native
-// host like `fleury serve` builds on.
+// Stable host semantics/process lifecycle plus the explicitly unstable remote
+// frame/codec/Unix-socket wire. The bridge must run against a matching Fleury
+// build.
 import 'package:fleury/fleury_host_io.dart';
+import 'package:fleury/fleury_wire.dart';
+import 'package:fleury/fleury_wire_io.dart';
 
 /// A line sink for the app subprocess's own stdout/stderr. The MCP server's
 /// real stdout is reserved for JSON-RPC, so app logs must never land there.
@@ -86,6 +90,8 @@ final class FleuryAppBridge {
   bool _started = false;
   bool _closed = false;
   bool _renderTimedOut = false;
+  int? _appProtocolVersion;
+  String? _protocolError;
 
   // Coalesced semantic delta: the net changed/removed ids accumulated across
   // frames since the last [takeDelta]. Paired with [settle], this yields one
@@ -179,10 +185,18 @@ final class FleuryAppBridge {
   /// with a clear message instead of each waiting out its own timeout.
   bool get renderTimedOut => _renderTimedOut;
 
+  /// A fatal wire-negotiation error detected by the bridge, or null while
+  /// negotiation is still pending or the bridge and app agree.
+  ///
+  /// The wire is explicitly lockstep: continuing after a mismatched echoed
+  /// [InitFrame] could silently misdecode later frames, so the bridge closes
+  /// immediately and records a diagnostic for the MCP server to surface.
+  String? get protocolError => _protocolError;
+
   /// Completes when the app reaches a settled initial state — the first
   /// semantic snapshot arrived, the app exited, or the first-frame watchdog
-  /// fired. Never errors; check [snapshot] / [isRunning] / [renderTimedOut]
-  /// after it resolves.
+  /// fired. Never errors; check [snapshot], [isRunning], [renderTimedOut], and
+  /// [protocolError] after it resolves.
   Future<void> get ready => _firstSnapshot.future;
 
   /// Completes when the app disconnects.
@@ -198,9 +212,19 @@ final class FleuryAppBridge {
       onDone: _markExited,
       cancelOnError: false,
     );
-    // Bound the "connected but never renders" case so the session can't wedge.
+    // Bound both handshake negotiation and "connected but never renders" so
+    // either failure mode resolves `ready` instead of wedging the session.
     _renderWatchdog = Timer(_firstFrameTimeout, () {
       if (_firstSnapshot.isCompleted) return;
+      if (_appProtocolVersion == null) {
+        _failProtocol(
+          'Fleury wire protocol negotiation failed: the app did not echo the '
+          'bridge INIT (v$remoteProtocolVersion) before the first-frame '
+          'timeout. Rebuild the app and fleury_mcp against the same Fleury '
+          'version.',
+        );
+        return;
+      }
       _renderTimedOut = true;
       _firstSnapshot.complete();
       _signalTick();
@@ -220,28 +244,55 @@ final class FleuryAppBridge {
   /// Invokes [action] on the live node [id]. The app dispatches it against its
   /// real element tree and re-renders; observe the visual result with
   /// [settle]. The returned future carries the app-reported invocation
-  /// status (v3 SEMANTIC_ACTION_RESULT), or null against an older app that
-  /// doesn't send results.
+  /// status (SEMANTIC_ACTION_RESULT). If the peer does not answer in time the
+  /// correlation slot stays reserved rather than allowing a retry to consume
+  /// the late result. It resolves to null only when the bridge disconnects
+  /// after the frame was sent but before its result arrives; callers must then
+  /// inspect [isRunning] and [protocolError]. A positional id must include the
+  /// [targetToken] observed in the semantic snapshot; the bridge sends
+  /// that claim only after the app negotiates support for verification.
   Future<SemanticActionInvocationStatus?> invokeAction(
     SemanticNodeId id,
-    SemanticAction action,
-  ) {
+    SemanticAction action, {
+    String? targetToken,
+  }) {
+    _requireActionSession();
+    _requireTargetTokenSupport(targetToken);
     final status = _expectActionResult(id, action);
-    _send(SemanticActionFrame(id, action));
+    try {
+      _send(SemanticActionFrame(id, action, targetToken: targetToken));
+    } catch (_) {
+      // Encoding can still reject a locally-invalid id/token after the result
+      // slot is armed. Release that unsent action immediately so its orphaned
+      // waiter cannot block the next valid mutation.
+      _abortPendingAction();
+      rethrow;
+    }
     return status;
   }
 
   /// Sets node [id]'s value to [value] — the payload for a `setValue` action
   /// (text into a field, a slider position…). The node must advertise
   /// `setValue`; observe the visual result with [settle]. Returns the
-  /// app-reported invocation status like [invokeAction].
+  /// app-reported invocation status like [invokeAction]. Positional ids use
+  /// [targetToken] under the same fail-closed rule.
   Future<SemanticActionInvocationStatus?> setValue(
     SemanticNodeId id,
-    Object? value,
-  ) {
+    Object? value, {
+    String? targetToken,
+  }) {
+    _requireActionSession();
+    _requireTargetTokenSupport(targetToken);
     final status = _expectActionResult(id, SemanticAction.setValue);
     try {
-      _send(SemanticActionFrame(id, SemanticAction.setValue, value: value));
+      _send(
+        SemanticActionFrame(
+          id,
+          SemanticAction.setValue,
+          value: value,
+          targetToken: targetToken,
+        ),
+      );
     } catch (_) {
       // The value could not be encoded into a frame (too large — see [_send]).
       // Drop the armed wait and let the failure propagate so the caller reports
@@ -253,50 +304,85 @@ final class FleuryAppBridge {
     return status;
   }
 
+  void _requireTargetTokenSupport(String? targetToken) {
+    if (targetToken == null) return;
+    if ((_appProtocolVersion ?? 0) >=
+        semanticActionTargetTokenProtocolVersion) {
+      return;
+    }
+    throw const FleuryAppBridgeException(
+      'The app has not negotiated positional semantic-target verification. '
+      'Rebuild the app and fleury_mcp against the same Fleury version before '
+      'retrying this action.',
+    );
+  }
+
+  void _requireActionSession() {
+    _requireNegotiatedSession();
+    if (_pendingAction != null) {
+      final pending = _pendingAction!;
+      throw FleurySemanticActionBusyException(
+        pending.id,
+        pending.action,
+        timedOut: pending.timedOut,
+      );
+    }
+  }
+
+  void _requireNegotiatedSession() {
+    if (!isRunning || _closed) {
+      throw const FleuryAppBridgeException(
+        'The Fleury app has exited; no frame can be sent.',
+      );
+    }
+    if (_appProtocolVersion != remoteProtocolVersion) {
+      throw const FleuryAppBridgeException(
+        'The Fleury app has not completed the exact-version INIT handshake; '
+        'wait for bridge.ready before sending input or actions.',
+      );
+    }
+  }
+
   /// The in-flight mutation awaiting its SEMANTIC_ACTION_RESULT, tagged with the
   /// (id, action) it was armed for so an arriving result is correlated to the
   /// request it belongs to. Mutations are serialized by the MCP server, so at
   /// most one is pending.
-  ({
-    SemanticNodeId id,
-    SemanticAction action,
-    Completer<SemanticActionInvocationStatus?> completer,
-  })?
-  _pendingAction;
+  _PendingSemanticAction? _pendingAction;
 
   /// Arms a one-shot listener for the SEMANTIC_ACTION_RESULT that echoes back
-  /// [id]/[action] (the app echoes both onto the result frame). Bounded:
-  /// resolves null when no result lands (a pre-v3 app, or one still running a
-  /// slow async handler) so callers degrade to the tree-diff heuristic instead
-  /// of hanging.
+  /// [id]/[action] (the app echoes both onto the result frame). Bounded: a peer
+  /// that does not answer leaves a tombstone in the only correlation slot
+  /// because the wire has no sequence number with which to distinguish its late
+  /// result from a retry.
   Future<SemanticActionInvocationStatus?> _expectActionResult(
     SemanticNodeId id,
     SemanticAction action,
   ) {
-    // Supersede any still-armed prior wait (shouldn't happen under the server's
-    // serialization, but keeps the field single-valued defensively).
-    final prior = _pendingAction;
-    if (prior != null && !prior.completer.isCompleted) {
-      prior.completer.complete(null);
-    }
     final completer = Completer<SemanticActionInvocationStatus?>();
-    final pending = (id: id, action: action, completer: completer);
+    final pending = _PendingSemanticAction(id, action, completer);
     _pendingAction = pending;
     return completer.future.timeout(
       const Duration(seconds: 2),
       onTimeout: () {
-        // De-arm on timeout so a LATE result for THIS request (a >2s async
-        // handler that finished after we gave up) can't bind to the NEXT
-        // mutation armed in our place. Guard against a newer mutation having
-        // already replaced us.
-        if (identical(_pendingAction, pending)) _pendingAction = null;
-        return null;
+        if (!identical(_pendingAction, pending)) return null;
+        pending.timedOut = true;
+        if (!pending.completer.isCompleted) {
+          pending.completer.complete(null);
+        }
+        // There is no result sequence/nonce on this wire. Once this action's
+        // result is late, a retry of the same (id, action) could consume it.
+        // Keep this completed record as a tombstone: the healthy app and
+        // non-semantic input stay usable, but no semantic action can re-arm
+        // the correlation slot until the exact late result clears it.
+        throw FleurySemanticActionTimeoutException(id, action);
       },
     );
   }
 
-  /// Aborts the in-flight mutation wait — its frame could not be sent — resolving
-  /// its caller to null so the tool degrades to the tree-diff heuristic.
+  /// Aborts the in-flight mutation wait because its frame could not be sent or
+  /// the peer exited. Resolving it promptly lets the MCP layer re-check bridge
+  /// state and return `app_exited` / `protocol_mismatch` instead of waiting for
+  /// the result timeout.
   void _abortPendingAction() {
     final pending = _pendingAction;
     _pendingAction = null;
@@ -312,18 +398,28 @@ final class FleuryAppBridge {
   /// Pulls a bounded, newest-last list of debug records of [kind]
   /// (`frames` / `logs` / `errors`) from the running app — the DT1 agent
   /// devtools channel. Returns the decoded JSON records, or null when the app
-  /// doesn't answer within the timeout (an app built before this protocol
-  /// frame, or one with debug tooling disabled), so a tool call degrades to
-  /// "not available" instead of hanging.
+  /// doesn't answer within the timeout (for example, debug tooling is disabled),
+  /// so a tool call degrades to "not available" instead of hanging.
   Future<List<Object?>?> queryDebug(String kind, {int limit = 50}) {
-    if (!isRunning) return Future<List<Object?>?>.value(null);
+    _requireNegotiatedSession();
     // Wrap within the 32-bit range the wire seq round-trips (the response
     // echoes it back through a 4-byte field); collisions only matter among the
     // handful of concurrently-pending queries, which this never reaches.
     final seq = _debugSeq = (_debugSeq + 1) & 0x7FFFFFFF;
+    final frame = DebugRequestFrame(seq, kind, limit: limit);
+    // Validate deterministic local codec constraints before reserving the
+    // correlation slot. In particular, debug kinds use a u8 UTF-8 length on
+    // the response wire; an overlong public `kind` must not look like transport
+    // death or leave an orphaned pending query.
+    encodeFrame(frame);
     final completer = Completer<List<Object?>?>();
     _pendingDebug[seq] = completer;
-    _send(DebugRequestFrame(seq, kind, limit: limit));
+    try {
+      _send(frame);
+    } catch (_) {
+      _pendingDebug.remove(seq);
+      rethrow;
+    }
     return completer.future.timeout(
       const Duration(seconds: 2),
       onTimeout: () {
@@ -337,6 +433,7 @@ final class FleuryAppBridge {
   /// same one a keypress would produce on the serve path).
   void typeText(String text) {
     if (text.isEmpty) return;
+    _requireNegotiatedSession();
     _send(InputEventFrame(TextInputEvent(text)));
   }
 
@@ -346,22 +443,35 @@ final class FleuryAppBridge {
     KeyCode code, {
     Set<KeyModifier> modifiers = const <KeyModifier>{},
   }) {
+    _requireNegotiatedSession();
     _send(InputEventFrame(KeyEvent(code, modifiers: modifiers)));
   }
 
   /// Resizes the app's viewport, reflowing the layout (and thus which rows of
   /// windowed widgets are in the tree).
-  void resize(CellSize size) => _send(ResizeFrame(size));
+  void resize(CellSize size) {
+    _requireNegotiatedSession();
+    _send(ResizeFrame(size));
+  }
 
   /// Sends a frame. A genuine transport failure (the socket dropped between our
   /// last `isRunning` check and now) is treated as the app exiting, so callers
-  /// get a clean "app gone" path. A [RemoteProtocolException] is different: the
-  /// local encoder REJECTED an oversized in-band frame ("frame was not
-  /// encoded") — the connection is intact, so it rethrows for the caller to
-  /// surface as a recoverable error rather than falsely declaring the healthy
-  /// app dead and tearing the session down.
+  /// get a clean "app gone" path. Local encoding failures are different:
+  /// [RemoteProtocolException] rejects an oversized in-band frame,
+  /// [RemoteCodecException] rejects an invalid structured field, and
+  /// [JsonUnsupportedObjectError] rejects a non-JSON setValue. None reached the
+  /// transport, so the connection is intact and the original error is rethrown
+  /// for the caller to surface without falsely declaring the app dead.
   void _send(RemoteFrame frame) {
     if (!isRunning) return;
+    if (frame is! InitFrame &&
+        frame is! ByeFrame &&
+        _appProtocolVersion != remoteProtocolVersion) {
+      throw const FleuryAppBridgeException(
+        'The Fleury app has not completed the exact-version INIT handshake; '
+        'only INIT may be sent before negotiation succeeds.',
+      );
+    }
     try {
       _transport.send(frame);
     } on RemoteProtocolException catch (e) {
@@ -372,6 +482,10 @@ final class FleuryAppBridge {
       // genuine death like any transport failure below.
       if (e.recoverable) rethrow;
       _markExited();
+    } on RemoteCodecException {
+      rethrow;
+    } on JsonUnsupportedObjectError {
+      rethrow;
     } catch (_) {
       _markExited();
     }
@@ -436,25 +550,59 @@ final class FleuryAppBridge {
     return snapshot;
   }
 
-  /// Tears down the transport and (for a spawned app) the subprocess.
-  /// Idempotent.
+  /// Best-effort teardown of the transport and (for a spawned app) subprocess.
+  ///
+  /// Idempotent and non-throwing: every cleanup stage is attempted and lifecycle
+  /// futures always settle even if an injected transport/process disposer fails.
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
     _renderWatchdog?.cancel();
-    await _sub?.cancel();
+    final sub = _sub;
     _sub = null;
     try {
-      _transport.send(const ByeFrame());
+      try {
+        await sub?.cancel();
+      } finally {
+        try {
+          _transport.send(const ByeFrame());
+        } catch (_) {
+          // Peer may already be gone.
+        }
+        try {
+          await _transport.close();
+        } finally {
+          // Process teardown is independent of transport teardown: attempt it
+          // even when closing the socket failed.
+          await _onClose?.call();
+        }
+      }
     } catch (_) {
-      // Peer may already be gone.
+      // Teardown is terminal and idempotent; there is no safe retry path after
+      // `_closed` flips. Continue to the lifecycle finalizer below.
+    } finally {
+      // `done`, pending action/debug calls, and lifecycle state must settle
+      // even if any injected cleanup callback fails.
+      _markExited();
     }
-    await _transport.close();
-    await _onClose?.call();
-    _markExited();
   }
 
   void _onFrame(RemoteFrame frame) {
+    // A transport can already have queued frames when BYE, close(), or a
+    // protocol failure ends the session. Lifecycle termination is a hard
+    // boundary: no late frame may revive or mutate the retained snapshot.
+    if (_closed || !isRunning || _protocolError != null) return;
+    if (_appProtocolVersion == null &&
+        frame is! InitFrame &&
+        frame is! ByeFrame) {
+      _failProtocol(
+        'Fleury wire protocol negotiation failed: the app sent '
+        '${frame.runtimeType} before echoing the bridge INIT '
+        '(v$remoteProtocolVersion). Rebuild the app and fleury_mcp against the '
+        'same Fleury version.',
+      );
+      return;
+    }
     switch (frame) {
       case SemanticsFrame f:
         final tree = _decoder.apply(f.json);
@@ -468,12 +616,21 @@ final class FleuryAppBridge {
         _signalTick();
       case ByeFrame():
         _markExited();
-      // Visual + handshake frames an agent doesn't consume. (An app never
-      // sends INIT/INPUT back; those would be protocol violations — ignore.)
+      case InitFrame f:
+        if (f.protocolVersion != remoteProtocolVersion) {
+          _failProtocol(
+            'Fleury wire protocol mismatch: bridge v$remoteProtocolVersion, '
+            'app v${f.protocolVersion}. Run fleury_mcp from the app dependency '
+            'graph or rebuild both against the same Fleury version.',
+          );
+        } else {
+          _appProtocolVersion = f.protocolVersion;
+        }
+        break;
+      // Visual frames and peer-directed input an agent doesn't consume.
       case PlanFrame _:
       case OutputFrame _:
       case InlineImageFrame _:
-      case InitFrame _:
       case InputFrame _:
       case ResizeFrame _:
       case InputEventFrame _:
@@ -530,6 +687,7 @@ final class FleuryAppBridge {
   }
 
   void _markExited() {
+    _abortPendingAction();
     for (final c in _pendingDebug.values) {
       if (!c.isCompleted) c.complete(null);
     }
@@ -541,6 +699,19 @@ final class FleuryAppBridge {
     // awaiter to handle. Callers check `snapshot`/`isRunning`/`renderTimedOut`.
     if (!_firstSnapshot.isCompleted) _firstSnapshot.complete();
     _signalTick();
+  }
+
+  void _failProtocol(String message) {
+    if (_protocolError != null) return;
+    _protocolError = message;
+    _tree = null;
+    _cachedSnapshot = null;
+    // Reject synchronously so `ready`, `done`, and any in-flight mutation
+    // cannot race a later data frame into reporting success. The asynchronous
+    // close then cancels the subscription, sends BYE when possible, and
+    // releases the socket/process resources.
+    _markExited();
+    unawaited(close());
   }
 
   /// Binds a Unix socket, spawns [command] with `FLEURY_HANDLE` pointed at it,
@@ -584,11 +755,63 @@ final class FleuryAppBridge {
   }
 }
 
-/// Thrown when an app can't be attached (failed to spawn, never connected, or
-/// exited before rendering).
+/// Thrown when the bridge cannot attach or safely use an app session, including
+/// spawn/connect/exit failures, incomplete or mismatched INIT negotiation, and
+/// action attempts after the session has stopped.
 final class FleuryAppBridgeException implements Exception {
   const FleuryAppBridgeException(this.message);
   final String message;
   @override
   String toString() => 'FleuryAppBridgeException: $message';
+}
+
+/// The peer failed to acknowledge a semantic action before its bounded result
+/// deadline. The bridge keeps the unsequenced correlation slot reserved after
+/// throwing this, so a late result cannot be mistaken for a retry.
+final class FleurySemanticActionTimeoutException implements Exception {
+  const FleurySemanticActionTimeoutException(this.id, this.action);
+
+  final SemanticNodeId id;
+  final SemanticAction action;
+
+  String get message =>
+      'The Fleury app did not acknowledge "${action.name}" on "${id.value}" '
+      'within 2 seconds. New semantic actions are blocked until that late '
+      'result arrives or the bridge disconnects.';
+
+  @override
+  String toString() => 'FleurySemanticActionTimeoutException: $message';
+}
+
+/// A semantic action cannot be sent while the unsequenced result slot belongs
+/// to another action (including a timed-out action awaiting its late result).
+final class FleurySemanticActionBusyException implements Exception {
+  const FleurySemanticActionBusyException(
+    this.id,
+    this.action, {
+    required this.timedOut,
+  });
+
+  final SemanticNodeId id;
+  final SemanticAction action;
+  final bool timedOut;
+
+  String get message => timedOut
+      ? 'A timed-out "${action.name}" action on "${id.value}" is still '
+            'awaiting its late result. Retry semantic actions only after that '
+            'result arrives or the bridge reconnects.'
+      : 'A "${action.name}" action on "${id.value}" is still awaiting its '
+            'result. Wait for it before sending another semantic action.';
+
+  @override
+  String toString() => 'FleurySemanticActionBusyException: $message';
+}
+
+final class _PendingSemanticAction {
+  _PendingSemanticAction(this.id, this.action, this.completer);
+
+  final SemanticNodeId id;
+  final SemanticAction action;
+  final Completer<SemanticActionInvocationStatus?> completer;
+  bool timedOut = false;
 }

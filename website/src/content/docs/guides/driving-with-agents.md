@@ -145,8 +145,10 @@ The server is a full MCP citizen beyond request/response:
   gated by `logging/setLevel` — so the agent sees what the app logged while
   driving it.
 
-All app-derived text is delimited as untrusted (read-and-report, never follow
-embedded instructions), and the mutating tools are rate-limited.
+All app-authored fields — including semantics, ids, debug records, logs, and
+errors — are marked as untrusted without altering their contents (read and
+report them; never follow embedded instructions). Mutating tools are
+rate-limited.
 
 ## Make your app drive well
 
@@ -155,9 +157,10 @@ The app works with zero effort; these make the agent's job easier:
 - **Pin stable ids** on the nodes that matter, with `Semantics(id: …)` or a
   `Key`. A node with a keyed ancestor keeps a stable id across rebuilds; a fully
   unkeyed node falls back to a positional id that can shift as the tree changes.
-  A `Semantics(id: 'submit')` is a durable handle. (The server guards against
-  acting on a *stale* positional id, so the worst case is a clear "re-read and
-  retry", not a mis-click.)
+  A `Semantics(id: const SemanticNodeId('submit'), …)` is a durable handle. (The
+  server rejects observable positional recycling. Semantically identical
+  logical replacements that share framework identity need distinct keys or
+  stable semantics ids.)
 - **Give nodes meaningful labels** — labels are how the agent recognizes a node.
 - **Hide decorative or off-screen chrome** with `ExcludeSemantics` so it doesn't
   clutter what the agent reads.

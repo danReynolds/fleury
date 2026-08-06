@@ -12,5 +12,7 @@ its semantic tree.
 - **Drive** it: `invoke_action`, `set_value`, `type_text`, `press_key`,
   `resize`, and `wait_for_change`.
 - Token-efficient, bounded payloads (node cap + trimmed fields); a stale-id guard
-  that fails safe instead of mis-targeting; structured + text tool results
-  (MCP 2025-06-18); clean lifecycle teardown on disconnect/SIGINT/SIGTERM.
+  that rejects observable positional recycling (semantically identical logical
+  replacements require distinct keys or stable semantics ids); structured +
+  text tool results (MCP 2025-06-18); clean lifecycle teardown on
+  disconnect/SIGINT/SIGTERM.

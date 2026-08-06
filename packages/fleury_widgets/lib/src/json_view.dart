@@ -495,7 +495,7 @@ class _JsonViewState extends State<JsonView> {
 
   void _onControllerChange() => setState(() {});
 
-  void _onFocusWithinChange(bool focused) {
+  void _onFocusDetectorChange(bool focused) {
     if (_focusedWithin == focused) return;
     setState(() {
       _focusedWithin = focused;
@@ -637,32 +637,37 @@ class _JsonViewState extends State<JsonView> {
     final selected = _selectedRow(rows);
     final visibleRange = _controller.visibleRange;
     final copyEnabled = widget.copySelection && rows.isNotEmpty;
-    Widget list = Focus(
-      canRequestFocus: false,
-      onKey: (event) => switch (event.code) {
-        KeyCode.arrowRight => _expandOrEnter(rows),
-        KeyCode.arrowLeft => _collapseOrParent(rows),
-        _ => KeyEventResult.ignored,
+    Widget list = KeyDetector(
+      onKey: (event) {
+        final handled = switch (event.code) {
+          KeyCode.arrowRight => _expandOrEnter(rows),
+          KeyCode.arrowLeft => _collapseOrParent(rows),
+          _ => KeyEventResult.ignored,
+        };
+        if (handled == KeyEventResult.handled) event.consume();
       },
-      child: ListView.builder(
-        controller: _controller._listController,
-        focusNode: _focusNode,
-        autofocus: widget.autofocus,
-        itemCount: rows.length,
-        onActivate: (index) => _toggleSelected(rows, index),
-        itemBuilder: (context, index, activeSelected) {
-          final selected = index == _controller.selectedIndex;
-          return _JsonRowWidget(
-            row: rows[index],
-            rowIndex: index,
-            selected: selected,
-            activeSelection: activeSelected,
-            copyEnabled: copyEnabled,
-            onOpen: () => _openRow(rows, index),
-            onClose: () => _closeRow(rows, index),
-            onCopy: () => _copyRow(rows, index),
-          );
-        },
+      child: Focus(
+        canRequestFocus: false,
+        child: ListView.builder(
+          controller: _controller._listController,
+          focusNode: _focusNode,
+          autofocus: widget.autofocus,
+          itemCount: rows.length,
+          onActivate: (index) => _toggleSelected(rows, index),
+          itemBuilder: (context, index, activeSelected) {
+            final selected = index == _controller.selectedIndex;
+            return _JsonRowWidget(
+              row: rows[index],
+              rowIndex: index,
+              selected: selected,
+              activeSelection: activeSelected,
+              copyEnabled: copyEnabled,
+              onOpen: () => _openRow(rows, index),
+              onClose: () => _closeRow(rows, index),
+              onCopy: () => _copyRow(rows, index),
+            );
+          },
+        ),
       ),
     );
 
@@ -672,15 +677,15 @@ class _JsonViewState extends State<JsonView> {
           KeyBinding(
             KeySequence.ctrl.c,
             label: 'Copy JSON node',
-            onTrigger: () => unawaited(_copySelection(rows)),
+            onTrigger: (_) => unawaited(_copySelection(rows)),
           ),
         ],
         child: list,
       );
     }
 
-    return FocusWithin(
-      onFocusChange: _onFocusWithinChange,
+    return FocusDetector(
+      onFocusChange: _onFocusDetectorChange,
       child: Semantics(
         role: SemanticRole.json,
         label: widget.semanticLabel,

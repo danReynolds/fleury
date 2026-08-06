@@ -7,7 +7,21 @@ MouseEvent _at(
   int col,
   int row, {
   MouseButton button = MouseButton.left,
-}) => MouseEvent(kind: kind, button: button, col: col, row: row);
+  Set<KeyModifier> modifiers = const <KeyModifier>{},
+}) => MouseEvent(
+  kind: kind,
+  button: button,
+  col: col,
+  row: row,
+  modifiers: modifiers,
+);
+
+PointerDownCallback _logPointerDown(List<String> log) => (details) {
+  log.add(
+    'details ${details.button.name} '
+    '${details.col},${details.row} ${details.hasAlt}',
+  );
+};
 
 void main() {
   group('GestureDetector', () {
@@ -65,6 +79,130 @@ void main() {
       );
       tester.sendMouse(_at(MouseEventKind.up, 1, 0, button: MouseButton.right));
       expect(secondary, 1);
+    });
+
+    testWidgets(
+      'onPointerDown reports coordinates, every button, and modifiers',
+      (tester) {
+        final details = <PointerDownDetails>[];
+        tester.pumpWidget(
+          GestureDetector(
+            onPointerDown: details.add,
+            child: const SizedBox(width: 8, height: 2, child: Text('target')),
+          ),
+        );
+        tester.render(size: const CellSize(8, 2));
+
+        final sourceModifiers = <KeyModifier>{
+          KeyModifier.ctrl,
+          KeyModifier.shift,
+        };
+        for (final button in <MouseButton>[
+          MouseButton.left,
+          MouseButton.right,
+          MouseButton.middle,
+        ]) {
+          tester.sendMouse(
+            _at(
+              MouseEventKind.down,
+              3,
+              1,
+              button: button,
+              modifiers: sourceModifiers,
+            ),
+          );
+          tester.sendMouse(_at(MouseEventKind.up, 3, 1, button: button));
+        }
+
+        expect(details, hasLength(3));
+        expect(details.map((value) => value.button), <MouseButton>[
+          MouseButton.left,
+          MouseButton.right,
+          MouseButton.middle,
+        ]);
+        for (final detail in details) {
+          expect((detail.col, detail.row), (3, 1));
+          expect(detail.modifiers, {KeyModifier.ctrl, KeyModifier.shift});
+          expect(detail.hasCtrl, isTrue);
+          expect(detail.hasShift, isTrue);
+          expect(detail.hasAlt, isFalse);
+        }
+
+        sourceModifiers
+          ..clear()
+          ..add(KeyModifier.alt);
+        expect(
+          details.first.modifiers,
+          {KeyModifier.ctrl, KeyModifier.shift},
+          reason: 'details retain an immutable modifier snapshot',
+        );
+        expect(
+          () => details.first.modifiers.add(KeyModifier.alt),
+          throwsUnsupportedError,
+        );
+      },
+    );
+
+    testWidgets('new and legacy pointer-down callbacks coexist', (tester) {
+      final log = <String>[];
+      tester.pumpWidget(
+        GestureDetector(
+          onTapDown: (col, row) => log.add('position $col,$row'),
+          onTapDownWithModifiers: (col, row, modifiers) {
+            log.add(
+              'modified $col,$row ${modifiers.contains(KeyModifier.alt)}',
+            );
+          },
+          onPointerDown: _logPointerDown(log),
+          child: const SizedBox(width: 5, height: 1, child: Text('A')),
+        ),
+      );
+      tester.render(size: const CellSize(5, 1));
+
+      tester.sendMouse(
+        _at(
+          MouseEventKind.down,
+          2,
+          0,
+          button: MouseButton.right,
+          modifiers: const <KeyModifier>{KeyModifier.alt},
+        ),
+      );
+
+      expect(log, [
+        'position 2,0',
+        'modified 2,0 true',
+        'details right 2,0 true',
+      ]);
+    });
+
+    testWidgets('onPointerDown updates when GestureDetector rebuilds', (
+      tester,
+    ) {
+      var oldCalls = 0;
+      var newCalls = 0;
+      const child = SizedBox(width: 5, height: 1, child: Text('A'));
+
+      tester.pumpWidget(
+        GestureDetector(onPointerDown: (_) => oldCalls++, child: child),
+      );
+      tester.render(size: const CellSize(5, 1));
+      tester.sendMouse(_at(MouseEventKind.down, 1, 0));
+      tester.sendMouse(_at(MouseEventKind.up, 1, 0));
+
+      tester.pumpWidget(
+        GestureDetector(onPointerDown: (_) => newCalls++, child: child),
+      );
+      tester.render(size: const CellSize(5, 1));
+      tester.sendMouse(
+        _at(MouseEventKind.down, 1, 0, button: MouseButton.middle),
+      );
+      tester.sendMouse(
+        _at(MouseEventKind.up, 1, 0, button: MouseButton.middle),
+      );
+
+      expect(oldCalls, 1);
+      expect(newCalls, 1);
     });
   });
 

@@ -247,9 +247,12 @@ client; two real gaps, now closed:
   `addStream` in both directions, which propagates the underlying
   socket's backpressure: a slow browser now stalls the app rather than
   growing the server's heap. Shutdown destroys the app socket to release
-  both `addStream` bindings cleanly. Verified by the real-relay serve
-  integration tests.
+  both `addStream` bindings cleanly. The app-side Unix-socket sender also
+  hard-caps pending output at 64 MiB and 4096 frames, failing the session
+  closed if a peer keeps requesting responses while it is not reading.
+  Verified by real-socket backpressure and relay integration tests.
 
 Already adequate (verified, not changed): WebSocket origin validation,
-the 64 MiB frame-payload cap (decoder rejects oversize), malformed-frame
+the 16 MiB global frame-payload cap (with tighter per-type caps; the decoder
+rejects oversize), malformed-frame
 rejection (codec fuzz), single-session enforcement.

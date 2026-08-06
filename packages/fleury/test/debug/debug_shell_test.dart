@@ -1065,6 +1065,38 @@ void main() {
   });
 
   group('tryConsumeDebugKey — escape-hatch dispatch', () {
+    test('hotkeys act once per physical press, never on the release', () {
+      // This dispatcher runs UPSTREAM of the release fence, so on a surface
+      // that reports releases (the web/serve backend since RFC 0020 P3, and
+      // terminals from P5) an unguarded match fires twice per press — F12
+      // would open and instantly close the shell.
+      final c = DebugController(const DebugConfig());
+      expect(tryConsumeDebugKey(c, _key(KeyCode.f12)), isTrue);
+      expect(c.mode, DebugMode.docked);
+      expect(
+        tryConsumeDebugKey(
+          c,
+          const KeyEvent(KeyCode.f12, type: KeyEventType.up),
+        ),
+        isFalse,
+        reason: 'the release is not a second press',
+      );
+      expect(c.mode, DebugMode.docked);
+
+      expect(
+        tryConsumeDebugKey(
+          c,
+          const KeyEvent(
+            KeyCode.char('g'),
+            modifiers: {KeyModifier.ctrl},
+            type: KeyEventType.up,
+          ),
+        ),
+        isFalse,
+      );
+      expect(c.mode, DebugMode.docked);
+    });
+
     test('Ctrl+G toggles off ↔ last-used open mode', () {
       final c = DebugController(const DebugConfig());
       expect(c.mode, DebugMode.off);

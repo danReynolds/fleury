@@ -121,12 +121,12 @@ class ApprovalPrompt extends StatelessWidget {
         bindings: <KeyBinding>[
           KeyBinding(
             KeyCode.char('y'),
-            onTrigger: () => _approve(),
+            onTrigger: (_) => _approve(),
             hideFromHintBar: true,
           ),
           KeyBinding(
             KeyCode.char('n'),
-            onTrigger: () => _deny(),
+            onTrigger: (_) => _deny(),
             hideFromHintBar: true,
           ),
         ],

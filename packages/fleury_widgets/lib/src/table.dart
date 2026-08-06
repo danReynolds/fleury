@@ -254,7 +254,7 @@ class _TableState extends State<Table> {
 
   void _onChange() => setState(() {});
 
-  void _onFocusWithinChange(bool focused) {
+  void _onFocusDetectorChange(bool focused) {
     if (!_interactive) return;
     setState(() {});
   }
@@ -410,18 +410,22 @@ class _TableState extends State<Table> {
       child: body,
     );
     if (!_interactive) return table;
-    return FocusWithin(
-      onFocusChange: _onFocusWithinChange,
-      child: Focus(
-        focusNode: _focusNode,
-        autofocus: widget.autofocus,
-        onKey: _onKey,
-        // Wheel over the table scrolls the row window by moving the selection.
-        child: PointerScrollListener(
-          router: PointerRouterScope.maybeOf(context),
-          onScrollUp: () => _scrollBy(-1),
-          onScrollDown: () => _scrollBy(1),
-          child: table,
+    return FocusDetector(
+      onFocusChange: _onFocusDetectorChange,
+      child: KeyDetector(
+        onKey: (event) {
+          if ((_onKey)(event) == KeyEventResult.handled) event.consume();
+        },
+        child: Focus(
+          focusNode: _focusNode,
+          autofocus: widget.autofocus,
+          // Wheel over the table scrolls the row window by moving the selection.
+          child: PointerScrollListener(
+            router: PointerRouterScope.maybeOf(context),
+            onScrollUp: () => _scrollBy(-1),
+            onScrollDown: () => _scrollBy(1),
+            child: table,
+          ),
         ),
       ),
     );

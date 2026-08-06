@@ -21,7 +21,7 @@ class _TogglingLabelState extends State<_TogglingLabel> {
       KeyBinding(
         KeyCode.char('r'),
         label: revealed ? 'hide' : 'reveal',
-        onTrigger: () => setState(() => revealed = !revealed),
+        onTrigger: (_) => setState(() => revealed = !revealed),
       ),
     ],
     child: const Focus(autofocus: true, child: Text('body')),
@@ -40,13 +40,13 @@ void main() {
           children: [
             KeyBindings(
               bindings: [
-                KeyBinding(KeyCode.char('?'), label: 'help', onTrigger: () {}),
+                KeyBinding(KeyCode.char('?'), label: 'help', onTrigger: (_) {}),
                 KeyBinding(
                   KeySequence.ctrl.char('s'),
                   label: 'save',
-                  onTrigger: () {},
+                  onTrigger: (_) {},
                 ),
-                KeyBinding(KeyCode.f1, label: 'manual', onTrigger: () {}),
+                KeyBinding(KeyCode.f1, label: 'manual', onTrigger: (_) {}),
               ],
               child: TextInput(autofocus: true),
             ),
@@ -74,7 +74,7 @@ void main() {
           children: [
             KeyBindings(
               bindings: [
-                KeyBinding(KeyCode.char('?'), label: 'help', onTrigger: () {}),
+                KeyBinding(KeyCode.char('?'), label: 'help', onTrigger: (_) {}),
               ],
               child: Column(
                 children: [
@@ -107,10 +107,11 @@ void main() {
           children: [
             KeyBindings(
               bindings: [
-                KeyBinding.any(
-                  [KeyCode.char('j'), KeyCode.arrowDown],
+                KeyBinding(
+                  KeyCode.char('j'),
+                  aliases: [KeyCode.arrowDown],
                   label: 'next',
-                  onTrigger: () {},
+                  onTrigger: (_) {},
                 ),
               ],
               child: TextInput(autofocus: true),
@@ -144,10 +145,11 @@ void main() {
           children: [
             KeyBindings(
               bindings: [
-                KeyBinding.any(
-                  [KeyCode.char('j'), KeyCode.arrowDown],
+                KeyBinding(
+                  KeyCode.char('j'),
+                  aliases: [KeyCode.arrowDown],
                   label: 'next',
-                  onTrigger: () {},
+                  onTrigger: (_) {},
                 ),
               ],
               child: KeyBindings(
@@ -155,7 +157,7 @@ void main() {
                   KeyBinding(
                     KeyCode.arrowDown,
                     label: 'scroll',
-                    onTrigger: () {},
+                    onTrigger: (_) {},
                   ),
                 ],
                 child: const Focus(autofocus: true, child: Text('x')),
@@ -186,10 +188,11 @@ void main() {
           children: [
             KeyBindings(
               bindings: [
-                KeyBinding.any(
-                  [KeyCode.char('S'), KeyCode.char('S')],
+                KeyBinding(
+                  KeyCode.char('S'),
+                  aliases: [KeyCode.char('S')],
                   label: 'save-as',
-                  onTrigger: () {},
+                  onTrigger: (_) {},
                 ),
               ],
               child: const Focus(autofocus: true, child: Text('x')),
@@ -224,7 +227,7 @@ void main() {
                 KeyBinding(
                   KeyCode.char('S'),
                   label: 'shallowSave',
-                  onTrigger: () {},
+                  onTrigger: (_) {},
                 ),
               ],
               child: KeyBindings(
@@ -232,7 +235,7 @@ void main() {
                   KeyBinding(
                     KeyCode.char('S'),
                     label: 'deepSave',
-                    onTrigger: () {},
+                    onTrigger: (_) {},
                   ),
                 ],
                 child: const Focus(autofocus: true, child: Text('x')),
@@ -267,7 +270,7 @@ void main() {
                 KeyBinding(
                   KeyCode.char('?'),
                   label: 'help',
-                  onTrigger: () => fired++,
+                  onTrigger: (_) => fired++,
                 ),
               ],
               child: TextInput(focusNode: node, enabled: false),

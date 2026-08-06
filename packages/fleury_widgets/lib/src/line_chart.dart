@@ -487,16 +487,20 @@ class _LineChartState extends State<LineChart> {
     );
 
     if (!widget.interactive) return semantic;
-    return FocusWithin(
+    return FocusDetector(
       onFocusChange: (has) {
         if (!mounted) return;
         setState(() => _focused = has);
       },
-      child: Focus(
-        focusNode: _node,
-        autofocus: widget.autofocus,
-        onKey: _onKey,
-        child: semantic,
+      child: KeyDetector(
+        onKey: (event) {
+          if ((_onKey)(event) == KeyEventResult.handled) event.consume();
+        },
+        child: Focus(
+          focusNode: _node,
+          autofocus: widget.autofocus,
+          child: semantic,
+        ),
       ),
     );
   }

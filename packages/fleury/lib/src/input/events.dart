@@ -1,6 +1,8 @@
+import 'package:characters/characters.dart';
 import 'package:meta/meta.dart';
 
 import '../foundation/geometry.dart';
+import 'key_dispatch.dart';
 
 /// The non-character keys a terminal can report, as an enumerable set.
 ///
@@ -34,6 +36,112 @@ enum SpecialKey {
   f10,
   f11,
   f12,
+
+  // ---- RFC 0020: the complete Kitty functional vocabulary -----------------
+  //
+  // Everything below is reported only under the Kitty keyboard protocol
+  // (PUA codepoints 57358–57454; the exact mapping lives in
+  // `key_tables.dart` and is pinned by tests against the spec table).
+  // APPEND-ONLY: `SpecialKey.index` is a wire value in the remote codec.
+
+  // Extended function keys.
+  f13,
+  f14,
+  f15,
+  f16,
+  f17,
+  f18,
+  f19,
+  f20,
+  f21,
+  f22,
+  f23,
+  f24,
+  f25,
+  f26,
+  f27,
+  f28,
+  f29,
+  f30,
+  f31,
+  f32,
+  f33,
+  f34,
+  f35,
+
+  // Locks and system keys.
+  capsLock,
+  scrollLock,
+  numLock,
+  printScreen,
+  pause,
+  menu,
+
+  // Keypad. Distinct from the main-cluster keys with the same meanings —
+  // the protocol reports them separately and so does Fleury; nothing is
+  // silently folded.
+  keypad0,
+  keypad1,
+  keypad2,
+  keypad3,
+  keypad4,
+  keypad5,
+  keypad6,
+  keypad7,
+  keypad8,
+  keypad9,
+  keypadDecimal,
+  keypadDivide,
+  keypadMultiply,
+  keypadSubtract,
+  keypadAdd,
+  keypadEnter,
+  keypadEqual,
+  keypadSeparator,
+  keypadLeft,
+  keypadRight,
+  keypadUp,
+  keypadDown,
+  keypadPageUp,
+  keypadPageDown,
+  keypadHome,
+  keypadEnd,
+  keypadInsert,
+  keypadDelete,
+  keypadBegin,
+
+  // Media and volume.
+  mediaPlay,
+  mediaPause,
+  mediaPlayPause,
+  mediaReverse,
+  mediaStop,
+  mediaFastForward,
+  mediaRewind,
+  mediaTrackNext,
+  mediaTrackPrevious,
+  mediaRecord,
+  volumeDown,
+  volumeUp,
+  volumeMute,
+
+  // Lone modifier keys, sided. These are *keys* (a Kitty flag-8 / DOM
+  // surface reports their own down/up); the `KeyModifier` set on other
+  // events remains the modifier-state vocabulary.
+  leftShift,
+  leftControl,
+  leftAlt,
+  leftSuper,
+  leftHyper,
+  leftMeta,
+  rightShift,
+  rightControl,
+  rightAlt,
+  rightSuper,
+  rightHyper,
+  rightMeta,
+  isoLevel3Shift,
+  isoLevel5Shift,
 }
 
 /// One logical key: a printable character or a special key.
@@ -54,7 +162,7 @@ enum SpecialKey {
 /// and `.char('?')` bind directly, while `.ctrl.s` and `.g.g` are the
 /// modified/multi-step sequences.
 @immutable
-final class KeyCode extends KeySequence {
+final class KeyCode extends KeySequence implements KeySelector {
   /// A printable-character key.
   ///
   /// [character] must be a single grapheme cluster (one user-perceived
@@ -76,6 +184,23 @@ final class KeyCode extends KeySequence {
     final code = _bySpecial[key.index];
     assert(code.special == key, 'canonical-instance table out of order');
     return code;
+  }
+
+  /// Looks up the canonical instance for a printable [character].
+  ///
+  /// The twin of [forSpecial], for construction from a character held in a
+  /// variable (the terminal parser, the DOM source, the wire codec). Every
+  /// key event on every surface goes through one of the two, and a const
+  /// constructor cannot canonicalize a runtime string — so without this a
+  /// printable key allocated a fresh code per press, repeat, and release.
+  ///
+  /// Falls back to constructing for anything outside printable ASCII
+  /// (non-Latin layouts, emoji): correctness first, interning where it pays.
+  static KeyCode forCharacter(String character) {
+    if (character.length != 1) return KeyCode.char(character);
+    final unit = character.codeUnitAt(0);
+    if (unit < 0x20 || unit > 0x7E) return KeyCode.char(character);
+    return _byAscii[unit - 0x20];
   }
 
   /// The printable character, or null for a special key.
@@ -147,12 +272,144 @@ final class KeyCode extends KeySequence {
   static const KeyCode f11 = KeyCode._special(SpecialKey.f11);
   static const KeyCode f12 = KeyCode._special(SpecialKey.f12);
 
+  // RFC 0020 vocabulary (see the SpecialKey block for grouping).
+  static const KeyCode f13 = KeyCode._special(SpecialKey.f13);
+  static const KeyCode f14 = KeyCode._special(SpecialKey.f14);
+  static const KeyCode f15 = KeyCode._special(SpecialKey.f15);
+  static const KeyCode f16 = KeyCode._special(SpecialKey.f16);
+  static const KeyCode f17 = KeyCode._special(SpecialKey.f17);
+  static const KeyCode f18 = KeyCode._special(SpecialKey.f18);
+  static const KeyCode f19 = KeyCode._special(SpecialKey.f19);
+  static const KeyCode f20 = KeyCode._special(SpecialKey.f20);
+  static const KeyCode f21 = KeyCode._special(SpecialKey.f21);
+  static const KeyCode f22 = KeyCode._special(SpecialKey.f22);
+  static const KeyCode f23 = KeyCode._special(SpecialKey.f23);
+  static const KeyCode f24 = KeyCode._special(SpecialKey.f24);
+  static const KeyCode f25 = KeyCode._special(SpecialKey.f25);
+  static const KeyCode f26 = KeyCode._special(SpecialKey.f26);
+  static const KeyCode f27 = KeyCode._special(SpecialKey.f27);
+  static const KeyCode f28 = KeyCode._special(SpecialKey.f28);
+  static const KeyCode f29 = KeyCode._special(SpecialKey.f29);
+  static const KeyCode f30 = KeyCode._special(SpecialKey.f30);
+  static const KeyCode f31 = KeyCode._special(SpecialKey.f31);
+  static const KeyCode f32 = KeyCode._special(SpecialKey.f32);
+  static const KeyCode f33 = KeyCode._special(SpecialKey.f33);
+  static const KeyCode f34 = KeyCode._special(SpecialKey.f34);
+  static const KeyCode f35 = KeyCode._special(SpecialKey.f35);
+  static const KeyCode capsLock = KeyCode._special(SpecialKey.capsLock);
+  static const KeyCode scrollLock = KeyCode._special(SpecialKey.scrollLock);
+  static const KeyCode numLock = KeyCode._special(SpecialKey.numLock);
+  static const KeyCode printScreen = KeyCode._special(SpecialKey.printScreen);
+  static const KeyCode pause = KeyCode._special(SpecialKey.pause);
+  static const KeyCode menu = KeyCode._special(SpecialKey.menu);
+  static const KeyCode keypad0 = KeyCode._special(SpecialKey.keypad0);
+  static const KeyCode keypad1 = KeyCode._special(SpecialKey.keypad1);
+  static const KeyCode keypad2 = KeyCode._special(SpecialKey.keypad2);
+  static const KeyCode keypad3 = KeyCode._special(SpecialKey.keypad3);
+  static const KeyCode keypad4 = KeyCode._special(SpecialKey.keypad4);
+  static const KeyCode keypad5 = KeyCode._special(SpecialKey.keypad5);
+  static const KeyCode keypad6 = KeyCode._special(SpecialKey.keypad6);
+  static const KeyCode keypad7 = KeyCode._special(SpecialKey.keypad7);
+  static const KeyCode keypad8 = KeyCode._special(SpecialKey.keypad8);
+  static const KeyCode keypad9 = KeyCode._special(SpecialKey.keypad9);
+  static const KeyCode keypadDecimal = KeyCode._special(
+    SpecialKey.keypadDecimal,
+  );
+  static const KeyCode keypadDivide = KeyCode._special(SpecialKey.keypadDivide);
+  static const KeyCode keypadMultiply = KeyCode._special(
+    SpecialKey.keypadMultiply,
+  );
+  static const KeyCode keypadSubtract = KeyCode._special(
+    SpecialKey.keypadSubtract,
+  );
+  static const KeyCode keypadAdd = KeyCode._special(SpecialKey.keypadAdd);
+  static const KeyCode keypadEnter = KeyCode._special(SpecialKey.keypadEnter);
+  static const KeyCode keypadEqual = KeyCode._special(SpecialKey.keypadEqual);
+  static const KeyCode keypadSeparator = KeyCode._special(
+    SpecialKey.keypadSeparator,
+  );
+  static const KeyCode keypadLeft = KeyCode._special(SpecialKey.keypadLeft);
+  static const KeyCode keypadRight = KeyCode._special(SpecialKey.keypadRight);
+  static const KeyCode keypadUp = KeyCode._special(SpecialKey.keypadUp);
+  static const KeyCode keypadDown = KeyCode._special(SpecialKey.keypadDown);
+  static const KeyCode keypadPageUp = KeyCode._special(SpecialKey.keypadPageUp);
+  static const KeyCode keypadPageDown = KeyCode._special(
+    SpecialKey.keypadPageDown,
+  );
+  static const KeyCode keypadHome = KeyCode._special(SpecialKey.keypadHome);
+  static const KeyCode keypadEnd = KeyCode._special(SpecialKey.keypadEnd);
+  static const KeyCode keypadInsert = KeyCode._special(SpecialKey.keypadInsert);
+  static const KeyCode keypadDelete = KeyCode._special(SpecialKey.keypadDelete);
+  static const KeyCode keypadBegin = KeyCode._special(SpecialKey.keypadBegin);
+  static const KeyCode mediaPlay = KeyCode._special(SpecialKey.mediaPlay);
+  static const KeyCode mediaPause = KeyCode._special(SpecialKey.mediaPause);
+  static const KeyCode mediaPlayPause = KeyCode._special(
+    SpecialKey.mediaPlayPause,
+  );
+  static const KeyCode mediaReverse = KeyCode._special(SpecialKey.mediaReverse);
+  static const KeyCode mediaStop = KeyCode._special(SpecialKey.mediaStop);
+  static const KeyCode mediaFastForward = KeyCode._special(
+    SpecialKey.mediaFastForward,
+  );
+  static const KeyCode mediaRewind = KeyCode._special(SpecialKey.mediaRewind);
+  static const KeyCode mediaTrackNext = KeyCode._special(
+    SpecialKey.mediaTrackNext,
+  );
+  static const KeyCode mediaTrackPrevious = KeyCode._special(
+    SpecialKey.mediaTrackPrevious,
+  );
+  static const KeyCode mediaRecord = KeyCode._special(SpecialKey.mediaRecord);
+  static const KeyCode volumeDown = KeyCode._special(SpecialKey.volumeDown);
+  static const KeyCode volumeUp = KeyCode._special(SpecialKey.volumeUp);
+  static const KeyCode volumeMute = KeyCode._special(SpecialKey.volumeMute);
+  static const KeyCode leftShift = KeyCode._special(SpecialKey.leftShift);
+  static const KeyCode leftControl = KeyCode._special(SpecialKey.leftControl);
+  static const KeyCode leftAlt = KeyCode._special(SpecialKey.leftAlt);
+  static const KeyCode leftSuper = KeyCode._special(SpecialKey.leftSuper);
+  static const KeyCode leftHyper = KeyCode._special(SpecialKey.leftHyper);
+  static const KeyCode leftMeta = KeyCode._special(SpecialKey.leftMeta);
+  static const KeyCode rightShift = KeyCode._special(SpecialKey.rightShift);
+  static const KeyCode rightControl = KeyCode._special(SpecialKey.rightControl);
+  static const KeyCode rightAlt = KeyCode._special(SpecialKey.rightAlt);
+  static const KeyCode rightSuper = KeyCode._special(SpecialKey.rightSuper);
+  static const KeyCode rightHyper = KeyCode._special(SpecialKey.rightHyper);
+  static const KeyCode rightMeta = KeyCode._special(SpecialKey.rightMeta);
+  static const KeyCode isoLevel3Shift = KeyCode._special(
+    SpecialKey.isoLevel3Shift,
+  );
+  static const KeyCode isoLevel5Shift = KeyCode._special(
+    SpecialKey.isoLevel5Shift,
+  );
+
   /// Canonical instances indexed by [SpecialKey.index] for [forSpecial].
+  /// Canonical printable codes for ASCII 0x20..0x7E, indexed by
+  /// `codeUnit - 0x20`. See [forCharacter].
+  static final List<KeyCode> _byAscii = [
+    for (var unit = 0x20; unit <= 0x7E; unit++)
+      KeyCode.char(String.fromCharCode(unit)),
+  ];
+
   static const List<KeyCode> _bySpecial = [
     enter, tab, backspace, escape, //
     arrowUp, arrowDown, arrowLeft, arrowRight, //
     home, end, pageUp, pageDown, insert, delete, //
-    f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12,
+    f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, //
+    f13, f14, f15, f16, f17, f18, f19, f20, f21, f22, f23, f24, //
+    f25, f26, f27, f28, f29, f30, f31, f32, f33, f34, f35, //
+    capsLock, scrollLock, numLock, printScreen, pause, menu, //
+    keypad0, keypad1, keypad2, keypad3, keypad4, //
+    keypad5, keypad6, keypad7, keypad8, keypad9, //
+    keypadDecimal, keypadDivide, keypadMultiply, keypadSubtract, keypadAdd, //
+    keypadEnter, keypadEqual, keypadSeparator, //
+    keypadLeft, keypadRight, keypadUp, keypadDown, //
+    keypadPageUp, keypadPageDown, keypadHome, keypadEnd, //
+    keypadInsert, keypadDelete, keypadBegin, //
+    mediaPlay, mediaPause, mediaPlayPause, mediaReverse, mediaStop, //
+    mediaFastForward, mediaRewind, mediaTrackNext, mediaTrackPrevious, //
+    mediaRecord, volumeDown, volumeUp, volumeMute, //
+    leftShift, leftControl, leftAlt, leftSuper, leftHyper, leftMeta, //
+    rightShift, rightControl, rightAlt, rightSuper, rightHyper, rightMeta, //
+    isoLevel3Shift, isoLevel5Shift,
   ];
 
   @override
@@ -174,10 +431,294 @@ final class KeyCode extends KeySequence {
   int get stepCount => 1;
 
   @override
+  String get selectorId =>
+      special != null ? 'key:${special!.name}' : 'chr:$character';
+
+  @override
   _KeyStep _stepAt(int index) {
     assert(index == 0, 'a KeyCode is a single step');
     return _KeyStep(this);
   }
+}
+
+// ===========================================================================
+// KeySelector + KeyPosition — RFC 0020 §13.
+// ===========================================================================
+
+/// One key identity, of either kind: a logical [KeyCode] (what the cap says)
+/// or a physical [KeyPosition] (where the key sits).
+///
+/// This is the type of data boundaries that must hold either kind — a
+/// rebindable-controls map, a sampled-controls list, a saved config entry.
+/// Application code never constructs a `KeySelector`; values come from the
+/// two implementing vocabularies or from [parse].
+///
+/// Deliberately *not* sealed: exhaustive switches over selectors would break
+/// when a future RFC (the input-map layer) adds selector kinds, so external
+/// switches always need a default — the same closure trick [KeySequence]
+/// uses.
+abstract final class KeySelector {
+  /// Stable, kind-prefixed identity for persistence: `chr:a` / `key:enter`
+  /// for [KeyCode], `pos:w` for [KeyPosition]. Round-trips through [parse].
+  String get selectorId;
+
+  /// Parses a [selectorId]. Throws [FormatException] on unknown kinds or
+  /// names — unknown kinds may be valid ids written by a future Fleury, so
+  /// callers persisting configs should catch and drop rather than crash.
+  static KeySelector parse(String id) {
+    if (id.startsWith('chr:')) {
+      final char = id.substring(4);
+      if (char.isEmpty || char.characters.length != 1) {
+        throw FormatException(
+          'chr: selector needs exactly one character, got "$char"',
+        );
+      }
+      return KeyCode.forCharacter(char);
+    }
+    if (id.startsWith('key:')) {
+      final name = id.substring(4);
+      for (final key in SpecialKey.values) {
+        if (key.name == name) return KeyCode.forSpecial(key);
+      }
+      throw FormatException('unknown special key "$name"');
+    }
+    if (id.startsWith('pos:')) {
+      final name = id.substring(4);
+      for (final position in KeyPosition.values) {
+        if (position.name == name) return position;
+      }
+      throw FormatException('unknown key position "$name"');
+    }
+    throw FormatException('unknown selector kind in "$id"');
+  }
+}
+
+/// One physical key position, named after the standard US-QWERTY layout.
+///
+/// QWERTY is the *naming grid*, not an assumption about the user's layout —
+/// the way "the C key" names a piano key. `KeyPosition.w` is the key at W's
+/// QWERTY spot: the Z-cap key on French AZERTY, the comma key on Dvorak.
+/// Positions are for **spatial** controls (movement clusters, the digit row
+/// as weapon-select); mnemonic commands the user reads by name always want
+/// [KeyCode].
+///
+/// Fed by the Kitty protocol's base-layout alternate key (flag 4) and the
+/// DOM's `KeyboardEvent.code`; both define themselves against the same US
+/// grid, so one vocabulary serves both surfaces. Positional identity is
+/// optional **per event** even on capable surfaces ([KeyEvent.position]).
+///
+/// Each member is one row of RFC 0020 §8.7's specification table: the DOM
+/// `code` string, plus exactly one of the unshifted US character (letter /
+/// digit / punctuation cluster) or the [SpecialKey] the position produces on
+/// a US layout. [intlBackslash] carries neither — the ISO extra key has no
+/// US-101 twin. Lookup maps are derived in `key_tables.dart`.
+///
+/// APPEND-ONLY: `KeyPosition.index` is a wire value in the remote codec.
+enum KeyPosition implements KeySelector, KeySequence {
+  // Letter cluster.
+  a('KeyA', 'a'),
+  b('KeyB', 'b'),
+  c('KeyC', 'c'),
+  d('KeyD', 'd'),
+  e('KeyE', 'e'),
+  f('KeyF', 'f'),
+  g('KeyG', 'g'),
+  h('KeyH', 'h'),
+  i('KeyI', 'i'),
+  j('KeyJ', 'j'),
+  k('KeyK', 'k'),
+  l('KeyL', 'l'),
+  m('KeyM', 'm'),
+  n('KeyN', 'n'),
+  o('KeyO', 'o'),
+  p('KeyP', 'p'),
+  q('KeyQ', 'q'),
+  r('KeyR', 'r'),
+  s('KeyS', 's'),
+  t('KeyT', 't'),
+  u('KeyU', 'u'),
+  v('KeyV', 'v'),
+  w('KeyW', 'w'),
+  x('KeyX', 'x'),
+  y('KeyY', 'y'),
+  z('KeyZ', 'z'),
+
+  // Number row. Positional digits are unshifted on every layout — the reason
+  // spatial digit controls (weapon rows) must be positions, not codes:
+  // logical '1' on AZERTY requires Shift.
+  digit0('Digit0', '0'),
+  digit1('Digit1', '1'),
+  digit2('Digit2', '2'),
+  digit3('Digit3', '3'),
+  digit4('Digit4', '4'),
+  digit5('Digit5', '5'),
+  digit6('Digit6', '6'),
+  digit7('Digit7', '7'),
+  digit8('Digit8', '8'),
+  digit9('Digit9', '9'),
+
+  // Punctuation cluster (unshifted US caps).
+  backquote('Backquote', '`'),
+  minus('Minus', '-'),
+  equal('Equal', '='),
+  bracketLeft('BracketLeft', '['),
+  bracketRight('BracketRight', ']'),
+  backslash('Backslash', r'\'),
+  semicolon('Semicolon', ';'),
+  quote('Quote', "'"),
+  comma('Comma', ','),
+  period('Period', '.'),
+  slash('Slash', '/'),
+
+  /// The ISO extra key between left Shift and Z. No US-101 twin: on a
+  /// surface without positional reporting this position can never match.
+  intlBackslash('IntlBackslash'),
+
+  space('Space', ' '),
+
+  // Editing / navigation cluster.
+  enter('Enter', null, SpecialKey.enter),
+  tab('Tab', null, SpecialKey.tab),
+  backspace('Backspace', null, SpecialKey.backspace),
+  escape('Escape', null, SpecialKey.escape),
+  insert('Insert', null, SpecialKey.insert),
+  delete('Delete', null, SpecialKey.delete),
+  home('Home', null, SpecialKey.home),
+  end('End', null, SpecialKey.end),
+  pageUp('PageUp', null, SpecialKey.pageUp),
+  pageDown('PageDown', null, SpecialKey.pageDown),
+  arrowUp('ArrowUp', null, SpecialKey.arrowUp),
+  arrowDown('ArrowDown', null, SpecialKey.arrowDown),
+  arrowLeft('ArrowLeft', null, SpecialKey.arrowLeft),
+  arrowRight('ArrowRight', null, SpecialKey.arrowRight),
+
+  // Function row.
+  f1('F1', null, SpecialKey.f1),
+  f2('F2', null, SpecialKey.f2),
+  f3('F3', null, SpecialKey.f3),
+  f4('F4', null, SpecialKey.f4),
+  f5('F5', null, SpecialKey.f5),
+  f6('F6', null, SpecialKey.f6),
+  f7('F7', null, SpecialKey.f7),
+  f8('F8', null, SpecialKey.f8),
+  f9('F9', null, SpecialKey.f9),
+  f10('F10', null, SpecialKey.f10),
+  f11('F11', null, SpecialKey.f11),
+  f12('F12', null, SpecialKey.f12),
+  f13('F13', null, SpecialKey.f13),
+  f14('F14', null, SpecialKey.f14),
+  f15('F15', null, SpecialKey.f15),
+  f16('F16', null, SpecialKey.f16),
+  f17('F17', null, SpecialKey.f17),
+  f18('F18', null, SpecialKey.f18),
+  f19('F19', null, SpecialKey.f19),
+  f20('F20', null, SpecialKey.f20),
+  f21('F21', null, SpecialKey.f21),
+  f22('F22', null, SpecialKey.f22),
+  f23('F23', null, SpecialKey.f23),
+  f24('F24', null, SpecialKey.f24),
+
+  // Locks and system keys.
+  capsLock('CapsLock', null, SpecialKey.capsLock),
+  numLock('NumLock', null, SpecialKey.numLock),
+  scrollLock('ScrollLock', null, SpecialKey.scrollLock),
+  printScreen('PrintScreen', null, SpecialKey.printScreen),
+  pause('Pause', null, SpecialKey.pause),
+  contextMenu('ContextMenu', null, SpecialKey.menu),
+
+  // Keypad.
+  numpad0('Numpad0', null, SpecialKey.keypad0),
+  numpad1('Numpad1', null, SpecialKey.keypad1),
+  numpad2('Numpad2', null, SpecialKey.keypad2),
+  numpad3('Numpad3', null, SpecialKey.keypad3),
+  numpad4('Numpad4', null, SpecialKey.keypad4),
+  numpad5('Numpad5', null, SpecialKey.keypad5),
+  numpad6('Numpad6', null, SpecialKey.keypad6),
+  numpad7('Numpad7', null, SpecialKey.keypad7),
+  numpad8('Numpad8', null, SpecialKey.keypad8),
+  numpad9('Numpad9', null, SpecialKey.keypad9),
+  numpadDecimal('NumpadDecimal', null, SpecialKey.keypadDecimal),
+  numpadDivide('NumpadDivide', null, SpecialKey.keypadDivide),
+  numpadMultiply('NumpadMultiply', null, SpecialKey.keypadMultiply),
+  numpadSubtract('NumpadSubtract', null, SpecialKey.keypadSubtract),
+  numpadAdd('NumpadAdd', null, SpecialKey.keypadAdd),
+  numpadEnter('NumpadEnter', null, SpecialKey.keypadEnter),
+  numpadEqual('NumpadEqual', null, SpecialKey.keypadEqual),
+  numpadComma('NumpadComma', null, SpecialKey.keypadSeparator),
+
+  // Sided modifier keys. DOM "Meta" is the Command/Windows key — the Kitty
+  // vocabulary calls the same physical keys "super".
+  shiftLeft('ShiftLeft', null, SpecialKey.leftShift),
+  shiftRight('ShiftRight', null, SpecialKey.rightShift),
+  controlLeft('ControlLeft', null, SpecialKey.leftControl),
+  controlRight('ControlRight', null, SpecialKey.rightControl),
+  altLeft('AltLeft', null, SpecialKey.leftAlt),
+  altRight('AltRight', null, SpecialKey.rightAlt),
+  metaLeft('MetaLeft', null, SpecialKey.leftSuper),
+  metaRight('MetaRight', null, SpecialKey.rightSuper);
+
+  const KeyPosition(this.domCode, [this.usCharacter, this.special])
+    : assert(
+        usCharacter == null || special == null,
+        'a position produces a character or a special on the US layout, '
+        'never both',
+      );
+
+  /// The DOM `KeyboardEvent.code` value for this position.
+  final String domCode;
+
+  /// The unshifted character this position produces on a US layout, for
+  /// character-cluster positions; null otherwise. Kitty's base-layout
+  /// alternate codes are the codepoints of these characters.
+  final String? usCharacter;
+
+  /// The [SpecialKey] this position produces on a US layout, for functional
+  /// positions; null otherwise.
+  final SpecialKey? special;
+
+  /// The logical key this position produces on a US layout — the one-way
+  /// degradation target: a positional query against a press whose position
+  /// is unknown matches this twin instead (RFC 0020 §13.3). Null only for
+  /// positions with no US-101 twin ([intlBackslash]).
+  KeyCode? get usTwin {
+    final s = special;
+    if (s != null) return KeyCode.forSpecial(s);
+    final c = usCharacter;
+    if (c != null) return KeyCode.char(c);
+    return null;
+  }
+
+  @override
+  String get selectorId => 'pos:$name';
+
+  // ---- KeySequence: a position is a one-step, unmodified gesture --------
+  //
+  // The same rule [KeyCode] follows (RFC 0018: every code is a valid
+  // one-step sequence), extended to the other identity kind. It is what
+  // makes `KeyBinding(KeyPosition.w, …)` legal — a spatial COMMAND, the
+  // counterpart to sampling a spatial control.
+
+  @override
+  int get stepCount => 1;
+
+  @override
+  _KeyStep _stepAt(int index) {
+    assert(index == 0, 'a KeyPosition is a single step');
+    // Canonical per value: a position's one-step form never varies, and
+    // `matches`/`hintLabel` both route through here on every dispatched key.
+    // Rebuilding it made a positional binding allocate once per key event.
+    return _stepByPosition[this.index];
+  }
+
+  @override
+  String get hintLabel => _stepAt(0).label;
+
+  @override
+  bool matches(KeyEvent event) => _stepAt(0).matches(event);
+
+  @override
+  bool isPrefixOf(KeySequence other) =>
+      other.stepCount >= 1 && other.stepLabelAt(0) == hintLabel;
 }
 
 /// A pattern that matches one or more keypresses — the value a [KeyBinding]
@@ -274,6 +815,47 @@ sealed class KeySequence {
   static const KeyCode f10 = KeyCode.f10;
   static const KeyCode f11 = KeyCode.f11;
   static const KeyCode f12 = KeyCode.f12;
+
+  // RFC 0020 vocabulary forwards, so `.f13` / `.mediaPlay` resolve in a
+  // KeySequence context like every other atom. (Sided modifier *keys* and
+  // keypad keys are bindable via their KeyCode statics; they are omitted
+  // here because bare `.leftShift` in a binding position is more often the
+  // start of a mistyped chord than an intended lone-modifier binding.)
+  static const KeyCode f13 = KeyCode.f13;
+  static const KeyCode f14 = KeyCode.f14;
+  static const KeyCode f15 = KeyCode.f15;
+  static const KeyCode f16 = KeyCode.f16;
+  static const KeyCode f17 = KeyCode.f17;
+  static const KeyCode f18 = KeyCode.f18;
+  static const KeyCode f19 = KeyCode.f19;
+  static const KeyCode f20 = KeyCode.f20;
+  static const KeyCode f21 = KeyCode.f21;
+  static const KeyCode f22 = KeyCode.f22;
+  static const KeyCode f23 = KeyCode.f23;
+  static const KeyCode f24 = KeyCode.f24;
+  static const KeyCode f25 = KeyCode.f25;
+  static const KeyCode f26 = KeyCode.f26;
+  static const KeyCode f27 = KeyCode.f27;
+  static const KeyCode f28 = KeyCode.f28;
+  static const KeyCode f29 = KeyCode.f29;
+  static const KeyCode f30 = KeyCode.f30;
+  static const KeyCode f31 = KeyCode.f31;
+  static const KeyCode f32 = KeyCode.f32;
+  static const KeyCode f33 = KeyCode.f33;
+  static const KeyCode f34 = KeyCode.f34;
+  static const KeyCode f35 = KeyCode.f35;
+  static const KeyCode printScreen = KeyCode.printScreen;
+  static const KeyCode pause = KeyCode.pause;
+  static const KeyCode menu = KeyCode.menu;
+  static const KeyCode mediaPlay = KeyCode.mediaPlay;
+  static const KeyCode mediaPause = KeyCode.mediaPause;
+  static const KeyCode mediaPlayPause = KeyCode.mediaPlayPause;
+  static const KeyCode mediaStop = KeyCode.mediaStop;
+  static const KeyCode mediaTrackNext = KeyCode.mediaTrackNext;
+  static const KeyCode mediaTrackPrevious = KeyCode.mediaTrackPrevious;
+  static const KeyCode volumeDown = KeyCode.volumeDown;
+  static const KeyCode volumeUp = KeyCode.volumeUp;
+  static const KeyCode volumeMute = KeyCode.volumeMute;
 
   /// Shift+Tab — the common back-traverse chord, spelled as a named atom
   /// because terminals encode it as one distinct sequence.
@@ -542,8 +1124,9 @@ extension KeySequenceChain on KeySequence {
   KeySequence char(String character) =>
       _appendAtom(this, KeyCode.char(character));
 
-  /// Append a [KeyCode] held in a variable.
-  KeySequence code(KeyCode keyCode) => _appendAtom(this, keyCode);
+  /// Append a key identity held in a variable — a logical [KeyCode] or a
+  /// physical [KeyPosition].
+  KeySequence code(KeySelector keyCode) => _appendAtom(this, keyCode);
 }
 
 /// Chain getters on a [PendingKeySequence]. Modifier atoms accumulate (still
@@ -629,8 +1212,9 @@ extension PendingKeySequenceChain on PendingKeySequence {
   /// Close the pending modifiers with a dynamic character atom.
   KeySequence char(String character) => code(KeyCode.char(character));
 
-  /// Close the pending modifiers with a [KeyCode] held in a variable.
-  KeySequence code(KeyCode keyCode) {
+  /// Close the pending modifiers with a key identity held in a variable —
+  /// a logical [KeyCode] or a physical [KeyPosition].
+  KeySequence code(KeySelector keyCode) {
     final step = _KeyStep.build(
       keyCode,
       ctrl: _ctrl,
@@ -646,6 +1230,12 @@ extension PendingKeySequenceChain on PendingKeySequence {
 // ---------------------------------------------------------------------------
 // Framework-internal step access consumed by [InputDispatcher].
 // ---------------------------------------------------------------------------
+
+/// Canonical one-step forms, indexed by [KeyPosition.index]. Built once so
+/// per-key matching never allocates (see [KeyPosition._stepAt]).
+final List<_KeyStep> _stepByPosition = [
+  for (final position in KeyPosition.values) _KeyStep(position),
+];
 
 /// **Framework-internal.** Lets the [InputDispatcher] walk a sequence
 /// step-by-step without exposing the step layout. Not a stable public API —
@@ -667,6 +1257,19 @@ extension $KeySequenceInternal on KeySequence {
     return _stepAt(index).label;
   }
 
+  /// The positional atoms in this sequence, by step index.
+  ///
+  /// Empty for an all-logical sequence (the common case), which is what lets
+  /// a layout-aware renderer skip substitution entirely.
+  Map<int, KeyPosition> get positionalSteps {
+    final out = <int, KeyPosition>{};
+    for (var index = 0; index < stepCount; index++) {
+      final selector = _stepAt(index).selector;
+      if (selector is KeyPosition) out[index] = selector;
+    }
+    return out;
+  }
+
   /// The events a terminal would emit for this sequence: a bare printable
   /// step arrives as a [TextInputEvent] (shift folded into the character's
   /// case), any modified or special step as a [KeyEvent]. Test harnesses use
@@ -683,7 +1286,7 @@ extension $KeySequenceInternal on KeySequence {
   /// shadowed — they arrive as key events, not text.
   bool get isShadowedByTextInput {
     final step = _stepAt(0);
-    return step.code.isCharacter &&
+    return (step.code?.isCharacter ?? false) &&
         !step.ctrl &&
         !step.alt &&
         !step.superKey &&
@@ -720,7 +1323,7 @@ final class _ModifiedSequence extends KeySequence {
 @immutable
 final class _KeyStep {
   const _KeyStep(
-    this.code, {
+    this.selector, {
     this.ctrl = false,
     this.alt = false,
     this.shift = false,
@@ -729,16 +1332,17 @@ final class _KeyStep {
   });
 
   /// Builds a step, folding Shift on a cased letter into the character's
-  /// case so the representation is canonical.
+  /// case so the representation is canonical. A positional atom has no case
+  /// to fold, so it passes straight through.
   factory _KeyStep.build(
-    KeyCode code, {
+    KeySelector code, {
     bool ctrl = false,
     bool alt = false,
     bool shift = false,
     bool superKey = false,
     bool meta = false,
   }) {
-    final ch = code.character;
+    final ch = code is KeyCode ? code.character : null;
     if (ch != null && ch.toLowerCase() != ch.toUpperCase()) {
       // A cased letter: encode Shift as case, never as a flag.
       final shifted = shift || ch != ch.toLowerCase();
@@ -760,7 +1364,15 @@ final class _KeyStep {
     );
   }
 
-  final KeyCode code;
+  /// The key this step names: a logical [KeyCode] or a physical
+  /// [KeyPosition]. Matching delegates to [KeyEvent.matches], so a
+  /// positional step follows the SAME per-press degradation rule as a
+  /// sampled read — one identity model, one comparison (RFC 0020 §5.3).
+  final KeySelector selector;
+
+  /// The logical code this step names, or null for a positional step.
+  KeyCode? get code => selector is KeyCode ? selector as KeyCode : null;
+
   final bool ctrl;
   final bool alt;
   final bool shift;
@@ -778,13 +1390,21 @@ final class _KeyStep {
     if (superKey != event.hasSuper) return false;
     if (meta != event.hasMeta) return false;
 
-    final special = code.special;
+    final logical = code;
+    if (logical == null) {
+      // A positional step: identity is the physical key, so there is no
+      // case to fold — Shift compares plainly.
+      if (!event.matches(selector)) return false;
+      return shift == event.hasShift;
+    }
+
+    final special = logical.special;
     if (special != null) {
       if (event.code.special != special) return false;
       return shift == event.hasShift;
     }
 
-    final stepChar = code.character!;
+    final stepChar = logical.character!;
     final eventChar = event.code.character;
     if (eventChar == null) return false;
     if (stepChar.toLowerCase() != eventChar.toLowerCase()) return false;
@@ -804,12 +1424,29 @@ final class _KeyStep {
   /// terminal reporting delivers (a bare `TextInputEvent` would drop it and
   /// fail to match a shifted binding).
   TuiEvent asInputEvent() {
-    final character = code.character;
+    final logical = code;
+    if (logical == null) {
+      // Positional: emit the US twin plus the position, which is exactly
+      // what a capable surface reports for that physical key.
+      final position = selector as KeyPosition;
+      return KeyEvent(
+        position.usTwin ?? KeyCode.space,
+        position: position,
+        modifiers: {
+          if (ctrl) KeyModifier.ctrl,
+          if (alt) KeyModifier.alt,
+          if (shift) KeyModifier.shift,
+          if (superKey) KeyModifier.superKey,
+          if (meta) KeyModifier.meta,
+        },
+      );
+    }
+    final character = logical.character;
     final bare =
         character != null && !ctrl && !alt && !shift && !superKey && !meta;
     if (bare) return TextInputEvent(character);
     return KeyEvent(
-      code,
+      logical,
       modifiers: {
         if (ctrl) KeyModifier.ctrl,
         if (alt) KeyModifier.alt,
@@ -822,7 +1459,33 @@ final class _KeyStep {
 
   /// Per-step label: `Ctrl+S`, `↑`, `d`, `Space`, `Shift+G`.
   String get label {
-    final ch = code.character;
+    final logical = code;
+    if (logical == null) {
+      final position = selector as KeyPosition;
+      final mods = <String>[
+        if (ctrl) 'Ctrl',
+        if (alt) 'Alt',
+        if (shift) 'Shift',
+        if (superKey) 'Super',
+        if (meta) 'Meta',
+      ];
+      // The US twin is the honest default; P6's layout table replaces it
+      // with the key the user actually has under that finger.
+      final twin = position.usTwin;
+      final twinChar = twin?.character;
+      // Same casing rule as a logical atom below: bare renders as the key
+      // produces it, a chord uppercases. Otherwise one hint bar reads
+      // `[q] Quit  [W] Thrust` and the inconsistency looks like a bug.
+      final base = twin == null
+          ? position.name
+          : (twin.special != null
+                ? _specialLabel(twin.special!)
+                : (twinChar == ' '
+                      ? 'Space'
+                      : (mods.isEmpty ? twinChar! : twinChar!.toUpperCase())));
+      return mods.isEmpty ? base : '${mods.join('+')}+$base';
+    }
+    final ch = logical.character;
     final isUpperLetter = ch != null && ch != ch.toLowerCase();
     final mods = <String>[
       if (ctrl) 'Ctrl',
@@ -831,7 +1494,7 @@ final class _KeyStep {
       if (superKey) 'Super',
       if (meta) 'Meta',
     ];
-    final special = code.special;
+    final special = logical.special;
     final String base;
     if (special != null) {
       base = _specialLabel(special);
@@ -846,7 +1509,7 @@ final class _KeyStep {
   @override
   bool operator ==(Object other) =>
       other is _KeyStep &&
-      other.code == code &&
+      other.selector == selector &&
       other.ctrl == ctrl &&
       other.alt == alt &&
       other.shift == shift &&
@@ -854,18 +1517,21 @@ final class _KeyStep {
       other.meta == meta;
 
   @override
-  int get hashCode => Object.hash(code, ctrl, alt, shift, superKey, meta);
+  int get hashCode => Object.hash(selector, ctrl, alt, shift, superKey, meta);
 }
 
 /// Reduces built steps to the tightest representation: a lone unmodified
 /// step is just its [KeyCode]; anything else is a [_ModifiedSequence].
 KeySequence _sequenceFromSteps(List<_KeyStep> steps) {
-  if (steps.length == 1 && !steps.first._hasModifiers) return steps.first.code;
+  if (steps.length == 1 && !steps.first._hasModifiers) {
+    final atom = steps.first.selector;
+    if (atom is KeySequence) return atom as KeySequence;
+  }
   return _ModifiedSequence(List<_KeyStep>.unmodifiable(steps));
 }
 
 /// Appends [atom] as a fresh step to [chain]'s steps.
-KeySequence _appendAtom(KeySequence chain, KeyCode atom) =>
+KeySequence _appendAtom(KeySequence chain, KeySelector atom) =>
     _sequenceFromSteps([..._collectSteps(chain), _KeyStep.build(atom)]);
 
 /// Materialises a sequence's steps (construction-time only, not hot).
@@ -903,6 +1569,94 @@ String _specialLabel(SpecialKey key) => switch (key) {
   SpecialKey.f10 => 'F10',
   SpecialKey.f11 => 'F11',
   SpecialKey.f12 => 'F12',
+  // RFC 0020 vocabulary. Labels are space-free (multi-step hint labels join
+  // steps with spaces) and every label round-trips through
+  // [KeySequence.parse] via [_specialByName].
+  SpecialKey.f13 => 'F13',
+  SpecialKey.f14 => 'F14',
+  SpecialKey.f15 => 'F15',
+  SpecialKey.f16 => 'F16',
+  SpecialKey.f17 => 'F17',
+  SpecialKey.f18 => 'F18',
+  SpecialKey.f19 => 'F19',
+  SpecialKey.f20 => 'F20',
+  SpecialKey.f21 => 'F21',
+  SpecialKey.f22 => 'F22',
+  SpecialKey.f23 => 'F23',
+  SpecialKey.f24 => 'F24',
+  SpecialKey.f25 => 'F25',
+  SpecialKey.f26 => 'F26',
+  SpecialKey.f27 => 'F27',
+  SpecialKey.f28 => 'F28',
+  SpecialKey.f29 => 'F29',
+  SpecialKey.f30 => 'F30',
+  SpecialKey.f31 => 'F31',
+  SpecialKey.f32 => 'F32',
+  SpecialKey.f33 => 'F33',
+  SpecialKey.f34 => 'F34',
+  SpecialKey.f35 => 'F35',
+  SpecialKey.capsLock => 'CapsLock',
+  SpecialKey.scrollLock => 'ScrollLock',
+  SpecialKey.numLock => 'NumLock',
+  SpecialKey.printScreen => 'PrintScreen',
+  SpecialKey.pause => 'Pause',
+  SpecialKey.menu => 'Menu',
+  SpecialKey.keypad0 => 'KP0',
+  SpecialKey.keypad1 => 'KP1',
+  SpecialKey.keypad2 => 'KP2',
+  SpecialKey.keypad3 => 'KP3',
+  SpecialKey.keypad4 => 'KP4',
+  SpecialKey.keypad5 => 'KP5',
+  SpecialKey.keypad6 => 'KP6',
+  SpecialKey.keypad7 => 'KP7',
+  SpecialKey.keypad8 => 'KP8',
+  SpecialKey.keypad9 => 'KP9',
+  SpecialKey.keypadDecimal => 'KPDecimal',
+  SpecialKey.keypadDivide => 'KPDivide',
+  SpecialKey.keypadMultiply => 'KPMultiply',
+  SpecialKey.keypadSubtract => 'KPSubtract',
+  SpecialKey.keypadAdd => 'KPAdd',
+  SpecialKey.keypadEnter => 'KPEnter',
+  SpecialKey.keypadEqual => 'KPEqual',
+  SpecialKey.keypadSeparator => 'KPSeparator',
+  SpecialKey.keypadLeft => 'KPLeft',
+  SpecialKey.keypadRight => 'KPRight',
+  SpecialKey.keypadUp => 'KPUp',
+  SpecialKey.keypadDown => 'KPDown',
+  SpecialKey.keypadPageUp => 'KPPgUp',
+  SpecialKey.keypadPageDown => 'KPPgDn',
+  SpecialKey.keypadHome => 'KPHome',
+  SpecialKey.keypadEnd => 'KPEnd',
+  SpecialKey.keypadInsert => 'KPIns',
+  SpecialKey.keypadDelete => 'KPDel',
+  SpecialKey.keypadBegin => 'KPBegin',
+  SpecialKey.mediaPlay => 'MediaPlay',
+  SpecialKey.mediaPause => 'MediaPause',
+  SpecialKey.mediaPlayPause => 'MediaPlayPause',
+  SpecialKey.mediaReverse => 'MediaReverse',
+  SpecialKey.mediaStop => 'MediaStop',
+  SpecialKey.mediaFastForward => 'MediaFastForward',
+  SpecialKey.mediaRewind => 'MediaRewind',
+  SpecialKey.mediaTrackNext => 'MediaNext',
+  SpecialKey.mediaTrackPrevious => 'MediaPrev',
+  SpecialKey.mediaRecord => 'MediaRecord',
+  SpecialKey.volumeDown => 'VolumeDown',
+  SpecialKey.volumeUp => 'VolumeUp',
+  SpecialKey.volumeMute => 'Mute',
+  SpecialKey.leftShift => 'LShift',
+  SpecialKey.leftControl => 'LCtrl',
+  SpecialKey.leftAlt => 'LAlt',
+  SpecialKey.leftSuper => 'LSuper',
+  SpecialKey.leftHyper => 'LHyper',
+  SpecialKey.leftMeta => 'LMeta',
+  SpecialKey.rightShift => 'RShift',
+  SpecialKey.rightControl => 'RCtrl',
+  SpecialKey.rightAlt => 'RAlt',
+  SpecialKey.rightSuper => 'RSuper',
+  SpecialKey.rightHyper => 'RHyper',
+  SpecialKey.rightMeta => 'RMeta',
+  SpecialKey.isoLevel3Shift => 'ISOLevel3',
+  SpecialKey.isoLevel5Shift => 'ISOLevel5',
 };
 
 /// Parses one step token (`ctrl+x`, `Shift+G`, `esc`, `?`, `ctrl++`) into a
@@ -1029,6 +1783,109 @@ const Map<String, SpecialKey> _specialByName = {
   'f10': SpecialKey.f10,
   'f11': SpecialKey.f11,
   'f12': SpecialKey.f12,
+  // RFC 0020 vocabulary — every [_specialLabel] form lowercased, plus
+  // long-form aliases.
+  'f13': SpecialKey.f13,
+  'f14': SpecialKey.f14,
+  'f15': SpecialKey.f15,
+  'f16': SpecialKey.f16,
+  'f17': SpecialKey.f17,
+  'f18': SpecialKey.f18,
+  'f19': SpecialKey.f19,
+  'f20': SpecialKey.f20,
+  'f21': SpecialKey.f21,
+  'f22': SpecialKey.f22,
+  'f23': SpecialKey.f23,
+  'f24': SpecialKey.f24,
+  'f25': SpecialKey.f25,
+  'f26': SpecialKey.f26,
+  'f27': SpecialKey.f27,
+  'f28': SpecialKey.f28,
+  'f29': SpecialKey.f29,
+  'f30': SpecialKey.f30,
+  'f31': SpecialKey.f31,
+  'f32': SpecialKey.f32,
+  'f33': SpecialKey.f33,
+  'f34': SpecialKey.f34,
+  'f35': SpecialKey.f35,
+  'capslock': SpecialKey.capsLock,
+  'scrolllock': SpecialKey.scrollLock,
+  'numlock': SpecialKey.numLock,
+  'printscreen': SpecialKey.printScreen,
+  'prtsc': SpecialKey.printScreen,
+  'pause': SpecialKey.pause,
+  'menu': SpecialKey.menu,
+  'kp0': SpecialKey.keypad0,
+  'kp1': SpecialKey.keypad1,
+  'kp2': SpecialKey.keypad2,
+  'kp3': SpecialKey.keypad3,
+  'kp4': SpecialKey.keypad4,
+  'kp5': SpecialKey.keypad5,
+  'kp6': SpecialKey.keypad6,
+  'kp7': SpecialKey.keypad7,
+  'kp8': SpecialKey.keypad8,
+  'kp9': SpecialKey.keypad9,
+  'kpdecimal': SpecialKey.keypadDecimal,
+  'kpdivide': SpecialKey.keypadDivide,
+  'kpmultiply': SpecialKey.keypadMultiply,
+  'kpsubtract': SpecialKey.keypadSubtract,
+  'kpadd': SpecialKey.keypadAdd,
+  'kpenter': SpecialKey.keypadEnter,
+  'kpequal': SpecialKey.keypadEqual,
+  'kpseparator': SpecialKey.keypadSeparator,
+  'kpleft': SpecialKey.keypadLeft,
+  'kpright': SpecialKey.keypadRight,
+  'kpup': SpecialKey.keypadUp,
+  'kpdown': SpecialKey.keypadDown,
+  'kppgup': SpecialKey.keypadPageUp,
+  'kppgdn': SpecialKey.keypadPageDown,
+  'kphome': SpecialKey.keypadHome,
+  'kpend': SpecialKey.keypadEnd,
+  'kpins': SpecialKey.keypadInsert,
+  'kpdel': SpecialKey.keypadDelete,
+  'kpbegin': SpecialKey.keypadBegin,
+  'mediaplay': SpecialKey.mediaPlay,
+  'mediapause': SpecialKey.mediaPause,
+  'mediaplaypause': SpecialKey.mediaPlayPause,
+  'mediareverse': SpecialKey.mediaReverse,
+  'mediastop': SpecialKey.mediaStop,
+  'mediafastforward': SpecialKey.mediaFastForward,
+  'mediarewind': SpecialKey.mediaRewind,
+  'medianext': SpecialKey.mediaTrackNext,
+  'mediaprev': SpecialKey.mediaTrackPrevious,
+  'mediarecord': SpecialKey.mediaRecord,
+  'volumedown': SpecialKey.volumeDown,
+  'volumeup': SpecialKey.volumeUp,
+  'mute': SpecialKey.volumeMute,
+  'volumemute': SpecialKey.volumeMute,
+  'lshift': SpecialKey.leftShift,
+  'leftshift': SpecialKey.leftShift,
+  'lctrl': SpecialKey.leftControl,
+  'leftctrl': SpecialKey.leftControl,
+  'leftcontrol': SpecialKey.leftControl,
+  'lalt': SpecialKey.leftAlt,
+  'leftalt': SpecialKey.leftAlt,
+  'lsuper': SpecialKey.leftSuper,
+  'leftsuper': SpecialKey.leftSuper,
+  'lhyper': SpecialKey.leftHyper,
+  'lefthyper': SpecialKey.leftHyper,
+  'lmeta': SpecialKey.leftMeta,
+  'leftmeta': SpecialKey.leftMeta,
+  'rshift': SpecialKey.rightShift,
+  'rightshift': SpecialKey.rightShift,
+  'rctrl': SpecialKey.rightControl,
+  'rightctrl': SpecialKey.rightControl,
+  'rightcontrol': SpecialKey.rightControl,
+  'ralt': SpecialKey.rightAlt,
+  'rightalt': SpecialKey.rightAlt,
+  'rsuper': SpecialKey.rightSuper,
+  'rightsuper': SpecialKey.rightSuper,
+  'rhyper': SpecialKey.rightHyper,
+  'righthyper': SpecialKey.rightHyper,
+  'rmeta': SpecialKey.rightMeta,
+  'rightmeta': SpecialKey.rightMeta,
+  'isolevel3': SpecialKey.isoLevel3Shift,
+  'isolevel5': SpecialKey.isoLevel5Shift,
 };
 
 /// Keyboard modifier flags.
@@ -1080,10 +1937,20 @@ final class KeyEvent extends TuiEvent {
     this.code, {
     this.modifiers = const <KeyModifier>{},
     this.type = KeyEventType.down,
+    this.position,
+    this.synthesized = false,
   });
 
   /// The logical key this event reports.
   final KeyCode code;
+
+  /// The physical position, when the backend knew it **for this event** —
+  /// Kitty's base-layout alternate (flag 4) or the DOM's `code`. Null means
+  /// unknown for this press, not unsupported by the surface: even capable
+  /// backends omit it per event (DOM `Unidentified`, a terminal skipping
+  /// the alternate field). Never silently substituted; [matches] applies
+  /// the one-way degradation rule instead.
+  final KeyPosition? position;
 
   final Set<KeyModifier> modifiers;
 
@@ -1091,6 +1958,41 @@ final class KeyEvent extends TuiEvent {
   /// [KeyEventType.down] unless the Kitty protocol's event-type reporting
   /// is enabled.
   final KeyEventType type;
+
+  /// True when Fleury generated this event to repair or recover backend
+  /// state (RFC 0020 §6's synthesis taxonomy) rather than receiving the
+  /// phase from the source. Provenance for diagnostics; the dispatch rules
+  /// for each synthesis origin are the taxonomy table's, not the flag's.
+  final bool synthesized;
+
+  /// Stops this event's propagation to shallower scopes (RFC 0020 §17.2).
+  ///
+  /// Valid only during the live synchronous dispatch of this event to an
+  /// entitled consumer — a [KeyDetector] `onKey` callback. Anywhere else
+  /// (observation, a stored event, after an `await`) it is a debug-mode
+  /// error and a release-mode no-op. Binding handlers control propagation
+  /// with `KeyBindingEvent.bubble()` instead; entitlement lives on the
+  /// dispatch context, never on the event object.
+  void consume() => KeyDispatchContext.consumeCurrent();
+
+  /// Whether this event is [selector]'s key, by identity alone.
+  ///
+  /// Modifiers are deliberately ignored — this answers "is it that key",
+  /// not "is it that gesture" (a Ctrl+W event matches both `KeyCode.w` and
+  /// `KeyPosition.w`). For a [KeyPosition], the one-way degradation rule
+  /// applies per press: a known position matches by position only; an
+  /// unknown one falls back to the selector's [KeyPosition.usTwin]. A
+  /// [KeyCode] selector never upgrades to positional matching.
+  bool matches(KeySelector selector) {
+    if (selector is KeyCode) return code == selector;
+    if (selector is KeyPosition) {
+      final p = position;
+      if (p != null) return p == selector;
+      final twin = selector.usTwin;
+      return twin != null && code == twin;
+    }
+    return false;
+  }
 
   bool get hasCtrl => modifiers.contains(KeyModifier.ctrl);
   bool get hasAlt => modifiers.contains(KeyModifier.alt);
@@ -1111,12 +2013,16 @@ final class KeyEvent extends TuiEvent {
       other is KeyEvent &&
       other.code == code &&
       other.type == type &&
+      other.position == position &&
+      other.synthesized == synthesized &&
       _setEquals(other.modifiers, modifiers);
 
   @override
   int get hashCode => Object.hash(
     code,
     type,
+    position,
+    synthesized,
     modifiers.fold<int>(0, (acc, m) => acc ^ m.hashCode),
   );
 
@@ -1130,9 +2036,102 @@ final class KeyEvent extends TuiEvent {
       if (modifiers.contains(KeyModifier.meta)) 'meta',
       code.special?.name ?? code.character ?? '',
     ];
-    final suffix = type == KeyEventType.down ? '' : ' ${type.name}';
+    final suffix = [
+      if (type != KeyEventType.down) ' ${type.name}',
+      if (position != null) ' @${position!.name}',
+      if (synthesized) ' synth',
+    ].join();
     return 'KeyEvent(${parts.join('+')}$suffix)';
   }
+}
+
+/// One normalized input packet: a key event, committed text, or both —
+/// RFC 0020 §5's batch model.
+///
+/// A batch exists wherever key identity and produced text arrive as one
+/// physical report and their correlation must survive transport: a Kitty
+/// lifecycle-mode printable (`CSI 97;1;97 u` is the A key *and* the text
+/// "a"), a DOM keydown paired with its input event, the wire, and the test
+/// driver. Bare [KeyEvent]/[TextInputEvent] values remain valid stream
+/// elements — a bare event is semantically a one-payload batch; the
+/// dispatcher normalizes at entry.
+///
+/// [timeStamp] is monotonic receipt time at the source; [sequence] is a
+/// per-source counter. Both are diagnostics/timing data, deliberately
+/// excluded from [==] — batch identity is its payload, and timing in
+/// equality would poison test assertions and event dedup (RFC 0020 §23,
+/// the timestamp deferral).
+@immutable
+final class InputBatch extends TuiEvent {
+  const InputBatch({
+    this.key,
+    this.committedText,
+    this.timeStamp = Duration.zero,
+    this.sequence = 0,
+  }) : assert(
+         key != null || committedText != null,
+         'a batch carries a key, text, or both — never neither',
+       );
+
+  /// The key half, when the report carried key identity.
+  final KeyEvent? key;
+
+  /// The committed text half, when the report produced text.
+  final String? committedText;
+
+  /// Monotonic receipt time at the emitting source.
+  final Duration timeStamp;
+
+  /// Per-source ordering counter.
+  final int sequence;
+
+  @override
+  bool operator ==(Object other) =>
+      other is InputBatch &&
+      other.key == key &&
+      other.committedText == committedText;
+
+  @override
+  int get hashCode => Object.hash(InputBatch, key, committedText);
+
+  @override
+  String toString() =>
+      'InputBatch(${key ?? ''}${key != null && committedText != null ? ' + ' : ''}'
+      '${committedText != null ? '"$committedText"' : ''})';
+}
+
+/// The terminal reporting that its window gained or lost keyboard focus
+/// (DECSET 1004).
+///
+/// Focus LOSS is an authority-loss trigger (RFC 0020 §10): the keys the
+/// user is holding will be released into whatever window took focus, so
+/// this terminal will never report those releases. Without the signal,
+/// every held key stays held forever — `KeyBinding.hold` never ends and
+/// sampled state lies until something else is pressed.
+///
+/// Support is opportunistic: 1004 cannot be queried, tmux forwards it only
+/// with `focus-events on`, and Terminal.app, mosh, screen and conhost have
+/// no support at all. Where it never arrives there is NO fallback: a key held
+/// across a focus change stays held until that key is next pressed, at which
+/// point `KeyboardSession`'s duplicate-down repair clears it. RFC 0020 §8.6
+/// specifies a repeat-silence watchdog to close this; it has never been
+/// built, and this comment used to claim otherwise.
+@immutable
+final class TerminalFocusEvent extends TuiEvent {
+  const TerminalFocusEvent({required this.focused});
+
+  /// True for `CSI I` (focus gained), false for `CSI O` (focus lost).
+  final bool focused;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TerminalFocusEvent && other.focused == focused;
+
+  @override
+  int get hashCode => Object.hash(TerminalFocusEvent, focused);
+
+  @override
+  String toString() => 'TerminalFocusEvent(${focused ? 'in' : 'out'})';
 }
 
 /// One or more graphemes of typed text. The driver accumulates UTF-8

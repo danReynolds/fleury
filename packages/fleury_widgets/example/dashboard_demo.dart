@@ -161,7 +161,7 @@ class _DashboardAppState extends State<DashboardApp> {
         KeyBinding(
           KeySequence.space,
           label: _paused ? 'Resume' : 'Pause',
-          onTrigger: () => setState(() => _paused = !_paused),
+          onTrigger: (_) => setState(() => _paused = !_paused),
         ),
       ],
       child: Padding(

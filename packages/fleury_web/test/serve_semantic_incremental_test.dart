@@ -8,6 +8,7 @@
 library;
 
 import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_wire.dart';
 import 'package:fleury_web/src/semantics/semantic_dom_presenter.dart';
 import 'package:test/test.dart';
 import 'package:web/web.dart' as web;
@@ -67,7 +68,8 @@ void main() {
     expect(
       stats.reusedElementCount,
       1,
-      reason: 'a one-node patch must touch one element; a full rebuild would '
+      reason:
+          'a one-node patch must touch one element; a full rebuild would '
           're-process the whole tree',
     );
     expect(stats.createdElementCount, 0);

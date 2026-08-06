@@ -26,14 +26,18 @@ abstract interface class RemoteFrameTransport {
   Stream<RemoteFrame> get incoming;
 
   /// Send one frame to the peer.
+  ///
+  /// An asynchronous transport may fail the whole session closed when
+  /// accepting another frame would exceed its bounded pending-output budget.
   void send(RemoteFrame frame);
 
   /// True while bytes accepted by [send] exceed the transport's
   /// high-water mark and have not yet been handed to the OS — the peer
   /// (or the pipe to it) has stalled. Hosts defer frame PRODUCTION while
-  /// this is true; frames already sent are never dropped (the wire
-  /// protocol's diffs are only valid against the exact previous frame
-  /// the peer holds).
+  /// this is true. A live session never selectively drops accepted frames
+  /// (the wire protocol's diffs are only valid against the exact previous
+  /// frame the peer holds); exceeding a transport hard bound fails the whole
+  /// session closed.
   bool get isSendBacklogged;
 
   /// Completes when the send backlog drains — immediately when not

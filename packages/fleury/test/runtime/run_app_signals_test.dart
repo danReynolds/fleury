@@ -125,7 +125,7 @@ void main() {
           bindings: [
             KeyBinding(
               KeySequence.q,
-              onTrigger: () => requestExit(),
+              onTrigger: (_) => requestExit(),
               label: 'Quit',
             ),
           ],
@@ -152,7 +152,7 @@ void main() {
             bindings: [
               KeyBinding(
                 KeySequence.q,
-                onTrigger: () => requestExit(),
+                onTrigger: (_) => requestExit(),
                 label: 'Quit',
               ),
             ],

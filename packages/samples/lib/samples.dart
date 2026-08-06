@@ -6,9 +6,12 @@
 library;
 
 export 'src/agent_tui.dart' show AgentApp;
+export 'src/ansi_sprite_studio.dart' show AnsiSpriteStudioApp;
 export 'src/dashboard.dart' show DashboardApp;
 export 'src/debug_playground.dart' show DebugPlaygroundApp;
 export 'src/editor.dart'
     show EditorApp, EditorModel, EditorPersonality, VimMode;
+export 'src/finance.dart' show FinanceApp;
 export 'src/file_manager.dart' show FileManagerApp;
+export 'src/neon_asteroids.dart' show NeonAsteroidsApp;
 export 'src/scaffold.dart' show SampleScaffold, fleurySampleTheme;

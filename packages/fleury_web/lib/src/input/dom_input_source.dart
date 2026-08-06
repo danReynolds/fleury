@@ -68,6 +68,8 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     }
 
     _add(textArea, 'keydown', _handleKeyDown);
+    _add(textArea, 'keyup', _handleKeyUp);
+    _add(web.document, 'visibilitychange', _handleVisibilityChange);
     _add(textArea, 'compositionstart', _handleCompositionStart);
     _add(textArea, 'compositionupdate', _handleCompositionUpdate);
     _add(textArea, 'compositionend', _handleCompositionEnd);
@@ -97,6 +99,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
 
   @override
   void dispose() {
+    _sweepOpenPresses();
     for (final listener in _listeners.reversed) {
       listener.target.removeEventListener(listener.type, listener.callback);
     }
@@ -244,12 +247,137 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     _onEvent?.call(event);
   }
 
+  /// Presses this source has reported a `down` for and not yet closed,
+  /// keyed by DOM `code` (or `key` when code is unavailable). The source's
+  /// own bookkeeping — what IT told the runtime — used to pair keyups to
+  /// their downs with down-time identity, to sweep on blur/visibility loss,
+  /// and to run the macOS Meta regime (RFC 0020 §10).
+  final Map<String, KeyEvent> _openPresses = {};
+
+  String _pressIdentity(web.KeyboardEvent event) =>
+      event.code.isNotEmpty && event.code != 'Unidentified'
+      ? event.code
+      : 'key:${event.key}';
+
+  /// Whether the browser's default action must be allowed to run so the
+  /// textarea produces the `input` event carrying this key's committed text.
+  ///
+  /// Plain and Shift-only printables are text-producing: RFC 0020 has the
+  /// source emit their key half for lifecycle tracking, but the text itself
+  /// still arrives through the input channel (§11 — "keydown never inserts
+  /// text; the browser's input events stay authoritative for IME and
+  /// dead-key correctness"). Calling `preventDefault()` on those keydowns
+  /// would suppress the insertion, the `input` event, and therefore ALL
+  /// typing on this surface.
+  static bool _needsBrowserTextDefault(
+    web.KeyboardEvent event,
+    KeyEvent mapped,
+  ) =>
+      mapped.code.isCharacter &&
+      !event.ctrlKey &&
+      !event.altKey &&
+      !event.metaKey;
+
   void _handleKeyDown(web.Event raw) {
     final event = raw as web.KeyboardEvent;
     final tuiEvent = keyEventFromBrowser(event);
     if (tuiEvent == null) return;
-    raw.preventDefault();
+
+    // Special keys and shortcut chords are ours; text-producing printables
+    // keep their default action (see above).
+    if (!_needsBrowserTextDefault(event, tuiEvent)) raw.preventDefault();
+
+    if (event.metaKey && !_isModifierKey(event.key)) {
+      // macOS browsers swallow keyup for non-modifier keys while Cmd is
+      // held (cross-engine, RFC 0020 §10): keys under Meta get press-only
+      // semantics — the down, then an immediate synthesized release —
+      // rather than an unclosable press. Hold durations under Meta are
+      // undefined by contract.
+      _emit(tuiEvent);
+      if (tuiEvent.type == KeyEventType.down) {
+        _emit(
+          KeyEvent(
+            tuiEvent.code,
+            modifiers: tuiEvent.modifiers,
+            type: KeyEventType.up,
+            position: tuiEvent.position,
+            synthesized: true,
+          ),
+        );
+      }
+      return;
+    }
+    if (tuiEvent.type != KeyEventType.up) {
+      // Repeats re-open the press too. A sweep (Meta tap, tab hide, blur)
+      // closes presses the user may still be physically holding; the
+      // session's repeat-without-down repair re-opens its record on the
+      // next auto-repeat, so this side must re-open in lockstep or the
+      // eventual real keyup finds nothing to close and the key wedges as
+      // permanently held (RFC 0020 §22's stuck-key criterion).
+      _openPresses[_pressIdentity(event)] = tuiEvent;
+    }
     _emit(tuiEvent);
+  }
+
+  void _handleKeyUp(web.Event raw) {
+    final event = raw as web.KeyboardEvent;
+    if (event.key == 'Meta') {
+      // Meta's OWN release is physical and must be reported as such — a
+      // synthesized one could never complete a `nextKey` capture (§6's
+      // taxonomy), making Cmd unbindable in a rebind UI. Emit it first,
+      // then sweep the rest: the swallow can also eat releases of keys
+      // pressed BEFORE Meta went down, and a key genuinely still held
+      // re-appears via auto-repeat and the session's repair.
+      final metaDown = _openPresses.remove(_pressIdentity(event));
+      if (metaDown != null) {
+        _emit(
+          KeyEvent(
+            metaDown.code,
+            type: KeyEventType.up,
+            position: metaDown.position,
+          ),
+        );
+      }
+      _sweepOpenPresses();
+      return;
+    }
+    final down = _openPresses.remove(_pressIdentity(event));
+    if (down == null) return; // press-only'd, or downed before attach
+    // No preventDefault: a keyup has no text-producing default action, and
+    // suppressing it could only interfere with the input channel.
+    _emit(
+      KeyEvent(
+        // Down-time identity: layout/modifier state may have changed
+        // mid-press; the release closes the press that opened.
+        down.code,
+        modifiers: _modifiersFromKeyboard(event),
+        type: KeyEventType.up,
+        position: down.position,
+      ),
+    );
+  }
+
+  /// Closes every open press with a synthesized release — the web
+  /// authority-loss triggers (§6): keyboard-capture blur, tab visibility
+  /// loss, Meta-up sweep, disposal.
+  void _sweepOpenPresses() {
+    if (_openPresses.isEmpty) return;
+    final open = List.of(_openPresses.values);
+    _openPresses.clear();
+    for (final down in open) {
+      _emit(
+        KeyEvent(
+          down.code,
+          type: KeyEventType.up,
+          position: down.position,
+          synthesized: true,
+        ),
+      );
+    }
+  }
+
+  void _handleVisibilityChange(web.Event raw) {
+    if (web.document.visibilityState == 'hidden') _sweepOpenPresses();
   }
 
   void _handleInput(web.Event raw) {
@@ -347,6 +475,9 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
   }
 
   void _handleTextAreaFocusOut(web.Event raw) {
+    // Keyboard-capture blur is authority loss for held keys: the release
+    // will be delivered to whatever got focus, never to us.
+    _sweepOpenPresses();
     _focusCoordinator?.handleBrowserFocusOut(WebFocusTarget.keyboardCapture);
   }
 
@@ -592,31 +723,71 @@ extension type _PointerCoords(JSObject _event) implements JSObject {
 
 /// Maps a browser keydown event to a Fleury key event.
 ///
-/// Printable text without shortcut modifiers is intentionally ignored here; it
-/// arrives through the textarea `input` channel as [TextInputEvent].
+/// Maps a browser keydown to its Fleury key event (RFC 0020 web backend).
+///
+/// Every mapped event carries the positional identity from
+/// `KeyboardEvent.code` when the browser knew it (`Unidentified` → null —
+/// per-event nullability, §13.3). Printables emit key events with their
+/// committed text still arriving through the textarea `input` channel as
+/// [TextInputEvent] — the dispatcher's routing keeps unmodified printable
+/// key halves out of the command lane so character bindings fire once.
 KeyEvent? keyEventFromBrowser(web.KeyboardEvent event) {
   if (event.isComposing) return null;
   final key = event.key;
   if (key == 'Dead' || key == 'Unidentified' || key.isEmpty) return null;
+
+  final position = event.code.isEmpty ? null : positionByDomCode[event.code];
 
   final keyCode = _keyCodeFor(key);
   final modifiers = _modifiersFromKeyboard(event);
   final type = event.repeat ? KeyEventType.repeat : KeyEventType.down;
   if (_isBrowserPasteAccelerator(event, key, keyCode)) return null;
   if (keyCode != null) {
-    return KeyEvent(keyCode, modifiers: modifiers, type: type);
+    return KeyEvent(
+      keyCode,
+      modifiers: modifiers,
+      type: type,
+      position: position,
+    );
+  }
+
+  // Lone modifier keys are keys (§5.7: modifier lifecycle rides the pressed
+  // set wherever held state works). Sided identity comes from the position;
+  // without one the press is untrackable and is skipped.
+  if (_isModifierKey(key)) {
+    final twin = position?.usTwin;
+    if (twin == null) return null;
+    return KeyEvent(twin, type: type, position: position);
   }
 
   if (_isBrowserTextInputModifiedKey(event, key)) return null;
 
   final shortcut = event.ctrlKey || event.altKey || event.metaKey;
-  if (!shortcut || key.length != 1) return null;
+  if (shortcut && key.length == 1) {
+    return KeyEvent(
+      KeyCode.forCharacter(_shortcutChar(key)),
+      modifiers: _shortcutModifiersFromKeyboard(event),
+      type: type,
+      position: position,
+    );
+  }
+  if (key.length != 1) return null;
+
+  // An unmodified (or shift-only) printable: the lifecycle key half. Base
+  // identity is the lowercase letter (terminal convention: Shift rides the
+  // modifier set, the produced character rides the text channel).
   return KeyEvent(
-    KeyCode.char(_shortcutChar(key)),
-    modifiers: _shortcutModifiersFromKeyboard(event),
+    KeyCode.forCharacter(_shortcutChar(key)),
+    modifiers: modifiers,
     type: type,
+    position: position,
   );
 }
+
+bool _isModifierKey(String key) => switch (key) {
+  'Shift' || 'Control' || 'Alt' || 'Meta' || 'AltGraph' => true,
+  _ => false,
+};
 
 bool _isBrowserPasteAccelerator(
   web.KeyboardEvent event,

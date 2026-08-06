@@ -482,11 +482,18 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
       // Jump to an exact date in one call (ISO `YYYY-MM-DD`), instead of
       // increment-ing a day at a time. Out-of-[firstDate, lastDate] is a no-op.
       onSetValue: _setDateFromPayload,
-      child: Focus(
-        focusNode: _node,
-        autofocus: widget.autofocus,
-        onKey: _onKey,
-        child: GestureDetector(onTap: () => _node.requestFocus(), child: body),
+      child: KeyDetector(
+        onKey: (event) {
+          if ((_onKey)(event) == KeyEventResult.handled) event.consume();
+        },
+        child: Focus(
+          focusNode: _node,
+          autofocus: widget.autofocus,
+          child: GestureDetector(
+            onTap: () => _node.requestFocus(),
+            child: body,
+          ),
+        ),
       ),
     );
     // styled component, not selectable text

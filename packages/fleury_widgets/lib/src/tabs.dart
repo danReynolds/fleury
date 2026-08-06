@@ -210,74 +210,78 @@ class _TabsState extends State<Tabs> {
       ],
     );
 
-    final body = Focus(
-      focusNode: _focusNode,
-      autofocus: widget.autofocus,
-      onKey: _onKey,
-      child: Column(
-        children: [
-          Row(
-            children: [
-              for (var i = 0; i < widget.tabs.length; i++)
-                Semantics(
-                  role: SemanticRole.tab,
-                  label: widget.tabs[i].label,
-                  focused: _focusNode.hasFocus && i == active,
-                  selected: i == active,
-                  actions: const <SemanticAction>{
-                    SemanticAction.focus,
-                    SemanticAction.select,
-                    SemanticAction.activate,
-                  },
-                  state: SemanticState({
-                    'tabIndex': i,
-                    'tabPosition': i + 1,
-                    'tabCount': widget.tabs.length,
-                    'active': i == active,
-                    if (i < 9) 'shortcut': 'Alt+${i + 1}',
-                  }),
-                  onAction: (action) {
-                    switch (action) {
-                      case SemanticAction.focus:
-                        _focusNode.requestFocus();
-                        return;
-                      case SemanticAction.select:
-                      case SemanticAction.activate:
+    final body = KeyDetector(
+      onKey: (event) {
+        if ((_onKey)(event) == KeyEventResult.handled) event.consume();
+      },
+      child: Focus(
+        focusNode: _focusNode,
+        autofocus: widget.autofocus,
+        child: Column(
+          children: [
+            Row(
+              children: [
+                for (var i = 0; i < widget.tabs.length; i++)
+                  Semantics(
+                    role: SemanticRole.tab,
+                    label: widget.tabs[i].label,
+                    focused: _focusNode.hasFocus && i == active,
+                    selected: i == active,
+                    actions: const <SemanticAction>{
+                      SemanticAction.focus,
+                      SemanticAction.select,
+                      SemanticAction.activate,
+                    },
+                    state: SemanticState({
+                      'tabIndex': i,
+                      'tabPosition': i + 1,
+                      'tabCount': widget.tabs.length,
+                      'active': i == active,
+                      if (i < 9) 'shortcut': 'Alt+${i + 1}',
+                    }),
+                    onAction: (action) {
+                      switch (action) {
+                        case SemanticAction.focus:
+                          _focusNode.requestFocus();
+                          return;
+                        case SemanticAction.select:
+                        case SemanticAction.activate:
+                          _controller.index = i;
+                          _focusNode.requestFocus();
+                          return;
+                        case _:
+                          return;
+                      }
+                    },
+                    // Click a tab label to switch to it (Tab/arrows/Alt+N by
+                    // keyboard) — the same select the semantic action performs.
+                    child: GestureDetector(
+                      onTap: () {
                         _controller.index = i;
                         _focusNode.requestFocus();
-                        return;
-                      case _:
-                        return;
-                    }
-                  },
-                  // Click a tab label to switch to it (Tab/arrows/Alt+N by
-                  // keyboard) — the same select the semantic action performs.
-                  child: GestureDetector(
-                    onTap: () {
-                      _controller.index = i;
-                      _focusNode.requestFocus();
-                    },
-                    child: Text(
-                      ' ${widget.tabs[i].label} ',
-                      allowSelect: false, // tab label, not selectable text
-                      style: i == active ? activeStyle : inactiveStyle,
+                      },
+                      child: Text(
+                        ' ${widget.tabs[i].label} ',
+                        allowSelect: false, // tab label, not selectable text
+                        style: i == active ? activeStyle : inactiveStyle,
+                      ),
                     ),
                   ),
-                ),
-            ],
-          ),
-          // Keep every tab mounted (state survives switching) but paint
-          // and traverse only the active one.
-          if (widget.bordered) ...[
-            const SizedBox(height: 1),
-            Container(
-              border: BoxBorder(style: theme.borderStyle),
-              padding: const EdgeInsets.symmetric(horizontal: 1),
-              child: content,
+              ],
             ),
-          ] else
-            content,
-        ],
+            // Keep every tab mounted (state survives switching) but paint
+            // and traverse only the active one.
+            if (widget.bordered) ...[
+              const SizedBox(height: 1),
+              Container(
+                border: BoxBorder(style: theme.borderStyle),
+                padding: const EdgeInsets.symmetric(horizontal: 1),
+                child: content,
+              ),
+            ] else
+              content,
+          ],
+        ),
       ),
     );
 
@@ -290,7 +294,7 @@ class _TabsState extends State<Tabs> {
         for (var i = 0; i < widget.tabs.length && i < 9; i++)
           KeyBinding(
             KeySequence.alt.char('${i + 1}'),
-            onTrigger: () {
+            onTrigger: (_) {
               _controller.index = i;
             },
             hideFromHintBar: true,
@@ -300,12 +304,12 @@ class _TabsState extends State<Tabs> {
         // while focus is deep inside panel content.
         KeyBinding(
           KeySequence.ctrl.pageUp,
-          onTrigger: () => _controller.previous(),
+          onTrigger: (_) => _controller.previous(),
           hideFromHintBar: true,
         ),
         KeyBinding(
           KeySequence.ctrl.pageDown,
-          onTrigger: () => _controller.next(),
+          onTrigger: (_) => _controller.next(),
           hideFromHintBar: true,
         ),
       ],

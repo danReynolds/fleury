@@ -370,20 +370,24 @@ class _RangeSliderState extends State<RangeSlider> {
           final next = coerceSemanticNum(payload);
           if (next != null) _setHandle(_active, next);
         },
-        child: Focus(
-          focusNode: _node,
-          autofocus: widget.autofocus,
-          onKey: _onKey,
-          // Click the track to move the nearest handle there; drag to slide it.
-          // The drag is captured, so the handle keeps following past the ends.
-          child: GestureDetector(
-            // A press grabs the nearest handle; the drag (always preceded by the
-            // press) then just slides that same grabbed handle.
-            onTapDown: (col, _) => _grabAt(col),
-            onDragStart: (col, _) => _dragTo(col),
-            onDragUpdate: (col, _) => _dragTo(col),
-            onDragEnd: () => _dragHandle = null,
-            child: slider,
+        child: KeyDetector(
+          onKey: (event) {
+            if ((_onKey)(event) == KeyEventResult.handled) event.consume();
+          },
+          child: Focus(
+            focusNode: _node,
+            autofocus: widget.autofocus,
+            // Click the track to move the nearest handle there; drag to slide it.
+            // The drag is captured, so the handle keeps following past the ends.
+            child: GestureDetector(
+              // A press grabs the nearest handle; the drag (always preceded by the
+              // press) then just slides that same grabbed handle.
+              onTapDown: (col, _) => _grabAt(col),
+              onDragStart: (col, _) => _dragTo(col),
+              onDragUpdate: (col, _) => _dragTo(col),
+              onDragEnd: () => _dragHandle = null,
+              child: slider,
+            ),
           ),
         ),
       ),

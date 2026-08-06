@@ -69,59 +69,89 @@ class FocusTraversalGroup extends StatelessWidget {
     // traversal group (or any ancestor) have a chance at it.
     return KeyBindings(
       bindings: [
-        KeyBinding.event(
+        KeyBinding(
           KeySequence.left,
-          onEvent: (event) {
+          onTrigger: (event) {
             if (_navigate(context, TraversalDirection.left) ==
                 KeyEventResult.ignored) {
               event.bubble();
             }
           },
           hideFromHintBar: true,
+          // Held arrows/Tab move continuously — the repeat-reliant class
+          // RFC 0020 §21.1's sweep exists for. Without this, holding an
+          // arrow would advance focus once on any surface that tags
+          // auto-repeat (every kitty-family terminal at the default tier).
+          includeRepeats: true,
         ),
-        KeyBinding.event(
+        KeyBinding(
           KeySequence.right,
-          onEvent: (event) {
+          onTrigger: (event) {
             if (_navigate(context, TraversalDirection.right) ==
                 KeyEventResult.ignored) {
               event.bubble();
             }
           },
           hideFromHintBar: true,
+          // Held arrows/Tab move continuously — the repeat-reliant class
+          // RFC 0020 §21.1's sweep exists for. Without this, holding an
+          // arrow would advance focus once on any surface that tags
+          // auto-repeat (every kitty-family terminal at the default tier).
+          includeRepeats: true,
         ),
-        KeyBinding.event(
+        KeyBinding(
           KeySequence.up,
-          onEvent: (event) {
+          onTrigger: (event) {
             if (_navigate(context, TraversalDirection.up) ==
                 KeyEventResult.ignored) {
               event.bubble();
             }
           },
           hideFromHintBar: true,
+          // Held arrows/Tab move continuously — the repeat-reliant class
+          // RFC 0020 §21.1's sweep exists for. Without this, holding an
+          // arrow would advance focus once on any surface that tags
+          // auto-repeat (every kitty-family terminal at the default tier).
+          includeRepeats: true,
         ),
-        KeyBinding.event(
+        KeyBinding(
           KeySequence.down,
-          onEvent: (event) {
+          onTrigger: (event) {
             if (_navigate(context, TraversalDirection.down) ==
                 KeyEventResult.ignored) {
               event.bubble();
             }
           },
           hideFromHintBar: true,
+          // Held arrows/Tab move continuously — the repeat-reliant class
+          // RFC 0020 §21.1's sweep exists for. Without this, holding an
+          // arrow would advance focus once on any surface that tags
+          // auto-repeat (every kitty-family terminal at the default tier).
+          includeRepeats: true,
         ),
-        KeyBinding.event(
+        KeyBinding(
           KeySequence.tab,
-          onEvent: (event) {
+          onTrigger: (event) {
             if (!Focus.of(context).focusNext()) event.bubble();
           },
           hideFromHintBar: true,
+          // Held arrows/Tab move continuously — the repeat-reliant class
+          // RFC 0020 §21.1's sweep exists for. Without this, holding an
+          // arrow would advance focus once on any surface that tags
+          // auto-repeat (every kitty-family terminal at the default tier).
+          includeRepeats: true,
         ),
-        KeyBinding.event(
+        KeyBinding(
           KeySequence.shiftTab,
-          onEvent: (event) {
+          onTrigger: (event) {
             if (!Focus.of(context).focusPrevious()) event.bubble();
           },
           hideFromHintBar: true,
+          // Held arrows/Tab move continuously — the repeat-reliant class
+          // RFC 0020 §21.1's sweep exists for. Without this, holding an
+          // arrow would advance focus once on any surface that tags
+          // auto-repeat (every kitty-family terminal at the default tier).
+          includeRepeats: true,
         ),
       ],
       child: child,

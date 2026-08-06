@@ -2254,17 +2254,21 @@ class _FormMultiSelectControlState extends State<_FormMultiSelectControl>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final focused = _focusNode.hasFocus;
-    return Focus(
-      focusNode: _focusNode,
-      autofocus: widget.autofocus,
-      onKey: _onKey,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (widget.field.options.isEmpty) Text(widget.field.placeholder),
-          for (var i = 0; i < widget.field.options.length; i++)
-            _optionRow(theme, i, focused),
-        ],
+    return KeyDetector(
+      onKey: (event) {
+        if ((_onKey)(event) == KeyEventResult.handled) event.consume();
+      },
+      child: Focus(
+        focusNode: _focusNode,
+        autofocus: widget.autofocus,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (widget.field.options.isEmpty) Text(widget.field.placeholder),
+            for (var i = 0; i < widget.field.options.length; i++)
+              _optionRow(theme, i, focused),
+          ],
+        ),
       ),
     );
   }

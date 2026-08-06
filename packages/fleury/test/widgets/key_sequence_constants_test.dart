@@ -1,6 +1,6 @@
 // Locks the named KeySequence constants used with Dart 3.10 dot-shorthand
 // in KeyBinding declarations:
-//   KeyBinding.event(keys: [.space, .ctrl.s, ...], onEvent: ...)
+//   KeyBinding(keys: [.space, .ctrl.s, ...], onTrigger: ...)
 //
 // Each constant should equal the same chord built via the escape-hatch
 // constructor, match the corresponding KeyEvent, and (for non-special
@@ -98,8 +98,8 @@ void main() {
           bindings: [
             // Dart resolves `.space` to `KeySequence.space` because the
             // list's element type is `KeySequence`.
-            KeyBinding(.space, onTrigger: () => sp++),
-            KeyBinding(.enter, onTrigger: () => en++),
+            KeyBinding(.space, onTrigger: (_) => sp++),
+            KeyBinding(.enter, onTrigger: (_) => en++),
           ],
           child: const Text('app'),
         ),
@@ -120,9 +120,9 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(.ctrl.s, onTrigger: () => fired.add('save')),
-            KeyBinding(.alt.x, onTrigger: () => fired.add('alt-x')),
-            KeyBinding(.ctrl.shift.p, onTrigger: () => fired.add('palette')),
+            KeyBinding(.ctrl.s, onTrigger: (_) => fired.add('save')),
+            KeyBinding(.alt.x, onTrigger: (_) => fired.add('alt-x')),
+            KeyBinding(.ctrl.shift.p, onTrigger: (_) => fired.add('palette')),
           ],
           child: const Text('app'),
         ),
@@ -154,7 +154,7 @@ void main() {
       var fired = 0;
       tester.pumpWidget(
         KeyBindings(
-          bindings: [KeyBinding(.ctrl.shift.space, onTrigger: () => fired++)],
+          bindings: [KeyBinding(.ctrl.shift.space, onTrigger: (_) => fired++)],
           child: const Text('app'),
         ),
       );
@@ -206,7 +206,7 @@ void main() {
       var fired = 0;
       tester.pumpWidget(
         KeyBindings(
-          bindings: [KeyBinding(.d.d, onTrigger: () => fired++)],
+          bindings: [KeyBinding(.d.d, onTrigger: (_) => fired++)],
           child: const Text('app'),
         ),
       );
@@ -225,7 +225,7 @@ void main() {
       var fired = 0;
       tester.pumpWidget(
         KeyBindings(
-          bindings: [KeyBinding(.ctrl.x.ctrl.s, onTrigger: () => fired++)],
+          bindings: [KeyBinding(.ctrl.x.ctrl.s, onTrigger: (_) => fired++)],
           child: const Text('app'),
         ),
       );

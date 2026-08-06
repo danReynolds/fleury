@@ -7,7 +7,7 @@
 //   2. FOCUS CHAIN, deepest first:
 //      a. Direct match on a KeyBindings binding (binding wins).
 //      b. Sequence-start match on a KeyBindings binding (begin pending).
-//      c. Focus.onKey fallback (returns handled? consumed).
+//      c. KeyDetector floor (consumes via KeyEvent.consume()).
 //      Modal FocusScope boundaries stop the walk.
 //   3. GLOBALS (skipped if a modal scope set suppressGlobals).
 //   4. IGNORED.
@@ -16,8 +16,12 @@ import 'dart:async';
 
 import 'package:characters/characters.dart';
 
+import '../foundation/fleury_error.dart';
 import '../input/events.dart';
+import '../input/keyboard_state.dart';
+import '../input/key_dispatch.dart';
 import '../widgets/focus.dart';
+import '../widgets/framework.dart';
 import '../widgets/key_bindings.dart';
 import '../widgets/pointer.dart';
 
@@ -33,10 +37,47 @@ class InputDispatcher {
     // Let the widget tree abandon a pending sequence (a which-key popup's
     // close control) by routing the notifier's cancel back to us.
     pendingSequenceNotifier.onCancel = cancelPending;
+    focusManager.addListener(_onFocusChanged);
   }
 
   /// The focus manager whose chain this dispatcher walks.
   final FocusManager focusManager;
+
+  /// The canonical session keyboard (RFC 0020 §6): press records, phase
+  /// repair, frame edges, capabilities. Fed by [dispatch]; latched once per
+  /// frame by the frame driver; read by the sampling surface (P4's
+  /// `Keyboard`) and this dispatcher's observation lane.
+  late final KeyboardSession keyboardSession = KeyboardSession()
+    // A surface caught not honouring the phases it claimed demotes itself to
+    // press-only; the tree has to hear about it, or an app keeps offering a
+    // hold-to-thrust control that can never end (§5.7).
+    ..onCapabilitiesDemoted = _onCapabilitiesDemoted;
+
+  void _onCapabilitiesDemoted(KeyboardCapabilities capabilities) {
+    // Everything the session believed was held is gone; anything downstream
+    // holding a press (a KeyBinding.hold, a game's own latch) must end it.
+    for (final release in keyboardSession.drainDemotionReleases()) {
+      _notifyKeyObservers(release);
+    }
+    onKeyboardCapabilitiesChanged?.call();
+  }
+
+  /// Framework-internal observation-lane registrations (RFC 0020 §5.5's
+  /// internal lane; `KeyBinding.hold` and the keyboard inspector consume
+  /// it). Empty for ordinary apps — the zero-observer path is one check.
+  final List<KeyPhaseObserverRegistration> _keyObservers = [];
+
+  /// Registers [observer] on the observation lane, scoped to the active
+  /// focus subtree of [anchor] (null = app-wide). Framework-internal.
+  KeyPhaseObserverRegistration addKeyObserver(
+    void Function(KeyEvent event) observer, {
+    FocusNode? anchor,
+  }) {
+    _checkNotDisposed();
+    final registration = KeyPhaseObserverRegistration._(this, observer, anchor);
+    _keyObservers.add(registration);
+    return registration;
+  }
 
   /// Routes mouse events to widget pointer regions (taps, hover, scroll).
   /// Null when pointer routing isn't installed.
@@ -102,6 +143,13 @@ class InputDispatcher {
   /// Whether a sequence is currently pending. Useful for tests.
   bool get hasPendingSequence => _pending != null;
 
+  /// The insertion a consumed printable key half owes suppression to
+  /// (§11): on surfaces that report printables as keys AND deliver their
+  /// text separately, consuming the key must drop the matching text — and
+  /// only that one. A non-matching insertion clears it rather than
+  /// swallowing unrelated input.
+  String? _suppressNextText;
+
   /// Abandons an in-flight sequence as if the user pressed Esc: held events
   /// replay (a shorter binding fires, a text-owed char reaches the field) and
   /// the pending state clears, dropping any which-key popup. No-op when
@@ -142,7 +190,50 @@ class InputDispatcher {
   /// handles them outside the dispatcher.
   KeyEventResult dispatch(TuiEvent event) {
     _checkNotDisposed();
+    assert(() {
+      _reportDeadControls();
+      return true;
+    }());
+    if (event is InputBatch) {
+      // A correlated key+text report (RFC 0020 §5). The key half feeds the
+      // session/observation lanes (stage 2-3); routing then preserves
+      // today's semantics — the text half drives the text-claimant /
+      // character-binding path, and a text-bearing key half is NOT
+      // separately command-dispatched (printables never reached key
+      // dispatch pre-batch either). The §6 key-walk-before-text interlock
+      // replaces the routing half in P4.
+      final key = event.key;
+      if (key != null) _regularizeAndObserve(key);
+      // Stage 4: an armed capture takes the whole batch — key AND text —
+      // ahead of every routed lane, but only AFTER the session and the
+      // observation lane have seen it (a hold in flight must still end).
+      if (key != null && _tryCapture(key)) return KeyEventResult.handled;
+      // Stage 5 BEFORE stage 6 (§6): the key walk runs first, so a binding
+      // can match identity the text half cannot carry — a positional
+      // gesture has no text equivalent. A consumed key suppresses the
+      // batch's text, which is what keeps a character binding from firing
+      // twice for one press.
+      final text = event.committedText;
+      if (key != null && key.type != KeyEventType.up) {
+        if (_dispatchKeyEvent(key) == KeyEventResult.handled) {
+          return KeyEventResult.handled;
+        }
+      }
+      if (text != null) {
+        // The key half already walked the routed lanes above.
+        return _dispatchText(
+          TextInputEvent(text),
+          keyAlreadyWalked: key != null && key.type != KeyEventType.up,
+        );
+      }
+      return KeyEventResult.ignored;
+    }
     if (event is TextInputEvent) {
+      final suppressed = _suppressNextText;
+      if (suppressed != null) {
+        _suppressNextText = null;
+        if (event.text == suppressed) return KeyEventResult.handled;
+      }
       return _dispatchText(event);
     }
     if (event is TextCompositionEvent) {
@@ -155,7 +246,30 @@ class InputDispatcher {
       return _dispatchMouse(event);
     }
     if (event is KeyEvent) {
-      return _dispatchKeyEvent(event);
+      _regularizeAndObserve(event);
+      if (_tryCapture(event)) return KeyEventResult.handled;
+      // Stage 5 (§6): the key walk runs before text. Where printables
+      // arrive as key events (reportsPrintableKeys — the DOM source), the
+      // committed text follows as a SEPARATE event, so a key consumed here
+      // must suppress it (§11's keydown/input pairing) — otherwise one
+      // press fires a character binding twice. The walk has to run first
+      // regardless: a positional gesture matches an identity the text half
+      // cannot carry.
+      final splitText =
+          keyboardSession.capabilities.reportsPrintableKeys &&
+          event.code.isCharacter &&
+          event.type != KeyEventType.up &&
+          event.modifiers.every((m) => m == KeyModifier.shift);
+      final result = _dispatchKeyEvent(event);
+      if (splitText) {
+        if (result == KeyEventResult.handled) {
+          // Drop the paired insertion, and only that one.
+          _suppressNextText = event.code.character;
+        }
+        // Unconsumed: the text half still owns it, exactly as before.
+        return KeyEventResult.ignored;
+      }
+      return result;
     }
     return KeyEventResult.ignored;
   }
@@ -211,6 +325,253 @@ class InputDispatcher {
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
+  }
+
+  /// Stage 2-3 of the batch pipeline (RFC 0020 §6): feed the session
+  /// regularizer, then project the regularized stream to active observers.
+  ///
+  /// The command lane deliberately still receives the RAW event during this
+  /// interim (repair-downs would double-fire with today's fire-on-repeat
+  /// binding default; §12's `includeRepeats` flip in P4 makes the
+  /// regularized stream safe for commands, and dispatch switches then).
+  /// Under the legacy capability profile the regularizer is a passthrough,
+  /// so this is a no-op cost on the typing path with no observers.
+  void _regularizeAndObserve(KeyEvent event) {
+    // Genuinely zero-cost when unused: a release-less source tracks no
+    // press records, so with nobody observing there is nothing to compute
+    // and nothing to allocate on the typing path (RFC 0020 §19).
+    //
+    // A positional report is the exception, because position reporting and
+    // release reporting are INDEPENDENT capabilities — a surface can have one
+    // without the other. Skipping those would mean the layout never learns on
+    // exactly the terminals where a hint bar is otherwise stuck showing US
+    // twins. Costs nothing on the surfaces this fast path was written for:
+    // they carry no position, so they still short-circuit here.
+    if (!keyboardSession.capabilities.supportsHeldState &&
+        _keyObservers.isEmpty &&
+        event.position == null) {
+      return;
+    }
+    final regularized = keyboardSession.ingest(event);
+    if (_keyObservers.isEmpty) return;
+    for (final e in regularized.events) {
+      _notifyKeyObservers(e);
+    }
+  }
+
+  /// Applies confirmed keyboard capabilities, routing any recovery releases
+  /// a downgrade produces to the observation lane.
+  ///
+  /// The seam exists so callers never reach into [keyboardSession] directly
+  /// and drop those releases: losing held-state support mid-session clears
+  /// the press records, and every open observer press must be closed with
+  /// it or `KeyBinding.hold`'s one-end-per-start contract breaks (§10).
+  /// Notified when the session catches a surface not honouring the phase
+  /// reporting it claimed, so the host can republish `Keyboard.capabilities`
+  /// and let apps re-branch their control schemes. Wired by `runApp`.
+  /// Sink for developer warnings — problems in the APP rather than failures
+  /// in the framework, which must be loud without killing the session. The
+  /// runtime wires this to the same reporter uncaught errors use, so a
+  /// warning gets stderr, the on-screen banner, and the debug shell's history
+  /// instead of being written over the next frame.
+  void Function(FleuryError warning)? onDeveloperWarning;
+
+  /// Selectors already reported, so a control sampled every frame warns once.
+  final Set<KeySelector> _deadControlsReported = <KeySelector>{};
+
+  /// Debug-only: catch a control that CANNOT work.
+  ///
+  /// Sampling a key (`keys.isHeld(...)`) on a surface that reports no held
+  /// state returns false forever. That is fine when a [KeyBinding] carries
+  /// the same key — the press-driven fallback every capability branch is
+  /// supposed to have. With no binding, the control is simply dead, and the
+  /// app looks broken with nothing anywhere saying why.
+  ///
+  /// The framework knows both halves: the capability, and every registered
+  /// binding. It had simply never compared them. Shipped Asteroids sampling
+  /// four movement controls behind a fallback that covered exactly one, and
+  /// nothing said a word on any of the four terminals it was tested on.
+  void _reportDeadControls() {
+    if (keyboardSession.capabilities.supportsHeldState) return;
+    final sampled = KeyboardSnapshot.debugTakeSampledSelectors();
+    if (sampled.isEmpty) return;
+    final covered = <KeyCode>{
+      for (final active in resolveActiveKeyBindings(focusManager))
+        for (final sequence in active.sequences)
+          if (sequence is KeyCode) sequence,
+      for (final binding in _globalBindings)
+        for (final sequence in binding.sequences)
+          if (sequence is KeyCode) sequence,
+    };
+    for (final selector in sampled) {
+      // Compare on the logical key: a positional sample is satisfied by a
+      // binding on its US twin, which is exactly how the two degrade into
+      // each other everywhere else (§13.3).
+      final logical = switch (selector) {
+        KeyCode() => selector,
+        KeyPosition() => selector.usTwin,
+        _ => null,
+      };
+      if (logical == null || covered.contains(logical)) continue;
+      if (!_deadControlsReported.add(selector)) continue;
+      onDeveloperWarning?.call(
+        FleuryError(
+          summary: 'Dead control: isHeld($selector) can never be true here.',
+          details:
+              'This app samples $selector, but this surface does not report '
+              'held keys — so the read is false on every frame — and no '
+              'KeyBinding covers $selector to carry it instead. The control '
+              'does nothing on this terminal.',
+          hint:
+              'Add a KeyBinding for $selector (includeRepeats: true keeps it '
+              'usable under auto-repeat, which arrives even where held state '
+              'does not), or gate the sampled read behind '
+              'Keyboard.of(context).capabilities.supportsHeldState.',
+        ),
+      );
+    }
+  }
+
+  void Function()? onKeyboardCapabilitiesChanged;
+
+  void updateKeyboardCapabilities(KeyboardCapabilities capabilities) {
+    _checkNotDisposed();
+    final releases = keyboardSession.updateCapabilities(capabilities);
+    for (final release in releases) {
+      _notifyKeyObservers(release);
+    }
+  }
+
+  /// Releases every held key through the observation lane — the
+  /// authority-loss path (§10) for a surface that will never report the
+  /// real releases: terminal focus loss, suspend, disconnect.
+  ///
+  /// Unlike [replaceKeyboardSession] this keeps the session identity: the
+  /// input source is the same one, it just stopped being able to see the
+  /// keyboard for a while.
+  void recoverHeldKeys() {
+    _checkNotDisposed();
+    for (final release in keyboardSession.loseAuthority()) {
+      _notifyKeyObservers(release);
+    }
+  }
+
+  /// Replaces the input session (driver swap, reconnect): recovers held
+  /// keys through the observation lane, drops pending edges, and bumps
+  /// `sessionGeneration` so sampled consumers can invalidate.
+  void replaceKeyboardSession() {
+    _checkNotDisposed();
+    final releases = keyboardSession.replaceSession();
+    for (final release in releases) {
+      _notifyKeyObservers(release);
+    }
+  }
+
+  // --- The capture gate (RFC 0020 §6 stage 4, §15) ------------------------
+
+  Completer<KeyEvent?>? _capture;
+  Element? _captureContext;
+
+  /// Whether a `Keyboard.nextKey` capture is armed.
+  bool get hasPendingCapture => _capture != null;
+
+  /// Arms a one-shot capture, completing with the next user-originated key
+  /// press — or null if [context] unmounts first.
+  ///
+  /// Scope-tied by signature: the caller cannot forget to cancel, and a
+  /// capture can never outlive the UI that started it and silently eat the
+  /// app's input.
+  Future<KeyEvent?> captureNextKey(BuildContext context) {
+    _checkNotDisposed();
+    assert(
+      _capture == null,
+      'A Keyboard.nextKey() capture is already pending. Exactly one awaiter '
+      'at a time: a second would race the first for the same keypress.',
+    );
+    final completer = Completer<KeyEvent?>();
+    _capture = completer;
+    _captureContext = context is Element ? context : null;
+    return completer.future;
+  }
+
+  /// Completes an armed capture, or reports that this event isn't one it
+  /// can take. Returns true when the batch's routed lanes must be skipped.
+  bool _tryCapture(KeyEvent event) {
+    final completer = _capture;
+    if (completer == null) return false;
+    // The context that armed it is gone: the UI moved on, so the capture
+    // does too rather than eating this key (§15's null contract).
+    final origin = _captureContext;
+    if (origin != null && !origin.mounted) {
+      _capture = null;
+      _captureContext = null;
+      completer.complete(null);
+      return false;
+    }
+    // Recovery events are Fleury's, not the user's: a blur that closes a
+    // held Ctrl must not "choose" Ctrl for a rebind row.
+    if (event.synthesized) return false;
+    if (event.type == KeyEventType.up) {
+      // A lone modifier's release completes the capture (so sprint-on-Shift
+      // stays bindable); every other release is just the tail of a press
+      // the awaiter already saw or didn't want.
+      if (!_isLoneModifierKey(event.code)) return false;
+    } else if (event.type == KeyEventType.repeat) {
+      return false; // one press, not its auto-repeat
+    } else if (_isLoneModifierKey(event.code)) {
+      // Wait for the chord: a modifier DOWN may still be joined by a key.
+      return false;
+    }
+    _capture = null;
+    _captureContext = null;
+    completer.complete(event);
+    return true;
+  }
+
+  static bool _isLoneModifierKey(KeyCode code) => switch (code.special) {
+    SpecialKey.leftShift ||
+    SpecialKey.rightShift ||
+    SpecialKey.leftControl ||
+    SpecialKey.rightControl ||
+    SpecialKey.leftAlt ||
+    SpecialKey.rightAlt ||
+    SpecialKey.leftSuper ||
+    SpecialKey.rightSuper ||
+    SpecialKey.leftHyper ||
+    SpecialKey.rightHyper ||
+    SpecialKey.leftMeta ||
+    SpecialKey.rightMeta ||
+    SpecialKey.isoLevel3Shift ||
+    SpecialKey.isoLevel5Shift => true,
+    _ => false,
+  };
+
+  /// Focus moved: an observer whose anchor just left the active chain must
+  /// close its open presses NOW, not whenever the next key happens to
+  /// arrive. Push-to-talk over a modal is the case that makes the
+  /// difference user-visible (§10, §14.5).
+  void _onFocusChanged() {
+    if (_keyObservers.isEmpty || _disposed) return;
+    final chain = focusManager.activeChain();
+    for (final registration in List.of(_keyObservers)) {
+      if (registration._removed) continue;
+      registration._projectScopeChange(chain);
+    }
+  }
+
+  /// Delivers [event] to every scope-active observer, applying each
+  /// registration's projection (RFC 0020 §10's observer-level contract):
+  /// entering scope mid-press yields no phantom up; leaving scope while a
+  /// seen key is held yields exactly one observer-local synthesized up;
+  /// phases for downs an observer never saw are suppressed.
+  void _notifyKeyObservers(KeyEvent event) {
+    // Routing snapshot: registrations captured before callbacks run.
+    final registrations = List.of(_keyObservers);
+    final chain = focusManager.activeChain();
+    for (final registration in registrations) {
+      if (registration._removed) continue;
+      registration._project(event, chain);
+    }
   }
 
   KeyEventResult _dispatchKeyEvent(KeyEvent event, {String? textOrigin}) {
@@ -312,7 +673,7 @@ class InputDispatcher {
     // action already happened. [_onTimeout] needs "did anything run", so a
     // bubbling shorter binding can't leave a prefix held open after it fired.
     _firedCount++;
-    binding.onEvent(wrapped);
+    binding.onTrigger!(wrapped);
     return wrapped.isBubbling ? KeyEventResult.ignored : KeyEventResult.handled;
   }
 
@@ -328,8 +689,30 @@ class InputDispatcher {
   /// even while a text field is focused. Text that instead breaks the
   /// sequence cancels it — replaying the held keys direct-only — and is
   /// then delivered as ordinary text.
-  KeyEventResult _dispatchText(TextInputEvent event) {
-    if (_matchablePending != null) {
+  KeyEventResult _dispatchText(
+    TextInputEvent event, {
+    bool keyAlreadyWalked = false,
+  }) {
+    // An armed capture outranks every routed lane — including this one
+    // (§17.2, "text-derived on legacy").
+    //
+    // Where the terminal reports printables only as bytes, a letter reaches
+    // the dispatcher as text and never as a key event. Consulting the capture
+    // gate only on the key path would mean `nextKey` silently ignores exactly
+    // the keys it is usually waiting FOR: vim's `m<letter>`, a rebind row's
+    // chosen character, quoted-insert. Worse than ignoring — the letter would
+    // fall through and fire whatever ordinary binding owns it, so pressing
+    // `a` at a mark prompt would open INSERT.
+    //
+    // Ahead of the pending-sequence check too: a capture is sequence-
+    // bypassing by design, so an awaiter beats a half-typed chord.
+    if (!keyAlreadyWalked && _capture != null) {
+      final captured = _keyEventForText(event.text);
+      if (captured != null && _tryCapture(captured)) {
+        return KeyEventResult.handled;
+      }
+    }
+    if (_matchablePending != null && !keyAlreadyWalked) {
       final keyEvent = _keyEventForText(event.text);
       if (keyEvent != null) {
         final result = _tryPendingSequence(keyEvent, textOrigin: event.text);
@@ -344,6 +727,14 @@ class InputDispatcher {
     if (textResult == KeyEventResult.handled) {
       return textResult;
     }
+
+    // Reconstructing a key from text is the LEGACY bridge: on a terminal that
+    // reports printables only as bytes, this is the sole way a `j` binding
+    // can ever match. A batch already offered its real key half to the same
+    // lanes one stage earlier (§6), so doing it again would walk the whole
+    // chain twice per keystroke — with a strictly worse key, since a
+    // text-derived one carries no position.
+    if (keyAlreadyWalked) return KeyEventResult.ignored;
 
     final keyEvent = _keyEventForText(event.text);
     if (keyEvent != null) {
@@ -469,7 +860,7 @@ class InputDispatcher {
     if (!iterator.moveNext()) return null;
     final grapheme = iterator.current;
     if (iterator.moveNext()) return null;
-    return KeyEvent(KeyCode.char(grapheme));
+    return KeyEvent(KeyCode.forCharacter(grapheme));
   }
 
   KeyEventResult _dispatchPlain(
@@ -494,6 +885,9 @@ class InputDispatcher {
 
     for (final node in focusManager.activeChain()) {
       final source = node.bindingSource;
+      // Whether a binding AT this node fired and chose to bubble — the
+      // deliberate per-key passthrough that a modal boundary must honour.
+      var bubbledHere = false;
       if (source != null) {
         if (allowSequenceStart) {
           final seqsHere = <KeyBinding>[];
@@ -509,6 +903,7 @@ class InputDispatcher {
               // KeyEventResult.ignored — continue walking ancestors so
               // an outer binding for the same sequence gets a chance.
               if (result == KeyEventResult.handled) return result;
+              bubbledHere = true;
             }
           }
         } else {
@@ -517,16 +912,29 @@ class InputDispatcher {
           if (hit != null) {
             final result = _fire(hit.binding, hit.sequence, [event]);
             if (result == KeyEventResult.handled) return result;
+            bubbledHere = true;
           }
         }
       }
 
-      // Focus.onKey fallback. Skip when this node belongs to a
-      // KeyBindings (its onKey is null) — only direct Focus widgets
-      // populate onKey.
-      final handler = node.onKey;
-      if (handler != null && handler(event) == KeyEventResult.handled) {
+      // KeyDetector floor (RFC 0020 §17): a detector on this node peeks at
+      // the event and consumes only what it uses. Propagate-by-default, so
+      // an unconsumed key continues up the chain.
+      final detector = node.keyDetector;
+      if (detector != null &&
+          KeyDispatchContext.run(() => detector(event), entitled: true)) {
         return KeyEventResult.handled;
+      }
+
+      // Modal boundary (§14.3): nothing at this scope claimed the key, so
+      // the unmatched remainder stops here — ancestors and globals never
+      // see it. Reaching this point means no binding here matched, OR one
+      // matched and bubbled; a bubble is the deliberate per-key
+      // passthrough, so it must NOT be trapped.
+      if (source != null && source.isModalScope && !bubbledHere) {
+        // Globals are suppressed with everything else: a modal surface
+        // traps the unmatched remainder completely.
+        return KeyEventResult.ignored;
       }
     }
 
@@ -558,6 +966,17 @@ class InputDispatcher {
     return KeyEventResult.ignored;
   }
 
+  /// Whether [binding] is eligible for [event]'s phase (RFC 0020 §14.2).
+  ///
+  /// Repeat policy is evaluated PER EVENT on the phase tag, never through a
+  /// capability bit — which is what makes it honest per key class. Where a
+  /// surface tags repeats (chords and functional keys at the default kitty
+  /// tier; everything under lifecycle mode / the DOM) a default binding
+  /// skips them, so holding Ctrl+S saves once. Where it cannot tag them the
+  /// event simply arrives as a fresh `down` and fires, exactly as before.
+  static bool _phaseEligible(KeyBinding binding, KeyEvent event) =>
+      event.type != KeyEventType.repeat || binding.includeRepeats;
+
   /// Scans [bindings] for an enabled, single-step sequence that matches
   /// [event] directly. Returns the first hit (binding + the specific alias
   /// that matched), or null.
@@ -567,6 +986,8 @@ class InputDispatcher {
   ) {
     for (final binding in bindings) {
       if (!binding.enabled) continue;
+      if (binding.isHold) continue; // holds ride the observation lane
+      if (!_phaseEligible(binding, event)) continue;
       for (final sequence in binding.sequences) {
         if (sequence.isSequence) continue;
         if (sequence.matches(event)) {
@@ -586,6 +1007,10 @@ class InputDispatcher {
   ) {
     for (final binding in bindings) {
       if (!binding.enabled) continue;
+      if (binding.isHold) continue;
+      // A repeat never ADVANCES or starts a sequence (§14.4): holding `g`
+      // must not arm `gg`.
+      if (event.type == KeyEventType.repeat) continue;
       for (final sequence in binding.sequences) {
         if (!sequence.isSequence) continue;
         if (sequence.matchesStepAt(0, event)) {
@@ -663,7 +1088,23 @@ class InputDispatcher {
   /// `runApp` during teardown.
   void dispose() {
     if (_disposed) return;
+    focusManager.removeListener(_onFocusChanged);
+    // An armed capture cannot outlive the dispatcher: complete it with the
+    // documented null rather than leaving an awaiter hanging forever.
+    _capture?.complete(null);
+    _capture = null;
+    _captureContext = null;
     _disposed = true;
+    // Teardown is authority loss (RFC 0020 §6): recover held keys so every
+    // observer's stream closes its open presses (one up per down, always).
+    final releases = keyboardSession.loseAuthority();
+    for (final release in releases) {
+      _notifyKeyObservers(release);
+    }
+    for (final registration in List.of(_keyObservers)) {
+      registration._exitScope();
+    }
+    _keyObservers.clear();
     _clearPending();
     // Unhook before disposing: this both drops the notifier's reference back
     // to us and makes a late `cancel()` (a click racing teardown) a silent
@@ -676,6 +1117,92 @@ class InputDispatcher {
     if (_disposed) {
       throw StateError('InputDispatcher has been disposed.');
     }
+  }
+}
+
+/// One observation-lane registration and its scope projection (RFC 0020
+/// §10's observer-level stream contract). Framework-internal: created via
+/// [InputDispatcher.addKeyObserver], consumed by `KeyBinding.hold` and the
+/// keyboard inspector.
+///
+/// The projector guarantees, per registration: every observed `up` was
+/// preceded by this observer's own observed `down`, and every observed
+/// `down` is followed by exactly one `up` — physical, or synthesized when
+/// the observer leaves scope (or is removed) while a seen key is held. It
+/// never mutates session state: the session stays the honest physical
+/// record while each observer gets a scope-consistent projection.
+final class KeyPhaseObserverRegistration {
+  KeyPhaseObserverRegistration._(
+    this._dispatcher,
+    this._observer,
+    this._anchor,
+  );
+
+  final InputDispatcher _dispatcher;
+  final void Function(KeyEvent event) _observer;
+  final FocusNode? _anchor;
+
+  /// Presses this observer has seen the down for, by physical identity.
+  final Map<Object, KeyEvent> _seen = {};
+  bool _removed = false;
+
+  void _project(KeyEvent event, List<FocusNode> chain) {
+    final anchor = _anchor;
+    final active = anchor == null || chain.contains(anchor);
+    if (!active) {
+      // Scope exit: close open presses with observer-local synthesized
+      // releases; the current event is not observed (its down, if any,
+      // belongs to whoever is in scope now).
+      _exitScope();
+      return;
+    }
+    final id = event.position ?? event.code;
+    switch (event.type) {
+      case KeyEventType.down:
+        _seen[id] = event;
+        _observer(event);
+      case KeyEventType.repeat:
+        // Repeats for downs never seen are suppressed — an observer that
+        // entered scope mid-press hears nothing until a fresh press.
+        if (_seen.containsKey(id)) _observer(event);
+      case KeyEventType.up:
+        if (_seen.remove(id) != null) _observer(event);
+    }
+  }
+
+  /// Focus changed: close open presses if this registration's anchor is no
+  /// longer in the active chain. An app-wide observer (null anchor) never
+  /// leaves scope.
+  void _projectScopeChange(List<FocusNode> chain) {
+    final anchor = _anchor;
+    if (anchor == null) return;
+    if (!chain.contains(anchor)) _exitScope();
+  }
+
+  void _exitScope() {
+    if (_seen.isEmpty) return;
+    final open = List.of(_seen.values);
+    _seen.clear();
+    for (final down in open) {
+      _observer(
+        KeyEvent(
+          down.code,
+          type: KeyEventType.up,
+          position: down.position,
+          synthesized: true,
+        ),
+      );
+    }
+  }
+
+  /// Unregisters. Open presses are closed first (synthesized releases) so
+  /// the one-up-per-down contract holds through removal — a disposing hold
+  /// widget receives its end callback before detaching.
+  void remove() {
+    if (_removed) return;
+    _removed = true;
+    _exitScope();
+    _dispatcher._keyObservers.remove(this);
   }
 }
 

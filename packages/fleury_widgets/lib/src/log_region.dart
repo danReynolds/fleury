@@ -358,7 +358,7 @@ class _LogRegionState extends State<LogRegion> {
 
   void _onControllerChange() => setState(() {});
 
-  void _onFocusWithinChange(bool focused) {
+  void _onFocusDetectorChange(bool focused) {
     if (_focusedWithin == focused) return;
     setState(() {
       _focusedWithin = focused;
@@ -493,15 +493,15 @@ class _LogRegionState extends State<LogRegion> {
           KeyBinding(
             KeySequence.ctrl.c,
             label: 'Copy log entry',
-            onTrigger: () => unawaited(_copySelection()),
+            onTrigger: (_) => unawaited(_copySelection()),
           ),
         ],
         child: list,
       );
     }
 
-    return FocusWithin(
-      onFocusChange: _onFocusWithinChange,
+    return FocusDetector(
+      onFocusChange: _onFocusDetectorChange,
       child: Semantics(
         role: SemanticRole.log,
         label: widget.semanticLabel,

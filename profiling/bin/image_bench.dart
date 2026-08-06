@@ -26,8 +26,8 @@ const _protocols = <({String name, ImageProtocol protocol})>[
 
 /// A distinct fake image payload per [seed] — deterministic, ~256 bytes so the
 /// encoder does real base64 + chunking work.
-Uint8List _png(int seed) =>
-    Uint8List.fromList(List<int>.generate(256, (i) => (i * 7 + seed * 31) & 0xFF));
+Uint8List _png(int seed) => Uint8List.fromList(
+    List<int>.generate(256, (i) => (i * 7 + seed * 31) & 0xFF));
 
 CellBuffer _withImage(Uint8List bytes) {
   final buf = CellBuffer(const CellSize(40, 20));
@@ -125,9 +125,10 @@ void _gate(int frames) {
   var failed = false;
   for (final p in _protocols) {
     // Dedup: a static image must cost 0 image bytes after the first frame.
-    final staticSteady = _imageBytesPerFrame(p.protocol, frames, animated: false)
-        .skip(1)
-        .fold<int>(0, (a, b) => a + b);
+    final staticSteady =
+        _imageBytesPerFrame(p.protocol, frames, animated: false)
+            .skip(1)
+            .fold<int>(0, (a, b) => a + b);
     // Zero-image fast path: image-free frames must emit 0 image bytes.
     final zero = _zeroImageBytes(p.protocol, frames);
     final ok = staticSteady == 0 && zero == 0;
@@ -136,12 +137,14 @@ void _gate(int frames) {
     if (!ok) failed = true;
   }
   if (failed) {
-    stdout.writeln('\nimage bench gate: FAIL — a still image is re-transmitting '
-        '(dedup regressed) or an image-free frame emits image bytes (the '
-        'zero-image fast path regressed).');
+    stdout
+        .writeln('\nimage bench gate: FAIL — a still image is re-transmitting '
+            '(dedup regressed) or an image-free frame emits image bytes (the '
+            'zero-image fast path regressed).');
     exitCode = 1;
   } else {
-    stdout.writeln('\nimage bench gate: pass — still images dedup and image-free '
-        'frames cost zero image bytes.');
+    stdout
+        .writeln('\nimage bench gate: pass — still images dedup and image-free '
+            'frames cost zero image bytes.');
   }
 }

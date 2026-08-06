@@ -139,7 +139,11 @@ void main() {
     const split = TextPresentationPolicy(lowering: ClusterLowering.split);
     const bold = CellStyle(bold: true);
 
-    CellBuffer paintRich(TextSpan span, TextPresentationPolicy policy, int cols) {
+    CellBuffer paintRich(
+      TextSpan span,
+      TextPresentationPolicy policy,
+      int cols,
+    ) {
       final r = RenderRichText(
         span: span,
         base: CellStyle.empty,
@@ -156,23 +160,25 @@ void main() {
       expect(_row(buf, 0), '\u{1F468} \u{1F469} \u{1F466}');
     });
 
-    test('span invariance: a sequence split across spans lowers identically',
-        () {
-      // The same logical sequence, arriving as two adjacent spans — detection
-      // runs on the flattened paragraph, so the span boundary changes nothing
-      // (property gate 12; per-span walking would misparse this).
-      final buf = paintRich(
-        const TextSpan(
-          children: [
-            TextSpan(text: '\u{1F468}\u{200D}'),
-            TextSpan(text: '\u{1F469}\u{200D}\u{1F466}'),
-          ],
-        ),
-        split,
-        8,
-      );
-      expect(_row(buf, 0), '\u{1F468} \u{1F469} \u{1F466}');
-    });
+    test(
+      'span invariance: a sequence split across spans lowers identically',
+      () {
+        // The same logical sequence, arriving as two adjacent spans — detection
+        // runs on the flattened paragraph, so the span boundary changes nothing
+        // (property gate 12; per-span walking would misparse this).
+        final buf = paintRich(
+          const TextSpan(
+            children: [
+              TextSpan(text: '\u{1F468}\u{200D}'),
+              TextSpan(text: '\u{1F469}\u{200D}\u{1F466}'),
+            ],
+          ),
+          split,
+          8,
+        );
+        expect(_row(buf, 0), '\u{1F468} \u{1F469} \u{1F466}');
+      },
+    );
 
     test('a lowered component inherits the style covering its own base', () {
       // First component styled by span 1, later components by span 2.

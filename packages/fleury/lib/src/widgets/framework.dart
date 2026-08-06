@@ -460,9 +460,60 @@ abstract interface class ElementDependency {
   void removeDependent(Element element);
 }
 
+int _nextElementActionTargetIdentity = 1;
+
+final class _ElementActionTargetLease {
+  const _ElementActionTargetLease(this.signature, this.nonce);
+
+  final Object signature;
+  final int nonce;
+}
+
+/// Opaque identities for [element]'s current positional action targets.
+///
+/// The semantics layer uses this package-internal hook to distinguish a
+/// positional action target from a different element later reconciled into the
+/// same slot. The identity deliberately survives rebuilds: Fleury's
+/// `runtimeType` + `Key` reconciliation contract defines an updated element as
+/// the same logical widget. Within that element, an exact [signatures] change
+/// or a target disappearing and later returning receives a new nonce. Routine
+/// value/focus/animation rebuilds with the same target signature retain it, so
+/// they do not make a just-observed action unusable.
+///
+/// [signatures] maps an element-owned positional semantic id to its structural
+/// action signature. The framework treats both keys and values as opaque; the
+/// semantics layer owns their shape. It is intentionally omitted from the
+/// public framework barrel: hosts consume the resulting tokens through
+/// `SemanticNode.actionTargetToken`, never by manufacturing one.
+@internal
+Map<Object, String> elementActionTargetTokens(
+  Element element,
+  Map<Object, Object> signatures,
+) {
+  final previous = element._actionTargetLeases;
+  final next = <Object, _ElementActionTargetLease>{};
+  final tokens = <Object, String>{};
+  for (final MapEntry(:key, :value) in signatures.entries) {
+    final oldLease = previous?[key];
+    final lease = oldLease != null && oldLease.signature == value
+        ? oldLease
+        : _ElementActionTargetLease(value, element._nextActionTargetNonce++);
+    next[key] = lease;
+    tokens[key] =
+        '${element._actionTargetIdentity.toRadixString(36)}.'
+        '${lease.nonce.toRadixString(36)}';
+  }
+  // Replace rather than merge: a target that disappears relinquishes its
+  // lease, so reusing that positional id later cannot resurrect an old token.
+  element._actionTargetLeases = next.isEmpty ? null : next;
+  return tokens;
+}
+
 /// Mounted instance of a [Widget] with stable identity across rebuilds.
 abstract class Element implements BuildContext {
-  Element(Widget widget) : _widget = widget;
+  Element(Widget widget)
+    : _widget = widget,
+      _actionTargetIdentity = _nextElementActionTargetIdentity++;
 
   /// The element whose `build` is currently running, or null when no
   /// build is in progress. Read by [ElementDependency] sources (e.g.
@@ -501,6 +552,9 @@ abstract class Element implements BuildContext {
   int _depth = 0;
   _ElementLifecycle _lifecycle = _ElementLifecycle.initial;
   bool _dirty = true;
+  final int _actionTargetIdentity;
+  int _nextActionTargetNonce = 1;
+  Map<Object, _ElementActionTargetLease>? _actionTargetLeases;
 
   /// The element this one was mounted under, or null for the root.
   Element? get elementParent => _parent;

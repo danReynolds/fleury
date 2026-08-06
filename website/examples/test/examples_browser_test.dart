@@ -216,8 +216,11 @@ void main() {
     await fixture.app.awaitSemanticIdle();
 
     // Browser text is accepted — appended to (not replacing) the seeded value.
-    expect(field.value, 'Ship v1.4.0\n\n- Add a --version flag\n'
-        '- Fix the Windows resize crash!');
+    expect(
+      field.value,
+      'Ship v1.4.0\n\n- Add a --version flag\n'
+      '- Fix the Windows resize crash!',
+    );
     expect(fixture.host.textContent, contains('resize crash!'));
   });
 
@@ -392,7 +395,8 @@ void main() {
         await app.awaitSemanticIdle();
         final screen = host.querySelector('.fleury-screen');
         final painted = (screen?.textContent ?? '').trim();
-        if (painted.isEmpty) blank.add('${info.id} (${info.cols}x${info.rows})');
+        if (painted.isEmpty)
+          blank.add('${info.id} (${info.cols}x${info.rows})');
         await app.dispose();
         host.remove();
       }
@@ -428,7 +432,10 @@ void main() {
       'textarea.basic': <String>['Ship v1.4.0'], // seeded multi-line content
       'conversationnavigator.basic': <String>['Docs site'], // both entries fit
       'tooltip.basic': <String>['Saves the current file'], // tip shows on focus
-      'modelstatusbar.basic': <String>['Context', '%'], // full bar, meter intact
+      'modelstatusbar.basic': <String>[
+        'Context',
+        '%',
+      ], // full bar, meter intact
       'autocomplete.basic': <String>['Apple'], // seeded query opens the matches
       'tracetimeline.basic': <String>['Publish report'], // third event fits
       // The tutorial-page embed: the full language list fits its frame.
@@ -437,7 +444,8 @@ void main() {
     final missing = <String>[];
     for (final entry in checks.entries) {
       final fixture = await _mountExample(entry.key, useManifestSize: true);
-      final painted = fixture.host.querySelector('.fleury-screen')?.textContent ?? '';
+      final painted =
+          fixture.host.querySelector('.fleury-screen')?.textContent ?? '';
       for (final needle in entry.value) {
         if (!painted.contains(needle)) missing.add('${entry.key} → "$needle"');
       }
@@ -459,9 +467,19 @@ void main() {
   test('landing-page demos render at their embedded sizes', () async {
     const embeds = <({String id, int cols, int rows, String needle})>[
       (id: 'digits.basic', cols: 56, rows: 11, needle: 'UTC'), // index.mdx
-      (id: 'datatable.basic', cols: 48, rows: 8, needle: 'COMMITS'), // index.mdx
+      (
+        id: 'datatable.basic',
+        cols: 48,
+        rows: 8,
+        needle: 'COMMITS',
+      ), // index.mdx
       (id: 'barchart.basic', cols: 52, rows: 12, needle: 'q4'), // index.mdx
-      (id: 'home.monitor', cols: 34, rows: 9, needle: 'CPU'), // getting-started, comparison
+      (
+        id: 'home.monitor',
+        cols: 34,
+        rows: 9,
+        needle: 'CPU',
+      ), // getting-started, comparison
     ];
     final missing = <String>[];
     for (final e in embeds) {

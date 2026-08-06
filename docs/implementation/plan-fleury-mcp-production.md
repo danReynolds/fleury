@@ -33,6 +33,16 @@ are explicitly out of scope (installability, docs). See the changelog tail.
 ¹ WS-1's delta granularity (whole-node, next-frame) is independent of WS-0, but
 coalescing during settle is cleaner once WS-0's generation exists.
 
+**2026-07-29 follow-up:** the launch review found that WS-2's semantic-shape
+fingerprint still allowed an identically described replacement control to
+receive a held action. The raw/MCP/browser paths now use app-issued per-element,
+per-positional-slot leases instead. A lease survives value/focus/busy/ticking
+updates, advances on an exact role/label/advertised-action change, is swept on
+removal, and changes on contributor remount. Same framework identity plus the
+same target signature remains intentionally indistinguishable; apps use a
+`Key` or stable `Semantics.id` to distinguish that case. This preserves WS-0's
+scoped fail-closed goal without its whole-tree false positives.
+
 ## Conventions
 
 - **Validate commands** (from repo root):
@@ -176,13 +186,16 @@ milestone review surfaced. **Depends.** WS-3 (dispatch map).
 
 ### WS-4 — Prompt-injection mitigation + rate-limit  ·  `[x]` done
 
-- [x] Design the untrusted-text policy (delimit/quote/mark app label/value spans)
+- [x] Design the untrusted-content policy (mark every model-facing app-authored
+      field, identifier, log, error, and debug record)
       **without** corrupting text the agent needs verbatim, and **without**
       overloading the renderer-shared `sanitizeForDisplay`. *(Design task first.)*
-- [x] Implement the mitigation on the `get_ui` output path.
-- [x] Add a rate-limit / call-budget guard on mutating tools.
-- **Acceptance:** `[x]` a hostile-label fixture can't inject instructions through
-  `get_ui`; `[x]` a runaway agent is throttled.
+- [x] Implement the mitigation on UI/resource reads, delta notifications,
+      devtools reads, forwarded logs, and errors that quote app data.
+- [x] Add both a token-bucket rate guard and a bounded pending-mutation queue.
+- **Acceptance:** `[x]` hostile content remains verbatim but marked on every
+  model-facing path; `[x]` a runaway agent is throttled and cannot grow the
+  mutation queue without bound.
 - **Validate:** `[x]` `fleury_mcp`.
 
 ### WS-9 — Typed affordances  ·  `[x]` done
@@ -251,8 +264,9 @@ milestone review surfaced. **Depends.** WS-3 (dispatch map).
       response is suppressed (the client is no longer awaiting). No capability
       needed (inbound notification).
 - [x] `logging` capability — the app's `[app …]` stdout/stderr is forwarded as
-      `notifications/message` (logger:`app`, sanitized by the spawn forwarder),
-      gated by `logging/setLevel`. Wired bin → `runMcpServer(appLog:)` → server.
+      `notifications/message` (logger:`app`, control-code filtered by the spawn
+      forwarder and wrapped as verbatim untrusted app data), gated by
+      `logging/setLevel`. Wired bin → `runMcpServer(appLog:)` → server.
 - [x] Machine-readable error `code` in `isError` `structuredContent`
       (`not_found` / `stale_reference` / `out_of_domain` / `rate_limited` / …);
       prose stays in `content`.
@@ -379,6 +393,17 @@ milestone review surfaced. **Depends.** WS-3 (dispatch map).
   five mutating tools at the shared `_serializeMutation` path; reads are never
   limited. Tests: hostile label stays verbatim but flagged; policy in initialize;
   burst throttled + refills. mcp 72 · clean.
+- *2026-07-29* — **WS-4 launch re-audit closed the remaining output and queue
+  holes.** The untrusted envelope now covers every app-authored semantic field
+  and id, resource-delta ids, devtools logs/errors/records, forwarded log
+  notifications, and tool errors that quote app text, while retaining the
+  original bytes. Mutations now have a fixed pending-depth bound in addition to
+  the token bucket, so a slow settle cannot accumulate unbounded stale intent.
+  The stdio runner also caps partial/completed request lines, active requests,
+  startup-log bytes, queued output bytes/lines, and flush duration; shutdown
+  cancels active waits and seals output against late writes. Hostile-content,
+  flood, stalled-reader, oversized-line, cancellation, and held-queue
+  regressions guard these contracts.
 - *2026-06-29* — **WS-8 done (test shapes).** Wire-decode robustness: added
   raw-byte corruption + every-truncation-length + 200 bit-flips + not-wedged
   recovery (complements the existing structural-JSON fuzz; covers the

@@ -640,7 +640,7 @@ class _FileMentionPickerState extends State<FileMentionPicker> {
           KeyBinding(
             KeySequence.ctrl.c,
             label: 'Copy file mention',
-            onTrigger: () => unawaited(_copySelection()),
+            onTrigger: (_) => unawaited(_copySelection()),
           ),
         ],
         child: panel,
@@ -651,12 +651,12 @@ class _FileMentionPickerState extends State<FileMentionPicker> {
       bindings: [
         KeyBinding(
           KeyCode.arrowUp,
-          onTrigger: () => _move(-1),
+          onTrigger: (_) => _move(-1),
           hideFromHintBar: true,
         ),
         KeyBinding(
           KeyCode.arrowDown,
-          onTrigger: () => _move(1),
+          onTrigger: (_) => _move(1),
           hideFromHintBar: true,
         ),
       ],

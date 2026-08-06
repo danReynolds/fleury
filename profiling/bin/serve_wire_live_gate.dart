@@ -90,7 +90,8 @@ Future<void> main(List<String> args) async {
         '--out=$out',
       ]);
       if (r.exitCode != 0) {
-        stderr.writeln('profiler failed for ${s.id}:\n${r.stdout}\n${r.stderr}');
+        stderr
+            .writeln('profiler failed for ${s.id}:\n${r.stdout}\n${r.stderr}');
         exitCode = 1;
         return;
       }
@@ -114,7 +115,8 @@ Future<void> main(List<String> args) async {
     return;
   }
 
-  final baseline = readBaselineOrNull(baselinePath, gateName: 'serve wire gate');
+  final baseline =
+      readBaselineOrNull(baselinePath, gateName: 'serve wire gate');
   if (baseline == null) {
     exitCode = 64;
     return;
@@ -191,12 +193,12 @@ void _warn(String axis, double cur, double base) {
       '${base.toStringAsFixed(1)} (${_pct(delta)}) warn-only');
 }
 
-String _pct(double d) =>
-    '${d >= 0 ? '+' : ''}${(d * 100).toStringAsFixed(1)}%';
+String _pct(double d) => '${d >= 0 ? '+' : ''}${(d * 100).toStringAsFixed(1)}%';
 
 /// Reads a numeric [key] from a result/baseline map with a clear error instead
 /// of a bare `Null is not a subtype of num` when a stale baseline lacks the key.
-double _axis(Map<String, Object?> m, String key, String scenario, String which) {
+double _axis(
+    Map<String, Object?> m, String key, String scenario, String which) {
   final v = m[key];
   if (v is! num) {
     stderr.writeln('$which JSON for "$scenario" is missing numeric axis "$key" '

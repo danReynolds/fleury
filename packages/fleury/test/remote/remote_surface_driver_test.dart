@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_wire.dart';
 import 'package:fleury/src/remote/remote_driver.dart';
 import 'package:test/test.dart';
 
@@ -60,6 +61,15 @@ const _init = InitFrame(
   imageProtocol: ImageProtocol.halfBlock,
   tmuxPassthrough: false,
 );
+
+SemanticTree _latestSemanticTree(_FakeTransport transport) {
+  final decoder = SemanticsWireDecoder();
+  SemanticTree? tree;
+  for (final frame in transport.sent.whereType<SemanticsFrame>()) {
+    tree = decoder.apply(frame.json) ?? tree;
+  }
+  return tree!;
+}
 
 void main() {
   group('RemoteTerminalDriver structured (serve) path', () {
@@ -1247,6 +1257,388 @@ void main() {
       await done;
     });
 
+    test('a matching token invokes the current positional target', () async {
+      final transport = _FakeTransport();
+      final driver = RemoteTerminalDriver(transport);
+      var ran = 0;
+      scheduleMicrotask(() => transport.emit(_init));
+      final done = runApp(
+        Semantics(
+          role: SemanticRole.button,
+          label: 'Current',
+          actions: const {SemanticAction.activate},
+          onAction: (_) {
+            ran++;
+          },
+          child: const Text('current'),
+        ),
+        driver: driver,
+        requireInteractiveTerminal: false,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      final target = _latestSemanticTree(
+        transport,
+      ).nodes.singleWhere((node) => node.label == 'Current');
+      expect(isPositionalSemanticId(target.id.value), isTrue);
+      transport.emit(
+        SemanticActionFrame(
+          target.id,
+          SemanticAction.activate,
+          targetToken: target.actionTargetToken,
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(ran, 1);
+      final result = transport.sent
+          .whereType<SemanticActionResultFrame>()
+          .single;
+      expect(result.status, SemanticActionInvocationStatus.completed);
+
+      await transport.disconnect();
+      await done;
+    });
+
+    test(
+      'a positional target token survives a benign rebuild of the same element',
+      () async {
+        final transport = _FakeTransport();
+        final driver = RemoteTerminalDriver(transport);
+        final tick = _BoolNotifier();
+        var ran = 0;
+        scheduleMicrotask(() => transport.emit(_init));
+        final done = runApp(
+          ListenableBuilder(
+            listenable: tick,
+            builder: (context, child) => Semantics(
+              role: SemanticRole.button,
+              label: 'Current',
+              value: tick.value ? 'tick-1' : 'tick-0',
+              focused: tick.value,
+              actions: const {SemanticAction.activate},
+              onAction: (_) {
+                ran++;
+              },
+              child: const Text('current'),
+            ),
+          ),
+          driver: driver,
+          requireInteractiveTerminal: false,
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+
+        final before = _latestSemanticTree(
+          transport,
+        ).nodes.singleWhere((node) => node.label == 'Current');
+        expect(isPositionalSemanticId(before.id.value), isTrue);
+        expect(before.actionTargetToken, isNotNull);
+
+        // This rebuild creates a new Semantics configuration and callback
+        // closure, but reconciliation keeps the mounted SemanticsElement: it is
+        // the same logical control with updated state, not a recycled slot.
+        tick.value = true;
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        final after = _latestSemanticTree(
+          transport,
+        ).nodes.singleWhere((node) => node.label == 'Current');
+        expect(after.value, 'tick-1');
+        expect(after.focused, isTrue);
+        expect(after.id, before.id);
+        expect(after.actionTargetToken, before.actionTargetToken);
+
+        transport.emit(
+          SemanticActionFrame(
+            before.id,
+            SemanticAction.activate,
+            targetToken: before.actionTargetToken,
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+
+        expect(ran, 1);
+        final result = transport.sent
+            .whereType<SemanticActionResultFrame>()
+            .single;
+        expect(result.status, SemanticActionInvocationStatus.completed);
+
+        tick.dispose();
+        await transport.disconnect();
+        await done;
+      },
+    );
+
+    test(
+      'target shape changes rotate monotonically on a reused positional element',
+      () async {
+        final transport = _FakeTransport();
+        final driver = RemoteTerminalDriver(transport);
+        final alternateShape = _BoolNotifier();
+        var ran = 0;
+        scheduleMicrotask(() => transport.emit(_init));
+        final done = runApp(
+          ListenableBuilder(
+            listenable: alternateShape,
+            builder: (context, child) {
+              final alternate = alternateShape.value;
+              return Semantics(
+                role: SemanticRole.button,
+                label: alternate ? 'Delete' : 'Open',
+                actions: alternate
+                    ? const {SemanticAction.activate}
+                    : const {SemanticAction.open},
+                onAction: (_) {
+                  ran++;
+                },
+                child: const Text('target'),
+              );
+            },
+          ),
+          driver: driver,
+          requireInteractiveTerminal: false,
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+
+        SemanticNode currentTarget() =>
+            _latestSemanticTree(transport).nodes.singleWhere(
+              (node) =>
+                  node.label == (alternateShape.value ? 'Delete' : 'Open'),
+            );
+
+        final firstA = currentTarget();
+        alternateShape.value = true;
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        final b = currentTarget();
+        alternateShape.value = false;
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        final secondA = currentTarget();
+
+        expect(b.id, firstA.id);
+        expect(secondA.id, firstA.id);
+        expect(b.actionTargetToken, isNot(firstA.actionTargetToken));
+        expect(secondA.actionTargetToken, isNot(firstA.actionTargetToken));
+        expect(secondA.actionTargetToken, isNot(b.actionTargetToken));
+
+        // Even though the visible signature returned to A, the old A lease
+        // must never revive.
+        transport.emit(
+          SemanticActionFrame(
+            firstA.id,
+            SemanticAction.open,
+            targetToken: firstA.actionTargetToken,
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        expect(ran, 0);
+        expect(
+          transport.sent.whereType<SemanticActionResultFrame>().single.status,
+          SemanticActionInvocationStatus.notFound,
+        );
+
+        alternateShape.dispose();
+        await transport.disconnect();
+        await done;
+      },
+    );
+
+    test(
+      'a removed synthesized positional target gets a new lease when re-added',
+      () async {
+        final transport = _FakeTransport();
+        final driver = RemoteTerminalDriver(transport);
+        final visible = _BoolNotifier()..value = true;
+        scheduleMicrotask(() => transport.emit(_init));
+        final done = runApp(
+          ListenableBuilder(
+            listenable: visible,
+            builder: (context, child) => _SyntheticActionSlots(
+              showTarget: visible.value,
+              child: const Text('synthetic'),
+            ),
+          ),
+          driver: driver,
+          requireInteractiveTerminal: false,
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+
+        SemanticNode? syntheticTarget() {
+          final matches = _latestSemanticTree(
+            transport,
+          ).nodes.where((node) => node.id.value == 'element-owned-slot');
+          return matches.isEmpty ? null : matches.single;
+        }
+
+        final before = syntheticTarget()!;
+        expect(before.actionTargetToken, isNotNull);
+        visible.value = false;
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        expect(syntheticTarget(), isNull);
+        visible.value = true;
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        final after = syntheticTarget()!;
+
+        expect(after.id, before.id);
+        expect(after.role, before.role);
+        expect(after.label, before.label);
+        expect(after.actions, before.actions);
+        expect(after.actionTargetToken, isNot(before.actionTargetToken));
+
+        visible.dispose();
+        await transport.disconnect();
+        await done;
+      },
+    );
+
+    test('a positional action without a target claim fails closed', () async {
+      final transport = _FakeTransport();
+      final driver = RemoteTerminalDriver(transport);
+      var ran = 0;
+      scheduleMicrotask(() => transport.emit(_init));
+      final done = runApp(
+        Semantics(
+          role: SemanticRole.button,
+          label: 'Current',
+          actions: const {SemanticAction.activate},
+          onAction: (_) {
+            ran++;
+          },
+          child: const Text('current'),
+        ),
+        driver: driver,
+        requireInteractiveTerminal: false,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      final target = _latestSemanticTree(
+        transport,
+      ).nodes.singleWhere((node) => node.label == 'Current');
+      expect(isPositionalSemanticId(target.id.value), isTrue);
+      transport.emit(SemanticActionFrame(target.id, SemanticAction.activate));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(ran, 0);
+      final result = transport.sent
+          .whereType<SemanticActionResultFrame>()
+          .single;
+      expect(result.status, SemanticActionInvocationStatus.notFound);
+
+      await transport.disconnect();
+      await done;
+    });
+
+    test(
+      'a stale positional action does not retarget after a contributor remount',
+      () async {
+        final transport = _FakeTransport();
+        final driver = RemoteTerminalDriver(transport);
+        final rebuildGate = Completer<void>();
+        final showReplacement = _BoolNotifier();
+        var originalRan = 0;
+        var replacementRan = 0;
+        scheduleMicrotask(() => transport.emit(_init));
+        final done = runApp(
+          Column(
+            children: [
+              Semantics(
+                id: const SemanticNodeId('swap'),
+                role: SemanticRole.button,
+                label: 'Swap',
+                actions: const {SemanticAction.activate},
+                onAction: (action) async {
+                  await rebuildGate.future;
+                  showReplacement.value = true;
+                  // Let the rebuild and its semantic flush land before this
+                  // serialized link releases the action queued behind it.
+                  await Future<void>.delayed(const Duration(milliseconds: 20));
+                },
+                child: const Text('swap'),
+              ),
+              ListenableBuilder(
+                listenable: showReplacement,
+                builder: (context, child) {
+                  return showReplacement.value
+                      ? _ReplacementDeleteControl(
+                          onActivate: () {
+                            replacementRan++;
+                          },
+                        )
+                      : _OriginalDeleteControl(
+                          onActivate: () {
+                            originalRan++;
+                          },
+                        );
+                },
+              ),
+            ],
+          ),
+          driver: driver,
+          requireInteractiveTerminal: false,
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+
+        final staleTarget = _latestSemanticTree(
+          transport,
+        ).nodes.singleWhere((node) => node.label == 'Delete');
+        expect(isPositionalSemanticId(staleTarget.id.value), isTrue);
+        expect(staleTarget.actionTargetToken, isNotNull);
+
+        // Both requests originate from the peer's Delete snapshot. The first
+        // parks the queue, mounts a different unkeyed widget type that emits an
+        // IDENTICALLY described Delete control, and only then lets the held
+        // positional request run. It must not silently activate the different
+        // callback that recycled the same positional id.
+        transport.emit(
+          const SemanticActionFrame(
+            SemanticNodeId('swap'),
+            SemanticAction.activate,
+          ),
+        );
+        transport.emit(
+          SemanticActionFrame(
+            staleTarget.id,
+            SemanticAction.activate,
+            targetToken: staleTarget.actionTargetToken,
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        rebuildGate.complete();
+
+        final stopwatch = Stopwatch()..start();
+        while (stopwatch.elapsed < const Duration(seconds: 2) &&
+            transport.sent.whereType<SemanticActionResultFrame>().length < 2) {
+          await Future<void>.delayed(const Duration(milliseconds: 1));
+        }
+        final results = transport.sent
+            .whereType<SemanticActionResultFrame>()
+            .toList();
+        expect(originalRan, 0);
+        expect(replacementRan, 0);
+        expect(results, hasLength(2));
+        expect(
+          results.last.status,
+          SemanticActionInvocationStatus.notFound,
+          reason: 'the stale positional target is rejected, not retargeted',
+        );
+        final replacementTarget = _latestSemanticTree(
+          transport,
+        ).nodes.singleWhere((node) => node.label == 'Delete');
+        expect(
+          replacementTarget.id,
+          staleTarget.id,
+          reason: 'the positional slot recycled the same semantic id',
+        );
+        expect(
+          replacementTarget.actionTargetToken,
+          isNot(staleTarget.actionTargetToken),
+          reason: 'the different mounted contributor gets a fresh token',
+        );
+
+        showReplacement.dispose();
+        await transport.disconnect();
+        await done;
+      },
+    );
+
     test('a fault delivering a RESULT does not wedge the queue', () async {
       // The RESULT send throws inside the link; the link must still RESOLVE
       // (its fault-safe catch routes the error to the reporter without
@@ -1430,6 +1822,100 @@ final class _LinkProbe extends StatelessWidget {
           : CellStyle.empty,
     );
   }
+}
+
+final class _BoolNotifier extends ChangeNotifier {
+  bool _value = false;
+
+  bool get value => _value;
+
+  set value(bool next) {
+    if (_value == next) return;
+    _value = next;
+    notifyListeners();
+  }
+}
+
+/// Two distinct unkeyed widget types model two logical controls reconciled into
+/// the same positional slot. Their semantics are deliberately identical: only
+/// the mounted contributor identity can keep a stale action from retargeting.
+final class _OriginalDeleteControl extends StatelessWidget {
+  const _OriginalDeleteControl({required this.onActivate});
+
+  final void Function() onActivate;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    role: SemanticRole.button,
+    label: 'Delete',
+    actions: const {SemanticAction.activate},
+    onAction: (_) => onActivate(),
+    child: const Text('delete'),
+  );
+}
+
+final class _ReplacementDeleteControl extends StatelessWidget {
+  const _ReplacementDeleteControl({required this.onActivate});
+
+  final void Function() onActivate;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    role: SemanticRole.button,
+    label: 'Delete',
+    actions: const {SemanticAction.activate},
+    onAction: (_) => onActivate(),
+    child: const Text('delete'),
+  );
+}
+
+/// A still-mounted contributor that owns an actionable synthetic child. This
+/// mirrors first-party aggregate widgets (tables, trees, lists) whose visible
+/// positional children can disappear and later reuse the same slot.
+final class _SyntheticActionSlots extends ProxyWidget {
+  const _SyntheticActionSlots({required this.showTarget, required super.child});
+
+  final bool showTarget;
+
+  @override
+  Element createElement() => _SyntheticActionSlotsElement(this);
+}
+
+final class _SyntheticActionSlotsElement extends ComponentElement
+    implements SemanticContributor, SemanticChildrenProvider {
+  _SyntheticActionSlotsElement(_SyntheticActionSlots super.widget);
+
+  @override
+  _SyntheticActionSlots get widget => super.widget as _SyntheticActionSlots;
+
+  @override
+  void update(covariant _SyntheticActionSlots newWidget) {
+    super.update(newWidget);
+    owner.semanticDirtyTracker.recordStructureDirty();
+    rebuild(force: true);
+  }
+
+  @override
+  Widget buildChild() => widget.child;
+
+  @override
+  void visitSemanticChildren(void Function(Element child) visitor) {}
+
+  @override
+  SemanticNode buildSemanticNode(List<SemanticNode> children) => SemanticNode(
+    id: const SemanticNodeId('synthetic-root'),
+    role: SemanticRole.region,
+    children: widget.showTarget
+        ? const <SemanticNode>[
+            SemanticNode(
+              id: SemanticNodeId('element-owned-slot'),
+              role: SemanticRole.button,
+              label: 'Owned target',
+              actions: {SemanticAction.activate},
+            ),
+          ]
+        : const <SemanticNode>[],
+  );
 }
 
 /// A steady-state (non-repaint) presentation plan whose damage carries

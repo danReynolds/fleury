@@ -39,13 +39,17 @@ class _ShellCliE2eAppState extends State<_ShellCliE2eApp> {
         }
       });
     }
-    return Focus(
-      autofocus: true,
-      onKey: _onKey,
-      child: Text(
-        _activated
-            ? 'SHELL-CLI-E2E-INPUT-RECEIVED'
-            : 'SHELL-CLI-E2E-FIRST-FRAME',
+    return KeyDetector(
+      onKey: (event) {
+        if ((_onKey)(event) == KeyEventResult.handled) event.consume();
+      },
+      child: Focus(
+        autofocus: true,
+        child: Text(
+          _activated
+              ? 'SHELL-CLI-E2E-INPUT-RECEIVED'
+              : 'SHELL-CLI-E2E-FIRST-FRAME',
+        ),
       ),
     );
   }

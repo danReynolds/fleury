@@ -53,12 +53,12 @@ class _Row extends StatelessWidget {
 }
 
 Widget _scene(List<RowModel> models, bool boundary, bool cheap) => Column(
-  crossAxisAlignment: CrossAxisAlignment.start,
-  children: [
-    for (var i = 0; i < models.length; i++)
-      _Row(index: i, model: models[i], boundary: boundary, cheap: cheap),
-  ],
-);
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < models.length; i++)
+          _Row(index: i, model: models[i], boundary: boundary, cheap: cheap),
+      ],
+    );
 
 double _run({
   required int rows,
@@ -119,10 +119,18 @@ void main(List<String> args) {
   const reps = 3;
   for (var r = 0; r < reps; r++) {
     baseUs += _run(
-      rows: rows, frames: frames, warmup: warmup, boundary: false, cheap: cheap,
+      rows: rows,
+      frames: frames,
+      warmup: warmup,
+      boundary: false,
+      cheap: cheap,
     );
     boundUs += _run(
-      rows: rows, frames: frames, warmup: warmup, boundary: true, cheap: cheap,
+      rows: rows,
+      frames: frames,
+      warmup: warmup,
+      boundary: true,
+      cheap: cheap,
     );
   }
   baseUs /= reps;
@@ -132,6 +140,7 @@ void main(List<String> args) {
   print('paint-walk probe — $rows rows × $_cols cols, one row changes/frame '
       '($frames frames × $reps reps)');
   print('  paint phase, NO boundaries : ${baseUs.toStringAsFixed(1)} µs/frame');
-  print('  paint phase, per-row RB    : ${boundUs.toStringAsFixed(1)} µs/frame');
+  print(
+      '  paint phase, per-row RB    : ${boundUs.toStringAsFixed(1)} µs/frame');
   print('  speedup                    : ${speedup.toStringAsFixed(2)}×');
 }

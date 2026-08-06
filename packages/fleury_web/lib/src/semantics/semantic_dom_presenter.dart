@@ -29,6 +29,12 @@ final class SemanticDomPresenter
 
   web.Element get rootElement => _root;
 
+  /// App-issued token of the target represented by the peer's retained DOM
+  /// node. The wire host echoes it with an action so a recycled positional id
+  /// cannot silently activate a replacement.
+  String? actionTargetToken(SemanticNodeId id) =>
+      _elementsById[id.value]?.getAttribute('data-fleury-action-target-token');
+
   @override
   set onSemanticActionRequest(SemanticActionRequestHandler? handler) {
     _onSemanticActionRequest = handler;
@@ -127,6 +133,7 @@ final class SemanticDomPresenter
       if (previousNode == null || nextNode == null) return false;
       if (!_elementsById.containsKey(id.value)) return false;
       if (_tagFor(previousNode.role) != _tagFor(nextNode.role)) return false;
+      if (_recyclesPositionalActionTarget(nextNode)) return false;
       if (!_hasSameChildOrder(previousNode, nextNode)) return false;
       if (nextNode.children.isNotEmpty) {
         final previousText = _ownText(
@@ -179,7 +186,9 @@ final class SemanticDomPresenter
     final id = node.id.value;
     final tag = _tagFor(node.role);
     final existing = _elementsById[id];
-    if (existing != null && existing.localName == tag) {
+    if (existing != null &&
+        existing.localName == tag &&
+        !_recyclesPositionalActionTarget(node)) {
       stats.reusedElementCount += 1;
       return existing;
     }
@@ -205,6 +214,8 @@ final class SemanticDomPresenter
     final attributes = <String, String>{
       'data-fleury-semantic-id': node.id.value,
       'data-fleury-semantic-role': node.role.name,
+      if (_actionTargetToken(node) case final token?)
+        'data-fleury-action-target-token': token,
     };
     final ariaRole = _ariaRoleFor(node.role);
     if (ariaRole != null) attributes['role'] = ariaRole;
@@ -266,6 +277,20 @@ final class SemanticDomPresenter
     _addLiveRegionAttributes(attributes, node.role);
     _addNativeControlAttributes(attributes, node.role);
     return attributes;
+  }
+
+  String? _actionTargetToken(SemanticNode node) {
+    if (node.actions.isEmpty || !isPositionalSemanticId(node.id.value)) {
+      return null;
+    }
+    return node.actionTargetToken;
+  }
+
+  bool _recyclesPositionalActionTarget(SemanticNode node) {
+    if (!isPositionalSemanticId(node.id.value)) return false;
+    final previous =
+        _attributesById[node.id.value]?['data-fleury-action-target-token'];
+    return previous != _actionTargetToken(node);
   }
 
   void _applyAttributes(

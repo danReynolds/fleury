@@ -94,7 +94,9 @@ Future<int> _run(List<String> args) async {
     stderr.writeln('fleury_mcp: ${e.message}');
     return 1;
   } on ProcessException catch (e) {
-    stderr.writeln('fleury_mcp: could not start ${command.first}: ${e.message}');
+    stderr.writeln(
+      'fleury_mcp: could not start ${command.first}: ${e.message}',
+    );
     return 1;
   }
 
@@ -161,9 +163,7 @@ bool _isColdRunCommand(List<String> command) {
 }
 
 void _printUsage() {
-  stderr.writeln(
-    'fleury_mcp [--cols=<n>] [--rows=<n>] -- <command ...>',
-  );
+  stderr.writeln('fleury_mcp [--cols=<n>] [--rows=<n>] -- <command ...>');
   stderr.writeln('');
   stderr.writeln(
     'Runs an MCP (Model Context Protocol) server over stdio that drives a '

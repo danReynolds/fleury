@@ -672,6 +672,9 @@ const SAMPLE_FILES = {
   files: 'file_manager.dart',
   agent: 'agent_tui.dart',
   editor: 'editor.dart',
+  finance: 'finance.dart',
+  asteroids: 'neon_asteroids.dart',
+  sprite: 'ansi_sprite_studio.dart',
 };
 const SHOWCASE_COMPONENT = '../../../components/ShowcaseWidgets.astro';
 const SHOWCASE_STAGE_COMPONENT = '../../../components/ShowcaseStage.astro';
@@ -718,6 +721,30 @@ const SHOWCASE_GOALS = {
     'editor declines typed text, so printables route to `KeyBindings` as ' +
     'commands; in INSERT it claims them. See ' +
     '[Focus & keyboard](/fleury/guides/focus-and-keyboard/).',
+  finance:
+    'A personal-finance workspace that feels immediately familiar: balances, ' +
+    'cash flow, category spending, filters, and a transaction ledger filled ' +
+    'with deterministic sample data.\n\n' +
+    'It combines Fleury charts with a virtualized, stable-ID `DataTable`; turn ' +
+    'on stress mode to filter and sort 2,500 additional rows without changing ' +
+    'the workflow. The wide and compact layouts are the same widget tree, so ' +
+    'the demo also shows how a data-heavy TUI can remain useful when resized.',
+  asteroids:
+    'A complete arcade game rendered into terminal cells: fixed-step physics, ' +
+    'toroidal wrapping, swept collisions, asteroid splitting, particles, ' +
+    'waves, lives, and score.\n\n' +
+    'The playfield is a braille `Canvas`, while Fleury focus, pointer input, ' +
+    'tickers, semantics, and presence effects provide the application shell. ' +
+    'It is deliberately deterministic, making visual and timing regressions ' +
+    'testable instead of turning the showcase into a lucky animation.',
+  sprite:
+    'A small but complete asset tool: paint full-color terminal cells, edit ' +
+    'keyed animation frames, tune their timing, onion-skin adjacent frames, ' +
+    'and preview the result live.\n\n' +
+    'Every edit is undoable and the exact animation round-trips through a ' +
+    'portable JSON format. It exercises pointer-to-cell geometry, custom ' +
+    'rendering, focus, keyboard commands, host clipboard writes, and dense ' +
+    'stateful workflows without requiring a filesystem or network service.',
 };
 
 // One concrete interaction invitation per showcase, shown right above the live
@@ -737,6 +764,15 @@ const SHOWCASE_TRY = {
     '*Try it: press Ctrl+B to switch between nano and vim — the whole ' +
     'shortcut bar changes with it. Then, in vim, press `d` and pause to see ' +
     'which-key list `dd`, `dw` and `d$`.*',
+  finance:
+    '*Try it: search for `Netflix`, sort or filter the ledger, then enable ' +
+    'Stress +2,500 to exercise the same workflow over a large fixture.*',
+  asteroids:
+    '*Try it: press Space to launch, then steer with A/D/W and fire with ' +
+    'Space—or click and drag directly in the playfield.*',
+  sprite:
+    '*Try it: drag across the cell canvas, press R to play your edit, then ' +
+    'Ctrl+Z to undo the entire stroke. Copy JSON exports exactly what plays.*',
 };
 
 // Catalog widget name → { slug, category }, for the "widgets used" links.
@@ -770,7 +806,7 @@ for (const e of showcases) {
       // with the run command + source link in the right-side rail beside it.
       `${SHOWCASE_GOALS[slug] ?? e.blurb}\n\n` +
       (SHOWCASE_TRY[slug] ? `${SHOWCASE_TRY[slug]}\n\n` : '') +
-      `<ShowcaseStage runCmd="fleury dev samples ${slug}"` +
+      `<ShowcaseStage runCmd="dart run packages/samples/bin/samples.dart ${slug}"` +
       (file
         ? ` sourceFile="${file}" sourceUrl="${REPO}/packages/samples/lib/src/${file}"`
         : '') +
@@ -785,9 +821,10 @@ for (const e of showcases) {
 }
 const showIndex =
   `---\ntitle: Showcases\ndescription: Full Fleury apps, each running live in your browser.\n---\n\n` +
-  `Three complete apps, each built entirely from Fleury widgets and **running ` +
+  `${showcases.length} complete apps, each built entirely from Fleury widgets and **running ` +
   `live in your browser** — open one and use your keyboard and mouse. Each is ` +
-  `also a runnable native sample: \`fleury dev samples <app>\`.\n\n` +
+  `also runnable from a Fleury framework checkout with ` +
+  `\`dart run packages/samples/bin/samples.dart <app>\`.\n\n` +
   showcases
     .map((e) => `- [${e.widget}](/fleury/showcases/${e.id.split('.')[1]}/) — ${e.blurb}`)
     .join('\n') +

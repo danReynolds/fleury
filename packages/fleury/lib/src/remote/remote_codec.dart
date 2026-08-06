@@ -998,6 +998,7 @@ Set<int> applyRemotePlanToBuffer(RemotePlan plan, CellBuffer mirror) {
 
 const int _evKey = 1;
 const int _evText = 2;
+const int _evBatch = 8;
 
 // [KeyEvent.code] payload discriminants within an _evKey record.
 const int _keyKindSpecial = 0;
@@ -1024,25 +1025,97 @@ Set<KeyModifier> _readModifiers(_Reader r) {
   };
 }
 
+/// The key-code discriminant + code + modifiers + type — the stable v1 key
+/// payload, shared by the bare [_evKey] shape and the nested batch shape.
+void _writeKeyPayload(_Writer w, KeyEvent e) {
+  final special = e.code.special;
+  if (special != null) {
+    w.u8(_keyKindSpecial);
+    w.u8(special.index);
+  } else {
+    w.u8(_keyKindChar);
+    w.str(e.code.character!);
+  }
+  _writeModifiers(w, e.modifiers);
+  w.u8(e.type.index);
+}
+
+/// The RFC 0020 extension pair (position, synthesized). Bare key events
+/// write it only when non-default (old-peer byte compatibility); the batch
+/// shape — a new tag old peers never receive — always writes it.
+void _writeKeyExtension(_Writer w, KeyEvent e) {
+  w.u8(e.position == null ? 0 : e.position!.index + 1);
+  w.boolean(e.synthesized);
+}
+
+KeyCode _readKeyCode(_Reader r) {
+  final kind = r.u8();
+  switch (kind) {
+    case _keyKindSpecial:
+      return KeyCode.forSpecial(r.enumValue(SpecialKey.values));
+    case _keyKindChar:
+      final char = r.str();
+      if (char.isEmpty) {
+        throw const RemoteCodecException(
+          'key event character must be non-empty',
+        );
+      }
+      return KeyCode.forCharacter(char);
+    default:
+      throw RemoteCodecException('unknown key code kind $kind');
+  }
+}
+
+(KeyPosition?, bool) _readKeyExtension(_Reader r) {
+  final raw = r.u8();
+  if (raw > KeyPosition.values.length) {
+    throw RemoteCodecException('unknown key position value $raw');
+  }
+  final position = raw == 0 ? null : KeyPosition.values[raw - 1];
+  return (position, r.boolean());
+}
+
 /// Encodes a [TuiEvent] to wire bytes. Throws [RemoteCodecException] for an
 /// event kind not carried by the serve protocol.
 Uint8List encodeInputEvent(TuiEvent event) {
   final w = _Writer();
   switch (event) {
+    case TerminalFocusEvent():
+      // A local terminal window signal, not a peer input event: a remote
+      // peer reports its own focus through its own driver.
+      throw const RemoteCodecException(
+        'terminal focus events are not carried by the serve protocol',
+      );
     case KeyEvent e:
       w.u8(_evKey);
-      // The code is one of two kinds; a leading discriminant picks the
-      // payload shape (special-key enum index vs UTF-8 character).
-      final special = e.code.special;
-      if (special != null) {
-        w.u8(_keyKindSpecial);
-        w.u8(special.index);
-      } else {
-        w.u8(_keyKindChar);
-        w.str(e.code.character!);
+      _writeKeyPayload(w, e);
+      // RFC 0020 positional identity + synthesized flag ride as an optional
+      // trailing extension, like segmented-paste metadata: absent for
+      // default values, so pre-0020 events stay byte-identical and old
+      // decoders never see the fields. KeyPosition.index is append-only by
+      // contract (events.dart) so the +1-biased wire value stays stable.
+      if (e.position != null || e.synthesized) {
+        _writeKeyExtension(w, e);
       }
-      _writeModifiers(w, e.modifiers);
-      w.u8(e.type.index);
+    case InputBatch e:
+      // RFC 0020 §5: the correlated key+text unit. A new tag, so it is only
+      // sent to peers whose handshake accepted this protocol revision; old
+      // peers keep receiving split KeyEvent/TextInputEvent traffic.
+      w.u8(_evBatch);
+      w.boolean(e.key != null);
+      if (e.key != null) {
+        _writeKeyPayload(w, e.key!);
+        _writeKeyExtension(w, e.key!);
+      }
+      w.boolean(e.committedText != null);
+      if (e.committedText != null) w.str(e.committedText!);
+      // Timestamp as whole-seconds + micros-remainder u32 pair: varint would
+      // overflow the reader at ~36 minutes of monotonic clock, and dart2js
+      // (the serve client — a real batch encoder come P3) cannot shift-encode
+      // values ≥ 2^32. Two u32s are JS-safe and good for 136 years.
+      w.u32(e.timeStamp.inSeconds);
+      w.u32(e.timeStamp.inMicroseconds % Duration.microsecondsPerSecond);
+      w.u32(e.sequence);
     case TextInputEvent e:
       w.u8(_evText);
       w.str(e.text);
@@ -1092,25 +1165,52 @@ TuiEvent decodeInputEvent(Uint8List bytes) {
   final TuiEvent event;
   switch (tag) {
     case _evKey:
-      final kind = r.u8();
-      final KeyCode code;
-      switch (kind) {
-        case _keyKindSpecial:
-          code = KeyCode.forSpecial(r.enumValue(SpecialKey.values));
-        case _keyKindChar:
-          final char = r.str();
-          if (char.isEmpty) {
-            throw const RemoteCodecException(
-              'key event character must be non-empty',
-            );
-          }
-          code = KeyCode.char(char);
-        default:
-          throw RemoteCodecException('unknown key code kind $kind');
-      }
+      final code = _readKeyCode(r);
       final mods = _readModifiers(r);
       final type = r.enumValue(KeyEventType.values);
-      event = KeyEvent(code, modifiers: mods, type: type);
+      KeyPosition? position;
+      var synthesized = false;
+      if (r.hasMore) {
+        (position, synthesized) = _readKeyExtension(r);
+      }
+      event = KeyEvent(
+        code,
+        modifiers: mods,
+        type: type,
+        position: position,
+        synthesized: synthesized,
+      );
+    case _evBatch:
+      KeyEvent? key;
+      if (r.boolean()) {
+        final code = _readKeyCode(r);
+        final mods = _readModifiers(r);
+        final type = r.enumValue(KeyEventType.values);
+        final (position, synthesized) = _readKeyExtension(r);
+        key = KeyEvent(
+          code,
+          modifiers: mods,
+          type: type,
+          position: position,
+          synthesized: synthesized,
+        );
+      }
+      final text = r.boolean() ? r.str() : null;
+      if (key == null && text == null) {
+        throw const RemoteCodecException('batch carries neither key nor text');
+      }
+      final seconds = r.u32();
+      final micros = r.u32();
+      if (micros >= Duration.microsecondsPerSecond) {
+        throw const RemoteCodecException('batch timestamp remainder overflow');
+      }
+      final sequence = r.u32();
+      event = InputBatch(
+        key: key,
+        committedText: text,
+        timeStamp: Duration(seconds: seconds, microseconds: micros),
+        sequence: sequence,
+      );
     case _evText:
       event = TextInputEvent(r.str());
     case _evComposition:
@@ -1167,6 +1267,7 @@ Uint8List encodeSemanticAction(
   SemanticNodeId id,
   SemanticAction action, {
   Object? value,
+  String? targetToken,
 }) {
   final w = _Writer();
   w.vstr(
@@ -1177,13 +1278,20 @@ Uint8List encodeSemanticAction(
   w.vstr(action.name);
   w.boolean(value != null);
   if (value != null) w.vstr(jsonEncode(value));
+  if (targetToken != null) {
+    // Deliberately omit even the presence byte when absent: stable-id actions
+    // then retain their exact pre-v6 payload and remain readable by older
+    // peers. Callers must version-gate the non-null extension.
+    w.boolean(true);
+    w.vstr(targetToken, maxBytes: 64, field: 'semantic action target token');
+  }
   return w.take();
 }
 
 /// Decodes a semantic-action request. Throws [RemoteCodecException] on an
 /// unrecognized action name (e.g. a peer on a newer protocol) or a malformed
 /// payload so the caller rejects it rather than misinterpreting it.
-({SemanticNodeId id, SemanticAction action, Object? value})
+({SemanticNodeId id, SemanticAction action, Object? value, String? targetToken})
 decodeSemanticAction(Uint8List bytes) {
   final r = _Reader(bytes);
   final id = r.vstr(
@@ -1205,10 +1313,26 @@ decodeSemanticAction(Uint8List bytes) {
       throw const RemoteCodecException('invalid setValue payload JSON');
     }
   }
+  String? targetToken;
+  // Version-gated after the v3 value field. Its complete absence keeps
+  // stable-id actions byte-compatible with older peers; positional ids fail
+  // closed at dispatch when a peer cannot supply the claim.
+  if (r.hasMore && r.boolean()) {
+    targetToken = r.vstr(
+      maxBytes: 64,
+      field: 'semantic action target token',
+      allowMalformed: false,
+    );
+  }
   r.expectEnd();
   for (final action in SemanticAction.values) {
     if (action.name == actionName) {
-      return (id: SemanticNodeId(id), action: action, value: value);
+      return (
+        id: SemanticNodeId(id),
+        action: action,
+        value: value,
+        targetToken: targetToken,
+      );
     }
   }
   throw RemoteCodecException('unknown semantic action "$actionName"');

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_wire.dart';
 import 'package:fleury/src/remote/remote_driver.dart';
 import 'package:fleury/src/remote/unix_socket_transport.dart';
 import 'package:test/test.dart';

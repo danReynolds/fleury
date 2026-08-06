@@ -22,7 +22,7 @@ void main() {
   });
 
   test('help documents the editor and dependency controls', () async {
-    final result = await _runCreate(packageRoot, tempDir, const ['--help']);
+    final result = await _runCreate(packageRoot, const ['--help']);
 
     expect(result.exitCode, 0, reason: result.stderr.toString());
     expect(result.stdout, contains('fleury create <directory>'));
@@ -32,10 +32,7 @@ void main() {
 
   test('creates a complete app and the minimal VS Code F5 contract', () async {
     final target = Directory('${tempDir.path}/my_app');
-    final result = await _runCreate(packageRoot, tempDir, [
-      target.path,
-      '--no-pub',
-    ]);
+    final result = await _runCreate(packageRoot, [target.path, '--no-pub']);
 
     expect(result.exitCode, 0, reason: result.stderr.toString());
     expect(
@@ -120,7 +117,7 @@ void main() {
 
   test('--no-editor-config omits every editor-specific file', () async {
     final target = Directory('${tempDir.path}/plain_app');
-    final result = await _runCreate(packageRoot, tempDir, [
+    final result = await _runCreate(packageRoot, [
       target.path,
       '--no-pub',
       '--no-editor-config',
@@ -138,7 +135,7 @@ void main() {
 
   test('supports the truthful pre-publication Git dependency source', () async {
     final target = Directory('${tempDir.path}/git_app');
-    final result = await _runCreate(packageRoot, tempDir, [
+    final result = await _runCreate(packageRoot, [
       target.path,
       '--no-pub',
       '--dependency-source=git',
@@ -161,7 +158,7 @@ void main() {
       'test',
     }) {
       final target = Directory('${tempDir.path}/self_dependency_$name');
-      final result = await _runCreate(packageRoot, tempDir, [
+      final result = await _runCreate(packageRoot, [
         target.path,
         '--project-name=$name',
         '--no-pub',
@@ -175,7 +172,7 @@ void main() {
 
   test('disambiguates a generated FleuryApp root class', () async {
     final target = Directory('${tempDir.path}/fleury_app_project');
-    final result = await _runCreate(packageRoot, tempDir, [
+    final result = await _runCreate(packageRoot, [
       target.path,
       '--project-name=fleury_app',
       '--no-pub',
@@ -191,79 +188,94 @@ void main() {
     expect(entrypoint, contains('const FleuryApplication()'));
   });
 
-  test('validates all inputs before writing project files', () async {
-    final missing = await _runCreate(packageRoot, tempDir, const ['--no-pub']);
-    expect(missing.exitCode, 2);
-    expect(missing.stderr, contains('missing project directory'));
+  group('validates all inputs before writing project files', () {
+    test('rejects a missing project directory', () async {
+      final result = await _runCreate(packageRoot, const ['--no-pub']);
 
-    final invalidTarget = Directory('${tempDir.path}/Not-A-Package');
-    final invalid = await _runCreate(packageRoot, tempDir, [
-      invalidTarget.path,
-      '--no-pub',
-    ]);
-    expect(invalid.exitCode, 2);
-    expect(invalid.stderr, contains('not a valid Dart package name'));
-    expect(invalidTarget.existsSync(), isFalse);
+      expect(result.exitCode, 2);
+      expect(result.stderr, contains('missing project directory'));
+    });
+
+    test('rejects an invalid Dart package name', () async {
+      final target = Directory('${tempDir.path}/Not-A-Package');
+      final result = await _runCreate(packageRoot, [target.path, '--no-pub']);
+
+      expect(result.exitCode, 2);
+      expect(result.stderr, contains('not a valid Dart package name'));
+      expect(target.existsSync(), isFalse);
+    });
 
     for (final keyword in const <String>['extension', 'interface', 'mixin']) {
-      final keywordTarget = Directory('${tempDir.path}/$keyword');
-      final keywordResult = await _runCreate(packageRoot, tempDir, [
-        keywordTarget.path,
-        '--no-pub',
-      ]);
-      expect(keywordResult.exitCode, 2, reason: keyword);
-      expect(keywordResult.stderr, contains('reserved Dart word'));
-      expect(keywordTarget.existsSync(), isFalse);
+      test('rejects the reserved Dart word "$keyword"', () async {
+        final target = Directory('${tempDir.path}/$keyword');
+        final result = await _runCreate(packageRoot, [target.path, '--no-pub']);
+
+        expect(result.exitCode, 2);
+        expect(result.stderr, contains('reserved Dart word'));
+        expect(target.existsSync(), isFalse);
+      });
     }
 
-    final unknownTarget = Directory('${tempDir.path}/unknown_app');
-    final unknown = await _runCreate(packageRoot, tempDir, [
-      unknownTarget.path,
-      '--no-pub',
-      '--surprise',
-    ]);
-    expect(unknown.exitCode, 2);
-    expect(unknown.stderr, contains('unknown option'));
-    expect(unknownTarget.existsSync(), isFalse);
-
-    final nonEmpty = Directory('${tempDir.path}/existing_app')..createSync();
-    final marker = File('${nonEmpty.path}/keep.txt')..writeAsStringSync('mine');
-    final occupied = await _runCreate(packageRoot, tempDir, [
-      nonEmpty.path,
-      '--no-pub',
-    ]);
-    expect(occupied.exitCode, 2);
-    expect(occupied.stderr, contains('is not empty'));
-    expect(marker.readAsStringSync(), 'mine');
-    expect(_relativeFiles(nonEmpty), <String>['keep.txt']);
-
-    final fileTarget = File('${tempDir.path}/file_app')
-      ..writeAsStringSync('mine');
-    final fileResult = await _runCreate(packageRoot, tempDir, [
-      fileTarget.path,
-      '--no-pub',
-    ]);
-    expect(fileResult.exitCode, 2);
-    expect(fileResult.stderr, contains('is not a directory'));
-    expect(fileTarget.readAsStringSync(), 'mine');
-
-    if (!Platform.isWindows) {
-      final linkTarget = Link('${tempDir.path}/linked_app')
-        ..createSync(nonEmpty.path);
-      final linkResult = await _runCreate(packageRoot, tempDir, [
-        linkTarget.path,
-        '--project-name=linked_app',
+    test('rejects an unknown option', () async {
+      final target = Directory('${tempDir.path}/unknown_app');
+      final result = await _runCreate(packageRoot, [
+        target.path,
         '--no-pub',
+        '--surprise',
       ]);
-      expect(linkResult.exitCode, 2);
-      expect(linkResult.stderr, contains('is not a directory'));
-      expect(linkTarget.targetSync(), nonEmpty.path);
-    }
+
+      expect(result.exitCode, 2);
+      expect(result.stderr, contains('unknown option'));
+      expect(target.existsSync(), isFalse);
+    });
+
+    test('preserves an occupied target directory', () async {
+      final target = Directory('${tempDir.path}/existing_app')..createSync();
+      final marker = File('${target.path}/keep.txt')..writeAsStringSync('mine');
+      final result = await _runCreate(packageRoot, [target.path, '--no-pub']);
+
+      expect(result.exitCode, 2);
+      expect(result.stderr, contains('is not empty'));
+      expect(marker.readAsStringSync(), 'mine');
+      expect(_relativeFiles(target), <String>['keep.txt']);
+    });
+
+    test('preserves a target that is a file', () async {
+      final target = File('${tempDir.path}/file_app')
+        ..writeAsStringSync('mine');
+      final result = await _runCreate(packageRoot, [target.path, '--no-pub']);
+
+      expect(result.exitCode, 2);
+      expect(result.stderr, contains('is not a directory'));
+      expect(target.readAsStringSync(), 'mine');
+    });
+
+    test(
+      'preserves a target that is a symbolic link',
+      () async {
+        final destination = Directory('${tempDir.path}/existing_app')
+          ..createSync();
+        final target = Link('${tempDir.path}/linked_app')
+          ..createSync(destination.path);
+        final result = await _runCreate(packageRoot, [
+          target.path,
+          '--project-name=linked_app',
+          '--no-pub',
+        ]);
+
+        expect(result.exitCode, 2);
+        expect(result.stderr, contains('is not a directory'));
+        expect(target.targetSync(), destination.path);
+      },
+      skip: Platform.isWindows
+          ? 'Symbolic-link validation is covered on POSIX hosts.'
+          : null,
+    );
   });
 
   test('--project-name supports a differently named destination', () async {
     final target = Directory('${tempDir.path}/My Fleury App');
-    final result = await _runCreate(packageRoot, tempDir, [
+    final result = await _runCreate(packageRoot, [
       target.path,
       '--project-name=my_fleury_app',
       '--description=A focused terminal app',
@@ -285,17 +297,13 @@ void main() {
   });
 }
 
-Future<ProcessResult> _runCreate(
-  String packageRoot,
-  Directory workingDirectory,
-  List<String> args,
-) {
+Future<ProcessResult> _runCreate(String packageRoot, List<String> args) {
   return Process.run(Platform.resolvedExecutable, <String>[
     'run',
-    '$packageRoot/bin/fleury.dart',
+    'fleury',
     'create',
     ...args,
-  ], workingDirectory: workingDirectory.path);
+  ], workingDirectory: packageRoot);
 }
 
 List<String> _relativeFiles(Directory root) {

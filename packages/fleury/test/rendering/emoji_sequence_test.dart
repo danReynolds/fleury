@@ -27,9 +27,7 @@ void main() {
     test('modifier integrity: the skin tone travels with its base', () {
       // 👩🏽‍⚕️ → 👩🏽 + ⚕️, never 👩 🏽 ⚕ FE0F (RFC 0019 decision 12).
       expect(
-        splitEmojiZwjSequence(
-          '\u{1F469}\u{1F3FD}\u{200D}\u{2695}\u{FE0F}',
-        ),
+        splitEmojiZwjSequence('\u{1F469}\u{1F3FD}\u{200D}\u{2695}\u{FE0F}'),
         ['\u{1F469}\u{1F3FD}', '\u{2695}\u{FE0F}'],
       );
     });
@@ -52,10 +50,10 @@ void main() {
 
     test('gender-sign components parse (they are Extended_Pictographic)', () {
       // 🧟‍♂️ zombie + male sign with selector.
-      expect(
-        splitEmojiZwjSequence('\u{1F9DF}\u{200D}\u{2642}\u{FE0F}'),
-        ['\u{1F9DF}', '\u{2642}\u{FE0F}'],
-      );
+      expect(splitEmojiZwjSequence('\u{1F9DF}\u{200D}\u{2642}\u{FE0F}'), [
+        '\u{1F9DF}',
+        '\u{2642}\u{FE0F}',
+      ]);
     });
   });
 
@@ -76,19 +74,27 @@ void main() {
       // segment bases are letters, not pictographs (property gate 10).
       expect(splitEmojiZwjSequence('\u{0644}\u{200D}\u{0627}'), isNull);
       // Devanagari conjunct with ZWJ.
-      expect(
-        splitEmojiZwjSequence('\u{0915}\u{094D}\u{200D}\u{0937}'),
-        isNull,
-      );
+      expect(splitEmojiZwjSequence('\u{0915}\u{094D}\u{200D}\u{0937}'), isNull);
     });
 
-    test('a mixed sequence with one non-pictographic base is rejected whole', () {
-      expect(splitEmojiZwjSequence('\u{1F468}\u{200D}a'), isNull);
-    });
+    test(
+      'a mixed sequence with one non-pictographic base is rejected whole',
+      () {
+        expect(splitEmojiZwjSequence('\u{1F468}\u{200D}a'), isNull);
+      },
+    );
 
     test('malformed joiner placement is rejected', () {
-      expect(splitEmojiZwjSequence('\u{200D}\u{1F468}'), isNull, reason: 'leading');
-      expect(splitEmojiZwjSequence('\u{1F468}\u{200D}'), isNull, reason: 'trailing');
+      expect(
+        splitEmojiZwjSequence('\u{200D}\u{1F468}'),
+        isNull,
+        reason: 'leading',
+      );
+      expect(
+        splitEmojiZwjSequence('\u{1F468}\u{200D}'),
+        isNull,
+        reason: 'trailing',
+      );
       expect(
         splitEmojiZwjSequence('\u{1F468}\u{200D}\u{200D}\u{1F469}'),
         isNull,

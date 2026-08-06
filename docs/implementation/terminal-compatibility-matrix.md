@@ -296,3 +296,71 @@ large pile of unreviewed local captures.
   `--write-plan=<path>`, keeping the external capture checklist generated from
   the same target matching and review-state logic as the JSON audit.
 - Real-terminal entries are still pending.
+
+## Kitty keyboard protocol — measured 2026-08-06 (macOS 15, RFC 0020)
+
+Flag columns captured with `fleury diagnose --probe --json-output=…` run
+**inside each emulator**, non-interactively. The probe pushes the full flag
+set, queries, and restores, so it measures what a terminal *claims*, not
+whatever happened to be in force.
+
+The **Delivers** column is different, and was added after a terminal claimed a
+flag it does not implement. It comes from `packages/fleury/bin/keytrace.dart`:
+hold a key, release it, and read the bytes. Only that answers whether the
+claim is true.
+
+| Terminal | TERM | Flags | Lifecycle safe | Delivers phases | Positions |
+|---|---|---|---|---|---|
+| Ghostty | `xterm-ghostty` | 31 | yes | yes | yes |
+| iTerm2 | `xterm-256color` | 31 | yes | yes | yes |
+| kitty | `xterm-kitty` | 31 | yes | yes | yes |
+| Warp | `xterm-256color` | 31 | yes | **NO** ¹ | yes |
+| Terminal.app | `xterm-256color` | — | no | no | no |
+| WezTerm | `xterm-256color` | — | no | no | no |
+
+¹ **Warp claims flag 2 and emits no event types for text keys.** Verified by
+byte capture on 2026-08-06, inline *and* in the alternate screen: holding `a`
+produces seven identical `CSI 97;1;97 u` — press plus six auto-repeats, none
+marked `:2` — and nothing at all on release. Lone modifiers DO carry a phase
+(`CSI 57442;5:1 u` for left-ctrl), so the machinery exists and is missing for
+ordinary keys. Warp masks undefined flags correctly (push bit 32, get `0`
+back), so its `31` is a sincere claim rather than a blind echo — which makes
+this a genuine Warp bug. No upstream report exists; Warp's own docs list
+"detecting key release events" as supported. Consequence: every held key
+sticks down forever until `KeyboardSession`'s duplicate-down detector demotes
+the surface to press-only.
+
+**Three of six actually deliver phases**, so `isHeld` and `KeyBinding.hold`
+are live there with no configuration. Warp needs a press-driven fallback like
+any legacy terminal.
+
+Two results correct assumptions made earlier in RFC 0020's development:
+
+- **Warp was assumed unsupported, then measured as fully supporting, and is
+  in fact neither.** The original assumption came by analogy with its lack of
+  OSC 8 support — a wrong analogy. The correction over-swung, because the
+  probe was read as a capability report when it only ever proved that Warp
+  answers a query. The lesson is in the Delivers column: a claim is not a
+  measurement.
+- **WezTerm reports no support.** It documents the protocol, but
+  `enable_kitty_keyboard` is config-gated and off by default, so a stock
+  install behaves as a legacy terminal. This is a configuration finding, not a
+  WezTerm limitation — worth re-measuring on a machine that enables it.
+
+### What the negative results validate
+
+Both unsupported terminals answered the bracketing DA1 **without** a keyboard
+reply — `\x1B[?1;2c` from Terminal.app, `\x1B[?65;4;6;18;22c` from WezTerm —
+rather than timing out. That is RFC 0020 §8.2's whole design working on real
+hardware: "unsupported" is detected by a positive DA1 arriving without a flags
+reply, so the verdict is independent of link latency and never costs a
+wall-clock timeout. Every confirmed terminal replied `\x1B[?31u` ahead of its
+DA1, in the expected order.
+
+### Not covered by this capture
+
+The probe confirms what the terminal *reports*. It does not exercise a running
+app, so the following still need a human at a real keyboard: holding a key
+across frames, alt-tab focus loss (`TerminalFocusEvent`, DECSET 1004), and
+whether restoration leaves the shell clean after an abnormal exit.
+

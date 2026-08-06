@@ -149,7 +149,7 @@ class _PasswordInputState extends State<PasswordInput> {
       bindings: <KeyBinding>[
         KeyBinding(
           widget.revealChord ?? _defaultRevealChord,
-          onTrigger: () => setState(() => _revealed = !_revealed),
+          onTrigger: (_) => setState(() => _revealed = !_revealed),
           hideFromHintBar: true,
         ),
       ],

@@ -24,8 +24,11 @@ import 'package:meta/meta.dart';
 import '../foundation/change_notifier.dart';
 import '../foundation/collections.dart';
 import '../input/events.dart';
+import '../input/keyboard_layout.dart';
+import '../runtime/input_dispatcher.dart';
 import 'focus.dart';
 import 'framework.dart';
+import 'keyboard.dart';
 import 'inherited_notifier.dart';
 
 // The pattern vocabulary a binding is written in lives in events.dart
@@ -193,89 +196,110 @@ class KeyBindingEvent {
   void bubble() => _shouldBubble = true;
 }
 
-/// A zero-argument binding action — the common case, invoked when the
-/// binding matches. The event is consumed. For propagation control or to
-/// read the match, use [KeyBinding.event] with a [KeyBindingHandler].
-typedef KeyBindingTrigger = void Function();
-
-/// An event-aware binding handler. Synchronous; async work scheduled inside
-/// runs after the dispatch decision, so propagation must be expressed
-/// synchronously via [KeyBindingEvent.bubble].
+/// A binding action, invoked when the binding matches. The event is
+/// consumed unless the handler calls [KeyBindingEvent.bubble].
+///
+/// Handlers always receive the event (RFC 0020 §14.1) — one signature for
+/// every binding, with propagation control always to hand. Tear-offs
+/// declare the parameter: `onTrigger: (_) => save()`.
+///
+/// Synchronous with respect to the dispatch decision: async work scheduled
+/// inside runs after it, so propagation must be expressed synchronously.
 typedef KeyBindingHandler = void Function(KeyBindingEvent event);
 
 // ===========================================================================
 // KeyBinding
 // ===========================================================================
 
-/// One key binding: a [KeySequence] (or several aliases that all fire the
+/// One key binding: a [KeySequence] (plus optional [aliases] that fire the
 /// same action), a handler, an optional hint-bar label, and an enabled flag.
 ///
-/// **Common case** — a zero-argument [onTrigger]:
-///
 /// ```dart
-/// KeyBinding(.ctrl.s, onTrigger: save, label: 'Save')
+/// KeyBinding(.ctrl.s, onTrigger: (_) => save(), label: 'Save')
+/// KeyBinding(.g.g, onTrigger: (_) => top(), label: 'Top')
 /// ```
 ///
-/// **Event-aware** — [KeyBinding.event] for propagation control or reading
-/// the match:
+/// **Aliases** — several spellings, one action, one hint entry. The primary
+/// sequence is canonical for the hint bar:
 ///
 /// ```dart
-/// KeyBinding.event(.escape, onEvent: (e) { if (!close()) e.bubble(); })
+/// KeyBinding(.j, aliases: [.down], onTrigger: (_) => next(), label: 'Next')
 /// ```
 ///
-/// **Aliases** — [KeyBinding.any]: several spellings, one action, one hint
-/// entry. The first sequence is canonical for the hint bar:
+/// **Auto-repeat** — a binding fires once per physical press by default;
+/// holding `Ctrl+S` must not re-save. Movement-style bindings opt in:
 ///
 /// ```dart
-/// KeyBinding.any([.j, .down], onTrigger: next, label: 'Next')
+/// KeyBinding(.j, includeRepeats: true, onTrigger: (_) => next())
+/// ```
+///
+/// Where the surface cannot distinguish auto-repeat from a fresh press
+/// (legacy terminals, plain printables outside lifecycle mode) suppression
+/// is best-effort — the event simply arrives untagged and fires.
+///
+/// **Propagation** — a match consumes; [KeyBindingEvent.bubble] opts out:
+///
+/// ```dart
+/// KeyBinding(.escape, onTrigger: (e) { if (!close()) e.bubble(); })
 /// ```
 final class KeyBinding {
-  /// Bind a single sequence to a zero-argument action.
+  /// Bind a sequence (plus any [aliases]) to an action.
   KeyBinding(
     KeySequence sequence, {
-    required KeyBindingTrigger onTrigger,
+    required this.onTrigger,
+    List<KeySequence> aliases = const <KeySequence>[],
+    this.includeRepeats = false,
     this.label,
     this.enabled = true,
     this.hideFromHintBar = false,
-  }) : sequences = [sequence],
-       onEvent = _triggerHandler(onTrigger);
+  }) : sequences = [sequence, ...aliases],
+       onHoldStart = null,
+       onHoldEnd = null;
 
-  /// Bind a single sequence to an event-aware handler.
-  KeyBinding.event(
-    KeySequence sequence, {
-    required this.onEvent,
+  /// Bind a key to the *duration* of a press: [onHoldStart] on the down,
+  /// [onHoldEnd] on its release — push-to-talk, hold-to-peek.
+  ///
+  /// Not a long-press: there is no threshold and no latency. Every keyboard
+  /// press is a hold of some duration, so the start fires immediately and a
+  /// brief tap is simply a brief hold (RFC 0020 §14.5).
+  ///
+  /// Exactly one end per start, always: the pairing rides the observation
+  /// lane, so it survives command-lane consumption, and the end is
+  /// synthesized on scope exit or authority loss (modal open, blur,
+  /// disconnect). Inert where the surface reports no held state — never
+  /// silently a toggle; branch on
+  /// `Keyboard.of(context).capabilities.supportsHeldState` for a fallback.
+  KeyBinding.hold(
+    KeySequence key, {
+    required KeyBindingHandler this.onHoldStart,
+    required KeyBindingHandler this.onHoldEnd,
     this.label,
     this.enabled = true,
     this.hideFromHintBar = false,
-  }) : sequences = [sequence];
-
-  /// Bind several alias sequences that all fire the same action. Provide
-  /// exactly one of [onTrigger] or [onEvent]. The first sequence is the
-  /// canonical one shown in the hint bar.
-  KeyBinding.any(
-    this.sequences, {
-    KeyBindingTrigger? onTrigger,
-    KeyBindingHandler? onEvent,
-    this.label,
-    this.enabled = true,
-    this.hideFromHintBar = false,
-  }) : assert(sequences.isNotEmpty, 'aliases list must be non-empty'),
-       assert(
-         (onTrigger == null) != (onEvent == null),
-         'provide exactly one of onTrigger / onEvent',
+  }) : assert(
+         key.stepCount == 1,
+         'a hold brackets one key press, not a multi-step sequence',
        ),
-       onEvent = onEvent ?? _triggerHandler(onTrigger!);
+       sequences = [key],
+       onTrigger = null,
+       includeRepeats = false;
 
-  static KeyBindingHandler _triggerHandler(KeyBindingTrigger onTrigger) =>
-      (_) => onTrigger();
-
-  /// The sequence(s) this binding matches. Any firing triggers [onEvent].
+  /// The sequence(s) this binding matches. Any firing triggers [onTrigger].
   /// The first is always canonical for hint-bar display.
   final List<KeySequence> sequences;
 
-  /// Handler invoked when the binding matches. `onTrigger` bindings wrap
-  /// their callback here; the dispatcher always calls this.
-  final KeyBindingHandler onEvent;
+  /// Handler invoked when the binding matches; null for a hold binding.
+  final KeyBindingHandler? onTrigger;
+
+  /// Press-duration handlers, non-null exactly for [KeyBinding.hold].
+  final KeyBindingHandler? onHoldStart;
+  final KeyBindingHandler? onHoldEnd;
+
+  /// Whether this binding also fires on keyboard auto-repeat.
+  final bool includeRepeats;
+
+  /// Whether this binding brackets a press rather than firing on it.
+  bool get isHold => onHoldStart != null;
 
   /// Short label shown by `KeyHintBar`. When null, the bar synthesises one
   /// from the primary sequence's [KeySequence.hintLabel]. A binding with
@@ -317,7 +341,25 @@ final class ActiveKeyBinding {
   final List<KeySequence> sequences;
 
   /// A combined label for all effective aliases, such as `↑↓`.
+  ///
+  /// Positional aliases render their US-QWERTY twin here, because a bare
+  /// value type has no keyboard to ask. Surfaces that CAN ask — anything with
+  /// a `BuildContext` — should call [labelWith] instead, so a `KeyPosition.w`
+  /// control reads `Z` on AZERTY rather than lying (RFC 0020 §9).
   String get sequenceLabel => sequences.map((s) => s.hintLabel).join();
+
+  /// [sequenceLabel] with each positional alias resolved against the caps
+  /// this keyboard actually has.
+  ///
+  /// ```dart
+  /// final layout = Keyboard.of(context).layout;
+  /// Text('[${hint.labelWith(layout)}] ${hint.binding.displayLabel}');
+  /// ```
+  ///
+  /// Identical to [sequenceLabel] for logical bindings, which is every
+  /// binding that does not name a physical spot.
+  String labelWith(KeyboardLayout layout) =>
+      sequences.map(layout.labelForSequence).join();
 }
 
 /// Resolves the discoverable key bindings active in [manager]'s focus context.
@@ -407,9 +449,29 @@ List<ActiveKeyBinding> resolveActiveKeyBindings(
 /// bindings it carries are consulted by the `InputDispatcher` when a
 /// `KeyEvent` reaches this node's spot in the chain.
 class KeyBindings extends StatefulWidget {
-  const KeyBindings({super.key, required this.bindings, required this.child});
+  const KeyBindings({
+    super.key,
+    required this.bindings,
+    this.modal = false,
+    required this.child,
+  });
 
   final List<KeyBinding> bindings;
+
+  /// Whether unmatched keys stop at this scope (RFC 0020 §14.3).
+  ///
+  /// A dialog binds y/n/Esc; a fat-fingered `j` matches nothing, and with
+  /// `modal: false` it would sail past into the app behind. There is no
+  /// handler in which to intercept that — the whole problem is that no
+  /// handler runs — so the policy belongs to the scope, not to a row.
+  ///
+  /// `modal: true` blocks ancestor scopes AND suppresses globals, extending
+  /// the focus system's existing modality to the key lane. A Navigator
+  /// modal route sets it implicitly, so routed dialogs write nothing.
+  /// Per-key passthrough is a binding at THIS scope that matches and calls
+  /// [KeyBindingEvent.bubble].
+  final bool modal;
+
   final Widget child;
 
   /// The discoverable bindings active in [context]'s focus context — hint
@@ -453,8 +515,27 @@ class KeyBindings extends StatefulWidget {
 class _KeyBindingsState extends State<KeyBindings> implements KeyBindingSource {
   late final FocusNode _node;
 
+  /// Observation-lane registration, present only while this scope declares
+  /// at least one [KeyBinding.hold] (RFC 0020 §14.5).
+  ///
+  /// Holds live on the observation lane rather than the command lane so
+  /// their pairing survives everything that can eat a command: a descendant
+  /// consuming the key, a modal boundary, an armed capture. That is what
+  /// makes "exactly one end per start" hold — including the synthesized end
+  /// the projector delivers when this scope leaves the active chain
+  /// (modal-open) or the session loses authority (blur, disconnect).
+  KeyPhaseObserverRegistration? _holdObserver;
+
+  /// Keys currently held open by this scope's hold bindings, mapped to the
+  /// binding that opened them, so an end pairs to the binding that saw the
+  /// down even if the widget rebuilt in between.
+  final Map<KeyCode, KeyBinding> _openHolds = {};
+
   @override
   List<KeyBinding> get activeBindings => widget.bindings;
+
+  @override
+  bool get isModalScope => widget.modal;
 
   @override
   void initState() {
@@ -464,6 +545,56 @@ class _KeyBindingsState extends State<KeyBindings> implements KeyBindingSource {
       skipTraversal: true,
       debugLabel: 'KeyBindings',
     )..bindingSource = this;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncHoldObserver();
+  }
+
+  bool get _hasHolds => widget.bindings.any((b) => b.isHold);
+
+  void _syncHoldObserver() {
+    final dispatcher = KeyboardScope.maybeDispatcherOf(context);
+    if (dispatcher == null) return;
+    // Inert where the surface cannot report releases: registering would
+    // fire starts that could never be paired with an end (§14.5).
+    final supported = dispatcher.keyboardSession.capabilities.supportsHeldState;
+    if (_hasHolds && supported && _holdObserver == null) {
+      _holdObserver = dispatcher.addKeyObserver(_observeHold, anchor: _node);
+    } else if ((!_hasHolds || !supported) && _holdObserver != null) {
+      _holdObserver!.remove();
+      _holdObserver = null;
+      _openHolds.clear();
+    }
+  }
+
+  /// The observation-lane callback: opens a hold on a matching down and
+  /// closes it on the paired up (physical or synthesized). Repeats are
+  /// meaningless to a hold — the key is already down.
+  void _observeHold(KeyEvent event) {
+    switch (event.type) {
+      case KeyEventType.down:
+        if (_openHolds.containsKey(event.code)) return;
+        for (final binding in widget.bindings) {
+          if (!binding.isHold || !binding.enabled) continue;
+          if (!binding.sequences.first.matches(event)) continue;
+          _openHolds[event.code] = binding;
+          binding.onHoldStart!(
+            KeyBindingEvent(KeySequenceMatch(binding.sequences.first, [event])),
+          );
+          return;
+        }
+      case KeyEventType.repeat:
+        return;
+      case KeyEventType.up:
+        final binding = _openHolds.remove(event.code);
+        if (binding == null) return;
+        binding.onHoldEnd!(
+          KeyBindingEvent(KeySequenceMatch(binding.sequences.first, [event])),
+        );
+    }
   }
 
   @override
@@ -482,6 +613,7 @@ class _KeyBindingsState extends State<KeyBindings> implements KeyBindingSource {
     if (_hintContentChanged(oldWidget.bindings, widget.bindings)) {
       Focus.maybeOf(context)?.notifyBindingsChanged();
     }
+    _syncHoldObserver();
   }
 
   static bool _hintContentChanged(List<KeyBinding> a, List<KeyBinding> b) {
@@ -502,6 +634,11 @@ class _KeyBindingsState extends State<KeyBindings> implements KeyBindingSource {
 
   @override
   void dispose() {
+    // Removing the registration synthesizes an end for anything still open
+    // (the projector's scope-exit path), so a hold can never outlive its
+    // scope with the action left running.
+    _holdObserver?.remove();
+    _openHolds.clear();
     _node.bindingSource = null;
     _node.dispose();
     super.dispose();
@@ -509,6 +646,11 @@ class _KeyBindingsState extends State<KeyBindings> implements KeyBindingSource {
 
   @override
   Widget build(BuildContext context) {
+    // Modality is enforced by the dispatcher (via [isModalScope]), NOT by
+    // wrapping in a modal FocusScope: that would truncate the focus chain
+    // at this node, leaving a boundary binding that calls `bubble()` with
+    // no ancestors to reach — and that bubble is exactly §14.3's per-key
+    // passthrough.
     return Focus(focusNode: _node, child: widget.child);
   }
 }

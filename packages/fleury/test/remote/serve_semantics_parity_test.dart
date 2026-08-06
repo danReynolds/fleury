@@ -12,6 +12,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_wire.dart';
 import 'package:fleury/src/remote/remote_driver.dart';
 import 'package:test/test.dart';
 
@@ -85,7 +86,7 @@ class _AppState extends State<_App> {
       bindings: [
         KeyBinding(
           KeyCode.char('t'),
-          onTrigger: () => setState(() => _count++),
+          onTrigger: (_) => setState(() => _count++),
         ),
       ],
       child: Focus(
@@ -151,7 +152,11 @@ void main() {
     }
 
     // --- 2. A value-only change ships a patch, not a second full frame.
-    transport.emit(const InputEventFrame(KeyEvent(KeyCode.char('t'))));
+    transport.emit(
+      const InputEventFrame(
+        InputBatch(key: KeyEvent(KeyCode.char('t')), committedText: 't'),
+      ),
+    );
     await _settle();
     expect(semantics(), hasLength(2));
     final patch = _decodeEnvelope(semantics()[1]);

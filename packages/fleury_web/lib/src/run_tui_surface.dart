@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:js_interop';
 
 import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_wire.dart' show ImagePlacement;
 
 import 'package:web/web.dart' as web;
 
@@ -186,6 +187,11 @@ Future<MountedApp> runTuiSurface(
     focusManager: focusManager,
     pointerRouter: pointerRouter,
   );
+  // The DOM surface has full keyboard lifecycle unconditionally (RFC 0020
+  // §5.7): keyup, positional `code`, and per-key printable reporting need
+  // no negotiation.
+  inputDispatcher.updateKeyboardCapabilities(KeyboardCapabilities.full);
+  final keyboardNotifier = KeyboardStateNotifier(inputDispatcher);
   final semanticsOwner = semanticPresenter == null ? null : SemanticsOwner();
   final pendingInput = <TuiEvent>[];
   final pendingSemanticActions = <_PendingSemanticAction>[];
@@ -255,6 +261,7 @@ Future<MountedApp> runTuiSurface(
     logBuffer: null,
     debugController: null,
     pendingSequenceNotifier: inputDispatcher.pendingSequenceNotifier,
+    keyboardNotifier: keyboardNotifier,
   );
 
   if (semanticPresenter != null) {
@@ -450,6 +457,10 @@ Future<MountedApp> runTuiSurface(
       ),
       planner: planner,
       onBeforeFrame: dispatchPendingWork,
+      // Input bookkeeping runs ahead of every production gate so
+      // per-frame edges expire even on frames that render nothing
+      // (RFC 0020 §5.6/§7).
+      onLatchInput: inputDispatcher.keyboardSession.publishLatch,
       onFramePresented: (frame, plan) =>
           semanticsPipeline?.onFramePresented(frame, plan),
       onFrameSkipped: (reason, size) {
@@ -628,7 +639,13 @@ final class _PendingSemanticAction {
 String _frameReasonForEvent(TuiEvent event) {
   return switch (event) {
     ResizeEvent() => 'resize',
+    // Terminal-only: the browser reports focus through its own blur path.
+    TerminalFocusEvent() => 'terminal-focus',
     KeyEvent(:final code) => 'key:${code.special?.name ?? code.character!}',
+    InputBatch(:final key) =>
+      key != null
+          ? 'key:${key.code.special?.name ?? key.code.character!}'
+          : 'text-input',
     TextInputEvent() => 'text-input',
     TextCompositionEvent(:final kind) => 'text-composition:${kind.name}',
     PasteEvent() => 'paste',

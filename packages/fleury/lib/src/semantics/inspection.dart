@@ -345,6 +345,7 @@ final class SemanticInspectionNode {
     required List<String> actions,
     required Map<String, Object?> state,
     required List<SemanticInspectionNode> children,
+    this.actionTargetToken,
   }) : actions = List<String>.unmodifiable(actions),
        state = Map<String, Object?>.unmodifiable(state),
        children = List<SemanticInspectionNode>.unmodifiable(children);
@@ -391,6 +392,7 @@ final class SemanticInspectionNode {
       actions: [for (final action in node.actions) action.name]..sort(),
       state: _semanticStateToJson(node.state),
       children: children,
+      actionTargetToken: node.actionTargetToken,
     );
   }
 
@@ -403,7 +405,7 @@ final class SemanticInspectionNode {
   static Map<String, Object?> flattenLiveNode(SemanticNode node) {
     final json = SemanticInspectionNode._fromSemanticNodeShallow(
       node,
-    ).toScalarJson(includeBounds: true);
+    ).toScalarJson(includeBounds: true, includeActionTargetToken: true);
     if (node.children.isNotEmpty) {
       json['childIds'] = <String>[
         for (final child in node.children) sanitizeForDisplay(child.id.value),
@@ -449,6 +451,7 @@ final class SemanticInspectionNode {
       actions: _jsonSortedStrings(json['actions']),
       state: redacted ? _redactSensitiveState(state) : state,
       children: _jsonNodeList(json['children']),
+      actionTargetToken: _jsonString(json['actionTargetToken']),
     );
   }
 
@@ -468,6 +471,13 @@ final class SemanticInspectionNode {
   final List<String> actions;
   final Map<String, Object?> state;
   final List<SemanticInspectionNode> children;
+
+  /// Opaque app-issued freshness token for an actionable positional id.
+  ///
+  /// The inspection object retains it so first-party hosts can echo the exact
+  /// target they presented, but normal inspection JSON omits it: it is
+  /// transport bookkeeping rather than app-authored semantic content.
+  final String? actionTargetToken;
 
   Iterable<SemanticInspectionNode> get descendants sync* {
     for (final child in children) {
@@ -494,8 +504,13 @@ final class SemanticInspectionNode {
   /// nested [toJson]. Computed by the same `_scalarJson` as [toJson], so the two
   /// can't drift on the fields they share; unlike [toJson], `includeBounds`
   /// defaults to false, so `bounds` is omitted unless asked for.
-  Map<String, Object?> toScalarJson({bool includeBounds = false}) =>
-      _scalarJson(includeBounds: includeBounds);
+  Map<String, Object?> toScalarJson({
+    bool includeBounds = false,
+    bool includeActionTargetToken = false,
+  }) => _scalarJson(
+    includeBounds: includeBounds,
+    includeActionTargetToken: includeActionTargetToken,
+  );
 
   /// This node's own fields without children — shared by [toJson] and the
   /// budgeted [_toJsonCapped].
@@ -508,6 +523,7 @@ final class SemanticInspectionNode {
   Map<String, Object?> _scalarJson({
     bool includeBounds = true,
     bool dedupeValue = false,
+    bool includeActionTargetToken = false,
   }) => <String, Object?>{
     'id': id,
     'role': role,
@@ -524,6 +540,8 @@ final class SemanticInspectionNode {
     if (includeBounds && bounds != null) 'bounds': _cellRectToJson(bounds!),
     if (actions.isNotEmpty) 'actions': actions,
     if (state.isNotEmpty) 'state': state,
+    if (includeActionTargetToken && actionTargetToken != null)
+      'actionTargetToken': actionTargetToken,
   };
 
   /// Serializes this subtree depth-first, emitting at most [budget] more
@@ -577,6 +595,7 @@ final class SemanticInspectionNode {
       for (final child in children) child.toSemanticNode(),
     ],
     state: SemanticState(Map<String, Object?>.of(state)),
+    actionTargetToken: actionTargetToken,
   );
 
   String _debugLine({required bool includeState}) {

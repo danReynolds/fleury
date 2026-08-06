@@ -31,6 +31,7 @@ import '../semantics/semantics.dart';
 import '../input/events.dart';
 import 'focus.dart';
 import 'framework.dart';
+import 'keyboard.dart';
 import 'media_query.dart';
 import 'text_input.dart'
     show TextClipboardPolicy, TextEditingController, textClipboardSemanticState;
@@ -581,6 +582,12 @@ class _TextAreaState extends State<TextArea>
     return KeyEventResult.handled;
   }
 
+  /// Detector adapter: editing keys the area handles are consumed;
+  /// anything else falls through to bindings above it.
+  void _detectKey(KeyEvent event) {
+    if (_handleKey(event) == KeyEventResult.handled) event.consume();
+  }
+
   KeyEventResult _handleKey(KeyEvent event) {
     if (!widget.enabled) return KeyEventResult.ignored;
     final action = widget.keymap.resolve(event);
@@ -756,30 +763,32 @@ class _TextAreaState extends State<TextArea>
       }),
       onAction: _handleSemanticAction,
       onSetValue: _handleSemanticSetValue,
-      child: Focus(
-        focusNode: _focusNode,
-        autofocus: widget.autofocus && widget.enabled,
-        // canRequestFocus is deliberately NOT passed: the enabled ↔
-        // focusability sync applies only to a node this state OWNS (see the
-        // `_ownsFocusNode` guard in didUpdateWidget) — a caller-provided
-        // node's flags belong to the caller, and a non-null value here
-        // would make the Focus widget overwrite them on every rebuild.
-        onKey: _handleKey,
-        child: _TextAreaDisplay(
+      child: KeyDetector(
+        onKey: _detectKey,
+        child: Focus(
           focusNode: _focusNode,
-          text: _controller.text,
-          selection: _controller.selection,
-          placeholder: widget.placeholder,
-          placeholderStyle: widget.enabled
-              ? widget.placeholderStyle
-              : widget.placeholderStyle.merge(const CellStyle(dim: true)),
-          style: widget.enabled
-              ? widget.style
-              : widget.style.merge(const CellStyle(dim: true)),
-          cursorStyle: widget.cursorStyle,
-          cursorVisible: focused,
-          minLines: widget.minLines,
-          maxLines: widget.maxLines,
+          autofocus: widget.autofocus && widget.enabled,
+          // canRequestFocus is deliberately NOT passed: the enabled ↔
+          // focusability sync applies only to a node this state OWNS (see the
+          // `_ownsFocusNode` guard in didUpdateWidget) — a caller-provided
+          // node's flags belong to the caller, and a non-null value here
+          // would make the Focus widget overwrite them on every rebuild.
+          child: _TextAreaDisplay(
+            focusNode: _focusNode,
+            text: _controller.text,
+            selection: _controller.selection,
+            placeholder: widget.placeholder,
+            placeholderStyle: widget.enabled
+                ? widget.placeholderStyle
+                : widget.placeholderStyle.merge(const CellStyle(dim: true)),
+            style: widget.enabled
+                ? widget.style
+                : widget.style.merge(const CellStyle(dim: true)),
+            cursorStyle: widget.cursorStyle,
+            cursorVisible: focused,
+            minLines: widget.minLines,
+            maxLines: widget.maxLines,
+          ),
         ),
       ),
     );

@@ -40,8 +40,8 @@ final class ColorScheme {
   final Color? foreground;
   final Color? background;
 
-  /// Opaque fill for raised surfaces and modal content — a [Surface] widget,
-  /// or content shown via [NavigatorState.present]. Unlike [background]
+  /// Opaque fill for raised surfaces and modal content — a `Container.filled`
+  /// widget, or content shown via [NavigatorState.present]. Unlike [background]
   /// (nullable = the terminal's own, i.e. effectively transparent), a surface
   /// must fully cover the cells it occupies so nothing painted beneath shows
   /// through. null derives a concrete fill from the theme brightness

@@ -355,7 +355,9 @@ void main() {
       var escapes = 0;
       tester.pumpWidget(
         KeyBindings(
-          bindings: [KeyBinding(KeyCode.escape, onTrigger: () => escapes += 1)],
+          bindings: [
+            KeyBinding(KeyCode.escape, onTrigger: (_) => escapes += 1),
+          ],
           child: const TextInput(autofocus: true),
         ),
       );
@@ -431,7 +433,7 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeySequence.up, onTrigger: () => ancestorUps += 1),
+            KeyBinding(KeySequence.up, onTrigger: (_) => ancestorUps += 1),
           ],
           child: const TextInput(autofocus: true),
         ),
@@ -474,7 +476,7 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeySequence.down, onTrigger: () => ancestorDowns += 1),
+            KeyBinding(KeySequence.down, onTrigger: (_) => ancestorDowns += 1),
           ],
           child: TextInput(
             controller: controller,
@@ -642,7 +644,7 @@ void main() {
         ..open(range: const TextRange.collapsed(0));
       tester.pumpWidget(
         KeyBindings(
-          bindings: [KeyBinding(KeySequence.tab, onTrigger: () => tabs += 1)],
+          bindings: [KeyBinding(KeySequence.tab, onTrigger: (_) => tabs += 1)],
           child: TextInput(completionController: completions, autofocus: true),
         ),
       );
@@ -665,7 +667,7 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeySequence.ctrl.s, onTrigger: () => saves += 1),
+            KeyBinding(KeySequence.ctrl.s, onTrigger: (_) => saves += 1),
           ],
           child: TextInput(controller: controller, autofocus: true),
         ),
@@ -702,7 +704,10 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeySequence.space.p, onTrigger: () => paletteOpens += 1),
+            KeyBinding(
+              KeySequence.space.p,
+              onTrigger: (_) => paletteOpens += 1,
+            ),
           ],
           child: TextInput(controller: controller, autofocus: true),
         ),
@@ -1157,7 +1162,7 @@ void main() {
           bindings: [
             KeyBinding(
               KeySequence.ctrl.c,
-              onTrigger: () => ancestorCopies += 1,
+              onTrigger: (_) => ancestorCopies += 1,
             ),
           ],
           child: TextInput(controller: controller, autofocus: true),
@@ -1180,7 +1185,7 @@ void main() {
           bindings: [
             KeyBinding(
               KeySequence.ctrl.c,
-              onTrigger: () => ancestorCopies += 1,
+              onTrigger: (_) => ancestorCopies += 1,
             ),
           ],
           child: TextInput(
@@ -1214,7 +1219,7 @@ void main() {
           bindings: [
             KeyBinding(
               KeySequence.ctrl.c,
-              onTrigger: () => ancestorCopies += 1,
+              onTrigger: (_) => ancestorCopies += 1,
             ),
           ],
           child: TextInput(

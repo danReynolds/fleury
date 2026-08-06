@@ -17,22 +17,22 @@ import 'package:fleury/fleury_host.dart';
 // A wide Column of semantic leaves. When [withIds] the leaf carries an explicit
 // id (the O(1) path); otherwise it's unkeyed (the anchor-walk path).
 Widget _scene(int width, {required bool withIds}) => Column(
-  children: [
-    for (var i = 0; i < width; i++)
-      withIds
-          ? Semantics(
-              id: SemanticNodeId('leaf-$i'),
-              role: SemanticRole.button,
-              label: 'row $i',
-              child: const SizedBox(width: 10, height: 1),
-            )
-          : Semantics(
-              role: SemanticRole.button,
-              label: 'row $i',
-              child: const SizedBox(width: 10, height: 1),
-            ),
-  ],
-);
+      children: [
+        for (var i = 0; i < width; i++)
+          withIds
+              ? Semantics(
+                  id: SemanticNodeId('leaf-$i'),
+                  role: SemanticRole.button,
+                  label: 'row $i',
+                  child: const SizedBox(width: 10, height: 1),
+                )
+              : Semantics(
+                  role: SemanticRole.button,
+                  label: 'row $i',
+                  child: const SizedBox(width: 10, height: 1),
+                ),
+      ],
+    );
 
 double _timeBuild({
   required int width,
@@ -86,7 +86,8 @@ void main() {
         '${(unkeyed - keyed).toStringAsFixed(1).padLeft(7)}µs');
   }
   print('');
-  print('overhead = the _nodeId anchor-walk cost a structure-gen cache removes.');
+  print(
+      'overhead = the _nodeId anchor-walk cost a structure-gen cache removes.');
   print('At 60fps a frame is 16667µs; the semantic build runs post-frame,');
   print('coalesced, only on a semantically-dirty frame.');
 }

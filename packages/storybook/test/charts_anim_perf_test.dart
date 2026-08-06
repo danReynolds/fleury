@@ -10,6 +10,7 @@ library;
 import 'dart:async';
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_wire.dart';
 import 'package:fleury/src/remote/remote_driver.dart';
 import 'package:fleury_storybook/storybook.dart';
 import 'package:test/test.dart';

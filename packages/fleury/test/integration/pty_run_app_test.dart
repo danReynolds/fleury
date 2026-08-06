@@ -377,7 +377,22 @@ void _expectTerminalRestored(String output) {
   expect(output, contains('\x1B[?1003l'));
   expect(output, contains('\x1B[?1002l'));
   expect(output, contains('\x1B[?1000l'));
-  expect(output, contains('\x1B[<u'));
+  // Explicit count: a bare `CSI < u` reads as ANSISYSRC (restore cursor)
+  // to a parser that drops the private marker.
+  expect(output, contains('\x1B[<1u'));
+  // Per-screen flag stacks (RFC 0020 §8.1): the pop MUST precede leaving
+  // the alt screen, or it pops the wrong stack and the session leaks its
+  // enhancement into the shell. Correct by ordering today; pinned here so a
+  // tidy-up cannot silently break it.
+  final popIndex = output.indexOf('\x1B[<1u');
+  final leaveIndex = output.indexOf('\x1B[?1049l');
+  if (popIndex >= 0 && leaveIndex >= 0) {
+    expect(
+      popIndex,
+      lessThan(leaveIndex),
+      reason: 'kitty pop must happen on the alt screen it was pushed to',
+    );
+  }
   expect(output, contains('\x1B[?2004l'));
   expect(output, contains('\x1B[?25h'));
   expect(output, contains('\x1B[?1049l'));

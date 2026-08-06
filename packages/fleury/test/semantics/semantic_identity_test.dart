@@ -26,6 +26,33 @@ void main() {
       expect(node.id, const SemanticNodeId('save-button'));
     });
 
+    for (final reservedId in const <String>[
+      'element-7',
+      'auto:scope/~0/button',
+    ]) {
+      testWidgets('explicit id rejects reserved shape "$reservedId"', (tester) {
+        tester.pumpWidget(
+          Semantics(
+            id: SemanticNodeId(reservedId),
+            role: SemanticRole.button,
+            label: 'Save',
+            child: const Text('Save'),
+          ),
+        );
+
+        expect(
+          tester.semantics,
+          throwsA(
+            isA<ArgumentError>().having(
+              (error) => '$error',
+              'message',
+              allOf(contains('Semantics.id'), contains('framework-reserved')),
+            ),
+          ),
+        );
+      });
+    }
+
     testWidgets('a Key yields a stable, deterministic id (key:<key>)', (
       tester,
     ) {

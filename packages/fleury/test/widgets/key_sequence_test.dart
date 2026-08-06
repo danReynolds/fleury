@@ -338,64 +338,78 @@ void main() {
   group('KeyBinding', () {
     test('onTrigger fires and consumes (no bubble)', () {
       var fired = 0;
-      final binding = KeyBinding(KeySequence.a, onTrigger: () => fired += 1);
+      final binding = KeyBinding(KeySequence.a, onTrigger: (_) => fired += 1);
       final event = _bindingEvent(KeySequence.a, _char('a'));
-      binding.onEvent(event);
+      binding.onTrigger!(event);
       expect(fired, 1);
       expect(event.isBubbling, isFalse);
     });
 
-    test('KeyBinding.event can bubble', () {
+    test('a handler can bubble', () {
       var fired = 0;
-      final binding = KeyBinding.event(
+      final binding = KeyBinding(
         KeySequence.a,
-        onEvent: (e) {
+        onTrigger: (e) {
           fired += 1;
           e.bubble();
         },
       );
       final event = _bindingEvent(KeySequence.a, _char('a'));
-      binding.onEvent(event);
+      binding.onTrigger!(event);
       expect(fired, 1);
       expect(event.isBubbling, isTrue);
     });
 
-    test('KeyBinding.any binds several aliases, one action', () {
-      final binding = KeyBinding.any([
+    test('aliases bind several spellings, one action', () {
+      final binding = KeyBinding(
         KeySequence.j,
-        KeySequence.down,
-      ], onTrigger: () {});
+        aliases: [KeySequence.down],
+        onTrigger: (_) {},
+      );
       expect(binding.sequences.length, 2);
       expect(binding.sequences.first.matches(_char('j')), isTrue);
       expect(binding.sequences[1].matches(_code(KeyCode.arrowDown)), isTrue);
     });
 
-    test('KeyBinding.any exposes which alias fired via the match', () {
+    test('the match exposes which alias fired', () {
       KeySequence? firedAlias;
-      final binding = KeyBinding.any([
+      final binding = KeyBinding(
         KeySequence.j,
-        KeySequence.down,
-      ], onEvent: (e) => firedAlias = e.match.sequence);
-      binding.onEvent(
+        aliases: [KeySequence.down],
+        onTrigger: (e) => firedAlias = e.match.sequence,
+      );
+      binding.onTrigger!(
         _bindingEvent(KeySequence.down, _code(KeyCode.arrowDown)),
       );
       expect(firedAlias, KeySequence.down);
     });
 
-    test('KeyBinding.any requires exactly one handler', () {
+    test('a hold binding brackets exactly one key', () {
       expect(
-        () =>
-            KeyBinding.any([KeySequence.j], onTrigger: () {}, onEvent: (_) {}),
+        () => KeyBinding.hold(
+          KeySequence.g.g,
+          onHoldStart: (_) {},
+          onHoldEnd: (_) {},
+        ),
         throwsA(isA<AssertionError>()),
+      );
+      expect(
+        KeyBinding.hold(
+          KeySequence.space,
+          onHoldStart: (_) {},
+          onHoldEnd: (_) {},
+        ).isHold,
+        isTrue,
       );
     });
 
     test('displayLabel falls back to the canonical sequence label', () {
-      expect(KeyBinding(KeySequence.q, onTrigger: () {}).displayLabel, 'q');
+      expect(KeyBinding(KeySequence.q, onTrigger: (_) {}).displayLabel, 'q');
       expect(
-        KeyBinding.any(
-          [KeySequence.j, KeySequence.down],
-          onTrigger: () {},
+        KeyBinding(
+          KeySequence.j,
+          aliases: [KeySequence.down],
+          onTrigger: (_) {},
           label: 'j/↓',
         ).displayLabel,
         'j/↓',

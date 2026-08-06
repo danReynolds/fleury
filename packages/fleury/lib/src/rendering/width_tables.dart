@@ -18,9 +18,10 @@
 const String widthTablesUnicodeVersion = '17.0.0';
 
 /// Hash of the generator source plus the emitted tables. See the freshness gate.
-const String widthTablesFingerprint = '5598170b34ef4f50';
+const String widthTablesFingerprint = '-48527eabd2e05baa';
 
 // ---- tables ----
+// dart format off
 /// 378 inclusive [start, end] code-point pairs.
 const List<int> zeroWidthRanges = <int>[
   0x0, 0x1F,

@@ -126,42 +126,43 @@ const _timingWarnFraction = 0.5;
 /// A static full-screen dashboard: full-width styled rows that never
 /// rebuild. The overlay base entry for S2.
 Widget _staticDashboard() => Column(
-  crossAxisAlignment: CrossAxisAlignment.start,
-  children: [
-    for (var i = 0; i < _rows; i++) styledRow(index: i, tick: 0, cols: _cols),
-  ],
-);
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < _rows; i++)
+          styledRow(index: i, tick: 0, cols: _cols),
+      ],
+    );
 
 /// A dashboard whose EVERY row carries the model's tick — one bump dirties
 /// the whole subtree (the app-dirty frame S3's convention protects).
 Widget _churningDashboard(RowModel model) => ListenableBuilder(
-  listenable: model,
-  builder: (context, _) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      for (var i = 0; i < _rows; i++)
-        styledRow(index: i, tick: model.v, cols: _cols),
-    ],
-  ),
-);
+      listenable: model,
+      builder: (context, _) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var i = 0; i < _rows; i++)
+            styledRow(index: i, tick: model.v, cols: _cols),
+        ],
+      ),
+    );
 
 /// A small churning floater box, bottom-right — a toast/dropdown stand-in
 /// with a fixed footprint (3 rows × 24 cols) so its damage bounds are exact.
 Widget _floaterBox(RowModel model) => Align(
-  alignment: Alignment.bottomRight,
-  child: ListenableBuilder(
-    listenable: model,
-    builder: (context, _) => Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('┌ floater ┐'.padRight(24, '·')),
-        Text('│ tick=${model.v} '.padRight(24, '·')),
-        Text('└──────────┘'.padRight(24, '·')),
-      ],
-    ),
-  ),
-);
+      alignment: Alignment.bottomRight,
+      child: ListenableBuilder(
+        listenable: model,
+        builder: (context, _) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('┌ floater ┐'.padRight(24, '·')),
+            Text('│ tick=${model.v} '.padRight(24, '·')),
+            Text('└──────────┘'.padRight(24, '·')),
+          ],
+        ),
+      ),
+    );
 
 /// Hands its own BuildContext to the caller (for `Toaster.show`) and builds
 /// [child]. The same shape the Toaster widget tests use.
@@ -251,12 +252,12 @@ const _Signature _zeroSignature = (
 );
 
 _Signature _sig(RepaintBoundaryFrameStats s) => (
-  boundaries: s.boundaryCount,
-  repainted: s.repaintedCount,
-  cached: s.cachedCount,
-  empty: s.emptyCount,
-  copiedCells: s.copiedCellCount,
-);
+      boundaries: s.boundaryCount,
+      repainted: s.repaintedCount,
+      cached: s.cachedCount,
+      empty: s.emptyCount,
+      copiedCells: s.copiedCellCount,
+    );
 
 String _fmt(_Signature s) =>
     'boundaries=${s.boundaries} repainted=${s.repainted} cached=${s.cached} '
@@ -687,22 +688,22 @@ List<_Check> _runDropdownTyping(int frames, int warmup) {
 // check. A check's gating mode (exact vs informational) deliberately lives
 // in code, NOT here — editing the baseline cannot change what gates.
 Map<String, Object?> _checkToJson(_Check c) => {
-  'boundaries': c.signature.boundaries,
-  'repainted': c.signature.repainted,
-  'cached': c.signature.cached,
-  'empty': c.signature.empty,
-  'copiedCells': c.signature.copiedCells,
-  'paintUsDebugStats': double.parse(c.paintUsDebugStats.toStringAsFixed(1)),
-  'frames': c.frames,
-};
+      'boundaries': c.signature.boundaries,
+      'repainted': c.signature.repainted,
+      'cached': c.signature.cached,
+      'empty': c.signature.empty,
+      'copiedCells': c.signature.copiedCells,
+      'paintUsDebugStats': double.parse(c.paintUsDebugStats.toStringAsFixed(1)),
+      'frames': c.frames,
+    };
 
 _Signature _signatureFromJson(Map<String, Object?> json) => (
-  boundaries: json['boundaries']! as int,
-  repainted: json['repainted']! as int,
-  cached: json['cached']! as int,
-  empty: json['empty']! as int,
-  copiedCells: json['copiedCells']! as int,
-);
+      boundaries: json['boundaries']! as int,
+      repainted: json['repainted']! as int,
+      cached: json['cached']! as int,
+      empty: json['empty']! as int,
+      copiedCells: json['copiedCells']! as int,
+    );
 
 Future<void> main(List<String> args) async {
   var frames = _defaultFrames;
@@ -834,8 +835,7 @@ Future<void> main(List<String> args) async {
     final baseUs = (baseline['paintUsDebugStats']! as num).toDouble();
 
     if (c.signature != baseSig) {
-      final line =
-          'paint gate: [${c.id}] counter signature drifted:\n'
+      final line = 'paint gate: [${c.id}] counter signature drifted:\n'
           '  baseline ${_fmt(baseSig)}\n'
           '  current  ${_fmt(c.signature)}';
       if (c.gated) {
@@ -848,9 +848,7 @@ Future<void> main(List<String> args) async {
       }
     }
 
-    final usDelta = baseUs == 0
-        ? 0.0
-        : (c.paintUsDebugStats - baseUs) / baseUs;
+    final usDelta = baseUs == 0 ? 0.0 : (c.paintUsDebugStats - baseUs) / baseUs;
     if (usDelta.abs() > _timingWarnFraction) {
       stdout.writeln(
         'paint gate: [${c.id}] paint µs (debug-stats) '

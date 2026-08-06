@@ -245,7 +245,7 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyCode.arrowUp, onTrigger: () => bubbled += 1),
+            KeyBinding(KeyCode.arrowUp, onTrigger: (_) => bubbled += 1),
           ],
           child: ListView.builder(
             itemCount: 3,
@@ -266,7 +266,7 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyCode.arrowUp, onTrigger: () => bubbled += 1),
+            KeyBinding(KeyCode.arrowUp, onTrigger: (_) => bubbled += 1),
           ],
           child: ListView.builder(
             itemCount: 3,
@@ -288,7 +288,7 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyCode.arrowDown, onTrigger: () => bubbled += 1),
+            KeyBinding(KeyCode.arrowDown, onTrigger: (_) => bubbled += 1),
           ],
           child: ListView.builder(
             controller: controller,
@@ -808,7 +808,7 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyCode.pageDown, onTrigger: () => bubbled += 1),
+            KeyBinding(KeyCode.pageDown, onTrigger: (_) => bubbled += 1),
           ],
           child: ListView.builder(
             controller: controller,

@@ -4,7 +4,7 @@ import 'package:test/test.dart';
 void main() {
   test('public barrel exposes the binding surface', () {
     final KeySequence seq = KeySequence.ctrl.char('+');
-    final b = KeyBinding(KeyCode.enter, onTrigger: () {});
+    final b = KeyBinding(KeyCode.enter, onTrigger: (_) {});
     final PendingKeySequence p = KeySequence.ctrl;
     expect(seq.hintLabel, 'Ctrl++');
     expect(b.displayLabel, 'Enter');

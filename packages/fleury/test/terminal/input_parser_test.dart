@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/src/input/key_tables.dart';
 import 'package:test/test.dart';
 
 /// Captures events into a list for assertion.
@@ -665,9 +666,14 @@ void main() {
         );
       });
 
-      test('a release of an unmodified text key produces nothing', () {
-        // No actionable modifier + release → not typed, not a key event.
-        expect(_parse(csiu('97;1:3')), isEmpty);
+      test('a release of an unmodified text key is a key event, not text', () {
+        // Phase retention (RFC 0020 §8.7): the printable's release carries
+        // the key identity with no text. The dispatcher fences `up` from
+        // commands; the regularizer and observation lanes consume it.
+        expect(
+          _parse(csiu('97;1:3')).single,
+          const KeyEvent(KeyCode.char('a'), type: KeyEventType.up),
+        );
       });
 
       test('event types thread through the legacy cursor-key form', () {
@@ -684,18 +690,234 @@ void main() {
     });
 
     group('text-producing chords (flag 8 / report-all scenarios)', () {
-      test('an unmodified printable in CSI-u form is plain text', () {
-        expect(_parse(csiu('97')).single, const TextInputEvent('a'));
+      // A CSI-u printable is one physical report carrying key identity AND
+      // text — it parses to a correlated InputBatch (RFC 0020 §5), so the
+      // key half (with its position) survives alongside the committed text.
+      test('an unmodified printable in CSI-u form is a correlated batch', () {
+        expect(
+          _parse(csiu('97')).single,
+          const InputBatch(
+            key: KeyEvent(KeyCode.char('a')),
+            committedText: 'a',
+          ),
+        );
       });
 
       test('Shift + letter prefers the reported shifted codepoint', () {
         // key group "97:65" (a→A); mods 2 (shift).
-        expect(_parse(csiu('97:65;2')).single, const TextInputEvent('A'));
+        expect(
+          _parse(csiu('97:65;2')).single,
+          const InputBatch(
+            key: KeyEvent(KeyCode.char('a'), modifiers: {KeyModifier.shift}),
+            committedText: 'A',
+          ),
+        );
       });
 
       test('the associated-text field is used when present', () {
         // codepoint 97, no modifiers, associated text 233 (é).
-        expect(_parse(csiu('97;1;233')).single, const TextInputEvent('é'));
+        expect(
+          _parse(csiu('97;1;233')).single,
+          const InputBatch(
+            key: KeyEvent(KeyCode.char('a')),
+            committedText: 'é',
+          ),
+        );
+      });
+
+      test('an empty shifted sub-param never becomes NUL text', () {
+        // `97::119;2` — shift held, shifted field absent (empty → 0), base
+        // present. The 0 means "absent", not codepoint 0.
+        expect(
+          _parse(csiu('97::119;2')).single,
+          const InputBatch(
+            key: KeyEvent(
+              KeyCode.char('a'),
+              modifiers: {KeyModifier.shift},
+              position: KeyPosition.w,
+            ),
+            committedText: 'a',
+          ),
+        );
+      });
+
+      test('a printable down keeps its base-layout position in the batch', () {
+        // AZERTY 'z' cap at QWERTY-W: primary 122, base 119, text 'z'.
+        expect(
+          _parse(csiu('122::119')).single,
+          const InputBatch(
+            key: KeyEvent(KeyCode.char('z'), position: KeyPosition.w),
+            committedText: 'z',
+          ),
+        );
+      });
+
+      test('a printable repeat is a batch whose key half says repeat', () {
+        // P2's repeat-without-down repair keys off exact phase retention.
+        expect(
+          _parse(csiu('97;1:2')).single,
+          const InputBatch(
+            key: KeyEvent(KeyCode.char('a'), type: KeyEventType.repeat),
+            committedText: 'a',
+          ),
+        );
+      });
+
+      test('a shift-only release retains its modifiers', () {
+        // Release A while Shift held: `97:65;2:3` — the up must carry
+        // {shift} so P2's press records see symmetric down/up state.
+        expect(
+          _parse(csiu('97:65;2:3')).single,
+          const KeyEvent(
+            KeyCode.char('a'),
+            modifiers: {KeyModifier.shift},
+            type: KeyEventType.up,
+          ),
+        );
+      });
+
+      test('a key-0 repeat re-emits its text (auto-repeat types)', () {
+        expect(_parse(csiu('0;1:2;233')).single, const TextInputEvent('é'));
+      });
+
+      test('control codes in associated text are rejected', () {
+        // The spec forbids control codes in the text field; CR/ESC must not
+        // smuggle into the text lane (`0;1;13` would otherwise type "\r").
+        expect(_parse(csiu('0;1;13')), isEmpty);
+        expect(_parse(csiu('97;1;27')), isEmpty);
+      });
+
+      test('a batch report fragmented across feeds parses whole', () {
+        final parser = InputParser();
+        final sink = _ListSink();
+        final bytes = [0x1B, 0x5B, ...'122::119;1u'.codeUnits];
+        for (final b in bytes) {
+          parser.feed([b], sink);
+        }
+        expect(
+          sink.events.single,
+          const InputBatch(
+            key: KeyEvent(KeyCode.char('z'), position: KeyPosition.w),
+            committedText: 'z',
+          ),
+        );
+      });
+
+      test('the unmapped-PUA drop holds across the whole block', () {
+        // Sweep the functional PUA block: every mapped codepoint yields a
+        // KeyEvent; every unmapped one yields nothing — never text.
+        for (var cp = 0xE000; cp <= 0xF8FF; cp += 7) {
+          final events = _parse(csiu('$cp'));
+          if (kittyFunctionalKeys.containsKey(cp) ||
+              cp == 13 ||
+              cp == 9 ||
+              cp == 27 ||
+              cp == 8 ||
+              cp == 127) {
+            expect(events.single, isA<KeyEvent>(), reason: 'cp $cp');
+          } else {
+            expect(events, isEmpty, reason: 'cp $cp');
+          }
+        }
+      });
+    });
+
+    group('alternate keys (flag 4 — base-layout positions)', () {
+      test('a modified chord carries its base-layout position', () {
+        // AZERTY Ctrl+Z: primary 'z'(122), shifted absent, base 'w'(119).
+        expect(
+          _parse(csiu('122::119;5')).single,
+          const KeyEvent(
+            KeyCode.char('z'),
+            modifiers: {KeyModifier.ctrl},
+            position: KeyPosition.w,
+          ),
+        );
+      });
+
+      test('a printable release carries its base-layout position', () {
+        expect(
+          _parse(csiu('122::119;1:3')).single,
+          const KeyEvent(
+            KeyCode.char('z'),
+            type: KeyEventType.up,
+            position: KeyPosition.w,
+          ),
+        );
+      });
+
+      test('the Cyrillic chord case: Ctrl+С carries base c', () {
+        // с = U+0441 (1089); base-layout 'c' = 99 (the spec's own example).
+        expect(
+          _parse(csiu('1089::99;5')).single,
+          const KeyEvent(
+            KeyCode.char('с'),
+            modifiers: {KeyModifier.ctrl},
+            position: KeyPosition.c,
+          ),
+        );
+      });
+
+      test(
+        'an unmapped base codepoint leaves position null, never guessed',
+        () {
+          // Base 233 ('é') is no US-101 key.
+          expect(
+            _parse(csiu('101::233;5')).single,
+            const KeyEvent(KeyCode.char('e'), modifiers: {KeyModifier.ctrl}),
+          );
+        },
+      );
+    });
+
+    group('functional vocabulary (PUA table)', () {
+      test('extended function keys decode', () {
+        expect(_parse(csiu('57376')).single, const KeyEvent(KeyCode.f13));
+        expect(
+          _parse(csiu('57398;5')).single,
+          const KeyEvent(KeyCode.f35, modifiers: {KeyModifier.ctrl}),
+        );
+      });
+
+      test('KP Enter is distinct from Enter — nothing silently folded', () {
+        expect(
+          _parse(csiu('57414')).single,
+          const KeyEvent(KeyCode.keypadEnter),
+        );
+      });
+
+      test('lone modifier keys decode with phases', () {
+        expect(_parse(csiu('57441')).single, const KeyEvent(KeyCode.leftShift));
+        expect(
+          _parse(csiu('57441;1:3')).single,
+          const KeyEvent(KeyCode.leftShift, type: KeyEventType.up),
+        );
+      });
+
+      test('media and lock keys decode', () {
+        expect(_parse(csiu('57428')).single, const KeyEvent(KeyCode.mediaPlay));
+        expect(_parse(csiu('57358')).single, const KeyEvent(KeyCode.capsLock));
+      });
+
+      test('an unmapped PUA codepoint is dropped, never emitted as text', () {
+        expect(_parse(csiu('57500')), isEmpty);
+        expect(_parse(csiu('58000;5')), isEmpty);
+      });
+    });
+
+    group('key number 0 (text with no key identity)', () {
+      test('emits the associated text alone', () {
+        // key 0, no mods, text 'é'.
+        expect(_parse(csiu('0;1;233')).single, const TextInputEvent('é'));
+      });
+
+      test('with no text, emits nothing', () {
+        expect(_parse(csiu('0')), isEmpty);
+        expect(_parse(csiu('0;1')), isEmpty);
+      });
+
+      test('a release with text emits nothing', () {
+        expect(_parse(csiu('0;1:3;233')), isEmpty);
       });
     });
 
@@ -709,6 +931,7 @@ void main() {
         '55296', // leading surrogate, not a Unicode scalar
         '97:1114112;2', // invalid shifted codepoint
         '97;1;1114112', // invalid associated text
+        '0;1;55296', // key-0 report with a surrogate in its text
       ]) {
         expect(
           _parse([...csiu(params), 0x71]),

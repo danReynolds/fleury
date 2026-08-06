@@ -14,8 +14,11 @@ RgbColor? _fgAt(FleuryTester tester, int col, int row, {CellSize? size}) {
   return fg is RgbColor ? fg : null;
 }
 
+Cell _cellAt(FleuryTester tester, int col, int row, {CellSize? size}) =>
+    tester.render(size: size ?? const CellSize(10, 1)).atColRow(col, row);
+
 CellRole _roleAt(FleuryTester tester, int col, int row, {CellSize? size}) =>
-    tester.render(size: size ?? const CellSize(10, 1)).atColRow(col, row).role;
+    _cellAt(tester, col, row, size: size).role;
 
 void main() {
   group('fadeIn', () {
@@ -39,6 +42,86 @@ void main() {
 
       tester.pump(const Duration(milliseconds: 100));
       expect(_fgAt(tester, 0, 0), const RgbColor(200, 100, 50));
+    });
+
+    testWidgets(
+      'background-only cells remain opaque and interpolate throughout fade',
+      (tester) {
+        const surface = RgbColor(10, 20, 30);
+        const background = RgbColor(110, 120, 130);
+        tester.pumpWidget(
+          Stack(
+            children: [
+              const Text(
+                '#',
+                style: CellStyle(foreground: RgbColor(255, 255, 255)),
+              ),
+              const Container(width: 1, height: 1, color: background)
+                  .animate(
+                    curve: Curves.linear,
+                    duration: const Duration(milliseconds: 100),
+                  )
+                  .fadeIn(surface: surface),
+            ],
+          ),
+        );
+
+        tester.pump(const Duration(milliseconds: 20));
+        var cell = _cellAt(tester, 0, 0);
+        expect(cell.role, CellRole.leading);
+        expect(
+          cell.grapheme,
+          ' ',
+          reason: 'the filled cell must cover the distinct content underneath',
+        );
+        expect(cell.style.background, const RgbColor(30, 40, 50));
+
+        tester.pump(const Duration(milliseconds: 30));
+        cell = _cellAt(tester, 0, 0);
+        expect(cell.grapheme, ' ');
+        expect(
+          cell.style.background,
+          const RgbColor(60, 70, 80),
+          reason: 'background color must fade independently of foreground',
+        );
+      },
+    );
+
+    testWidgets('RGB background survives coarse non-RGB foreground fade', (
+      tester,
+    ) {
+      const surface = RgbColor(0, 0, 0);
+      const background = RgbColor(100, 80, 60);
+      tester.pumpWidget(
+        const Text(
+              'A',
+              style: CellStyle(
+                foreground: AnsiColor(2),
+                background: background,
+              ),
+            )
+            .animate(
+              curve: Curves.linear,
+              duration: const Duration(milliseconds: 100),
+            )
+            .fadeIn(surface: surface),
+      );
+
+      tester.pump(const Duration(milliseconds: 20));
+      var cell = _cellAt(tester, 0, 0);
+      expect(cell.role, CellRole.leading);
+      expect(
+        cell.style.foreground,
+        const RgbColor(20, 16, 12),
+        reason: 'the coarse-path glyph stays hidden against its background',
+      );
+      expect(cell.style.background, const RgbColor(20, 16, 12));
+
+      tester.pump(const Duration(milliseconds: 30));
+      cell = _cellAt(tester, 0, 0);
+      expect(cell.style.foreground, const AnsiColor(2));
+      expect(cell.style.background, const RgbColor(50, 40, 30));
+      expect(cell.style.dim, isTrue);
     });
   });
 

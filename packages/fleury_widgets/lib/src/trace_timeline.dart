@@ -516,7 +516,7 @@ class _TraceTimelineState extends State<TraceTimeline> {
     _controller.selectedIndex = nextIndex;
   }
 
-  void _onFocusWithinChange(bool focused) {
+  void _onFocusDetectorChange(bool focused) {
     if (_focusedWithin == focused) return;
     setState(() {
       _focusedWithin = focused;
@@ -644,7 +644,7 @@ class _TraceTimelineState extends State<TraceTimeline> {
           KeyBinding(
             KeySequence.ctrl.c,
             label: 'Copy trace event',
-            onTrigger: () => unawaited(_copySelection()),
+            onTrigger: (_) => unawaited(_copySelection()),
           ),
         ],
         child: list,
@@ -652,8 +652,8 @@ class _TraceTimelineState extends State<TraceTimeline> {
     }
 
     final counts = _statusCounts(widget.events);
-    return FocusWithin(
-      onFocusChange: _onFocusWithinChange,
+    return FocusDetector(
+      onFocusChange: _onFocusDetectorChange,
       child: Semantics(
         role: SemanticRole.traceTimeline,
         label: _sanitizeTraceText(widget.label),
