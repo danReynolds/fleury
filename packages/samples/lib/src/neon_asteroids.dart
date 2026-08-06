@@ -67,6 +67,12 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
   /// toggle rather than a hold (see [_supportsHeldControls]).
   bool _thrustLatched = false;
 
+  /// Press-driven movement on a surface with no held-key reporting: each
+  /// press (or auto-repeat) buys a few simulation steps of turn or brake.
+  int _turnDirection = 0;
+  int _turnTicks = 0;
+  int _brakeTicks = 0;
+
   /// Whether focus is inside the playfield. Starts false and is corrected on
   /// mount by [FocusDetector]'s initial sync, so a scene that never receives
   /// focus never simulates.
@@ -126,14 +132,24 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
     // One immutable read for the whole frame, so every fixed simulation step
     // below agrees about what was held (RFC 0020 §5.6).
     final keys = _keyboard.snapshot;
-    final left = keys.isHeld(_leftKey) || keys.isHeld(KeyCode.arrowLeft);
-    final right = keys.isHeld(_rightKey) || keys.isHeld(KeyCode.arrowRight);
+    // Sampled where the surface supports it; press-driven where it does not.
+    if (_turnTicks > 0) _turnTicks--;
+    if (_brakeTicks > 0) _brakeTicks--;
+    final nudgeLeft = _turnTicks > 0 && _turnDirection < 0;
+    final nudgeRight = _turnTicks > 0 && _turnDirection > 0;
+    final left =
+        keys.isHeld(_leftKey) || keys.isHeld(KeyCode.arrowLeft) || nudgeLeft;
+    final right =
+        keys.isHeld(_rightKey) || keys.isHeld(KeyCode.arrowRight) || nudgeRight;
     final thrust =
         keys.isHeld(_thrustKey) ||
         keys.isHeld(KeyCode.arrowUp) ||
         _thrustLatched ||
         _pointerThrust;
-    final brake = keys.isHeld(_brakeKey) || keys.isHeld(KeyCode.arrowDown);
+    final brake =
+        keys.isHeld(_brakeKey) ||
+        keys.isHeld(KeyCode.arrowDown) ||
+        _brakeTicks > 0;
 
     // An EDGE, not a level: `wasPressed` survives a press+release that lands
     // entirely between two frames, so a quick tap is never swallowed — and it
@@ -179,19 +195,65 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
       onTrigger: (_) => _togglePause(),
     ),
     KeyBinding(KeyCode.r, label: 'Restart', onTrigger: (_) => _start()),
-    // Legacy surfaces only: thrust becomes a toggle, because hold-to-thrust
-    // while turning is impossible there. The capability read is reactive, so
-    // this appears if a surface negotiates down mid-session.
-    if (!_supportsHeldControls)
+    // ---- Legacy surfaces: the WHOLE movement scheme, not just thrust ----
+    //
+    // Where a surface cannot report held keys, every sampled control above is
+    // dead — `isHeld` is false forever — so each one needs a press-driven
+    // counterpart. Shipping a fallback for thrust alone left turning and
+    // braking with no binding at all: the ship thrusted once and then could
+    // neither steer nor stop.
+    //
+    // `includeRepeats: true` is what makes these usable rather than tolerable:
+    // auto-repeat still arrives on a press-only terminal, so holding A really
+    // does keep turning — it is just driven by repeats instead of by a held
+    // record. Positional identities are the same ones the sampled path uses,
+    // degrading to their US twin where positions are unreported (§13.3).
+    if (!_supportsHeldControls) ...[
       KeyBinding(
-        // The same positional identity the sampled control uses. Where the
-        // surface reports no positions it degrades to the US twin, so one
-        // declaration covers both worlds (§13.3).
         _thrustKey,
         label: 'Thrust',
         onTrigger: (_) => setState(() => _thrustLatched = !_thrustLatched),
       ),
+
+      KeyBinding(
+        _leftKey,
+        aliases: [KeyCode.arrowLeft],
+        label: 'Turn left',
+        includeRepeats: true,
+        onTrigger: (_) => _nudgeTurn(-1),
+      ),
+      KeyBinding(
+        _rightKey,
+        aliases: [KeyCode.arrowRight],
+        label: 'Turn right',
+        includeRepeats: true,
+        onTrigger: (_) => _nudgeTurn(1),
+      ),
+      KeyBinding(
+        _brakeKey,
+        aliases: [KeyCode.arrowDown],
+        label: 'Brake',
+        includeRepeats: true,
+        onTrigger: (_) => _nudgeBrake(),
+      ),
+    ],
   ];
+
+  /// One press worth of turn on a press-only surface. Held long enough to be
+  /// visible for a single tap, short enough that auto-repeat blends the
+  /// presses into continuous rotation rather than stacking them.
+  void _nudgeTurn(int direction) {
+    if (_game.phase != NeonAsteroidsPhase.playing) return;
+    _turnDirection = direction;
+    _turnTicks = _nudgeTicks;
+  }
+
+  void _nudgeBrake() {
+    if (_game.phase != NeonAsteroidsPhase.playing) return;
+    _brakeTicks = _nudgeTicks;
+  }
+
+  static const _nudgeTicks = 8;
 
   /// Whether this surface reports real held keys. Where it does not (a
   /// legacy terminal), holding two directions at once is impossible — the OS
@@ -203,6 +265,8 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
     _pointerThrust = false;
     _pointerFire = false;
     _pointerArmed = false;
+    _turnTicks = 0;
+    _brakeTicks = 0;
     _thrustLatched = false;
   }
 
