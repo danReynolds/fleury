@@ -186,9 +186,33 @@ final class KeyboardSnapshot {
       if (r.position != null) r.position!,
   };
 
+  /// Every selector any app has sampled, in debug builds only. Read and
+  /// cleared by the dispatcher's dead-control check; see
+  /// [debugTakeSampledSelectors].
+  static final Set<KeySelector> _debugSampled = <KeySelector>{};
+
+  /// Drains the selectors sampled since the last call. Debug-only: in release
+  /// the recording below is compiled out and this is always empty.
+  static Set<KeySelector> debugTakeSampledSelectors() {
+    final taken = Set<KeySelector>.of(_debugSampled);
+    _debugSampled.clear();
+    return taken;
+  }
+
   /// Whether [selector]'s key is down right now (per-press §13.3 matching:
   /// positional when the press carried a position, else US-twin logical).
-  bool isHeld(KeySelector selector) => _held.any((r) => r.matches(selector));
+  bool isHeld(KeySelector selector) {
+    // Recorded so the dispatcher can catch a control that cannot possibly
+    // work: sampling a key on a surface that reports no held state, with no
+    // binding to carry it, is dead code the framework can see and the author
+    // cannot. `assert(() {...}())` compiles out entirely in release, so the
+    // input allocation gate is untouched.
+    assert(() {
+      _debugSampled.add(selector);
+      return true;
+    }());
+    return _held.any((r) => r.matches(selector));
+  }
 
   /// Whether [selector]'s key transitioned down since the previous latch.
   /// Non-consuming; survives a press+release that lands entirely between

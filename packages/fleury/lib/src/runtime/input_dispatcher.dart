@@ -16,6 +16,7 @@ import 'dart:async';
 
 import 'package:characters/characters.dart';
 
+import '../foundation/fleury_error.dart';
 import '../input/events.dart';
 import '../input/keyboard_state.dart';
 import '../input/key_dispatch.dart';
@@ -189,6 +190,10 @@ class InputDispatcher {
   /// handles them outside the dispatcher.
   KeyEventResult dispatch(TuiEvent event) {
     _checkNotDisposed();
+    assert(() {
+      _reportDeadControls();
+      return true;
+    }());
     if (event is InputBatch) {
       // A correlated key+text report (RFC 0020 §5). The key half feeds the
       // session/observation lanes (stage 2-3); routing then preserves
@@ -364,6 +369,69 @@ class InputDispatcher {
   /// Notified when the session catches a surface not honouring the phase
   /// reporting it claimed, so the host can republish `Keyboard.capabilities`
   /// and let apps re-branch their control schemes. Wired by `runApp`.
+  /// Sink for developer warnings — problems in the APP rather than failures
+  /// in the framework, which must be loud without killing the session. The
+  /// runtime wires this to the same reporter uncaught errors use, so a
+  /// warning gets stderr, the on-screen banner, and the debug shell's history
+  /// instead of being written over the next frame.
+  void Function(FleuryError warning)? onDeveloperWarning;
+
+  /// Selectors already reported, so a control sampled every frame warns once.
+  final Set<KeySelector> _deadControlsReported = <KeySelector>{};
+
+  /// Debug-only: catch a control that CANNOT work.
+  ///
+  /// Sampling a key (`keys.isHeld(...)`) on a surface that reports no held
+  /// state returns false forever. That is fine when a [KeyBinding] carries
+  /// the same key — the press-driven fallback every capability branch is
+  /// supposed to have. With no binding, the control is simply dead, and the
+  /// app looks broken with nothing anywhere saying why.
+  ///
+  /// The framework knows both halves: the capability, and every registered
+  /// binding. It had simply never compared them. Shipped Asteroids sampling
+  /// four movement controls behind a fallback that covered exactly one, and
+  /// nothing said a word on any of the four terminals it was tested on.
+  void _reportDeadControls() {
+    if (keyboardSession.capabilities.supportsHeldState) return;
+    final sampled = KeyboardSnapshot.debugTakeSampledSelectors();
+    if (sampled.isEmpty) return;
+    final covered = <KeyCode>{
+      for (final active in resolveActiveKeyBindings(focusManager))
+        for (final sequence in active.sequences)
+          if (sequence is KeyCode) sequence,
+      for (final binding in _globalBindings)
+        for (final sequence in binding.sequences)
+          if (sequence is KeyCode) sequence,
+    };
+    for (final selector in sampled) {
+      // Compare on the logical key: a positional sample is satisfied by a
+      // binding on its US twin, which is exactly how the two degrade into
+      // each other everywhere else (§13.3).
+      final logical = switch (selector) {
+        KeyCode() => selector,
+        KeyPosition() => selector.usTwin,
+        _ => null,
+      };
+      if (logical == null || covered.contains(logical)) continue;
+      if (!_deadControlsReported.add(selector)) continue;
+      onDeveloperWarning?.call(
+        FleuryError(
+          summary: 'Dead control: isHeld($selector) can never be true here.',
+          details:
+              'This app samples $selector, but this surface does not report '
+              'held keys — so the read is false on every frame — and no '
+              'KeyBinding covers $selector to carry it instead. The control '
+              'does nothing on this terminal.',
+          hint:
+              'Add a KeyBinding for $selector (includeRepeats: true keeps it '
+              'usable under auto-repeat, which arrives even where held state '
+              'does not), or gate the sampled read behind '
+              'Keyboard.of(context).capabilities.supportsHeldState.',
+        ),
+      );
+    }
+  }
+
   void Function()? onKeyboardCapabilitiesChanged;
 
   void updateKeyboardCapabilities(KeyboardCapabilities capabilities) {

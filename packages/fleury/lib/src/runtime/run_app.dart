@@ -634,6 +634,11 @@ Future<AppExit> _runAppImpl(
   final errorReporter = RuntimeErrorReporter(
     onLog: (message) => stderr.writeln(message),
   )..addListener(() => scheduleFrame('runtime-error'));
+  // Developer warnings ride the same surface as uncaught errors: stderr, the
+  // on-screen banner, and the debug shell's history. A warning printed
+  // straight to stdout would be painted over by the next frame.
+  dispatcher.onDeveloperWarning = (warning) =>
+      errorReporter.report(warning, StackTrace.current);
   // Contained layout/paint failures surface like any other survivable
   // error: stderr + the on-screen banner (once per error-state entry),
   // while the boundary renders the in-place presentation.
