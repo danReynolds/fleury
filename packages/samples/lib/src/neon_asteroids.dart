@@ -555,13 +555,22 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
 
   Widget _controls(CellSize size) {
     final narrow = size.cols < 74;
+    // Thrust is HOLD where the surface reports held keys and TAP-TO-TOGGLE
+    // where it does not, so the legend has to say which — telling a
+    // Terminal.app player to hold W describes a control this game is not
+    // offering them. The label is layout-honest too: on AZERTY the key under
+    // that finger is capped Z, and the keyboard knows it.
+    final thrustCap =
+        _keyboard.layout.labelFor(_thrustKey)?.text.toUpperCase() ?? 'W';
+    final thrustVerb = _supportsHeldControls ? 'THRUST' : 'THRUST (TAP)';
     final controls = size.cols < 48
-        ? 'A/D  W  SPACE  P'
+        ? 'A/D  $thrustCap  SPACE  P'
         : (_reducedMotion && size.cols < 64)
-        ? 'A/D TURN  W THRUST  SPACE FIRE'
+        ? 'A/D TURN  $thrustCap $thrustVerb  SPACE FIRE'
         : narrow
-        ? 'A/D TURN  W THRUST  SPACE FIRE  P PAUSE  R RESET'
-        : '←/A TURN LEFT   →/D TURN RIGHT   ↑/W THRUST   SPACE FIRE   P PAUSE   R RESTART';
+        ? 'A/D TURN  $thrustCap $thrustVerb  SPACE FIRE  P PAUSE  R RESET'
+        : '←/A TURN LEFT   →/D TURN RIGHT   ↑/$thrustCap $thrustVerb   '
+              'SPACE FIRE   P PAUSE   R RESTART';
     return Row(
       children: <Widget>[
         Text(controls, style: const CellStyle(foreground: _starBright)),
