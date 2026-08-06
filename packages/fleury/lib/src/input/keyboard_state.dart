@@ -239,6 +239,56 @@ final class KeyboardSession {
   /// produced — the mapping, observed rather than assumed.
   final KeyboardLayout layout = KeyboardLayout.learning();
 
+  /// How many times a surface claiming phase reporting has contradicted
+  /// itself (see the `down`-while-held branch of [ingest]).
+  int _phaseViolations = 0;
+
+  /// Called when a surface is caught not honouring the phases it claimed, so
+  /// the runtime can republish capabilities and let apps re-branch their
+  /// controls. Set by the dispatcher.
+  void Function(KeyboardCapabilities)? onCapabilitiesDemoted;
+
+  /// Downgrades this session to press-only after a surface is caught lying.
+  ///
+  /// Everything currently "held" is a fiction — those keys have no releases
+  /// coming — so the records are dropped rather than left to stick down
+  /// forever. Apps that branch on [KeyboardCapabilities.supportsHeldState]
+  /// then offer their press-only scheme, which is the honest experience on
+  /// such a terminal.
+  List<KeyEvent> _demotionReleases = const [];
+
+  /// The synthetic releases owed after a demotion — see [_demoteToPressOnly].
+  List<KeyEvent> drainDemotionReleases() {
+    final out = _demotionReleases;
+    _demotionReleases = const [];
+    return out;
+  }
+
+  void _demoteToPressOnly() {
+    // Synthesize the releases the terminal will never send, so a hold that is
+    // in flight ends instead of hanging on forever.
+    _demotionReleases = [
+      for (final record in _held.values)
+        KeyEvent(
+          record.code,
+          type: KeyEventType.up,
+          position: record.position,
+          synthesized: true,
+        ),
+    ];
+    _capabilities = KeyboardCapabilities(
+      supportsHeldState: false,
+      distinguishesRepeats: false,
+      supportsPositions: _capabilities.supportsPositions,
+      reportsPrintableKeys: _capabilities.reportsPrintableKeys,
+    );
+    _held.clear();
+    _pendingDowns = [];
+    _pendingUps = [];
+    _dirtySinceLatch = true;
+    onCapabilitiesDemoted?.call(_capabilities);
+  }
+
   /// Live press records, keyed by physical identity (position when known,
   /// else logical code).
   final Map<Object, _PressRecord> _held = {};
@@ -322,6 +372,23 @@ final class KeyboardSession {
     switch (event.type) {
       case KeyEventType.down:
         if (heldId != null) {
+          // A `down` for a key we already believe is held. On a terminal that
+          // truly honours event types this cannot happen: auto-repeat would
+          // arrive tagged `:2`, and the key would have been released first.
+          //
+          // So it is evidence the surface CLAIMED phase reporting and does not
+          // do it — the failure mode is silent and total, because without
+          // releases every key sticks down forever and `isHeld` never goes
+          // back to false. Observed on Warp, which answers the Kitty status
+          // query with all five flags and then emits bare `CSI 97;1;97 u` for
+          // every press and repeat alike.
+          //
+          // Two strikes, not one: a single dropped release (a lost byte, a
+          // suspend) is a legitimate one-off, but a terminal that does not
+          // implement phases produces this on every repeat.
+          if (!event.synthesized && ++_phaseViolations == 2) {
+            _demoteToPressOnly();
+          }
           // Duplicate down while held: demote. State already says held.
           final demoted = KeyEvent(
             event.code,

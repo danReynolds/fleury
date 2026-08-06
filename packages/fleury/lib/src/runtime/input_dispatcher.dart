@@ -46,7 +46,20 @@ class InputDispatcher {
   /// repair, frame edges, capabilities. Fed by [dispatch]; latched once per
   /// frame by the frame driver; read by the sampling surface (P4's
   /// `Keyboard`) and this dispatcher's observation lane.
-  final KeyboardSession keyboardSession = KeyboardSession();
+  late final KeyboardSession keyboardSession = KeyboardSession()
+    // A surface caught not honouring the phases it claimed demotes itself to
+    // press-only; the tree has to hear about it, or an app keeps offering a
+    // hold-to-thrust control that can never end (§5.7).
+    ..onCapabilitiesDemoted = _onCapabilitiesDemoted;
+
+  void _onCapabilitiesDemoted(KeyboardCapabilities capabilities) {
+    // Everything the session believed was held is gone; anything downstream
+    // holding a press (a KeyBinding.hold, a game's own latch) must end it.
+    for (final release in keyboardSession.drainDemotionReleases()) {
+      _notifyKeyObservers(release);
+    }
+    onKeyboardCapabilitiesChanged?.call();
+  }
 
   /// Framework-internal observation-lane registrations (RFC 0020 §5.5's
   /// internal lane; `KeyBinding.hold` and the keyboard inspector consume
@@ -348,6 +361,11 @@ class InputDispatcher {
   /// and drop those releases: losing held-state support mid-session clears
   /// the press records, and every open observer press must be closed with
   /// it or `KeyBinding.hold`'s one-end-per-start contract breaks (§10).
+  /// Notified when the session catches a surface not honouring the phase
+  /// reporting it claimed, so the host can republish `Keyboard.capabilities`
+  /// and let apps re-branch their control schemes. Wired by `runApp`.
+  void Function()? onKeyboardCapabilitiesChanged;
+
   void updateKeyboardCapabilities(KeyboardCapabilities capabilities) {
     _checkNotDisposed();
     final releases = keyboardSession.updateCapabilities(capabilities);

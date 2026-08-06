@@ -5,6 +5,7 @@
 // handle's asymmetric reactivity (§15).
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/src/input/keyboard_state.dart';
 import 'package:test/test.dart';
 
 import '../support/harness.dart';
@@ -450,48 +451,140 @@ void main() {
     });
   });
 
-  group('the frame latch is published by the FRAME, not by the test (§5.6)', () {
-    testWidgets('a ticker sees a held key without any explicit latch', (t) {
-      // THE regression this file exists for. `publishLatch` used to be called
-      // only by the test harness, so every sampled-input test passed while a
-      // real app never latched at all and `isHeld` was false forever — A/D
-      // did not steer the asteroids showcase. Nothing here may call
-      // `latchFrame()`: the point is that pumping a frame is enough.
-      t.keyboardCapabilities = KeyboardCapabilities.full;
-      final seen = <bool>[];
-      late Keyboard keyboard;
-      t.pumpWidget(
-        _TickerProbe(
-          onReady: (k) => keyboard = k,
-          onTick: () => seen.add(keyboard.snapshot.isHeld(KeyPosition.a)),
-        ),
-      );
-      t.holdKey(KeyPosition.a);
-      t.pump(const Duration(milliseconds: 100));
+  group(
+    'the frame latch is published by the FRAME, not by the test (§5.6)',
+    () {
+      testWidgets('a ticker sees a held key without any explicit latch', (t) {
+        // THE regression this file exists for. `publishLatch` used to be called
+        // only by the test harness, so every sampled-input test passed while a
+        // real app never latched at all and `isHeld` was false forever — A/D
+        // did not steer the asteroids showcase. Nothing here may call
+        // `latchFrame()`: the point is that pumping a frame is enough.
+        t.keyboardCapabilities = KeyboardCapabilities.full;
+        final seen = <bool>[];
+        late Keyboard keyboard;
+        t.pumpWidget(
+          _TickerProbe(
+            onReady: (k) => keyboard = k,
+            onTick: () => seen.add(keyboard.snapshot.isHeld(KeyPosition.a)),
+          ),
+        );
+        t.holdKey(KeyPosition.a);
+        t.pump(const Duration(milliseconds: 100));
+        expect(
+          seen.any((held) => held),
+          isTrue,
+          reason:
+              'a ticker sampling during a pumped frame must observe the '
+              'held key — if this fails the runtime is not latching per frame',
+        );
+      });
+
+      testWidgets('releasing it clears the sampled state', (t) {
+        t.keyboardCapabilities = KeyboardCapabilities.full;
+        final seen = <bool>[];
+        late Keyboard keyboard;
+        t.pumpWidget(
+          _TickerProbe(
+            onReady: (k) => keyboard = k,
+            onTick: () => seen.add(keyboard.snapshot.isHeld(KeyPosition.a)),
+          ),
+        );
+        t.holdKey(KeyPosition.a);
+        t.pump(const Duration(milliseconds: 50));
+        t.releaseKey(KeyPosition.a);
+        seen.clear();
+        t.pump(const Duration(milliseconds: 50));
+        expect(seen, isNot(contains(true)));
+      });
+    },
+  );
+
+  group('a surface that claims phases and does not send them (§5.7)', () {
+    test('Warp\'s exact byte stream demotes the session to press-only', () {
+      // Captured from Warp 2026-08: it answers the Kitty status query with
+      // `CSI ?31u` — all five flags — and then emits an IDENTICAL
+      // `CSI 97;1;97 u` for the initial press and every auto-repeat, with no
+      // event-type sub-parameter and nothing at all on release.
+      //
+      // Believing that claim is catastrophic and silent: with no releases,
+      // every key sticks down forever, so `isHeld` never returns to false and
+      // a held-key control latches on permanently. Holding W in the asteroids
+      // showcase thrusted until the app was killed.
+      final session = KeyboardSession(capabilities: KeyboardCapabilities.full);
+      var demotedTo = KeyboardCapabilities.full;
+      session.onCapabilitiesDemoted = (caps) => demotedTo = caps;
+
+      const warpPress = KeyEvent(KeyCode.a, position: KeyPosition.a);
+      session.ingest(warpPress);
       expect(
-        seen.any((held) => held),
+        session.publishLatch().isHeld(KeyPosition.a),
         isTrue,
-        reason: 'a ticker sampling during a pumped frame must observe the '
-            'held key — if this fails the runtime is not latching per frame',
+        reason: 'the first press is indistinguishable from an honest one',
+      );
+
+      // Auto-repeat arrives as another bare `down`, which an honest flag-2
+      // terminal could never send for an already-held key.
+      session.ingest(warpPress);
+      expect(
+        session.capabilities.supportsHeldState,
+        isTrue,
+        reason: 'one strike is a dropped release, not proof',
+      );
+
+      session.ingest(warpPress);
+      expect(
+        session.capabilities.supportsHeldState,
+        isFalse,
+        reason: 'caught: stop promising held state on this surface',
+      );
+      expect(demotedTo.supportsHeldState, isFalse);
+      expect(
+        session.publishLatch().isHeld(KeyPosition.a),
+        isFalse,
+        reason: 'the phantom hold must not survive the demotion',
       );
     });
 
-    testWidgets('releasing it clears the sampled state', (t) {
-      t.keyboardCapabilities = KeyboardCapabilities.full;
-      final seen = <bool>[];
-      late Keyboard keyboard;
-      t.pumpWidget(
-        _TickerProbe(
-          onReady: (k) => keyboard = k,
-          onTick: () => seen.add(keyboard.snapshot.isHeld(KeyPosition.a)),
+    test('the demotion owes a release for every phantom hold', () {
+      final session = KeyboardSession(capabilities: KeyboardCapabilities.full);
+      const press = KeyEvent(KeyCode.a, position: KeyPosition.a);
+      session.ingest(press);
+      session.ingest(press);
+      session.ingest(press);
+      final releases = session.drainDemotionReleases();
+      expect(releases, hasLength(1));
+      expect(releases.single.type, KeyEventType.up);
+      expect(
+        releases.single.synthesized,
+        isTrue,
+        reason: 'a synthesized release must not trigger command bindings',
+      );
+      expect(session.drainDemotionReleases(), isEmpty, reason: 'drained once');
+    });
+
+    test('an honest flag-2 terminal is never demoted', () {
+      // Press, tagged repeats, release — no contradiction, no demotion.
+      final session = KeyboardSession(capabilities: KeyboardCapabilities.full);
+      session.ingest(const KeyEvent(KeyCode.a, position: KeyPosition.a));
+      for (var i = 0; i < 20; i++) {
+        session.ingest(
+          const KeyEvent(
+            KeyCode.a,
+            position: KeyPosition.a,
+            type: KeyEventType.repeat,
+          ),
+        );
+      }
+      session.ingest(
+        const KeyEvent(
+          KeyCode.a,
+          position: KeyPosition.a,
+          type: KeyEventType.up,
         ),
       );
-      t.holdKey(KeyPosition.a);
-      t.pump(const Duration(milliseconds: 50));
-      t.releaseKey(KeyPosition.a);
-      seen.clear();
-      t.pump(const Duration(milliseconds: 50));
-      expect(seen, isNot(contains(true)));
+      expect(session.capabilities.supportsHeldState, isTrue);
+      expect(session.publishLatch().isHeld(KeyPosition.a), isFalse);
     });
   });
 }
@@ -526,5 +619,6 @@ class _TickerProbeState extends State<_TickerProbe> {
   }
 
   @override
-  Widget build(BuildContext context) => const Focus(autofocus: true, child: Text('probe'));
+  Widget build(BuildContext context) =>
+      const Focus(autofocus: true, child: Text('probe'));
 }

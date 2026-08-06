@@ -511,6 +511,12 @@ Future<AppExit> _runAppImpl(
   // never published and every sampled query reads empty forever.
   binding.tickerScheduler.onFrameStart =
       dispatcher.keyboardSession.publishLatch;
+  // A surface can answer the capability query truthfully and then not honour
+  // it. When the session catches that mid-session it demotes itself to
+  // press-only, and `Keyboard.capabilities` is reactive — so republishing here
+  // is what flips an app's control scheme over to the one that works.
+  dispatcher.onKeyboardCapabilitiesChanged =
+      keyboardNotifier.notifyCapabilitiesChanged;
   // Optional byte telemetry: set FLEURY_BYTE_TELEMETRY=1 to wrap the live
   // output sink and print a per-frame byte budget on exit. Aggregate mode
   // (no per-frame list) so a long session stays bounded; zero cost when off.
