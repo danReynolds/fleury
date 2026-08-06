@@ -100,6 +100,11 @@ class FleuryTester {
        _clock = FakeClock(),
        _focusManager = FocusManager() {
     _scheduler = FakeTickerScheduler(clock: _clock);
+    // The same hook `runApp` installs. Tests must exercise the production
+    // seam, not substitute for it: this gap existed because the harness
+    // published the frame latch ITSELF, so every sampled-input test passed
+    // while the runtime never latched at all (RFC 0020 §5.6).
+    _scheduler.onFrameStart = () => _dispatcher.keyboardSession.publishLatch();
     _binding = TuiBinding(
       tickerScheduler: _scheduler,
       animationPolicy: animationPolicy,
@@ -626,8 +631,13 @@ class FleuryTester {
     _owner.flushBuild();
   }
 
-  /// Publishes the frame latch, as the frame driver does at frame start.
-  /// Sampled state ([KeyboardSnapshot]) observes input only after a latch.
+  /// Publishes the frame latch out of band, for a test with no ticker
+  /// running.
+  ///
+  /// [pump] already latches through the same frame-start hook the runtime
+  /// installs, so a test that pumps does NOT need this — and should not use
+  /// it to stand in for a frame, because that is precisely how a missing
+  /// runtime latch stayed invisible.
   KeyboardSnapshot latchFrame() {
     _assertNotDisposed('latchFrame');
     return _dispatcher.keyboardSession.publishLatch();

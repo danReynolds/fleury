@@ -42,6 +42,7 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
   static const _thrustKey = KeyPosition.w;
   static const _leftKey = KeyPosition.a;
   static const _rightKey = KeyPosition.d;
+  static const _brakeKey = KeyPosition.s;
 
   final NeonAsteroidsGame _game = NeonAsteroidsGame();
   Ticker? _ticker;
@@ -58,6 +59,9 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
   /// game's input model — aiming and firing by mouse feed the same channel.
   bool _pointerThrust = false;
   bool _pointerFire = false;
+
+  /// Whether the in-flight press began during play (see [_pointerDown]).
+  bool _pointerArmed = false;
 
   /// Legacy fallback: where the surface cannot report held keys, thrust is a
   /// toggle rather than a hold (see [_supportsHeldControls]).
@@ -129,6 +133,7 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
         keys.isHeld(KeyCode.arrowUp) ||
         _thrustLatched ||
         _pointerThrust;
+    final brake = keys.isHeld(_brakeKey) || keys.isHeld(KeyCode.arrowDown);
 
     // An EDGE, not a level: `wasPressed` survives a press+release that lands
     // entirely between two frames, so a quick tap is never swallowed — and it
@@ -142,6 +147,7 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
         rotateLeft: left,
         rotateRight: right,
         thrust: thrust,
+        brake: brake,
         fire: shoot,
       );
     });
@@ -196,6 +202,7 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
   void _clearControls() {
     _pointerThrust = false;
     _pointerFire = false;
+    _pointerArmed = false;
     _thrustLatched = false;
   }
 
@@ -253,7 +260,21 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
       _start();
       return;
     }
+    // Aim now, shoot on RELEASE — a completed drag suppresses `onTapUp`, so
+    // dragging to steer no longer lets off a shot every time.
+    //
+    // The shot is armed HERE rather than decided at release: a press that
+    // resumed a paused run leaves the game playing, and a release-time phase
+    // check would read that as "the player shot".
+    _pointerArmed = true;
     _aimAt(details.col, details.row);
+  }
+
+  void _pointerTapUp(int col, int row) {
+    if (!_pointerArmed) return;
+    _pointerArmed = false;
+    if (_game.phase != NeonAsteroidsPhase.playing) return;
+    _aimAt(col, row);
     _pointerFire = true;
   }
 
@@ -442,9 +463,13 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
       onAction: _onSemanticAction,
       child: GestureDetector(
         onPointerDown: _pointerDown,
+        onTapUp: _pointerTapUp,
         onDragStart: _pointerDrag,
         onDragUpdate: _pointerDrag,
-        onDragEnd: () => _pointerThrust = false,
+        onDragEnd: () {
+          _pointerThrust = false;
+          _pointerArmed = false;
+        },
         child: Stack(
           children: <Widget>[
             canvas,
@@ -563,13 +588,15 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
     final thrustCap =
         _keyboard.layout.labelFor(_thrustKey)?.text.toUpperCase() ?? 'W';
     final thrustVerb = _supportsHeldControls ? 'THRUST' : 'THRUST (TAP)';
+    final brakeCap =
+        _keyboard.layout.labelFor(_brakeKey)?.text.toUpperCase() ?? 'S';
     final controls = size.cols < 48
         ? 'A/D  $thrustCap  SPACE  P'
         : (_reducedMotion && size.cols < 64)
         ? 'A/D TURN  $thrustCap $thrustVerb  SPACE FIRE'
         : narrow
-        ? 'A/D TURN  $thrustCap $thrustVerb  SPACE FIRE  P PAUSE  R RESET'
-        : '←/A TURN LEFT   →/D TURN RIGHT   ↑/$thrustCap $thrustVerb   '
+        ? 'A/D TURN  $thrustCap $thrustVerb  $brakeCap BRAKE  SPACE FIRE  P PAUSE'
+        : '←/A TURN   →/D TURN   ↑/$thrustCap $thrustVerb   ↓/$brakeCap BRAKE   '
               'SPACE FIRE   P PAUSE   R RESTART';
     return Row(
       children: <Widget>[

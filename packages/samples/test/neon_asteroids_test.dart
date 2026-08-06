@@ -498,4 +498,44 @@ String _snapshot(NeonAsteroidsGame game) {
       expect(a.ship.position.y, closeTo(b.ship.position.y, 1e-6));
     });
   });
+
+  group('controls reported broken in dogfooding', () {
+    test('brake bleeds off speed; without it the ship keeps coasting', () {
+      final coasting = _controlledGame();
+      final braking = _controlledGame();
+      const burn = NeonAsteroidsInput(thrust: true);
+      for (var i = 0; i < 30; i++) {
+        coasting.advance(const Duration(milliseconds: 16), burn);
+        braking.advance(const Duration(milliseconds: 16), burn);
+      }
+      const brake = NeonAsteroidsInput(brake: true);
+      const coast = NeonAsteroidsInput();
+      for (var i = 0; i < 30; i++) {
+        coasting.advance(const Duration(milliseconds: 16), coast);
+        braking.advance(const Duration(milliseconds: 16), brake);
+      }
+      double speed(NeonAsteroidsGame g) =>
+          g.ship.velocity.x * g.ship.velocity.x +
+          g.ship.velocity.y * g.ship.velocity.y;
+      expect(
+        speed(braking),
+        lessThan(speed(coasting) / 2),
+        reason:
+            'holding brake must visibly slow the ship — classic asteroids '
+            'has no brake at all, which reads as broken controls',
+      );
+    });
+
+    test('brake does not rotate or move the ship on its own', () {
+      final g = _controlledGame();
+      final angle = g.ship.angle;
+      for (var i = 0; i < 20; i++) {
+        g.advance(
+          const Duration(milliseconds: 16),
+          const NeonAsteroidsInput(brake: true),
+        );
+      }
+      expect(g.ship.angle, angle);
+    });
+  });
 }

@@ -504,6 +504,13 @@ Future<AppExit> _runAppImpl(
   // Publishes the session keyboard to `Keyboard.of` (capabilities reactive,
   // sampled state not — RFC 0020 §15).
   final keyboardNotifier = KeyboardStateNotifier(dispatcher);
+  // Frame start latches the sampled keyboard, BEFORE any ticker runs: a game
+  // loop reading `Keyboard.snapshot` gets one immutable view that every step
+  // of that frame agrees about, and edges (`wasPressed`) expire exactly once
+  // per frame rather than per event (§5.6/§7.2). Without this the latch is
+  // never published and every sampled query reads empty forever.
+  binding.tickerScheduler.onFrameStart =
+      dispatcher.keyboardSession.publishLatch;
   // Optional byte telemetry: set FLEURY_BYTE_TELEMETRY=1 to wrap the live
   // output sink and print a per-frame byte budget on exit. Aggregate mode
   // (no per-frame list) so a long session stays bounded; zero cost when off.

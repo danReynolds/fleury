@@ -12,23 +12,32 @@ class NeonAsteroidsInput {
     this.rotateLeft = false,
     this.rotateRight = false,
     this.thrust = false,
+    this.brake = false,
     this.fire = false,
   });
 
   final bool rotateLeft;
   final bool rotateRight;
   final bool thrust;
+
+  /// Retro-thrust. Classic asteroids has no brake — you turn 180° and burn —
+  /// which reads as "the controls are broken" to anyone who has not played
+  /// the 1979 cabinet. Held, it bleeds off speed regardless of heading.
+  final bool brake;
+
   final bool fire;
 
   NeonAsteroidsInput copyWith({
     bool? rotateLeft,
     bool? rotateRight,
     bool? thrust,
+    bool? brake,
     bool? fire,
   }) => NeonAsteroidsInput(
     rotateLeft: rotateLeft ?? this.rotateLeft,
     rotateRight: rotateRight ?? this.rotateRight,
     thrust: thrust ?? this.thrust,
+    brake: brake ?? this.brake,
     fire: fire ?? this.fire,
   );
 }
@@ -146,6 +155,10 @@ class NeonAsteroidsGame {
   static const int maxCatchUpMicros = 1000000;
 
   static const double _turnSpeed = 3.7;
+
+  /// Per fixed step. Strong enough to feel immediate, gentle enough that the
+  /// ship coasts to rest rather than stopping dead.
+  static const double _brakeDamping = 0.94;
   static const double _thrustAcceleration = 27;
   static const double _bulletSpeed = 68;
   static const int _bulletLifeTicks = 150;
@@ -314,6 +327,14 @@ class NeonAsteroidsGame {
         ..x += math.cos(ship.angle) * _thrustAcceleration * fixedDt
         ..y += math.sin(ship.angle) * _thrustAcceleration * fixedDt;
       if (tickCount.isEven) _spawnThrustParticle();
+    }
+
+    // Retro-thrust bleeds speed off along the current velocity, so it slows
+    // you without needing to point anywhere particular.
+    if (input.brake) {
+      ship.velocity
+        ..x *= _brakeDamping
+        ..y *= _brakeDamping;
     }
 
     // Per-second drag expressed at the fixed cadence.

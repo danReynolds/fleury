@@ -449,4 +449,82 @@ void main() {
       expect(fired, 2, reason: 'the positional alias fires too');
     });
   });
+
+  group('the frame latch is published by the FRAME, not by the test (§5.6)', () {
+    testWidgets('a ticker sees a held key without any explicit latch', (t) {
+      // THE regression this file exists for. `publishLatch` used to be called
+      // only by the test harness, so every sampled-input test passed while a
+      // real app never latched at all and `isHeld` was false forever — A/D
+      // did not steer the asteroids showcase. Nothing here may call
+      // `latchFrame()`: the point is that pumping a frame is enough.
+      t.keyboardCapabilities = KeyboardCapabilities.full;
+      final seen = <bool>[];
+      late Keyboard keyboard;
+      t.pumpWidget(
+        _TickerProbe(
+          onReady: (k) => keyboard = k,
+          onTick: () => seen.add(keyboard.snapshot.isHeld(KeyPosition.a)),
+        ),
+      );
+      t.holdKey(KeyPosition.a);
+      t.pump(const Duration(milliseconds: 100));
+      expect(
+        seen.any((held) => held),
+        isTrue,
+        reason: 'a ticker sampling during a pumped frame must observe the '
+            'held key — if this fails the runtime is not latching per frame',
+      );
+    });
+
+    testWidgets('releasing it clears the sampled state', (t) {
+      t.keyboardCapabilities = KeyboardCapabilities.full;
+      final seen = <bool>[];
+      late Keyboard keyboard;
+      t.pumpWidget(
+        _TickerProbe(
+          onReady: (k) => keyboard = k,
+          onTick: () => seen.add(keyboard.snapshot.isHeld(KeyPosition.a)),
+        ),
+      );
+      t.holdKey(KeyPosition.a);
+      t.pump(const Duration(milliseconds: 50));
+      t.releaseKey(KeyPosition.a);
+      seen.clear();
+      t.pump(const Duration(milliseconds: 50));
+      expect(seen, isNot(contains(true)));
+    });
+  });
+}
+
+/// A widget that runs a ticker and samples the keyboard from it — the
+/// game-loop shape RFC 0020 §7 is designed around.
+class _TickerProbe extends StatefulWidget {
+  const _TickerProbe({required this.onReady, required this.onTick});
+
+  final void Function(Keyboard) onReady;
+  final void Function() onTick;
+
+  @override
+  State<_TickerProbe> createState() => _TickerProbeState();
+}
+
+class _TickerProbeState extends State<_TickerProbe> {
+  Ticker? _ticker;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    widget.onReady(Keyboard.of(context));
+    _ticker ??= TuiBinding.of(context).createTicker((_) => widget.onTick())
+      ..start();
+  }
+
+  @override
+  void dispose() {
+    _ticker?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => const Focus(autofocus: true, child: Text('probe'));
 }

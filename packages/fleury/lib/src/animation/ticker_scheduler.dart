@@ -144,6 +144,16 @@ class TickerScheduler {
     _reassembleCallbacks.remove(callback);
   }
 
+  /// Runs at the top of every frame, before any ticker callback.
+  ///
+  /// The runtime wires this to the keyboard session's frame latch. It is a
+  /// dedicated hook rather than an ordinary tick callback because ordering
+  /// matters and the callback set has none: a ticker that sampled input
+  /// before the latch was published would read the previous frame's state.
+  void Function()? _onFrameStart;
+
+  set onFrameStart(void Function()? callback) => _onFrameStart = callback;
+
   /// Fires every registered reassemble callback. Called by the
   /// runtime (via the `onReassemble` hook in `runApp`) after the
   /// build owner has walked the element tree.
@@ -233,7 +243,14 @@ class TickerScheduler {
   /// register or unregister during a tick without confusing
   /// iteration.
   void _fire() {
-    if (_disposed || _callbacks.isEmpty) return;
+    if (_disposed) return;
+    // Frame start, BEFORE any ticker runs: whatever samples input this frame
+    // must all see the same state. Running it here rather than inside a
+    // registered callback is what guarantees the ordering — the callback set
+    // has no order, so a ticker could otherwise sample a latch published
+    // after it ran (RFC 0020 §5.6).
+    _onFrameStart?.call();
+    if (_callbacks.isEmpty) return;
     final snapshot = List<SchedulerTickCallback>.from(_callbacks);
     final now = _clock.now;
     for (final cb in snapshot) {
