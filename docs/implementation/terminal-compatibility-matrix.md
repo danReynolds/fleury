@@ -296,3 +296,50 @@ large pile of unreviewed local captures.
   `--write-plan=<path>`, keeping the external capture checklist generated from
   the same target matching and review-state logic as the JSON audit.
 - Real-terminal entries are still pending.
+
+## Kitty keyboard protocol — measured 2026-08-06 (macOS 15, RFC 0020)
+
+Captured with `fleury diagnose --probe --json-output=…` run **inside each
+emulator**, non-interactively. The probe pushes the full flag set, queries, and
+restores, so this measures *support*, not whatever happened to be in force.
+
+| Terminal | TERM | Flags | Lifecycle safe | Held state | Positions |
+|---|---|---|---|---|---|
+| Ghostty | `xterm-ghostty` | 31 | yes | yes | yes |
+| iTerm2 | `xterm-256color` | 31 | yes | yes | yes |
+| kitty | `xterm-kitty` | 31 | yes | yes | yes |
+| Warp | `xterm-256color` | 31 | yes | yes | yes |
+| Terminal.app | `xterm-256color` | — | no | no | no |
+| WezTerm | `xterm-256color` | — | no | no | no |
+
+**Four of six honour all five progressive-enhancement flags**, so `isHeld`,
+`KeyBinding.hold`, and positional gestures are live on them with no
+configuration.
+
+Two results correct assumptions made earlier in RFC 0020's development:
+
+- **Warp supports it fully.** It was assumed not to, by analogy with its
+  well-known lack of OSC 8 hyperlink support. Those are unrelated features and
+  the analogy was wrong.
+- **WezTerm reports no support.** It documents the protocol, but
+  `enable_kitty_keyboard` is config-gated and off by default, so a stock
+  install behaves as a legacy terminal. This is a configuration finding, not a
+  WezTerm limitation — worth re-measuring on a machine that enables it.
+
+### What the negative results validate
+
+Both unsupported terminals answered the bracketing DA1 **without** a keyboard
+reply — `\x1B[?1;2c` from Terminal.app, `\x1B[?65;4;6;18;22c` from WezTerm —
+rather than timing out. That is RFC 0020 §8.2's whole design working on real
+hardware: "unsupported" is detected by a positive DA1 arriving without a flags
+reply, so the verdict is independent of link latency and never costs a
+wall-clock timeout. Every confirmed terminal replied `\x1B[?31u` ahead of its
+DA1, in the expected order.
+
+### Not covered by this capture
+
+The probe confirms what the terminal *reports*. It does not exercise a running
+app, so the following still need a human at a real keyboard: holding a key
+across frames, alt-tab focus loss (`TerminalFocusEvent`, DECSET 1004), and
+whether restoration leaves the shell clean after an abnormal exit.
+
