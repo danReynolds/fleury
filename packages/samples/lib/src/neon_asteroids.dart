@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:fleury/fleury_core.dart';
 import 'package:fleury_widgets/fleury_widgets_web.dart';
 
+import 'neon_asteroids_controls.dart';
 import 'neon_asteroids_model.dart';
 import 'scaffold.dart';
 
@@ -55,23 +56,10 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
   /// change. The handle itself is stable for the app's lifetime (§15).
   late Keyboard _keyboard;
 
-  /// Pointer-driven controls. The keyboard is one SOURCE of input, not the
-  /// game's input model — aiming and firing by mouse feed the same channel.
-  bool _pointerThrust = false;
-  bool _pointerFire = false;
-
-  /// Whether the in-flight press began during play (see [_pointerDown]).
-  bool _pointerArmed = false;
-
-  /// Legacy fallback: where the surface cannot report held keys, thrust is a
-  /// toggle rather than a hold (see [_supportsHeldControls]).
-  bool _thrustLatched = false;
-
-  /// Press-driven movement on a surface with no held-key reporting: each
-  /// press (or auto-repeat) buys a few simulation steps of turn or brake.
-  int _turnDirection = 0;
-  int _turnTicks = 0;
-  int _brakeTicks = 0;
+  /// Every input source the ship answers to, resolved in one place. The
+  /// keyboard is one SOURCE of input, not the game's input model — pointer
+  /// aiming and the press-driven fallbacks feed the same channel.
+  final _input = ShipControls();
 
   /// Whether focus is inside the playfield. Starts false and is corrected on
   /// mount by [FocusDetector]'s initial sync, so a scene that never receives
@@ -132,40 +120,18 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
     // One immutable read for the whole frame, so every fixed simulation step
     // below agrees about what was held (RFC 0020 §5.6).
     final keys = _keyboard.snapshot;
-    // Sampled where the surface supports it; press-driven where it does not.
-    if (_turnTicks > 0) _turnTicks--;
-    if (_brakeTicks > 0) _brakeTicks--;
-    final nudgeLeft = _turnTicks > 0 && _turnDirection < 0;
-    final nudgeRight = _turnTicks > 0 && _turnDirection > 0;
-    final left =
-        keys.isHeld(_leftKey) || keys.isHeld(KeyCode.arrowLeft) || nudgeLeft;
-    final right =
-        keys.isHeld(_rightKey) || keys.isHeld(KeyCode.arrowRight) || nudgeRight;
-    final thrust =
-        keys.isHeld(_thrustKey) ||
-        keys.isHeld(KeyCode.arrowUp) ||
-        _thrustLatched ||
-        _pointerThrust;
-    final brake =
-        keys.isHeld(_brakeKey) ||
-        keys.isHeld(KeyCode.arrowDown) ||
-        _brakeTicks > 0;
-
-    // An EDGE, not a level: `wasPressed` survives a press+release that lands
-    // entirely between two frames, so a quick tap is never swallowed — and it
-    // is consumed at exactly one simulation step, so one press is one shot.
-    var fire = keys.wasPressed(KeyCode.space) || _pointerFire;
-    _pointerFire = false;
+    final movement = _input.resolveMovement(
+      keys,
+      left: _leftKey,
+      right: _rightKey,
+      thrust: _thrustKey,
+      brake: _brakeKey,
+    );
+    var fire = _input.takeFire(keys);
     final steps = _game.advanceWithTimeline(delta, (_) {
       final shoot = fire;
       fire = false;
-      return NeonAsteroidsInput(
-        rotateLeft: left,
-        rotateRight: right,
-        thrust: thrust,
-        brake: brake,
-        fire: shoot,
-      );
+      return movement.copyWith(fire: shoot);
     });
     if (_reducedMotion && _game.phase == NeonAsteroidsPhase.gameOver) {
       _ticker?.stop();
@@ -212,7 +178,8 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
       KeyBinding(
         _thrustKey,
         label: 'Thrust',
-        onTrigger: (_) => setState(() => _thrustLatched = !_thrustLatched),
+        onTrigger: (_) =>
+            setState(() => _input.thrustLatched = !_input.thrustLatched),
       ),
 
       KeyBinding(
@@ -244,16 +211,13 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
   /// presses into continuous rotation rather than stacking them.
   void _nudgeTurn(int direction) {
     if (_game.phase != NeonAsteroidsPhase.playing) return;
-    _turnDirection = direction;
-    _turnTicks = _nudgeTicks;
+    _input.turn(direction);
   }
 
   void _nudgeBrake() {
     if (_game.phase != NeonAsteroidsPhase.playing) return;
-    _brakeTicks = _nudgeTicks;
+    _input.brake();
   }
-
-  static const _nudgeTicks = 8;
 
   /// Whether this surface reports real held keys. Where it does not (a
   /// legacy terminal), holding two directions at once is impossible — the OS
@@ -262,12 +226,7 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
   bool get _supportsHeldControls => _keyboard.capabilities.supportsHeldState;
 
   void _clearControls() {
-    _pointerThrust = false;
-    _pointerFire = false;
-    _pointerArmed = false;
-    _turnTicks = 0;
-    _brakeTicks = 0;
-    _thrustLatched = false;
+    _input.reset();
   }
 
   void _start() {
@@ -285,7 +244,7 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
     } else if (_game.phase == NeonAsteroidsPhase.playing) {
       // Fire is edge-triggered from the snapshot during play; this path is
       // the pointer/semantic-action entry point.
-      _pointerFire = true;
+      _input.fire();
     }
   }
 
@@ -330,22 +289,22 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
     // The shot is armed HERE rather than decided at release: a press that
     // resumed a paused run leaves the game playing, and a release-time phase
     // check would read that as "the player shot".
-    _pointerArmed = true;
+    _input.pointerArmed = true;
     _aimAt(details.col, details.row);
   }
 
   void _pointerTapUp(int col, int row) {
-    if (!_pointerArmed) return;
-    _pointerArmed = false;
+    if (!_input.pointerArmed) return;
+    _input.pointerArmed = false;
     if (_game.phase != NeonAsteroidsPhase.playing) return;
     _aimAt(col, row);
-    _pointerFire = true;
+    _input.fire();
   }
 
   void _pointerDrag(int col, int row) {
     if (_game.phase != NeonAsteroidsPhase.playing) return;
     _aimAt(col, row);
-    _pointerThrust = true;
+    _input.pointerThrust = true;
   }
 
   void _aimAt(int col, int row) {
@@ -531,8 +490,8 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
         onDragStart: _pointerDrag,
         onDragUpdate: _pointerDrag,
         onDragEnd: () {
-          _pointerThrust = false;
-          _pointerArmed = false;
+          _input.pointerThrust = false;
+          _input.pointerArmed = false;
         },
         child: Stack(
           children: <Widget>[
