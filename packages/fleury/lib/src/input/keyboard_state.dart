@@ -166,6 +166,15 @@ final class KeyboardSnapshot {
     0,
   );
 
+  /// A snapshot with nothing held and no edges — what any consumer sees
+  /// before the first latch, or on a surface that reports no held state.
+  ///
+  /// Public so code that CONSUMES snapshots (an intent resolver taking
+  /// per-frame input, like the showcase's `ShipControls`) can be tested
+  /// against "no keyboard input" without reaching into `src/` for a session
+  /// to latch one out of.
+  static KeyboardSnapshot get empty => _empty;
+
   final List<_PressRecord> _held;
   final List<_PressRecord> _downEdges;
   final List<_PressRecord> _upEdges;

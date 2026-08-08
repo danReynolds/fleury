@@ -1,14 +1,18 @@
 // Sampled keyboard input, through the REAL runtime.
 //
-// This file exists because of a bug that 2846 tests could not see:
-// `publishLatch()` was called only by FleuryTester, so `Keyboard.snapshot` in a
-// running app stayed empty forever and every held-key control was dead. The
-// harness supplied the wiring production was missing, so the tests agreed the
-// feature worked.
+// The rule this file encodes: sampled input is verified through `runApp`'s
+// own frame loop, with only the terminal substituted. Nothing here may stand
+// in for a runtime responsibility — FleuryTester publishes the frame latch
+// itself, so a whole test corpus can agree a sampled feature works while the
+// runtime wiring is broken.
 //
-// The rule this encodes: sampled input is verified through `runApp`'s own
-// frame loop, with only the terminal substituted. Nothing here may stand in
-// for a runtime responsibility.
+// (An earlier version of this header claimed the runtime never latched at
+// all. False — the FrameDriver always did, via `onLatchInput`; the grep that
+// "proved" otherwise searched for `publishLatch()` with parentheses and
+// missed the tear-off. The real runtime defect was the OPPOSITE: a second
+// latch site briefly added at `tickerScheduler.onFrameStart` expired
+// `wasPressed` edges before tickers could read them — see
+// ticker_edge_visibility_test.dart.)
 import 'dart:async';
 
 import 'package:fleury/fleury.dart';

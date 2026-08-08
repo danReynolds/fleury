@@ -56,6 +56,25 @@ void main() {
     );
   });
 
+
+  test('a POSITIONAL binding covers its sampled position', () {
+    // The exact shape Asteroids ships on a legacy terminal: sampled
+    // KeyPosition.a, fallback KeyBinding(KeyPosition.a). KeyPosition
+    // implements KeySequence, so a covered-set filter that only admits
+    // `sequence is KeyCode` silently drops every positional binding and this
+    // warns falsely — on the one app that has its fallbacks right.
+    dispatcher.globalBindings = [
+      KeyBinding(KeyPosition.a, label: 'Turn left', onTrigger: (_) {}),
+    ];
+    sample(KeyPosition.a);
+    dispatcher.dispatch(const KeyEvent(KeyCode.a, position: KeyPosition.a));
+    expect(
+      warnings,
+      isEmpty,
+      reason: 'a positional binding must count as coverage for its own key',
+    );
+  });
+
   test('a surface that DOES report held keys is silent', () {
     dispatcher.updateKeyboardCapabilities(KeyboardCapabilities.full);
     sample(KeyPosition.a);

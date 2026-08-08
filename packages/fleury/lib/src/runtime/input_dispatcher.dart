@@ -395,13 +395,24 @@ class InputDispatcher {
     if (keyboardSession.capabilities.supportsHeldState) return;
     final sampled = KeyboardSnapshot.debugTakeSampledSelectors();
     if (sampled.isEmpty) return;
+    // Both sides of the comparison lower to the LOGICAL key. KeyPosition
+    // implements KeySequence, so positional bindings arrive here as
+    // KeyPosition values — an `is KeyCode` filter alone silently dropped
+    // them, and the warning fired on apps whose positional fallbacks were
+    // exactly right. Chords and modified sequences stay excluded on purpose:
+    // a `.ctrl.x` binding does not make a bare `x` sample live.
+    KeyCode? lower(KeySequence sequence) => switch (sequence) {
+      KeyCode() => sequence,
+      KeyPosition() => sequence.usTwin,
+      _ => null,
+    };
     final covered = <KeyCode>{
       for (final active in resolveActiveKeyBindings(focusManager))
         for (final sequence in active.sequences)
-          if (sequence is KeyCode) sequence,
+          if (lower(sequence) case final code?) code,
       for (final binding in _globalBindings)
         for (final sequence in binding.sequences)
-          if (sequence is KeyCode) sequence,
+          if (lower(sequence) case final code?) code,
     };
     for (final selector in sampled) {
       // Compare on the logical key: a positional sample is satisfied by a

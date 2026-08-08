@@ -305,18 +305,26 @@ set, queries, and restores, so it measures what a terminal *claims*, not
 whatever happened to be in force.
 
 The **Delivers** column is different, and was added after a terminal claimed a
-flag it does not implement. It comes from `packages/fleury/bin/keytrace.dart`:
-hold a key, release it, and read the bytes. Only that answers whether the
-claim is true.
+flag it does not implement. It is answered by
+`packages/fleury/bin/keytrace.dart` — hold a key, release it, read the bytes —
+and **only rows marked with a verification footnote have actually been
+captured**. The others carry the probe's claim forward, explicitly labelled,
+because the whole point of this column is that a claim is not a measurement:
+as of 2026-08-06 only Warp has been keytrace'd, and it is the row that turned
+out to be false. Run keytrace in the others and replace "claimed" with a
+footnote when captured.
 
 | Terminal | TERM | Flags | Lifecycle safe | Delivers phases | Positions |
 |---|---|---|---|---|---|
-| Ghostty | `xterm-ghostty` | 31 | yes | yes | yes |
-| iTerm2 | `xterm-256color` | 31 | yes | yes | yes |
-| kitty | `xterm-kitty` | 31 | yes | yes | yes |
+| Ghostty | `xterm-ghostty` | 31 | yes | claimed (unverified) | yes |
+| iTerm2 | `xterm-256color` | 31 | yes | claimed (unverified) | yes |
+| kitty | `xterm-kitty` | 31 | yes | claimed (unverified) ² | yes |
 | Warp | `xterm-256color` | 31 | yes | **NO** ¹ | yes |
 | Terminal.app | `xterm-256color` | — | no | no | no |
 | WezTerm | `xterm-256color` | — | no | no | no |
+
+² kitty is the protocol's reference implementation, which is a strong prior —
+but the column records captures, not priors.
 
 ¹ **Warp claims flag 2 and emits no event types for text keys.** Verified by
 byte capture on 2026-08-06, inline *and* in the alternate screen: holding `a`
@@ -330,9 +338,9 @@ this a genuine Warp bug. No upstream report exists; Warp's own docs list
 sticks down forever until `KeyboardSession`'s duplicate-down detector demotes
 the surface to press-only.
 
-**Three of six actually deliver phases**, so `isHeld` and `KeyBinding.hold`
-are live there with no configuration. Warp needs a press-driven fallback like
-any legacy terminal.
+**Warp is measured as NOT delivering phases despite claiming them**; the
+three claimed-yes rows are expected to deliver but await capture. Warp needs a
+press-driven fallback like any legacy terminal.
 
 Two results correct assumptions made earlier in RFC 0020's development:
 

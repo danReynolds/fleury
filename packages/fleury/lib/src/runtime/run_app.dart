@@ -504,13 +504,19 @@ Future<AppExit> _runAppImpl(
   // Publishes the session keyboard to `Keyboard.of` (capabilities reactive,
   // sampled state not — RFC 0020 §15).
   final keyboardNotifier = KeyboardStateNotifier(dispatcher);
-  // Frame start latches the sampled keyboard, BEFORE any ticker runs: a game
-  // loop reading `Keyboard.snapshot` gets one immutable view that every step
-  // of that frame agrees about, and edges (`wasPressed`) expire exactly once
-  // per frame rather than per event (§5.6/§7.2). Without this the latch is
-  // never published and every sampled query reads empty forever.
-  binding.tickerScheduler.onFrameStart =
-      dispatcher.keyboardSession.publishLatch;
+  // The keyboard latch has exactly ONE publisher: the FrameDriver, at render
+  // (its `onLatchInput`, below). Do NOT add a second — this line used to also
+  // latch from `tickerScheduler.onFrameStart`, and because `publishLatch`
+  // expires edges on a quiet call, that second site destroyed every
+  // `wasPressed` edge at the worst possible instant. Every driver event
+  // schedules a render, so the render latch published the edges first; the
+  // ticker timer's frame-start latch then found them quiet-but-present and
+  // expired them immediately BEFORE the tickers ran — the only consumers §7.2
+  // designed edges for. Measured through the real runtime: 0 of 5 presses
+  // observed with the second site, 5 of 5 without
+  // (test/integration/ticker_edge_visibility_test.dart). Tickers read the
+  // render-published latch from the frame AFTER the input lands; that one
+  // frame of settle is the design, not a defect (§5.6).
   // A surface can answer the capability query truthfully and then not honour
   // it. When the session catches that mid-session it demotes itself to
   // press-only, and `Keyboard.capabilities` is reactive — so republishing here

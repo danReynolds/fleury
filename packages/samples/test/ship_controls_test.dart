@@ -4,14 +4,12 @@
 // binding was declared, not that pressing the key moves the ship — which is
 // exactly the gap the shipped bug lived in.
 import 'package:fleury/fleury.dart';
-import 'package:fleury/src/input/keyboard_state.dart';
 import 'package:fleury_samples/src/neon_asteroids_controls.dart';
 import 'package:fleury_samples/src/neon_asteroids_model.dart';
 import 'package:test/test.dart';
 
 /// A snapshot with nothing held — a legacy surface, every frame.
-KeyboardSnapshot get _nothingHeld =>
-    (KeyboardSession(capabilities: KeyboardCapabilities.legacy)).publishLatch();
+KeyboardSnapshot get _nothingHeld => KeyboardSnapshot.empty;
 
 NeonAsteroidsInput _resolve(ShipControls controls) => controls.resolveMovement(
   _nothingHeld,
