@@ -546,15 +546,9 @@ class _CounterState extends State<_Counter> {
   @override
   Widget build(BuildContext context) => KeyDetector(
     onKey: (event) {
-      if (((e) {
-            if (e.code == KeyCode.enter) {
-              setState(() => _count++);
-              return KeyEventResult.handled;
-            }
-            return KeyEventResult.ignored;
-          })(event) ==
-          KeyEventResult.handled)
-        event.consume();
+      if (event.code != KeyCode.enter) return;
+      setState(() => _count++);
+      event.consume();
     },
     child: Focus(focusNode: widget.focusNode, child: Text('count=$_count')),
   );
