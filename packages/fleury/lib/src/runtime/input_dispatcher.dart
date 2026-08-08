@@ -378,6 +378,8 @@ class InputDispatcher {
 
   /// Selectors already reported, so a control sampled every frame warns once.
   final Set<KeySelector> _deadControlsReported = <KeySelector>{};
+  final Set<KeySelector> _deadControlSuspects = <KeySelector>{};
+  KeyboardCapabilities? _deadControlsCapsSeen;
 
   /// Debug-only: catch a control that CANNOT work.
   ///
@@ -392,7 +394,22 @@ class InputDispatcher {
   /// four movement controls behind a fallback that covered exactly one, and
   /// nothing said a word on any of the four terminals it was tested on.
   void _reportDeadControls() {
-    if (keyboardSession.capabilities.supportsHeldState) return;
+    final caps = keyboardSession.capabilities;
+    if (!identical(caps, _deadControlsCapsSeen)) {
+      // Capability transition: startup, negotiation, or a mid-session
+      // demotion. Samples taken under the OLD capabilities describe the old
+      // control scheme, and the app has not necessarily rebuilt for the new
+      // one yet — capabilities are reactive, so its fallback bindings arrive
+      // a render AFTER the flip, while (on the demotion path specifically)
+      // the next auto-repeat arrives sooner. Reporting here fired a false
+      // warning at exactly the app that branches correctly. Discard and
+      // start clean; a genuinely dead control is re-sampled within a frame.
+      _deadControlsCapsSeen = caps;
+      _deadControlSuspects.clear();
+      KeyboardSnapshot.debugTakeSampledSelectors();
+      return;
+    }
+    if (caps.supportsHeldState) return;
     final sampled = KeyboardSnapshot.debugTakeSampledSelectors();
     if (sampled.isEmpty) return;
     // Both sides of the comparison lower to the LOGICAL key. KeyPosition
@@ -423,7 +440,19 @@ class InputDispatcher {
         KeyPosition() => selector.usTwin,
         _ => null,
       };
-      if (logical == null || covered.contains(logical)) continue;
+      if (logical == null || covered.contains(logical)) {
+        // Covered now. A suspect from an earlier check was a rebuild still
+        // in flight, not a dead control — retire the suspicion.
+        _deadControlSuspects.remove(selector);
+        continue;
+      }
+      // Two sightings, not one: warn only when the selector was sampled and
+      // uncovered on a PREVIOUS check too. One sighting can be a reactive
+      // rebuild that has not rendered yet; a control that is still uncovered
+      // when freshly-taken samples arrive at a later dispatch has had its
+      // chance. Real consumers sample every frame, so a genuinely dead
+      // control reaches its second sighting within one input event.
+      if (_deadControlSuspects.add(selector)) continue;
       if (!_deadControlsReported.add(selector)) continue;
       onDeveloperWarning?.call(
         FleuryError(
