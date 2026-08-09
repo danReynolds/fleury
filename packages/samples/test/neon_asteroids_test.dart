@@ -425,8 +425,12 @@ void main() {
           (line) => line.contains('VECTOR FLIGHT / TOROIDAL SECTOR'),
         );
         expect(vectorRow, greaterThanOrEqualTo(0));
-        final left = lines[vectorRow].indexOf('│');
-        final right = lines[vectorRow].lastIndexOf('│');
+        // Anchor on the card text, not "first │ on the row": the playfield
+        // bezel adds its own verticals at the field edges, and the card's
+        // frame is the nearest │ on each side of its content.
+        final textStart = lines[vectorRow].indexOf('VECTOR FLIGHT');
+        final left = lines[vectorRow].lastIndexOf('│', textStart);
+        final right = lines[vectorRow].indexOf('│', textStart);
         expect(
           lines[vectorRow + 1].substring(left, right + 1),
           '│${List<String>.filled(right - left - 1, ' ').join()}│',

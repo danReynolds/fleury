@@ -514,36 +514,49 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
           _input.pointerThrust = false;
           _input.pointerArmed = false;
         },
-        child: Stack(
-          children: <Widget>[
-            canvas,
-            if (_game.phase == NeonAsteroidsPhase.attract)
-              Center(
-                key: const ValueKey<String>('attract-card'),
-                child: _attractCard(size),
-              ),
-            if (_game.phase == NeonAsteroidsPhase.paused)
-              Center(
-                key: const ValueKey<String>('paused-card'),
-                child: _messageCard(
-                  width: math.min(38, math.max(24, size.cols - 6)),
-                  title: 'SIMULATION PAUSED',
-                  body: 'P / ESC TO RESUME',
-                  color: _amber,
+        // The cabinet bezel: the same rounded cyan frame the cards use, so
+        // the playfield reads as a CRT in a cabinet. Two rows and columns
+        // of field go to the frame (game.resize absorbs it) — and the
+        // impact shake now rattles INSIDE the bezel, which is exactly how
+        // a cabinet should feel. The hard boundary also makes the toroidal
+        // wrap legible: things leave one wall and return through the other.
+        child: Container.framed(
+          color: _void,
+          border: const BoxBorder(
+            style: BorderStyle.rounded,
+            cellStyle: CellStyle(foreground: _cyanDim),
+          ),
+          child: Stack(
+            children: <Widget>[
+              canvas,
+              if (_game.phase == NeonAsteroidsPhase.attract)
+                Center(
+                  key: const ValueKey<String>('attract-card'),
+                  child: _attractCard(size),
                 ),
-              ),
-            if (_game.phase == NeonAsteroidsPhase.gameOver)
-              Center(
-                key: const ValueKey<String>('game-over-card'),
-                child: _messageCard(
-                  width: math.min(42, math.max(24, size.cols - 6)),
-                  title: 'SIGNAL LOST',
-                  body:
-                      'FINAL ${_game.score.toString().padLeft(6, '0')}  ·  R / SPACE',
-                  color: _coral,
+              if (_game.phase == NeonAsteroidsPhase.paused)
+                Center(
+                  key: const ValueKey<String>('paused-card'),
+                  child: _messageCard(
+                    width: math.min(38, math.max(24, size.cols - 6)),
+                    title: 'SIMULATION PAUSED',
+                    body: 'P / ESC TO RESUME',
+                    color: _amber,
+                  ),
                 ),
-              ),
-          ],
+              if (_game.phase == NeonAsteroidsPhase.gameOver)
+                Center(
+                  key: const ValueKey<String>('game-over-card'),
+                  child: _messageCard(
+                    width: math.min(42, math.max(24, size.cols - 6)),
+                    title: 'SIGNAL LOST',
+                    body:
+                        'FINAL ${_game.score.toString().padLeft(6, '0')}  ·  R / SPACE',
+                    color: _coral,
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
