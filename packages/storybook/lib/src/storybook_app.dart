@@ -349,7 +349,7 @@ class _StorybookAppState extends State<StorybookApp> {
         // it first.)
         KeyBinding(
           KeySequence.escape,
-          onTrigger: () => _selectorFocusNode.requestFocus(),
+          onTrigger: (_) => _selectorFocusNode.requestFocus(),
           hideFromHintBar: true,
         ),
       ],

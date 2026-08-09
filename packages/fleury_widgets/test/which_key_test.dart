@@ -33,10 +33,10 @@ Widget _app({Duration showDelay = Duration.zero}) => WhichKey(
   showDelay: showDelay,
   child: KeyBindings(
     bindings: [
-      KeyBinding(KeySequence.space.f, label: 'Find file', onTrigger: () {}),
-      KeyBinding(KeySequence.space.b, label: 'Buffers', onTrigger: () {}),
+      KeyBinding(KeySequence.space.f, label: 'Find file', onTrigger: (_) {}),
+      KeyBinding(KeySequence.space.b, label: 'Buffers', onTrigger: (_) {}),
       // Unlabeled: fires but must not be advertised in the popup.
-      KeyBinding(KeySequence.space.x, onTrigger: () {}),
+      KeyBinding(KeySequence.space.x, onTrigger: (_) {}),
     ],
     child: const Focus(autofocus: true, child: Text('body')),
   ),
@@ -88,7 +88,7 @@ void main() {
                 KeyBinding(
                   KeySequence.space.char(letter),
                   label: 'Cmd $letter',
-                  onTrigger: () {},
+                  onTrigger: (_) {},
                 ),
             ],
             child: const Focus(autofocus: true, child: Text('body')),
@@ -143,7 +143,7 @@ void main() {
               KeyBinding(
                 KeySequence.space.f,
                 label: 'Find file',
-                onTrigger: () {},
+                onTrigger: (_) {},
               ),
             ],
             child: Focus(

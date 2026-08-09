@@ -10,6 +10,7 @@
 library;
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_wire.dart';
 import 'package:test/test.dart';
 
 /// A realistic agent tree: status + a message list + an input. [tick] perturbs

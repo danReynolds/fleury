@@ -156,9 +156,7 @@ void main() {
   group('InputDispatcher lifecycle', () {
     test('dispose clears pending state and blocks further dispatch', () {
       final h = _TestHarness(
-        globalBindings: [
-          KeyBinding.any([KeySequence.space.q], onTrigger: () {}),
-        ],
+        globalBindings: [KeyBinding(KeySequence.space.q, onTrigger: (_) {})],
       );
       h.dispatch(_char(' '));
       expect(h.dispatcher.hasPendingSequence, isTrue);
@@ -179,6 +177,198 @@ void main() {
     });
   });
 
+  group('InputBatch dispatch (RFC 0020 P1d interim routing)', () {
+    test('the text half reaches the focused text claimant', () {
+      final events = <String>[];
+      final h = _TestHarness();
+      h.mountRoot(_ClaimLog(events: events));
+      final result = h.dispatcher.dispatch(
+        const InputBatch(key: KeyEvent(KeyCode.char('a')), committedText: 'a'),
+      );
+      expect(result, KeyEventResult.handled);
+      expect(events, ['text:a']);
+    });
+
+    test('a text-bearing batch does not also key-dispatch its key half', () {
+      // Pre-batch, a CSI-u printable was text-only: a character binding on
+      // 'a' fires via the text fallback when unclaimed, and must fire ONCE.
+      var fired = 0;
+      final h = _TestHarness(
+        globalBindings: [KeyBinding(KeyCode.a, onTrigger: (_) => fired++)],
+      );
+      h.mountRoot(const EmptyBox());
+      h.dispatcher.dispatch(
+        const InputBatch(key: KeyEvent(KeyCode.char('a')), committedText: 'a'),
+      );
+      expect(fired, 1);
+    });
+
+    test('a key-only up batch is fenced from bindings', () {
+      var fired = 0;
+      final h = _TestHarness(
+        globalBindings: [KeyBinding(KeyCode.a, onTrigger: (_) => fired++)],
+      );
+      h.mountRoot(const EmptyBox());
+      final result = h.dispatcher.dispatch(
+        const InputBatch(
+          key: KeyEvent(KeyCode.char('a'), type: KeyEventType.up),
+        ),
+      );
+      expect(result, KeyEventResult.ignored);
+      expect(fired, 0);
+    });
+
+    test('a key-only down batch reaches key dispatch', () {
+      var fired = 0;
+      final h = _TestHarness(
+        globalBindings: [KeyBinding(KeyCode.f13, onTrigger: (_) => fired++)],
+      );
+      h.mountRoot(const EmptyBox());
+      final result = h.dispatcher.dispatch(
+        const InputBatch(key: KeyEvent(KeyCode.f13)),
+      );
+      expect(result, KeyEventResult.handled);
+      expect(fired, 1);
+    });
+  });
+
+  group('observation lane projection (RFC 0020 §10)', () {
+    List<String> phases(List<KeyEvent> log) => [
+      for (final e in log)
+        '${e.code.character ?? e.code.special!.name}:${e.type.name}'
+            '${e.synthesized ? '*' : ''}',
+    ];
+
+    _TestHarness fullCaps() {
+      final h = _TestHarness();
+      h.dispatcher.keyboardSession.updateCapabilities(
+        KeyboardCapabilities.full,
+      );
+      h.mountRoot(const EmptyBox());
+      return h;
+    }
+
+    KeyEvent down(String c) => KeyEvent(KeyCode.char(c));
+    KeyEvent up(String c) => KeyEvent(KeyCode.char(c), type: KeyEventType.up);
+    KeyEvent repeat(String c) =>
+        KeyEvent(KeyCode.char(c), type: KeyEventType.repeat);
+
+    test('an app-wide observer sees the full regularized phase stream', () {
+      final h = fullCaps();
+      final log = <KeyEvent>[];
+      h.dispatcher.addKeyObserver(log.add);
+      h.dispatcher.dispatch(down('a'));
+      h.dispatcher.dispatch(repeat('a'));
+      h.dispatcher.dispatch(up('a'));
+      expect(phases(log), ['a:down', 'a:repeat', 'a:up']);
+    });
+
+    test('phase repair reaches observers (repeat-without-down)', () {
+      final h = fullCaps();
+      final log = <KeyEvent>[];
+      h.dispatcher.addKeyObserver(log.add);
+      h.dispatcher.dispatch(repeat('a'));
+      expect(phases(log), ['a:down*', 'a:repeat']);
+    });
+
+    test('an observer registered mid-press hears nothing until a fresh '
+        'press (no phantom phases)', () {
+      final h = fullCaps();
+      h.dispatcher.dispatch(down('a'));
+      final log = <KeyEvent>[];
+      h.dispatcher.addKeyObserver(log.add);
+      h.dispatcher.dispatch(repeat('a'));
+      h.dispatcher.dispatch(up('a'));
+      expect(log, isEmpty);
+      h.dispatcher.dispatch(down('a'));
+      expect(phases(log), ['a:down']);
+    });
+
+    test('removal mid-press closes open presses with a synthesized up', () {
+      final h = fullCaps();
+      final log = <KeyEvent>[];
+      final registration = h.dispatcher.addKeyObserver(log.add);
+      h.dispatcher.dispatch(down('w'));
+      registration.remove();
+      expect(phases(log), ['w:down', 'w:up*']);
+      // Removed registrations observe nothing further.
+      h.dispatcher.dispatch(down('x'));
+      expect(log, hasLength(2));
+    });
+
+    test('dispatcher disposal closes open presses (authority loss)', () {
+      final h = fullCaps();
+      final log = <KeyEvent>[];
+      h.dispatcher.addKeyObserver(log.add);
+      h.dispatcher.dispatch(down('w'));
+      h.dispatcher.dispose();
+      expect(phases(log), ['w:down', 'w:up*']);
+    });
+
+    test('a scope-anchored observer projects on focus exit', () {
+      final h = fullCaps();
+      final nodeA = FocusNode(debugLabel: 'a');
+      final nodeB = FocusNode(debugLabel: 'b');
+      addTearDown(() {
+        nodeA.dispose();
+        nodeB.dispose();
+      });
+      h.mountRoot(
+        Column(
+          children: [
+            Focus(focusNode: nodeA, autofocus: true, child: const EmptyBox()),
+            Focus(focusNode: nodeB, child: const EmptyBox()),
+          ],
+        ),
+      );
+      final log = <KeyEvent>[];
+      h.dispatcher.addKeyObserver(log.add, anchor: nodeA);
+
+      h.dispatcher.dispatch(down('w')); // in scope: observed
+      nodeB.requestFocus(); // scope exit while held
+      // The end fires AT the focus change — not lazily on the next key.
+      // Push-to-talk over a modal is the case that makes this visible: the
+      // mic must close when the dialog opens, not whenever something else
+      // is typed (RFC 0020 §10, §14.5).
+      expect(phases(log), ['w:down', 'w:up*']);
+
+      h.dispatcher.dispatch(down('x')); // out of scope: not observed
+      expect(phases(log), ['w:down', 'w:up*']);
+
+      nodeA.requestFocus();
+      h.dispatcher.dispatch(down('y')); // back in scope
+      expect(phases(log), ['w:down', 'w:up*', 'y:down']);
+    });
+
+    test('a capability downgrade routes recovery releases to observers', () {
+      final h = fullCaps();
+      final log = <KeyEvent>[];
+      h.dispatcher.addKeyObserver(log.add);
+      h.dispatcher.dispatch(down('w'));
+      // Losing held-state support mid-session (a negotiated rollback)
+      // clears the press records; every open observer press must close
+      // with them, or hold's one-end-per-start contract breaks.
+      h.dispatcher.updateKeyboardCapabilities(KeyboardCapabilities.legacy);
+      expect(phases(log), ['w:down', 'w:up*']);
+    });
+
+    test('replacing the session recovers presses and bumps the '
+        'generation', () {
+      final h = fullCaps();
+      final log = <KeyEvent>[];
+      h.dispatcher.addKeyObserver(log.add);
+      h.dispatcher.dispatch(down('w'));
+      final before = h.dispatcher.keyboardSession.sessionGeneration;
+      h.dispatcher.replaceKeyboardSession();
+      expect(phases(log), ['w:down', 'w:up*']);
+      expect(
+        h.dispatcher.keyboardSession.sessionGeneration,
+        before + 1,
+        reason: 'sampled consumers key invalidation off this',
+      );
+    });
+  });
+
   group('Acceptance tests — focus chain bubble-up', () {
     test('1. Focused child binding handles a key before parent', () {
       final calls = <String>[];
@@ -188,7 +378,7 @@ void main() {
           bindings: [
             KeyBinding(
               KeyCode.char('q'),
-              onTrigger: () => calls.add('parent'),
+              onTrigger: (_) => calls.add('parent'),
               label: 'p',
             ),
           ],
@@ -196,7 +386,7 @@ void main() {
             bindings: [
               KeyBinding(
                 KeyCode.char('q'),
-                onTrigger: () => calls.add('child'),
+                onTrigger: (_) => calls.add('child'),
                 label: 'c',
               ),
             ],
@@ -215,14 +405,17 @@ void main() {
       h.mountRoot(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyCode.char('q'), onTrigger: () => calls.add('parent')),
+            KeyBinding(
+              KeyCode.char('q'),
+              onTrigger: (_) => calls.add('parent'),
+            ),
           ],
           // Child has bindings but none for 'q'.
           child: KeyBindings(
             bindings: [
               KeyBinding(
                 KeyCode.char('x'),
-                onTrigger: () => calls.add('child:x'),
+                onTrigger: (_) => calls.add('child:x'),
               ),
             ],
             child: const Focus(autofocus: true, child: EmptyBox()),
@@ -242,7 +435,10 @@ void main() {
       h.mountRoot(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyCode.char('q'), onTrigger: () => calls.add('parent')),
+            KeyBinding(
+              KeyCode.char('q'),
+              onTrigger: (_) => calls.add('parent'),
+            ),
           ],
           child: const FocusScope(
             child: Focus(autofocus: true, child: EmptyBox()),
@@ -260,7 +456,10 @@ void main() {
       h.mountRoot(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyCode.char('q'), onTrigger: () => calls.add('parent')),
+            KeyBinding(
+              KeyCode.char('q'),
+              onTrigger: (_) => calls.add('parent'),
+            ),
           ],
           child: const FocusScope(
             modal: true,
@@ -279,7 +478,7 @@ void main() {
       final calls = <String>[];
       final h = _TestHarness(
         globalBindings: [
-          KeyBinding(KeySequence.ctrl.c, onTrigger: () => calls.add('global')),
+          KeyBinding(KeySequence.ctrl.c, onTrigger: (_) => calls.add('global')),
         ],
       );
       h.mountRoot(const Focus(autofocus: true, child: EmptyBox()));
@@ -292,13 +491,13 @@ void main() {
       final calls = <String>[];
       final h = _TestHarness(
         globalBindings: [
-          KeyBinding(KeyCode.char('q'), onTrigger: () => calls.add('global')),
+          KeyBinding(KeyCode.char('q'), onTrigger: (_) => calls.add('global')),
         ],
       );
       h.mountRoot(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyCode.char('q'), onTrigger: () => calls.add('local')),
+            KeyBinding(KeyCode.char('q'), onTrigger: (_) => calls.add('local')),
           ],
           child: const Focus(autofocus: true, child: EmptyBox()),
         ),
@@ -314,14 +513,14 @@ void main() {
     // lives in fleury_widgets/test/key_hint_bar_test.dart. These
     // check the binding data fields the bar filters on.
     test('9. Bindings with description=null are hidden from hint bar', () {
-      final binding = KeyBinding(KeyCode.char('q'), onTrigger: () {});
+      final binding = KeyBinding(KeyCode.char('q'), onTrigger: (_) {});
       expect(binding.label, isNull);
     });
 
     test('10. Bindings with hideFromHintBar=true are hidden', () {
       final binding = KeyBinding(
         KeySequence.ctrl.c,
-        onTrigger: () {},
+        onTrigger: (_) {},
         label: 'Quit',
         hideFromHintBar: true,
       );
@@ -335,12 +534,12 @@ void main() {
       // KeyBindings.bindings field being read live in
       // _KeyBindingsState.activeBindings.
       final stateBindings = <KeyBinding>[
-        KeyBinding(KeyCode.char('a'), onTrigger: () {}, label: 'first'),
+        KeyBinding(KeyCode.char('a'), onTrigger: (_) {}, label: 'first'),
       ];
       expect(stateBindings.first.label, 'first');
       stateBindings[0] = KeyBinding(
         KeyCode.char('a'),
-        onTrigger: () {},
+        onTrigger: (_) {},
         label: 'second',
       );
       expect(stateBindings.first.label, 'second');
@@ -354,10 +553,11 @@ void main() {
       h.mountRoot(
         KeyBindings(
           bindings: [
-            KeyBinding.any(const [
+            KeyBinding(
               KeyCode.char('j'),
-              KeyCode.arrowDown,
-            ], onTrigger: () => calls.add('down')),
+              aliases: [KeyCode.arrowDown],
+              onTrigger: (_) => calls.add('down'),
+            ),
           ],
           child: const Focus(autofocus: true, child: EmptyBox()),
         ),
@@ -376,9 +576,10 @@ void main() {
       h.mountRoot(
         KeyBindings(
           bindings: [
-            KeyBinding.any([
+            KeyBinding(
               KeySequence.space.q,
-            ], onTrigger: () => calls.add('Space+q')),
+              onTrigger: (_) => calls.add('Space+q'),
+            ),
           ],
           child: const Focus(autofocus: true, child: EmptyBox()),
         ),
@@ -406,12 +607,12 @@ void main() {
           bindings: [
             KeyBinding(
               KeySequence.space.q,
-              onTrigger: () => calls.add('Space+q'),
+              onTrigger: (_) => calls.add('Space+q'),
               label: 'Sequence',
             ),
             KeyBinding(
               KeyCode.char(' '),
-              onTrigger: () => calls.add('bare-space'),
+              onTrigger: (_) => calls.add('bare-space'),
               label: 'Bare space',
             ),
           ],
@@ -436,15 +637,16 @@ void main() {
       h.mountRoot(
         KeyBindings(
           bindings: [
-            KeyBinding.any([
+            KeyBinding(
               KeySequence.space.q,
-            ], onTrigger: () => calls.add('ancestor:Space-q')),
+              onTrigger: (_) => calls.add('ancestor:Space-q'),
+            ),
           ],
           child: KeyBindings(
             bindings: [
               KeyBinding(
                 KeyCode.char(' '),
-                onTrigger: () => calls.add('focused:Space'),
+                onTrigger: (_) => calls.add('focused:Space'),
               ),
             ],
             child: const Focus(autofocus: true, child: EmptyBox()),
@@ -470,9 +672,10 @@ void main() {
       h.mountRoot(
         KeyBindings(
           bindings: [
-            KeyBinding.any([
+            KeyBinding(
               KeySequence.space.p,
-            ], onTrigger: () => paletteOpens += 1),
+              onTrigger: (_) => paletteOpens += 1,
+            ),
           ],
           child: TextInput(controller: controller, autofocus: true),
         ),
@@ -489,7 +692,7 @@ void main() {
       final h = _TestHarness();
       h.mountRoot(
         KeyBindings(
-          bindings: [KeyBinding(.space, onTrigger: () => activations += 1)],
+          bindings: [KeyBinding(.space, onTrigger: (_) => activations += 1)],
           child: const Focus(autofocus: true, child: EmptyBox()),
         ),
       );
@@ -503,7 +706,7 @@ void main() {
       final h = _TestHarness();
       h.mountRoot(
         KeyBindings(
-          bindings: [KeyBinding(.space.p, onTrigger: () => paletteOpens += 1)],
+          bindings: [KeyBinding(.space.p, onTrigger: (_) => paletteOpens += 1)],
           child: const Focus(autofocus: true, child: EmptyBox()),
         ),
       );
@@ -531,7 +734,7 @@ void main() {
           bindings: [
             KeyBinding(
               KeySequence.ctrl.x.b,
-              onTrigger: () => switchBuffer += 1,
+              onTrigger: (_) => switchBuffer += 1,
             ),
           ],
           child: TextInput(controller: controller, autofocus: true),
@@ -565,9 +768,9 @@ void main() {
           bindings: [
             KeyBinding(
               KeySequence.ctrl.x.b,
-              onTrigger: () => switchBuffer += 1,
+              onTrigger: (_) => switchBuffer += 1,
             ),
-            KeyBinding(KeySequence.ctrl.x, onTrigger: () => directCtrlX += 1),
+            KeyBinding(KeySequence.ctrl.x, onTrigger: (_) => directCtrlX += 1),
           ],
           child: TextInput(controller: controller, autofocus: true),
         ),
@@ -595,7 +798,7 @@ void main() {
       h.mountRoot(
         KeyBindings(
           bindings: [
-            KeyBinding(KeySequence.ctrl.x.a.b, onTrigger: () => fired += 1),
+            KeyBinding(KeySequence.ctrl.x.a.b, onTrigger: (_) => fired += 1),
           ],
           child: TextInput(controller: controller, autofocus: true),
         ),
@@ -624,7 +827,7 @@ void main() {
       h.mountRoot(
         KeyBindings(
           bindings: [
-            KeyBinding(KeySequence.ctrl.x.a.b, onTrigger: () => fired += 1),
+            KeyBinding(KeySequence.ctrl.x.a.b, onTrigger: (_) => fired += 1),
           ],
           child: TextInput(controller: controller, autofocus: true),
         ),
@@ -680,7 +883,7 @@ void main() {
         h.mountRoot(
           KeyBindings(
             bindings: [
-              KeyBinding(KeyCode.char('a'), onTrigger: () => activations += 1),
+              KeyBinding(KeyCode.char('a'), onTrigger: (_) => activations += 1),
             ],
             child: const Focus(autofocus: true, child: EmptyBox()),
           ),
@@ -738,8 +941,8 @@ void main() {
       h.mountRoot(
         KeyBindings(
           bindings: [
-            KeyBinding(KeySequence.ctrl.s, onTrigger: () => calls.add('save')),
-            KeyBinding(KeySequence.alt.x, onTrigger: () => calls.add('alt-x')),
+            KeyBinding(KeySequence.ctrl.s, onTrigger: (_) => calls.add('save')),
+            KeyBinding(KeySequence.alt.x, onTrigger: (_) => calls.add('alt-x')),
           ],
           child: const Focus(autofocus: true, child: EmptyBox()),
         ),
@@ -760,7 +963,7 @@ void main() {
           bindings: [
             KeyBinding(
               KeyCode.escape,
-              onTrigger: () => calls.add('list:escape'),
+              onTrigger: (_) => calls.add('list:escape'),
             ),
           ],
           child: FocusScope(
@@ -769,7 +972,7 @@ void main() {
               bindings: [
                 KeyBinding(
                   KeyCode.escape,
-                  onTrigger: () => calls.add('dialog:cancel'),
+                  onTrigger: (_) => calls.add('dialog:cancel'),
                 ),
               ],
               child: const Focus(autofocus: true, child: EmptyBox()),
@@ -788,7 +991,7 @@ void main() {
         globalBindings: [
           KeyBinding(
             KeySequence.ctrl.c,
-            onTrigger: () => calls.add('global:quit'),
+            onTrigger: (_) => calls.add('global:quit'),
           ),
         ],
       );
@@ -814,7 +1017,7 @@ void main() {
           bindings: [
             KeyBinding(
               KeyCode.char('d'),
-              onTrigger: () => calls.add('delete'),
+              onTrigger: (_) => calls.add('delete'),
               enabled: false,
             ),
           ],
@@ -836,7 +1039,7 @@ void main() {
           bindings: [
             KeyBinding(
               KeySequence.ctrl.x.ctrl.s,
-              onTrigger: () => calls.add('save'),
+              onTrigger: (_) => calls.add('save'),
             ),
           ],
           child: const Focus(autofocus: true, child: EmptyBox()),
@@ -863,8 +1066,8 @@ void main() {
         h.mountRoot(
           KeyBindings(
             bindings: [
-              KeyBinding(KeySequence.d, onTrigger: () => calls.add('d')),
-              KeyBinding(KeySequence.d.k, onTrigger: () => calls.add('dk')),
+              KeyBinding(KeySequence.d, onTrigger: (_) => calls.add('d')),
+              KeyBinding(KeySequence.d.k, onTrigger: (_) => calls.add('dk')),
             ],
             child: const Focus(autofocus: true, child: EmptyBox()),
           ),
@@ -901,10 +1104,10 @@ void main() {
           bindings: [
             KeyBinding(
               KeySequence.ctrl.x.ctrl.s,
-              onTrigger: () => calls.add('save'),
+              onTrigger: (_) => calls.add('save'),
             ),
-            KeyBinding(KeySequence.ctrl.x, onTrigger: () => calls.add('cx')),
-            KeyBinding(KeyCode.char('q'), onTrigger: () => calls.add('q')),
+            KeyBinding(KeySequence.ctrl.x, onTrigger: (_) => calls.add('cx')),
+            KeyBinding(KeyCode.char('q'), onTrigger: (_) => calls.add('q')),
           ],
           child: const Focus(autofocus: true, child: EmptyBox()),
         ),
@@ -932,9 +1135,9 @@ void main() {
           bindings: [
             KeyBinding(
               KeySequence.space.q,
-              onTrigger: () => calls.add('space-q'),
+              onTrigger: (_) => calls.add('space-q'),
             ),
-            KeyBinding(KeyCode.char('z'), onTrigger: () => calls.add('z')),
+            KeyBinding(KeyCode.char('z'), onTrigger: (_) => calls.add('z')),
           ],
           child: const Focus(autofocus: true, child: EmptyBox()),
         ),
@@ -965,7 +1168,7 @@ void main() {
         h.mountRoot(
           KeyBindings(
             bindings: [
-              KeyBinding(KeySequence.d.k, onTrigger: () => calls.add('dk')),
+              KeyBinding(KeySequence.d.k, onTrigger: (_) => calls.add('dk')),
             ],
             child: const Focus(autofocus: true, child: EmptyBox()),
           ),
@@ -1002,8 +1205,8 @@ void main() {
         h.mountRoot(
           KeyBindings(
             bindings: [
-              KeyBinding(KeySequence.d.k, onTrigger: () => calls.add('dk')),
-              KeyBinding(KeyCode.char('z'), onTrigger: () => calls.add('z')),
+              KeyBinding(KeySequence.d.k, onTrigger: (_) => calls.add('dk')),
+              KeyBinding(KeyCode.char('z'), onTrigger: (_) => calls.add('z')),
             ],
             child: const Focus(autofocus: true, child: EmptyBox()),
           ),
@@ -1032,7 +1235,7 @@ void main() {
       final h = _TestHarness();
       h.mountRoot(
         KeyBindings(
-          bindings: [KeyBinding(KeySequence.d.k, onTrigger: () {})],
+          bindings: [KeyBinding(KeySequence.d.k, onTrigger: (_) {})],
           child: const _DecliningField(),
         ),
       );
@@ -1065,14 +1268,14 @@ void main() {
       h.mountRoot(
         KeyBindings(
           bindings: [
-            KeyBinding.event(
+            KeyBinding(
               KeySequence.d,
-              onEvent: (e) {
+              onTrigger: (e) {
                 calls.add('d');
                 e.bubble();
               },
             ),
-            KeyBinding(KeySequence.d.k, onTrigger: () => calls.add('dk')),
+            KeyBinding(KeySequence.d.k, onTrigger: (_) => calls.add('dk')),
           ],
           child: const Focus(autofocus: true, child: EmptyBox()),
         ),
@@ -1108,12 +1311,12 @@ void main() {
           bindings: [
             KeyBinding(
               KeySequence.d,
-              onTrigger: () {
+              onTrigger: (_) {
                 calls.add('d');
                 if (calls.length < 5) h.dispatch(_char('d')); // re-enter
               },
             ),
-            KeyBinding(KeySequence.d.k, onTrigger: () => calls.add('dk')),
+            KeyBinding(KeySequence.d.k, onTrigger: (_) => calls.add('dk')),
           ],
           child: const Focus(autofocus: true, child: EmptyBox()),
         ),
@@ -1139,7 +1342,7 @@ void main() {
       h.mountRoot(
         KeyBindings(
           bindings: [
-            KeyBinding(KeySequence.d.k, onTrigger: () => calls.add('dk')),
+            KeyBinding(KeySequence.d.k, onTrigger: (_) => calls.add('dk')),
           ],
           child: const Focus(autofocus: true, child: EmptyBox()),
         ),
@@ -1159,8 +1362,8 @@ void main() {
       h.mountRoot(
         KeyBindings(
           bindings: [
-            KeyBinding(KeySequence.d, onTrigger: () => calls.add('d')),
-            KeyBinding(KeySequence.d.k, onTrigger: () => calls.add('dk')),
+            KeyBinding(KeySequence.d, onTrigger: (_) => calls.add('d')),
+            KeyBinding(KeySequence.d.k, onTrigger: (_) => calls.add('dk')),
           ],
           child: const Focus(autofocus: true, child: EmptyBox()),
         ),
@@ -1186,7 +1389,7 @@ void main() {
       final h = _TestHarness();
       h.mountRoot(
         KeyBindings(
-          bindings: [KeyBinding(KeySequence.d.k, onTrigger: () {})],
+          bindings: [KeyBinding(KeySequence.d.k, onTrigger: (_) {})],
           child: const Focus(autofocus: true, child: EmptyBox()),
         ),
       );
@@ -1203,7 +1406,7 @@ void main() {
       final h = _TestHarness();
       h.mountRoot(
         KeyBindings(
-          bindings: [KeyBinding(KeySequence.d.k, onTrigger: () {})],
+          bindings: [KeyBinding(KeySequence.d.k, onTrigger: (_) {})],
           child: const Focus(autofocus: true, child: EmptyBox()),
         ),
       );

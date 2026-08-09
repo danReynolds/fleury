@@ -1,5 +1,5 @@
-// Guards the load-bearing claim in fleury_core.dart / fleury_host.dart:
-// everything reachable from the core and host barrels is free of dart:io
+// Guards the load-bearing claim in the platform-neutral Fleury barrels:
+// everything reachable from the core, host, and wire barrels is free of dart:io
 // and dart:ffi, so it compiles to the web. The public-api boundary test
 // checks WHERE symbols are exported; this checks WHAT those exports drag
 // in — the gap that let hot-reload (vm_service) and the process-spawning
@@ -10,7 +10,11 @@ import 'dart:io';
 import 'package:test/test.dart';
 
 void main() {
-  for (final barrel in ['lib/fleury_core.dart', 'lib/fleury_host.dart']) {
+  for (final barrel in [
+    'lib/fleury_core.dart',
+    'lib/fleury_host.dart',
+    'lib/fleury_wire.dart',
+  ]) {
     test('$barrel is transitively free of dart:io and dart:ffi', () {
       final offenders = <String>[];
       final visited = <String>{};

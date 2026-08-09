@@ -347,11 +347,12 @@ class _FleuryAppState extends State<FleuryApp> {
       final sourceContext = _commandSourceContext(context);
       if (!_commandVisible(command, sourceContext)) continue;
       bindings.add(
-        KeyBinding.any(
-          command.shortcuts,
+        KeyBinding(
+          command.shortcuts.first,
+          aliases: command.shortcuts.skip(1).toList(),
           label: command.title,
           enabled: _commandEnabled(command, sourceContext),
-          onTrigger: () {
+          onTrigger: (_) {
             unawaited(
               _commands.invoke(
                 command.id,

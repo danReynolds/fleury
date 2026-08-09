@@ -743,7 +743,7 @@ void main() {
         var globalFired = 0;
         final binding = KeyBinding(
           KeyCode.char('g'),
-          onTrigger: () => globalFired += 1,
+          onTrigger: (_) => globalFired += 1,
           label: 'g',
         );
         final dispatcher = InputDispatcher(
@@ -794,7 +794,7 @@ void main() {
         var globalFired = 0;
         final binding = KeyBinding(
           KeyCode.char('g'),
-          onTrigger: () => globalFired += 1,
+          onTrigger: (_) => globalFired += 1,
           label: 'g',
         );
         final dispatcher = InputDispatcher(

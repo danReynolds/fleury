@@ -565,7 +565,7 @@ void main() {
           bindings: [
             KeyBinding(
               KeySequence.escape,
-              onTrigger: () => ancestorEscapes += 1,
+              onTrigger: (_) => ancestorEscapes += 1,
             ),
           ],
           child: TextArea(
@@ -798,7 +798,7 @@ void main() {
           bindings: [
             KeyBinding(
               KeySequence.ctrl.c,
-              onTrigger: () => ancestorCopies += 1,
+              onTrigger: (_) => ancestorCopies += 1,
             ),
           ],
           child: TextArea(

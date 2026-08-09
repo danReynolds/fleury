@@ -1252,6 +1252,9 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       case 'alloc-gate':
         await benchmarkAllocGate(rest);
         return;
+      case 'input-alloc-gate':
+        await benchmarkInputAllocGate(rest);
+        return;
       case 'paint-gate':
         await benchmarkPaintGate(rest);
         return;
@@ -1658,6 +1661,22 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
     ], workingDirectory: profiling);
   }
 
+  /// Per-key input-path allocation gate (RFC 0020 §19). Drives raw terminal
+  /// bytes through parser -> dispatcher -> session -> binding walk and gates
+  /// on bytes/key of `package:fleury` churn — the axis the per-frame gate
+  /// cannot see, because it never presses a key.
+  Future<void> benchmarkInputAllocGate(List<String> args) async {
+    await _run('dart', [
+      // Same reason as alloc-gate: without --deterministic a background JIT
+      // tier can land mid-window and collapse the measured churn.
+      '--deterministic',
+      '--enable-vm-service=0',
+      '--disable-service-auth-codes',
+      'bin/input_alloc_gate.dart',
+      ...args,
+    ], workingDirectory: profiling);
+  }
+
   /// Paint-cost regression gate. Drives real-widget steady-state scenarios
   /// (ListView auto-boundaries, Overlay adaptive entry boundaries, the lazy
   /// toast layer) and gates on exact per-frame repaint-boundary counters —
@@ -1708,6 +1727,13 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
         '--enable-vm-service=0',
         '--disable-service-auth-codes',
         'bin/alloc_gate.dart',
+        '--gate',
+      ]),
+      (name: 'input-alloc-gate', cmd: [
+        '--deterministic',
+        '--enable-vm-service=0',
+        '--disable-service-auth-codes',
+        'bin/input_alloc_gate.dart',
         '--gate',
       ]),
       (name: 'paint-gate', cmd: ['run', 'bin/paint_gate.dart', '--gate']),
@@ -6710,6 +6736,9 @@ void _printBenchmarkUsage() {
   );
   stdout.writeln(
     '  alloc-gate [--gate]     Per-frame package:fleury allocation churn',
+  );
+  stdout.writeln(
+    '  input-alloc-gate [--gate] Per-key input-path allocation churn',
   );
   stdout.writeln(
     '  paint-gate [--gate]     Repaint-boundary counters (paint-walk pruning)',

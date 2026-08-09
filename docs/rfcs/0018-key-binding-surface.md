@@ -2,6 +2,17 @@
 
 **Status:** Implemented — design converged in maintainer review 2026-07-20, then shipped across PRs #157 (core redesign), #160 (`activeOf` / `pendingOf`, `WhichKey`, `tester.press`) and #162 (the `samples/editor` proving ground). See §12.1 for errata.
 **Date:** 2026-07-20
+**Amended by [RFC 0020](0020-keyboard-lifecycle-and-kitty.md)** (accepted
+2026-08-03): bindings no longer fire on keyboard auto-repeat by default
+(`includeRepeats:` opts in; repeat-reliant framework bindings — focus
+traversal, selection extension — are marked in the same change); handlers
+always receive the event (`onTrigger: (e) => …`); `KeyBinding.any` becomes the
+`aliases:` parameter and `KeyBinding.event` is folded into the unnamed
+constructor; `Focus.onKey` is removed in favor of `KeyDetector`; sequence
+lifecycle corners (Esc-cancel as a non-competing side effect, no prefix replay
+on cancellation, repeat/timeout/scope-exit rules) are pinned by RFC 0020 §14.4.
+This RFC's matching model, precedence, DSL, and hint/which-key surfaces carry
+forward unchanged.
 **Supersedes:** the authoring surface of RFC 0008 (`KeyChord`, `KeyBinding` constructors, `KeyEvent` shape). The dispatch architecture of RFC 0008 §7 (precedence, modal scopes, text-input claim order, central `InputDispatcher`) carries forward unchanged.
 **Prerequisite:** Dart ≥ 3.10 (dot shorthands — already required by the current tree).
 
@@ -65,9 +76,12 @@ The compile-error messages quoted in §11 are verbatim analyzer output.
 - String-based *bind sites* (`bind('ctrl+s', …)`). Strings are for
   config files and capture UIs (§9); call sites stay typed.
 - Digit statics (`.digit1`). Digits and punctuation use `.char('1')`.
-- A `repeats:` flag on bindings. Legacy terminals cannot distinguish
+- ~~A `repeats:` flag on bindings.~~ **Superseded by RFC 0020 §12:**
+  `includeRepeats:` shipped once bindings fired once per physical press by
+  default — the per-terminal divergence this bullet feared became the
+  regularizer's job. Original text: legacy terminals cannot distinguish
   auto-repeat from fresh presses, so the flag would silently behave
-  differently per terminal. Kitty-only repeat sensitivity is available
+  differently per terminal. Kitty-only repeat sensitivity was available
   via `KeyBinding.event` + `event.raw.type` (§7).
 - Vim-grade operator/count/textobject grammar as a framework primitive
   (unchanged from RFC 0008). The `samples/editor` showcase (§13)
@@ -189,9 +203,10 @@ Nine rules, normative:
    the Kitty path and the DOM input source) fires a bare `.s` binding.
 4. **Caps Lock / Num Lock never enter the model** — dropped at the
    parser.
-5. **Bindings fire on `down` and `repeat`, never `up`.** The matcher
-   rejects releases so enabling Kitty event-type reporting later cannot
-   double-fire bindings.
+5. **Bindings fire once per physical press, never on `up`.** The matcher
+   rejects releases so event-type reporting cannot double-fire bindings.
+   (*Amended by RFC 0020 §12: repeats are filtered by default too —
+   `includeRepeats: true` opts a binding back into auto-repeat.*)
 6. **Sequences keep RFC 0008 dispatch:** vim-style precedence (a direct
    `.d` waits while `.d.d` is live), per-dispatcher `sequenceTimeout`
    (default 500 ms), cancel/timeout replays held events with text-origin
@@ -227,6 +242,9 @@ final class KeyBinding {
     String? label, bool enabled = true, bool hideFromHintBar = false,
   });
 
+  // (Historical: .event and .any were folded into the single
+  // KeyBinding(...) constructor by RFC 0020 P4 — onTrigger takes the
+  // event, aliases: replaces .any.)
   KeyBinding.event(KeySequence sequence, {
     required void Function(KeyBindingEvent) onEvent,
     String? label, bool enabled = true, bool hideFromHintBar = false,
@@ -280,9 +298,13 @@ final raw event, and `KeyBinding.any` handlers cannot tell which alias
 fired. Events synthesized from text input appear as their synthesized
 `KeyEvent`s.
 
-Kitty-only repeat sensitivity, when genuinely needed:
+Kitty-only repeat sensitivity, when genuinely needed (*historical: RFC 0020
+made once-per-press the default and `KeyBinding.event` was folded into the
+single `onTrigger` constructor*):
 
 ```dart
+// Today: KeyBinding(.ctrl.q, onTrigger: (_) => confirmQuit()) — repeats
+// are already filtered. The original proposal read:
 KeyBinding.event(.ctrl.q, onEvent: (event) {
   if (event.raw.type == KeyEventType.repeat) return;
   confirmQuit();

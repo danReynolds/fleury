@@ -110,7 +110,8 @@ Widget styledRow({required int index, required int tick, required int cols}) {
 
 /// [styledRow] listening to its OWN [model] — the streaming-token /
 /// live-row update shape whose localized repaint the boundaries prune.
-Widget liveRow({required int index, required RowModel model, required int cols}) {
+Widget liveRow(
+    {required int index, required RowModel model, required int cols}) {
   return ListenableBuilder(
     listenable: model,
     builder: (context, _) => styledRow(index: index, tick: model.v, cols: cols),

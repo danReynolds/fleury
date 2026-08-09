@@ -21,6 +21,7 @@
 import 'dart:async';
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_wire.dart';
 import '../support/harness.dart';
 import 'package:fleury/src/remote/remote_driver.dart';
 import 'package:test/test.dart';
@@ -45,7 +46,7 @@ class _HostState extends State<_Host> {
       bindings: [
         KeyBinding(
           KeyCode.char('f'),
-          onTrigger: () => setState(() => mode = BoomMode.healthy),
+          onTrigger: (_) => setState(() => mode = BoomMode.healthy),
         ),
       ],
       child: Focus(
@@ -137,7 +138,7 @@ class _SequenceInteractivePaintFailureState
       rethrowContained: false,
       child: KeyBindings(
         bindings: [
-          KeyBinding(KeySequence.g.g, onTrigger: () => widget.onTriggered()),
+          KeyBinding(KeySequence.g.g, onTrigger: (_) => widget.onTriggered()),
         ],
         child: Focus(
           autofocus: true,
@@ -719,7 +720,11 @@ void _coherenceOracle() {
     expect(contained, contains('layout-boom'), reason: 'panel on the wire');
 
     // Recover: the 'f' binding heals the subtree.
-    transport.emit(const InputEventFrame(KeyEvent(KeyCode.char('f'))));
+    transport.emit(
+      const InputEventFrame(
+        InputBatch(key: KeyEvent(KeyCode.char('f')), committedText: 'f'),
+      ),
+    );
     await Future<void>.delayed(const Duration(milliseconds: 20));
 
     mirrorText();

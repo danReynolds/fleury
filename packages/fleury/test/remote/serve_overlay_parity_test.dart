@@ -9,6 +9,7 @@
 import 'dart:math';
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_wire.dart';
 import 'package:test/test.dart';
 
 String _render(CellBuffer b) {

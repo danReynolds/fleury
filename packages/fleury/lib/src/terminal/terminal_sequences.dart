@@ -14,9 +14,20 @@ String buildTerminalEnterSequences(TerminalMode mode) {
   if (mode.alternateScreen) buf.write('\x1B[?7l');
   if (mode.hideCursor) buf.write('\x1B[?25l');
   if (mode.bracketedPaste) buf.write('\x1B[?2004h');
-  // Push the Kitty "disambiguate escape codes" flag (1). Unknown terminals
-  // drop the sequence silently.
-  if (mode.kittyKeyboard) buf.write('\x1B[>1u');
+  // Focus reporting (DECSET 1004). Opportunistic: it cannot be queried, so
+  // we enable it and use what arrives. Where it flows, focus-out is the
+  // authority-loss signal that keeps held keys from wedging (RFC 0020 §8.6);
+  // where it doesn't, nothing covers it — the watchdog this comment used to
+  // credit was specified and never implemented.
+  if (mode.focusReporting) buf.write('\x1B[?1004h');
+  // Push this tier's Kitty flags. MUST come after the alt-screen switch
+  // above: the protocol mandates a separate flag stack per screen buffer,
+  // so pushing before `?1049h` would push onto the MAIN screen's stack and
+  // leave the session unenhanced (RFC 0020 §8.1 — the failure Bubble Tea
+  // filed as #1383). Unknown terminals drop the sequence silently.
+  if (mode.kittyKeyboard) {
+    buf.write('\x1B[>${mode.keyboardProtocol.requestedFlags}u');
+  }
   // SGR mouse: button tracking (1000) + drag (1002), plus all-motion (1003)
   // for hover when requested, all in SGR encoding (1006).
   if (mode.mouse || mode.mouseMotion) {
@@ -39,7 +50,13 @@ String buildTerminalExitSequences(TerminalMode mode) {
   // (classified as session lifecycle in AnsiByteBreakdown, not frame
   // overhead).
   buf.write('\x1B[?1006l\x1B[?1003l\x1B[?1002l\x1B[?1000l');
-  if (mode.kittyKeyboard) buf.write('\x1B[<u');
+  // Pop exactly the one entry we pushed, with an EXPLICIT count: a bare
+  // `CSI < u` is `CSI u` to a parser that drops the private marker, which
+  // Windows consoles define as ANSISYSRC (restore cursor). Must come before
+  // leaving the alt screen, for the same per-buffer-stack reason as the
+  // push (§8.1).
+  if (mode.kittyKeyboard) buf.write('\x1B[<1u');
+  if (mode.focusReporting) buf.write('\x1B[?1004l');
   if (mode.bracketedPaste) buf.write('\x1B[?2004l');
   if (mode.hideCursor) buf.write('\x1B[?25h');
   if (mode.resetStyleOnExit) buf.write('\x1B[0m');

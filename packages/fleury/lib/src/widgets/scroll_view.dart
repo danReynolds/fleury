@@ -32,6 +32,7 @@ import '../rendering/render_object.dart';
 import '../input/events.dart';
 import 'focus.dart';
 import 'framework.dart';
+import 'keyboard.dart';
 import 'list_view.dart' show EdgeBehavior;
 import 'pointer.dart';
 import 'scrollbar.dart';
@@ -218,6 +219,13 @@ class _ScrollViewState extends State<ScrollView> {
     });
   }
 
+  /// Detector adapter: this widget consumes only the scrolls it can
+  /// perform, so an arrow at the edge falls through to whoever is next
+  /// (RFC 0020 §17's conditional-consumption floor).
+  void _detectKey(KeyEvent event) {
+    if (_handleKey(event) == KeyEventResult.handled) event.consume();
+  }
+
   KeyEventResult _handleKey(KeyEvent event) {
     final page = _controller.viewportExtent < 1
         ? 1
@@ -282,14 +290,16 @@ class _ScrollViewState extends State<ScrollView> {
       router: PointerRouterScope.maybeOf(context),
       onScrollUp: () => _controller.scrollBy(-3),
       onScrollDown: () => _controller.scrollBy(3),
-      child: Focus(
-        focusNode: _focusNode,
-        autofocus: widget.autofocus,
-        onKey: _handleKey,
-        child: _ScrollViewport(
-          controller: _controller,
-          paintRevision: _paintRevision,
-          child: widget.child,
+      child: KeyDetector(
+        onKey: _detectKey,
+        child: Focus(
+          focusNode: _focusNode,
+          autofocus: widget.autofocus,
+          child: _ScrollViewport(
+            controller: _controller,
+            paintRevision: _paintRevision,
+            child: widget.child,
+          ),
         ),
       ),
     );

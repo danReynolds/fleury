@@ -1,0 +1,570 @@
+// RFC 0020 Part I — the session keyboard model: semantic capabilities, the
+// canonical press-record regularizer, and the frame-latched snapshot.
+//
+// This layer is the "honest physical record" (§6): it is fed the normalized
+// key stream, repairs impossible phase sequences, maintains active press
+// records, accumulates frame edges, and synthesizes releases ONLY on
+// authority loss (blur/suspend/disconnect/restore/downgrade/replacement).
+// Focus transitions never touch it — per-observer scope projection is the
+// dispatcher's job, layered above.
+
+import 'package:meta/meta.dart';
+
+import 'events.dart';
+import 'keyboard_layout.dart';
+
+/// What a keyboard surface has been *confirmed* to guarantee (RFC 0020
+/// §5.7): semantic capabilities, never raw protocol flags, projected from
+/// what negotiation confirmed — not what was requested.
+@immutable
+final class KeyboardCapabilities {
+  const KeyboardCapabilities({
+    this.supportsHeldState = false,
+    this.distinguishesRepeats = false,
+    this.supportsPositions = false,
+    this.reportsPrintableKeys = false,
+  });
+
+  /// Reliable down/up for all ordinary keys — the gate for every sampled
+  /// query. Kitty: flags 2∧8 confirmed. Web: true. Legacy: false.
+  final bool supportsHeldState;
+
+  /// Auto-repeat carries an event-type tag (for printables only where
+  /// [reportsPrintableKeys] also holds). Informational — repeat policy is
+  /// evaluated per event on [KeyEventType], never through this bit.
+  final bool distinguishesRepeats;
+
+  /// Positional identity is generally available. Still optional per event
+  /// ([KeyEvent.position] stays nullable on every surface).
+  final bool supportsPositions;
+
+  /// Every printable arrives as a key event (kitty flag 8 / the DOM). The
+  /// floor's tier requirement: raw-key consumers of printables (§17.4).
+  final bool reportsPrintableKeys;
+
+  /// Projects CONFIRMED Kitty progressive-enhancement flags into semantic
+  /// guarantees (RFC 0020 §5.7) — the one definition of that mapping, so a
+  /// local terminal, a `fleury shell` relay, and a diagnostic can never
+  /// disagree about what a given reply promises.
+  ///
+  /// Held state deliberately needs event types AND all-keys-as-escapes: with
+  /// flag 2 alone an ordinary printable still arrives as a plain byte, so it
+  /// has no release to pair and no press record to keep.
+  factory KeyboardCapabilities.fromKittyFlags(int flags) {
+    final eventTypes = flags & 0x02 != 0;
+    final allKeys = flags & 0x08 != 0;
+    final alternates = flags & 0x04 != 0;
+    return KeyboardCapabilities(
+      supportsHeldState: eventTypes && allKeys,
+      distinguishesRepeats: eventTypes,
+      supportsPositions: eventTypes && allKeys && alternates,
+      reportsPrintableKeys: allKeys,
+    );
+  }
+
+  /// Decodes the remote INIT `keyboard=` declaration (RFC 0020 §11).
+  factory KeyboardCapabilities.fromWireBits(int bits) => KeyboardCapabilities(
+    supportsHeldState: bits & 0x1 != 0,
+    distinguishesRepeats: bits & 0x2 != 0,
+    supportsPositions: bits & 0x4 != 0,
+    reportsPrintableKeys: bits & 0x8 != 0,
+  );
+
+  /// This declaration as remote-wire bits. Semantic guarantees travel, never
+  /// Kitty flags: a browser peer has no flags at all, and a peer that
+  /// negotiated a tier the reader has never heard of still declares exactly
+  /// what it can promise.
+  int get wireBits =>
+      (supportsHeldState ? 0x1 : 0) |
+      (distinguishesRepeats ? 0x2 : 0) |
+      (supportsPositions ? 0x4 : 0) |
+      (reportsPrintableKeys ? 0x8 : 0);
+
+  /// The conservative default: press-only, best-effort input.
+  static const KeyboardCapabilities legacy = KeyboardCapabilities();
+
+  /// Everything confirmed — the DOM surface, and kitty lifecycle mode with
+  /// flag 4 honored.
+  static const KeyboardCapabilities full = KeyboardCapabilities(
+    supportsHeldState: true,
+    distinguishesRepeats: true,
+    supportsPositions: true,
+    reportsPrintableKeys: true,
+  );
+
+  @override
+  bool operator ==(Object other) =>
+      other is KeyboardCapabilities &&
+      other.supportsHeldState == supportsHeldState &&
+      other.distinguishesRepeats == distinguishesRepeats &&
+      other.supportsPositions == supportsPositions &&
+      other.reportsPrintableKeys == reportsPrintableKeys;
+
+  @override
+  int get hashCode => Object.hash(
+    supportsHeldState,
+    distinguishesRepeats,
+    supportsPositions,
+    reportsPrintableKeys,
+  );
+
+  @override
+  String toString() =>
+      'KeyboardCapabilities('
+      '${[if (supportsHeldState) 'heldState', if (distinguishesRepeats) 'repeats', if (supportsPositions) 'positions', if (reportsPrintableKeys) 'printableKeys'].join(', ')}'
+      ')';
+}
+
+/// One physically-held key as the session recorded it: the logical identity
+/// captured at down, the positional identity when that press carried one.
+@immutable
+final class _PressRecord {
+  const _PressRecord(this.code, this.position);
+
+  final KeyCode code;
+  final KeyPosition? position;
+
+  /// §13.3 identity matching, per press: a known position matches by
+  /// position only; an unknown one degrades one-way to the selector's US
+  /// twin. Mirrors [KeyEvent.matches].
+  bool matches(KeySelector selector) {
+    if (selector is KeyCode) return code == selector;
+    if (selector is KeyPosition) {
+      final p = position;
+      if (p != null) return p == selector;
+      final twin = selector.usTwin;
+      return twin != null && code == twin;
+    }
+    return false;
+  }
+
+  /// Map key: physical position when known (unique per physical key), else
+  /// the logical code.
+  Object get identity => position ?? code;
+}
+
+/// An immutable, frame-latched view of the session keyboard (RFC 0020
+/// §5.6/§7): what is held, and which identities transitioned since the
+/// previous latch. Edges are non-consuming and expire at the next latch
+/// whether or not anyone read them; a paused consumer gets no backlog.
+final class KeyboardSnapshot {
+  KeyboardSnapshot._(
+    List<_PressRecord> held,
+    List<_PressRecord> downEdges,
+    List<_PressRecord> upEdges,
+    this.sessionGeneration,
+    this.frameNumber,
+  ) : _held = held,
+      _downEdges = downEdges,
+      _upEdges = upEdges;
+
+  static final KeyboardSnapshot _empty = KeyboardSnapshot._(
+    const [],
+    const [],
+    const [],
+    0,
+    0,
+  );
+
+  /// A snapshot with nothing held and no edges — what any consumer sees
+  /// before the first latch, or on a surface that reports no held state.
+  ///
+  /// Public so code that CONSUMES snapshots (an intent resolver taking
+  /// per-frame input, like the showcase's `ShipControls`) can be tested
+  /// against "no keyboard input" without reaching into `src/` for a session
+  /// to latch one out of.
+  static KeyboardSnapshot get empty => _empty;
+
+  final List<_PressRecord> _held;
+  final List<_PressRecord> _downEdges;
+  final List<_PressRecord> _upEdges;
+
+  /// Bumped when the input session is replaced (driver swap, reconnect);
+  /// all prior state and edges are invalidated with it.
+  final int sessionGeneration;
+
+  /// The latch ordinal of the last input change this snapshot reflects.
+  final int frameNumber;
+
+  /// Logical identities currently down.
+  Set<KeyCode> get pressed => {for (final r in _held) r.code};
+
+  /// Positional identities currently down (presses that carried one).
+  Set<KeyPosition> get positionsPressed => {
+    for (final r in _held)
+      if (r.position != null) r.position!,
+  };
+
+  /// Every selector any app has sampled, in debug builds only. Read and
+  /// cleared by the dispatcher's dead-control check; see
+  /// [debugTakeSampledSelectors].
+  static final Set<KeySelector> _debugSampled = <KeySelector>{};
+
+  /// Drains the selectors sampled since the last call. Debug-only: in release
+  /// the recording below is compiled out and this is always empty.
+  static Set<KeySelector> debugTakeSampledSelectors() {
+    final taken = Set<KeySelector>.of(_debugSampled);
+    _debugSampled.clear();
+    return taken;
+  }
+
+  /// Whether [selector]'s key is down right now (per-press §13.3 matching:
+  /// positional when the press carried a position, else US-twin logical).
+  bool isHeld(KeySelector selector) {
+    // Recorded so the dispatcher can catch a control that cannot possibly
+    // work: sampling a key on a surface that reports no held state, with no
+    // binding to carry it, is dead code the framework can see and the author
+    // cannot. `assert(() {...}())` compiles out entirely in release, so the
+    // input allocation gate is untouched.
+    assert(() {
+      _debugSampled.add(selector);
+      return true;
+    }());
+    return _held.any((r) => r.matches(selector));
+  }
+
+  /// Whether [selector]'s key transitioned down since the previous latch.
+  /// Non-consuming; survives a press+release that lands entirely between
+  /// two frames (the fixed-step-simulation contract, §7.2).
+  bool wasPressed(KeySelector selector) =>
+      _downEdges.any((r) => r.matches(selector));
+
+  /// Whether [selector]'s key transitioned up since the previous latch.
+  bool wasReleased(KeySelector selector) =>
+      _upEdges.any((r) => r.matches(selector));
+
+  @override
+  String toString() =>
+      'KeyboardSnapshot(held: ${_held.length}, +${_downEdges.length} '
+      '-${_upEdges.length}, gen $sessionGeneration, frame $frameNumber)';
+}
+
+/// The outcome of regularizing one key event: the event stream downstream
+/// lanes observe (possibly with a repair event prepended), preserving the
+/// per-key one-down/n-repeats/one-up contract.
+final class RegularizedKey {
+  const RegularizedKey._(this.events);
+
+  /// In order. One element in the common case; two when a repair event was
+  /// synthesized (repeat-without-down → synthesized down + the repeat).
+  final List<KeyEvent> events;
+}
+
+/// The canonical session keyboard: press records, phase repair, edge
+/// accumulation, and snapshot publication. Owned by the input dispatcher;
+/// one per running app.
+final class KeyboardSession {
+  KeyboardSession({
+    KeyboardCapabilities capabilities = KeyboardCapabilities.legacy,
+  }) : _capabilities = capabilities;
+
+  KeyboardCapabilities _capabilities;
+  KeyboardCapabilities get capabilities => _capabilities;
+
+  /// Called when what this keyboard IS has changed — new capabilities, or a
+  /// newly learned cap. Wired by the runtime to the tree-facing notifier.
+  void Function()? onDescriptionChanged;
+
+  /// What this keyboard's keys are actually capped with (RFC 0020 §9).
+  ///
+  /// Learns from the stream below: where the terminal reports positional
+  /// identity, every press pairs a physical spot with the character it
+  /// produced — the mapping, observed rather than assumed.
+  final KeyboardLayout layout = KeyboardLayout.learning();
+
+  /// How many times a surface claiming phase reporting has contradicted
+  /// itself (see the `down`-while-held branch of [ingest]).
+  int _phaseViolations = 0;
+
+  /// Called when a surface is caught not honouring the phases it claimed, so
+  /// the runtime can republish capabilities and let apps re-branch their
+  /// controls. Set by the dispatcher.
+  void Function(KeyboardCapabilities)? onCapabilitiesDemoted;
+
+  /// Downgrades this session to press-only after a surface is caught lying.
+  ///
+  /// Everything currently "held" is a fiction — those keys have no releases
+  /// coming — so the records are dropped rather than left to stick down
+  /// forever. Apps that branch on [KeyboardCapabilities.supportsHeldState]
+  /// then offer their press-only scheme, which is the honest experience on
+  /// such a terminal.
+  List<KeyEvent> _demotionReleases = const [];
+
+  /// The synthetic releases owed after a demotion — see [_demoteToPressOnly].
+  List<KeyEvent> drainDemotionReleases() {
+    final out = _demotionReleases;
+    _demotionReleases = const [];
+    return out;
+  }
+
+  void _demoteToPressOnly() {
+    // Synthesize the releases the terminal will never send, so a hold that is
+    // in flight ends instead of hanging on forever.
+    _demotionReleases = [
+      for (final record in _held.values)
+        KeyEvent(
+          record.code,
+          type: KeyEventType.up,
+          position: record.position,
+          synthesized: true,
+        ),
+    ];
+    _capabilities = KeyboardCapabilities(
+      supportsHeldState: false,
+      distinguishesRepeats: false,
+      supportsPositions: _capabilities.supportsPositions,
+      reportsPrintableKeys: _capabilities.reportsPrintableKeys,
+    );
+    _held.clear();
+    _pendingDowns = [];
+    _pendingUps = [];
+    _dirtySinceLatch = true;
+    onCapabilitiesDemoted?.call(_capabilities);
+  }
+
+  /// Live press records, keyed by physical identity (position when known,
+  /// else logical code).
+  final Map<Object, _PressRecord> _held = {};
+
+  /// Edge accumulators since the last latch.
+  List<_PressRecord> _pendingDowns = [];
+  List<_PressRecord> _pendingUps = [];
+
+  int _sessionGeneration = 0;
+  int _frameNumber = 0;
+  bool _dirtySinceLatch = false;
+  KeyboardSnapshot _latched = KeyboardSnapshot._empty;
+
+  int get sessionGeneration => _sessionGeneration;
+
+  /// The most recently published latch. Allocation-free when no input
+  /// changed since the last publish (§19): the cached instance is returned.
+  KeyboardSnapshot get snapshot => _latched;
+
+  /// Replaces the effective capabilities (negotiation completing, a
+  /// downgrade, a driver swap). Losing held-state support is authority
+  /// loss: records are recovered per [loseAuthority].
+  List<KeyEvent> updateCapabilities(KeyboardCapabilities next) {
+    if (next == _capabilities) return const [];
+    final losingState =
+        _capabilities.supportsHeldState && !next.supportsHeldState;
+    // Gaining held state is a fresh grant of trust (a renegotiation, a new
+    // peer, a driver swap): the violation evidence belonged to the surface
+    // that earned it. A lying surface re-earns its demotion in two strikes.
+    if (!_capabilities.supportsHeldState && next.supportsHeldState) {
+      _phaseViolations = 0;
+    }
+    _capabilities = next;
+    return losingState ? loseAuthority() : const [];
+  }
+
+  /// Ingests one key event from the normalized stream, updating records and
+  /// edges, and returns the regularized event list downstream lanes must
+  /// observe in order (§6's repair table):
+  ///
+  /// - duplicate down while held → demoted to a repeat;
+  /// - repeat without a preceding down → synthesized down (command-eligible;
+  ///   it stands in for a press that physically happened) + the repeat;
+  /// - up for an unheld key → delivered for observability, records intact.
+  ///
+  /// On a surface without [KeyboardCapabilities.supportsHeldState] the
+  /// session tracks nothing and repairs nothing — a release-less source's
+  /// fresh downs are fresh presses, never "duplicates" (the test-harness
+  /// and legacy-terminal profile).
+  /// The map key of the held record [event] refers to, or null when nothing
+  /// matching is held.
+  ///
+  /// Positional identity is optional **per event** even on a confirmed
+  /// surface (RFC 0020 §4: flag 4 is "can send"; the DOM reports
+  /// `Unidentified`), so the same physical key can arrive with a position
+  /// once and without it the next time. Exact keying alone would then open
+  /// a second record for a key already held and leave the first one
+  /// unclosable — a silent stuck key. Fall back to §13.3's degradation so a
+  /// mismatched pair still closes the press it opened.
+  Object? _lookupHeld(KeyEvent event) {
+    final exact = event.position ?? event.code;
+    if (_held.containsKey(exact)) return exact;
+    for (final MapEntry(key: id, value: record) in _held.entries) {
+      if (record.matches(event.position ?? event.code)) return id;
+      if (record.code == event.code) return id;
+    }
+    return null;
+  }
+
+  RegularizedKey ingest(KeyEvent event) {
+    // Layout learning is independent of held-state support: a surface can
+    // report positions without releases, and every such report teaches us
+    // one cap.
+    if (event.type == KeyEventType.down && layout.observe(event)) {
+      // A newly learned cap changes what every hint surface should render,
+      // and the layout fills in one key at a time — so republish, or the bar
+      // keeps showing the US twin until an unrelated rebuild happens to come
+      // along. Bounded by the physical key count, not the keystroke rate.
+      onDescriptionChanged?.call();
+    }
+    if (!_capabilities.supportsHeldState) {
+      return RegularizedKey._([event]);
+    }
+    final record = _PressRecord(event.code, event.position);
+    final id = record.identity;
+    final heldId = _lookupHeld(event);
+    switch (event.type) {
+      case KeyEventType.down:
+        if (heldId != null) {
+          // A `down` for a key we already believe is held. On a terminal that
+          // truly honours event types this cannot happen: auto-repeat would
+          // arrive tagged `:2`, and the key would have been released first.
+          //
+          // So it is evidence the surface CLAIMED phase reporting and does not
+          // do it — the failure mode is silent and total, because without
+          // releases every key sticks down forever and `isHeld` never goes
+          // back to false. Observed on Warp, which answers the Kitty status
+          // query with all five flags and then emits bare `CSI 97;1;97 u` for
+          // every press and repeat alike.
+          //
+          // Two strikes, not one: a single dropped release (a lost byte, a
+          // suspend) is a legitimate one-off, but a terminal that does not
+          // implement phases produces this on every repeat.
+          // `>=`, not `==`: after a demotion the counter rests at 2, and a
+          // later re-upgrade (reconnect, driver swap, renegotiation) would
+          // otherwise increment it PAST 2 on the next violation — never
+          // equal again, detector permanently disarmed on exactly the
+          // surfaces that need it.
+          if (!event.synthesized && ++_phaseViolations >= 2) {
+            _demoteToPressOnly();
+          }
+          // Duplicate down while held: demote. State already says held.
+          final demoted = KeyEvent(
+            event.code,
+            modifiers: event.modifiers,
+            type: KeyEventType.repeat,
+            position: event.position,
+            synthesized: event.synthesized,
+          );
+          return RegularizedKey._([demoted]);
+        }
+        _held[id] = record;
+        _pendingDowns.add(record);
+        _dirtySinceLatch = true;
+        return RegularizedKey._([event]);
+      case KeyEventType.repeat:
+        // Positive evidence, and the only kind that exists: the parser
+        // produces `repeat` and `up` ONLY from an explicit `:2` / `:3`
+        // sub-parameter, so either one proves this surface really does
+        // implement phases. That retires whatever suspicion earlier dropped
+        // bytes accumulated — without it the counter is a one-way ratchet and
+        // a long session on an honest terminal demotes itself over two
+        // unrelated lost releases.
+        if (!event.synthesized) _phaseViolations = 0;
+        if (heldId == null) {
+          // Repeat without down: the down physically happened and was
+          // missed. Repair with a synthesized, command-eligible down.
+          _held[id] = record;
+          _pendingDowns.add(record);
+          _dirtySinceLatch = true;
+          final repair = KeyEvent(
+            event.code,
+            modifiers: event.modifiers,
+            type: KeyEventType.down,
+            position: event.position,
+            synthesized: true,
+          );
+          return RegularizedKey._([repair, event]);
+        }
+        return RegularizedKey._([event]);
+      case KeyEventType.up:
+        // Positive evidence, and the only kind that exists: the parser
+        // produces `repeat` and `up` ONLY from an explicit `:2` / `:3`
+        // sub-parameter, so either one proves this surface really does
+        // implement phases. That retires whatever suspicion earlier dropped
+        // bytes accumulated — without it the counter is a one-way ratchet and
+        // a long session on an honest terminal demotes itself over two
+        // unrelated lost releases.
+        if (!event.synthesized) _phaseViolations = 0;
+        // Close the record this release refers to, by ITS identity — which
+        // may differ from this event's when position reporting is uneven.
+        final held = heldId == null ? null : _held.remove(heldId);
+        if (held != null) {
+          _pendingUps.add(held);
+          _dirtySinceLatch = true;
+        }
+        // Unheld up: observable, but corrupts nothing.
+        return RegularizedKey._([event]);
+    }
+  }
+
+  /// Synthesizes a release for every held key — the authority-loss triggers
+  /// of §6 (blur, suspend, disconnect, terminal restore, protocol
+  /// downgrade, session replacement). Returned events are observation-lane
+  /// data; they never enter command dispatch and never complete a capture.
+  List<KeyEvent> loseAuthority() {
+    if (_held.isEmpty) return const [];
+    final releases = <KeyEvent>[
+      for (final record in _held.values)
+        KeyEvent(
+          record.code,
+          type: KeyEventType.up,
+          position: record.position,
+          synthesized: true,
+        ),
+    ];
+    _pendingUps.addAll(_held.values);
+    _held.clear();
+    _dirtySinceLatch = true;
+    return releases;
+  }
+
+  /// Replaces the session (driver swap/reconnect): recovers held keys,
+  /// drops pending edges, and bumps [sessionGeneration].
+  List<KeyEvent> replaceSession() {
+    final releases = loseAuthority();
+    _pendingDowns = [];
+    _pendingUps = [];
+    _sessionGeneration++;
+    _dirtySinceLatch = true;
+    return releases;
+  }
+
+  /// Publishes the frame latch (§5.6 step 2). Exactly ONE runtime call site:
+  /// the FrameDriver, at render, before frame production (FleuryTester
+  /// stands in for it in tests). A second publisher is not "fresher" — it
+  /// expires the previous publisher's edges before their consumers read
+  /// them; see ticker_edge_visibility_test.dart for the measured failure.
+  /// Drains the edge accumulators into an immutable
+  /// snapshot; allocation-free when nothing changed since the last publish
+  /// AND the cached snapshot carries no edges (edges live for exactly one
+  /// latch — a quiet frame after an edgeful one must expire them, or
+  /// `wasPressed` would report a stale tap forever).
+  KeyboardSnapshot publishLatch() {
+    if (!_dirtySinceLatch) {
+      if (_latched._downEdges.isEmpty && _latched._upEdges.isEmpty) {
+        return _latched;
+      }
+      // Quiet frame after an edgeful one: same held state, edges expired.
+      // A distinct ordinal, because the CONTENT differs — a consumer
+      // memoizing "already handled ordinal N" must not confuse the edgeful
+      // snapshot with its expired successor.
+      _frameNumber++;
+      _latched = KeyboardSnapshot._(
+        _latched._held,
+        const [],
+        const [],
+        _sessionGeneration,
+        _frameNumber,
+      );
+      return _latched;
+    }
+    _frameNumber++;
+    _latched = KeyboardSnapshot._(
+      List.unmodifiable(_held.values),
+      List.unmodifiable(_pendingDowns),
+      List.unmodifiable(_pendingUps),
+      _sessionGeneration,
+      _frameNumber,
+    );
+    _pendingDowns = [];
+    _pendingUps = [];
+    _dirtySinceLatch = false;
+    return _latched;
+  }
+}

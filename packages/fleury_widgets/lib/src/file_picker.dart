@@ -372,26 +372,30 @@ class _FilePickerState extends State<FilePicker> {
           'selectedIsDirectory': selected is Directory,
         },
       }),
-      child: Focus(
-        focusNode: _node,
-        autofocus: widget.autofocus,
-        onKey: _onKey,
-        child: GestureDetector(
-          onTap: () => _node.requestFocus(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(safeCwd, style: theme.mutedStyle),
-              // A failed listing (unreadable / just-deleted directory) shows
-              // up as a dim status row; the retained listing stays usable.
-              if (_error != null)
-                Text(
-                  '  ${_safeText(_error!)}',
-                  style: const CellStyle(dim: true),
-                ),
-              ?upRow,
-              SizedBox(height: visible, child: listing),
-            ],
+      child: KeyDetector(
+        onKey: (event) {
+          if ((_onKey)(event) == KeyEventResult.handled) event.consume();
+        },
+        child: Focus(
+          focusNode: _node,
+          autofocus: widget.autofocus,
+          child: GestureDetector(
+            onTap: () => _node.requestFocus(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(safeCwd, style: theme.mutedStyle),
+                // A failed listing (unreadable / just-deleted directory) shows
+                // up as a dim status row; the retained listing stays usable.
+                if (_error != null)
+                  Text(
+                    '  ${_safeText(_error!)}',
+                    style: const CellStyle(dim: true),
+                  ),
+                ?upRow,
+                SizedBox(height: visible, child: listing),
+              ],
+            ),
           ),
         ),
       ),

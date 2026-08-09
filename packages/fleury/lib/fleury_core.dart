@@ -261,10 +261,13 @@ export 'src/terminal/terminal_probe.dart'
 export 'src/input/events.dart'
     show
         AppSignal,
+        InputBatch,
         KeyCode,
         KeyEvent,
         KeyEventType,
         KeyModifier,
+        KeyPosition,
+        KeySelector,
         KeySequence,
         KeySequenceChain,
         MouseButton,
@@ -279,18 +282,32 @@ export 'src/input/events.dart'
         SpecialKey,
         TextCompositionEvent,
         TextCompositionEventKind,
+        TerminalFocusEvent,
         TextInputEvent,
         TuiEvent;
+// Only the table with a real cross-package consumer (the DOM backend's
+// code→position resolution). The kitty-side tables are parser internals;
+// exporting them was pure public-surface debt with zero consumers.
+export 'src/input/key_tables.dart' show positionByDomCode;
+export 'src/input/keyboard_layout.dart'
+    show KeyLabel, KeyLabelSource, KeyboardLayout;
+export 'src/input/keyboard_state.dart'
+    show KeyboardCapabilities, KeyboardSnapshot;
 export 'src/terminal/fake_driver.dart' show FakeTerminalDriver;
 export 'src/terminal/input_parser.dart' show InputParser, TuiEventSink;
 export 'src/runtime/remote_surface_sink.dart'
-    show RemoteSemanticActionHandler, RemoteSurfaceSink;
+    show
+        RemoteClipboardStatus,
+        RemoteDebugRequestHandler,
+        RemoteSemanticActionHandler,
+        RemoteSurfaceSink;
 export 'src/terminal/terminal_driver.dart'
     show
         OutputFlowControl,
         TerminalAttentionDriver,
         TerminalDriver,
         TerminalHandoffDriver,
+        KeyboardProtocolMode,
         TerminalMode,
         notifyTerminal,
         ringTerminalBell,
@@ -306,10 +323,9 @@ export 'src/widgets/focus.dart'
         FocusManager,
         FocusManagerScope,
         FocusNode,
-        FocusOnKeyCallback,
         FocusScope,
         FocusScopeRef,
-        FocusWithin,
+        FocusDetector,
         KeyBindingSource,
         KeyEventResult,
         PasteEventClaimant,
@@ -320,13 +336,14 @@ export 'src/widgets/focus_traversal.dart'
     show FocusTraversalGroup, TraversalDirection, nearestFocusableInDirection;
 export 'src/widgets/inherited_notifier.dart' show InheritedNotifier;
 export 'src/widgets/intrinsic.dart' show IntrinsicHeight, IntrinsicWidth;
+export 'src/widgets/keyboard.dart'
+    show Keyboard, KeyboardScope, KeyboardStateNotifier, KeyDetector;
 export 'src/widgets/key_bindings.dart'
     show
         ActiveKeyBinding,
         KeyBinding,
         KeyBindingEvent,
         KeyBindingHandler,
-        KeyBindingTrigger,
         KeyBindings,
         KeyCompletion,
         KeySequenceMatch,
@@ -356,6 +373,9 @@ export 'src/widgets/pointer.dart'
         PointerRouter,
         PointerRouterScope,
         PointerScrollListener,
+        PointerDownCallback,
+        PointerDownDetails,
+        PointerModifiedTapCallback,
         PointerTapCallback,
         PointerPositionCallback;
 export 'src/widgets/scroll_view.dart' show ScrollController, ScrollView;

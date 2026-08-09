@@ -4,8 +4,57 @@ import 'package:meta/meta.dart';
 
 import '../foundation/geometry.dart';
 import '../input/events.dart';
+import '../input/keyboard_state.dart';
 import '../runtime/remote_surface_sink.dart';
 import 'capabilities.dart';
+
+/// How much of the Kitty keyboard protocol a session negotiates
+/// (RFC 0020 §8).
+///
+/// Each tier is a *request*; what a terminal actually honours is confirmed
+/// by querying and reported through `KeyboardCapabilities`. Nothing here
+/// promises a capability — a terminal that ignores the push silently stays
+/// at whatever it already did.
+enum KeyboardProtocolMode {
+  /// Push nothing. Strict legacy behaviour, for debugging or a terminal
+  /// known to mishandle the protocol.
+  legacy(0),
+
+  /// Flags 1|2 — disambiguate escape codes, and report event types.
+  ///
+  /// The safe tier: what a lifecycle request falls back to when the
+  /// terminal cannot honour full lifecycle transactionally, and what the
+  /// automatic upgrade stops at inside a terminal multiplexer (tmux/screen),
+  /// where a raw query is not a reliable statement about the host terminal.
+  /// Flag 1 makes otherwise-ambiguous chords distinct (lone
+  /// Esc, Ctrl+I vs Tab, Ctrl+M vs Enter, super/meta). Flag 2 adds
+  /// press/repeat/release tags to keys that are ALREADY escape-coded —
+  /// chords, arrows, function keys — which is what lets a binding fire once
+  /// per physical press instead of once per auto-repeat.
+  ///
+  /// Text is untouched: printable presses and repeats still arrive as
+  /// ordinary bytes. Their RELEASES do become escape reports (the spec
+  /// exempts only Enter, Tab and Backspace), which the parser drops and
+  /// which §8.5's spawn bracket keeps out of child processes.
+  disambiguated(1 | 2),
+
+  /// Flags 1|2|4|8|16 — the full lifecycle: every key as an escape code,
+  /// with alternate/base-layout identities and associated text.
+  ///
+  /// The default (RFC 0020 §26.1): `runApp` asks every terminal for full
+  /// lifecycle and negotiates down transactionally, committing only when
+  /// the terminal confirms 2, 8 AND 16 (§8.3) — flag 8 stops the terminal
+  /// sending text, and flag 16 is what re-supplies it, so honouring one
+  /// without the other would leave the session with no text input at all.
+  /// `FLEURY_KEYBOARD=disambiguated|legacy` overrides the request for a
+  /// terminal where the negotiation itself misbehaves.
+  lifecycle(1 | 2 | 4 | 8 | 16);
+
+  const KeyboardProtocolMode(this.requestedFlags);
+
+  /// The progressive-enhancement bitset this tier pushes.
+  final int requestedFlags;
+}
 
 /// The set of terminal modes the driver should enable for a TUI session.
 ///
@@ -21,7 +70,8 @@ final class TerminalMode {
     this.hideCursor = true,
     this.resetStyleOnExit = true,
     this.bracketedPaste = true,
-    this.kittyKeyboard = true,
+    this.keyboardProtocol = KeyboardProtocolMode.lifecycle,
+    this.focusReporting = true,
     this.mouse = false,
     this.mouseMotion = false,
   });
@@ -40,13 +90,19 @@ final class TerminalMode {
   /// only helps.
   final bool bracketedPaste;
 
-  /// Negotiate the Kitty keyboard protocol (CSI-u) by pushing the
-  /// "disambiguate escape codes" flag on enter and popping it on exit.
-  /// On by default: terminals that support it then report otherwise-
-  /// ambiguous chords (lone Esc, Ctrl+I vs Tab, Ctrl+M vs Enter) and the
-  /// super/meta modifiers unambiguously; terminals that don't silently
-  /// ignore the unknown sequence, so it's safe everywhere.
-  final bool kittyKeyboard;
+  /// Ask the terminal to report window focus changes (DECSET 1004).
+  ///
+  /// On by default and harmless where unsupported (the sequence is
+  /// ignored). Focus-out is what tells the runtime to release keys the user
+  /// is holding, since those releases will land in whatever window took
+  /// focus and this terminal will never report them.
+  final bool focusReporting;
+
+  /// How much of the Kitty keyboard protocol to negotiate (RFC 0020 §8).
+  final KeyboardProtocolMode keyboardProtocol;
+
+  /// Whether any Kitty keyboard flags are pushed at all.
+  bool get kittyKeyboard => keyboardProtocol != KeyboardProtocolMode.legacy;
 
   /// Enable SGR mouse reporting (clicks, drags, wheel). Off by default:
   /// capturing the mouse takes over the terminal's own text selection,
@@ -137,6 +193,18 @@ abstract interface class TerminalDriver {
 /// diff base stays at the last frame the peer actually received, and the
 /// resumed frame ships one coalesced patch. Local terminal drivers don't
 /// implement this (a blocking stdout already applies backpressure).
+/// Optional driver extension: declares the keyboard's confirmed semantic
+/// capabilities (RFC 0020 §5.7). Drivers that don't implement it report the
+/// conservative press-only profile. Follows the [TerminalHandoffDriver]
+/// opt-in pattern so the base interface stays stable.
+abstract interface class KeyboardCapabilitiesDriver {
+  /// What this surface's keyboard has been CONFIRMED to guarantee — never
+  /// what was requested. A terminal projects negotiated flags (P5); the DOM
+  /// surface is unconditionally full; a remote driver relays its peer's
+  /// declaration (P6).
+  KeyboardCapabilities get keyboardCapabilities;
+}
+
 abstract interface class OutputFlowControl {
   /// True while unsent output exceeds the channel's high-water mark.
   bool get isOutputBacklogged;

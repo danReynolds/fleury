@@ -672,7 +672,7 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
           KeyBinding(
             KeySequence.ctrl.c,
             label: 'Copy conversation',
-            onTrigger: () => unawaited(_copySelection()),
+            onTrigger: (_) => unawaited(_copySelection()),
           ),
         ],
         child: panel,
@@ -683,12 +683,12 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
       bindings: [
         KeyBinding(
           KeyCode.arrowUp,
-          onTrigger: () => _move(-1),
+          onTrigger: (_) => _move(-1),
           hideFromHintBar: true,
         ),
         KeyBinding(
           KeyCode.arrowDown,
-          onTrigger: () => _move(1),
+          onTrigger: (_) => _move(1),
           hideFromHintBar: true,
         ),
       ],

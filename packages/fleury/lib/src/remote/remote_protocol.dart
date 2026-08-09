@@ -73,13 +73,13 @@
 // is treated as v1 (ANSI host). The payload size is a 32-bit unsigned
 // length so a single frame can hold a fat-screen full repaint.
 //
-// Versioning rule (the one rule, stated once): NEW FRAME TYPES and
-// OPTIONAL TRAILING FIELDS are additive — decoders skip unknown type
-// discriminators and tolerate absent trailing fields, so peers one
-// version apart interoperate. CELL/ENUM ENCODINGS inside existing
-// frames are version-gated: server and client ship from the same
-// fleury build (the client bundle is embedded in the binary), so
-// changing them requires a version bump and matching peers.
+// Versioning rule (the one rule, stated once): NEW FRAME TYPES are additive
+// because decoders skip unknown type discriminators. A trailing field is
+// additive only when the older decoder already tolerates trailing data;
+// otherwise its emission is version-gated. CELL/ENUM ENCODINGS inside existing
+// frames are version-gated too. The browser client ships in the server binary;
+// separately launched first-party peers must use a matching Fleury build and
+// reject an echoed INIT version mismatch.
 //
 // Under that rule: SEMANTIC_ACTION's optional trailing value byte
 // (set_value) was additive. v3 added SEMANTIC_ACTION_RESULT (0x1A)
@@ -112,6 +112,15 @@
 // only to a peer that negotiated v>=5. This preserves both compatibility
 // directions while letting clipped images retain their original fit geometry.
 //
+// v6 version-gates an optional target token on SEMANTIC_ACTION. A peer echoes
+// the app-issued token it observed for a positional semantic id, and the app
+// rejects the action if a different contributor now occupies that slot or its
+// role/label/advertised-action signature changed.
+// Stable-id actions omit the field and retain their exact v5 byte shape.
+// First-party peers send positional actions only after the app echoes the exact
+// matching protocol version (currently v6). Any version skew fails the session
+// closed; a mismatched peer cannot safely verify or decode the action.
+//
 // The normative statement of this protocol — the version, the frame table
 // above, the additive-vs-version-gated rule, and the launch-relevant caveat
 // that the wire is NOT a public/stable integration surface (same-build peers
@@ -125,9 +134,11 @@ import 'dart:typed_data';
 
 import '../foundation/geometry.dart';
 import '../rendering/surface_capabilities.dart';
+import '../runtime/remote_surface_sink.dart' show RemoteClipboardStatus;
 import '../semantics/semantics.dart';
 import '../terminal/capabilities.dart';
 import '../input/events.dart';
+import '../input/keyboard_state.dart';
 import 'remote_codec.dart';
 
 /// Current serve/shell protocol version. Bumped when frame semantics
@@ -137,9 +148,14 @@ import 'remote_codec.dart';
 /// v4 version-gates the optional OSC 8 link in the PLAN cell-style entry
 /// (RFC 0017 §5). v5 adds an explicitly flagged original-box window to
 /// inline-image placements so clipped images keep their fit and source crop.
-/// Both additions are emitted only to peers that negotiated the corresponding
-/// version; plans without the feature remain byte-compatible with older peers.
-const int remoteProtocolVersion = 5;
+/// v6 adds an app-issued target token to positional semantic actions.
+/// These additions are emitted only to peers that negotiated the corresponding
+/// version; payloads without the feature remain byte-compatible with older
+/// peers.
+const int remoteProtocolVersion = 6;
+
+/// First protocol version that can verify a positional semantic-action target.
+const int semanticActionTargetTokenProtocolVersion = 6;
 
 /// The ANSI terminal-host protocol spoken by `fleury shell`.
 ///
@@ -277,6 +293,7 @@ final class InitFrame extends RemoteFrame {
     required this.tmuxPassthrough,
     this.images,
     this.hyperlinks = false,
+    this.keyboard,
     this.protocolVersion = remoteProtocolVersion,
   });
 
@@ -303,6 +320,17 @@ final class InitFrame extends RemoteFrame {
   /// which gates whether the wire *serializes* a link at all (v>=4); this gates
   /// whether one is ever *produced*.
   final bool hyperlinks;
+
+  /// What the peer's keyboard has been CONFIRMED to guarantee (RFC 0020
+  /// §11). Optional additive `keyboard=<bits>` INIT param.
+  ///
+  /// Null from a peer that never learned the field — read as "declares
+  /// nothing", which is press-only. A peer's lifecycle support is never
+  /// inferred from [protocolVersion]: version says the codecs match, not
+  /// that the terminal on the far end honoured flag 8. A `fleury shell`
+  /// relay in front of Ghostty and one in front of Terminal.app speak the
+  /// identical wire version and have completely different keyboards.
+  final KeyboardCapabilities? keyboard;
 
   /// Negotiated protocol version. A peer omitting `v` in INIT is read as
   /// v1 (the legacy ANSI host).
@@ -361,13 +389,23 @@ final class InputEventFrame extends RemoteFrame {
 /// the live node [id]. Peer → app; the structured counterpart to the
 /// app → peer [SemanticsFrame].
 final class SemanticActionFrame extends RemoteFrame {
-  const SemanticActionFrame(this.id, this.action, {this.value});
+  const SemanticActionFrame(
+    this.id,
+    this.action, {
+    this.value,
+    this.targetToken,
+  });
   final SemanticNodeId id;
   final SemanticAction action;
 
   /// Optional payload, carried only by [SemanticAction.setValue] (a
   /// JSON-friendly scalar). Null for every parameterless action.
   final Object? value;
+
+  /// Opaque app-issued token the peer observed for [id].
+  ///
+  /// Required to safely dispatch positional ids; stable ids do not need it.
+  final String? targetToken;
 }
 
 /// The bytes of one inline image (browser surface), keyed by content-hash
@@ -390,9 +428,6 @@ final class ClipboardWriteFrame extends RemoteFrame {
   final int seq;
   final String text;
 }
-
-/// How the peer's clipboard write went.
-enum RemoteClipboardStatus { written, denied, unavailable }
 
 /// The peer's answer to a [ClipboardWriteFrame]. Peer → app.
 final class ClipboardResultFrame extends RemoteFrame {
@@ -468,7 +503,12 @@ Uint8List encodeFrame(RemoteFrame frame) {
     InputEventFrame f => (FrameType.inputEvent, encodeInputEvent(f.event)),
     SemanticActionFrame f => (
       FrameType.semanticAction,
-      encodeSemanticAction(f.id, f.action, value: f.value),
+      encodeSemanticAction(
+        f.id,
+        f.action,
+        value: f.value,
+        targetToken: f.targetToken,
+      ),
     ),
     SemanticActionResultFrame f => (
       FrameType.semanticActionResult,
@@ -515,6 +555,11 @@ String _encodeInit(InitFrame f) =>
     // link-free INIT stays byte-identical to a peer that never learned the
     // field. Absent ⇒ decoded as false.
     '${f.hyperlinks ? 'hyperlinks=1,' : ''}'
+    // Semantic guarantees, never Kitty flags: a browser peer has no flags,
+    // and the reader must not have to know the far end's protocol to
+    // understand its promises. Omitted when undeclared, so an INIT from a
+    // peer that never learned the field stays byte-identical.
+    '${f.keyboard == null ? '' : 'keyboard=${f.keyboard!.wireBits},'}'
     'v=${f.protocolVersion}';
 
 /// Wire layout: [u16 id length][id utf-8][image bytes...].
@@ -843,8 +888,15 @@ final class FrameDecoder {
         }
       case FrameType.semanticAction:
         try {
-          final (:id, :action, :value) = decodeSemanticAction(payload);
-          return SemanticActionFrame(id, action, value: value);
+          final (:id, :action, :value, :targetToken) = decodeSemanticAction(
+            payload,
+          );
+          return SemanticActionFrame(
+            id,
+            action,
+            value: value,
+            targetToken: targetToken,
+          );
         } on RemoteCodecException catch (e) {
           throw RemoteProtocolException('SEMANTIC_ACTION frame: ${e.message}.');
         }
@@ -928,6 +980,10 @@ InitFrame _decodeInit(String body) {
       _ => null,
     },
     hyperlinks: params['hyperlinks'] == '1',
+    keyboard: switch (int.tryParse(params['keyboard'] ?? '')) {
+      final bits? => KeyboardCapabilities.fromWireBits(bits),
+      null => null,
+    },
     protocolVersion: int.tryParse(params['v'] ?? '') ?? 1,
   );
 }
@@ -966,7 +1022,7 @@ Map<String, String> _parseParams(String body) {
   return out;
 }
 
-// Debug response payload: 4-byte LE seq, 1-byte kind length, kind bytes,
+// Debug response payload: 4-byte BE seq, 1-byte kind length, kind bytes,
 // then the raw JSON document — avoids JSON-escaping the (potentially large)
 // document into an envelope.
 Uint8List _encodeDebugRequest(DebugRequestFrame f) {
@@ -991,10 +1047,7 @@ List<int> _encodeDebugKind(String kind) {
 Uint8List _encodeDebugResponse(DebugResponseFrame f) {
   final kind = _encodeDebugKind(f.kind);
   final out = BytesBuilder(copy: false)
-    ..addByte(f.seq & 0xFF)
-    ..addByte((f.seq >> 8) & 0xFF)
-    ..addByte((f.seq >> 16) & 0xFF)
-    ..addByte((f.seq >> 24) & 0xFF)
+    ..add((ByteData(4)..setUint32(0, f.seq)).buffer.asUint8List())
     ..addByte(kind.length)
     ..add(kind)
     ..add(f.json);
@@ -1005,8 +1058,7 @@ DebugResponseFrame _decodeDebugResponse(Uint8List payload) {
   if (payload.length < 5) {
     throw const RemoteProtocolException('DEBUG_RESPONSE: short payload.');
   }
-  final seq =
-      payload[0] | (payload[1] << 8) | (payload[2] << 16) | (payload[3] << 24);
+  final seq = ByteData.sublistView(payload, 0, 4).getUint32(0);
   final kindLen = payload[4];
   if (payload.length < 5 + kindLen) {
     throw const RemoteProtocolException('DEBUG_RESPONSE: truncated kind.');

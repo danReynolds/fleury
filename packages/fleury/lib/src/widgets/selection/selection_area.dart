@@ -569,32 +569,40 @@ class _SelectionAreaState extends State<SelectionArea> {
       child: KeyBindings(
         bindings: [
           if (widget.selectAllShortcut)
-            KeyBinding.event(KeySequence.ctrl.a, onEvent: _onSelectAll),
-          KeyBinding.event(KeySequence.ctrl.c, onEvent: _onCopy),
-          KeyBinding.event(KeySequence.escape, onEvent: _onEscape),
-          KeyBinding.event(
+            KeyBinding(KeySequence.ctrl.a, onTrigger: _onSelectAll),
+          KeyBinding(KeySequence.ctrl.c, onTrigger: _onCopy),
+          KeyBinding(KeySequence.escape, onTrigger: _onEscape),
+          KeyBinding(
             KeySequence.shift.left,
-            onEvent: (e) => _extendCursor(-1, 0, e),
+            onTrigger: (e) => _extendCursor(-1, 0, e),
+            // Held Shift+arrow extends continuously (§21.1's sweep).
+            includeRepeats: true,
           ),
-          KeyBinding.event(
+          KeyBinding(
             KeySequence.shift.right,
-            onEvent: (e) => _extendCursor(1, 0, e),
+            onTrigger: (e) => _extendCursor(1, 0, e),
+            // Held Shift+arrow extends continuously (§21.1's sweep).
+            includeRepeats: true,
           ),
-          KeyBinding.event(
+          KeyBinding(
             KeySequence.shift.up,
-            onEvent: (e) => _extendCursor(0, -1, e),
+            onTrigger: (e) => _extendCursor(0, -1, e),
+            // Held Shift+arrow extends continuously (§21.1's sweep).
+            includeRepeats: true,
           ),
-          KeyBinding.event(
+          KeyBinding(
             KeySequence.shift.down,
-            onEvent: (e) => _extendCursor(0, 1, e),
+            onTrigger: (e) => _extendCursor(0, 1, e),
+            // Held Shift+arrow extends continuously (§21.1's sweep).
+            includeRepeats: true,
           ),
-          KeyBinding.event(
+          KeyBinding(
             KeySequence.shift.home,
-            onEvent: (e) => _extendToLineEdge(-1, e),
+            onTrigger: (e) => _extendToLineEdge(-1, e),
           ),
-          KeyBinding.event(
+          KeyBinding(
             KeySequence.shift.end,
-            onEvent: (e) => _extendToLineEdge(1, e),
+            onTrigger: (e) => _extendToLineEdge(1, e),
           ),
         ],
         child: GestureDetector(

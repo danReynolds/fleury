@@ -1,4 +1,5 @@
 import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_wire.dart';
 
 /// Applies a decoded [plan] to the client's [CellBuffer] mirror and returns
 /// the [FramePresentationPlan] the surface needs to repaint the touched

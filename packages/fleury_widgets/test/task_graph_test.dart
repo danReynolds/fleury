@@ -347,7 +347,9 @@ void main() {
     });
 
     testWidgets('accessibility snapshot describes task graph state', (tester) {
-      tester.pumpWidget(TaskGraph(semanticLabel: 'Release plan', nodes: _nodes()));
+      tester.pumpWidget(
+        TaskGraph(semanticLabel: 'Release plan', nodes: _nodes()),
+      );
       tester.render(size: const CellSize(80, 6));
 
       final graph = tester.accessibilitySnapshot().single(

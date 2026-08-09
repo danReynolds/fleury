@@ -4,7 +4,7 @@
 
 import 'dart:async';
 
-import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_wire.dart';
 
 class FakeFrameTransport
     with SynchronousSendTransport

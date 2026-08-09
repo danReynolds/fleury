@@ -154,6 +154,7 @@ final class FrameDriver {
     required FramePresenter presenter,
     FramePresentationPlanner planner = const FramePresentationPlanner(),
     void Function(String reason)? onBeforeFrame,
+    void Function()? onLatchInput,
     void Function(TuiRenderedFrame frame, FramePresentationPlan? plan)?
     onFramePresented,
     void Function(String reason, CellSize size)? onFrameSkipped,
@@ -173,6 +174,7 @@ final class FrameDriver {
        _presenter = presenter,
        _planner = planner,
        _onBeforeFrame = onBeforeFrame,
+       _onLatchInput = onLatchInput,
        _onFramePresented = onFramePresented,
        _onFrameSkipped = onFrameSkipped,
        _onBackstopError = onBackstopError,
@@ -199,6 +201,10 @@ final class FrameDriver {
   final FramePresenter _presenter;
   final FramePresentationPlanner _planner;
   final void Function(String reason)? _onBeforeFrame;
+
+  /// Per-frame input bookkeeping that must run even when the frame produces
+  /// nothing (backlogged transport, empty viewport, skipped frame).
+  final void Function()? _onLatchInput;
   final void Function(TuiRenderedFrame, FramePresentationPlan?)?
   _onFramePresented;
   final void Function(String reason, CellSize size)? _onFrameSkipped;
@@ -310,6 +316,11 @@ final class FrameDriver {
 
   void _renderNowBody(String reason) {
     if (_rootElement == null) return;
+    // Pure input bookkeeping, ahead of every production gate below: the
+    // keyboard latch must advance even on frames that produce nothing, or
+    // per-frame edges accumulate across a stall and the resumed frame
+    // reports every press since it began (RFC 0020 §7's no-backlog rule).
+    _onLatchInput?.call();
     final snapshot = _readViewport();
     final size = snapshot.size;
     if (size.isEmpty) return;

@@ -47,6 +47,8 @@ import 'package:fleury/src/remote/unix_socket_transport.dart';
 import 'package:fleury/src/terminal/capabilities.dart';
 import 'package:fleury/src/terminal/diagnostics.dart';
 import 'package:fleury/src/terminal/native_driver.dart';
+import 'package:fleury/fleury.dart'
+    show KeyboardCapabilities, KeyboardProtocolMode;
 import 'package:fleury/src/terminal/terminal_probe.dart';
 
 Future<void> main(List<String> args) async {
@@ -410,8 +412,30 @@ Future<int> _runSession(Socket client, {Future<void>? shutdownSignal}) async {
   StreamSubscription<List<int>>? stdinSub;
   try {
     // Bracketed paste + Kitty keyboard mirror the app's own setup so the
-    // bytes coming back to it match what a normal terminal would send.
-    stdout.write('\x1B[?1049h\x1B[?25l\x1B[?2004h\x1B[>1u');
+    // bytes coming back to it match what a normal terminal would send. The
+    // keyboard push must match a local app's DEFAULT TIER, not flag 1 alone
+    // — otherwise every binding behind the relay fires once per auto-repeat
+    // while the same app run locally fires once per press (RFC 0020 §8.1).
+    stdout.write(
+      '\x1B[?1049h\x1B[?25l\x1B[?2004h'
+      '\x1B[>${KeyboardProtocolMode.disambiguated.requestedFlags}u',
+    );
+
+    // ONE stdin subscription serves both phases. `stdin` is
+    // single-subscription: a probe listener of its own would make the relay
+    // listener below throw, and cancelling first would drop whatever the user
+    // typed in between. So the relay attaches now and diverts to the probe
+    // buffer until the reply lands.
+    final probe = _ShellKeyboardProbe();
+    stdinSub = stdin.listen((bytes) {
+      final relayed = probe.absorb(bytes);
+      if (relayed != null) transport.send(InputFrame(_asUint8(relayed)));
+    }, cancelOnError: false);
+
+    // Ask the real emulator what actually stuck: the app behind the relay
+    // needs a keyboard declaration it can trust rather than an inference from
+    // our wire version (§11).
+    final keyboard = await probe.run();
 
     // Initial handshake — send what the app needs to lay out its first
     // frame correctly: actual size + the capabilities OUR terminal
@@ -420,20 +444,27 @@ Future<int> _runSession(Socket client, {Future<void>? shutdownSignal}) async {
       Platform.environment,
     );
     transport.send(
-      buildShellInitFrame(size: _localSize(), capabilities: capabilities),
+      buildShellInitFrame(
+        size: _localSize(),
+        capabilities: capabilities,
+        keyboard: keyboard,
+      ),
     );
+
+    // Only NOW may real input flow. Anything typed during the probe window
+    // is genuine keystrokes (the reply is stripped), but a peer discards
+    // input that arrives before the handshake — and a slow-starting app can
+    // easily leave a keystroke sitting in the PTY buffer before its session
+    // even begins. Draining it after INIT is what makes the relay lossless.
+    final typedDuringProbe = probe.finish();
+    if (typedDuringProbe.isNotEmpty) {
+      transport.send(InputFrame(_asUint8(typedDuringProbe)));
+    }
 
     // SIGWINCH → RESIZE frame. The app reflows on its end.
     winchSub = ProcessSignal.sigwinch.watch().listen((_) {
       transport.send(ResizeFrame(_localSize()));
     });
-
-    // Stdin bytes → INPUT frame. No parsing; the app's own InputParser
-    // does the work on the other end.
-    stdinSub = stdin.listen(
-      (bytes) => transport.send(InputFrame(_asUint8(bytes))),
-      cancelOnError: false,
-    );
 
     // App's OUTPUT frames → stdout verbatim.
     await for (final frame in transport.incoming) {
@@ -928,15 +959,14 @@ void _pumpBytes({
 /// the response be revalidated instead of blindly reused.
 String? _monoFontETagCache;
 
-String _monoFontETag() =>
-    _monoFontETagCache ??= () {
-      // FNV-1a over the subset; no crypto dependency needed for a cache tag.
-      var hash = 0xcbf29ce484222325;
-      for (final byte in serveMonoFontBytes()) {
-        hash = (hash ^ byte) * 0x100000001b3;
-      }
-      return '"${hash.toUnsigned(64).toRadixString(16)}"';
-    }();
+String _monoFontETag() => _monoFontETagCache ??= () {
+  // FNV-1a over the subset; no crypto dependency needed for a cache tag.
+  var hash = 0xcbf29ce484222325;
+  for (final byte in serveMonoFontBytes()) {
+    hash = (hash ^ byte) * 0x100000001b3;
+  }
+  return '"${hash.toUnsigned(64).toRadixString(16)}"';
+}();
 
 Future<void> _serveStaticAsset(HttpRequest req) async {
   final path = req.uri.path;
@@ -1846,6 +1876,71 @@ typedef _ActiveProbeEvidence = ({
   TerminalProbeReport report,
   WidthMeasurements measuredWidths,
 });
+
+/// Probes what the user's real terminal confirmed for the flags `fleury
+/// shell` just pushed, and projects it into the semantic guarantees the app
+/// on the far end will plan against.
+///
+/// Shares the relay's single stdin subscription: [absorb] diverts bytes into
+/// the probe buffer while a reply is owed and returns them for relay
+/// afterwards. Best-effort by construction — a terminal that does not answer
+/// leaves the declaration null, which the app reads as press-only, the same
+/// conservative floor a local session falls back to.
+final class _ShellKeyboardProbe implements TerminalProbeTransport {
+  final List<int> _buffer = <int>[];
+  var _active = true;
+
+  /// Whether the probe is still owed a reply (the DA1 that brackets it).
+  bool get _replyComplete => daReplyEndN(_buffer, 1) >= 0;
+
+  /// Routes one stdin chunk. Returns the bytes the relay should forward, or
+  /// null while the probe still owns the stream.
+  List<int>? absorb(List<int> bytes) {
+    if (!_active) return bytes;
+    _buffer.addAll(bytes);
+    return null;
+  }
+
+  @override
+  Future<List<int>> request(String bytes, {required Duration timeout}) async {
+    stdout.write(bytes);
+    await stdout.flush();
+    final deadline = Stopwatch()..start();
+    while (deadline.elapsed < timeout) {
+      if (_replyComplete) break;
+      await Future<void>.delayed(const Duration(milliseconds: 4));
+    }
+    return List<int>.unmodifiable(_buffer);
+  }
+
+  Future<KeyboardCapabilities?> run() async {
+    if (!stdin.hasTerminal || !stdout.hasTerminal) return null;
+    final override = Platform.environment['FLEURY_KEYBOARD_PROBE'];
+    if (override == '0' || override == 'false') return null;
+    try {
+      final flags = await probeKeyboardFlags(this);
+      if (flags == null) return null;
+      return KeyboardCapabilities.fromKittyFlags(flags);
+    } on Object {
+      return null;
+    }
+  }
+
+  /// Ends the probe phase and returns whatever the user typed during it.
+  ///
+  /// Only the tail past the reply is real input. If the reply never landed the
+  /// whole buffer is real input — a terminal that does not speak the protocol
+  /// answered nothing, so nothing in there is ours.
+  List<int> finish() {
+    _active = false;
+    final tailStart = daReplyEndN(_buffer, 1);
+    final tail = tailStart >= 0
+        ? _buffer.sublist(tailStart)
+        : List<int>.of(_buffer);
+    _buffer.clear();
+    return tail;
+  }
+}
 
 Future<_ActiveProbeEvidence> _runActiveTerminalProbes(Duration timeout) async {
   if (!stdin.hasTerminal || !stdout.hasTerminal) {

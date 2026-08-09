@@ -424,7 +424,7 @@ class _CodeViewState extends State<CodeView> {
 
   void _onControllerChange() => setState(() {});
 
-  void _onFocusWithinChange(bool focused) {
+  void _onFocusDetectorChange(bool focused) {
     if (_focusedWithin == focused) return;
     setState(() {
       _focusedWithin = focused;
@@ -537,15 +537,15 @@ class _CodeViewState extends State<CodeView> {
           KeyBinding(
             KeySequence.ctrl.c,
             label: 'Copy code selection',
-            onTrigger: () => unawaited(_copySelection()),
+            onTrigger: (_) => unawaited(_copySelection()),
           ),
         ],
         child: list,
       );
     }
 
-    return FocusWithin(
-      onFocusChange: _onFocusWithinChange,
+    return FocusDetector(
+      onFocusChange: _onFocusDetectorChange,
       child: Semantics(
         role: SemanticRole.code,
         label: widget.semanticLabel,

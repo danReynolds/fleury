@@ -23,7 +23,7 @@ void main() {
       var fired = 0;
       tester.pumpWidget(
         KeyBindings(
-          bindings: [KeyBinding(KeyCode.char('x'), onTrigger: () => fired++)],
+          bindings: [KeyBinding(KeyCode.char('x'), onTrigger: (_) => fired++)],
           // Deliberately NO focusable descendant and no autofocus.
           child: const Text('no focus here'),
         ),
@@ -85,13 +85,13 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyCode.char('x'), onTrigger: () => order.add('outer')),
+            KeyBinding(KeyCode.char('x'), onTrigger: (_) => order.add('outer')),
           ],
           child: KeyBindings(
             bindings: [
               KeyBinding(
                 KeyCode.char('x'),
-                onTrigger: () => order.add('inner'),
+                onTrigger: (_) => order.add('inner'),
               ),
             ],
             child: const Text('nested'),
@@ -108,38 +108,40 @@ void main() {
   });
 
   group('focusable widgets stay focus-gated (not ambient)', () {
-    testWidgets('an unfocused Focus(onKey:) does NOT receive chords', (tester) {
-      // A focusable interactive control (canRequestFocus: true) must only
-      // handle chords while focused — the root fallback is for ambient
-      // KeyBindings, not for waking up every Checkbox/Button on screen.
-      var sawKey = 0;
-      final node = FocusNode(debugLabel: 'control');
-      tester.pumpWidget(
-        Focus(
-          focusNode: node,
-          onKey: (_) {
-            sawKey++;
-            return KeyEventResult.handled;
-          },
-          child: const Text('control'),
-        ),
-      );
-      tester.render(size: const CellSize(20, 1));
-      expect(node.hasFocus, isFalse, reason: 'precondition: not focused');
+    testWidgets(
+      'an unfocused KeyDetector over a Focus does NOT receive chords',
+      (tester) {
+        // A focusable interactive control (canRequestFocus: true) must only
+        // handle chords while focused — the root fallback is for ambient
+        // KeyBindings, not for waking up every Checkbox/Button on screen.
+        var sawKey = 0;
+        final node = FocusNode(debugLabel: 'control');
+        tester.pumpWidget(
+          KeyDetector(
+            onKey: (event) {
+              sawKey++;
+              event.consume();
+            },
+            child: Focus(focusNode: node, child: const Text('control')),
+          ),
+        );
+        tester.render(size: const CellSize(20, 1));
+        expect(node.hasFocus, isFalse, reason: 'precondition: not focused');
 
-      tester.sendKey(const KeyEvent(KeyCode.char(' ')));
-      expect(
-        sawKey,
-        0,
-        reason: 'a focusable control must stay silent until focused',
-      );
+        tester.sendKey(const KeyEvent(KeyCode.char(' ')));
+        expect(
+          sawKey,
+          0,
+          reason: 'a focusable control must stay silent until focused',
+        );
 
-      // Once focused, it handles chords as normal.
-      node.requestFocus();
-      tester.pump();
-      tester.sendKey(const KeyEvent(KeyCode.char(' ')));
-      expect(sawKey, 1, reason: 'focused control handles chords');
-    });
+        // Once focused, it handles chords as normal.
+        node.requestFocus();
+        tester.pump();
+        tester.sendKey(const KeyEvent(KeyCode.char(' ')));
+        expect(sawKey, 1, reason: 'focused control handles chords');
+      },
+    );
   });
 
   group('modal still confines unfocused key handling', () {
@@ -158,7 +160,7 @@ void main() {
                   bindings: [
                     KeyBinding(
                       KeyCode.char('x'),
-                      onTrigger: () => outsideFired++,
+                      onTrigger: (_) => outsideFired++,
                     ),
                   ],
                   child: const Text('outside'),
@@ -172,7 +174,7 @@ void main() {
                     bindings: [
                       KeyBinding(
                         KeyCode.char('x'),
-                        onTrigger: () => insideFired++,
+                        onTrigger: (_) => insideFired++,
                       ),
                     ],
                     child: const Text('inside modal'),

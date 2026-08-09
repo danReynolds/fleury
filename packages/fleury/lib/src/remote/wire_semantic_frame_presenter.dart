@@ -10,8 +10,8 @@ import '../semantics/semantic_presenter.dart';
 import '../semantics/semantics.dart';
 import '../semantics/semantics_owner.dart';
 
-/// Presents semantic trees as [SemanticsFrame]s through a
-/// [RemoteSurfaceSink].
+/// Presents semantic trees to a [RemoteSurfaceSink] for host-defined
+/// serialization and transport.
 final class WireSemanticFramePresenter implements SemanticFramePresenter {
   WireSemanticFramePresenter(this._sink);
 

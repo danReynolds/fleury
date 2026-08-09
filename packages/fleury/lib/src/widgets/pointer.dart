@@ -20,6 +20,7 @@ import 'framework.dart';
 
 typedef PointerTapCallback = void Function();
 typedef PointerPositionCallback = void Function(int col, int row);
+typedef PointerDownCallback = void Function(PointerDownDetails details);
 
 /// Like [PointerPositionCallback] but also exposes the keyboard
 /// modifiers the terminal reported on the originating mouse event.
@@ -28,6 +29,37 @@ typedef PointerPositionCallback = void Function(int col, int row);
 /// selection to the click point instead of starting a new one.
 typedef PointerModifiedTapCallback =
     void Function(int col, int row, Set<KeyModifier> modifiers);
+
+/// Details for a pointer-button press reported by [GestureDetector].
+///
+/// [col] and [row] are absolute terminal cell coordinates. The modifier set is
+/// an immutable snapshot, so callers can safely retain these details after the
+/// callback returns.
+@immutable
+final class PointerDownDetails {
+  PointerDownDetails({
+    required this.col,
+    required this.row,
+    required this.button,
+    Set<KeyModifier> modifiers = const <KeyModifier>{},
+  }) : modifiers = modifiers.isEmpty
+           ? const <KeyModifier>{}
+           : Set<KeyModifier>.unmodifiable(modifiers);
+
+  final int col;
+  final int row;
+  final MouseButton button;
+  final Set<KeyModifier> modifiers;
+
+  bool get hasCtrl => modifiers.contains(KeyModifier.ctrl);
+  bool get hasAlt => modifiers.contains(KeyModifier.alt);
+  bool get hasShift => modifiers.contains(KeyModifier.shift);
+
+  @override
+  String toString() =>
+      'PointerDownDetails(${button.name} @$col,$row, '
+      'modifiers: $modifiers)';
+}
 
 /// Per-frame registry of pointer-listening regions plus hover state.
 /// One instance per runtime; [beginFrame] clears it before each paint and
@@ -219,6 +251,14 @@ class PointerRouter {
           event.row,
           event.modifiers,
         );
+        _downTarget?.onPointerDown?.call(
+          PointerDownDetails(
+            col: event.col,
+            row: event.row,
+            button: event.button,
+            modifiers: event.modifiers,
+          ),
+        );
         // Arm (but don't start) a drag from the region under the press.
         _dragTarget = event.button == MouseButton.left
             ? _topmost(event.col, event.row, _hasDrag)
@@ -274,6 +314,7 @@ class PointerRouter {
       r.onTap != null ||
       r.onTapDown != null ||
       r.onTapDownWithModifiers != null ||
+      r.onPointerDown != null ||
       r.onTapUp != null ||
       r.onSecondaryTap != null;
 
@@ -321,6 +362,7 @@ class GestureDetector extends StatelessWidget {
     this.onTap,
     this.onTapDown,
     this.onTapDownWithModifiers,
+    this.onPointerDown,
     this.onTapUp,
     this.onSecondaryTap,
     this.onDragStart,
@@ -341,6 +383,12 @@ class GestureDetector extends StatelessWidget {
   /// on every press routed to this region — register only the one you care
   /// about.
   final PointerModifiedTapCallback? onTapDownWithModifiers;
+
+  /// Called on any button press with its coordinates, button, and modifiers.
+  ///
+  /// This fires alongside [onTapDown] and [onTapDownWithModifiers] when those
+  /// legacy callbacks are also supplied.
+  final PointerDownCallback? onPointerDown;
 
   /// Called on a non-drag button release over this region, with absolute
   /// terminal cell coordinates. A completed drag suppresses this callback.
@@ -370,6 +418,7 @@ class GestureDetector extends StatelessWidget {
     onTap: onTap,
     onTapDown: onTapDown,
     onTapDownWithModifiers: onTapDownWithModifiers,
+    onPointerDown: onPointerDown,
     onTapUp: onTapUp,
     onSecondaryTap: onSecondaryTap,
     onDragStart: onDragStart,
@@ -419,6 +468,7 @@ class _PointerListener extends SingleChildRenderObjectWidget {
     this.onTap,
     this.onTapDown,
     this.onTapDownWithModifiers,
+    this.onPointerDown,
     this.onTapUp,
     this.onSecondaryTap,
     this.onDragStart,
@@ -434,6 +484,7 @@ class _PointerListener extends SingleChildRenderObjectWidget {
   final PointerTapCallback? onTap;
   final PointerPositionCallback? onTapDown;
   final PointerModifiedTapCallback? onTapDownWithModifiers;
+  final PointerDownCallback? onPointerDown;
   final PointerPositionCallback? onTapUp;
   final PointerTapCallback? onSecondaryTap;
   final PointerPositionCallback? onDragStart;
@@ -454,6 +505,7 @@ class _PointerListener extends SingleChildRenderObjectWidget {
         ..onTap = onTap
         ..onTapDown = onTapDown
         ..onTapDownWithModifiers = onTapDownWithModifiers
+        ..onPointerDown = onPointerDown
         ..onTapUp = onTapUp
         ..onSecondaryTap = onSecondaryTap
         ..onDragStart = onDragStart
@@ -473,6 +525,7 @@ class _PointerListener extends SingleChildRenderObjectWidget {
       ..onTap = onTap
       ..onTapDown = onTapDown
       ..onTapDownWithModifiers = onTapDownWithModifiers
+      ..onPointerDown = onPointerDown
       ..onTapUp = onTapUp
       ..onSecondaryTap = onSecondaryTap
       ..onDragStart = onDragStart
@@ -612,6 +665,7 @@ class RenderPointerListener extends RenderObject
   PointerTapCallback? onTap;
   PointerPositionCallback? onTapDown;
   PointerModifiedTapCallback? onTapDownWithModifiers;
+  PointerDownCallback? onPointerDown;
   PointerPositionCallback? onTapUp;
   PointerTapCallback? onSecondaryTap;
   PointerPositionCallback? onDragStart;

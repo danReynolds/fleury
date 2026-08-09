@@ -64,12 +64,13 @@ void _dispatchTraceEvent({
 }) {
   final target = _string(event, 'target') == 'host' ? host : textArea;
   switch (_string(event, 'event')) {
-    case 'keydown':
+    case 'keydown' || 'keyup':
       target.dispatchEvent(
         web.KeyboardEvent(
-          'keydown',
+          _string(event, 'event'),
           web.KeyboardEventInit(
             key: _string(event, 'key'),
+            code: event['code'] as String? ?? '',
             ctrlKey: _bool(event, 'ctrlKey'),
             shiftKey: _bool(event, 'shiftKey'),
             altKey: _bool(event, 'altKey'),
@@ -184,14 +185,24 @@ List<TraceMap> _serializeEvents(List<TuiEvent> events) =>
     events.map(_serializeEvent).toList();
 
 TraceMap _serializeEvent(TuiEvent event) => switch (event) {
+  // Terminal-only; the DOM source never produces one.
+  TerminalFocusEvent() => {'type': 'terminal-focus'},
   KeyEvent() => {
     'type': 'key',
     if (event.code.special case final special?) 'keyCode': special.name,
     if (event.code.character case final char?) 'char': char,
     'keyEventType': event.type.name,
     'modifiers': _modifierNames(event.modifiers),
+    if (event.position case final position?) 'position': position.name,
+    if (event.synthesized) 'synthesized': true,
   },
   TextInputEvent() => {'type': 'text', 'text': event.text},
+  InputBatch() => {
+    'type': 'batch',
+    if (event.key case final key?) 'keyEventType': key.type.name,
+    if (event.key?.code.character case final char?) 'char': char,
+    if (event.committedText case final text?) 'text': text,
+  },
   SignalEvent() => {'type': 'signal', 'signal': event.signal.name},
   TextCompositionEvent() => {
     'type': 'composition',

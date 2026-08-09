@@ -151,11 +151,16 @@ class _FocusableControlState extends State<_FocusableControl>
                 _node.requestFocus();
                 widget.onActivate!();
               },
-              child: Focus(
-                focusNode: _node,
-                autofocus: widget.autofocus,
-                onKey: _onKey,
-                child: widget.builder(_node.hasFocus, true),
+              child: KeyDetector(
+                onKey: (event) {
+                  if ((_onKey)(event) == KeyEventResult.handled)
+                    event.consume();
+                },
+                child: Focus(
+                  focusNode: _node,
+                  autofocus: widget.autofocus,
+                  child: widget.builder(_node.hasFocus, true),
+                ),
               ),
             ),
           );
@@ -604,7 +609,12 @@ class _RadioGroupState<T> extends State<RadioGroup<T>> {
     return Semantics(
       role: SemanticRole.region,
       label: widget.semanticLabel,
-      child: Focus(canRequestFocus: false, onKey: _onKey, child: layout),
+      child: KeyDetector(
+        onKey: (event) {
+          if ((_onKey)(event) == KeyEventResult.handled) event.consume();
+        },
+        child: Focus(canRequestFocus: false, child: layout),
+      ),
     );
   }
 }

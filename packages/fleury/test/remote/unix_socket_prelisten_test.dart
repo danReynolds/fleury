@@ -15,7 +15,8 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:fleury/fleury_host.dart';
-import 'package:fleury/src/remote/unix_socket_transport.dart';
+import 'package:fleury/fleury_wire.dart';
+import 'package:fleury/fleury_wire_io.dart';
 import 'package:test/test.dart';
 
 void main() {

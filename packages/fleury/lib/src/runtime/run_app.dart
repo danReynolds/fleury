@@ -38,6 +38,7 @@ import '../terminal/terminal_driver.dart';
 import '../widgets/focus.dart';
 import '../widgets/framework.dart';
 import '../widgets/key_bindings.dart';
+import '../widgets/keyboard.dart';
 import '../widgets/overlay.dart';
 import '../widgets/selection/selection_area.dart';
 import 'clipboard.dart';
@@ -177,6 +178,8 @@ final class _StartupEventBuffer {
       TextCompositionEvent(:final text) => text,
       PasteEvent(:final text) => text,
       KeyEvent(:final code) => code.character,
+      InputBatch(:final committedText, :final key) =>
+        committedText ?? key?.code.character,
       _ => null,
     };
     return text == null ? 0 : utf8.encode(text).length;
@@ -214,7 +217,7 @@ const _maxPendingRemoteSemanticActions = 64;
 /// restored — so the caller owns process-exit semantics:
 ///
 /// ```dart
-/// final exit = await runApp(app, onEvent: (event) {
+/// final exit = await runApp(app, onTrigger: (event) {
 ///   if (event is SignalEvent) {
 ///     beginShutdown(event.signal);        // async teardown → requestExit()
 ///     return const EventHandled();        // claim it: don't die yet
@@ -240,6 +243,15 @@ const _maxPendingRemoteSemanticActions = 64;
 /// Wrap the root in `FleuryApp(home: ...)` for Fleury's standard navigation
 /// shell, or supply a `Navigator`/custom shell explicitly. Bare single-screen
 /// roots remain valid.
+/// Pass your `main()` argv as [args] if the app reads it: a dev hot-reload
+/// respawn re-runs the entrypoint, and a process cannot portably recover its
+/// own script arguments, so without this the restarted app sees an empty argv
+/// and may show something other than what was asked for.
+///
+/// ```dart
+/// Future<void> main(List<String> args) => runApp(MyApp(), args: args);
+/// ```
+///
 Future<AppExit> runApp(
   Widget root, {
   TerminalDriver? driver,
@@ -253,6 +265,7 @@ Future<AppExit> runApp(
   Duration sequenceTimeout = const Duration(milliseconds: 500),
   DebugConfig debug = const DebugConfig(),
   Duration frameInterval = Duration.zero,
+  List<String> args = const [],
 }) async {
   // Plain `dart run` dev sessions hand the process to the dev supervisor:
   // it re-spawns this same script as a child process with the VM service
@@ -266,7 +279,7 @@ Future<AppExit> runApp(
     driverInjected: driver != null,
     enableHotReload: enableHotReload,
   )) {
-    await DevBootstrap.runOrFallThrough();
+    await DevBootstrap.runOrFallThrough(args: args);
     // Reaching here means this run was ineligible after async checks or the
     // bootstrap could not start; run classically.
   }
@@ -394,7 +407,7 @@ Future<AppExit> _runAppImpl(
     return fdCapture!.terminal;
   }
 
-  // Remote sessions (fleury mcp / serve --spawn / a shell handle) skip the
+  // Remote sessions (serve --spawn / a shell handle) skip the
   // terminal fd guard above — frames go over the socket, not fd 1, so there's
   // nothing to protect. But that also left the LogBuffer unfed, so an agent's
   // read_logs came back empty. When debug tooling is on, capture on the real
@@ -488,6 +501,28 @@ Future<AppExit> _runAppImpl(
     sequenceTimeout: sequenceTimeout,
     globalBindings: globalBindings,
   );
+  // Publishes the session keyboard to `Keyboard.of` (capabilities reactive,
+  // sampled state not — RFC 0020 §15).
+  final keyboardNotifier = KeyboardStateNotifier(dispatcher);
+  // The keyboard latch has exactly ONE publisher: the FrameDriver, at render
+  // (its `onLatchInput`, below). Do NOT add a second — this line used to also
+  // latch from `tickerScheduler.onFrameStart`, and because `publishLatch`
+  // expires edges on a quiet call, that second site destroyed every
+  // `wasPressed` edge at the worst possible instant. Every driver event
+  // schedules a render, so the render latch published the edges first; the
+  // ticker timer's frame-start latch then found them quiet-but-present and
+  // expired them immediately BEFORE the tickers ran — the only consumers §7.2
+  // designed edges for. Measured through the real runtime: 0 of 5 presses
+  // observed with the second site, 5 of 5 without
+  // (test/integration/ticker_edge_visibility_test.dart). Tickers read the
+  // render-published latch from the frame AFTER the input lands; that one
+  // frame of settle is the design, not a defect (§5.6).
+  // A surface can answer the capability query truthfully and then not honour
+  // it. When the session catches that mid-session it demotes itself to
+  // press-only, and `Keyboard.capabilities` is reactive — so republishing here
+  // is what flips an app's control scheme over to the one that works.
+  dispatcher.onKeyboardCapabilitiesChanged =
+      keyboardNotifier.notifyCapabilitiesChanged;
   // Optional byte telemetry: set FLEURY_BYTE_TELEMETRY=1 to wrap the live
   // output sink and print a per-frame byte budget on exit. Aggregate mode
   // (no per-frame list) so a long session stays bounded; zero cost when off.
@@ -605,6 +640,11 @@ Future<AppExit> _runAppImpl(
   final errorReporter = RuntimeErrorReporter(
     onLog: (message) => stderr.writeln(message),
   )..addListener(() => scheduleFrame('runtime-error'));
+  // Developer warnings ride the same surface as uncaught errors: stderr, the
+  // on-screen banner, and the debug shell's history. A warning printed
+  // straight to stdout would be painted over by the next frame.
+  dispatcher.onDeveloperWarning = (warning) =>
+      errorReporter.report(warning, StackTrace.current);
   // Contained layout/paint failures surface like any other survivable
   // error: stderr + the on-screen banner (once per error-state entry),
   // while the boundary renders the in-place presentation.
@@ -635,6 +675,16 @@ Future<AppExit> _runAppImpl(
         DebugEvents.emitTerminalDiagnosis(currentTerminalDiagnosis());
       }
 
+      if (event is TerminalFocusEvent) {
+        // Focus left this terminal window: the keys the user is holding
+        // will be released into whatever took focus, so this terminal will
+        // never report them. Recover now (RFC 0020 §10) — otherwise every
+        // held key stays held forever, a hold never ends, and sampled
+        // state lies until something else is pressed.
+        if (!event.focused) dispatcher.recoverHeldKeys();
+        return;
+      }
+
       // Debug-shell hotkeys bypass modal suppression at the same escape-hatch
       // tier as Ctrl+C.
       if (event is KeyEvent && tryConsumeDebugKey(debugController, event)) {
@@ -646,13 +696,25 @@ Future<AppExit> _runAppImpl(
         scheduleFrame('debug-key');
         return;
       }
+      // A correlated batch's text half takes the same debug-hotkey route the
+      // bare TextInputEvent shape did for identical wire input.
+      if (event is InputBatch &&
+          event.committedText != null &&
+          tryConsumeDebugText(
+            debugController,
+            TextInputEvent(event.committedText!),
+          )) {
+        scheduleFrame('debug-key');
+        return;
+      }
 
       KeyEventResult dispatchResult = KeyEventResult.ignored;
       if (event is KeyEvent ||
           event is TextInputEvent ||
           event is TextCompositionEvent ||
           event is PasteEvent ||
-          event is MouseEvent) {
+          event is MouseEvent ||
+          event is InputBatch) {
         dispatchResult = dispatcher.dispatch(event);
         semanticsPipeline?.markSemanticsDirty();
       }
@@ -660,6 +722,10 @@ Future<AppExit> _runAppImpl(
       // Ctrl+C exits only when the app did not handle it first. Structured
       // browser sessions are exempt because browser Cmd+C maps to Ctrl+C.
       if (event is KeyEvent &&
+          // Once per physical press: a release always dispatches as
+          // `ignored` (the fence), so without this an app that handled the
+          // press would still exit on the up (RFC 0020 §6).
+          event.type != KeyEventType.up &&
           event.code.character == 'c' &&
           event.hasCtrl &&
           dispatchResult != KeyEventResult.handled &&
@@ -951,6 +1017,15 @@ Future<AppExit> _runAppImpl(
         runtimeMarkers?.mark('terminal.enter.end');
         final startupOverflow = startupEvents.overflowError;
         if (startupOverflow != null) throw startupOverflow;
+        // Confirmed keyboard capabilities, from drivers that declare them
+        // (RFC 0020 §5.7). AFTER enter: a remote driver only knows its
+        // peer's protocol once the INIT handshake has landed.
+        if (usedDriver is KeyboardCapabilitiesDriver) {
+          dispatcher.updateKeyboardCapabilities(
+            (usedDriver as KeyboardCapabilitiesDriver).keyboardCapabilities,
+          );
+          keyboardNotifier.notifyCapabilitiesChanged();
+        }
         // The ambiguous-width probe has now run (inside enter()); build the
         // renderer with the confirmed width mode. A terminal that draws
         // ambiguous glyphs one column wide drops the defensive per-cell
@@ -1003,7 +1078,7 @@ Future<AppExit> _runAppImpl(
           // action against the live tree and re-render, completing the
           // semantics round trip (presentSemantics ships the tree out, this
           // brings activations back). Mirrors the in-browser host.
-          negotiatedSink.onSemanticAction = (id, action, value) {
+          negotiatedSink.onSemanticAction = (id, action, value, {targetToken}) {
             if (pendingSemanticActions >= _maxPendingRemoteSemanticActions) {
               // Queue one marker behind every earlier admitted action. RESULT
               // has no sequence number, so sending this immediately would put
@@ -1060,8 +1135,21 @@ Future<AppExit> _runAppImpl(
                 // both paths. Deferred into the link (not fired at arrival) so
                 // it reflects the tree AFTER the prior action mutated it.
                 semanticsPipeline?.flushPendingNow('semantic-action');
+                final liveTree = SemanticTree.fromElement(root);
+                if (isPositionalSemanticId(id.value)) {
+                  final liveNode = liveTree.nodeById(id);
+                  if (targetToken == null ||
+                      liveNode?.actionTargetToken != targetToken) {
+                    negotiatedSink.presentSemanticActionResult(
+                      id,
+                      action,
+                      SemanticActionInvocationStatus.notFound,
+                    );
+                    return;
+                  }
+                }
                 final result = await invokeSemanticActionFromElement(
-                  tree: SemanticTree.fromElement(root),
+                  tree: liveTree,
                   id: id,
                   action: action,
                   value: value,
@@ -1194,6 +1282,7 @@ Future<AppExit> _runAppImpl(
             logBuffer: logBuffer,
             debugController: debugController,
             pendingSequenceNotifier: dispatcher.pendingSequenceNotifier,
+            keyboardNotifier: keyboardNotifier,
           );
           final activeSurfaceSink = surfaceSink;
           // The clipboard is a host service shared via ClipboardScope in
@@ -1229,6 +1318,11 @@ Future<AppExit> _runAppImpl(
             runtime: runtime,
             frameLoop: frameLoop,
             readViewport: () => FrameViewportSnapshot(usedDriver.size),
+            // Frame start, after input drained (events are pumped before
+            // frames are produced): publish the keyboard latch so every
+            // read within this frame — tickers included — agrees, and
+            // edges expire on schedule (RFC 0020 §5.6).
+            onLatchInput: dispatcher.keyboardSession.publishLatch,
             // Remote drivers surface their transport's send backlog;
             // the frame program defers production while the peer stalls
             // (structured AND v1-byte modes — dropped bytes are never
@@ -1467,7 +1561,12 @@ Future<AppExit> _runAppImpl(
 String _frameReasonForEvent(TuiEvent event) {
   return switch (event) {
     ResizeEvent() => 'resize',
+    TerminalFocusEvent() => 'terminal-focus',
     KeyEvent(:final code) => 'key:${code.special?.name ?? code.character!}',
+    InputBatch(:final key) =>
+      key != null
+          ? 'key:${key.code.special?.name ?? key.code.character!}'
+          : 'text-input',
     TextInputEvent() => 'text-input',
     TextCompositionEvent(:final kind) => 'text-composition:${kind.name}',
     PasteEvent() => 'paste',

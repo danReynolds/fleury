@@ -44,7 +44,7 @@ runApp(
     return null;
   },
   globalBindings: [
-    KeyBinding(KeySequence.ctrl.q, onTrigger: requestExit, label: 'Quit'),
+    KeyBinding(KeySequence.ctrl.q, onTrigger: (_) => requestExit(), label: 'Quit'),
   ],
 )
 ```

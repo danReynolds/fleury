@@ -22,7 +22,9 @@ void main(List<String> args) {
   final json = const JsonEncoder.withIndent('  ').convert(visitor.out);
   if (args.isNotEmpty) {
     File(args.first).writeAsStringSync('$json\n');
-    stdout.writeln('extracted ${visitor.out.length} example snippets → ${args.first}');
+    stdout.writeln(
+      'extracted ${visitor.out.length} example snippets → ${args.first}',
+    );
   } else {
     stdout.write(json);
   }

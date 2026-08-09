@@ -64,6 +64,149 @@ const browserInputTraceFixtures = <TraceMap>[
         'keyEventType': 'down',
         'modifiers': <String>['ctrl', 'shift'],
       },
+      // RFC 0020 Meta regime: keys under Meta are press-only — macOS
+      // browsers swallow their keyup, so the source closes the press
+      // immediately with a synthesized release.
+      {
+        'type': 'key',
+        'char': 'z',
+        'keyEventType': 'up',
+        'modifiers': <String>['ctrl', 'shift'],
+        'synthesized': true,
+      },
+    ],
+  },
+  {
+    'name': 'printable lifecycle: key half plus text, then a paired keyup',
+    'browserEvents': <TraceMap>[
+      {
+        'target': 'textArea',
+        'event': 'keydown',
+        'key': 'z',
+        'code': 'KeyW', // AZERTY: the QWERTY-W spot types 'z'
+      },
+      {
+        'target': 'textArea',
+        'event': 'input',
+        'inputType': 'insertText',
+        'data': 'z',
+      },
+      {'target': 'textArea', 'event': 'keyup', 'key': 'z', 'code': 'KeyW'},
+    ],
+    'expectedFleuryEvents': <TraceMap>[
+      {
+        'type': 'key',
+        'char': 'z',
+        'keyEventType': 'down',
+        'modifiers': <String>[],
+        'position': 'w',
+      },
+      {'type': 'text', 'text': 'z'},
+      {
+        'type': 'key',
+        'char': 'z',
+        'keyEventType': 'up',
+        'modifiers': <String>[],
+        'position': 'w',
+      },
+    ],
+  },
+  {
+    'name': 'an unpaired keyup is ignored (downed before attach)',
+    'browserEvents': <TraceMap>[
+      {'target': 'textArea', 'event': 'keyup', 'key': 'x', 'code': 'KeyX'},
+    ],
+    'expectedFleuryEvents': <TraceMap>[],
+  },
+  {
+    // A sweep closes presses the user may still be physically holding. The
+    // session re-opens its record on the next auto-repeat, so the source
+    // must re-open in lockstep — otherwise the eventual real keyup finds
+    // nothing to close and the key wedges as permanently held.
+    'name': 'a sweep mid-hold still yields one up per down',
+    'browserEvents': <TraceMap>[
+      {
+        'target': 'textArea',
+        'event': 'keydown',
+        'key': 'ArrowRight',
+        'code': 'ArrowRight',
+      },
+      // Meta tap: sweeps, closing the arrow press.
+      {
+        'target': 'textArea',
+        'event': 'keydown',
+        'key': 'Meta',
+        'code': 'MetaLeft',
+        'metaKey': true,
+      },
+      {
+        'target': 'textArea',
+        'event': 'keyup',
+        'key': 'Meta',
+        'code': 'MetaLeft',
+      },
+      // Still held → auto-repeat re-opens the press.
+      {
+        'target': 'textArea',
+        'event': 'keydown',
+        'key': 'ArrowRight',
+        'code': 'ArrowRight',
+        'repeat': true,
+      },
+      // The real release must now close it.
+      {
+        'target': 'textArea',
+        'event': 'keyup',
+        'key': 'ArrowRight',
+        'code': 'ArrowRight',
+      },
+    ],
+    'expectedFleuryEvents': <TraceMap>[
+      {
+        'type': 'key',
+        'keyCode': 'arrowRight',
+        'keyEventType': 'down',
+        'modifiers': <String>[],
+        'position': 'arrowRight',
+      },
+      {
+        'type': 'key',
+        'keyCode': 'leftSuper',
+        'keyEventType': 'down',
+        'modifiers': <String>[],
+        'position': 'metaLeft',
+      },
+      // Meta's own release is PHYSICAL — a synthesized one could never
+      // complete a nextKey capture, making Cmd unbindable in a rebind UI.
+      {
+        'type': 'key',
+        'keyCode': 'leftSuper',
+        'keyEventType': 'up',
+        'modifiers': <String>[],
+        'position': 'metaLeft',
+      },
+      {
+        'type': 'key',
+        'keyCode': 'arrowRight',
+        'keyEventType': 'up',
+        'modifiers': <String>[],
+        'position': 'arrowRight',
+        'synthesized': true,
+      },
+      {
+        'type': 'key',
+        'keyCode': 'arrowRight',
+        'keyEventType': 'repeat',
+        'modifiers': <String>[],
+        'position': 'arrowRight',
+      },
+      {
+        'type': 'key',
+        'keyCode': 'arrowRight',
+        'keyEventType': 'up',
+        'modifiers': <String>[],
+        'position': 'arrowRight',
+      },
     ],
   },
   {

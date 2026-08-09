@@ -14,7 +14,7 @@ Future<void> main(List<String> args) async {
   try {
     switch (options.command) {
       case _StorybookCommand.run:
-        await _runInteractive(options);
+        await _runInteractive(options, args);
       case _StorybookCommand.list:
         _printStoryCatalog(json: options.json);
       case _StorybookCommand.verify:
@@ -30,7 +30,10 @@ Future<void> main(List<String> args) async {
   }
 }
 
-Future<void> _runInteractive(_StorybookCliOptions options) async {
+Future<void> _runInteractive(
+  _StorybookCliOptions options,
+  List<String> args,
+) async {
   final story = _storyForId(options.storyId);
   final overrides = _controlOverridesFor(story, options.controlSpecs);
   _validateVariant(story, options.variantId);
@@ -44,6 +47,10 @@ Future<void> _runInteractive(_StorybookCliOptions options) async {
       initialViewport: options.viewport,
     ),
     mode: const TerminalMode(mouse: true),
+    // The selected story/variant/theme all come from argv, and a dev
+    // hot-restart re-runs this entrypoint — without argv the restart would
+    // silently drop you back on the default story.
+    args: args,
     onEvent: (event) {
       if (event is KeyEvent && event.hasCtrl && event.code.character == 'c') {
         return const ExitRequested();

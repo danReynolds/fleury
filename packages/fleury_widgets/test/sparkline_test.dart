@@ -168,23 +168,23 @@ void main() {
       );
     });
 
-  testWidgets('semantic state omits non-finite values', (tester) {
-    tester.pumpWidget(
-      const Sparkline(
-        data: [1, 2, double.nan],
-        semanticLabel: 'q',
-        min: double.nan,
-      ),
-    );
-    final chart = tester.semantics().single(
-      role: SemanticRole.chart,
-      label: 'q',
-    );
-    // serve jsonEncodes semantic state; JSON has no NaN/Infinity, so a
-    // non-finite latest sample or bound must be absent, not shipped raw.
-    expect(chart.state.chartLatestValue, isNull);
-    expect(chart.state.chartMinValue, isNull);
-    expect(chart.state.chartMaxValue, 2);
-  });
+    testWidgets('semantic state omits non-finite values', (tester) {
+      tester.pumpWidget(
+        const Sparkline(
+          data: [1, 2, double.nan],
+          semanticLabel: 'q',
+          min: double.nan,
+        ),
+      );
+      final chart = tester.semantics().single(
+        role: SemanticRole.chart,
+        label: 'q',
+      );
+      // serve jsonEncodes semantic state; JSON has no NaN/Infinity, so a
+      // non-finite latest sample or bound must be absent, not shipped raw.
+      expect(chart.state.chartLatestValue, isNull);
+      expect(chart.state.chartMinValue, isNull);
+      expect(chart.state.chartMaxValue, 2);
+    });
   });
 }

@@ -22,10 +22,11 @@ void main() {
         _node('spinButton', state: {'min': 0, 'max': 10, 'step': 2}),
       );
       expect(s, {'type': 'number', 'minimum': 0, 'maximum': 10, 'step': 2});
-      expect(
-        deriveValueSchema(_node('slider', state: {'min': 1, 'max': 5})),
-        {'type': 'number', 'minimum': 1, 'maximum': 5},
-      );
+      expect(deriveValueSchema(_node('slider', state: {'min': 1, 'max': 5})), {
+        'type': 'number',
+        'minimum': 1,
+        'maximum': 5,
+      });
     });
 
     test('checkbox/toggle → boolean', () {
@@ -94,13 +95,16 @@ void main() {
 
     test('range slider (activeHandle) notes it moves the active handle', () {
       final s = deriveValueSchema(
-        _node('slider', state: {
-          'min': 0,
-          'max': 10,
-          'activeHandle': 'low',
-          'lowValue': 2,
-          'highValue': 8,
-        }),
+        _node(
+          'slider',
+          state: {
+            'min': 0,
+            'max': 10,
+            'activeHandle': 'low',
+            'lowValue': 2,
+            'highValue': 8,
+          },
+        ),
       );
       expect(s!['type'], 'number');
       expect(s['description'], contains('active handle'));
@@ -111,15 +115,22 @@ void main() {
       expect(s!.containsKey('description'), isFalse);
     });
 
-    test('all-disabled select (empty options) → enum that rejects any value', () {
-      final s = deriveValueSchema(_node('button', state: {'options': <Object?>[]}));
-      expect(s, {'type': 'enum', 'options': <Object?>[]});
-      expect(validateValueForSchema(s!, 'anything'), contains('no options'));
-    });
+    test(
+      'all-disabled select (empty options) → enum that rejects any value',
+      () {
+        final s = deriveValueSchema(
+          _node('button', state: {'options': <Object?>[]}),
+        );
+        expect(s, {'type': 'enum', 'options': <Object?>[]});
+        expect(validateValueForSchema(s!, 'anything'), contains('no options'));
+      },
+    );
 
     test('null when not settable, or a plain button with no options', () {
-      expect(deriveValueSchema(_node('spinButton', actions: ['activate'])),
-          isNull);
+      expect(
+        deriveValueSchema(_node('spinButton', actions: ['activate'])),
+        isNull,
+      );
       expect(deriveValueSchema(_node('button')), isNull); // no options key
     });
 
@@ -128,15 +139,27 @@ void main() {
       // node — guard against a future key regression.
       for (final s in <Map<String, Object?>?>[
         deriveValueSchema(_node('spinButton', state: {'min': 0, 'max': 9})),
-        deriveValueSchema(_node('datePicker', state: {'firstDate': '2020-01-01'})),
+        deriveValueSchema(
+          _node('datePicker', state: {'firstDate': '2020-01-01'}),
+        ),
         deriveValueSchema(_node('table', state: {'collectionRowCount': 3})),
         deriveValueSchema(_node('checkbox')),
       ]) {
         for (final key in s!.keys) {
           final lower = key.toLowerCase();
-          for (final bad in ['value', 'text', 'token', 'query', 'secret',
-              'password']) {
-            expect(lower.contains(bad), isFalse, reason: '"$key" trips redaction');
+          for (final bad in [
+            'value',
+            'text',
+            'token',
+            'query',
+            'secret',
+            'password',
+          ]) {
+            expect(
+              lower.contains(bad),
+              isFalse,
+              reason: '"$key" trips redaction',
+            );
           }
         }
       }
@@ -168,7 +191,10 @@ void main() {
       expect(validateValueForSchema(s, 'yes'), isNull); // widget spelling
       expect(validateValueForSchema(s, 'on'), isNull);
       expect(validateValueForSchema(s, 1), isNull); // num, like widget
-      expect(validateValueForSchema(s, 'maybe'), contains('expected a boolean'));
+      expect(
+        validateValueForSchema(s, 'maybe'),
+        contains('expected a boolean'),
+      );
     });
 
     test('date: format + range', () {

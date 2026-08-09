@@ -409,7 +409,8 @@ void main() {
       expect(
         t.intrinsicWidth,
         6,
-        reason: 'split: three 2-cell atoms — geometry changed, so the setter '
+        reason:
+            'split: three 2-cell atoms — geometry changed, so the setter '
             'must invalidate layout, not merely paint',
       );
       // Re-laying out yields the new geometry — the observable form of

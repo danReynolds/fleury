@@ -154,6 +154,12 @@ class _DebugShellState extends State<DebugShell> {
 ///   ↑/↓/Home            move semantic cursor while Tree tab is active
 bool tryConsumeDebugKey(DebugController controller, KeyEvent event) {
   if (!controller.config.enabled) return false;
+  // Hotkeys act once per physical press. This runs UPSTREAM of the
+  // dispatcher's release fence, so on a surface that reports releases
+  // (RFC 0020: the web/serve backend, and terminals from P5) an unguarded
+  // match would fire again on the up — F12 would open and instantly close
+  // the shell, Esc would collapse two levels, Tab would skip a tab.
+  if (event.type == KeyEventType.up) return false;
 
   if (event.code.character == 'g' && event.hasCtrl) {
     controller.toggleOnOff();

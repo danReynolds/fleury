@@ -8,6 +8,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_wire.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -748,6 +749,66 @@ void main() {
       );
       final decoded = decodeInputEvent(encodeInputEvent(event)) as KeyEvent;
       expect(decoded, event);
+    });
+
+    test('RFC 0020 fields ride the trailing extension and round-trip', () {
+      const positional = KeyEvent(
+        KeyCode.char('z'),
+        position: KeyPosition.w,
+        type: KeyEventType.up,
+      );
+      expect(decodeInputEvent(encodeInputEvent(positional)), positional);
+
+      const synthesizedOnly = KeyEvent(KeyCode.leftShift, synthesized: true);
+      expect(
+        decodeInputEvent(encodeInputEvent(synthesizedOnly)),
+        synthesizedOnly,
+      );
+    });
+
+    test('default RFC 0020 fields add no bytes (old-peer compatibility)', () {
+      // A default-fields event must encode without the trailing extension so
+      // pre-0020 decoders — which reject unread trailing bytes — still
+      // accept it. The wire proof: the extension adds exactly two bytes.
+      const plain = KeyEvent(KeyCode.enter);
+      const extended = KeyEvent(KeyCode.enter, synthesized: true);
+      expect(
+        encodeInputEvent(extended).length,
+        encodeInputEvent(plain).length + 2,
+      );
+    });
+
+    test('extended vocabulary specials round-trip by index', () {
+      const event = KeyEvent(KeyCode.mediaPlayPause);
+      expect(decodeInputEvent(encodeInputEvent(event)), event);
+      const keypad = KeyEvent(
+        KeyCode.keypadEnter,
+        position: KeyPosition.numpadEnter,
+      );
+      expect(decodeInputEvent(encodeInputEvent(keypad)), keypad);
+    });
+
+    test('correlated batches round-trip, timing preserved on the wire', () {
+      const batch = InputBatch(
+        key: KeyEvent(
+          KeyCode.char('z'),
+          modifiers: {KeyModifier.shift},
+          position: KeyPosition.w,
+        ),
+        committedText: 'Z',
+        timeStamp: Duration(microseconds: 123456),
+        sequence: 42,
+      );
+      final decoded = decodeInputEvent(encodeInputEvent(batch)) as InputBatch;
+      expect(decoded, batch); // == is payload-only…
+      expect(decoded.timeStamp, batch.timeStamp); // …but timing still rides
+      expect(decoded.sequence, batch.sequence);
+
+      const textOnly = InputBatch(committedText: 'é');
+      expect(decodeInputEvent(encodeInputEvent(textOnly)), textOnly);
+
+      const keyOnly = InputBatch(key: KeyEvent(KeyCode.f13));
+      expect(decodeInputEvent(encodeInputEvent(keyOnly)), keyOnly);
     });
 
     test('all carried event kinds round-trip (seeded)', () {

@@ -562,7 +562,7 @@ void main() {
           bindings: [
             KeyBinding(
               KeySequence.ctrl.k,
-              onTrigger: () {
+              onTrigger: (_) {
                 calls.add('ancestor');
               },
             ),

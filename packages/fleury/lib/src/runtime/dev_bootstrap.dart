@@ -50,6 +50,7 @@
 // exists at all (no restart there either: a respawned child would re-dial
 // the handle's single-accept socket and wedge the session).
 import 'dart:async';
+import 'package:meta/meta.dart';
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:io';
@@ -74,6 +75,40 @@ const String kDevSupervisorEnv = 'FLEURY_DEV_SUPERVISED';
 const String kDevSvcFileEnv = 'FLEURY_DEV_SVC_FILE';
 
 /// The dev supervisor for one `dart run` session.
+/// The VM arguments a supervised respawn runs the app's entrypoint with.
+///
+/// Pure so the contract can be pinned: the two things that can silently break
+/// a dev session are the service coming from the wrong place and the app's own
+/// argv going missing, and neither is visible without a real TTY run.
+@visibleForTesting
+List<String> devRespawnArguments({
+  required String scriptPath,
+  required Uri serviceInfo,
+  List<String> args = const [],
+}) => [
+  // The service MUST come from VM flags: under a runtime-enabled service
+  // (`Service.controlWebServer`) any reload of changed sources crashes the
+  // VM's kernel service and hangs the RPC — see the file-header note and
+  // docs/implementation/vm-reload-bug-report-draft.md. The flag path is what
+  // every editor session exercises daily. The cost is the VM's one-line
+  // startup banner, which the alt screen hides.
+  '--enable-vm-service=0',
+  '--no-serve-devtools',
+  '--write-service-info=$serviceInfo',
+  scriptPath,
+  // The app's own argv, so a respawn re-runs the SAME command.
+  //
+  // A process cannot portably read back its own script arguments, so this only
+  // works if the app hands them over (`runApp(args: args)`). Without it every
+  // respawn re-ran the entrypoint with an EMPTY argv — so an app that selects
+  // what to show from argv quietly started showing something else.
+  // `samples asteroids` printed its usage banner and exited, which reads as a
+  // broken CLI rather than a dropped argument.
+  //
+  // Trailing, so the script path stays the first non-flag argument.
+  ...args,
+];
+
 final class DevBootstrap {
   DevBootstrap._();
 
@@ -95,6 +130,10 @@ final class DevBootstrap {
   /// subscription lands).
   static void requestRestartFromApp() =>
       developer.postEvent(kRestartRequestedEvent, const {});
+
+  /// The app's own `main()` argv, replayed onto every respawn (see
+  /// [_spawnChildInto]). Empty when the app did not hand it over.
+  List<String> _args = const [];
 
   VmService? _vm;
   Process? _child;
@@ -177,7 +216,7 @@ final class DevBootstrap {
   /// started (callers then proceed with the classic path); once supervision
   /// begins, this future never completes — the session ends via `exit()`
   /// with the child's exit code.
-  static Future<void> runOrFallThrough() async {
+  static Future<void> runOrFallThrough({List<String> args = const []}) async {
     // A pre-existing VM service means an editor/debugger owns this run (F5,
     // `--enable-vm-service`): its reload/restart tooling is better placed
     // than ours, and a surprise child process would degrade its UX.
@@ -188,7 +227,7 @@ final class DevBootstrap {
       return;
     }
 
-    final supervisor = DevBootstrap._();
+    final supervisor = DevBootstrap._().._args = args;
     // The whole supervisor runs under one guarded zone: a bug in the dev
     // tooling must never take the session down un-restored.
     var started = false;
@@ -371,22 +410,11 @@ final class DevBootstrap {
     try {
       child = await Process.start(
         Platform.resolvedExecutable,
-        [
-          // The service MUST come from VM flags: under a runtime-enabled
-          // service (`Service.controlWebServer`) any reload of changed
-          // sources crashes the VM's kernel service and hangs the RPC — see
-          // the file-header note and
-          // docs/implementation/vm-reload-bug-report-draft.md. The flag path
-          // is what every editor session exercises daily. The cost is the
-          // VM's one-line startup banner, which the alt screen hides.
-          '--enable-vm-service=0',
-          '--no-serve-devtools',
-          '--write-service-info=${infoFile.uri}',
-          Platform.script.toFilePath(),
-          // The original CLI arguments of main() are not recoverable from
-          // inside the process; dev respawns re-run the entrypoint without
-          // them. (An app that must re-see argv can set FLEURY_HOT_RELOAD=0.)
-        ],
+        devRespawnArguments(
+          scriptPath: Platform.script.toFilePath(),
+          serviceInfo: infoFile.uri,
+          args: _args,
+        ),
         mode: ProcessStartMode.inheritStdio,
         environment: {
           ...Platform.environment,

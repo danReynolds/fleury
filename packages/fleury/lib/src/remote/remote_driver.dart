@@ -11,6 +11,7 @@ import 'dart:io' show Platform;
 import 'dart:typed_data';
 
 import '../foundation/geometry.dart';
+import '../input/keyboard_state.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/surface_capabilities.dart';
 import '../runtime/frame_presentation.dart';
@@ -50,7 +51,23 @@ final class RemoteTerminalDriver
         TerminalDriver,
         RemoteSurfaceSink,
         SurfaceCapabilitiesProvider,
-        OutputFlowControl {
+        OutputFlowControl,
+        KeyboardCapabilitiesDriver {
+  /// What the peer DECLARED in its INIT (RFC 0020 §11) — never an inference
+  /// from [_protocolVersion].
+  ///
+  /// The version says the codecs match; it says nothing about the keyboard on
+  /// the far end. Two `fleury shell` relays at the identical wire version, one
+  /// in front of Ghostty and one in front of Terminal.app, have completely
+  /// different keyboards, and only the relay itself can know which. A peer
+  /// that declares nothing gets the conservative press-only reading — which
+  /// is exactly right, because a peer that cannot say what it supports has
+  /// not confirmed anything.
+  @override
+  KeyboardCapabilities get keyboardCapabilities =>
+      _peerKeyboard ?? KeyboardCapabilities.legacy;
+
+  KeyboardCapabilities? _peerKeyboard;
   RemoteTerminalDriver(
     this._transport, {
     InlineImageCachePolicy imageCachePolicy = defaultInlineImageCachePolicy,
@@ -464,6 +481,7 @@ final class RemoteTerminalDriver
         _handshakeReceived = true;
         _size = _clampSize(f.size);
         _protocolVersion = f.protocolVersion;
+        _peerKeyboard = f.keyboard;
         _capabilities = TerminalCapabilities(
           colorMode: f.colorMode,
           glyphTier: f.glyphTier,
@@ -513,6 +531,7 @@ final class RemoteTerminalDriver
               // value drives no link decision; restating what the peer sent
               // keeps a link-free echo byte-flat (false emits no `hyperlinks=`).
               hyperlinks: f.hyperlinks,
+              keyboard: f.keyboard,
             ),
           );
         }
@@ -549,7 +568,12 @@ final class RemoteTerminalDriver
         // The peer activated a node in its accessible DOM; invoke it on the
         // live tree (only on the structured path, like the other v2 input).
         if (_active && wantsPresentationPlans) {
-          _onSemanticAction?.call(f.id, f.action, f.value);
+          _onSemanticAction?.call(
+            f.id,
+            f.action,
+            f.value,
+            targetToken: f.targetToken,
+          );
         }
       case DebugRequestFrame f:
         if (_active) _onDebugRequest?.call(f.seq, f.kind, f.limit);

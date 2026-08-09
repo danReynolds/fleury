@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../input/keyboard_state.dart';
 
 import 'package:meta/meta.dart';
 
@@ -173,6 +174,39 @@ Future<ImageProtocol?> probeImageProtocol(
   stopwatch.stop();
   final result = _parseKittyGraphicsQuery(response, elapsed: stopwatch.elapsed);
   return result.isConfirmed ? ImageProtocol.kitty : null;
+}
+
+/// Asks the terminal which Kitty keyboard flags are actually active.
+///
+/// Returns the confirmed bitset, or null when the terminal does not support
+/// the protocol (or answered nothing in time). The query is bracketed by a
+/// primary device-attributes request, which every real emulator answers —
+/// so "unsupported" is detected by DA1 arriving WITHOUT a flags reply
+/// rather than by a wall-clock timeout, keeping the verdict independent of
+/// link latency (RFC 0020 §8.2).
+///
+/// Shares [_parseKittyKeyboardStatus] with the diagnostic probe, so runtime
+/// negotiation and `diagnose --probe` can never disagree about what a reply
+/// means.
+Future<int?> probeKeyboardFlags(
+  TerminalProbeTransport transport, {
+  Duration timeout = const Duration(milliseconds: 150),
+}) async {
+  final stopwatch = Stopwatch()..start();
+  final List<int> response;
+  try {
+    response = await transport.request(_kittyKeyboardQuery, timeout: timeout);
+  } on Object {
+    return null;
+  }
+  stopwatch.stop();
+  final result = _parseKittyKeyboardStatus(
+    response,
+    elapsed: stopwatch.elapsed,
+  );
+  if (!result.isConfirmed) return null;
+  final flags = result.details['flags'];
+  return flags is int ? flags : null;
 }
 
 /// Actively measures whether the terminal renders East-Asian *Ambiguous*-width
@@ -510,7 +544,32 @@ final class _ProbeDefinition {
 }
 
 const _deviceAttributesQuery = '\x1B[c';
+
+/// Runtime negotiation's query: the app's enter sequences ALREADY pushed a
+/// tier, so a bare status read reports what the terminal honoured of it.
+@visibleForTesting
+const kittyKeyboardRuntimeQuery = _kittyKeyboardQuery;
+
 const _kittyKeyboardQuery = '\x1B[?u$_deviceAttributesQuery';
+
+/// The DIAGNOSTIC's query, which must measure SUPPORT rather than current
+/// state.
+///
+/// `CSI ? u` alone reports the flags currently in force — and a terminal
+/// sitting at a shell prompt has pushed nothing, so every emulator on earth
+/// answers 0. Read as support, that says Ghostty and Kitty do not implement
+/// the protocol they invented. So the probe asks for everything, reads back
+/// the honoured subset, and pops to leave the terminal exactly as found. The
+/// pop lands before the DA1 that brackets the exchange, so the restore is
+/// complete by the time the probe resolves.
+@visibleForTesting
+const kittyKeyboardSupportQuery = _kittyKeyboardSupportQuery;
+
+const _kittyKeyboardSupportQuery =
+    '\x1B[>31u' // push: request every progressive-enhancement flag
+    '\x1B[?u' // query: what stuck
+    '\x1B[<1u' // pop: restore the prior stack entry
+    '$_deviceAttributesQuery';
 const _kittyGraphicsQuery =
     '\x1B_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1B\\$_deviceAttributesQuery';
 
@@ -525,7 +584,7 @@ const List<_ProbeDefinition> _probeDefinitions = <_ProbeDefinition>[
     id: 'kittyKeyboardStatus',
     label: 'Kitty keyboard status',
     feature: TerminalFeature.kittyKeyboard,
-    request: _kittyKeyboardQuery,
+    request: _kittyKeyboardSupportQuery,
     parse: _parseKittyKeyboardStatus,
   ),
   _ProbeDefinition(
@@ -569,6 +628,19 @@ TerminalProbeResult _parsePrimaryDeviceAttributes(
   );
 }
 
+/// The §5.7 projection, flattened for a JSON details map.
+Map<String, Object?> _semanticDetails(int flags) {
+  final caps = KeyboardCapabilities.fromKittyFlags(flags);
+  return <String, Object?>{
+    'supportsHeldState': caps.supportsHeldState,
+    'distinguishesRepeats': caps.distinguishesRepeats,
+    'supportsPositions': caps.supportsPositions,
+    'reportsPrintableKeys': caps.reportsPrintableKeys,
+    'lifecycleSafe':
+        flags & 0x02 != 0 && flags & 0x08 != 0 && flags & 0x10 != 0,
+  };
+}
+
 TerminalProbeResult _parseKittyKeyboardStatus(
   List<int> responseBytes, {
   required Duration elapsed,
@@ -591,6 +663,11 @@ TerminalProbeResult _parseKittyKeyboardStatus(
         'reportAlternateKeys': flags & 0x04 != 0,
         'reportAllKeysAsEscapes': flags & 0x08 != 0,
         'reportAssociatedText': flags & 0x10 != 0,
+        // What apps actually plan against (RFC 0020 §5.7). Raw flags are the
+        // protocol's vocabulary; these are the framework's, and a support
+        // matrix compared across terminals wants the latter — "held state
+        // works here" is the reviewable claim, not "bit 3 is set".
+        ..._semanticDetails(flags),
       },
     );
   }
@@ -712,4 +789,33 @@ String _escapedResponse(List<int> bytes) {
     buffer.write('...');
   }
   return buffer.toString();
+}
+
+/// **Framework-internal.** Index just past the [n]-th Device-Attributes reply's `c` terminator in [buf],
+/// or -1 if fewer than [n] are present yet. A DA reply is `ESC [` then CSI
+/// parameter/intermediate bytes (0x20–0x3F) then the final byte `c` (0x63).
+/// Requiring valid CSI bytes before the `c` stops a stray 0x63 in unrelated
+/// content (or a user keystroke that leaked in) from being mistaken for the
+/// terminator. Counting to [n] keeps the probe-completion sentinel unambiguous
+/// across a multi-probe startup sequence: the wait and the post-probe replay
+/// both key off the LAST owed reply, not an earlier probe's straggler. [n] <= 0
+/// returns 0 (nothing owed → the whole buffer is real input).
+int daReplyEndN(List<int> buf, int n) {
+  if (n <= 0) return 0;
+  var seen = 0;
+  for (var i = 0; i + 1 < buf.length; i++) {
+    if (buf[i] != 0x1B || buf[i + 1] != 0x5B) continue; // ESC [
+    var j = i + 2;
+    while (j < buf.length && buf[j] >= 0x20 && buf[j] <= 0x3F) {
+      j++; // CSI parameter / intermediate bytes
+    }
+    if (j >= buf.length) return -1; // final byte not arrived yet
+    if (buf[j] == 0x63) {
+      // 'c' final byte → Device Attributes.
+      seen++;
+      if (seen >= n) return j + 1;
+    }
+    i = j; // step past this CSI final byte and keep scanning
+  }
+  return -1;
 }

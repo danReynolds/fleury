@@ -13,9 +13,10 @@ environment:
   sdk: ^3.10.4
 
 dependencies:
-  # fleury's published API; pubspec_overrides.yaml resolves it from the
-  # monorepo during development.
-  fleury: ^0.1.0
+  # The browser host consumes Fleury's explicitly lockstep remote wire.
+  # Keep this exact; pubspec_overrides.yaml resolves the monorepo sibling
+  # during development.
+  fleury: 0.1.0
   web: ^1.1.1
 
 dev_dependencies:

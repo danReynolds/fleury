@@ -128,7 +128,7 @@ void main() {
     // The opt-out must let the character fall through the tree's handler.
     var quits = 0;
     Widget host({required bool typeahead}) => KeyBindings(
-      bindings: [KeyBinding(KeySequence.q, onTrigger: () => quits += 1)],
+      bindings: [KeyBinding(KeySequence.q, onTrigger: (_) => quits += 1)],
       child: _tree(typeahead: typeahead),
     );
 
@@ -319,7 +319,7 @@ void main() {
       tester.pumpWidget(
         KeyBindings(
           bindings: [
-            KeyBinding(KeyCode.arrowRight, onTrigger: () => bubbled++),
+            KeyBinding(KeyCode.arrowRight, onTrigger: (_) => bubbled++),
           ],
           child: const Tree<String>(
             autofocus: true,
@@ -337,7 +337,9 @@ void main() {
       var bubbled = 0;
       tester.pumpWidget(
         KeyBindings(
-          bindings: [KeyBinding(KeyCode.arrowLeft, onTrigger: () => bubbled++)],
+          bindings: [
+            KeyBinding(KeyCode.arrowLeft, onTrigger: (_) => bubbled++),
+          ],
           child: const Tree<String>(
             autofocus: true,
             roots: [

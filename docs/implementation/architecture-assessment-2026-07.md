@@ -63,18 +63,22 @@ instead of “remember to mirror.”
 
 ---
 
-## The other real risk: semantic node identity
+## The other real risk: semantic node identity — resolved
 
-Distinct from the parity theme, and the thing most likely to bite the **agent**
-story. Auto-generated semantic ids are positional — `element-<hash>` (explicitly
-not stable across rebuilds) or `auto:…~<index>` (carries a positional segment).
-A held agent/AT reference can come to denote a *different* logical node after an
-unkeyed list recycles element slots. The MCP layer guards with a role+label+
-actions fingerprint, but its own docstring admits the residual gap (two nodes
-differing only in value are interchangeable). The correct fix — a build-owner
-**structure generation** backing stable ids (the deferred “A3” work) — would make
-identity survive rebuilds without depending on app-author `Semantics(id:)`
-discipline. **If one thing is hardened for the moat, it should be identity, not bytes.**
+The assessment correctly identified recycled positional ids as the remaining
+agent/AT correctness risk, but its proposed whole-tree structure generation was
+too coarse. As of 2026-07-29, each actionable positional node instead carries
+an opaque token issued from its mounted contributing element. Browser and MCP
+peers echo the token, and the app rejects the action if a different element now
+occupies that slot — including when the replacement has the same role, label,
+actions, and value. A role, label, or advertised-action change on a reused
+element also rotates its per-slot lease, while value/focus/busy/ticking updates
+retain it so ticking UIs do not invalidate just-observed actions. The exact
+residual follows the framework identity contract: same `runtimeType` + `Key`
+and the same target signature is the same logical control. Apps distinguish a
+semantically identical replacement with a `Key` or stable `Semantics.id`;
+frequently relabeled controls should prefer the latter. Positional ids now fail
+closed on observable recycling rather than silently retarget.
 
 ---
 

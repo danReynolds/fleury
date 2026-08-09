@@ -90,10 +90,7 @@ void main() {
     });
 
     test('multiple sequences project independently and in order', () {
-      final projection = projectText(
-        '$_family and $_family',
-        policy: _split,
-      );
+      final projection = projectText('$_family and $_family', policy: _split);
       expect(projection.changedClusters, hasLength(2));
       expect(
         projection.changedClusters[0].displayRange.end,
@@ -111,10 +108,7 @@ void main() {
       expect(projection.sourceToDisplay(3), 3);
       // After the cluster: shifted by the two dropped joiners.
       final delta = projection.displayText.length - text.length;
-      expect(
-        projection.sourceToDisplay(text.length),
-        text.length + delta,
-      );
+      expect(projection.sourceToDisplay(text.length), text.length + delta);
       expect(
         projection.displayToSource(projection.displayText.length),
         text.length,
@@ -141,7 +135,8 @@ void main() {
       const text = _family;
       final projection = projectText(text, policy: _split);
       final cluster = projection.changedClusters.single;
-      final inside = cluster.displayRange.start +
+      final inside =
+          cluster.displayRange.start +
           (cluster.displayAtomRanges.first.end -
               cluster.displayAtomRanges.first.start);
       expect(

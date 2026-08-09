@@ -364,23 +364,27 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
         final next = coerceSemanticNum(payload);
         if (next != null) _jump(next);
       },
-      child: FocusWithin(
+      child: FocusDetector(
         onFocusChange: _handleFocusChange,
-        child: Focus(
-          focusNode: _node,
-          autofocus: widget.autofocus,
-          onKey: _onKey,
-          // Wheel over the stepper nudges the value (the spinner convention).
-          // It doesn't steal focus, so wheeling past it in a scrollable form
-          // isn't disruptive.
-          child: PointerScrollListener(
-            router: PointerRouterScope.maybeOf(context),
-            onScrollUp: () => _nudge(widget.step),
-            onScrollDown: () => _nudge(-widget.step),
-            child: GestureDetector(
-              onTap: () => _node.requestFocus(),
-              // A stepper is a styled control, not selectable text.
-              child: SelectionArea.disabled(child: body()),
+        child: KeyDetector(
+          onKey: (event) {
+            if ((_onKey)(event) == KeyEventResult.handled) event.consume();
+          },
+          child: Focus(
+            focusNode: _node,
+            autofocus: widget.autofocus,
+            // Wheel over the stepper nudges the value (the spinner convention).
+            // It doesn't steal focus, so wheeling past it in a scrollable form
+            // isn't disruptive.
+            child: PointerScrollListener(
+              router: PointerRouterScope.maybeOf(context),
+              onScrollUp: () => _nudge(widget.step),
+              onScrollDown: () => _nudge(-widget.step),
+              child: GestureDetector(
+                onTap: () => _node.requestFocus(),
+                // A stepper is a styled control, not selectable text.
+                child: SelectionArea.disabled(child: body()),
+              ),
             ),
           ),
         ),

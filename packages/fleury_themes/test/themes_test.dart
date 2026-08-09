@@ -103,7 +103,8 @@ void _webSafetyGuard() {
     expect(
       offenders,
       isEmpty,
-      reason: 'import package:fleury/fleury_core.dart instead — the native '
+      reason:
+          'import package:fleury/fleury_core.dart instead — the native '
           'umbrella breaks the web build',
     );
   });

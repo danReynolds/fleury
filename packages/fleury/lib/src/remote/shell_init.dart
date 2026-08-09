@@ -1,4 +1,5 @@
 import '../foundation/geometry.dart';
+import '../input/keyboard_state.dart';
 import '../terminal/capabilities.dart';
 import 'remote_protocol.dart';
 
@@ -10,6 +11,7 @@ import 'remote_protocol.dart';
 InitFrame buildShellInitFrame({
   required CellSize size,
   required TerminalCapabilities capabilities,
+  KeyboardCapabilities? keyboard,
 }) {
   return InitFrame(
     size: size,
@@ -18,6 +20,11 @@ InitFrame buildShellInitFrame({
     imageProtocol: capabilities.imageProtocol,
     tmuxPassthrough: capabilities.tmuxPassthrough,
     hyperlinks: capabilities.hyperlinks,
+    // What the user's REAL terminal confirmed, probed by the shell before it
+    // starts relaying bytes. Without this the app behind the relay sees a
+    // press-only keyboard no matter what the emulator can do — the exact
+    // silent-disappearance this file exists to prevent.
+    keyboard: keyboard,
     protocolVersion: remoteAnsiProtocolVersion,
   );
 }

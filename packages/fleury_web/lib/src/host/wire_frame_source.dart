@@ -12,6 +12,7 @@ import 'dart:js_interop';
 import 'dart:typed_data';
 
 import 'package:fleury/fleury_host.dart';
+import 'package:fleury/fleury_wire.dart';
 import 'package:web/web.dart' as web;
 
 import '../focus/web_focus_coordinator.dart';
@@ -39,6 +40,9 @@ final class WireFrameSource implements BrowserFrameSource {
   CellSize _size = const CellSize(80, 24);
   CellBuffer _mirror = CellBuffer(const CellSize(80, 24));
   bool _handshakeSent = false;
+  int? _appProtocolVersion;
+  bool _resizePendingDuringNegotiation = false;
+  bool _warnedUnsafeSemanticAction = false;
   bool _closed = false;
   int _nextPasteId = 1;
   CellRect? _lastCaret;
@@ -161,14 +165,38 @@ final class WireFrameSource implements BrowserFrameSource {
     // sends the action back to the host, which invokes it on the live
     // tree — the semantics round trip that keeps a served session operable
     // through the a11y tree, not just the visual grid.
-    components.semanticPresenter?.onSemanticActionRequest = (id, action) {
-      _send(encodeFrame(SemanticActionFrame(id, action)));
-    };
+    _bindSemanticActions(components);
     _mirror = CellBuffer(_size);
     components.inputSource.start(_sendInput);
     _openSetupHookForTest?.call();
     _sendInit();
     _observeMetrics();
+  }
+
+  void _bindSemanticActions(BrowserHostComponents components) {
+    components.semanticPresenter?.onSemanticActionRequest = (id, action) {
+      String? targetToken;
+      if (isPositionalSemanticId(id.value)) {
+        if ((_appProtocolVersion ?? 0) <
+            semanticActionTargetTokenProtocolVersion) {
+          if (!_warnedUnsafeSemanticAction) {
+            _warnedUnsafeSemanticAction = true;
+            web.console.warn(
+              'fleury: ignored a positional semantic action because the app '
+                      'has not negotiated target verification; reload with a '
+                      'matching client and app build.'
+                  .toJS,
+            );
+          }
+          return;
+        }
+        targetToken = components.semanticPresenter?.actionTargetToken(id);
+        if (targetToken == null) return;
+      }
+      _send(
+        encodeFrame(SemanticActionFrame(id, action, targetToken: targetToken)),
+      );
+    };
   }
 
   /// Reconciles the inline-image overlay against this frame's
@@ -210,9 +238,14 @@ final class WireFrameSource implements BrowserFrameSource {
           // its MarkdownText gate produce a linkUri that the v4 wire then
           // carries. Without it links render underlined-but-not-clickable.
           hyperlinks: true,
+          // The DOM surface reports keydown/keyup for every key with a
+          // physical `code`, so it declares the full lifecycle outright
+          // (RFC 0020 §11) — never inferred from the protocol version.
+          keyboard: KeyboardCapabilities.full,
           protocolVersion: remoteProtocolVersion,
         ),
       ),
+      isInit: true,
     );
   }
 
@@ -335,6 +368,13 @@ final class WireFrameSource implements BrowserFrameSource {
     // Do NOT reset _mirror here: an in-flight plan built against the old size
     // (sent before the server saw our ResizeFrame) must keep applying to the old
     // mirror. The next size-matched full-repaint plan resets it in _handleFrame.
+    if (_appProtocolVersion != remoteProtocolVersion) {
+      // INIT already carried the size measured at open. If layout changes
+      // while the app is still echoing it, retain only the latest measurement
+      // and synchronize it immediately after exact-version negotiation.
+      _resizePendingDuringNegotiation = true;
+      return;
+    }
     _send(encodeFrame(ResizeFrame(next)));
   }
 
@@ -354,11 +394,24 @@ final class WireFrameSource implements BrowserFrameSource {
   int _consecutiveApplyFailures = 0;
 
   void _onMessage(web.MessageEvent event) {
+    _ingestMessageData(event.data);
+  }
+
+  void _ingestMessageData(JSAny? data) {
     // A message still queued at the socket when we tore down must not repaint
     // over the reload banner on a dead session.
     if (_closed) return;
-    final data = event.data;
-    if (data == null) return;
+    if (data == null || !data.isA<JSArrayBuffer>()) {
+      // The wire is binary-only (`binaryType = arraybuffer`). A text/blob or
+      // otherwise unexpected message is a protocol desynchronization, not a
+      // callback exception to leak into JavaScript while leaving a wedged
+      // socket open.
+      _teardown(
+        'The session desynchronized — reload to reconnect.',
+        banner: true,
+      );
+      return;
+    }
     final buffer = (data as JSArrayBuffer).toDart;
     _ingest(buffer.asUint8List());
   }
@@ -381,60 +434,68 @@ final class WireFrameSource implements BrowserFrameSource {
     // a list first would, on a decode error partway through, discard the
     // good frames already pulled (and applied-from) the buffer, leaving the
     // mirror diverged from what the server thinks the peer holds.
-    try {
-      for (final frame in _decoder.drain()) {
-        // A teardown mid-batch — a ByeFrame, or the escalation below — closes
-        // the session; stop applying the rest of this drained batch so nothing
-        // repaints over the banner.
-        if (_closed) return;
-        try {
-          _handleFrame(frame);
-          // A clean apply ends any run of failures — only a *persistent* apply
-          // failure (nothing succeeding in between) escalates below.
-          _consecutiveApplyFailures = 0;
-        } catch (error) {
-          web.console.error('fleury: remote frame apply failed: $error'.toJS);
-          _consecutiveApplyFailures++;
-          if (_consecutiveApplyFailures >= _maxConsecutiveApplyFailures) {
-            // A frame that keeps failing to apply is effectively hung too:
-            // stop resyncing and surface the same reload banner. _teardown
-            // closes the socket, so bail out of the drain.
-            _teardown(
-              'The session desynchronized — reload to reconnect.',
-              banner: true,
-            );
-            return;
+    while (!_closed) {
+      try {
+        for (final frame in _decoder.drain()) {
+          // A teardown mid-batch — a ByeFrame, or the escalation below — closes
+          // the session; stop applying the rest of this drained batch so nothing
+          // repaints over the banner.
+          if (_closed) return;
+          try {
+            _handleFrame(frame);
+            // A clean apply ends any run of failures — only a *persistent* apply
+            // failure (nothing succeeding in between) escalates below.
+            _consecutiveApplyFailures = 0;
+          } catch (error) {
+            web.console.error('fleury: remote frame apply failed: $error'.toJS);
+            _consecutiveApplyFailures++;
+            if (_consecutiveApplyFailures >= _maxConsecutiveApplyFailures) {
+              // A frame that keeps failing to apply is effectively hung too:
+              // stop resyncing and surface the same reload banner. _teardown
+              // closes the socket, so bail out of the drain.
+              _teardown(
+                'The session desynchronized — reload to reconnect.',
+                banner: true,
+              );
+              return;
+            }
+            // A single bad frame with intact stream framing is recoverable:
+            // repair the screen from the mirror and keep going.
+            _resyncFromMirror();
           }
-          // A single bad frame with intact stream framing is recoverable:
-          // repair the screen from the mirror and keep going.
-          _resyncFromMirror();
         }
-      }
-    } on RemoteProtocolException catch (error) {
-      // A decode-level protocol error surfaced from drain(). If the decoder
-      // lost stream framing (an oversized length prefix cleared the buffer),
-      // the byte stream can never re-synchronize and the mirror will never
-      // advance — the "frozen screen, no banner" hang. Surface it: close the
-      // now-untrustworthy socket and show the reload banner the user can
-      // click, instead of silently resyncing forever.
-      if (!error.recoverable) {
-        _teardown(
-          'The session desynchronized — reload to reconnect.',
-          banner: true,
-        );
+        return;
+      } on RemoteProtocolException catch (error) {
+        // A decode-level protocol error surfaced from drain(). If the decoder
+        // lost stream framing (an oversized length prefix cleared the buffer),
+        // the byte stream can never re-synchronize and the mirror will never
+        // advance — the "frozen screen, no banner" hang. Surface it: close the
+        // now-untrustworthy socket and show the reload banner the user can
+        // click, instead of silently resyncing forever.
+        if (!error.recoverable) {
+          _teardown(
+            'The session desynchronized — reload to reconnect.',
+            banner: true,
+          );
+          return;
+        }
+        // A single malformed frame whose length header was valid: drain()
+        // skipped exactly it and framing stayed intact, so this is recoverable.
+        // The frames decoded before it were already applied above; repair the
+        // screen from the (now-current) mirror, then drain again so valid frames
+        // already buffered after the malformed one are not stranded until a
+        // future socket message that may never arrive. Every recoverable error
+        // consumes one complete frame, so this loop always makes progress.
+        web.console.error('fleury: remote frame decode failed: $error'.toJS);
+        _resyncFromMirror();
+      } catch (error) {
+        // A non-protocol decode fault (defensive; shouldn't normally reach
+        // here): unlike a recoverable RemoteProtocolException, it has no
+        // forward-progress guarantee, so repair once and stop this drain.
+        web.console.error('fleury: remote frame decode failed: $error'.toJS);
+        _resyncFromMirror();
         return;
       }
-      // A single malformed frame whose length header was valid: drain()
-      // skipped exactly it and framing stayed intact, so this is recoverable.
-      // The frames decoded before it were already applied above; repair the
-      // screen from the (now-current) mirror.
-      web.console.error('fleury: remote frame decode failed: $error'.toJS);
-      _resyncFromMirror();
-    } catch (error) {
-      // A non-protocol decode fault (defensive; shouldn't normally reach here):
-      // treat as recoverable and repair from the mirror.
-      web.console.error('fleury: remote frame decode failed: $error'.toJS);
-      _resyncFromMirror();
     }
   }
 
@@ -470,6 +531,24 @@ final class WireFrameSource implements BrowserFrameSource {
   }
 
   void _handleFrame(RemoteFrame frame) {
+    // Production ingestion stops at teardown, but keep the handler itself
+    // fail-closed too: direct/test callers and any future dispatch path must not
+    // present a frame that was already queued when negotiation rejected the
+    // session.
+    if (_closed) return;
+    // The wire is lockstep, not capability-negotiated. Until the app echoes an
+    // exact current INIT, no frame shape is safe to stage, decode into retained
+    // state, or present. BYE remains legal so an app that exits during startup
+    // still follows the ordinary clean-teardown path.
+    if (_appProtocolVersion == null &&
+        frame is! InitFrame &&
+        frame is! ByeFrame) {
+      _teardown(
+        'Fleury wire negotiation failed: the app sent ${frame.runtimeType} '
+        'before echoing INIT.',
+      );
+      return;
+    }
     final components = _components!;
     // Image bytes precede their plan on the wire. Commit the staged generation
     // at that decoded boundary, before grid mutation/presentation can throw.
@@ -535,14 +614,20 @@ final class WireFrameSource implements BrowserFrameSource {
       case InitFrame f:
         // v3 apps echo INIT with their protocol version after receiving
         // ours, so a stale cached client bundle is detectable instead of
-        // silently mis-decoding. Same major version: silence.
+        // silently mis-decoding. The raw wire deliberately has no compatibility
+        // lane: first-party peers ship in lockstep, and either older OR newer
+        // frame shapes may be unsafe for this client.
         if (f.protocolVersion != remoteProtocolVersion) {
-          web.console.warn(
-            'fleury: protocol version skew — client v$remoteProtocolVersion, '
-                    'app v${f.protocolVersion}. Reload with a fresh bundle '
-                    '(the serve asset is no-store; check any caching proxy).'
-                .toJS,
+          _teardown(
+            'Fleury wire protocol mismatch: browser v$remoteProtocolVersion, '
+            'app v${f.protocolVersion}. Use matching app and browser builds.',
           );
+          return;
+        }
+        _appProtocolVersion = f.protocolVersion;
+        if (_resizePendingDuringNegotiation) {
+          _resizePendingDuringNegotiation = false;
+          _send(encodeFrame(ResizeFrame(_size)));
         }
       case SemanticActionResultFrame f:
         // Outcome of a semantic action this client (AT mirror) fired.
@@ -600,12 +685,16 @@ final class WireFrameSource implements BrowserFrameSource {
     semantics.present(tree, update: _semanticsOwner.update(tree));
   }
 
-  void _send(Uint8List bytes) {
+  void _send(Uint8List bytes, {bool isInit = false}) {
     // After teardown the socket is gone for good; drop sends rather than
     // letting a late resize/semantic-action append to the capture list
     // forever. (Tests drive frames through attachComponentsForTest with no
     // socket and without closing, so they still capture into sentForTest.)
     if (_closed) return;
+    // The browser's INIT is the only legal outbound frame until the app echoes
+    // that exact protocol version. Input capture and geometry observation start
+    // immediately at socket open, but neither can speak an unverified wire.
+    if (!isInit && _appProtocolVersion != remoteProtocolVersion) return;
     final socket = _socket;
     if (socket == null) {
       sentForTest.add(bytes);
@@ -632,6 +721,10 @@ final class WireFrameSource implements BrowserFrameSource {
   /// pipeline production uses from onmessage — test-only.
   void feedBytesForTest(Uint8List bytes) => _ingest(bytes);
 
+  /// Feeds raw WebSocket message data through the production payload-type
+  /// boundary — test-only.
+  void feedMessageDataForTest(JSAny? data) => _ingestMessageData(data);
+
   /// When set, an apply is forced to throw for any frame the predicate accepts,
   /// exercising the resync / escalation path without crafting an unapplyable
   /// frame — test-only.
@@ -657,6 +750,7 @@ final class WireFrameSource implements BrowserFrameSource {
   /// Attaches [components] without a socket — test-only.
   MountedApp attachComponentsForTest(BrowserHostComponents components) {
     _components = components;
+    _bindSemanticActions(components);
     return _mountedAppFor(components);
   }
 

@@ -41,13 +41,95 @@ void main() {
       );
     });
 
-    test('leaves plain printable text to the input channel', () {
+    test('a plain printable is the lifecycle key half (text still rides '
+        'the input channel)', () {
+      // RFC 0020 P3: printables emit key events for held-state tracking;
+      // committed text arrives separately and the dispatcher keeps the
+      // unmodified key half out of the command lane.
       expect(
         keyEventFromBrowser(
-          web.KeyboardEvent('keydown', web.KeyboardEventInit(key: 'a')),
+          web.KeyboardEvent(
+            'keydown',
+            web.KeyboardEventInit(key: 'a', code: 'KeyA'),
+          ),
         ),
-        isNull,
+        const KeyEvent(KeyCode.char('a'), position: KeyPosition.a),
       );
+    });
+
+    group('RFC 0020 lifecycle mapping', () {
+      test('positions ride every mapped event; Unidentified stays null', () {
+        expect(
+          keyEventFromBrowser(
+            web.KeyboardEvent(
+              'keydown',
+              web.KeyboardEventInit(key: 'z', code: 'KeyW'),
+            ),
+          ),
+          // AZERTY: the QWERTY-W spot types 'z'.
+          const KeyEvent(KeyCode.char('z'), position: KeyPosition.w),
+        );
+        expect(
+          keyEventFromBrowser(
+            web.KeyboardEvent(
+              'keydown',
+              web.KeyboardEventInit(key: 'ArrowUp', code: 'ArrowUp'),
+            ),
+          ),
+          const KeyEvent(KeyCode.arrowUp, position: KeyPosition.arrowUp),
+        );
+        expect(
+          keyEventFromBrowser(
+            web.KeyboardEvent(
+              'keydown',
+              web.KeyboardEventInit(key: 'q', code: 'Unidentified'),
+            ),
+          ),
+          const KeyEvent(KeyCode.char('q')),
+        );
+      });
+
+      test('shifted printables carry the base letter plus the modifier', () {
+        expect(
+          keyEventFromBrowser(
+            web.KeyboardEvent(
+              'keydown',
+              web.KeyboardEventInit(key: 'A', code: 'KeyA', shiftKey: true),
+            ),
+          ),
+          const KeyEvent(
+            KeyCode.char('a'),
+            modifiers: {KeyModifier.shift},
+            position: KeyPosition.a,
+          ),
+        );
+      });
+
+      test('lone modifier keys are sided keys via their position', () {
+        expect(
+          keyEventFromBrowser(
+            web.KeyboardEvent(
+              'keydown',
+              web.KeyboardEventInit(
+                key: 'Shift',
+                code: 'ShiftLeft',
+                shiftKey: true,
+              ),
+            ),
+          ),
+          const KeyEvent(KeyCode.leftShift, position: KeyPosition.shiftLeft),
+        );
+        // No position → no sided identity → untrackable, skipped.
+        expect(
+          keyEventFromBrowser(
+            web.KeyboardEvent(
+              'keydown',
+              web.KeyboardEventInit(key: 'Shift', code: ''),
+            ),
+          ),
+          isNull,
+        );
+      });
     });
 
     test('normalizes Meta printable shortcuts to Fleury Ctrl shortcuts', () {
@@ -130,6 +212,89 @@ void main() {
         isNull,
       );
     });
+  });
+
+  test('a text-producing keydown keeps the browser default so the input '
+      'channel still fires', () {
+    // The regression this pins is invisible to trace fixtures, which
+    // dispatch `keydown` and `input` as independent synthetic events: in a
+    // REAL browser, preventDefault() on a printable keydown suppresses the
+    // character insertion, the `input` event, and therefore all typing.
+    // RFC 0020 §11: the source emits the key half for lifecycle tracking
+    // but must leave text to the input channel.
+    final events = <TuiEvent>[];
+    final host = web.document.createElement('div');
+    final textArea =
+        web.document.createElement('textarea') as web.HTMLTextAreaElement;
+    web.document.body!.appendChild(host);
+    final source = DomInputSource(
+      hostElement: host,
+      textArea: textArea,
+      cellMetrics: _FakeMetrics(
+        const MeasuredCellBox(
+          cssCellWidth: 10,
+          cssCellHeight: 20,
+          cssCanvasWidth: 80,
+          cssCanvasHeight: 60,
+          cssCanvasLeft: 10,
+          cssCanvasTop: 20,
+          devicePixelRatio: 1,
+          cols: 8,
+          rows: 3,
+        ),
+      ),
+    );
+    addTearDown(() {
+      source.dispose();
+      host.parentNode?.removeChild(host);
+    });
+    source.start(events.add);
+
+    web.KeyboardEvent keydown(
+      String key, {
+      String code = '',
+      bool ctrlKey = false,
+      bool shiftKey = false,
+    }) => web.KeyboardEvent(
+      'keydown',
+      web.KeyboardEventInit(
+        key: key,
+        code: code,
+        ctrlKey: ctrlKey,
+        shiftKey: shiftKey,
+        bubbles: true,
+        cancelable: true,
+      ),
+    );
+
+    final plain = keydown('a', code: 'KeyA');
+    textArea.dispatchEvent(plain);
+    expect(
+      plain.defaultPrevented,
+      isFalse,
+      reason: 'a plain printable must reach the textarea to produce `input`',
+    );
+
+    final shifted = keydown('A', code: 'KeyA', shiftKey: true);
+    textArea.dispatchEvent(shifted);
+    expect(shifted.defaultPrevented, isFalse, reason: 'Shift is still text');
+
+    // Ours: chords and special keys never reach the textarea.
+    final chord = keydown('s', code: 'KeyS', ctrlKey: true);
+    textArea.dispatchEvent(chord);
+    expect(chord.defaultPrevented, isTrue);
+
+    final special = keydown('ArrowLeft', code: 'ArrowLeft');
+    textArea.dispatchEvent(special);
+    expect(special.defaultPrevented, isTrue);
+
+    // The key halves were still emitted for lifecycle tracking.
+    expect(events.whereType<KeyEvent>().map((e) => e.code).toList(), const [
+      KeyCode.char('a'),
+      KeyCode.char('a'),
+      KeyCode.char('s'),
+      KeyCode.arrowLeft,
+    ]);
   });
 
   test('DomInputSource emits keyboard, composition, text, paste, pointer, and '

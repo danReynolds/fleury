@@ -145,7 +145,7 @@ class ProcessPanel extends StatelessWidget {
           KeyBinding(
             shortcut,
             label: 'Cancel process',
-            onTrigger: () => controller.cancel(),
+            onTrigger: (_) => controller.cancel(),
           ),
         ],
         child: body,

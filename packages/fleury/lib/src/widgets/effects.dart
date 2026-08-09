@@ -183,13 +183,50 @@ class _FadeEffect extends Effect {
       final p = (out ? (1 - t) : t).clamp(0.0, 1.0);
       final style = cell.style;
       final fg = _asRgb(style.foreground);
+      final bg = _asRgb(style.background);
       if (fg != null) {
         var s = style.copyWith(foreground: rgbColorLerp(surface, fg, p));
-        final bg = _asRgb(style.background);
         if (bg != null) {
           s = s.copyWith(background: rgbColorLerp(surface, bg, p));
         }
         return CellPlacement(col, row, s);
+      }
+      // A painted background is coverage, even when the foreground uses the
+      // terminal default or the existing coarse ANSI/indexed fade path. Keep
+      // writing the cell throughout the fade so opaque blank space does not
+      // reveal content underneath, and fade the RGB background independently
+      // of the foreground's coarse steps.
+      if (bg != null) {
+        // Fully faded: paint nothing. Coverage exists so a fade-in-progress
+        // does not reveal content underneath a still-opaque panel — but once
+        // the fade completes there is nothing left to hide, and continuing to
+        // write the cell would leave the child's glyphs in the buffer behind
+        // a surface-coloured block (invisible, yet still "on screen" to
+        // anything reading text — e.g. a dismissed modal route).
+        if (p <= 0) return null;
+        final fadedBackground = rgbColorLerp(surface, bg, p);
+        if (p < 0.34) {
+          return CellPlacement(
+            col,
+            row,
+            style.copyWith(
+              foreground: fadedBackground,
+              background: fadedBackground,
+            ),
+          );
+        }
+        if (p < 0.67) {
+          return CellPlacement(
+            col,
+            row,
+            style.copyWith(background: fadedBackground, dim: true),
+          );
+        }
+        return CellPlacement(
+          col,
+          row,
+          style.copyWith(background: fadedBackground),
+        );
       }
       // No RGB foreground to lerp: coarse 3-step fade via `dim`.
       if (p < 0.34) return null; // invisible
@@ -372,7 +409,9 @@ class _ShakeEffect extends Effect {
 ///     Effects.fadeIn() + Effects.slideIn(from: Edge.left)
 abstract final class Effects {
   /// Fades the child in from [surface] (default black). Smoothest on
-  /// RGB-colored text; falls back to a coarse `dim` fade otherwise.
+  /// RGB-colored text; falls back to a coarse `dim` fade otherwise. RGB
+  /// backgrounds always interpolate independently so filled cells retain
+  /// their coverage throughout the fade.
   static Effect fadeIn({RgbColor surface = const RgbColor(0, 0, 0)}) =>
       _FadeEffect(out: false, surface: surface);
 

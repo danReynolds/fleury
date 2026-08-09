@@ -12,10 +12,10 @@
 //
 // In this slice the dispatch is intentionally simple: events walk the
 // focused node's element-tree ancestor chain calling each Focus's
-// onKey, stopping at the first node that returns
+// KeyDetector handlers, stopping at the first that consumes
 // KeyEventResult.handled or at a modal FocusScope boundary. The richer
 // dispatcher (sequence matching, KeyBindings, KeyHintBar) lands in
-// the next slice and replaces the direct Focus.onKey path with a
+// the next slice and replaces the direct detector path with a
 // proper InputDispatcher.
 
 import 'dart:async';
@@ -28,6 +28,7 @@ import '../rendering/cell_buffer.dart';
 import '../rendering/layout.dart';
 import '../rendering/render_object.dart';
 import '../input/events.dart';
+import '../input/key_dispatch.dart';
 import 'framework.dart';
 import 'inherited_notifier.dart';
 import 'key_bindings.dart' show KeyBinding;
@@ -44,7 +45,6 @@ enum KeyEventResult {
 }
 
 /// Signature for a key-event handler on a [Focus] or [FocusNode].
-typedef FocusOnKeyCallback = KeyEventResult Function(KeyEvent event);
 
 /// The keyboard convention for a widget that navigates with arrow keys.
 ///
@@ -82,6 +82,13 @@ abstract interface class KeyBindingSource {
   /// The bindings this source currently contributes. May change over
   /// time as the source rebuilds.
   List<KeyBinding> get activeBindings;
+
+  /// Whether unmatched keys stop at this scope (RFC 0020 §14.3).
+  ///
+  /// Enforced by the dispatcher rather than by truncating the focus chain,
+  /// so a binding here that matches and calls `bubble()` still has
+  /// ancestors to reach — that bubble IS the per-key passthrough.
+  bool get isModalScope;
 }
 
 /// Marker interface for widgets that consume insertable text input
@@ -149,9 +156,11 @@ class FocusNode {
   /// Optional human-readable label. Only surfaces in `toString`.
   final String? debugLabel;
 
-  /// The currently registered key handler. Set by [Focus] when its
-  /// `onKey` callback changes.
-  FocusOnKeyCallback? onKey;
+  /// The `KeyDetector` handler installed on this node, if any (RFC 0020
+  /// §17). The dispatcher visits it deepest-first alongside binding scopes;
+  /// the handler consumes by calling [KeyEvent.consume] rather than by
+  /// returning a result.
+  void Function(KeyEvent event)? keyDetector;
 
   FocusManager? _manager;
   Element? _element;
@@ -160,7 +169,7 @@ class FocusNode {
   /// Optional source of `KeyBinding`s contributed by a `KeyBindings`
   /// widget. The `InputDispatcher` reads this to find bindings on each
   /// node of the focus chain. Null for `Focus` widgets that use
-  /// `onKey` directly.
+  /// a `KeyDetector` directly.
   KeyBindingSource? bindingSource;
 
   /// Optional consumer of insertable text input (a `TextInput`
@@ -226,7 +235,7 @@ class FocusNode {
   /// The [BuildContext] of the `Focus` that owns this node, or null when
   /// the node isn't attached. Mirrors Flutter's `FocusNode.context`; lets
   /// a widget ask whether focus sits within its subtree — see
-  /// [FocusWithin].
+  /// [FocusDetector].
   BuildContext? get context => _element;
 
   /// The nearest enclosing [FocusScope]'s reference, if any.
@@ -251,7 +260,7 @@ class FocusNode {
     _manager = null;
     _element = null;
     _enclosingScope = null;
-    onKey = null;
+    keyDetector = null;
     bindingSource = null;
     textInputClaimant = null;
     textCompositionClaimant = null;
@@ -421,7 +430,7 @@ class FocusManager extends ChangeNotifier {
 
   /// Whether the focused node claims typed text (a focused, editable
   /// [TextInput]). While true, chords shadowed by text input
-  /// ([KeySequence.isShadowedByTextInput]) can never fire — the claimant
+  /// (`KeySequence.isShadowedByTextInput`) can never fire — the claimant
   /// consumes the characters before chord matching runs. The hint bar uses
   /// this to hide such bindings instead of advertising dead keys.
   bool get focusedNodeClaimsText {
@@ -884,7 +893,7 @@ class FocusManager extends ChangeNotifier {
   /// (`canRequestFocus == false`): ambient `KeyBindings` and the
   /// `FocusTraversalGroup` Tab host, whose chords are meant to be live
   /// whenever their subtree is in scope. Focusable interactive widgets
-  /// (a `Checkbox`'s `Focus(onKey:)`, a `Button`, a text field) are
+  /// (a `Checkbox`'s `KeyDetector`, a `Button`, a text field) are
   /// deliberately excluded — their key handling is gated on holding
   /// focus, so an unfocused Checkbox must NOT toggle on Space. This is
   /// the line between "app/tree-level shortcut" and "this widget is the
@@ -898,7 +907,13 @@ class FocusManager extends ChangeNotifier {
     final nodes = _attachedNodes
         .where((n) => !n.canRequestFocus)
         .where(_acceptsInput)
-        .where((n) => n.bindingSource != null || n.onKey != null)
+        // Binding hosts only. A `KeyDetector` is deliberately NOT ambient
+        // (RFC 0020 §17): its marker node is non-focusable, so without this
+        // it would qualify here and fire before anything holds focus —
+        // whereas the focusable `Focus(onKey:)` it replaced never did.
+        // Detectors are widget-internal handling, gated on their subtree
+        // holding focus; ambient reach belongs to declared bindings.
+        .where((n) => n.bindingSource != null)
         .where((n) => modal == null || _isUnderScopeMarker(n, modal))
         .toList();
     // Deepest element first; attach order as a stable tiebreak. Mirrors
@@ -934,16 +949,20 @@ class FocusManager extends ChangeNotifier {
     return focused._enclosingScope?.suppressGlobals ?? false;
   }
 
-  /// Delivers [event] to the active focus chain, calling each node's
-  /// `onKey` in deepest-first order. Stops at the first handler that
-  /// returns [KeyEventResult.handled] or at the chain's end.
+  /// Delivers [event] to the active focus chain's `KeyDetector` handlers in
+  /// deepest-first order, stopping at the first that consumes it.
+  ///
+  /// Detectors consume by calling [KeyEvent.consume] (RFC 0020 §17): the
+  /// default is to propagate, which inverts the old `Focus.onKey` failure
+  /// mode where a blanket `return handled` silently starved an ancestor.
   KeyEventResult dispatchKey(KeyEvent event) {
     _checkNotDisposed();
     for (final node in activeChain()) {
-      final handler = node.onKey;
+      final handler = node.keyDetector;
       if (handler == null) continue;
-      final result = handler(event);
-      if (result == KeyEventResult.handled) return KeyEventResult.handled;
+      if (KeyDispatchContext.run(() => handler(event), entitled: true)) {
+        return KeyEventResult.handled;
+      }
     }
     return KeyEventResult.ignored;
   }
@@ -1060,7 +1079,7 @@ class FocusManagerScope extends StatelessWidget {
 ///
 /// In its simplest form: `Focus(autofocus: true, child: ...)`. Most
 /// apps will move to `KeyBindings` (next slice) for the actual key
-/// handling, but `Focus(onKey: ...)` is the supported low-level
+/// handling, and `KeyDetector` is the supported low-level
 /// escape hatch.
 class Focus extends StatefulWidget {
   const Focus({
@@ -1069,7 +1088,6 @@ class Focus extends StatefulWidget {
     this.autofocus = false,
     this.canRequestFocus,
     this.skipTraversal,
-    this.onKey,
     this.debugLabel,
     required this.child,
   });
@@ -1097,7 +1115,6 @@ class Focus extends StatefulWidget {
   /// caller-controlled flags across use sites.
   final bool? canRequestFocus;
   final bool? skipTraversal;
-  final FocusOnKeyCallback? onKey;
   final String? debugLabel;
   final Widget child;
 
@@ -1165,7 +1182,6 @@ class _FocusState extends State<Focus> {
         debugLabel: widget.debugLabel,
       );
     }
-    _node.onKey = widget.onKey;
     _applyWidgetFlags();
   }
 
@@ -1196,13 +1212,11 @@ class _FocusState extends State<Focus> {
               debugLabel: widget.debugLabel,
             )
           : null;
-      _node.onKey = widget.onKey;
       _applyWidgetFlags();
       // A genuinely new node gets a fresh autofocus opportunity.
       _didAutofocus = false;
       _attach();
     } else {
-      _node.onKey = widget.onKey;
       _applyWidgetFlags();
     }
   }
@@ -1375,7 +1389,7 @@ class _RenderFocusBounds extends RenderObject
 
 /// A scope for focus operations. Children inside a `FocusScope` form
 /// a traversal group; with `modal: true` the scope also stops events
-/// from reaching `KeyBindings` (or `Focus.onKey`) above it.
+/// from reaching `KeyBindings` (or a `KeyDetector`) above it.
 ///
 /// Flutter divergence: `modal` is a first-class flag here that scopes
 /// BOTH key dispatch AND Tab/arrow traversal in one place. Flutter
@@ -1658,19 +1672,21 @@ class _ExcludeFocusMarkerElement extends ComponentElement {
 }
 
 // ---------------------------------------------------------------------------
-// FocusWithin
+// FocusDetector
 // ---------------------------------------------------------------------------
 
 /// Reports when keyboard focus enters or leaves its subtree.
 ///
 /// [onFocusChange] fires with `true` when the focused node becomes this
-/// subtree (or any descendant), and `false` when it leaves — the
+/// subtree (or any descendant), and `false` when it leaves. It also fires
+/// on mount when focus is ALREADY within, so a consumer never has to assume
+/// an initial value — the
 /// descendant-inclusive focus signal that powers focus-reactive chrome:
 /// a tooltip that appears while its target is focused, an active-pane
 /// highlight, a section that styles itself when something inside has
 /// focus. (For a rebuild, call `setState` from the callback.)
-class FocusWithin extends StatefulWidget {
-  const FocusWithin({
+class FocusDetector extends StatefulWidget {
+  const FocusDetector({
     super.key,
     required this.onFocusChange,
     required this.child,
@@ -1680,10 +1696,10 @@ class FocusWithin extends StatefulWidget {
   final Widget child;
 
   @override
-  State<FocusWithin> createState() => _FocusWithinState();
+  State<FocusDetector> createState() => _FocusDetectorState();
 }
 
-class _FocusWithinState extends State<FocusWithin> {
+class _FocusDetectorState extends State<FocusDetector> {
   FocusManager? _manager;
   bool _within = false;
 
@@ -1696,6 +1712,12 @@ class _FocusWithinState extends State<FocusWithin> {
       _manager = manager;
       _manager?.addListener(_onFocusChange);
     }
+    // Report the state we mount INTO, not only later transitions. Without
+    // this a consumer that derives behaviour from focus (a focus-gated
+    // TickerMode) has to guess an initial value, and a scene whose child
+    // autofocuses during this same mount would miss the notification
+    // entirely — the listener above is registered after that focus lands.
+    _onFocusChange();
   }
 
   void _onFocusChange() {
@@ -1706,12 +1728,12 @@ class _FocusWithinState extends State<FocusWithin> {
   }
 
   /// Walks up from the focused node's context; focus is within us when
-  /// our state is its nearest enclosing [FocusWithin] (so for nested
-  /// FocusWithins the innermost one owns the focus).
+  /// our state is its nearest enclosing [FocusDetector] (so for nested
+  /// FocusDetectors the innermost one owns the focus).
   bool _computeWithin() {
     final ctx = _manager?.focusedNode?.context;
     if (ctx == null) return false;
-    return identical(ctx.findAncestorStateOfType<_FocusWithinState>(), this);
+    return identical(ctx.findAncestorStateOfType<_FocusDetectorState>(), this);
   }
 
   @override

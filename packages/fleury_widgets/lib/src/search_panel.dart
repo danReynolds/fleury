@@ -614,7 +614,7 @@ class _SearchPanelState extends State<SearchPanel> {
           KeyBinding(
             KeySequence.ctrl.c,
             label: 'Copy search result',
-            onTrigger: () => unawaited(_copySelection()),
+            onTrigger: (_) => unawaited(_copySelection()),
           ),
         ],
         child: panel,
@@ -632,9 +632,9 @@ class _SearchPanelState extends State<SearchPanel> {
         // out (up to the query, or past the panel) instead of clamping and
         // swallowing the key. Regressed to a plain clamp in the RFC 0018
         // binding-constructor pass; restored here via the event form.
-        KeyBinding.event(
+        KeyBinding(
           KeyCode.arrowUp,
-          onEvent: (event) {
+          onTrigger: (event) {
             if (_resultsFocusNode.hasFocus) {
               event.bubble();
             } else {
@@ -643,9 +643,9 @@ class _SearchPanelState extends State<SearchPanel> {
           },
           hideFromHintBar: true,
         ),
-        KeyBinding.event(
+        KeyBinding(
           KeyCode.arrowDown,
-          onEvent: (event) {
+          onTrigger: (event) {
             if (_resultsFocusNode.hasFocus) {
               event.bubble();
             } else {

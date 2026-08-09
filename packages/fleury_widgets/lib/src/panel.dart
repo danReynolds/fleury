@@ -14,7 +14,7 @@ import 'package:fleury/fleury_core.dart';
 /// The border and title resolve from the ambient [Theme]: muted at rest, the
 /// [ColorScheme.primary] accent when the pane is active, so the user can see
 /// where input goes. **Active-ness is detected, not declared** — the panel
-/// watches the focus tree ([FocusWithin]) and accents itself whenever focus is
+/// watches the focus tree ([FocusDetector]) and accents itself whenever focus is
 /// anywhere inside it. Nesting resolves innermost-first, so an inner pane
 /// lights up without also lighting its ancestors.
 ///
@@ -66,7 +66,7 @@ class Panel extends StatefulWidget {
 }
 
 class _PanelState extends State<Panel> {
-  /// Whether focus is inside this panel, tracked by [FocusWithin]. Only
+  /// Whether focus is inside this panel, tracked by [FocusDetector]. Only
   /// consulted when the caller left [Panel.focused] null.
   bool _focusWithin = false;
 
@@ -86,7 +86,7 @@ class _PanelState extends State<Panel> {
       // Always mounted so the subtree shape doesn't change when a caller
       // toggles `focused` between null and a pinned value; the listener is
       // idle when the panel isn't following focus.
-      child: FocusWithin(
+      child: FocusDetector(
         onFocusChange: (within) {
           if (widget.focused != null || within == _focusWithin) return;
           setState(() => _focusWithin = within);

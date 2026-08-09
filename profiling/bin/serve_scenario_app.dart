@@ -94,11 +94,11 @@ class _ScenarioAppState extends State<_ScenarioApp> {
 
   @override
   Widget build(BuildContext context) => switch (widget.scenario) {
-    'log' => _buildLog(),
-    'counter' => _buildCounter(),
-    'input-latency' => _buildInputLatency(),
-    _ => _buildDashboard(),
-  };
+        'log' => _buildLog(),
+        'counter' => _buildCounter(),
+        'input-latency' => _buildInputLatency(),
+        _ => _buildDashboard(),
+      };
 
   // A dashboard mirroring SB.6's widget vocabulary: gauges, a sparkline, a bar
   // chart, and variable-width status lines — a realistic served workload.
@@ -165,8 +165,15 @@ class _ScenarioAppState extends State<_ScenarioApp> {
   // A scrolling log tail: distinct content per line each frame.
   Widget _buildLog() {
     const words = [
-      'connect', 'GET /api/v2/users', 'cache miss', 'retry backoff',
-      'flush wal', 'commit txn', 'timeout', 'parse json', 'spawn worker',
+      'connect',
+      'GET /api/v2/users',
+      'cache miss',
+      'retry backoff',
+      'flush wal',
+      'commit txn',
+      'timeout',
+      'parse json',
+      'spawn worker',
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -196,37 +203,38 @@ class _ScenarioAppState extends State<_ScenarioApp> {
   Widget _buildInputLatency() {
     const width = 64;
     final filled = _keys % width;
-    return Focus(
-      autofocus: true,
-      onKey: (event) {
-        setState(() => _keys++);
-        return KeyEventResult.handled;
-      },
-      child: Padding(
-        padding: const EdgeInsets.all(1),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('input-latency probe'),
-            const SizedBox(height: 1),
-            Text('keys=${_keys.toString().padLeft(6, '0')}'),
-            Text(('#' * filled).padRight(width, '.'), softWrap: false),
-          ],
-        ),
-      ),
-    );
+    return KeyDetector(
+        onKey: (event) {
+          setState(() => _keys++);
+          event.consume();
+        },
+        child: Focus(
+          autofocus: true,
+          child: Padding(
+            padding: const EdgeInsets.all(1),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('input-latency probe'),
+                const SizedBox(height: 1),
+                Text('keys=${_keys.toString().padLeft(6, '0')}'),
+                Text(('#' * filled).padRight(width, '.'), softWrap: false),
+              ],
+            ),
+          ),
+        ));
   }
 
   // A single changing field — the sparse-update lower bound.
   Widget _buildCounter() => Padding(
-    padding: const EdgeInsets.all(2),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('counter'),
-        const SizedBox(height: 1),
-        Text('Count: ${_tick % 1000}'),
-      ],
-    ),
-  );
+        padding: const EdgeInsets.all(2),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('counter'),
+            const SizedBox(height: 1),
+            Text('Count: ${_tick % 1000}'),
+          ],
+        ),
+      );
 }

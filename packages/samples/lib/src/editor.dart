@@ -49,6 +49,12 @@ class EditorModel with ChangeNotifier {
   String _clipboard = '';
   String status = '';
 
+  /// Vim marks: a letter → the position `m<letter>` recorded.
+  final Map<String, ({int row, int col})> _marks = {};
+
+  /// The marks set so far, for the status line.
+  Iterable<String> get markNames => _marks.keys.toList()..sort();
+
   List<String> get lines => List<String>.unmodifiable(_lines);
   int get row => _row;
   int get col => _col;
@@ -286,6 +292,31 @@ class EditorModel with ChangeNotifier {
     _changed();
   }
 
+  /// `m<letter>` — records the cursor under a letter.
+  void setMark(String letter) {
+    _marks[letter] = (row: _row, col: _col);
+    flash("mark '$letter set");
+  }
+
+  /// `'<letter>` — jumps to a recorded mark, or says why it cannot.
+  void jumpToMark(String letter) {
+    final mark = _marks[letter];
+    if (mark == null) {
+      flash("mark '$letter is not set");
+      return;
+    }
+    _row = mark.row.clamp(0, _lines.length - 1);
+    _col = mark.col.clamp(0, _maxColAt(_row));
+    _changed();
+    flash("jumped to '$letter");
+  }
+
+  int _maxColAt(int row) {
+    final len = _lines[row].length;
+    final capped = acceptsText ? len : len - 1;
+    return capped < 0 ? 0 : capped;
+  }
+
   void gotoTop() {
     _row = 0;
     _col = 0;
@@ -451,7 +482,7 @@ class _EditorBodyState extends State<_EditorBody> implements TextInputClaimant {
     final toggle = KeyBinding(
       KeySequence.ctrl.b,
       label: _isVim ? 'nano' : 'vim',
-      onTrigger: _model.togglePersonality,
+      onTrigger: (_) => _model.togglePersonality(),
     );
     return switch (_model.personality) {
       EditorPersonality.nano => [toggle, ..._nanoBindings()],
@@ -464,31 +495,74 @@ class _EditorBodyState extends State<_EditorBody> implements TextInputClaimant {
 
   // Nano: modeless. Text inserts directly; every command is a Ctrl-chord, all
   // labeled so the KeyHintBar advertises them.
+  /// Prompts for the single letter that names a mark, then applies [apply].
+  ///
+  /// The whole prompt is four lines because `nextKey` handles the hard parts:
+  /// it outranks every routed lane while pending (so the editor's own `i` and
+  /// Escape bindings do not steal the letter), it is never completed by a
+  /// recovery-synthesized event (a blur must not silently "choose" a mark),
+  /// and it completes null if this widget goes away.
+  Future<void> _awaitMarkLetter(void Function(String letter) apply) async {
+    _model.flash('mark: press a letter (Esc to cancel)');
+    final key = await Keyboard.nextKey(context);
+    if (key == null) return; // unmounted, or the scope went away
+    if (key.code == KeyCode.escape) {
+      _model.flash('');
+      return;
+    }
+    final letter = key.code.character;
+    if (letter == null || !RegExp(r'^[a-zA-Z]$').hasMatch(letter)) {
+      _model.flash('marks are named by a letter');
+      return;
+    }
+    apply(letter);
+  }
+
   List<KeyBinding> _nanoBindings() => [
     KeyBinding(
       KeySequence.ctrl.o,
       label: 'Write Out',
-      onTrigger: () => _model.flash('Saved ✓'),
+      onTrigger: (_) => _model.flash('Saved ✓'),
     ),
     KeyBinding(
       KeySequence.ctrl.x,
       label: 'Exit',
-      onTrigger: () => _model.flash('Ctrl+C to quit'),
+      onTrigger: (_) => _model.flash('Ctrl+C to quit'),
     ),
-    KeyBinding(KeySequence.ctrl.k, label: 'Cut', onTrigger: _model.deleteLine),
-    KeyBinding(KeySequence.ctrl.u, label: 'Paste', onTrigger: _model.paste),
-    KeyBinding(KeySequence.ctrl.a, label: 'Home', onTrigger: _model.lineStart),
-    KeyBinding(KeySequence.ctrl.e, label: 'End', onTrigger: _model.lineEnd),
-    KeyBinding(KeySequence.ctrl.y, label: 'Prev Pg', onTrigger: _model.pageUp),
+    KeyBinding(
+      KeySequence.ctrl.k,
+      label: 'Cut',
+      onTrigger: (_) => _model.deleteLine(),
+    ),
+    KeyBinding(
+      KeySequence.ctrl.u,
+      label: 'Paste',
+      onTrigger: (_) => _model.paste(),
+    ),
+    KeyBinding(
+      KeySequence.ctrl.a,
+      label: 'Home',
+      onTrigger: (_) => _model.lineStart(),
+    ),
+    KeyBinding(
+      KeySequence.ctrl.e,
+      label: 'End',
+      onTrigger: (_) => _model.lineEnd(),
+    ),
+    KeyBinding(
+      KeySequence.ctrl.y,
+      label: 'Prev Pg',
+      onTrigger: (_) => _model.pageUp(),
+    ),
     KeyBinding(
       KeySequence.ctrl.v,
       label: 'Next Pg',
-      onTrigger: _model.pageDown,
+      onTrigger: (_) => _model.pageDown(),
     ),
     KeyBinding(
       KeySequence.ctrl.c,
       label: 'Where',
-      onTrigger: _model.reportPosition,
+      onTrigger: (_) => _model.reportPosition(),
     ),
     ..._editingKeys(),
   ];
@@ -496,29 +570,50 @@ class _EditorBodyState extends State<_EditorBody> implements TextInputClaimant {
   // Vim NORMAL: printables are commands (the surface declines text). Multi-key
   // commands are sequences, so which-key reveals them.
   List<KeyBinding> _vimNormalBindings() => [
-    KeyBinding.any([KeyCode.h, KeyCode.arrowLeft], onTrigger: _model.moveLeft),
-    KeyBinding.any([
+    KeyBinding(
+      KeyCode.h,
+      aliases: [KeyCode.arrowLeft],
+      onTrigger: (_) => _model.moveLeft(),
+      includeRepeats: true,
+    ),
+    KeyBinding(
       KeyCode.l,
-      KeyCode.arrowRight,
-    ], onTrigger: _model.moveRight),
-    KeyBinding.any([KeyCode.k, KeyCode.arrowUp], onTrigger: _model.moveUp),
-    KeyBinding.any([KeyCode.j, KeyCode.arrowDown], onTrigger: _model.moveDown),
-    KeyBinding(KeyCode.w, onTrigger: _model.wordForward),
-    KeyBinding(KeyCode.b, onTrigger: _model.wordBack),
-    KeyBinding(KeyCode.char('0'), onTrigger: _model.lineStart),
-    KeyBinding(KeyCode.char(r'$'), onTrigger: _model.lineEnd),
+      aliases: [KeyCode.arrowRight],
+      onTrigger: (_) => _model.moveRight(),
+      includeRepeats: true,
+    ),
+    KeyBinding(
+      KeyCode.k,
+      aliases: [KeyCode.arrowUp],
+      onTrigger: (_) => _model.moveUp(),
+      includeRepeats: true,
+    ),
+    KeyBinding(
+      KeyCode.j,
+      aliases: [KeyCode.arrowDown],
+      onTrigger: (_) => _model.moveDown(),
+      includeRepeats: true,
+    ),
+    KeyBinding(KeyCode.w, onTrigger: (_) => _model.wordForward()),
+    KeyBinding(KeyCode.b, onTrigger: (_) => _model.wordBack()),
+    KeyBinding(KeyCode.char('0'), onTrigger: (_) => _model.lineStart()),
+    KeyBinding(KeyCode.char(r'$'), onTrigger: (_) => _model.lineEnd()),
     KeyBinding(
       KeyCode.x,
       label: 'delete char',
-      onTrigger: _model.deleteCharUnderCursor,
+      onTrigger: (_) => _model.deleteCharUnderCursor(),
     ),
-    KeyBinding(KeyCode.i, label: 'insert', onTrigger: _model.enterInsert),
+    KeyBinding(
+      KeyCode.i,
+      label: 'insert',
+      onTrigger: (_) => _model.enterInsert(),
+    ),
     KeyBinding(
       KeyCode.a,
       label: 'append',
       // Enter INSERT first so the cursor can advance past the last character
       // (a block cursor is clamped to len-1; a bar cursor reaches len).
-      onTrigger: () {
+      onTrigger: (_) {
         _model.enterInsert();
         _model.moveRight();
       },
@@ -526,78 +621,125 @@ class _EditorBodyState extends State<_EditorBody> implements TextInputClaimant {
     KeyBinding(
       KeyCode.char('A'),
       label: 'append at end',
-      onTrigger: () {
+      onTrigger: (_) {
         _model.enterInsert();
         _model.lineEnd();
       },
     ),
-    KeyBinding(KeyCode.o, label: 'open below', onTrigger: _model.openLineBelow),
+    KeyBinding(
+      KeyCode.o,
+      label: 'open below',
+      onTrigger: (_) => _model.openLineBelow(),
+    ),
     KeyBinding(
       KeyCode.char('O'),
       label: 'open above',
-      onTrigger: _model.openLineAbove,
+      onTrigger: (_) => _model.openLineAbove(),
     ),
     // Delete family — the `d` prefix reveals its completions in which-key.
     KeyBinding(
       KeySequence.d.d,
       label: 'delete line',
-      onTrigger: _model.deleteLine,
+      onTrigger: (_) => _model.deleteLine(),
     ),
     KeyBinding(
       KeySequence.d.w,
       label: 'delete word',
-      onTrigger: _model.deleteWord,
+      onTrigger: (_) => _model.deleteWord(),
     ),
     KeyBinding(
       KeySequence.d.char(r'$'),
       label: 'delete to end',
-      onTrigger: _model.deleteToLineEnd,
+      onTrigger: (_) => _model.deleteToLineEnd(),
+    ),
+    // Marks — the case a declared sequence structurally cannot express.
+    //
+    // `m` takes ANY letter as its second step: 26 bindings would be a lie
+    // (they would appear in the hint bar as 26 separate commands), and a
+    // two-step `KeySequence` needs both steps named up front. So `m` is one
+    // binding that then *awaits* one key. `nextKey` is scope-tied by
+    // signature — if this editor unmounts mid-prompt the future completes
+    // null, so the capture can never outlive the UI that started it and eat
+    // the app's input (RFC 0020 §17.2).
+    KeyBinding(
+      KeyCode.m,
+      label: 'set mark',
+      onTrigger: (_) => _awaitMarkLetter(_model.setMark),
+    ),
+    KeyBinding(
+      KeyCode.char("'"),
+      label: 'jump to mark',
+      onTrigger: (_) => _awaitMarkLetter(_model.jumpToMark),
     ),
     // Goto — `gg` top, `G` bottom.
-    KeyBinding(KeySequence.g.g, label: 'go to top', onTrigger: _model.gotoTop),
+    KeyBinding(
+      KeySequence.g.g,
+      label: 'go to top',
+      onTrigger: (_) => _model.gotoTop(),
+    ),
     KeyBinding(
       KeyCode.char('G'),
       label: 'go to bottom',
-      onTrigger: _model.gotoBottom,
+      onTrigger: (_) => _model.gotoBottom(),
     ),
     // Space leader — the actions menu, front and centre in which-key.
     KeyBinding(
       KeySequence.space.w,
       label: 'write / save',
-      onTrigger: () => _model.flash('Saved ✓'),
+      onTrigger: (_) => _model.flash('Saved ✓'),
     ),
     KeyBinding(
       KeySequence.space.q,
       label: 'quit',
-      onTrigger: () => _model.flash('Ctrl+C to quit'),
+      onTrigger: (_) => _model.flash('Ctrl+C to quit'),
     ),
-    KeyBinding(KeySequence.space.p, label: 'paste', onTrigger: _model.paste),
+    KeyBinding(
+      KeySequence.space.p,
+      label: 'paste',
+      onTrigger: (_) => _model.paste(),
+    ),
     // Count register: 1–9 accumulate (`3dd`). Hidden from any bar.
     for (var digit = 1; digit <= 9; digit++)
       KeyBinding(
         KeyCode.char('$digit'),
-        onTrigger: () => _model.pushCountDigit(digit),
+        onTrigger: (_) => _model.pushCountDigit(digit),
       ),
   ];
 
   // Vim INSERT: text is claimed by the surface; only the non-text keys are
   // bound here.
   List<KeyBinding> _vimInsertBindings() => [
-    KeyBinding(KeyCode.escape, onTrigger: _model.enterNormal),
+    KeyBinding(KeyCode.escape, onTrigger: (_) => _model.enterNormal()),
     ..._editingKeys(),
   ];
 
   // Non-text editing keys shared by nano and vim INSERT (they arrive as key
   // events, so they route here regardless of the text claim).
   List<KeyBinding> _editingKeys() => [
-    KeyBinding(KeyCode.arrowLeft, onTrigger: _model.moveLeft),
-    KeyBinding(KeyCode.arrowRight, onTrigger: _model.moveRight),
-    KeyBinding(KeyCode.arrowUp, onTrigger: _model.moveUp),
-    KeyBinding(KeyCode.arrowDown, onTrigger: _model.moveDown),
-    KeyBinding(KeyCode.home, onTrigger: _model.lineStart),
-    KeyBinding(KeyCode.end, onTrigger: _model.lineEnd),
-    KeyBinding(KeyCode.enter, onTrigger: _model.newline),
-    KeyBinding(KeyCode.backspace, onTrigger: _model.backspace),
+    KeyBinding(
+      KeyCode.arrowLeft,
+      onTrigger: (_) => _model.moveLeft(),
+      includeRepeats: true,
+    ),
+    KeyBinding(
+      KeyCode.arrowRight,
+      onTrigger: (_) => _model.moveRight(),
+      includeRepeats: true,
+    ),
+    KeyBinding(
+      KeyCode.arrowUp,
+      onTrigger: (_) => _model.moveUp(),
+      includeRepeats: true,
+    ),
+    KeyBinding(
+      KeyCode.arrowDown,
+      onTrigger: (_) => _model.moveDown(),
+      includeRepeats: true,
+    ),
+    KeyBinding(KeyCode.home, onTrigger: (_) => _model.lineStart()),
+    KeyBinding(KeyCode.end, onTrigger: (_) => _model.lineEnd()),
+    KeyBinding(KeyCode.enter, onTrigger: (_) => _model.newline()),
+    KeyBinding(KeyCode.backspace, onTrigger: (_) => _model.backspace()),
   ];
 }
 

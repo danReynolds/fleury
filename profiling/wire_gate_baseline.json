@@ -1,23 +1,23 @@
 {
   "sb1": {
-    "totalBytes": 117.0,
-    "bytesPerFrame": 58.5,
+    "totalBytes": 144.0,
+    "bytesPerFrame": 72.0,
     "overheadPercent": 71.875,
-    "ttfbMs": 19.798,
+    "ttfbMs": 17.233,
     "frames": 2.0
   },
   "sb6": {
-    "totalBytes": 109059.0,
-    "bytesPerFrame": 901.3140495867768,
-    "overheadPercent": 30.855983996182573,
-    "ttfbMs": 17.456,
+    "totalBytes": 115357.0,
+    "bytesPerFrame": 953.3636363636364,
+    "overheadPercent": 33.50947980389605,
+    "ttfbMs": 17.241,
     "frames": 121.0
   },
   "sb9": {
-    "totalBytes": 5250.0,
-    "bytesPerFrame": 477.27272727272725,
-    "overheadPercent": 34.23039690222652,
-    "ttfbMs": 17.268,
+    "totalBytes": 5293.0,
+    "bytesPerFrame": 481.1818181818182,
+    "overheadPercent": 34.43350704497201,
+    "ttfbMs": 17.053,
     "frames": 11.0
   }
 }

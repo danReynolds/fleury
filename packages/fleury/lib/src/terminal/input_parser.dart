@@ -37,6 +37,7 @@
 import 'dart:convert';
 
 import '../input/events.dart';
+import '../input/key_tables.dart';
 
 /// Sink interface used by the parser to emit events. The terminal
 /// driver supplies the real implementation (typically a
@@ -75,6 +76,11 @@ class InputParser {
   /// malformed terminal or legacy remote peer from growing parameter lists and
   /// arbitrary-precision integers forever without a final byte.
   final int maxCsiSequenceLength;
+
+  /// Monotonic receipt clock and per-source counter for [InputBatch]
+  /// stamping. Timing is diagnostics data, excluded from batch equality.
+  final Stopwatch _clock = Stopwatch()..start();
+  int _nextSequence = 0;
 
   /// Target bytes retained for one bracketed-paste segment.
   ///
@@ -326,7 +332,7 @@ class InputParser {
       // Alt + printable.
       sink.add(
         KeyEvent(
-          KeyCode.char(String.fromCharCode(byte)),
+          KeyCode.forCharacter(String.fromCharCode(byte)),
           modifiers: const {KeyModifier.alt},
         ),
       );
@@ -461,25 +467,49 @@ class InputParser {
     // SS3 is a single final byte.
     switch (byte) {
       case 0x41: // 'A'
-        sink.add(const KeyEvent(KeyCode.arrowUp));
+        sink.add(
+          KeyEvent(KeyCode.arrowUp, position: _positionFor(KeyCode.arrowUp)),
+        );
       case 0x42: // 'B'
-        sink.add(const KeyEvent(KeyCode.arrowDown));
+        sink.add(
+          KeyEvent(
+            KeyCode.arrowDown,
+            position: _positionFor(KeyCode.arrowDown),
+          ),
+        );
       case 0x43: // 'C'
-        sink.add(const KeyEvent(KeyCode.arrowRight));
+        sink.add(
+          KeyEvent(
+            KeyCode.arrowRight,
+            position: _positionFor(KeyCode.arrowRight),
+          ),
+        );
       case 0x44: // 'D'
-        sink.add(const KeyEvent(KeyCode.arrowLeft));
+        sink.add(
+          KeyEvent(
+            KeyCode.arrowLeft,
+            position: _positionFor(KeyCode.arrowLeft),
+          ),
+        );
+      case 0x45: // 'E' — KP_BEGIN (keypad 5 with NumLock off)
+        sink.add(
+          KeyEvent(
+            KeyCode.keypadBegin,
+            position: _positionFor(KeyCode.keypadBegin),
+          ),
+        );
       case 0x48: // 'H'
-        sink.add(const KeyEvent(KeyCode.home));
+        sink.add(KeyEvent(KeyCode.home, position: _positionFor(KeyCode.home)));
       case 0x46: // 'F'
-        sink.add(const KeyEvent(KeyCode.end));
+        sink.add(KeyEvent(KeyCode.end, position: _positionFor(KeyCode.end)));
       case 0x50: // 'P' — F1
-        sink.add(const KeyEvent(KeyCode.f1));
+        sink.add(KeyEvent(KeyCode.f1, position: _positionFor(KeyCode.f1)));
       case 0x51:
-        sink.add(const KeyEvent(KeyCode.f2));
+        sink.add(KeyEvent(KeyCode.f2, position: _positionFor(KeyCode.f2)));
       case 0x52:
-        sink.add(const KeyEvent(KeyCode.f3));
+        sink.add(KeyEvent(KeyCode.f3, position: _positionFor(KeyCode.f3)));
       case 0x53:
-        sink.add(const KeyEvent(KeyCode.f4));
+        sink.add(KeyEvent(KeyCode.f4, position: _positionFor(KeyCode.f4)));
     }
     _state = _State.ground;
   }
@@ -506,9 +536,27 @@ class InputParser {
       // '~' — tilde-finalised chords, p1 selects which.
       final kc = _tildeKey(p1 ?? 0);
       if (kc != null) {
-        sink.add(KeyEvent(kc, modifiers: modifiers, type: type));
+        sink.add(
+          KeyEvent(
+            kc,
+            modifiers: modifiers,
+            type: type,
+            position: _positionFor(kc),
+          ),
+        );
       }
       return;
+    }
+
+    // Focus reporting (DECSET 1004): `CSI I` in, `CSI O` out. Parameterless
+    // by definition, so a params-bearing sequence with the same final is
+    // something else and falls through.
+    if ((finalByte == 0x49 || finalByte == 0x4F) && _csiGroups.length <= 1) {
+      final p = _groupValue(0);
+      if (p == null || p == 0) {
+        sink.add(TerminalFocusEvent(focused: finalByte == 0x49));
+        return;
+      }
     }
 
     if (finalByte == 0x5A) {
@@ -520,6 +568,7 @@ class InputParser {
           KeyCode.tab,
           modifiers: {...modifiers, KeyModifier.shift},
           type: type,
+          position: _positionFor(KeyCode.tab),
         ),
       );
       return;
@@ -531,6 +580,7 @@ class InputParser {
       0x42 => KeyCode.arrowDown,
       0x43 => KeyCode.arrowRight,
       0x44 => KeyCode.arrowLeft,
+      0x45 => KeyCode.keypadBegin, // KP_BEGIN's legacy form (`CSI 1 E`)
       0x48 => KeyCode.home,
       0x46 => KeyCode.end,
       0x50 => KeyCode.f1,
@@ -540,12 +590,21 @@ class InputParser {
       _ => null,
     };
     if (kc != null) {
-      sink.add(KeyEvent(kc, modifiers: modifiers, type: type));
+      sink.add(
+        KeyEvent(
+          kc,
+          modifiers: modifiers,
+          type: type,
+          position: _positionFor(kc),
+        ),
+      );
     }
   }
 
-  /// Decodes a Kitty keyboard report (`CSI codepoint ; mods[:event] [; text] u`)
-  /// into the matching key or text event.
+  /// Decodes a full Kitty keyboard report
+  /// (`CSI key[:shifted[:base]] ; mods[:event] [; text] u`) into the
+  /// matching key or text event (RFC 0020 §8.7 — the complete grammar, not
+  /// a showcase subset).
   void _emitKittyKey(TuiEventSink sink) {
     final codepoint = _groupValue(0);
     if (codepoint == null || !_isUnicodeScalar(codepoint)) return;
@@ -557,39 +616,106 @@ class InputParser {
       if (_csiGroups[1].length >= 2) type = _eventType(_csiGroups[1][1]);
     }
 
-    // Special chords carry their classic control codepoint even in CSI-u
-    // form — this is the disambiguation win (lone Esc, Ctrl+I vs Tab,
-    // Ctrl+M vs Enter all become distinct, modifier-bearing events).
-    final kc = _kittyFunctionalKey(codepoint);
-    if (kc != null) {
-      sink.add(KeyEvent(kc, modifiers: modifiers, type: type));
+    // Base-layout alternate (flag 4): third sub-param of the key group.
+    // Empty sub-params parse as 0, which the protocol also uses for
+    // "absent" — never a real key. Positional identity is per-event data;
+    // an unmapped base codepoint leaves it null rather than guessing.
+    KeyPosition? position;
+    if (_csiGroups[0].length >= 3 && _csiGroups[0][2] > 0) {
+      position = positionByUsCodepoint[_csiGroups[0][2]];
+    }
+
+    // Key number 0: text with no key identity (IME/OS-produced text).
+    // Emit the associated text alone — no invented KeyCode, no state
+    // (RFC 0020 §6, text-only batches).
+    if (codepoint == 0) {
+      if (!_kittyAssociatedTextIsValid()) return;
+      final text = _kittyAssociatedText();
+      if (text != null && text.isNotEmpty && type != KeyEventType.up) {
+        sink.add(TextInputEvent(text));
+      }
       return;
     }
 
+    // Special chords carry their classic control codepoint even in CSI-u
+    // form — this is the disambiguation win (lone Esc, Ctrl+I vs Tab,
+    // Ctrl+M vs Enter all become distinct, modifier-bearing events). The
+    // functional PUA table extends this to the complete vocabulary,
+    // including lone modifier keys and the keypad — KP Enter is
+    // [KeyCode.keypadEnter], deliberately distinct from Enter (§8.7:
+    // nothing silently folded).
+    final kc = _kittyFunctionalKey(codepoint);
+    if (kc != null) {
+      // Flag-4 data still wins when present (kitty could someday remap).
+      position ??= _positionFor(kc);
+      sink.add(
+        KeyEvent(kc, modifiers: modifiers, type: type, position: position),
+      );
+      return;
+    }
+
+    // A well-formed functional codepoint outside the mapped table (the PUA
+    // block 57344–63743) is diagnosable unsupported input — never text
+    // (§8.7). Dropping beats emitting private-use garbage as typing.
+    if (codepoint >= 0xE000 && codepoint <= 0xF8FF) return;
+
     // A text-producing key with no actionable modifier (only Shift, or
-    // none) is plain input. Releases never produce text.
+    // none) is plain input on down/repeat. Its release is a key event with
+    // no text — phase retention (§8.7): the dispatcher fences `up` from
+    // commands; the regularizer and observation lanes consume it.
     final actionable = modifiers.any((m) => m != KeyModifier.shift);
     if (!actionable) {
-      if (type == KeyEventType.up) return;
+      if (type == KeyEventType.up) {
+        sink.add(
+          KeyEvent(
+            KeyCode.forCharacter(String.fromCharCode(codepoint)),
+            modifiers: modifiers,
+            type: KeyEventType.up,
+            position: position,
+          ),
+        );
+        return;
+      }
       var cp = codepoint;
       // Prefer the shifted codepoint the terminal reports (group 0's
-      // second sub-param) when Shift is held.
-      if (modifiers.contains(KeyModifier.shift) && _csiGroups[0].length >= 2) {
+      // second sub-param) when Shift is held. 0 means absent.
+      if (modifiers.contains(KeyModifier.shift) &&
+          _csiGroups[0].length >= 2 &&
+          _csiGroups[0][1] > 0) {
         cp = _csiGroups[0][1];
       }
       if (!_isUnicodeScalar(cp) || !_kittyAssociatedTextIsValid()) return;
       final text = _kittyAssociatedText() ?? String.fromCharCode(cp);
-      sink.add(TextInputEvent(text));
+      // The report carried key identity AND produced text — one physical
+      // fact, one correlated batch (RFC 0020 §5). This is where positional
+      // identity survives for printables; the pre-batch pipeline threw the
+      // key half away.
+      sink.add(
+        InputBatch(
+          key: KeyEvent(
+            KeyCode.forCharacter(String.fromCharCode(codepoint)),
+            modifiers: modifiers,
+            type: type,
+            position: position,
+          ),
+          committedText: text,
+          timeStamp: _clock.elapsed,
+          sequence: _nextSequence++,
+        ),
+      );
       return;
     }
 
     // A modified key (Ctrl/Alt/Super/Meta + key): report the base
-    // character so bindings like Ctrl+C match regardless of layout.
+    // character so bindings like Ctrl+C match regardless of layout. The
+    // base-layout position rides along — it is the §13.3 non-Latin
+    // matching fallback's data source (Ctrl+С carrying base 'c').
     sink.add(
       KeyEvent(
-        KeyCode.char(String.fromCharCode(codepoint)),
+        KeyCode.forCharacter(String.fromCharCode(codepoint)),
         modifiers: modifiers,
         type: type,
+        position: position,
       ),
     );
   }
@@ -600,13 +726,31 @@ class InputParser {
     _ => KeyEventType.down,
   };
 
-  KeyCode? _kittyFunctionalKey(int cp) => switch (cp) {
-    13 || 57414 => KeyCode.enter, // Enter, KP Enter
-    9 => KeyCode.tab,
-    27 => KeyCode.escape,
-    8 || 127 => KeyCode.backspace,
-    _ => null,
-  };
+  /// Positional identity for a functional key: layout-independent, so the
+  /// parsed special IS the physical key — no flag-4 data needed. This is
+  /// [positionBySpecial]'s whole purpose, and it is what keeps positional
+  /// selectors matching identically on the terminal and DOM surfaces
+  /// (§13.3 parity): the DOM backend has always reported ArrowLeft's
+  /// position, while these paths used to emit arrows position-less.
+  KeyPosition? _positionFor(KeyCode kc) {
+    final special = kc.special;
+    return special == null ? null : positionBySpecial[special];
+  }
+
+  KeyCode? _kittyFunctionalKey(int cp) {
+    switch (cp) {
+      case 13:
+        return KeyCode.enter;
+      case 9:
+        return KeyCode.tab;
+      case 27:
+        return KeyCode.escape;
+      case 8 || 127:
+        return KeyCode.backspace;
+    }
+    final special = kittyFunctionalKeys[cp];
+    return special == null ? null : KeyCode.forSpecial(special);
+  }
 
   /// The associated-text field (group 2, colon-separated codepoints), only
   /// present when the terminal was asked to report text. Null otherwise.
@@ -617,7 +761,18 @@ class InputParser {
 
   bool _kittyAssociatedTextIsValid() {
     if (_csiGroups.length < 3) return true;
-    return _csiGroups[2].every(_isUnicodeScalar);
+    // The spec forbids control codes in associated text; a terminal (or
+    // spoofed peer) sending them must not smuggle CR/ESC into the text lane.
+    // That means C1 (0x80–0x9F) too, not just C0/DEL: 0x9B is a one-byte CSI,
+    // and letting it through as "text" hands re-interpretable control bytes
+    // to whatever renders or forwards the string.
+    return _csiGroups[2].every(
+      (cp) =>
+          _isUnicodeScalar(cp) &&
+          cp >= 0x20 &&
+          cp != 0x7F &&
+          !(cp >= 0x80 && cp <= 0x9F),
+    );
   }
 
   bool _isUnicodeScalar(int value) =>

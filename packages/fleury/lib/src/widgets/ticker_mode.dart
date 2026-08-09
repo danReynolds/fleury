@@ -33,7 +33,7 @@ class TickerMode extends InheritedWidget {
 
   /// Returns the [enabled] value of the nearest ancestor
   /// [TickerMode], or `true` if no ancestor exists.
-  static bool enabledOf(BuildContext context) {
+  static bool of(BuildContext context) {
     final scope = context.dependOnInheritedWidgetOfExactType<TickerMode>();
     return scope?.enabled ?? true;
   }

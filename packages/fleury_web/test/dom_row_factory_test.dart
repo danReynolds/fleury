@@ -144,20 +144,26 @@ void main() {
       expect(root.textContent, contains('click'));
     });
 
-    test('a link with no explicit fg gets the default foreground, not UA blue', () {
-      // The <a> would otherwise fall to the UA link color (#0000EE). Pin it to
-      // the grid default foreground so a link reads as default-fg + underline.
-      final root = _render(
-        20,
-        (b) => b.writeText(
-          const CellOffset(0, 0),
-          'docs',
-          style: const CellStyle(underline: true, linkUri: 'https://example.com'),
-        ),
-      );
-      final style = root.querySelector('a')!.getAttribute('style') ?? '';
-      expect(style, contains('color:rgb(208, 208, 208)'));
-    });
+    test(
+      'a link with no explicit fg gets the default foreground, not UA blue',
+      () {
+        // The <a> would otherwise fall to the UA link color (#0000EE). Pin it to
+        // the grid default foreground so a link reads as default-fg + underline.
+        final root = _render(
+          20,
+          (b) => b.writeText(
+            const CellOffset(0, 0),
+            'docs',
+            style: const CellStyle(
+              underline: true,
+              linkUri: 'https://example.com',
+            ),
+          ),
+        );
+        final style = root.querySelector('a')!.getAttribute('style') ?? '';
+        expect(style, contains('color:rgb(208, 208, 208)'));
+      },
+    );
 
     test('a link-free run with no fg emits no color (byte-identical)', () {
       final root = _render(

@@ -167,14 +167,16 @@ void main() {
       owner.mountRoot(
         FocusManagerScope(
           manager: manager,
-          child: Focus(
-            focusNode: node,
-            autofocus: true,
-            onKey: (e) {
-              received.add('inner:${e.code.character}');
-              return KeyEventResult.handled;
+          child: KeyDetector(
+            onKey: (event) {
+              received.add('inner:${event.code.character}');
+              event.consume();
             },
-            child: const EmptyBox(),
+            child: Focus(
+              focusNode: node,
+              autofocus: true,
+              child: const EmptyBox(),
+            ),
           ),
         ),
       );
@@ -191,18 +193,18 @@ void main() {
       owner.mountRoot(
         FocusManagerScope(
           manager: manager,
-          child: Focus(
-            onKey: (e) {
-              received.add('outer:${e.code.character}');
-              return KeyEventResult.handled;
+          child: KeyDetector(
+            onKey: (event) {
+              received.add('outer:${event.code.character}');
+              event.consume();
             },
             child: Focus(
-              autofocus: true,
-              onKey: (e) {
-                received.add('inner:${e.code.character}');
-                return KeyEventResult.ignored;
-              },
-              child: const EmptyBox(),
+              child: KeyDetector(
+                onKey: (event) {
+                  received.add('inner:${event.code.character}');
+                },
+                child: Focus(autofocus: true, child: const EmptyBox()),
+              ),
             ),
           ),
         ),
@@ -220,18 +222,19 @@ void main() {
       owner.mountRoot(
         FocusManagerScope(
           manager: manager,
-          child: Focus(
-            onKey: (e) {
-              received.add('outer:${e.code.character}');
-              return KeyEventResult.handled;
+          child: KeyDetector(
+            onKey: (event) {
+              received.add('outer:${event.code.character}');
+              event.consume();
             },
             child: Focus(
-              autofocus: true,
-              onKey: (e) {
-                received.add('inner:${e.code.character}');
-                return KeyEventResult.handled;
-              },
-              child: const EmptyBox(),
+              child: KeyDetector(
+                onKey: (event) {
+                  received.add('inner:${event.code.character}');
+                  event.consume();
+                },
+                child: Focus(autofocus: true, child: const EmptyBox()),
+              ),
             ),
           ),
         ),
@@ -251,19 +254,19 @@ void main() {
       owner.mountRoot(
         FocusManagerScope(
           manager: manager,
-          child: Focus(
-            onKey: (e) {
+          child: KeyDetector(
+            onKey: (event) {
               received.add('app');
-              return KeyEventResult.handled;
+              event.consume();
             },
-            child: FocusScope(
-              child: Focus(
-                autofocus: true,
-                onKey: (e) {
-                  received.add('inner');
-                  return KeyEventResult.ignored;
-                },
-                child: const EmptyBox(),
+            child: Focus(
+              child: FocusScope(
+                child: KeyDetector(
+                  onKey: (event) {
+                    received.add('inner');
+                  },
+                  child: Focus(autofocus: true, child: const EmptyBox()),
+                ),
               ),
             ),
           ),
@@ -282,20 +285,20 @@ void main() {
       owner.mountRoot(
         FocusManagerScope(
           manager: manager,
-          child: Focus(
-            onKey: (e) {
+          child: KeyDetector(
+            onKey: (event) {
               received.add('app');
-              return KeyEventResult.handled;
+              event.consume();
             },
-            child: FocusScope(
-              modal: true,
-              child: Focus(
-                autofocus: true,
-                onKey: (e) {
-                  received.add('inner');
-                  return KeyEventResult.ignored;
-                },
-                child: const EmptyBox(),
+            child: Focus(
+              child: FocusScope(
+                modal: true,
+                child: KeyDetector(
+                  onKey: (event) {
+                    received.add('inner');
+                  },
+                  child: Focus(autofocus: true, child: const EmptyBox()),
+                ),
               ),
             ),
           ),
@@ -424,15 +427,20 @@ void main() {
       Widget host({required bool show}) => FocusManagerScope(
         manager: manager,
         child: show
-            ? Focus(
-                onKey: (e) {
+            ? KeyDetector(
+                onKey: (event) {
                   hits++;
-                  return KeyEventResult.handled;
+                  event.consume();
                 },
                 child: Focus(
-                  focusNode: node,
-                  onKey: (e) => KeyEventResult.ignored,
-                  child: const EmptyBox(),
+                  child: KeyDetector(
+                    onKey: (event) {
+                      if (((e) => KeyEventResult.ignored)(event) ==
+                          KeyEventResult.handled)
+                        event.consume();
+                    },
+                    child: Focus(focusNode: node, child: const EmptyBox()),
+                  ),
                 ),
               )
             : const EmptyBox(),
@@ -474,26 +482,31 @@ void main() {
       var liveHits = 0;
       final owner = BuildOwner();
 
+      final liveNode = FocusNode(debugLabel: 'live');
+
       Widget host({required bool show}) => FocusManagerScope(
         manager: manager,
-        // Non-focusable, so it participates in the ambient (unfocused)
-        // dispatch chain — where keys land once nothing holds focus.
-        child: Focus(
-          canRequestFocus: false,
-          onKey: (e) {
+        child: KeyDetector(
+          onKey: (event) {
             liveHits++;
-            return KeyEventResult.handled;
+            event.consume();
           },
-          child: show
-              ? Focus(
-                  focusNode: node,
-                  onKey: (e) {
-                    deadHits++;
-                    return KeyEventResult.handled;
-                  },
-                  child: const EmptyBox(),
-                )
-              : const EmptyBox(),
+          child: Focus(
+            canRequestFocus: false,
+            child: Column(
+              children: [
+                Focus(focusNode: liveNode, child: const EmptyBox()),
+                if (show)
+                  KeyDetector(
+                    onKey: (event) {
+                      deadHits++;
+                      event.consume();
+                    },
+                    child: Focus(focusNode: node, child: const EmptyBox()),
+                  ),
+              ],
+            ),
+          ),
         ),
       );
 
@@ -515,9 +528,12 @@ void main() {
       expect(node.hasFocus, isFalse);
 
       // Keys route to the live tree, never through the unmounted handler.
+      // Detectors are focus-scoped (RFC 0020 §17), so the live half is
+      // reached by focusing a surviving node rather than ambiently.
+      liveNode.requestFocus();
       manager.dispatchKey(_key('a'));
       expect(deadHits, 0);
-      expect(liveHits, 1, reason: 'the live ambient chain still receives keys');
+      expect(liveHits, 1, reason: 'the live chain still receives keys');
     });
   });
 }

@@ -40,11 +40,13 @@ import '../semantics/accessibility.dart';
 import '../semantics/inspection.dart';
 import '../semantics/semantics.dart';
 import '../input/events.dart';
+import '../input/keyboard_state.dart';
 import '../widgets/basic.dart';
 import '../runtime/clipboard.dart';
 import '../widgets/clipboard_scope.dart';
 import '../widgets/focus.dart';
 import '../widgets/key_bindings.dart';
+import '../widgets/keyboard.dart';
 import '../widgets/framework.dart';
 import '../widgets/media_query.dart';
 import '../widgets/overlay.dart';
@@ -98,6 +100,11 @@ class FleuryTester {
        _clock = FakeClock(),
        _focusManager = FocusManager() {
     _scheduler = FakeTickerScheduler(clock: _clock);
+    // The same hook `runApp` installs. Tests must exercise the production
+    // seam, not substitute for it: this gap existed because the harness
+    // published the frame latch ITSELF, so every sampled-input test passed
+    // while the runtime never latched at all (RFC 0020 §5.6).
+    _scheduler.onFrameStart = () => _dispatcher.keyboardSession.publishLatch();
     _binding = TuiBinding(
       tickerScheduler: _scheduler,
       animationPolicy: animationPolicy,
@@ -106,6 +113,7 @@ class FleuryTester {
       focusManager: _focusManager,
       pointerRouter: _pointerRouter,
     );
+    _keyboardNotifier = KeyboardStateNotifier(_dispatcher);
     // Match the runtime: render an error panel for a thrown build()
     // rather than letting the exception escape the test harness. Per-owner,
     // so a test customizing hooks can't leak into the next test.
@@ -191,6 +199,7 @@ class FleuryTester {
   final FocusManager _focusManager;
   final PointerRouter _pointerRouter = PointerRouter();
   late final InputDispatcher _dispatcher;
+  late final KeyboardStateNotifier _keyboardNotifier;
   late final BuildOwner _owner;
   Element? _root;
   Widget _currentUserWidget = const EmptyBox();
@@ -583,6 +592,77 @@ class FleuryTester {
     _owner.flushBuild();
   }
 
+  // ---- RFC 0020 lifecycle driving --------------------------------------
+
+  /// The confirmed keyboard capabilities the session runs under. Defaults
+  /// to the press-only legacy profile, so the existing down-only test
+  /// corpus keeps meaning what it meant. Set [KeyboardCapabilities.full]
+  /// to drive held-state scenarios.
+  KeyboardCapabilities get keyboardCapabilities =>
+      _dispatcher.keyboardSession.capabilities;
+
+  set keyboardCapabilities(KeyboardCapabilities value) {
+    _assertNotDisposed('keyboardCapabilities');
+    _dispatcher.updateKeyboardCapabilities(value);
+    _keyboardNotifier.notifyCapabilitiesChanged();
+  }
+
+  /// Dispatches a correlated [InputBatch], as a lifecycle-mode terminal or
+  /// the DOM source emits for printables.
+  void sendBatch(InputBatch batch) {
+    _assertNotDisposed('sendBatch');
+    _dispatcher.dispatch(batch);
+    _owner.flushBuild();
+  }
+
+  /// Presses [key] down (without releasing) — the start of a held-key
+  /// scenario. Requires [keyboardCapabilities] with held-state support for
+  /// the session to track it.
+  void holdKey(KeySelector key, {Set<KeyModifier> modifiers = const {}}) {
+    _assertNotDisposed('holdKey');
+    _dispatcher.dispatch(_lifecycleEvent(key, KeyEventType.down, modifiers));
+    _owner.flushBuild();
+  }
+
+  /// Releases a key previously pressed with [holdKey].
+  void releaseKey(KeySelector key, {Set<KeyModifier> modifiers = const {}}) {
+    _assertNotDisposed('releaseKey');
+    _dispatcher.dispatch(_lifecycleEvent(key, KeyEventType.up, modifiers));
+    _owner.flushBuild();
+  }
+
+  /// Publishes the frame latch out of band, for a test with no ticker
+  /// running.
+  ///
+  /// [pump] already latches through the same frame-start hook the runtime
+  /// installs, so a test that pumps does NOT need this — and should not use
+  /// it to stand in for a frame, because that is precisely how a missing
+  /// runtime latch stayed invisible.
+  KeyboardSnapshot latchFrame() {
+    _assertNotDisposed('latchFrame');
+    return _dispatcher.keyboardSession.publishLatch();
+  }
+
+  static KeyEvent _lifecycleEvent(
+    KeySelector key,
+    KeyEventType type,
+    Set<KeyModifier> modifiers,
+  ) {
+    if (key is KeyCode) {
+      return KeyEvent(key, type: type, modifiers: modifiers);
+    }
+    final position = key as KeyPosition;
+    final twin = position.usTwin;
+    if (twin == null) {
+      throw ArgumentError.value(
+        key,
+        'key',
+        'position has no US twin; construct the KeyEvent explicitly',
+      );
+    }
+    return KeyEvent(twin, type: type, modifiers: modifiers, position: position);
+  }
+
   /// Dispatches a [MouseEvent] (e.g. a left-button click for
   /// click-to-focus). Render first so focus rects are recorded.
   void sendMouse(MouseEvent event) {
@@ -891,16 +971,19 @@ class FleuryTester {
               clipboard: clipboard,
               // Mirror runApp's host scopes: share the dispatcher's pending
               // state so KeyBindings.pendingOf / WhichKey work under test.
-              child: PendingSequenceScope(
-                notifier: _dispatcher.pendingSequenceNotifier,
-                // Opt out of entry repaint boundaries. The harness overlay is
-                // usually single-entry (pass-through anyway under adaptive
-                // engagement), but a test that floats extra entries — a menu,
-                // a toast — would otherwise engage harness-owned boundaries
-                // and skew the boundary stats and paint counts under test.
-                child: Overlay(
-                  initialEntries: [_userEntry],
-                  addRepaintBoundaries: false,
+              child: KeyboardScope(
+                notifier: _keyboardNotifier,
+                child: PendingSequenceScope(
+                  notifier: _dispatcher.pendingSequenceNotifier,
+                  // Opt out of entry repaint boundaries. The harness overlay is
+                  // usually single-entry (pass-through anyway under adaptive
+                  // engagement), but a test that floats extra entries — a menu,
+                  // a toast — would otherwise engage harness-owned boundaries
+                  // and skew the boundary stats and paint counts under test.
+                  child: Overlay(
+                    initialEntries: [_userEntry],
+                    addRepaintBoundaries: false,
+                  ),
                 ),
               ),
             ),

@@ -5,6 +5,7 @@
 // style flags are set, and unsupported syntax falls through as text.
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_wire.dart';
 import 'package:fleury_test/fleury_test.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
 import 'package:test/test.dart';
@@ -211,11 +212,14 @@ void main() {
 
         // The link label cells carry the OSC 8 target AND stay underlined.
         expect(
-          _anyCellMatches(
-            buf,
-            {'f', 'l', 'e', 'u', 'r', 'y'},
-            (s) => s.linkUri == 'https://fleury.dev' && s.underline,
-          ),
+          _anyCellMatches(buf, {
+            'f',
+            'l',
+            'e',
+            'u',
+            'r',
+            'y',
+          }, (s) => s.linkUri == 'https://fleury.dev' && s.underline),
           isTrue,
           reason: 'label run is a live link',
         );
@@ -246,27 +250,31 @@ void main() {
           _surface(
             const MarkdownText(
               '[open an issue](https://x)',
-              inlineLinkUrls: false, // drop the (url) suffix; only the label paints
+              inlineLinkUrls:
+                  false, // drop the (url) suffix; only the label paints
             ),
             hyperlinks: true,
           ),
         );
         final buf = tester.render(size: const CellSize(40, 1));
         expect(
-          _anyCellMatches(
-            buf,
-            {'o', 'p', 'e', 'n', 'a', 'i', 's', 'u'},
-            (s) => s.linkUri == 'https://x' && s.underline,
-          ),
+          _anyCellMatches(buf, {
+            'o',
+            'p',
+            'e',
+            'n',
+            'a',
+            'i',
+            's',
+            'u',
+          }, (s) => s.linkUri == 'https://x' && s.underline),
           isTrue,
           reason: 'the label words are linked',
         );
         expect(
-          _anyCellMatches(
-            buf,
-            {' '},
-            (s) => s.linkUri == 'https://x' && s.underline,
-          ),
+          _anyCellMatches(buf, {
+            ' ',
+          }, (s) => s.linkUri == 'https://x' && s.underline),
           isTrue,
           reason: 'the spaces INSIDE the link are linked too (contiguous run)',
         );
@@ -314,46 +322,46 @@ void main() {
         );
         final buf = tester.render(size: const CellSize(20, 1));
         expect(
-          _anyCellMatches(
-            buf,
-            {'f', 'l', 'e', 'u', 'r', 'y'},
-            (s) => s.linkUri == 'https://fleury.dev' && s.underline,
-          ),
+          _anyCellMatches(buf, {
+            'f',
+            'l',
+            'e',
+            'u',
+            'r',
+            'y',
+          }, (s) => s.linkUri == 'https://fleury.dev' && s.underline),
           isTrue,
         );
       },
     );
 
-    testWidgets(
-      'supporting surface still refuses an un-allow-listed scheme '
-      '(osc8Policy disabledByPolicy)',
-      (tester) {
-        tester.pumpWidget(
-          _surface(
-            const MarkdownText('grab [file](ftp://host.example/x) now'),
-            hyperlinks: true,
-          ),
-        );
-        final buf = tester.render(size: const CellSize(60, 1));
+    testWidgets('supporting surface still refuses an un-allow-listed scheme '
+        '(osc8Policy disabledByPolicy)', (tester) {
+      tester.pumpWidget(
+        _surface(
+          const MarkdownText('grab [file](ftp://host.example/x) now'),
+          hyperlinks: true,
+        ),
+      );
+      final buf = tester.render(size: const CellSize(60, 1));
 
-        // Scheme blocked at the producer: nothing gets a linkUri, but the
-        // fallback (underline label + visible url) is intact.
-        expect(_anyLinkedCell(buf), isFalse);
-        expect(
-          _anyCellMatches(buf, {'f', 'i', 'l', 'e'}, (s) => s.underline),
-          isTrue,
-        );
+      // Scheme blocked at the producer: nothing gets a linkUri, but the
+      // fallback (underline label + visible url) is intact.
+      expect(_anyLinkedCell(buf), isFalse);
+      expect(
+        _anyCellMatches(buf, {'f', 'i', 'l', 'e'}, (s) => s.underline),
+        isTrue,
+      );
 
-        final link = tester.semantics().single(
-          role: SemanticRole.link,
-          label: 'file',
-        );
-        expect(link.value, 'ftp://host.example/x');
-        expect(link.state.values['linkScheme'], 'ftp');
-        expect(link.state.values['safeLinkScheme'], isFalse);
-        expect(link.state.values['osc8Policy'], 'disabledByPolicy');
-      },
-    );
+      final link = tester.semantics().single(
+        role: SemanticRole.link,
+        label: 'file',
+      );
+      expect(link.value, 'ftp://host.example/x');
+      expect(link.state.values['linkScheme'], 'ftp');
+      expect(link.state.values['safeLinkScheme'], isFalse);
+      expect(link.state.values['osc8Policy'], 'disabledByPolicy');
+    });
 
     testWidgets(
       'FULL LOOP: one MarkdownText link reaches the terminal (OSC 8) and the '

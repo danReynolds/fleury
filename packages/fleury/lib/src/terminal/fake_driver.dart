@@ -3,6 +3,7 @@ import 'dart:async';
 import '../foundation/geometry.dart';
 import 'capabilities.dart';
 import '../input/events.dart';
+import '../input/keyboard_state.dart';
 import '../runtime/remote_surface_sink.dart';
 import 'terminal_driver.dart';
 
@@ -11,13 +12,23 @@ import 'terminal_driver.dart';
 /// assertions, and lets the test push events into the event stream.
 final class FakeTerminalDriver
     with TerminalAttentionSequences
-    implements TerminalDriver, TerminalHandoffDriver {
+    implements
+        TerminalDriver,
+        TerminalHandoffDriver,
+        KeyboardCapabilitiesDriver {
   FakeTerminalDriver({
     CellSize size = const CellSize(80, 24),
     this.capabilities = TerminalCapabilities.defaultCapabilities,
+    this.keyboardCapabilities = KeyboardCapabilities.legacy,
     bool isInteractive = true,
   }) : _size = size,
        _isInteractive = isInteractive;
+
+  /// Confirmed keyboard capabilities this fake declares. Defaults to the
+  /// press-only legacy profile so the existing down-only test corpus keeps
+  /// meaning what it meant (the session regularizer is capability-gated).
+  @override
+  final KeyboardCapabilities keyboardCapabilities;
 
   /// Whether this fake stands in for an interactive terminal. Set false to
   /// exercise the non-TTY (piped/redirected) code paths.

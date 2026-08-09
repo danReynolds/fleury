@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_wire.dart';
 import 'package:test/test.dart';
 
 /// A realistic agent tree: status + a message list + an input. [tick] perturbs
@@ -57,6 +58,48 @@ Map<String, Object?> _envelope(List<int> bytes) =>
 
 void main() {
   group('SemanticsWire encode/decode', () {
+    test(
+      'an action target token round-trips and patches identical semantics',
+      () {
+        SemanticTree tree(String token) => SemanticTree(
+          root: SemanticNode(
+            id: const SemanticNodeId('root'),
+            role: SemanticRole.app,
+            children: [
+              SemanticNode(
+                id: const SemanticNodeId('element-7'),
+                role: SemanticRole.button,
+                label: 'Delete',
+                actions: const {SemanticAction.activate},
+                actionTargetToken: token,
+              ),
+            ],
+          ),
+        );
+
+        final encoder = SemanticsWireEncoder();
+        final decoder = SemanticsWireDecoder();
+        final first = encoder.encodeTree(tree('element.1'))!;
+        expect(
+          decoder
+              .apply(first)!
+              .nodeById(const SemanticNodeId('element-7'))!
+              .actionTargetToken,
+          'element.1',
+        );
+
+        final second = encoder.encodeTree(tree('element.2'))!;
+        expect(_envelope(second)['mode'], 'patch');
+        expect(
+          decoder
+              .apply(second)!
+              .nodeById(const SemanticNodeId('element-7'))!
+              .actionTargetToken,
+          'element.2',
+        );
+      },
+    );
+
     test('a FULL then PATCH stream reproduces every frame exactly', () {
       final encoder = SemanticsWireEncoder();
       final decoder = SemanticsWireDecoder();

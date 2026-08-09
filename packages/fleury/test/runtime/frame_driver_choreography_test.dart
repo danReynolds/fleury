@@ -21,6 +21,7 @@
 import 'dart:async';
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_wire.dart';
 import 'package:fleury/src/remote/remote_driver.dart';
 import 'package:test/test.dart';
 
@@ -58,12 +59,12 @@ class _CounterState extends State<_Counter> {
     });
     return KeyBindings(
       bindings: [
-        KeyBinding(_Counter.tap, onTrigger: () => setState(() => _count++)),
+        KeyBinding(_Counter.tap, onTrigger: (_) => setState(() => _count++)),
         KeyBinding(
           _Counter.silent,
           // Mutates non-visual state without setState: dispatch happens,
           // nothing rebuilds, the frame is a no-work skip.
-          onTrigger: () => _silentPokes++,
+          onTrigger: (_) => _silentPokes++,
         ),
       ],
       child: Semantics(
@@ -150,7 +151,11 @@ void main() {
 
     // --- Invariant 5: input dispatched before the skip gate.
     final sentBefore = transport.sent.length;
-    transport.emit(const InputEventFrame(KeyEvent(KeyCode.char('t'))));
+    transport.emit(
+      const InputEventFrame(
+        InputBatch(key: KeyEvent(KeyCode.char('t')), committedText: 't'),
+      ),
+    );
     await _settle();
     expect(
       plans(),
@@ -170,7 +175,11 @@ void main() {
     // --- Invariant 3: a no-work frame writes nothing.
     final sentBeforeSilent = transport.sent.length;
     final tagsBeforeSilent = postFrameTags.length;
-    transport.emit(const InputEventFrame(KeyEvent(KeyCode.char('s'))));
+    transport.emit(
+      const InputEventFrame(
+        InputBatch(key: KeyEvent(KeyCode.char('s')), committedText: 's'),
+      ),
+    );
     await _settle();
     expect(
       transport.sent.length,
