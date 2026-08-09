@@ -473,13 +473,17 @@ shared letter/digit block — the caged use — maps cleanly.
 
 ### 13.2 `KeySelector`
 
-The sealed-in-spirit union both enums implement, with `.id`/`parse` for
-persistence. **Closed to exhaustive switching** (the `KeySequence` trick: user
-switches always need a default) so future selector kinds — the InputMap RFC's
-growth axis — are additive, and ids are **kind-prefixed** (`pos:w`, `code:sp`)
-from day one because they land in user config files. Users name the type
-roughly twice per app (a settings map annotation, a `parse` call) and never
-construct it.
+The sealed-in-spirit union both enums implement. **Closed to exhaustive
+switching** (the `KeySequence` trick: user switches always need a default) so
+future selector kinds — the InputMap RFC's growth axis — are additive. The
+persistence ids specified here (kind-prefixed: `pos:w`, `code:sp`, because
+they land in user config files) are the InputMap RFC's to implement: the
+`.id`/`parse` pair originally shipped with P1b, but an id grammar with no
+serializer consuming it is exactly the shipped-no-caller defect class this
+project keeps re-learning, so the 2026-08-09 review pass deleted the
+implementation and this spec remains the grammar's home. Users will name the
+type roughly twice per app (a settings map annotation, a parse call) and
+never construct it.
 
 ### 13.3 Matching rules
 

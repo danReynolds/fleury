@@ -160,34 +160,6 @@ void main() {
     });
   });
 
-  group('KeySelector id grammar', () {
-    test('round-trips every position', () {
-      for (final p in KeyPosition.values) {
-        expect(KeySelector.parse(p.selectorId), same(p));
-      }
-    });
-
-    test('round-trips special and character codes', () {
-      for (final key in SpecialKey.values) {
-        final code = KeyCode.forSpecial(key);
-        expect(KeySelector.parse(code.selectorId), code);
-      }
-      for (final char in ['a', ' ', ':', 'é', '@', r'\']) {
-        final code = KeyCode.char(char);
-        expect(KeySelector.parse(code.selectorId), code);
-        expect(code.selectorId, 'chr:$char');
-      }
-    });
-
-    test('rejects unknown kinds and names', () {
-      expect(() => KeySelector.parse('pos:nope'), throwsFormatException);
-      expect(() => KeySelector.parse('key:nope'), throwsFormatException);
-      expect(() => KeySelector.parse('chr:'), throwsFormatException);
-      expect(() => KeySelector.parse('wat:w'), throwsFormatException);
-      expect(() => KeySelector.parse('w'), throwsFormatException);
-    });
-  });
-
   group('KeyEvent.matches — RFC 0020 §13.3', () {
     test('logical selectors match by code, never by position', () {
       const event = KeyEvent(KeyCode.char('z'), position: KeyPosition.w);

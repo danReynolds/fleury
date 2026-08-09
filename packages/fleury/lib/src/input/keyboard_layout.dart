@@ -44,9 +44,11 @@ final class KeyLabel {
 ///    which IS the mapping, observed rather than assumed. Fills in one key
 ///    per first press, so it is a slow-filling cache and never the
 ///    first-paint story.
-/// 2. **A named table.** Bundled layouts for the common non-US keyboards.
-///    Selected explicitly; a guess about which layout is in use, but a
-///    correct one for that layout.
+/// 2. **A supplied table.** The constructor accepts a position→cap map for
+///    an embedder that knows the layout out of band. Fleury bundles no
+///    tables: a curated layout set is real data with a real maintenance
+///    cost, and it ships when something consumes it (the sessions the
+///    framework runs always learn instead).
 ///
 /// Anything unknown stays unknown. There is deliberately no third tier that
 /// invents a plausible label.
@@ -56,14 +58,6 @@ final class KeyboardLayout {
 
   /// A layout with no table: only what the terminal teaches us.
   factory KeyboardLayout.learning() => KeyboardLayout();
-
-  /// One of the bundled layouts by name (`fr-azerty`, `de-qwertz`,
-  /// `tr-q`, `dvorak`), or a learning-only layout when the name is unknown.
-  factory KeyboardLayout.named(String name) {
-    final table = bundledKeyboardLayouts[name.toLowerCase()];
-    if (table == null) return KeyboardLayout.learning();
-    return KeyboardLayout(table: table, tableName: name.toLowerCase());
-  }
 
   final Map<KeyPosition, String> _table;
   final Map<KeyPosition, String> _learned = {};
@@ -151,78 +145,3 @@ final class KeyboardLayout {
     return substituted ? steps.join(' ') : sequence.hintLabel;
   }
 }
-
-/// Bundled cap tables for the layouts whose letter/digit block differs most
-/// from US-QWERTY. Keyed by position; the value is the unmodified cap.
-///
-/// Deliberately partial: only the keys that actually move. A position absent
-/// from a table produces the same character it does on US-QWERTY, which is
-/// what [KeyPosition.usTwin] already reports.
-const Map<String, Map<KeyPosition, String>> bundledKeyboardLayouts = {
-  // French AZERTY: A↔Q, Z↔W swap, M moves off the home row, and the digit
-  // row is shifted (its unmodified caps are punctuation).
-  'fr-azerty': {
-    KeyPosition.q: 'a',
-    KeyPosition.a: 'q',
-    KeyPosition.w: 'z',
-    KeyPosition.z: 'w',
-    KeyPosition.semicolon: 'm',
-    KeyPosition.m: ',',
-    KeyPosition.comma: ';',
-    KeyPosition.period: ':',
-    KeyPosition.slash: '!',
-  },
-  // German QWERTZ: Y↔Z, plus the umlaut keys on the punctuation cluster.
-  'de-qwertz': {
-    KeyPosition.y: 'z',
-    KeyPosition.z: 'y',
-    KeyPosition.semicolon: 'ö',
-    KeyPosition.quote: 'ä',
-    KeyPosition.bracketLeft: 'ü',
-    KeyPosition.minus: 'ß',
-  },
-  // Turkish-Q: the letters stay put; the punctuation cluster carries the
-  // dotted/dotless i and friends.
-  'tr-q': {
-    KeyPosition.bracketLeft: 'ğ',
-    KeyPosition.bracketRight: 'ü',
-    KeyPosition.semicolon: 'ş',
-    KeyPosition.quote: 'i',
-    KeyPosition.comma: 'ö',
-    KeyPosition.period: 'ç',
-  },
-  // Dvorak: almost nothing is where QWERTY puts it — the layout that makes
-  // "just render the US name" most obviously wrong.
-  'dvorak': {
-    KeyPosition.q: "'",
-    KeyPosition.w: ',',
-    KeyPosition.e: '.',
-    KeyPosition.r: 'p',
-    KeyPosition.t: 'y',
-    KeyPosition.y: 'f',
-    KeyPosition.u: 'g',
-    KeyPosition.i: 'c',
-    KeyPosition.o: 'r',
-    KeyPosition.p: 'l',
-    KeyPosition.a: 'a',
-    KeyPosition.s: 'o',
-    KeyPosition.d: 'e',
-    KeyPosition.f: 'u',
-    KeyPosition.g: 'i',
-    KeyPosition.h: 'd',
-    KeyPosition.j: 'h',
-    KeyPosition.k: 't',
-    KeyPosition.l: 'n',
-    KeyPosition.semicolon: 's',
-    KeyPosition.z: ';',
-    KeyPosition.x: 'q',
-    KeyPosition.c: 'j',
-    KeyPosition.v: 'k',
-    KeyPosition.b: 'x',
-    KeyPosition.n: 'b',
-    KeyPosition.m: 'm',
-    KeyPosition.comma: 'w',
-    KeyPosition.period: 'v',
-    KeyPosition.slash: 'z',
-  },
-};

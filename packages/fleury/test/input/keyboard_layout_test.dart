@@ -17,8 +17,8 @@ void main() {
       expect(KeyboardLayout.learning().labelFor(KeyPosition.w), isNull);
     });
 
-    test('a bundled table names the cap that is really there', () {
-      final azerty = KeyboardLayout.named('fr-azerty');
+    test('a supplied table names the cap that is really there', () {
+      final azerty = KeyboardLayout(table: _azerty, tableName: 'fr-azerty');
       expect(azerty.labelFor(KeyPosition.w)?.text, 'z');
       expect(azerty.labelFor(KeyPosition.a)?.text, 'q');
       expect(azerty.labelFor(KeyPosition.w)?.source, KeyLabelSource.table);
@@ -26,11 +26,7 @@ void main() {
 
     test('a position the table does not move keeps its US cap', () {
       // Tables are deliberately partial — absent means "same as US".
-      expect(KeyboardLayout.named('de-qwertz').labelFor(KeyPosition.j), isNull);
-    });
-
-    test('an unknown table name degrades to learning, never throws', () {
-      expect(KeyboardLayout.named('klingon').labelFor(KeyPosition.w), isNull);
+      expect(KeyboardLayout(table: _azerty).labelFor(KeyPosition.j), isNull);
     });
   });
 
@@ -49,7 +45,7 @@ void main() {
     test('what the terminal reports beats the table', () {
       // The table is an assumption about which layout is in use; a report is
       // this keyboard, right now.
-      final layout = KeyboardLayout.named('fr-azerty');
+      final layout = KeyboardLayout(table: _azerty, tableName: 'fr-azerty');
       expect(layout.labelFor(KeyPosition.w)?.text, 'z');
       layout.observe(
         const KeyEvent(KeyCode.char('!'), position: KeyPosition.w),
@@ -88,13 +84,13 @@ void main() {
 
   group('labelForSequence', () {
     test('an all-logical sequence is untouched', () {
-      final layout = KeyboardLayout.named('fr-azerty');
+      final layout = KeyboardLayout(table: _azerty, tableName: 'fr-azerty');
       final ctrlS = KeySequence.ctrl.s;
       expect(layout.labelForSequence(ctrlS), ctrlS.hintLabel);
     });
 
     test('a positional step is substituted', () {
-      final layout = KeyboardLayout.named('fr-azerty');
+      final layout = KeyboardLayout(table: _azerty, tableName: 'fr-azerty');
       expect(layout.labelForSequence(KeyPosition.w), 'z');
     });
 
@@ -106,7 +102,7 @@ void main() {
     });
 
     test('substitution preserves the modifier prefix', () {
-      final layout = KeyboardLayout.named('fr-azerty');
+      final layout = KeyboardLayout(table: _azerty, tableName: 'fr-azerty');
       final chord = KeySequence.ctrl.code(KeyPosition.w);
       expect(layout.labelForSequence(chord), 'Ctrl+Z');
     });
@@ -132,3 +128,14 @@ void main() {
     });
   });
 }
+
+/// The AZERTY letter swaps, as an embedder supplying its own table would
+/// write them (Fleury bundles no layout data — see KeyboardLayout's doc).
+const Map<KeyPosition, String> _azerty = {
+  KeyPosition.q: 'a',
+  KeyPosition.a: 'q',
+  KeyPosition.w: 'z',
+  KeyPosition.z: 'w',
+  KeyPosition.m: ',',
+  KeyPosition.semicolon: 'm',
+};

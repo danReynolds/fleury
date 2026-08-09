@@ -1,4 +1,3 @@
-import 'package:characters/characters.dart';
 import 'package:meta/meta.dart';
 
 import '../foundation/geometry.dart';
@@ -431,10 +430,6 @@ final class KeyCode extends KeySequence implements KeySelector {
   int get stepCount => 1;
 
   @override
-  String get selectorId =>
-      special != null ? 'key:${special!.name}' : 'chr:$character';
-
-  @override
   _KeyStep _stepAt(int index) {
     assert(index == 0, 'a KeyCode is a single step');
     return _KeyStep(this);
@@ -449,49 +444,18 @@ final class KeyCode extends KeySequence implements KeySelector {
 /// or a physical [KeyPosition] (where the key sits).
 ///
 /// This is the type of data boundaries that must hold either kind — a
-/// rebindable-controls map, a sampled-controls list, a saved config entry.
-/// Application code never constructs a `KeySelector`; values come from the
-/// two implementing vocabularies or from [parse].
+/// rebindable-controls map, a sampled-controls list. Application code never
+/// constructs a `KeySelector`; values come from the two implementing
+/// vocabularies.
 ///
 /// Deliberately *not* sealed: exhaustive switches over selectors would break
 /// when a future RFC (the input-map layer) adds selector kinds, so external
 /// switches always need a default — the same closure trick [KeySequence]
-/// uses.
-abstract final class KeySelector {
-  /// Stable, kind-prefixed identity for persistence: `chr:a` / `key:enter`
-  /// for [KeyCode], `pos:w` for [KeyPosition]. Round-trips through [parse].
-  String get selectorId;
-
-  /// Parses a [selectorId]. Throws [FormatException] on unknown kinds or
-  /// names — unknown kinds may be valid ids written by a future Fleury, so
-  /// callers persisting configs should catch and drop rather than crash.
-  static KeySelector parse(String id) {
-    if (id.startsWith('chr:')) {
-      final char = id.substring(4);
-      if (char.isEmpty || char.characters.length != 1) {
-        throw FormatException(
-          'chr: selector needs exactly one character, got "$char"',
-        );
-      }
-      return KeyCode.forCharacter(char);
-    }
-    if (id.startsWith('key:')) {
-      final name = id.substring(4);
-      for (final key in SpecialKey.values) {
-        if (key.name == name) return KeyCode.forSpecial(key);
-      }
-      throw FormatException('unknown special key "$name"');
-    }
-    if (id.startsWith('pos:')) {
-      final name = id.substring(4);
-      for (final position in KeyPosition.values) {
-        if (position.name == name) return position;
-      }
-      throw FormatException('unknown key position "$name"');
-    }
-    throw FormatException('unknown selector kind in "$id"');
-  }
-}
+/// uses. That RFC also owns the persistence story: its kind-prefixed
+/// selector-id grammar (RFC 0020 §13) ships WITH the input-map layer —
+/// an id scheme with no serializer yet is public-surface debt, and this
+/// PR's own review deleted exactly that once already.
+abstract final class KeySelector {}
 
 /// One physical key position, named after the standard US-QWERTY layout.
 ///
@@ -687,9 +651,6 @@ enum KeyPosition implements KeySelector, KeySequence {
     if (c != null) return KeyCode.char(c);
     return null;
   }
-
-  @override
-  String get selectorId => 'pos:$name';
 
   // ---- KeySequence: a position is a one-step, unmodified gesture --------
   //
