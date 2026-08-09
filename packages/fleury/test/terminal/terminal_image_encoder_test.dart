@@ -5,6 +5,8 @@
 // (kitty placement deletes, data frees, repaint resets).
 
 import 'dart:convert';
+import 'dart:convert';
+import 'dart:io' show ZLibDecoder;
 import 'dart:typed_data';
 
 import 'package:fleury/fleury.dart';
@@ -968,6 +970,75 @@ void main() {
       );
       e.encodeFrame(CellBuffer(empty), fullRepaint: false);
       expect(e.encodeFrame(CellBuffer(empty), fullRepaint: false), isEmpty);
+    });
+  });
+
+  group('raster lane (RFC 0021 — the pixel canvas tier)', () {
+    Uint8List rasterRgba() {
+      // 8x8 RGBA test card: row-major gradient so any pixel shuffle or
+      // stride bug breaks the round-trip comparison.
+      final rgba = Uint8List(8 * 8 * 4);
+      for (var i = 0; i < 64; i++) {
+        rgba[i * 4] = i * 3;
+        rgba[i * 4 + 1] = 255 - i * 3;
+        rgba[i * 4 + 2] = (i * 7) & 0xFF;
+        rgba[i * 4 + 3] = 255;
+      }
+      return rgba;
+    }
+
+    CellBuffer rasterBuffer(String id, Uint8List rgba) {
+      final buf = CellBuffer(const CellSize(20, 10));
+      buf.writeImageWithId(
+        const CellOffset(2, 1),
+        id,
+        Uint8List(0),
+        width: 4,
+        height: 2,
+        fit: InlineImageFit.fill,
+        sourceWidth: 8,
+        sourceHeight: 8,
+        pixels: () => rgba,
+      );
+      return buf;
+    }
+
+    test('a raster image transmits raw RGBA (f=32, o=z) that round-trips', () {
+      final rgba = rasterRgba();
+      final e = TerminalImageEncoder(protocol: ImageProtocol.kitty);
+      final out = e.encodeFrame(rasterBuffer('r#1', rgba), fullRepaint: true);
+      expect(out, contains('a=t,f=32,s=8,v=8,o=z,i=1'));
+      expect(out, isNot(contains('f=100')), reason: 'no PNG lane for rasters');
+
+      // Extract every APC payload chunk of the transmit and reassemble.
+      final apc = RegExp(r'\x1B_G([^\x1B]*)\x1B\\');
+      final b64 = StringBuffer();
+      for (final m in apc.allMatches(out)) {
+        final body = m.group(1)!;
+        if (!body.contains(';')) continue;
+        final control = body.substring(0, body.indexOf(';'));
+        final payload = body.substring(body.indexOf(';') + 1);
+        if (control.contains('a=p') || control.contains('a=d')) continue;
+        b64.write(payload);
+      }
+      final inflated = ZLibDecoder().convert(base64.decode(b64.toString()));
+      expect(inflated, rgba, reason: 'the terminal must see our exact pixels');
+    });
+
+    test('a redrawn canvas (new id) frees the previous frame data', () {
+      final rgba = rasterRgba();
+      final e = TerminalImageEncoder(protocol: ImageProtocol.kitty);
+      e.encodeFrame(rasterBuffer('r#1', rgba), fullRepaint: true);
+      // Incremental frame, like the render loop's: the old id must be freed
+      // INDIVIDUALLY (a full repaint would nuke everything with d=A and
+      // hide a broken eviction path).
+      final out2 = e.encodeFrame(rasterBuffer('r#2', rgba), fullRepaint: false);
+      expect(out2, contains('a=t,f=32'), reason: 'fresh frame transmits');
+      expect(
+        out2,
+        contains('a=d,d=I,i=1'),
+        reason: 'frame 1 data must be freed or animation accumulates forever',
+      );
     });
   });
 }

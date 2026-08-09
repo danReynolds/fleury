@@ -121,6 +121,46 @@ void main(List<String> args) {
       'place once). animated/f is the per-frame re-transmit cost.');
 }
 
+/// The pixel canvas tier's sustained load (RFC 0021 P3): a mid-size canvas
+/// (100×28 cells → 800×448 raster) redrawn with a fresh id every frame,
+/// exactly the render loop's animation shape. Returns (µs/frame, B/frame)
+/// over the steady state.
+(double, double) _rasterSustained(int frames) {
+  final rgba = Uint8List(800 * 448 * 4);
+  // Neon-ish content: mostly black, ~8% lit — the compression profile the
+  // tier is designed around. Deterministic, no RNG.
+  for (var i = 0; i < rgba.length; i += 52) {
+    rgba[i] = 220;
+    rgba[i + 3] = 255;
+  }
+  CellBuffer withRaster(int frame) {
+    final buf = CellBuffer(const CellSize(120, 40));
+    buf.writeImageWithId(
+      const CellOffset(2, 2),
+      'raster#$frame',
+      Uint8List(0),
+      width: 100,
+      height: 28,
+      fit: InlineImageFit.fill,
+      sourceWidth: 800,
+      sourceHeight: 448,
+      pixels: () => rgba,
+    );
+    return buf;
+  }
+
+  final encoder = TerminalImageEncoder(protocol: ImageProtocol.kitty);
+  encoder.encodeFrame(withRaster(0), fullRepaint: true); // prime
+  final sw = Stopwatch()..start();
+  var bytes = 0;
+  for (var i = 1; i <= frames; i++) {
+    final out = encoder.encodeFrame(withRaster(i), fullRepaint: false);
+    bytes += out.length;
+  }
+  sw.stop();
+  return (sw.elapsedMicroseconds / frames, bytes / frames);
+}
+
 void _gate(int frames) {
   var failed = false;
   for (final p in _protocols) {
@@ -136,6 +176,19 @@ void _gate(int frames) {
         'zero-image ${zero} B ${ok ? 'ok' : 'FAIL'}');
     if (!ok) failed = true;
   }
+  // Raster lane: the sustained cost must fit an animation frame budget.
+  // Ceilings are deliberately loose (~3× measured) — this catches a lane
+  // that fell off a cliff (PNG creeping back in, compression dropped, the
+  // per-frame delete lost), not scheduler noise.
+  final (rasterUs, rasterBytes) = _rasterSustained(frames);
+  final rasterOk = rasterUs < 12000 && rasterBytes < 400000;
+  stdout.writeln(
+    'kitty raster: ${rasterUs.toStringAsFixed(0)} µs/f, '
+    '${rasterBytes.toStringAsFixed(0)} B/f '
+    '${rasterOk ? 'ok' : 'FAIL'} (ceilings 12000 µs, 400000 B)',
+  );
+  if (!rasterOk) failed = true;
+
   if (failed) {
     stdout
         .writeln('\nimage bench gate: FAIL — a still image is re-transmitting '
