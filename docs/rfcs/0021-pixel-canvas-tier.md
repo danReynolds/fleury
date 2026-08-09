@@ -28,10 +28,16 @@ tiers.** A `Canvas` picks intent with one word.
 - `pixels` — always rasterize; on a surface with no pixel-capable image
   protocol the canvas falls back to `braille` (a canvas must never be
   blank because the terminal is old).
-- `auto` — resolve at build time from the confirmed surface capabilities:
-  `ImageProtocol.kitty` or `.iterm2` → `pixels`; anything else → `braille`.
-  Sixel is deliberately excluded in v1 (lossy palette, slow encode, small
-  audience); revisit only with evidence.
+- `auto` — resolve at build time from the confirmed surface capabilities.
+  **P2 learning:** the widget layer reads the NEUTRAL `SurfaceCapabilities`,
+  which deliberately hides protocol names — and the browser also reports
+  placement support, so keying on "has placements" would have shipped
+  empty-byte rasters to serve clients. Resolution therefore consults a new
+  neutral bit, `SurfaceCapabilities.liveRasters` ("this surface can present
+  per-frame raster placements"), true today exactly when the terminal
+  confirmed Kitty graphics. iTerm2 (PNG-per-frame) and Sixel (re-rasterize)
+  fail animation cadence and stay false; the serve surface flips its bit
+  when P3's raster wire lands. Honest at every commit.
 
 Authors declare intent, and the two intents are distinct on purpose:
 fidelity-is-the-point content (charts, maps) picks `auto`; texture-is-the-
@@ -75,10 +81,14 @@ the encoder's (P2/P3).
 One `InlineImage` per `RenderCanvas`, stable id for the render object's
 lifetime, `pixels()` supplier returning the current raster. Frame-to-frame
 updates ride the encoder's existing placement diffing; damage-bounded
-re-encode via `croppedBytes` where the encoder asks. Transmission format
-v1: whatever the encoder does today (PNG). If P2 profiling shows PNG
-encode dominating the frame budget, the kitty raw-RGBA + zlib format is
-the sanctioned fix — an encoder change, invisible above it.
+re-encode via `croppedBytes` where the encoder asks. Transmission format:
+**P2 learning — PNG was never viable**: `InlineImage.bytes` is PNG by
+contract and the core cannot encode one, so the raster lane
+(`InlineImage.isRaster`: empty bytes + live `pixels()`) ships in P2, and
+the Kitty presenter transmits it as raw RGBA (`f=32`), zlib level 1
+(`o=z`). Measured on the busy-frame raster: 3.0ms/frame to compress,
+66KiB compressed / 88KiB base64 — ~5.3MB/s at 60fps, and with the 5.0ms
+raster the whole producer side is ~8ms of the 16.6ms frame budget.
 
 ### 2.6 Browser surface
 

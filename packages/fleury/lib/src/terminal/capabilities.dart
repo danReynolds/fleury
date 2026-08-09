@@ -667,6 +667,11 @@ extension TerminalSurfaceCapabilities on TerminalCapabilities {
       images: imageProtocol == ImageProtocol.halfBlock
           ? InlineImageSupport.none
           : InlineImageSupport.placements,
+      // Per-frame raster placements need a protocol that takes raw pixels
+      // and replaces images without flicker — Kitty, and only Kitty today.
+      // iTerm2 wants a PNG per frame; Sixel re-rasterizes; both fail
+      // animation cadence (RFC 0021 §2.1).
+      liveRasters: imageProtocol == ImageProtocol.kitty,
       hyperlinks: hyperlinks,
       pointer: PointerPrecision.cell,
       textPolicy: textPolicy.policy,

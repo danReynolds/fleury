@@ -34,6 +34,7 @@
 //    stacks are likewise cleared and replayed in paint order.
 
 import 'dart:convert';
+import 'dart:io' show ZLibEncoder;
 import 'dart:typed_data';
 
 import '../rendering/cell.dart' show CellRole;
@@ -276,7 +277,11 @@ final class TerminalImageEncoder {
       );
       place.kittyImageId = kittyId;
       if (_transmitted.add(place.contentId)) {
-        _writeKittyTransmit(out, kittyId, image.bytes);
+        if (image.isRaster) {
+          _writeKittyTransmitRaster(out, kittyId, image);
+        } else {
+          _writeKittyTransmit(out, kittyId, image.bytes);
+        }
       }
       place.kittyPlacementId = _nextKittyPlacementId++;
       final f = place.fit;
@@ -337,6 +342,46 @@ final class TerminalImageEncoder {
       final chunk = StringBuffer('\x1B_G');
       if (first) {
         chunk.write('a=t,f=100,i=$kittyId,q=2,m=${isLast ? 0 : 1};');
+        first = false;
+      } else {
+        chunk.write('m=${isLast ? 0 : 1};');
+      }
+      chunk.write(b64.substring(pos, end));
+      chunk.write('\x1B\\');
+      out.write(_wrap(chunk.toString()));
+      pos = end;
+    }
+  }
+
+  /// Transmits a raster-lane image ([InlineImage.isRaster]) as raw RGBA
+  /// (`f=32`), zlib-compressed (`o=z`). The pixel canvas redraws every
+  /// frame; PNG-encoding each frame would dominate the budget, while
+  /// deflate on neon-on-black rasters runs fast and ~50-100×. Level 1:
+  /// this is a per-frame hot path and ratio beyond "mostly-black collapses"
+  /// buys nothing.
+  void _writeKittyTransmitRaster(
+    StringBuffer out,
+    int kittyId,
+    InlineImage image,
+  ) {
+    final rgba = image.pixels!();
+    final compressed = Uint8List.fromList(
+      ZLibEncoder(level: 1).convert(rgba),
+    );
+    final b64 = base64.encode(compressed);
+    final w = image.sourceWidth;
+    final h = image.sourceHeight;
+    const chunkSize = 4096;
+    var pos = 0;
+    var first = true;
+    while (pos < b64.length) {
+      final end = (pos + chunkSize < b64.length) ? pos + chunkSize : b64.length;
+      final isLast = end == b64.length;
+      final chunk = StringBuffer('\x1B_G');
+      if (first) {
+        chunk.write(
+          'a=t,f=32,s=$w,v=$h,o=z,i=$kittyId,q=2,m=${isLast ? 0 : 1};',
+        );
         first = false;
       } else {
         chunk.write('m=${isLast ? 0 : 1};');

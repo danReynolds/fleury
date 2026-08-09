@@ -61,6 +61,7 @@ final class SurfaceCapabilities {
     this.colorMode = ColorMode.truecolor,
     this.glyphTier = GlyphTier.unicode,
     this.images = InlineImageSupport.none,
+    this.liveRasters = false,
     this.hyperlinks = false,
     this.pointer = PointerPrecision.cell,
     this.textPolicy = TextPresentationPolicy.spec,
@@ -69,6 +70,16 @@ final class SurfaceCapabilities {
   final ColorMode colorMode;
   final GlyphTier glyphTier;
   final InlineImageSupport images;
+
+  /// Whether the surface can present LIVE raster placements: images whose
+  /// RGBA is regenerated every frame ([InlineImage.isRaster] — the pixel
+  /// canvas tier, RFC 0021). Deliberately separate from [images]: a surface
+  /// can render static placements (the browser's `<img>` overlay, iTerm2's
+  /// PNG protocol) without having a per-frame pixel path that survives
+  /// animation cadence. True today only where the terminal confirmed the
+  /// Kitty graphics protocol; the serve surface flips it when its raster
+  /// wire lands (RFC 0021 P3).
+  final bool liveRasters;
 
   /// Real hyperlinks: OSC 8 on terminals, anchors on the web.
   final bool hyperlinks;
@@ -86,6 +97,7 @@ final class SurfaceCapabilities {
     ColorMode? colorMode,
     GlyphTier? glyphTier,
     InlineImageSupport? images,
+    bool? liveRasters,
     bool? hyperlinks,
     PointerPrecision? pointer,
     TextPresentationPolicy? textPolicy,
@@ -94,6 +106,7 @@ final class SurfaceCapabilities {
       colorMode: colorMode ?? this.colorMode,
       glyphTier: glyphTier ?? this.glyphTier,
       images: images ?? this.images,
+      liveRasters: liveRasters ?? this.liveRasters,
       hyperlinks: hyperlinks ?? this.hyperlinks,
       pointer: pointer ?? this.pointer,
       textPolicy: textPolicy ?? this.textPolicy,
@@ -106,6 +119,7 @@ final class SurfaceCapabilities {
         other.colorMode == colorMode &&
         other.glyphTier == glyphTier &&
         other.images == images &&
+        other.liveRasters == liveRasters &&
         other.hyperlinks == hyperlinks &&
         other.pointer == pointer &&
         other.textPolicy == textPolicy;
@@ -116,6 +130,7 @@ final class SurfaceCapabilities {
     colorMode,
     glyphTier,
     images,
+    liveRasters,
     hyperlinks,
     pointer,
     textPolicy,

@@ -51,6 +51,14 @@ final class InlineImage {
   /// a decoded bitmap can supply this without making the rendering core learn
   /// how to decode or encode PNGs.
   final Uint8List Function(int x, int y, int width, int height)? croppedBytes;
+
+  /// A raster-lane image: no encoded file bytes, just live RGBA via
+  /// [pixels] (RFC 0021). Produced by the pixel canvas tier, which re-draws
+  /// every frame — encoding a PNG per frame would burn the frame budget the
+  /// rasterizer just earned, so the Kitty presenter transmits these as raw
+  /// RGBA instead. The widget layer only routes raster images to surfaces
+  /// whose confirmed protocol can take them.
+  bool get isRaster => bytes.isEmpty && pixels != null;
 }
 
 /// One visible placement of an inline image.

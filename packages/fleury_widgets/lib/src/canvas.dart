@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:fleury/fleury_core.dart';
 
 import 'braille.dart';
@@ -5,6 +7,7 @@ import 'half_block_buffer.dart';
 import 'octant_buffer.dart';
 import 'quadrant_buffer.dart';
 import 'sextant_buffer.dart';
+import 'pixel_surface.dart';
 import 'sub_cell_buffer.dart';
 
 /// Logical drawing extents for a [Canvas]. Logical Y increases upward,
@@ -100,6 +103,23 @@ enum CanvasMarker {
   /// (kitty ≥ 0.40, Ghostty). Falls back gracefully elsewhere only if the
   /// caller picks another tier.
   octant,
+
+  /// Real pixels via the terminal's confirmed graphics protocol (RFC 0021):
+  /// the painter rasterizes to RGBA — antialiased strokes, per-pixel color,
+  /// additive glow — delivered as an inline-image placement over the
+  /// canvas's cells. Requires a Kitty-graphics surface; where none is
+  /// confirmed the canvas renders [braille] instead (a canvas must never be
+  /// blank because the terminal is old). Pick this to pin the pixel look;
+  /// pick [auto] to take the best the surface offers.
+  pixels,
+
+  /// Resolve at build time from the confirmed surface capabilities: a
+  /// Kitty-graphics protocol upgrades to [pixels], everything else renders
+  /// [braille]. For content where fidelity is the point (charts, maps).
+  /// Content whose glyph texture IS the aesthetic should pin a glyph tier
+  /// instead — the framework never silently changes a canvas's look unless
+  /// the author opted into exactly that.
+  auto,
 }
 
 /// Builds the sub-cell buffer for [marker] at the given cell dimensions.
@@ -111,6 +131,10 @@ SubCellBuffer subCellBufferFor(CanvasMarker marker, int cols, int rows) =>
       CanvasMarker.quadrant => QuadrantBuffer(cols, rows),
       CanvasMarker.sextant => SextantBuffer(cols, rows),
       CanvasMarker.octant => OctantBuffer(cols, rows),
+      // The glyph ladder's callers only: Canvas resolves pixels/auto at
+      // build time and never passes them here. A caller that does (LineChart
+      // handed `auto` by an app) gets braille — the never-blank floor.
+      CanvasMarker.pixels || CanvasMarker.auto => BrailleBuffer(cols, rows),
     };
 
 /// A sub-cell drawing surface for custom plots, diagrams, and markers.
@@ -172,7 +196,16 @@ class Canvas extends StatelessWidget {
     final raw = _RawCanvas(
       painter: painter,
       bounds: resolvedBounds,
-      marker: marker,
+      // pixels/auto resolve HERE, against the confirmed surface (RFC 0021
+      // §2.1): the render object only ever sees a concrete tier, and the
+      // decision is rebuilt when capabilities change (MediaQuery dependency).
+      marker: switch (marker) {
+        CanvasMarker.pixels || CanvasMarker.auto =>
+          MediaQuery.capabilitiesOf(context).liveRasters
+              ? CanvasMarker.pixels
+              : CanvasMarker.braille,
+        final m => m,
+      },
       defaultStyle: CellStyle(foreground: theme.colorScheme.primary),
       glyphTier: MediaQuery.glyphTierOf(context),
     );
@@ -303,9 +336,116 @@ class RenderCanvas extends RenderObject {
     CellRect? clipRect,
   }) {
     if (size.cols == 0 || size.rows == 0) return;
+    if (_marker == CanvasMarker.pixels) {
+      _paintPixels(buffer, offset);
+      return;
+    }
     final buf = subCellBufferFor(_marker, size.cols, size.rows);
     _painter.paint(_SubCellCtx(buf, _bounds));
     buf.writeTo(buffer, offset, _defaultStyle, glyphTier: _glyphTier);
+  }
+
+  /// RFC 0021 §2.3: the v1 raster density. ≈4× braille, matching the
+  /// typical 1:2 cell aspect.
+  static const int _pxPerCellX = 8;
+  static const int _pxPerCellY = 16;
+
+  /// Raster identity: images are content-addressed by string id and Kitty
+  /// caches by id, so a canvas that redraws must present each frame as a
+  /// NEW id — the encoder then transmits the fresh raster and deletes the
+  /// old one (its normal placement-diff lifecycle). Instance-unique so two
+  /// pixel canvases never collide.
+  static int _nextRasterInstance = 1;
+  late final int _rasterInstance = _nextRasterInstance++;
+  int _rasterRevision = 0;
+  PixelSurface? _pixelSurface;
+  static final Uint8List _noBytes = Uint8List(0);
+
+  void _paintPixels(CellBuffer buffer, CellOffset offset) {
+    final w = size.cols * _pxPerCellX;
+    final h = size.rows * _pxPerCellY;
+    var surface = _pixelSurface;
+    if (surface == null || surface.width != w || surface.height != h) {
+      surface = _pixelSurface = PixelSurface(w, h);
+    } else {
+      surface.clear();
+    }
+    final captured = surface;
+    _painter.paint(_PixelCtx(captured, _bounds));
+    _rasterRevision++;
+    buffer.writeImageWithId(
+      offset,
+      'canvas-$_rasterInstance#$_rasterRevision',
+      _noBytes,
+      width: size.cols,
+      height: size.rows,
+      fit: InlineImageFit.fill,
+      sourceWidth: w,
+      sourceHeight: h,
+      // Consumed by the presenter within this frame; the surface is reused
+      // (cleared, redrawn) only on the NEXT paint, after presentation.
+      pixels: () => captured.rgba,
+    );
+  }
+}
+
+/// Maps a painter's logical calls onto the pixel raster (RFC 0021). The
+/// same to-fraction math as [_SubCellCtx], but unrounded — fractional
+/// coordinates are the antialiaser's input, not an error to snap away.
+class _PixelCtx implements CanvasContext {
+  _PixelCtx(this._surface, this._bounds);
+  final PixelSurface _surface;
+  final CanvasBounds _bounds;
+
+  /// §2.2: stroke width is canonical in braille-dot units; this tier is 4×
+  /// braille's vertical density.
+  static const double _widthScale = _pxPerCellYd / 4;
+  static const double _pxPerCellYd = 16;
+
+  double _mapX(double x) =>
+      (x - _bounds.minX) / (_bounds.maxX - _bounds.minX) * (_surface.width - 1);
+
+  double _mapY(double y) =>
+      (1 - (y - _bounds.minY) / (_bounds.maxY - _bounds.minY)) *
+      (_surface.height - 1);
+
+  (int, int, int) _rgb(Color? color) {
+    // Painters overwhelmingly draw RgbColor; palette-indexed colors have no
+    // portable RGB without the terminal's palette, so they render as the
+    // canvas's hot white rather than guessing.
+    if (color is RgbColor) return (color.r, color.g, color.b);
+    return (242, 252, 255);
+  }
+
+  @override
+  void drawDot(double x, double y, {Color? color}) {
+    final (r, g, b) = _rgb(color);
+    final px = _mapX(x);
+    final py = _mapY(y);
+    // One braille dot's visual weight at this density.
+    _surface.addLine(px, py, px, py, r: r, g: g, b: b, width: _widthScale);
+  }
+
+  @override
+  void drawLine(
+    double x1,
+    double y1,
+    double x2,
+    double y2, {
+    Color? color,
+    double width = 1,
+  }) {
+    final (r, g, b) = _rgb(color);
+    _surface.addLine(
+      _mapX(x1),
+      _mapY(y1),
+      _mapX(x2),
+      _mapY(y2),
+      r: r,
+      g: g,
+      b: b,
+      width: width * _widthScale,
+    );
   }
 }
 
