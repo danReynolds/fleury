@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury_samples/samples.dart';
-import 'package:fleury_widgets/fleury_widgets.dart';
 
 /// Runnable showcase apps for Fleury, mirroring the storybook CLI:
 ///
@@ -51,15 +50,8 @@ Future<void> main(List<String> args) async {
     exit(2);
   }
 
-  // `asteroids --chunky` renders through the sextant tier (solid 2x3
-  // blocks): a fat-pixel alternate skin for the same game. Braille stays
-  // the default -- the game is a vector look first.
-  final home = name == 'asteroids' && args.contains('--chunky')
-      ? const NeonAsteroidsApp(marker: CanvasMarker.sextant)
-      : entry.$2();
-
   await runApp(
-    FleuryApp(title: 'Fleury $name sample', home: withQuitKey(home)),
+    FleuryApp(title: 'Fleury $name sample', home: withQuitKey(entry.$2())),
     // No keyboard flags: `asteroids` needs real key releases and `dashboard`
     // does not, and neither has to say so. The framework asks the terminal for
     // everything it can safely give and negotiates down transactionally.

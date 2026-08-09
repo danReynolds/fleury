@@ -25,24 +25,15 @@ const _violetHot = RgbColor(0xD6, 0xAE, 0xFF);
 /// A real-time, browser-safe Asteroids showcase built entirely from Fleury
 /// cells and public animation/input APIs.
 class NeonAsteroidsApp extends StatelessWidget {
-  const NeonAsteroidsApp({super.key, this.marker = CanvasMarker.braille});
-
-  /// The sub-cell tier the playfield renders through. Braille (2×4 dots) is
-  /// the default: outlined vector look, the game's identity. Sextant (2×3
-  /// solid blocks — the CLI's `--chunky`) trades curve fidelity for a
-  /// fat-pixel cartridge skin; the stroke/glow pass works on both, it just
-  /// reads as tubing on one and sprites on the other.
-  final CanvasMarker marker;
+  const NeonAsteroidsApp({super.key});
 
   @override
   Widget build(BuildContext context) =>
-      SampleScaffold(child: _NeonAsteroidsBody(marker: marker));
+      const SampleScaffold(child: _NeonAsteroidsBody());
 }
 
 class _NeonAsteroidsBody extends StatefulWidget {
-  const _NeonAsteroidsBody({required this.marker});
-
-  final CanvasMarker marker;
+  const _NeonAsteroidsBody();
 
   @override
   State<_NeonAsteroidsBody> createState() => _NeonAsteroidsBodyState();
@@ -483,7 +474,12 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
       shakeY = math.cos(_game.tickCount * 2.3) * 1.2 * intensity;
     }
     final canvas = Canvas(
-      marker: widget.marker,
+      // Braille, and only braille. The sextant tier was tried and rejected
+      // (2026-08-09): solid 2×3 blocks turn the vector outlines into flat
+      // fat-pixel sprites — the glow layering collapses and the game stops
+      // reading as VECTOR FLIGHT. If that skin is ever wanted back, it is
+      // one revert away; it does not ride along as an unloved flag.
+      marker: CanvasMarker.braille,
       bounds: CanvasBounds(
         minX: shakeX,
         maxX: _game.width + shakeX,
