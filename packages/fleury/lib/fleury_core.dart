@@ -285,15 +285,12 @@ export 'src/input/events.dart'
         TerminalFocusEvent,
         TextInputEvent,
         TuiEvent;
-export 'src/input/key_tables.dart'
-    show
-        kittyCodepointOf,
-        kittyFunctionalKeys,
-        positionByDomCode,
-        positionBySpecial,
-        positionByUsCodepoint;
+// Only the table with a real cross-package consumer (the DOM backend's
+// code→position resolution). The kitty-side tables are parser internals;
+// exporting them was pure public-surface debt with zero consumers.
+export 'src/input/key_tables.dart' show positionByDomCode;
 export 'src/input/keyboard_layout.dart'
-    show KeyLabel, KeyLabelSource, KeyboardLayout, bundledKeyboardLayouts;
+    show KeyLabel, KeyLabelSource, KeyboardLayout;
 export 'src/input/keyboard_state.dart'
     show KeyboardCapabilities, KeyboardSnapshot;
 export 'src/terminal/fake_driver.dart' show FakeTerminalDriver;

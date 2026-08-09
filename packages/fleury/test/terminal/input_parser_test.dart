@@ -193,28 +193,48 @@ void main() {
 
   group('CSI cursor chords', () {
     test('CSI A/B/C/D map to arrow chords', () {
-      expect(_parse([0x1B, 0x5B, 0x41]), [const KeyEvent(KeyCode.arrowUp)]);
-      expect(_parse([0x1B, 0x5B, 0x42]), [const KeyEvent(KeyCode.arrowDown)]);
-      expect(_parse([0x1B, 0x5B, 0x43]), [const KeyEvent(KeyCode.arrowRight)]);
-      expect(_parse([0x1B, 0x5B, 0x44]), [const KeyEvent(KeyCode.arrowLeft)]);
+      expect(_parse([0x1B, 0x5B, 0x41]), [
+        const KeyEvent(KeyCode.arrowUp, position: KeyPosition.arrowUp),
+      ]);
+      expect(_parse([0x1B, 0x5B, 0x42]), [
+        const KeyEvent(KeyCode.arrowDown, position: KeyPosition.arrowDown),
+      ]);
+      expect(_parse([0x1B, 0x5B, 0x43]), [
+        const KeyEvent(KeyCode.arrowRight, position: KeyPosition.arrowRight),
+      ]);
+      expect(_parse([0x1B, 0x5B, 0x44]), [
+        const KeyEvent(KeyCode.arrowLeft, position: KeyPosition.arrowLeft),
+      ]);
     });
 
     test('CSI H is home, F is end', () {
-      expect(_parse([0x1B, 0x5B, 0x48]), [const KeyEvent(KeyCode.home)]);
-      expect(_parse([0x1B, 0x5B, 0x46]), [const KeyEvent(KeyCode.end)]);
+      expect(_parse([0x1B, 0x5B, 0x48]), [
+        const KeyEvent(KeyCode.home, position: KeyPosition.home),
+      ]);
+      expect(_parse([0x1B, 0x5B, 0x46]), [
+        const KeyEvent(KeyCode.end, position: KeyPosition.end),
+      ]);
     });
 
     test('CSI 1;5C is Ctrl+arrowRight', () {
       // ESC [ 1 ; 5 C  → arrow right with mod=5 (= ctrl).
       expect(_parse([0x1B, 0x5B, 0x31, 0x3B, 0x35, 0x43]), [
-        const KeyEvent(KeyCode.arrowRight, modifiers: {KeyModifier.ctrl}),
+        const KeyEvent(
+          KeyCode.arrowRight,
+          modifiers: {KeyModifier.ctrl},
+          position: KeyPosition.arrowRight,
+        ),
       ]);
     });
 
     test('CSI 1;2A is Shift+arrowUp', () {
       // mod=2 = shift.
       expect(_parse([0x1B, 0x5B, 0x31, 0x3B, 0x32, 0x41]), [
-        const KeyEvent(KeyCode.arrowUp, modifiers: {KeyModifier.shift}),
+        const KeyEvent(
+          KeyCode.arrowUp,
+          modifiers: {KeyModifier.shift},
+          position: KeyPosition.arrowUp,
+        ),
       ]);
     });
 
@@ -248,39 +268,43 @@ void main() {
   group('CSI tilde-finalised chords', () {
     test('CSI 5~ is pageUp, 6~ is pageDown', () {
       expect(_parse([0x1B, 0x5B, 0x35, 0x7E]), [
-        const KeyEvent(KeyCode.pageUp),
+        const KeyEvent(KeyCode.pageUp, position: KeyPosition.pageUp),
       ]);
       expect(_parse([0x1B, 0x5B, 0x36, 0x7E]), [
-        const KeyEvent(KeyCode.pageDown),
+        const KeyEvent(KeyCode.pageDown, position: KeyPosition.pageDown),
       ]);
     });
 
     test('CSI 3~ is delete, 2~ is insert', () {
       expect(_parse([0x1B, 0x5B, 0x33, 0x7E]), [
-        const KeyEvent(KeyCode.delete),
+        const KeyEvent(KeyCode.delete, position: KeyPosition.delete),
       ]);
       expect(_parse([0x1B, 0x5B, 0x32, 0x7E]), [
-        const KeyEvent(KeyCode.insert),
+        const KeyEvent(KeyCode.insert, position: KeyPosition.insert),
       ]);
     });
 
     test('CSI 11~ is F1, 24~ is F12', () {
       expect(_parse([0x1B, 0x5B, 0x31, 0x31, 0x7E]), [
-        const KeyEvent(KeyCode.f1),
+        const KeyEvent(KeyCode.f1, position: KeyPosition.f1),
       ]);
       expect(_parse([0x1B, 0x5B, 0x32, 0x34, 0x7E]), [
-        const KeyEvent(KeyCode.f12),
+        const KeyEvent(KeyCode.f12, position: KeyPosition.f12),
       ]);
     });
   });
 
   group('SS3 (ESC O ...) sequences', () {
     test('ESC O A is arrowUp', () {
-      expect(_parse([0x1B, 0x4F, 0x41]), [const KeyEvent(KeyCode.arrowUp)]);
+      expect(_parse([0x1B, 0x4F, 0x41]), [
+        const KeyEvent(KeyCode.arrowUp, position: KeyPosition.arrowUp),
+      ]);
     });
 
     test('ESC O P is F1', () {
-      expect(_parse([0x1B, 0x4F, 0x50]), [const KeyEvent(KeyCode.f1)]);
+      expect(_parse([0x1B, 0x4F, 0x50]), [
+        const KeyEvent(KeyCode.f1, position: KeyPosition.f1),
+      ]);
     });
   });
 
@@ -289,7 +313,7 @@ void main() {
       // 'h' + ESC[A + 'i' → text 'h', arrow up, text 'i'.
       expect(_parse([0x68, 0x1B, 0x5B, 0x41, 0x69]), [
         const TextInputEvent('h'),
-        const KeyEvent(KeyCode.arrowUp),
+        const KeyEvent(KeyCode.arrowUp, position: KeyPosition.arrowUp),
         const TextInputEvent('i'),
       ]);
     });
@@ -345,7 +369,7 @@ void main() {
       // ESC [ A decodes as arrowUp — not swallowed and re-parsed as the typed
       // text "[" then "A".
       expect(_parse([0x1B, 0x5B, 0x1B, 0x5B, 0x41]), [
-        const KeyEvent(KeyCode.arrowUp),
+        const KeyEvent(KeyCode.arrowUp, position: KeyPosition.arrowUp),
       ]);
     });
 
@@ -591,7 +615,10 @@ void main() {
     });
 
     test('lone Esc reports as the escape key without waiting for a flush', () {
-      expect(_parse(csiu('27')).single, const KeyEvent(KeyCode.escape));
+      expect(
+        _parse(csiu('27')).single,
+        const KeyEvent(KeyCode.escape, position: KeyPosition.escape),
+      );
     });
 
     test('Ctrl+M is distinct from Enter', () {
@@ -606,7 +633,11 @@ void main() {
       // codepoint 13 is Enter even in CSI-u form.
       expect(
         _parse(csiu('13;5')).single,
-        const KeyEvent(KeyCode.enter, modifiers: {KeyModifier.ctrl}),
+        const KeyEvent(
+          KeyCode.enter,
+          modifiers: {KeyModifier.ctrl},
+          position: KeyPosition.enter,
+        ),
       );
     });
 
@@ -684,6 +715,7 @@ void main() {
             KeyCode.arrowUp,
             modifiers: {KeyModifier.ctrl},
             type: KeyEventType.up,
+            position: KeyPosition.arrowUp,
           ),
         );
       });
@@ -787,6 +819,31 @@ void main() {
         expect(_parse(csiu('97;1;27')), isEmpty);
       });
 
+      test('C1 controls in associated text are rejected too', () {
+        // "Control codes" includes C1 (0x80-0x9F), not just C0/DEL: 0x9B is
+        // a one-byte CSI, and 0x9B-as-text hands re-interpretable control
+        // bytes to whatever renders or forwards the string. A guard that
+        // only floors at 0x20 lets the whole C1 block through.
+        expect(_parse(csiu('0;1;155')), isEmpty); // U+009B, one-byte CSI
+        expect(_parse(csiu('97;1;133')), isEmpty); // U+0085, NEL
+      });
+
+      test('functional keys imply their position without flag-4 data', () {
+        // Arrows and F-keys are layout-independent: the parsed special IS
+        // the physical key, so positional identity needs no base-layout
+        // sub-param. This is what keeps positional selectors matching
+        // identically on the terminal and DOM surfaces (§13.3 parity) —
+        // the DOM backend has always reported ArrowLeft's position.
+        final bytes = [0x1B, 0x5B, ...'1;1:3D'.codeUnits];
+        final up = _parse(bytes).single as KeyEvent; // arrowLeft release
+        expect(up.code, KeyCode.arrowLeft);
+        expect(up.position, KeyPosition.arrowLeft);
+        expect(up.type, KeyEventType.up);
+        // Legacy CSI final-byte forms carry it too.
+        final legacy = _parse([0x1B, 0x5B, 0x44]).single as KeyEvent;
+        expect(legacy.code, KeyCode.arrowLeft);
+      });
+
       test('a batch report fragmented across feeds parses whole', () {
         final parser = InputParser();
         final sink = _ListSink();
@@ -872,7 +929,10 @@ void main() {
 
     group('functional vocabulary (PUA table)', () {
       test('extended function keys decode', () {
-        expect(_parse(csiu('57376')).single, const KeyEvent(KeyCode.f13));
+        expect(
+          _parse(csiu('57376')).single,
+          const KeyEvent(KeyCode.f13, position: KeyPosition.f13),
+        );
         expect(
           _parse(csiu('57398;5')).single,
           const KeyEvent(KeyCode.f35, modifiers: {KeyModifier.ctrl}),
@@ -882,21 +942,34 @@ void main() {
       test('KP Enter is distinct from Enter — nothing silently folded', () {
         expect(
           _parse(csiu('57414')).single,
-          const KeyEvent(KeyCode.keypadEnter),
+          const KeyEvent(
+            KeyCode.keypadEnter,
+            position: KeyPosition.numpadEnter,
+          ),
         );
       });
 
       test('lone modifier keys decode with phases', () {
-        expect(_parse(csiu('57441')).single, const KeyEvent(KeyCode.leftShift));
+        expect(
+          _parse(csiu('57441')).single,
+          const KeyEvent(KeyCode.leftShift, position: KeyPosition.shiftLeft),
+        );
         expect(
           _parse(csiu('57441;1:3')).single,
-          const KeyEvent(KeyCode.leftShift, type: KeyEventType.up),
+          const KeyEvent(
+            KeyCode.leftShift,
+            type: KeyEventType.up,
+            position: KeyPosition.shiftLeft,
+          ),
         );
       });
 
       test('media and lock keys decode', () {
         expect(_parse(csiu('57428')).single, const KeyEvent(KeyCode.mediaPlay));
-        expect(_parse(csiu('57358')).single, const KeyEvent(KeyCode.capsLock));
+        expect(
+          _parse(csiu('57358')).single,
+          const KeyEvent(KeyCode.capsLock, position: KeyPosition.capsLock),
+        );
       });
 
       test('an unmapped PUA codepoint is dropped, never emitted as text', () {

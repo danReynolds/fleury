@@ -54,7 +54,11 @@ export 'src/runtime/frame_scheduler.dart'
         FrameFlushScheduler,
         FrameRenderCallback,
         FrameScheduler;
-export 'src/runtime/input_dispatcher.dart' show InputDispatcher;
+// KeyPhaseObserverRegistration rides along because InputDispatcher's
+// addKeyObserver returns it — an exported method must not return an
+// unexported type.
+export 'src/runtime/input_dispatcher.dart'
+    show InputDispatcher, KeyPhaseObserverRegistration;
 export 'src/runtime/tui_frame_loop.dart'
     show
         TuiDirtyRowRange,

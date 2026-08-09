@@ -10,13 +10,13 @@
 //
 // Authoring at a glance:
 //
-//   KeyBinding(.ctrl.s, onTrigger: save, label: 'Save')
-//   KeyBinding.any([.j, .down], onTrigger: next, label: 'Next')
-//   KeyBinding.event(.escape, onEvent: (e) { if (!close()) e.bubble(); })
+//   KeyBinding(.ctrl.s, onTrigger: (_) => save(), label: 'Save')
+//   KeyBinding(.j, aliases: [.down], onTrigger: (_) => next(), label: 'Next')
+//   KeyBinding(.escape, onTrigger: (e) { if (!close()) e.bubble(); })
 //
-// The common case is `onTrigger` (a zero-argument callback); reach for
-// `KeyBinding.event` only when the handler needs the event — to control
-// propagation via `event.bubble()` or to read which alias fired via
+// One constructor: `onTrigger` always receives the [KeyBindingEvent].
+// Ignore it (`(_) => save()`) in the common case; read it to control
+// propagation via `event.bubble()` or to see which alias fired via
 // `event.match`.
 
 import 'package:meta/meta.dart';
@@ -51,8 +51,8 @@ export '../input/events.dart'
 ///
 /// For a single-step binding, [events] has one entry. For a multi-step
 /// sequence (`.ctrl.x.ctrl.s`), it has one entry per step, in order, so
-/// `events.length == sequence.stepCount`. For a [KeyBinding.any], [sequence]
-/// tells the handler which alias the user actually pressed.
+/// `events.length == sequence.stepCount`. For a binding with [KeyBinding.aliases],
+/// [sequence] tells the handler which alias the user actually pressed.
 @immutable
 final class KeySequenceMatch {
   KeySequenceMatch(this.sequence, List<KeyEvent> events)
@@ -145,20 +145,21 @@ final class PendingSequenceScope
   });
 }
 
-/// Passed to a [KeyBinding.event] handler. Exposes what matched ([match]),
-/// the raw event(s), and per-dispatch propagation control ([bubble]).
+/// Passed to every [KeyBinding.onTrigger] handler. Exposes what matched
+/// ([match]), the raw event(s), and per-dispatch propagation control
+/// ([bubble]).
 ///
-/// **Consume (default):** do nothing; the event is claimed.
+/// **Consume (default):** ignore the event; it is claimed.
 ///
 /// ```dart
-/// KeyBinding.event(.ctrl.s, onEvent: (_) => save())
+/// KeyBinding(.ctrl.s, onTrigger: (_) => save())
 /// ```
 ///
 /// **Conditionally propagate:** call [bubble] to let the event continue to
-/// ancestor bindings, `Focus.onKey`, or globals instead of being consumed:
+/// ancestor bindings, [KeyDetector]s, or globals instead of being consumed:
 ///
 /// ```dart
-/// KeyBinding.event(.tab, onEvent: (event) {
+/// KeyBinding(.tab, onTrigger: (event) {
 ///   if (!Focus.of(context).focusNext()) event.bubble();
 /// })
 /// ```
@@ -466,10 +467,13 @@ class KeyBindings extends StatefulWidget {
   /// handler runs — so the policy belongs to the scope, not to a row.
   ///
   /// `modal: true` blocks ancestor scopes AND suppresses globals, extending
-  /// the focus system's existing modality to the key lane. A Navigator
-  /// modal route sets it implicitly, so routed dialogs write nothing.
-  /// Per-key passthrough is a binding at THIS scope that matches and calls
-  /// [KeyBindingEvent.bubble].
+  /// the focus system's existing modality to the key lane. Routed dialogs
+  /// write nothing — not because Navigator sets this flag (it does not),
+  /// but because a modal route's `FocusScope(modal: true, suppressGlobals:
+  /// true)` already stops the walk and kills globals at the scope boundary.
+  /// This flag exists for modal UI that is NOT a route: an inline command
+  /// palette, a capture overlay. Per-key passthrough is a binding at THIS
+  /// scope that matches and calls [KeyBindingEvent.bubble].
   final bool modal;
 
   final Widget child;

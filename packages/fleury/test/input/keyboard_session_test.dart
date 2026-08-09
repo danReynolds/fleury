@@ -346,4 +346,34 @@ void _phaseViolationRecovery() {
       expect(session.capabilities.supportsHeldState, isFalse);
     });
   });
+
+  test('the liar detector re-arms after a capability re-upgrade', () {
+    // After a demotion the violation counter rests at 2. A later re-grant of
+    // held state (reconnect, driver swap, renegotiation) must reset it: with
+    // an exact `== 2` demotion check, the next violation would move the
+    // counter PAST 2 and the detector would never fire again — keys sticking
+    // down forever on exactly the surfaces that lie about phases.
+    final session = KeyboardSession(capabilities: KeyboardCapabilities.full);
+    const w = KeyEvent(KeyCode.w, position: KeyPosition.w);
+    session.ingest(w);
+    session.ingest(w); // strike one
+    session.ingest(w); // strike two: demoted
+    expect(session.capabilities.supportsHeldState, isFalse);
+
+    session.updateCapabilities(KeyboardCapabilities.full); // fresh trust
+    expect(session.capabilities.supportsHeldState, isTrue);
+    session.ingest(w);
+    session.ingest(w); // strike one (fresh)
+    expect(
+      session.capabilities.supportsHeldState,
+      isTrue,
+      reason: 'one violation under fresh trust is not enough',
+    );
+    session.ingest(w); // strike two: must demote AGAIN
+    expect(
+      session.capabilities.supportsHeldState,
+      isFalse,
+      reason: 'the detector must re-arm after re-upgrade',
+    );
+  });
 }

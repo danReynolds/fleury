@@ -5,7 +5,7 @@
 //     index plus programmatic scroll commands. Optional; the widget
 //     creates its own when none is supplied.
 //   - ListView — the widget. Lays out items vertically, claims
-//     arrow-up / arrow-down / home / end / enter via Focus.onKey, and
+//     arrow-up / arrow-down / home / end / enter via KeyDetector, and
 //     auto-scrolls to keep the selected item visible.
 //   - _RenderListView — the render object. Lays out only items that
 //     fit in the viewport starting from a scroll anchor, paints them,

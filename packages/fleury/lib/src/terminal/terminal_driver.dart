@@ -22,7 +22,11 @@ enum KeyboardProtocolMode {
 
   /// Flags 1|2 — disambiguate escape codes, and report event types.
   ///
-  /// The default. Flag 1 makes otherwise-ambiguous chords distinct (lone
+  /// The safe tier: what a lifecycle request falls back to when the
+  /// terminal cannot honour full lifecycle transactionally, and what the
+  /// automatic upgrade stops at inside a terminal multiplexer (tmux/screen),
+  /// where a raw query is not a reliable statement about the host terminal.
+  /// Flag 1 makes otherwise-ambiguous chords distinct (lone
   /// Esc, Ctrl+I vs Tab, Ctrl+M vs Enter, super/meta). Flag 2 adds
   /// press/repeat/release tags to keys that are ALREADY escape-coded —
   /// chords, arrows, function keys — which is what lets a binding fire once
@@ -37,10 +41,13 @@ enum KeyboardProtocolMode {
   /// Flags 1|2|4|8|16 — the full lifecycle: every key as an escape code,
   /// with alternate/base-layout identities and associated text.
   ///
-  /// Opt-in, and committed only when the terminal confirms 2, 8 AND 16
-  /// (§8.3): flag 8 stops the terminal sending text, and flag 16 is what
-  /// re-supplies it, so honouring one without the other would leave the
-  /// session with no text input at all.
+  /// The default (RFC 0020 §26.1): `runApp` asks every terminal for full
+  /// lifecycle and negotiates down transactionally, committing only when
+  /// the terminal confirms 2, 8 AND 16 (§8.3) — flag 8 stops the terminal
+  /// sending text, and flag 16 is what re-supplies it, so honouring one
+  /// without the other would leave the session with no text input at all.
+  /// `FLEURY_KEYBOARD=disambiguated|legacy` overrides the request for a
+  /// terminal where the negotiation itself misbehaves.
   lifecycle(1 | 2 | 4 | 8 | 16);
 
   const KeyboardProtocolMode(this.requestedFlags);

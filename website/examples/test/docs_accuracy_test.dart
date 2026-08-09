@@ -359,6 +359,14 @@ List<File> _publicDocs(Directory repo) {
       'performance.md',
     ])
       File(p.join(repo.path, 'docs', name)),
+    // Public dartdoc is documentation too: the removed-API guards above
+    // caught every README and guide while `key_bindings.dart`'s own class
+    // docs went on teaching two deleted constructors. Scan the public lib
+    // of the core package so pub.dev-rendered docs meet the same bar.
+    ...Directory(p.join(repo.path, 'packages/fleury/lib'))
+        .listSync(recursive: true, followLinks: false)
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.dart')),
     ...Directory(p.join(repo.path, 'website/src/content/docs'))
         .listSync(recursive: true, followLinks: false)
         .whereType<File>()

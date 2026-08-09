@@ -1,7 +1,9 @@
 # RFC 0020: Keyboard Lifecycle, the Kitty Protocol, and the Key-Input DX
 
-**Status:** FROZEN 2026-08-05. Implemented across P1–P7; §24's showcase
-validation gate passed with no design change required (see §26).
+**Status:** FROZEN 2026-08-05, then amended the same day by §26.1 — the
+default tier flipped to lifecycle, the one post-freeze design change.
+Implemented across P1–P7; §24's showcase validation gate passed with no
+API-surface change (see §26).
 **Dates:** drafted 2026-07-29; revised 2026-07-30 (peer review); finalized
 2026-08-03 after five persona-review rounds, a naming poll, and a four-lens
 assumption-challenge review (implementation-vs-code, adversarial semantics,
@@ -58,9 +60,10 @@ gestures; `Keyboard` reads keys.** React to a press → a binding. Need "is it
 held right now" in a tick → the snapshot. Wait for one key → `nextKey`.
 Widget-internal conditional key handling → the detector floor.
 
-On terminals, the default tier requests Kitty flags 1|2 and *queries what
-stuck*; full lifecycle mode (flags 1|2|4|8|16) is opt-in and transactional —
-committed only when text entry provably survives. Unsupported terminals stay
+On terminals, `runApp` requests full lifecycle (flags 1|2|4|8|16) by default
+and *queries what stuck*, committing transactionally — only when text entry
+provably survives — and falling back to the safe tier (1|2) otherwise, or
+inside a multiplexer (§26.1; this reverses decision 12). Unsupported terminals stay
 fully usable; capabilities report what was **confirmed, never what was
 requested**, and applications branch to different control schemes rather than
 degraded ones. The browser backend has full lifecycle unconditionally and is
@@ -281,21 +284,21 @@ is the whole frame span — tickers included; only `build()` asserts.
 
 ```dart
 enum KeyboardProtocolMode { legacy, disambiguated, lifecycle }
-TerminalMode(keyboardProtocol: KeyboardProtocolMode.disambiguated)  // default
+TerminalMode(keyboardProtocol: KeyboardProtocolMode.lifecycle)  // default (§26.1)
 ```
 
 | mode | request | notes |
 |---|---|---|
 | `legacy` | nothing | debugging / strict environments |
-| `disambiguated` | flags **1\|2** | default; text presses/repeats unchanged; chords, arrows, F-keys gain event types where honored |
-| `lifecycle` | flags 1\|2\|4\|8\|16 | games, instruments; transactional (§8.3) |
+| `disambiguated` | flags **1\|2** | the safe fallback tier (and the multiplexer cap, §26.1); text presses/repeats unchanged; chords, arrows, F-keys gain event types where honored |
+| `lifecycle` | flags 1\|2\|4\|8\|16 | the default (§26.1); transactional (§8.3) |
 
 The **default tier also queries** (§8.2): the 2026 ecosystem is not universal
 (VTE, Konsole, Terminal.app, default WezTerm, tmux, screen, mosh, Windows
 Terminal stable lack event types), so repeat suppression is recorded as a
-capability, never assumed. `lifecycle` remaining opt-in is a closed decision:
+capability, never assumed. ~~`lifecycle` remaining opt-in is a closed decision:
 flag 8 makes Fleury reconstruct all committed text; a future RFC may revisit
-only with evidence of general-app benefit.
+only with evidence of general-app benefit.~~ **AMENDED 2026-08-05 (§26.1): lifecycle is the default.** The revisit bar this paragraph set was met by the showcase gate itself — the browser surface already ran every app with full lifecycle semantics, so the terminal opt-in made the two surfaces behave differently for a reason apps could not see.
 
 ### 8.2 Negotiation is answer-driven and never blocks
 
@@ -827,7 +830,8 @@ doubled or lost, no release ever fires a command.
   `Focus.onKey` removal + ~30 migrations + repeat sweep (§21), **NeonAsteroids
   rewritten** (latch deleted, positional controls, suppression idiom, legacy
   scheme, focus pause).
-- **P5 — kitty negotiation** (Part I): tier 1|2 + default-tier query,
+- **P5 — kitty negotiation** (Part I): transactional negotiation + query
+  (default tier since amended to lifecycle by §26.1),
   transactional lifecycle, ordering tests, spawn bracket, SIGTSTP/CONT, 1004,
   chaos-exit suite. (The §8.6 watchdog was listed here and never built — see
   that section for why one of its two uses is rejected outright and the other
@@ -911,13 +915,13 @@ quality issues justify further key-DX adjustment?**
 
 **Answer: no further adjustment justified.** Every defect the phases surfaced
 was the implementation failing to do what this document already specified —
-not the specification being wrong. No decision in §25 was reopened, and no
-public name changed after P4.
+not the specification being wrong. No public name changed after P4, and one
+§25 decision was reopened: decision 12, reversed by §26.1 after the gate.
 
-That distinction is the finding. A design that survives seven phases of
-contact with real apps without a single reversal is not automatically a good
-design, but a design that had to be reversed would have been a clear signal,
-and there was none.
+That distinction is the finding. The API surface survived seven phases of
+contact with real apps unchanged; the one reversal was a *policy* default,
+and the gate producing it is exactly the signal this paragraph exists to
+watch for — recorded in §26.1 rather than smoothed over.
 
 ### What the showcases proved
 

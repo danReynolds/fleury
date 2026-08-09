@@ -407,7 +407,7 @@ Future<AppExit> _runAppImpl(
     return fdCapture!.terminal;
   }
 
-  // Remote sessions (fleury mcp / serve --spawn / a shell handle) skip the
+  // Remote sessions (serve --spawn / a shell handle) skip the
   // terminal fd guard above — frames go over the socket, not fd 1, so there's
   // nothing to protect. But that also left the LogBuffer unfed, so an agent's
   // read_logs came back empty. When debug tooling is on, capture on the real

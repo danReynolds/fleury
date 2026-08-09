@@ -12,6 +12,8 @@
 import '../foundation/change_notifier.dart';
 import '../input/events.dart';
 import '../input/keyboard_layout.dart';
+import 'package:meta/meta.dart';
+
 import '../input/keyboard_state.dart';
 import '../runtime/input_dispatcher.dart';
 import 'focus.dart';
@@ -162,6 +164,11 @@ final class KeyboardStateNotifier with ChangeNotifier {
   /// The dispatcher that owns the session and the capture gate.
   final InputDispatcher dispatcher;
 
+  /// Framework-internal: [KeyboardSession] is not part of the public API
+  /// surface (external code reads [Keyboard]); annotated so the leak of an
+  /// unexported type through an exported one is analyzer-visible outside
+  /// this package.
+  @internal
   KeyboardSession get session => dispatcher.keyboardSession;
 
   /// Framework-only: the runtime calls this after applying confirmed

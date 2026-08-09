@@ -110,24 +110,26 @@ const Map<int, SpecialKey> kittyFunctionalKeys = {
   57454: SpecialKey.isoLevel5Shift,
 };
 
-/// Reverse of [kittyFunctionalKeys], built once.
-final Map<SpecialKey, int> kittyCodepointOf = {
+/// Reverse of [kittyFunctionalKeys], built once. Unmodifiable: these tables
+/// are process-global resolution state — a writable handle would let any
+/// consumer silently corrupt key identity for the whole runtime.
+final Map<SpecialKey, int> kittyCodepointOf = Map.unmodifiable({
   for (final MapEntry(:key, :value) in kittyFunctionalKeys.entries) value: key,
-};
+});
 
 /// US-layout codepoint → position, for the character cluster. This is the
 /// map Kitty's flag-4 *base layout key* resolves through: an AZERTY
 /// terminal reporting base 0x77 ('w') means the physical key at QWERTY-W.
-final Map<int, KeyPosition> positionByUsCodepoint = {
+final Map<int, KeyPosition> positionByUsCodepoint = Map.unmodifiable({
   for (final position in KeyPosition.values)
     if (position.usCharacter != null)
       position.usCharacter!.codeUnitAt(0): position,
-};
+});
 
 /// DOM `KeyboardEvent.code` → position (total over the vocabulary).
-final Map<String, KeyPosition> positionByDomCode = {
+final Map<String, KeyPosition> positionByDomCode = Map.unmodifiable({
   for (final position in KeyPosition.values) position.domCode: position,
-};
+});
 
 /// [SpecialKey] → the position producing it on a US layout, where one
 /// exists. Functional keys are layout-independent, so a parsed special
@@ -136,7 +138,7 @@ final Map<String, KeyPosition> positionByDomCode = {
 /// Partial: the keypad *navigation* specials (KP_LEFT…KP_BEGIN) have no
 /// DOM position (browsers report `Numpad4` etc. regardless of NumLock) and
 /// hyper/ISO-level modifiers have no standard DOM code.
-final Map<SpecialKey, KeyPosition> positionBySpecial = {
+final Map<SpecialKey, KeyPosition> positionBySpecial = Map.unmodifiable({
   for (final position in KeyPosition.values)
     if (position.special != null) position.special!: position,
-};
+});

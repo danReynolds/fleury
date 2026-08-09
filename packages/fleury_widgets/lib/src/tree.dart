@@ -264,7 +264,7 @@ class _TreeState<T> extends State<Tree<T>> {
     _flat = _flatten();
     final selectedStyle =
         widget.selectedStyle ?? Theme.of(context).selectionStyle;
-    // Use Focus.onKey (not KeyBindings) so a no-op Left/Right returns
+    // Use KeyDetector (not KeyBindings) so a no-op Left/Right returns
     // `ignored` and bubbles to the focus chain — letting an enclosing
     // FocusTraversalGroup move between panes at the tree's edges. (A
     // matched KeyBinding is terminal even when it returns ignored.)

@@ -348,6 +348,12 @@ final class KeyboardSession {
     if (next == _capabilities) return const [];
     final losingState =
         _capabilities.supportsHeldState && !next.supportsHeldState;
+    // Gaining held state is a fresh grant of trust (a renegotiation, a new
+    // peer, a driver swap): the violation evidence belonged to the surface
+    // that earned it. A lying surface re-earns its demotion in two strikes.
+    if (!_capabilities.supportsHeldState && next.supportsHeldState) {
+      _phaseViolations = 0;
+    }
     _capabilities = next;
     return losingState ? loseAuthority() : const [];
   }
@@ -419,7 +425,12 @@ final class KeyboardSession {
           // Two strikes, not one: a single dropped release (a lost byte, a
           // suspend) is a legitimate one-off, but a terminal that does not
           // implement phases produces this on every repeat.
-          if (!event.synthesized && ++_phaseViolations == 2) {
+          // `>=`, not `==`: after a demotion the counter rests at 2, and a
+          // later re-upgrade (reconnect, driver swap, renegotiation) would
+          // otherwise increment it PAST 2 on the next violation — never
+          // equal again, detector permanently disarmed on exactly the
+          // surfaces that need it.
+          if (!event.synthesized && ++_phaseViolations >= 2) {
             _demoteToPressOnly();
           }
           // Duplicate down while held: demote. State already says held.
@@ -514,8 +525,12 @@ final class KeyboardSession {
     return releases;
   }
 
-  /// Publishes the frame latch (§5.6 step 2): called once at frame start
-  /// after input drains. Drains the edge accumulators into an immutable
+  /// Publishes the frame latch (§5.6 step 2). Exactly ONE runtime call site:
+  /// the FrameDriver, at render, before frame production (FleuryTester
+  /// stands in for it in tests). A second publisher is not "fresher" — it
+  /// expires the previous publisher's edges before their consumers read
+  /// them; see ticker_edge_visibility_test.dart for the measured failure.
+  /// Drains the edge accumulators into an immutable
   /// snapshot; allocation-free when nothing changed since the last publish
   /// AND the cached snapshot carries no edges (edges live for exactly one
   /// latch — a quiet frame after an edgeful one must expire them, or

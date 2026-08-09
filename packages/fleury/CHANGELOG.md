@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- **Keyboard lifecycle (RFC 0020).** Key releases and held-state work out of
+  the box: `runApp` asks every terminal for the full Kitty keyboard protocol
+  and negotiates down transactionally — no flags, no tiers to declare, and a
+  terminal that only partly honours the protocol is rolled back to the safe
+  tier before the app sees a keystroke (inside tmux/screen the automatic ask
+  stops at the safe tier; `FLEURY_KEYBOARD` overrides). New DX surface:
+  `Keyboard.of(context)` (frame-latched `snapshot` with `isHeld` /
+  `wasPressed` / `wasReleased`, reactive `capabilities`, `nextKey`),
+  `KeyDetector`, `KeyBinding.hold`, `KeyPosition` spatial selectors,
+  `aliases:`, `modal:`, and `includeRepeats:` — bindings now fire once per
+  physical press, not once per auto-repeat. A surface caught claiming phase
+  reporting it does not deliver demotes itself to press-only and the tree
+  re-branches reactively; in debug builds the framework names controls that
+  cannot work on the current surface. Breaking: `KeyBinding.event` /
+  `KeyBinding.any` folded into the single `KeyBinding(...)` constructor
+  (`onTrigger` receives the `KeyBindingEvent`), `FocusWithin` renamed
+  `FocusDetector`, `Focus.onKey` replaced by `KeyDetector`.
+
 - Automatic hot reload for plain `dart run` sessions: a built-in dev
   supervisor re-spawns the app with the VM service enabled, watches the
   package sources (root package + local path deps), and hot reloads on save

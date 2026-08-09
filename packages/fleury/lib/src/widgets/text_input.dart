@@ -6,7 +6,7 @@
 //   - TextInput — the widget. Creates a Focus node tagged as a
 //     TextInputClaimant / TextCompositionClaimant, so the InputDispatcher
 //     routes typed printable text and IME composition directly to it. Handles
-//     special chords (Backspace, arrows, Enter, etc.) via Focus.onKey.
+//     special chords (Backspace, arrows, Enter, etc.) via KeyDetector.
 //   - RenderTextInput — paints the text plus a one-cell inverse
 //     cursor at the current selection position.
 //
