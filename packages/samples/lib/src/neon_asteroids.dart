@@ -25,15 +25,24 @@ const _violetHot = RgbColor(0xD6, 0xAE, 0xFF);
 /// A real-time, browser-safe Asteroids showcase built entirely from Fleury
 /// cells and public animation/input APIs.
 class NeonAsteroidsApp extends StatelessWidget {
-  const NeonAsteroidsApp({super.key});
+  const NeonAsteroidsApp({super.key, this.marker = CanvasMarker.braille});
+
+  /// The sub-cell tier the playfield renders through. Braille (2×4 dots) is
+  /// the default: outlined vector look, the game's identity. Sextant (2×3
+  /// solid blocks — the CLI's `--chunky`) trades curve fidelity for a
+  /// fat-pixel cartridge skin; the stroke/glow pass works on both, it just
+  /// reads as tubing on one and sprites on the other.
+  final CanvasMarker marker;
 
   @override
   Widget build(BuildContext context) =>
-      const SampleScaffold(child: _NeonAsteroidsBody());
+      SampleScaffold(child: _NeonAsteroidsBody(marker: marker));
 }
 
 class _NeonAsteroidsBody extends StatefulWidget {
-  const _NeonAsteroidsBody();
+  const _NeonAsteroidsBody({required this.marker});
+
+  final CanvasMarker marker;
 
   @override
   State<_NeonAsteroidsBody> createState() => _NeonAsteroidsBodyState();
@@ -474,7 +483,7 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
       shakeY = math.cos(_game.tickCount * 2.3) * 1.2 * intensity;
     }
     final canvas = Canvas(
-      marker: CanvasMarker.braille,
+      marker: widget.marker,
       bounds: CanvasBounds(
         minX: shakeX,
         maxX: _game.width + shakeX,
@@ -764,13 +773,18 @@ class _AsteroidsPainter extends CanvasPainter {
 
   void _paintShip(CanvasContext ctx) {
     final ship = game.ship;
-    _wrappedCopies(ship.position, 4.0, (cx, cy) {
-      final noseX = cx + math.cos(ship.angle) * 3.6;
-      final noseY = cy + math.sin(ship.angle) * 3.6;
-      final leftX = cx + math.cos(ship.angle + 2.48) * 2.8;
-      final leftY = cy + math.sin(ship.angle + 2.48) * 2.8;
-      final rightX = cx + math.cos(ship.angle - 2.48) * 2.8;
-      final rightY = cy + math.sin(ship.angle - 2.48) * 2.8;
+    _wrappedCopies(ship.position, 5.0, (cx, cy) {
+      // A touch larger than the classic 3.6/2.8 wedge: hairline edges this
+      // short re-round their Bresenham staircase every frame of rotation,
+      // and a little length is what lets them read as lines. The collision
+      // ring (2.5) is deliberately smaller than the drawn hull — visually
+      // forgiving, never unfair.
+      final noseX = cx + math.cos(ship.angle) * 4.4;
+      final noseY = cy + math.sin(ship.angle) * 4.4;
+      final leftX = cx + math.cos(ship.angle + 2.48) * 3.4;
+      final leftY = cy + math.sin(ship.angle + 2.48) * 3.4;
+      final rightX = cx + math.cos(ship.angle - 2.48) * 3.4;
+      final rightY = cy + math.sin(ship.angle - 2.48) * 3.4;
 
       // The flame goes UNDER the hull: its halo must not eat the tail edges.
       if (game.thrusting && game.phase == NeonAsteroidsPhase.playing) {
@@ -790,16 +804,21 @@ class _AsteroidsPainter extends CanvasPainter {
       // Hull: HAIRLINE, deliberately. Braille has no brightness levels — a
       // cell is lit or not — so a glow pass only works when halo and core
       // land in DIFFERENT cells, i.e. on shapes several cells across per
-      // limb. The rocks qualify; a ~16-pixel wedge does not, and any halo
+      // limb. The rocks qualify; a ~20-pixel wedge does not, and any halo
       // here floods the hull into a solid blob (measured on the serve
       // surface, twice). The ship's glow is its flame, shield, and sparks —
-      // things that extend into open space. Heat lives in the palette:
-      // white-hot leading edges over a cyan tail.
+      // things that extend into open space.
+      //
+      // ONE hull color, also deliberately: color resolves per CELL, so a
+      // white-nose/cyan-tail split turns every shared cell into a coin
+      // flip and the wedge into patchwork (user-spotted on Warp). The heat
+      // accent is a single white dot at the nose — one cell, stable.
       ctx
         ..drawLine(leftX, leftY, cx, cy, color: _cyan)
         ..drawLine(cx, cy, rightX, rightY, color: _cyan)
-        ..drawLine(noseX, noseY, leftX, leftY, color: _white)
-        ..drawLine(rightX, rightY, noseX, noseY, color: _white);
+        ..drawLine(noseX, noseY, leftX, leftY, color: _cyan)
+        ..drawLine(rightX, rightY, noseX, noseY, color: _cyan)
+        ..drawDot(noseX, noseY, color: _white);
 
       if (ship.shieldTicks > 0 && game.phase == NeonAsteroidsPhase.playing) {
         final pulse = reducedMotion
