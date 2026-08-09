@@ -246,6 +246,162 @@ void main() {
     );
   });
 
+  group('impact feedback (visual-only model state)', () {
+    NeonAsteroidsGame killOneAsteroid() {
+      final game = NeonAsteroidsGame(
+        seed: 7,
+        width: 120,
+        height: 60,
+        populate: false,
+      )..start(spawnWave: false);
+      game
+        ..asteroids.add(
+          NeonAsteroid(
+            id: 41,
+            position: NeonVector(50, 12),
+            velocity: NeonVector(0, 0),
+            radius: 3,
+            tier: 1,
+          ),
+        )
+        ..bullets.add(
+          NeonBullet(
+            position: NeonVector(8, 12),
+            velocity: NeonVector(180, 0),
+            lifeTicks: 180,
+          ),
+        );
+      game.advance(
+        const Duration(milliseconds: 400),
+        const NeonAsteroidsInput(),
+      );
+      expect(
+        game.asteroids.any((asteroid) => asteroid.id == 41),
+        isFalse,
+        reason: 'scenario must kill the rock (the next wave then spawns)',
+      );
+      return game;
+    }
+
+    test('a kill spawns a shockwave that ages out and is removed', () {
+      final game = killOneAsteroid();
+      expect(game.shockwaves, isNotEmpty);
+      final wave = game.shockwaves.last;
+      expect(wave.ageTicks, lessThan(wave.maxLifeTicks));
+      // Every lifetime is under 400ms of ticks, and the freshly spawned
+      // next wave starts too far out (safeCenter) to cause a new impact in
+      // that window — so afterwards the list must be empty again.
+      game.advance(
+        const Duration(milliseconds: 400),
+        const NeonAsteroidsInput(),
+      );
+      expect(game.shockwaves, isEmpty);
+    });
+
+    /// Like [killOneAsteroid], but the bullet starts six units out so the
+    /// kill lands within the first few ticks — for asserting on the SHORT
+    /// feedback (shake lasts a handful of ticks; 400ms outlives it).
+    NeonAsteroidsGame killOneAsteroidFresh() {
+      final game = NeonAsteroidsGame(
+        seed: 7,
+        width: 120,
+        height: 60,
+        populate: false,
+      )..start(spawnWave: false);
+      game
+        ..asteroids.add(
+          NeonAsteroid(
+            id: 41,
+            position: NeonVector(50, 12),
+            velocity: NeonVector(0, 0),
+            radius: 3,
+            tier: 1,
+          ),
+        )
+        ..bullets.add(
+          NeonBullet(
+            position: NeonVector(44, 12),
+            velocity: NeonVector(180, 0),
+            lifeTicks: 180,
+          ),
+        );
+      game.advance(
+        const Duration(milliseconds: 50),
+        const NeonAsteroidsInput(),
+      );
+      expect(
+        game.asteroids.any((asteroid) => asteroid.id == 41),
+        isFalse,
+        reason: 'scenario must kill the rock within the window',
+      );
+      return game;
+    }
+
+    test('a kill kicks the shake, and the shake decays to zero', () {
+      final game = killOneAsteroidFresh();
+      expect(game.shakeTicks, greaterThan(0));
+      expect(game.shakeIntensity, greaterThan(0));
+      game.advance(
+        const Duration(milliseconds: 400),
+        const NeonAsteroidsInput(),
+      );
+      expect(game.shakeTicks, 0);
+      expect(game.shakeIntensity, 0);
+    });
+
+    test('a ship impact shakes harder than a kill', () {
+      final killShake = killOneAsteroidFresh().shakeTicks;
+      expect(killShake, greaterThan(0), reason: 'kill shake must be live');
+
+      final game = NeonAsteroidsGame(
+        seed: 7,
+        width: 120,
+        height: 60,
+        populate: false,
+      )..start(spawnWave: false);
+      game.ship.shieldTicks = 0;
+      game.asteroids.add(
+        NeonAsteroid(
+          id: 5,
+          position: NeonVector(game.ship.position.x + 1, game.ship.position.y),
+          velocity: NeonVector(0, 0),
+          radius: 4,
+          tier: 2,
+        ),
+      );
+      game.advance(
+        const Duration(milliseconds: 40),
+        const NeonAsteroidsInput(),
+      );
+      expect(game.impactEvent, 1, reason: 'the scenario must hit the ship');
+      expect(game.shakeTicks, greaterThan(killShake));
+    });
+
+    test('restart clears every visual-feedback remnant', () {
+      final game = killOneAsteroid();
+      expect(game.shockwaves.isNotEmpty || game.shakeTicks > 0, isTrue);
+      game.restart();
+      expect(game.shockwaves, isEmpty);
+      expect(game.shakeTicks, 0);
+    });
+
+    test('feedback state is deterministic across identical runs', () {
+      // The model rule shockwaves inherit from particles: visual state may
+      // never consume randomness, so two identical runs agree exactly.
+      final a = killOneAsteroid();
+      final b = killOneAsteroid();
+      expect(a.shockwaves.length, b.shockwaves.length);
+      for (var i = 0; i < a.shockwaves.length; i++) {
+        expect(a.shockwaves[i].ageTicks, b.shockwaves[i].ageTicks);
+        expect(a.shockwaves[i].maxRadius, b.shockwaves[i].maxRadius);
+        expect(a.shockwaves[i].position.x, b.shockwaves[i].position.x);
+      }
+      expect(a.shakeTicks, b.shakeTicks);
+      expect(a.tickCount, b.tickCount);
+      expect(a.score, b.score);
+    });
+  });
+
   group('NeonAsteroidsApp', () {
     const viewport = CellSize(100, 30);
 
