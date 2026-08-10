@@ -35,7 +35,23 @@ abstract class CanvasContext {
   void drawDot(double x, double y, {Color? color});
 
   /// Draws a line segment in logical space (Bresenham at pixel resolution).
-  void drawLine(double x1, double y1, double x2, double y2, {Color? color});
+  ///
+  /// [width] is a stroke thickness in SUB-CELL PIXELS (braille dots / block
+  /// sub-pixels), not logical units, so a stroke keeps its visual weight
+  /// when the canvas bounds change. `1` is the hairline default — exactly
+  /// the pre-width rasterization; larger values stamp a round brush along
+  /// the line, so caps and polygon joints come out rounded. A cell still
+  /// holds one color: overlapping strokes resolve last-drawn-wins per cell,
+  /// which is what makes a two-pass glow work — draw the wide dim halo
+  /// first, the narrow bright core second.
+  void drawLine(
+    double x1,
+    double y1,
+    double x2,
+    double y2, {
+    Color? color,
+    double width = 1,
+  });
 }
 
 /// A [Canvas]'s drawing routine.
@@ -313,7 +329,14 @@ class _SubCellCtx implements CanvasContext {
   }
 
   @override
-  void drawLine(double x1, double y1, double x2, double y2, {Color? color}) {
+  void drawLine(
+    double x1,
+    double y1,
+    double x2,
+    double y2, {
+    Color? color,
+    double width = 1,
+  }) {
     final (px1, py1) = _toPixel(
       _bounds,
       x1,
@@ -328,6 +351,71 @@ class _SubCellCtx implements CanvasContext {
       _buf.pixelWidth,
       _buf.pixelHeight,
     );
-    _buf.drawLine(px1, py1, px2, py2, color);
+    if (width <= 1) {
+      _buf.drawLine(px1, py1, px2, py2, color);
+      return;
+    }
+    // Thick stroke: walk the same Bresenham the buffers use, stamping a
+    // round brush at every step instead of one pixel. Stamping (vs N offset
+    // parallel lines) keeps diagonals gap-free and rounds caps and joints,
+    // which is what vector outlines want. Over-stamping neighbouring steps
+    // is harmless — setPixel ORs dots — and the brush is cached per width.
+    final brush = _brushFor(width);
+    var x = px1;
+    var y = py1;
+    final dx = (px2 - px1).abs();
+    final dy = (py2 - py1).abs();
+    final sx = px1 < px2 ? 1 : -1;
+    final sy = py1 < py2 ? 1 : -1;
+    var err = dx - dy;
+    while (true) {
+      for (var i = 0; i < brush.length; i += 2) {
+        _buf.setPixel(x + brush[i], y + brush[i + 1], color);
+      }
+      if (x == px2 && y == py2) break;
+      final e2 = err * 2;
+      if (e2 > -dy) {
+        err -= dy;
+        x += sx;
+      }
+      if (e2 < dx) {
+        err += dx;
+        y += sy;
+      }
+    }
+  }
+
+  /// Brush offsets for a rounded stamp of [width] pixels, packed as
+  /// `[dx0, dy0, dx1, dy1, ...]` and cached — painters redraw every frame,
+  /// and the brush for a given width never changes.
+  static final Map<int, List<int>> _brushes = {};
+
+  static List<int> _brushFor(double width) {
+    final w = width.round().clamp(2, 64);
+    return _brushes[w] ??= _buildBrush(w);
+  }
+
+  static List<int> _buildBrush(int w) {
+    // Offsets span the w-pixel box centred as symmetrically as an integer
+    // grid allows (even widths bias half a pixel down-right). Corners are
+    // trimmed to a disc for w >= 4; at 2-3 pixels a full square IS the
+    // roundest shape the grid can express.
+    final lo = -((w - 1) >> 1);
+    final hi = w >> 1;
+    final centre = (lo + hi) / 2;
+    final r2 = (w * w) / 4 + 0.6;
+    final out = <int>[];
+    for (var dy = lo; dy <= hi; dy++) {
+      for (var dx = lo; dx <= hi; dx++) {
+        if (w <= 3 ||
+            (dx - centre) * (dx - centre) + (dy - centre) * (dy - centre) <=
+                r2) {
+          out
+            ..add(dx)
+            ..add(dy);
+        }
+      }
+    }
+    return out;
   }
 }

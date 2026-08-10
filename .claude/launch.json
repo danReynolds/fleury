@@ -9,6 +9,22 @@
         "cd /Users/dan/Coding/fleury-mcp/website && exec npm run dev"
       ],
       "port": 4321
+    },
+    {
+      "name": "asteroids-serve",
+      "runtimeExecutable": "dart",
+      "runtimeArgs": [
+        "run",
+        "packages/fleury/bin/fleury.dart",
+        "serve",
+        "--port=8474",
+        "--spawn",
+        "dart",
+        "run",
+        "packages/samples/bin/samples.dart",
+        "asteroids"
+      ],
+      "port": 8474
     }
   ]
 }
