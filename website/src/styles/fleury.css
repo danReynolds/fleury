@@ -1051,191 +1051,350 @@ th:nth-last-child(-n + 2) .ct::after {
   font-size: var(--sl-text-lg);
 }
 
-/* ── CodeDemoSplit: one source file beside what it renders ──────────────────*/
-/* Shares the landing window's look, but sized for a guide: the code column
-   takes the width the snippet actually needs so nothing clips, the demo pins
-   to the top instead of floating in the middle of a tall pane, and the pair
-   stacks when the column gets narrow. */
-.code-demo {
-  /* Break out of the prose column: a snippet plus a terminal needs more
-     than a measure-width text column. Bounded so it never reaches the
-     sidebar or the TOC rail. */
+/* ── CodeDemoSplit (.cds): one source file beside what it renders ───────────*/
+/* A terminal-window card. Honours the site's panel look (dark gradient,
+   fleury-green live cue, mono chrome) and adds two refinements: a labelled
+   "renders" seam that names the source→output relationship, and a real
+   full-screen focus mode that promotes a pane in place. Neutrals carry a
+   faint green bias so they read as chosen, not defaulted. */
+.cds {
+  /* Break out wider than the prose column; bounded off the sidebar/TOC. */
+  --cds-radius: 0.9rem;
+  --cds-line: color-mix(in srgb, var(--sl-color-gray-4) 55%, transparent);
+  --cds-accent: #3ddc97;
   width: min(78rem, calc(100% + 14rem));
-  margin: 1.25rem calc((100% - min(78rem, calc(100% + 14rem))) / 2) 2rem;
-  border: 1px solid color-mix(in srgb, var(--sl-color-gray-4) 60%, transparent);
-  border-radius: 0.9rem;
+  margin: 1.5rem calc((100% - min(78rem, calc(100% + 14rem))) / 2) 2.25rem;
+  border: 1px solid var(--cds-line);
+  border-radius: var(--cds-radius);
   overflow: hidden;
   background:
-    radial-gradient(130% 90% at 0% 0%, rgba(61, 220, 151, 0.07), transparent 42%),
+    radial-gradient(130% 90% at 0% 0%, rgba(61, 220, 151, 0.06), transparent 44%),
     linear-gradient(180deg, #0d1219, #0a0e13);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 28px 70px -30px rgba(0, 0, 0, 0.85);
+    0 30px 72px -34px rgba(0, 0, 0, 0.85);
 }
-:root[data-theme='light'] .code-demo {
-  border-color: color-mix(in srgb, #bcd5ca 72%, transparent);
+:root[data-theme='light'] .cds {
+  --cds-line: color-mix(in srgb, #bcd5ca 70%, transparent);
   background:
-    radial-gradient(110% 85% at 0% 0%, rgba(19, 138, 92, 0.08), transparent 46%),
+    radial-gradient(110% 85% at 0% 0%, rgba(19, 138, 92, 0.07), transparent 48%),
     linear-gradient(180deg, #ffffff, #f3faf6);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.92),
-    0 28px 70px -34px rgba(15, 58, 41, 0.35);
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 30px 72px -38px rgba(15, 58, 41, 0.32);
 }
-.code-demo-bar {
+
+/* Title bar ──────────────────────────────────────────────────────────────*/
+.cds-bar {
   display: flex;
   align-items: center;
   gap: 0.7rem;
-  padding: 0.5rem 0.85rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--sl-color-gray-5) 70%, transparent);
+  padding: 0.55rem 0.9rem;
+  border-bottom: 1px solid var(--cds-line);
 }
-.code-demo-file {
+.cds-file {
   font-family: var(--sl-font-mono, ui-monospace, monospace);
   font-size: 0.85rem;
   color: var(--sl-color-gray-2);
 }
-.code-demo-live {
+.cds-live {
   margin-left: auto;
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
+  gap: 0.4rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.11em;
   text-transform: uppercase;
   color: var(--sl-color-gray-3);
 }
-.code-demo-pulse {
-  width: 0.5rem;
-  height: 0.5rem;
+.cds-pulse {
+  width: 0.48rem;
+  height: 0.48rem;
   border-radius: 50%;
-  background: #3ddc97;
-  box-shadow: 0 0 0 0 rgba(61, 220, 151, 0.6);
+  background: var(--cds-accent);
+  box-shadow: 0 0 0 0 rgba(61, 220, 151, 0.55);
+  animation: cds-pulse 2.4s ease-out infinite;
 }
-.code-demo-body {
+@keyframes cds-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(61, 220, 151, 0.5); }
+  70% { box-shadow: 0 0 0 0.5rem rgba(61, 220, 151, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(61, 220, 151, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cds-pulse { animation: none; }
+}
+
+/* Body: stacked by default; two-column only when there's real room ────────*/
+.cds-body {
   display: grid;
-  /* Stacked by default: code above, demo below, EACH getting the figure's
-     full breakout width. Side-by-side (below) only switches on when the
-     viewport is wide enough that both panes are actually roomy — a
-     laptop-width two-column split just cramps the live demo. Either pane
-     SCROLLS past its width; content is never silently clipped. */
   grid-template-columns: minmax(0, 1fr);
-  gap: 1.1rem;
-  padding: 0.9rem 1rem 1.1rem;
+  gap: 0;
+  padding: 0.5rem 0.9rem 0.9rem;
 }
-.code-demo-pane {
+.cds-pane {
+  position: relative;
   min-width: 0;
+  padding-top: 0.7rem;
 }
-.code-demo-tag-row {
+.cds-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  margin-bottom: 0.4rem;
+  margin-bottom: 0.5rem;
 }
-.code-demo-tag {
-  display: block;
-  font-size: 0.68rem;
-  letter-spacing: 0.09em;
+.cds-cap {
+  font-size: 0.66rem;
+  letter-spacing: 0.13em;
   text-transform: uppercase;
   color: var(--sl-color-gray-3);
 }
-.code-demo-expand {
-  border: 1px solid color-mix(in srgb, var(--sl-color-gray-4) 55%, transparent);
-  border-radius: 0.35rem;
+/* The demo caption gets the accent — it names the payoff. */
+.cds-pane[data-pane='demo'] .cds-cap {
+  color: color-mix(in srgb, var(--cds-accent) 78%, var(--sl-color-gray-2));
+}
+.cds-expand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  border: none;
+  border-radius: 0.4rem;
   background: transparent;
   color: var(--sl-color-gray-3);
-  font-size: 0.8rem;
-  line-height: 1;
-  padding: 0.15rem 0.35rem;
   cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.14s ease, background 0.14s ease, color 0.14s ease;
 }
-.code-demo-expand:hover {
+.cds-pane:hover .cds-expand,
+.cds-expand:focus-visible {
+  opacity: 1;
+}
+.cds-expand:hover {
+  background: color-mix(in srgb, var(--cds-accent) 16%, transparent);
   color: var(--sl-color-white);
-  border-color: var(--sl-color-gray-3);
 }
-/* The no-clip rule: each pane scrolls its own overflow, both axes. */
-.code-demo-scroll {
+.cds-expand:focus-visible {
+  outline: 2px solid var(--cds-accent);
+  outline-offset: 2px;
+}
+/* Each pane scrolls its own overflow — nothing is ever clipped. */
+.cds-scroll {
   overflow: auto;
   max-width: 100%;
 }
-/* The snippet owns its own scrolling only as a last resort; normally the
-   max-content column means there is nothing to scroll. */
-.code-demo-code :is(pre, .expressive-code) {
+.cds-scroll :is(pre, .expressive-code) {
   margin: 0 !important;
 }
-.code-demo-code pre {
+.cds-scroll pre {
   background: transparent !important;
 }
-/* Top-aligned: a short demo should sit under its label, not drift to the
-   middle of whatever height the code pane happens to be. */
-.code-demo-demo-inner {
+.cds-demo {
   display: flex;
   justify-content: flex-start;
   align-items: flex-start;
 }
-.code-demo-demo-inner .fleury-frame {
+.cds-demo .fleury-frame {
   margin: 0;
 }
-/* Two columns only when the breakout is genuinely wide enough for both —
-   code sized to its content, the live demo taking the rest. */
+
+/* The seam: names the code→demo relationship. Horizontal when stacked. ────*/
+.cds-seam {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0.9rem 0 0.2rem;
+  color: color-mix(in srgb, var(--cds-accent) 62%, var(--sl-color-gray-3));
+  font-size: 0.64rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.cds-seam::before,
+.cds-seam::after {
+  content: '';
+  height: 1px;
+  flex: 1;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--cds-line),
+    transparent
+  );
+}
+.cds-seam-arrow {
+  transform: rotate(90deg);
+  font-size: 0.8rem;
+  letter-spacing: 0;
+}
+
+/* Two columns when the breakout is genuinely wide enough for both. ────────*/
 @media (min-width: 88rem) {
-  .code-demo-body {
-    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
-    gap: 0 1rem;
+  .cds-body {
+    grid-template-columns: minmax(0, max-content) auto minmax(0, 1fr);
+    align-items: stretch;
+    gap: 0 1.25rem;
+  }
+  .cds-seam {
+    flex-direction: column;
+    margin: 0;
+    padding-top: 2rem;
+  }
+  .cds-seam::before,
+  .cds-seam::after {
+    width: 1px;
+    height: auto;
+    background: linear-gradient(
+      180deg,
+      transparent,
+      var(--cds-line),
+      transparent
+    );
+  }
+  .cds-seam-word {
+    writing-mode: vertical-rl;
+  }
+  .cds-seam-arrow {
+    transform: rotate(0deg);
   }
 }
-/* Below the breakout threshold, sit inside the prose column like any figure. */
+/* Below the breakout threshold, sit inside the prose column like any figure.*/
 @media (max-width: 72rem) {
-  .code-demo {
+  .cds {
     width: 100%;
     margin-inline: 0;
   }
 }
 
-/* Expand: promote one pane to a fixed near-fullscreen overlay IN PLACE.
-   The live demo node never moves, so the app keeps running with its state. */
-.code-demo-backdrop {
+/* Full-screen focus mode: promote one pane in place. ─────────────────────*/
+.cds-backdrop {
   display: none;
   position: fixed;
   inset: 0;
-  z-index: 90;
-  background: rgba(4, 8, 12, 0.72);
-  backdrop-filter: blur(2px);
+  z-index: 60;
+  background: rgba(4, 8, 12, 0.82);
+  backdrop-filter: blur(3px);
+  animation: cds-fade 0.16s ease-out;
 }
-.code-demo.is-expanded-code .code-demo-backdrop,
-.code-demo.is-expanded-demo .code-demo-backdrop {
+.cds.is-fs-code .cds-backdrop,
+.cds.is-fs-demo .cds-backdrop {
   display: block;
 }
-.code-demo.is-expanded-code .code-demo-code,
-.code-demo.is-expanded-demo .code-demo-demo {
+@keyframes cds-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cds-backdrop { animation: none; }
+}
+
+/* The promoted pane becomes a centred, framed stage. */
+.cds.is-fs-code .cds-pane[data-pane='code'],
+.cds.is-fs-demo .cds-pane[data-pane='demo'] {
   position: fixed;
-  z-index: 91;
-  inset: max(2vh, 1rem) max(2vw, 1rem);
+  z-index: 61;
+  inset: max(3vh, 1.5rem) max(3vw, 1.5rem)
+    calc(max(3vh, 1.5rem) + 2.75rem);
   margin: 0;
-  padding: 0.75rem 1rem 1rem;
-  border: 1px solid color-mix(in srgb, var(--sl-color-gray-4) 60%, transparent);
-  border-radius: 0.9rem;
-  background: linear-gradient(180deg, #0d1219, #0a0e13);
-  box-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.85);
+  padding: 1.25rem 1.5rem 1.5rem;
+  border: 1px solid var(--cds-line);
+  border-radius: var(--cds-radius);
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgba(61, 220, 151, 0.05), transparent 55%),
+    linear-gradient(180deg, #0e141c, #0a0e13);
+  box-shadow: 0 40px 120px -40px rgba(0, 0, 0, 0.9);
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
-:root[data-theme='light'] .code-demo.is-expanded-code .code-demo-code,
-:root[data-theme='light'] .code-demo.is-expanded-demo .code-demo-demo {
-  background: linear-gradient(180deg, #ffffff, #f3faf6);
+:root[data-theme='light'] .cds.is-fs-code .cds-pane[data-pane='code'],
+:root[data-theme='light'] .cds.is-fs-demo .cds-pane[data-pane='demo'] {
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgba(19, 138, 92, 0.06), transparent 55%),
+    linear-gradient(180deg, #ffffff, #f3faf6);
 }
-/* The promoted pane's scroll area fills the overlay; its demo centres. */
-.code-demo.is-expanded-code .code-demo-code .code-demo-scroll,
-.code-demo.is-expanded-demo .code-demo-demo .code-demo-scroll {
+/* Its head becomes the stage caption; the corner control is hidden — the
+   toolbar below owns closing. */
+.cds.is-fs-code .cds-pane[data-pane='code'] .cds-head,
+.cds.is-fs-demo .cds-pane[data-pane='demo'] .cds-head {
+  margin-bottom: 0.9rem;
+}
+.cds.is-fs-code .cds-pane[data-pane='code'] .cds-expand,
+.cds.is-fs-demo .cds-pane[data-pane='demo'] .cds-expand {
+  display: none;
+}
+/* The stage's scroll area fills the panel; the demo centres on it. */
+.cds.is-fs-code .cds-scroll,
+.cds.is-fs-demo .cds-scroll {
   flex: 1;
-  min-height: 0;
 }
-.code-demo.is-expanded-demo .code-demo-demo .code-demo-demo-inner {
+.cds.is-fs-demo .cds-demo {
   justify-content: center;
   align-items: center;
+  min-height: 100%;
 }
-/* The expand button becomes the collapse control while a pane is open. */
-.code-demo.is-expanded-code .code-demo-code .code-demo-expand,
-.code-demo.is-expanded-demo .code-demo-demo .code-demo-expand {
+
+/* Full-screen toolbar: label · Esc · close. Shown only in focus mode. */
+.cds-fsbar {
+  display: none;
+  position: fixed;
+  z-index: 62;
+  left: 50%;
+  bottom: max(3vh, 1.5rem);
+  transform: translateX(-50%);
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.4rem 0.5rem 0.4rem 0.95rem;
+  border: 1px solid var(--cds-line);
+  border-radius: 999px;
+  background: linear-gradient(180deg, #121a22, #0c1117);
+  box-shadow: 0 18px 44px -18px rgba(0, 0, 0, 0.8);
+}
+:root[data-theme='light'] .cds-fsbar {
+  background: linear-gradient(180deg, #ffffff, #eef7f2);
+}
+.cds.is-fs-code .cds-fsbar,
+.cds.is-fs-demo .cds-fsbar {
+  display: inline-flex;
+}
+.cds-fsbar-file {
+  font-family: var(--sl-font-mono, ui-monospace, monospace);
+  font-size: 0.78rem;
+  color: var(--sl-color-gray-2);
+}
+.cds-fsbar-label {
+  font-size: 0.64rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--cds-accent) 72%, var(--sl-color-gray-2));
+}
+.cds-fsbar-esc {
+  font-family: var(--sl-font-mono, ui-monospace, monospace);
+  font-size: 0.66rem;
+  color: var(--sl-color-gray-3);
+  border: 1px solid var(--cds-line);
+  border-radius: 0.35rem;
+  padding: 0.05rem 0.35rem;
+}
+.cds-fsbar-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sl-color-gray-5) 55%, transparent);
+  color: var(--sl-color-gray-2);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.cds-fsbar-close:hover {
+  background: color-mix(in srgb, var(--cds-accent) 22%, transparent);
   color: var(--sl-color-white);
-  border-color: var(--sl-color-gray-3);
+}
+.cds-fsbar-close:focus-visible {
+  outline: 2px solid var(--cds-accent);
+  outline-offset: 2px;
 }
