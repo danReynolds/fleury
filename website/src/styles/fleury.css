@@ -1124,6 +1124,7 @@ th:nth-last-child(-n + 2) .ct::after {
 .cds-toggle {
   display: inline-flex;
   align-items: center;
+  gap: 0.35rem;
   border: 1px solid var(--cds-line);
   border-radius: 0.45rem;
   background: color-mix(in srgb, var(--sl-color-gray-6) 40%, transparent);
@@ -1143,26 +1144,9 @@ th:nth-last-child(-n + 2) .ct::after {
   outline: 2px solid var(--cds-accent);
   outline-offset: 2px;
 }
-.cds-toggle-open {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
+.cds-toggle span {
+  display: inline;
 }
-.cds-toggle-close {
-  display: none;
-  align-items: center;
-  gap: 0.4rem;
-}
-.cds-toggle-close kbd {
-  font-family: var(--sl-font-mono, ui-monospace, monospace);
-  font-size: 0.62rem;
-  color: var(--sl-color-gray-3);
-  border: 1px solid var(--cds-line);
-  border-radius: 0.3rem;
-  padding: 0 0.28rem;
-}
-.cds.is-fs .cds-toggle-open { display: none; }
-.cds.is-fs .cds-toggle-close { display: inline-flex; }
 
 /* Body: stacked by default; two-column only when there's real room. ───────*/
 .cds-body {
@@ -1258,29 +1242,34 @@ th:nth-last-child(-n + 2) .ct::after {
   }
 }
 
-/* ── Full playground modal ────────────────────────────────────────────────*/
-.cds-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  background: rgba(4, 8, 12, 0.82);
-  backdrop-filter: blur(3px);
-  animation: cds-fade 0.16s ease-out;
-}
-@keyframes cds-fade {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-body.cds-modal-open {
+/* ── Full playground modal (native <dialog>, browser top layer) ────────────*/
+/* Built at <body> level and shown with showModal(), so no page stacking
+   context can trap it behind the backdrop. Code left, a freshly-mounted demo
+   right — the inline demo keeps running untouched. */
+.cds-modal {
+  width: min(96vw, 88rem);
+  max-width: 88rem;
+  height: min(90vh, 58rem);
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--sl-color-gray-4) 55%, transparent);
+  border-radius: 0.9rem;
+  background:
+    radial-gradient(120% 70% at 50% 0%, rgba(61, 220, 151, 0.05), transparent 55%),
+    linear-gradient(180deg, #0e141c, #0a0e13);
+  color: var(--sl-color-gray-2);
   overflow: hidden;
 }
-.cds.is-fs {
-  position: fixed;
-  inset: max(3.5vh, 1rem) max(3.5vw, 1rem);
-  z-index: 201;
-  width: auto;
-  max-width: none;
-  margin: 0;
+:root[data-theme='light'] .cds-modal {
+  border-color: color-mix(in srgb, #bcd5ca 70%, transparent);
+  background:
+    radial-gradient(120% 70% at 50% 0%, rgba(19, 138, 92, 0.06), transparent 55%),
+    linear-gradient(180deg, #ffffff, #f3faf6);
+}
+.cds-modal::backdrop {
+  background: rgba(4, 8, 12, 0.82);
+  backdrop-filter: blur(3px);
+}
+.cds-modal[open] {
   display: flex;
   flex-direction: column;
   animation: cds-rise 0.18s cubic-bezier(0.2, 0.7, 0.3, 1);
@@ -1290,61 +1279,91 @@ body.cds-modal-open {
   to { opacity: 1; transform: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .cds-backdrop, .cds.is-fs { animation: none; }
+  .cds-modal[open] { animation: none; }
 }
-/* Playground body: code | seam | demo, filling the panel height. */
-.cds.is-fs .cds-body {
+.cds-modal-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem 0.6rem 0.55rem 0.95rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--sl-color-gray-4) 55%, transparent);
+}
+.cds-modal-close {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid color-mix(in srgb, var(--sl-color-gray-4) 55%, transparent);
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--sl-color-gray-6) 40%, transparent);
+  color: var(--sl-color-gray-2);
+  font-size: 0.72rem;
+  padding: 0.28rem 0.55rem;
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+.cds-modal-close:hover {
+  color: var(--sl-color-white);
+  border-color: color-mix(in srgb, #3ddc97 55%, transparent);
+  background: color-mix(in srgb, #3ddc97 12%, transparent);
+}
+.cds-modal-close:focus-visible {
+  outline: 2px solid #3ddc97;
+  outline-offset: 2px;
+}
+.cds-modal-close kbd {
+  font-family: var(--sl-font-mono, ui-monospace, monospace);
+  font-size: 0.62rem;
+  color: var(--sl-color-gray-3);
+  border: 1px solid color-mix(in srgb, var(--sl-color-gray-4) 55%, transparent);
+  border-radius: 0.3rem;
+  padding: 0 0.28rem;
+}
+/* code | seam | demo, filling the dialog height. */
+.cds-modal-body {
   flex: 1;
   min-height: 0;
+  display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   gap: 0 1.5rem;
   padding: 1rem 1.5rem 1.5rem;
-  overflow: hidden;
 }
-.cds.is-fs .cds-pane {
+.cds-modal-pane {
   min-height: 0;
-  padding-top: 0.9rem;
+  display: flex;
+  flex-direction: column;
 }
-/* Each side scrolls independently; the code left-aligned, the demo centred. */
-.cds.is-fs .cds-scroll {
+.cds-modal-pane .cds-scroll {
   flex: 1;
   min-height: 0;
 }
-.cds.is-fs .cds-demo {
-  justify-content: center;
+.cds-modal-demo {
   align-items: center;
 }
-/* The seam runs vertically between the two columns in the playground. */
-.cds.is-fs .cds-seam {
+.cds-modal-demo .fleury-host {
+  margin: auto;
+}
+/* Stack under a narrow screen; the whole body scrolls as one column. */
+@media (max-width: 60rem) {
+  .cds-modal-body {
+    grid-template-columns: minmax(0, 1fr);
+    overflow: auto;
+  }
+  .cds-modal .cds-seam { flex-direction: row; }
+  .cds-modal .cds-seam-word { writing-mode: horizontal-tb; }
+  .cds-modal .cds-seam-arrow { transform: rotate(90deg); }
+}
+/* The playground seam runs vertically between the two columns. */
+.cds-modal .cds-seam {
   flex-direction: column;
   margin: 0;
   padding-top: 2.5rem;
 }
-.cds.is-fs .cds-seam::before,
-.cds.is-fs .cds-seam::after {
+.cds-modal .cds-seam::before,
+.cds-modal .cds-seam::after {
   width: 1px;
   height: auto;
-  background: linear-gradient(180deg, transparent, var(--cds-line), transparent);
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--sl-color-gray-4) 55%, transparent), transparent);
 }
-.cds.is-fs .cds-seam-word { writing-mode: vertical-rl; }
-.cds.is-fs .cds-seam-arrow { transform: rotate(0deg); }
-/* On a narrow screen the playground stacks and scrolls as one column. */
-@media (max-width: 60rem) {
-  .cds.is-fs .cds-body {
-    grid-template-columns: minmax(0, 1fr);
-    overflow: auto;
-  }
-  .cds.is-fs .cds-seam {
-    flex-direction: row;
-    padding-top: 0;
-    margin: 0.9rem 0 0.2rem;
-  }
-  .cds.is-fs .cds-seam::before,
-  .cds.is-fs .cds-seam::after {
-    width: auto;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--cds-line), transparent);
-  }
-  .cds.is-fs .cds-seam-word { writing-mode: horizontal-tb; }
-  .cds.is-fs .cds-seam-arrow { transform: rotate(90deg); }
-}
+.cds-modal .cds-seam-word { writing-mode: vertical-rl; }
+.cds-modal .cds-seam-arrow { transform: rotate(0deg); }

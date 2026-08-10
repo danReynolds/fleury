@@ -8,15 +8,16 @@
 //   </CodeDemoSplit>
 //
 // A terminal-window card. Inline it stacks (or goes two-column when roomy);
-// one "Expand" in the title bar opens a full playground modal — code left,
-// running demo right — over a dimmed backdrop.
+// "Expand" opens a full playground — code left, running demo right — in a
+// native <dialog> (browser top layer, so no page stacking context can trap
+// it behind the backdrop, which is what broke the in-place approach).
 //
-// Modal mechanics: the figure is promoted to a fixed overlay IN PLACE by a
-// class; NOTHING is moved. Moving the demo node (or portaling the figure)
-// disconnects it, and FleuryExample re-hydrates a second instance on
-// reconnect — so the live app stays exactly where it mounted and simply
-// gets a bigger frame. A backdrop is added to <body>; Esc, the backdrop,
-// and the toolbar button all close. Styling lives in src/styles/fleury.css.
+// The demo in the modal is a FRESH mount, not a moved node: the slotted
+// FleuryExample exposes id/cols/rows via its own `.fleury-expand` button, so
+// the dialog mounts a new instance with `window.fleuryMountInto(host, id)`
+// (the same API FleuryExample's own fullscreen uses) and disposes it on
+// close. The inline demo keeps running, untouched. Styling lives in
+// src/styles/fleury.css.
 interface Props {
   /** Filename shown in the title bar, e.g. "amber_theme.dart". */
   file: string;
@@ -35,15 +36,17 @@ const expandIcon =
   '<path d="M12 4h4v4M8 16H4v-4M16 4l-5 5M4 16l5-5"/></svg>';
 ---
 
-<figure class="cds">
+<figure class="cds" data-file={file}>
   <header class="cds-bar">
     <span class="cds-file">{file}</span>
     <span class="cds-live"><span class="cds-pulse"></span>live</span>
-    <button class="cds-toggle" type="button" aria-label="Expand to full screen">
-      <span class="cds-toggle-open" set:html={expandIcon + '<span>Expand</span>'}
-      ></span>
-      <span class="cds-toggle-close">Close <kbd>Esc</kbd></span>
-    </button>
+    <button
+      class="cds-toggle"
+      type="button"
+      aria-haspopup="dialog"
+      aria-label="Open the full playground"
+      set:html={expandIcon + '<span>Expand</span>'}
+    />
   </header>
 
   <div class="cds-body">
@@ -67,32 +70,115 @@ const expandIcon =
 <script>
   for (const root of document.querySelectorAll<HTMLElement>('.cds')) {
     const toggle = root.querySelector<HTMLButtonElement>('.cds-toggle')!;
-    let backdrop: HTMLElement | null = null;
+    const file = root.dataset.file ?? '';
+    const codeLabel =
+      root.querySelector('.cds-pane[data-pane="code"] .cds-cap')?.textContent ??
+      'You write';
+    const demoLabel =
+      root.querySelector('.cds-pane[data-pane="demo"] .cds-cap')?.textContent ??
+      'Fleury renders';
 
-    const close = () => {
-      if (!root.classList.contains('is-fs')) return;
-      root.classList.remove('is-fs');
-      document.body.classList.remove('cds-modal-open');
-      backdrop?.remove();
-      backdrop = null;
-      toggle.setAttribute('aria-label', 'Expand to full screen');
-    };
-    const open = () => {
-      if (root.classList.contains('is-fs')) return;
-      backdrop = document.createElement('div');
-      backdrop.className = 'cds-backdrop';
-      backdrop.addEventListener('click', close);
-      document.body.appendChild(backdrop);
-      document.body.classList.add('cds-modal-open');
-      root.classList.add('is-fs');
-      toggle.setAttribute('aria-label', 'Exit full screen');
-    };
+    toggle.addEventListener('click', () => {
+      // The slotted FleuryExample carries the example's identity + size on
+      // its own expand button; reuse it to mount a fresh instance.
+      const fx = root.querySelector<HTMLElement>('.fleury-expand');
+      const id = fx?.dataset.id;
+      const cols = Math.min(Math.round((+(fx?.dataset.cols ?? 60)) * 1.5), 160);
+      const rows = Math.min(Math.round((+(fx?.dataset.rows ?? 12)) * 1.4), 46);
+      const theme = fx?.dataset.theme ?? 'dark';
 
-    toggle.addEventListener('click', () =>
-      root.classList.contains('is-fs') ? close() : open(),
-    );
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') close();
+      const dlg = document.createElement('dialog');
+      dlg.className = 'cds-modal';
+
+      const bar = document.createElement('div');
+      bar.className = 'cds-modal-bar';
+      const fileEl = document.createElement('span');
+      fileEl.className = 'cds-file';
+      fileEl.textContent = file;
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.className = 'cds-modal-close';
+      close.innerHTML = 'Close <kbd>Esc</kbd>';
+      bar.append(fileEl, close);
+
+      const body = document.createElement('div');
+      body.className = 'cds-modal-body';
+
+      const codeCol = document.createElement('section');
+      codeCol.className = 'cds-modal-pane';
+      const codeCap = document.createElement('span');
+      codeCap.className = 'cds-cap';
+      codeCap.textContent = codeLabel;
+      const codeScroll = document.createElement('div');
+      codeScroll.className = 'cds-scroll';
+      const codeSrc = root.querySelector(
+        '.cds-pane[data-pane="code"] .cds-scroll',
+      );
+      if (codeSrc) codeScroll.append(codeSrc.cloneNode(true));
+      codeCol.append(codeCap, codeScroll);
+
+      const seam = document.createElement('div');
+      seam.className = 'cds-seam';
+      seam.setAttribute('aria-hidden', 'true');
+      seam.innerHTML =
+        '<span class="cds-seam-word">renders</span>' +
+        '<span class="cds-seam-arrow">→</span>';
+
+      const demoCol = document.createElement('section');
+      demoCol.className = 'cds-modal-pane cds-modal-demo';
+      const demoCap = document.createElement('span');
+      demoCap.className = 'cds-cap';
+      demoCap.textContent = demoLabel;
+      const host = document.createElement('div');
+      host.className = 'fleury-host';
+      host.dataset.fleuryTheme = theme;
+      host.style.cssText =
+        `width:${cols}ch;height:${(rows * 1.25).toFixed(1)}em;` +
+        'max-width:100%;max-height:100%';
+      demoCol.append(demoCap, host);
+
+      body.append(codeCol, seam, demoCol);
+      dlg.append(bar, body);
+      document.body.appendChild(dlg);
+      dlg.showModal();
+
+      const handle =
+        id && (window as any).fleuryMountInto
+          ? (window as any).fleuryMountInto(host, id)
+          : null;
+
+      // Explicit, idempotent teardown wired to every close path. We do NOT
+      // rely on the dialog's 'close' event — it does not fire in every engine
+      // (observed here), which would strand the dialog and leak the mount.
+      let dismissed = false;
+      const dismiss = () => {
+        if (dismissed) return;
+        dismissed = true;
+        try {
+          handle?.dispose?.();
+        } catch {
+          /* a broken example must not block teardown */
+        }
+        document.removeEventListener('keydown', onKey);
+        if (dlg.open) dlg.close();
+        dlg.remove();
+      };
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') dismiss();
+      };
+      close.addEventListener('click', dismiss);
+      // Backdrop click: the dialog element itself receives clicks that land
+      // outside its content box.
+      dlg.addEventListener('click', (e) => {
+        if (e.target === dlg) dismiss();
+      });
+      // Esc: native dialogs fire 'cancel' before closing; preventDefault so
+      // our teardown owns the close. The document listener is the backstop.
+      dlg.addEventListener('cancel', (e) => {
+        e.preventDefault();
+        dismiss();
+      });
+      document.addEventListener('keydown', onKey);
     });
   }
 </script>
