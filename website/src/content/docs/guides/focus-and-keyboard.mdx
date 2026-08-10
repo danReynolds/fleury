@@ -4,6 +4,7 @@ description: Handle key events, manage focus, and register app-wide shortcuts.
 ---
 
 import FleuryExample from '../../../components/FleuryExample.astro';
+import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
 
 Fleury routes every key event to the focused part of the tree. Most widgets —
 inputs, lists, trees, tables — manage their own focus and keys, so much of the
@@ -21,59 +22,68 @@ is a value you pull once a frame and never subscribe to.
 
 | Use | When |
 |---|---|
-| **`KeyBindings`** | Commands: `Ctrl+S`, `q` to quit, `gg`, a Space leader. The default and by far the common case. |
+| **`KeyBindings`** | Shortcuts: `Ctrl+S`, `q` to quit, `gg`, a Space leader. The default and by far the common case. |
 | **`Keyboard.of(context).snapshot`** | Continuous input read from a ticker — movement, thrust, anything where "held" matters. |
 | **`Keyboard.nextKey(context)`** | Await exactly one keypress: a rebind row, vim's `m<letter>`, press-any-key. |
 | **`KeyDetector`** | Conditional handling *inside a reusable widget* — a scroll region, a terminal pane. The floor, not the authoring surface. |
 | **`Focus` / `FocusNode`** | Make something focusable, or drive focus imperatively. |
 
-## Commands
+## Key bindings
 
-Wrap a region in `KeyBindings`. Each `KeyBinding` pairs a key with a handler and
-a label — the label is what discoverability surfaces render, so writing one is
-how your app teaches itself.
+Wrap a region in `KeyBindings`. Each `KeyBinding` pairs a gesture with a
+handler and a label — the label is what discoverability surfaces render, so
+writing one is how your app teaches itself. Gestures are written in dot
+shorthand — `.ctrl.s`, `.g.g`, `.space.f` — and this is the whole authoring
+surface, running live:
 
+<CodeDemoSplit file="key_bindings.dart">
+<Fragment slot="code">
 ```dart
 KeyBindings(
   bindings: [
-    KeyBinding(KeySequence.ctrl.s, label: 'Save', onTrigger: (_) => _save()),
-    KeyBinding(KeyCode.q, label: 'Quit', onTrigger: (_) => _quit()),
-    // Multi-step sequences: vim's `gg`, emacs' `C-x C-s`, a Space leader.
-    KeyBinding(KeySequence.g.g, label: 'Top', onTrigger: (_) => _gotoTop()),
+    KeyBinding(.ctrl.s, label: 'Save', onTrigger: (_) => _save()),
+    // One command, several keys — one row in the hint bar.
     KeyBinding(
-      KeySequence.space.f,
-      label: 'Find file',
-      onTrigger: (_) => _findFile(),
+      .j,
+      aliases: [.down],
+      label: 'Down',
+      // Movement is the repeat-reliant class: holding the key
+      // should keep moving. Everything else fires once per press.
+      includeRepeats: true,
+      onTrigger: (_) => _move(1),
     ),
+    // Multi-step sequences: vim's gg, a Space leader.
+    KeyBinding(.g.g, label: 'Top', onTrigger: (_) => _top()),
+    KeyBinding(.space.f, label: 'Find', onTrigger: (_) => _find()),
   ],
   child: child,
 );
 ```
+</Fragment>
+<Fragment slot="demo">
+<FleuryExample id="keyboard.bindings" cols={64} rows={14} interactive />
+</Fragment>
+</CodeDemoSplit>
 
-Because the leading type is inferred you can drop it and write the dot shorthand
-— `KeyBinding(.ctrl.s, ...)`.
+Click the demo, then try `j`, `↓` (same row in the bar), `gg`, `Space f`,
+`Ctrl+S`. The hint bar at the bottom is `KeyHintBar()` reading the binding
+list — nothing is maintained by hand.
+
+The dot forms are plain `KeySequence` values with the leading type inferred;
+write `KeySequence.ctrl.s` longhand anywhere inference has nothing to infer
+from.
 
 Bindings match **deepest-first**: the innermost scope that declares a key wins,
 so a pane can shadow an app-wide shortcut without either side knowing about the
 other.
 
-### Aliases, repeats, and declining
+### Declining a key
 
 ```dart
-// One command, several keys — one row in the hint bar, not three.
-KeyBinding(
-  KeyCode.j,
-  aliases: [KeyCode.arrowDown],
-  label: 'Down',
-  // Movement is the repeat-reliant class: holding the key should keep
-  // moving. Everything else fires once per physical press.
-  includeRepeats: true,
-  onTrigger: (_) => _moveDown(),
-),
 // A handler always receives the event, so it can decline: bubble() hands
 // the key to an ancestor binding instead of consuming it.
 KeyBinding(
-  KeyCode.escape,
+  .escape,
   label: 'Close',
   onTrigger: (event) {
     if (!_close()) event.bubble(); // not ours after all
@@ -94,9 +104,9 @@ the walk at that scope:
 KeyBindings(
   modal: true,
   bindings: [
-    KeyBinding(KeyCode.y, label: 'Yes', onTrigger: (_) => onAnswer(true)),
-    KeyBinding(KeyCode.n, label: 'No', onTrigger: (_) => onAnswer(false)),
-    KeyBinding(KeyCode.escape, label: 'Cancel', onTrigger: (_) => onAnswer(false)),
+    KeyBinding(.y, label: 'Yes', onTrigger: (_) => onAnswer(true)),
+    KeyBinding(.n, label: 'No', onTrigger: (_) => onAnswer(false)),
+    KeyBinding(.escape, label: 'Cancel', onTrigger: (_) => onAnswer(false)),
   ],
   child: const Focus(autofocus: true, child: Text('Delete this file? y/n')),
 );
@@ -162,7 +172,7 @@ final canHold = Keyboard.of(context).capabilities.supportsHeldState;
 Where `supportsHeldState` is false, every sampled query reads empty — an
 accumulating set with no releases is a lying set. Branch on it and offer a
 *different* control scheme (a tap-toggle instead of hold-to-thrust) rather than
-a broken version of the same one. Commands work everywhere and need no branch.
+a broken version of the same one. Bindings work everywhere and need no branch.
 
 ### One game, two control schemes
 
@@ -180,7 +190,7 @@ Widget build(BuildContext context) {
   return KeyBindings(
     bindings: [
       // Commands need no branch — they work on every tier.
-      KeyBinding(KeyCode.space, label: 'Fire', onTrigger: (_) => fire()),
+      KeyBinding(.space, label: 'Fire', onTrigger: (_) => fire()),
       if (!canHold)
         // The fallback: each press nudges the simulation a fixed step, and
         // includeRepeats keeps it nudging while the key auto-repeats. The
@@ -230,7 +240,7 @@ For a key whose *duration* is the command:
 
 ```dart
 KeyBinding.hold(
-  KeyCode.space,
+  .space,
   label: 'Peek at logs',
   onHoldStart: (_) => onPeek(true),
   onHoldEnd: (_) => onPeek(false),

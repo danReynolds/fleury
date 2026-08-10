@@ -9,6 +9,15 @@
         "cd /Users/dan/Coding/fleury-mcp/website && exec npm run dev"
       ],
       "port": 4321
+    },
+    {
+      "name": "fleury-docs-local",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd website && exec npm run dev"
+      ],
+      "port": 4321
     }
   ]
 }

@@ -1831,6 +1831,19 @@ TextArea(
     builder: () => const NeonAsteroidsApp(),
   ),
   ExampleInfo(
+    id: 'keyboard.bindings',
+    widget: 'KeyBindings',
+    category: 'Inputs & controls',
+    blurb:
+        'The key-binding surface in one screen: dot-shorthand gestures, an '
+        'alias, a repeat-reliant mover, a two-key sequence, a Space leader — '
+        'and the hint bar teaching all of it, for free.',
+    cols: 64,
+    rows: 14,
+    interactive: true,
+    builder: () => const _KeyBindingsTour(),
+  ),
+  ExampleInfo(
     id: 'showcase.sprite',
     widget: 'ANSI Sprite Studio',
     category: 'Showcases',
@@ -3035,6 +3048,88 @@ class _ThemePreview extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The guide's "Key bindings" demo: every authoring feature on one screen,
+/// with the hint bar proving that bindings are data the app can render.
+class _KeyBindingsTour extends StatefulWidget {
+  const _KeyBindingsTour();
+  @override
+  State<_KeyBindingsTour> createState() => _KeyBindingsTourState();
+}
+
+class _KeyBindingsTourState extends State<_KeyBindingsTour> {
+  String _last = 'press a key from the bar below';
+  int _row = 3;
+
+  void _log(String action) => setState(() => _last = action);
+
+  @override
+  Widget build(BuildContext context) {
+    return KeyBindings(
+      bindings: [
+        KeyBinding(.ctrl.s, label: 'Save', onTrigger: (_) => _log('Saved')),
+        KeyBinding(
+          .j,
+          aliases: [.down],
+          label: 'Down',
+          includeRepeats: true,
+          onTrigger: (_) => setState(() => _row = (_row + 1).clamp(0, 6)),
+        ),
+        KeyBinding(
+          .k,
+          aliases: [.up],
+          label: 'Up',
+          includeRepeats: true,
+          onTrigger: (_) => setState(() => _row = (_row - 1).clamp(0, 6)),
+        ),
+        KeyBinding(
+          .g.g,
+          label: 'Top',
+          onTrigger: (_) {
+            _log('Jumped to top');
+            setState(() => _row = 0);
+          },
+        ),
+        KeyBinding(.space.f, label: 'Find', onTrigger: (_) => _log('Find…')),
+      ],
+      child: Focus(
+        autofocus: true,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(1),
+              child: Text(_last, style: const CellStyle(bold: true)),
+            ),
+            Expanded(child: ListViewSelectionDemoRows(row: _row)),
+            const KeyHintBar(),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Seven rows with one highlighted — the j/k target.
+class ListViewSelectionDemoRows extends StatelessWidget {
+  const ListViewSelectionDemoRows({super.key, required this.row});
+  final int row;
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      children: [
+        for (var i = 0; i < 7; i++)
+          Text(
+            '${i == row ? '▸' : ' '} item ${i + 1}',
+            style: i == row
+                ? CellStyle(foreground: theme.colorScheme.primary, bold: true)
+                : const CellStyle(),
+          ),
+      ],
     );
   }
 }
