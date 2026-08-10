@@ -32,8 +32,8 @@ The sections below follow that order.
 ## Key bindings
 
 Wrap a region in `KeyBindings`. Each `KeyBinding` pairs a gesture with a handler
-and a label. The label is what discoverability surfaces render, so writing one
-is how your app documents itself. Gestures use dot shorthand — `.ctrl.s`,
+and a label. The label is what discoverability surfaces render, so it's the only
+documentation the shortcut needs. Gestures use dot shorthand — `.ctrl.s`,
 `.g.g`, `.space.c` — and that is the whole authoring surface:
 
 <CodeDemoSplit file="key_bindings.dart">
@@ -56,7 +56,7 @@ KeyBindings(
     KeyBinding(.g.g, label: 'Top', onTrigger: (_) => _top()),
     KeyBinding(.space.c, label: 'Clear ★', onTrigger: (_) => _clearBookmarks()),
   ],
-  child: child,
+  child: /* your app */,
 );
 ```
 </Fragment>
@@ -76,6 +76,30 @@ The dot forms are `KeySequence` values with the leading type inferred; write
 Bindings match **deepest-first**: the innermost scope that declares a key wins,
 so a pane can shadow an app-wide shortcut without either side knowing about the
 other.
+
+### App-wide shortcuts
+
+Shortcuts that should work anywhere go on `runApp` as `globalBindings`. They're
+consulted after the focus chain, so any pane can still shadow one:
+
+```dart
+runApp(
+  const MyApp(),
+  globalBindings: [
+    KeyBinding(.q, label: 'Quit', onTrigger: (_) => requestExit()),
+    KeyBinding(.ctrl.p, label: 'Commands', onTrigger: (_) => _openPalette()),
+  ],
+);
+```
+
+Quit has to be a binding rather than a check for the character `q`: printable
+input is claimed by a focused text field first (see [Typed text vs key
+events](#typed-text-vs-key-events)), so a binding is what gives you "`q` quits,
+unless the user is typing".
+
+For the `Ctrl+P` half, Fleury ships the palette itself — see
+[`CommandPalette`](/fleury/widgets/commandpalette/) rather than building a
+filtered list by hand.
 
 ### Declining a key
 
@@ -99,7 +123,8 @@ going" — cursor movement, scrolling, a value stepper.
 ### Modal scopes
 
 A dialog should not let the app's shortcuts fire behind it. `modal: true` stops
-the walk at that scope:
+the key walk at that scope — bindings above it and `globalBindings` both stop
+firing:
 
 ```dart
 KeyBindings(
@@ -110,6 +135,19 @@ KeyBindings(
     KeyBinding(.escape, label: 'Cancel', onTrigger: (_) => onAnswer(false)),
   ],
   child: const Focus(autofocus: true, child: Text('Delete this file? y/n')),
+);
+```
+
+**This traps keys, not `Tab`.** Modality here is enforced by the key dispatcher,
+so focus traversal can still walk out of the dialog into the app behind it. If
+the dialog must also trap traversal, wrap it in a modal focus scope as well —
+which is what Fleury's own overlays (`Select`, `Menu`) do:
+
+```dart
+FocusScope(
+  modal: true,
+  suppressGlobals: true,
+  child: KeyBindings(modal: true, bindings: [...], child: dialog),
 );
 ```
 
@@ -132,8 +170,8 @@ releases, so they only work where the terminal reports them — gate them on
 
 ### Awaiting one key
 
-Some prompts take *any* key — a rebind row, vim's `m<letter>`. Declaring 26
-bindings would be wrong; await one instead:
+Some prompts accept *any* key, so there's no gesture to declare. Await one
+instead:
 
 ```dart
 final key = await Keyboard.nextKey(context);
@@ -143,12 +181,12 @@ if (key.code == KeyCode.escape) return;  // cancelled
 apply(key.position ?? key.code);
 ```
 
-While pending, it outranks every other lane, so the app's own bindings can't
-steal the key you're waiting for. It's scope-tied: if the context unmounts, the
+While pending, it takes priority over every other binding, so the app's own
+shortcuts can't steal the key you're waiting for. It's scope-tied: if the context unmounts, the
 future completes `null`, so a capture can't outlive its UI and keep eating
 input.
 
-### Rendering the bindings
+### Making bindings discoverable
 
 Two accessors read the *live* binding set, so a discoverability surface is a
 widget you drop in, not a list you maintain in parallel.
@@ -186,16 +224,22 @@ differ. [Full source and walkthrough](/fleury/showcases/editor/).
 
 ## KeyDetector
 
-Use a detector when the handling is internal to a reusable widget — a scroll
-region, a terminal pane forwarding raw keys.
+A detector is the low-level hook: it sees the keys routed through its subtree,
+before any binding at that level matches.
+
+**A detector only fires while something inside its subtree holds focus.** Unlike
+`KeyBindings`, which is ambient — its chords work whenever its subtree is in
+scope — a detector is widget-internal handling, so it needs a focus target
+inside it. A `KeyDetector` with nothing focusable under it silently receives
+nothing.
 
 `KeyBinding` and `KeyDetector` have opposite defaults, on purpose. A binding
 names one gesture, so when it matches, the key is yours: it consumes. A detector
 sees *every* key routed through its subtree, so it defaults to passing them
 through; you call `event.consume()` only for the keys you actually handle. (Flip
 either default and one tool breaks — a consume-by-default detector would swallow
-all input, and a propagate-by-default binding would make every shortcut
-ceremony.)
+all input, and a propagate-by-default binding would turn every shortcut into
+ceremony — you'd call `consume()` on every one.)
 
 The demo shows that in one screen. The pane owns `↑` / `↓` while it can move its
 cursor, and consumes them. At the first or last row it stops consuming, so the
@@ -205,18 +249,30 @@ same arrow falls through to the app's binding:
 <Fragment slot="code">
 ```dart
 // The pane owns the arrows — but only while it can act on them.
-KeyDetector(
-  onKey: (event) {
-    if (event.code == KeyCode.arrowDown && cursor < last) {
-      moveDown();
-      event.consume();          // mine — stop here
-    }
-    // At the edge: do nothing. The arrow continues up the focus chain
-    // to whatever binding an ancestor declared.
-  },
-  child: paneContents,
+// Focus first: without a focused descendant the detector never fires.
+Focus(
+  autofocus: true,
+  child: KeyDetector(
+    onKey: (event) {
+      if (event.code == KeyCode.arrowDown && cursor < last) {
+        moveDown();
+        event.consume();        // mine — stop here (synchronously!)
+      }
+      // At the edge: do nothing. The arrow continues up the focus chain
+      // to whatever binding an ancestor declared.
+    },
+    child: paneContents,
+  ),
 );
 ```
+
+Two constraints worth knowing before you ship a widget on this:
+
+- **`consume()` (and `bubble()`) must be called synchronously.** After an
+  `await` the decision is already made: it asserts in debug and does nothing in
+  release.
+- **A detector sees repeats too.** There's no `includeRepeats` equivalent here —
+  check `event.type` yourself if you only want fresh presses.
 </Fragment>
 <Fragment slot="demo">
 <FleuryExample id="keyboard.detector" cols={64} rows={12} interactive />
@@ -231,7 +287,7 @@ the ancestor acts) — visible immediately, rather than silently swallowed.
 
 In app code, prefer `KeyBindings`: bindings are data the hint bar and which-key
 can read; a closure is not. Reach for a detector inside a widget others will
-embed, where "let the host keep what I don't use" is the contract.
+embed: consume only the keys you handle, and leave the rest for the host.
 
 ## Games & simulations
 
@@ -251,6 +307,8 @@ void _tick(Duration elapsed) {
   // wasPressed is an edge, not a level: a tap that starts and ends between
   // two frames is still reported, so a quick shot is never dropped.
   if (keys.wasPressed(KeyCode.space)) _fire();
+  // wasReleased is the matching edge — charge-and-release, drop-on-let-go.
+  if (keys.wasReleased(KeyCode.space)) _releaseCharge();
 }
 ```
 
@@ -268,10 +326,11 @@ mnemonic ones (`q` for quit means the letter Q, wherever it lives).
 Hint surfaces resolve a position to the cap the user actually has, learning it
 from the terminal — so an AZERTY player is told to press Z, not W.
 
-### When a terminal can't report held keys
+### Terminals without held-key support
 
 "Is this key held" needs key *releases*, and some terminals can't send them (see
-[Terminal support](#terminal-support) for who can and why). The keyboard tells
+[Terminal keyboard support](#terminal-keyboard-support) for which terminals
+and why). The keyboard tells
 you, reactively:
 
 ```dart
@@ -288,64 +347,84 @@ no branch.
 
 ### Supporting both: sampled and press-driven
 
-In practice you run two schemes: the sampled one where held state exists, and a
-press-driven fallback built from ordinary bindings everywhere else. Presses are
-the one thing every terminal reports, and binding labels let the hint bar show
-which scheme is live:
+In practice you run two input sources at once: sampled held state where it
+exists, and a press-driven fallback built from ordinary bindings for
+everywhere else. Presses are the one thing every terminal reports.
+
+**Give every sampled axis a fallback — not just one.** This is the mistake
+worth naming, because the Neon Asteroids showcase shipped it: a fallback for
+thrust alone left turning and braking with no binding at all, so on a
+press-only terminal the ship thrusted once and could then neither steer nor
+stop. Each press-driven binding sets a small counter that decays over the next
+few frames, which is what turns discrete presses into the continuous-ish input
+a simulation wants:
 
 ```dart
-Widget build(BuildContext context) {
-  // Reactive: rebuilds when negotiation lands or a surface is demoted, so
-  // the control scheme (and its hint labels) update live.
-  final canHold = Keyboard.of(context).capabilities.supportsHeldState;
-  return KeyBindings(
-    bindings: [
-      // Commands need no branch — they work on every tier.
-      KeyBinding(.space, label: 'Fire', onTrigger: (_) => fire()),
-      if (!canHold)
-        // Fallback: each press nudges the simulation a fixed step, and
-        // includeRepeats keeps it nudging under auto-repeat. The label
-        // says what the control really is on THIS terminal.
-        KeyBinding(
-          KeyPosition.w,
-          aliases: [KeyCode.arrowUp],
-          label: 'Thrust (tap)',
-          includeRepeats: true,
-          onTrigger: (_) => controls.nudgeThrust(),
-        ),
-    ],
-    child: playfield,
-  );
-}
+// One binding per sampled axis. includeRepeats matters: auto-repeat still
+// arrives on a press-only terminal, so holding A really does keep turning —
+// driven by repeats instead of by a held record.
+KeyBindings(
+  bindings: [
+    for (final axis in [
+      (.a, KeyCode.arrowLeft, 'Left', controls.nudgeLeft),
+      (.d, KeyCode.arrowRight, 'Right', controls.nudgeRight),
+      (.w, KeyCode.arrowUp, 'Thrust', controls.nudgeThrust),
+      (.s, KeyCode.arrowDown, 'Brake', controls.nudgeBrake),
+    ])
+      KeyBinding(
+        axis.$1,
+        aliases: [axis.$2],
+        label: axis.$3,
+        includeRepeats: true,
+        onTrigger: (_) => axis.$4(),
+      ),
+    // Fire is an edge on both tiers — no fallback needed.
+    KeyBinding(.space, label: 'Fire', onTrigger: (_) => fire()),
+  ],
+  child: playfield,
+);
+```
 
-void tick(Duration elapsed) {
-  // One simulation, two input sources: sampled held state where it exists,
-  // the bindings' accumulated nudges where it doesn't.
-  final input = canHold
-      ? ShipInput(thrust: keyboard.snapshot.isHeld(KeyPosition.w))
-      : controls.takeAccumulated();
-  game.advance(elapsed, input);
+Then **merge the two sources rather than branching between them.** Each axis is
+"held, or nudged recently" — so the same resolver works on every tier and you
+never write `if (canHold)` in the hot path:
+
+```dart
+NeonAsteroidsInput resolveMovement(KeyboardSnapshot keys) {
+  if (_turnSteps > 0) _turnSteps--;   // press-driven state decays
+  return NeonAsteroidsInput(
+    rotateLeft: keys.isHeld(KeyPosition.a) ||      // sampled
+        keys.isHeld(KeyCode.arrowLeft) ||          // arrow alias
+        (_turnSteps > 0 && _turnDirection < 0),    // press-driven
+    // …one line per axis, same shape.
+  );
 }
 ```
 
-Two things to get right:
+Two more things to get right:
 
-1. **Every sampled control needs a fallback binding or a capability gate.** The
-   framework checks this: in debug builds, sampling a key on a press-only
-   surface with no binding covering it logs a *dead control* warning naming the
-   key and the fix.
+1. **A sampled control with no fallback is a dead control**, and the framework
+   says so: in debug builds, sampling a key on a press-only surface with no
+   binding covering it logs a warning naming the key and the fix.
 2. **Keep the fallback's bindings positional** (`KeyPosition.w`, not
    `KeyCode.w`) so both schemes stay WASD-shaped on every layout.
 
-The Neon Asteroids showcase runs exactly this. On a surface with releases you
-get hold-to-thrust and smooth turning; the browser embed below is that surface.
-The full dual-scheme source is
+One limitation to design around: on a press-only terminal you generally can't
+get **diagonals**, because the OS auto-repeats only the most recently pressed
+key. The fallback is a genuinely different scheme — one axis at a time — not a
+slightly worse version of the same one. Say so in your UI rather than letting
+the player wonder why they can't thrust and turn together.
+
+The Neon Asteroids showcase is built on this pattern — see
 [`neon_asteroids.dart`](https://github.com/danReynolds/fleury/blob/main/packages/samples/lib/src/neon_asteroids.dart)
-and its `neon_asteroids_controls.dart` resolver:
+for the bindings and `neon_asteroids_controls.dart` for the resolver above. The
+browser embed below reports held state, so you get hold-to-thrust and smooth
+turning; [the showcase page](/fleury/showcases/asteroids/) has the full
+walkthrough:
 
 <FleuryExample id="showcase.asteroids" cols={100} rows={30} interactive />
 
-## Terminal support
+## Terminal keyboard support
 
 Key releases, held state, and per-key positions come from the Kitty keyboard
 protocol. Fleury asks every terminal for it at startup — there is no flag to set
@@ -367,7 +446,7 @@ For app code, the takeaway is the reactive read you already saw —
 `supportsPositions` and `distinguishesRepeats`. Branch on the capability, never
 on a terminal name.
 
-## Typed text is not a key event
+## Typed text vs key events
 
 Printable input arrives as text, not as a `KeyEvent` — the text widgets claim
 it. That is why `q` can quit your app while a focused text field keeps typing
