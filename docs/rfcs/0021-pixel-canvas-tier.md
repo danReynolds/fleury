@@ -77,12 +77,28 @@ tracers) on the full 1600×880 raster — 3× the 60fps budget before the
 encoder spends a byte, so the sustained-throughput question is entirely
 the encoder's (P2/P3).
 
-### 2.5 Placement lifecycle
+### 2.5 Placement lifecycle — REVISED after Warp measured the v1 design
 
-One `InlineImage` per `RenderCanvas`, stable id for the render object's
-lifetime, `pixels()` supplier returning the current raster. Frame-to-frame
-updates ride the encoder's existing placement diffing; damage-bounded
-re-encode via `croppedBytes` where the encoder asks. Transmission format:
+The original v1 presented each frame under a NEW image id (id-per-frame),
+which forces a transmit-place-delete cycle every frame. Dan's live Warp run
+measured the consequence: heavy flicker — Warp decodes graphics
+asynchronously, so the frame-end delete lands before the next frame's
+decode and the placement gaps to black between frames. (Kitty-proper
+processes the stream coherently and masked it; a presumption, not a
+measurement, until a second terminal disagreed.)
+
+The shipped contract: **one STABLE image id per canvas + a monotonically
+bumped `revision`** (`InlineImage.revision`, mirrored onto the placement —
+where it participates in the load-bearing equality, because a canvas whose
+CELLS never change still needs the frame diff to see each new raster).
+Presenters re-transmit INTO the existing terminal-side image (`a=t` with a
+known id replaces data in place): no placement churn, nothing deleted
+mid-animation, and an async-decoding terminal shows the previous frame
+until the new one lands — never a gap. The serve driver re-ships bytes on
+revision change under the same stable id; the client replaces its decode
+in place. Ledger entries deliberately keep first-arrival sizes on both
+sides, so the two eviction ledgers stay in lockstep as per-frame
+compressed sizes wobble. Transmission format:
 **P2 learning — PNG was never viable**: `InlineImage.bytes` is PNG by
 contract and the core cannot encode one, so the raster lane
 (`InlineImage.isRaster`: empty bytes + live `pixels()`) ships in P2, and
@@ -141,3 +157,6 @@ Two properties of the shipped v1, observed live and accepted:
 - **P4** ✅ — `asteroids --turbo` (auto: pixels on Kitty terminals AND the
   serve browser, braille elsewhere — never blank); verified live over
   serve: antialiased glowing rocks, additive halos, the vector-CRT ship.
+- **P5 (unplanned)** ✅ — the Warp flicker fix: §2.5's stable-id + revision
+  contract, driven by the first live run on a second terminal. Sustained
+  gate re-measured on the real animation shape: 1060 µs/f, 13.4 KB/f.

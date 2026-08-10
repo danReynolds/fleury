@@ -83,6 +83,12 @@ final class TerminalImageEncoder {
   /// Content ids whose pixel data the terminal currently holds.
   final Set<String> _transmitted = <String>{};
 
+  /// Last transmitted [InlineImage.revision] per raster content id: a
+  /// bumped revision re-transmits INTO the same Kitty image id (a=t with an
+  /// existing id replaces its data; live placements keep showing the old
+  /// frame until the new one decodes — no gap, no flicker).
+  final Map<String, int> _rasterRevisionSent = <String, int>{};
+
   /// Kitty placements alive on screen after the previous frame.
   List<_KittyPlacement> _kittyLive = <_KittyPlacement>[];
 
@@ -141,6 +147,7 @@ final class TerminalImageEncoder {
     // a clear; retransmit on next placement. Full repaints are rare
     // (startup, resize), so the retransmit cost is incidental.
     _transmitted.clear();
+    _rasterRevisionSent.clear();
     _rasterLive = <_RasterPlacement>[];
   }
 
@@ -231,6 +238,12 @@ final class TerminalImageEncoder {
       if (exact &&
           (wanted.isNotEmpty ||
               (_kittyIdByContent.isEmpty && _transmitted.isEmpty))) {
+        // The stable stack is exactly where raster ANIMATION lives (RFC
+        // 0021: stable id, bumped revision, identical geometry) — the whole
+        // point of the stable-id contract is to hit this path every frame.
+        // Stale rasters re-transmit into their existing image ids here;
+        // everything else genuinely has nothing to do.
+        _retransmitStaleRasters(next, _kittyLive, out);
         return;
       }
     }
@@ -276,9 +289,14 @@ final class TerminalImageEncoder {
         () => _nextKittyImageId++,
       );
       place.kittyImageId = kittyId;
-      if (_transmitted.add(place.contentId)) {
+      final newContent = _transmitted.add(place.contentId);
+      final rasterStale =
+          image.isRaster &&
+          _rasterRevisionSent[place.contentId] != image.revision;
+      if (newContent || rasterStale) {
         if (image.isRaster) {
           _writeKittyTransmitRaster(out, kittyId, image);
+          _rasterRevisionSent[place.contentId] = image.revision;
         } else {
           _writeKittyTransmit(out, kittyId, image.bytes);
         }
@@ -316,8 +334,38 @@ final class TerminalImageEncoder {
     _kittyIdByContent.removeWhere(
       (contentId, _) => !referenced.contains(contentId),
     );
+    _rasterRevisionSent.removeWhere(
+      (contentId, _) => !referenced.contains(contentId),
+    );
+
+    // Matched placements never enter the transmit loop above; their rasters
+    // still animate. (Newly transmitted ones just had their revision
+    // recorded, so the helper skips them.)
+    _retransmitStaleRasters(next, reconciled, out);
 
     _kittyLive = reconciled;
+  }
+
+  /// Re-transmits raster images whose [InlineImage.revision] moved past the
+  /// last transmitted one, INTO their existing Kitty image ids — the
+  /// data-replace half of the stable-id animation contract. No placements
+  /// are touched and nothing is deleted; a terminal decoding asynchronously
+  /// shows the previous frame until the new one lands, never a gap.
+  void _retransmitStaleRasters(
+    CellBuffer next,
+    Iterable<_KittyPlacement> places,
+    StringBuffer out,
+  ) {
+    final done = <String>{};
+    for (final place in places) {
+      if (place.kittyImageId == 0) continue;
+      if (!done.add(place.contentId)) continue;
+      final image = next.images[place.contentId];
+      if (image == null || !image.isRaster) continue;
+      if (_rasterRevisionSent[place.contentId] == image.revision) continue;
+      _writeKittyTransmitRaster(out, place.kittyImageId, image);
+      _rasterRevisionSent[place.contentId] = image.revision;
+    }
   }
 
   /// Transmit-only (`a=t`) upload: PNG bytes pass through untouched
@@ -365,9 +413,7 @@ final class TerminalImageEncoder {
     InlineImage image,
   ) {
     final rgba = image.pixels!();
-    final compressed = Uint8List.fromList(
-      ZLibEncoder(level: 1).convert(rgba),
-    );
+    final compressed = Uint8List.fromList(ZLibEncoder(level: 1).convert(rgba));
     final b64 = base64.encode(compressed);
     final w = image.sourceWidth;
     final h = image.sourceHeight;

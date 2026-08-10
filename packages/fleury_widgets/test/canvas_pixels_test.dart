@@ -78,22 +78,30 @@ void main() {
       );
     });
 
-    testWidgets('every repaint presents a fresh raster identity', (tester) {
-      // Kitty caches image data by id: a redrawn canvas must arrive as a
-      // NEW id or the terminal would keep showing the first frame forever.
+    testWidgets('a repaint keeps the id STABLE and bumps the revision', (
+      tester,
+    ) {
+      // The stable-id contract (RFC 0021 §2.5 revised): presenters replace
+      // image data in place, so animation never churns placements and never
+      // opens the deleted-old/undecoded-new gap that flickered on Warp. The
+      // revision is what tells the diff and the presenters that the pixels
+      // changed.
       tester.pumpWidget(_app(CanvasMarker.pixels, _rasterCaps));
       final first = tester
           .render(size: const CellSize(12, 6))
           .imagePlacements
-          .single
-          .id;
+          .single;
       tester.pumpWidget(_app(CanvasMarker.pixels, _rasterCaps));
       final second = tester
           .render(size: const CellSize(12, 6))
           .imagePlacements
-          .single
-          .id;
-      expect(second, isNot(first));
+          .single;
+      expect(second.id, first.id, reason: 'the id must never churn');
+      expect(
+        second.revision,
+        greaterThan(first.revision),
+        reason: 'the revision is the animation signal',
+      );
     });
   });
 }

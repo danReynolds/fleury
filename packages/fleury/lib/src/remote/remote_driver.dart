@@ -141,6 +141,14 @@ final class RemoteTerminalDriver
   /// host/client ledger-identity invariant depends on that agreement.
   final Map<String, Uint8List> _rasterPayloads = <String, Uint8List>{};
 
+  /// Last shipped [InlineImage.revision] per raster id: a bumped revision
+  /// re-ships bytes for an id the peer already holds (the client replaces
+  /// its decode in place — stable ids are what keep animation from
+  /// churning placements). The LEDGER entry is NOT re-added on a re-ship:
+  /// both sides keep first-arrival sizes, so their eviction decisions stay
+  /// in lockstep even as per-frame compressed sizes wobble.
+  final Map<String, int> _shippedRasterRevisions = <String, int>{};
+
   /// The wire bytes for [image]: file bytes as-is, or the frame's memoized
   /// zlib RGBA for a raster (level 1 — the same speed-over-ratio call the
   /// Kitty presenter makes, on the same mostly-black content).
@@ -350,22 +358,28 @@ final class RemoteTerminalDriver
     final handledIds = <String>{};
     for (final placement in remotePlan.placements) {
       if (!handledIds.add(placement.id)) continue; // already handled this frame
-      if (_shippedImages.contains(placement.id)) continue; // peer holds it
       final image = next.images[placement.id];
-      if (image != null) {
-        final wireBytes = _wireBytesFor(placement.id, image);
-        _transport.send(
-          image.isRaster
-              ? InlineImageFrame(
-                  placement.id,
-                  wireBytes,
-                  rasterWidth: image.sourceWidth,
-                  rasterHeight: image.sourceHeight,
-                )
-              : InlineImageFrame(placement.id, wireBytes),
-        );
-        _shippedImages.add(placement.id, wireBytes.length);
+      if (image == null) continue;
+      final held = _shippedImages.contains(placement.id);
+      final rasterStale =
+          image.isRaster &&
+          _shippedRasterRevisions[placement.id] != image.revision;
+      if (held && !rasterStale) continue; // peer holds current content
+      final wireBytes = _wireBytesFor(placement.id, image);
+      _transport.send(
+        image.isRaster
+            ? InlineImageFrame(
+                placement.id,
+                wireBytes,
+                rasterWidth: image.sourceWidth,
+                rasterHeight: image.sourceHeight,
+              )
+            : InlineImageFrame(placement.id, wireBytes),
+      );
+      if (image.isRaster) {
+        _shippedRasterRevisions[placement.id] = image.revision;
       }
+      if (!held) _shippedImages.add(placement.id, wireBytes.length);
     }
     _evictShippedImageIds(placedIds);
     _rasterPayloads.clear();
@@ -425,6 +439,9 @@ final class RemoteTerminalDriver
   /// placed working set itself already fits this policy.
   void _evictShippedImageIds(Set<String> placedThisFrame) {
     _shippedImages.evictStale(placedThisFrame);
+    _shippedRasterRevisions.removeWhere(
+      (id, _) => !_shippedImages.contains(id),
+    );
   }
 
   /// Diffs the semantic [tree] against the last one sent to this peer and ships

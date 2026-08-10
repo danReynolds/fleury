@@ -137,7 +137,9 @@ void main(List<String> args) {
     final buf = CellBuffer(const CellSize(120, 40));
     buf.writeImageWithId(
       const CellOffset(2, 2),
-      'raster#$frame',
+      // The stable-id animation contract: one id, bumped revision. This is
+      // the shape the render loop actually produces (RFC 0021 §2.5 revised).
+      'raster-canvas',
       Uint8List(0),
       width: 100,
       height: 28,
@@ -145,6 +147,7 @@ void main(List<String> args) {
       sourceWidth: 800,
       sourceHeight: 448,
       pixels: () => rgba,
+      revision: frame,
     );
     return buf;
   }

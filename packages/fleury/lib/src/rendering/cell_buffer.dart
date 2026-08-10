@@ -524,6 +524,7 @@ final class CellBuffer {
     int? sourceHeight,
     Uint8List Function()? pixels,
     Uint8List Function(int x, int y, int width, int height)? croppedBytes,
+    int revision = 0,
   }) {
     // A zero (or negative) dimension is a no-op, like a width-0 grapheme:
     // recording it would hand the terminal image encoder a degenerate box
@@ -546,6 +547,7 @@ final class CellBuffer {
       sourceHeight: sourceHeight,
       pixels: pixels,
       croppedBytes: croppedBytes,
+      revision: revision,
     );
     _recordImagePlacement(
       image,
@@ -675,6 +677,9 @@ final class CellBuffer {
         boxRows: boxRows,
         boxOffsetCol: boxOffsetCol,
         boxOffsetRow: boxOffsetRow,
+        // The image's content generation rides the placement so the frame
+        // diff sees raster animation even when no cell changes.
+        revision: image.revision,
       ),
     );
     // Include the ±1 edge columns: _evictWideNeighbors below empties a

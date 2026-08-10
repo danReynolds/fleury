@@ -375,7 +375,11 @@ class RenderCanvas extends RenderObject {
     _rasterRevision++;
     buffer.writeImageWithId(
       offset,
-      'canvas-$_rasterInstance#$_rasterRevision',
+      // STABLE id + bumped revision (RFC 0021 §2.5 revised): presenters
+      // replace the image's data in place instead of transmit-place-delete
+      // churn — the churn opened a deleted-old/undecoded-new gap that
+      // flickered on terminals with asynchronous graphics decode (Warp).
+      'canvas-$_rasterInstance',
       _noBytes,
       width: size.cols,
       height: size.rows,
@@ -385,6 +389,7 @@ class RenderCanvas extends RenderObject {
       // Consumed by the presenter within this frame; the surface is reused
       // (cleared, redrawn) only on the NEXT paint, after presentation.
       pixels: () => captured.rgba,
+      revision: _rasterRevision,
     );
   }
 }

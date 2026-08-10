@@ -92,7 +92,18 @@ class InlineImageOverlay {
     int? rasterHeight,
   }) {
     if (_overlay == null) return false;
-    if (_imageCache.contains(id) || _pendingImages.containsKey(id)) return true;
+    final isRaster = rasterWidth != null && rasterHeight != null;
+    // A raster arriving for an id the cache already holds is the stable-id
+    // animation contract: REPLACE the decode in place (file images stay
+    // ship-once). The ledger entry is deliberately not re-added — the
+    // sender keeps first-arrival sizes too, so the two eviction ledgers
+    // stay in lockstep.
+    if (_imageCache.contains(id)) {
+      if (!isRaster) return true;
+      unawaited(_materializeRaster(id, bytes, rasterWidth, rasterHeight));
+      return true;
+    }
+    if (_pendingImages.containsKey(id)) return true;
     if (bytes.length > _imageCache.policy.maxBytes ||
         _pendingImages.length >= _imageCache.policy.maxEntries ||
         _pendingImageBytes + bytes.length > _imageCache.policy.maxBytes) {

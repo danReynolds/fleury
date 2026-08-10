@@ -987,7 +987,7 @@ void main() {
       return rgba;
     }
 
-    CellBuffer rasterBuffer(String id, Uint8List rgba) {
+    CellBuffer rasterBuffer(String id, Uint8List rgba, {int revision = 1}) {
       final buf = CellBuffer(const CellSize(20, 10));
       buf.writeImageWithId(
         const CellOffset(2, 1),
@@ -999,6 +999,7 @@ void main() {
         sourceWidth: 8,
         sourceHeight: 8,
         pixels: () => rgba,
+        revision: revision,
       );
       return buf;
     }
@@ -1025,20 +1026,41 @@ void main() {
       expect(inflated, rgba, reason: 'the terminal must see our exact pixels');
     });
 
-    test('a redrawn canvas (new id) frees the previous frame data', () {
+    test('a bumped revision replaces data in the SAME image — no deletes', () {
+      // The stable-id animation contract (RFC 0021 §2.5 revised, after Warp
+      // flickered under transmit-place-delete churn): frame 2 re-transmits
+      // into the same Kitty image id; nothing is deleted, no placement
+      // churns, and a terminal with async graphics decode shows the old
+      // frame until the new one is ready instead of a gap.
       final rgba = rasterRgba();
       final e = TerminalImageEncoder(protocol: ImageProtocol.kitty);
-      e.encodeFrame(rasterBuffer('r#1', rgba), fullRepaint: true);
-      // Incremental frame, like the render loop's: the old id must be freed
-      // INDIVIDUALLY (a full repaint would nuke everything with d=A and
-      // hide a broken eviction path).
-      final out2 = e.encodeFrame(rasterBuffer('r#2', rgba), fullRepaint: false);
-      expect(out2, contains('a=t,f=32'), reason: 'fresh frame transmits');
+      final out1 = e.encodeFrame(
+        rasterBuffer('canvas-1', rgba, revision: 1),
+        fullRepaint: true,
+      );
+      expect(out1, contains('a=t,f=32,s=8,v=8,o=z,i=1'));
+      final out2 = e.encodeFrame(
+        rasterBuffer('canvas-1', rgba, revision: 2),
+        fullRepaint: false,
+      );
       expect(
         out2,
-        contains('a=d,d=I,i=1'),
-        reason: 'frame 1 data must be freed or animation accumulates forever',
+        contains('a=t,f=32,s=8,v=8,o=z,i=1'),
+        reason: 'the new frame re-transmits into the SAME image id',
       );
+      expect(out2, isNot(contains('a=d')), reason: 'nothing may be deleted');
+      // An UNCHANGED revision transmits nothing.
+      final out3 = e.encodeFrame(
+        rasterBuffer('canvas-1', rgba, revision: 2),
+        fullRepaint: false,
+      );
+      expect(out3, isNot(contains('a=t')));
+      // The canvas disappearing frees the image, exactly once.
+      final out4 = e.encodeFrame(
+        CellBuffer(const CellSize(20, 10)),
+        fullRepaint: false,
+      );
+      expect(out4, contains('a=d,d=I,i=1'));
     });
   });
 }

@@ -37,6 +37,7 @@ final class InlineImage {
     this.sourceHeight,
     this.pixels,
     this.croppedBytes,
+    this.revision = 0,
   });
 
   final String id;
@@ -51,6 +52,15 @@ final class InlineImage {
   /// a decoded bitmap can supply this without making the rendering core learn
   /// how to decode or encode PNGs.
   final Uint8List Function(int x, int y, int width, int height)? croppedBytes;
+
+  /// Content generation for raster-lane images (RFC 0021, revised): the id
+  /// stays STABLE for a canvas's lifetime and this counter says the pixels
+  /// changed. Presenters re-transmit INTO the same terminal-side image
+  /// (Kitty replaces data in place), so animation never churns placements
+  /// and never opens a deleted-old/undecoded-new gap — the flicker Warp
+  /// exposed under the original id-per-frame design. Always 0 for file
+  /// images.
+  final int revision;
 
   /// A raster-lane image: no encoded file bytes, just live RGBA via
   /// [pixels] (RFC 0021). Produced by the pixel canvas tier, which re-draws
@@ -84,6 +94,7 @@ final class InlineImagePlacement {
     int? boxRows,
     this.boxOffsetCol = 0,
     this.boxOffsetRow = 0,
+    this.revision = 0,
   }) : boxCols = boxCols ?? cols,
        boxRows = boxRows ?? rows,
        assert(cols > 0 && rows > 0, 'visible box must be non-empty'),
@@ -102,6 +113,12 @@ final class InlineImagePlacement {
   final int boxRows;
   final int boxOffsetCol;
   final int boxOffsetRow;
+
+  /// The referenced image's content generation (see [InlineImage.revision]).
+  /// Participates in equality ON PURPOSE: a pixel canvas whose CELLS never
+  /// change still needs the frame diff to see each new raster, or an
+  /// animating canvas would present once and freeze.
+  final int revision;
 
   bool get isClipped =>
       boxOffsetCol != 0 ||
@@ -136,7 +153,8 @@ final class InlineImagePlacement {
           other.boxCols == boxCols &&
           other.boxRows == boxRows &&
           other.boxOffsetCol == boxOffsetCol &&
-          other.boxOffsetRow == boxOffsetRow;
+          other.boxOffsetRow == boxOffsetRow &&
+          other.revision == revision;
 
   @override
   int get hashCode => Object.hash(
@@ -150,6 +168,7 @@ final class InlineImagePlacement {
     boxRows,
     boxOffsetCol,
     boxOffsetRow,
+    revision,
   );
 }
 

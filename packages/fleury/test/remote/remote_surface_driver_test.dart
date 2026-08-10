@@ -802,6 +802,51 @@ void main() {
       expect(inflated, rgba, reason: 'the peer must inflate our exact pixels');
     });
 
+    test('a raster revision bump re-ships bytes under the SAME id, even '
+        'with zero cell changes', () async {
+      final transport = _FakeTransport();
+      final driver = await connected(transport);
+      final size = const CellSize(40, 10);
+
+      CellBuffer frame(int revision) {
+        final rgba = Uint8List(8 * 8 * 4);
+        for (var i = 0; i < rgba.length; i += 4) {
+          rgba[i] = revision * 40;
+          rgba[i + 3] = 255;
+        }
+        return CellBuffer(size)..writeImageWithId(
+          const CellOffset(0, 0),
+          'canvas-1',
+          Uint8List(0),
+          width: 3,
+          height: 2,
+          fit: InlineImageFit.fill,
+          sourceWidth: 8,
+          sourceHeight: 8,
+          pixels: () => rgba,
+          revision: revision,
+        );
+      }
+
+      driver.presentFrame(CellBuffer(size), frame(1), fullPlan(size));
+      expect(transport.sent.whereType<InlineImageFrame>(), hasLength(1));
+      transport.sent.clear();
+
+      // Same id, same geometry, same CELLS — only the pixels moved. The
+      // stable-id animation contract: bytes re-ship, placements do not
+      // churn, and any "nothing changed" fast path that eats this frame
+      // freezes every animating pixel canvas.
+      driver.presentFrame(frame(1), frame(2), fullPlan(size));
+      final reshipped = transport.sent.whereType<InlineImageFrame>().single;
+      expect(reshipped.id, 'canvas-1');
+      expect(reshipped.isRaster, isTrue);
+      transport.sent.clear();
+
+      // Unchanged revision: the peer holds current content — no re-ship.
+      driver.presentFrame(frame(2), frame(2), fullPlan(size));
+      expect(transport.sent.whereType<InlineImageFrame>(), isEmpty);
+    });
+
     test('ships bytes once, then not while the peer still caches them '
         '(no re-ship on leave-and-return under the cache bound)', () async {
       final transport = _FakeTransport();

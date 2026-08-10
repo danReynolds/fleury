@@ -149,6 +149,22 @@ const _oneFieldApart = <String, InlineImagePlacement>{
     boxOffsetCol: 1,
     boxOffsetRow: 2,
   ),
+  // RFC 0021: raster animation with a STABLE id — the revision is the ONLY
+  // field that changes frame to frame, so its absence from == would freeze
+  // every animating pixel canvas after one presented frame.
+  'revision': InlineImagePlacement(
+    id: 'base',
+    col: 2,
+    row: 1,
+    cols: 3,
+    rows: 2,
+    fit: InlineImageFit.contain,
+    boxCols: 6,
+    boxRows: 4,
+    boxOffsetCol: 1,
+    boxOffsetRow: 1,
+    revision: 1,
+  ),
 };
 
 void main() {
@@ -191,7 +207,7 @@ void main() {
       // residual is owned by the doc on `InlineImagePlacement.==`, which
       // names this table as part of the contract for adding a field. If this
       // count surprises you, you are the person that doc is talking to.
-      expect(_oneFieldApart.keys, hasLength(10));
+      expect(_oneFieldApart.keys, hasLength(11));
     });
   });
 }
