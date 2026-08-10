@@ -3062,7 +3062,7 @@ class _KeyBindingsTour extends StatefulWidget {
 
 class _KeyBindingsTourState extends State<_KeyBindingsTour> {
   static const _count = 7;
-  String _last = 'move with j / k, bookmark with Ctrl+S, jump with Space f';
+  String _last = 'move with j / k, bookmark with Ctrl+S, clear with Space c';
   int _row = 3;
   final Set<int> _saved = <int>{};
 
@@ -3078,21 +3078,16 @@ class _KeyBindingsTourState extends State<_KeyBindingsTour> {
     }
   });
 
-  // "Find" jumps to the next bookmark after the cursor (wrapping) — a real,
-  // useful action tied to Save, not a dead placeholder.
-  void _findNextSaved() => setState(() {
+  // The Space leader clears every bookmark in one stroke — a simple,
+  // obviously-useful action tied to Save.
+  void _clearSaved() => setState(() {
     if (_saved.isEmpty) {
-      _last = 'Nothing bookmarked yet — press Ctrl+S to bookmark a row';
+      _last = 'No bookmarks to clear';
       return;
     }
-    for (var step = 1; step <= _count; step++) {
-      final candidate = (_row + step) % _count;
-      if (_saved.contains(candidate)) {
-        _row = candidate;
-        _last = 'Found bookmark: item ${candidate + 1} ★';
-        return;
-      }
-    }
+    final n = _saved.length;
+    _saved.clear();
+    _last = 'Cleared $n bookmark${n == 1 ? '' : 's'}';
   });
 
   @override
@@ -3123,9 +3118,9 @@ class _KeyBindingsTourState extends State<_KeyBindingsTour> {
           }),
         ),
         KeyBinding(
-          .space.f,
-          label: 'Find ★',
-          onTrigger: (_) => _findNextSaved(),
+          .space.c,
+          label: 'Clear ★',
+          onTrigger: (_) => _clearSaved(),
         ),
       ],
       child: Focus(

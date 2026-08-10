@@ -54,7 +54,7 @@ KeyBindings(
     ),
     // A two-key sequence (gg) and a Space leader — try them in the demo.
     KeyBinding(.g.g, label: 'Top', onTrigger: (_) => _top()),
-    KeyBinding(.space.f, label: 'Find ★', onTrigger: (_) => _findBookmark()),
+    KeyBinding(.space.c, label: 'Clear ★', onTrigger: (_) => _clearBookmarks()),
   ],
   child: child,
 );
@@ -66,9 +66,9 @@ KeyBindings(
 </CodeDemoSplit>
 
 Click the demo, then move with `j` / `↓` / `k` / `↑`, jump to the top with
-`gg`, bookmark the current row with `Ctrl+S`, and press `Space` then `f` to
-jump to your next bookmark. The hint bar at the bottom is `KeyHintBar()`
-reading the binding list — nothing is maintained by hand.
+`gg`, bookmark the current row with `Ctrl+S`, and press `Space` then `c` to
+clear every bookmark. The hint bar at the bottom is `KeyHintBar()` reading
+the binding list — nothing is maintained by hand.
 
 The dot forms are plain `KeySequence` values with the leading type inferred;
 write `KeySequence.ctrl.s` longhand anywhere inference has nothing to infer
