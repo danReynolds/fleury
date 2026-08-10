@@ -12,12 +12,59 @@
   --sl-color-accent: #1f9c6b;
   --sl-color-accent-high: #a5f0d3;
   --sl-color-text-accent: #3ddb9e;
+
+  /* Neutrals are the live-demo panel's own family — a deep blue-teal
+     near-black, not Starlight's default cool grey — so the whole site reads
+     like the widgets it embeds. Green stays the ACCENT (plus the faint page
+     glow below); the grounds just carry its temperature. Hues sit ~210°,
+     low saturation; the ramp keeps body text and headings well clear of
+     WCAG AA on these grounds. */
+  --sl-color-white: #f1f7ff;
+  --sl-color-gray-1: #dbe3ec;
+  --sl-color-gray-2: #afbac7;
+  --sl-color-gray-3: #757f8d;
+  --sl-color-gray-4: #38444f;
+  --sl-color-gray-5: #1c2531;
+  --sl-color-gray-6: #10161e;
+  --sl-color-gray-7: #0c1016;
+  --sl-color-black: #0a0e13;
 }
 :root[data-theme='light'] {
   --sl-color-accent-low: #c4f2e0;
   --sl-color-accent: #138a5c;
   --sl-color-accent-high: #0a4c33;
   --sl-color-text-accent: #107a51;
+
+  /* Light: the widget's own light ground — near-white with a green whisper,
+     borders and surfaces faintly teal, text a deep green-black. */
+  --sl-color-white: #0c1a15;
+  --sl-color-gray-1: #1d2b26;
+  --sl-color-gray-2: #3b4842;
+  --sl-color-gray-3: #5f6c66;
+  --sl-color-gray-4: #98aba3;
+  --sl-color-gray-5: #caded5;
+  --sl-color-gray-6: #eef6f2;
+  --sl-color-gray-7: #f4faf7;
+  --sl-color-black: #ffffff;
+}
+
+/* A whisper of the widgets' top-left glow, fixed behind the page so scrolling
+   doesn't drag it. Kept well under 6% so it warms the ground without ever
+   competing with text. */
+body {
+  background-image: radial-gradient(
+    120% 70% at 12% -8%,
+    rgba(61, 219, 158, 0.05),
+    transparent 46%
+  );
+  background-attachment: fixed;
+}
+:root[data-theme='light'] body {
+  background-image: radial-gradient(
+    120% 70% at 12% -8%,
+    rgba(19, 138, 92, 0.06),
+    transparent 48%
+  );
 }
 
 /* The header mark is a dark square tile; round it so it reads as a product
