@@ -7,6 +7,8 @@
 @TestOn('browser')
 library;
 
+import 'dart:async' show unawaited;
+import 'dart:js_interop';
 import 'dart:typed_data';
 
 import 'package:fleury/fleury_host.dart' show InlineImageFit;
@@ -450,4 +452,49 @@ void main() {
     expect(host.children.length, 0, reason: 'overlay removed on dispose');
     host.remove();
   });
+
+  test('a raster payload inflates, blits, and appears once decoded', () async {
+    // The full RFC 0021 client path: zlib RGBA in, DecompressionStream
+    // inflate, canvas blit, data-URL <img> — landing via the async
+    // decode-complete re-apply (per-frame ids mean the URL is only ready
+    // AFTER the plan that placed it).
+    final rgba = Uint8List(4 * 2 * 4);
+    for (var i = 0; i < 8; i++) {
+      rgba[i * 4] = 10 + i;
+      rgba[i * 4 + 3] = 255;
+    }
+    final compressed = await _deflate(rgba);
+
+    final host = _makeHost();
+    final overlay = InlineImageOverlay(host)
+      ..cacheImage('canvas-1#1', compressed, rasterWidth: 4, rasterHeight: 2)
+      ..presentPlan([_place('canvas-1#1', 0, 0, 2, 1)], _box(cw: 10, ch: 20));
+
+    // The decode is asynchronous; poll briefly for the re-applied element.
+    web.HTMLImageElement? img;
+    for (var i = 0; i < 100 && img == null; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      final imgs = _imgs(host);
+      if (imgs.isNotEmpty && imgs.single.src.startsWith('data:image/png')) {
+        img = imgs.single;
+      }
+    }
+    expect(img, isNotNull, reason: 'raster never materialized');
+
+    overlay.dispose();
+    host.remove();
+  });
+}
+
+/// zlib-compresses via the browser's CompressionStream — the counterpart of
+/// the server's ZLibEncoder (both RFC 1950).
+Future<Uint8List> _deflate(Uint8List raw) async {
+  final stream = web.CompressionStream('deflate');
+  final writer = stream.writable.getWriter();
+  unawaited(writer.write(raw.toJS).toDart.catchError((_) => null));
+  unawaited(writer.close().toDart.catchError((_) => null));
+  final buffer = await web.Response(
+    stream.readable as JSAny,
+  ).arrayBuffer().toDart;
+  return buffer.toDart.asUint8List();
 }

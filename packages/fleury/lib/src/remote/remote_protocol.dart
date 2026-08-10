@@ -293,6 +293,7 @@ final class InitFrame extends RemoteFrame {
     required this.tmuxPassthrough,
     this.images,
     this.hyperlinks = false,
+    this.liveRasters = false,
     this.keyboard,
     this.protocolVersion = remoteProtocolVersion,
   });
@@ -320,6 +321,13 @@ final class InitFrame extends RemoteFrame {
   /// which gates whether the wire *serializes* a link at all (v>=4); this gates
   /// whether one is ever *produced*.
   final bool hyperlinks;
+
+  /// Whether the peer presents LIVE raster placements — images whose RGBA
+  /// is regenerated every frame (the pixel canvas tier, RFC 0021). Additive
+  /// `liveRasters=1` INIT param, absent ⇒ false. Threaded into the
+  /// app-side [SurfaceCapabilities.liveRasters]; the fleury web client
+  /// declares it once its inflate-and-blit overlay path exists.
+  final bool liveRasters;
 
   /// What the peer's keyboard has been CONFIRMED to guarantee (RFC 0020
   /// §11). Optional additive `keyboard=<bits>` INIT param.
@@ -414,9 +422,31 @@ final class SemanticActionFrame extends RemoteFrame {
 /// `placements` reference it. Decoupling bytes from placement keeps the image
 /// off the cell-grid wire and ships it a single time.
 final class InlineImageFrame extends RemoteFrame {
-  const InlineImageFrame(this.id, this.bytes);
+  const InlineImageFrame(
+    this.id,
+    this.bytes, {
+    this.rasterWidth,
+    this.rasterHeight,
+  }) : assert(
+         (rasterWidth == null) == (rasterHeight == null),
+         'raster dims travel together',
+       );
   final String id;
+
+  /// File bytes (PNG et al) for ordinary images; zlib-compressed row-major
+  /// RGBA for raster-lane images (RFC 0021 — the pixel canvas tier, whose
+  /// frames have no file encoding). Which one is stated by [isRaster].
   final Uint8List bytes;
+
+  /// Pixel dimensions of a raster payload; null for file images (their
+  /// dimensions live in the file header).
+  final int? rasterWidth;
+  final int? rasterHeight;
+
+  /// True when [bytes] is zlib RGBA rather than an image file. The wire
+  /// marks this with the id-length header's high bit, so a file-image
+  /// frame stays byte-identical to every earlier protocol version.
+  bool get isRaster => rasterWidth != null;
 }
 
 /// The app asks the peer to place [text] on the PEER's clipboard — the
@@ -555,6 +585,7 @@ String _encodeInit(InitFrame f) =>
     // link-free INIT stays byte-identical to a peer that never learned the
     // field. Absent ⇒ decoded as false.
     '${f.hyperlinks ? 'hyperlinks=1,' : ''}'
+    '${f.liveRasters ? 'liveRasters=1,' : ''}'
     // Semantic guarantees, never Kitty flags: a browser peer has no flags,
     // and the reader must not have to know the far end's protocol to
     // understand its promises. Omitted when undeclared, so an INIT from a
@@ -562,12 +593,25 @@ String _encodeInit(InitFrame f) =>
     '${f.keyboard == null ? '' : 'keyboard=${f.keyboard!.wireBits},'}'
     'v=${f.protocolVersion}';
 
-/// Wire layout: [u16 id length][id utf-8][image bytes...].
+/// Wire layout: [u16 id length][id utf-8][image bytes...]. A raster frame
+/// (RFC 0021) sets bit 15 of the id length and inserts [u16 width]
+/// [u16 height] between the id and the bytes; file frames are byte-identical
+/// to every earlier protocol version.
 Uint8List _encodeInlineImage(InlineImageFrame f) {
   final idBytes = utf8.encode(f.id);
   final out = BytesBuilder(copy: false);
-  out.add((ByteData(2)..setUint16(0, idBytes.length)).buffer.asUint8List());
+  final header = f.isRaster ? (idBytes.length | 0x8000) : idBytes.length;
+  out.add((ByteData(2)..setUint16(0, header)).buffer.asUint8List());
   out.add(idBytes);
+  if (f.isRaster) {
+    out.add(
+      (ByteData(4)
+            ..setUint16(0, f.rasterWidth!)
+            ..setUint16(2, f.rasterHeight!))
+          .buffer
+          .asUint8List(),
+    );
+  }
   out.add(f.bytes);
   return out.toBytes();
 }
@@ -576,7 +620,9 @@ InlineImageFrame _decodeInlineImage(Uint8List payload) {
   if (payload.length < 2) {
     throw RemoteProtocolException('INLINE_IMAGE frame: truncated header.');
   }
-  final idLen = ByteData.sublistView(payload, 0, 2).getUint16(0);
+  final header = ByteData.sublistView(payload, 0, 2).getUint16(0);
+  final isRaster = header & 0x8000 != 0;
+  final idLen = header & 0x7FFF;
   if (idLen == 0 || idLen > 256) {
     throw RemoteProtocolException(
       'INLINE_IMAGE frame: id length $idLen is outside 1..256.',
@@ -589,8 +635,25 @@ InlineImageFrame _decodeInlineImage(Uint8List payload) {
   // bit-flipped id should degrade to a harmless mismatched key, not throw a
   // raw FormatException that drops every other frame in the batch.
   final id = utf8.decode(payload.sublist(2, 2 + idLen), allowMalformed: true);
-  final bytes = Uint8List.fromList(payload.sublist(2 + idLen));
-  return InlineImageFrame(id, bytes);
+  if (!isRaster) {
+    final bytes = Uint8List.fromList(payload.sublist(2 + idLen));
+    return InlineImageFrame(id, bytes);
+  }
+  if (2 + idLen + 4 > payload.length) {
+    throw RemoteProtocolException(
+      'INLINE_IMAGE frame: raster dims overrun payload.',
+    );
+  }
+  final dims = ByteData.sublistView(payload, 2 + idLen, 2 + idLen + 4);
+  final w = dims.getUint16(0);
+  final h = dims.getUint16(2);
+  if (w == 0 || h == 0) {
+    throw RemoteProtocolException(
+      'INLINE_IMAGE frame: raster dims must be positive, got ${w}x$h.',
+    );
+  }
+  final bytes = Uint8List.fromList(payload.sublist(2 + idLen + 4));
+  return InlineImageFrame(id, bytes, rasterWidth: w, rasterHeight: h);
 }
 
 /// Wire layout: [u32 seq][utf-8 text...].
@@ -980,6 +1043,7 @@ InitFrame _decodeInit(String body) {
       _ => null,
     },
     hyperlinks: params['hyperlinks'] == '1',
+    liveRasters: params['liveRasters'] == '1',
     keyboard: switch (int.tryParse(params['keyboard'] ?? '')) {
       final bits? => KeyboardCapabilities.fromWireBits(bits),
       null => null,

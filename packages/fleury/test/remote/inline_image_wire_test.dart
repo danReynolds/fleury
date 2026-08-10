@@ -4,6 +4,8 @@ import 'package:fleury/src/foundation/geometry.dart';
 import 'package:fleury/src/remote/remote_codec.dart';
 import 'package:fleury/src/remote/remote_protocol.dart';
 import 'package:fleury/src/rendering/cell_buffer.dart';
+import 'package:fleury/src/rendering/surface_capabilities.dart';
+import 'package:fleury/src/terminal/capabilities.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -366,6 +368,84 @@ void main() {
       final f = frame as InlineImageFrame;
       expect(f.id, 'abc123-257');
       expect(f.bytes, bytes);
+    });
+  });
+
+  group('raster frames (RFC 0021 — the pixel canvas tier)', () {
+    test('a raster InlineImageFrame round-trips with its dims', () {
+      final payload = Uint8List.fromList(List.generate(64, (i) => i));
+      final frame = InlineImageFrame(
+        'canvas-1#7',
+        payload,
+        rasterWidth: 800,
+        rasterHeight: 448,
+      );
+      final decoded =
+          (FrameDecoder()..feed(encodeFrame(frame))).drain().single
+              as InlineImageFrame;
+      expect(decoded.id, 'canvas-1#7');
+      expect(decoded.isRaster, isTrue);
+      expect(decoded.rasterWidth, 800);
+      expect(decoded.rasterHeight, 448);
+      expect(decoded.bytes, payload);
+    });
+
+    test('a file InlineImageFrame stays byte-identical to the old wire', () {
+      // The raster flag rides the id-length high bit; a file frame must not
+      // set it, so pre-raster decoders keep working against these bytes.
+      final frame = InlineImageFrame('logo', Uint8List.fromList([1, 2, 3]));
+      final decoded =
+          (FrameDecoder()..feed(encodeFrame(frame))).drain().single
+              as InlineImageFrame;
+      expect(decoded.isRaster, isFalse);
+      expect(decoded.rasterWidth, isNull);
+      expect(decoded.bytes, [1, 2, 3]);
+    });
+
+    test('truncated raster dims are rejected, not misread as bytes', () {
+      final good = encodeFrame(
+        InlineImageFrame('r', Uint8List(0), rasterWidth: 8, rasterHeight: 8),
+      );
+      // Chop into the dims field but keep the ENVELOPE honest (1-byte type +
+      // u32 length + payload): a shortened envelope would just make the
+      // decoder wait for more bytes, which is correct and proves nothing.
+      final payload = good.sublist(5, good.length - 2);
+      final rewrapped = Uint8List(5 + payload.length)
+        ..[0] = good[0]
+        ..setRange(5, 5 + payload.length, payload);
+      ByteData.sublistView(rewrapped, 1, 5).setUint32(0, payload.length);
+      expect(
+        () => (FrameDecoder()..feed(rewrapped)).drain().toList(),
+        throwsA(isA<RemoteProtocolException>()),
+      );
+    });
+
+    test('INIT liveRasters is additive and round-trips', () {
+      InitFrame roundTrip(InitFrame frame) =>
+          (FrameDecoder()..feed(encodeFrame(frame))).drain().single
+              as InitFrame;
+
+      final without = roundTrip(
+        const InitFrame(
+          size: CellSize(80, 24),
+          colorMode: ColorMode.truecolor,
+          imageProtocol: ImageProtocol.halfBlock,
+          tmuxPassthrough: false,
+        ),
+      );
+      expect(without.liveRasters, isFalse);
+
+      final declared = roundTrip(
+        const InitFrame(
+          size: CellSize(80, 24),
+          colorMode: ColorMode.truecolor,
+          imageProtocol: ImageProtocol.halfBlock,
+          tmuxPassthrough: false,
+          images: InlineImageSupport.placements,
+          liveRasters: true,
+        ),
+      );
+      expect(declared.liveRasters, isTrue);
     });
   });
 }

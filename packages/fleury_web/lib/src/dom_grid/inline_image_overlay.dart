@@ -1,3 +1,4 @@
+import 'dart:async' show unawaited;
 import 'dart:js_interop';
 import 'dart:typed_data';
 
@@ -51,11 +52,16 @@ class InlineImageOverlay {
   // repeated placements of one image each get a distinct element.
   final Map<String, String> _blobUrls = <String, String>{};
   final Map<String, Uint8List> _pendingImages = <String, Uint8List>{};
+
+  /// Raster dims by pending id (RFC 0021): present exactly for payloads that
+  /// are zlib RGBA rather than an image file.
+  final Map<String, (int, int)> _pendingRasterDims = <String, (int, int)>{};
   int _pendingImageBytes = 0;
   final Map<String, web.HTMLImageElement> _els =
       <String, web.HTMLImageElement>{};
   final Map<String, String> _rects = <String, String>{};
   List<ImagePlacement> _last = const <ImagePlacement>[];
+  MeasuredCellBox? _lastBox;
 
   /// Number of live `<img>` elements — for tests/diagnostics.
   int get imageElementCount => _els.length;
@@ -79,7 +85,12 @@ class InlineImageOverlay {
   /// stream. Staging keeps the committed cache and the in-flight generation
   /// independently bounded while preserving the wire's images-before-plan
   /// ordering.
-  bool cacheImage(String id, Uint8List bytes) {
+  bool cacheImage(
+    String id,
+    Uint8List bytes, {
+    int? rasterWidth,
+    int? rasterHeight,
+  }) {
     if (_overlay == null) return false;
     if (_imageCache.contains(id) || _pendingImages.containsKey(id)) return true;
     if (bytes.length > _imageCache.policy.maxBytes ||
@@ -88,6 +99,9 @@ class InlineImageOverlay {
       return false;
     }
     _pendingImages[id] = bytes;
+    if (rasterWidth != null && rasterHeight != null) {
+      _pendingRasterDims[id] = (rasterWidth, rasterHeight);
+    }
     _pendingImageBytes += bytes.length;
     return true;
   }
@@ -117,6 +131,7 @@ class InlineImageOverlay {
   /// committed at the real plan boundary.
   void apply(List<ImagePlacement> placements, MeasuredCellBox box) {
     _last = placements;
+    _lastBox = box;
     final overlay = _overlay;
     if (overlay == null) return;
     if (!_ownsHostPosition && box.hostPositionIsStatic) {
@@ -249,15 +264,81 @@ class InlineImageOverlay {
       )) {
         continue;
       }
-      final blob = web.Blob(
-        <JSAny>[entry.value.toJS].toJS,
-        web.BlobPropertyBag(type: 'image/png'),
-      );
-      _blobUrls[entry.key] = web.URL.createObjectURL(blob);
+      final rasterDims = _pendingRasterDims[entry.key];
+      if (rasterDims == null) {
+        final blob = web.Blob(
+          <JSAny>[entry.value.toJS].toJS,
+          web.BlobPropertyBag(type: 'image/png'),
+        );
+        _blobUrls[entry.key] = web.URL.createObjectURL(blob);
+      } else {
+        // Raster lane (RFC 0021): zlib RGBA, no file bytes. The ledger entry
+        // commits NOW at the wire byte length — identical accounting to the
+        // sender's ledger — while the pixels decode asynchronously; the URL
+        // pops in a beat later and re-applies the current placements. The
+        // async gap is why the refresh below exists: raster ids are
+        // per-frame, so without it every frame's URL would arrive just
+        // after the only plan that references it.
+        final (w, h) = rasterDims;
+        unawaited(_materializeRaster(entry.key, entry.value, w, h));
+      }
       _imageCache.add(entry.key, entry.value.length);
     }
     _pendingImages.clear();
+    _pendingRasterDims.clear();
     _pendingImageBytes = 0;
+  }
+
+  /// Inflates one raster payload (browser-native zlib via
+  /// `DecompressionStream('deflate')` — the format Dart's `ZLibEncoder`
+  /// emits), blits it to a canvas, and publishes the resulting URL. If the
+  /// id is still placed when the decode lands, the placements re-apply so
+  /// the raster becomes visible within the same frame interval.
+  Future<void> _materializeRaster(
+    String id,
+    Uint8List compressed,
+    int width,
+    int height,
+  ) async {
+    Uint8List rgba;
+    try {
+      rgba = await _inflateZlib(compressed);
+    } catch (_) {
+      return; // corrupt payload degrades to blank, like a broken <img>
+    }
+    if (rgba.length != width * height * 4) return;
+    // Evicted while decoding (per-frame ids retire fast): drop the work.
+    if (!_imageCache.contains(id)) return;
+    final canvas = web.HTMLCanvasElement()
+      ..width = width
+      ..height = height;
+    final ctx = canvas.getContext('2d') as web.CanvasRenderingContext2D?;
+    if (ctx == null) return;
+    final data = web.ImageData(
+      rgba.buffer.asUint8ClampedList(rgba.offsetInBytes, rgba.length).toJS,
+      width,
+      height.toJS,
+    );
+    ctx.putImageData(data, 0, 0);
+    // A data URL, not a blob URL: synchronous to produce, nothing to revoke,
+    // and revokeObjectURL ignores it harmlessly if the shared eviction path
+    // passes it through.
+    _blobUrls[id] = canvas.toDataURL('image/png');
+    final box = _lastBox;
+    if (box != null && _last.any((p) => p.id == id)) {
+      apply(_last, box);
+    }
+  }
+
+  Future<Uint8List> _inflateZlib(Uint8List compressed) async {
+    final stream = web.DecompressionStream('deflate');
+    final writer = stream.writable.getWriter();
+    unawaited(writer.write(compressed.toJS).toDart.catchError((_) => null));
+    unawaited(writer.close().toDart.catchError((_) => null));
+    final buffer = await web.Response(
+      stream.readable as JSAny,
+    ).arrayBuffer().toDart;
+    return buffer.toDart.asUint8List();
   }
 
   /// Bounds the blob-URL cache by count and encoded bytes, revoking the oldest

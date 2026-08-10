@@ -5,6 +5,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show ZLibDecoder;
 import 'dart:typed_data';
 
 import 'package:fleury/fleury.dart';
@@ -760,6 +761,46 @@ void main() {
         }
       },
     );
+
+    test('a raster canvas ships compressed RGBA with dims, sized truly '
+        'in the ledger', () async {
+      final transport = _FakeTransport();
+      final driver = await connected(transport);
+      final size = const CellSize(40, 10);
+      final empty = CellBuffer(size);
+
+      final rgba = Uint8List(8 * 8 * 4);
+      for (var i = 0; i < rgba.length; i += 4) {
+        rgba[i] = 200;
+        rgba[i + 3] = 255;
+      }
+      final next = CellBuffer(size)
+        ..writeImageWithId(
+          const CellOffset(0, 0),
+          'canvas-1#1',
+          Uint8List(0),
+          width: 3,
+          height: 2,
+          fit: InlineImageFit.fill,
+          sourceWidth: 8,
+          sourceHeight: 8,
+          pixels: () => rgba,
+        );
+      driver.presentFrame(empty, next, fullPlan(size));
+
+      final frame = transport.sent.whereType<InlineImageFrame>().single;
+      expect(frame.isRaster, isTrue);
+      expect(frame.rasterWidth, 8);
+      expect(frame.rasterHeight, 8);
+      expect(frame.bytes, isNotEmpty);
+      expect(
+        frame.bytes.length,
+        lessThan(rgba.length),
+        reason: 'the wire carries compressed RGBA, never the raw buffer',
+      );
+      final inflated = ZLibDecoder().convert(frame.bytes);
+      expect(inflated, rgba, reason: 'the peer must inflate our exact pixels');
+    });
 
     test('ships bytes once, then not while the peer still caches them '
         '(no re-ship on leave-and-return under the cache bound)', () async {

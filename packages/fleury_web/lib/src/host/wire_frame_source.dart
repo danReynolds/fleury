@@ -233,6 +233,10 @@ final class WireFrameSource implements BrowserFrameSource {
           imageProtocol: ImageProtocol.halfBlock,
           tmuxPassthrough: false,
           images: InlineImageSupport.placements,
+          // RFC 0021: the overlay inflates zlib-RGBA raster frames
+          // (DecompressionStream) and blits them to a canvas, so per-frame
+          // pixel canvases are live here — declared, never inferred.
+          liveRasters: true,
           // The DOM grid renders real <a> anchors (dom_row_factory), so tell
           // the server-side app its surface supports links: this is what makes
           // its MarkdownText gate produce a linkUri that the v4 wire then
@@ -574,7 +578,13 @@ final class WireFrameSource implements BrowserFrameSource {
         _applyPlacements(f.plan.placements);
       case InlineImageFrame f:
         final overlay = _imageOverlay;
-        if (overlay != null && !overlay.cacheImage(f.id, f.bytes)) {
+        if (overlay != null &&
+            !overlay.cacheImage(
+              f.id,
+              f.bytes,
+              rasterWidth: f.rasterWidth,
+              rasterHeight: f.rasterHeight,
+            )) {
           _teardown(
             'The session sent too much pending image data — reload to reconnect.',
             banner: true,

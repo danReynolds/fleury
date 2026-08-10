@@ -7,7 +7,7 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Platform;
+import 'dart:io' show Platform, ZLibEncoder;
 import 'dart:typed_data';
 
 import '../foundation/geometry.dart';
@@ -133,6 +133,24 @@ final class RemoteTerminalDriver
   // fresh id per tick — re-ships bytes only when the client would actually
   // have evicted them, not on every loop.
   final InlineImageCacheLedger _shippedImages;
+
+  /// Per-frame memo of compressed raster payloads (RFC 0021), keyed by
+  /// content id. Cleared each present. Compressing once and reusing keeps
+  /// every byte-accounting site — placement bounding, the projected-fit
+  /// eviction, the ledger, the transport — agreeing on the SAME size; the
+  /// host/client ledger-identity invariant depends on that agreement.
+  final Map<String, Uint8List> _rasterPayloads = <String, Uint8List>{};
+
+  /// The wire bytes for [image]: file bytes as-is, or the frame's memoized
+  /// zlib RGBA for a raster (level 1 — the same speed-over-ratio call the
+  /// Kitty presenter makes, on the same mostly-black content).
+  Uint8List _wireBytesFor(String id, InlineImage image) {
+    if (!image.isRaster) return image.bytes;
+    return _rasterPayloads[id] ??= Uint8List.fromList(
+      ZLibEncoder(level: 1).convert(image.pixels!()),
+    );
+  }
+
   bool _active = false;
   bool _handshakeReceived = false;
   int _protocolVersion = 1;
@@ -317,7 +335,7 @@ final class RemoteTerminalDriver
       final image = next.images[id];
       if (image == null) continue;
       additionalEntries++;
-      additionalBytes += image.bytes.length;
+      additionalBytes += _wireBytesFor(id, image).length;
     }
     // Make room against the *next* plan before sending its images. The browser
     // stages those frames and performs this same projected-fit eviction when
@@ -335,11 +353,22 @@ final class RemoteTerminalDriver
       if (_shippedImages.contains(placement.id)) continue; // peer holds it
       final image = next.images[placement.id];
       if (image != null) {
-        _transport.send(InlineImageFrame(placement.id, image.bytes));
-        _shippedImages.add(placement.id, image.bytes.length);
+        final wireBytes = _wireBytesFor(placement.id, image);
+        _transport.send(
+          image.isRaster
+              ? InlineImageFrame(
+                  placement.id,
+                  wireBytes,
+                  rasterWidth: image.sourceWidth,
+                  rasterHeight: image.sourceHeight,
+                )
+              : InlineImageFrame(placement.id, wireBytes),
+        );
+        _shippedImages.add(placement.id, wireBytes.length);
       }
     }
     _evictShippedImageIds(placedIds);
+    _rasterPayloads.clear();
     _transport.send(PlanFrame(remotePlan));
   }
 
@@ -368,7 +397,9 @@ final class RemoteTerminalDriver
 
       final image = next.images[placement.id];
       final idBytes = utf8.encode(placement.id);
-      final imageBytes = image?.bytes.length ?? 0;
+      final imageBytes = image == null
+          ? 0
+          : _wireBytesFor(placement.id, image).length;
       final validFrame =
           image != null &&
           idBytes.isNotEmpty &&
@@ -505,6 +536,10 @@ final class RemoteTerminalDriver
                 colorMode: f.colorMode,
                 glyphTier: f.glyphTier,
                 images: peerImages,
+                // RFC 0021: the peer says whether its overlay can inflate
+                // and blit per-frame rasters. Never inferred from version —
+                // capability, like keyboard=.
+                liveRasters: f.liveRasters,
                 // A browser peer that renders <a> anchors declares this in
                 // INIT; without it the server-side MarkdownText gate reads
                 // MediaQuery.capabilitiesOf(context).hyperlinks == false and
