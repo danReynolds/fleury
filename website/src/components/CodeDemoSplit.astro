@@ -55,11 +55,6 @@ const expandIcon =
       <div class="cds-scroll"><slot name="code" /></div>
     </section>
 
-    <div class="cds-seam" aria-hidden="true">
-      <span class="cds-seam-word">renders</span>
-      <span class="cds-seam-arrow">→</span>
-    </div>
-
     <section class="cds-pane" data-pane="demo">
       <span class="cds-cap">{demoLabel}</span>
       <div class="cds-scroll cds-demo"><slot name="demo" /></div>
@@ -117,13 +112,6 @@ const expandIcon =
       if (codeSrc) codeScroll.append(codeSrc.cloneNode(true));
       codeCol.append(codeCap, codeScroll);
 
-      const seam = document.createElement('div');
-      seam.className = 'cds-seam';
-      seam.setAttribute('aria-hidden', 'true');
-      seam.innerHTML =
-        '<span class="cds-seam-word">renders</span>' +
-        '<span class="cds-seam-arrow">→</span>';
-
       const demoCol = document.createElement('section');
       demoCol.className = 'cds-modal-pane cds-modal-demo';
       const demoCap = document.createElement('span');
@@ -137,7 +125,7 @@ const expandIcon =
         'max-width:100%;max-height:100%';
       demoCol.append(demoCap, host);
 
-      body.append(codeCol, seam, demoCol);
+      body.append(codeCol, demoCol);
       dlg.append(bar, body);
       document.body.appendChild(dlg);
       dlg.showModal();

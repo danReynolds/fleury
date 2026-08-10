@@ -3061,39 +3061,72 @@ class _KeyBindingsTour extends StatefulWidget {
 }
 
 class _KeyBindingsTourState extends State<_KeyBindingsTour> {
-  String _last = 'press a key from the bar below';
+  static const _count = 7;
+  String _last = 'move with j / k, bookmark with Ctrl+S, jump with Space f';
   int _row = 3;
+  final Set<int> _saved = <int>{};
 
-  void _log(String action) => setState(() => _last = action);
+  void _move(int delta) =>
+      setState(() => _row = (_row + delta).clamp(0, _count - 1));
+
+  void _toggleSave() => setState(() {
+    if (_saved.remove(_row)) {
+      _last = 'Un-bookmarked item ${_row + 1}';
+    } else {
+      _saved.add(_row);
+      _last = 'Bookmarked item ${_row + 1} ★';
+    }
+  });
+
+  // "Find" jumps to the next bookmark after the cursor (wrapping) — a real,
+  // useful action tied to Save, not a dead placeholder.
+  void _findNextSaved() => setState(() {
+    if (_saved.isEmpty) {
+      _last = 'Nothing bookmarked yet — press Ctrl+S to bookmark a row';
+      return;
+    }
+    for (var step = 1; step <= _count; step++) {
+      final candidate = (_row + step) % _count;
+      if (_saved.contains(candidate)) {
+        _row = candidate;
+        _last = 'Found bookmark: item ${candidate + 1} ★';
+        return;
+      }
+    }
+  });
 
   @override
   Widget build(BuildContext context) {
     return KeyBindings(
       bindings: [
-        KeyBinding(.ctrl.s, label: 'Save', onTrigger: (_) => _log('Saved')),
+        KeyBinding(.ctrl.s, label: 'Bookmark', onTrigger: (_) => _toggleSave()),
         KeyBinding(
           .j,
           aliases: [.down],
           label: 'Down',
           includeRepeats: true,
-          onTrigger: (_) => setState(() => _row = (_row + 1).clamp(0, 6)),
+          onTrigger: (_) => _move(1),
         ),
         KeyBinding(
           .k,
           aliases: [.up],
           label: 'Up',
           includeRepeats: true,
-          onTrigger: (_) => setState(() => _row = (_row - 1).clamp(0, 6)),
+          onTrigger: (_) => _move(-1),
         ),
         KeyBinding(
           .g.g,
           label: 'Top',
-          onTrigger: (_) {
-            _log('Jumped to top');
-            setState(() => _row = 0);
-          },
+          onTrigger: (_) => setState(() {
+            _row = 0;
+            _last = 'Jumped to top';
+          }),
         ),
-        KeyBinding(.space.f, label: 'Find', onTrigger: (_) => _log('Find…')),
+        KeyBinding(
+          .space.f,
+          label: 'Find ★',
+          onTrigger: (_) => _findNextSaved(),
+        ),
       ],
       child: Focus(
         autofocus: true,
@@ -3104,7 +3137,9 @@ class _KeyBindingsTourState extends State<_KeyBindingsTour> {
               padding: const EdgeInsets.all(1),
               child: Text(_last, style: const CellStyle(bold: true)),
             ),
-            Expanded(child: ListViewSelectionDemoRows(row: _row)),
+            Expanded(
+              child: ListViewSelectionDemoRows(row: _row, saved: _saved),
+            ),
             const KeyHintBar(),
           ],
         ),
@@ -3113,10 +3148,15 @@ class _KeyBindingsTourState extends State<_KeyBindingsTour> {
   }
 }
 
-/// Seven rows with one highlighted — the j/k target.
+/// Seven rows: one highlighted (the j/k cursor), any bookmarked (★, Ctrl+S).
 class ListViewSelectionDemoRows extends StatelessWidget {
-  const ListViewSelectionDemoRows({super.key, required this.row});
+  const ListViewSelectionDemoRows({
+    super.key,
+    required this.row,
+    this.saved = const <int>{},
+  });
   final int row;
+  final Set<int> saved;
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -3124,9 +3164,12 @@ class ListViewSelectionDemoRows extends StatelessWidget {
       children: [
         for (var i = 0; i < 7; i++)
           Text(
-            '${i == row ? '▸' : ' '} item ${i + 1}',
+            '${i == row ? '▸' : ' '} ${saved.contains(i) ? '★' : ' '} '
+            'item ${i + 1}',
             style: i == row
                 ? CellStyle(foreground: theme.colorScheme.primary, bold: true)
+                : saved.contains(i)
+                ? CellStyle(foreground: theme.colorScheme.primary)
                 : const CellStyle(),
           ),
       ],

@@ -41,7 +41,7 @@ surface, running live:
 ```dart
 KeyBindings(
   bindings: [
-    KeyBinding(.ctrl.s, label: 'Save', onTrigger: (_) => _save()),
+    KeyBinding(.ctrl.s, label: 'Bookmark', onTrigger: (_) => _bookmark()),
     // One command, several keys — one row in the hint bar.
     KeyBinding(
       .j,
@@ -52,9 +52,9 @@ KeyBindings(
       includeRepeats: true,
       onTrigger: (_) => _move(1),
     ),
-    // Multi-step sequences: vim's gg, a Space leader.
+    // A two-key sequence (gg) and a Space leader — try them in the demo.
     KeyBinding(.g.g, label: 'Top', onTrigger: (_) => _top()),
-    KeyBinding(.space.f, label: 'Find', onTrigger: (_) => _find()),
+    KeyBinding(.space.f, label: 'Find ★', onTrigger: (_) => _findBookmark()),
   ],
   child: child,
 );
@@ -65,9 +65,10 @@ KeyBindings(
 </Fragment>
 </CodeDemoSplit>
 
-Click the demo, then try `j`, `↓` (same row in the bar), `gg`, `Space f`,
-`Ctrl+S`. The hint bar at the bottom is `KeyHintBar()` reading the binding
-list — nothing is maintained by hand.
+Click the demo, then move with `j` / `↓` / `k` / `↑`, jump to the top with
+`gg`, bookmark the current row with `Ctrl+S`, and press `Space` then `f` to
+jump to your next bookmark. The hint bar at the bottom is `KeyHintBar()`
+reading the binding list — nothing is maintained by hand.
 
 The dot forms are plain `KeySequence` values with the leading type inferred;
 write `KeySequence.ctrl.s` longhand anywhere inference has nothing to infer
