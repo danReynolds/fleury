@@ -8,14 +8,18 @@
 //   </CodeDemoSplit>
 //
 // Deliberately not HomeSplit: that is the landing hero, tuned for a one-liner
-// beside a wide demo — equal columns, a fixed stage height so crossfading
-// slides don't jump, and carousel chrome. A guide snippet is the opposite
-// shape (tall narrow code, small demo), and forcing it through those
-// constraints clipped the code and left the demo adrift in dead space.
+// beside a wide demo. A guide snippet is the opposite shape (tall narrow
+// code, small demo).
 //
-// Here the columns are sized to what each side actually needs, the demo pins
-// to the top so it never floats, and the whole thing stacks under a narrow
-// viewport. Styling lives in src/styles/fleury.css.
+// Layout contract:
+//   - The figure breaks out wider than the prose column (bounded so it never
+//     reaches the sidebar or TOC), stacking on laptop widths and going
+//     two-column only when there is genuinely room.
+//   - Each pane SCROLLS its own overflow — nothing is ever silently clipped.
+//   - An expand control promotes a pane to a near-fullscreen overlay IN
+//     PLACE, by toggling a class on the figure. The live demo node never
+//     moves, so the running app keeps its state and nothing re-mounts.
+// Styling lives in src/styles/fleury.css.
 interface Props {
   /** Filename shown in the title bar, e.g. "amber_theme.dart". */
   file: string;
@@ -34,13 +38,69 @@ const { file, codeLabel = 'You write', demoLabel = 'Fleury renders' } =
     <span class="code-demo-live"><span class="code-demo-pulse"></span>live</span>
   </div>
   <div class="code-demo-body">
-    <div class="code-demo-pane code-demo-code">
-      <span class="code-demo-tag">{codeLabel}</span>
-      <slot name="code" />
-    </div>
-    <div class="code-demo-pane code-demo-demo">
-      <span class="code-demo-tag">{demoLabel}</span>
-      <div class="code-demo-demo-inner"><slot name="demo" /></div>
-    </div>
+    <section class="code-demo-pane code-demo-code">
+      <div class="code-demo-tag-row">
+        <span class="code-demo-tag">{codeLabel}</span>
+        <button
+          class="code-demo-expand"
+          type="button"
+          data-pane="code"
+          aria-label={`Expand ${codeLabel} to full screen`}
+          title="Expand">⛶</button>
+      </div>
+      <div class="code-demo-scroll"><slot name="code" /></div>
+    </section>
+    <section class="code-demo-pane code-demo-demo">
+      <div class="code-demo-tag-row">
+        <span class="code-demo-tag">{demoLabel}</span>
+        <button
+          class="code-demo-expand"
+          type="button"
+          data-pane="demo"
+          aria-label={`Expand ${demoLabel} to full screen`}
+          title="Expand">⛶</button>
+      </div>
+      <div class="code-demo-scroll code-demo-demo-inner"><slot name="demo" /></div>
+    </section>
   </div>
 </figure>
+
+<script>
+  // Expand promotes a pane to a fixed overlay IN PLACE via a class on the
+  // figure — the live demo node never moves, so the app keeps running with
+  // its state. A shared collapse button, backdrop click, and Esc all close.
+  for (const root of document.querySelectorAll<HTMLElement>('.code-demo')) {
+    const collapse = () => {
+      root.classList.remove('is-expanded-code', 'is-expanded-demo');
+      // Each pane owns one collapse control, added lazily on first expand.
+    };
+    const expand = (pane: 'code' | 'demo') => {
+      root.classList.remove('is-expanded-code', 'is-expanded-demo');
+      root.classList.add(pane === 'code' ? 'is-expanded-code' : 'is-expanded-demo');
+    };
+    for (const btn of root.querySelectorAll<HTMLButtonElement>(
+      '.code-demo-expand',
+    )) {
+      btn.addEventListener('click', () => {
+        const pane = btn.dataset.pane as 'code' | 'demo';
+        const active =
+          root.classList.contains(`is-expanded-${pane}`);
+        active ? collapse() : expand(pane);
+      });
+    }
+    // A backdrop element (behind the promoted pane) closes on click.
+    const backdrop = document.createElement('div');
+    backdrop.className = 'code-demo-backdrop';
+    backdrop.addEventListener('click', collapse);
+    root.appendChild(backdrop);
+    document.addEventListener('keydown', (e) => {
+      if (
+        e.key === 'Escape' &&
+        (root.classList.contains('is-expanded-code') ||
+          root.classList.contains('is-expanded-demo'))
+      ) {
+        collapse();
+      }
+    });
+  }
+</script>

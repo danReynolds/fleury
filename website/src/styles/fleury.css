@@ -1057,10 +1057,11 @@ th:nth-last-child(-n + 2) .ct::after {
    to the top instead of floating in the middle of a tall pane, and the pair
    stacks when the column gets narrow. */
 .code-demo {
-  /* Reclaim a little of the prose gutter — a snippet plus a terminal needs
-     more than a measure-width text column. */
-  width: min(64rem, calc(100% + 8rem));
-  margin: 1.25rem -4rem 2rem;
+  /* Break out of the prose column: a snippet plus a terminal needs more
+     than a measure-width text column. Bounded so it never reaches the
+     sidebar or the TOC rail. */
+  width: min(78rem, calc(100% + 14rem));
+  margin: 1.25rem calc((100% - min(78rem, calc(100% + 14rem))) / 2) 2rem;
   border: 1px solid color-mix(in srgb, var(--sl-color-gray-4) 60%, transparent);
   border-radius: 0.9rem;
   overflow: hidden;
@@ -1111,23 +1112,50 @@ th:nth-last-child(-n + 2) .ct::after {
 }
 .code-demo-body {
   display: grid;
-  /* Code gets the room it needs (a full ThemeData is ~46 columns); the demo
-     takes what it needs and no more. `max-content` on the code column is what
-     stops the snippet scrolling horizontally. */
-  grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
-  gap: 0 1rem;
+  /* Stacked by default: code above, demo below, EACH getting the figure's
+     full breakout width. Side-by-side (below) only switches on when the
+     viewport is wide enough that both panes are actually roomy — a
+     laptop-width two-column split just cramps the live demo. Either pane
+     SCROLLS past its width; content is never silently clipped. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.1rem;
   padding: 0.9rem 1rem 1.1rem;
 }
 .code-demo-pane {
   min-width: 0;
 }
+.code-demo-tag-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
 .code-demo-tag {
   display: block;
-  margin-bottom: 0.4rem;
   font-size: 0.68rem;
   letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--sl-color-gray-3);
+}
+.code-demo-expand {
+  border: 1px solid color-mix(in srgb, var(--sl-color-gray-4) 55%, transparent);
+  border-radius: 0.35rem;
+  background: transparent;
+  color: var(--sl-color-gray-3);
+  font-size: 0.8rem;
+  line-height: 1;
+  padding: 0.15rem 0.35rem;
+  cursor: pointer;
+}
+.code-demo-expand:hover {
+  color: var(--sl-color-white);
+  border-color: var(--sl-color-gray-3);
+}
+/* The no-clip rule: each pane scrolls its own overflow, both axes. */
+.code-demo-scroll {
+  overflow: auto;
+  max-width: 100%;
 }
 /* The snippet owns its own scrolling only as a last resort; normally the
    max-content column means there is nothing to scroll. */
@@ -1147,13 +1175,67 @@ th:nth-last-child(-n + 2) .ct::after {
 .code-demo-demo-inner .fleury-frame {
   margin: 0;
 }
+/* Two columns only when the breakout is genuinely wide enough for both —
+   code sized to its content, the live demo taking the rest. */
+@media (min-width: 88rem) {
+  .code-demo-body {
+    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+    gap: 0 1rem;
+  }
+}
+/* Below the breakout threshold, sit inside the prose column like any figure. */
 @media (max-width: 72rem) {
   .code-demo {
     width: 100%;
     margin-inline: 0;
   }
-  .code-demo-body {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 1.1rem;
-  }
+}
+
+/* Expand: promote one pane to a fixed near-fullscreen overlay IN PLACE.
+   The live demo node never moves, so the app keeps running with its state. */
+.code-demo-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(4, 8, 12, 0.72);
+  backdrop-filter: blur(2px);
+}
+.code-demo.is-expanded-code .code-demo-backdrop,
+.code-demo.is-expanded-demo .code-demo-backdrop {
+  display: block;
+}
+.code-demo.is-expanded-code .code-demo-code,
+.code-demo.is-expanded-demo .code-demo-demo {
+  position: fixed;
+  z-index: 91;
+  inset: max(2vh, 1rem) max(2vw, 1rem);
+  margin: 0;
+  padding: 0.75rem 1rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--sl-color-gray-4) 60%, transparent);
+  border-radius: 0.9rem;
+  background: linear-gradient(180deg, #0d1219, #0a0e13);
+  box-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.85);
+  display: flex;
+  flex-direction: column;
+}
+:root[data-theme='light'] .code-demo.is-expanded-code .code-demo-code,
+:root[data-theme='light'] .code-demo.is-expanded-demo .code-demo-demo {
+  background: linear-gradient(180deg, #ffffff, #f3faf6);
+}
+/* The promoted pane's scroll area fills the overlay; its demo centres. */
+.code-demo.is-expanded-code .code-demo-code .code-demo-scroll,
+.code-demo.is-expanded-demo .code-demo-demo .code-demo-scroll {
+  flex: 1;
+  min-height: 0;
+}
+.code-demo.is-expanded-demo .code-demo-demo .code-demo-demo-inner {
+  justify-content: center;
+  align-items: center;
+}
+/* The expand button becomes the collapse control while a pane is open. */
+.code-demo.is-expanded-code .code-demo-code .code-demo-expand,
+.code-demo.is-expanded-demo .code-demo-demo .code-demo-expand {
+  color: var(--sl-color-white);
+  border-color: var(--sl-color-gray-3);
 }
