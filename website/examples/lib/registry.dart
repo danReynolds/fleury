@@ -1844,6 +1844,19 @@ TextArea(
     builder: () => const _KeyBindingsTour(),
   ),
   ExampleInfo(
+    id: 'keyboard.detector',
+    widget: 'KeyDetector',
+    category: 'Inputs & controls',
+    blurb:
+        'Propagate-by-default in one screen: a pane owns the arrow keys while '
+        'it can move, and lets them bubble to the app at its edge — the '
+        'scroll-region-yields-at-its-boundary pattern.',
+    cols: 64,
+    rows: 12,
+    interactive: true,
+    builder: () => const _KeyDetectorTour(),
+  ),
+  ExampleInfo(
     id: 'showcase.sprite',
     widget: 'ANSI Sprite Studio',
     category: 'Showcases',
@@ -3168,6 +3181,106 @@ class ListViewSelectionDemoRows extends StatelessWidget {
                 : const CellStyle(),
           ),
       ],
+    );
+  }
+}
+
+/// KeyDetector's defining trait: it PROPAGATES by default and consumes only
+/// what it owns. The inner detector moves a cursor inside the pane and
+/// consumes the arrow; at the pane's edge it does NOT consume, so the arrow
+/// bubbles to the outer KeyBindings — the scroll-region-yields-at-its-boundary
+/// pattern, live.
+class _KeyDetectorTour extends StatefulWidget {
+  const _KeyDetectorTour();
+  @override
+  State<_KeyDetectorTour> createState() => _KeyDetectorTourState();
+}
+
+class _KeyDetectorTourState extends State<_KeyDetectorTour> {
+  static const _count = 5;
+  int _cursor = 0;
+  String _status = 'press ↑ / ↓ — the pane keeps them until it reaches an edge';
+  bool _bubbled = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return KeyBindings(
+      // The ancestor. It only ever hears an arrow the pane declined to
+      // consume — i.e. one that fell off the pane's edge.
+      bindings: [
+        KeyBinding(
+          KeyCode.arrowDown,
+          label: 'App ↓',
+          onTrigger: (_) => setState(() {
+            _bubbled = true;
+            _status = '↓ bubbled to the app — the pane was at its last row';
+          }),
+        ),
+        KeyBinding(
+          KeyCode.arrowUp,
+          label: 'App ↑',
+          onTrigger: (_) => setState(() {
+            _bubbled = true;
+            _status = '↑ bubbled to the app — the pane was at its first row';
+          }),
+        ),
+      ],
+      child: Focus(
+        autofocus: true,
+        child: KeyDetector(
+          onKey: (e) {
+            if (e.code == KeyCode.arrowDown && _cursor < _count - 1) {
+              setState(() {
+                _cursor++;
+                _bubbled = false;
+                _status = 'pane consumed ↓ (row ${_cursor + 1})';
+              });
+              e.consume();
+            } else if (e.code == KeyCode.arrowUp && _cursor > 0) {
+              setState(() {
+                _cursor--;
+                _bubbled = false;
+                _status = 'pane consumed ↑ (row ${_cursor + 1})';
+              });
+              e.consume();
+            }
+            // At an edge: do nothing → the arrow continues to the ancestor.
+          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(1),
+                child: Text(
+                  _status,
+                  style: CellStyle(
+                    bold: true,
+                    foreground: _bubbled ? theme.colorScheme.warning : null,
+                  ),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 1),
+                child: Text('── scroll pane ──'),
+              ),
+              for (var i = 0; i < _count; i++)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 1),
+                  child: Text(
+                    '${i == _cursor ? '▸' : ' '} line ${i + 1}',
+                    style: i == _cursor
+                        ? CellStyle(
+                            foreground: theme.colorScheme.primary,
+                            bold: true,
+                          )
+                        : const CellStyle(),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
