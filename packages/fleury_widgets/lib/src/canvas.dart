@@ -345,10 +345,22 @@ class RenderCanvas extends RenderObject {
     buf.writeTo(buffer, offset, _defaultStyle, glyphTier: _glyphTier);
   }
 
-  /// RFC 0021 §2.3: the v1 raster density. ≈4× braille, matching the
-  /// typical 1:2 cell aspect.
-  static const int _pxPerCellX = 8;
-  static const int _pxPerCellY = 16;
+  /// RFC 0021 §2.3: the raster density ladder. Full density is ≈4× braille
+  /// (matching the typical 1:2 cell aspect); a canvas whose full-density
+  /// raster would exceed [_rasterAreaBudget] drops one rung to half density
+  /// (still 2× braille) — a full-screen playfield is 4× cheaper to
+  /// rasterize, compress, and DECODE terminal-side, which is where slow
+  /// graphics implementations (Warp) actually spend the frame.
+  static const int _pxPerCellXFull = 8;
+  static const int _pxPerCellYFull = 16;
+  static const int _rasterAreaBudget = 480000;
+
+  /// Minimum interval between raster regenerations for budget-exceeding
+  /// canvases: the simulation keeps its own cadence; the previous frame
+  /// simply stays displayed. Bounding the producer rate is what keeps a
+  /// slow terminal decoder's queue — and input-to-photon latency — from
+  /// growing without limit.
+  static const Duration _largeRasterInterval = Duration(milliseconds: 33);
 
   /// Raster identity: images are content-addressed by string id and Kitty
   /// caches by id, so a canvas that redraws must present each frame as a
@@ -358,27 +370,76 @@ class RenderCanvas extends RenderObject {
   static int _nextRasterInstance = 1;
   late final int _rasterInstance = _nextRasterInstance++;
   int _rasterRevision = 0;
+  int _lastRasterHash = 0;
+  final Stopwatch _sinceRaster = Stopwatch();
   PixelSurface? _pixelSurface;
   static final Uint8List _noBytes = Uint8List(0);
 
-  void _paintPixels(CellBuffer buffer, CellOffset offset) {
-    final w = size.cols * _pxPerCellX;
-    final h = size.rows * _pxPerCellY;
-    var surface = _pixelSurface;
-    if (surface == null || surface.width != w || surface.height != h) {
-      surface = _pixelSurface = PixelSurface(w, h);
-    } else {
-      surface.clear();
+  /// FNV-1a over the raster words. ~0.1–0.5ms against rasters that cost
+  /// 5ms to draw and 3ms to compress — cheap insurance that a visually
+  /// IDENTICAL frame (paused game, settled chart) never bumps the revision
+  /// and never re-ships a byte anywhere.
+  static int _hashRaster(Uint8List rgba) {
+    final words = rgba.buffer.asUint32List(
+      rgba.offsetInBytes,
+      rgba.lengthInBytes >> 2,
+    );
+    var h = 0xcbf29ce484222325;
+    for (var i = 0; i < words.length; i++) {
+      h ^= words[i];
+      h *= 0x100000001b3;
     }
-    final captured = surface;
-    _painter.paint(_PixelCtx(captured, _bounds));
-    _rasterRevision++;
+    return h;
+  }
+
+  void _paintPixels(CellBuffer buffer, CellOffset offset) {
+    // Density ladder: full density unless the raster would blow the area
+    // budget; then half (still 2× braille). Derived from size alone, so a
+    // given canvas never oscillates between rungs frame to frame.
+    final fullArea = size.cols * _pxPerCellXFull * size.rows * _pxPerCellYFull;
+    final dense = fullArea <= _rasterAreaBudget;
+    final pxX = dense ? _pxPerCellXFull : _pxPerCellXFull ~/ 2;
+    final pxY = dense ? _pxPerCellYFull : _pxPerCellYFull ~/ 2;
+    final w = size.cols * pxX;
+    final h = size.rows * pxY;
+    var surface = _pixelSurface;
+    final sameSize =
+        surface != null && surface.width == w && surface.height == h;
+
+    // Producer throttle for budget-exceeding canvases: within the interval
+    // the PREVIOUS raster stays displayed (same revision → nothing
+    // re-transmits, nothing re-ships) and the 5ms+3ms produce cost is
+    // skipped entirely. Small canvases never throttle.
+    final throttled =
+        !dense &&
+        sameSize &&
+        _rasterRevision > 0 &&
+        _sinceRaster.isRunning &&
+        _sinceRaster.elapsed < _largeRasterInterval;
+
+    if (!throttled) {
+      if (!sameSize) {
+        surface = _pixelSurface = PixelSurface(w, h);
+        _lastRasterHash = 0;
+      } else {
+        surface!.clear();
+      }
+      _painter.paint(_PixelCtx(surface, _bounds, pxY / 4));
+      final hash = _hashRaster(surface.rgba);
+      if (hash != _lastRasterHash || _rasterRevision == 0) {
+        _lastRasterHash = hash;
+        _rasterRevision++;
+      }
+      _sinceRaster
+        ..reset()
+        ..start();
+    }
+    final captured = surface!;
     buffer.writeImageWithId(
       offset,
-      // STABLE id + bumped revision (RFC 0021 §2.5 revised): presenters
-      // replace the image's data in place instead of transmit-place-delete
-      // churn — the churn opened a deleted-old/undecoded-new gap that
-      // flickered on terminals with asynchronous graphics decode (Warp).
+      // STABLE id + revision (RFC 0021 §2.5 revised): presenters replace
+      // the image's data in place; an unchanged revision (identical pixels,
+      // or a throttled frame) costs zero bytes end to end.
       'canvas-$_rasterInstance',
       _noBytes,
       width: size.cols,
@@ -387,7 +448,7 @@ class RenderCanvas extends RenderObject {
       sourceWidth: w,
       sourceHeight: h,
       // Consumed by the presenter within this frame; the surface is reused
-      // (cleared, redrawn) only on the NEXT paint, after presentation.
+      // (cleared, redrawn) only on a LATER paint, after presentation.
       pixels: () => captured.rgba,
       revision: _rasterRevision,
     );
@@ -398,14 +459,14 @@ class RenderCanvas extends RenderObject {
 /// same to-fraction math as [_SubCellCtx], but unrounded — fractional
 /// coordinates are the antialiaser's input, not an error to snap away.
 class _PixelCtx implements CanvasContext {
-  _PixelCtx(this._surface, this._bounds);
+  _PixelCtx(this._surface, this._bounds, this._widthScale);
   final PixelSurface _surface;
   final CanvasBounds _bounds;
 
-  /// §2.2: stroke width is canonical in braille-dot units; this tier is 4×
-  /// braille's vertical density.
-  static const double _widthScale = _pxPerCellYd / 4;
-  static const double _pxPerCellYd = 16;
+  /// §2.2: stroke width is canonical in braille-dot units, scaled by this
+  /// tier's vertical density relative to braille's 4 rows/cell — passed in
+  /// because the density ladder makes it per-canvas, not a constant.
+  final double _widthScale;
 
   double _mapX(double x) =>
       (x - _bounds.minX) / (_bounds.maxX - _bounds.minX) * (_surface.width - 1);

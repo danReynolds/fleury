@@ -12,6 +12,16 @@ class _CrossPainter implements CanvasPainter {
   }
 }
 
+class _FramePainter implements CanvasPainter {
+  const _FramePainter(this.frame);
+  final int frame;
+  @override
+  void paint(CanvasContext ctx) {
+    final y = 0.2 + (frame % 5) * 0.15;
+    ctx.drawLine(0, y, 1, y, color: const RgbColor(255, 255, 255), width: 2);
+  }
+}
+
 const _rasterCaps = SurfaceCapabilities(
   images: InlineImageSupport.placements,
   liveRasters: true,
@@ -78,6 +88,54 @@ void main() {
       );
     });
 
+    testWidgets('identical pixels never bump the revision', (tester) {
+      // A paused game or settled chart repaints the SAME raster; the hash
+      // gate must keep the revision still, or 90KB/frame streams for
+      // nothing on every surface.
+      tester.pumpWidget(_app(CanvasMarker.pixels, _rasterCaps));
+      final first = tester
+          .render(size: const CellSize(12, 6))
+          .imagePlacements
+          .single
+          .revision;
+      // Same painter constant → identical pixels on repaint.
+      tester.pumpWidget(_app(CanvasMarker.pixels, _rasterCaps));
+      final second = tester
+          .render(size: const CellSize(12, 6))
+          .imagePlacements
+          .single
+          .revision;
+      expect(second, first);
+    });
+
+    testWidgets('a budget-exceeding canvas drops one density rung', (tester) {
+      // 200x40 cells at 8x16 would be 2.05M px — over the 480K budget, so
+      // the ladder halves to 4x8 (still 2x braille density).
+      tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(
+            size: CellSize(200, 40),
+            capabilities: SurfaceCapabilities(
+              images: InlineImageSupport.placements,
+              liveRasters: true,
+            ),
+          ),
+          child: SizedBox(
+            width: 200,
+            height: 40,
+            child: Canvas(
+              marker: CanvasMarker.pixels,
+              painter: const _CrossPainter(),
+            ),
+          ),
+        ),
+      );
+      final buffer = tester.render(size: const CellSize(200, 40));
+      final image = buffer.images[buffer.imagePlacements.single.id]!;
+      expect(image.sourceWidth, 200 * 4);
+      expect(image.sourceHeight, 40 * 8);
+    });
+
     testWidgets('a repaint keeps the id STABLE and bumps the revision', (
       tester,
     ) {
@@ -86,12 +144,26 @@ void main() {
       // opens the deleted-old/undecoded-new gap that flickered on Warp. The
       // revision is what tells the diff and the presenters that the pixels
       // changed.
-      tester.pumpWidget(_app(CanvasMarker.pixels, _rasterCaps));
+      Widget frameApp(int frame) => MediaQuery(
+        data: const MediaQueryData(
+          size: CellSize(12, 6),
+          capabilities: _rasterCaps,
+        ),
+        child: SizedBox(
+          width: 12,
+          height: 6,
+          child: Canvas(
+            marker: CanvasMarker.pixels,
+            painter: _FramePainter(frame),
+          ),
+        ),
+      );
+      tester.pumpWidget(frameApp(1));
       final first = tester
           .render(size: const CellSize(12, 6))
           .imagePlacements
           .single;
-      tester.pumpWidget(_app(CanvasMarker.pixels, _rasterCaps));
+      tester.pumpWidget(frameApp(2));
       final second = tester
           .render(size: const CellSize(12, 6))
           .imagePlacements
