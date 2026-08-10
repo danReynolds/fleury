@@ -7,16 +7,16 @@
 //     <FleuryExample slot="demo" id="…" />
 //   </CodeDemoSplit>
 //
-// A terminal-window card: title bar, the source, a labelled seam that names
-// the source→output relationship, then the live output. Design notes:
-//   - The figure breaks out wider than the prose column (bounded off the
-//     sidebar/TOC), stacks on laptop widths, goes two-column only when there
-//     is real room. Each pane SCROLLS its overflow — never silently clipped.
-//   - "Full screen" promotes a pane IN PLACE by toggling a class on the
-//     figure. The live demo node never moves, so the running app keeps its
-//     state and nothing re-mounts (moving it made FleuryExample re-hydrate a
-//     second instance). Backdrop click, the toolbar ✕, and Esc all exit.
-// Styling lives in src/styles/fleury.css.
+// A terminal-window card. Inline it stacks (or goes two-column when roomy);
+// one "Expand" in the title bar opens a full playground modal — code left,
+// running demo right — over a dimmed backdrop.
+//
+// Modal mechanics: the figure is promoted to a fixed overlay IN PLACE by a
+// class; NOTHING is moved. Moving the demo node (or portaling the figure)
+// disconnects it, and FleuryExample re-hydrates a second instance on
+// reconnect — so the live app stays exactly where it mounted and simply
+// gets a bigger frame. A backdrop is added to <body>; Esc, the backdrop,
+// and the toolbar button all close. Styling lives in src/styles/fleury.css.
 interface Props {
   /** Filename shown in the title bar, e.g. "amber_theme.dart". */
   file: string;
@@ -28,33 +28,27 @@ interface Props {
 const { file, codeLabel = 'You write', demoLabel = 'Fleury renders' } =
   Astro.props;
 
-// A clean "enter full screen" glyph — frame corners opening outward.
 const expandIcon =
-  '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" ' +
-  'stroke="currentColor" stroke-width="1.6" stroke-linecap="round" ' +
+  '<svg viewBox="0 0 20 20" width="13" height="13" fill="none" ' +
+  'stroke="currentColor" stroke-width="1.7" stroke-linecap="round" ' +
   'stroke-linejoin="round" aria-hidden="true">' +
-  '<path d="M4 8V4h4M16 8V4h-4M4 12v4h4M16 12v4h-4"/></svg>';
+  '<path d="M12 4h4v4M8 16H4v-4M16 4l-5 5M4 16l5-5"/></svg>';
 ---
 
 <figure class="cds">
   <header class="cds-bar">
     <span class="cds-file">{file}</span>
     <span class="cds-live"><span class="cds-pulse"></span>live</span>
+    <button class="cds-toggle" type="button" aria-label="Expand to full screen">
+      <span class="cds-toggle-open" set:html={expandIcon + '<span>Expand</span>'}
+      ></span>
+      <span class="cds-toggle-close">Close <kbd>Esc</kbd></span>
+    </button>
   </header>
 
   <div class="cds-body">
     <section class="cds-pane" data-pane="code">
-      <div class="cds-head">
-        <span class="cds-cap">{codeLabel}</span>
-        <button
-          class="cds-expand"
-          type="button"
-          data-pane="code"
-          aria-label={`Full screen: ${codeLabel}`}
-          title="Full screen"
-          set:html={expandIcon}
-        />
-      </div>
+      <span class="cds-cap">{codeLabel}</span>
       <div class="cds-scroll"><slot name="code" /></div>
     </section>
 
@@ -64,60 +58,41 @@ const expandIcon =
     </div>
 
     <section class="cds-pane" data-pane="demo">
-      <div class="cds-head">
-        <span class="cds-cap">{demoLabel}</span>
-        <button
-          class="cds-expand"
-          type="button"
-          data-pane="demo"
-          aria-label={`Full screen: ${demoLabel}`}
-          title="Full screen"
-          set:html={expandIcon}
-        />
-      </div>
+      <span class="cds-cap">{demoLabel}</span>
       <div class="cds-scroll cds-demo"><slot name="demo" /></div>
     </section>
   </div>
-
-  <div class="cds-fsbar" aria-hidden="true">
-    <span class="cds-fsbar-file">{file}</span>
-    <span class="cds-fsbar-label"></span>
-    <kbd class="cds-fsbar-esc">Esc</kbd>
-    <button class="cds-fsbar-close" type="button" aria-label="Exit full screen"
-      >✕</button>
-  </div>
-  <div class="cds-backdrop" aria-hidden="true"></div>
 </figure>
 
 <script>
   for (const root of document.querySelectorAll<HTMLElement>('.cds')) {
-    const label = root.querySelector<HTMLElement>('.cds-fsbar-label')!;
-    const exit = () =>
-      root.classList.remove('is-fs-code', 'is-fs-demo');
-    const enter = (pane: 'code' | 'demo') => {
-      const cap = root
-        .querySelector(`.cds-pane[data-pane="${pane}"] .cds-cap`)
-        ?.textContent?.trim();
-      label.textContent = cap ?? '';
-      exit();
-      root.classList.add(pane === 'code' ? 'is-fs-code' : 'is-fs-demo');
+    const toggle = root.querySelector<HTMLButtonElement>('.cds-toggle')!;
+    let backdrop: HTMLElement | null = null;
+
+    const close = () => {
+      if (!root.classList.contains('is-fs')) return;
+      root.classList.remove('is-fs');
+      document.body.classList.remove('cds-modal-open');
+      backdrop?.remove();
+      backdrop = null;
+      toggle.setAttribute('aria-label', 'Expand to full screen');
     };
-    for (const btn of root.querySelectorAll<HTMLButtonElement>('.cds-expand')) {
-      btn.addEventListener('click', () => {
-        const pane = btn.dataset.pane as 'code' | 'demo';
-        root.classList.contains(`is-fs-${pane}`) ? exit() : enter(pane);
-      });
-    }
-    root.querySelector('.cds-fsbar-close')!.addEventListener('click', exit);
-    root.querySelector('.cds-backdrop')!.addEventListener('click', exit);
+    const open = () => {
+      if (root.classList.contains('is-fs')) return;
+      backdrop = document.createElement('div');
+      backdrop.className = 'cds-backdrop';
+      backdrop.addEventListener('click', close);
+      document.body.appendChild(backdrop);
+      document.body.classList.add('cds-modal-open');
+      root.classList.add('is-fs');
+      toggle.setAttribute('aria-label', 'Exit full screen');
+    };
+
+    toggle.addEventListener('click', () =>
+      root.classList.contains('is-fs') ? close() : open(),
+    );
     document.addEventListener('keydown', (e) => {
-      if (
-        e.key === 'Escape' &&
-        (root.classList.contains('is-fs-code') ||
-          root.classList.contains('is-fs-demo'))
-      ) {
-        exit();
-      }
+      if (e.key === 'Escape') close();
     });
   }
 </script>
