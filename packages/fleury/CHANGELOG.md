@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **Pixel canvas tier (RFC 0021).** `CanvasMarker` gains `pixels` and
+  `auto`: the same `CanvasPainter` rasterized to real antialiased RGBA —
+  additive glow, per-pixel color — and delivered as an inline-image
+  placement wherever the surface confirmed a live-raster path (Kitty
+  graphics terminals; the serve browser, which inflates zlib rasters
+  natively and blits to a canvas). Everywhere else the canvas renders
+  braille — never blank. Stroke widths are canonical across tiers, so a
+  braille-tuned painter keeps its proportions under `auto`. The showcase
+  stays text-tier by identity; `samples asteroids --turbo` demonstrates
+  the ceiling.
+
 - **Keyboard lifecycle (RFC 0020).** Key releases and held-state work out of
   the box: `runApp` asks every terminal for the full Kitty keyboard protocol
   and negotiates down transactionally — no flags, no tiers to declare, and a

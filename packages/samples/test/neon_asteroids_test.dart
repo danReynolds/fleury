@@ -246,6 +246,55 @@ void main() {
     );
   });
 
+  group('turbo (RFC 0021 pixel ceiling)', () {
+    testWidgets('turbo renders raster placements on a live-raster surface', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(
+            size: CellSize(80, 24),
+            capabilities: SurfaceCapabilities(
+              images: InlineImageSupport.placements,
+              liveRasters: true,
+            ),
+          ),
+          child: const NeonAsteroidsApp(turbo: true),
+        ),
+      );
+      tester.pump(const Duration(milliseconds: 100));
+      final buffer = tester.render(size: const CellSize(80, 24));
+      expect(
+        buffer.imagePlacements,
+        isNotEmpty,
+        reason: 'the playfield canvas must upgrade to pixels',
+      );
+      expect(buffer.images[buffer.imagePlacements.first.id]!.isRaster, isTrue);
+    });
+
+    testWidgets('turbo without live rasters stays braille — never blank', (
+      tester,
+    ) {
+      tester.pumpWidget(const NeonAsteroidsApp(turbo: true));
+      tester.pump(const Duration(milliseconds: 100));
+      final buffer = tester.render(size: const CellSize(80, 24));
+      expect(buffer.imagePlacements, isEmpty);
+      // The attract screen still draws rocks as braille somewhere.
+      var braille = 0;
+      for (var row = 0; row < 24; row++) {
+        for (var col = 0; col < 80; col++) {
+          final g = buffer.atColRow(col, row).grapheme;
+          if (g != null &&
+              g.codeUnitAt(0) >= 0x2800 &&
+              g.codeUnitAt(0) <= 0x28FF) {
+            braille++;
+          }
+        }
+      }
+      expect(braille, greaterThan(10), reason: 'the glyph fallback must draw');
+    });
+  });
+
   group('impact feedback (visual-only model state)', () {
     NeonAsteroidsGame killOneAsteroid() {
       final game = NeonAsteroidsGame(

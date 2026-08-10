@@ -25,6 +25,23 @@
         "asteroids"
       ],
       "port": 8474
+    },
+    {
+      "name": "asteroids-turbo-serve",
+      "runtimeExecutable": "dart",
+      "runtimeArgs": [
+        "run",
+        "packages/fleury/bin/fleury.dart",
+        "serve",
+        "--port=8475",
+        "--spawn",
+        "dart",
+        "run",
+        "packages/samples/bin/samples.dart",
+        "asteroids",
+        "--turbo"
+      ],
+      "port": 8475
     }
   ]
 }

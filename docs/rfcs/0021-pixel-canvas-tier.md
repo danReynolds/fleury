@@ -1,7 +1,8 @@
 # RFC 0021 — The pixel canvas tier
 
-**Status:** ACCEPTED 2026-08-09 (direction approved by Dan in session; this
-document records the decisions). Implementation phased P1–P4.
+**Status:** IMPLEMENTED 2026-08-09 — P1–P4 all landed the same day, each
+phase closed with a review that adjusted the next (the §2 "learning" notes
+are those reviews' output).
 **Depends on:** the `CanvasMarker` ladder and `drawLine(width:)` (PR #193),
 the inline-image placement architecture (`InlineImage`/`InlineImagePlacement`
 in the cell buffer, the placement-diffing `TerminalImageEncoder`, the serve
@@ -92,27 +93,51 @@ raster the whole producer side is ~8ms of the 16.6ms frame budget.
 
 ### 2.6 Browser surface
 
-Placements already mirror to the serve client's image overlay; the pixel
-canvas inherits web parity with zero new wire surface. Rendering the
-vector commands natively in a browser `<canvas>` (shipping draw commands
-over the wire) is explicitly rejected for v1: it is a second renderer and
-a second wire vocabulary to keep honest.
+**P3 learning — "placements already mirror" was FALSE for rasters**: the
+serve wire ships file bytes and a raster has none. The shipped design:
+`InlineImageFrame` gains a raster shape (id-length high bit + u16 dims;
+file frames stay byte-identical to the old wire), the host compresses the
+live RGBA once per frame (memoized so placement bounding, projected-fit
+eviction, the ledger, and the transport all account the SAME true size —
+the host/client ledger-identity invariant depends on it), and the client
+inflates with the browser's native `DecompressionStream('deflate')`, blits
+to a canvas, and publishes a data URL. Because raster ids are per-frame
+and the decode is asynchronous, decode completion RE-APPLIES the current
+placements — without that every frame's pixels would materialize just
+after the only plan that referenced them, and never be seen. The client
+declares `liveRasters=1` in INIT (additive, never version-inferred).
+Rendering vector commands natively in a browser `<canvas>` stays rejected:
+one renderer, one wire vocabulary.
 
-### 2.7 Out of scope, v1
+### 2.7 Out of scope, v1 — and two known v1 properties
 
 Sixel; `pixelScale`; bloom/post-processing beyond additive accumulation;
 the kitty animation protocol (`a=t` frame updates — plain placement
 replacement first, measured before optimized); z-order guarantees beyond
 existing placement semantics; any change to glyph-tier rendering.
 
-## 3. Phases
+Two properties of the shipped v1, observed live and accepted:
 
-- **P1** — this document + `PixelSurface` (rasterizer, headless tests).
-- **P2** — `CanvasMarker.pixels`/`auto`; `RenderCanvas` records the
-  placement; capability resolution; FakeTerminal tests; encode profiling.
-- **P3** — serve parity verification at animation cadence; a sustained-
-  throughput gate (image-bench covers single encodes only).
-- **P4** — `asteroids --turbo` (marker: auto), captures, guide, CHANGELOG.
+- **Rasters paint above the text grid** (the placement layer's existing
+  property, shared with `Image`): a text card overlapping a pixel canvas
+  is pierced by lit strokes rather than covering them. Mostly-transparent
+  rasters keep cards readable; proper z-interleaving is the deferred
+  z-order work.
+- **The first serve frame lands one decode behind** (~ms): the async
+  inflate means a session's very first raster materializes just after its
+  plan; at animation cadence every subsequent frame is covered by the
+  decode-complete re-apply and the gap is imperceptible.
 
-Each phase lands independently useful; the investment can stop after any
-of them without stranded work.
+## 3. Phases — all complete
+
+- **P1** ✅ — this document + `PixelSurface`. Measured: 5.0ms busy-frame
+  raster (201fps headroom).
+- **P2** ✅ — `pixels`/`auto` via the neutral `liveRasters` bit;
+  placements with per-repaint ids; the kitty raw-RGBA+zlib lane (3.0ms +
+  88KiB b64 per busy frame).
+- **P3** ✅ — reordered by the P2 review: encoder round-trip + eviction
+  proof + sustained gate (796µs/f, 13.5KB/f) FIRST, then the serve raster
+  wire (§2.6), full client path green in real Chrome.
+- **P4** ✅ — `asteroids --turbo` (auto: pixels on Kitty terminals AND the
+  serve browser, braille elsewhere — never blank); verified live over
+  serve: antialiased glowing rocks, additive halos, the vector-CRT ship.

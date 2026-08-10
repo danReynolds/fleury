@@ -50,8 +50,14 @@ Future<void> main(List<String> args) async {
     exit(2);
   }
 
+  // `asteroids --turbo`: the RFC 0021 pixel ceiling — the same game,
+  // rasterized to real antialiased pixels where the surface supports it.
+  final home = name == 'asteroids' && args.contains('--turbo')
+      ? const NeonAsteroidsApp(turbo: true)
+      : entry.$2();
+
   await runApp(
-    FleuryApp(title: 'Fleury $name sample', home: withQuitKey(entry.$2())),
+    FleuryApp(title: 'Fleury $name sample', home: withQuitKey(home)),
     // No keyboard flags: `asteroids` needs real key releases and `dashboard`
     // does not, and neither has to say so. The framework asks the terminal for
     // everything it can safely give and negotiates down transactionally.

@@ -25,15 +25,25 @@ const _violetHot = RgbColor(0xD6, 0xAE, 0xFF);
 /// A real-time, browser-safe Asteroids showcase built entirely from Fleury
 /// cells and public animation/input APIs.
 class NeonAsteroidsApp extends StatelessWidget {
-  const NeonAsteroidsApp({super.key});
+  const NeonAsteroidsApp({super.key, this.turbo = false});
+
+  /// The pixel ceiling (RFC 0021): rasterize the SAME painter to real
+  /// antialiased pixels wherever the surface confirmed a live-raster path
+  /// (Kitty graphics terminals; the serve browser), falling back to braille
+  /// everywhere else. Off by default ON PURPOSE: the text-tier rendering is
+  /// the showcase's identity — the flag exists to demonstrate the ceiling,
+  /// not to replace the craft. CLI: `asteroids --turbo`.
+  final bool turbo;
 
   @override
   Widget build(BuildContext context) =>
-      const SampleScaffold(child: _NeonAsteroidsBody());
+      SampleScaffold(child: _NeonAsteroidsBody(turbo: turbo));
 }
 
 class _NeonAsteroidsBody extends StatefulWidget {
-  const _NeonAsteroidsBody();
+  const _NeonAsteroidsBody({required this.turbo});
+
+  final bool turbo;
 
   @override
   State<_NeonAsteroidsBody> createState() => _NeonAsteroidsBodyState();
@@ -474,12 +484,12 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
       shakeY = math.cos(_game.tickCount * 2.3) * 1.2 * intensity;
     }
     final canvas = Canvas(
-      // Braille, and only braille. The sextant tier was tried and rejected
-      // (2026-08-09): solid 2×3 blocks turn the vector outlines into flat
-      // fat-pixel sprites — the glow layering collapses and the game stops
-      // reading as VECTOR FLIGHT. If that skin is ever wanted back, it is
-      // one revert away; it does not ride along as an unloved flag.
-      marker: CanvasMarker.braille,
+      // Braille is the identity; `--turbo` is the ceiling. The sextant tier
+      // was tried and rejected (2026-08-09): solid 2×3 blocks turned the
+      // vector outlines into flat sprites. Pixels are different in kind —
+      // the SAME vector painter at real resolution (RFC 0021), and `auto`
+      // keeps braille wherever no live-raster surface is confirmed.
+      marker: widget.turbo ? CanvasMarker.auto : CanvasMarker.braille,
       bounds: CanvasBounds(
         minX: shakeX,
         maxX: _game.width + shakeX,
