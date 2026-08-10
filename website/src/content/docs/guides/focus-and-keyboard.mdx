@@ -164,6 +164,66 @@ accumulating set with no releases is a lying set. Branch on it and offer a
 *different* control scheme (a tap-toggle instead of hold-to-thrust) rather than
 a broken version of the same one. Commands work everywhere and need no branch.
 
+### One game, two control schemes
+
+The production shape of that branch is a duet: the sampled scheme where held
+state exists, and a **press-driven fallback built from ordinary bindings**
+everywhere else. Bindings are the fallback on purpose — presses are the one
+thing every terminal reports, and binding labels let the hint bar tell the
+truth about which scheme is live:
+
+```dart
+Widget build(BuildContext context) {
+  // Reactive: rebuilds when negotiation lands or a surface is demoted, so
+  // the control scheme (and its hint labels) upgrade and downgrade live.
+  final canHold = Keyboard.of(context).capabilities.supportsHeldState;
+  return KeyBindings(
+    bindings: [
+      // Commands need no branch — they work on every tier.
+      KeyBinding(KeyCode.space, label: 'Fire', onTrigger: (_) => fire()),
+      if (!canHold)
+        // The fallback: each press nudges the simulation a fixed step, and
+        // includeRepeats keeps it nudging while the key auto-repeats. The
+        // label says what the control really is on THIS terminal.
+        KeyBinding(
+          KeyPosition.w,
+          aliases: [KeyCode.arrowUp],
+          label: 'Thrust (tap)',
+          includeRepeats: true,
+          onTrigger: (_) => controls.nudgeThrust(),
+        ),
+    ],
+    child: playfield,
+  );
+}
+
+void tick(Duration elapsed) {
+  // One simulation, two input sources: sampled held state where it exists,
+  // the bindings' accumulated nudges where it does not.
+  final input = canHold
+      ? ShipInput(thrust: keyboard.snapshot.isHeld(KeyPosition.w))
+      : controls.takeAccumulated();
+  game.advance(elapsed, input);
+}
+```
+
+Two details make this robust rather than merely present. First, **every
+sampled control needs a fallback binding or a capability gate** — and the
+framework checks: in debug builds, sampling a key on a press-only surface
+with no binding covering it prints a *dead control* warning naming the key
+and the fix, because a control that cannot possibly work should say so
+instead of silently doing nothing. Second, keep the fallback's bindings
+positional too (`KeyPosition.w`, not `KeyCode.w`) so both schemes stay
+WASD-shaped on every layout.
+
+Here is the whole story running — the Neon Asteroids showcase. On a surface
+with releases you get hold-to-thrust and smooth turning; the browser embed
+below is exactly that surface. The full dual-scheme source is
+[`neon_asteroids.dart`](https://github.com/danReynolds/fleury/blob/main/packages/samples/lib/src/neon_asteroids.dart)
+and its `neon_asteroids_controls.dart` resolver:
+
+<FleuryExample id="showcase.asteroids" cols={100} rows={30} interactive />
+
 ## Hold — push-to-talk
 
 For a key whose *duration* is the command:
