@@ -147,6 +147,20 @@ const expandIcon =
           ? (window as any).fleuryMountInto(host, id)
           : null;
 
+      // Send focus straight into the running demo so the keyboard drives it
+      // immediately — otherwise showModal parks focus on the Close button and
+      // the reader has to click the demo first. The mount's input element
+      // (a focus-capture textarea) may appear a frame after mount, so aim
+      // twice: this frame and shortly after.
+      const focusDemo = () => {
+        const target =
+          host.querySelector<HTMLElement>('textarea, canvas, [tabindex]') ??
+          host;
+        target?.focus?.();
+      };
+      requestAnimationFrame(focusDemo);
+      setTimeout(focusDemo, 80);
+
       // Explicit, idempotent teardown wired to every close path. We do NOT
       // rely on the dialog's 'close' event — it does not fire in every engine
       // (observed here), which would strand the dialog and leak the mount.

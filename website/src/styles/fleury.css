@@ -1247,6 +1247,10 @@ th:nth-last-child(-n + 2) .ct::after {
    context can trap it behind the backdrop. Code left, a freshly-mounted demo
    right — the inline demo keeps running untouched. */
 .cds-modal {
+  /* Explicitly centered: a global reset zeroes the UA margin:auto that
+     normally centers a modal <dialog>, leaving it pinned top-left. */
+  inset: 0;
+  margin: auto;
   width: min(96vw, 88rem);
   max-width: 88rem;
   height: min(90vh, 58rem);
@@ -1272,11 +1276,12 @@ th:nth-last-child(-n + 2) .ct::after {
 .cds-modal[open] {
   display: flex;
   flex-direction: column;
-  animation: cds-rise 0.18s cubic-bezier(0.2, 0.7, 0.3, 1);
+  /* Fade only — no transform, which would fight the centered position. */
+  animation: cds-fade-in 0.16s ease-out;
 }
-@keyframes cds-rise {
-  from { opacity: 0; transform: translateY(0.6rem) scale(0.99); }
-  to { opacity: 1; transform: none; }
+@keyframes cds-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
   .cds-modal[open] { animation: none; }
