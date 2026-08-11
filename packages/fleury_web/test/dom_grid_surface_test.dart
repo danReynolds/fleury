@@ -409,8 +409,8 @@ void main() {
               background: Colors.blue,
             ),
           );
-          // A block glyph without a background (e.g. a sparkline bar) stays on
-          // the normal inline text path.
+          // A block glyph with no background — a bar-chart column. It paints
+          // solid ink, so it must fill its cell just as the image cell does.
           buffer.writeText(
             const CellOffset(1, 0),
             '▇',
@@ -423,20 +423,28 @@ void main() {
 
       final spans = surface.rowElements.single.children;
       final imageCell = spans.item(0)!;
-      expect(imageCell.textContent, '▀');
+      // The glyph is gone: the ink is a CSS rectangle over the cell background,
+      // so neither axis depends on the font's ink extent.
+      expect(imageCell.textContent, ' ');
       final imgStyle = imageCell.getAttribute('style')!;
       expect(imgStyle, contains('display:inline-block'));
       expect(imgStyle, contains('height:100%'));
       expect(imgStyle, contains('vertical-align:top'));
       expect(imgStyle, contains('background-color:'), reason: 'fills the cell');
+      expect(imgStyle, contains('background-size:100% 50%'), reason: 'top ▀');
+      // Pinned to exactly one snapped cell so the rectangle's edge is on-grid.
+      expect(imgStyle, contains('width:10px'));
 
       final barCell = spans.item(1)!;
-      expect(barCell.textContent, '▇');
+      expect(barCell.textContent, ' ');
+      final barStyle = barCell.getAttribute('style')!;
       expect(
-        barCell.getAttribute('style') ?? '',
-        isNot(contains('inline-block')),
-        reason: 'no background → plain inline glyph, baseline-aligned',
+        barStyle,
+        contains('display:inline-block'),
+        reason: 'solid ink fills the cell box whether or not there is a bg',
       );
+      expect(barStyle, contains('background-size:100% 87.5%'), reason: '7/8 ▇');
+      expect(barStyle, isNot(contains('background-color:')));
     });
 
     test('dispose clears retained rows and root children', () async {

@@ -19,11 +19,14 @@ export 'src/rendering/scroll_detection.dart'
     show detectBeneficialScrollUp, rowsEqual, screenDiffStats;
 export 'src/rendering/cell_span.dart'
     show
+        BlockRect,
         CellRunKind,
         CellSpanBuilder,
         CellSpanRun,
         RowSpanModel,
         WidthCorrection,
+        blockElementRects,
+        blockRectsSpanFullWidth,
         boxDrawingMask,
         boxSegmentEast,
         boxSegmentNorth,
