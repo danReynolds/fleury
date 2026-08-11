@@ -284,8 +284,7 @@ class FocusScopeRef {
   final bool modal;
 
   @override
-  String toString() =>
-      'FocusScopeRef(id=$id, modal=$modal)';
+  String toString() => 'FocusScopeRef(id=$id, modal=$modal)';
 }
 
 // ---------------------------------------------------------------------------
@@ -406,8 +405,9 @@ class FocusManager extends ChangeNotifier {
     }
   }
 
-  /// Notifies listeners that the modal frontier (or a scope
-  /// flag on it) has changed. Deferred to a microtask so the notification
+  /// Notifies listeners that the modal frontier has changed — a scope
+  /// registered, unregistered, or flipped its `modal` flag. Deferred to a
+  /// microtask so the notification
   /// never lands mid-build — a marker's `mount` / `update` runs inside a
   /// build phase, and `notifyListeners` there would re-enter `setState`
   /// on a dependent.
@@ -708,6 +708,7 @@ class FocusManager extends ChangeNotifier {
   /// The innermost enclosing modal marker element of [node], or null
   /// when no modal scope is open above it. Mirrors the walk in
   /// [activeChain] but returns the modal anchor instead of stopping at it.
+  ///
   /// Anchoring on the marker ELEMENT (rather than its widget-level
   /// [FocusScopeRef]) keeps identity stable across rebuilds: each
   /// `FocusScope.build` allocates a fresh `FocusScopeRef`, but the
@@ -1371,11 +1372,7 @@ class _RenderFocusBounds extends RenderObject
 /// handles modal-like behaviour indirectly — via Navigator routes that
 /// stack focus scopes, or via a custom `FocusTraversalPolicy`.
 class FocusScope extends StatelessWidget {
-  const FocusScope({
-    super.key,
-    this.modal = false,
-    required this.child,
-  });
+  const FocusScope({super.key, this.modal = false, required this.child});
 
   final bool modal;
   final Widget child;
