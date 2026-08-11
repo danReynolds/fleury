@@ -43,13 +43,39 @@ final class TerminalQueryRunner
     final elapsed = Stopwatch()..start();
     final previous = _tail;
     final released = Completer<void>();
+    final result = Completer<List<int>>();
+    final queueTimer = Timer(timeout, () {
+      if (!result.isCompleted) {
+        result.completeError(
+          TimeoutException(
+            'Terminal query deadline elapsed before the exchange could start.',
+            timeout,
+          ),
+        );
+      }
+    });
     _tail = released.future;
-    return () async {
+    unawaited(() async {
       try {
-        await _awaitWithinDeadline(previous, elapsed, timeout);
+        // Wait for the actual preceding exchange even if this caller's own
+        // deadline expires. Releasing the queue early would let a later query
+        // overwrite the still-active parser expectation.
+        await previous;
+        if (result.isCompleted) return;
+        queueTimer.cancel();
         final quarantine = _quarantine;
         if (quarantine != null) {
-          await _awaitWithinDeadline(quarantine.done.future, elapsed, timeout);
+          final remaining = timeout - elapsed.elapsed;
+          if (remaining <= Duration.zero) {
+            throw TimeoutException('Terminal query deadline elapsed.', timeout);
+          }
+          await quarantine.done.future.timeout(
+            remaining,
+            onTimeout: () => throw TimeoutException(
+              'Terminal query deadline elapsed before the exchange could start.',
+              timeout,
+            ),
+          );
         }
         if (_disposed) {
           throw StateError('TerminalQueryRunner is disposed.');
@@ -58,29 +84,16 @@ final class TerminalQueryRunner
         if (remaining <= Duration.zero) {
           throw TimeoutException('Terminal query deadline elapsed.', timeout);
         }
-        return await _run(bytes, remaining);
+        final response = await _run(bytes, remaining);
+        if (!result.isCompleted) result.complete(response);
+      } on Object catch (error, stack) {
+        if (!result.isCompleted) result.completeError(error, stack);
       } finally {
+        queueTimer.cancel();
         released.complete();
       }
-    }();
-  }
-
-  Future<void> _awaitWithinDeadline(
-    Future<void> future,
-    Stopwatch elapsed,
-    Duration timeout,
-  ) {
-    final remaining = timeout - elapsed.elapsed;
-    if (remaining <= Duration.zero) {
-      throw TimeoutException('Terminal query deadline elapsed.', timeout);
-    }
-    return future.timeout(
-      remaining,
-      onTimeout: () => throw TimeoutException(
-        'Terminal query deadline elapsed before the exchange could start.',
-        timeout,
-      ),
-    );
+    }());
+    return result.future;
   }
 
   Future<List<int>> _run(String bytes, Duration timeout) {

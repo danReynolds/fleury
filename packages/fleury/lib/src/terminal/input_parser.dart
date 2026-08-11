@@ -69,7 +69,7 @@ class InputParser {
     this.maxPasteBytes = 1024 * 1024,
     Iterable<LegacyKeySequence> additionalLegacyKeySequences =
         const <LegacyKeySequence>[],
-  }) : _legacySequences = _LegacySequenceTrie(<LegacyKeySequence>[
+  }) : _legacySequences = _LegacySequenceTable(<LegacyKeySequence>[
          ...builtInLegacyKeySequences,
          ...additionalLegacyKeySequences,
        ]),
@@ -115,7 +115,7 @@ class InputParser {
   _State _state = _State.ground;
   final List<int> _pendingUtf8 = <int>[];
   final List<int> _escapeBytes = <int>[];
-  final _LegacySequenceTrie _legacySequences;
+  final _LegacySequenceTable _legacySequences;
   final List<int> _legacyCandidate = <int>[];
 
   // CRLF collapse: a CR (0x0D) emits Enter and arms this so the LF (0x0A)
@@ -321,33 +321,28 @@ class InputParser {
   }
 
   void _consume(int byte, TuiEventSink sink) {
-    if (_legacyCandidate.isEmpty &&
-        _state == _State.ground &&
-        byte == 0x1B &&
-        _legacySequences.canStartWith(byte)) {
+    if (_legacyCandidate.isEmpty && _state == _State.ground && byte == 0x1B) {
       _legacyCandidate.add(byte);
       return;
     }
     if (_legacyCandidate.isNotEmpty) {
       _legacyCandidate.add(byte);
-      switch (_legacySequences.match(_legacyCandidate)) {
-        case _LegacySequenceMatch.prefix:
-          return;
-        case _LegacySequenceMatch.exact:
-          final sequence = _legacySequences.exact(_legacyCandidate)!;
-          sink.add(
-            KeyEvent(
-              sequence.key,
-              modifiers: sequence.modifiers,
-              position: _positionFor(sequence.key),
-            ),
-          );
-          _legacyCandidate.clear();
-          return;
-        case _LegacySequenceMatch.none:
-          _replayLegacyCandidate(sink);
-          return;
+      final match = _legacySequences.match(_legacyCandidate);
+      if (match.prefix) return;
+      final sequence = match.exact;
+      if (sequence != null) {
+        sink.add(
+          KeyEvent(
+            sequence.key,
+            modifiers: sequence.modifiers,
+            position: _positionFor(sequence.key),
+          ),
+        );
+        _legacyCandidate.clear();
+        return;
       }
+      _replayLegacyCandidate(sink);
+      return;
     }
     _consumeDecoded(byte, sink);
   }
@@ -374,9 +369,8 @@ class InputParser {
       case _State.ss3:
         _consumeSs3(byte, sink);
       case _State.controlString:
-        _consumeControlString(byte);
       case _State.controlStringDiscard:
-        _consumeDiscardedControlString(byte);
+        _consumeControlString(byte);
       case _State.utf8Continuation:
         _consumeUtf8(byte, sink);
       case _State.paste:
@@ -688,7 +682,8 @@ class InputParser {
   }
 
   void _consumeControlString(int byte) {
-    _escapeBytes.add(byte);
+    final retaining = _state == _State.controlString;
+    if (retaining) _escapeBytes.add(byte);
     final kind = _controlKind;
     if (kind == null) {
       _clearEscapeSequence();
@@ -700,32 +695,23 @@ class InputParser {
         kind == TerminalResponseKind.operatingSystemCommand && byte == 0x07;
     final stringTerminated = _controlSawEsc && byte == 0x5C;
     if (bellTerminated || stringTerminated) {
-      _responseSink?.addTerminalResponse(TerminalResponse(kind, _escapeBytes));
+      if (retaining) {
+        _responseSink?.addTerminalResponse(
+          TerminalResponse(kind, _escapeBytes),
+        );
+      }
       _clearEscapeSequence();
       _state = _State.ground;
       return;
     }
 
     _controlSawEsc = byte == 0x1B;
-    if (_escapeBytes.length > maxControlStringLength) {
+    if (retaining && _escapeBytes.length > maxControlStringLength) {
       // Keep discarding through the terminator. Returning to ground here would
       // reinterpret the response payload as user input.
       _escapeBytes.clear();
       _state = _State.controlStringDiscard;
     }
-  }
-
-  void _consumeDiscardedControlString(int byte) {
-    final kind = _controlKind;
-    final bellTerminated =
-        kind == TerminalResponseKind.operatingSystemCommand && byte == 0x07;
-    final stringTerminated = _controlSawEsc && byte == 0x5C;
-    if (bellTerminated || stringTerminated) {
-      _clearEscapeSequence();
-      _state = _State.ground;
-      return;
-    }
-    _controlSawEsc = byte == 0x1B;
   }
 
   /// First sub-parameter of semicolon group [i], or null when absent.
@@ -1388,69 +1374,57 @@ enum _State {
   paste,
 }
 
-enum _LegacySequenceMatch { none, prefix, exact }
-
-final class _LegacySequenceTrie {
+final class _LegacySequenceTable {
   static const _maxSequenceLength = 256;
 
-  _LegacySequenceTrie(Iterable<LegacyKeySequence> sequences) {
-    for (final sequence in sequences) {
-      final bytes = sequence.sequence.codeUnits;
+  _LegacySequenceTable(Iterable<LegacyKeySequence> sequences)
+    : _entries = <({List<int> bytes, LegacyKeySequence sequence})>[
+        for (final sequence in sequences)
+          (bytes: sequence.sequence.codeUnits, sequence: sequence),
+      ] {
+    for (var i = 0; i < _entries.length; i++) {
+      final entry = _entries[i];
+      final bytes = entry.bytes;
       if (bytes.length < 2 ||
           bytes.length > _maxSequenceLength ||
           bytes.first != 0x1B ||
           bytes.any((byte) => byte > 0x7F)) {
         throw ArgumentError.value(
-          sequence.sequence,
+          entry.sequence.sequence,
           'additionalLegacyKeySequences',
           'Fixed terminal key sequences must be 2–256 ASCII bytes and start '
               'with ESC.',
         );
       }
-      var node = _root;
-      for (final byte in bytes) {
-        if (node.sequence != null) {
+      for (var j = 0; j < i; j++) {
+        final other = _entries[j].bytes;
+        if (_startsWith(bytes, other) || _startsWith(other, bytes)) {
           throw ArgumentError(
-            'Legacy key sequences may not be prefixes of one another.',
+            'Legacy key sequences must be unique and prefix-free.',
           );
         }
-        node = node.children.putIfAbsent(byte, _LegacySequenceNode.new);
       }
-      if (node.sequence != null || node.children.isNotEmpty) {
-        throw ArgumentError(
-          'Legacy key sequences must be unique and prefix-free.',
-        );
-      }
-      node.sequence = sequence;
     }
   }
 
-  final _LegacySequenceNode _root = _LegacySequenceNode();
+  final List<({List<int> bytes, LegacyKeySequence sequence})> _entries;
 
-  bool canStartWith(int byte) => _root.children.containsKey(byte);
-
-  _LegacySequenceMatch match(List<int> bytes) {
-    final node = _find(bytes);
-    if (node == null) return _LegacySequenceMatch.none;
-    return node.sequence == null
-        ? _LegacySequenceMatch.prefix
-        : _LegacySequenceMatch.exact;
-  }
-
-  LegacyKeySequence? exact(List<int> bytes) => _find(bytes)?.sequence;
-
-  _LegacySequenceNode? _find(List<int> bytes) {
-    var node = _root;
-    for (final byte in bytes) {
-      final next = node.children[byte];
-      if (next == null) return null;
-      node = next;
+  ({LegacyKeySequence? exact, bool prefix}) match(List<int> candidate) {
+    for (final entry in _entries) {
+      if (!_startsWith(entry.bytes, candidate)) continue;
+      return (
+        exact: entry.bytes.length == candidate.length ? entry.sequence : null,
+        prefix: entry.bytes.length > candidate.length,
+      );
     }
-    return node;
+    return (exact: null, prefix: false);
   }
 }
 
-final class _LegacySequenceNode {
-  final Map<int, _LegacySequenceNode> children = <int, _LegacySequenceNode>{};
-  LegacyKeySequence? sequence;
+bool _startsWith(List<int> value, List<int> prefix) {
+  if (prefix.length > value.length) return false;
+  for (var i = 0; i < prefix.length; i++) {
+    if (value[i] != prefix[i]) return false;
+  }
+  return true;
 }

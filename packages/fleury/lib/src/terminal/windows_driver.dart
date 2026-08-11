@@ -118,17 +118,24 @@ class WindowsTerminalDriver
     }
     _terminalState = ActiveTerminalState(
       requestedMode: mode,
-      effectiveMode: mode,
+      // This driver has no terminal-query channel yet, so it must not request
+      // a Kitty mode that it cannot confirm. Configure the same conservative
+      // legacy semantics returned in the session profile.
+      effectiveMode: terminalModeWithKeyboardProtocol(
+        mode,
+        KeyboardProtocolMode.legacy,
+      ),
     );
     _sink.target = _events;
 
-    _enableConsoleMode(mode);
-    _enableRawInput(mode);
+    final effectiveMode = _mode!;
+    _enableConsoleMode(effectiveMode);
+    _enableRawInput(effectiveMode);
 
-    final enter = buildTerminalEnterSequences(mode);
+    final enter = buildTerminalEnterSequences(effectiveMode);
     if (_stdoutIsTerminal && enter.isNotEmpty) {
       _stdout.write(enter);
-      _terminalState = _terminalState!.copyWith(outputModesOwned: true);
+      _terminalState!.outputModesOwned = true;
     }
 
     _stdinSubscription = _stdin.listen(
@@ -182,7 +189,7 @@ class WindowsTerminalDriver
     _originalLineMode ??= _stdin.lineMode;
     _originalEchoMode ??= _stdin.echoMode;
     _setRawMode();
-    _terminalState = _terminalState!.copyWith(rawInputOwned: true);
+    _terminalState!.rawInputOwned = true;
   }
 
   void _setRawMode() {
@@ -323,7 +330,7 @@ class WindowsTerminalDriver
           buildTerminalExitSequences(_mode ?? TerminalMode.interactive),
         );
       } catch (_) {}
-      _terminalState = _terminalState?.copyWith(outputModesOwned: false);
+      _terminalState?.outputModesOwned = false;
     }
 
     try {
@@ -332,7 +339,7 @@ class WindowsTerminalDriver
 
     if (_changedStdin) {
       _restoreCookedMode();
-      _terminalState = _terminalState?.copyWith(rawInputOwned: false);
+      _terminalState?.rawInputOwned = false;
     }
     _restoreConsoleMode();
 

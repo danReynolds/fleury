@@ -251,7 +251,7 @@ The parser combines:
 
 - grammar-based decoding for CSI-u, modifyOtherKeys, parameterized CSI/SS3
   keys, mouse, and terminal responses;
-- a fixed-sequence table/trie for exceptional legacy terminal key strings.
+- a validated fixed-sequence table for exceptional legacy terminal key strings.
 
 `InputParser` accepts additional validated `LegacyKeySequence` data alongside
 Fleury's built-in table. A future POSIX terminfo adapter can produce that data
@@ -268,6 +268,10 @@ The activation preference is semantic:
 
 The parser may understand every encoding, but the driver activates one selected
 enhancement path.
+
+POSIX selects that path through the typed query runner. The Windows driver
+remains on legacy input until it has an equivalent confirmation path; it does
+not emit an unconfirmed Kitty request while reporting legacy capabilities.
 
 ## 12. Verification
 

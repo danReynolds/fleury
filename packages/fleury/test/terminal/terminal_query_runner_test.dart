@@ -306,6 +306,43 @@ void main() {
     await second;
     runner.dispose();
   });
+
+  test('an expired waiter cannot release a later query early', () async {
+    final parser = InputParser();
+    final input = _InputSink();
+    final writes = <String>[];
+    late TerminalQueryRunner runner;
+    runner = TerminalQueryRunner(
+      parser: parser,
+      inputSink: input,
+      write: (bytes) async => writes.add(bytes),
+    );
+
+    final first = runner.request(
+      'first\x1b[c',
+      timeout: const Duration(milliseconds: 100),
+    );
+    final expired = runner.request(
+      'expired\x1b[c',
+      timeout: const Duration(milliseconds: 5),
+    );
+    final third = runner.request(
+      'third\x1b[c',
+      timeout: const Duration(milliseconds: 100),
+    );
+
+    await expectLater(expired, throwsA(isA<TimeoutException>()));
+    expect(writes, <String>['first\x1b[c']);
+
+    parser.feed('\x1b[?1;2c'.codeUnits, input, responseSink: runner);
+    await first;
+    await Future<void>.delayed(Duration.zero);
+    expect(writes, <String>['first\x1b[c', 'third\x1b[c']);
+
+    parser.feed('\x1b[?1;2c'.codeUnits, input, responseSink: runner);
+    await third;
+    runner.dispose();
+  });
 }
 
 final class _InputSink implements TuiEventSink {

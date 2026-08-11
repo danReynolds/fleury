@@ -16,8 +16,8 @@
   dependency.
 
 - **Keyboard lifecycle (RFC 0020).** Key releases and held-state work out of
-  the box: `runApp` asks every terminal for the full Kitty keyboard protocol
-  and negotiates down transactionally — no flags, no tiers to declare, and a
+  the box: `runApp` requests the full Kitty keyboard protocol and capable
+  drivers negotiate down transactionally — no flags, no tiers to declare, and a
   terminal that only partly honours the protocol is rolled back to the safe
   tier before the app sees a keystroke (inside tmux/screen the automatic ask
   stops at the safe tier; `FLEURY_KEYBOARD` overrides). New DX surface:

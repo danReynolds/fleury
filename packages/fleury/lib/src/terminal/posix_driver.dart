@@ -367,7 +367,7 @@ class PosixTerminalDriver
         _originalEchoMode = _stdin.echoMode;
         _setDartRawMode();
       }
-      _terminalState = _terminalState!.copyWith(rawInputOwned: true);
+      _terminalState!.rawInputOwned = true;
     }
 
     // Screen-control sequences only when stdout is a real terminal — writing
@@ -375,7 +375,7 @@ class PosixTerminalDriver
     final enter = _enterSequences(_mode!);
     if (_stdoutIsTerminal && enter.isNotEmpty) {
       _stdout.write(enter);
-      _terminalState = _terminalState!.copyWith(outputModesOwned: true);
+      _terminalState!.outputModesOwned = true;
     }
 
     _stdinSubscription = _stdin.listen(
@@ -492,10 +492,9 @@ class PosixTerminalDriver
         '\x1B[<1u'
         '\x1B[>${KeyboardProtocolMode.disambiguated.requestedFlags}u',
       );
-      _terminalState = _terminalState!.copyWith(
-        effectiveMode: effective.copyWith(
-          keyboardProtocol: KeyboardProtocolMode.disambiguated,
-        ),
+      _terminalState!.effectiveMode = terminalModeWithKeyboardProtocol(
+        effective,
+        KeyboardProtocolMode.disambiguated,
       );
       await _stdout.flush();
       int? after;
@@ -535,12 +534,13 @@ class PosixTerminalDriver
       return;
     }
     _confirmedKeyboardFlags = null;
-    _terminalState = _terminalState!.copyWith(
-      effectiveMode: effective.copyWith(
-        keyboardProtocol: KeyboardProtocolMode.legacy,
-      ),
-      modifyOtherKeysOwned: true,
-    );
+    final state = _terminalState!;
+    state
+      ..effectiveMode = terminalModeWithKeyboardProtocol(
+        effective,
+        KeyboardProtocolMode.legacy,
+      )
+      ..modifyOtherKeysOwned = true;
   }
 
   /// Lifecycle is only safe to keep when text survives it: event types (2),
@@ -641,7 +641,7 @@ class PosixTerminalDriver
       environment: Platform.environment,
     );
     if (tier == mode.keyboardProtocol) return mode;
-    return mode.copyWith(keyboardProtocol: tier);
+    return terminalModeWithKeyboardProtocol(mode, tier);
   }
 
   /// Builds the mode-exit escape sequence, shared by [restore] and
@@ -967,7 +967,7 @@ class PosixTerminalDriver
       // inside _restoreCookedMode. The important cleanup is the ANSI
       // cursor / alt-screen sequences below.
       _restoreCookedMode();
-      _terminalState = _terminalState?.copyWith(rawInputOwned: false);
+      _terminalState?.rawInputOwned = false;
     }
 
     if (_wroteEnterSequences) {
@@ -976,7 +976,7 @@ class PosixTerminalDriver
       try {
         _stdout.write(_exitSequences(_mode ?? TerminalMode.interactive));
       } catch (_) {}
-      _terminalState = _terminalState?.copyWith(outputModesOwned: false);
+      _terminalState?.outputModesOwned = false;
     }
 
     // Critical: flush stdout. Without this the cleanup sequences sit in

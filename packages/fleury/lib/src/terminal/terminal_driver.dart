@@ -112,8 +112,9 @@ enum KeyboardProtocolMode {
   /// Flags 1|2|4|8|16 — the full lifecycle: every key as an escape code,
   /// with alternate/base-layout identities and associated text.
   ///
-  /// The default (RFC 0020 §26.1): `runApp` asks every terminal for full
-  /// lifecycle and negotiates down transactionally, committing only when
+  /// The default request (RFC 0020 §26.1): `runApp` asks drivers for full
+  /// lifecycle and capable drivers negotiate down transactionally, committing
+  /// only when
   /// the terminal confirms 2, 8 AND 16 (§8.3) — flag 8 stops the terminal
   /// sending text, and flag 16 is what re-supplies it, so honouring one
   /// without the other would leave the session with no text input at all.
@@ -184,29 +185,26 @@ final class TerminalMode {
   /// (`MouseRegion`). Implies [mouse]. Off by default since motion
   /// reporting is chatty — only turn it on if you use hover.
   final bool mouseMotion;
-
-  TerminalMode copyWith({
-    bool? rawInput,
-    bool? alternateScreen,
-    bool? hideCursor,
-    bool? resetStyleOnExit,
-    bool? bracketedPaste,
-    KeyboardProtocolMode? keyboardProtocol,
-    bool? focusReporting,
-    bool? mouse,
-    bool? mouseMotion,
-  }) => TerminalMode(
-    rawInput: rawInput ?? this.rawInput,
-    alternateScreen: alternateScreen ?? this.alternateScreen,
-    hideCursor: hideCursor ?? this.hideCursor,
-    resetStyleOnExit: resetStyleOnExit ?? this.resetStyleOnExit,
-    bracketedPaste: bracketedPaste ?? this.bracketedPaste,
-    keyboardProtocol: keyboardProtocol ?? this.keyboardProtocol,
-    focusReporting: focusReporting ?? this.focusReporting,
-    mouse: mouse ?? this.mouse,
-    mouseMotion: mouseMotion ?? this.mouseMotion,
-  );
 }
+
+/// Returns [mode] with only its keyboard protocol request changed.
+///
+/// Kept out of the public barrel API: native drivers use this when policy or
+/// negotiation selects an effective tier without rebuilding modes ad hoc.
+TerminalMode terminalModeWithKeyboardProtocol(
+  TerminalMode mode,
+  KeyboardProtocolMode keyboardProtocol,
+) => TerminalMode(
+  rawInput: mode.rawInput,
+  alternateScreen: mode.alternateScreen,
+  hideCursor: mode.hideCursor,
+  resetStyleOnExit: mode.resetStyleOnExit,
+  bracketedPaste: mode.bracketedPaste,
+  keyboardProtocol: keyboardProtocol,
+  focusReporting: mode.focusReporting,
+  mouse: mode.mouse,
+  mouseMotion: mode.mouseMotion,
+);
 
 /// Typed record of the terminal state a native driver actually owns.
 ///
@@ -214,9 +212,8 @@ final class TerminalMode {
 /// fallback, not merely what the app requested. The ownership booleans record
 /// which mutation paths Fleury entered (including a potentially partial
 /// platform attempt), so restore and handoff never infer cleanup from a request.
-@immutable
 final class ActiveTerminalState {
-  const ActiveTerminalState({
+  ActiveTerminalState({
     required this.requestedMode,
     required this.effectiveMode,
     this.rawInputOwned = false,
@@ -225,23 +222,10 @@ final class ActiveTerminalState {
   });
 
   final TerminalMode requestedMode;
-  final TerminalMode effectiveMode;
-  final bool rawInputOwned;
-  final bool outputModesOwned;
-  final bool modifyOtherKeysOwned;
-
-  ActiveTerminalState copyWith({
-    TerminalMode? effectiveMode,
-    bool? rawInputOwned,
-    bool? outputModesOwned,
-    bool? modifyOtherKeysOwned,
-  }) => ActiveTerminalState(
-    requestedMode: requestedMode,
-    effectiveMode: effectiveMode ?? this.effectiveMode,
-    rawInputOwned: rawInputOwned ?? this.rawInputOwned,
-    outputModesOwned: outputModesOwned ?? this.outputModesOwned,
-    modifyOtherKeysOwned: modifyOtherKeysOwned ?? this.modifyOtherKeysOwned,
-  );
+  TerminalMode effectiveMode;
+  bool rawInputOwned;
+  bool outputModesOwned;
+  bool modifyOtherKeysOwned;
 }
 
 /// The single I/O boundary between the framework and a real terminal.

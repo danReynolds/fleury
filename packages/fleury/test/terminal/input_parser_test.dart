@@ -218,6 +218,25 @@ void main() {
       expect(responses.responses.single.raw, bytes);
     });
 
+    test('oversized control replies discard through their terminator', () {
+      final parser = InputParser(maxControlStringLength: 8)
+        ..responseExpectation = const TerminalResponseExpectation(
+          applicationProgramCommand: true,
+        );
+      final events = _ListSink();
+      final responses = _ResponseListSink();
+
+      parser.feed(
+        '\x1b_123456789\x1b'.codeUnits,
+        events,
+        responseSink: responses,
+      );
+      parser.feed('\\x'.codeUnits, events, responseSink: responses);
+
+      expect(responses.responses, isEmpty);
+      expect(events.events, const <TuiEvent>[TextInputEvent('x')]);
+    });
+
     test('a pending Escape is released when a control-string query ends', () {
       final parser = InputParser();
       final events = _ListSink();
