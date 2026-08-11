@@ -151,6 +151,35 @@ void main() {
       expect(row.runs[2].kind, CellRunKind.emptyText);
     });
 
+    test('adjacent same-style text cannot be absorbed into a block run', () {
+      // A CSS-painted run's text IS its lookup key. Let a plain character
+      // append onto it and the key stops resolving, so the adapter quietly
+      // falls back to the font glyph — the seam returns with no sign in the
+      // markup. `digits.dart` paints exactly this shape: `█ █` in one style.
+      final row = builder.buildRow(
+        frame(3, 1, (b) {
+          b.writeText(
+            const CellOffset(0, 0),
+            '█ █',
+            style: const CellStyle(foreground: Colors.green),
+          );
+        }),
+        0,
+      );
+
+      expect(row.runs.map((r) => (r.kind, r.text, r.widthCols)), [
+        (CellRunKind.blockElement, '█', 1),
+        (CellRunKind.text, ' ', 1),
+        (CellRunKind.blockElement, '█', 1),
+      ]);
+      // Every CSS-painted run's text still resolves to rectangles.
+      for (final run in row.runs.where(
+        (r) => r.kind == CellRunKind.blockElement,
+      )) {
+        expect(blockElementRects(run.text), isNotNull);
+      }
+    });
+
     test('shade and braille glyphs stay on the text path', () {
       // Stipple textures are not solid rectangles; flattening them to a tint
       // would change how they read, so they keep the font glyph.

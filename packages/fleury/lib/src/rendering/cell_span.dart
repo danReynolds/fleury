@@ -48,7 +48,7 @@ final class CellSpanBuilder {
     }) {
       final current = pending;
       if (current != null &&
-          current.kind != CellRunKind.boxDrawing &&
+          !_isCssPaintedRun(current.kind) &&
           current.style == style &&
           current.endCol == col) {
         current
@@ -162,14 +162,19 @@ final class CellSpanBuilder {
             col += 2;
           } else {
             final grapheme = cell.grapheme!;
-            // Cheap range gate before the two string switches: box-drawing
+            // Cheap range gate before the string switches: box-drawing
             // (U+2500–257F) and block elements (U+2580–259F) are the only
             // graphemes with a CSS-painted form, so ordinary text pays one
-            // integer compare per cell instead of a switch it can never match.
+            // integer compare per cell instead of switches it can never
+            // match. The ranges are disjoint, so no glyph runs both.
             final cp = grapheme.length == 1 ? grapheme.codeUnitAt(0) : 0;
-            final cssPainted = cp >= 0x2500 && cp <= 0x259F;
-            final rects = cssPainted ? blockElementRects(grapheme) : null;
-            if (cssPainted && boxDrawingMask(grapheme) != null) {
+            final mask = (cp >= 0x2500 && cp <= 0x257F)
+                ? boxDrawingMask(grapheme)
+                : null;
+            final rects = (cp >= 0x2580 && cp <= 0x259F)
+                ? blockElementRects(grapheme)
+                : null;
+            if (mask != null) {
               appendBox(col: col, grapheme: grapheme, style: cell.style);
             } else if (rects != null) {
               appendBlock(
@@ -324,6 +329,17 @@ int? boxDrawingMask(String grapheme) {
       return null;
   }
 }
+
+/// Whether a run of [kind] carries a single grapheme that the DOM adapters
+/// replace with spaces and paint in CSS.
+///
+/// Nothing may be appended to such a run. Its text *is* the lookup key
+/// ([boxDrawingMask] / [blockElementRects]); append one ordinary character and
+/// the key stops resolving, so the adapter silently falls back to drawing the
+/// glyph from the font — the exact rendering the CSS path exists to replace,
+/// and a failure that is invisible in the markup.
+bool _isCssPaintedRun(CellRunKind kind) =>
+    kind == CellRunKind.boxDrawing || kind == CellRunKind.blockElement;
 
 /// One axis-aligned rectangle of ink inside a single cell, in eighths of the
 /// cell box, with the origin at the cell's top-left.
