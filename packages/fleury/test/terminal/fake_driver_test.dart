@@ -1,7 +1,50 @@
 import 'package:fleury/fleury.dart';
+import 'package:fleury/src/terminal/terminal_driver.dart'
+    show synchronizedOutputOverrideFromEnvironment;
 import 'package:test/test.dart';
 
 void main() {
+  group('synchronized-output policy', () {
+    test('is automatic when unset or unrecognized', () {
+      expect(synchronizedOutputOverrideFromEnvironment(const {}), isNull);
+      expect(
+        synchronizedOutputOverrideFromEnvironment(const {
+          'FLEURY_SYNC_OUTPUT': 'maybe',
+        }),
+        isNull,
+      );
+    });
+
+    test('accepts explicit enable and disable values', () {
+      for (final value in <String>['1', 'true', 'YES', 'on']) {
+        expect(
+          synchronizedOutputOverrideFromEnvironment({
+            'FLEURY_SYNC_OUTPUT': value,
+          }),
+          isTrue,
+        );
+      }
+      for (final value in <String>['0', 'false', 'NO', 'off']) {
+        expect(
+          synchronizedOutputOverrideFromEnvironment({
+            'FLEURY_SYNC_OUTPUT': value,
+          }),
+          isFalse,
+        );
+      }
+    });
+
+    test('queryless ANSI profiles default to ordinary output', () {
+      final profile = TerminalSessionProfile.ansi(
+        terminal: TerminalCapabilities.defaultCapabilities,
+      );
+      expect(
+        (profile.presentation as AnsiTerminalPresentation).synchronizedOutput,
+        isFalse,
+      );
+    });
+  });
+
   group('FakeTerminalDriver lifecycle', () {
     test('starts inactive and becomes active on enter()', () async {
       final driver = FakeTerminalDriver(

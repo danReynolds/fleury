@@ -1,7 +1,6 @@
 import 'package:meta/meta.dart';
 
 import '../semantics/semantics.dart';
-import 'capabilities.dart';
 
 /// Terminal feature names that widgets and services can request.
 enum TerminalFeature {
@@ -28,6 +27,95 @@ enum TerminalFeature {
   sshSession,
   rawAnsiParsing,
   synchronizedOutput,
+}
+
+/// Whether the relevant terminal, surface, or transport supports a feature.
+enum CapabilitySupport { unknown, supported, unsupported }
+
+/// Whether Fleury actually enabled a supported feature for this session.
+enum CapabilityEnablement { notApplicable, unknown, enabled, disabled }
+
+/// Whether the requested behavior reached its destination.
+///
+/// Emitting a control sequence is [unverified], not [delivered]. Delivery can
+/// only be claimed from an operation result or a behavioral receipt.
+enum CapabilityDelivery { notApplicable, unverified, delivered, failed }
+
+/// Origin of one fact in a [CapabilityTruth].
+enum CapabilityEvidenceSource {
+  surfaceProfile,
+  environment,
+  terminfo,
+  appliedState,
+  activeProbe,
+  remoteDeclaration,
+  operationResult,
+  behavioralReceipt,
+  policy,
+  fallback,
+  userOverride,
+}
+
+/// One inspectable provenance record for a capability fact.
+@immutable
+final class CapabilityEvidence {
+  const CapabilityEvidence({required this.source, required this.detail});
+
+  final CapabilityEvidenceSource source;
+  final String detail;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'source': source.name,
+    'detail': detail,
+  };
+}
+
+/// Runtime truth for one feature at one decision boundary.
+///
+/// This deliberately does not infer protocol state from a static terminal
+/// summary. The component that observed support, applied a mode, received an
+/// operation result, or enforced policy supplies the facts and their evidence.
+@immutable
+final class CapabilityTruth {
+  const CapabilityTruth({
+    required this.feature,
+    required this.support,
+    required this.enablement,
+    required this.delivery,
+    required this.evidence,
+    this.policyBlocked = false,
+    this.unsafe = false,
+  });
+
+  final TerminalFeature feature;
+  final CapabilitySupport support;
+  final CapabilityEnablement enablement;
+  final CapabilityDelivery delivery;
+  final bool policyBlocked;
+  final bool unsafe;
+  final List<CapabilityEvidence> evidence;
+
+  bool get hasOperationalFailure =>
+      support == CapabilitySupport.unsupported ||
+      enablement == CapabilityEnablement.disabled ||
+      delivery == CapabilityDelivery.failed;
+
+  bool get isVerifiedAvailable =>
+      support == CapabilitySupport.supported &&
+      (enablement == CapabilityEnablement.enabled ||
+          enablement == CapabilityEnablement.notApplicable) &&
+      (delivery == CapabilityDelivery.delivered ||
+          delivery == CapabilityDelivery.notApplicable);
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'feature': feature.name,
+    'support': support.name,
+    'enablement': enablement.name,
+    'delivery': delivery.name,
+    'policyBlocked': policyBlocked,
+    'unsafe': unsafe,
+    'evidence': <Object?>[for (final fact in evidence) fact.toJson()],
+  };
 }
 
 /// Strength of a capability request.
@@ -70,31 +158,40 @@ final class CapabilityRequirement {
   };
 }
 
-/// Outcome of resolving a requirement against terminal capabilities and policy.
+/// Outcome of resolving a requirement against runtime truth and policy.
 enum CapabilityResolutionState {
   available,
+  unverified,
   degraded,
   disabledByPolicy,
   unsupported,
   unsafe,
 }
 
-/// Resolved capability state for diagnostics, semantics, and tests.
+/// Canonical capability result for diagnostics, semantics, and tests.
 @immutable
 final class CapabilityResolution {
-  const CapabilityResolution({
-    required this.feature,
+  const CapabilityResolution._({
+    required this.truth,
     required this.level,
     required this.state,
     this.fallbackLabel,
     this.warning,
   });
 
-  final TerminalFeature feature;
+  final CapabilityTruth truth;
+  TerminalFeature get feature => truth.feature;
   final CapabilityLevel level;
   final CapabilityResolutionState state;
   final String? fallbackLabel;
   final String? warning;
+
+  CapabilitySupport get support => truth.support;
+  CapabilityEnablement get enablement => truth.enablement;
+  CapabilityDelivery get delivery => truth.delivery;
+  bool get policyBlocked => truth.policyBlocked;
+  bool get unsafe => truth.unsafe;
+  List<CapabilityEvidence> get evidence => truth.evidence;
 
   /// Whether this resolution should block the requesting surface.
   bool get isBlocking =>
@@ -108,6 +205,14 @@ final class CapabilityResolution {
       'terminalCapability': feature.name,
       'capabilityRequirement': level.name,
       'capabilityResolution': state.name,
+      'capabilitySupport': support.name,
+      'capabilityEnablement': enablement.name,
+      'capabilityDelivery': delivery.name,
+      'capabilityPolicyBlocked': policyBlocked,
+      'capabilityUnsafe': unsafe,
+      'capabilityEvidence': <Object?>[
+        for (final fact in evidence) fact.toJson(),
+      ],
       if (fallbackLabel != null) 'activeFallback': fallbackLabel,
     });
   }
@@ -117,40 +222,48 @@ final class CapabilityResolution {
     'level': level.name,
     'state': state.name,
     'blocking': isBlocking,
+    'truth': truth.toJson(),
     if (fallbackLabel != null) 'fallbackLabel': fallbackLabel,
     if (warning != null) 'warning': warning,
   };
 }
 
-/// Resolves one capability requirement against current terminal capabilities.
+/// Resolves one request against facts observed by the owning runtime domain.
 CapabilityResolution resolveCapabilityRequirement(
   CapabilityRequirement requirement,
-  TerminalCapabilities capabilities, {
-  Set<TerminalFeature> additionalAvailableFeatures = const <TerminalFeature>{},
-  Set<TerminalFeature> policyBlockedFeatures = const <TerminalFeature>{},
-  Set<TerminalFeature> unsafeFeatures = const <TerminalFeature>{},
-}) {
+  CapabilityTruth truth,
+) {
+  if (requirement.feature != truth.feature) {
+    throw ArgumentError.value(
+      truth.feature,
+      'truth.feature',
+      'must match requirement.feature (${requirement.feature.name})',
+    );
+  }
+  if (truth.evidence.isEmpty) {
+    throw ArgumentError.value(
+      truth.evidence,
+      'truth.evidence',
+      'must contain at least one provenance record',
+    );
+  }
+
   final feature = requirement.feature;
   final level = requirement.level;
-  final available = terminalFeatureAvailable(
-    feature,
-    capabilities,
-    additionalAvailableFeatures: additionalAvailableFeatures,
-  );
 
-  if (unsafeFeatures.contains(feature)) {
-    return CapabilityResolution(
-      feature: feature,
+  if (truth.unsafe) {
+    return CapabilityResolution._(
+      truth: truth,
       level: level,
       state: CapabilityResolutionState.unsafe,
+      fallbackLabel: requirement.fallback?.label,
       warning: '${feature.name} is unsafe for this content source.',
     );
   }
 
-  if (policyBlockedFeatures.contains(feature) ||
-      level == CapabilityLevel.prohibited && available) {
-    return CapabilityResolution(
-      feature: feature,
+  if (truth.policyBlocked || level == CapabilityLevel.prohibited) {
+    return CapabilityResolution._(
+      truth: truth,
       level: level,
       state: CapabilityResolutionState.disabledByPolicy,
       fallbackLabel: requirement.fallback?.label,
@@ -158,110 +271,58 @@ CapabilityResolution resolveCapabilityRequirement(
     );
   }
 
-  if (available) {
-    return CapabilityResolution(
-      feature: feature,
+  if (truth.hasOperationalFailure) {
+    final fallback = requirement.fallback;
+    if (level == CapabilityLevel.preferred && fallback != null) {
+      return CapabilityResolution._(
+        truth: truth,
+        level: level,
+        state: CapabilityResolutionState.degraded,
+        fallbackLabel: fallback.label,
+        warning: '${feature.name} failed; using ${fallback.label}.',
+      );
+    }
+    return CapabilityResolution._(
+      truth: truth,
+      level: level,
+      state: CapabilityResolutionState.unsupported,
+      fallbackLabel: fallback?.label,
+      warning: level == CapabilityLevel.required
+          ? '${feature.name} is required but unavailable.'
+          : null,
+    );
+  }
+
+  if (truth.isVerifiedAvailable) {
+    return CapabilityResolution._(
+      truth: truth,
       level: level,
       state: CapabilityResolutionState.available,
     );
   }
 
-  final fallback = requirement.fallback;
-  if (level == CapabilityLevel.preferred && fallback != null) {
-    return CapabilityResolution(
-      feature: feature,
-      level: level,
-      state: CapabilityResolutionState.degraded,
-      fallbackLabel: fallback.label,
-      warning: '${feature.name} is unavailable; using ${fallback.label}.',
-    );
-  }
-
-  return CapabilityResolution(
-    feature: feature,
+  return CapabilityResolution._(
+    truth: truth,
     level: level,
-    state: CapabilityResolutionState.unsupported,
-    fallbackLabel: fallback?.label,
-    warning: level == CapabilityLevel.required
-        ? '${feature.name} is required but unavailable.'
-        : null,
+    state: CapabilityResolutionState.unverified,
+    fallbackLabel: requirement.fallback?.label,
+    warning: '${feature.name} has not been behaviorally verified.',
   );
 }
 
-/// Resolves several requirements in input order.
+/// Resolves several requirements in input order from an explicit truth map.
 List<CapabilityResolution> resolveCapabilityRequirements(
   Iterable<CapabilityRequirement> requirements,
-  TerminalCapabilities capabilities, {
-  Set<TerminalFeature> additionalAvailableFeatures = const <TerminalFeature>{},
-  Set<TerminalFeature> policyBlockedFeatures = const <TerminalFeature>{},
-  Set<TerminalFeature> unsafeFeatures = const <TerminalFeature>{},
-}) {
+  Map<TerminalFeature, CapabilityTruth> truths,
+) {
   return <CapabilityResolution>[
     for (final requirement in requirements)
       resolveCapabilityRequirement(
         requirement,
-        capabilities,
-        additionalAvailableFeatures: additionalAvailableFeatures,
-        policyBlockedFeatures: policyBlockedFeatures,
-        unsafeFeatures: unsafeFeatures,
+        truths[requirement.feature] ??
+            (throw ArgumentError(
+              'No capability truth supplied for ${requirement.feature.name}.',
+            )),
       ),
   ];
-}
-
-/// Returns whether [feature] is available in the current capability summary.
-bool terminalFeatureAvailable(
-  TerminalFeature feature,
-  TerminalCapabilities capabilities, {
-  Set<TerminalFeature> additionalAvailableFeatures = const <TerminalFeature>{},
-}) {
-  if (additionalAvailableFeatures.contains(feature)) return true;
-  switch (feature) {
-    case TerminalFeature.colorAnsi16:
-      return capabilities.colorMode != ColorMode.none;
-    case TerminalFeature.colorIndexed256:
-      return capabilities.colorMode == ColorMode.indexed256 ||
-          capabilities.colorMode == ColorMode.truecolor;
-    case TerminalFeature.colorTruecolor:
-      return capabilities.colorMode == ColorMode.truecolor;
-    case TerminalFeature.unicodeWidthProfile:
-      return true;
-    case TerminalFeature.alternateScreen:
-      return capabilities.supportsAlternateScreen;
-    case TerminalFeature.hideCursor:
-      return capabilities.supportsHidingCursor;
-    case TerminalFeature.bracketedPaste:
-      return true;
-    case TerminalFeature.kittyKeyboard:
-      return true;
-    case TerminalFeature.mouse:
-    case TerminalFeature.mouseMotion:
-      return true;
-    case TerminalFeature.clipboardWrite:
-    case TerminalFeature.hyperlinks:
-      return true;
-    case TerminalFeature.osc8Hyperlinks:
-      // Derived from real detection (env allow-list, tmux-suppressed) rather
-      // than a hardcoded constant. A supporting terminal reports
-      // capabilities.hyperlinks == true; a browser peer's projection sets it
-      // from the DOM surface. See detectHyperlinksFromEnvironment / RFC 0017.
-      return capabilities.hyperlinks;
-    case TerminalFeature.osc52Clipboard:
-      return false;
-    case TerminalFeature.inlineImages:
-      return capabilities.imageProtocol != ImageProtocol.halfBlock;
-    case TerminalFeature.imageKitty:
-      return capabilities.imageProtocol == ImageProtocol.kitty;
-    case TerminalFeature.imageIterm2:
-      return capabilities.imageProtocol == ImageProtocol.iterm2;
-    case TerminalFeature.imageSixel:
-      return capabilities.imageProtocol == ImageProtocol.sixel;
-    case TerminalFeature.imageGlyphFallback:
-      return true;
-    case TerminalFeature.tmuxPassthrough:
-      return capabilities.tmuxPassthrough;
-    case TerminalFeature.sshSession:
-    case TerminalFeature.rawAnsiParsing:
-    case TerminalFeature.synchronizedOutput:
-      return false;
-  }
 }

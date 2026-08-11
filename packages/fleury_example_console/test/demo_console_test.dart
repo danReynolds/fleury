@@ -2342,7 +2342,7 @@ void main() {
       label: 'OSC 52 clipboard',
     );
     expect(osc52.state.terminalCapability, 'osc52Clipboard');
-    expect(osc52.state.capabilityResolution, 'degraded');
+    expect(osc52.state.capabilityResolution, 'unverified');
     expect(osc52.state.activeFallback, 'in-process register');
     expect(osc52.state.clipboardTransport, 'osc52');
 

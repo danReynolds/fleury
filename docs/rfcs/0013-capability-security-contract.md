@@ -2,6 +2,7 @@
 
 **Status:** Proposal  
 **Date:** 2026-05-31  
+**Superseded for capability truth by:** RFC 0022
 **Decision point for:** M1.7 terminal diagnose and capability model, M1.11
 sanitized output pipeline, semantic capability state, image/link/clipboard
 widgets, subprocess output, debug inspector expansion, and future adapter

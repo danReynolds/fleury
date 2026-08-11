@@ -212,11 +212,24 @@ class _FakeClipboard extends Clipboard {
     lastWritten = text;
     return ClipboardWriteReport(
       result: ClipboardWriteResult.inProcessOnly,
-      resolution: const CapabilityResolution(
-        feature: TerminalFeature.clipboardWrite,
-        level: CapabilityLevel.preferred,
-        state: CapabilityResolutionState.degraded,
-        fallbackLabel: 'in-process register',
+      resolution: resolveCapabilityRequirement(
+        const CapabilityRequirement(
+          feature: TerminalFeature.clipboardWrite,
+          level: CapabilityLevel.preferred,
+          fallback: CapabilityFallback(label: 'in-process register'),
+        ),
+        const CapabilityTruth(
+          feature: TerminalFeature.clipboardWrite,
+          support: CapabilitySupport.unsupported,
+          enablement: CapabilityEnablement.notApplicable,
+          delivery: CapabilityDelivery.notApplicable,
+          evidence: <CapabilityEvidence>[
+            CapabilityEvidence(
+              source: CapabilityEvidenceSource.fallback,
+              detail: 'Test clipboard uses an in-process register.',
+            ),
+          ],
+        ),
       ),
       policy: policy,
       payloadBytes: text.length,

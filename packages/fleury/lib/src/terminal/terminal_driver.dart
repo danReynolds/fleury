@@ -20,7 +20,7 @@ sealed class TerminalPresentation {
 final class AnsiTerminalPresentation extends TerminalPresentation {
   const AnsiTerminalPresentation(
     this.capabilities, {
-    this.synchronizedOutput = true,
+    this.synchronizedOutput = false,
   });
 
   final TerminalCapabilities capabilities;
@@ -54,7 +54,7 @@ final class TerminalSessionProfile {
     required TerminalCapabilities terminal,
     KeyboardCapabilities keyboard = KeyboardCapabilities.legacy,
     SurfaceCapabilities? surface,
-    bool synchronizedOutput = true,
+    bool synchronizedOutput = false,
   }) => TerminalSessionProfile(
     surface: surface ?? terminal.toSurfaceCapabilities(),
     keyboard: keyboard,
@@ -77,6 +77,26 @@ final class TerminalSessionProfile {
   final SurfaceCapabilities surface;
   final KeyboardCapabilities keyboard;
   final TerminalPresentation presentation;
+}
+
+/// Reads the explicit synchronized-output policy for an ANSI session.
+///
+/// `null` means negotiate DEC mode 2026 when the transport can query its peer.
+/// Drivers without a query channel treat `null` conservatively as disabled.
+/// This is deliberately a tri-state override rather than terminal-name
+/// detection: `FLEURY_SYNC_OUTPUT=1` is an explicit operator assertion, while
+/// the default remains evidence-driven.
+bool? synchronizedOutputOverrideFromEnvironment(
+  Map<String, String> environment,
+) {
+  switch (environment['FLEURY_SYNC_OUTPUT']?.toLowerCase().trim()) {
+    case '1' || 'true' || 'yes' || 'on':
+      return true;
+    case '0' || 'false' || 'no' || 'off':
+      return false;
+    default:
+      return null;
+  }
 }
 
 /// How much of the Kitty keyboard protocol a session negotiates
@@ -218,14 +238,12 @@ final class ActiveTerminalState {
     required this.effectiveMode,
     this.rawInputOwned = false,
     this.outputModesOwned = false,
-    this.modifyOtherKeysOwned = false,
   });
 
   final TerminalMode requestedMode;
   TerminalMode effectiveMode;
   bool rawInputOwned;
   bool outputModesOwned;
-  bool modifyOtherKeysOwned;
 }
 
 /// The single I/O boundary between the framework and a real terminal.

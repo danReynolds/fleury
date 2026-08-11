@@ -58,16 +58,13 @@ final class AnsiRenderer {
   /// it are downsampled per [quantizeColor] (truecolor → 256 → 16 →
   /// none). Defaults to [ColorMode.truecolor] (no downsampling).
   ///
-  /// [synchronizedOutput] (default `true`) wraps each emitted frame in
+  /// [synchronizedOutput] wraps each emitted frame in
   /// DEC mode 2026 begin/end markers (`ESC[?2026h` … `ESC[?2026l`) so
   /// the terminal buffers the diff and applies it atomically — no
-  /// mid-frame tearing on structural updates. Universally supported by
-  /// modern terminals (Kitty/Alacritty/WezTerm/iTerm2/Ghostty/Windows
-  /// Terminal/tmux); terminals that don't recognize the escape ignore
-  /// it, and modern terminals enforce a ~1-second safety timeout so a
-  /// missing ESU can't lock the display. Set `false` only if you've
-  /// seen flicker on a specific terminal that mis-implements the
-  /// mode — the failure cost is low.
+  /// mid-frame tearing on structural updates. Native sessions enable it only
+  /// after DECRQM confirms mutable mode-2026 support; queryless transports use
+  /// ordinary output unless explicitly overridden. Direct construction also
+  /// defaults to ordinary output; a confirmed session opts in explicitly.
   /// [ambiguousCharsAreWide] controls the defensive per-cell repositioning for
   /// ambiguous-width glyphs (box drawing, block elements, arrows — UAX #11
   /// "Ambiguous"). When `true` (the safe default), each such glyph is pinned
@@ -87,7 +84,7 @@ final class AnsiRenderer {
   /// (link-ignoring) so a link never perturbs the non-link byte stream.
   const AnsiRenderer({
     this.colorMode = ColorMode.truecolor,
-    this.synchronizedOutput = true,
+    this.synchronizedOutput = false,
     this.ambiguousCharsAreWide = true,
     this.hyperlinks = false,
   });

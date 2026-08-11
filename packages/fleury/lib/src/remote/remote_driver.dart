@@ -227,8 +227,14 @@ final class RemoteTerminalDriver
             terminal: _capabilities,
             keyboard: keyboardCapabilities,
             surface: surfaceCapabilities,
+            // Legacy ANSI peers have no terminal query channel. Structured
+            // peers do not use this presenter; ANSI stays conservative unless
+            // the operator explicitly asserts mode-2026 support.
             synchronizedOutput:
-                Platform.environment['FLEURY_SYNC_OUTPUT'] != '0',
+                synchronizedOutputOverrideFromEnvironment(
+                  Platform.environment,
+                ) ??
+                false,
           )
         : TerminalSessionProfile.structured(
             surface: surfaceCapabilities,

@@ -37,7 +37,6 @@ import '../rendering/text_sanitizer.dart';
 import '../rendering/width_resolver.dart';
 import 'clipboard_scope.dart';
 import '../semantics/semantics.dart';
-import '../terminal/capabilities.dart';
 import '../terminal/capability_requirements.dart';
 import '../input/events.dart';
 import 'focus.dart';
@@ -63,6 +62,7 @@ enum TextClipboardPolicy {
 }
 
 CapabilityResolution resolveTextClipboardPolicy(TextClipboardPolicy policy) {
+  final blocked = policy == TextClipboardPolicy.disabled;
   return resolveCapabilityRequirement(
     const CapabilityRequirement(
       feature: TerminalFeature.clipboardWrite,
@@ -70,10 +70,25 @@ CapabilityResolution resolveTextClipboardPolicy(TextClipboardPolicy policy) {
       reason: 'Copy selected editable text.',
       fallback: CapabilityFallback(label: 'in-process register'),
     ),
-    TerminalCapabilities.defaultCapabilities,
-    policyBlockedFeatures: policy == TextClipboardPolicy.disabled
-        ? const <TerminalFeature>{TerminalFeature.clipboardWrite}
-        : const <TerminalFeature>{},
+    CapabilityTruth(
+      feature: TerminalFeature.clipboardWrite,
+      support: CapabilitySupport.supported,
+      enablement: blocked
+          ? CapabilityEnablement.disabled
+          : CapabilityEnablement.notApplicable,
+      delivery: CapabilityDelivery.notApplicable,
+      policyBlocked: blocked,
+      evidence: <CapabilityEvidence>[
+        CapabilityEvidence(
+          source: blocked
+              ? CapabilityEvidenceSource.policy
+              : CapabilityEvidenceSource.fallback,
+          detail: blocked
+              ? 'The field clipboard policy disables copy and cut.'
+              : 'The in-process clipboard register is always available.',
+        ),
+      ],
+    ),
   );
 }
 

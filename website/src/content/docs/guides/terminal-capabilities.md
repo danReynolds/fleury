@@ -5,20 +5,32 @@ description: How Fleury detects what a terminal can do — native images, clicka
 
 Terminals differ in what they can actually render — native image protocols,
 clickable hyperlinks, color depth — and multiplexers like tmux sit in the
-middle rewriting escapes. Fleury's policy is the same everywhere: **detect the
-capability from the environment, use the richest safe form, and degrade to a
-form that never lies** (cell art instead of a dropped image, a visible URL
-instead of a dead link). This page covers the two capabilities with real
-divergence in the wild; `fleury diagnose` and the debug shell's **Tree** tab
-report exactly what was detected in your session.
+middle rewriting escapes. Fleury combines conservative environment evidence
+with bounded protocol queries where a reliable query exists, uses the richest
+confirmed form, and keeps an explicit fallback. `fleury diagnose` and the
+debug shell's **Tree** tab report what was detected in your session.
+
+The launch support boundary is a modern UTF-8, xterm-compatible POSIX terminal.
+The Windows driver and native Sixel rendering are preview capabilities rather
+than part of that launch compatibility claim.
+
+## Synchronized output
+
+Fleury uses DEC mode 2026 to avoid presenting a partially applied frame only
+when DECRQM reports mutable support. Unsupported terminals and transports
+without a query channel receive ordinary ANSI frames. Set
+`FLEURY_SYNC_OUTPUT=1` or `0` only as an explicit operator override for a
+terminal whose report or implementation is known to be wrong.
 
 ## Terminal images through multiplexers
 
-`Image` uses native Kitty, iTerm2, or Sixel graphics in a directly supported
-terminal and falls back to cell art everywhere else. Fleury defaults to cell
-art inside tmux, GNU Screen, and Zellij because multiplexers can drop or
-transform native-image escapes and cannot safely model every protocol's raster
-lifecycle across redraws and resizes.
+`Image` uses native Kitty or iTerm2 graphics when that protocol is selected and
+falls back to cell art elsewhere. A native Sixel path exists, but remains
+experimental until Fleury replaces its conventional cell-pixel sizing with
+queried geometry. Fleury defaults to cell art inside tmux, GNU Screen, and
+Zellij because multiplexers can drop or transform native-image escapes and
+cannot safely model every protocol's raster lifecycle across redraws and
+resizes.
 
 Fleury currently keeps Kitty, iTerm2, and Sixel on cell art through those
 multiplexers. Direct sessions still use their native image protocol. `fleury

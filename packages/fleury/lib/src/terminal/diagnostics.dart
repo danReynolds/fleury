@@ -277,7 +277,7 @@ final class TerminalCompatibilityFinding {
 final class TerminalCompatibilityReport {
   const TerminalCompatibilityReport({
     required this.findings,
-    this.schemaVersion = 1,
+    this.schemaVersion = 2,
     this.skippedReason,
   });
 
@@ -292,13 +292,12 @@ final class TerminalCompatibilityReport {
     return null;
   }
 
-  /// Features that active probe comparison confirmed as available.
+  /// Features that active probe comparison confirmed as supported.
   ///
-  /// This includes features confirmed by both passive and active evidence, plus
-  /// active-only confirmations. Callers can pass this set to
-  /// `resolveCapabilityRequirement(additionalAvailableFeatures: ...)` when
-  /// using explicitly collected probe evidence for a session.
-  Set<TerminalFeature> get confirmedAvailableFeatures {
+  /// This set is a matrix summary, not a runtime capability input. Use
+  /// [truthFor] when resolving a requirement so the probe provenance and the
+  /// distinction between support, enablement, and delivery are preserved.
+  Set<TerminalFeature> get confirmedSupportedFeatures {
     return Set<TerminalFeature>.unmodifiable(<TerminalFeature>{
       for (final finding in findings)
         if (finding.status == TerminalCompatibilityStatus.confirmed ||
@@ -316,6 +315,34 @@ final class TerminalCompatibilityReport {
     });
   }
 
+  /// Converts one compatibility finding into explicit, probe-scoped truth.
+  CapabilityTruth truthFor(TerminalFeature feature) {
+    final finding = findingFor(feature);
+    final status = finding?.status ?? TerminalCompatibilityStatus.inconclusive;
+    final support = switch (status) {
+      TerminalCompatibilityStatus.confirmed ||
+      TerminalCompatibilityStatus.activeConfirmed =>
+        CapabilitySupport.supported,
+      TerminalCompatibilityStatus.unsupported => CapabilitySupport.unsupported,
+      TerminalCompatibilityStatus.passiveUnverified ||
+      TerminalCompatibilityStatus.inconclusive => CapabilitySupport.unknown,
+    };
+    return CapabilityTruth(
+      feature: feature,
+      support: support,
+      enablement: CapabilityEnablement.notApplicable,
+      delivery: CapabilityDelivery.notApplicable,
+      evidence: <CapabilityEvidence>[
+        CapabilityEvidence(
+          source: CapabilityEvidenceSource.activeProbe,
+          detail: finding == null
+              ? 'No active compatibility finding was collected.'
+              : '${finding.label}: ${finding.status.name}; ${finding.detail ?? finding.passiveEvidence}',
+        ),
+      ],
+    );
+  }
+
   Map<String, int> get summary {
     final counts = <String, int>{
       for (final status in TerminalCompatibilityStatus.values) status.name: 0,
@@ -330,8 +357,8 @@ final class TerminalCompatibilityReport {
     'schemaVersion': schemaVersion,
     if (skippedReason != null) 'skippedReason': skippedReason,
     'summary': summary,
-    'confirmedAvailableFeatures': <String>[
-      for (final feature in confirmedAvailableFeatures) feature.name,
+    'confirmedSupportedFeatures': <String>[
+      for (final feature in confirmedSupportedFeatures) feature.name,
     ],
     'activeConfirmedFeatures': <String>[
       for (final feature in activeConfirmedFeatures) feature.name,
@@ -374,8 +401,8 @@ final class TerminalDiagnosis {
 
   TerminalCapabilities get passiveCapabilities => capabilities.toCapabilities();
 
-  Set<TerminalFeature> get confirmedAvailableFeatures {
-    return compatibility?.confirmedAvailableFeatures ??
+  Set<TerminalFeature> get confirmedSupportedFeatures {
+    return compatibility?.confirmedSupportedFeatures ??
         const <TerminalFeature>{};
   }
 

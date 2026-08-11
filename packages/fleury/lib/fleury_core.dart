@@ -221,15 +221,20 @@ export 'src/terminal/capabilities.dart'
         parseEnvFlag;
 export 'src/terminal/capability_requirements.dart'
     show
+        CapabilityDelivery,
+        CapabilityEnablement,
+        CapabilityEvidence,
+        CapabilityEvidenceSource,
         CapabilityFallback,
         CapabilityLevel,
         CapabilityRequirement,
         CapabilityResolution,
         CapabilityResolutionState,
+        CapabilitySupport,
+        CapabilityTruth,
         TerminalFeature,
         resolveCapabilityRequirement,
-        resolveCapabilityRequirements,
-        terminalFeatureAvailable;
+        resolveCapabilityRequirements;
 export 'src/terminal/diagnostics.dart'
     show
         TerminalCapabilityReport,

@@ -10,7 +10,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import '../terminal/capabilities.dart';
 import '../terminal/capability_requirements.dart';
 import 'clipboard.dart';
 
@@ -58,8 +57,9 @@ class SystemClipboard extends Clipboard {
           if (await _runTool(tool.executable, tool.args, text)) {
             return ClipboardWriteReport(
               result: ClipboardWriteResult.platformTool,
-              resolution: _availableClipboardResolution(
+              resolution: _deliveredClipboardResolution(
                 TerminalFeature.clipboardWrite,
+                '$platformTool exited successfully after consuming the payload.',
               ),
               policy: policy,
               payloadBytes: payloadBytes,
@@ -101,7 +101,7 @@ class SystemClipboard extends Clipboard {
     _stdoutWrite('\x1b]52;c;$encoded\x07');
     return ClipboardWriteReport(
       result: ClipboardWriteResult.osc52,
-      resolution: _availableClipboardResolution(TerminalFeature.osc52Clipboard),
+      resolution: _unverifiedOsc52Resolution(),
       policy: policy,
       payloadBytes: payloadBytes,
       osc52EncodedLength: encoded.length,
@@ -169,7 +169,10 @@ Future<bool> _defaultRunTool(
   return code == 0;
 }
 
-CapabilityResolution _availableClipboardResolution(TerminalFeature feature) {
+CapabilityResolution _deliveredClipboardResolution(
+  TerminalFeature feature,
+  String detail,
+) {
   return resolveCapabilityRequirement(
     CapabilityRequirement(
       feature: feature,
@@ -177,8 +180,43 @@ CapabilityResolution _availableClipboardResolution(TerminalFeature feature) {
       reason: 'Copy text to the user clipboard.',
       fallback: const CapabilityFallback(label: 'in-process register'),
     ),
-    TerminalCapabilities.defaultCapabilities,
-    additionalAvailableFeatures: <TerminalFeature>{feature},
+    CapabilityTruth(
+      feature: feature,
+      support: CapabilitySupport.supported,
+      enablement: CapabilityEnablement.notApplicable,
+      delivery: CapabilityDelivery.delivered,
+      evidence: <CapabilityEvidence>[
+        CapabilityEvidence(
+          source: CapabilityEvidenceSource.operationResult,
+          detail: detail,
+        ),
+      ],
+    ),
+  );
+}
+
+CapabilityResolution _unverifiedOsc52Resolution() {
+  return resolveCapabilityRequirement(
+    const CapabilityRequirement(
+      feature: TerminalFeature.osc52Clipboard,
+      level: CapabilityLevel.preferred,
+      reason:
+          'Copy text through OSC 52 when platform clipboard is unavailable.',
+      fallback: CapabilityFallback(label: 'in-process register'),
+    ),
+    const CapabilityTruth(
+      feature: TerminalFeature.osc52Clipboard,
+      support: CapabilitySupport.unknown,
+      enablement: CapabilityEnablement.enabled,
+      delivery: CapabilityDelivery.unverified,
+      evidence: <CapabilityEvidence>[
+        CapabilityEvidence(
+          source: CapabilityEvidenceSource.operationResult,
+          detail:
+              'The OSC 52 sequence was emitted; the terminal does not acknowledge clipboard delivery.',
+        ),
+      ],
+    ),
   );
 }
 
@@ -191,9 +229,18 @@ CapabilityResolution _blockedOsc52Resolution() {
           'Copy text through OSC 52 when platform clipboard is unavailable.',
       fallback: CapabilityFallback(label: 'in-process register'),
     ),
-    TerminalCapabilities.defaultCapabilities,
-    policyBlockedFeatures: const <TerminalFeature>{
-      TerminalFeature.osc52Clipboard,
-    },
+    const CapabilityTruth(
+      feature: TerminalFeature.osc52Clipboard,
+      support: CapabilitySupport.unknown,
+      enablement: CapabilityEnablement.disabled,
+      delivery: CapabilityDelivery.notApplicable,
+      policyBlocked: true,
+      evidence: <CapabilityEvidence>[
+        CapabilityEvidence(
+          source: CapabilityEvidenceSource.policy,
+          detail: 'The clipboard policy did not permit this OSC 52 write.',
+        ),
+      ],
+    ),
   );
 }

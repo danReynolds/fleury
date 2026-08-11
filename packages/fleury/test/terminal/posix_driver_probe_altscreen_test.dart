@@ -7,9 +7,10 @@
 // enter()'s call ordering.
 //
 // This drives enter() over terminal-reporting fake stdio (hasTerminal => true)
-// and inspects the bytes written to stdout. No terminal reply is fed, so each
-// probe simply times out; the query bytes are written before the wait, so their
-// presence/absence in the captured output is what's under test.
+// and inspects the bytes written to stdout. The fake returns only the DA
+// sentinel appended to each startup query: that models an unsupported but
+// responsive terminal and lets every serialized probe reach its write within
+// the aggregate startup budget.
 
 import 'dart:async';
 import 'dart:io';
@@ -20,13 +21,20 @@ import 'package:test/test.dart';
 
 /// A stdout that reports a real terminal and records every write.
 class _TerminalStdout implements Stdout {
+  _TerminalStdout({this.onWrite});
+
+  final void Function(String bytes)? onWrite;
   final StringBuffer written = StringBuffer();
 
   @override
   bool get hasTerminal => true;
 
   @override
-  void write(Object? object) => written.write(object);
+  void write(Object? object) {
+    final bytes = object.toString();
+    written.write(bytes);
+    onWrite?.call(bytes);
+  }
 
   @override
   Future<void> flush() async {}
@@ -42,7 +50,7 @@ class _TerminalStdout implements Stdout {
 }
 
 /// A stdin that reports a real terminal so raw mode engages (_changedStdin) and
-/// the probe's terminal guards pass. Nothing is fed, so probes time out.
+/// the probe's terminal guards pass.
 class _TerminalStdin implements Stdin {
   final _controller = StreamController<List<int>>();
   bool _lineMode = true;
@@ -76,6 +84,8 @@ class _TerminalStdin implements Stdin {
 
   Future<void> close() => _controller.close();
 
+  void push(String bytes) => _controller.add(bytes.codeUnits);
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -83,8 +93,14 @@ class _TerminalStdin implements Stdin {
 /// Enters [mode] on a driver backed by terminal-reporting fake stdio, then
 /// restores, and returns everything written to stdout during that lifecycle.
 Future<String> _enterAndCapture(TerminalMode mode) async {
-  final out = _TerminalStdout();
   final input = _TerminalStdin();
+  final out = _TerminalStdout(
+    onWrite: (bytes) {
+      if (bytes.contains('\x1B[c')) {
+        scheduleMicrotask(() => input.push('\x1B[?1;2c'));
+      }
+    },
+  );
   final driver = PosixTerminalDriver(stdinOverride: input, stdoutOverride: out);
   await driver.enter(mode);
   await driver.restore();

@@ -184,8 +184,8 @@ Rules:
 ## 8. Active terminal state
 
 Terminal state is finite and typed. `ActiveTerminalState` records the requested
-mode, the effective mode after policy/fallback, raw-input ownership, output-mode
-ownership, and modifyOtherKeys ownership. `TerminalMode` carries the selected
+mode, the effective mode after policy/fallback, raw-input ownership, and
+output-mode ownership. `TerminalMode` carries the selected
 screen, cursor, paste, focus, mouse, and keyboard settings; platform-native
 termios/console snapshots remain in their platform controllers.
 
@@ -263,11 +263,12 @@ The activation preference is semantic:
 
 1. full key lifecycle;
 2. key disambiguation;
-3. modifyOtherKeys compatibility;
-4. legacy input.
+3. legacy input.
 
-The parser may understand every encoding, but the driver activates one selected
-enhancement path.
+The parser understands modifyOtherKeys input for compatibility when a host or
+outer application already enabled it, but Fleury does not activate the
+protocol. Its original encoding is incomplete and ambiguous, so decoding is a
+legacy fallback rather than a negotiated capability.
 
 POSIX selects that path through the typed query runner. The Windows driver
 remains on legacy input until it has an equivalent confirmation path; it does
@@ -317,9 +318,11 @@ emulator.
    `runApp`.
 5. Make surface/keyboard/service capabilities canonical and narrow the mixed
    terminal feature vocabulary.
-6. Add the legacy sequence provider and modifyOtherKeys fallback.
+6. Add terminfo-backed legacy sequences when fixture comparison proves useful;
+   keep modifyOtherKeys parse-only.
 7. Add synchronized-output detection, in-band resize, pixel mouse, and further
    protocols only through the proven path.
 
-Steps 1–6 are implemented by this RFC. Step 7 remains ordinary future protocol
-work, not architecture required to validate this design.
+Steps 1–5 and modifyOtherKeys compatibility parsing are implemented by this
+RFC. The terminfo adapter in step 6 and the protocols in step 7 remain ordinary
+future work, not architecture required to validate this design.

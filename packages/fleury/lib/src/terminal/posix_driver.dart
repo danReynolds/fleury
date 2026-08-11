@@ -147,6 +147,7 @@ class PosixTerminalDriver
   static Duration startupNegotiationBudget = const Duration(milliseconds: 500);
   static const _perProbeTimeout = Duration(milliseconds: 150);
   ImageProtocol? _imageProtocolOverride;
+  bool _synchronizedOutput = false;
   // Set once the ambiguous-width probe measures how the terminal sizes
   // ambiguous glyphs; a confirmed `narrow` lets the renderer drop the
   // defensive per-cell repositioning [capabilities] otherwise assumes.
@@ -411,6 +412,7 @@ class PosixTerminalDriver
     // simply leaves capabilities conservative.
     final negotiationClock = Stopwatch()..start();
     await _negotiateKeyboard(negotiationClock);
+    await _negotiateSynchronizedOutput(negotiationClock);
     await _maybeProbeImageProtocol(negotiationClock);
     await _maybeProbeAmbiguousWidth(_mode!.alternateScreen, negotiationClock);
 
@@ -433,8 +435,30 @@ class PosixTerminalDriver
     return TerminalSessionProfile.ansi(
       terminal: terminal,
       keyboard: keyboardCapabilities,
-      synchronizedOutput: Platform.environment['FLEURY_SYNC_OUTPUT'] != '0',
+      synchronizedOutput: _synchronizedOutput,
     );
+  }
+
+  Future<void> _negotiateSynchronizedOutput(Stopwatch negotiationClock) async {
+    final override = synchronizedOutputOverrideFromEnvironment(
+      Platform.environment,
+    );
+    if (override != null) {
+      _synchronizedOutput = override;
+      return;
+    }
+    _synchronizedOutput = false;
+    if (!_stdoutIsTerminal || !_changedStdin) return;
+    final timeout = _nextProbeTimeout(negotiationClock);
+    if (timeout == null) return;
+    try {
+      _synchronizedOutput = await probeSynchronizedOutput(
+        _queryRunner,
+        timeout: timeout,
+      );
+    } on Object {
+      _synchronizedOutput = false;
+    }
   }
 
   /// When the environment doesn't already name a native image protocol, ask
@@ -467,21 +491,27 @@ class PosixTerminalDriver
     if (effective.keyboardProtocol == KeyboardProtocolMode.legacy) return;
     // Escape hatch for a terminal where the query itself misbehaves.
     final flag = Platform.environment['FLEURY_KEYBOARD_PROBE'];
-    if (flag == '0' || flag == 'false') return;
+    if (flag == '0' || flag == 'false') {
+      await _restoreLegacyKeyboard(effective);
+      return;
+    }
     int? flags;
     final timeout = _nextProbeTimeout(negotiationClock);
-    if (timeout == null) return;
+    if (timeout == null) {
+      await _restoreLegacyKeyboard(effective);
+      return;
+    }
     try {
       flags = await probeKeyboardFlags(_queryRunner, timeout: timeout);
     } on Object {
       flags = null;
     }
     if (flags == null) {
-      // No answer: the terminal does not speak the protocol. Whatever we
-      // pushed was ignored, so there is nothing to roll back — but we
-      // claim nothing either.
+      // No answer confirms no enhanced keyboard tier. Pop the attempted frame
+      // (ignored by terminals that never understood it) and claim only legacy
+      // parsing.
       _confirmedKeyboardFlags = null;
-      await _activateModifyOtherKeysFallback(effective);
+      await _restoreLegacyKeyboard(effective);
       return;
     }
     if (effective.keyboardProtocol == KeyboardProtocolMode.lifecycle &&
@@ -511,36 +541,34 @@ class PosixTerminalDriver
       }
       _confirmedKeyboardFlags = after;
       if (after == null || after & 0x01 == 0) {
-        await _activateModifyOtherKeysFallback(effective);
+        await _restoreLegacyKeyboard(effective);
       }
       return;
     }
     _confirmedKeyboardFlags = flags;
     if (flags & 0x01 == 0) {
-      await _activateModifyOtherKeysFallback(effective);
+      await _restoreLegacyKeyboard(effective);
     }
   }
 
-  /// Falls back to xterm modifyOtherKeys level 2 when Kitty disambiguation was
-  /// not confirmed. Pop the attempted Kitty frame first: a late/partial Kitty
-  /// implementation must never remain stacked underneath the fallback.
-  Future<void> _activateModifyOtherKeysFallback(TerminalMode effective) async {
-    final flag = Platform.environment['FLEURY_MODIFY_OTHER_KEYS'];
-    if (flag == '0' || flag == 'false') return;
+  /// Returns to legacy input when Kitty disambiguation was not confirmed.
+  ///
+  /// Fleury parses modifyOtherKeys replies for compatibility with a mode the
+  /// host or an outer application enabled, but never activates that ambiguous
+  /// protocol itself. Pop the attempted Kitty frame so a partial
+  /// implementation cannot remain stacked under the legacy parser.
+  Future<void> _restoreLegacyKeyboard(TerminalMode effective) async {
     try {
-      _stdout.write('\x1B[<1u\x1B[>4;2m');
+      _stdout.write('\x1B[<1u');
       await _stdout.flush();
     } on Object {
       return;
     }
     _confirmedKeyboardFlags = null;
-    final state = _terminalState!;
-    state
-      ..effectiveMode = terminalModeWithKeyboardProtocol(
-        effective,
-        KeyboardProtocolMode.legacy,
-      )
-      ..modifyOtherKeysOwned = true;
+    _terminalState!.effectiveMode = terminalModeWithKeyboardProtocol(
+      effective,
+      KeyboardProtocolMode.legacy,
+    );
   }
 
   /// Lifecycle is only safe to keep when text survives it: event types (2),
@@ -625,8 +653,7 @@ class PosixTerminalDriver
   /// Builds the mode-entry escape sequence (alt screen, hide cursor,
   /// bracketed paste, Kitty keyboard, mouse), shared by [enter] and resume.
   String _enterSequences(TerminalMode mode) =>
-      '${buildTerminalEnterSequences(mode)}'
-      '${_terminalState?.modifyOtherKeysOwned ?? false ? '\x1B[>4;2m' : ''}';
+      buildTerminalEnterSequences(mode);
 
   /// Applies the fleet override before any sequence is built.
   ///
@@ -647,9 +674,7 @@ class PosixTerminalDriver
   /// Builds the mode-exit escape sequence, shared by [restore] and
   /// suspend. Disables mouse modes unconditionally (incl. all-motion
   /// 1003) so none leak back to the shell.
-  String _exitSequences(TerminalMode mode) =>
-      '${_terminalState?.modifyOtherKeysOwned ?? false ? '\x1B[>4;0m' : ''}'
-      '${buildTerminalExitSequences(mode)}';
+  String _exitSequences(TerminalMode mode) => buildTerminalExitSequences(mode);
 
   bool _interceptParsedEvent(TuiEvent event) {
     if (!_active ||

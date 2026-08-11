@@ -366,7 +366,18 @@ Map<String, Object?> _clipboardSemanticState(DataTableCopyOptions options) {
       reason: 'Copy selected table row.',
       fallback: CapabilityFallback(label: 'in-process register'),
     ),
-    TerminalCapabilities.defaultCapabilities,
+    const CapabilityTruth(
+      feature: TerminalFeature.clipboardWrite,
+      support: CapabilitySupport.supported,
+      enablement: CapabilityEnablement.notApplicable,
+      delivery: CapabilityDelivery.notApplicable,
+      evidence: <CapabilityEvidence>[
+        CapabilityEvidence(
+          source: CapabilityEvidenceSource.fallback,
+          detail: 'The in-process clipboard register is available.',
+        ),
+      ],
+    ),
   );
   return <String, Object?>{
     'copyEnabled': true,

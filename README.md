@@ -69,6 +69,19 @@ The [getting-started guide](https://danreynolds.github.io/fleury/getting-started
 covers installation, state, higher-level widgets, and running the same tree in
 a browser.
 
+## Terminal support
+
+The launch target is a modern UTF-8, xterm-compatible terminal on POSIX. Fleury
+negotiates optional protocols such as Kitty keyboard and synchronized output,
+and retains legacy keyboard, ordinary ANSI-frame, glyph-image, and plain-link
+fallbacks when they are unavailable.
+
+The Windows driver is available as a preview, but real-Windows acceptance is
+still pending and Windows is not part of the launch support claim. Native
+Sixel rendering is also experimental until cell-pixel geometry is negotiated;
+Kitty and iTerm2 images remain progressive enhancements, with cell art as the
+portable image path.
+
 ## Go deeper
 
 - [Browse the widget catalog](https://danreynolds.github.io/fleury/widgets/)

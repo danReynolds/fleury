@@ -111,14 +111,18 @@ void main() {
 
       expect(report.result, ClipboardWriteResult.osc52);
       expect(report.resolution.feature, TerminalFeature.osc52Clipboard);
-      expect(report.resolution.state, CapabilityResolutionState.available);
+      expect(report.resolution.state, CapabilityResolutionState.unverified);
+      expect(report.resolution.support, CapabilitySupport.unknown);
+      expect(report.resolution.enablement, CapabilityEnablement.enabled);
+      expect(report.resolution.delivery, CapabilityDelivery.unverified);
       expect(report.overSsh, isTrue);
       expect(report.osc52Attempted, isTrue);
       expect(report.osc52Emitted, isTrue);
       expect(oscEmitted, isNotNull);
       expect(state.terminalCapability, 'osc52Clipboard');
       expect(state.capabilityRequirement, 'preferred');
-      expect(state.capabilityResolution, 'available');
+      expect(state.capabilityResolution, 'unverified');
+      expect(state.values['capabilityDelivery'], 'unverified');
       expect(state.clipboardTransport, 'osc52');
       expect(state.clipboardPolicy, 'standard');
       expect(state.values['clipboardInProcessUpdated'], isTrue);
