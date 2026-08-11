@@ -231,7 +231,7 @@ void main() {
     });
   });
 
-  group('capability projection + feature gate', () {
+  group('capability projection', () {
     test('toSurfaceCapabilities reflects the detected value', () {
       final supporting = detectTerminalCapabilitiesFromEnvironment(const {
         'TERM_PROGRAM': 'ghostty',
@@ -243,26 +243,6 @@ void main() {
       expect(unknown.hyperlinks, isFalse);
       expect(unknown.toSurfaceCapabilities().hyperlinks, isFalse);
     });
-
-    test(
-      'osc8Hyperlinks feature derives from the capability, not a constant',
-      () {
-        expect(
-          terminalFeatureAvailable(
-            TerminalFeature.osc8Hyperlinks,
-            const TerminalCapabilities(hyperlinks: true),
-          ),
-          isTrue,
-        );
-        expect(
-          terminalFeatureAvailable(
-            TerminalFeature.osc8Hyperlinks,
-            const TerminalCapabilities(),
-          ),
-          isFalse,
-        );
-      },
-    );
   });
 
   group('diagnose reflects the accurate OSC 8 state (end-to-end)', () {

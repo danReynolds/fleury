@@ -15,9 +15,11 @@ display untrusted output or use advanced terminal features.
   feeds both runtime shell handshakes and diagnosis output.
 - `TerminalDiagnosis` provides the first machine-readable terminal profile,
   capability, fallback, warning, and unsupported-feature snapshot.
-- A pure `CapabilityRequirement`/`CapabilityResolution` model now lets
-  widgets and services declare required, preferred, optional, or prohibited
-  terminal features before broad widget integration.
+- `CapabilityTruth` and `CapabilityResolution` now keep support, enablement,
+  delivery, policy, fallback, and provenance distinct. Widgets and services
+  declare required, preferred, optional, or prohibited behavior; domain owners
+  supply observed truth without reconstructing it from a static terminal
+  summary.
 - `Image` is the first widget integration: semantic snapshots report native
   image availability, glyph fallback state, active protocol, color mode, tmux
   passthrough, and frame metadata.
@@ -283,10 +285,10 @@ display untrusted output or use advanced terminal features.
     through `--json-output`, avoiding false non-interactive entries caused by a
     stdout pipe. Current platform-evidence slice adds platform JSON to
     diagnosis and compact matrix summaries. Current active-evidence slice
-    exposes compatibility-confirmed feature sets and
-    `TerminalDiagnosis.confirmedAvailableFeatures`, so explicit active probe
-    evidence can feed `resolveCapabilityRequirement` through
-    `additionalAvailableFeatures` without changing passive startup detection.
+    exposes compatibility findings through
+    `TerminalCompatibilityReport.truthFor`, so explicit active probe support
+    evidence retains provenance without changing passive startup detection or
+    implying enablement/delivery.
     Current audit-tooling slice adds `terminal-matrix-audit`, which summarizes
     committed entry readiness and can fail in strict mode when target labels
     lack `readyForReview` entries or invalid JSON files are present. Latest
@@ -401,9 +403,9 @@ display untrusted output or use advanced terminal features.
   through `fleury diagnose --probe`, where their latency and terminal writes
   are explicit developer choices.
 - Active probe evidence now creates a compatibility report, but it still does
-  not change startup capabilities by default. Compatibility-confirmed features
-  are exposed as an explicit set that apps/tests can pass as
-  `additionalAvailableFeatures` when resolving a capability requirement.
+  not change startup capabilities by default. Apps/tests resolve a finding
+  through `TerminalCompatibilityReport.truthFor`, preserving probe provenance
+  and the support-only scope of the evidence.
 - The `script(1)` pseudo-terminal fixture in `terminal_probe_test.dart` is a
   transport smoke test, not real terminal-emulator evidence. It proves the
   active probe suite can write/read through a PTY-shaped subprocess boundary
@@ -430,10 +432,9 @@ display untrusted output or use advanced terminal features.
   final output, size, mode, and call-count state stay inspectable, while new
   writes, resize/enqueue calls, terminal handoffs, enter calls, and
   `isInteractive` mutation after disposal fail explicitly.
-- Capability resolution currently uses the lightweight `TerminalCapabilities`
-  summary plus explicit `additionalAvailableFeatures`, `policyBlockedFeatures`,
-  and `unsafeFeatures` sets. That keeps v0 testable while leaving room for a
-  richer terminal profile report later.
+- Capability resolution requires explicit domain truth. Static
+  `TerminalCapabilities`, terminal identity, and ad hoc feature sets can no
+  longer silently turn into runtime availability.
 - Widget integration should preserve render behavior first and add semantic
   evidence around it. The image slice follows that rule: no renderer path
   changes, only explicit capability/fallback state.

@@ -1011,10 +1011,19 @@ Widget _linkSemantics(
       reason: 'Markdown links render as visible text by default.',
       fallback: CapabilityFallback(label: 'visible URL'),
     ),
-    TerminalCapabilities.defaultCapabilities,
-    policyBlockedFeatures: const <TerminalFeature>{
-      TerminalFeature.osc8Hyperlinks,
-    },
+    const CapabilityTruth(
+      feature: TerminalFeature.osc8Hyperlinks,
+      support: CapabilitySupport.unknown,
+      enablement: CapabilityEnablement.disabled,
+      delivery: CapabilityDelivery.notApplicable,
+      policyBlocked: true,
+      evidence: <CapabilityEvidence>[
+        CapabilityEvidence(
+          source: CapabilityEvidenceSource.policy,
+          detail: 'Markdown links use visible URLs by default.',
+        ),
+      ],
+    ),
   );
   final state = resolution.toSemanticState().merge(<String, Object?>{
     'markdownLinkIndex': index,

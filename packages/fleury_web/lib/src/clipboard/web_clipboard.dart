@@ -72,11 +72,9 @@ final class WebClipboard extends fleury.Clipboard {
 
     final resolution = !_isSecureContext
         ? _unsafeResolution('Browser clipboard requires a secure context.')
-        : _degradedResolution(
-            _clipboardAvailable
-                ? 'Browser clipboard write disabled by policy.'
-                : 'Browser clipboard API is unavailable.',
-          );
+        : !policy.allowPlatformTool
+        ? _policyBlockedResolution()
+        : _unsupportedResolution();
     return _report(
       result: fleury.ClipboardWriteResult.inProcessOnly,
       resolution: resolution,
@@ -138,27 +136,95 @@ final class WebClipboard extends fleury.Clipboard {
   }
 }
 
+const _clipboardRequirement = fleury.CapabilityRequirement(
+  feature: fleury.TerminalFeature.clipboardWrite,
+  level: fleury.CapabilityLevel.preferred,
+  fallback: fleury.CapabilityFallback(label: _fallbackLabel),
+);
+
 fleury.CapabilityResolution _availableResolution() =>
-    const fleury.CapabilityResolution(
-      feature: fleury.TerminalFeature.clipboardWrite,
-      level: fleury.CapabilityLevel.preferred,
-      state: fleury.CapabilityResolutionState.available,
+    fleury.resolveCapabilityRequirement(
+      _clipboardRequirement,
+      const fleury.CapabilityTruth(
+        feature: fleury.TerminalFeature.clipboardWrite,
+        support: fleury.CapabilitySupport.supported,
+        enablement: fleury.CapabilityEnablement.notApplicable,
+        delivery: fleury.CapabilityDelivery.delivered,
+        evidence: <fleury.CapabilityEvidence>[
+          fleury.CapabilityEvidence(
+            source: fleury.CapabilityEvidenceSource.operationResult,
+            detail: 'navigator.clipboard.writeText completed successfully.',
+          ),
+        ],
+      ),
     );
 
 fleury.CapabilityResolution _degradedResolution(String warning) =>
-    fleury.CapabilityResolution(
-      feature: fleury.TerminalFeature.clipboardWrite,
-      level: fleury.CapabilityLevel.preferred,
-      state: fleury.CapabilityResolutionState.degraded,
-      fallbackLabel: _fallbackLabel,
-      warning: warning,
+    fleury.resolveCapabilityRequirement(
+      _clipboardRequirement,
+      fleury.CapabilityTruth(
+        feature: fleury.TerminalFeature.clipboardWrite,
+        support: fleury.CapabilitySupport.supported,
+        enablement: fleury.CapabilityEnablement.notApplicable,
+        delivery: fleury.CapabilityDelivery.failed,
+        evidence: <fleury.CapabilityEvidence>[
+          fleury.CapabilityEvidence(
+            source: fleury.CapabilityEvidenceSource.operationResult,
+            detail: warning,
+          ),
+        ],
+      ),
     );
 
 fleury.CapabilityResolution _unsafeResolution(String warning) =>
-    fleury.CapabilityResolution(
-      feature: fleury.TerminalFeature.clipboardWrite,
-      level: fleury.CapabilityLevel.preferred,
-      state: fleury.CapabilityResolutionState.unsafe,
-      fallbackLabel: _fallbackLabel,
-      warning: warning,
+    fleury.resolveCapabilityRequirement(
+      _clipboardRequirement,
+      fleury.CapabilityTruth(
+        feature: fleury.TerminalFeature.clipboardWrite,
+        support: fleury.CapabilitySupport.unknown,
+        enablement: fleury.CapabilityEnablement.disabled,
+        delivery: fleury.CapabilityDelivery.notApplicable,
+        unsafe: true,
+        evidence: <fleury.CapabilityEvidence>[
+          fleury.CapabilityEvidence(
+            source: fleury.CapabilityEvidenceSource.policy,
+            detail: warning,
+          ),
+        ],
+      ),
+    );
+
+fleury.CapabilityResolution _policyBlockedResolution() =>
+    fleury.resolveCapabilityRequirement(
+      _clipboardRequirement,
+      const fleury.CapabilityTruth(
+        feature: fleury.TerminalFeature.clipboardWrite,
+        support: fleury.CapabilitySupport.unknown,
+        enablement: fleury.CapabilityEnablement.disabled,
+        delivery: fleury.CapabilityDelivery.notApplicable,
+        policyBlocked: true,
+        evidence: <fleury.CapabilityEvidence>[
+          fleury.CapabilityEvidence(
+            source: fleury.CapabilityEvidenceSource.policy,
+            detail: 'Browser clipboard write was disabled by policy.',
+          ),
+        ],
+      ),
+    );
+
+fleury.CapabilityResolution _unsupportedResolution() =>
+    fleury.resolveCapabilityRequirement(
+      _clipboardRequirement,
+      const fleury.CapabilityTruth(
+        feature: fleury.TerminalFeature.clipboardWrite,
+        support: fleury.CapabilitySupport.unsupported,
+        enablement: fleury.CapabilityEnablement.notApplicable,
+        delivery: fleury.CapabilityDelivery.notApplicable,
+        evidence: <fleury.CapabilityEvidence>[
+          fleury.CapabilityEvidence(
+            source: fleury.CapabilityEvidenceSource.surfaceProfile,
+            detail: 'The browser clipboard API is unavailable.',
+          ),
+        ],
+      ),
     );

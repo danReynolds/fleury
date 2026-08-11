@@ -1,72 +1,23 @@
 import 'package:fleury/fleury.dart';
 import 'package:test/test.dart';
 
+const _probeEvidence = <CapabilityEvidence>[
+  CapabilityEvidence(
+    source: CapabilityEvidenceSource.activeProbe,
+    detail: 'The protocol query received a positive reply.',
+  ),
+];
+
+const _operationEvidence = <CapabilityEvidence>[
+  CapabilityEvidence(
+    source: CapabilityEvidenceSource.operationResult,
+    detail: 'The destination acknowledged the operation.',
+  ),
+];
+
 void main() {
-  group('terminalFeatureAvailable', () {
-    test('resolves color fidelity by capability level', () {
-      const none = TerminalCapabilities(colorMode: ColorMode.none);
-      const indexed = TerminalCapabilities(colorMode: ColorMode.indexed256);
-      const truecolor = TerminalCapabilities(colorMode: ColorMode.truecolor);
-
-      expect(
-        terminalFeatureAvailable(TerminalFeature.colorAnsi16, none),
-        isFalse,
-      );
-      expect(
-        terminalFeatureAvailable(TerminalFeature.colorAnsi16, indexed),
-        isTrue,
-      );
-      expect(
-        terminalFeatureAvailable(TerminalFeature.colorIndexed256, indexed),
-        isTrue,
-      );
-      expect(
-        terminalFeatureAvailable(TerminalFeature.colorIndexed256, truecolor),
-        isTrue,
-      );
-      expect(
-        terminalFeatureAvailable(TerminalFeature.colorTruecolor, indexed),
-        isFalse,
-      );
-      expect(
-        terminalFeatureAvailable(TerminalFeature.colorTruecolor, truecolor),
-        isTrue,
-      );
-    });
-
-    test('resolves image protocols and explicit session features', () {
-      const halfBlock = TerminalCapabilities(
-        imageProtocol: ImageProtocol.halfBlock,
-      );
-      const kitty = TerminalCapabilities(imageProtocol: ImageProtocol.kitty);
-
-      expect(
-        terminalFeatureAvailable(TerminalFeature.inlineImages, halfBlock),
-        isFalse,
-      );
-      expect(
-        terminalFeatureAvailable(TerminalFeature.imageGlyphFallback, halfBlock),
-        isTrue,
-      );
-      expect(
-        terminalFeatureAvailable(TerminalFeature.imageKitty, kitty),
-        isTrue,
-      );
-      expect(
-        terminalFeatureAvailable(
-          TerminalFeature.sshSession,
-          halfBlock,
-          additionalAvailableFeatures: const <TerminalFeature>{
-            TerminalFeature.sshSession,
-          },
-        ),
-        isTrue,
-      );
-    });
-  });
-
   group('resolveCapabilityRequirement', () {
-    test('blocks required unsupported features', () {
+    test('blocks a required feature with unsupported evidence', () {
       final resolution = resolveCapabilityRequirement(
         const CapabilityRequirement(
           feature: TerminalFeature.imageKitty,
@@ -74,7 +25,13 @@ void main() {
           reason: 'Native image preview',
           fallback: CapabilityFallback(label: 'cell art'),
         ),
-        const TerminalCapabilities(imageProtocol: ImageProtocol.halfBlock),
+        const CapabilityTruth(
+          feature: TerminalFeature.imageKitty,
+          support: CapabilitySupport.unsupported,
+          enablement: CapabilityEnablement.notApplicable,
+          delivery: CapabilityDelivery.notApplicable,
+          evidence: _probeEvidence,
+        ),
       );
 
       expect(resolution.state, CapabilityResolutionState.unsupported);
@@ -84,97 +41,221 @@ void main() {
       expect(resolution.warning, contains('required but unavailable'));
     });
 
-    test('degrades preferred unsupported features with a fallback', () {
+    test('degrades a failed preferred feature to its fallback', () {
       final resolution = resolveCapabilityRequirement(
         const CapabilityRequirement(
-          feature: TerminalFeature.imageKitty,
+          feature: TerminalFeature.clipboardWrite,
           level: CapabilityLevel.preferred,
-          fallback: CapabilityFallback(
-            label: 'half-block image',
-            description: 'Render the image as ANSI cell art.',
-          ),
+          fallback: CapabilityFallback(label: 'in-process register'),
         ),
-        const TerminalCapabilities(imageProtocol: ImageProtocol.halfBlock),
+        const CapabilityTruth(
+          feature: TerminalFeature.clipboardWrite,
+          support: CapabilitySupport.supported,
+          enablement: CapabilityEnablement.notApplicable,
+          delivery: CapabilityDelivery.failed,
+          evidence: _operationEvidence,
+        ),
       );
 
       expect(resolution.state, CapabilityResolutionState.degraded);
-      expect(resolution.fallbackLabel, 'half-block image');
+      expect(resolution.fallbackLabel, 'in-process register');
       expect(resolution.isBlocking, isFalse);
-      expect(resolution.isSatisfied, isTrue);
     });
 
-    test('disables prohibited available features by policy', () {
+    test('distinguishes emitted bytes from verified delivery', () {
       final resolution = resolveCapabilityRequirement(
         const CapabilityRequirement(
-          feature: TerminalFeature.osc8Hyperlinks,
-          level: CapabilityLevel.prohibited,
-          reason: 'Untrusted markdown',
+          feature: TerminalFeature.osc52Clipboard,
+          level: CapabilityLevel.preferred,
+          fallback: CapabilityFallback(label: 'in-process register'),
         ),
-        TerminalCapabilities.defaultCapabilities,
-        additionalAvailableFeatures: const <TerminalFeature>{
-          TerminalFeature.osc8Hyperlinks,
-        },
+        const CapabilityTruth(
+          feature: TerminalFeature.osc52Clipboard,
+          support: CapabilitySupport.unknown,
+          enablement: CapabilityEnablement.enabled,
+          delivery: CapabilityDelivery.unverified,
+          evidence: <CapabilityEvidence>[
+            CapabilityEvidence(
+              source: CapabilityEvidenceSource.operationResult,
+              detail: 'OSC 52 bytes were emitted without an acknowledgement.',
+            ),
+          ],
+        ),
       );
 
-      expect(resolution.state, CapabilityResolutionState.disabledByPolicy);
-      expect(resolution.isBlocking, isFalse);
-      expect(resolution.warning, contains('disabled by policy'));
+      expect(resolution.state, CapabilityResolutionState.unverified);
+      expect(resolution.delivery, CapabilityDelivery.unverified);
+      expect(resolution.fallbackLabel, 'in-process register');
     });
 
-    test('treats required policy-blocked features as blocking', () {
+    test('marks acknowledged operations available', () {
+      final resolution = resolveCapabilityRequirement(
+        const CapabilityRequirement(
+          feature: TerminalFeature.clipboardWrite,
+          level: CapabilityLevel.preferred,
+        ),
+        const CapabilityTruth(
+          feature: TerminalFeature.clipboardWrite,
+          support: CapabilitySupport.supported,
+          enablement: CapabilityEnablement.notApplicable,
+          delivery: CapabilityDelivery.delivered,
+          evidence: _operationEvidence,
+        ),
+      );
+
+      expect(resolution.state, CapabilityResolutionState.available);
+      expect(resolution.evidence, _operationEvidence);
+    });
+
+    test('preserves policy truth independently of support', () {
       final resolution = resolveCapabilityRequirement(
         const CapabilityRequirement(
           feature: TerminalFeature.osc52Clipboard,
           level: CapabilityLevel.required,
+          fallback: CapabilityFallback(label: 'in-process register'),
         ),
-        TerminalCapabilities.defaultCapabilities,
-        additionalAvailableFeatures: const <TerminalFeature>{
-          TerminalFeature.osc52Clipboard,
-        },
-        policyBlockedFeatures: const <TerminalFeature>{
-          TerminalFeature.osc52Clipboard,
-        },
+        const CapabilityTruth(
+          feature: TerminalFeature.osc52Clipboard,
+          support: CapabilitySupport.unknown,
+          enablement: CapabilityEnablement.disabled,
+          delivery: CapabilityDelivery.notApplicable,
+          policyBlocked: true,
+          evidence: <CapabilityEvidence>[
+            CapabilityEvidence(
+              source: CapabilityEvidenceSource.policy,
+              detail: 'This content cannot leave the process.',
+            ),
+          ],
+        ),
       );
 
       expect(resolution.state, CapabilityResolutionState.disabledByPolicy);
+      expect(resolution.policyBlocked, isTrue);
       expect(resolution.isBlocking, isTrue);
-      expect(resolution.isSatisfied, isFalse);
     });
 
-    test('exports semantic state for inspectors and tests', () {
+    test('keeps the fallback visible when the primary path is unsafe', () {
       final resolution = resolveCapabilityRequirement(
         const CapabilityRequirement(
-          feature: TerminalFeature.colorTruecolor,
+          feature: TerminalFeature.clipboardWrite,
           level: CapabilityLevel.preferred,
-          fallback: CapabilityFallback(label: '256-color palette'),
+          fallback: CapabilityFallback(label: 'in-process register'),
         ),
-        const TerminalCapabilities(colorMode: ColorMode.indexed256),
+        const CapabilityTruth(
+          feature: TerminalFeature.clipboardWrite,
+          support: CapabilitySupport.unknown,
+          enablement: CapabilityEnablement.disabled,
+          delivery: CapabilityDelivery.notApplicable,
+          unsafe: true,
+          evidence: <CapabilityEvidence>[
+            CapabilityEvidence(
+              source: CapabilityEvidenceSource.policy,
+              detail: 'The browser context is not secure.',
+            ),
+          ],
+        ),
       );
-      final state = resolution.toSemanticState();
 
-      expect(state.terminalCapability, 'colorTruecolor');
-      expect(state.capabilityRequirement, 'preferred');
-      expect(state.capabilityResolution, 'degraded');
-      expect(state.activeFallback, '256-color palette');
+      expect(resolution.state, CapabilityResolutionState.unsafe);
+      expect(resolution.fallbackLabel, 'in-process register');
     });
 
-    test('resolves requirement lists in order', () {
-      final resolutions =
-          resolveCapabilityRequirements(const <CapabilityRequirement>[
-            CapabilityRequirement(
-              feature: TerminalFeature.colorAnsi16,
-              level: CapabilityLevel.required,
-            ),
-            CapabilityRequirement(
-              feature: TerminalFeature.imageKitty,
-              level: CapabilityLevel.optional,
-            ),
-          ], const TerminalCapabilities(colorMode: ColorMode.ansi16));
+    test('exports truth and provenance for inspectors and tests', () {
+      final resolution = resolveCapabilityRequirement(
+        const CapabilityRequirement(
+          feature: TerminalFeature.imageKitty,
+          level: CapabilityLevel.preferred,
+        ),
+        const CapabilityTruth(
+          feature: TerminalFeature.imageKitty,
+          support: CapabilitySupport.supported,
+          enablement: CapabilityEnablement.notApplicable,
+          delivery: CapabilityDelivery.notApplicable,
+          evidence: _probeEvidence,
+        ),
+      );
+      final state = resolution.toSemanticState();
+      final json = resolution.toJson();
+
+      expect(state.terminalCapability, 'imageKitty');
+      expect(state.capabilityResolution, 'available');
+      expect(state.values['capabilitySupport'], 'supported');
+      expect(state.values['capabilityDelivery'], 'notApplicable');
+      expect((json['truth'] as Map<String, Object?>)['evidence'], isNotEmpty);
+    });
+
+    test('resolves requirement lists from explicit truth in order', () {
+      final resolutions = resolveCapabilityRequirements(
+        const <CapabilityRequirement>[
+          CapabilityRequirement(
+            feature: TerminalFeature.colorAnsi16,
+            level: CapabilityLevel.required,
+          ),
+          CapabilityRequirement(
+            feature: TerminalFeature.imageKitty,
+            level: CapabilityLevel.optional,
+          ),
+        ],
+        const <TerminalFeature, CapabilityTruth>{
+          TerminalFeature.colorAnsi16: CapabilityTruth(
+            feature: TerminalFeature.colorAnsi16,
+            support: CapabilitySupport.supported,
+            enablement: CapabilityEnablement.notApplicable,
+            delivery: CapabilityDelivery.notApplicable,
+            evidence: _probeEvidence,
+          ),
+          TerminalFeature.imageKitty: CapabilityTruth(
+            feature: TerminalFeature.imageKitty,
+            support: CapabilitySupport.unsupported,
+            enablement: CapabilityEnablement.notApplicable,
+            delivery: CapabilityDelivery.notApplicable,
+            evidence: _probeEvidence,
+          ),
+        },
+      );
 
       expect(resolutions, hasLength(2));
       expect(resolutions[0].state, CapabilityResolutionState.available);
       expect(resolutions[1].state, CapabilityResolutionState.unsupported);
       expect(resolutions[1].isSatisfied, isTrue);
+    });
+
+    test('rejects truth for a different feature', () {
+      expect(
+        () => resolveCapabilityRequirement(
+          const CapabilityRequirement(
+            feature: TerminalFeature.imageKitty,
+            level: CapabilityLevel.optional,
+          ),
+          const CapabilityTruth(
+            feature: TerminalFeature.osc52Clipboard,
+            support: CapabilitySupport.unknown,
+            enablement: CapabilityEnablement.unknown,
+            delivery: CapabilityDelivery.unverified,
+            evidence: _probeEvidence,
+          ),
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('rejects truth without provenance', () {
+      expect(
+        () => resolveCapabilityRequirement(
+          const CapabilityRequirement(
+            feature: TerminalFeature.imageKitty,
+            level: CapabilityLevel.optional,
+          ),
+          const CapabilityTruth(
+            feature: TerminalFeature.imageKitty,
+            support: CapabilitySupport.unknown,
+            enablement: CapabilityEnablement.unknown,
+            delivery: CapabilityDelivery.unverified,
+            evidence: <CapabilityEvidence>[],
+          ),
+        ),
+        throwsArgumentError,
+      );
     });
   });
 }

@@ -7,9 +7,10 @@
 
 Collect comparable `fleury diagnose --probe --json` evidence across real
 terminals before Fleury makes strong compatibility claims or feeds active probe
-results into default startup capability summaries. Confirmed active evidence
-can be used explicitly through `additionalAvailableFeatures` when resolving
-requirements for a diagnosed session.
+results into default startup capability summaries. A compatibility finding can
+be converted to explicit probe-scoped `CapabilityTruth` with
+`TerminalCompatibilityReport.truthFor`; it proves queried support, not mode
+enablement or delivered behavior.
 
 The matrix should answer:
 
@@ -259,9 +260,9 @@ large pile of unreviewed local captures.
 - [ ] `compatibility.summary` has no unexpected `passiveUnverified` findings
   without a note in this file or the execution journal.
 - [ ] tmux/SSH entries are labeled as such.
-- [ ] Any surprising active-confirmed feature is treated as reviewed evidence
-  and only used through explicit `additionalAvailableFeatures`, not as an
-  automatic startup override.
+- [ ] Any surprising active-confirmed feature is treated as reviewed support
+  evidence through `TerminalCompatibilityReport.truthFor`, not as an automatic
+  startup override or delivery claim.
 
 ## Current State
 
@@ -371,4 +372,3 @@ The probe confirms what the terminal *reports*. It does not exercise a running
 app, so the following still need a human at a real keyboard: holding a key
 across frames, alt-tab focus loss (`TerminalFocusEvent`, DECSET 1004), and
 whether restoration leaves the shell clean after an abnormal exit.
-

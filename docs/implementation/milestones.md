@@ -1076,10 +1076,9 @@ terminal fallbacks, and performance evidence.
     platform fields to diagnosis JSON and matrix summaries so Windows and
     non-Windows captures can be reviewed without guessing from environment
     variables. Current active-evidence slice exposes compatibility-confirmed
-    feature sets and `TerminalDiagnosis.confirmedAvailableFeatures`, letting
-    apps/tests feed opt-in confirmed probe evidence into
-    `resolveCapabilityRequirement(additionalAvailableFeatures: ...)` without
-    changing passive startup detection. Current audit-tooling slice adds
+    findings and `TerminalCompatibilityReport.truthFor`, letting apps/tests
+    feed opt-in support evidence into capability resolution without changing
+    passive startup detection or claiming delivery. Current audit-tooling slice adds
     `dart tool/fleury_dev.dart terminal-matrix-audit`, which scans collected
     matrix entries, reports review status/platform coverage, flags invalid
     files, and lists target terminal labels that still lack ready reviewed

@@ -61,7 +61,7 @@ final class RemoteClipboard extends Clipboard {
       return _report(
         policy: policy,
         payloadBytes: payloadBytes,
-        fallbackState: CapabilityResolutionState.disabledByPolicy,
+        policyBlocked: true,
         warning: 'Remote clipboard write is disabled by policy.',
       );
     }
@@ -114,20 +114,46 @@ final class RemoteClipboard extends Clipboard {
     required ClipboardWritePolicy policy,
     required int payloadBytes,
     bool delivered = false,
-    CapabilityResolutionState fallbackState =
-        CapabilityResolutionState.degraded,
+    bool policyBlocked = false,
     String? warning,
   }) {
+    final truth = CapabilityTruth(
+      feature: TerminalFeature.clipboardWrite,
+      support: delivered
+          ? CapabilitySupport.supported
+          : policyBlocked
+          ? CapabilitySupport.unknown
+          : CapabilitySupport.supported,
+      enablement: policyBlocked
+          ? CapabilityEnablement.disabled
+          : CapabilityEnablement.notApplicable,
+      delivery: delivered
+          ? CapabilityDelivery.delivered
+          : policyBlocked
+          ? CapabilityDelivery.notApplicable
+          : CapabilityDelivery.failed,
+      policyBlocked: policyBlocked,
+      evidence: <CapabilityEvidence>[
+        CapabilityEvidence(
+          source: policyBlocked
+              ? CapabilityEvidenceSource.policy
+              : CapabilityEvidenceSource.operationResult,
+          detail:
+              warning ?? 'The peer acknowledged writing the host clipboard.',
+        ),
+      ],
+    );
     return ClipboardWriteReport(
       result: delivered
           ? ClipboardWriteResult.hostSurface
           : ClipboardWriteResult.inProcessOnly,
-      resolution: CapabilityResolution(
-        feature: TerminalFeature.clipboardWrite,
-        level: CapabilityLevel.preferred,
-        state: delivered ? CapabilityResolutionState.available : fallbackState,
-        fallbackLabel: delivered ? null : 'in-process register',
-        warning: warning,
+      resolution: resolveCapabilityRequirement(
+        const CapabilityRequirement(
+          feature: TerminalFeature.clipboardWrite,
+          level: CapabilityLevel.preferred,
+          fallback: CapabilityFallback(label: 'in-process register'),
+        ),
+        truth,
       ),
       policy: policy,
       payloadBytes: payloadBytes,

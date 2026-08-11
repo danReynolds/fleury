@@ -348,11 +348,9 @@ class _ImageState extends State<Image> with SingleTickerProviderStateMixin {
     final colorMode = MediaQuery.colorModeOf(context);
     final images = MediaQuery.imagesOf(context);
     final pixels = images == InlineImageSupport.placements;
-    // The requirement framework wants a terminal-capability summary; the
-    // widget only knows the neutral surface answer, so it reports
-    // availability through the sanctioned side-channel instead of
-    // fabricating a protocol. Which protocol (if any) renders the
-    // placement is the presenter's business.
+    // The widget knows the neutral surface answer, not the protocol that
+    // produced it. Preserve that boundary as explicit surface-profile
+    // evidence rather than fabricating terminal support.
     final capabilityResolution = resolveCapabilityRequirement(
       CapabilityRequirement(
         feature: TerminalFeature.inlineImages,
@@ -360,10 +358,22 @@ class _ImageState extends State<Image> with SingleTickerProviderStateMixin {
         reason: 'Render image widgets with true pixels.',
         fallback: CapabilityFallback(label: '${widget.glyph.name} glyph image'),
       ),
-      const TerminalCapabilities(),
-      additionalAvailableFeatures: pixels
-          ? const <TerminalFeature>{TerminalFeature.inlineImages}
-          : const <TerminalFeature>{},
+      CapabilityTruth(
+        feature: TerminalFeature.inlineImages,
+        support: pixels
+            ? CapabilitySupport.supported
+            : CapabilitySupport.unsupported,
+        enablement: CapabilityEnablement.notApplicable,
+        delivery: CapabilityDelivery.notApplicable,
+        evidence: <CapabilityEvidence>[
+          CapabilityEvidence(
+            source: CapabilityEvidenceSource.surfaceProfile,
+            detail: pixels
+                ? 'The active surface accepts true-pixel placements.'
+                : 'The active surface accepts cell rendering only.',
+          ),
+        ],
+      ),
     );
     final semanticState = capabilityResolution
         .toSemanticState()

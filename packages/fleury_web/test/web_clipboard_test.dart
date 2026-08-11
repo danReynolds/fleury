@@ -36,7 +36,7 @@ void main() {
     expect(report.result, ClipboardWriteResult.inProcessOnly);
     expect(report.resolution.state, CapabilityResolutionState.degraded);
     expect(report.resolution.fallbackLabel, 'in-process register');
-    expect(report.resolution.warning, contains('denied'));
+    expect(report.resolution.evidence.single.detail, contains('denied'));
     expect(report.platformToolAttempted, isTrue);
     expect(report.platformTool, 'navigator.clipboard.writeText');
   });
@@ -78,7 +78,7 @@ void main() {
       expect(clipboard.readInProcess(), 'copy');
       expect(report.result, ClipboardWriteResult.inProcessOnly);
       expect(report.resolution.state, CapabilityResolutionState.degraded);
-      expect(report.resolution.warning, contains('unavailable'));
+      expect(report.resolution.evidence.single.detail, contains('unavailable'));
       expect(report.resolution.fallbackLabel, 'in-process register');
       expect(report.platformToolAttempted, isFalse);
       expect(report.platformTool, isNull);

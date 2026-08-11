@@ -218,14 +218,12 @@ final class ActiveTerminalState {
     required this.effectiveMode,
     this.rawInputOwned = false,
     this.outputModesOwned = false,
-    this.modifyOtherKeysOwned = false,
   });
 
   final TerminalMode requestedMode;
   TerminalMode effectiveMode;
   bool rawInputOwned;
   bool outputModesOwned;
-  bool modifyOtherKeysOwned;
 }
 
 /// The single I/O boundary between the framework and a real terminal.

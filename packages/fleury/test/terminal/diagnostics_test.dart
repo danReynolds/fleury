@@ -403,11 +403,11 @@ void main() {
         contains('kittyKeyboard'),
       );
       expect(
-        compatibility['confirmedAvailableFeatures'],
+        compatibility['confirmedSupportedFeatures'],
         contains('kittyKeyboard'),
       );
       expect(
-        compatibility['confirmedAvailableFeatures'],
+        compatibility['confirmedSupportedFeatures'],
         isNot(contains('imageKitty')),
       );
     });
@@ -447,7 +447,7 @@ void main() {
       expect(graphics.status, TerminalCompatibilityStatus.inconclusive);
       expect(graphics.detail, contains('not authoritative'));
       expect(
-        diagnosis.confirmedAvailableFeatures,
+        diagnosis.confirmedSupportedFeatures,
         isNot(contains(TerminalFeature.imageKitty)),
       );
       expect(
@@ -523,7 +523,7 @@ void main() {
       expect(diagnosis.compatibility, isNotNull);
     });
 
-    test('confirmed active probe features can satisfy requirements', () {
+    test('confirmed active probes produce supported truth with provenance', () {
       final diagnosis = diagnoseTerminal(FakeTerminalDriver()).withActiveProbes(
         const TerminalProbeReport(
           probes: <TerminalProbeResult>[
@@ -543,14 +543,9 @@ void main() {
         level: CapabilityLevel.preferred,
         fallback: const CapabilityFallback(label: 'half-block'),
       );
-      final passiveOnly = resolveCapabilityRequirement(
-        requirement,
-        diagnosis.passiveCapabilities,
-      );
       final withActiveEvidence = resolveCapabilityRequirement(
         requirement,
-        diagnosis.passiveCapabilities,
-        additionalAvailableFeatures: diagnosis.confirmedAvailableFeatures,
+        diagnosis.compatibility!.truthFor(TerminalFeature.imageKitty),
       );
 
       expect(
@@ -561,9 +556,12 @@ void main() {
         diagnosis.compatibility!.activeConfirmedFeatures,
         contains(TerminalFeature.imageKitty),
       );
-      expect(passiveOnly.state, CapabilityResolutionState.degraded);
-      expect(passiveOnly.fallbackLabel, 'half-block');
       expect(withActiveEvidence.state, CapabilityResolutionState.available);
+      expect(withActiveEvidence.support, CapabilitySupport.supported);
+      expect(
+        withActiveEvidence.evidence.single.source,
+        CapabilityEvidenceSource.activeProbe,
+      );
       expect(withActiveEvidence.fallbackLabel, isNull);
     });
   });

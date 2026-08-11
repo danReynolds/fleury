@@ -3487,15 +3487,27 @@ final class _DemoDiagnosticSnapshot {
   }) {
     final media = MediaQuery.of(context);
     // The widget layer only sees neutral surface capabilities; protocol
-    // details (which escape protocol, tmux passthrough) are presenter
-    // concerns and never reach MediaQuery. The demo's requirement
-    // resolution reports inline-image availability through the
-    // side-channel, like the Image widget does.
+    // details remain presenter concerns. Build truth from that exact boundary.
     final surfaceImages = media.capabilities.images;
     final capabilities = TerminalCapabilities(colorMode: media.colorMode);
-    final availableFeatures = surfaceImages == InlineImageSupport.placements
-        ? const <TerminalFeature>{TerminalFeature.inlineImages}
-        : const <TerminalFeature>{};
+    CapabilityTruth surfaceTruth(
+      TerminalFeature feature, {
+      required bool supported,
+      required String detail,
+    }) => CapabilityTruth(
+      feature: feature,
+      support: supported
+          ? CapabilitySupport.supported
+          : CapabilitySupport.unsupported,
+      enablement: CapabilityEnablement.notApplicable,
+      delivery: CapabilityDelivery.notApplicable,
+      evidence: <CapabilityEvidence>[
+        CapabilityEvidence(
+          source: CapabilityEvidenceSource.surfaceProfile,
+          detail: detail,
+        ),
+      ],
+    );
     final driver = FakeTerminalDriver(
       size: media.size,
       capabilities: capabilities,
@@ -3516,7 +3528,11 @@ final class _DemoDiagnosticSnapshot {
         reason: 'Render full-fidelity color in rich widgets.',
         fallback: CapabilityFallback(label: 'ANSI color'),
       ),
-      capabilities,
+      surfaceTruth(
+        TerminalFeature.colorTruecolor,
+        supported: media.colorMode == ColorMode.truecolor,
+        detail: 'The active surface reports ${media.colorMode.name} color.',
+      ),
     );
     final images = resolveCapabilityRequirement(
       const CapabilityRequirement(
@@ -3525,8 +3541,11 @@ final class _DemoDiagnosticSnapshot {
         reason: 'Render native images when the terminal supports them.',
         fallback: CapabilityFallback(label: 'glyph image'),
       ),
-      capabilities,
-      additionalAvailableFeatures: availableFeatures,
+      surfaceTruth(
+        TerminalFeature.inlineImages,
+        supported: surfaceImages == InlineImageSupport.placements,
+        detail: 'The active surface reports ${surfaceImages.name} images.',
+      ),
     );
     final osc8 = resolveCapabilityRequirement(
       const CapabilityRequirement(
@@ -3535,10 +3554,19 @@ final class _DemoDiagnosticSnapshot {
         reason: 'Markdown links stay visible and inert by default.',
         fallback: CapabilityFallback(label: 'visible URL'),
       ),
-      capabilities,
-      policyBlockedFeatures: const <TerminalFeature>{
-        TerminalFeature.osc8Hyperlinks,
-      },
+      const CapabilityTruth(
+        feature: TerminalFeature.osc8Hyperlinks,
+        support: CapabilitySupport.unknown,
+        enablement: CapabilityEnablement.disabled,
+        delivery: CapabilityDelivery.notApplicable,
+        policyBlocked: true,
+        evidence: <CapabilityEvidence>[
+          CapabilityEvidence(
+            source: CapabilityEvidenceSource.policy,
+            detail: 'The demo renders markdown links as visible URLs.',
+          ),
+        ],
+      ),
     );
     final clipboard = resolveCapabilityRequirement(
       const CapabilityRequirement(
@@ -3547,7 +3575,18 @@ final class _DemoDiagnosticSnapshot {
         reason: 'Copy selected text while preserving an in-app fallback.',
         fallback: CapabilityFallback(label: 'in-process register'),
       ),
-      capabilities,
+      const CapabilityTruth(
+        feature: TerminalFeature.clipboardWrite,
+        support: CapabilitySupport.supported,
+        enablement: CapabilityEnablement.notApplicable,
+        delivery: CapabilityDelivery.notApplicable,
+        evidence: <CapabilityEvidence>[
+          CapabilityEvidence(
+            source: CapabilityEvidenceSource.fallback,
+            detail: 'The in-process clipboard register is available.',
+          ),
+        ],
+      ),
     );
     final osc52 = resolveCapabilityRequirement(
       const CapabilityRequirement(
@@ -3556,7 +3595,18 @@ final class _DemoDiagnosticSnapshot {
         reason: 'Copy over SSH/tmux when platform clipboard is unavailable.',
         fallback: CapabilityFallback(label: 'in-process register'),
       ),
-      capabilities,
+      const CapabilityTruth(
+        feature: TerminalFeature.osc52Clipboard,
+        support: CapabilitySupport.unknown,
+        enablement: CapabilityEnablement.unknown,
+        delivery: CapabilityDelivery.notApplicable,
+        evidence: <CapabilityEvidence>[
+          CapabilityEvidence(
+            source: CapabilityEvidenceSource.environment,
+            detail: 'No OSC 52 operation or behavioral receipt was collected.',
+          ),
+        ],
+      ),
     );
     final rows = <_CapabilityDiagnosticItem>[
       _CapabilityDiagnosticItem(

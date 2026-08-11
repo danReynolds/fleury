@@ -32,10 +32,23 @@ final class _RecordingClipboard extends Clipboard {
       result: deny
           ? ClipboardWriteResult.inProcessOnly
           : ClipboardWriteResult.platformTool,
-      resolution: const CapabilityResolution(
-        feature: TerminalFeature.clipboardWrite,
-        level: CapabilityLevel.preferred,
-        state: CapabilityResolutionState.available,
+      resolution: resolveCapabilityRequirement(
+        const CapabilityRequirement(
+          feature: TerminalFeature.clipboardWrite,
+          level: CapabilityLevel.preferred,
+        ),
+        const CapabilityTruth(
+          feature: TerminalFeature.clipboardWrite,
+          support: CapabilitySupport.supported,
+          enablement: CapabilityEnablement.notApplicable,
+          delivery: CapabilityDelivery.delivered,
+          evidence: <CapabilityEvidence>[
+            CapabilityEvidence(
+              source: CapabilityEvidenceSource.operationResult,
+              detail: 'Test clipboard acknowledged the write.',
+            ),
+          ],
+        ),
       ),
       policy: policy,
       payloadBytes: text.length,
