@@ -69,6 +69,8 @@ void renderRowHtml(RowSpanModel row, StringBuffer out) {
         _writeTextSpan(run, out);
       case CellRunKind.boxDrawing:
         _writeBoxDrawingSpan(run, out);
+      case CellRunKind.blockElement:
+        _writeBlockElementSpan(run, out);
       case CellRunKind.wideText:
         _writeWideSpan(run, out);
     }
@@ -131,6 +133,22 @@ void _writeBoxDrawingSpan(CellSpanRun run, StringBuffer out) {
   out
     ..write('<span style="')
     ..write(boxDrawingCss(run.style, mask))
+    ..write('">')
+    ..write(''.padRight(run.widthCols, ' '))
+    ..write('</span>');
+}
+
+void _writeBlockElementSpan(CellSpanRun run, StringBuffer out) {
+  final rects = blockElementRects(run.text);
+  if (rects == null) {
+    _writeTextSpan(run, out);
+    return;
+  }
+  // Spaces hold the cells; the ink is painted as CSS rectangles so a solid fill
+  // covers the whole cell box instead of only the font glyph's ink.
+  out
+    ..write('<span style="')
+    ..write(blockElementCss(run.style, rects))
     ..write('">')
     ..write(''.padRight(run.widthCols, ' '))
     ..write('</span>');

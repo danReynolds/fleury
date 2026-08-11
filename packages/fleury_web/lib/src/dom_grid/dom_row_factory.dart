@@ -82,15 +82,36 @@ final class DomRowFactory {
       }
     }
 
-    // Block-element glyphs (half / quarter / sextant blocks, shades, braille)
-    // carry image pixels. Rendered as inline text the cell background paints
+    if (run.kind == CellRunKind.blockElement) {
+      final rects = blockElementRects(run.text);
+      if (rects != null) {
+        // Spaces hold the cells; the ink is painted as CSS rectangles. Those
+        // are sized as a percentage of the span, so the span itself is pinned
+        // to an exact multiple of the device-snapped cell — a box a fraction of
+        // a pixel off would put the rectangle's edge off the grid, which is
+        // exactly the seam this path exists to remove.
+        span.textContent = ''.padRight(run.widthCols, ' ');
+        span.setAttribute(
+          'style',
+          metrics == null
+              ? blockElementCss(run.style, rects)
+              : '${_pinnedWidthCss(run, stats, metrics)}'
+                    ';${blockElementCss(run.style, rects)}',
+        );
+        return span;
+      }
+    }
+
+    // Sub-cell *pattern* glyphs — shades, sextants, octants, braille — that
+    // [blockElementRects] does not decompose into rectangles, so they are still
+    // drawn from the font. Rendered as inline text the cell background paints
     // only the font's content box, so the line-box leading leaves a sliver of
     // page background at every row boundary — visible as horizontal "scan
     // lines" across an image. When such a glyph carries a background, lay the
     // cell out as a full-height inline-block so the background fills the whole
     // cell and neighbours meet with no gap (the same tiling fix box-drawing
-    // glyphs get). Gating on a background keeps baseline-aligned block glyphs
-    // without one — sparkline / progress bars — on the normal text path.
+    // glyphs get). Without a background there is nothing to fill, so those stay
+    // on the normal text path.
     if (metrics != null &&
         run.style.background != null &&
         _isBlockElementText(run.text)) {
@@ -110,6 +131,7 @@ final class DomRowFactory {
       case CellRunKind.text:
       case CellRunKind.emptyText:
       case CellRunKind.boxDrawing:
+      case CellRunKind.blockElement:
         break;
       case CellRunKind.wideText:
         element.className = 'w2';
@@ -160,17 +182,35 @@ final class DomRowFactory {
     if (metrics == null) {
       return 'display:inline-block;width:${run.widthCols}ch;overflow:hidden';
     }
+    return _pinnedWidthCss(run, stats, metrics, withDisplay: true);
+  }
+
+  /// `width` + clip that pins a span to an exact whole number of device-snapped
+  /// cells, so a box edge never lands off the grid.
+  ///
+  /// [withDisplay] adds the `inline-block` that the pin needs to take effect;
+  /// callers whose style CSS already contributes it (anything carrying
+  /// [kFillsCellBoxCss]) leave it off rather than emitting it twice.
+  String _pinnedWidthCss(
+    CellSpanRun run,
+    DomRowReplacementStats? stats,
+    MeasuredCellBox metrics, {
+    bool withDisplay = false,
+  }) {
     final key = _WidthCorrectionCacheKey(
       widthCols: run.widthCols,
       cssCellWidth: metrics.cssCellWidth,
+      withDisplay: withDisplay,
     );
-    if (_widthCssCache.containsKey(key)) {
+    final cached = _widthCssCache[key];
+    if (cached != null) {
       stats?.widthCacheHits += 1;
-      return _widthCssCache[key]!;
+      return cached;
     }
     stats?.widthCacheMisses += 1;
     final css =
-        'display:inline-block;width:${_cssPx(run.widthCols * metrics.cssCellWidth)};overflow:hidden';
+        '${withDisplay ? 'display:inline-block;' : ''}'
+        'width:${_cssPx(run.widthCols * metrics.cssCellWidth)};overflow:hidden';
     _widthCssCache[key] = css;
     return css;
   }
@@ -179,6 +219,11 @@ final class DomRowFactory {
   /// blocks, shades and the full block (U+2580–U+259F), legacy-computing
   /// sextants (U+1FB00–U+1FB3B), or braille (U+2800–U+28FF). These are the
   /// glyphs the image renderer paints pixels with.
+  ///
+  /// In practice only the patterns reach here: whatever [blockElementRects]
+  /// decomposes into rectangles is already a [CellRunKind.blockElement] run and
+  /// returned above. The range stays whole so a run that somehow arrives as
+  /// plain text still gets its cell box filled.
   static bool _isBlockElementText(String text) {
     if (text.isEmpty) return false;
     for (final rune in text.runes) {
@@ -203,8 +248,7 @@ final class DomRowFactory {
     DomRowReplacementStats? stats,
     MeasuredCellBox metrics,
   ) =>
-      'width:${_cssPx(run.widthCols * metrics.cssCellWidth)}'
-      ';overflow:hidden'
+      '${_pinnedWidthCss(run, stats, metrics)}'
       ';${_styleCssFor(run.style, stats)}';
 
   String _styleCssFor(CellStyle style, DomRowReplacementStats? stats) {
@@ -240,19 +284,22 @@ final class _WidthCorrectionCacheKey {
   const _WidthCorrectionCacheKey({
     required this.widthCols,
     required this.cssCellWidth,
+    required this.withDisplay,
   });
 
   final int widthCols;
   final double cssCellWidth;
+  final bool withDisplay;
 
   @override
   bool operator ==(Object other) =>
       other is _WidthCorrectionCacheKey &&
       other.widthCols == widthCols &&
-      other.cssCellWidth == cssCellWidth;
+      other.cssCellWidth == cssCellWidth &&
+      other.withDisplay == withDisplay;
 
   @override
-  int get hashCode => Object.hash(widthCols, cssCellWidth);
+  int get hashCode => Object.hash(widthCols, cssCellWidth, withDisplay);
 }
 
 String _cssPx(double value) {

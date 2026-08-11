@@ -86,6 +86,112 @@ void main() {
       expect(run.text, isNot(contains(buffer.imagePlacements.single.id)));
     });
 
+    test('full-width block glyphs coalesce into one run', () {
+      // A bar chart's `barWidth: 2` column: two `█` cells in one style. They
+      // must arrive as a single run carrying the grapheme once — the DOM
+      // adapters paint the run as one rectangle, so the seam a per-cell glyph
+      // would leave between them cannot exist.
+      final row = builder.buildRow(
+        frame(4, 1, (b) {
+          b.writeText(
+            const CellOffset(0, 0),
+            '██',
+            style: const CellStyle(foreground: Colors.green),
+          );
+        }),
+        0,
+      );
+
+      final block = row.runs.first;
+      expect(block.kind, CellRunKind.blockElement);
+      expect(block.startCol, 0);
+      expect(block.widthCols, 2);
+      expect(block.text, '█', reason: 'the grapheme is carried once');
+    });
+
+    test('a differing block glyph or style breaks the run', () {
+      // A bar's partial top cell (`▅`) sits on top of full cells, and a stacked
+      // bar changes color at a segment boundary. Neither may merge.
+      final row = builder.buildRow(
+        frame(4, 1, (b) {
+          b.writeText(const CellOffset(0, 0), '█▅');
+          b.writeText(
+            const CellOffset(2, 0),
+            '█',
+            style: const CellStyle(foreground: Colors.red),
+          );
+        }),
+        0,
+      );
+
+      expect(
+        row.runs.take(3).map((r) => (r.kind, r.text, r.widthCols)),
+        [
+          (CellRunKind.blockElement, '█', 1),
+          (CellRunKind.blockElement, '▅', 1),
+          (CellRunKind.blockElement, '█', 1),
+        ],
+      );
+      expect(row.runs[2].style.foreground, Colors.red);
+    });
+
+    test('partial-width block glyphs stay one cell per run', () {
+      // `▌` is half a cell wide. Coalescing would stretch one half-width
+      // rectangle across both cells, so each keeps its own run.
+      final row = builder.buildRow(
+        frame(3, 1, (b) => b.writeText(const CellOffset(0, 0), '▌▌')),
+        0,
+      );
+
+      expect(row.runs[0].kind, CellRunKind.blockElement);
+      expect(row.runs[0].widthCols, 1);
+      expect(row.runs[1].kind, CellRunKind.blockElement);
+      expect(row.runs[1].widthCols, 1);
+      // ...and the run after them is ordinary text, not an absorbed cell.
+      expect(row.runs[2].kind, CellRunKind.emptyText);
+    });
+
+    test('adjacent same-style text cannot be absorbed into a block run', () {
+      // A CSS-painted run's text IS its lookup key. Let a plain character
+      // append onto it and the key stops resolving, so the adapter quietly
+      // falls back to the font glyph — the seam returns with no sign in the
+      // markup. `digits.dart` paints exactly this shape: `█ █` in one style.
+      final row = builder.buildRow(
+        frame(3, 1, (b) {
+          b.writeText(
+            const CellOffset(0, 0),
+            '█ █',
+            style: const CellStyle(foreground: Colors.green),
+          );
+        }),
+        0,
+      );
+
+      expect(row.runs.map((r) => (r.kind, r.text, r.widthCols)), [
+        (CellRunKind.blockElement, '█', 1),
+        (CellRunKind.text, ' ', 1),
+        (CellRunKind.blockElement, '█', 1),
+      ]);
+      // Every CSS-painted run's text still resolves to rectangles.
+      for (final run in row.runs.where(
+        (r) => r.kind == CellRunKind.blockElement,
+      )) {
+        expect(blockElementRects(run.text), isNotNull);
+      }
+    });
+
+    test('shade and braille glyphs stay on the text path', () {
+      // Stipple textures are not solid rectangles; flattening them to a tint
+      // would change how they read, so they keep the font glyph.
+      final row = builder.buildRow(
+        frame(4, 1, (b) => b.writeText(const CellOffset(0, 0), '░▒⠿⣿')),
+        0,
+      );
+
+      expect(row.runs.single.kind, CellRunKind.text);
+      expect(row.runs.single.text, '░▒⠿⣿');
+    });
+
     test('buildDirtyRows builds only requested row models', () {
       final buffer = frame(4, 3, (b) {
         b.writeText(const CellOffset(0, 0), 'zero');

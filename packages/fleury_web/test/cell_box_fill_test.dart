@@ -1,4 +1,4 @@
-// The cell-box fill rule: anything that paints a background must cover the
+// The cell-box fill rule: anything that paints a solid area must cover the
 // whole cell box.
 //
 // An `inline` box paints its background over the font's content area, not the
@@ -8,6 +8,14 @@
 // glyphs, once for block elements — and patched locally each time, which left
 // ordinary text carrying a background still broken. It only became obvious
 // when a light theme put a pale fill against a dark page.
+//
+// A background is not the only thing that paints solid: so does the *ink* of a
+// block-element glyph, and a glyph cannot be made to fill its cell in either
+// axis. `█` in a 17.5px row measures 16.45px tall, and the grid's sub-pixel
+// letter-spacing lands between glyphs instead of widening them — so a bar chart
+// showed a scan line at every row edge plus a hairline down the middle of every
+// two-cell-wide bar. Those glyphs are therefore painted as CSS rectangles
+// rather than text, the same treatment box drawing already gets.
 //
 // These tests pin the RULE rather than any one glyph class, so a future run
 // type cannot quietly reintroduce the seam.
@@ -81,6 +89,65 @@ void main() {
     });
   });
 
+  group('blockElementCss — solid ink fills too', () {
+    String cssFor(String glyph, [CellStyle style = const CellStyle()]) =>
+        blockElementCss(style, blockElementRects(glyph)!);
+
+    test('a full block fills the entire cell box', () {
+      final css = cssFor('█');
+      _expectFillsCellBox(css, reason: '█ is a solid cell');
+      expect(css, contains('background-size:100% 100%'));
+      expect(css, contains('linear-gradient(currentColor,currentColor)'));
+    });
+
+    test('the eighth ramps are exact fractions anchored to their edge', () {
+      // Vertical ramp grows up from the bottom; horizontal ramp from the left.
+      expect(cssFor('▅'), contains('background-size:100% 62.5%'));
+      expect(cssFor('▅'), contains('background-position:left bottom'));
+      expect(cssFor('▏'), contains('background-size:12.5% 100%'));
+      expect(cssFor('▏'), contains('background-position:left top'));
+      expect(cssFor('▀'), contains('background-position:left top'));
+      expect(cssFor('▐'), contains('background-position:right top'));
+      expect(cssFor('▐'), contains('background-size:50% 100%'));
+    });
+
+    test('a multi-rectangle quadrant emits one layer per rectangle', () {
+      // `▟` = right half + lower half, so two gradients in matching order.
+      final css = cssFor('▟');
+      expect(css, contains('background-position:right top,left bottom'));
+      expect(css, contains('background-size:50% 100%,100% 50%'));
+      expect('linear-gradient'.allMatches(css).length, 2);
+    });
+
+    test('an image cell keeps its background behind the ink', () {
+      // The half-block image tier is two colors per cell: background behind,
+      // foreground rectangle over half of it.
+      final css = cssFor(
+        '▀',
+        const CellStyle(
+          foreground: RgbColor(10, 20, 30),
+          background: RgbColor(40, 50, 60),
+        ),
+      );
+      expect(css, contains('color:rgb(10, 20, 30)'));
+      expect(css, contains('background-color:rgb(40, 50, 60)'));
+      expect(css, contains('background-size:100% 50%'));
+      _expectFillsCellBox(css, reason: 'an image cell paints edge to edge');
+    });
+
+    test('the fill rule has one definition here too', () {
+      expect(cssFor('█'), contains(kFillsCellBoxCss));
+    });
+
+    test('stipple textures are not claimed as rectangles', () {
+      // Shades and braille are patterns, not solid fills — flattening them to
+      // a tint would change how they read.
+      for (final glyph in ['░', '▒', '▓', '⠿', '⣿']) {
+        expect(blockElementRects(glyph), isNull, reason: glyph);
+      }
+    });
+  });
+
   group('rendered markup', () {
     test('a filled row emits no bare inline background anywhere', () {
       // End to end through the static renderer: every background-carrying span
@@ -113,6 +180,37 @@ void main() {
           reason: 'a background in rendered markup that does not fill: $css',
         );
       }
+    });
+
+    test('a bar column is CSS rectangles, not block glyphs', () {
+      // Two columns of a `barWidth: 2` bar chart: full cells below, a partial
+      // `▅` cap on top. No literal block glyph may survive into the markup —
+      // one would bring the font's ink-vs-cell mismatch back with it.
+      final buffer = CellBuffer(const CellSize(2, 2));
+      const green = CellStyle(foreground: RgbColor(61, 220, 151));
+      buffer.writeText(const CellOffset(0, 0), '▅▅', style: green);
+      buffer.writeText(const CellOffset(0, 1), '██', style: green);
+      final html = renderScreenHtml(buffer);
+
+      for (final glyph in ['█', '▅']) {
+        expect(html, isNot(contains(glyph)), reason: '$glyph should be CSS');
+      }
+      // One span per row — the two cells of each row coalesce, so the rectangle
+      // spans the whole bar and there is no interior edge to show a seam.
+      expect('linear-gradient'.allMatches(html).length, 2);
+      expect(html, contains('background-size:100% 100%'));
+      expect(html, contains('background-size:100% 62.5%'));
+    });
+
+    test('a half-width glyph keeps one span per cell', () {
+      // Coalescing `▌▌` would stretch a single half-width rectangle over both
+      // cells and paint the wrong shape.
+      final buffer = CellBuffer(const CellSize(2, 1));
+      buffer.writeText(const CellOffset(0, 0), '▌▌');
+      final html = renderScreenHtml(buffer);
+
+      expect('linear-gradient'.allMatches(html).length, 2);
+      expect(html, isNot(contains('▌')));
     });
   });
 }

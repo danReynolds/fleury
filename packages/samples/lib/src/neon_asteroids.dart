@@ -16,6 +16,11 @@ const _coral = RgbColor(0xFF, 0x6B, 0x7A);
 const _amber = RgbColor(0xFF, 0xD1, 0x66);
 const _starBright = RgbColor(0x70, 0x91, 0xA8);
 const _starDim = RgbColor(0x2C, 0x3C, 0x4A);
+// Glow cores. Neon is a bright core over a dim halo of the same hue — the
+// canvas resolves overlapping strokes last-drawn-wins per cell, so each
+// shape strokes its halo pass first and its core pass second.
+const _white = RgbColor(0xF2, 0xFC, 0xFF);
+const _violetHot = RgbColor(0xD6, 0xAE, 0xFF);
 
 /// A real-time, browser-safe Asteroids showcase built entirely from Fleury
 /// cells and public animation/input APIs.
@@ -457,13 +462,29 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
   }
 
   Widget _playfield(CellSize size) {
+    // Impact shake: the whole field jitters by shifting the canvas window,
+    // not the entities — same span, deterministic phase from the tick
+    // counter, and it decays with the model's shakeTicks. Reduced motion
+    // renders rock-steady.
+    var shakeX = 0.0;
+    var shakeY = 0.0;
+    if (!_reducedMotion && _game.shakeTicks > 0) {
+      final intensity = _game.shakeIntensity;
+      shakeX = math.sin(_game.tickCount * 1.9) * 1.8 * intensity;
+      shakeY = math.cos(_game.tickCount * 2.3) * 1.2 * intensity;
+    }
     final canvas = Canvas(
+      // Braille, and only braille. The sextant tier was tried and rejected
+      // (2026-08-09): solid 2×3 blocks turn the vector outlines into flat
+      // fat-pixel sprites — the glow layering collapses and the game stops
+      // reading as VECTOR FLIGHT. If that skin is ever wanted back, it is
+      // one revert away; it does not ride along as an unloved flag.
       marker: CanvasMarker.braille,
       bounds: CanvasBounds(
-        minX: 0,
-        maxX: _game.width,
-        minY: 0,
-        maxY: _game.height,
+        minX: shakeX,
+        maxX: _game.width + shakeX,
+        minY: shakeY,
+        maxY: _game.height + shakeY,
       ),
       painter: _AsteroidsPainter(_game, reducedMotion: _reducedMotion),
       semanticLabel: 'Neon Asteroids playfield',
@@ -493,36 +514,49 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
           _input.pointerThrust = false;
           _input.pointerArmed = false;
         },
-        child: Stack(
-          children: <Widget>[
-            canvas,
-            if (_game.phase == NeonAsteroidsPhase.attract)
-              Center(
-                key: const ValueKey<String>('attract-card'),
-                child: _attractCard(size),
-              ),
-            if (_game.phase == NeonAsteroidsPhase.paused)
-              Center(
-                key: const ValueKey<String>('paused-card'),
-                child: _messageCard(
-                  width: math.min(38, math.max(24, size.cols - 6)),
-                  title: 'SIMULATION PAUSED',
-                  body: 'P / ESC TO RESUME',
-                  color: _amber,
+        // The cabinet bezel: the same rounded cyan frame the cards use, so
+        // the playfield reads as a CRT in a cabinet. Two rows and columns
+        // of field go to the frame (game.resize absorbs it) — and the
+        // impact shake now rattles INSIDE the bezel, which is exactly how
+        // a cabinet should feel. The hard boundary also makes the toroidal
+        // wrap legible: things leave one wall and return through the other.
+        child: Container.framed(
+          color: _void,
+          border: const BoxBorder(
+            style: BorderStyle.rounded,
+            cellStyle: CellStyle(foreground: _cyanDim),
+          ),
+          child: Stack(
+            children: <Widget>[
+              canvas,
+              if (_game.phase == NeonAsteroidsPhase.attract)
+                Center(
+                  key: const ValueKey<String>('attract-card'),
+                  child: _attractCard(size),
                 ),
-              ),
-            if (_game.phase == NeonAsteroidsPhase.gameOver)
-              Center(
-                key: const ValueKey<String>('game-over-card'),
-                child: _messageCard(
-                  width: math.min(42, math.max(24, size.cols - 6)),
-                  title: 'SIGNAL LOST',
-                  body:
-                      'FINAL ${_game.score.toString().padLeft(6, '0')}  ·  R / SPACE',
-                  color: _coral,
+              if (_game.phase == NeonAsteroidsPhase.paused)
+                Center(
+                  key: const ValueKey<String>('paused-card'),
+                  child: _messageCard(
+                    width: math.min(38, math.max(24, size.cols - 6)),
+                    title: 'SIMULATION PAUSED',
+                    body: 'P / ESC TO RESUME',
+                    color: _amber,
+                  ),
                 ),
-              ),
-          ],
+              if (_game.phase == NeonAsteroidsPhase.gameOver)
+                Center(
+                  key: const ValueKey<String>('game-over-card'),
+                  child: _messageCard(
+                    width: math.min(42, math.max(24, size.cols - 6)),
+                    title: 'SIGNAL LOST',
+                    body:
+                        'FINAL ${_game.score.toString().padLeft(6, '0')}  ·  R / SPACE',
+                    color: _coral,
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -646,6 +680,11 @@ class _AsteroidsPainter extends CanvasPainter {
   @override
   void paint(CanvasContext ctx) {
     _paintStars(ctx);
+    if (!reducedMotion) {
+      for (final wave in game.shockwaves) {
+        _paintShockwave(ctx, wave);
+      }
+    }
     for (final asteroid in game.asteroids) {
       _paintAsteroid(ctx, asteroid);
     }
@@ -670,46 +709,66 @@ class _AsteroidsPainter extends CanvasPainter {
           : game.tickCount * (0.000012 + layer * 0.000008);
       final x = ((baseX + drift) % 1) * game.width;
       final y = baseY * game.height;
-      ctx.drawDot(x, y, color: layer == 2 ? _starBright : _starDim);
+      // The bright layer twinkles: each star flips between its bright and
+      // dim cap on its own deterministic cadence. Derived from tickCount,
+      // so it costs no randomness and reduced motion holds it steady.
+      var color = layer == 2 ? _starBright : _starDim;
+      if (layer == 2 && !reducedMotion) {
+        final phase = (game.tickCount >> 4) + i * 7;
+        if (_hashUnit(phase) < 0.3) color = _starDim;
+      }
+      ctx.drawDot(x, y, color: color);
+    }
+  }
+
+  /// Strokes a closed polygon twice — wide dim halo, then narrow bright
+  /// core — which is what makes the outlines read as lit neon tubing
+  /// instead of stipple. The halo pass must COMPLETE before the core pass
+  /// starts: cells are one color each, and a later edge's halo would
+  /// otherwise dim the previous edge's core at every joint.
+  void _glowPolygon(
+    CanvasContext ctx,
+    List<double> xs,
+    List<double> ys, {
+    required Color core,
+    required Color halo,
+    double coreWidth = 2,
+    double haloWidth = 4,
+  }) {
+    final n = xs.length;
+    for (var i = 0; i < n; i++) {
+      final j = (i + 1) % n;
+      ctx.drawLine(xs[i], ys[i], xs[j], ys[j], color: halo, width: haloWidth);
+    }
+    for (var i = 0; i < n; i++) {
+      final j = (i + 1) % n;
+      ctx.drawLine(xs[i], ys[i], xs[j], ys[j], color: core, width: coreWidth);
     }
   }
 
   void _paintAsteroid(CanvasContext ctx, NeonAsteroid asteroid) {
     _wrappedCopies(asteroid.position, asteroid.radius, (cx, cy) {
       const vertices = 10;
-      var previousX = 0.0;
-      var previousY = 0.0;
-      var firstX = 0.0;
-      var firstY = 0.0;
+      final xs = List<double>.filled(vertices, 0);
+      final ys = List<double>.filled(vertices, 0);
       for (var i = 0; i < vertices; i++) {
         final angle = asteroid.angle + i * math.pi * 2 / vertices;
         final roughness = 0.76 + _hashUnit(asteroid.id * 37 + i * 19) * 0.34;
-        final x = cx + math.cos(angle) * asteroid.radius * roughness;
-        final y = cy + math.sin(angle) * asteroid.radius * roughness;
-        if (i == 0) {
-          firstX = x;
-          firstY = y;
-        } else {
-          ctx.drawLine(
-            previousX,
-            previousY,
-            x,
-            y,
-            color: asteroid.tier == 1 ? _violet : _violetDim,
-          );
-        }
-        previousX = x;
-        previousY = y;
+        xs[i] = cx + math.cos(angle) * asteroid.radius * roughness;
+        ys[i] = cy + math.sin(angle) * asteroid.radius * roughness;
       }
-      ctx.drawLine(
-        previousX,
-        previousY,
-        firstX,
-        firstY,
-        color: asteroid.tier == 1 ? _violet : _violetDim,
+      // Small rocks run hotter: they are the immediate threat.
+      _glowPolygon(
+        ctx,
+        xs,
+        ys,
+        core: asteroid.tier == 1 ? _violetHot : _violet,
+        halo: _violetDim,
+        haloWidth: asteroid.tier == 3 ? 4 : 3,
       );
 
-      // One sparse internal facet gives the rocks depth without filling them.
+      // One sparse internal facet gives the rocks depth without filling
+      // them. Hairline on purpose: interior detail, not tubing.
       final facet = asteroid.angle + asteroid.id * 0.31;
       ctx.drawLine(
         cx + math.cos(facet) * asteroid.radius * 0.18,
@@ -723,31 +782,52 @@ class _AsteroidsPainter extends CanvasPainter {
 
   void _paintShip(CanvasContext ctx) {
     final ship = game.ship;
-    _wrappedCopies(ship.position, 4.0, (cx, cy) {
-      final noseX = cx + math.cos(ship.angle) * 3.6;
-      final noseY = cy + math.sin(ship.angle) * 3.6;
-      final leftX = cx + math.cos(ship.angle + 2.48) * 2.8;
-      final leftY = cy + math.sin(ship.angle + 2.48) * 2.8;
-      final rightX = cx + math.cos(ship.angle - 2.48) * 2.8;
-      final rightY = cy + math.sin(ship.angle - 2.48) * 2.8;
-      ctx
-        ..drawLine(noseX, noseY, leftX, leftY, color: _cyan)
-        ..drawLine(leftX, leftY, cx, cy, color: _cyanDim)
-        ..drawLine(cx, cy, rightX, rightY, color: _cyanDim)
-        ..drawLine(rightX, rightY, noseX, noseY, color: _cyan);
+    _wrappedCopies(ship.position, 5.0, (cx, cy) {
+      // A touch larger than the classic 3.6/2.8 wedge: hairline edges this
+      // short re-round their Bresenham staircase every frame of rotation,
+      // and a little length is what lets them read as lines. The collision
+      // ring (2.5) is deliberately smaller than the drawn hull — visually
+      // forgiving, never unfair.
+      final noseX = cx + math.cos(ship.angle) * 4.4;
+      final noseY = cy + math.sin(ship.angle) * 4.4;
+      final leftX = cx + math.cos(ship.angle + 2.48) * 3.4;
+      final leftY = cy + math.sin(ship.angle + 2.48) * 3.4;
+      final rightX = cx + math.cos(ship.angle - 2.48) * 3.4;
+      final rightY = cy + math.sin(ship.angle - 2.48) * 3.4;
 
+      // The flame goes UNDER the hull: its halo must not eat the tail edges.
       if (game.thrusting && game.phase == NeonAsteroidsPhase.playing) {
         final flicker = reducedMotion
             ? 3.2
             : 2.6 + 1.4 * (0.5 + 0.5 * math.sin(game.tickCount * 0.9));
-        ctx.drawLine(
-          cx + math.cos(ship.angle + math.pi) * 1.2,
-          cy + math.sin(ship.angle + math.pi) * 1.2,
-          cx + math.cos(ship.angle + math.pi) * flicker,
-          cy + math.sin(ship.angle + math.pi) * flicker,
-          color: _coral,
-        );
+        final backAngle = ship.angle + math.pi;
+        final bx = cx + math.cos(backAngle) * 1.2;
+        final by = cy + math.sin(backAngle) * 1.2;
+        final tx = cx + math.cos(backAngle) * flicker;
+        final ty = cy + math.sin(backAngle) * flicker;
+        ctx
+          ..drawLine(bx, by, tx, ty, color: _coral, width: 3)
+          ..drawLine(bx, by, tx, ty, color: _amber, width: 1);
       }
+
+      // Hull: HAIRLINE, deliberately. Braille has no brightness levels — a
+      // cell is lit or not — so a glow pass only works when halo and core
+      // land in DIFFERENT cells, i.e. on shapes several cells across per
+      // limb. The rocks qualify; a ~20-pixel wedge does not, and any halo
+      // here floods the hull into a solid blob (measured on the serve
+      // surface, twice). The ship's glow is its flame, shield, and sparks —
+      // things that extend into open space.
+      //
+      // ONE hull color, also deliberately: color resolves per CELL, so a
+      // white-nose/cyan-tail split turns every shared cell into a coin
+      // flip and the wedge into patchwork (user-spotted on Warp). The heat
+      // accent is a single white dot at the nose — one cell, stable.
+      ctx
+        ..drawLine(leftX, leftY, cx, cy, color: _cyan)
+        ..drawLine(cx, cy, rightX, rightY, color: _cyan)
+        ..drawLine(noseX, noseY, leftX, leftY, color: _cyan)
+        ..drawLine(rightX, rightY, noseX, noseY, color: _cyan)
+        ..drawDot(noseX, noseY, color: _white);
 
       if (ship.shieldTicks > 0 && game.phase == NeonAsteroidsPhase.playing) {
         final pulse = reducedMotion
@@ -759,6 +839,8 @@ class _AsteroidsPainter extends CanvasPainter {
           final angle = i * math.pi * 2 / 18;
           final x = cx + math.cos(angle) * pulse;
           final y = cy + math.sin(angle) * pulse;
+          // A soft bubble, not tubing — and hairline for the same
+          // cell-granularity reason as the hull.
           ctx.drawLine(px, py, x, y, color: _cyanDim);
           px = x;
           py = y;
@@ -768,28 +850,84 @@ class _AsteroidsPainter extends CanvasPainter {
   }
 
   void _paintBullet(CanvasContext ctx, NeonBullet bullet) {
-    ctx.drawDot(bullet.position.x, bullet.position.y, color: _amber);
-    if (reducedMotion) return;
-    final dx = bullet.position.x - bullet.previous.x;
-    final dy = bullet.position.y - bullet.previous.y;
-    if (dx.abs() < game.width / 2 && dy.abs() < game.height / 2) {
-      ctx.drawLine(
-        bullet.previous.x,
-        bullet.previous.y,
-        bullet.position.x,
-        bullet.position.y,
-        color: _coral,
-      );
+    final x = bullet.position.x;
+    final y = bullet.position.y;
+    if (reducedMotion) {
+      // Still a visible slug, just without the streak.
+      ctx.drawLine(x, y, x, y, color: _amber, width: 3);
+      return;
     }
+    final dx = x - bullet.previous.x;
+    final dy = y - bullet.previous.y;
+    if (dx.abs() < game.width / 2 && dy.abs() < game.height / 2) {
+      // Tracer: coral streak under an amber core, white-hot head. A
+      // zero-length thick line stamps the round head.
+      ctx
+        ..drawLine(
+          bullet.previous.x,
+          bullet.previous.y,
+          x,
+          y,
+          color: _coral,
+          width: 3,
+        )
+        ..drawLine(
+          bullet.previous.x,
+          bullet.previous.y,
+          x,
+          y,
+          color: _amber,
+          width: 1,
+        )
+        ..drawLine(x, y, x, y, color: _white, width: 3);
+    } else {
+      ctx.drawLine(x, y, x, y, color: _white, width: 3);
+    }
+  }
+
+  void _paintShockwave(CanvasContext ctx, NeonShockwave wave) {
+    final t = wave.ageTicks / wave.maxLifeTicks;
+    // Ease-out: fast birth, gentle fade — how a blast reads.
+    final ease = 1 - (1 - t) * (1 - t);
+    final radius = wave.maxRadius * ease;
+    if (radius < 0.8) return;
+    final color = t < 0.3
+        ? _white
+        : t < 0.55
+        ? _cyan
+        : t < 0.8
+        ? _cyanDim
+        : _starDim;
+    final width = t < 0.5 ? 2.0 : 1.0;
+    _wrappedCopies(wave.position, radius + 1, (cx, cy) {
+      var px = cx + radius;
+      var py = cy;
+      for (var i = 1; i <= 18; i++) {
+        final angle = i * math.pi * 2 / 18;
+        final x = cx + math.cos(angle) * radius;
+        final y = cy + math.sin(angle) * radius;
+        ctx.drawLine(px, py, x, y, color: color, width: width);
+        px = x;
+        py = y;
+      }
+    });
   }
 
   void _paintParticle(CanvasContext ctx, NeonParticle particle) {
     final remaining = particle.lifeTicks / particle.maxLifeTicks;
-    ctx.drawDot(
-      particle.position.x,
-      particle.position.y,
-      color: remaining > 0.58 ? _coral : _violetDim,
-    );
+    final x = particle.position.x;
+    final y = particle.position.y;
+    // Sparks cool: white-hot birth, ember middle, ash end. The hot phase
+    // gets a 2-pixel stamp so fresh debris reads as matter, not noise.
+    if (remaining > 0.72) {
+      ctx.drawLine(x, y, x, y, color: _white, width: 2);
+    } else if (remaining > 0.5) {
+      ctx.drawLine(x, y, x, y, color: _amber, width: 2);
+    } else if (remaining > 0.28) {
+      ctx.drawDot(x, y, color: _coral);
+    } else {
+      ctx.drawDot(x, y, color: _violetDim);
+    }
   }
 
   void _wrappedCopies(

@@ -121,6 +121,25 @@ class NeonParticle {
   final int maxLifeTicks;
 }
 
+/// A purely visual expanding ring marking a destruction or impact.
+///
+/// Shockwaves follow the same rule as [NeonParticle]: they never participate
+/// in physics and never consume randomness, so reduced-motion rendering can
+/// omit them without changing a subsequent simulation result. Their radius is
+/// a pure function of age, so they carry no per-tick mutable geometry.
+class NeonShockwave {
+  NeonShockwave({
+    required this.position,
+    required this.maxRadius,
+    required this.maxLifeTicks,
+  });
+
+  final NeonVector position;
+  final double maxRadius;
+  final int maxLifeTicks;
+  int ageTicks = 0;
+}
+
 /// Deterministic, fixed-step Asteroids simulation used by the showcase.
 ///
 /// Wall-clock deltas are accumulated as integer microseconds and expanded into
@@ -165,6 +184,9 @@ class NeonAsteroidsGame {
   static const int _shotCooldownTicks = 13;
   static const int _respawnShieldTicks = 240;
 
+  /// Full impact-shake duration; asteroid kills use a fraction of it.
+  static const int _shakeLifeTicks = 22;
+
   final int _seed;
   math.Random _random;
 
@@ -174,6 +196,7 @@ class NeonAsteroidsGame {
   final List<NeonAsteroid> asteroids = <NeonAsteroid>[];
   final List<NeonBullet> bullets = <NeonBullet>[];
   final List<NeonParticle> particles = <NeonParticle>[];
+  final List<NeonShockwave> shockwaves = <NeonShockwave>[];
 
   NeonAsteroidsPhase phase = NeonAsteroidsPhase.attract;
   int score = 0;
@@ -183,6 +206,14 @@ class NeonAsteroidsGame {
   int lastScoreDelta = 0;
   int scoreEvent = 0;
   int impactEvent = 0;
+
+  /// Remaining screen-shake ticks. Visual-only, decayed every tick; the
+  /// renderer derives a deterministic jitter from [shakeIntensity] and
+  /// [tickCount], so the model stores no offsets.
+  int shakeTicks = 0;
+
+  /// 1.0 at the moment of impact, easing to 0 as the shake decays.
+  double get shakeIntensity => shakeTicks / _shakeLifeTicks;
 
   int _accumulatorMicros = 0;
   int _nextAsteroidId = 1;
@@ -247,6 +278,11 @@ class NeonAsteroidsGame {
         ..x *= sx
         ..y *= sy;
     }
+    for (final wave in shockwaves) {
+      wave.position
+        ..x *= sx
+        ..y *= sy;
+    }
     width = newWidth;
     height = newHeight;
   }
@@ -301,6 +337,8 @@ class NeonAsteroidsGame {
   void _tick(NeonAsteroidsInput input) {
     tickCount++;
     _tickParticles();
+    _tickShockwaves();
+    if (shakeTicks > 0) shakeTicks--;
 
     if (phase == NeonAsteroidsPhase.attract) {
       ship.angle = _normalAngle(ship.angle + fixedDt * 0.55);
@@ -477,6 +515,8 @@ class NeonAsteroidsGame {
       if (dx * dx + dy * dy > hitRadius * hitRadius) continue;
 
       _spawnBurst(ship.position, count: 12);
+      _spawnShockwave(ship.position, maxRadius: 14, maxLifeTicks: 34);
+      shakeTicks = _shakeLifeTicks;
       impactEvent++;
       lives--;
       _destroyAsteroid(i, awardScore: false);
@@ -520,6 +560,14 @@ class NeonAsteroidsGame {
   void _destroyAsteroid(int index, {required bool awardScore}) {
     final asteroid = asteroids.removeAt(index);
     _spawnBurst(asteroid.position, count: 3 + asteroid.tier * 3);
+    _spawnShockwave(
+      asteroid.position,
+      maxRadius: asteroid.radius * 2.2,
+      maxLifeTicks: 20 + asteroid.tier * 4,
+    );
+    // A kill kicks a mild shake; a ship impact already set the full one and
+    // max() keeps it.
+    shakeTicks = math.max(shakeTicks, 3 + asteroid.tier * 2);
 
     if (awardScore) {
       lastScoreDelta = switch (asteroid.tier) {
@@ -637,6 +685,33 @@ class NeonAsteroidsGame {
     _trimParticles();
   }
 
+  void _spawnShockwave(
+    NeonVector origin, {
+    required double maxRadius,
+    required int maxLifeTicks,
+  }) {
+    shockwaves.add(
+      NeonShockwave(
+        position: origin.copy(),
+        maxRadius: maxRadius,
+        maxLifeTicks: maxLifeTicks,
+      ),
+    );
+    // Same spirit as _trimParticles: a busy screen must not grow unbounded.
+    const limit = 12;
+    if (shockwaves.length > limit) {
+      shockwaves.removeRange(0, shockwaves.length - limit);
+    }
+  }
+
+  void _tickShockwaves() {
+    for (var i = shockwaves.length - 1; i >= 0; i--) {
+      final wave = shockwaves[i];
+      wave.ageTicks++;
+      if (wave.ageTicks >= wave.maxLifeTicks) shockwaves.removeAt(i);
+    }
+  }
+
   void _tickParticles() {
     for (var i = particles.length - 1; i >= 0; i--) {
       final particle = particles[i];
@@ -664,6 +739,7 @@ class NeonAsteroidsGame {
     asteroids.clear();
     bullets.clear();
     particles.clear();
+    shockwaves.clear();
     score = 0;
     lives = 3;
     wave = 0;
@@ -676,6 +752,7 @@ class NeonAsteroidsGame {
     _shotCooldown = 0;
     _fireQueued = false;
     _thrusting = false;
+    shakeTicks = 0;
     ship
       ..angle = math.pi / 2
       ..shieldTicks = _respawnShieldTicks;
