@@ -75,9 +75,6 @@ Never _printUsage() {
 }
 
 final class _WireTerminalDriver implements TerminalDriver {
-  @override
-  RemoteSurfaceSink? get surfaceSink => null; // byte presentation only
-
   _WireTerminalDriver() : _stdout = stdout;
 
   final Stdout _stdout;
@@ -116,12 +113,15 @@ final class _WireTerminalDriver implements TerminalDriver {
   }
 
   @override
-  Future<void> enter(TerminalMode mode) async {
-    if (_active) return;
+  Future<TerminalSessionProfile> enter(TerminalMode mode) async {
+    if (_active) {
+      throw StateError('_WireTerminalDriver.enter called on an active driver.');
+    }
     _mode = mode;
     _active = true;
     final enter = buildTerminalEnterSequences(mode);
     if (enter.isNotEmpty) _stdout.write(enter);
+    return TerminalSessionProfile.ansi(terminal: capabilities);
   }
 
   @override
