@@ -24,15 +24,11 @@ class CommandsExample extends StatelessWidget {
   @override
   Widget build(BuildContext context) => KeyBindings(
     bindings: [
-      KeyBinding(KeySequence.ctrl.s, label: 'Save', onTrigger: (_) => _save()),
-      KeyBinding(KeyCode.q, label: 'Quit', onTrigger: (_) => _quit()),
+      KeyBinding(.ctrl.s, label: 'Save', onTrigger: (_) => _save()),
+      KeyBinding(.q, label: 'Quit', onTrigger: (_) => _quit()),
       // Multi-step sequences: vim's `gg`, emacs' `C-x C-s`, a Space leader.
-      KeyBinding(KeySequence.g.g, label: 'Top', onTrigger: (_) => _gotoTop()),
-      KeyBinding(
-        KeySequence.space.f,
-        label: 'Find file',
-        onTrigger: (_) => _findFile(),
-      ),
+      KeyBinding(.g.g, label: 'Top', onTrigger: (_) => _gotoTop()),
+      KeyBinding(.space.f, label: 'Find file', onTrigger: (_) => _findFile()),
     ],
     child: child,
   );
@@ -55,8 +51,8 @@ class BindingOptionsExample extends StatelessWidget {
     bindings: [
       // One command, several keys — one row in the hint bar, not three.
       KeyBinding(
-        KeyCode.j,
-        aliases: [KeyCode.arrowDown],
+        .j,
+        aliases: [.down],
         label: 'Down',
         // Movement is the repeat-reliant class: holding the key should keep
         // moving. Everything else fires once per physical press.
@@ -255,9 +251,40 @@ class _ExplicitFocusExampleState extends State<ExplicitFocusExample> {
     // Fires when focus enters or leaves the subtree — pause a simulation, dim
     // a panel, stop a cursor blinking.
     onFocusChange: (hasFocus) => setState(() => _active = hasFocus),
-    child: Focus(
-      focusNode: _node,
-      child: Text(_active ? 'editing' : 'idle'),
-    ),
+    child: Focus(focusNode: _node, child: Text(_active ? 'editing' : 'idle')),
   );
+}
+
+/// The guide's "one game, two control schemes" snippet, compile-checked.
+class DualSchemeControls extends StatefulWidget {
+  const DualSchemeControls({super.key});
+  @override
+  State<DualSchemeControls> createState() => _DualSchemeControlsState();
+}
+
+class _DualSchemeControlsState extends State<DualSchemeControls> {
+  final _nudges = <String, int>{};
+
+  void _fire() {}
+
+  void _nudgeThrust() => _nudges.update('w', (n) => n + 1, ifAbsent: () => 1);
+
+  @override
+  Widget build(BuildContext context) {
+    final canHold = Keyboard.of(context).capabilities.supportsHeldState;
+    return KeyBindings(
+      bindings: [
+        KeyBinding(KeyCode.space, label: 'Fire', onTrigger: (_) => _fire()),
+        if (!canHold)
+          KeyBinding(
+            KeyPosition.w,
+            aliases: [KeyCode.arrowUp],
+            label: 'Thrust (tap)',
+            includeRepeats: true,
+            onTrigger: (_) => _nudgeThrust(),
+          ),
+      ],
+      child: const Text('playfield'),
+    );
+  }
 }

@@ -12,12 +12,59 @@
   --sl-color-accent: #1f9c6b;
   --sl-color-accent-high: #a5f0d3;
   --sl-color-text-accent: #3ddb9e;
+
+  /* Neutrals are the live-demo panel's own family — a deep blue-teal
+     near-black, not Starlight's default cool grey — so the whole site reads
+     like the widgets it embeds. Green stays the ACCENT (plus the faint page
+     glow below); the grounds just carry its temperature. Hues sit ~210°,
+     low saturation; the ramp keeps body text and headings well clear of
+     WCAG AA on these grounds. */
+  --sl-color-white: #f1f7ff;
+  --sl-color-gray-1: #dbe3ec;
+  --sl-color-gray-2: #afbac7;
+  --sl-color-gray-3: #757f8d;
+  --sl-color-gray-4: #38444f;
+  --sl-color-gray-5: #1c2531;
+  --sl-color-gray-6: #10161e;
+  --sl-color-gray-7: #0c1016;
+  --sl-color-black: #0a0e13;
 }
 :root[data-theme='light'] {
   --sl-color-accent-low: #c4f2e0;
   --sl-color-accent: #138a5c;
   --sl-color-accent-high: #0a4c33;
   --sl-color-text-accent: #107a51;
+
+  /* Light: the widget's own light ground — near-white with a green whisper,
+     borders and surfaces faintly teal, text a deep green-black. */
+  --sl-color-white: #0c1a15;
+  --sl-color-gray-1: #1d2b26;
+  --sl-color-gray-2: #3b4842;
+  --sl-color-gray-3: #5f6c66;
+  --sl-color-gray-4: #98aba3;
+  --sl-color-gray-5: #caded5;
+  --sl-color-gray-6: #eef6f2;
+  --sl-color-gray-7: #f4faf7;
+  --sl-color-black: #ffffff;
+}
+
+/* A whisper of the widgets' top-left glow, fixed behind the page so scrolling
+   doesn't drag it. Kept well under 6% so it warms the ground without ever
+   competing with text. */
+body {
+  background-image: radial-gradient(
+    120% 70% at 12% -8%,
+    rgba(61, 219, 158, 0.05),
+    transparent 46%
+  );
+  background-attachment: fixed;
+}
+:root[data-theme='light'] body {
+  background-image: radial-gradient(
+    120% 70% at 12% -8%,
+    rgba(19, 138, 92, 0.06),
+    transparent 48%
+  );
 }
 
 /* The header mark is a dark square tile; round it so it reads as a product
@@ -1051,109 +1098,279 @@ th:nth-last-child(-n + 2) .ct::after {
   font-size: var(--sl-text-lg);
 }
 
-/* ── CodeDemoSplit: one source file beside what it renders ──────────────────*/
-/* Shares the landing window's look, but sized for a guide: the code column
-   takes the width the snippet actually needs so nothing clips, the demo pins
-   to the top instead of floating in the middle of a tall pane, and the pair
-   stacks when the column gets narrow. */
-.code-demo {
-  /* Reclaim a little of the prose gutter — a snippet plus a terminal needs
-     more than a measure-width text column. */
-  width: min(64rem, calc(100% + 8rem));
-  margin: 1.25rem -4rem 2rem;
-  border: 1px solid color-mix(in srgb, var(--sl-color-gray-4) 60%, transparent);
-  border-radius: 0.9rem;
+/* ── CodeDemoSplit (.cds): one source file beside what it renders ───────────*/
+/* A terminal-window card that honours the site's panel look (dark gradient,
+   fleury-green live cue, mono chrome). Inline it stacks or goes two-column;
+   "Expand" opens a full playground modal — code left, running demo right. */
+.cds {
+  --cds-radius: 0.9rem;
+  --cds-line: color-mix(in srgb, var(--sl-color-gray-4) 55%, transparent);
+  --cds-accent: #3ddc97;
+  width: min(78rem, calc(100% + 14rem));
+  margin: 1.5rem calc((100% - min(78rem, calc(100% + 14rem))) / 2) 2.25rem;
+  border: 1px solid var(--cds-line);
+  border-radius: var(--cds-radius);
   overflow: hidden;
   background:
-    radial-gradient(130% 90% at 0% 0%, rgba(61, 220, 151, 0.07), transparent 42%),
+    radial-gradient(130% 90% at 0% 0%, rgba(61, 220, 151, 0.06), transparent 44%),
     linear-gradient(180deg, #0d1219, #0a0e13);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 28px 70px -30px rgba(0, 0, 0, 0.85);
+    0 30px 72px -34px rgba(0, 0, 0, 0.85);
 }
-:root[data-theme='light'] .code-demo {
-  border-color: color-mix(in srgb, #bcd5ca 72%, transparent);
+:root[data-theme='light'] .cds {
+  --cds-line: color-mix(in srgb, #bcd5ca 70%, transparent);
   background:
-    radial-gradient(110% 85% at 0% 0%, rgba(19, 138, 92, 0.08), transparent 46%),
+    radial-gradient(110% 85% at 0% 0%, rgba(19, 138, 92, 0.07), transparent 48%),
     linear-gradient(180deg, #ffffff, #f3faf6);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.92),
-    0 28px 70px -34px rgba(15, 58, 41, 0.35);
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 30px 72px -38px rgba(15, 58, 41, 0.32);
 }
-.code-demo-bar {
+
+/* Title bar ──────────────────────────────────────────────────────────────*/
+.cds-bar {
   display: flex;
   align-items: center;
   gap: 0.7rem;
-  padding: 0.5rem 0.85rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--sl-color-gray-5) 70%, transparent);
+  padding: 0.5rem 0.6rem 0.5rem 0.9rem;
+  border-bottom: 1px solid var(--cds-line);
 }
-.code-demo-file {
+.cds-file {
   font-family: var(--sl-font-mono, ui-monospace, monospace);
   font-size: 0.85rem;
   color: var(--sl-color-gray-2);
 }
-.code-demo-live {
+.cds-live {
   margin-left: auto;
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--sl-color-gray-3);
-}
-.code-demo-pulse {
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
-  background: #3ddc97;
-  box-shadow: 0 0 0 0 rgba(61, 220, 151, 0.6);
-}
-.code-demo-body {
-  display: grid;
-  /* Code gets the room it needs (a full ThemeData is ~46 columns); the demo
-     takes what it needs and no more. `max-content` on the code column is what
-     stops the snippet scrolling horizontally. */
-  grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
-  gap: 0 1rem;
-  padding: 0.9rem 1rem 1.1rem;
-}
-.code-demo-pane {
-  min-width: 0;
-}
-.code-demo-tag {
-  display: block;
-  margin-bottom: 0.4rem;
+  gap: 0.4rem;
   font-size: 0.68rem;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.11em;
   text-transform: uppercase;
   color: var(--sl-color-gray-3);
 }
-/* The snippet owns its own scrolling only as a last resort; normally the
-   max-content column means there is nothing to scroll. */
-.code-demo-code :is(pre, .expressive-code) {
+.cds-pulse {
+  width: 0.48rem;
+  height: 0.48rem;
+  border-radius: 50%;
+  background: var(--cds-accent);
+  animation: cds-pulse 2.4s ease-out infinite;
+}
+@keyframes cds-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(61, 220, 151, 0.5); }
+  70% { box-shadow: 0 0 0 0.5rem rgba(61, 220, 151, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(61, 220, 151, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cds-pulse { animation: none; }
+}
+
+/* The single expand/close control. ───────────────────────────────────────*/
+.cds-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--cds-line);
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--sl-color-gray-6) 40%, transparent);
+  color: var(--sl-color-gray-2);
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+  padding: 0.28rem 0.55rem;
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+.cds-toggle:hover {
+  color: var(--sl-color-white);
+  border-color: color-mix(in srgb, var(--cds-accent) 55%, var(--cds-line));
+  background: color-mix(in srgb, var(--cds-accent) 12%, transparent);
+}
+.cds-toggle:focus-visible {
+  outline: 2px solid var(--cds-accent);
+  outline-offset: 2px;
+}
+.cds-toggle span {
+  display: inline;
+}
+
+/* Body: stacked by default; two-column only when there's real room. ───────*/
+.cds-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  padding: 0.6rem 0.9rem 0.95rem;
+}
+/* margin:0 is load-bearing: with the seam gone the two panes are adjacent
+   siblings, so a prose flow-margin rule lands on the second one and pushes
+   its caption out of line with the first. */
+.cds-body .cds-pane {
+  min-width: 0;
+  margin: 0;
+  padding-top: 0.7rem;
+  display: flex;
+  flex-direction: column;
+}
+.cds-cap {
+  margin-bottom: 0.5rem;
+  font-size: 0.66rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+}
+.cds-pane[data-pane='demo'] .cds-cap {
+  color: color-mix(in srgb, var(--cds-accent) 78%, var(--sl-color-gray-2));
+}
+.cds-scroll {
+  overflow: auto;
+  max-width: 100%;
+}
+.cds-scroll :is(pre, .expressive-code) {
   margin: 0 !important;
 }
-.code-demo-code pre {
+.cds-scroll pre {
   background: transparent !important;
 }
-/* Top-aligned: a short demo should sit under its label, not drift to the
-   middle of whatever height the code pane happens to be. */
-.code-demo-demo-inner {
+.cds-demo {
   display: flex;
   justify-content: flex-start;
   align-items: flex-start;
 }
-.code-demo-demo-inner .fleury-frame {
+.cds-demo .fleury-frame {
   margin: 0;
 }
+
+/* Two columns inline when the breakout is genuinely wide enough for both. ─*/
+@media (min-width: 88rem) {
+  .cds:not(.is-fs) .cds-body {
+    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+    /* Top-align so both captions pin to the same line — stretch let the
+       panes drift apart vertically. */
+    align-items: start;
+    gap: 0 1.75rem;
+  }
+}
 @media (max-width: 72rem) {
-  .code-demo {
+  .cds:not(.is-fs) {
     width: 100%;
     margin-inline: 0;
   }
-  .code-demo-body {
+}
+
+/* ── Full playground modal (native <dialog>, browser top layer) ────────────*/
+/* Built at <body> level and shown with showModal(), so no page stacking
+   context can trap it behind the backdrop. Code left, a freshly-mounted demo
+   right — the inline demo keeps running untouched. */
+.cds-modal {
+  /* Explicitly centered: a global reset zeroes the UA margin:auto that
+     normally centers a modal <dialog>, leaving it pinned top-left. */
+  inset: 0;
+  margin: auto;
+  width: min(96vw, 88rem);
+  max-width: 88rem;
+  height: min(90vh, 58rem);
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--sl-color-gray-4) 55%, transparent);
+  border-radius: 0.9rem;
+  background:
+    radial-gradient(120% 70% at 50% 0%, rgba(61, 220, 151, 0.05), transparent 55%),
+    linear-gradient(180deg, #0e141c, #0a0e13);
+  color: var(--sl-color-gray-2);
+  overflow: hidden;
+}
+:root[data-theme='light'] .cds-modal {
+  border-color: color-mix(in srgb, #bcd5ca 70%, transparent);
+  background:
+    radial-gradient(120% 70% at 50% 0%, rgba(19, 138, 92, 0.06), transparent 55%),
+    linear-gradient(180deg, #ffffff, #f3faf6);
+}
+.cds-modal::backdrop {
+  background: rgba(4, 8, 12, 0.82);
+  backdrop-filter: blur(3px);
+}
+.cds-modal[open] {
+  display: flex;
+  flex-direction: column;
+  /* Fade only — no transform, which would fight the centered position. */
+  animation: cds-fade-in 0.16s ease-out;
+}
+@keyframes cds-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cds-modal[open] { animation: none; }
+}
+.cds-modal-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem 0.6rem 0.55rem 0.95rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--sl-color-gray-4) 55%, transparent);
+}
+.cds-modal-close {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid color-mix(in srgb, var(--sl-color-gray-4) 55%, transparent);
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--sl-color-gray-6) 40%, transparent);
+  color: var(--sl-color-gray-2);
+  font-size: 0.72rem;
+  padding: 0.28rem 0.55rem;
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+.cds-modal-close:hover {
+  color: var(--sl-color-white);
+  border-color: color-mix(in srgb, #3ddc97 55%, transparent);
+  background: color-mix(in srgb, #3ddc97 12%, transparent);
+}
+.cds-modal-close:focus-visible {
+  outline: 2px solid #3ddc97;
+  outline-offset: 2px;
+}
+.cds-modal-close kbd {
+  font-family: var(--sl-font-mono, ui-monospace, monospace);
+  font-size: 0.62rem;
+  color: var(--sl-color-gray-3);
+  border: 1px solid color-mix(in srgb, var(--sl-color-gray-4) 55%, transparent);
+  border-radius: 0.3rem;
+  padding: 0 0.28rem;
+}
+/* code | seam | demo, filling the dialog height. */
+.cds-modal-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  /* Top-align so "You write" and "Fleury renders" pin to the same line. */
+  align-items: start;
+  gap: 0 2rem;
+  padding: 1rem 1.5rem 1.5rem;
+}
+.cds-modal-pane {
+  min-height: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+.cds-modal-pane .cds-scroll {
+  flex: 1;
+  min-height: 0;
+}
+.cds-modal-demo {
+  align-items: center;
+}
+.cds-modal-demo .fleury-host {
+  margin: auto;
+}
+/* Stack under a narrow screen; the whole body scrolls as one column. */
+@media (max-width: 60rem) {
+  .cds-modal-body {
     grid-template-columns: minmax(0, 1fr);
-    gap: 1.1rem;
+    overflow: auto;
   }
 }

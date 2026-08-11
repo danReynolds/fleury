@@ -854,7 +854,6 @@ class _SelectListState<T> extends State<_SelectList<T>> {
       },
       child: FocusScope(
         modal: true,
-        suppressGlobals: true,
         child: KeyDetector(
           onKey: (event) {
             if (_onKey(event) == KeyEventResult.handled) event.consume();

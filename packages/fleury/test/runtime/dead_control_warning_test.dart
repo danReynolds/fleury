@@ -18,14 +18,30 @@ void main() {
   late FocusManager focusManager;
   late InputDispatcher dispatcher;
   late List<FleuryError> warnings;
+  late BuildOwner owner;
 
   setUp(() {
     focusManager = FocusManager();
     warnings = <FleuryError>[];
+    owner = BuildOwner();
     dispatcher = InputDispatcher(focusManager: focusManager)
       ..onDeveloperWarning = warnings.add
       ..updateKeyboardCapabilities(KeyboardCapabilities.legacy);
   });
+
+  /// Mounts app-wide bindings the way an app does — an outermost
+  /// `KeyBindings` — so they land in the focus chain the check reads.
+  void mountBindings(List<KeyBinding> bindings) {
+    owner.mountRoot(
+      FocusManagerScope(
+        manager: focusManager,
+        child: KeyBindings(
+          bindings: bindings,
+          child: const Focus(autofocus: true, child: EmptyBox()),
+        ),
+      ),
+    );
+  }
 
   KeyboardSnapshot sample(KeySelector selector) {
     final snapshot = dispatcher.keyboardSession.publishLatch();
@@ -60,9 +76,9 @@ void main() {
   });
 
   test('a sampled key WITH a binding is silent', () {
-    dispatcher.globalBindings = [
+    mountBindings([
       KeyBinding(KeyCode.a, label: 'Turn left', onTrigger: (_) {}),
-    ];
+    ]);
     settleAndTrip(KeyPosition.a);
     expect(
       warnings,
@@ -77,9 +93,9 @@ void main() {
     // implements KeySequence, so a covered-set filter that only admits
     // `sequence is KeyCode` silently drops every positional binding and this
     // warns falsely — on the one app that has its fallbacks right.
-    dispatcher.globalBindings = [
+    mountBindings([
       KeyBinding(KeyPosition.a, label: 'Turn left', onTrigger: (_) {}),
-    ];
+    ]);
     settleAndTrip(KeyPosition.a);
     expect(
       warnings,
@@ -113,9 +129,9 @@ void main() {
       isEmpty,
       reason: 'one sighting can be a rebuild in flight',
     );
-    dispatcher.globalBindings = [
+    mountBindings([
       KeyBinding(KeyPosition.a, label: 'Turn left', onTrigger: (_) {}),
-    ];
+    ]);
     frame(KeyPosition.a); // covered: suspicion retired
     frame(KeyPosition.a);
     frame(KeyPosition.a);
@@ -140,9 +156,9 @@ void main() {
     expect(warnings, isEmpty, reason: 'the rebuild has not had its frame yet');
 
     // The rebuild lands: the fallback binding appears. Never warns.
-    dispatcher.globalBindings = [
+    mountBindings([
       KeyBinding(KeyPosition.w, label: 'Thrust', onTrigger: (_) {}),
-    ];
+    ]);
     frame(KeyPosition.w);
     frame(KeyPosition.w);
     frame(KeyPosition.w);
@@ -163,9 +179,9 @@ void main() {
     // The shape that actually shipped: four movement controls sampled, one
     // fallback binding. Kept as a regression case because no test, review, or
     // real-terminal run caught it — the user found it by playing the game.
-    dispatcher.globalBindings = [
+    mountBindings([
       KeyBinding(KeyCode.w, label: 'Thrust', onTrigger: (_) {}),
-    ];
+    ]);
     // Three frames of play, all four controls sampled each frame — the
     // two-sighting cadence needs a transition-absorbing check plus two
     // uncovered sightings before it will speak.

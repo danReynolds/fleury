@@ -77,8 +77,11 @@ tree with a diffing ANSI renderer. Unhandled Ctrl+C exits by default.
 - **Layout**: `Row` / `Column` / `Flex`, `Stack`, `Align` / `Center`,
   `Padding`, `SizedBox`, `Expanded` / `Flexible`, intrinsic sizing,
   `LayoutBuilder`.
-- **Input + focus**: key bindings, focus traversal (Tab / directional),
-  modal focus scopes, mouse + pointer routing, paste handling.
+- **Input + focus**: key bindings that fire once per physical press, and
+  held-key state sampled per frame for games (`Keyboard.of` — key releases
+  negotiated with the terminal automatically, no flags), focus traversal
+  (Tab / directional), modal focus scopes, mouse + pointer routing, paste
+  handling.
 - **Navigation**: `Navigator` with routes + an `Overlay` for modals,
   menus, tooltips, and toasts.
 - **Animation**: `AnimationBuilder` + `Animation` (spring-based,

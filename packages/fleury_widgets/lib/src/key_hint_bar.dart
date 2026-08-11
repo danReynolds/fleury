@@ -12,11 +12,11 @@ import 'package:fleury/fleury_core.dart';
 /// bindings as the width allows and collapses the rest into a trailing `+N`,
 /// rather than clipping a label mid-word or silently dropping the trailing
 /// hints. Priority is chain order — the deepest / most local bindings are kept
-/// first, and [globalBindings] (appended last) collapse into the `+N` first;
-/// the marker is the affordance that a narrow terminal is hiding more (the
-/// missing "no affordance" the plain-`Text` bar lacked). Pinning ubiquitous
-/// globals like quit/help ahead of locals is a deliberate non-goal for now —
-/// it would break the contiguous prefix + single trailing marker. A binding
+/// first, and the outermost collapse into the `+N` first; the marker is the
+/// affordance that a narrow terminal is hiding more (the missing "no
+/// affordance" the plain-`Text` bar lacked). Pinning ubiquitous bindings like
+/// quit/help ahead of locals is a deliberate non-goal for now — it would
+/// break the contiguous prefix + single trailing marker. A binding
 /// bound to several aliases (`KeyBinding(↑, aliases: [↓], …)`) renders a
 /// **combined** label — `[↑↓] move`, not just `[↑] move`.
 ///
@@ -27,7 +27,6 @@ import 'package:fleury/fleury_core.dart';
 ///   2. Bindings with `hideFromHintBar: true` are hidden.
 ///   3. Bindings with `enabled: false` are hidden.
 ///   4. Duplicate chords keep the nearest (deeper) binding.
-///   5. Global bindings (passed via [globalBindings]) appear last.
 class KeyHintBar extends StatelessWidget {
   const KeyHintBar({
     super.key,
@@ -35,7 +34,6 @@ class KeyHintBar extends StatelessWidget {
     this.separator = ' · ',
     this.style = CellStyle.empty,
     this.keyStyle,
-    this.globalBindings = const [],
   });
 
   /// Hard cap on how many bindings are considered, applied before width
@@ -55,11 +53,6 @@ class KeyHintBar extends StatelessWidget {
   /// on [style].
   final CellStyle? keyStyle;
 
-  /// Bindings from `runApp`'s `globalBindings` parameter. Pass these
-  /// in explicitly so the hint bar can show them; the framework
-  /// doesn't currently expose them via an InheritedWidget.
-  final List<KeyBinding> globalBindings;
-
   @override
   Widget build(BuildContext context) {
     final manager = Focus.maybeOf(context);
@@ -67,10 +60,7 @@ class KeyHintBar extends StatelessWidget {
     // Positional bindings name a SPOT, not a cap. Ask the keyboard what that
     // spot is actually labelled before telling anyone to press it (§9).
     final layout = Keyboard.of(context).layout;
-    final hints = resolveActiveKeyBindings(
-      manager,
-      globalBindings: globalBindings,
-    );
+    final hints = resolveActiveKeyBindings(manager);
     if (hints.isEmpty) return const EmptyBox();
     // Highest-priority (deepest / most local) bindings come first; the hard
     // [maxBindings] cap bounds the candidate set before width fitting. `total`

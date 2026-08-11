@@ -1324,8 +1324,8 @@ void main() {
     );
 
     test('F12 reaches Logs even inside a Navigator modal route', () async {
-      // The Navigator's active route sets `suppressGlobals: true`,
-      // which previously would have prevented a tree-level KeyBindings
+      // A Navigator modal route truncates the key dispatch chain at its
+      // boundary, which would otherwise prevent an app-level KeyBindings
       // from firing. The debug-shell hotkeys are escape-hatches routed
       // through runApp BEFORE the dispatcher, so they bypass the modal
       // scope — this test locks that contract.

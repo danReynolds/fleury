@@ -43,9 +43,6 @@ runApp(
     // Return an ExitRequested to quit cleanly; null lets it through.
     return null;
   },
-  globalBindings: [
-    KeyBinding(KeySequence.ctrl.q, onTrigger: (_) => requestExit(), label: 'Quit'),
-  ],
 )
 ```
 

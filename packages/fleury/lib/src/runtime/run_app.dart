@@ -37,7 +37,6 @@ import '../terminal/posix_driver.dart';
 import '../terminal/terminal_driver.dart';
 import '../widgets/focus.dart';
 import '../widgets/framework.dart';
-import '../widgets/key_bindings.dart';
 import '../widgets/keyboard.dart';
 import '../widgets/overlay.dart';
 import '../widgets/selection/selection_area.dart';
@@ -261,7 +260,6 @@ Future<AppExit> runApp(
   void Function(LogLine line)? onStrayOutput,
   TuiEventHandler? onEvent,
   Clipboard? clipboard,
-  List<KeyBinding> globalBindings = const [],
   Duration sequenceTimeout = const Duration(milliseconds: 500),
   DebugConfig debug = const DebugConfig(),
   Duration frameInterval = Duration.zero,
@@ -298,7 +296,6 @@ Future<AppExit> runApp(
       onStrayOutput: onStrayOutput,
       onEvent: onEvent,
       clipboard: clipboard,
-      globalBindings: globalBindings,
       sequenceTimeout: sequenceTimeout,
       debug: debug,
       frameInterval: frameInterval,
@@ -368,7 +365,6 @@ Future<AppExit> _runAppImpl(
   void Function(LogLine line)? onStrayOutput,
   TuiEventHandler? onEvent,
   Clipboard? clipboard,
-  List<KeyBinding> globalBindings = const [],
   Duration sequenceTimeout = const Duration(milliseconds: 500),
   DebugConfig debug = const DebugConfig(),
   Duration frameInterval = Duration.zero,
@@ -499,7 +495,6 @@ Future<AppExit> _runAppImpl(
     focusManager: focusManager,
     pointerRouter: pointerRouter,
     sequenceTimeout: sequenceTimeout,
-    globalBindings: globalBindings,
   );
   // Publishes the session keyboard to `Keyboard.of` (capabilities reactive,
   // sampled state not — RFC 0020 §15).

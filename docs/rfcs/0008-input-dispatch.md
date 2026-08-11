@@ -8,8 +8,12 @@ type, the `KeyBinding` constructors, and the `KeyEvent` shape below are
 **historical** — `KeyChord` is now `KeySequence`, and the common handler is
 `onTrigger`. The *dispatch architecture* in §7 (precedence, modal scopes,
 text-input claim order, the central `InputDispatcher`) carries forward
-unchanged and is still current. Left as written: this is the record of what
-was decided in May 2026, not a guide to today's API.
+unchanged and is still current, with **one exception**: the global-bindings
+stage (§6.6, step 4 of §7) and its `suppressGlobals` opt-out were **removed
+2026-08-11**. App-wide shortcuts are now an outermost `KeyBindings` widget, and
+a modal scope's chain truncation is what isolates a dialog from them. Left as
+written: this is the record of what was decided in May 2026, not a guide to
+today's API.
 **Decision point for:** P1 implementation order
 
 ## 1. Summary
@@ -431,6 +435,14 @@ parameter) **still fire** when a modal scope is active, unless the
 modal scope sets `suppressGlobals: true`. Default is to leave globals
 active so `Ctrl+C` always works.
 
+> **Removed 2026-08-11.** Neither `globalBindings` nor `suppressGlobals`
+> exists. App-wide shortcuts are an outermost `KeyBindings` widget, so they
+> live *in* the chain rather than after it — which means a modal scope
+> isolates a dialog from them by truncating the chain, with no second
+> opt-out to keep in sync. `Ctrl+C` is handled by the runtime, not by a
+> binding, so it was never what kept the escape hatch open. §6.6 and step 4
+> of §7 below are historical.
+
 ### 6.6 Global bindings
 
 ```dart
@@ -510,7 +522,7 @@ When the runtime receives a `KeyEvent` from the driver, the
             start pending sequence state. Return handled.
      c. If a binding is disabled (`enabled: false`), skip it.
 
-4. GLOBAL BINDINGS
+4. GLOBAL BINDINGS  [removed 2026-08-11 — see the note in 6.5]
    Check `runTui`'s globalBindings. Same match logic as step 3b.
    Modal scope's `suppressGlobals` (if true) skips this step.
 

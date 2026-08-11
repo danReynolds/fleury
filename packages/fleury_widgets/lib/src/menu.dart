@@ -489,7 +489,6 @@ class _MenuBodyState extends State<_MenuBody> {
       },
       child: FocusScope(
         modal: true,
-        suppressGlobals: true,
         child: KeyDetector(
           onKey: (event) {
             if (_onKey(event) == KeyEventResult.handled) event.consume();
