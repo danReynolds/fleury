@@ -77,6 +77,82 @@ String rgbCss(Color color) {
   return 'rgb(${c.r}, ${c.g}, ${c.b})';
 }
 
+/// Inline CSS that paints a block-element glyph as solid rectangles instead of
+/// relying on the font glyph.
+///
+/// A font glyph cannot fill its cell in a browser, in either axis. Vertically,
+/// the row is a line box and the ink is only the font's content area — `█` in
+/// a 17.5px row measures 16.45px tall, so a bar chart shows a scan line at
+/// every row boundary. Horizontally, the grid carries a sub-pixel
+/// `letter-spacing` so text flows on the device-pixel-snapped pitch (see
+/// `DomGridSurface._rootStyle`), and that space lands *between* glyphs rather
+/// than widening them — so two adjacent `█` no longer touch and a `barWidth: 2`
+/// bar gets a hairline straight down its middle. Painting the ink as a CSS
+/// rectangle sized from the cell box is exact in both axes and independent of
+/// the font entirely.
+///
+/// [rects] is a [blockElementRects] result; the span's text should be spaces so
+/// no glyph is drawn over the rectangles. Rectangles use the cell foreground;
+/// the cell background sits behind them.
+///
+/// The span may cover several cells, in which case the rectangles are sized as
+/// a percentage of the whole run — correct only for full-width ink, which is
+/// exactly what [blockRectsSpanFullWidth] gates coalescing on.
+String blockElementCss(CellStyle style, List<BlockRect> rects) {
+  Color? fg = style.foreground;
+  Color? bg = style.background;
+  if (style.inverse) {
+    final swappedFg = bg ?? kDefaultBackground;
+    bg = fg ?? kDefaultForeground;
+    fg = swappedFg;
+  }
+
+  final positions = <String>[];
+  final sizes = <String>[];
+  for (final rect in rects) {
+    // Every rectangle is edge-anchored on both axes (asserted by BlockRect), so
+    // a keyword pair places it exactly — no percentage-position arithmetic,
+    // whose reference is the *leftover* space rather than the box.
+    positions.add(
+      '${rect.left == 0 ? 'left' : 'right'} '
+      '${rect.top == 0 ? 'top' : 'bottom'}',
+    );
+    sizes.add('${_eighths[rect.width]} ${_eighths[rect.height]}');
+  }
+
+  final images = List.filled(
+    positions.length,
+    'linear-gradient(currentColor,currentColor)',
+  );
+  final parts = <String>[
+    // Solid ink must reach the row edges and meet its neighbours above and
+    // below with no seam — the same rule as any painted cell.
+    kFillsCellBoxCss,
+    'color:${rgbCss(fg ?? kDefaultForeground)}',
+    if (bg != null) 'background-color:${rgbCss(bg)}',
+    'background-image:${images.join(',')}',
+    'background-position:${positions.join(',')}',
+    'background-size:${sizes.join(',')}',
+    'background-repeat:no-repeat',
+  ];
+  if (style.dim) parts.add('opacity:.6');
+  return parts.join(';');
+}
+
+/// `n/8` as an exact CSS percentage — indexed by eighths, so no float
+/// formatting runs on the per-frame path.
+const List<String> _eighths = [
+  '0%',
+  '12.5%',
+  '25%',
+  '37.5%',
+  '50%',
+  '62.5%',
+  '75%',
+  '87.5%',
+  '100%',
+];
+
 /// Inline CSS that paints a box-drawing glyph as crisp gradient lines instead
 /// of relying on the font glyph (which does not tile vertically in a browser).
 /// [mask] is a [boxDrawingMask] result; the span's text should be spaces so no
