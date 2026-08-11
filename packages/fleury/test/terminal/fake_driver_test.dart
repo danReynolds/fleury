@@ -4,12 +4,19 @@ import 'package:test/test.dart';
 void main() {
   group('FakeTerminalDriver lifecycle', () {
     test('starts inactive and becomes active on enter()', () async {
-      final driver = FakeTerminalDriver();
+      final driver = FakeTerminalDriver(
+        keyboardCapabilities: KeyboardCapabilities.full,
+        synchronizedOutput: false,
+      );
       expect(driver.isActive, isFalse);
-      await driver.enter(TerminalMode.interactive);
+      final profile = await driver.enter(TerminalMode.interactive);
       expect(driver.isActive, isTrue);
       expect(driver.enterCallCount, 1);
       expect(driver.currentMode, TerminalMode.interactive);
+      expect(profile.keyboard, KeyboardCapabilities.full);
+      expect(profile.surface, driver.capabilities.toSurfaceCapabilities());
+      final presentation = profile.presentation as AnsiTerminalPresentation;
+      expect(presentation.synchronizedOutput, isFalse);
       await driver.dispose();
     });
 

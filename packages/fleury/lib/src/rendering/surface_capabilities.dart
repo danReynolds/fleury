@@ -121,12 +121,3 @@ final class SurfaceCapabilities {
     textPolicy,
   );
 }
-
-/// Implemented by drivers whose surface capabilities come from somewhere
-/// richer than the terminal-capability projection — a structured remote
-/// driver reporting what its PEER (a browser) declared. runApp prefers
-/// this over projecting [TerminalCapabilities] when present. Folds into
-/// presenter negotiation (pipeline-program PR9).
-abstract interface class SurfaceCapabilitiesProvider {
-  SurfaceCapabilities get surfaceCapabilities;
-}

@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- **Systematic terminal negotiation (RFC 0021).** `TerminalDriver.enter()` now
+  returns one immutable semantic session profile and a sealed ANSI/structured
+  presentation choice, so `runApp` no longer assembles capability truth from
+  post-enter temporal getters. POSIX terminal queries share the input parser:
+  typed CSI/OSC/DCS/APC replies go to a serialized, deadline-bounded query
+  runner while ordinary interleaved user input continues; ambiguous response
+  prefixes use a bounded late-reply quarantine. Terminal cleanup now records
+  the effective selected mode, fixing Kitty fallback across suspend/handoff.
+  Legacy coverage adds
+  xterm modifyOtherKeys, SS3 keypad identity, Linux-console F-key sequences,
+  and a prefix-safe `LegacyKeySequence` data seam without making terminfo a
+  dependency.
+
 - **Keyboard lifecycle (RFC 0020).** Key releases and held-state work out of
   the box: `runApp` asks every terminal for the full Kitty keyboard protocol
   and negotiates down transactionally — no flags, no tiers to declare, and a

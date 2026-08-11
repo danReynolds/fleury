@@ -15,6 +15,15 @@ class _ListSink implements TuiEventSink {
   }
 }
 
+class _ResponseListSink implements TerminalResponseSink {
+  final List<TerminalResponse> responses = <TerminalResponse>[];
+
+  @override
+  void addTerminalResponse(TerminalResponse response) {
+    responses.add(response);
+  }
+}
+
 /// Convenience: feed a list of bytes and immediately flush.
 List<TuiEvent> _parse(List<int> bytes) {
   final parser = InputParser();
@@ -133,6 +142,164 @@ void main() {
     test('DEL (0x7F) and BS (0x08) both become KeyCode.backspace', () {
       expect(_parse([0x7F]), [const KeyEvent(KeyCode.backspace)]);
       expect(_parse([0x08]), [const KeyEvent(KeyCode.backspace)]);
+    });
+  });
+
+  group('Terminal response framing', () {
+    test('private CSI replies never become application input', () {
+      final parser = InputParser();
+      final events = _ListSink();
+      final responses = _ResponseListSink();
+
+      parser.feed(
+        '\x1b[?1;2c\x1b[?31u'.codeUnits,
+        events,
+        responseSink: responses,
+      );
+
+      expect(events.events, isEmpty);
+      expect(
+        responses.responses.map((response) => response.kind),
+        <TerminalResponseKind>[
+          TerminalResponseKind.deviceAttributes,
+          TerminalResponseKind.keyboardStatus,
+        ],
+      );
+      expect(String.fromCharCodes(responses.responses.first.raw), '\x1b[?1;2c');
+    });
+
+    test('CPR remains modified F3 unless a cursor query owns it', () {
+      final parser = InputParser();
+      final events = _ListSink();
+      final responses = _ResponseListSink();
+
+      parser.feed('\x1b[1;2R'.codeUnits, events, responseSink: responses);
+      expect(responses.responses, isEmpty);
+      expect(events.events, <TuiEvent>[
+        const KeyEvent(
+          KeyCode.f3,
+          modifiers: <KeyModifier>{KeyModifier.shift},
+          position: KeyPosition.f3,
+        ),
+      ]);
+
+      events.events.clear();
+      parser.responseExpectation = const TerminalResponseExpectation(
+        cursorPosition: true,
+      );
+      parser.feed('\x1b[1;2R'.codeUnits, events, responseSink: responses);
+      expect(events.events, isEmpty);
+      expect(
+        responses.responses.single.kind,
+        TerminalResponseKind.cursorPosition,
+      );
+    });
+
+    test('expected APC response frames across arbitrary input reads', () {
+      final parser = InputParser()
+        ..responseExpectation = const TerminalResponseExpectation(
+          applicationProgramCommand: true,
+        );
+      final events = _ListSink();
+      final responses = _ResponseListSink();
+      final bytes = '\x1b_Gi=31;OK\x1b\\'.codeUnits;
+
+      for (final byte in bytes) {
+        parser.feed(<int>[byte], events, responseSink: responses);
+        parser.flush(events);
+      }
+
+      expect(events.events, isEmpty);
+      expect(responses.responses, hasLength(1));
+      expect(
+        responses.responses.single.kind,
+        TerminalResponseKind.applicationProgramCommand,
+      );
+      expect(responses.responses.single.raw, bytes);
+    });
+
+    test('a pending Escape is released when a control-string query ends', () {
+      final parser = InputParser();
+      final events = _ListSink();
+      parser.responseExpectation = const TerminalResponseExpectation(
+        applicationProgramCommand: true,
+      );
+
+      parser.feed(<int>[0x1b], events);
+      parser.flush(events);
+      expect(events.events, isEmpty);
+
+      parser.responseExpectation = TerminalResponseExpectation.none;
+      parser.flush(events);
+
+      expect(events.events, const <TuiEvent>[KeyEvent(KeyCode.escape)]);
+    });
+
+    test('control-string prefixes remain Alt chords when not expected', () {
+      expect(_parse('\x1b_'.codeUnits), <TuiEvent>[
+        const KeyEvent(
+          KeyCode.char('_'),
+          modifiers: <KeyModifier>{KeyModifier.alt},
+        ),
+      ]);
+    });
+
+    test('user input interleaved with replies is delivered in place', () {
+      final parser = InputParser();
+      final events = _ListSink();
+      final responses = _ResponseListSink();
+
+      parser.feed('a\x1b[?1;2cb'.codeUnits, events, responseSink: responses);
+
+      expect(events.events, const <TuiEvent>[
+        TextInputEvent('a'),
+        TextInputEvent('b'),
+      ]);
+      expect(responses.responses, hasLength(1));
+    });
+
+    test('response-shaped bytes inside bracketed paste remain paste', () {
+      final parser = InputParser();
+      final events = _ListSink();
+      final responses = _ResponseListSink();
+
+      parser.feed(
+        '\x1b[200~before\x1b[?1;2cafter\x1b[201~'.codeUnits,
+        events,
+        responseSink: responses,
+      );
+
+      expect(events.events, const <TuiEvent>[
+        PasteEvent('before\x1b[?1;2cafter'),
+      ]);
+      expect(responses.responses, isEmpty);
+    });
+
+    test('DECRPM mode replies preserve intermediates and raw bytes', () {
+      final parser = InputParser();
+      final events = _ListSink();
+      final responses = _ResponseListSink();
+      final bytes = '\x1b[?2026;1\$y'.codeUnits;
+
+      parser.feed(bytes, events, responseSink: responses);
+
+      expect(events.events, isEmpty);
+      expect(responses.responses.single.kind, TerminalResponseKind.modeReport);
+      expect(responses.responses.single.raw, bytes);
+    });
+
+    test('an incomplete private CSI is not retained outside a query', () {
+      final parser = InputParser();
+      final events = _ListSink();
+
+      parser.feed('\x1b[?'.codeUnits, events);
+      parser.flush(events);
+      parser.feed('ok'.codeUnits, events);
+
+      expect(events.events, const <TuiEvent>[
+        TextInputEvent('o'),
+        TextInputEvent('k'),
+      ]);
     });
   });
 
@@ -305,6 +472,77 @@ void main() {
       expect(_parse([0x1B, 0x4F, 0x50]), [
         const KeyEvent(KeyCode.f1, position: KeyPosition.f1),
       ]);
+    });
+
+    test('application-keypad reports retain keypad identity', () {
+      expect(_parse('\x1bOp\x1bOM'.codeUnits), const <TuiEvent>[
+        KeyEvent(KeyCode.keypad0, position: KeyPosition.numpad0),
+        KeyEvent(KeyCode.keypadEnter, position: KeyPosition.numpadEnter),
+      ]);
+    });
+  });
+
+  group('legacy fixed-sequence provider', () {
+    test('built-in Linux-console F1 through F5 sequences decode', () {
+      expect(_parse('\x1b[[A\x1b[[E'.codeUnits), const <TuiEvent>[
+        KeyEvent(KeyCode.f1, position: KeyPosition.f1),
+        KeyEvent(KeyCode.f5, position: KeyPosition.f5),
+      ]);
+    });
+
+    test('custom entries compose without replacing protocol grammar', () {
+      final parser = InputParser(
+        additionalLegacyKeySequences: const <LegacyKeySequence>[
+          LegacyKeySequence('\x1b[99~', KeyCode.f20),
+        ],
+      );
+      final sink = _ListSink();
+
+      parser.feed('\x1b[99~\x1b[A'.codeUnits, sink);
+      parser.flush(sink);
+
+      expect(sink.events, const <TuiEvent>[
+        KeyEvent(KeyCode.f20, position: KeyPosition.f20),
+        KeyEvent(KeyCode.arrowUp, position: KeyPosition.arrowUp),
+      ]);
+    });
+
+    test('tables reject ambiguous prefix entries', () {
+      expect(
+        () => InputParser(
+          additionalLegacyKeySequences: const <LegacyKeySequence>[
+            LegacyKeySequence('\x1b[A', KeyCode.f1),
+            LegacyKeySequence('\x1b[AB', KeyCode.f2),
+          ],
+        ),
+        throwsArgumentError,
+      );
+    });
+  });
+
+  group('xterm modifyOtherKeys', () {
+    test('Ctrl+I is a modified key, distinct from Tab', () {
+      expect(_parse('\x1b[27;5;105~'.codeUnits), const <TuiEvent>[
+        KeyEvent(KeyCode.char('i'), modifiers: <KeyModifier>{KeyModifier.ctrl}),
+      ]);
+    });
+
+    test('Alt+Tab retains the functional key identity', () {
+      expect(_parse('\x1b[27;3;9~'.codeUnits), const <TuiEvent>[
+        KeyEvent(
+          KeyCode.tab,
+          modifiers: <KeyModifier>{KeyModifier.alt},
+          position: KeyPosition.tab,
+        ),
+      ]);
+    });
+
+    test('mode-3 unmodified printables preserve key and text together', () {
+      final events = _parse('\x1b[27;1;32~'.codeUnits);
+      expect(events, hasLength(1));
+      final batch = events.single as InputBatch;
+      expect(batch.key, const KeyEvent(KeyCode.char(' ')));
+      expect(batch.committedText, ' ');
     });
   });
 

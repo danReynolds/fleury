@@ -47,12 +47,7 @@ const int maxRemoteGridCells = maxRemotePlanGridCells;
 /// sends structured input. [wantsPresentationPlans] reflects the negotiated
 /// version and is read by [runApp] after [enter] completes.
 final class RemoteTerminalDriver
-    implements
-        TerminalDriver,
-        RemoteSurfaceSink,
-        SurfaceCapabilitiesProvider,
-        OutputFlowControl,
-        KeyboardCapabilitiesDriver {
+    implements TerminalDriver, RemoteSurfaceSink, OutputFlowControl {
   /// What the peer DECLARED in its INIT (RFC 0020 §11) — never an inference
   /// from [_protocolVersion].
   ///
@@ -63,7 +58,6 @@ final class RemoteTerminalDriver
   /// that declares nothing gets the conservative press-only reading — which
   /// is exactly right, because a peer that cannot say what it supports has
   /// not confirmed anything.
-  @override
   KeyboardCapabilities get keyboardCapabilities =>
       _peerKeyboard ?? KeyboardCapabilities.legacy;
 
@@ -120,7 +114,6 @@ final class RemoteTerminalDriver
   /// present, else the terminal projection (a v1 `fleury shell` peer is a
   /// real terminal). A structured browser peer gets sub-cell pointer
   /// fidelity — its input source reports real mouse geometry.
-  @override
   SurfaceCapabilities get surfaceCapabilities =>
       _peerSurfaceCapabilities ?? _capabilities.toSurfaceCapabilities();
 
@@ -169,11 +162,10 @@ final class RemoteTerminalDriver
   @override
   bool get isInteractive => true;
 
-  @override
   RemoteSurfaceSink? get surfaceSink => wantsPresentationPlans ? this : null;
 
   @override
-  Future<void> enter(TerminalMode mode) async {
+  Future<TerminalSessionProfile> enter(TerminalMode mode) async {
     if (_active) {
       throw StateError(
         'RemoteTerminalDriver.enter called on an active driver.',
@@ -229,6 +221,20 @@ final class RemoteTerminalDriver
       }
     }
     _active = true;
+    final sink = surfaceSink;
+    return sink == null
+        ? TerminalSessionProfile.ansi(
+            terminal: _capabilities,
+            keyboard: keyboardCapabilities,
+            surface: surfaceCapabilities,
+            synchronizedOutput:
+                Platform.environment['FLEURY_SYNC_OUTPUT'] != '0',
+          )
+        : TerminalSessionProfile.structured(
+            surface: surfaceCapabilities,
+            keyboard: keyboardCapabilities,
+            sink: sink,
+          );
   }
 
   /// How long [enter] waits for the peer's INIT before failing closed.

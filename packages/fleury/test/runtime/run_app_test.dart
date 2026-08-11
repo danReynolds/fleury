@@ -277,15 +277,13 @@ class _LifecycleFaultDriver implements TerminalDriver {
   bool get isInteractive => true;
 
   @override
-  RemoteSurfaceSink? get surfaceSink => null;
-
-  @override
-  Future<void> enter(TerminalMode mode) async {
+  Future<TerminalSessionProfile> enter(TerminalMode mode) async {
     _active = true;
     onEnter?.call(_events);
     final event = enterEvent;
     if (event != null) _events.add(event);
     if (closeDuringEnter) await _events.close();
+    return TerminalSessionProfile.ansi(terminal: capabilities);
   }
 
   void enqueue(TuiEvent event) => _events.add(event);
