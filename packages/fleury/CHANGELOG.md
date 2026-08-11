@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **Breaking: `runApp`'s `globalBindings` and `FocusScope.suppressGlobals`
+  are removed.** App-wide shortcuts are an outermost `KeyBindings` widget
+  instead. `globalBindings` sat *after* the focus chain, so modality needed a
+  second opt-out (`suppressGlobals`) to stop a dialog from firing app
+  shortcuts — two knobs kept in sync by hand, the second existing only to undo
+  the first. An outermost `KeyBindings` is the shallowest scope, so anything
+  deeper still shadows it, and a modal scope isolates a dialog by truncating
+  the chain it already truncates for traversal. Migration: move the list into
+  a `KeyBindings` wrapping your root widget; drop `suppressGlobals` (a modal
+  `FocusScope` or `KeyBindings(modal: true)` already does the job).
+  `Ctrl+C` is unaffected — it is handled by the runtime, not by a binding.
+
 - **Keyboard lifecycle (RFC 0020).** Key releases and held-state work out of
   the box: `runApp` asks every terminal for the full Kitty keyboard protocol
   and negotiates down transactionally — no flags, no tiers to declare, and a

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Breaking: `KeyHintBar`'s `globalBindings` parameter is removed**, following
+  the removal of `runApp`'s `globalBindings` in `fleury`. App-wide shortcuts
+  now live in an outermost `KeyBindings`, so they are already in the focus
+  chain the hint bar reads — there is nothing left to pass in by hand.
+
 - `CanvasContext.drawLine` gains `width:` — stroke thickness in sub-cell
   pixels (visual weight survives bounds changes), rasterized as a stamped
   round brush: gap-free diagonals, rounded caps and joints, cached per
