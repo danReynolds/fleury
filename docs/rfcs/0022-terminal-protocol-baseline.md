@@ -59,6 +59,12 @@ an OSC 52 write can be enabled and emitted while delivery remains unverified.
 8. Fallbacks and cleanup are part of the protocol contract, not incidental
    implementation details.
 
+An open ledger item blocks the corresponding public capability claim, not the
+entire release. Launch is blocked only by a known unsafe default, a missing
+behavioral check for the declared primary target, or public scope that implies
+unearned compatibility. Optional terminals and protocols may ship as preview
+or experimental when their fallback and evidence boundary are explicit.
+
 ## 4. Admission checklist
 
 No capability enters Fleury's public compatibility matrix without all of:
@@ -82,9 +88,9 @@ passed.
 | Area | Owner | Negotiation and truth | Fallback and cleanup | Required evidence | State |
 | --- | --- | --- | --- | --- | --- |
 | Capability truth | Domain boundary plus `CapabilityResolution` | Observed facts are supplied explicitly; no static availability inference | Domain fallback is named in the resolution | Resolver tests plus operation-report tests | Implemented |
-| Compatibility evidence | Terminal conformance harness | Exercise delivered behavior through a real terminal session | Claim remains unverified; harness must always restore its modes | Receipts for Terminal.app, iTerm2, Kitty, Ghostty, Alacritty, WezTerm, Windows Terminal, tmux, Zellij, and SSH | Open |
+| Compatibility evidence | Terminal conformance harness | Exercise delivered behavior through a real terminal session | Claim remains unverified; harness must always restore its modes | One direct POSIX receipt protects the launch boundary; enhanced-protocol, multiplexer, and named-terminal claims need corresponding receipts | Direct POSIX receipt exists; enhanced claims open |
 | Legacy keyboard | Input parser and POSIX driver | Kitty protocol is queried; terminfo may add validated legacy sequences | Legacy parser; modifyOtherKeys is parsed but never enabled; pop attempted Kitty state | Parser fixtures, transaction traces, then terminfo fixture comparison | Parse-only policy implemented; terminfo open |
-| Windows transport | Windows driver | Native console/ConPTY behavior is detected by the driver, not inferred from macOS | Legacy keyboard and conservative surface profile; restore console modes | Windows CI first, then Windows Terminal receipt | Open |
+| Windows transport | Windows driver | Native console/ConPTY behavior is detected by the driver, not inferred from macOS | Legacy keyboard and conservative surface profile; restore console modes | Windows CI first, then Windows Terminal receipt before Windows becomes a verified target | Preview; claim-gated |
 
 ### P1
 
@@ -92,7 +98,7 @@ passed.
 | --- | --- | --- | --- | --- | --- |
 | Cell pixel geometry | ANSI session profile | Query CSI `14 t` and `16 t`; refresh after resize | Unknown geometry disables pixel-derived sizing; no terminal mode to clean up | Codec, fragmented-reply, resize, and real-terminal receipts | Open |
 | Dark/light changes | Theme domain | Negotiate DEC 2031/996; use OSC 10/11 only as fallback evidence | Keep configured theme; undo subscriptions during restore | Parser, lifecycle, fallback, and terminal receipts | Open |
-| Synchronized output | ANSI presentation | Query DEC mode 2026 with DECRQM before treating support as known | Plain frame output; always close a started synchronized frame | Query/timeout/partial-support traces and terminal receipts | Open |
+| Synchronized output | ANSI presentation | Query DEC mode 2026 with DECRQM before treating support as known | Plain frame output; always close a started synchronized frame | Query/timeout/partial-support traces; behavioral receipts remain claim evidence | Implemented; receipts pending |
 | Pixel mouse | Pointer domain | Negotiate xterm mode 1016 when sub-cell coordinates are requested | SGR 1006 cell mouse; disable every enabled mouse mode on exit | Parser, resize, cleanup, and canvas receipts | Open |
 | Multiplexer graphics | Image presentation | Confirm terminal graphics and configured mux passthrough separately | Half-block cells; delete image placements and end passthrough cleanly | tmux and Zellij configuration/lifecycle receipts | Open |
 

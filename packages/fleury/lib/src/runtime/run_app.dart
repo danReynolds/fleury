@@ -532,12 +532,10 @@ Future<AppExit> _runAppImpl(
       ? _CapturingAnsiSink.wrap(byteTelemetry ?? driverSink, capturePath)
       : (byteTelemetry ?? driverSink);
   // Downsample colors to whatever the terminal actually supports.
-  // `FLEURY_SYNC_OUTPUT=0` drops the DEC-2026 synchronized-update wrapper around
-  // each frame. The wrapper is correct per spec (and verified by the renderer's
-  // own equivalence tests), but a terminal whose 2026 implementation drops or
-  // mis-applies updates under rapid frames (e.g. fast scrolling) can desync from
-  // the renderer's model and show persistent stale cells; this is the escape
-  // hatch to confirm/avoid that without touching the diff.
+  // DEC-2026 synchronized updates are selected by the entered session profile:
+  // native POSIX negotiates them with DECRQM, while queryless transports stay
+  // off. `FLEURY_SYNC_OUTPUT=1|0` is the explicit operator override for a
+  // terminal whose report or implementation is known to be wrong.
   // Built after enter() below, from its immutable session profile.
   late final AnsiRenderer renderer;
   late final TerminalSessionProfile sessionProfile;

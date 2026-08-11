@@ -69,9 +69,9 @@ tree with a diffing ANSI renderer. Unhandled Ctrl+C exits by default.
 - **Framework**: `Widget` / `StatefulWidget` / `State`, `BuildContext`,
   `InheritedWidget`, keys + reconciliation, `MediaQuery`, layout
   constraints, the `RenderObject` tree, and a swappable
-  `TerminalDriver` (native POSIX and Windows drivers; the current launch matrix
-  validates macOS Terminal and tmux, while broader terminal coverage and
-  real-Windows acceptance are still pending).
+  `TerminalDriver`. The launch support boundary is a modern UTF-8,
+  xterm-compatible POSIX terminal; the native Windows driver is preview-only
+  until real-Windows acceptance lands.
   `fleury_web` renders the same tree to a browser DOM cell grid — selectable
   text and a real accessibility tree, not a canvas bitmap.
 - **Layout**: `Row` / `Column` / `Flex`, `Stack`, `Align` / `Center`,
@@ -91,7 +91,8 @@ tree with a diffing ANSI renderer. Unhandled Ctrl+C exits by default.
   [the hot-reload guide](https://github.com/danReynolds/fleury/blob/main/packages/fleury/doc/hot_reload.md).
 - **Widgets**: a deep catalog lives in the companion `fleury_widgets`
   package — inputs, selects, tables, trees, charts, an image widget
-  with four terminal graphics protocols, and more.
+  with Kitty/iTerm2 progressive enhancement, experimental Sixel, and portable
+  glyph rendering, and more.
 
 Design rationale and the phased delivery plan live in the RFC:
 [Fleury framework RFC 0007](https://github.com/danReynolds/fleury/blob/main/docs/rfcs/0007-fleury-framework.md).

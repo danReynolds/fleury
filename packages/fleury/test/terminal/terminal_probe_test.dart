@@ -2,54 +2,71 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/src/terminal/terminal_probe.dart'
+    show probeSynchronizedOutput;
 import 'package:test/test.dart';
 
 void main() {
   group('runTerminalProbeSuite', () {
-    test('confirms DA, Kitty keyboard, and Kitty graphics replies', () async {
-      final report = await runTerminalProbeSuite(
-        _FakeTerminalProbeTransport((request) {
-          if (request.contains('_G')) {
-            return '\x1B_Gi=31;OK\x1B\\\x1B[?1;2c'.codeUnits;
-          }
-          if (request.contains('[?u')) {
-            return '\x1B[?5u\x1B[?1;2c'.codeUnits;
-          }
-          return '\x1B[?1;2c'.codeUnits;
-        }),
-      );
+    test(
+      'confirms DA, Kitty keyboard, synchronized output, and graphics',
+      () async {
+        final report = await runTerminalProbeSuite(
+          _FakeTerminalProbeTransport((request) {
+            if (request.contains('_G')) {
+              return '\x1B_Gi=31;OK\x1B\\\x1B[?1;2c'.codeUnits;
+            }
+            if (request.contains('[?u')) {
+              return '\x1B[?5u\x1B[?1;2c'.codeUnits;
+            }
+            if (request.contains('?2026\$p')) {
+              return '\x1B[?2026;2\$y\x1B[?1;2c'.codeUnits;
+            }
+            return '\x1B[?1;2c'.codeUnits;
+          }),
+        );
 
-      expect(
-        report.resultFor('primaryDeviceAttributes')!.status,
-        TerminalProbeStatus.confirmed,
-      );
-      expect(
-        report.resultFor('kittyKeyboardStatus')!.status,
-        TerminalProbeStatus.confirmed,
-      );
-      expect(
-        report.resultFor('kittyKeyboardStatus')!.details,
-        containsPair('flags', 5),
-      );
-      expect(
-        report.resultFor('kittyGraphicsQuery')!.status,
-        TerminalProbeStatus.confirmed,
-      );
-      expect(
-        report.confirmedFeatures,
-        containsAll(<TerminalFeature>[
-          TerminalFeature.kittyKeyboard,
-          TerminalFeature.imageKitty,
-        ]),
-      );
-      expect(
-        report.toJson()['confirmedFeatures'],
-        containsAll(<String>['kittyKeyboard', 'imageKitty']),
-      );
-      final summary = report.toJson()['summary'] as Map<String, Object?>;
-      expect(summary['confirmed'], 3);
-      expect(summary['unsupported'], 0);
-    });
+        expect(
+          report.resultFor('primaryDeviceAttributes')!.status,
+          TerminalProbeStatus.confirmed,
+        );
+        expect(
+          report.resultFor('kittyKeyboardStatus')!.status,
+          TerminalProbeStatus.confirmed,
+        );
+        expect(
+          report.resultFor('kittyKeyboardStatus')!.details,
+          containsPair('flags', 5),
+        );
+        expect(
+          report.resultFor('synchronizedOutput')!.status,
+          TerminalProbeStatus.confirmed,
+        );
+        expect(
+          report.resultFor('kittyGraphicsQuery')!.status,
+          TerminalProbeStatus.confirmed,
+        );
+        expect(
+          report.confirmedFeatures,
+          containsAll(<TerminalFeature>[
+            TerminalFeature.kittyKeyboard,
+            TerminalFeature.synchronizedOutput,
+            TerminalFeature.imageKitty,
+          ]),
+        );
+        expect(
+          report.toJson()['confirmedFeatures'],
+          containsAll(<String>[
+            'kittyKeyboard',
+            'synchronizedOutput',
+            'imageKitty',
+          ]),
+        );
+        final summary = report.toJson()['summary'] as Map<String, Object?>;
+        expect(summary['confirmed'], 4);
+        expect(summary['unsupported'], 0);
+      },
+    );
 
     test(
       'marks optional protocol probes unsupported when DA replies',
@@ -64,6 +81,10 @@ void main() {
         );
         expect(
           report.resultFor('kittyKeyboardStatus')!.status,
+          TerminalProbeStatus.unsupported,
+        );
+        expect(
+          report.resultFor('synchronizedOutput')!.status,
           TerminalProbeStatus.unsupported,
         );
         expect(
@@ -112,7 +133,7 @@ void main() {
           containsPair('message', 'scripted timeout'),
         );
         final summary = report.toJson()['summary'] as Map<String, Object?>;
-        expect(summary['timeout'], 3);
+        expect(summary['timeout'], 4);
         expect(summary['error'], 0);
       },
     );
@@ -144,6 +165,9 @@ void main() {
           if (request.contains('[?u')) {
             return '\x1B[?7u\x1B[?1;2c'.codeUnits;
           }
+          if (request.contains('?2026\$p')) {
+            return '\x1B[?2026;1\$y\x1B[?1;2c'.codeUnits;
+          }
           return '\x1B[?1;2c'.codeUnits;
         });
         if (transport == null) {
@@ -164,16 +188,42 @@ void main() {
           report.resultFor('kittyKeyboardStatus')!.details,
           containsPair('flags', 7),
         );
-        expect(report.summary['confirmed'], 3);
+        expect(report.summary['confirmed'], 4);
         expect(
           report.confirmedFeatures,
           containsAll(<TerminalFeature>[
             TerminalFeature.kittyKeyboard,
+            TerminalFeature.synchronizedOutput,
             TerminalFeature.imageKitty,
           ]),
         );
       },
     );
+
+    test('accepts only mutable DECRPM states for mode 2026', () async {
+      for (final state in <int>[1, 2]) {
+        expect(
+          await probeSynchronizedOutput(
+            _FakeTerminalProbeTransport(
+              (_) => '\x1B[?2026;$state\$y\x1B[?1;2c'.codeUnits,
+            ),
+          ),
+          isTrue,
+          reason: 'state $state is mutable and supported',
+        );
+      }
+      for (final state in <int>[0, 3, 4]) {
+        expect(
+          await probeSynchronizedOutput(
+            _FakeTerminalProbeTransport(
+              (_) => '\x1B[?2026;$state\$y\x1B[?1;2c'.codeUnits,
+            ),
+          ),
+          isFalse,
+          reason: 'state $state must not authorize frame wrapping',
+        );
+      }
+    });
   });
 }
 

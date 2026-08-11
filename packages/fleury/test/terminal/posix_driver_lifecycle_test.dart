@@ -154,6 +154,11 @@ void main() {
       try {
         final profile = await driver.enter(TerminalMode.interactive);
         expect(profile.keyboard, KeyboardCapabilities.legacy);
+        expect(
+          (profile.presentation as AnsiTerminalPresentation).synchronizedOutput,
+          isFalse,
+          reason: 'a DA sentinel without a mode-2026 reply is unsupported',
+        );
         expect(out.written.toString(), contains('\x1B[<1u'));
         expect(out.written.toString(), isNot(contains('\x1B[>4;2m')));
         out.written.clear();
@@ -172,6 +177,46 @@ void main() {
       }
     },
   );
+
+  test('mode-2026 support is negotiated into the session profile', () async {
+    final trace = <String>[];
+    final input = _FakeStdin(terminal: true);
+    late final _RecordingStdout out;
+    out = _RecordingStdout(
+      terminal: true,
+      trace: trace,
+      onWrite: (bytes) {
+        if (bytes.contains('[?u')) {
+          scheduleMicrotask(() => input.push('\x1B[?1;2c'.codeUnits));
+        } else if (bytes.contains('?2026\$p')) {
+          scheduleMicrotask(
+            () => input.push('\x1B[?2026;2\$y\x1B[?1;2c'.codeUnits),
+          );
+        } else if (bytes.contains('\x1B[6n')) {
+          scheduleMicrotask(() => input.push('\x1B[1;2R\x1B[?1;2c'.codeUnits));
+        } else if (bytes.contains('\x1B[c')) {
+          scheduleMicrotask(() => input.push('\x1B[?1;2c'.codeUnits));
+        }
+      },
+    );
+    final driver = PosixTerminalDriver(
+      stdinOverride: input,
+      stdoutOverride: out,
+      terminalModeController: _FakeModeController(trace),
+    );
+
+    try {
+      final profile = await driver.enter(TerminalMode.interactive);
+      expect(
+        (profile.presentation as AnsiTerminalPresentation).synchronizedOutput,
+        isTrue,
+      );
+      expect(out.written.toString(), contains('\x1B[?2026\$p'));
+    } finally {
+      await driver.restore();
+      await input.close();
+    }
+  });
 
   test(
     'negotiated keyboard fallback is the mode restored after resume',

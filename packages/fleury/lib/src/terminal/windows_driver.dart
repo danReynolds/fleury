@@ -170,7 +170,11 @@ class WindowsTerminalDriver
     return TerminalSessionProfile.ansi(
       terminal: capabilities,
       keyboard: KeyboardCapabilities.legacy,
-      synchronizedOutput: Platform.environment['FLEURY_SYNC_OUTPUT'] != '0',
+      // This driver has no query channel yet. An explicit operator assertion
+      // may enable mode 2026; otherwise ordinary frame output is the safe path.
+      synchronizedOutput:
+          synchronizedOutputOverrideFromEnvironment(Platform.environment) ??
+          false,
     );
   }
 

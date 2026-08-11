@@ -359,7 +359,7 @@ void main() {
       next.writeText(const CellOffset(0, 1), 'cccc');
       final sink = StringAnsiSink();
 
-      const AnsiRenderer().renderDiff(prev, next, sink);
+      const AnsiRenderer(synchronizedOutput: true).renderDiff(prev, next, sink);
 
       // The scroll payload here is tiny, so the small-diff sync skip
       // applies; the scroll escape itself is unchanged.
@@ -375,7 +375,7 @@ void main() {
       next.writeText(const CellOffset(0, 1), 'c' * 70);
       final sink = StringAnsiSink();
 
-      const AnsiRenderer().renderDiff(prev, next, sink);
+      const AnsiRenderer(synchronizedOutput: true).renderDiff(prev, next, sink);
 
       expect(sink.output.startsWith('\x1B[?2026h'), isTrue);
       expect(sink.output.endsWith('\x1B[?2026l'), isTrue);
@@ -829,7 +829,7 @@ void main() {
   });
 
   group('renderDiff — Synchronized Output (DEC mode 2026)', () {
-    test('wraps a dirty frame in BSU/ESU by default', () {
+    test('wraps a dirty frame in BSU/ESU when enabled', () {
       // Wide enough that the payload exceeds the small-diff sync skip.
       final prev = CellBuffer(const CellSize(80, 1));
       final next = CellBuffer(const CellSize(80, 1));
@@ -839,7 +839,7 @@ void main() {
       );
       final sink = StringAnsiSink();
 
-      const AnsiRenderer().renderDiff(prev, next, sink);
+      const AnsiRenderer(synchronizedOutput: true).renderDiff(prev, next, sink);
       expect(
         sink.output.startsWith('\x1B[?2026h'),
         isTrue,
@@ -860,7 +860,7 @@ void main() {
       next.writeText(const CellOffset(0, 0), 'x');
       final sink = StringAnsiSink();
 
-      const AnsiRenderer().renderDiff(prev, next, sink);
+      const AnsiRenderer(synchronizedOutput: true).renderDiff(prev, next, sink);
 
       expect(sink.output.contains('\x1B[?2026'), isFalse);
       expect(sink.output, contains('x'));
@@ -874,19 +874,17 @@ void main() {
       final next = CellBuffer(const CellSize(3, 1));
       final sink = StringAnsiSink();
 
-      const AnsiRenderer().renderDiff(prev, next, sink);
+      const AnsiRenderer(synchronizedOutput: true).renderDiff(prev, next, sink);
       expect(sink.output, isEmpty);
     });
 
-    test('synchronizedOutput: false omits both markers', () {
-      final prev = CellBuffer(const CellSize(3, 1));
-      final next = CellBuffer(const CellSize(3, 1));
-      next.writeText(const CellOffset(0, 0), 'x');
+    test('ordinary output is the safe default', () {
+      final prev = CellBuffer(const CellSize(80, 1));
+      final next = CellBuffer(const CellSize(80, 1));
+      next.writeText(const CellOffset(0, 0), 'x' * 70);
       final sink = StringAnsiSink();
 
-      const AnsiRenderer(
-        synchronizedOutput: false,
-      ).renderDiff(prev, next, sink);
+      const AnsiRenderer().renderDiff(prev, next, sink);
       expect(sink.output.contains('\x1B[?2026h'), isFalse);
       expect(sink.output.contains('\x1B[?2026l'), isFalse);
       // But the cell content still emits.
@@ -898,10 +896,13 @@ void main() {
       // cell mutations so the terminal knows to buffer them.
       final prev = CellBuffer(const CellSize(3, 1));
       final next = CellBuffer(const CellSize(3, 1));
-      next.writeText(const CellOffset(0, 0), 'x');
+      next.writeText(
+        const CellOffset(0, 0),
+        'a long enough line of content to exceed the sync threshold',
+      );
       final sink = StringAnsiSink();
 
-      const AnsiRenderer().renderDiff(prev, next, sink);
+      const AnsiRenderer(synchronizedOutput: true).renderDiff(prev, next, sink);
       final bsu = sink.output.indexOf('\x1B[?2026h');
       final firstCup = sink.output.indexOf('\x1B[H'); // home (CSI H == 1;1)
       expect(
@@ -1055,7 +1056,9 @@ void main() {
       next.writeText(const CellOffset(0, 0), 'x' * 70);
       final sink = StringAnsiSink();
 
-      const AnsiRenderer().renderDiff(prev, next, sink, trailer: 'IMGBYTES');
+      const AnsiRenderer(
+        synchronizedOutput: true,
+      ).renderDiff(prev, next, sink, trailer: 'IMGBYTES');
       expect(sink.output.startsWith('\x1B[?2026h'), isTrue);
       expect(sink.output.endsWith('IMGBYTES\x1B[?2026l'), isTrue);
     });

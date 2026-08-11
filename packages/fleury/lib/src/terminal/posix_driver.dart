@@ -147,6 +147,7 @@ class PosixTerminalDriver
   static Duration startupNegotiationBudget = const Duration(milliseconds: 500);
   static const _perProbeTimeout = Duration(milliseconds: 150);
   ImageProtocol? _imageProtocolOverride;
+  bool _synchronizedOutput = false;
   // Set once the ambiguous-width probe measures how the terminal sizes
   // ambiguous glyphs; a confirmed `narrow` lets the renderer drop the
   // defensive per-cell repositioning [capabilities] otherwise assumes.
@@ -411,6 +412,7 @@ class PosixTerminalDriver
     // simply leaves capabilities conservative.
     final negotiationClock = Stopwatch()..start();
     await _negotiateKeyboard(negotiationClock);
+    await _negotiateSynchronizedOutput(negotiationClock);
     await _maybeProbeImageProtocol(negotiationClock);
     await _maybeProbeAmbiguousWidth(_mode!.alternateScreen, negotiationClock);
 
@@ -433,8 +435,30 @@ class PosixTerminalDriver
     return TerminalSessionProfile.ansi(
       terminal: terminal,
       keyboard: keyboardCapabilities,
-      synchronizedOutput: Platform.environment['FLEURY_SYNC_OUTPUT'] != '0',
+      synchronizedOutput: _synchronizedOutput,
     );
+  }
+
+  Future<void> _negotiateSynchronizedOutput(Stopwatch negotiationClock) async {
+    final override = synchronizedOutputOverrideFromEnvironment(
+      Platform.environment,
+    );
+    if (override != null) {
+      _synchronizedOutput = override;
+      return;
+    }
+    _synchronizedOutput = false;
+    if (!_stdoutIsTerminal || !_changedStdin) return;
+    final timeout = _nextProbeTimeout(negotiationClock);
+    if (timeout == null) return;
+    try {
+      _synchronizedOutput = await probeSynchronizedOutput(
+        _queryRunner,
+        timeout: timeout,
+      );
+    } on Object {
+      _synchronizedOutput = false;
+    }
   }
 
   /// When the environment doesn't already name a native image protocol, ask

@@ -209,6 +209,33 @@ Future<int?> probeKeyboardFlags(
   return flags is int ? flags : null;
 }
 
+/// Confirms that DEC synchronized-output mode 2026 is mutable on this terminal.
+///
+/// DECRQM values 1 (set) and 2 (reset) are the protocol's supported states.
+/// Values 0 and 4 are unsupported; value 3 is undefined for mode 2026 and is
+/// therefore rejected conservatively. The appended DA1 sentinel distinguishes
+/// an unsupported mode from a transport that never replied.
+Future<bool> probeSynchronizedOutput(
+  TerminalProbeTransport transport, {
+  Duration timeout = const Duration(milliseconds: 150),
+}) async {
+  final stopwatch = Stopwatch()..start();
+  final List<int> response;
+  try {
+    response = await transport.request(
+      synchronizedOutputQuery,
+      timeout: timeout,
+    );
+  } on Object {
+    return false;
+  }
+  stopwatch.stop();
+  return _parseSynchronizedOutput(
+    response,
+    elapsed: stopwatch.elapsed,
+  ).isConfirmed;
+}
+
 /// Actively measures whether the terminal renders East-Asian *Ambiguous*-width
 /// glyphs as one column or two.
 ///
@@ -545,6 +572,11 @@ final class _ProbeDefinition {
 
 const _deviceAttributesQuery = '\x1B[c';
 
+/// DECRQM query for synchronized-output mode 2026, bracketed by DA1 so an
+/// unsupported terminal resolves promptly instead of consuming the timeout.
+@visibleForTesting
+const synchronizedOutputQuery = '\x1B[?2026\$p$_deviceAttributesQuery';
+
 /// Runtime negotiation's query: the app's enter sequences ALREADY pushed a
 /// tier, so a bare status read reports what the terminal honoured of it.
 @visibleForTesting
@@ -588,6 +620,13 @@ const List<_ProbeDefinition> _probeDefinitions = <_ProbeDefinition>[
     parse: _parseKittyKeyboardStatus,
   ),
   _ProbeDefinition(
+    id: 'synchronizedOutput',
+    label: 'Synchronized output',
+    feature: TerminalFeature.synchronizedOutput,
+    request: synchronizedOutputQuery,
+    parse: _parseSynchronizedOutput,
+  ),
+  _ProbeDefinition(
     id: 'kittyGraphicsQuery',
     label: 'Kitty graphics query',
     feature: TerminalFeature.imageKitty,
@@ -595,6 +634,49 @@ const List<_ProbeDefinition> _probeDefinitions = <_ProbeDefinition>[
     parse: _parseKittyGraphicsQuery,
   ),
 ];
+
+TerminalProbeResult _parseSynchronizedOutput(
+  List<int> responseBytes, {
+  required Duration elapsed,
+}) {
+  final response = _escapedResponse(responseBytes);
+  final state = _synchronizedOutputState(responseBytes);
+  final supported = state == 1 || state == 2;
+  if (supported) {
+    return TerminalProbeResult(
+      id: 'synchronizedOutput',
+      label: 'Synchronized output',
+      feature: TerminalFeature.synchronizedOutput,
+      status: TerminalProbeStatus.confirmed,
+      elapsed: elapsed,
+      response: response,
+      detail: 'Terminal reports mutable DEC mode 2026 support.',
+      details: <String, Object?>{
+        'mode': 2026,
+        'state': state!,
+        'enabled': state == 1,
+      },
+    );
+  }
+
+  final sentinelReceived = _primaryDeviceAttributes(responseBytes) != null;
+  return TerminalProbeResult(
+    id: 'synchronizedOutput',
+    label: 'Synchronized output',
+    feature: TerminalFeature.synchronizedOutput,
+    status: sentinelReceived
+        ? TerminalProbeStatus.unsupported
+        : TerminalProbeStatus.timeout,
+    elapsed: elapsed,
+    response: response,
+    detail: sentinelReceived
+        ? state == 3
+              ? 'Terminal reported undefined permanently-set state for mode 2026.'
+              : 'Terminal did not report mutable DEC mode 2026 support.'
+        : 'No sentinel terminal response received before timeout.',
+    details: <String, Object?>{'mode': 2026, 'state': state},
+  );
+}
 
 TerminalProbeResult _parsePrimaryDeviceAttributes(
   List<int> responseBytes, {
@@ -738,6 +820,12 @@ int? _kittyKeyboardFlags(List<int> bytes) {
   final match = RegExp('\x1B\\[\\?([0-9]+)u').firstMatch(text);
   if (match == null) return null;
   return int.tryParse(match.group(1)!);
+}
+
+int? _synchronizedOutputState(List<int> bytes) {
+  final text = String.fromCharCodes(bytes);
+  final match = RegExp('\x1B\\[\\?2026;([0-4])\\\$y').firstMatch(text);
+  return match == null ? null : int.parse(match.group(1)!);
 }
 
 Map<String, Object?>? _kittyGraphicsResponse(List<int> bytes) {
