@@ -120,37 +120,6 @@ KeyBinding(
 `Ctrl+S` saves once. Opt into repeats only where holding the key means "keep
 going" — cursor movement, scrolling, a value stepper.
 
-### Modal scopes
-
-A dialog should not let the app's shortcuts fire behind it. `modal: true` stops
-the key walk at that scope — bindings above it and `globalBindings` both stop
-firing:
-
-```dart
-KeyBindings(
-  modal: true,
-  bindings: [
-    KeyBinding(.y, label: 'Yes', onTrigger: (_) => onAnswer(true)),
-    KeyBinding(.n, label: 'No', onTrigger: (_) => onAnswer(false)),
-    KeyBinding(.escape, label: 'Cancel', onTrigger: (_) => onAnswer(false)),
-  ],
-  child: const Focus(autofocus: true, child: Text('Delete this file? y/n')),
-);
-```
-
-**This traps keys, not `Tab`.** Modality here is enforced by the key dispatcher,
-so focus traversal can still walk out of the dialog into the app behind it. If
-the dialog must also trap traversal, wrap it in a modal focus scope as well —
-which is what Fleury's own overlays (`Select`, `Menu`) do:
-
-```dart
-FocusScope(
-  modal: true,
-  suppressGlobals: true,
-  child: KeyBindings(modal: true, bindings: [...], child: dialog),
-);
-```
-
 ### Push-to-talk holds
 
 For a key whose *duration* is the command:
@@ -224,14 +193,8 @@ differ. [Full source and walkthrough](/fleury/showcases/editor/).
 
 ## KeyDetector
 
-A detector is the low-level hook: it sees the keys routed through its subtree,
-before any binding at that level matches.
-
-**A detector only fires while something inside its subtree holds focus.** Unlike
-`KeyBindings`, which is ambient — its chords work whenever its subtree is in
-scope — a detector is widget-internal handling, so it needs a focus target
-inside it. A `KeyDetector` with nothing focusable under it silently receives
-nothing.
+A detector is the low-level hook: it sees the keys routed through its subtree
+while that subtree has focus, before any binding at that level matches.
 
 `KeyBinding` and `KeyDetector` have opposite defaults, on purpose. A binding
 names one gesture, so when it matches, the key is yours: it consumes. A detector
@@ -249,20 +212,16 @@ same arrow falls through to the app's binding:
 <Fragment slot="code">
 ```dart
 // The pane owns the arrows — but only while it can act on them.
-// Focus first: without a focused descendant the detector never fires.
-Focus(
-  autofocus: true,
-  child: KeyDetector(
-    onKey: (event) {
-      if (event.code == KeyCode.arrowDown && cursor < last) {
-        moveDown();
-        event.consume();        // mine — stop here (synchronously!)
-      }
-      // At the edge: do nothing. The arrow continues up the focus chain
-      // to whatever binding an ancestor declared.
-    },
-    child: paneContents,
-  ),
+KeyDetector(
+  onKey: (event) {
+    if (event.code == KeyCode.arrowDown && cursor < last) {
+      moveDown();
+      event.consume();          // mine — stop here
+    }
+    // At the edge: do nothing. The arrow continues up the focus chain
+    // to whatever binding an ancestor declared.
+  },
+  child: paneContents,
 );
 ```
 
@@ -347,80 +306,35 @@ no branch.
 
 ### Supporting both: sampled and press-driven
 
-In practice you run two input sources at once: sampled held state where it
-exists, and a press-driven fallback built from ordinary bindings for
-everywhere else. Presses are the one thing every terminal reports.
-
-**Give every sampled axis a fallback — not just one.** This is the mistake
-worth naming, because the Neon Asteroids showcase shipped it: a fallback for
-thrust alone left turning and braking with no binding at all, so on a
-press-only terminal the ship thrusted once and could then neither steer nor
-stop. Each press-driven binding sets a small counter that decays over the next
-few frames, which is what turns discrete presses into the continuous-ish input
-a simulation wants:
+Where held state is missing you still want the game playable, so give every
+sampled axis an ordinary binding as well, and merge the two sources — "held, or
+nudged recently" — rather than branching on the capability in your hot path:
 
 ```dart
-// One binding per sampled axis. includeRepeats matters: auto-repeat still
-// arrives on a press-only terminal, so holding A really does keep turning —
-// driven by repeats instead of by a held record.
-KeyBindings(
-  bindings: [
-    for (final axis in [
-      (.a, KeyCode.arrowLeft, 'Left', controls.nudgeLeft),
-      (.d, KeyCode.arrowRight, 'Right', controls.nudgeRight),
-      (.w, KeyCode.arrowUp, 'Thrust', controls.nudgeThrust),
-      (.s, KeyCode.arrowDown, 'Brake', controls.nudgeBrake),
-    ])
-      KeyBinding(
-        axis.$1,
-        aliases: [axis.$2],
-        label: axis.$3,
-        includeRepeats: true,
-        onTrigger: (_) => axis.$4(),
-      ),
-    // Fire is an edge on both tiers — no fallback needed.
-    KeyBinding(.space, label: 'Fire', onTrigger: (_) => fire()),
-  ],
-  child: playfield,
-);
+// Bindings cover the press-only case. includeRepeats matters: auto-repeat
+// still arrives, so holding A keeps turning.
+KeyBinding(.a, aliases: [.left], label: 'Left',
+    includeRepeats: true, onTrigger: (_) => controls.nudgeLeft()),
+// …one per axis: right, thrust, brake.
+
+// One resolver for every terminal.
+NeonAsteroidsInput resolve(KeyboardSnapshot keys) => NeonAsteroidsInput(
+      rotateLeft: keys.isHeld(KeyPosition.a) || controls.turningLeft,
+      thrust: keys.isHeld(KeyPosition.w) || controls.thrusting,
+      // …
+    );
 ```
 
-Then **merge the two sources rather than branching between them.** Each axis is
-"held, or nudged recently" — so the same resolver works on every tier and you
-never write `if (canHold)` in the hot path:
-
-```dart
-NeonAsteroidsInput resolveMovement(KeyboardSnapshot keys) {
-  if (_turnSteps > 0) _turnSteps--;   // press-driven state decays
-  return NeonAsteroidsInput(
-    rotateLeft: keys.isHeld(KeyPosition.a) ||      // sampled
-        keys.isHeld(KeyCode.arrowLeft) ||          // arrow alias
-        (_turnSteps > 0 && _turnDirection < 0),    // press-driven
-    // …one line per axis, same shape.
-  );
-}
-```
-
-Two more things to get right:
-
-1. **A sampled control with no fallback is a dead control**, and the framework
-   says so: in debug builds, sampling a key on a press-only surface with no
-   binding covering it logs a warning naming the key and the fix.
-2. **Keep the fallback's bindings positional** (`KeyPosition.w`, not
-   `KeyCode.w`) so both schemes stay WASD-shaped on every layout.
-
-One limitation to design around: on a press-only terminal you generally can't
-get **diagonals**, because the OS auto-repeats only the most recently pressed
-key. The fallback is a genuinely different scheme — one axis at a time — not a
-slightly worse version of the same one. Say so in your UI rather than letting
-the player wonder why they can't thrust and turn together.
+Give *every* sampled axis a fallback, not just one — a fallback for thrust
+alone leaves the ship unable to steer or stop. Two notes: sampling a key with
+no fallback binding logs a *dead control* warning in debug, and on a press-only
+terminal you generally can't get diagonals, since the OS auto-repeats only the
+most recent key.
 
 The Neon Asteroids showcase is built on this pattern — see
 [`neon_asteroids.dart`](https://github.com/danReynolds/fleury/blob/main/packages/samples/lib/src/neon_asteroids.dart)
-for the bindings and `neon_asteroids_controls.dart` for the resolver above. The
-browser embed below reports held state, so you get hold-to-thrust and smooth
-turning; [the showcase page](/fleury/showcases/asteroids/) has the full
-walkthrough:
+and its `neon_asteroids_controls.dart` resolver, or
+[the showcase page](/fleury/showcases/asteroids/) for the walkthrough:
 
 <FleuryExample id="showcase.asteroids" cols={100} rows={30} interactive />
 
@@ -457,29 +371,17 @@ to your bindings. You get this for free; it's worth knowing when a shortcut
 ## Focus & traversal
 
 Keys go to the focused part of the tree, so focus decides *where*. Most widgets
-manage it themselves; when you need to drive it directly:
+manage it themselves; the short version is that `Focus` makes a subtree
+focusable and `autofocus` claims focus on appear:
 
 ```dart
-final _node = FocusNode(debugLabel: 'editor');
-_node.requestFocus();
-final hasIt = _node.hasFocus;
-_node.dispose();
+Focus(autofocus: true, child: SearchField());
 ```
 
-To react when focus enters or leaves a subtree — pause a simulation, dim a
-panel, stop a cursor blinking — wrap it in `FocusDetector`:
-
-```dart
-FocusDetector(
-  onFocusChange: (hasFocus) => setState(() => _active = hasFocus),
-  child: Focus(focusNode: _node, child: body),
-);
-```
-
-Inside a `FleuryApp(home: ...)` route or an explicit `FocusTraversalGroup`,
-`Tab` / `Shift+Tab` move between focusable nodes. A bare widget passed directly
-to `runApp` has the focus manager but no traversal policy; wrap it in a group
-when it has multiple controls.
+Inside a `FleuryApp(home: ...)` route, `Tab` / `Shift+Tab` and the arrow keys
+already traverse between focusable widgets. For driving focus yourself, Tab
+order, trapping focus in a dialog, and how arrow traversal chooses its target,
+see **[Focus & traversal](/fleury/guides/focus/)**.
 
 **One thing to watch:** inside `FleuryApp(home: ...)` (or another `Navigator`),
 `Esc` already pops the current route by default. If you also bind it, decide
