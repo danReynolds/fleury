@@ -279,14 +279,13 @@ class FocusNode {
 /// the public API; consumers interact with [FocusScope] the widget.
 @immutable
 class FocusScopeRef {
-  const FocusScopeRef._(this.id, this.modal, this.suppressGlobals);
+  const FocusScopeRef._(this.id, this.modal);
   final Object id;
   final bool modal;
-  final bool suppressGlobals;
 
   @override
   String toString() =>
-      'FocusScopeRef(id=$id, modal=$modal, suppressGlobals=$suppressGlobals)';
+      'FocusScopeRef(id=$id, modal=$modal)';
 }
 
 // ---------------------------------------------------------------------------
@@ -407,7 +406,7 @@ class FocusManager extends ChangeNotifier {
     }
   }
 
-  /// Notifies listeners that the modal frontier (or a `suppressGlobals`
+  /// Notifies listeners that the modal frontier (or a scope
   /// flag on it) has changed. Deferred to a microtask so the notification
   /// never lands mid-build — a marker's `mount` / `update` runs inside a
   /// build phase, and `notifyListeners` there would re-enter `setState`
@@ -709,9 +708,6 @@ class FocusManager extends ChangeNotifier {
   /// The innermost enclosing modal marker element of [node], or null
   /// when no modal scope is open above it. Mirrors the walk in
   /// [activeChain] but returns the modal anchor instead of stopping at it.
-  /// `suppressGlobals` is deliberately ignored here — it gates global
-  /// key bindings during dispatch, not traversal.
-  ///
   /// Anchoring on the marker ELEMENT (rather than its widget-level
   /// [FocusScopeRef]) keeps identity stable across rebuilds: each
   /// `FocusScope.build` allocates a fresh `FocusScopeRef`, but the
@@ -926,27 +922,6 @@ class FocusManager extends ChangeNotifier {
       return attachIndex[a]! - attachIndex[b]!;
     });
     return nodes;
-  }
-
-  /// Returns true if the currently active focus chain crosses a
-  /// [FocusScope] whose `suppressGlobals` is true.
-  ///
-  /// When a modal is active, the value comes from the element-snapshotted
-  /// `_capturedSuppressGlobals` on the deepest active modal marker — never
-  /// from a live widget-level read. The marker captures the flag at
-  /// `mount`/`update` time so a rebuild that flips `suppressGlobals` is
-  /// observed without re-attaching anything.
-  ///
-  /// When no modal is active, falls back to the enclosing scope of the
-  /// currently focused node — a non-modal `FocusScope(suppressGlobals: true)`
-  /// (e.g. wrapping a text field that wants to swallow chord-like
-  /// `KeyEvent`s) must still gate globals.
-  bool get suppressGlobals {
-    final modal = _deepestActiveModalScope();
-    if (modal != null) return modal._capturedSuppressGlobals;
-    final focused = _focusedNode;
-    if (focused == null || !_acceptsInput(focused)) return false;
-    return focused._enclosingScope?.suppressGlobals ?? false;
   }
 
   /// Delivers [event] to the active focus chain's `KeyDetector` handlers in
@@ -1399,17 +1374,15 @@ class FocusScope extends StatelessWidget {
   const FocusScope({
     super.key,
     this.modal = false,
-    this.suppressGlobals = false,
     required this.child,
   });
 
   final bool modal;
-  final bool suppressGlobals;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    final ref = FocusScopeRef._(this, modal, suppressGlobals);
+    final ref = FocusScopeRef._(this, modal);
     return _FocusScopeMarker(scope: ref, child: child);
   }
 
@@ -1456,11 +1429,6 @@ class _FocusScopeMarkerElement extends ComponentElement {
   /// claim the modal had changed.
   bool _capturedModal = false;
 
-  /// Same idea as `_capturedModal` for `suppressGlobals` — refreshed on
-  /// `update` so the dispatcher reads the new value on the next event,
-  /// without the marker re-registering anything.
-  bool _capturedSuppressGlobals = false;
-
   late final int _mountSeq;
 
   @override
@@ -1496,8 +1464,6 @@ class _FocusScopeMarkerElement extends ComponentElement {
     // through `widget`.
     _mountSeq = _nextMountSeq++;
     _capturedModal = (widget as _FocusScopeMarker).scope.modal;
-    _capturedSuppressGlobals =
-        (widget as _FocusScopeMarker).scope.suppressGlobals;
     super.mount(parent);
     _registerIfModal();
   }
@@ -1511,7 +1477,6 @@ class _FocusScopeMarkerElement extends ComponentElement {
     // captured booleans.
     final newMarker = newWidget as _FocusScopeMarker;
     final newModal = newMarker.scope.modal;
-    final newSuppress = newMarker.scope.suppressGlobals;
     if (newModal != _capturedModal) {
       _capturedModal = newModal;
       if (newModal) {
@@ -1519,12 +1484,6 @@ class _FocusScopeMarkerElement extends ComponentElement {
       } else {
         _unregisterIfRegistered();
       }
-    }
-    if (newSuppress != _capturedSuppressGlobals) {
-      _capturedSuppressGlobals = newSuppress;
-      // Manager iterates `_activeModalScopes` to compute `suppressGlobals`;
-      // notify dependents so any cached value (e.g. a debug overlay) syncs.
-      _registeredManager?._notifyManagerScopeChanged();
     }
     // Rebuild with the new widget's child, like every other ComponentElement
     // (StatelessElement does the same in its update). Without this the

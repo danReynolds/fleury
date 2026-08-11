@@ -238,6 +238,8 @@ final class KeyDetector extends StatefulWidget {
   /// [KeyEvent.consume]; do nothing to let it continue.
   final void Function(KeyEvent event) onKey;
 
+  /// The subtree whose keys [onKey] sees. The detector only fires while this
+  /// subtree holds focus — it is scoped, not ambient.
   final Widget child;
 
   @override

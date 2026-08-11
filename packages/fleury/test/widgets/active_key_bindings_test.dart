@@ -22,18 +22,18 @@ void main() {
 
       tester.pumpWidget(
         KeyBindings(
-          bindings: [next],
+          bindings: [quit],
           child: KeyBindings(
-            bindings: [scroll],
-            child: const Focus(autofocus: true, child: Text('Body')),
+            bindings: [next],
+            child: KeyBindings(
+              bindings: [scroll],
+              child: const Focus(autofocus: true, child: Text('Body')),
+            ),
           ),
         ),
       );
 
-      final active = resolveActiveKeyBindings(
-        tester.focusManager,
-        globalBindings: [quit],
-      );
+      final active = resolveActiveKeyBindings(tester.focusManager);
 
       expect(active.map((entry) => entry.binding), [scroll, next, quit]);
       expect(active.map((entry) => entry.sequenceLabel), ['↓', 'j', 'q']);

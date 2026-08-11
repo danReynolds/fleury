@@ -170,9 +170,8 @@ class SelectionArea extends StatefulWidget {
 
   /// Whether to bind Ctrl+A to select-all. On by default. The app-wide default
   /// wrap ([DefaultRootSelection]) turns it OFF so the always-on selection
-  /// never shadows an app's own `runApp(globalBindings: [Ctrl+A …])` (widget
-  /// bindings out-rank globals in dispatch, so a bound-here Ctrl+A would eat
-  /// the chord before the globals are consulted). Drag-select still works; an
+  /// never shadows an app's own Ctrl+A binding (a deeper binding out-ranks
+  /// an outer one, so a bound-here Ctrl+A would eat the chord first). Drag-select still works; an
   /// app that wants keyboard select-all uses an explicit [SelectionArea].
   final bool selectAllShortcut;
 
@@ -652,7 +651,7 @@ class _DisabledSelection extends StatelessWidget {
 ///    — the next Ctrl+C finds nothing and bubbles through to the runApp quit
 ///    guard. With no selection it bubbles straight to quit.
 ///  - **Ctrl+A** is NOT bound here (`selectAllShortcut: false`), so the
-///    always-on default never shadows an app's own `globalBindings` Ctrl+A.
+///    always-on default never shadows an app's own Ctrl+A binding.
 ///    Drag-select still selects everything reachable; an app that wants
 ///    keyboard select-all uses an explicit [SelectionArea].
 ///  - **Esc / Shift+Arrow** act only while a selection is live and bubble when

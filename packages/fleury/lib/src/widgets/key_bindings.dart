@@ -366,9 +366,8 @@ final class ActiveKeyBinding {
 /// Resolves the discoverable key bindings active in [manager]'s focus context.
 ///
 /// Resolution follows the same precedence as key dispatch: the deepest local
-/// binding wins each sequence, with [globalBindings] considered last unless the
-/// active focus scope suppresses globals. It also applies the framework's
-/// user-facing discovery rules:
+/// binding wins each sequence. It also applies the framework's user-facing
+/// discovery rules:
 ///
 ///  * bindings need an explicit [KeyBinding.label];
 ///  * disabled and [KeyBinding.hideFromHintBar] bindings are omitted;
@@ -380,10 +379,7 @@ final class ActiveKeyBinding {
 /// The returned list is deepest-first and immutable. This is the canonical
 /// resolution API for hint bars, help overlays, and keymap inspection; those
 /// surfaces should not independently walk [FocusManager.activeChain].
-List<ActiveKeyBinding> resolveActiveKeyBindings(
-  FocusManager manager, {
-  List<KeyBinding> globalBindings = const <KeyBinding>[],
-}) {
+List<ActiveKeyBinding> resolveActiveKeyBindings(FocusManager manager) {
   final result = <ActiveKeyBinding>[];
   // Canonical sequence identity mirrors dispatch. Differently spelled aliases
   // for the same firing event must not evade deeper-binding precedence.
@@ -421,11 +417,6 @@ List<ActiveKeyBinding> resolveActiveKeyBindings(
       consider(binding);
     }
   }
-  if (!manager.suppressGlobals) {
-    for (final binding in globalBindings) {
-      consider(binding);
-    }
-  }
   return List<ActiveKeyBinding>.unmodifiable(result);
 }
 
@@ -457,6 +448,12 @@ class KeyBindings extends StatefulWidget {
     required this.child,
   });
 
+  /// The shortcuts this scope declares. Each pairs a gesture with a handler
+  /// and a label; the label is what [activeOf] surfaces (hint bars, help
+  /// overlays) render, so a labelled binding documents itself.
+  ///
+  /// Keys match deepest-first, so an inner scope shadows an outer one without
+  /// either side knowing about the other.
   final List<KeyBinding> bindings;
 
   /// Whether unmatched keys stop at this scope (RFC 0020 §14.3).
@@ -466,31 +463,26 @@ class KeyBindings extends StatefulWidget {
   /// handler in which to intercept that — the whole problem is that no
   /// handler runs — so the policy belongs to the scope, not to a row.
   ///
-  /// `modal: true` blocks ancestor scopes AND suppresses globals, extending
-  /// the focus system's existing modality to the key lane. Routed dialogs
-  /// write nothing — not because Navigator sets this flag (it does not),
-  /// but because a modal route's `FocusScope(modal: true, suppressGlobals:
-  /// true)` already stops the walk and kills globals at the scope boundary.
-  /// This flag exists for modal UI that is NOT a route: an inline command
-  /// palette, a capture overlay. Per-key passthrough is a binding at THIS
-  /// scope that matches and calls [KeyBindingEvent.bubble].
+  /// `modal: true` blocks ancestor scopes, extending the focus system's
+  /// existing modality to the key lane. Routed dialogs write nothing — not
+  /// because Navigator sets this flag (it does not), but because a modal
+  /// route's `FocusScope(modal: true)` already truncates the focus chain at
+  /// the scope boundary. This flag exists for modal UI that is NOT a route:
+  /// an inline command palette, a capture overlay. Per-key passthrough is a
+  /// binding at THIS scope that matches and calls [KeyBindingEvent.bubble].
   final bool modal;
 
+  /// The subtree these bindings cover. A key fires them when focus is on this
+  /// subtree — the scope is where the widget sits, not the whole app.
   final Widget child;
 
   /// The discoverable bindings active in [context]'s focus context — hint
   /// bars, help overlays, and command palettes read this instead of walking
   /// the focus tree. Rebuilds when focus moves or the active bindings change.
-  ///
-  /// `runApp`'s global bindings aren't in the tree, so pass them via
-  /// [globalBindings] (as `KeyHintBar` does) to have them included.
-  static List<ActiveKeyBinding> activeOf(
-    BuildContext context, {
-    List<KeyBinding> globalBindings = const <KeyBinding>[],
-  }) {
+  static List<ActiveKeyBinding> activeOf(BuildContext context) {
     final manager = Focus.maybeOf(context);
     if (manager == null) return const <ActiveKeyBinding>[];
-    return resolveActiveKeyBindings(manager, globalBindings: globalBindings);
+    return resolveActiveKeyBindings(manager);
   }
 
   /// The sequence the user is partway through typing, or null when none is in

@@ -49,7 +49,7 @@ KeyBindings(
 ```
 </Fragment>
 <Fragment slot="demo">
-<FleuryExample id="keyboard.bindings" cols={64} rows={14} interactive />
+<FleuryExample id="keybindings.basic" cols={64} rows={14} interactive />
 </Fragment>
 </CodeDemoSplit>
 
@@ -94,10 +94,6 @@ unless the user is typing".
 For the `Ctrl+P` half, Fleury ships the palette itself — see
 [`CommandPalette`](/fleury/widgets/commandpalette/) rather than building a
 filtered list by hand.
-
-`runApp` also takes a `globalBindings` list, consulted after the whole focus
-chain rather than as part of it. Prefer the widget: it participates in scoping
-and the hint bar picks it up automatically.
 
 ### Making bindings discoverable
 
@@ -156,7 +152,7 @@ KeyDetector(
 ```
 </Fragment>
 <Fragment slot="demo">
-<FleuryExample id="keyboard.detector" cols={64} rows={12} interactive />
+<FleuryExample id="keydetector.basic" cols={64} rows={12} interactive />
 </Fragment>
 </CodeDemoSplit>
 

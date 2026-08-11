@@ -1,6 +1,5 @@
 // Modal-scoped focus traversal: Tab / Shift+Tab cycle WITHIN the
 // active modal scope only; arrow-driven directional moves obey the
-// same boundary. suppressGlobals is a separate axis and does NOT
 // confine traversal.
 //
 // Test layout note: Tab is dispatched along the focus chain (deepest
@@ -472,47 +471,6 @@ void main() {
       },
     );
 
-    testWidgets('suppressGlobals without modal does NOT trap Tab', (tester) {
-      // Regression guard: suppressGlobals is a dispatch-time gate for
-      // global key bindings, not a traversal boundary. A scope with
-      // suppressGlobals:true, modal:false must let Tab leave it.
-      final inside = FocusNode(debugLabel: 'inside');
-      final outside = FocusNode(debugLabel: 'outside');
-
-      tester.pumpWidget(
-        FocusTraversalGroup(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SizedBox(
-                height: 1,
-                child: FocusScope(
-                  suppressGlobals: true,
-                  child: Focus(
-                    focusNode: inside,
-                    autofocus: true,
-                    child: const Text('inside'),
-                  ),
-                ),
-              ),
-              SizedBox(
-                height: 1,
-                child: Focus(focusNode: outside, child: const Text('outside')),
-              ),
-            ],
-          ),
-        ),
-      );
-      tester.render(size: const CellSize(20, 2));
-      expect(inside.hasFocus, isTrue);
-
-      tester.sendKey(_code(KeyCode.tab));
-      expect(
-        outside.hasFocus,
-        isTrue,
-        reason: 'suppressGlobals does not confine traversal',
-      );
-    });
   });
 
   group('element-snapshotted modal scope', () {
@@ -733,106 +691,10 @@ void main() {
       },
     );
 
-    testWidgets(
-      'suppressGlobals mid-life rebuild flips dispatcher decision next event',
-      (tester) {
-        // A FocusScope toggles `suppressGlobals` between renders. The
-        // marker element captures the flag in update(), and the manager
-        // reads it on `_capturedSuppressGlobals` — no re-registration
-        // needed, and the next dispatcher consultation sees the new value.
-        var globalFired = 0;
-        final binding = KeyBinding(
-          KeyCode.char('g'),
-          onTrigger: (_) => globalFired += 1,
-          label: 'g',
-        );
-        final dispatcher = InputDispatcher(
-          focusManager: tester.focusManager,
-          globalBindings: [binding],
-        );
 
-        final inside = FocusNode(debugLabel: 'inside');
-        tester.pumpWidget(
-          _ModalSuppressToggleHost(startSuppress: false, inside: inside),
-        );
-        tester.render(size: const CellSize(20, 1));
-        expect(inside.hasFocus, isTrue);
-
-        // suppressGlobals=false: global fires.
-        dispatcher.dispatch(_char('g'));
-        expect(globalFired, 1);
-
-        // Toggle on.
-        _ModalSuppressToggleHost.of(tester)!.toggleSuppress();
-        tester.pump();
-        tester.render(size: const CellSize(20, 1));
-
-        dispatcher.dispatch(_char('g'));
-        expect(
-          globalFired,
-          1,
-          reason: 'suppressGlobals flipped on; global must NOT fire',
-        );
-
-        // Toggle off.
-        _ModalSuppressToggleHost.of(tester)!.toggleSuppress();
-        tester.pump();
-        tester.render(size: const CellSize(20, 1));
-
-        dispatcher.dispatch(_char('g'));
-        expect(globalFired, 2, reason: 'flipped back off; global fires again');
-
-        dispatcher.dispose();
-      },
-    );
-
-    testWidgets(
-      'non-modal FocusScope with suppressGlobals still gates globals',
-      (tester) {
-        // Regression: the manager must read suppressGlobals from the
-        // focused node's enclosing scope when there's no active modal.
-        var globalFired = 0;
-        final binding = KeyBinding(
-          KeyCode.char('g'),
-          onTrigger: (_) => globalFired += 1,
-          label: 'g',
-        );
-        final dispatcher = InputDispatcher(
-          focusManager: tester.focusManager,
-          globalBindings: [binding],
-        );
-
-        final inside = FocusNode(debugLabel: 'inside');
-        tester.pumpWidget(
-          FocusScope(
-            suppressGlobals: true,
-            child: SizedBox(
-              height: 1,
-              child: Focus(
-                focusNode: inside,
-                autofocus: true,
-                child: const Text('inside'),
-              ),
-            ),
-          ),
-        );
-        tester.render(size: const CellSize(20, 1));
-        expect(inside.hasFocus, isTrue);
-
-        dispatcher.dispatch(_char('g'));
-        expect(
-          globalFired,
-          0,
-          reason: 'non-modal suppressGlobals must still gate globals',
-        );
-
-        dispatcher.dispose();
-      },
-    );
   });
 }
 
-KeyEvent _char(String c) => KeyEvent(KeyCode.char(c));
 
 /// Host whose `build()` calls a builder with the current rebuild count.
 /// Tests trigger a rebuild via `bump()`.
@@ -993,48 +855,6 @@ class _ModalGrowHostState extends State<_ModalGrowHost> {
   }
 }
 
-/// Host whose FocusScope toggles `suppressGlobals` (modal stays true).
-class _ModalSuppressToggleHost extends StatefulWidget {
-  const _ModalSuppressToggleHost({
-    required this.startSuppress,
-    required this.inside,
-  });
-  final bool startSuppress;
-  final FocusNode inside;
-
-  static _ModalSuppressToggleHostState? of(FleuryTester tester) {
-    final el =
-        tester.find(byType(_ModalSuppressToggleHost)).singleOrNull
-            as StatefulElement?;
-    return el?.state as _ModalSuppressToggleHostState?;
-  }
-
-  @override
-  State<_ModalSuppressToggleHost> createState() =>
-      _ModalSuppressToggleHostState();
-}
-
-class _ModalSuppressToggleHostState extends State<_ModalSuppressToggleHost> {
-  late bool _suppress = widget.startSuppress;
-  void toggleSuppress() => setState(() => _suppress = !_suppress);
-
-  @override
-  Widget build(BuildContext context) {
-    return FocusScope(
-      key: const ValueKey('suppress-scope'),
-      modal: true,
-      suppressGlobals: _suppress,
-      child: SizedBox(
-        height: 1,
-        child: Focus(
-          focusNode: widget.inside,
-          autofocus: true,
-          child: const Text('inside'),
-        ),
-      ),
-    );
-  }
-}
 
 extension<E> on List<E> {
   E? get singleOrNull => length == 1 ? single : null;

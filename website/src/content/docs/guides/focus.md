@@ -125,13 +125,13 @@ other.
 ## Trapping focus in a dialog
 
 A modal `FocusScope` keeps focus inside it — `Tab` cycles within the dialog
-instead of walking out into the app behind it. `suppressGlobals` additionally
-stops app-wide bindings from firing while it's open:
+instead of walking out into the app behind it. It also truncates the key
+dispatch chain at its boundary, so your app-wide bindings don't fire while the
+dialog is open:
 
 ```dart
 FocusScope(
   modal: true,
-  suppressGlobals: true,
   child: Dialog(child: content),
 );
 ```
@@ -148,7 +148,7 @@ but not traversal. Use the focus scope when the dialog must trap `Tab` too.
 | `FocusNode` | A focus target you hold and drive: `requestFocus()`, `hasFocus`, `dispose()`. |
 | `FocusDetector` | Calls back when focus enters or leaves a subtree. |
 | `FocusTraversalGroup` | Scopes `Tab` cycling and arrow traversal to a subtree. |
-| `FocusScope` | A focus boundary; `modal` traps traversal, `suppressGlobals` silences app-wide bindings. |
+| `FocusScope` | A focus boundary; `modal` traps traversal and stops keys reaching the app behind it. |
 | `ExcludeFocus` | Removes a whole subtree from focus. |
 | `FocusManager` | The app-level owner of the focus chain — rarely used directly. |
 

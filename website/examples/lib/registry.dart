@@ -1831,7 +1831,7 @@ TextArea(
     builder: () => const NeonAsteroidsApp(),
   ),
   ExampleInfo(
-    id: 'keyboard.bindings',
+    id: 'keybindings.basic',
     widget: 'KeyBindings',
     category: 'Inputs & controls',
     blurb:
@@ -1844,7 +1844,7 @@ TextArea(
     builder: () => const _KeyBindingsTour(),
   ),
   ExampleInfo(
-    id: 'keyboard.detector',
+    id: 'keydetector.basic',
     widget: 'KeyDetector',
     category: 'Inputs & controls',
     blurb:

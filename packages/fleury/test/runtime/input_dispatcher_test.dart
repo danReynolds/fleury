@@ -26,22 +26,28 @@ KeyEvent _code(KeyCode kc) => KeyEvent(kc);
 
 /// Wires up a manager + dispatcher + element tree for testing.
 class _TestHarness {
-  _TestHarness({List<KeyBinding> globalBindings = const []}) {
+  _TestHarness({List<KeyBinding> rootBindings = const []})
+    : _rootBindings = rootBindings {
     manager = FocusManager();
     dispatcher = InputDispatcher(
       focusManager: manager,
       sequenceTimeout: const Duration(milliseconds: 50),
-      globalBindings: globalBindings,
     );
     owner = BuildOwner();
   }
 
+  final List<KeyBinding> _rootBindings;
   late final FocusManager manager;
   late final InputDispatcher dispatcher;
   late final BuildOwner owner;
 
+  /// App-wide bindings are an outermost `KeyBindings` — the same thing an app
+  /// writes at its root now that `globalBindings` is gone.
   void mountRoot(Widget app) {
-    owner.mountRoot(FocusManagerScope(manager: manager, child: app));
+    final root = _rootBindings.isEmpty
+        ? app
+        : KeyBindings(bindings: _rootBindings, child: app);
+    owner.mountRoot(FocusManagerScope(manager: manager, child: root));
   }
 
   KeyEventResult dispatch(KeyEvent event) => dispatcher.dispatch(event);
@@ -156,8 +162,9 @@ void main() {
   group('InputDispatcher lifecycle', () {
     test('dispose clears pending state and blocks further dispatch', () {
       final h = _TestHarness(
-        globalBindings: [KeyBinding(KeySequence.space.q, onTrigger: (_) {})],
+        rootBindings: [KeyBinding(KeySequence.space.q, onTrigger: (_) {})],
       );
+      h.mountRoot(const EmptyBox());
       h.dispatch(_char(' '));
       expect(h.dispatcher.hasPendingSequence, isTrue);
 
@@ -165,13 +172,8 @@ void main() {
       h.dispatcher.dispose();
 
       expect(h.dispatcher.hasPendingSequence, isFalse);
-      expect(() => h.dispatcher.globalBindings, returnsNormally);
       expect(
         () => h.dispatch(_char('q')),
-        _stateError('InputDispatcher has been disposed.'),
-      );
-      expect(
-        () => h.dispatcher.globalBindings = const [],
         _stateError('InputDispatcher has been disposed.'),
       );
     });
@@ -194,7 +196,7 @@ void main() {
       // 'a' fires via the text fallback when unclaimed, and must fire ONCE.
       var fired = 0;
       final h = _TestHarness(
-        globalBindings: [KeyBinding(KeyCode.a, onTrigger: (_) => fired++)],
+        rootBindings: [KeyBinding(KeyCode.a, onTrigger: (_) => fired++)],
       );
       h.mountRoot(const EmptyBox());
       h.dispatcher.dispatch(
@@ -206,7 +208,7 @@ void main() {
     test('a key-only up batch is fenced from bindings', () {
       var fired = 0;
       final h = _TestHarness(
-        globalBindings: [KeyBinding(KeyCode.a, onTrigger: (_) => fired++)],
+        rootBindings: [KeyBinding(KeyCode.a, onTrigger: (_) => fired++)],
       );
       h.mountRoot(const EmptyBox());
       final result = h.dispatcher.dispatch(
@@ -221,7 +223,7 @@ void main() {
     test('a key-only down batch reaches key dispatch', () {
       var fired = 0;
       final h = _TestHarness(
-        globalBindings: [KeyBinding(KeyCode.f13, onTrigger: (_) => fired++)],
+        rootBindings: [KeyBinding(KeyCode.f13, onTrigger: (_) => fired++)],
       );
       h.mountRoot(const EmptyBox());
       final result = h.dispatcher.dispatch(
@@ -473,25 +475,25 @@ void main() {
     });
   });
 
-  group('Acceptance tests — globals', () {
-    test('5. Global binding fires after focus chain ignores', () {
+  group('Acceptance tests — root bindings', () {
+    test('5. A root binding fires when the focus chain ignores the key', () {
       final calls = <String>[];
       final h = _TestHarness(
-        globalBindings: [
-          KeyBinding(KeySequence.ctrl.c, onTrigger: (_) => calls.add('global')),
+        rootBindings: [
+          KeyBinding(KeySequence.ctrl.c, onTrigger: (_) => calls.add('root')),
         ],
       );
       h.mountRoot(const Focus(autofocus: true, child: EmptyBox()));
 
       h.dispatch(_char('c', ctrl: true));
-      expect(calls, ['global']);
+      expect(calls, ['root']);
     });
 
-    test('6. Focus-chain binding overrides global binding', () {
+    test('6. A deeper binding overrides a root binding', () {
       final calls = <String>[];
       final h = _TestHarness(
-        globalBindings: [
-          KeyBinding(KeyCode.char('q'), onTrigger: (_) => calls.add('global')),
+        rootBindings: [
+          KeyBinding(KeyCode.char('q'), onTrigger: (_) => calls.add('root')),
         ],
       );
       h.mountRoot(
@@ -985,26 +987,29 @@ void main() {
       expect(calls, ['dialog:cancel']);
     });
 
-    test('19. Global Ctrl+C still works unless suppressed by modal', () {
+    test('19. A modal scope isolates the app\'s root bindings', () {
+      // With globalBindings gone, app-wide shortcuts are an outermost
+      // KeyBindings — so a modal scope's chain truncation is what keeps a
+      // dialog from firing them. This is the whole dialog-isolation
+      // guarantee, and it needs no separate suppression flag.
       final calls = <String>[];
       final h = _TestHarness(
-        globalBindings: [
+        rootBindings: [
           KeyBinding(
             KeySequence.ctrl.c,
-            onTrigger: (_) => calls.add('global:quit'),
+            onTrigger: (_) => calls.add('root:quit'),
           ),
         ],
       );
       h.mountRoot(
         const FocusScope(
           modal: true,
-          // Note: NOT suppressGlobals: globals still run.
           child: Focus(autofocus: true, child: EmptyBox()),
         ),
       );
 
       h.dispatch(_char('c', ctrl: true));
-      expect(calls, ['global:quit']);
+      expect(calls, isEmpty, reason: 'the modal must not leak to the root');
     });
   });
 

@@ -134,8 +134,7 @@ class _DebugShellState extends State<DebugShell> {
 /// Tries to consume [event] as a debug-shell hotkey, returning true
 /// when it did. Called by runApp's event loop BEFORE the dispatcher,
 /// in the same escape-hatch tier as the Ctrl+C exit guard — so debug
-/// hotkeys fire even inside a modal route's `suppressGlobals: true`
-/// scope.
+/// hotkeys fire even inside a modal route's scope.
 ///
 /// Key-code bindings. The printable shortcuts — `p`, `/`, `s`, and the typed
 /// Logs-search query — arrive as text, not key codes, and are handled by the

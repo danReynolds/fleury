@@ -783,7 +783,6 @@ class _RouteHost extends StatelessWidget {
     final dismissible = align == null || route.barrierDismissible;
     Widget content = FocusScope(
       modal: modal,
-      suppressGlobals: modal,
       // The restoreKey anchors focus restoration: it sits INSIDE the route's
       // FocusScope, so restoreFocusInScope(key.currentContext) resolves this
       // route's scope memory when a pop reveals the route again.

@@ -9,8 +9,7 @@
 //      b. Sequence-start match on a KeyBindings binding (begin pending).
 //      c. KeyDetector floor (consumes via KeyEvent.consume()).
 //      Modal FocusScope boundaries stop the walk.
-//   3. GLOBALS (skipped if a modal scope set suppressGlobals).
-//   4. IGNORED.
+//   3. IGNORED.
 
 import 'dart:async';
 
@@ -32,8 +31,7 @@ class InputDispatcher {
     required this.focusManager,
     this.pointerRouter,
     this.sequenceTimeout = const Duration(milliseconds: 500),
-    List<KeyBinding> globalBindings = const [],
-  }) : _globalBindings = globalBindings {
+  }) {
     // Let the widget tree abandon a pending sequence (a which-key popup's
     // close control) by routing the notifier's cancel back to us.
     pendingSequenceNotifier.onCancel = cancelPending;
@@ -92,17 +90,6 @@ class InputDispatcher {
   /// commit, so it does NOT time out: it stays pending until the next key or
   /// Esc, keeping a which-key popup on screen. See [_onTimeout].
   final Duration sequenceTimeout;
-
-  /// Bindings to consult after the focus chain ignores an event.
-  /// Mutable so consumers can update it dynamically.
-  List<KeyBinding> _globalBindings;
-
-  List<KeyBinding> get globalBindings => _globalBindings;
-
-  set globalBindings(List<KeyBinding> value) {
-    _checkNotDisposed();
-    _globalBindings = value;
-  }
 
   _PendingSequence? _pendingSequence;
   Timer? _timer;
@@ -427,9 +414,6 @@ class InputDispatcher {
       for (final active in resolveActiveKeyBindings(focusManager))
         for (final sequence in active.sequences)
           if (lower(sequence) case final code?) code,
-      for (final binding in _globalBindings)
-        for (final sequence in binding.sequences)
-          if (lower(sequence) case final code?) code,
     };
     for (final selector in sampled) {
       // Compare on the logical key: a positional sample is satisfied by a
@@ -694,8 +678,7 @@ class InputDispatcher {
         return true;
       }
     }
-    return !focusManager.suppressGlobals &&
-        _globalBindings.any((entry) => identical(entry, binding));
+    return false;
   }
 
   /// Runs [binding]'s handler for a match of [sequence] that consumed
@@ -982,25 +965,6 @@ class InputDispatcher {
     if (allowSequenceStart && sequenceCandidates.isNotEmpty) {
       _startPending(event, sequenceCandidates, textOrigin);
       return KeyEventResult.handled;
-    }
-
-    // 3. Globals (when no modal scope suppresses them). Same
-    // precedence rule as the focus chain: sequence-start defers
-    // direct firing.
-    if (!focusManager.suppressGlobals) {
-      if (allowSequenceStart) {
-        final globalSeqs = <KeyBinding>[];
-        _collectSequenceStarts(_globalBindings, event, globalSeqs);
-        if (globalSeqs.isNotEmpty) {
-          _startPending(event, globalSeqs, textOrigin);
-          return KeyEventResult.handled;
-        }
-      }
-      final hit = _findDirectMatch(_globalBindings, event);
-      if (hit != null) {
-        final result = _fire(hit.binding, hit.sequence, [event]);
-        if (result == KeyEventResult.handled) return result;
-      }
     }
 
     return KeyEventResult.ignored;
