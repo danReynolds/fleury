@@ -126,7 +126,13 @@ void main() {
       final events = <TuiEvent>[];
       final sub = driver.events.listen(events.add, onDone: done.complete);
 
-      await driver.enter(TerminalMode.interactive);
+      final profile = await driver.enter(TerminalMode.interactive);
+      expect(profile.keyboard, KeyboardCapabilities.legacy);
+      expect(
+        out.written.toString(),
+        isNot(contains('\x1B[>')),
+        reason: 'an unconfirmed Kitty tier must not be configured',
+      );
       input.push('\x1B[200~abc'.codeUnits);
       await input.close();
       await done.future.timeout(const Duration(seconds: 1));

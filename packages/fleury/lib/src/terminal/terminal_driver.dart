@@ -5,8 +5,79 @@ import 'package:meta/meta.dart';
 import '../foundation/geometry.dart';
 import '../input/events.dart';
 import '../input/keyboard_state.dart';
+import '../rendering/surface_capabilities.dart';
 import '../runtime/remote_surface_sink.dart';
 import 'capabilities.dart';
+
+/// The presentation path selected for one entered terminal session.
+sealed class TerminalPresentation {
+  const TerminalPresentation();
+}
+
+/// ANSI byte presentation, with the terminal-specific mechanisms its
+/// presenter needs. Widgets consume [TerminalSessionProfile.surface] instead.
+@immutable
+final class AnsiTerminalPresentation extends TerminalPresentation {
+  const AnsiTerminalPresentation(
+    this.capabilities, {
+    this.synchronizedOutput = true,
+  });
+
+  final TerminalCapabilities capabilities;
+
+  /// Whether frame output uses DEC synchronized-update markers.
+  final bool synchronizedOutput;
+}
+
+/// Structured frame presentation to a negotiated remote surface.
+@immutable
+final class StructuredTerminalPresentation extends TerminalPresentation {
+  const StructuredTerminalPresentation(this.sink);
+
+  final RemoteSurfaceSink sink;
+}
+
+/// Immutable truth returned by a successful [TerminalDriver.enter].
+///
+/// The profile separates semantic behavior used by apps from the concrete
+/// presentation mechanism used by the host. It remains valid until restore;
+/// live keyboard contradiction repair may still demote the dispatcher's copy.
+@immutable
+final class TerminalSessionProfile {
+  const TerminalSessionProfile({
+    required this.surface,
+    required this.keyboard,
+    required this.presentation,
+  });
+
+  factory TerminalSessionProfile.ansi({
+    required TerminalCapabilities terminal,
+    KeyboardCapabilities keyboard = KeyboardCapabilities.legacy,
+    SurfaceCapabilities? surface,
+    bool synchronizedOutput = true,
+  }) => TerminalSessionProfile(
+    surface: surface ?? terminal.toSurfaceCapabilities(),
+    keyboard: keyboard,
+    presentation: AnsiTerminalPresentation(
+      terminal,
+      synchronizedOutput: synchronizedOutput,
+    ),
+  );
+
+  factory TerminalSessionProfile.structured({
+    required SurfaceCapabilities surface,
+    required KeyboardCapabilities keyboard,
+    required RemoteSurfaceSink sink,
+  }) => TerminalSessionProfile(
+    surface: surface,
+    keyboard: keyboard,
+    presentation: StructuredTerminalPresentation(sink),
+  );
+
+  final SurfaceCapabilities surface;
+  final KeyboardCapabilities keyboard;
+  final TerminalPresentation presentation;
+}
 
 /// How much of the Kitty keyboard protocol a session negotiates
 /// (RFC 0020 §8).
@@ -41,8 +112,9 @@ enum KeyboardProtocolMode {
   /// Flags 1|2|4|8|16 — the full lifecycle: every key as an escape code,
   /// with alternate/base-layout identities and associated text.
   ///
-  /// The default (RFC 0020 §26.1): `runApp` asks every terminal for full
-  /// lifecycle and negotiates down transactionally, committing only when
+  /// The default request (RFC 0020 §26.1): `runApp` asks drivers for full
+  /// lifecycle and capable drivers negotiate down transactionally, committing
+  /// only when
   /// the terminal confirms 2, 8 AND 16 (§8.3) — flag 8 stops the terminal
   /// sending text, and flag 16 is what re-supplies it, so honouring one
   /// without the other would leave the session with no text input at all.
@@ -115,6 +187,47 @@ final class TerminalMode {
   final bool mouseMotion;
 }
 
+/// Returns [mode] with only its keyboard protocol request changed.
+///
+/// Kept out of the public barrel API: native drivers use this when policy or
+/// negotiation selects an effective tier without rebuilding modes ad hoc.
+TerminalMode terminalModeWithKeyboardProtocol(
+  TerminalMode mode,
+  KeyboardProtocolMode keyboardProtocol,
+) => TerminalMode(
+  rawInput: mode.rawInput,
+  alternateScreen: mode.alternateScreen,
+  hideCursor: mode.hideCursor,
+  resetStyleOnExit: mode.resetStyleOnExit,
+  bracketedPaste: mode.bracketedPaste,
+  keyboardProtocol: keyboardProtocol,
+  focusReporting: mode.focusReporting,
+  mouse: mode.mouse,
+  mouseMotion: mode.mouseMotion,
+);
+
+/// Typed record of the terminal state a native driver actually owns.
+///
+/// [effectiveMode] is the mode Fleury emitted after policy and transactional
+/// fallback, not merely what the app requested. The ownership booleans record
+/// which mutation paths Fleury entered (including a potentially partial
+/// platform attempt), so restore and handoff never infer cleanup from a request.
+final class ActiveTerminalState {
+  ActiveTerminalState({
+    required this.requestedMode,
+    required this.effectiveMode,
+    this.rawInputOwned = false,
+    this.outputModesOwned = false,
+    this.modifyOtherKeysOwned = false,
+  });
+
+  final TerminalMode requestedMode;
+  TerminalMode effectiveMode;
+  bool rawInputOwned;
+  bool outputModesOwned;
+  bool modifyOtherKeysOwned;
+}
+
 /// The single I/O boundary between the framework and a real terminal.
 ///
 /// All bytes that ever reach stdout come through [write]; widget code
@@ -159,10 +272,9 @@ abstract interface class TerminalDriver {
   /// keystrokes — does not make a driver non-interactive.)
   bool get isInteractive;
 
-  /// Puts the terminal into [mode]. Must be called before any I/O
-  /// happens. Idempotent — calling it twice on an already-entered
-  /// driver is a programming error.
-  Future<void> enter(TerminalMode mode);
+  /// Puts the terminal into [mode] and returns the session facts established by
+  /// setup/negotiation. Calling it on an already-entered driver is an error.
+  Future<TerminalSessionProfile> enter(TerminalMode mode);
 
   /// Reverses everything [enter] configured. Safe to call after an
   /// exception. Idempotent — calling twice has no further effect.
@@ -172,18 +284,6 @@ abstract interface class TerminalDriver {
   /// guarantees these are pre-sanitized ANSI from the diff renderer —
   /// the driver does not re-validate.
   void write(String data);
-
-  /// The structured presentation sink this session negotiated, or null
-  /// for byte (ANSI) presentation — the answer every driver owns.
-  ///
-  /// Negotiation rides the connection handshake, so the value is
-  /// meaningful only after [enter] returns: a structured remote driver
-  /// returns its sink once the peer declared a plan-capable protocol
-  /// version, and null for a v1 byte peer. Ordinary terminals always
-  /// return null. `runApp` builds the matching presenter around the
-  /// answer (wire plans vs ANSI diff) — the driver never constructs
-  /// presenters, which need host-owned services.
-  RemoteSurfaceSink? get surfaceSink;
 }
 
 /// Implemented by drivers whose output channel can back up — a remote
@@ -193,18 +293,6 @@ abstract interface class TerminalDriver {
 /// diff base stays at the last frame the peer actually received, and the
 /// resumed frame ships one coalesced patch. Local terminal drivers don't
 /// implement this (a blocking stdout already applies backpressure).
-/// Optional driver extension: declares the keyboard's confirmed semantic
-/// capabilities (RFC 0020 §5.7). Drivers that don't implement it report the
-/// conservative press-only profile. Follows the [TerminalHandoffDriver]
-/// opt-in pattern so the base interface stays stable.
-abstract interface class KeyboardCapabilitiesDriver {
-  /// What this surface's keyboard has been CONFIRMED to guarantee — never
-  /// what was requested. A terminal projects negotiated flags (P5); the DOM
-  /// surface is unconditionally full; a remote driver relays its peer's
-  /// declaration (P6).
-  KeyboardCapabilities get keyboardCapabilities;
-}
-
 abstract interface class OutputFlowControl {
   /// True while unsent output exceeds the channel's high-water mark.
   bool get isOutputBacklogged;

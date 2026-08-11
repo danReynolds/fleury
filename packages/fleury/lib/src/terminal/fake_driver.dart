@@ -4,7 +4,6 @@ import '../foundation/geometry.dart';
 import 'capabilities.dart';
 import '../input/events.dart';
 import '../input/keyboard_state.dart';
-import '../runtime/remote_surface_sink.dart';
 import 'terminal_driver.dart';
 
 /// A [TerminalDriver] for tests and offline rendering. No real I/O —
@@ -12,14 +11,12 @@ import 'terminal_driver.dart';
 /// assertions, and lets the test push events into the event stream.
 final class FakeTerminalDriver
     with TerminalAttentionSequences
-    implements
-        TerminalDriver,
-        TerminalHandoffDriver,
-        KeyboardCapabilitiesDriver {
+    implements TerminalDriver, TerminalHandoffDriver {
   FakeTerminalDriver({
     CellSize size = const CellSize(80, 24),
     this.capabilities = TerminalCapabilities.defaultCapabilities,
     this.keyboardCapabilities = KeyboardCapabilities.legacy,
+    this.synchronizedOutput = true,
     bool isInteractive = true,
   }) : _size = size,
        _isInteractive = isInteractive;
@@ -27,16 +24,16 @@ final class FakeTerminalDriver
   /// Confirmed keyboard capabilities this fake declares. Defaults to the
   /// press-only legacy profile so the existing down-only test corpus keeps
   /// meaning what it meant (the session regularizer is capability-gated).
-  @override
   final KeyboardCapabilities keyboardCapabilities;
+
+  /// ANSI presentation policy declared by this fake session.
+  final bool synchronizedOutput;
 
   /// Whether this fake stands in for an interactive terminal. Set false to
   /// exercise the non-TTY (piped/redirected) code paths.
   @override
   bool get isInteractive => _isInteractive;
 
-  @override
-  RemoteSurfaceSink? get surfaceSink => null; // byte presentation only
   set isInteractive(bool value) {
     _checkNotDisposed();
     _isInteractive = value;
@@ -110,11 +107,16 @@ final class FakeTerminalDriver
   Stream<TuiEvent> get events => _events.stream;
 
   @override
-  Future<void> enter(TerminalMode mode) async {
+  Future<TerminalSessionProfile> enter(TerminalMode mode) async {
     _checkNotDisposed();
     enterCallCount += 1;
     _active = true;
     _enteredMode = mode;
+    return TerminalSessionProfile.ansi(
+      terminal: capabilities,
+      keyboard: keyboardCapabilities,
+      synchronizedOutput: synchronizedOutput,
+    );
   }
 
   @override

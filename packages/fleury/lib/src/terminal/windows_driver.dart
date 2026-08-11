@@ -12,8 +12,8 @@ import 'package:meta/meta.dart';
 import '../foundation/geometry.dart';
 import 'capabilities.dart';
 import '../input/events.dart';
+import '../input/keyboard_state.dart';
 import 'input_parser.dart';
-import '../runtime/remote_surface_sink.dart';
 import 'terminal_driver.dart';
 import 'terminal_sequences.dart';
 
@@ -57,10 +57,11 @@ class WindowsTerminalDriver
   bool _active = false;
   bool _handoffActive = false;
   Future<void> _handoffTail = Future<void>.value();
-  TerminalMode? _mode;
+  ActiveTerminalState? _terminalState;
+  TerminalMode? get _mode => _terminalState?.effectiveMode;
+  bool get _changedStdin => _terminalState?.rawInputOwned ?? false;
+  bool get _wroteEnterSequences => _terminalState?.outputModesOwned ?? false;
   CellSize? _lastSize;
-  bool _wroteEnterSequences = false;
-  bool _changedStdin = false;
   bool? _originalLineMode;
   bool? _originalEchoMode;
   WindowsConsoleModeState? _consoleModeState;
@@ -99,10 +100,7 @@ class WindowsTerminalDriver
   bool get isInteractive => _stdoutIsTerminal;
 
   @override
-  RemoteSurfaceSink? get surfaceSink => null; // byte presentation only
-
-  @override
-  Future<void> enter(TerminalMode mode) async {
+  Future<TerminalSessionProfile> enter(TerminalMode mode) async {
     if (_active) {
       throw StateError(
         'WindowsTerminalDriver.enter called on an active driver.',
@@ -118,16 +116,26 @@ class WindowsTerminalDriver
         'hand it out again. Run each interactive session in its own process.',
       );
     }
-    _mode = mode;
+    _terminalState = ActiveTerminalState(
+      requestedMode: mode,
+      // This driver has no terminal-query channel yet, so it must not request
+      // a Kitty mode that it cannot confirm. Configure the same conservative
+      // legacy semantics returned in the session profile.
+      effectiveMode: terminalModeWithKeyboardProtocol(
+        mode,
+        KeyboardProtocolMode.legacy,
+      ),
+    );
     _sink.target = _events;
 
-    _enableConsoleMode(mode);
-    _enableRawInput(mode);
+    final effectiveMode = _mode!;
+    _enableConsoleMode(effectiveMode);
+    _enableRawInput(effectiveMode);
 
-    final enter = buildTerminalEnterSequences(mode);
+    final enter = buildTerminalEnterSequences(effectiveMode);
     if (_stdoutIsTerminal && enter.isNotEmpty) {
       _stdout.write(enter);
-      _wroteEnterSequences = true;
+      _terminalState!.outputModesOwned = true;
     }
 
     _stdinSubscription = _stdin.listen(
@@ -159,6 +167,11 @@ class WindowsTerminalDriver
     }
 
     _active = true;
+    return TerminalSessionProfile.ansi(
+      terminal: capabilities,
+      keyboard: KeyboardCapabilities.legacy,
+      synchronizedOutput: Platform.environment['FLEURY_SYNC_OUTPUT'] != '0',
+    );
   }
 
   void _enableConsoleMode(TerminalMode mode) {
@@ -176,7 +189,7 @@ class WindowsTerminalDriver
     _originalLineMode ??= _stdin.lineMode;
     _originalEchoMode ??= _stdin.echoMode;
     _setRawMode();
-    _changedStdin = true;
+    _terminalState!.rawInputOwned = true;
   }
 
   void _setRawMode() {
@@ -290,6 +303,7 @@ class WindowsTerminalDriver
         !_wroteEnterSequences &&
         !_changedStdin &&
         _consoleModeState == null) {
+      _terminalState = null;
       return;
     }
 
@@ -316,7 +330,7 @@ class WindowsTerminalDriver
           buildTerminalExitSequences(_mode ?? TerminalMode.interactive),
         );
       } catch (_) {}
-      _wroteEnterSequences = false;
+      _terminalState?.outputModesOwned = false;
     }
 
     try {
@@ -325,11 +339,11 @@ class WindowsTerminalDriver
 
     if (_changedStdin) {
       _restoreCookedMode();
-      _changedStdin = false;
+      _terminalState?.rawInputOwned = false;
     }
     _restoreConsoleMode();
 
-    _mode = null;
+    _terminalState = null;
     _sink.target = null;
   }
 

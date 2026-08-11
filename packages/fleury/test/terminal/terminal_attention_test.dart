@@ -23,9 +23,8 @@ class _PlainDriver implements TerminalDriver {
   @override
   bool get isInteractive => true;
   @override
-  RemoteSurfaceSink? get surfaceSink => null;
-  @override
-  Future<void> enter(TerminalMode mode) async {}
+  Future<TerminalSessionProfile> enter(TerminalMode mode) async =>
+      TerminalSessionProfile.ansi(terminal: capabilities);
   @override
   Future<void> restore() async {}
   @override

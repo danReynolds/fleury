@@ -80,8 +80,10 @@ void main() {
       expect(driver.wantsPresentationPlans, isFalse);
       final entered = driver.enter(TerminalMode.interactive);
       transport.emit(_init); // current structured protocol
-      await entered;
+      final profile = await entered;
       expect(driver.wantsPresentationPlans, isTrue);
+      expect(profile.presentation, isA<StructuredTerminalPresentation>());
+      expect(profile.surface, driver.surfaceCapabilities);
       await driver.restore();
     });
 
@@ -98,8 +100,9 @@ void main() {
           protocolVersion: 1,
         ),
       );
-      await entered;
+      final profile = await entered;
       expect(driver.wantsPresentationPlans, isFalse);
+      expect(profile.presentation, isA<AnsiTerminalPresentation>());
       driver.write('ansi');
       expect(
         transport.sent.whereType<OutputFrame>(),

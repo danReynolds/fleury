@@ -25,7 +25,6 @@ import '../rendering/ansi_byte_budget.dart';
 import '../rendering/ansi_renderer.dart';
 import 'runtime_error_overlay.dart';
 import '../semantics/semantics.dart';
-import '../rendering/surface_capabilities.dart';
 import '../terminal/capabilities.dart';
 import '../terminal/diagnostics.dart';
 import '../input/events.dart';
@@ -136,7 +135,7 @@ bool requestExit() {
 /// negotiates capabilities and the application tree mounts.
 ///
 /// Driver event streams are broadcast. Subscribing after `enter()` silently
-/// loses ready stdin, probe-tail keystrokes, and EOF-time input; subscribing
+/// loses ready stdin, enter-time keystrokes, and EOF-time input; subscribing
 /// early without a bound merely moves the problem into unbounded startup
 /// memory. This queue makes the handoff explicit and fails startup loudly if a
 /// custom driver exceeds the short negotiation budget.
@@ -539,16 +538,12 @@ Future<AppExit> _runAppImpl(
   // mis-applies updates under rapid frames (e.g. fast scrolling) can desync from
   // the renderer's model and show persistent stale cells; this is the escape
   // hatch to confirm/avoid that without touching the diff.
-  // Built after enter() below, once the startup ambiguous-width probe has run —
-  // its result feeds `ambiguousCharsAreWide`. colorMode/synchronizedOutput are
-  // env-derived and stable; the renderer's only use is the presenter built after
-  // the handshake, so deferring construction costs nothing.
+  // Built after enter() below, from its immutable session profile.
   late final AnsiRenderer renderer;
-  // A driver may negotiate structured presentation plans (the serve
-  // path, rendering through the fleury web surface) rather than ANSI.
-  // The driver owns that answer — TerminalDriver.surfaceSink — and it is
-  // finalized by the handshake, so it's read after enter() below. Null
-  // for every ordinary terminal session; that path is byte-unchanged.
+  late final TerminalSessionProfile sessionProfile;
+  AnsiTerminalPresentation? ansiPresentation;
+  // Null for ANSI sessions; set from the sealed presentation choice returned
+  // by enter() for structured remote sessions.
   RemoteSurfaceSink? surfaceSink;
   const presentationPlanner = FramePresentationPlanner();
   var disposed = false;
@@ -977,7 +972,7 @@ Future<AppExit> _runAppImpl(
         StackTrace? startupStack;
         // Subscribe BEFORE enter(): POSIX starts stdin/probe handling during
         // enter, and TerminalDriver.events is broadcast, so attaching later
-        // silently drops ready pipe input, fast keystrokes, and probe-tail
+        // silently drops ready pipe input, fast keystrokes, and enter-time
         // bytes. Events replay only after mount so autofocus/claimants exist.
         eventSub = usedDriver.events.listen(
           (event) {
@@ -1008,40 +1003,28 @@ Future<AppExit> _runAppImpl(
           },
         );
         runtimeMarkers?.mark('terminal.enter.start');
-        await usedDriver.enter(mode);
+        sessionProfile = await usedDriver.enter(mode);
         runtimeMarkers?.mark('terminal.enter.end');
         final startupOverflow = startupEvents.overflowError;
         if (startupOverflow != null) throw startupOverflow;
-        // Confirmed keyboard capabilities, from drivers that declare them
-        // (RFC 0020 §5.7). AFTER enter: a remote driver only knows its
-        // peer's protocol once the INIT handshake has landed.
-        if (usedDriver is KeyboardCapabilitiesDriver) {
-          dispatcher.updateKeyboardCapabilities(
-            (usedDriver as KeyboardCapabilitiesDriver).keyboardCapabilities,
-          );
-          keyboardNotifier.notifyCapabilitiesChanged();
+        dispatcher.updateKeyboardCapabilities(sessionProfile.keyboard);
+        keyboardNotifier.notifyCapabilitiesChanged();
+        switch (sessionProfile.presentation) {
+          case final AnsiTerminalPresentation ansi:
+            ansiPresentation = ansi;
+            final capabilities = ansi.capabilities;
+            renderer = AnsiRenderer(
+              colorMode: capabilities.colorMode,
+              synchronizedOutput: ansi.synchronizedOutput,
+              ambiguousCharsAreWide:
+                  capabilities.ambiguousCharWidth == AmbiguousCharWidth.wide,
+              hyperlinks: capabilities.hyperlinks,
+            );
+          case final StructuredTerminalPresentation structured:
+            surfaceSink = structured.sink;
         }
-        // The ambiguous-width probe has now run (inside enter()); build the
-        // renderer with the confirmed width mode. A terminal that draws
-        // ambiguous glyphs one column wide drops the defensive per-cell
-        // repositioning; unknown/failed keeps the safe `wide` default.
-        renderer = AnsiRenderer(
-          colorMode: usedDriver.capabilities.colorMode,
-          synchronizedOutput: Platform.environment['FLEURY_SYNC_OUTPUT'] != '0',
-          ambiguousCharsAreWide:
-              usedDriver.capabilities.ambiguousCharWidth ==
-              AmbiguousCharWidth.wide,
-          // OSC 8 emission only on a detected, non-tmux, OSC-8-capable local
-          // terminal; false (unchanged bytes) otherwise. A remote/serve session
-          // uses the wire presenter, not this renderer — links ride the wire in
-          // Stage 2 — so a remote driver's default-false capability is moot.
-          hyperlinks: usedDriver.capabilities.hyperlinks,
-        );
-        // The handshake has landed, so the driver now knows whether the
-        // peer negotiated the structured (plan) path.
-        final negotiatedSink = usedDriver.surfaceSink;
+        final negotiatedSink = surfaceSink;
         if (negotiatedSink != null) {
-          surfaceSink = negotiatedSink;
           // Report a link fault WITHOUT ever throwing back into the serialize
           // link. errorReporter.report → notifyListeners() can throw (a
           // throwing listener); if that escaped the link it would reject the
@@ -1265,10 +1248,7 @@ Future<AppExit> _runAppImpl(
             // terminal snapshot is one projection of it. A structured remote
             // driver reports what its PEER declared (a browser: placements,
             // sub-cell pointer).
-            capabilities: usedDriver is SurfaceCapabilitiesProvider
-                ? (usedDriver as SurfaceCapabilitiesProvider)
-                      .surfaceCapabilities
-                : usedDriver.capabilities.toSurfaceCapabilities(),
+            capabilities: sessionProfile.surface,
             focusManager: focusManager,
             pointerRouter: pointerRouter,
             clipboard: effectiveClipboard,
@@ -1341,13 +1321,14 @@ Future<AppExit> _runAppImpl(
                     // widgets place neutral image placements; the encoder
                     // emits Kitty/iTerm2/Sixel escapes after each diff.
                     imageEncoder:
-                        usedDriver.capabilities.imageProtocol ==
+                        ansiPresentation!.capabilities.imageProtocol ==
                             ImageProtocol.halfBlock
                         ? null
                         : TerminalImageEncoder(
-                            protocol: usedDriver.capabilities.imageProtocol,
+                            protocol:
+                                ansiPresentation!.capabilities.imageProtocol,
                             tmuxPassthrough:
-                                usedDriver.capabilities.tmuxPassthrough,
+                                ansiPresentation!.capabilities.tmuxPassthrough,
                           ),
                   ),
             planner: presentationPlanner,

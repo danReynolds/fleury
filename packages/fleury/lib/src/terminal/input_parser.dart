@@ -31,13 +31,12 @@
 //     driver negotiates it with the terminal; the parser handles the
 //     reports it elicits (and ignores them harmlessly otherwise).
 //
-// What is intentionally NOT handled:
-//   - Focus in / out events.
-
 import 'dart:convert';
 
 import '../input/events.dart';
 import '../input/key_tables.dart';
+import 'legacy_key_sequences.dart';
+import 'terminal_response.dart';
 
 /// Sink interface used by the parser to emit events. The terminal
 /// driver supplies the real implementation (typically a
@@ -66,8 +65,16 @@ abstract interface class TuiEventSink {
 class InputParser {
   InputParser({
     this.maxCsiSequenceLength = 256,
+    this.maxControlStringLength = 64 * 1024,
     this.maxPasteBytes = 1024 * 1024,
-  }) : assert(maxCsiSequenceLength > 0),
+    Iterable<LegacyKeySequence> additionalLegacyKeySequences =
+        const <LegacyKeySequence>[],
+  }) : _legacySequences = _LegacySequenceTable(<LegacyKeySequence>[
+         ...builtInLegacyKeySequences,
+         ...additionalLegacyKeySequences,
+       ]),
+       assert(maxCsiSequenceLength > 0),
+       assert(maxControlStringLength > 0),
        assert(maxPasteBytes > 0);
 
   /// Maximum bytes accepted between `CSI` and its final byte.
@@ -76,6 +83,21 @@ class InputParser {
   /// malformed terminal or legacy remote peer from growing parameter lists and
   /// arbitrary-precision integers forever without a final byte.
   final int maxCsiSequenceLength;
+
+  /// Maximum bytes retained for one OSC, DCS, or APC terminal response.
+  ///
+  /// Capability replies are normally tiny. The larger bound accommodates
+  /// palette-style replies without allowing a malformed peer to retain input
+  /// without limit while a query is active.
+  final int maxControlStringLength;
+
+  /// Response forms currently expected by the driver's single-flight query.
+  ///
+  /// The driver leaves this at [TerminalResponseExpectation.none] outside a
+  /// query and during ordinary application input. Private CSI responses remain
+  /// recognizable because they do not collide with valid input encodings.
+  TerminalResponseExpectation responseExpectation =
+      TerminalResponseExpectation.none;
 
   /// Monotonic receipt clock and per-source counter for [InputBatch]
   /// stamping. Timing is diagnostics data, excluded from batch equality.
@@ -92,6 +114,9 @@ class InputParser {
 
   _State _state = _State.ground;
   final List<int> _pendingUtf8 = <int>[];
+  final List<int> _escapeBytes = <int>[];
+  final _LegacySequenceTable _legacySequences;
+  final List<int> _legacyCandidate = <int>[];
 
   // CRLF collapse: a CR (0x0D) emits Enter and arms this so the LF (0x0A)
   // half of a `\r\n` pair — as delivered by piped/scripted input, LNM-mode
@@ -109,10 +134,18 @@ class InputParser {
   final List<List<int>> _csiGroups = <List<int>>[];
   List<int> _csiGroup = <int>[];
   bool _csiHasIntermediate = false;
+  int? _csiPrivateMarker;
+  final List<int> _csiIntermediates = <int>[];
   bool _csiMouseSgr = false; // saw the SGR-mouse private marker '<'
   int _csiCurrentParam = 0;
   bool _csiAccumulating = false;
   int _csiSequenceLength = 0;
+
+  // OSC/DCS/APC response framing. `_controlSawEsc` permits the ST terminator
+  // (`ESC \\`) to span input reads. BEL terminates OSC only.
+  TerminalResponseKind? _controlKind;
+  bool _controlSawEsc = false;
+  TerminalResponseSink? _responseSink;
 
   // Bracketed-paste accumulation. `_pasteEnd` is the `ESC [ 2 0 1 ~`
   // terminator; `_pasteMatch` tracks how many of its bytes have matched
@@ -126,7 +159,12 @@ class InputParser {
 
   /// Feeds [bytes] to the parser and emits any complete events to
   /// [sink].
-  void feed(List<int> bytes, TuiEventSink sink) {
+  void feed(
+    List<int> bytes,
+    TuiEventSink sink, {
+    TerminalResponseSink? responseSink,
+  }) {
+    _responseSink = responseSink;
     for (final b in bytes) {
       _consume(b, sink);
     }
@@ -142,6 +180,7 @@ class InputParser {
   /// (and slow PTYs can exceed the ESC timeout); both states are bounded and
   /// can safely wait for their continuation bytes.
   void flush(TuiEventSink sink) {
+    _replayLegacyCandidate(sink);
     // An idle flush ends the "immediately after CR" window: a lone CR is the
     // normal raw-mode Enter byte, and the driver flushes on a ~30ms idle
     // debounce, so without this a much-later unrelated raw LF (Ctrl+J) would
@@ -150,7 +189,11 @@ class InputParser {
     _swallowNextLf = false;
     switch (_state) {
       case _State.afterEsc:
+        if (responseExpectation.hasControlStrings) {
+          break;
+        }
         sink.add(const KeyEvent(KeyCode.escape));
+        _clearEscapeSequence();
         _state = _State.ground;
       case _State.utf8Continuation:
         // A stream read can split a scalar and the next byte can arrive after
@@ -158,10 +201,24 @@ class InputParser {
         // prefix; a later invalid continuation recovers through ground state.
         break;
       case _State.csi:
+        // A query response may be fragmented across a gap longer than the
+        // lone-ESC debounce. Preserve response-shaped CSI only while the
+        // driver owns an active expectation; ordinary incomplete key CSI is
+        // still discarded on idle exactly as before.
+        if (_couldStillBeExpectedCsiResponse) break;
+        _resetCsi();
+        _clearEscapeSequence();
+        _state = _State.ground;
+      case _State.controlString:
+      case _State.controlStringDiscard:
+        // Control strings are entered only while explicitly expected. Their
+        // query deadline, not the key debounce, owns their lifetime.
+        break;
       case _State.csiDiscard:
       case _State.ss3:
         // Mid-sequence on flush — give up and reset.
         _resetCsi();
+        _clearEscapeSequence();
         _state = _State.ground;
       case _State.paste:
         // Bracketed paste can span many reads (especially over SSH). Its live
@@ -173,6 +230,38 @@ class InputParser {
     }
   }
 
+  /// Ends query ownership of ambiguous terminal-response prefixes.
+  ///
+  /// A Device Attributes sentinel establishes a clean response boundary, so
+  /// [discardIncompleteResponses] is false on normal completion and a pending
+  /// lone Escape is returned to the app. When a late-reply quarantine expires
+  /// without that sentinel, response-shaped prefixes are unsafe to replay:
+  /// their eventual tails could otherwise become phantom key presses. A bare
+  /// Escape has no response-specific evidence, so it is released as input once
+  /// the bounded quarantine itself has expired.
+  void endResponseExpectation(
+    TuiEventSink sink, {
+    bool discardIncompleteResponses = false,
+  }) {
+    _replayLegacyCandidate(sink);
+    final ownedIncompleteResponse = switch (_state) {
+      _State.afterEsc => false,
+      _State.csi => _couldStillBeExpectedCsiResponse,
+      _State.csiDiscard ||
+      _State.controlString ||
+      _State.controlStringDiscard => true,
+      _ => false,
+    };
+    responseExpectation = TerminalResponseExpectation.none;
+    if (discardIncompleteResponses && ownedIncompleteResponse) {
+      _resetCsi();
+      _clearEscapeSequence();
+      _state = _State.ground;
+      return;
+    }
+    flush(sink);
+  }
+
   /// Resolves any pending parser state when the byte stream reaches EOF.
   ///
   /// Unlike [flush], this is a hard boundary: an incomplete UTF-8 scalar is
@@ -182,6 +271,7 @@ class InputParser {
   /// from its stdin `onDone` path; idle timeouts must continue to use [flush]
   /// so a slow but valid paste is never truncated.
   void finish(TuiEventSink sink) {
+    _replayLegacyCandidate(sink);
     _swallowNextLf = false;
     switch (_state) {
       case _State.afterEsc:
@@ -198,11 +288,14 @@ class InputParser {
       case _State.csi:
       case _State.csiDiscard:
       case _State.ss3:
+      case _State.controlString:
+      case _State.controlStringDiscard:
       case _State.ground:
         break;
     }
     _pendingUtf8.clear();
     _resetCsi();
+    _clearEscapeSequence();
     _state = _State.ground;
   }
 
@@ -228,6 +321,42 @@ class InputParser {
   }
 
   void _consume(int byte, TuiEventSink sink) {
+    if (_legacyCandidate.isEmpty && _state == _State.ground && byte == 0x1B) {
+      _legacyCandidate.add(byte);
+      return;
+    }
+    if (_legacyCandidate.isNotEmpty) {
+      _legacyCandidate.add(byte);
+      final match = _legacySequences.match(_legacyCandidate);
+      if (match.prefix) return;
+      final sequence = match.exact;
+      if (sequence != null) {
+        sink.add(
+          KeyEvent(
+            sequence.key,
+            modifiers: sequence.modifiers,
+            position: _positionFor(sequence.key),
+          ),
+        );
+        _legacyCandidate.clear();
+        return;
+      }
+      _replayLegacyCandidate(sink);
+      return;
+    }
+    _consumeDecoded(byte, sink);
+  }
+
+  void _replayLegacyCandidate(TuiEventSink sink) {
+    if (_legacyCandidate.isEmpty) return;
+    final bytes = List<int>.of(_legacyCandidate);
+    _legacyCandidate.clear();
+    for (final byte in bytes) {
+      _consumeDecoded(byte, sink);
+    }
+  }
+
+  void _consumeDecoded(int byte, TuiEventSink sink) {
     switch (_state) {
       case _State.ground:
         _consumeGround(byte, sink);
@@ -239,6 +368,9 @@ class InputParser {
         _consumeDiscardedCsi(byte);
       case _State.ss3:
         _consumeSs3(byte, sink);
+      case _State.controlString:
+      case _State.controlStringDiscard:
+        _consumeControlString(byte);
       case _State.utf8Continuation:
         _consumeUtf8(byte, sink);
       case _State.paste:
@@ -252,6 +384,9 @@ class InputParser {
     final swallowLf = _swallowNextLf;
     _swallowNextLf = false;
     if (byte == 0x1B) {
+      _escapeBytes
+        ..clear()
+        ..add(byte);
       _state = _State.afterEsc;
       return;
     }
@@ -310,6 +445,7 @@ class InputParser {
   }
 
   void _consumeAfterEsc(int byte, TuiEventSink sink) {
+    _escapeBytes.add(byte);
     if (byte == 0x5B) {
       // '['
       _state = _State.csi;
@@ -322,10 +458,28 @@ class InputParser {
       _state = _State.ss3;
       return;
     }
+    final controlKind = switch (byte) {
+      0x5D when responseExpectation.operatingSystemCommand =>
+        TerminalResponseKind.operatingSystemCommand, // ']': OSC
+      0x50 when responseExpectation.deviceControlString =>
+        TerminalResponseKind.deviceControlString, // 'P': DCS
+      0x5F when responseExpectation.applicationProgramCommand =>
+        TerminalResponseKind.applicationProgramCommand, // '_': APC
+      _ => null,
+    };
+    if (controlKind != null) {
+      _controlKind = controlKind;
+      _controlSawEsc = false;
+      _state = _State.controlString;
+      return;
+    }
     if (byte == 0x1B) {
       // Two ESCs in a row — emit the previous one as escape and stay
       // in afterEsc for the new one.
       sink.add(const KeyEvent(KeyCode.escape));
+      _escapeBytes
+        ..clear()
+        ..add(byte);
       return;
     }
     if (byte >= 0x20 && byte < 0x7F) {
@@ -336,18 +490,22 @@ class InputParser {
           modifiers: const {KeyModifier.alt},
         ),
       );
+      _clearEscapeSequence();
       _state = _State.ground;
       return;
     }
     // Unknown sequence — reset to ground and keep the byte.
+    _clearEscapeSequence();
     _state = _State.ground;
     _consumeGround(byte, sink);
   }
 
   void _consumeCsi(int byte, TuiEventSink sink) {
+    _escapeBytes.add(byte);
     _csiSequenceLength++;
     if (_csiSequenceLength > maxCsiSequenceLength) {
       _resetCsi();
+      _clearEscapeSequence();
       _state = _State.csiDiscard;
       // This byte may itself be the final that closes the overlong sequence.
       // Consume it in discard state so the following ordinary byte is not
@@ -381,12 +539,22 @@ class InputParser {
     if (byte == 0x3C) {
       // '<' — SGR mouse report marker. Parsed (not ignored).
       _csiMouseSgr = true;
+      _csiPrivateMarker ??= byte;
       return;
     }
     if (byte == 0x3F || byte == 0x3E || byte == 0x3D) {
       // '?', '>', '=' — private-mode marker. Track but otherwise
       // pass through; we'll ignore unknown sequences.
       _csiHasIntermediate = true;
+      _csiPrivateMarker ??= byte;
+      return;
+    }
+    if (byte >= 0x20 && byte <= 0x2F) {
+      // ECMA-48 intermediate bytes. Mode reports use `$` before their final
+      // `y`; retaining the exact intermediates lets response classification
+      // happen before a sequence can be mistaken for input.
+      _csiHasIntermediate = true;
+      _csiIntermediates.add(byte);
       return;
     }
     if (byte >= 0x40 && byte <= 0x7E) {
@@ -396,10 +564,19 @@ class InputParser {
         _csiGroups.add(_csiGroup);
         _csiGroup = <int>[];
       }
+      final response = _classifyCsiResponse(byte);
+      if (response != null) {
+        _responseSink?.addTerminalResponse(response);
+        _resetCsi();
+        _clearEscapeSequence();
+        _state = _State.ground;
+        return;
+      }
       // SGR mouse report: `CSI < Cb ; Cx ; Cy M|m`.
       if (_csiMouseSgr && (byte == 0x4D || byte == 0x6D)) {
         _emitMouse(byte, sink);
         _resetCsi();
+        _clearEscapeSequence();
         _state = _State.ground;
         return;
       }
@@ -409,6 +586,7 @@ class InputParser {
       if (byte == 0x75 && !_csiMouseSgr) {
         if (!_csiHasIntermediate) _emitKittyKey(sink);
         _resetCsi();
+        _clearEscapeSequence();
         _state = _State.ground;
         return;
       }
@@ -424,10 +602,12 @@ class InputParser {
         _activePasteId = _nextPasteId;
         _nextPasteId = _nextPasteId == 0x7FFFFFFF ? 1 : _nextPasteId + 1;
         _state = _State.paste;
+        _clearEscapeSequence();
         return;
       }
       _emitCsi(byte, sink);
       _resetCsi();
+      _clearEscapeSequence();
       _state = _State.ground;
       return;
     }
@@ -437,11 +617,15 @@ class InputParser {
       // afterEsc lets the immediately-following report (e.g. `ESC [ A`) decode
       // instead of the ESC being dropped and `[ A` mis-parsed as typed text.
       _resetCsi();
+      _escapeBytes
+        ..clear()
+        ..add(byte);
       _state = _State.afterEsc;
       return;
     }
     // Unknown intermediate byte — abort sequence.
     _resetCsi();
+    _clearEscapeSequence();
     _state = _State.ground;
   }
 
@@ -450,11 +634,83 @@ class InputParser {
   /// restores ground state; a fresh ESC starts a new sequence.
   void _consumeDiscardedCsi(int byte) {
     if (byte == 0x1B) {
+      _escapeBytes
+        ..clear()
+        ..add(byte);
       _state = _State.afterEsc;
       return;
     }
     if (byte >= 0x40 && byte <= 0x7E) {
+      _clearEscapeSequence();
       _state = _State.ground;
+    }
+  }
+
+  TerminalResponse? _classifyCsiResponse(int finalByte) {
+    final privateMarker = _csiPrivateMarker;
+    final hasDollar = _csiIntermediates.contains(0x24);
+    final kind = switch (finalByte) {
+      0x63
+          when privateMarker == 0x3F ||
+              privateMarker == 0x3E ||
+              privateMarker == 0x3D =>
+        TerminalResponseKind.deviceAttributes,
+      0x75 when privateMarker == 0x3F => TerminalResponseKind.keyboardStatus,
+      0x52 when responseExpectation.cursorPosition && privateMarker == null =>
+        TerminalResponseKind.cursorPosition,
+      0x79 when hasDollar => TerminalResponseKind.modeReport,
+      0x74 when responseExpectation.windowOperation =>
+        TerminalResponseKind.windowOperation,
+      _ => null,
+    };
+    return kind == null ? null : TerminalResponse(kind, _escapeBytes);
+  }
+
+  /// Whether an incomplete CSI can still be a reply whose lifecycle belongs
+  /// to the active query deadline rather than the key debounce.
+  bool get _couldStillBeExpectedCsiResponse {
+    if (_csiPrivateMarker == 0x3F ||
+        _csiPrivateMarker == 0x3E ||
+        _csiPrivateMarker == 0x3D) {
+      return responseExpectation.privateCsiPrefix;
+    }
+    if (_csiIntermediates.contains(0x24)) {
+      return responseExpectation.modeReport;
+    }
+    return responseExpectation.cursorPosition ||
+        responseExpectation.windowOperation;
+  }
+
+  void _consumeControlString(int byte) {
+    final retaining = _state == _State.controlString;
+    if (retaining) _escapeBytes.add(byte);
+    final kind = _controlKind;
+    if (kind == null) {
+      _clearEscapeSequence();
+      _state = _State.ground;
+      return;
+    }
+
+    final bellTerminated =
+        kind == TerminalResponseKind.operatingSystemCommand && byte == 0x07;
+    final stringTerminated = _controlSawEsc && byte == 0x5C;
+    if (bellTerminated || stringTerminated) {
+      if (retaining) {
+        _responseSink?.addTerminalResponse(
+          TerminalResponse(kind, _escapeBytes),
+        );
+      }
+      _clearEscapeSequence();
+      _state = _State.ground;
+      return;
+    }
+
+    _controlSawEsc = byte == 0x1B;
+    if (retaining && _escapeBytes.length > maxControlStringLength) {
+      // Keep discarding through the terminator. Returning to ground here would
+      // reinterpret the response payload as user input.
+      _escapeBytes.clear();
+      _state = _State.controlStringDiscard;
     }
   }
 
@@ -465,52 +721,42 @@ class InputParser {
 
   void _consumeSs3(int byte, TuiEventSink sink) {
     // SS3 is a single final byte.
-    switch (byte) {
-      case 0x41: // 'A'
-        sink.add(
-          KeyEvent(KeyCode.arrowUp, position: _positionFor(KeyCode.arrowUp)),
-        );
-      case 0x42: // 'B'
-        sink.add(
-          KeyEvent(
-            KeyCode.arrowDown,
-            position: _positionFor(KeyCode.arrowDown),
-          ),
-        );
-      case 0x43: // 'C'
-        sink.add(
-          KeyEvent(
-            KeyCode.arrowRight,
-            position: _positionFor(KeyCode.arrowRight),
-          ),
-        );
-      case 0x44: // 'D'
-        sink.add(
-          KeyEvent(
-            KeyCode.arrowLeft,
-            position: _positionFor(KeyCode.arrowLeft),
-          ),
-        );
-      case 0x45: // 'E' — KP_BEGIN (keypad 5 with NumLock off)
-        sink.add(
-          KeyEvent(
-            KeyCode.keypadBegin,
-            position: _positionFor(KeyCode.keypadBegin),
-          ),
-        );
-      case 0x48: // 'H'
-        sink.add(KeyEvent(KeyCode.home, position: _positionFor(KeyCode.home)));
-      case 0x46: // 'F'
-        sink.add(KeyEvent(KeyCode.end, position: _positionFor(KeyCode.end)));
-      case 0x50: // 'P' — F1
-        sink.add(KeyEvent(KeyCode.f1, position: _positionFor(KeyCode.f1)));
-      case 0x51:
-        sink.add(KeyEvent(KeyCode.f2, position: _positionFor(KeyCode.f2)));
-      case 0x52:
-        sink.add(KeyEvent(KeyCode.f3, position: _positionFor(KeyCode.f3)));
-      case 0x53:
-        sink.add(KeyEvent(KeyCode.f4, position: _positionFor(KeyCode.f4)));
+    final key = switch (byte) {
+      0x41 => KeyCode.arrowUp,
+      0x42 => KeyCode.arrowDown,
+      0x43 => KeyCode.arrowRight,
+      0x44 => KeyCode.arrowLeft,
+      0x45 => KeyCode.keypadBegin,
+      0x48 => KeyCode.home,
+      0x46 => KeyCode.end,
+      0x50 => KeyCode.f1,
+      0x51 => KeyCode.f2,
+      0x52 => KeyCode.f3,
+      0x53 => KeyCode.f4,
+      0x70 => KeyCode.keypad0,
+      0x71 => KeyCode.keypad1,
+      0x72 => KeyCode.keypad2,
+      0x73 => KeyCode.keypad3,
+      0x74 => KeyCode.keypad4,
+      0x75 => KeyCode.keypad5,
+      0x76 => KeyCode.keypad6,
+      0x77 => KeyCode.keypad7,
+      0x78 => KeyCode.keypad8,
+      0x79 => KeyCode.keypad9,
+      0x6A => KeyCode.keypadMultiply,
+      0x6B => KeyCode.keypadAdd,
+      0x6C => KeyCode.keypadSeparator,
+      0x6D => KeyCode.keypadSubtract,
+      0x6E => KeyCode.keypadDecimal,
+      0x6F => KeyCode.keypadDivide,
+      0x4D => KeyCode.keypadEnter,
+      0x58 => KeyCode.keypadEqual,
+      _ => null,
+    };
+    if (key != null) {
+      sink.add(KeyEvent(key, position: _positionFor(key)));
     }
+    _clearEscapeSequence();
     _state = _State.ground;
   }
 
@@ -534,6 +780,10 @@ class InputParser {
 
     if (finalByte == 0x7E) {
       // '~' — tilde-finalised chords, p1 selects which.
+      if (p1 == 27) {
+        _emitModifyOtherKey(sink);
+        return;
+      }
       final kc = _tildeKey(p1 ?? 0);
       if (kc != null) {
         sink.add(
@@ -599,6 +849,53 @@ class InputParser {
         ),
       );
     }
+  }
+
+  /// Decodes xterm's default modifyOtherKeys form:
+  /// `CSI 27 ; modifier ; codepoint ~`.
+  void _emitModifyOtherKey(TuiEventSink sink) {
+    if (_csiGroups.length < 3) return;
+    final modifier = _groupValue(1);
+    final codepoint = _groupValue(2);
+    if (modifier == null || codepoint == null || !_isUnicodeScalar(codepoint)) {
+      return;
+    }
+    final modifiers = _decodeModifiers(modifier);
+    final special = switch (codepoint) {
+      9 => KeyCode.tab,
+      13 => KeyCode.enter,
+      27 => KeyCode.escape,
+      8 || 127 => KeyCode.backspace,
+      _ => null,
+    };
+    if (special != null) {
+      sink.add(
+        KeyEvent(
+          special,
+          modifiers: modifiers,
+          position: _positionFor(special),
+        ),
+      );
+      return;
+    }
+    if (codepoint < 0x20 || (codepoint >= 0x7F && codepoint <= 0x9F)) return;
+    final text = String.fromCharCode(codepoint);
+    final key = KeyCode.forCharacter(text);
+    final actionable = modifiers.any(
+      (modifier) => modifier != KeyModifier.shift,
+    );
+    if (actionable) {
+      sink.add(KeyEvent(key, modifiers: modifiers));
+      return;
+    }
+    sink.add(
+      InputBatch(
+        key: KeyEvent(key, modifiers: modifiers),
+        committedText: text,
+        timeStamp: _clock.elapsed,
+        sequence: _nextSequence++,
+      ),
+    );
   }
 
   /// Decodes a full Kitty keyboard report
@@ -814,6 +1111,14 @@ class InputParser {
       21 => KeyCode.f10,
       23 => KeyCode.f11,
       24 => KeyCode.f12,
+      25 => KeyCode.f13,
+      26 => KeyCode.f14,
+      28 => KeyCode.f15,
+      29 => KeyCode.f16,
+      31 => KeyCode.f17,
+      32 => KeyCode.f18,
+      33 => KeyCode.f19,
+      34 => KeyCode.f20,
       _ => null,
     };
   }
@@ -1042,11 +1347,84 @@ class InputParser {
     _csiGroups.clear();
     _csiGroup = <int>[];
     _csiHasIntermediate = false;
+    _csiPrivateMarker = null;
+    _csiIntermediates.clear();
     _csiMouseSgr = false;
     _csiCurrentParam = 0;
     _csiAccumulating = false;
     _csiSequenceLength = 0;
   }
+
+  void _clearEscapeSequence() {
+    _escapeBytes.clear();
+    _controlKind = null;
+    _controlSawEsc = false;
+  }
 }
 
-enum _State { ground, afterEsc, csi, csiDiscard, ss3, utf8Continuation, paste }
+enum _State {
+  ground,
+  afterEsc,
+  csi,
+  csiDiscard,
+  ss3,
+  controlString,
+  controlStringDiscard,
+  utf8Continuation,
+  paste,
+}
+
+final class _LegacySequenceTable {
+  static const _maxSequenceLength = 256;
+
+  _LegacySequenceTable(Iterable<LegacyKeySequence> sequences)
+    : _entries = <({List<int> bytes, LegacyKeySequence sequence})>[
+        for (final sequence in sequences)
+          (bytes: sequence.sequence.codeUnits, sequence: sequence),
+      ] {
+    for (var i = 0; i < _entries.length; i++) {
+      final entry = _entries[i];
+      final bytes = entry.bytes;
+      if (bytes.length < 2 ||
+          bytes.length > _maxSequenceLength ||
+          bytes.first != 0x1B ||
+          bytes.any((byte) => byte > 0x7F)) {
+        throw ArgumentError.value(
+          entry.sequence.sequence,
+          'additionalLegacyKeySequences',
+          'Fixed terminal key sequences must be 2–256 ASCII bytes and start '
+              'with ESC.',
+        );
+      }
+      for (var j = 0; j < i; j++) {
+        final other = _entries[j].bytes;
+        if (_startsWith(bytes, other) || _startsWith(other, bytes)) {
+          throw ArgumentError(
+            'Legacy key sequences must be unique and prefix-free.',
+          );
+        }
+      }
+    }
+  }
+
+  final List<({List<int> bytes, LegacyKeySequence sequence})> _entries;
+
+  ({LegacyKeySequence? exact, bool prefix}) match(List<int> candidate) {
+    for (final entry in _entries) {
+      if (!_startsWith(entry.bytes, candidate)) continue;
+      return (
+        exact: entry.bytes.length == candidate.length ? entry.sequence : null,
+        prefix: entry.bytes.length > candidate.length,
+      );
+    }
+    return (exact: null, prefix: false);
+  }
+}
+
+bool _startsWith(List<int> value, List<int> prefix) {
+  if (prefix.length > value.length) return false;
+  for (var i = 0; i < prefix.length; i++) {
+    if (value[i] != prefix[i]) return false;
+  }
+  return true;
+}

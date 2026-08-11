@@ -126,6 +126,104 @@ Future<void> _pump() => Future<void>.delayed(const Duration(milliseconds: 10));
 
 void main() {
   test(
+    'unsupported Kitty input falls back to modifyOtherKeys across resume',
+    () async {
+      final trace = <String>[];
+      final input = _FakeStdin(terminal: true);
+      late final _RecordingStdout out;
+      out = _RecordingStdout(
+        terminal: true,
+        trace: trace,
+        onWrite: (bytes) {
+          if (bytes.contains('\x1B[6n')) {
+            scheduleMicrotask(
+              () => input.push('\x1B[1;2R\x1B[?1;2c'.codeUnits),
+            );
+          } else if (bytes.contains('\x1B[c')) {
+            scheduleMicrotask(() => input.push('\x1B[?1;2c'.codeUnits));
+          }
+        },
+      );
+      final driver = PosixTerminalDriver(
+        stdinOverride: input,
+        stdoutOverride: out,
+        terminalModeController: _FakeModeController(trace),
+        selfStopOverride: () => true,
+      );
+
+      try {
+        final profile = await driver.enter(TerminalMode.interactive);
+        expect(profile.keyboard, KeyboardCapabilities.legacy);
+        expect(out.written.toString(), contains('\x1B[<1u\x1B[>4;2m'));
+        out.written.clear();
+
+        await driver.debugSuspend();
+        driver.debugResume();
+
+        expect(out.written.toString(), contains('\x1B[>4;2m'));
+        expect(out.written.toString(), isNot(contains('\x1B[>31u')));
+        out.written.clear();
+        await driver.restore();
+        expect(out.written.toString(), contains('\x1B[>4;0m'));
+      } finally {
+        await driver.restore();
+        await input.close();
+      }
+    },
+  );
+
+  test(
+    'negotiated keyboard fallback is the mode restored after resume',
+    () async {
+      final trace = <String>[];
+      final input = _FakeStdin(terminal: true);
+      late final _RecordingStdout out;
+      out = _RecordingStdout(
+        terminal: true,
+        trace: trace,
+        onWrite: (bytes) {
+          if (bytes.contains('\x1B[?u')) {
+            scheduleMicrotask(() => input.push('\x1B[?3u\x1B[?1;2c'.codeUnits));
+          } else if (bytes.contains('\x1B[6n')) {
+            scheduleMicrotask(
+              () => input.push('\x1B[1;2R\x1B[?1;2c'.codeUnits),
+            );
+          } else if (bytes.contains('\x1B[c')) {
+            scheduleMicrotask(() => input.push('\x1B[?1;2c'.codeUnits));
+          }
+        },
+      );
+      final driver = PosixTerminalDriver(
+        stdinOverride: input,
+        stdoutOverride: out,
+        terminalModeController: _FakeModeController(trace),
+        selfStopOverride: () => true,
+      );
+
+      try {
+        final profile = await driver.enter(TerminalMode.interactive);
+        expect(profile.keyboard.distinguishesRepeats, isTrue);
+        expect(profile.keyboard.supportsHeldState, isFalse);
+        out.written.clear();
+
+        await driver.debugSuspend();
+        driver.debugResume();
+
+        expect(out.written.toString(), contains('\x1B[>3u'));
+        expect(
+          out.written.toString(),
+          isNot(contains('\x1B[>31u')),
+          reason:
+              'resume must not re-enable the lifecycle tier that was rejected',
+        );
+      } finally {
+        await driver.restore();
+        await input.close();
+      }
+    },
+  );
+
+  test(
     'raw Ctrl+Z restores before self-stop, is consumed, and resumes',
     () async {
       final trace = <String>[];

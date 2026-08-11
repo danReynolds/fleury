@@ -23,9 +23,9 @@ import 'capabilities.dart';
 import '../input/events.dart';
 import '../input/keyboard_state.dart';
 import 'input_parser.dart';
-import '../runtime/remote_surface_sink.dart';
 import 'terminal_driver.dart';
 import 'terminal_probe.dart';
+import 'terminal_query_runner.dart';
 import 'terminal_sequences.dart';
 
 /// Native POSIX terminal lifecycle and byte-input driver.
@@ -36,10 +36,7 @@ import 'terminal_sequences.dart';
 /// it may stop the process before Fleury can restore terminal modes.
 class PosixTerminalDriver
     with TerminalAttentionSequences
-    implements
-        TerminalDriver,
-        TerminalHandoffDriver,
-        KeyboardCapabilitiesDriver {
+    implements TerminalDriver, TerminalHandoffDriver {
   PosixTerminalDriver({
     Stdin? stdinOverride,
     Stdout? stdoutOverride,
@@ -59,6 +56,15 @@ class PosixTerminalDriver
     _sink
       ..target = _events
       ..intercept = _interceptParsedEvent;
+    _queryRunner = TerminalQueryRunner(
+      parser: _parser,
+      inputSink: _sink,
+      write: (bytes) async {
+        _stdout.write(bytes);
+        await _stdout.flush();
+      },
+      lateResponseGrace: lateProbeGrace,
+    );
   }
 
   final Stdin _stdin;
@@ -104,6 +110,7 @@ class PosixTerminalDriver
   final InputParser _parser = InputParser();
   late final StreamController<TuiEvent> _events;
   final _ParserSink _sink = _ParserSink();
+  late final TerminalQueryRunner _queryRunner;
 
   StreamSubscription<List<int>>? _stdinSubscription;
   StreamSubscription<ProcessSignal>? _resizeSubscription;
@@ -126,38 +133,19 @@ class PosixTerminalDriver
   // gates frame [write]s while the shell owns the terminal and single-flights
   // [_suspend].
   bool _suspended = false;
-  TerminalMode? _mode;
+  ActiveTerminalState? _terminalState;
+  TerminalMode? get _mode => _terminalState?.effectiveMode;
+  bool get _changedStdin => _terminalState?.rawInputOwned ?? false;
+  bool get _wroteEnterSequences => _terminalState?.outputModesOwned ?? false;
 
-  // Image-protocol probe state. While [_probing] is true the stdin listener
-  // diverts bytes into [_probeBuffer] (the terminal's reply to our query)
-  // instead of the input parser. [_imageProtocolOverride], once a probe
-  // confirms a native protocol the environment didn't advertise (e.g. Kitty
-  // graphics under Warp), upgrades [capabilities].
-  bool _probing = false;
-  List<int> _probeBuffer = <int>[];
-  // How many Device-Attributes replies the startup probe sequence still owes.
-  // Each probe query appends one DA request, and the terminal answers queries
-  // in order, so the reply to probe N is bracketed by the Nth DA. Counting them
-  // keeps the completion sentinel unambiguous PER EXCHANGE: a later probe waits
-  // for the LAST owed DA rather than settling on an earlier probe's straggling
-  // reply — without this, a slow-link image-probe DA satisfied the width
-  // probe's sentinel and the width probe's own (later) Cursor-Position reply
-  // leaked to the parser as a phantom Shift+F3 keypress on startup.
-  int _daRepliesPending = 0;
-  // Late-reply drain: a probe that timed out may still get its reply on a slow
-  // link (SSH). While draining, stdin keeps diverting into [_probeBuffer] —
-  // instead of being parsed as keystrokes — until every owed DA terminator
-  // lands (then real input after the last one replays) or [lateProbeGrace]
-  // expires. Without this, a Kitty/DA reply arriving after the probe window
-  // types garbage (`Gi=31,...`) into the focused widget.
-  bool _drainingLateProbe = false;
-  Timer? _lateProbeTimer;
+  // A timed-out query keeps its response grammar active briefly so a slow SSH
+  // reply cannot become input. Ordinary keystrokes continue through the parser
+  // throughout; only complete response frames are consumed.
   @visibleForTesting
   static Duration lateProbeGrace = const Duration(milliseconds: 250);
-  // A real probe reply is a few bytes; cap the drain buffer so a terminal
-  // spraying without a DA terminator can't grow it (and the per-batch rescan)
-  // for the whole grace — give up early instead.
-  static const _maxProbeBufferBytes = 4096;
+  @visibleForTesting
+  static Duration startupNegotiationBudget = const Duration(milliseconds: 500);
+  static const _perProbeTimeout = Duration(milliseconds: 150);
   ImageProtocol? _imageProtocolOverride;
   // Set once the ambiguous-width probe measures how the terminal sizes
   // ambiguous glyphs; a confirmed `narrow` lets the renderer drop the
@@ -167,8 +155,6 @@ class PosixTerminalDriver
   /// What the startup probe measured the terminal actually drawing. Reported
   /// through [capabilities] for diagnostics; null fields mean "unmeasured".
   WidthMeasurements _measuredGlyphWidths = const WidthMeasurements.empty();
-  bool _wroteEnterSequences = false;
-  bool _changedStdin = false;
   bool _nativeRawMode = false;
   bool? _originalLineMode;
   bool? _originalEchoMode;
@@ -332,10 +318,7 @@ class PosixTerminalDriver
   bool get isInteractive => _stdoutIsTerminal;
 
   @override
-  RemoteSurfaceSink? get surfaceSink => null; // byte presentation only
-
-  @override
-  Future<void> enter(TerminalMode mode) async {
+  Future<TerminalSessionProfile> enter(TerminalMode mode) async {
     if (_active) {
       throw StateError('PosixTerminalDriver.enter called on an active driver.');
     }
@@ -352,7 +335,10 @@ class PosixTerminalDriver
     _restoring = false;
     _entering = true;
     final enterGeneration = ++_lifecycleGeneration;
-    _mode = mode;
+    _terminalState = ActiveTerminalState(
+      requestedMode: mode,
+      effectiveMode: _effectiveMode(mode),
+    );
     _sink.target = _events;
 
     // Arm process-termination signals BEFORE the first terminal mutation. The
@@ -381,44 +367,20 @@ class PosixTerminalDriver
         _originalEchoMode = _stdin.echoMode;
         _setDartRawMode();
       }
-      _changedStdin = true;
+      _terminalState!.rawInputOwned = true;
     }
 
     // Screen-control sequences only when stdout is a real terminal — writing
     // them into a pipe or file would just corrupt it.
-    final enter = _enterSequences(mode);
+    final enter = _enterSequences(_mode!);
     if (_stdoutIsTerminal && enter.isNotEmpty) {
       _stdout.write(enter);
-      _wroteEnterSequences = true;
+      _terminalState!.outputModesOwned = true;
     }
 
     _stdinSubscription = _stdin.listen(
       (bytes) {
-        // During the startup image-protocol probe, the terminal's reply is for
-        // us, not the app — divert it to the probe buffer so it isn't parsed
-        // as keystrokes (and so a non-supporting terminal's reply is consumed
-        // rather than leaked as garbage).
-        if (_probing) {
-          _probeBuffer.addAll(bytes);
-          return;
-        }
-        if (_drainingLateProbe) {
-          // A probe timed out; its reply may still be arriving. Keep diverting
-          // until every owed DA terminator lands (then replay real input after
-          // the last one), rather than parsing the reply as keystrokes.
-          _probeBuffer.addAll(bytes);
-          if (daReplyEndN(_probeBuffer, _daRepliesPending) >= 0) {
-            _finishLateProbeDrain();
-          } else if (_probeBuffer.length > _maxProbeBufferBytes) {
-            // A terminal spraying without a DA terminator: a real reply is
-            // tiny, so give up now rather than grow the buffer (and rescan it)
-            // for the full grace. Real keystrokes buffered here are replayed,
-            // not dropped (see [_giveUpLateProbeDrain]).
-            _giveUpLateProbeDrain();
-          }
-          return;
-        }
-        _parser.feed(bytes, _sink);
+        _parser.feed(bytes, _sink, responseSink: _queryRunner);
         _scheduleFlush();
         _schedulePasteIdleFlush();
       },
@@ -447,13 +409,18 @@ class PosixTerminalDriver
     // sequences pushed our flags, and on the SAME screen buffer they were
     // pushed to (§8.1). It never blocks the app: an unanswered query
     // simply leaves capabilities conservative.
-    await _negotiateKeyboard(mode);
-    await _maybeProbeImageProtocol();
-    await _maybeProbeAmbiguousWidth(mode.alternateScreen);
+    final negotiationClock = Stopwatch()..start();
+    await _negotiateKeyboard(negotiationClock);
+    await _maybeProbeImageProtocol(negotiationClock);
+    await _maybeProbeAmbiguousWidth(_mode!.alternateScreen, negotiationClock);
 
     // A concurrent force-restore can complete while a bounded startup probe is
     // awaiting its reply. Never reactivate a driver whose lifecycle moved on.
-    if (_restoring || enterGeneration != _lifecycleGeneration) return;
+    if (_restoring || enterGeneration != _lifecycleGeneration) {
+      throw StateError(
+        'PosixTerminalDriver was restored while enter was negotiating.',
+      );
+    }
 
     _resizeSubscription = _watchSignal(ProcessSignal.sigwinch, (_) {
       if (!_events.isClosed) _events.add(ResizeEvent(size));
@@ -462,6 +429,12 @@ class PosixTerminalDriver
     _active = true;
     _entering = false;
     _emitPendingSignalIfListened();
+    final terminal = capabilities;
+    return TerminalSessionProfile.ansi(
+      terminal: terminal,
+      keyboard: keyboardCapabilities,
+      synchronizedOutput: Platform.environment['FLEURY_SYNC_OUTPUT'] != '0',
+    );
   }
 
   /// When the environment doesn't already name a native image protocol, ask
@@ -474,7 +447,6 @@ class PosixTerminalDriver
   /// successful negotiation.
   int? _confirmedKeyboardFlags;
 
-  @override
   KeyboardCapabilities get keyboardCapabilities {
     final flags = _confirmedKeyboardFlags;
     if (flags == null) return KeyboardCapabilities.legacy;
@@ -489,26 +461,27 @@ class PosixTerminalDriver
   /// so a terminal honouring 8 without 16 leaves the session unable to type
   /// at all. Reporting conservative capabilities cannot fix that; only
   /// leaving the mode can (§8.3).
-  Future<void> _negotiateKeyboard(TerminalMode mode) async {
+  Future<void> _negotiateKeyboard(Stopwatch negotiationClock) async {
     if (!_stdoutIsTerminal || !_changedStdin) return;
-    final effective = _effectiveMode(mode);
+    final effective = _mode!;
     if (effective.keyboardProtocol == KeyboardProtocolMode.legacy) return;
     // Escape hatch for a terminal where the query itself misbehaves.
     final flag = Platform.environment['FLEURY_KEYBOARD_PROBE'];
     if (flag == '0' || flag == 'false') return;
     int? flags;
+    final timeout = _nextProbeTimeout(negotiationClock);
+    if (timeout == null) return;
     try {
-      flags = await probeKeyboardFlags(_DriverProbeTransport(this));
+      flags = await probeKeyboardFlags(_queryRunner, timeout: timeout);
     } on Object {
       flags = null;
-    } finally {
-      _replayPostProbeInput();
     }
     if (flags == null) {
       // No answer: the terminal does not speak the protocol. Whatever we
       // pushed was ignored, so there is nothing to roll back — but we
       // claim nothing either.
       _confirmedKeyboardFlags = null;
+      await _activateModifyOtherKeysFallback(effective);
       return;
     }
     if (effective.keyboardProtocol == KeyboardProtocolMode.lifecycle &&
@@ -519,19 +492,55 @@ class PosixTerminalDriver
         '\x1B[<1u'
         '\x1B[>${KeyboardProtocolMode.disambiguated.requestedFlags}u',
       );
+      _terminalState!.effectiveMode = terminalModeWithKeyboardProtocol(
+        effective,
+        KeyboardProtocolMode.disambiguated,
+      );
       await _stdout.flush();
       int? after;
-      try {
-        after = await probeKeyboardFlags(_DriverProbeTransport(this));
-      } on Object {
-        after = null;
-      } finally {
-        _replayPostProbeInput();
+      final fallbackTimeout = _nextProbeTimeout(negotiationClock);
+      if (fallbackTimeout != null) {
+        try {
+          after = await probeKeyboardFlags(
+            _queryRunner,
+            timeout: fallbackTimeout,
+          );
+        } on Object {
+          after = null;
+        }
       }
       _confirmedKeyboardFlags = after;
+      if (after == null || after & 0x01 == 0) {
+        await _activateModifyOtherKeysFallback(effective);
+      }
       return;
     }
     _confirmedKeyboardFlags = flags;
+    if (flags & 0x01 == 0) {
+      await _activateModifyOtherKeysFallback(effective);
+    }
+  }
+
+  /// Falls back to xterm modifyOtherKeys level 2 when Kitty disambiguation was
+  /// not confirmed. Pop the attempted Kitty frame first: a late/partial Kitty
+  /// implementation must never remain stacked underneath the fallback.
+  Future<void> _activateModifyOtherKeysFallback(TerminalMode effective) async {
+    final flag = Platform.environment['FLEURY_MODIFY_OTHER_KEYS'];
+    if (flag == '0' || flag == 'false') return;
+    try {
+      _stdout.write('\x1B[<1u\x1B[>4;2m');
+      await _stdout.flush();
+    } on Object {
+      return;
+    }
+    _confirmedKeyboardFlags = null;
+    final state = _terminalState!;
+    state
+      ..effectiveMode = terminalModeWithKeyboardProtocol(
+        effective,
+        KeyboardProtocolMode.legacy,
+      )
+      ..modifyOtherKeysOwned = true;
   }
 
   /// Lifecycle is only safe to keep when text survives it: event types (2),
@@ -540,7 +549,7 @@ class PosixTerminalDriver
   static bool _lifecycleIsSafe(int flags) =>
       flags & 0x02 != 0 && flags & 0x08 != 0 && flags & 0x10 != 0;
 
-  Future<void> _maybeProbeImageProtocol() async {
+  Future<void> _maybeProbeImageProtocol(Stopwatch negotiationClock) async {
     if (!_stdoutIsTerminal || !_changedStdin) return;
     // Escape hatch: `FLEURY_IMAGE_PROBE=0` disables the startup query for users
     // on a terminal where it misbehaves (the conservative env fallback stands).
@@ -554,13 +563,13 @@ class PosixTerminalDriver
         ImageProtocol.halfBlock) {
       return;
     }
+    final timeout = _nextProbeTimeout(negotiationClock);
+    if (timeout == null) return;
     try {
-      final detected = await probeImageProtocol(_DriverProbeTransport(this));
+      final detected = await probeImageProtocol(_queryRunner, timeout: timeout);
       if (detected != null) _imageProtocolOverride = detected;
     } on Object {
       // Probe failed (no terminal reply, write error, …): keep the fallback.
-    } finally {
-      _replayPostProbeInput();
     }
   }
 
@@ -573,7 +582,10 @@ class PosixTerminalDriver
   /// scrollback. So it runs only when [onAlternateScreen] is true; the safety is
   /// now enforced by this gate rather than being a consequence of call ordering.
   /// Any failure leaves the safe `wide` default in place.
-  Future<void> _maybeProbeAmbiguousWidth(bool onAlternateScreen) async {
+  Future<void> _maybeProbeAmbiguousWidth(
+    bool onAlternateScreen,
+    Stopwatch negotiationClock,
+  ) async {
     if (!_stdoutIsTerminal || !_changedStdin) return;
     if (!onAlternateScreen) return;
     final env = Platform.environment;
@@ -587,10 +599,12 @@ class PosixTerminalDriver
     // ASCII-only output emits no ambiguous glyphs, so nothing needs sizing —
     // skip the round trip and the stray probe glyph.
     if (detectGlyphTierFromEnvironment(env) == GlyphTier.ascii) return;
+    final timeout = _nextProbeTimeout(negotiationClock);
+    if (timeout == null) return;
     try {
       // One round trip measures every width class the field disagrees on, not
       // just ambiguous — same cost as the old single-glyph probe.
-      final measured = await probeGlyphWidths(_DriverProbeTransport(this));
+      final measured = await probeGlyphWidths(_queryRunner, timeout: timeout);
       _measuredGlyphWidths = measured;
       // Agreement across the ambiguous representatives, or keep the default:
       // one glyph is a signal, not proof (RFC 0019 §6.1).
@@ -599,150 +613,20 @@ class PosixTerminalDriver
     } on Object {
       // Probe failed (no terminal reply, write error, …): keep the `wide`
       // default so ambiguous-wide terminals never garble.
-    } finally {
-      _replayPostProbeInput();
     }
   }
 
-  /// Begins one probe query/response exchange, invoked as a probe query is
-  /// written. Each probe appends a Device-Attributes request, so one more DA
-  /// reply is now owed. The buffer is deliberately NOT cleared between probes of
-  /// the same startup sequence: an earlier probe's reply may still be in flight
-  /// on a slow link and must be drained too, not leaked to the parser. Any
-  /// pending late-drain is paused — this exchange's own diversion ([_probing])
-  /// takes over — and re-armed by [_replayPostProbeInput] when the exchange
-  /// ends with replies still owed.
-  void _beginProbeExchange() {
-    _lateProbeTimer?.cancel();
-    _lateProbeTimer = null;
-    _drainingLateProbe = false;
-    if (_daRepliesPending == 0) _probeBuffer = <int>[];
-    _daRepliesPending++;
-    _probing = true;
+  Duration? _nextProbeTimeout(Stopwatch negotiationClock) {
+    final remaining = startupNegotiationBudget - negotiationClock.elapsed;
+    if (remaining <= Duration.zero) return null;
+    return remaining < _perProbeTimeout ? remaining : _perProbeTimeout;
   }
-
-  /// True once the probe buffer holds every Device-Attributes reply currently
-  /// owed ([_daRepliesPending]) — the terminal has answered all outstanding
-  /// probe queries, so their graphics/cursor replies are already in and the
-  /// wait can stop.
-  bool _probeReplyComplete() =>
-      daReplyEndN(_probeBuffer, _daRepliesPending) >= 0;
-
-  /// Replays real keystrokes that arrived during the probe window. Everything
-  /// the terminal captured after the LAST owed Device-Attributes reply is user
-  /// input (each probe's reply ends at its DA, answered in query order), so feed
-  /// that tail to the parser instead of dropping it. Bytes at/before the final
-  /// owed reply are the terminal's own responses and stay consumed; if fewer DA
-  /// replies than owed have landed (a slow link, or a timeout), keep diverting
-  /// until the rest arrive rather than parsing a straggling reply as keystrokes.
-  void _replayPostProbeInput() {
-    final tailStart = daReplyEndN(_probeBuffer, _daRepliesPending);
-    if (tailStart >= 0) {
-      // Every owed DA reply landed within the probe window — everything after
-      // the last one is real input; feed that tail to the parser.
-      final buf = _probeBuffer;
-      _probeBuffer = <int>[];
-      _daRepliesPending = 0;
-      if (tailStart < buf.length) {
-        _parser.feed(buf.sublist(tailStart), _sink);
-        _scheduleFlush();
-      }
-      return;
-    }
-    // Fewer replies than owed have landed. On a slow link the rest may still be
-    // en route; parsing them as keystrokes would type garbage into the app.
-    // Keep diverting stdin (the listener routes to the drain) until the
-    // remaining DAs land or a short grace expires.
-    _drainingLateProbe = true;
-    _lateProbeTimer = Timer(lateProbeGrace, _giveUpLateProbeDrain);
-  }
-
-  /// The last owed DA terminator arrived while draining: stop diverting, discard
-  /// the replies, and replay any real input that trailed the final one.
-  void _finishLateProbeDrain() {
-    _lateProbeTimer?.cancel();
-    _lateProbeTimer = null;
-    _drainingLateProbe = false;
-    final buf = _probeBuffer;
-    _probeBuffer = <int>[];
-    final tailStart = daReplyEndN(buf, _daRepliesPending);
-    _daRepliesPending = 0;
-    if (tailStart >= 0 && tailStart < buf.length) {
-      _parser.feed(buf.sublist(tailStart), _sink);
-      _scheduleFlush();
-    }
-  }
-
-  /// The grace elapsed before every owed DA terminator landed (a terminal that
-  /// doesn't answer DA, or a reply that stalled past the window). Rather than
-  /// discard the whole buffer — which silently drops real keystrokes typed
-  /// during the window, up to and including the Ctrl+C escape hatch on a
-  /// scripted/CI PTY that never answers DA — replay the buffered input, skipping
-  /// only a leading unanswered probe-reply fragment so a straggling
-  /// Cursor-Position/Device-Attributes reply is not decoded as a phantom key.
-  void _giveUpLateProbeDrain() {
-    _lateProbeTimer?.cancel();
-    _lateProbeTimer = null;
-    _drainingLateProbe = false;
-    final buf = _probeBuffer;
-    _probeBuffer = <int>[];
-    _daRepliesPending = 0;
-    final tailStart = _probeReplyPrefixEnd(buf);
-    if (tailStart < buf.length) {
-      _parser.feed(buf.sublist(tailStart), _sink);
-      _scheduleFlush();
-    }
-  }
-
-  /// Tears down any pending late-probe drain on the restore path: cancel the
-  /// grace timer, stop diverting, and forget any owed replies / buffered bytes.
-  void _cancelLateProbeDrain() {
-    _lateProbeTimer?.cancel();
-    _lateProbeTimer = null;
-    _drainingLateProbe = false;
-    _daRepliesPending = 0;
-    _probeBuffer = <int>[];
-  }
-
-  /// Test seam: whether stdin is currently diverting a late probe reply.
-  @visibleForTesting
-  bool get debugDrainingLateProbe => _drainingLateProbe;
-
-  /// Test seam: how many Device-Attributes replies the probe sequence still owes.
-  @visibleForTesting
-  int get debugProbeRepliesPending => _daRepliesPending;
-
-  /// Test seam: the current probe-diversion buffer contents.
-  @visibleForTesting
-  List<int> get debugProbeBuffer => List<int>.unmodifiable(_probeBuffer);
-
-  /// Test seam: enter the late-drain state as a timed-out probe would, with an
-  /// optional [partial] already in the buffer — modelling a reply that began
-  /// arriving before the timeout (e.g. `ESC [ ? 6 2` with the `c` still in
-  /// flight), so the post-timeout tail must reassemble across the boundary.
-  /// [repliesOwed] models how many probes are outstanding (each owes one DA):
-  /// the default of 1 is a single timed-out probe; 2 models the image+width
-  /// startup pair where the first probe's reply is still in flight.
-  @visibleForTesting
-  void debugBeginLateProbeDrain([
-    List<int> partial = const <int>[],
-    int repliesOwed = 1,
-  ]) {
-    _probeBuffer = List<int>.of(partial);
-    _daRepliesPending = repliesOwed;
-    _replayPostProbeInput();
-  }
-
-  /// Test seam: begin a probe exchange as a probe query write would (models the
-  /// second startup probe starting while the first's reply is still owed).
-  @visibleForTesting
-  void debugBeginProbeExchange() => _beginProbeExchange();
 
   /// Builds the mode-entry escape sequence (alt screen, hide cursor,
   /// bracketed paste, Kitty keyboard, mouse), shared by [enter] and resume.
-  String _enterSequences(TerminalMode mode) {
-    return buildTerminalEnterSequences(_effectiveMode(mode));
-  }
+  String _enterSequences(TerminalMode mode) =>
+      '${buildTerminalEnterSequences(mode)}'
+      '${_terminalState?.modifyOtherKeysOwned ?? false ? '\x1B[>4;2m' : ''}';
 
   /// Applies the fleet override before any sequence is built.
   ///
@@ -757,26 +641,15 @@ class PosixTerminalDriver
       environment: Platform.environment,
     );
     if (tier == mode.keyboardProtocol) return mode;
-    return TerminalMode(
-      rawInput: mode.rawInput,
-      alternateScreen: mode.alternateScreen,
-      hideCursor: mode.hideCursor,
-      resetStyleOnExit: mode.resetStyleOnExit,
-      bracketedPaste: mode.bracketedPaste,
-      focusReporting: mode.focusReporting,
-      keyboardProtocol: tier,
-      mouse: mode.mouse,
-      mouseMotion: mode.mouseMotion,
-    );
+    return terminalModeWithKeyboardProtocol(mode, tier);
   }
 
   /// Builds the mode-exit escape sequence, shared by [restore] and
   /// suspend. Disables mouse modes unconditionally (incl. all-motion
   /// 1003) so none leak back to the shell.
-  String _exitSequences(TerminalMode mode) {
-    // Same resolution as entry: what we pop must match what we pushed.
-    return buildTerminalExitSequences(_effectiveMode(mode));
-  }
+  String _exitSequences(TerminalMode mode) =>
+      '${_terminalState?.modifyOtherKeysOwned ?? false ? '\x1B[>4;0m' : ''}'
+      '${buildTerminalExitSequences(mode)}';
 
   bool _interceptParsedEvent(TuiEvent event) {
     if (!_active ||
@@ -1043,9 +916,9 @@ class PosixTerminalDriver
     _pendingSignal = null;
     _pendingSignalDelivered = false;
     _entering = false;
-    // Before the early-return: a late-probe drain timer must never outlive
-    // restore(), even on the nothing-else-to-restore path.
-    _cancelLateProbeDrain();
+    // Before the early-return: query deadlines and late-reply quarantine must
+    // never outlive terminal ownership.
+    _queryRunner.dispose();
     if (!_active &&
         !_wroteEnterSequences &&
         !_changedStdin &&
@@ -1053,7 +926,7 @@ class PosixTerminalDriver
         _resizeSubscription == null &&
         _intSubscription == null &&
         _termSubscription == null) {
-      _mode = null;
+      _terminalState = null;
       _sink.target = null;
       _restoring = false;
       return;
@@ -1094,7 +967,7 @@ class PosixTerminalDriver
       // inside _restoreCookedMode. The important cleanup is the ANSI
       // cursor / alt-screen sequences below.
       _restoreCookedMode();
-      _changedStdin = false;
+      _terminalState?.rawInputOwned = false;
     }
 
     if (_wroteEnterSequences) {
@@ -1103,7 +976,7 @@ class PosixTerminalDriver
       try {
         _stdout.write(_exitSequences(_mode ?? TerminalMode.interactive));
       } catch (_) {}
-      _wroteEnterSequences = false;
+      _terminalState?.outputModesOwned = false;
     }
 
     // Critical: flush stdout. Without this the cleanup sequences sit in
@@ -1116,7 +989,7 @@ class PosixTerminalDriver
       // can do at that point.
     }
 
-    _mode = null;
+    _terminalState = null;
     _sink.target = null;
     // Belt-and-suspenders against a callback already queued before watcher
     // cancellation. Successful teardown must leave no force-exit timer behind.
@@ -1289,81 +1162,6 @@ final class _PosixTermiosBindings {
   final _TcgetattrDart tcgetattr;
   final _TcsetattrDart tcsetattr;
   final _CfmakerawDart cfmakeraw;
-}
-
-/// Probe transport over a [PosixTerminalDriver]'s live stdin/stdout. Writes the
-/// query, then waits for the reply that the driver's stdin listener diverts
-/// into its probe buffer. Because the query appends a Device Attributes request
-/// (which every terminal answers), it stops as soon as that reply lands instead
-/// of always blocking for the full timeout.
-class _DriverProbeTransport implements TerminalProbeTransport {
-  _DriverProbeTransport(this._driver);
-
-  final PosixTerminalDriver _driver;
-
-  @override
-  Future<List<int>> request(String bytes, {required Duration timeout}) async {
-    // Begin an exchange (one more DA reply owed). Unlike a naive reset, this
-    // keeps any earlier probe's still-in-flight reply in the buffer so it is
-    // drained, not leaked; the wait below completes only once EVERY owed DA has
-    // landed, so a later probe never settles on an earlier probe's reply.
-    _driver._beginProbeExchange();
-    try {
-      _driver._stdout.write(bytes);
-      await _driver._stdout.flush();
-      final deadline = Stopwatch()..start();
-      while (deadline.elapsed < timeout) {
-        if (_driver._probeReplyComplete()) break;
-        await Future<void>.delayed(const Duration(milliseconds: 4));
-      }
-      return List<int>.unmodifiable(_driver._probeBuffer);
-    } finally {
-      _driver._probing = false;
-    }
-  }
-}
-
-/// Index in [buf] where real post-probe input begins, skipping a LEADING
-/// probe-reply fragment a slow terminal may have emitted: a Device-Attributes
-/// (`ESC [ … c`), Cursor-Position (`ESC [ … R`) or other private/incomplete CSI
-/// reply, or a Kitty graphics APC (`ESC _ … ESC \`). Genuine keystrokes — plain
-/// text, control bytes such as Ctrl+C (0x03), and real cursor/function-key CSIs
-/// — are NOT skipped, so a give-up replays them instead of discarding them, and
-/// a straggling Cursor-Position reply is not decoded as a phantom key.
-int _probeReplyPrefixEnd(List<int> buf) {
-  var i = 0;
-  while (i + 1 < buf.length && buf[i] == 0x1B) {
-    final next = buf[i + 1];
-    if (next == 0x5B) {
-      // CSI. Scan parameter / intermediate bytes.
-      var j = i + 2;
-      var private = false;
-      while (j < buf.length && buf[j] >= 0x20 && buf[j] <= 0x3F) {
-        if (buf[j] == 0x3F || buf[j] == 0x3E || buf[j] == 0x3D) private = true;
-        j++;
-      }
-      if (j >= buf.length) return buf.length; // incomplete reply fragment
-      final finalByte = buf[j];
-      // A probe reply is a private CSI (DA/keyboard-status carry `?`/`>`/`=`), a
-      // Cursor-Position report (`R`), or a Device-Attributes reply (`c`). Any
-      // other final byte is a genuine key report (arrow, kitty CSU, …) — stop.
-      final isReply =
-          private || finalByte == 0x52 /* R */ || finalByte == 0x63 /* c */;
-      if (!isReply) return i;
-      i = j + 1;
-    } else if (next == 0x5F) {
-      // APC (Kitty graphics reply): ESC _ … ESC \.
-      var j = i + 2;
-      while (j + 1 < buf.length && !(buf[j] == 0x1B && buf[j + 1] == 0x5C)) {
-        j++;
-      }
-      if (j + 1 >= buf.length) return buf.length; // incomplete APC
-      i = j + 2;
-    } else {
-      return i; // ESC + other (lone ESC, Alt+char, SS3) — genuine input.
-    }
-  }
-  return i;
 }
 
 /// The keyboard tier this session actually pushes, from what the app asked for

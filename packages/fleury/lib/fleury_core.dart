@@ -142,8 +142,7 @@ export 'src/rendering/surface_capabilities.dart'
         GlyphTier,
         InlineImageSupport,
         PointerPrecision,
-        SurfaceCapabilities,
-        SurfaceCapabilitiesProvider;
+        SurfaceCapabilities;
 export 'src/rendering/render_objects.dart'
     show
         RenderBorder,
@@ -295,6 +294,13 @@ export 'src/input/keyboard_state.dart'
     show KeyboardCapabilities, KeyboardSnapshot;
 export 'src/terminal/fake_driver.dart' show FakeTerminalDriver;
 export 'src/terminal/input_parser.dart' show InputParser, TuiEventSink;
+export 'src/terminal/legacy_key_sequences.dart' show LegacyKeySequence;
+export 'src/terminal/terminal_response.dart'
+    show
+        TerminalResponse,
+        TerminalResponseExpectation,
+        TerminalResponseKind,
+        TerminalResponseSink;
 export 'src/runtime/remote_surface_sink.dart'
     show
         RemoteClipboardStatus,
@@ -304,9 +310,13 @@ export 'src/runtime/remote_surface_sink.dart'
 export 'src/terminal/terminal_driver.dart'
     show
         OutputFlowControl,
+        AnsiTerminalPresentation,
+        StructuredTerminalPresentation,
         TerminalAttentionDriver,
         TerminalDriver,
         TerminalHandoffDriver,
+        TerminalPresentation,
+        TerminalSessionProfile,
         KeyboardProtocolMode,
         TerminalMode,
         notifyTerminal,
