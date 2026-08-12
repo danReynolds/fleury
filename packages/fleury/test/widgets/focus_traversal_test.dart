@@ -79,6 +79,64 @@ void main() {
       expect(hit, same(sameRow));
     });
 
+    test('prefers cross-axis alignment in every direction', () {
+      final cases =
+          <
+            ({
+              TraversalDirection direction,
+              FocusNode from,
+              FocusNode before,
+              FocusNode aligned,
+              FocusNode after,
+            })
+          >[
+            (
+              direction: TraversalDirection.left,
+              from: _node(left: 20, top: 1, width: 10, height: 1),
+              before: _node(left: 0, top: 0, width: 10, height: 1),
+              aligned: _node(left: 0, top: 1, width: 10, height: 1),
+              after: _node(left: 0, top: 2, width: 10, height: 1),
+            ),
+            (
+              direction: TraversalDirection.right,
+              from: _node(left: 0, top: 1, width: 10, height: 1),
+              before: _node(left: 20, top: 0, width: 10, height: 1),
+              aligned: _node(left: 20, top: 1, width: 10, height: 1),
+              after: _node(left: 20, top: 2, width: 10, height: 1),
+            ),
+            (
+              direction: TraversalDirection.up,
+              from: _node(left: 1, top: 20, width: 1, height: 10),
+              before: _node(left: 0, top: 0, width: 1, height: 10),
+              aligned: _node(left: 1, top: 0, width: 1, height: 10),
+              after: _node(left: 2, top: 0, width: 1, height: 10),
+            ),
+            (
+              direction: TraversalDirection.down,
+              from: _node(left: 1, top: 0, width: 1, height: 10),
+              before: _node(left: 0, top: 20, width: 1, height: 10),
+              aligned: _node(left: 1, top: 20, width: 1, height: 10),
+              after: _node(left: 2, top: 20, width: 1, height: 10),
+            ),
+          ];
+
+      for (final testCase in cases) {
+        final hit = nearestFocusableInDirection(
+          from: testCase.from.rect!,
+          candidates: [
+            testCase.from,
+            testCase.before,
+            testCase.aligned,
+            testCase.after,
+          ],
+          excluding: testCase.from,
+          direction: testCase.direction,
+        );
+
+        expect(hit, same(testCase.aligned), reason: testCase.direction.name);
+      }
+    });
+
     test('skips nodes flagged skipTraversal', () {
       final from = _node(left: 0, top: 0, width: 5, height: 3);
       final skip = _node(
@@ -444,6 +502,117 @@ void main() {
       expect(c.hasFocus, isTrue, reason: 'Shift+Tab wraps backward');
     });
 
+    testWidgets('Tab follows painted reading order, not attachment order', (
+      tester,
+    ) {
+      final topLeft = FocusNode(debugLabel: 'top left');
+      final topRight = FocusNode(debugLabel: 'top right');
+      final bottomLeft = FocusNode(debugLabel: 'bottom left');
+      final bottomRight = FocusNode(debugLabel: 'bottom right');
+
+      tester.pumpWidget(
+        FocusTraversalGroup(
+          child: Stack(
+            children: [
+              // Positioned children do not define a Stack's intrinsic size.
+              const SizedBox(width: 24, height: 6),
+              // Deliberately attach these in an order unrelated to their
+              // painted positions. Sequential traversal should still read the
+              // screen top-to-bottom, then left-to-right.
+              Positioned(
+                left: 12,
+                top: 3,
+                width: 8,
+                height: 1,
+                child: Focus(focusNode: bottomRight, child: const Text('BR')),
+              ),
+              Positioned(
+                left: 0,
+                top: 0,
+                width: 8,
+                height: 1,
+                child: Focus(
+                  focusNode: topLeft,
+                  autofocus: true,
+                  child: const Text('TL'),
+                ),
+              ),
+              Positioned(
+                left: 0,
+                top: 3,
+                width: 8,
+                height: 1,
+                child: Focus(focusNode: bottomLeft, child: const Text('BL')),
+              ),
+              Positioned(
+                left: 12,
+                top: 0,
+                width: 8,
+                height: 1,
+                child: Focus(focusNode: topRight, child: const Text('TR')),
+              ),
+            ],
+          ),
+        ),
+      );
+      tester.render(size: const CellSize(24, 6));
+
+      expect(topLeft.hasFocus, isTrue);
+      tester.sendKey(_code(KeyCode.tab));
+      expect(topRight.hasFocus, isTrue);
+      tester.sendKey(_code(KeyCode.tab));
+      expect(bottomLeft.hasFocus, isTrue);
+      tester.sendKey(_code(KeyCode.tab));
+      expect(bottomRight.hasFocus, isTrue);
+    });
+
+    testWidgets('nested groups localize arrows without trapping Tab', (tester) {
+      final first = FocusNode(debugLabel: 'first in group');
+      final second = FocusNode(debugLabel: 'second in group');
+      final outside = FocusNode(debugLabel: 'outside group');
+
+      tester.pumpWidget(
+        FocusTraversalGroup(
+          child: Column(
+            children: [
+              FocusTraversalGroup(
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 8,
+                      child: Focus(
+                        focusNode: first,
+                        autofocus: true,
+                        child: const Text('First'),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 8,
+                      child: Focus(
+                        focusNode: second,
+                        child: const Text('Second'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Focus(focusNode: outside, child: const Text('Outside')),
+            ],
+          ),
+        ),
+      );
+      tester.render(size: const CellSize(24, 4));
+
+      tester.sendKey(_code(KeyCode.tab));
+      expect(second.hasFocus, isTrue);
+      tester.sendKey(_code(KeyCode.tab));
+      expect(
+        outside.hasFocus,
+        isTrue,
+        reason: 'a directional boundary must not become an accidental Tab trap',
+      );
+    });
+
     testWidgets('Tab skips nodes flagged skipTraversal', (tester) {
       final a = FocusNode(debugLabel: 'a');
       final skip = FocusNode(debugLabel: 'skip', skipTraversal: true);
@@ -578,7 +747,7 @@ void main() {
     testWidgets(
       'modal open: click on a node OUTSIDE the modal does not move focus',
       (tester) {
-        // Mouse path must honour the active modal boundary same as Tab.
+        // Mouse path must honour the active focus trap same as Tab.
         // A click on a node behind a modal dialog must not focus through.
         final outside = FocusNode(debugLabel: 'outside');
         final inside = FocusNode(debugLabel: 'inside');
@@ -593,7 +762,7 @@ void main() {
               SizedBox(
                 height: 1,
                 child: FocusScope(
-                  modal: true,
+                  trapFocus: true,
                   child: Focus(
                     focusNode: inside,
                     autofocus: true,
@@ -633,7 +802,7 @@ void main() {
       final inB = FocusNode(debugLabel: 'inB');
       tester.pumpWidget(
         FocusScope(
-          modal: true,
+          trapFocus: true,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -677,7 +846,7 @@ void main() {
         final anchor = FocusNode(debugLabel: 'anchor');
         tester.pumpWidget(
           FocusScope(
-            modal: true,
+            trapFocus: true,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [

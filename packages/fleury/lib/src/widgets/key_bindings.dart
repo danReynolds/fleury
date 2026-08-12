@@ -463,13 +463,12 @@ class KeyBindings extends StatefulWidget {
   /// handler in which to intercept that — the whole problem is that no
   /// handler runs — so the policy belongs to the scope, not to a row.
   ///
-  /// `modal: true` blocks ancestor scopes, extending the focus system's
-  /// existing modality to the key lane. Routed dialogs write nothing — not
-  /// because Navigator sets this flag (it does not), but because a modal
-  /// route's `FocusScope(modal: true)` already truncates the focus chain at
-  /// the scope boundary. This flag exists for modal UI that is NOT a route:
-  /// an inline command palette, a capture overlay. Per-key passthrough is a
-  /// binding at THIS scope that matches and calls [KeyBindingEvent.bubble].
+  /// `modal: true` blocks ancestor binding scopes. Routed dialogs get this
+  /// policy from Navigator alongside `FocusScope(trapFocus: true)`: the focus
+  /// scope keeps focus inside while this binding scope keeps unmatched keys
+  /// from reaching the covered screen. Low-level overlays can compose the two
+  /// policies explicitly. Per-key passthrough is a binding at THIS scope that
+  /// matches and calls [KeyBindingEvent.bubble].
   final bool modal;
 
   /// The subtree these bindings cover. A key fires them when focus is on this
@@ -642,11 +641,10 @@ class _KeyBindingsState extends State<KeyBindings> implements KeyBindingSource {
 
   @override
   Widget build(BuildContext context) {
-    // Modality is enforced by the dispatcher (via [isModalScope]), NOT by
-    // wrapping in a modal FocusScope: that would truncate the focus chain
-    // at this node, leaving a boundary binding that calls `bubble()` with
-    // no ancestors to reach — and that bubble is exactly §14.3's per-key
-    // passthrough.
+    // Unmatched-key isolation is enforced by the dispatcher (via
+    // [isModalScope]), independently of FocusScope.trapFocus. Keeping the
+    // ancestor chain intact is what lets a binding at this boundary call
+    // `bubble()` for explicit per-key passthrough.
     return Focus(focusNode: _node, child: widget.child);
   }
 }

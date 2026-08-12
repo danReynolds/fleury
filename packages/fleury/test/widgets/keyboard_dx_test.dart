@@ -181,7 +181,7 @@ void main() {
   });
 
   group('KeyBindings(modal:) (§14.3)', () {
-    testWidgets('unmatched keys stop at a modal scope', (tester) {
+    testWidgets('unmatched keys stop at a modal key boundary', (tester) {
       var appSaw = 0;
       var dialogSaw = 0;
       tester.pumpFleuryHome(

@@ -73,6 +73,11 @@ void main() {
       isFalse,
       reason: 'tapping the trigger again closes the menu',
     );
+    expect(
+      tester.focusManager.focusedNode?.debugLabel,
+      'menu-trigger',
+      reason: 'the outer close path retires the trap before restoring focus',
+    );
   });
 
   testWidgets('Down + Enter runs the selected item and closes', (tester) {

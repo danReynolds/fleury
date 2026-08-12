@@ -36,7 +36,7 @@
 //
 //   - Type-safe with no codegen, no strings. Arguments ride the screen's
 //     constructor; the result rides `push<T>()` / `present<T>() ->
-//     Future<T?>`. Focus traps to the top route (modal FocusScope) and is
+//     Future<T?>`. Focus traps to the top presented route and is
 //     restored to the route beneath on pop.
 //   - One presentation system: `push` for pages, `present` for modals
 //     (dialogs/sheets — non-opaque routes over the screen beneath), `pop`
@@ -51,7 +51,6 @@ import '../rendering/cell.dart' show Color;
 import '../rendering/render_navigator.dart';
 import '../rendering/render_object.dart';
 import '../semantics/semantics.dart';
-import '../input/events.dart';
 import 'align.dart' show Align, Alignment;
 import 'basic.dart' show Container;
 import 'effects.dart';
@@ -455,6 +454,15 @@ class NavigatorState extends State<Navigator> {
     // between are already gone); the push-time snapshot is the fallback for
     // focus that lived OUTSIDE this navigator's routes (a sidebar pane, app
     // chrome), which no route scope ever recorded.
+    // The leaving route's focus markers stay mounted until the reveal frame.
+    // Exclude its subtree now, then retire its focus trap, so no direct
+    // request can reclaim focus during that gap and the revealed route can
+    // restore through the same trap-aware request path used everywhere else.
+    final leavingContext = route.restoreKey.currentContext;
+    if (leavingContext != null) {
+      _manager?.excludeFocusIn(leavingContext);
+    }
+    _manager?.releaseFocusTrapIn(leavingContext);
     _manager?.requestFocus(null);
     final revealed = _topLive;
     final revealedContext = revealed?.restoreKey.currentContext;
@@ -752,9 +760,10 @@ class _RouteHost extends StatelessWidget {
       //
       // It also gets its OWN selection scope. The app-root scope that makes
       // text selectable by default sits outside this route, and a modal
-      // FocusScope (below) deliberately cuts the background out of the active
-      // chain — which would otherwise take the root scope's Ctrl+C with it,
-      // leaving a dialog's text selectable-looking but impossible to copy.
+      // route-local KeyBindings (below) deliberately cuts the background out
+      // of the active chain — which would otherwise take the root scope's
+      // Ctrl+C with it, leaving a dialog's text selectable-looking but
+      // impossible to copy.
       // Nested SelectionAreas are fine: the innermost one wins, so a route
       // that brings its own still behaves.
       Widget content = Align(
@@ -782,12 +791,17 @@ class _RouteHost extends StatelessWidget {
     // for a modal only when it's barrierDismissible.
     final dismissible = align == null || route.barrierDismissible;
     Widget content = FocusScope(
-      modal: modal,
+      trapFocus: modal,
       // The restoreKey anchors focus restoration: it sits INSIDE the route's
       // FocusScope, so restoreFocusInScope(key.currentContext) resolves this
       // route's scope memory when a pop reveals the route again.
       child: KeyBindings(
         key: route.restoreKey,
+        // Focus trapping and key propagation are separate policies. A
+        // presented route needs both: focus cannot leave the dialog, and an
+        // unmatched key cannot fall through to the covered screen. Page
+        // routes keep ancestor app-level commands available.
+        modal: modal,
         bindings: active && dismissible
             ? [
                 KeyBinding(
@@ -811,10 +825,10 @@ class _RouteHost extends StatelessWidget {
             route: route,
             // Per-route traversal: every route — the home page, a pushed page,
             // or a presented modal — gets arrow + Tab focus traversal for free.
-            // It sits inside the route's FocusScope, so a modal's traversal is
-            // trapped within it (an explicit inner group can still sub-scope a
-            // pane). This is where a Navigator-backed app and every navigated
-            // route pick up traversal, so no screen has to wrap one itself.
+            // It sits inside the route's FocusScope, so a presented route's
+            // traversal is trapped within it. This is where a Navigator-backed
+            // app and every navigated route pick up traversal, so no screen
+            // has to wrap one itself.
             child: FocusTraversalGroup(child: ErrorBoundary(child: screen)),
           ),
         ),

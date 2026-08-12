@@ -165,9 +165,10 @@ void main() {
     });
   });
   group('modal routes get their own selection scope', () {
-    // A presented route is a modal FocusScope, which cuts the background out
-    // of the active chain — taking the app-root selection scope's Ctrl+C with
-    // it. Without a scope of its own the text highlighted but never copied.
+    // A presented route installs a key-binding boundary, which cuts the
+    // background out of the active chain — taking the app-root selection
+    // scope's Ctrl+C with it. Without a selection scope of its own, the
+    // dialog's text highlighted but never copied.
     testWidgets('text presented in a modal route can be selected AND copied', (
       tester,
     ) {

@@ -602,7 +602,7 @@ void main() {
       expect(calls, ['parent']);
     });
 
-    test('4. Modal FocusScope blocks parent bindings behind it', () {
+    test('4. A focus trap does not implicitly block parent bindings', () {
       final calls = <String>[];
       final h = _TestHarness();
       h.mountRoot(
@@ -614,14 +614,100 @@ void main() {
             ),
           ],
           child: const FocusScope(
-            modal: true,
+            trapFocus: true,
             child: Focus(autofocus: true, child: EmptyBox()),
           ),
         ),
       );
 
       h.dispatch(_char('q'));
-      expect(calls, isEmpty);
+      expect(calls, [
+        'parent',
+      ], reason: 'focus location and unmatched-key propagation are separate');
+    });
+
+    test('4a. With no focus, a trap keeps sibling bindings out of the '
+        'synthetic active chain', () {
+      final calls = <String>[];
+      final h = _TestHarness();
+      h.mountRoot(
+        KeyBindings(
+          bindings: [
+            KeyBinding(
+              KeyCode.char('q'),
+              onTrigger: (_) => calls.add('ancestor'),
+            ),
+          ],
+          child: Column(
+            children: [
+              KeyBindings(
+                bindings: [
+                  KeyBinding(
+                    KeyCode.char('q'),
+                    onTrigger: (_) => calls.add('background sibling'),
+                  ),
+                ],
+                child: const EmptyBox(),
+              ),
+              FocusScope(
+                trapFocus: true,
+                child: KeyBindings(
+                  bindings: [
+                    KeyBinding(
+                      KeyCode.char('x'),
+                      onTrigger: (_) => calls.add('trap'),
+                    ),
+                  ],
+                  child: const Focus(autofocus: true, child: EmptyBox()),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      h.manager.requestFocus(null);
+      h.dispatch(_char('q'));
+
+      expect(
+        calls,
+        ['ancestor'],
+        reason:
+            'the trap preserves ancestor propagation without activating a '
+            'sibling branch behind it',
+      );
+    });
+
+    test('4b. ExcludeFocus removes ambient bindings even when no node is '
+        'focused', () {
+      final calls = <String>[];
+      final h = _TestHarness();
+      h.mountRoot(
+        KeyBindings(
+          bindings: [
+            KeyBinding(
+              KeyCode.char('q'),
+              onTrigger: (_) => calls.add('ancestor'),
+            ),
+          ],
+          child: ExcludeFocus(
+            child: KeyBindings(
+              bindings: [
+                KeyBinding(
+                  KeyCode.char('q'),
+                  onTrigger: (_) => calls.add('excluded'),
+                ),
+              ],
+              child: const EmptyBox(),
+            ),
+          ),
+        ),
+      );
+
+      h.manager.requestFocus(null);
+      h.dispatch(_char('q'));
+
+      expect(calls, ['ancestor']);
     });
   });
 
@@ -1119,7 +1205,7 @@ void main() {
             ),
           ],
           child: FocusScope(
-            modal: true,
+            trapFocus: true,
             child: KeyBindings(
               bindings: [
                 KeyBinding(
@@ -1137,11 +1223,10 @@ void main() {
       expect(calls, ['dialog:cancel']);
     });
 
-    test('19. A modal scope isolates the app\'s root bindings', () {
-      // With globalBindings gone, app-wide shortcuts are an outermost
-      // KeyBindings — so a modal scope's chain truncation is what keeps a
-      // dialog from firing them. This is the whole dialog-isolation
-      // guarantee, and it needs no separate suppression flag.
+    test('19. A dialog composes focus and key boundaries', () {
+      // FocusScope traps the focus location; the inner modal KeyBindings is
+      // the independent unmatched-key boundary. Navigator composes both for
+      // presented routes.
       final calls = <String>[];
       final h = _TestHarness(
         rootBindings: [
@@ -1152,9 +1237,13 @@ void main() {
         ],
       );
       h.mountRoot(
-        const FocusScope(
+        const KeyBindings(
           modal: true,
-          child: Focus(autofocus: true, child: EmptyBox()),
+          bindings: <KeyBinding>[],
+          child: FocusScope(
+            trapFocus: true,
+            child: Focus(autofocus: true, child: EmptyBox()),
+          ),
         ),
       );
 

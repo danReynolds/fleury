@@ -169,7 +169,7 @@ void main() {
               SizedBox(
                 height: 1,
                 child: FocusScope(
-                  modal: true,
+                  trapFocus: true,
                   child: KeyBindings(
                     bindings: [
                       KeyBinding(

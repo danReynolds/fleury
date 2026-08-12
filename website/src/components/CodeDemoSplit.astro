@@ -25,9 +25,15 @@ interface Props {
   codeLabel?: string;
   /** Caption over the demo pane. */
   demoLabel?: string;
+  /** Give the running demo more room when the code remains readable narrow. */
+  layout?: 'balanced' | 'demo-wide';
 }
-const { file, codeLabel = 'You write', demoLabel = 'Fleury renders' } =
-  Astro.props;
+const {
+  file,
+  codeLabel = 'You write',
+  demoLabel = 'Fleury renders',
+  layout = 'balanced',
+} = Astro.props;
 
 const expandIcon =
   '<svg viewBox="0 0 20 20" width="13" height="13" fill="none" ' +
@@ -36,7 +42,10 @@ const expandIcon =
   '<path d="M12 4h4v4M8 16H4v-4M16 4l-5 5M4 16l5-5"/></svg>';
 ---
 
-<figure class="cds" data-file={file}>
+<figure
+  class:list={['cds', { 'cds-demo-wide': layout === 'demo-wide' }]}
+  data-file={file}
+>
   <header class="cds-bar">
     <span class="cds-file">{file}</span>
     <span class="cds-live"><span class="cds-pulse"></span>live</span>
@@ -84,6 +93,9 @@ const expandIcon =
 
       const dlg = document.createElement('dialog');
       dlg.className = 'cds-modal';
+      if (root.classList.contains('cds-demo-wide')) {
+        dlg.classList.add('cds-demo-wide');
+      }
 
       const bar = document.createElement('div');
       bar.className = 'cds-modal-bar';

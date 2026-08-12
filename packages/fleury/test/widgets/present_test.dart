@@ -74,7 +74,7 @@ void main() {
       'no group of its own', (tester) {
     // The Navigator gives every route (incl. a presented modal) its own
     // FocusTraversalGroup, so arrows move focus within the modal out of the box
-    // — and, because the modal FocusScope traps, they can't escape to the page.
+    // — and, because the route enables trapFocus, they can't escape to the page.
     final inA = FocusNode(debugLabel: 'inA');
     final inB = FocusNode(debugLabel: 'inB');
     tester.pumpWidget(

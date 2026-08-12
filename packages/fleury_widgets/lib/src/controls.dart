@@ -629,6 +629,10 @@ enum ButtonVariant { normal, primary, success, warning, error }
 /// [variant] tints the label from the theme's [ColorScheme] (primary for
 /// the default action, error for a destructive one, etc.); when focused
 /// the button shows the theme's selection highlight.
+///
+/// A button is normally as wide as its label. Give it a tight width, such as
+/// `SizedBox(width: 14, child: Button(...))`, to center the label and expand
+/// the bracketed button to that width.
 class Button extends StatelessWidget {
   const Button({
     super.key,
@@ -663,6 +667,36 @@ class Button extends StatelessWidget {
         ButtonVariant.error => scheme.error,
       };
 
+  static const WidthResolver _widthResolver = DefaultWidthResolver();
+
+  Widget _text(BuildContext context, String content, CellStyle style) =>
+      LayoutBuilder(
+        builder: (context, constraints) {
+          final maxCols = constraints.maxCols;
+          final tightWidth = maxCols != null && constraints.minCols == maxCols
+              ? maxCols
+              : null;
+          if (tightWidth == null) {
+            return Text(content, allowSelect: false, style: style);
+          }
+
+          final policy = MediaQuery.textPolicyOf(context).widths;
+          final contentWidth = _widthResolver.widthOfText(content, policy);
+          if (contentWidth >= tightWidth) {
+            return Text(content, allowSelect: false, style: style);
+          }
+
+          final slack = tightWidth - contentWidth;
+          final before = slack ~/ 2;
+          final after = slack - before;
+          return Text(
+            '[ ${' ' * before}$label${' ' * after} ]',
+            allowSelect: false,
+            style: style,
+          );
+        },
+      );
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -676,11 +710,7 @@ class Button extends StatelessWidget {
         enabled: false,
         // A control is a styled component, not selectable text (like a disabled
         // `<button>`). The enabled path opts out via _FocusableControl.
-        child: Text(
-          content,
-          allowSelect: false,
-          style: widgetTheme.resolveDisabled(theme),
-        ),
+        child: _text(context, content, widgetTheme.resolveDisabled(theme)),
       );
     }
     final base = CellStyle(foreground: _color(variant, theme.colorScheme));
@@ -690,9 +720,10 @@ class Button extends StatelessWidget {
       onActivate: onPressed!,
       semanticRole: SemanticRole.button,
       semanticLabel: label,
-      builder: (focused, enabled) => Text(
+      builder: (focused, enabled) => _text(
+        context,
         content,
-        style: focused ? base.merge(theme.selectionStyle) : base,
+        focused ? base.merge(theme.selectionStyle) : base,
       ),
     );
   }

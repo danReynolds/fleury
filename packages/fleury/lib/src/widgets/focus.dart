@@ -4,8 +4,8 @@
 // Flutter's API:
 //   - FocusNode is a long-lived object held by a widget's State.
 //   - Focus is the widget that wires a FocusNode into the tree.
-//   - FocusScope groups focusable children for traversal; with
-//     modal: true it stops events from reaching ancestor widgets.
+//   - FocusScope groups focusable children for focus memory; with
+//     trapFocus: true it prevents focus from leaving the subtree.
 //   - FocusManager is the singleton (one per BuildOwner / runApp)
 //     that holds which node is focused, the broadcast for changes,
 //     and the dispatch entry point.
@@ -13,7 +13,8 @@
 // In this slice the dispatch is intentionally simple: events walk the
 // focused node's element-tree ancestor chain calling each Focus's
 // KeyDetector handlers, stopping at the first that consumes
-// KeyEventResult.handled or at a modal FocusScope boundary. The richer
+// KeyEventResult.handled. Key propagation boundaries are provided by
+// KeyBindings rather than FocusScope. The richer
 // dispatcher (sequence matching, KeyBindings, KeyHintBar) lands in
 // the next slice and replaces the direct detector path with a
 // proper InputDispatcher.
@@ -144,7 +145,12 @@ abstract interface class TextCompositionClaimant {
 /// state stable across reparenting.
 class FocusNode {
   FocusNode({
+    /// Whether this node can receive focus through traversal, pointer input,
+    /// or [requestFocus].
     bool canRequestFocus = true,
+
+    /// Whether Tab and arrow traversal should skip this node while explicit
+    /// [requestFocus] and pointer focus remain available.
     bool skipTraversal = false,
     this.debugLabel,
   }) : _canRequestFocus = canRequestFocus,
@@ -241,8 +247,11 @@ class FocusNode {
   /// The nearest enclosing [FocusScope]'s reference, if any.
   FocusScopeRef? get enclosingScope => _enclosingScope;
 
-  /// Asks the manager to make this node the focused node. No-op when
-  /// [canRequestFocus] is false or this node is not attached.
+  /// Asks the manager to make this node the focused node.
+  ///
+  /// No-op when [canRequestFocus] is false, this node is not attached, the
+  /// node is excluded from focus, or an active focus trap contains another
+  /// subtree.
   void requestFocus() {
     if (!_canRequestFocus) return;
     _manager?.requestFocus(this);
@@ -279,12 +288,12 @@ class FocusNode {
 /// the public API; consumers interact with [FocusScope] the widget.
 @immutable
 class FocusScopeRef {
-  const FocusScopeRef._(this.id, this.modal);
+  const FocusScopeRef._(this.id, this.trapFocus);
   final Object id;
-  final bool modal;
+  final bool trapFocus;
 
   @override
-  String toString() => 'FocusScopeRef(id=$id, modal=$modal)';
+  String toString() => 'FocusScopeRef(id=$id, trapFocus=$trapFocus)';
 }
 
 // ---------------------------------------------------------------------------
@@ -295,7 +304,7 @@ class FocusScopeRef {
 /// (one [BuildOwner] / one [runApp]).
 ///
 /// Listeners are notified when the focused node changes or when the
-/// active focus chain composition shifts (e.g. modal scope opens /
+/// active focus chain composition shifts (e.g. a focus trap opens /
 /// closes above the focused node).
 /// Nearest [_FocusScopeMarkerElement] at or above [from] — THE definition of
 /// "the enclosing FocusScope" (the stable element, not the per-build
@@ -325,16 +334,16 @@ class FocusManager extends ChangeNotifier {
   /// dispatcher to find the autofocus candidate, etc.
   final List<FocusNode> _attachedNodes = <FocusNode>[];
 
-  /// Currently mounted modal [_FocusScopeMarkerElement]s. Lets us name the
-  /// active modal scope even when the focused node has detached (its widget
+  /// Currently mounted focus-trapping [_FocusScopeMarkerElement]s. Lets us
+  /// name the active trap even when the focused node has detached (its widget
   /// rebuilt away) — without this set, traversal called against a null
   /// `_focusedNode` would treat the entire tree as in-scope and escape any
-  /// open modal.
+  /// open focus trap.
   ///
   /// Markers add themselves here only while their element-snapshotted
-  /// `_capturedModal` is true, so the set is precisely the active modal
+  /// `_capturedTrapFocus` is true, so the set is precisely the active focus
   /// frontier — never widget-level state that may be stale across a rebuild.
-  final Set<_FocusScopeMarkerElement> _activeModalScopes =
+  final Set<_FocusScopeMarkerElement> _activeFocusTraps =
       <_FocusScopeMarkerElement>{};
   final Set<_ExcludeFocusMarkerElement> _activeExcludeFocusMarkers =
       <_ExcludeFocusMarkerElement>{};
@@ -369,14 +378,14 @@ class FocusManager extends ChangeNotifier {
     }
   }
 
-  void _registerModalScope(_FocusScopeMarkerElement element) {
+  void _registerFocusTrap(_FocusScopeMarkerElement element) {
     _checkNotDisposed();
-    if (_activeModalScopes.add(element)) _notifyManagerScopeChanged();
+    if (_activeFocusTraps.add(element)) _notifyManagerScopeChanged();
   }
 
-  void _unregisterModalScope(_FocusScopeMarkerElement element) {
+  void _unregisterFocusTrap(_FocusScopeMarkerElement element) {
     if (_disposed) return;
-    if (_activeModalScopes.remove(element)) _notifyManagerScopeChanged();
+    if (_activeFocusTraps.remove(element)) _notifyManagerScopeChanged();
   }
 
   void _registerExcludeFocus(_ExcludeFocusMarkerElement element) {
@@ -405,8 +414,8 @@ class FocusManager extends ChangeNotifier {
     }
   }
 
-  /// Notifies listeners that the modal frontier has changed — a scope
-  /// registered, unregistered, or flipped its `modal` flag. Deferred to a
+  /// Notifies listeners that the focus-trap frontier has changed — a scope
+  /// registered, unregistered, or flipped its `trapFocus` flag. Deferred to a
   /// microtask so the notification
   /// never lands mid-build — a marker's `mount` / `update` runs inside a
   /// build phase, and `notifyListeners` there would re-enter `setState`
@@ -452,15 +461,17 @@ class FocusManager extends ChangeNotifier {
     return isClickable(node);
   }
 
-  /// Whether [node] can take focus via mouse click: it can request focus
-  /// and sits under no active [ExcludeFocus]. Wider than [isTraversable]
-  /// — a node with `skipTraversal: true` (e.g. a Button) is still
-  /// click-focusable but excluded from Tab/arrow cycling.
+  /// Whether [node] can take focus via mouse click or [requestFocus]: it can
+  /// request focus, accepts input, sits under no active [ExcludeFocus], and
+  /// is inside the active focus trap when one exists. Wider than
+  /// [isTraversable] — a node with `skipTraversal: true` (e.g. a Button) is
+  /// still directly focusable but excluded from Tab/arrow cycling.
   @internal
   bool isClickable(FocusNode node) {
     if (!node.canRequestFocus) return false;
     if (!_acceptsInput(node)) return false;
-    return !_isExcludedFromFocus(node);
+    if (_isExcludedFromFocus(node)) return false;
+    return isUnderActiveFocusTrap(node);
   }
 
   /// Whether [node] sits under an active (`excluding: true`) [ExcludeFocus]
@@ -502,6 +513,49 @@ class FocusManager extends ChangeNotifier {
     }
 
     if (root is Element) visit(root);
+  }
+
+  /// Excludes the outermost [ExcludeFocus] marker(s) inside [root]
+  /// immediately, ahead of the rebuild that will flip them on.
+  ///
+  /// This is the inverse of [liftExclusionIn]. [Navigator.pop] uses both to
+  /// make its logical route switch atomic for focus: the leaving route becomes
+  /// inert at the same instant the revealed route becomes eligible, even
+  /// though both marker widgets update on the next frame.
+  @internal
+  void excludeFocusIn(BuildContext root) {
+    _checkNotDisposed();
+    void visit(Element e) {
+      if (e is _ExcludeFocusMarkerElement) {
+        e._excludeEarly();
+        return;
+      }
+      e.visitChildren(visit);
+    }
+
+    if (root is Element) visit(root);
+  }
+
+  /// Releases the nearest trapping [FocusScope] enclosing [context]
+  /// immediately, ahead of the rebuild that will flip its `trapFocus` flag
+  /// off or remove the scope.
+  ///
+  /// Use this during a low-level overlay's close transaction, before removing
+  /// its subtree and restoring focus outside it. [Navigator.pop] performs the
+  /// same handoff for presented routes. Ordinary screens and dialogs do not
+  /// need to call this directly.
+  void releaseFocusTrapIn(BuildContext? context) {
+    _checkNotDisposed();
+    if (context is! Element) return;
+    Element? element = context;
+    while (element != null) {
+      if (element is _FocusScopeMarkerElement && element._capturedTrapFocus) {
+        element._capturedTrapFocus = false;
+        element._unregisterIfRegistered();
+        return;
+      }
+      element = element.elementParent;
+    }
   }
 
   /// Temporarily removes the mounted subtree below [root] from focus and text
@@ -587,18 +641,12 @@ class FocusManager extends ChangeNotifier {
   /// Requests that [node] become the focused node (null to clear
   /// focus). Returns whether focus actually moved.
   ///
-  /// Denied — returning false — for a node that can't take focus, whose
-  /// subtree doesn't accept input, or that sits under an active
-  /// [ExcludeFocus]: programmatic focus obeys the same exclusion boundary
-  /// as click, Tab/arrow traversal, and autofocus.
+  /// Denied — returning false — when [isClickable] is false: programmatic
+  /// focus obeys the same availability, exclusion, and focus-trap boundaries as
+  /// pointer and traversal focus.
   bool requestFocus(FocusNode? node) {
     _checkNotDisposed();
-    if (node != null &&
-        (!node.canRequestFocus ||
-            !_acceptsInput(node) ||
-            _isExcludedFromFocus(node))) {
-      return false;
-    }
+    if (node != null && !isClickable(node)) return false;
     if (identical(_focusedNode, node)) return false;
     _focusedNode = node;
     if (node != null) _rememberFocusInScopes(node);
@@ -652,7 +700,7 @@ class FocusManager extends ChangeNotifier {
   /// the key bindings live in [FocusTraversalGroup].
   ///
   /// Reading order is derived from each node's painted `rect`, so it
-  /// matches what the user sees regardless of mount order. When a modal
+  /// matches what the user sees regardless of mount order. When a trapping
   /// [FocusScope] is active, traversal is confined to nodes inside it.
   bool focusNext() => _cycleFocus(forward: true);
 
@@ -677,17 +725,17 @@ class FocusManager extends ChangeNotifier {
 
   /// Focusable nodes in reading order (row, then column), with
   /// attachment order as a stable tiebreak and not-yet-painted nodes
-  /// last. Filtered to the active modal scope when one is open — Tab
-  /// inside a modal dialog cannot escape it.
+  /// last. Filtered to the active focus trap when one is open — Tab inside a
+  /// trapped dialog cannot escape it.
   List<FocusNode> _traversalOrder() {
     final attachIndex = <FocusNode, int>{};
     for (var i = 0; i < _attachedNodes.length; i++) {
       attachIndex[_attachedNodes[i]] = i;
     }
-    final modal = _innermostModalScopeElement(_focusedNode);
+    final trap = _innermostFocusTrapElement(_focusedNode);
     final nodes = _attachedNodes
         .where(isTraversable)
-        .where((n) => modal == null || _isUnderScopeMarker(n, modal))
+        .where((n) => trap == null || _isUnderScopeMarker(n, trap))
         .toList();
     nodes.sort((a, b) {
       final ra = a.rect;
@@ -705,59 +753,52 @@ class FocusManager extends ChangeNotifier {
     return nodes;
   }
 
-  /// The innermost enclosing modal marker element of [node], or null
-  /// when no modal scope is open above it. Mirrors the walk in
-  /// [activeChain] but returns the modal anchor instead of stopping at it.
+  /// The innermost enclosing focus-trap marker element of [node], or null
+  /// when no trap is open above it.
   ///
   /// Anchoring on the marker ELEMENT (rather than its widget-level
   /// [FocusScopeRef]) keeps identity stable across rebuilds: each
   /// `FocusScope.build` allocates a fresh `FocusScopeRef`, but the
   /// underlying `_FocusScopeMarkerElement` survives `update()`. Using
   /// scope-ref identity would silently treat every rebuild as a different
-  /// modal and break `_isUnderScope`/`_activeModalScopes` invariants.
+  /// trap and break `_isUnderScope`/`_activeFocusTraps` invariants.
   ///
-  /// When [node] is null, falls back to the deepest mounted modal scope
-  /// in [_activeModalScopes] — programmatic `focusNext()` after a focused
-  /// node detached must still respect any open modal.
+  /// When [node] is null, falls back to the deepest mounted focus trap in
+  /// [_activeFocusTraps] — programmatic `focusNext()` after a focused node
+  /// detached must still respect any open trap.
   ///
-  /// When [node] is non-null but its ancestor walk doesn't cross a modal
-  /// marker (e.g. the focused node sits outside an opened modal because
-  /// it was focused before the modal mounted), still fall back to the
-  /// deepest active modal — the open modal should bound traversal even
-  /// for stale focus.
-  _FocusScopeMarkerElement? _innermostModalScopeElement(FocusNode? node) {
-    if (node == null) return _deepestActiveModalScope();
+  /// When [node] is non-null but its ancestor walk doesn't cross a trap
+  /// marker (e.g. the focused node sits outside a newly opened trap), still
+  /// fall back to the deepest active trap so stale focus cannot escape it.
+  _FocusScopeMarkerElement? _innermostFocusTrapElement(FocusNode? node) {
+    if (node == null) return _activeFocusTrap();
     Element? element = node._element;
     while (element != null) {
       if (element is _FocusScopeMarkerElement &&
-          element._capturedModal &&
+          element._capturedTrapFocus &&
           !_isElementInputExcluded(element)) {
         return element;
       }
       element = element.elementParent;
     }
-    // The node sits outside every modal. If one is open elsewhere in the
+    // The node sits outside every focus trap. If one is open elsewhere in the
     // tree, traversal should still be confined to it.
-    return _deepestActiveModalScope();
+    return _activeFocusTrap();
   }
 
-  /// Deepest (by element depth) modal marker currently mounted, or null
-  /// when no modal is open. Ties on depth are broken by `_mountSeq` —
-  /// the later-mounted marker wins, mirroring "innermost / most recent
-  /// modal owns input" without relying on Set iteration order.
-  _FocusScopeMarkerElement? _deepestActiveModalScope() {
-    if (_activeModalScopes.isEmpty) return null;
+  /// The most recently activated focus trap, or null when none is open.
+  ///
+  /// Activation order is the useful stack order for both nested scopes and
+  /// sibling overlay entries: an inner scope mounts after its parent, while a
+  /// newly inserted popup may live in a shallower sibling branch than the
+  /// popup beneath it. Element depth alone would strand focus in that older
+  /// branch. The explicit sequence also avoids relying on Set iteration order.
+  _FocusScopeMarkerElement? _activeFocusTrap() {
+    if (_activeFocusTraps.isEmpty) return null;
     _FocusScopeMarkerElement? best;
-    for (final marker in _activeModalScopes) {
+    for (final marker in _activeFocusTraps) {
       if (_isElementInputExcluded(marker)) continue;
-      if (best == null) {
-        best = marker;
-        continue;
-      }
-      if (marker.depth > best.depth) {
-        best = marker;
-      } else if (marker.depth == best.depth &&
-          marker._mountSeq > best._mountSeq) {
+      if (best == null || marker._activationSeq > best._activationSeq) {
         best = marker;
       }
     }
@@ -766,7 +807,7 @@ class FocusManager extends ChangeNotifier {
 
   /// Whether [node]'s element-tree ancestor chain crosses [marker]
   /// before reaching the root. Used to filter traversal candidates to
-  /// those inside the currently-active modal. Compared by ELEMENT
+  /// those inside the currently active focus trap. Compared by ELEMENT
   /// identity — `FocusScopeRef` is rebuilt on every `FocusScope.build`,
   /// the marker element is not.
   bool _isUnderScopeMarker(FocusNode node, _FocusScopeMarkerElement marker) {
@@ -803,28 +844,28 @@ class FocusManager extends ChangeNotifier {
     return _isUnderScopeMarker(focused, marker);
   }
 
-  /// Whether [node] sits under the currently-active modal (when one is
-  /// open) or always, when no modal is open. Used by the input
-  /// dispatcher to scope click-to-focus to the modal frontier.
+  /// Whether [node] sits under the currently active focus trap (when one is
+  /// open), or always when no trap is open. Click-to-focus and direct focus
+  /// requests consult the same frontier as traversal.
   @internal
-  bool isUnderActiveModal(FocusNode node) {
-    if (_activeModalScopes.isEmpty) return true;
-    final modal = _deepestActiveModalScope();
-    if (modal == null) return true;
-    return _isUnderScopeMarker(node, modal);
+  bool isUnderActiveFocusTrap(FocusNode node) {
+    if (_activeFocusTraps.isEmpty) return true;
+    final trap = _activeFocusTrap();
+    if (trap == null) return true;
+    return _isUnderScopeMarker(node, trap);
   }
 
   /// Returns the candidate set [FocusTraversalGroup] should consider
   /// for directional (arrow) traversal: traversable, attached, under
-  /// [scopeContext] when provided, and — when a modal scope is open —
-  /// inside that scope.
+  /// [scopeContext] when provided, and — when a focus trap is open — inside
+  /// that trap.
   @internal
   Iterable<FocusNode> traversalCandidates({BuildContext? scopeContext}) {
-    final modal = _innermostModalScopeElement(_focusedNode);
+    final trap = _innermostFocusTrapElement(_focusedNode);
     final scopeElement = scopeContext is Element ? scopeContext : null;
     var base = _attachedNodes.where(isTraversable);
-    if (modal != null) {
-      base = base.where((n) => _isUnderScopeMarker(n, modal));
+    if (trap != null) {
+      base = base.where((n) => _isUnderScopeMarker(n, trap));
     }
     if (scopeElement != null) {
       base = base.where((n) => _isUnderElement(n, scopeElement));
@@ -844,11 +885,8 @@ class FocusManager extends ChangeNotifier {
   /// Returns the focus chain from [focusedNode] up to the root, in
   /// deepest-first order, by walking element parents.
   ///
-  /// A modal [FocusScope] boundary stops the walk *as the walker
-  /// crosses out of the scope*. Focus nodes *inside* the same modal
-  /// scope as the focused node are included; focus nodes outside it
-  /// are not. Without a modal scope, the walk continues to the
-  /// element tree root.
+  /// Focus traps do not alter key propagation. Use `KeyBindings(modal: true)`
+  /// when unmatched keys must stop at a subtree boundary.
   List<FocusNode> activeChain() {
     final focused = _focusedNode;
     if (focused == null) return _rootActiveChain();
@@ -856,13 +894,6 @@ class FocusManager extends ChangeNotifier {
     if (_acceptsInput(focused)) chain.add(focused);
     var element = focused._element?.elementParent;
     while (element != null) {
-      if (element is _FocusScopeMarkerElement &&
-          element.scope.modal &&
-          !_isElementInputExcluded(element)) {
-        // We're about to exit a modal scope. Stop — anything above
-        // this marker is outside the modal.
-        break;
-      }
       if (element is _FocusElement) {
         if (_acceptsInput(element.node)) chain.add(element.node);
       }
@@ -880,11 +911,13 @@ class FocusManager extends ChangeNotifier {
   /// chicken-and-egg deadlock). Unlike a pointer-primary GUI, we can't
   /// just wait for a focusable to be clicked.
   ///
-  /// So with no focused node we treat the ambient binding hosts in
-  /// scope as active, ordered deepest-first to preserve the usual
-  /// "innermost wins" dispatch precedence. When a modal scope is open,
-  /// the chain is confined to it — an unfocused modal still traps input
-  /// the same way a focused one would.
+  /// So with no focused node we treat the ambient binding hosts in the active
+  /// branch as active, ordered deepest-first to preserve the usual "innermost
+  /// wins" dispatch precedence. When a focus trap exists, that branch consists
+  /// of binding hosts inside the trap plus its ancestors. Sibling/background
+  /// hosts are not part of the synthetic chain, but the ancestors remain so
+  /// the trap itself does not become a key-propagation boundary. A
+  /// `KeyBindings(modal: true)` host is the explicit unmatched-key boundary.
   ///
   /// Crucially this is limited to *non-focusable* nodes
   /// (`canRequestFocus == false`): ambient `KeyBindings` and the
@@ -896,7 +929,7 @@ class FocusManager extends ChangeNotifier {
   /// the line between "app/tree-level shortcut" and "this widget is the
   /// active control."
   List<FocusNode> _rootActiveChain() {
-    final modal = _deepestActiveModalScope();
+    final trap = _activeFocusTrap();
     final attachIndex = <FocusNode, int>{};
     for (var i = 0; i < _attachedNodes.length; i++) {
       attachIndex[_attachedNodes[i]] = i;
@@ -911,7 +944,17 @@ class FocusManager extends ChangeNotifier {
         // Detectors are widget-internal handling, gated on their subtree
         // holding focus; ambient reach belongs to declared bindings.
         .where((n) => n.bindingSource != null)
-        .where((n) => modal == null || _isUnderScopeMarker(n, modal))
+        // ExcludeFocus removes a subtree from every input path, including the
+        // ambient no-focus path. With an active trap, synthesize the same
+        // logical branch a focused descendant would have produced: nodes
+        // inside the trap and nodes on its ancestor chain, never siblings.
+        .where((n) => !_isExcludedFromFocus(n))
+        .where(
+          (n) =>
+              trap == null ||
+              _isUnderScopeMarker(n, trap) ||
+              _elementIsAncestorOf(n._element, trap),
+        )
         .toList();
     // Deepest element first; attach order as a stable tiebreak. Mirrors
     // the focused-chain ordering, where the node nearest the focused
@@ -923,6 +966,16 @@ class FocusManager extends ChangeNotifier {
       return attachIndex[a]! - attachIndex[b]!;
     });
     return nodes;
+  }
+
+  bool _elementIsAncestorOf(Element? ancestor, Element descendant) {
+    if (ancestor == null) return false;
+    Element? element = descendant;
+    while (element != null) {
+      if (identical(element, ancestor)) return true;
+      element = element.elementParent;
+    }
+    return false;
   }
 
   /// Delivers [event] to the active focus chain's `KeyDetector` handlers in
@@ -956,7 +1009,7 @@ class FocusManager extends ChangeNotifier {
       }
     }
     _attachedNodes.clear();
-    _activeModalScopes.clear();
+    _activeFocusTraps.clear();
     _activeExcludeFocusMarkers.clear();
     _inputExcludedSubtrees.clear();
     _frameInputAborted = true;
@@ -1090,8 +1143,18 @@ class Focus extends StatefulWidget {
   /// null and configure the node directly when the node should keep
   /// caller-controlled flags across use sites.
   final bool? canRequestFocus;
+
+  /// Whether traversal should skip this node while still allowing it to take
+  /// focus through a click or an explicit [FocusNode.requestFocus] call.
+  ///
+  /// When null, this widget leaves the node's existing value unchanged.
   final bool? skipTraversal;
+
+  /// Optional diagnostic label included when the internally owned node is
+  /// printed or inspected.
   final String? debugLabel;
+
+  /// The widget subtree represented by this focus target.
   final Widget child;
 
   @override
@@ -1363,23 +1426,31 @@ class _RenderFocusBounds extends RenderObject
 // FocusScope
 // ---------------------------------------------------------------------------
 
-/// A scope for focus operations. Children inside a `FocusScope` form
-/// a traversal group; with `modal: true` the scope also stops events
-/// from reaching `KeyBindings` (or a `KeyDetector`) above it.
+/// A boundary for focus memory and optional focus trapping.
 ///
-/// Flutter divergence: `modal` is a first-class flag here that scopes
-/// BOTH key dispatch AND Tab/arrow traversal in one place. Flutter
-/// handles modal-like behaviour indirectly — via Navigator routes that
-/// stack focus scopes, or via a custom `FocusTraversalPolicy`.
+/// Every scope remembers its most recently focused descendant. With
+/// [trapFocus] enabled, programmatic focus, pointer focus, and traversal are
+/// confined to this subtree. Key events may still propagate to ancestors; use
+/// `KeyBindings(modal: true)` when unmatched keys must also stop here.
+///
+/// Navigator routes install their own scope and traversal policy. Presented
+/// dialogs enable [trapFocus] and a key-binding boundary automatically.
 class FocusScope extends StatelessWidget {
-  const FocusScope({super.key, this.modal = false, required this.child});
+  const FocusScope({super.key, this.trapFocus = false, required this.child});
 
-  final bool modal;
+  /// Whether focus must stay inside this scope.
+  ///
+  /// When true, Tab and arrow traversal, pointer focus, and direct
+  /// [FocusNode.requestFocus] calls cannot move focus outside this subtree.
+  /// This does not stop key events from propagating to ancestor handlers.
+  final bool trapFocus;
+
+  /// The subtree that shares this focus scope.
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    final ref = FocusScopeRef._(this, modal);
+    final ref = FocusScopeRef._(this, trapFocus);
     return _FocusScopeMarker(scope: ref, child: child);
   }
 
@@ -1401,10 +1472,11 @@ class _FocusScopeMarker extends Widget {
 class _FocusScopeMarkerElement extends ComponentElement {
   _FocusScopeMarkerElement(_FocusScopeMarker super.widget);
 
-  /// Process-wide monotonic counter used as the modal tiebreaker — the
-  /// later-mounted marker wins among equal-depth modals. Stable across
-  /// rebuilds (mountSeq is set once, in `mount`).
-  static int _nextMountSeq = 0;
+  /// Process-wide monotonic counter used to model focus traps as a stack.
+  /// Registration assigns a fresh value, so a newly mounted, enabled, or
+  /// reactivated trap becomes the active frontier regardless of which overlay
+  /// branch happens to be deeper in the element tree.
+  static int _nextActivationSeq = 0;
 
   FocusScopeRef get scope => (widget as _FocusScopeMarker).scope;
   FocusManager? _registeredManager;
@@ -1419,50 +1491,57 @@ class _FocusScopeMarkerElement extends ComponentElement {
   /// (rebuild, GlobalKey move) keeps its memory.
   FocusNode? _rememberedFocus;
 
-  /// Snapshot of `scope.modal` taken at mount and refreshed in `update`.
-  /// We read this — not the live widget — to decide what's modal because
+  /// Snapshot of `scope.trapFocus` taken at mount and refreshed in `update`.
+  /// We read this — not the live widget — to decide what's trapped because
   /// `FocusScope.build` constructs a fresh `FocusScopeRef` on every
   /// rebuild; comparing widget identity across rebuilds would falsely
-  /// claim the modal had changed.
-  bool _capturedModal = false;
+  /// claim the trap had changed.
+  bool _capturedTrapFocus = false;
 
-  late final int _mountSeq;
+  int _activationSeq = -1;
 
   @override
-  Widget buildChild() => (widget as _FocusScopeMarker).child;
+  Widget buildChild() {
+    // ComponentElement.mount builds the child inside super.mount(). Register
+    // the trap here, before returning that child, so a descendant autofocus
+    // sees the newly opened trap instead of being rejected by the older trap
+    // behind it (nested popup/dialog insertion).
+    _registerIfTrapping();
+    return (widget as _FocusScopeMarker).child;
+  }
 
-  // Track modal markers on the manager so `_innermostModalScope` can name
-  // the active modal even when no node holds focus. Idempotent on rebuild;
+  // Track focus-trap markers on the manager so `_innermostFocusTrapElement`
+  // can name the active trap even when no node holds focus. Idempotent on rebuild;
   // tied to lifecycle (mount/activate/deactivate/unmount) rather than
   // build so a temporarily-inactive subtree doesn't appear active.
-  void _registerIfModal() {
-    if (!_capturedModal) return;
+  void _registerIfTrapping() {
+    if (!_capturedTrapFocus) return;
     if (_registeredManager != null) return;
     // No dependency: this marker doesn't rebuild on manager changes — we
     // just need a reference to register against.
     final manager =
         getInheritedWidgetOfExactType<_FocusManagerProvider>()?.notifier;
     if (manager == null) return;
-    manager._registerModalScope(this);
+    _activationSeq = _nextActivationSeq++;
+    manager._registerFocusTrap(this);
     _registeredManager = manager;
   }
 
   void _unregisterIfRegistered() {
     final manager = _registeredManager;
     if (manager == null) return;
-    manager._unregisterModalScope(this);
+    manager._unregisterFocusTrap(this);
     _registeredManager = null;
   }
 
   @override
   void mount(Element? parent) {
-    // Capture BEFORE super.mount so `_registerIfModal` (called below) and
+    // Capture BEFORE super.mount so `_registerIfTrapping` (called below) and
     // any same-frame queries see the snapshotted flags rather than racing
     // through `widget`.
-    _mountSeq = _nextMountSeq++;
-    _capturedModal = (widget as _FocusScopeMarker).scope.modal;
+    _capturedTrapFocus = (widget as _FocusScopeMarker).scope.trapFocus;
     super.mount(parent);
-    _registerIfModal();
+    _registerIfTrapping();
   }
 
   @override
@@ -1473,11 +1552,11 @@ class _FocusScopeMarkerElement extends ComponentElement {
     // FocusScopeRef), so we can't compare widgets — we compare the
     // captured booleans.
     final newMarker = newWidget as _FocusScopeMarker;
-    final newModal = newMarker.scope.modal;
-    if (newModal != _capturedModal) {
-      _capturedModal = newModal;
-      if (newModal) {
-        _registerIfModal();
+    final newTrapFocus = newMarker.scope.trapFocus;
+    if (newTrapFocus != _capturedTrapFocus) {
+      _capturedTrapFocus = newTrapFocus;
+      if (newTrapFocus) {
+        _registerIfTrapping();
       } else {
         _unregisterIfRegistered();
       }
@@ -1493,7 +1572,7 @@ class _FocusScopeMarkerElement extends ComponentElement {
   @override
   void activate() {
     super.activate();
-    _registerIfModal();
+    _registerIfTrapping();
   }
 
   @override
@@ -1513,13 +1592,13 @@ class _FocusScopeMarkerElement extends ComponentElement {
 // ExcludeFocus
 // ---------------------------------------------------------------------------
 
-/// Removes its subtree from focus traversal while [excluding] is true.
+/// Removes its subtree from focus while [excluding] is true.
 ///
 /// Descendant [Focus] nodes stay mounted — so their [State] (text,
-/// scroll position, selection…) is preserved — but Tab/Shift+Tab and the
-/// arrow-key policies skip them, and they won't claim autofocus. Toggling
-/// [excluding] keeps the same subtree in place, so flipping it on and off
-/// (as a tab is hidden and re-shown) never resets that state.
+/// scroll position, selection…) is preserved — but they cannot claim or
+/// receive focus through autofocus, traversal, pointer input, or a direct
+/// request. Toggling [excluding] keeps the same subtree in place, so flipping
+/// it on and off (as a tab is hidden and re-shown) never resets that state.
 ///
 /// This is what lets an [IndexedStack] of pages keep every page alive
 /// without letting the keyboard wander into the hidden ones.
@@ -1547,15 +1626,19 @@ class _ExcludeFocusMarker extends Widget {
 class _ExcludeFocusMarkerElement extends ComponentElement {
   _ExcludeFocusMarkerElement(_ExcludeFocusMarker super.widget);
 
-  bool get excluding =>
-      (widget as _ExcludeFocusMarker).excluding && !_liftedEarly;
+  bool get excluding => (_capturedExcluding || _excludedEarly) && !_liftedEarly;
   bool _capturedExcluding = false;
 
-  /// Set by [FocusManager.liftExclusionAbove] when a container reveals
+  /// Set by [FocusManager.liftExclusionIn] when a container reveals
   /// this subtree by intent before the rebuild that flips [excluding]
   /// lands (Navigator.pop). Cleared on the next update, which re-syncs
   /// to the widget's real configuration.
   bool _liftedEarly = false;
+
+  /// Set by [FocusManager.excludeFocusIn] when a container hides this subtree
+  /// by intent before the rebuild that flips [excluding] lands. Cleared on the
+  /// next update, symmetrically with [_liftedEarly].
+  bool _excludedEarly = false;
   FocusManager? _registeredManager;
 
   @override
@@ -1565,13 +1648,19 @@ class _ExcludeFocusMarkerElement extends ComponentElement {
   }
 
   void _registerIfExcluding() {
-    if (!_capturedExcluding) return;
+    if (!excluding) return;
     if (_registeredManager != null) return;
     final manager =
         getInheritedWidgetOfExactType<_FocusManagerProvider>()?.notifier;
     if (manager == null) return;
     manager._registerExcludeFocus(this);
     _registeredManager = manager;
+  }
+
+  void _excludeEarly() {
+    _liftedEarly = false;
+    _excludedEarly = true;
+    _registerIfExcluding();
   }
 
   void _unregisterIfRegistered() {
@@ -1591,15 +1680,14 @@ class _ExcludeFocusMarkerElement extends ComponentElement {
   @override
   void update(Widget newWidget) {
     _liftedEarly = false;
+    _excludedEarly = false;
     super.update(newWidget);
     final newExcluding = (newWidget as _ExcludeFocusMarker).excluding;
-    if (newExcluding != _capturedExcluding) {
-      _capturedExcluding = newExcluding;
-      if (newExcluding) {
-        _registerIfExcluding();
-      } else {
-        _unregisterIfRegistered();
-      }
+    _capturedExcluding = newExcluding;
+    if (newExcluding) {
+      _registerIfExcluding();
+    } else {
+      _unregisterIfRegistered();
     }
     // Rebuild with the new widget's child, like every other ComponentElement
     // (and like the FocusScope marker, fixed the same way): without this, a
@@ -1648,7 +1736,12 @@ class FocusDetector extends StatefulWidget {
     required this.child,
   });
 
+  /// Called when focus enters or leaves [child]'s subtree.
+  ///
+  /// Moving focus between descendants of [child] does not call this again.
   final void Function(bool hasFocus) onFocusChange;
+
+  /// The subtree whose focus boundary is observed.
   final Widget child;
 
   @override

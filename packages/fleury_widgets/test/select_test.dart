@@ -417,6 +417,28 @@ void main() {
         expect(trigger.state.selectedKey, 'blue');
       });
 
+      testWidgets('trigger semantic close restores focus after retiring the '
+          'trap', (tester) async {
+        tester.pumpWidget(const _Host(initial: 'red'));
+
+        await tester.invokeSemanticAction(
+          SemanticAction.open,
+          role: SemanticRole.button,
+          label: 'Color',
+        );
+        tester.render(size: const CellSize(30, 8));
+
+        final result = await tester.invokeSemanticAction(
+          SemanticAction.close,
+          role: SemanticRole.button,
+          label: 'Color',
+        );
+
+        expect(result.completed, isTrue);
+        expect(tester.semantics().where(role: SemanticRole.menu), isEmpty);
+        expect(tester.focusManager.focusedNode?.debugLabel, 'select-trigger');
+      });
+
       testWidgets(
         'disabled options are visible but not semantically selectable',
         (tester) async {

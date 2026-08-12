@@ -14,7 +14,7 @@
 // active screen) is suppressing globals. runApp's event handler
 // consumes them BEFORE the InputDispatcher walks the focus chain, in
 // the same tier as the Ctrl+C exit-guard. Putting them in a tree-level
-// KeyBindings would correctly land inside the modal scope filter and
+// KeyBindings would correctly land behind the dialog's key boundary and
 // stop firing the moment the user opened a route — bad.
 
 import '../animation/clock.dart';

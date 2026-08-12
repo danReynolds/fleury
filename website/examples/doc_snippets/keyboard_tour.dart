@@ -73,7 +73,7 @@ class BindingOptionsExample extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// 3. A modal scope — a dialog that keeps the app's keys out.
+// 3. A key boundary — a dialog that keeps the app's keys out.
 // ---------------------------------------------------------------------------
 
 class ConfirmDialog extends StatelessWidget {

@@ -1,4 +1,5 @@
 import 'package:fleury/fleury.dart';
+import '../support/harness.dart';
 import 'package:test/test.dart';
 
 Matcher _stateError(String message) => throwsA(
@@ -246,7 +247,7 @@ void main() {
   });
 
   group('FocusScope', () {
-    test('non-modal scope does not block bubble-up', () {
+    test('ordinary scope does not block bubble-up', () {
       final manager = FocusManager();
       final owner = BuildOwner();
       final received = <String>[];
@@ -277,7 +278,7 @@ void main() {
       expect(received, ['inner', 'app']);
     });
 
-    test('modal scope stops bubble-up at its boundary', () {
+    test('trapFocus does not change key-event propagation', () {
       final manager = FocusManager();
       final owner = BuildOwner();
       final received = <String>[];
@@ -292,7 +293,7 @@ void main() {
             },
             child: Focus(
               child: FocusScope(
-                modal: true,
+                trapFocus: true,
                 child: KeyDetector(
                   onKey: (event) {
                     received.add('inner');
@@ -306,8 +307,11 @@ void main() {
       );
 
       manager.dispatchKey(_key('a'));
-      // 'app' must NOT fire — the modal scope blocked bubble-up.
-      expect(received, ['inner']);
+      expect(
+        received,
+        ['inner', 'app'],
+        reason: 'FocusScope controls focus location, not event propagation',
+      );
     });
   });
 
@@ -436,8 +440,9 @@ void main() {
                   child: KeyDetector(
                     onKey: (event) {
                       if (((e) => KeyEventResult.ignored)(event) ==
-                          KeyEventResult.handled)
+                          KeyEventResult.handled) {
                         event.consume();
+                      }
                     },
                     child: Focus(focusNode: node, child: const EmptyBox()),
                   ),
@@ -534,6 +539,54 @@ void main() {
       manager.dispatchKey(_key('a'));
       expect(deadHits, 0);
       expect(liveHits, 1, reason: 'the live chain still receives keys');
+    });
+  });
+
+  group('FocusDetector', () {
+    testWidgets('reports only when focus crosses its subtree boundary', (
+      tester,
+    ) {
+      final title = FocusNode(debugLabel: 'title');
+      final body = FocusNode(debugLabel: 'body');
+      final preview = FocusNode(debugLabel: 'preview');
+      final changes = <bool>[];
+
+      tester.pumpWidget(
+        FocusTraversalGroup(
+          child: Column(
+            children: [
+              FocusDetector(
+                onFocusChange: changes.add,
+                child: Column(
+                  children: [
+                    Focus(
+                      focusNode: title,
+                      autofocus: true,
+                      child: const Text('Title'),
+                    ),
+                    Focus(focusNode: body, child: const Text('Body')),
+                  ],
+                ),
+              ),
+              Focus(focusNode: preview, child: const Text('Preview')),
+            ],
+          ),
+        ),
+      );
+      tester.render(size: const CellSize(20, 4));
+
+      expect(changes, [true], reason: 'autofocus entered the observed region');
+
+      body.requestFocus();
+      expect(changes, [
+        true,
+      ], reason: 'moving between children is not a leave-and-enter cycle');
+
+      preview.requestFocus();
+      expect(changes, [true, false]);
+
+      title.requestFocus();
+      expect(changes, [true, false, true]);
     });
   });
 }

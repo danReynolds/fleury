@@ -503,36 +503,34 @@ class _StorybookShell extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Expanded(
-                      child: FocusTraversalGroup(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            SizedBox(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          SizedBox(
+                            width: selectorWidth,
+                            child: _WidgetSelector(
                               width: selectorWidth,
-                              child: _WidgetSelector(
-                                width: selectorWidth,
-                                stories: stories,
-                                selectedIndex: selectedIndex,
-                                selectedWidgetName: selectedWidgetName,
-                                onSelect: onSelectWidget,
-                                listFocusNode: selectorFocusNode,
-                              ),
+                              stories: stories,
+                              selectedIndex: selectedIndex,
+                              selectedWidgetName: selectedWidgetName,
+                              onSelect: onSelectWidget,
+                              listFocusNode: selectorFocusNode,
                             ),
-                            const SizedBox(width: 1),
-                            Expanded(
-                              child: _PreviewPanel(
-                                key: ValueKey('${story.id}:$resetGeneration'),
-                                story: story,
-                                variant: variant,
-                                selectedWidgetName: selectedWidgetName,
-                                values: controlValues,
-                                recordAction: onRecordAction,
-                                viewport: viewport,
-                                compact: compactPreview,
-                              ),
+                          ),
+                          const SizedBox(width: 1),
+                          Expanded(
+                            child: _PreviewPanel(
+                              key: ValueKey('${story.id}:$resetGeneration'),
+                              story: story,
+                              variant: variant,
+                              selectedWidgetName: selectedWidgetName,
+                              values: controlValues,
+                              recordAction: onRecordAction,
+                              viewport: viewport,
+                              compact: compactPreview,
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                     if (showDetailsPanel) ...[

@@ -551,6 +551,242 @@ void main() {
     expect(focused?.textContent, contains('First'));
   });
 
+  test('focus.explorer demonstrates traversal and a trapped modal', () async {
+    final fixture = await _mountExample(
+      'focus.explorer',
+      useManifestSize: true,
+    );
+    final keyboardCapture =
+        fixture.host.querySelector('textarea') as web.HTMLTextAreaElement;
+
+    web.Element? focusedButton() => fixture.host.querySelector(
+      '.fleury-semantics [role="button"][data-fleury-focused="true"]',
+    );
+
+    Future<void> settle() async {
+      await Future<void>.delayed(Duration.zero);
+      for (var i = 0; i < 4 && fixture.flush.pending; i++) {
+        fixture.flush.fire();
+      }
+      await fixture.app.awaitSemanticIdle();
+    }
+
+    Future<void> press(String key, {String? code, bool shift = false}) async {
+      keyboardCapture.dispatchEvent(
+        web.KeyboardEvent(
+          'keydown',
+          web.KeyboardEventInit(
+            key: key,
+            code: code ?? key,
+            shiftKey: shift,
+            bubbles: true,
+            cancelable: true,
+          ),
+        ),
+      );
+      await settle();
+    }
+
+    web.Element buttonNamed(String label) {
+      final buttons = fixture.host.querySelectorAll(
+        '.fleury-semantics [role="button"]',
+      );
+      for (var i = 0; i < buttons.length; i++) {
+        final button = buttons.item(i)! as web.Element;
+        if ((button.textContent ?? '').contains(label)) return button;
+      }
+      fail('No semantic button named "$label"');
+    }
+
+    expect(focusedButton()?.textContent, contains('New file'));
+    expect(fixture.host.textContent, contains('AUTOMATIC'));
+    final primaryButtons = fixture.host.querySelectorAll(
+      '.fleury-semantics [role="button"]',
+    );
+    expect(primaryButtons.length, 6);
+    final buttonWidths = <int>{};
+    for (var i = 0; i < primaryButtons.length; i++) {
+      final button = primaryButtons.item(i)! as web.Element;
+      buttonWidths.add(button.getBoundingClientRect().width.round());
+    }
+    expect(
+      buttonWidths,
+      hasLength(1),
+      reason: 'the two action columns should use one consistent button width',
+    );
+    expect(
+      fixture.host.querySelector('.fleury-screen')?.textContent,
+      contains(RegExp(r'\[\s+Publish…\s+\]')),
+      reason: 'the full button label and closing bracket must be painted',
+    );
+
+    await press('Tab', code: 'Tab');
+    expect(
+      focusedButton()?.textContent,
+      contains('Refresh'),
+      reason: 'Tab follows painted row-major reading order',
+    );
+    await press('Tab', code: 'Tab', shift: true);
+    expect(focusedButton()?.textContent, contains('New file'));
+
+    await press('ArrowRight');
+    expect(focusedButton()?.textContent, contains('Refresh'));
+    expect(fixture.host.textContent, contains('active: Preview'));
+    await press('ArrowDown');
+    expect(focusedButton()?.textContent, contains('Inspect'));
+    await press('ArrowLeft');
+    expect(focusedButton()?.textContent, contains('Open file'));
+
+    (buttonNamed('Publish') as web.HTMLElement).click();
+    await settle();
+    expect(fixture.host.textContent, contains('Publish?'));
+    expect(focusedButton()?.textContent, contains('Cancel'));
+
+    await press('Tab', code: 'Tab');
+    expect(focusedButton()?.textContent, contains('Publish'));
+    await press('Tab', code: 'Tab');
+    expect(
+      focusedButton()?.textContent,
+      contains('Cancel'),
+      reason: 'Tab must wrap inside the modal instead of reaching the panes',
+    );
+
+    await press('Enter', code: 'Enter');
+    // Navigator completes the dialog future after the removal frame; yield
+    // once more so the awaiting screen can publish its result state.
+    await settle();
+    expect(fixture.host.textContent, isNot(contains('Publish?')));
+    expect(focusedButton()?.textContent, contains('Publish'));
+    expect(fixture.host.textContent, contains('Publish canceled'));
+  });
+
+  test('focusnode.programmatic visibly hands focus to its target', () async {
+    final fixture = await _mountExample(
+      'focusnode.programmatic',
+      useManifestSize: true,
+    );
+    final keyboardCapture =
+        fixture.host.querySelector('textarea') as web.HTMLTextAreaElement;
+
+    web.Element? focusedControl() => fixture.host.querySelector(
+      '.fleury-semantics [data-fleury-focused="true"]',
+    );
+
+    expect(focusedControl()?.textContent, contains('Focus search'));
+    expect(
+      fixture.host.querySelector('.fleury-screen')?.textContent,
+      allOf(contains('Focus search'), contains('Search files')),
+    );
+
+    keyboardCapture.dispatchEvent(
+      web.KeyboardEvent(
+        'keydown',
+        web.KeyboardEventInit(
+          key: 'Enter',
+          code: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        ),
+      ),
+    );
+    await Future<void>.delayed(Duration.zero);
+    for (var i = 0; i < 4 && fixture.flush.pending; i++) {
+      fixture.flush.fire();
+    }
+    await fixture.app.awaitSemanticIdle();
+
+    final searchField = fixture.host.querySelector(
+      '.fleury-semantics [role="textbox"][data-fleury-focused="true"]',
+    );
+    expect(searchField, isNotNull);
+    expect(searchField?.getAttribute('aria-label'), 'Search files');
+    expect(fixture.host.textContent, contains('Focus moved to Search files'));
+
+    keyboardCapture.dispatchEvent(
+      web.InputEvent(
+        'input',
+        web.InputEventInit(
+          data: 'logs',
+          inputType: 'insertText',
+          bubbles: true,
+          cancelable: true,
+        ),
+      ),
+    );
+    expect(fixture.flush.pending, isTrue);
+    fixture.flush.fire();
+    await fixture.app.awaitSemanticIdle();
+
+    final updatedSearchField =
+        fixture.host.querySelector(
+              '.fleury-semantics [role="textbox"][data-fleury-focused="true"]',
+            )
+            as web.HTMLInputElement;
+    expect(updatedSearchField.value, 'logs');
+    expect(fixture.host.textContent, contains('Searching for "logs"'));
+  });
+
+  test(
+    'focusdetector.basic reports subtree crossings, not child moves',
+    () async {
+      final fixture = await _mountExample(
+        'focusdetector.basic',
+        useManifestSize: true,
+      );
+      final keyboardCapture =
+          fixture.host.querySelector('textarea') as web.HTMLTextAreaElement;
+
+      web.Element? focusedButton() => fixture.host.querySelector(
+        '.fleury-semantics [role="button"][data-fleury-focused="true"]',
+      );
+
+      Future<void> pressTab() async {
+        keyboardCapture.dispatchEvent(
+          web.KeyboardEvent(
+            'keydown',
+            web.KeyboardEventInit(
+              key: 'Tab',
+              code: 'Tab',
+              bubbles: true,
+              cancelable: true,
+            ),
+          ),
+        );
+        await Future<void>.delayed(Duration.zero);
+        for (var i = 0; i < 4 && fixture.flush.pending; i++) {
+          fixture.flush.fire();
+        }
+        await fixture.app.awaitSemanticIdle();
+      }
+
+      expect(focusedButton()?.textContent, contains('Title'));
+      expect(fixture.host.textContent, contains('boundary changes: 1'));
+      expect(
+        fixture.host.querySelector('.fleury-screen')?.textContent,
+        allOf(contains('Title'), contains('Body'), contains('Preview')),
+        reason: 'the teaching controls must be painted, not only semantic',
+      );
+
+      await pressTab();
+      expect(focusedButton()?.textContent, contains('Body'));
+      expect(
+        fixture.host.textContent,
+        contains('boundary changes: 1'),
+        reason: 'moving inside the editor must not emit a boundary change',
+      );
+
+      await pressTab();
+      expect(focusedButton()?.textContent, contains('Preview'));
+      expect(fixture.host.textContent, contains('editor: inactive'));
+      expect(fixture.host.textContent, contains('boundary changes: 2'));
+      expect(
+        fixture.host.querySelector('.fleury-screen')?.textContent,
+        allOf(contains('Title'), contains('Body'), contains('Preview')),
+        reason: 'the observed region must stay visible after focus leaves',
+      );
+    },
+  );
+
   test('keydetector.basic makes consumption and bubbling visible', () async {
     final fixture = await _mountExample(
       'keydetector.basic',
