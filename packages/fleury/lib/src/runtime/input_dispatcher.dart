@@ -163,7 +163,14 @@ class InputDispatcher {
       if (!binding.enabled) continue;
       for (final sequence in binding.sequences) {
         if (sequence.stepCount <= pending.events.length) continue;
-        if (!_prefixMatches(sequence, pending.events, pending.lanes)) continue;
+        if (!_prefixMatches(
+          sequence,
+          pending.events,
+          pending.lanes,
+          pending.texts,
+        )) {
+          continue;
+        }
         final label = sequence.stepLabelAt(pending.events.length);
         if (label == null) continue;
         completions.add(KeyCompletion(next: label, binding: binding));
@@ -229,6 +236,7 @@ class InputDispatcher {
         return _dispatchText(
           TextInputEvent(text),
           keyAlreadyWalked: key != null && key.type != KeyEventType.up,
+          keyView: key != null && key.type != KeyEventType.up ? key : null,
         );
       }
       return KeyEventResult.ignored;
@@ -684,7 +692,7 @@ class InputDispatcher {
       );
       _pending = pending;
     }
-    final completed = pending.tryComplete(event, lane);
+    final completed = pending.tryComplete(event, lane, textOrigin);
     if (completed != null) {
       _clearPending();
       return _fire(completed.binding, completed.sequence, [
@@ -693,7 +701,7 @@ class InputDispatcher {
       ]);
     }
     // Could the event extend the sequence by one more step?
-    final survivors = pending.surviveOneMoreStep(event, lane);
+    final survivors = pending.surviveOneMoreStep(event, lane, textOrigin);
     if (survivors.isNotEmpty) {
       _pending = pending.advance(event, survivors, textOrigin, lane);
       _timer?.cancel();
@@ -765,8 +773,12 @@ class InputDispatcher {
   KeyEventResult _dispatchText(
     TextInputEvent event, {
     bool keyAlreadyWalked = false,
+    KeyEvent? keyView,
   }) {
-    final keyEvent = _keyEventForText(event.text);
+    // A correlated batch already owns a truthful physical event. Reuse it for
+    // the binding receipt while matching the authoritative committed text;
+    // legacy and split DOM text still synthesize the compatibility event.
+    final keyEvent = keyView ?? _keyEventForText(event.text);
     // An armed capture outranks every routed lane — including this one
     // (§17.2, "text-derived on legacy").
     //
@@ -882,6 +894,7 @@ class InputDispatcher {
       _dispatchPlain(
         pending.events[i],
         allowSequenceStart: false,
+        textOrigin: pending.texts[i],
         lane: pending.lanes[i],
         visitDetectors: true,
       );
@@ -976,12 +989,23 @@ class InputDispatcher {
       if (source != null) {
         if (allowSequenceStart) {
           final seqsHere = <KeyBinding>[];
-          _collectSequenceStarts(source.activeBindings, event, seqsHere, lane);
+          _collectSequenceStarts(
+            source.activeBindings,
+            event,
+            seqsHere,
+            lane,
+            textOrigin,
+          );
           sequenceCandidates.addAll(seqsHere);
           // Defer direct firing while any sequence is still on the
           // table (here or accumulated from a deeper node).
           if (sequenceCandidates.isEmpty) {
-            final hit = _findDirectMatch(source.activeBindings, event, lane);
+            final hit = _findDirectMatch(
+              source.activeBindings,
+              event,
+              lane,
+              textOrigin,
+            );
             if (hit != null) {
               final result = _fire(hit.binding, hit.sequence, [event]);
               // Bindings that call event.bubble() return
@@ -993,7 +1017,12 @@ class InputDispatcher {
           }
         } else {
           // Replay mode: pre-sequence-rule semantics.
-          final hit = _findDirectMatch(source.activeBindings, event, lane);
+          final hit = _findDirectMatch(
+            source.activeBindings,
+            event,
+            lane,
+            textOrigin,
+          );
           if (hit != null) {
             final result = _fire(hit.binding, hit.sequence, [event]);
             if (result == KeyEventResult.handled) return result;
@@ -1050,6 +1079,7 @@ class InputDispatcher {
     Iterable<KeyBinding> bindings,
     KeyEvent event,
     _BindingLane lane,
+    String? textOrigin,
   ) {
     for (final binding in bindings) {
       if (!binding.enabled) continue;
@@ -1057,7 +1087,7 @@ class InputDispatcher {
       if (!_phaseEligible(binding, event)) continue;
       for (final sequence in binding.sequences) {
         if (sequence.isSequence) continue;
-        if (_matchesStepInLane(sequence, 0, event, lane)) {
+        if (_matchesStepInLane(sequence, 0, event, lane, textOrigin)) {
           return (binding: binding, sequence: sequence);
         }
       }
@@ -1072,6 +1102,7 @@ class InputDispatcher {
     KeyEvent event,
     List<KeyBinding> out,
     _BindingLane lane,
+    String? textOrigin,
   ) {
     for (final binding in bindings) {
       if (!binding.enabled) continue;
@@ -1081,7 +1112,7 @@ class InputDispatcher {
       if (event.type == KeyEventType.repeat) continue;
       for (final sequence in binding.sequences) {
         if (!sequence.isSequence) continue;
-        if (_matchesStepInLane(sequence, 0, event, lane)) {
+        if (_matchesStepInLane(sequence, 0, event, lane, textOrigin)) {
           out.add(binding);
           break;
         }
@@ -1310,14 +1341,21 @@ class _PendingSequence {
   ({KeyBinding binding, KeySequence sequence})? tryComplete(
     KeyEvent event,
     _BindingLane lane,
+    String? textOrigin,
   ) {
     final matchedSoFar = events.length;
     for (final binding in candidates) {
       for (final sequence in binding.sequences) {
         if (!sequence.isSequence) continue;
         if (sequence.stepCount != matchedSoFar + 1) continue;
-        if (_prefixMatches(sequence, events, lanes) &&
-            _matchesStepInLane(sequence, matchedSoFar, event, lane)) {
+        if (_prefixMatches(sequence, events, lanes, texts) &&
+            _matchesStepInLane(
+              sequence,
+              matchedSoFar,
+              event,
+              lane,
+              textOrigin,
+            )) {
           return (binding: binding, sequence: sequence);
         }
       }
@@ -1329,15 +1367,25 @@ class _PendingSequence {
   /// matched as a strict prefix after appending [event] (i.e. still
   /// has at least one more step to go). Empty list means the pending
   /// state must be cancelled.
-  List<KeyBinding> surviveOneMoreStep(KeyEvent event, _BindingLane lane) {
+  List<KeyBinding> surviveOneMoreStep(
+    KeyEvent event,
+    _BindingLane lane,
+    String? textOrigin,
+  ) {
     final matchedSoFar = events.length;
     final out = <KeyBinding>[];
     for (final binding in candidates) {
       for (final sequence in binding.sequences) {
         if (!sequence.isSequence) continue;
         if (sequence.stepCount <= matchedSoFar + 1) continue;
-        if (_prefixMatches(sequence, events, lanes) &&
-            _matchesStepInLane(sequence, matchedSoFar, event, lane)) {
+        if (_prefixMatches(sequence, events, lanes, texts) &&
+            _matchesStepInLane(
+              sequence,
+              matchedSoFar,
+              event,
+              lane,
+              textOrigin,
+            )) {
           out.add(binding);
           break;
         }
@@ -1367,9 +1415,12 @@ bool _prefixMatches(
   KeySequence sequence,
   List<KeyEvent> events,
   List<_BindingLane> lanes,
+  List<String?> texts,
 ) {
   for (var i = 0; i < events.length; i++) {
-    if (!_matchesStepInLane(sequence, i, events[i], lanes[i])) return false;
+    if (!_matchesStepInLane(sequence, i, events[i], lanes[i], texts[i])) {
+      return false;
+    }
   }
   return true;
 }
@@ -1379,9 +1430,16 @@ bool _matchesStepInLane(
   int index,
   KeyEvent event,
   _BindingLane lane,
+  String? textOrigin,
 ) {
-  final textDriven = sequence.isTextDrivenStepAt(index);
-  if (lane == _BindingLane.key && textDriven) return false;
-  if (lane == _BindingLane.text && !textDriven) return false;
-  return sequence.matchesStepAt(index, event);
+  return sequence.matchesStepAt(
+    index,
+    event,
+    textDriven: switch (lane) {
+      _BindingLane.all => null,
+      _BindingLane.key => false,
+      _BindingLane.text => true,
+    },
+    committedText: lane == _BindingLane.text ? textOrigin : null,
+  );
 }

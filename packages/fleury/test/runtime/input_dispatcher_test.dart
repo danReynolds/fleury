@@ -223,9 +223,16 @@ void main() {
 
     test('a shifted produced character matches through committed text', () {
       var fired = 0;
+      KeyBindingEvent? received;
       final h = _TestHarness(
         rootBindings: [
-          KeyBinding(KeySequence.char(r'$'), onTrigger: (_) => fired++),
+          KeyBinding(
+            KeySequence.char(r'$'),
+            onTrigger: (event) {
+              fired++;
+              received = event;
+            },
+          ),
         ],
       );
       h.mountRoot(const EmptyBox());
@@ -242,6 +249,9 @@ void main() {
       );
 
       expect(fired, 1);
+      expect(received!.code, KeyCode.char('4'));
+      expect(received!.hasShift, isTrue);
+      expect(received!.match.events.single.position, KeyPosition.digit4);
     });
 
     test('a positional command takes precedence over produced text', () {

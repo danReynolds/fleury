@@ -432,6 +432,15 @@ final class KeyCode extends KeySequence implements KeySelector {
   @override
   _KeyStep _stepAt(int index) {
     assert(index == 0, 'a KeyCode is a single step');
+    final s = special;
+    if (s != null) return _stepBySpecialCode[s.index];
+    final value = character!;
+    if (value.length == 1) {
+      final unit = value.codeUnitAt(0);
+      if (unit >= 0x20 && unit <= 0x7E) {
+        return _stepByAsciiCode[unit - 0x20];
+      }
+    }
     return _KeyStep(this);
   }
 }
@@ -1198,6 +1207,16 @@ final List<_KeyStep> _stepByPosition = [
   for (final position in KeyPosition.values) _KeyStep(position),
 ];
 
+/// Canonical one-step forms for the interned [KeyCode] vocabularies. Binding
+/// walks inspect these on every key, so rebuilding the wrapper would turn a
+/// second key/text lane into steady per-key allocation churn.
+final List<_KeyStep> _stepByAsciiCode = [
+  for (final code in KeyCode._byAscii) _KeyStep(code),
+];
+final List<_KeyStep> _stepBySpecialCode = [
+  for (final code in KeyCode._bySpecial) _KeyStep(code),
+];
+
 /// **Framework-internal.** Lets the [InputDispatcher] walk a sequence
 /// step-by-step without exposing the step layout. Not a stable public API —
 /// app code should treat these as private.
@@ -1206,27 +1225,19 @@ extension $KeySequenceInternal on KeySequence {
   bool get isSequence => stepCount > 1;
 
   /// Matches the step at [index] against [event]; false when out of range.
-  bool matchesStepAt(int index, KeyEvent event) {
-    if (index < 0 || index >= stepCount) return false;
-    return _stepAt(index).matches(event);
-  }
-
-  /// Whether this step is driven by committed text rather than the raw key
-  /// half of an input report.
-  ///
-  /// Produced characters (including uppercase letters and AltGr-produced
-  /// symbols) must match what the input method committed, not the key cap or
-  /// modifier recipe used to obtain it. An explicitly retained modifier — such
-  /// as `.shift.char('1')` — is a chord and stays on the key lane.
-  bool isTextDrivenStepAt(int index) {
+  bool matchesStepAt(
+    int index,
+    KeyEvent event, {
+    bool? textDriven,
+    String? committedText,
+  }) {
     if (index < 0 || index >= stepCount) return false;
     final step = _stepAt(index);
-    return (step.code?.isCharacter ?? false) &&
-        !step.ctrl &&
-        !step.alt &&
-        !step.shift &&
-        !step.superKey &&
-        !step.meta;
+    if (textDriven != null && step.isTextDriven != textDriven) return false;
+    if (textDriven == true && committedText != null) {
+      return step.matchesCommittedText(committedText);
+    }
+    return step.matches(event);
   }
 
   /// The [hintLabel]-style label of the step at [index] (`Ctrl+S`, `↑`, `d`),
@@ -1359,6 +1370,23 @@ final class _KeyStep {
   final bool meta;
 
   bool get _hasModifiers => ctrl || alt || shift || superKey || meta;
+
+  /// Whether committed text, rather than the raw key report, owns matching
+  /// for this step. Keeping the lane test on the already-loaded step avoids a
+  /// second transient [_KeyStep] for one-step [KeyCode] bindings.
+  bool get isTextDriven =>
+      (code?.isCharacter ?? false) &&
+      !ctrl &&
+      !alt &&
+      !shift &&
+      !superKey &&
+      !meta;
+
+  /// Matches the authoritative text view of a physical press. This is exact:
+  /// case and symbols are already the terminal or browser's resolved output,
+  /// so layout/modifier reconstruction would only lose information.
+  bool matchesCommittedText(String text) =>
+      isTextDriven && code!.character == text;
 
   /// Strict per-step match. All five modifiers compare by equality; for a
   /// character code, shift is folded through case so `.shift.g` matches an
