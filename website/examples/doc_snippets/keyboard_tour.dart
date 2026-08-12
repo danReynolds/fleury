@@ -182,6 +182,44 @@ class PeekExample extends StatelessWidget {
   );
 }
 
+/// A capability-driven control uses the richest behavior that was actually
+/// delivered, while keeping the same command usable on press-only terminals.
+class AdaptivePeekExample extends StatelessWidget {
+  const AdaptivePeekExample({
+    super.key,
+    required this.child,
+    required this.peeking,
+    required this.onPeek,
+  });
+
+  final Widget child;
+  final bool peeking;
+  final void Function(bool showing) onPeek;
+
+  @override
+  Widget build(BuildContext context) {
+    final canHold = Keyboard.of(context).capabilities.supportsHeldState;
+    return KeyBindings(
+      bindings: [
+        if (canHold)
+          KeyBinding.hold(
+            .space,
+            label: 'Peek (hold)',
+            onHoldStart: (_) => onPeek(true),
+            onHoldEnd: (_) => onPeek(false),
+          )
+        else
+          KeyBinding(
+            .space,
+            label: 'Peek (toggle)',
+            onTrigger: (_) => onPeek(!peeking),
+          ),
+      ],
+      child: child,
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // 6. Awaiting one key — a rebind row, vim's `m<letter>`.
 // ---------------------------------------------------------------------------

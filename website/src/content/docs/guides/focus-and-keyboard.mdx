@@ -319,32 +319,57 @@ The capture takes priority over ordinary bindings and is tied to its
 `BuildContext`. If that UI unmounts, the future completes with `null` rather
 than continuing to consume input.
 
-### Terminal capabilities
+### Terminal support
 
-Classic terminal input reports presses but often cannot distinguish some
-chords or report releases and physical positions. Fleury negotiates enhanced
-keyboard input where the terminal supports it and exposes the delivered result
-as capabilities:
+Most shortcuts need no terminal-specific code. Fleury automatically negotiates
+enhanced keyboard input and falls back to classic press events, so commands such
+as `Ctrl+S`, `q`, arrows, and multi-key sequences use the same declarations on
+both paths.
 
-| Capability | Your application can rely on |
-|---|---|
-| `supportsHeldState` | `isHeld` and `wasReleased` work |
-| `supportsPositions` | Reported keys can carry physical-position identity |
-| `distinguishesRepeats` | Auto-repeat events are explicitly identified |
+Check a capability only when the feature fundamentally needs information that a
+classic terminal may not deliver. This control uses hold-to-peek when reliable
+releases are available, and keeps Space useful as a press-to-toggle fallback
+when they are not:
 
-Branch on these capabilities, never on a terminal name. If a terminal or
-multiplexer cannot deliver an enhanced feature, ordinary press bindings still
-work and the fallback patterns above remain available.
+```dart
+final canHold = Keyboard.of(context).capabilities.supportsHeldState;
 
-Fleury handles negotiation automatically. Inside a multiplexer it stays at a
-safe tier unless the transport is known to preserve the protocol. Two operator
-overrides are available for unusual deployments:
+KeyBindings(
+  bindings: [
+    if (canHold)
+      KeyBinding.hold(
+        .space,
+        label: 'Peek (hold)',
+        onHoldStart: (_) => setPeeking(true),
+        onHoldEnd: (_) => setPeeking(false),
+      )
+    else
+      KeyBinding(
+        .space,
+        label: 'Peek (toggle)',
+        onTrigger: (_) => setPeeking(!peeking),
+      ),
+  ],
+  child: content,
+);
+```
 
-- `FLEURY_KEYBOARD=lifecycle` forces enhanced keyboard negotiation.
-- `FLEURY_KEYBOARD=legacy` keeps the session on press-only input.
+Capability reads in `build` are reactive: if startup negotiation upgrades the
+session, Fleury rebuilds the control and selects the hold gesture. The
+[Neon Asteroids example above](#real-time-held-keys) uses this same decision for
+continuous flight controls while retaining press-driven movement as its
+fallback.
 
-Leave the override unset for ordinary use. The complete protocol and fallback
-design is recorded in [RFC 0020](https://github.com/danReynolds/fleury/blob/main/docs/rfcs/0020-keyboard-lifecycle-and-kitty.md).
+Fleury supports enhanced terminal input through the Kitty keyboard protocol.
+The framework requests it automatically, confirms the guarantees the terminal
+and any multiplexer actually preserve, and exposes only those semantic
+capabilities to the app. Application code should not inspect terminal names,
+parse protocol replies, or force a keyboard mode.
+
+For diagnostics and operator-level overrides, see
+[Terminal capabilities](/fleury/guides/terminal-capabilities/). Terminal and
+framework authors can find the wire-level format in the
+[Kitty keyboard protocol](https://sw.kovidgoyal.net/kitty/keyboard-protocol/).
 
 ## Next steps
 
