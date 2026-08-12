@@ -551,6 +551,43 @@ void main() {
     expect(focused?.textContent, contains('First'));
   });
 
+  test('keydetector.basic makes consumption and bubbling visible', () async {
+    final fixture = await _mountExample(
+      'keydetector.basic',
+      useManifestSize: true,
+    );
+    final keyboardCapture =
+        fixture.host.querySelector('textarea') as web.HTMLTextAreaElement;
+
+    Future<void> pressDown() async {
+      keyboardCapture.dispatchEvent(
+        web.KeyboardEvent(
+          'keydown',
+          web.KeyboardEventInit(
+            key: 'ArrowDown',
+            code: 'ArrowDown',
+            bubbles: true,
+            cancelable: true,
+          ),
+        ),
+      );
+      expect(fixture.flush.pending, isTrue);
+      fixture.flush.fire();
+      await fixture.app.awaitSemanticIdle();
+    }
+
+    await pressDown();
+    await pressDown();
+    expect(fixture.host.textContent, contains('PANE  HANDLED · moved'));
+    expect(fixture.host.textContent, contains('APP   — not reached'));
+    expect(fixture.host.textContent, contains('pane 2 · app 0'));
+
+    await pressDown();
+    expect(fixture.host.textContent, contains('PANE  PASSED · at edge'));
+    expect(fixture.host.textContent, contains('APP   HANDLED'));
+    expect(fixture.host.textContent, contains('pane 2 · app 1'));
+  });
+
   test('barchart.basic renders its categories', () async {
     final host = await _mount('barchart.basic');
     expect(host.textContent, contains('q4'));

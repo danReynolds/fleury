@@ -28,7 +28,7 @@ This guide starts with the common command path, then covers those lower-level
 cases. To control *where* keys go—focusable widgets, Tab order, and traversal—see
 [Focus management](/fleury/guides/focus/).
 
-## Core keyboard commands
+## Core commands
 
 ### Declare a shortcut
 
@@ -55,7 +55,7 @@ Bindings fire once per physical press by default, so holding `Ctrl+S` still
 saves once. The label is part of the declaration because Fleury uses it for
 discoverability surfaces such as `KeyHintBar`.
 
-### Scope commands to the right part of the app
+### Scope shortcuts
 
 Put application-wide shortcuts near the root:
 
@@ -77,7 +77,7 @@ nearest declaration wins. An editor can give `Ctrl+S` a local meaning while the
 rest of the application keeps its own binding, without either scope knowing
 about the other.
 
-### Compose aliases, sequences, and repeating movement
+### Aliases, sequences, and repeat
 
 A command can accept aliases, use more than one key, or opt into auto-repeat.
 This example combines the common forms:
@@ -119,7 +119,7 @@ Aliases describe several gestures for one command, so they produce one entry in
 the hint bar. Sequences such as `gg` and `Space c` remain pending briefly while
 Fleury waits for the next key.
 
-### Keep shortcuts discoverable
+### Shortcut discovery
 
 `KeyHintBar` reads the bindings active at its location. You do not maintain a
 second list of shortcut labels:
@@ -145,7 +145,7 @@ The buffer does not change when the keymap changes—only the active binding lis
 and the surface presenting it do. See the [editor walkthrough](/fleury/showcases/editor/)
 for the complete example.
 
-### Typed text and commands coexist
+### Text input precedence
 
 Printable input is offered to focused text widgets before it becomes a command.
 That is why a root binding can make `q` quit while a focused `TextInput` still
@@ -156,13 +156,13 @@ Use bindings for commands rather than manually checking characters. You then
 get the expected "`q` quits unless the user is typing" behavior without adding
 focus checks to every handler.
 
-## Advanced keyboard patterns
+## Advanced patterns
 
 The rest of this guide is for reusable controls, real-time input, and commands
 whose lifecycle is more involved than a single press. Most application
 shortcuts do not need these APIs.
 
-### Handle keys inside a reusable widget
+### Custom widget handling
 
 `KeyDetector` is the low-level hook for behavior internal to a widget: a custom
 scroll region, canvas, or terminal pane. It sees keys routed through its subtree
@@ -192,9 +192,10 @@ KeyDetector(
 </Fragment>
 </CodeDemoSplit>
 
-Click the example and press `↓`. The pane consumes the key while its cursor can
-move. At the last row, press `↓` again and the event bubbles to the application's
-binding.
+Click the example and press `↓` three times. Its event trace makes the routing
+visible: the pane handles the first two presses and moves its cursor, so the app
+is not reached. On the third press, the pane is at its edge and passes the key;
+the ancestor app binding handles it. Press `↑` to watch the same path in reverse.
 
 Two rules matter when implementing a detector:
 
@@ -206,7 +207,7 @@ Two rules matter when implementing a detector:
 Prefer `KeyBindings` in ordinary application code: declarations can drive
 shortcut hints and inspection tools; an arbitrary detector callback cannot.
 
-### Read held keys for games and simulations
+### Real-time held keys
 
 A real-time loop usually wants the current keyboard state once per frame rather
 than one callback per keypress. Cache the keyboard handle and take one immutable
@@ -255,7 +256,7 @@ Neon Asteroids combines held movement, tap edges, and press-driven fallbacks:
 See the [full source](https://github.com/danReynolds/fleury/blob/main/packages/samples/lib/src/neon_asteroids.dart)
 and [showcase walkthrough](/fleury/showcases/asteroids/).
 
-### Choose physical positions or logical keys
+### Keyboard layouts
 
 Use a `KeyPosition` when the control is spatial and should stay under the same
 finger across keyboard layouts. Use a `KeyCode` when the command is mnemonic
@@ -273,7 +274,7 @@ On AZERTY, the physical position used by QWERTY `W` is labeled `Z`. Fleury's
 hint surfaces resolve positions to the user's label when that information is
 available.
 
-### Holds, propagation, and one-key capture
+### Holds, bubbling, and capture
 
 Use a hold binding when the duration itself is the command, such as
 push-to-talk or peek-while-held. Only offer it when releases are supported:
@@ -318,7 +319,7 @@ The capture takes priority over ordinary bindings and is tied to its
 `BuildContext`. If that UI unmounts, the future completes with `null` rather
 than continuing to consume input.
 
-### Terminal keyboard capabilities
+### Terminal capabilities
 
 Classic terminal input reports presses but often cannot distinguish some
 chords or report releases and physical positions. Fleury negotiates enhanced
@@ -345,7 +346,7 @@ overrides are available for unusual deployments:
 Leave the override unset for ordinary use. The complete protocol and fallback
 design is recorded in [RFC 0020](https://github.com/danReynolds/fleury/blob/main/docs/rfcs/0020-keyboard-lifecycle-and-kitty.md).
 
-## Where to go next
+## Next steps
 
 The default is deliberately small: use `KeyBindings` for commands, place them
 at the scope that owns them, and render the same declarations with
