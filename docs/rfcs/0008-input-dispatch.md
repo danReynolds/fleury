@@ -8,12 +8,12 @@ type, the `KeyBinding` constructors, and the `KeyEvent` shape below are
 **historical** — `KeyChord` is now `KeySequence`, and the common handler is
 `onTrigger`. The *dispatch architecture* in §7 (precedence, modal scopes,
 text-input claim order, the central `InputDispatcher`) carries forward
-unchanged and is still current, with **one exception**: the global-bindings
-stage (§6.6, step 4 of §7) and its `suppressGlobals` opt-out were **removed
-2026-08-11**. App-wide shortcuts are now an outermost `KeyBindings` widget, and
-a modal scope's chain truncation is what isolates a dialog from them. Left as
-written: this is the record of what was decided in May 2026, not a guide to
-today's API.
+with two later revisions. First, the global-bindings stage (§6.6, step 4 of §7)
+and its `suppressGlobals` opt-out were removed 2026-08-11. Second, focus and
+key boundaries were separated 2026-08-12: `FocusScope(trapFocus: true)` confines
+focus only, while `KeyBindings(modal: true)` stops unmatched keys. Navigator
+composes both for presented routes. Left as written: this is the record of what
+was decided in May 2026, not a guide to today's API.
 **Decision point for:** P1 implementation order
 
 ## 1. Summary
@@ -429,6 +429,11 @@ A normal `FocusScope` groups focus traversal but does not block
 bubble-up — events still reach ancestor `KeyBindings`. `modal: true`
 turns the scope into a *trap*: events do not reach `KeyBindings`
 ancestors above the scope.
+
+> **Revised 2026-08-12.** The current API separates these policies.
+> `FocusScope(trapFocus: true)` confines focus but does not alter key
+> propagation. `KeyBindings(modal: true)` is the unmatched-key boundary.
+> Navigator composes both for presented routes.
 
 Global bindings (registered with `runTui`'s `globalBindings`
 parameter) **still fire** when a modal scope is active, unless the

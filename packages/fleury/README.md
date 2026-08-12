@@ -80,7 +80,7 @@ tree with a diffing ANSI renderer. Unhandled Ctrl+C exits by default.
 - **Input + focus**: key bindings that fire once per physical press, and
   held-key state sampled per frame for games (`Keyboard.of` — key releases
   negotiated with the terminal automatically, no flags), focus traversal
-  (Tab / directional), modal focus scopes, mouse + pointer routing, paste
+  (Tab / directional), dialog focus traps, mouse + pointer routing, paste
   handling.
 - **Navigation**: `Navigator` with routes + an `Overlay` for modals,
   menus, tooltips, and toasts.

@@ -8,7 +8,7 @@
 //      a. Direct match on a KeyBindings binding (binding wins).
 //      b. Sequence-start match on a KeyBindings binding (begin pending).
 //      c. KeyDetector floor (consumes via KeyEvent.consume()).
-//      Modal FocusScope boundaries stop the walk.
+//      KeyBindings modal boundaries stop the unmatched remainder.
 //   3. IGNORED.
 
 import 'dart:async';
@@ -300,9 +300,9 @@ class InputDispatcher {
   /// pointer. Runs alongside [PointerRouter] (which handles taps, hover,
   /// and scroll) — clicking a focusable both activates and focuses it.
   ///
-  /// While a modal scope is open, only nodes inside it are clickable —
+  /// While a focus trap is open, only nodes inside it are clickable —
   /// a stray click on a focusable behind a modal dialog must not change
-  /// focus and slip past the modal boundary. Mouse-modal filtering is
+  /// focus and slip past the focus boundary. Mouse filtering is
   /// applied here (rather than via `traversalCandidates`) so a node
   /// that opted out of Tab traversal (`skipTraversal: true` — e.g. a
   /// Button) can still receive focus via click.
@@ -326,7 +326,6 @@ class InputDispatcher {
       // node that opted out of Tab (skipTraversal: true — e.g. Button)
       // still responds to a click.
       if (!focusManager.isClickable(node)) continue;
-      if (!focusManager.isUnderActiveModal(node)) continue;
       final r = node.rect;
       if (r == null) continue;
       if (event.col < r.left ||
@@ -446,8 +445,7 @@ class InputDispatcher {
     };
     final covered = <KeyCode>{
       for (final active in resolveActiveKeyBindings(focusManager))
-        for (final sequence in active.sequences)
-          if (lower(sequence) case final code?) code,
+        for (final sequence in active.sequences) ?lower(sequence),
     };
     for (final selector in sampled) {
       // Compare on the logical key: a positional sample is satisfied by a
@@ -1040,11 +1038,11 @@ class InputDispatcher {
         return KeyEventResult.handled;
       }
 
-      // Modal boundary (§14.3): nothing at this scope claimed the key, so
-      // the unmatched remainder stops here — ancestors and globals never
+      // Key-binding boundary (§14.3): nothing at this scope claimed the key,
+      // so the unmatched remainder stops here — ancestors and globals never
       // see it. Reaching this point means no binding here matched, OR one
-      // matched and bubbled; a bubble is the deliberate per-key
-      // passthrough, so it must NOT be trapped.
+      // matched and bubbled; a bubble is the deliberate per-key passthrough,
+      // so it must NOT be trapped.
       if (source != null && source.isModalScope && !bubbledHere) {
         // Globals are suppressed with everything else: a modal surface
         // traps the unmatched remainder completely.

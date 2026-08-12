@@ -1,16 +1,10 @@
-// Modal-scoped focus traversal: Tab / Shift+Tab cycle WITHIN the
-// active modal scope only; arrow-driven directional moves obey the
-// confine traversal.
+// Focus-trapped traversal: Tab / Shift+Tab cycle WITHIN the active trap;
+// arrow-driven directional moves obey the same boundary.
 //
-// Test layout note: Tab is dispatched along the focus chain (deepest
-// first, stopping at the modal boundary). For a FocusTraversalGroup
-// binding to see Tab inside a modal, the group must sit between the
-// focused node and the modal marker. Real-world apps follow this
-// shape — a modal dialog wraps its content in its own
-// FocusTraversalGroup. The bug these tests guard against: even
-// correctly nested, focusNext() previously walked the manager's
-// global attachedNodes list and could move focus to a node OUTSIDE
-// the modal.
+// FocusScope itself does not own Tab or key propagation. The traversal group
+// supplies movement; trapFocus constrains the candidates selected by that
+// policy. The bug these tests guard against: focusNext() previously walked the
+// manager's global attachedNodes list and could move focus outside the trap.
 
 import 'package:fleury/fleury.dart';
 import '../support/harness.dart';
@@ -32,8 +26,55 @@ class _FocusTrace {
 }
 
 void main() {
-  group('modal-scope Tab traversal', () {
-    testWidgets('Tab cycles only between focusables inside a modal scope', (
+  group('trapped FocusScope traversal', () {
+    testWidgets('direct focus requests cannot escape the active focus trap', (
+      tester,
+    ) {
+      final outside = FocusNode(debugLabel: 'outside');
+      final inA = FocusNode(debugLabel: 'inA');
+      final inB = FocusNode(debugLabel: 'inB');
+
+      tester.pumpWidget(
+        Column(
+          children: [
+            Focus(focusNode: outside, child: const Text('outside')),
+            FocusScope(
+              trapFocus: true,
+              child: Column(
+                children: [
+                  Focus(
+                    focusNode: inA,
+                    autofocus: true,
+                    child: const Text('inA'),
+                  ),
+                  Focus(focusNode: inB, child: const Text('inB')),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+      tester.render(size: const CellSize(20, 3));
+      expect(inA.hasFocus, isTrue);
+
+      inB.requestFocus();
+      expect(inB.hasFocus, isTrue, reason: 'requests inside the modal work');
+
+      expect(
+        tester.focusManager.requestFocus(outside),
+        isFalse,
+        reason: 'the manager rejects a request outside the focus trap',
+      );
+      outside.requestFocus();
+      expect(
+        inB.hasFocus,
+        isTrue,
+        reason: 'FocusNode.requestFocus cannot bypass the focus trap',
+      );
+      expect(outside.hasFocus, isFalse);
+    });
+
+    testWidgets('Tab cycles only between focusables inside a focus trap', (
       tester,
     ) {
       final outside = FocusNode(debugLabel: 'outside');
@@ -51,7 +92,7 @@ void main() {
             SizedBox(
               height: 2,
               child: FocusScope(
-                modal: true,
+                trapFocus: true,
                 child: FocusTraversalGroup(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -84,7 +125,7 @@ void main() {
       tester.sendKey(_code(KeyCode.tab));
       expect(inB.hasFocus, isTrue);
       tester.sendKey(_code(KeyCode.tab));
-      expect(inA.hasFocus, isTrue, reason: 'wraps within the modal');
+      expect(inA.hasFocus, isTrue, reason: 'wraps within the focus trap');
       tester.sendKey(_code(KeyCode.tab));
       expect(inB.hasFocus, isTrue);
 
@@ -97,7 +138,7 @@ void main() {
       trace.dispose();
     });
 
-    testWidgets('Shift+Tab obeys the same modal boundary', (tester) {
+    testWidgets('Shift+Tab obeys the same focus trap', (tester) {
       final outside = FocusNode(debugLabel: 'outside');
       final inA = FocusNode(debugLabel: 'inA');
       final inB = FocusNode(debugLabel: 'inB');
@@ -113,7 +154,7 @@ void main() {
             SizedBox(
               height: 2,
               child: FocusScope(
-                modal: true,
+                trapFocus: true,
                 child: FocusTraversalGroup(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -152,11 +193,11 @@ void main() {
       trace.dispose();
     });
 
-    testWidgets('arrow traversal stays inside the active modal', (tester) {
+    testWidgets('arrow traversal stays inside the active focus trap', (tester) {
       // Layout: outside sits to the LEFT of the modal; inA sits to the
       // LEFT of inB inside the modal. With inA focused, ArrowLeft would
       // naturally land on `outside` (spatially adjacent) — but the
-      // modal filter must reject it. We check the full transition trace
+      // focus-trap filter must reject it. We check the full transition trace
       // (T2 guard) rather than just inA.hasFocus, so a "stayed by accident"
       // outcome can't pass for the wrong reason.
       final outside = FocusNode(debugLabel: 'outside');
@@ -174,7 +215,7 @@ void main() {
             SizedBox(
               width: 12,
               child: FocusScope(
-                modal: true,
+                trapFocus: true,
                 child: FocusTraversalGroup(
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -229,14 +270,14 @@ void main() {
       trace.dispose();
     });
 
-    testWidgets('nested modals: innermost wins', (tester) {
+    testWidgets('nested focus traps: innermost wins', (tester) {
       final outerOnly = FocusNode(debugLabel: 'outerOnly');
       final innerA = FocusNode(debugLabel: 'innerA');
       final innerB = FocusNode(debugLabel: 'innerB');
 
       tester.pumpWidget(
         FocusScope(
-          modal: true,
+          trapFocus: true,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -247,7 +288,7 @@ void main() {
               SizedBox(
                 height: 2,
                 child: FocusScope(
-                  modal: true,
+                  trapFocus: true,
                   child: FocusTraversalGroup(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -289,87 +330,82 @@ void main() {
       expect(
         trace.sequence.contains(outerOnly),
         isFalse,
-        reason: 'inner modal must not leak to the outer-only node',
+        reason: 'inner focus trap must not leak to the outer-only node',
       );
       trace.dispose();
     });
 
-    testWidgets(
-      'programmatic focusNext respects the modal even with a detached '
-      'focused node',
-      (tester) {
-        // B1 guard. _focusedNode goes null whenever the focused node detaches
-        // (its widget unmounts mid-rebuild). Calling focusManager.focusNext()
-        // imperatively in that window — e.g. from an app-level "advance focus"
-        // shortcut — used to walk the entire attached set because the modal
-        // anchor was derived from the (now-null) focused node. The fix is the
-        // marker-tracked _activeModalScopes set on FocusManager.
-        final outside = FocusNode(debugLabel: 'outside');
-        final inA = FocusNode(debugLabel: 'inA');
-        final inB = FocusNode(debugLabel: 'inB');
+    testWidgets('programmatic focusNext respects the trap even with a detached '
+        'focused node', (tester) {
+      // B1 guard. _focusedNode goes null whenever the focused node detaches
+      // (its widget unmounts mid-rebuild). Calling focusManager.focusNext()
+      // imperatively in that window — e.g. from an app-level "advance focus"
+      // shortcut — used to walk the entire attached set because the modal
+      // anchor was derived from the (now-null) focused node. The fix is the
+      // marker-tracked active focus-trap set on FocusManager.
+      final outside = FocusNode(debugLabel: 'outside');
+      final inA = FocusNode(debugLabel: 'inA');
+      final inB = FocusNode(debugLabel: 'inB');
 
-        tester.pumpWidget(
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SizedBox(
-                height: 1,
-                child: Focus(focusNode: outside, child: const Text('outside')),
-              ),
-              SizedBox(
-                height: 2,
-                child: FocusScope(
-                  modal: true,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      SizedBox(
-                        height: 1,
-                        child: Focus(
-                          focusNode: inA,
-                          autofocus: true,
-                          child: const Text('inA'),
-                        ),
+      tester.pumpWidget(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              height: 1,
+              child: Focus(focusNode: outside, child: const Text('outside')),
+            ),
+            SizedBox(
+              height: 2,
+              child: FocusScope(
+                trapFocus: true,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(
+                      height: 1,
+                      child: Focus(
+                        focusNode: inA,
+                        autofocus: true,
+                        child: const Text('inA'),
                       ),
-                      SizedBox(
-                        height: 1,
-                        child: Focus(focusNode: inB, child: const Text('inB')),
-                      ),
-                    ],
-                  ),
+                    ),
+                    SizedBox(
+                      height: 1,
+                      child: Focus(focusNode: inB, child: const Text('inB')),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-        );
-        tester.render(size: const CellSize(20, 3));
-        expect(inA.hasFocus, isTrue);
+            ),
+          ],
+        ),
+      );
+      tester.render(size: const CellSize(20, 3));
+      expect(inA.hasFocus, isTrue);
 
-        // Drop focus (mimics the focused node detaching mid-build).
-        tester.focusManager.requestFocus(null);
-        expect(tester.focusManager.focusedNode, isNull);
+      // Drop focus (mimics the focused node detaching mid-build).
+      tester.focusManager.requestFocus(null);
+      expect(tester.focusManager.focusedNode, isNull);
 
-        // Programmatically advance focus. The modal must still bound the walk
-        // even though no node holds focus.
-        tester.focusManager.focusNext();
-        expect(
-          inA.hasFocus,
-          isTrue,
-          reason:
-              'focusNext with no current focus picks the first IN-modal '
-              'node, not the outside one',
-        );
-        expect(outside.hasFocus, isFalse);
-      },
-    );
+      // Programmatically advance focus. The trap must still bound the walk
+      // even though no node holds focus.
+      tester.focusManager.focusNext();
+      expect(
+        inA.hasFocus,
+        isTrue,
+        reason:
+            'focusNext with no current focus picks the first trapped '
+            'node, not the outside one',
+      );
+      expect(outside.hasFocus, isFalse);
+    });
 
     testWidgets(
-      'FocusTraversalGroup OUTSIDE the modal still cannot leak Tab out',
+      'FocusTraversalGroup outside the trap still cannot leak focus out',
       (tester) {
         // T1 guard. Earlier drafts placed FocusTraversalGroup outside the
-        // modal — but activeChain() stops at the modal boundary, so Tab never
-        // reaches the group's binding and the test passes for the wrong
-        // reason. To prove the _traversalOrder modal filter actually does the
+        // trap. To prove the _traversalOrder focus filter actually does the
         // work, we drive focusNext() programmatically here. Reverting the
         // filter in focus.dart's _traversalOrder makes this test fail with
         // the outside nodes appearing in the trace.
@@ -400,7 +436,7 @@ void main() {
                   width: 20,
                   height: 2,
                   child: FocusScope(
-                    modal: true,
+                    trapFocus: true,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -470,18 +506,17 @@ void main() {
         trace.dispose();
       },
     );
-
   });
 
-  group('element-snapshotted modal scope', () {
+  group('element-snapshotted focus trap', () {
     testWidgets(
-      'rebuilding a FocusScope with same modal flag keeps modal anchor stable',
+      'rebuilding a FocusScope with same trapFocus keeps its anchor stable',
       (tester) {
         // A FocusScope rebuilds on every parent setState — `FocusScope.build`
         // allocates a fresh `FocusScopeRef` each time. If the marker tracked
         // identity off the widget-level ref, every rebuild would look like
         // "a different modal" and break the active-modal invariant. The
-        // marker element captures the modal flag once and survives rebuilds.
+        // marker element captures trapFocus once and survives rebuilds.
         final inA = FocusNode(debugLabel: 'inA');
         final inB = FocusNode(debugLabel: 'inB');
         final outside = FocusNode(debugLabel: 'outside');
@@ -503,7 +538,7 @@ void main() {
                     height: 2,
                     child: FocusScope(
                       key: const ValueKey('marker-host'),
-                      modal: true,
+                      trapFocus: true,
                       child: FocusTraversalGroup(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -538,7 +573,7 @@ void main() {
 
         // Rebuild the host: the FocusScope's `_FocusScopeMarker` widget is a
         // brand-new instance (new FocusScopeRef) but the marker element
-        // survives via update(). The modal anchor stays the same logical scope.
+        // survives via update(). The trap anchor stays the same logical scope.
         _RebuildHost.of(tester)!.bump();
         tester.pump();
         tester.render(size: const CellSize(20, 3));
@@ -552,33 +587,30 @@ void main() {
         expect(
           trace.sequence.contains(outside),
           isFalse,
-          reason: 'rebuild must not break the modal boundary',
+          reason: 'rebuild must not break the focus trap',
         );
         trace.dispose();
       },
     );
 
-    testWidgets('flipping modal:false at rebuild releases the modal anchor', (
-      tester,
-    ) {
+    testWidgets('flipping trapFocus off releases the trap', (tester) {
       // Driver: a host that toggles `modal` on its FocusScope. After
       // the flip, Tab must be able to leave the (no-longer-modal) scope.
       final inside = FocusNode(debugLabel: 'inside');
       final outside = FocusNode(debugLabel: 'outside');
 
       tester.pumpWidget(
-        _ModalToggleHost(startModal: true, inside: inside, outside: outside),
+        _TrapToggleHost(startTrapped: true, inside: inside, outside: outside),
       );
       tester.render(size: const CellSize(20, 2));
       expect(inside.hasFocus, isTrue);
 
-      // Modal active: Tab confined.
+      // Trap active: Tab confined.
       tester.sendKey(_code(KeyCode.tab));
       expect(inside.hasFocus, isTrue, reason: 'Tab confined to modal');
 
-      // Flip modal off via setState — same marker element, captured
-      // _capturedModal toggles in update().
-      _ModalToggleHost.of(tester)!.toggleModal();
+      // Flip the trap off via setState on the same marker element.
+      _TrapToggleHost.of(tester)!.toggleTrap();
       tester.pump();
       tester.render(size: const CellSize(20, 2));
 
@@ -586,39 +618,41 @@ void main() {
       expect(
         outside.hasFocus,
         isTrue,
-        reason: 'modal flipped off; Tab can now leave the scope',
+        reason: 'trap flipped off; Tab can now leave the scope',
       );
     });
 
-    testWidgets('flipping modal:true on a rebuild starts confining Tab', (
-      tester,
-    ) {
-      // The inverse: a scope starts non-modal, then gets a new
-      // _capturedModal=true via update(). The manager must learn about
-      // the modal without remounting the subtree.
+    testWidgets('flipping trapFocus on starts confining Tab', (tester) {
+      // The inverse: a scope starts open, then enables trapFocus in update().
+      // The manager must learn about the trap without remounting the subtree.
       final inA = FocusNode(debugLabel: 'inA');
       final inB = FocusNode(debugLabel: 'inB');
       final outside = FocusNode(debugLabel: 'outside');
 
       tester.pumpWidget(
-        _ModalGrowHost(startModal: false, outside: outside, inA: inA, inB: inB),
+        _TrapGrowHost(
+          startTrapped: false,
+          outside: outside,
+          inA: inA,
+          inB: inB,
+        ),
       );
       tester.render(size: const CellSize(20, 3));
       expect(inA.hasFocus, isTrue);
 
-      // Non-modal: Tab leaves the scope freely.
+      // Open scope: Tab leaves the scope freely.
       tester.sendKey(_code(KeyCode.tab));
       expect(inB.hasFocus, isTrue);
       tester.sendKey(_code(KeyCode.tab));
       expect(
         outside.hasFocus,
         isTrue,
-        reason: 'non-modal: Tab escapes the scope',
+        reason: 'open scope: Tab escapes the scope',
       );
 
-      // Move focus back into the scope and then flip modal on.
+      // Move focus back into the scope and then enable its trap.
       inA.requestFocus();
-      _ModalGrowHost.of(tester)!.toggleModal();
+      _TrapGrowHost.of(tester)!.toggleTrap();
       tester.pump();
       tester.render(size: const CellSize(20, 3));
 
@@ -626,26 +660,22 @@ void main() {
       tester.sendKey(_code(KeyCode.tab));
       expect(inB.hasFocus, isTrue);
       tester.sendKey(_code(KeyCode.tab));
-      expect(inA.hasFocus, isTrue, reason: 'wraps within the now-modal scope');
+      expect(inA.hasFocus, isTrue, reason: 'wraps within the trapped scope');
       expect(
         trace.sequence.contains(outside),
         isFalse,
-        reason: 'modal flipped on; outside must no longer appear',
+        reason: 'trap enabled; outside must no longer appear',
       );
       trace.dispose();
     });
 
     testWidgets(
-      'equal-depth modals: later-mounted marker wins the deepest tiebreak',
+      'the most recently activated sibling trap wins regardless of depth',
       (tester) {
-        // Two modals at the SAME element depth (siblings under the same
-        // parent). The deepest-active-modal picker must use the monotonic
-        // `_mountSeq` tiebreak so the later-mounted one anchors the modal
-        // boundary — Set iteration order is not depended on.
-        //
-        // Children mount in slot order, so slot[1] (B) has a higher
-        // _mountSeq than slot[0] (A). The deepest-active picker must
-        // pick B's marker.
+        // A popup inserted later may sit in a shallower overlay branch than
+        // the popup behind it. Focus-trap order must therefore follow
+        // activation, not element depth. Children mount in slot order here;
+        // A is deliberately deeper, but B activates later and must win.
         final aNode = FocusNode(debugLabel: 'aNode');
         final bNode = FocusNode(debugLabel: 'bNode');
 
@@ -655,15 +685,18 @@ void main() {
             children: [
               SizedBox(
                 height: 1,
-                child: FocusScope(
-                  modal: true,
-                  child: Focus(focusNode: aNode, child: const Text('A')),
+                child: Padding(
+                  padding: EdgeInsets.zero,
+                  child: FocusScope(
+                    trapFocus: true,
+                    child: Focus(focusNode: aNode, child: const Text('A')),
+                  ),
                 ),
               ),
               SizedBox(
                 height: 1,
                 child: FocusScope(
-                  modal: true,
+                  trapFocus: true,
                   child: Focus(focusNode: bNode, child: const Text('B')),
                 ),
               ),
@@ -672,29 +705,24 @@ void main() {
         );
         tester.render(size: const CellSize(20, 2));
 
-        // No node focused, two equal-depth modals open. focusNext() must
-        // confine to the LATER-mounted modal (B), per the mountSeq tiebreak.
+        // No node focused, two sibling traps open. focusNext() must confine to
+        // the later-activated trap (B), even though A's marker is deeper.
         tester.focusManager.requestFocus(null);
         tester.focusManager.focusNext();
         expect(
           aNode.hasFocus,
           isFalse,
-          reason: 'earlier-mounted modal (A) should NOT be the anchor',
+          reason: 'earlier-mounted trap (A) should NOT be the anchor',
         );
         expect(
           bNode.hasFocus,
           isTrue,
-          reason:
-              'later-mounted modal (B) anchors the deepest-modal '
-              'tiebreak when depths are equal',
+          reason: 'later-activated trap (B) owns the active frontier',
         );
       },
     );
-
-
   });
 }
-
 
 /// Host whose `build()` calls a builder with the current rebuild count.
 /// Tests trigger a rebuild via `bump()`.
@@ -720,30 +748,30 @@ class _RebuildHostState extends State<_RebuildHost> {
   Widget build(BuildContext context) => widget.builder(_count);
 }
 
-/// Host with a single FocusScope whose `modal` is toggleable.
-class _ModalToggleHost extends StatefulWidget {
-  const _ModalToggleHost({
-    required this.startModal,
+/// Host with a single FocusScope whose trap is toggleable.
+class _TrapToggleHost extends StatefulWidget {
+  const _TrapToggleHost({
+    required this.startTrapped,
     required this.inside,
     required this.outside,
   });
-  final bool startModal;
+  final bool startTrapped;
   final FocusNode inside;
   final FocusNode outside;
 
-  static _ModalToggleHostState? of(FleuryTester tester) {
+  static _TrapToggleHostState? of(FleuryTester tester) {
     final el =
-        tester.find(byType(_ModalToggleHost)).singleOrNull as StatefulElement?;
-    return el?.state as _ModalToggleHostState?;
+        tester.find(byType(_TrapToggleHost)).singleOrNull as StatefulElement?;
+    return el?.state as _TrapToggleHostState?;
   }
 
   @override
-  State<_ModalToggleHost> createState() => _ModalToggleHostState();
+  State<_TrapToggleHost> createState() => _TrapToggleHostState();
 }
 
-class _ModalToggleHostState extends State<_ModalToggleHost> {
-  late bool _modal = widget.startModal;
-  void toggleModal() => setState(() => _modal = !_modal);
+class _TrapToggleHostState extends State<_TrapToggleHost> {
+  late bool _trapFocus = widget.startTrapped;
+  void toggleTrap() => setState(() => _trapFocus = !_trapFocus);
 
   @override
   Widget build(BuildContext context) {
@@ -755,7 +783,7 @@ class _ModalToggleHostState extends State<_ModalToggleHost> {
             height: 1,
             child: FocusScope(
               key: const ValueKey('toggle-scope'),
-              modal: _modal,
+              trapFocus: _trapFocus,
               child: Focus(
                 focusNode: widget.inside,
                 autofocus: true,
@@ -776,39 +804,39 @@ class _ModalToggleHostState extends State<_ModalToggleHost> {
   }
 }
 
-/// Host with a FocusScope that flips from non-modal to modal.
-class _ModalGrowHost extends StatefulWidget {
-  const _ModalGrowHost({
-    required this.startModal,
+/// Host with a FocusScope that enables focus trapping after mount.
+class _TrapGrowHost extends StatefulWidget {
+  const _TrapGrowHost({
+    required this.startTrapped,
     required this.outside,
     required this.inA,
     required this.inB,
   });
-  final bool startModal;
+  final bool startTrapped;
   final FocusNode outside;
   final FocusNode inA;
   final FocusNode inB;
 
-  static _ModalGrowHostState? of(FleuryTester tester) {
+  static _TrapGrowHostState? of(FleuryTester tester) {
     final el =
-        tester.find(byType(_ModalGrowHost)).singleOrNull as StatefulElement?;
-    return el?.state as _ModalGrowHostState?;
+        tester.find(byType(_TrapGrowHost)).singleOrNull as StatefulElement?;
+    return el?.state as _TrapGrowHostState?;
   }
 
   @override
-  State<_ModalGrowHost> createState() => _ModalGrowHostState();
+  State<_TrapGrowHost> createState() => _TrapGrowHostState();
 }
 
-class _ModalGrowHostState extends State<_ModalGrowHost> {
-  late bool _modal = widget.startModal;
-  void toggleModal() => setState(() => _modal = !_modal);
+class _TrapGrowHostState extends State<_TrapGrowHost> {
+  late bool _trapFocus = widget.startTrapped;
+  void toggleTrap() => setState(() => _trapFocus = !_trapFocus);
 
   @override
   Widget build(BuildContext context) {
     // Outer FocusTraversalGroup handles Tab from the outside node; the
-    // inner one binds Tab inside the scope (Tab's chain-stops-at-modal
-    // walk means the outer binding never sees Tab while the scope is
-    // modal, so the inner binding is required to make Tab work inside).
+    // inner one is deliberately redundant for key reachability now that
+    // focus trapping and key propagation are separate. It still provides a
+    // narrower spatial search region while focus is inside the scope.
     return FocusTraversalGroup(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -824,7 +852,7 @@ class _ModalGrowHostState extends State<_ModalGrowHost> {
             height: 2,
             child: FocusScope(
               key: const ValueKey('grow-scope'),
-              modal: _modal,
+              trapFocus: _trapFocus,
               child: FocusTraversalGroup(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -854,7 +882,6 @@ class _ModalGrowHostState extends State<_ModalGrowHost> {
     );
   }
 }
-
 
 extension<E> on List<E> {
   E? get singleOrNull => length == 1 ? single : null;

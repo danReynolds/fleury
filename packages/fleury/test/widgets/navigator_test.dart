@@ -435,6 +435,52 @@ void main() {
     expect(homeInput.text, 'ac', reason: 'focus restored to home');
   });
 
+  testWidgets('popping a modal retires its focus frontier before restoration', (
+    tester,
+  ) {
+    BuildContext? home;
+    final homeFocus = FocusNode(debugLabel: 'home');
+    final modalFocus = FocusNode(debugLabel: 'modal');
+
+    tester.pumpWidget(
+      Navigator(
+        home: _CaptureChild(
+          sink: (x) => home = x,
+          child: Focus(
+            focusNode: homeFocus,
+            autofocus: true,
+            child: const Text('home'),
+          ),
+        ),
+      ),
+    );
+    tester.render();
+    expect(homeFocus.hasFocus, isTrue);
+
+    home!.present<void>(
+      Focus(focusNode: modalFocus, autofocus: true, child: const Text('modal')),
+      transition: RouteTransition.none,
+    );
+    tester.pump();
+    tester.render();
+    expect(modalFocus.hasFocus, isTrue);
+
+    home!.navigator.pop();
+    expect(
+      homeFocus.hasFocus,
+      isTrue,
+      reason: 'the revealed route restores synchronously through requestFocus',
+    );
+    modalFocus.requestFocus();
+    expect(
+      homeFocus.hasFocus,
+      isTrue,
+      reason: 'the leaving modal is focus-inert before its exit frame builds',
+    );
+    tester.pump();
+    expect(homeFocus.hasFocus, isTrue);
+  });
+
   testWidgets('an app claim from the pop future wins over scope restore', (
     tester,
   ) async {
@@ -947,7 +993,7 @@ void main() {
         ),
       );
       // Input lands on the inner screen despite the outer navigator's
-      // modal focus scope wrapping it.
+      // route focus trap wrapping it.
       tester.type('hi');
       expect(innerInput.text, 'hi');
     });

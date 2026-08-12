@@ -13,6 +13,22 @@ void main() {
       expect(_text(tester), '[ Save ]');
     });
 
+    testWidgets('expands its brackets to a tight parent width', (tester) {
+      tester.pumpWidget(
+        SizedBox(
+          width: 10,
+          child: Button(label: 'Go', onPressed: () {}),
+        ),
+      );
+
+      expect(_text(tester, cols: 10), '[   Go   ]');
+      expect(
+        tester.semantics().single(role: SemanticRole.button).label,
+        'Go',
+        reason: 'visual padding must not leak into the accessible label',
+      );
+    });
+
     testWidgets('Enter activates when focused', (tester) {
       var presses = 0;
       tester.pumpWidget(

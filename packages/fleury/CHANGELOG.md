@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Focus boundaries.** `FocusScope.modal` is now `trapFocus`, describing its
+  single responsibility: Tab, spatial traversal, pointer focus, and direct
+  focus requests stay inside the subtree. Key propagation is independent;
+  `KeyBindings.modal` remains the unmatched-key boundary, and
+  `Navigator.present` composes both automatically. Focus traps use activation
+  order so nested and sibling overlay popups hand focus off predictably.
+
 - **Systematic terminal negotiation (RFC 0021).** `TerminalDriver.enter()` now
   returns one immutable semantic session profile and a sealed ANSI/structured
   presentation choice, so `runApp` no longer assembles capability truth from

@@ -23,7 +23,8 @@ changes underneath a doc, the build goes red instead of the docs going stale.
 | `web_app_shell.dart` | Browser entry snippets in [App entry points](../../src/content/docs/concepts/app-entry.md) and [Coming from Flutter](../../src/content/docs/coming-from-flutter.md) |
 | `coming_from_flutter.dart` | [Coming from Flutter](../../src/content/docs/coming-from-flutter.md) |
 | `filterable_list.dart` | [Tutorial: a filterable list](../../src/content/docs/tutorial.md) |
-| `keyboard_tour.dart` | [Focus & keyboard](../../src/content/docs/guides/focus-and-keyboard.mdx) |
+| `keyboard_tour.dart` | [Key handling](../../src/content/docs/guides/focus-and-keyboard.mdx) |
+| `focus_tour.dart` | [Focus management](../../src/content/docs/guides/focus.mdx) |
 | `core_widgets.dart` | Lists & scrolling, Loading data, Input & gestures, Theming (RichText) |
 | `navigation_demo.dart` | [Navigation](../../src/content/docs/guides/navigation.md) |
 | `forms.dart` | [Forms & validation](../../src/content/docs/guides/forms.md) |

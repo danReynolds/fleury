@@ -78,7 +78,7 @@ export default defineConfig({
             { label: 'Theming', slug: 'guides/theming' },
             { label: 'Animation', slug: 'guides/animation' },
             {
-              label: 'Key handling & focus management',
+              label: 'Keyboard & focus',
               items: [
                 { label: 'Key handling', slug: 'guides/focus-and-keyboard' },
                 { label: 'Focus management', slug: 'guides/focus' },

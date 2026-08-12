@@ -542,10 +542,10 @@ write nothing). Per-key passthrough is a binding **at the modal scope** that
 matches and bubbles. Transit rule (adversarially reviewed): an unconsumed
 event crosses a modal boundary only if a binding *at that boundary's scope*
 matches and bubbles; deeper bubbles propagate up to the boundary and stop
-unless relayed. Implementation note: the current chain walk pre-truncates at
-the modal frontier — bubble-through requires boundary-annotated traversal (new
-machinery, scoped in P4) — and the hint bar cannot advertise ancestor bindings
-reachable only via passthrough (it renders reachability truth).
+unless relayed. The focus chain remains intact; the dispatcher enforces the
+boundary through the binding source's `isModalScope`, so an explicit bubble
+can continue to ancestors without special traversal machinery. A
+`FocusScope(trapFocus: true)` is a separate focus-location policy.
 
 ### 14.4 Sequences (0018 completed)
 

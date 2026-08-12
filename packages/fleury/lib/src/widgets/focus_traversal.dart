@@ -51,12 +51,16 @@ enum TraversalDirection { left, right, up, down }
 /// Catches arrow chords that bubble out of the focused widget and
 /// moves focus to the spatially nearest focusable in that direction.
 ///
-/// The [Navigator] installs one around every route — the home screen, a pushed
-/// page, and a presented modal — so a `FleuryApp(home: ...)` or explicit
-/// Navigator gives every route arrow/Tab traversal without a manual group.
-/// Add explicit groups only to *scope* traversal: a pane that should traverse
-/// on its own, an embedded surface, or a bare single-screen root with no
-/// [Navigator] above it.
+/// The [Navigator] installs one around every screen and dialog, so a
+/// `FleuryApp(home: ...)` or explicit Navigator gives every route arrow/Tab
+/// traversal without a manual group.
+/// Most apps should not add another group around ordinary panes or controls:
+/// the route-level policy already uses widget-tree locality while ranking
+/// directional targets. Create one directly for an embedded or bare
+/// single-screen root with no [Navigator] above it. Nested groups are supported
+/// for low-level components that deliberately own directional traversal; they
+/// search their region first and let an outer group respond when no local target
+/// exists. They do not create a private Tab cycle.
 class FocusTraversalGroup extends StatelessWidget {
   const FocusTraversalGroup({super.key, required this.child});
 
@@ -168,7 +172,7 @@ class FocusTraversalGroup extends StatelessWidget {
     final target = nearestFocusableInDirection(
       from: currentRect,
       // Confine directional moves to this traversal group and the active
-      // modal scope; without this, an arrow press in one pane can jump to
+      // focus trap; without this, an arrow press in one pane can jump to
       // a visually-near control in a sibling chrome/header area.
       candidates: manager.traversalCandidates(scopeContext: context),
       excluding: current,
@@ -218,19 +222,39 @@ FocusNode? nearestFocusableInDirection({
       case TraversalDirection.left:
         if (cx >= fromCx) continue;
         majorDistance = _rangeGap(rect.right, rect.right, from.left, from.left);
-        minorDistance = _rangeGap(from.top, from.bottom, rect.top, rect.bottom);
+        minorDistance = _crossAxisSeparation(
+          from.top,
+          from.bottom,
+          rect.top,
+          rect.bottom,
+        );
       case TraversalDirection.right:
         if (cx <= fromCx) continue;
         majorDistance = _rangeGap(from.right, from.right, rect.left, rect.left);
-        minorDistance = _rangeGap(from.top, from.bottom, rect.top, rect.bottom);
+        minorDistance = _crossAxisSeparation(
+          from.top,
+          from.bottom,
+          rect.top,
+          rect.bottom,
+        );
       case TraversalDirection.up:
         if (cy >= fromCy) continue;
         majorDistance = _rangeGap(rect.bottom, rect.bottom, from.top, from.top);
-        minorDistance = _rangeGap(from.left, from.right, rect.left, rect.right);
+        minorDistance = _crossAxisSeparation(
+          from.left,
+          from.right,
+          rect.left,
+          rect.right,
+        );
       case TraversalDirection.down:
         if (cy <= fromCy) continue;
         majorDistance = _rangeGap(from.bottom, from.bottom, rect.top, rect.top);
-        minorDistance = _rangeGap(from.left, from.right, rect.left, rect.right);
+        minorDistance = _crossAxisSeparation(
+          from.left,
+          from.right,
+          rect.left,
+          rect.right,
+        );
     }
 
     final context = node.context;
@@ -292,6 +316,18 @@ FocusNode? nearestFocusableInDirection({
 int _rangeGap(int aStart, int aEnd, int bStart, int bEnd) {
   if (aEnd < bStart) return bStart - aEnd;
   if (bEnd < aStart) return aStart - bEnd;
+  return 0;
+}
+
+/// Cross-axis distance between half-open cell ranges.
+///
+/// Touching edges are adjacent rather than overlapping: `[1, 2)` and `[2, 3)`
+/// retain one cell of separation. That makes a same-row or same-column
+/// candidate beat the rows immediately beside it when major-axis distances
+/// tie.
+int _crossAxisSeparation(int aStart, int aEnd, int bStart, int bEnd) {
+  if (aEnd <= bStart) return bStart - aEnd + 1;
+  if (bEnd <= aStart) return aStart - bEnd + 1;
   return 0;
 }
 

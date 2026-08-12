@@ -244,6 +244,42 @@ void main() {
     expect(output, contains('Type to filter'));
   });
 
+  testWidgets(
+    'route traversal moves from the selector into the preview without a header detour',
+    (tester) {
+      tester.pumpWidget(
+        StorybookApp(
+          initialStoryId: 'controls.text-entry.completion-text-input',
+        ),
+      );
+      tester.render(size: const CellSize(120, 40));
+
+      final selectorNode = tester.focusManager.focusedNode;
+      final selector = selectorNode?.rect;
+      expect(selectorNode?.debugLabel, 'SearchPanel query');
+      expect(selector, isNotNull);
+
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight));
+      tester.pump();
+      tester.render(size: const CellSize(120, 40));
+
+      final previewNode = tester.focusManager.focusedNode;
+      expect(
+        previewNode?.debugLabel,
+        'CompletionTextInput',
+        reason:
+            'Right should enter the preview rather than a header or details control',
+      );
+      final preview = previewNode?.rect;
+      expect(preview, isNotNull);
+      expect(
+        preview!.left,
+        greaterThan(selector!.right),
+        reason: 'the target should be painted to the right of the selector',
+      );
+    },
+  );
+
   testWidgets('initial story, variant, and control values render', (tester) {
     tester.pumpWidget(
       StorybookApp(

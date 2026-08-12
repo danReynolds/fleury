@@ -1250,6 +1250,9 @@ th:nth-last-child(-n + 2) .ct::after {
     align-items: start;
     gap: 0 1.75rem;
   }
+  .cds.cds-demo-wide:not(.is-fs) .cds-body {
+    grid-template-columns: minmax(19rem, 2fr) minmax(0, 3fr);
+  }
 }
 @media (max-width: 72rem) {
   .cds:not(.is-fs) {
@@ -1367,9 +1370,13 @@ th:nth-last-child(-n + 2) .ct::after {
 .cds-modal-demo .fleury-host {
   margin: auto;
 }
+.cds-modal.cds-demo-wide .cds-modal-body {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+}
 /* Stack under a narrow screen; the whole body scrolls as one column. */
 @media (max-width: 60rem) {
-  .cds-modal-body {
+  .cds-modal-body,
+  .cds-modal.cds-demo-wide .cds-modal-body {
     grid-template-columns: minmax(0, 1fr);
     overflow: auto;
   }

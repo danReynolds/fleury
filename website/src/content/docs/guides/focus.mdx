@@ -1,0 +1,327 @@
+---
+title: Focus management
+description: Let users move through your interface, direct focus, and keep it where it belongs.
+---
+
+import FleuryExample from '../../../components/FleuryExample.astro';
+import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
+
+Focus decides which part of your interface receives keyboard input. Fleury's
+built-in controls can already take focus, show it, and handle the keys they
+understand.
+
+Movement between controls is called **focus traversal**. Fleury provides two
+forms automatically:
+
+- **Sequential traversal:** Tab and Shift+Tab follow visual reading order.
+- **Spatial navigation:** the arrow keys move through the two-dimensional
+  layout.
+
+Both forms work out of the box in a `FleuryApp`. You work with focus directly
+only when you build a custom control, move focus after an action, observe an
+active region, or construct an overlay. For commands that run after a key
+reaches the focused region, see
+[Key handling](/fleury/guides/focus-and-keyboard/).
+
+| You need to… | Use |
+|---|---|
+| Let users move between ordinary controls | Built in with `FleuryApp` |
+| Make a custom widget focusable | `Focus` |
+| Move focus from code | `FocusNode` |
+| React when a region gains or loses focus | `FocusDetector` |
+| Open a dialog and restore focus afterward | `Navigator.present` |
+
+## Automatic traversal
+
+`FleuryApp` gives every screen and dialog automatic focus traversal:
+
+```dart
+FleuryApp(
+  title: 'Workspace',
+  home: Row(
+    children: [
+      Expanded(
+        child: Column(
+          children: [
+            Button(label: 'New file', autofocus: true, onPressed: createFile),
+            Button(label: 'Open file', onPressed: openFile),
+            Button(label: 'Settings', onPressed: openSettings),
+          ],
+        ),
+      ),
+      Expanded(
+        child: Column(
+          children: [
+            Button(label: 'Refresh', onPressed: refresh),
+            Button(label: 'Inspect', onPressed: inspect),
+            Button(label: 'Publish…', onPressed: publish),
+          ],
+        ),
+      ),
+    ],
+  ),
+)
+```
+
+A focused control always sees the key first. An arrow moves a list selection or
+text cursor while that control can use it; at the edge, the unhandled arrow can
+continue outward and move focus. This gives collection widgets useful internal
+navigation without trapping the user.
+
+Fleury provides this policy with a `FocusTraversalGroup` at each route root.
+You normally do not add one yourself; build the layout and let traversal follow
+it.
+
+### How arrow movement works
+
+Arrow-driven focus movement is commonly called
+[spatial navigation](https://www.w3.org/TR/css-nav-1/). Fleury uses the painted
+layout and the widget tree together. When a focused control leaves an arrow
+unhandled, Fleury:
+
+1. Considers visible, focusable controls in the requested direction.
+2. Prefers controls in the same logical region, such as siblings in one pane.
+3. Prefers a focusable child over its focusable container.
+4. Chooses the best-aligned nearby control, with stable reading order as the
+   final tie-breaker.
+
+Arrows do not wrap. If there is no target in that direction, the key remains
+unhandled so an ancestor can respond. Because navigation follows the rendered
+layout, moving or resizing a control updates the focus path automatically.
+
+Click the example, then try the behavior together:
+
+- Tab scans each visual row from left to right; Shift+Tab reverses it.
+- Arrow keys move to a control in the requested direction.
+- Enter activates the focused button.
+- `Publish…` opens a dialog; Tab stays inside, then focus returns to
+  `Publish…` when the dialog closes.
+
+<FleuryExample
+  id="focus.explorer"
+  title="Try automatic focus traversal"
+  cols={70}
+  rows={18}
+  interactive
+/>
+
+The highlighted panel only makes the automatic path visible. The screen does
+not configure focus traversal.
+
+## Focus targets
+
+### Initial focus
+
+Use `autofocus` for the one control that should be ready when a screen or dialog
+first appears:
+
+```dart
+TextInput(
+  autofocus: true,
+  placeholder: 'Search files',
+  onChanged: filterFiles,
+)
+```
+
+Autofocus is scoped and one-shot. It fills an empty focus scope when the widget
+appears; it does not steal focus again on every rebuild.
+
+### Custom targets
+
+Wrap a custom control in `Focus` when it should receive keys and participate in
+traversal:
+
+```dart
+Focus(
+  autofocus: true,
+  child: TimelineEditor(),
+)
+```
+
+Put the control's key behavior inside it with `KeyDetector`, or declare
+commands around it with `KeyBindings`.
+
+## Programmatic focus
+
+Own a `FocusNode` when an action should move focus to a specific control. In the
+demo, press Enter on **Focus search**, then type a query: the action moves focus
+straight to the search field, without stepping through the controls between
+them.
+
+<CodeDemoSplit file="focus_tour.dart">
+<Fragment slot="code">
+```dart
+class _WorkspaceState extends State<Workspace> {
+  final _searchFocus = FocusNode(debugLabel: 'search');
+
+  void focusSearch() => _searchFocus.requestFocus();
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Button(label: 'Focus search', onPressed: focusSearch),
+      SizedBox(
+        width: 24,
+        child: TextInput(
+          focusNode: _searchFocus,
+          placeholder: 'Search files',
+          onChanged: search,
+        ),
+      ),
+    ],
+  );
+
+  @override
+  void dispose() {
+    _searchFocus.dispose();
+    super.dispose();
+  }
+}
+```
+</Fragment>
+<Fragment slot="demo">
+<FleuryExample id="focusnode.programmatic" cols={60} rows={10} interactive />
+</Fragment>
+</CodeDemoSplit>
+
+A node is an owned resource: create it once, keep it across rebuilds, and
+dispose it with the state that owns it. Use `hasFocus` when behavior depends on
+that exact target. Built-in controls accept a `focusNode`; wrap a custom target
+in `Focus(focusNode: ...)` instead.
+
+## Focus changes
+
+Use `FocusDetector` to react when focus crosses the boundary of a whole
+subtree. It is useful for active-pane styling, cursor visibility, and pausing
+an inactive preview:
+
+<CodeDemoSplit file="focus_tour.dart" layout="demo-wide">
+<Fragment slot="code">
+```dart
+FocusDetector(
+  onFocusChange: (hasFocus) {
+    setState(
+      () => editorActive = hasFocus,
+    );
+  },
+  child: Column(
+    children: [
+      Button(
+        label: 'Title',
+        autofocus: true,
+        onPressed: editTitle,
+      ),
+      Button(
+        label: 'Body',
+        onPressed: editBody,
+      ),
+    ],
+  ),
+)
+```
+</Fragment>
+<Fragment slot="demo">
+<FleuryExample id="focusdetector.basic" cols={62} rows={14} interactive />
+</Fragment>
+</CodeDemoSplit>
+
+Tab from Title to Body: both controls remain inside the editor, so the boundary
+counter does not change. Tab to Preview and the detector reports one leave.
+This avoids false leave-and-enter cycles when focus merely moves between
+children of the same region.
+
+## Screens and dialogs
+
+Each screen and dialog gets its own `FocusScope`. A scope remembers the last
+control focused inside it, so returning to a screen restores the user's place.
+Opening another screen or dialog activates its scope; closing it restores the
+previous screen's remembered control.
+
+`Navigator.present` also traps focus inside the dialog. Tab, arrow traversal,
+clicks, and direct focus requests cannot move focus to the covered screen, and
+unmatched keys do not fall through to it. The `Publish…` flow in the first demo
+shows both behaviors: focus starts on Cancel, stays in the dialog, and returns
+to Publish when the dialog closes.
+
+```dart
+final confirmed = await context.present<bool>(
+  const ConfirmPublishDialog(),
+);
+
+if (confirmed == true) publish();
+```
+
+Pages pushed with `Navigator.push` get the same focus memory and restoration,
+without trapping app-level focus or shortcuts as a dialog would.
+
+## Advanced patterns
+
+### Custom focus traps
+
+Most applications never configure a focus trap directly. Use
+`FocusScope(trapFocus: true)` only for a custom overlay that does not go through
+`Navigator.present`:
+
+```dart
+FocusScope(
+  trapFocus: true,
+  child: CommandPalette(),
+)
+```
+
+Every `FocusScope` remembers its last focused descendant. `trapFocus` adds the
+stronger rule that focus cannot leave the subtree; it does not swallow key
+events. Use a key-binding boundary separately when a low-level overlay must
+also prevent unmatched commands from reaching the app behind it.
+
+### Bare roots
+
+Every screen and dialog hosted by `FleuryApp` already gets the traversal
+behavior shown above. `FocusTraversalGroup` is the lower-level widget that
+provides that policy, not an extra boundary that ordinary panes and toolbars
+need to add.
+
+Create one directly only for a low-level tree passed to `runApp` without
+`FleuryApp` or `Navigator`:
+
+```dart
+runApp(FocusTraversalGroup(child: EmbeddedSurface()));
+```
+
+### Focus exclusion
+
+These APIs answer different questions:
+
+```dart
+// Clickable or programmatically focusable, but skipped by traversal.
+Focus(skipTraversal: true, child: AuxiliaryButton());
+
+// Cannot receive focus by traversal, click, or requestFocus().
+Focus(canRequestFocus: false, child: DecorativeWidget());
+
+// Remove an entire hidden or inactive subtree from focus.
+ExcludeFocus(child: OffstagePage());
+```
+
+Prefer `ExcludeFocus` for a whole inactive page and the `Focus` flags for an
+individual target. Skipping traversal does not disable pointer input.
+
+## API reference
+
+| API | What it does |
+|---|---|
+| `Focus` | Makes a custom subtree focusable. |
+| `FocusNode` | Owns a target you can request, inspect, and dispose. |
+| `FocusDetector` | Reports focus entering or leaving a subtree. |
+| `FocusScope` | Remembers focus within a subtree; `trapFocus` can contain it. |
+| `FocusTraversalGroup` | Installs Tab and arrow traversal for a bare root. |
+| `ExcludeFocus` | Removes a whole subtree from every focus path. |
+
+## Next steps
+
+- Add commands with [Key handling](/fleury/guides/focus-and-keyboard/).
+- Move focus after validation in [Forms & validation](/fleury/guides/forms/).
+- Learn how collections consume and release arrows in
+  [Lists & scrolling](/fleury/guides/lists-and-scrolling/).
+- Review the generated [`Focus` API reference](/fleury/widgets/focus/) and the
+  [`FocusTraversalGroup` source](https://github.com/danReynolds/fleury/blob/main/packages/fleury/lib/src/widgets/focus_traversal.dart).
