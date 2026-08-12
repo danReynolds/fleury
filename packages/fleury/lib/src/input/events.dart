@@ -1211,6 +1211,24 @@ extension $KeySequenceInternal on KeySequence {
     return _stepAt(index).matches(event);
   }
 
+  /// Whether this step is driven by committed text rather than the raw key
+  /// half of an input report.
+  ///
+  /// Produced characters (including uppercase letters and AltGr-produced
+  /// symbols) must match what the input method committed, not the key cap or
+  /// modifier recipe used to obtain it. An explicitly retained modifier — such
+  /// as `.shift.char('1')` — is a chord and stays on the key lane.
+  bool isTextDrivenStepAt(int index) {
+    if (index < 0 || index >= stepCount) return false;
+    final step = _stepAt(index);
+    return (step.code?.isCharacter ?? false) &&
+        !step.ctrl &&
+        !step.alt &&
+        !step.shift &&
+        !step.superKey &&
+        !step.meta;
+  }
+
   /// The [hintLabel]-style label of the step at [index] (`Ctrl+S`, `↑`, `d`),
   /// or null when out of range. Used to render which-key completions.
   String? stepLabelAt(int index) {

@@ -105,6 +105,26 @@ void main() {
         );
       });
 
+      test('shifted punctuation keeps produced text and physical position', () {
+        expect(
+          keyEventFromBrowser(
+            web.KeyboardEvent(
+              'keydown',
+              web.KeyboardEventInit(
+                key: r'$',
+                code: 'Digit4',
+                shiftKey: true,
+              ),
+            ),
+          ),
+          const KeyEvent(
+            KeyCode.char(r'$'),
+            modifiers: {KeyModifier.shift},
+            position: KeyPosition.digit4,
+          ),
+        );
+      });
+
       test('lone modifier keys are sided keys via their position', () {
         expect(
           keyEventFromBrowser(

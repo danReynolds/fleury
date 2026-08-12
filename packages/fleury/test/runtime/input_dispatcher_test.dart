@@ -179,7 +179,7 @@ void main() {
     });
   });
 
-  group('InputBatch dispatch (RFC 0020 P1d interim routing)', () {
+  group('InputBatch atomic key/text routing (RFC 0020 §6)', () {
     test('the text half reaches the focused text claimant', () {
       final events = <String>[];
       final h = _TestHarness();
@@ -191,9 +191,9 @@ void main() {
       expect(events, ['text:a']);
     });
 
-    test('a text-bearing batch does not also key-dispatch its key half', () {
-      // Pre-batch, a CSI-u printable was text-only: a character binding on
-      // 'a' fires via the text fallback when unclaimed, and must fire ONCE.
+    test('one command fires once across the key and text views', () {
+      // A character binding is eligible on the text view only. The correlated
+      // key view still carries lifecycle/position data, but cannot double-fire.
       var fired = 0;
       final h = _TestHarness(
         rootBindings: [KeyBinding(KeyCode.a, onTrigger: (_) => fired++)],
@@ -203,6 +203,146 @@ void main() {
         const InputBatch(key: KeyEvent(KeyCode.char('a')), committedText: 'a'),
       );
       expect(fired, 1);
+    });
+
+    test('a focused text claimant outranks a text-driven root binding', () {
+      final events = <String>[];
+      var quit = 0;
+      final h = _TestHarness(
+        rootBindings: [KeyBinding(KeyCode.q, onTrigger: (_) => quit++)],
+      );
+      h.mountRoot(_ClaimLog(events: events));
+
+      h.dispatcher.dispatch(
+        const InputBatch(key: KeyEvent(KeyCode.q), committedText: 'q'),
+      );
+
+      expect(events, ['text:q']);
+      expect(quit, 0, reason: 'the key half must not bypass text precedence');
+    });
+
+    test('a shifted produced character matches through committed text', () {
+      var fired = 0;
+      final h = _TestHarness(
+        rootBindings: [
+          KeyBinding(KeySequence.char(r'$'), onTrigger: (_) => fired++),
+        ],
+      );
+      h.mountRoot(const EmptyBox());
+
+      h.dispatcher.dispatch(
+        const InputBatch(
+          key: KeyEvent(
+            KeyCode.char('4'),
+            modifiers: {KeyModifier.shift},
+            position: KeyPosition.digit4,
+          ),
+          committedText: r'$',
+        ),
+      );
+
+      expect(fired, 1);
+    });
+
+    test('a positional command takes precedence over produced text', () {
+      final calls = <String>[];
+      final h = _TestHarness(
+        rootBindings: [
+          KeyBinding(
+            KeySequence.shift.code(KeyPosition.digit4),
+            onTrigger: (_) => calls.add('position'),
+          ),
+          KeyBinding(
+            KeySequence.char(r'$'),
+            onTrigger: (_) => calls.add('text'),
+          ),
+        ],
+      );
+      h.mountRoot(const EmptyBox());
+
+      h.dispatcher.dispatch(
+        const InputBatch(
+          key: KeyEvent(
+            KeyCode.char('4'),
+            modifiers: {KeyModifier.shift},
+            position: KeyPosition.digit4,
+          ),
+          committedText: r'$',
+        ),
+      );
+
+      expect(calls, ['position']);
+    });
+
+    test('an explicit Shift chord remains key-driven', () {
+      final calls = <String>[];
+      final h = _TestHarness(
+        rootBindings: [
+          KeyBinding(
+            KeySequence.shift.char('4'),
+            onTrigger: (_) => calls.add('chord'),
+          ),
+          KeyBinding(
+            KeySequence.char(r'$'),
+            onTrigger: (_) => calls.add('text'),
+          ),
+        ],
+      );
+      h.mountRoot(const EmptyBox());
+
+      h.dispatcher.dispatch(
+        const InputBatch(
+          key: KeyEvent(
+            KeyCode.char('4'),
+            modifiers: {KeyModifier.shift},
+            position: KeyPosition.digit4,
+          ),
+          committedText: r'$',
+        ),
+      );
+
+      expect(calls, ['chord']);
+    });
+
+    test(
+      'a detector sees one key view, while a binding sees one text view',
+      () {
+        var detectorCalls = 0;
+        var bindingCalls = 0;
+        final h = _TestHarness(
+          rootBindings: [
+            KeyBinding(KeyCode.a, onTrigger: (_) => bindingCalls++),
+          ],
+        );
+        h.mountRoot(
+          KeyDetector(
+            onKey: (_) => detectorCalls++,
+            child: const Focus(autofocus: true, child: EmptyBox()),
+          ),
+        );
+
+        h.dispatcher.dispatch(
+          const InputBatch(key: KeyEvent(KeyCode.a), committedText: 'a'),
+        );
+
+        expect(detectorCalls, 1);
+        expect(bindingCalls, 1);
+      },
+    );
+
+    test('legacy text remains a compatibility bridge to detectors', () {
+      var detectorCalls = 0;
+      final h = _TestHarness();
+      h.mountRoot(
+        KeyDetector(
+          onKey: (_) => detectorCalls++,
+          child: const Focus(autofocus: true, child: EmptyBox()),
+        ),
+      );
+
+      h.dispatcher.dispatch(const TextInputEvent('a'));
+
+      expect(detectorCalls, 1);
     });
 
     test('a key-only up batch is fenced from bindings', () {
@@ -1155,6 +1295,167 @@ void main() {
       // (which has a binding).
       h.dispatch(_char('z'));
       expect(calls, ['z']);
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+  });
+
+  group('Atomic key/text sequence steps', () {
+    test('split DOM Shift+4 completes a logical dollar continuation', () {
+      var fired = 0;
+      final h = _TestHarness();
+      h.dispatcher.updateKeyboardCapabilities(KeyboardCapabilities.full);
+      h.mountRoot(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeySequence.d.char(r'$'), onTrigger: (_) => fired++),
+          ],
+          child: const Focus(autofocus: true, child: EmptyBox()),
+        ),
+      );
+
+      // The DOM reports the lifecycle key half and committed text separately.
+      h.dispatcher.dispatch(const TextInputEvent('d'));
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+
+      h.dispatcher.dispatch(
+        const KeyEvent(KeyCode.leftShift, position: KeyPosition.shiftLeft),
+      );
+      expect(
+        h.dispatcher.hasPendingSequence,
+        isTrue,
+        reason: 'modifier-down composes the next step; it is not a breaker',
+      );
+
+      h.dispatcher.dispatch(
+        const KeyEvent(
+          KeyCode.char(r'$'),
+          modifiers: {KeyModifier.shift},
+          position: KeyPosition.digit4,
+        ),
+      );
+      expect(
+        h.dispatcher.hasPendingSequence,
+        isTrue,
+        reason: 'the printable key half waits for authoritative DOM text',
+      );
+
+      h.dispatcher.dispatch(const TextInputEvent(r'$'));
+      expect(fired, 1);
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+
+    test('a correlated Kitty batch completes the same logical character', () {
+      var fired = 0;
+      final h = _TestHarness();
+      h.mountRoot(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeySequence.d.char(r'$'), onTrigger: (_) => fired++),
+          ],
+          child: const Focus(autofocus: true, child: EmptyBox()),
+        ),
+      );
+
+      h.dispatcher.dispatch(
+        const InputBatch(key: KeyEvent(KeyCode.d), committedText: 'd'),
+      );
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+
+      h.dispatcher.dispatch(
+        const InputBatch(
+          key: KeyEvent(KeyCode.leftShift, position: KeyPosition.shiftLeft),
+        ),
+      );
+      expect(
+        h.dispatcher.hasPendingSequence,
+        isTrue,
+        reason: 'a key-only lifecycle batch must preserve the prefix',
+      );
+
+      h.dispatcher.dispatch(
+        const InputBatch(
+          key: KeyEvent(
+            KeyCode.char('4'),
+            modifiers: {KeyModifier.shift},
+            position: KeyPosition.digit4,
+          ),
+          committedText: r'$',
+        ),
+      );
+
+      expect(fired, 1);
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+
+    test('AltGraph or Option modifiers preserve a text continuation', () {
+      var fired = 0;
+      final h = _TestHarness();
+      h.mountRoot(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeySequence.d.char('@'), onTrigger: (_) => fired++),
+          ],
+          child: const Focus(autofocus: true, child: EmptyBox()),
+        ),
+      );
+
+      h.dispatcher.dispatch(const TextInputEvent('d'));
+      h.dispatcher.dispatch(
+        const KeyEvent(KeyCode.rightAlt, position: KeyPosition.altRight),
+      );
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+
+      // AltGraph/Option printables are deliberately left to the text channel.
+      h.dispatcher.dispatch(const TextInputEvent('@'));
+      expect(fired, 1);
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+
+    test('an explicitly named modifier remains a valid continuation', () {
+      var fired = 0;
+      final h = _TestHarness();
+      h.mountRoot(
+        KeyBindings(
+          bindings: [
+            KeyBinding(
+              KeySequence.d.code(KeyCode.leftShift),
+              onTrigger: (_) => fired++,
+            ),
+          ],
+          child: const Focus(autofocus: true, child: EmptyBox()),
+        ),
+      );
+
+      h.dispatcher.dispatch(const TextInputEvent('d'));
+      h.dispatcher.dispatch(
+        const KeyEvent(KeyCode.leftShift, position: KeyPosition.shiftLeft),
+      );
+
+      expect(fired, 1);
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+
+    test('a modified non-text key still breaks an unrelated prefix', () {
+      final h = _TestHarness();
+      h.mountRoot(
+        KeyBindings(
+          bindings: [KeyBinding(KeySequence.d.char(r'$'), onTrigger: (_) {})],
+          child: const Focus(autofocus: true, child: EmptyBox()),
+        ),
+      );
+
+      h.dispatcher.dispatch(const TextInputEvent('d'));
+      h.dispatcher.dispatch(
+        const KeyEvent(KeyCode.leftShift, position: KeyPosition.shiftLeft),
+      );
+      h.dispatcher.dispatch(
+        const KeyEvent(
+          KeyCode.arrowLeft,
+          modifiers: {KeyModifier.shift},
+          position: KeyPosition.arrowLeft,
+        ),
+      );
+
       expect(h.dispatcher.hasPendingSequence, isFalse);
     });
   });

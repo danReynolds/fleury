@@ -1,9 +1,8 @@
-// Compile-checked source behind the Focus & keyboard guide.
+// Compile-checked source behind the Key handling guide.
 //
-// Every code block in
-// `website/src/content/docs/guides/focus-and-keyboard.mdx` is lifted from
-// here, so the guide cannot drift to an API that no longer exists — which is
-// exactly what happened to it before RFC 0020 landed.
+// The public API patterns in
+// `website/src/content/docs/guides/focus-and-keyboard.mdx` have compile-checked
+// counterparts here, so the guide cannot drift to APIs that no longer exist.
 
 import 'package:fleury/fleury.dart';
 
