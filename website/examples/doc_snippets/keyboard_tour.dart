@@ -1,9 +1,8 @@
-// Compile-checked source behind the Focus & keyboard guide.
+// Compile-checked source behind the Key handling guide.
 //
-// Every code block in
-// `website/src/content/docs/guides/focus-and-keyboard.mdx` is lifted from
-// here, so the guide cannot drift to an API that no longer exists — which is
-// exactly what happened to it before RFC 0020 landed.
+// The public API patterns in
+// `website/src/content/docs/guides/focus-and-keyboard.mdx` have compile-checked
+// counterparts here, so the guide cannot drift to APIs that no longer exist.
 
 import 'package:fleury/fleury.dart';
 
@@ -181,6 +180,44 @@ class PeekExample extends StatelessWidget {
     ],
     child: child,
   );
+}
+
+/// A capability-driven control uses the richest behavior that was actually
+/// delivered, while keeping the same command usable on press-only terminals.
+class AdaptivePeekExample extends StatelessWidget {
+  const AdaptivePeekExample({
+    super.key,
+    required this.child,
+    required this.peeking,
+    required this.onPeek,
+  });
+
+  final Widget child;
+  final bool peeking;
+  final void Function(bool showing) onPeek;
+
+  @override
+  Widget build(BuildContext context) {
+    final canHold = Keyboard.of(context).capabilities.supportsHeldState;
+    return KeyBindings(
+      bindings: [
+        if (canHold)
+          KeyBinding.hold(
+            .space,
+            label: 'Peek (hold)',
+            onHoldStart: (_) => onPeek(true),
+            onHoldEnd: (_) => onPeek(false),
+          )
+        else
+          KeyBinding(
+            .space,
+            label: 'Peek (toggle)',
+            onTrigger: (_) => onPeek(!peeking),
+          ),
+      ],
+      child: child,
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------

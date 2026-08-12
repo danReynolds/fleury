@@ -24,6 +24,14 @@ import '../widgets/framework.dart';
 import '../widgets/key_bindings.dart';
 import '../widgets/pointer.dart';
 
+/// Which view of one physical input step is being routed to bindings.
+///
+/// A capable source can report both a key (identity, position, modifiers) and
+/// committed text. Those are alternatives for one sequence step, never two
+/// consecutive steps: key-driven gestures get the former and logical
+/// character gestures get the latter.
+enum _BindingLane { all, key, text }
+
 /// Owns the runtime input pipeline. One instance per [runApp]. Tests
 /// can construct one against a hand-built [FocusManager].
 class InputDispatcher {
@@ -155,7 +163,14 @@ class InputDispatcher {
       if (!binding.enabled) continue;
       for (final sequence in binding.sequences) {
         if (sequence.stepCount <= pending.events.length) continue;
-        if (!_prefixMatches(sequence, pending.events)) continue;
+        if (!_prefixMatches(
+          sequence,
+          pending.events,
+          pending.lanes,
+          pending.texts,
+        )) {
+          continue;
+        }
         final label = sequence.stepLabelAt(pending.events.length);
         if (label == null) continue;
         completions.add(KeyCompletion(next: label, binding: binding));
@@ -183,12 +198,11 @@ class InputDispatcher {
     }());
     if (event is InputBatch) {
       // A correlated key+text report (RFC 0020 §5). The key half feeds the
-      // session/observation lanes (stage 2-3); routing then preserves
-      // today's semantics — the text half drives the text-claimant /
-      // character-binding path, and a text-bearing key half is NOT
-      // separately command-dispatched (printables never reached key
-      // dispatch pre-batch either). The §6 key-walk-before-text interlock
-      // replaces the routing half in P4.
+      // session/observation lanes and key-driven commands (positions, special
+      // keys, actionable modifier chords); the text half drives text claimants
+      // and produced-character commands. They are two views of one physical
+      // step, so a consuming key view suppresses text and an ignored key view
+      // cannot cancel a sequence before its text view is considered.
       final key = event.key;
       if (key != null) _regularizeAndObserve(key);
       // Stage 4: an armed capture takes the whole batch — key AND text —
@@ -202,7 +216,18 @@ class InputDispatcher {
       // twice for one press.
       final text = event.committedText;
       if (key != null && key.type != KeyEventType.up) {
-        if (_dispatchKeyEvent(key) == KeyEventResult.handled) {
+        // A text-bearing key has two views of ONE physical step. Offer the
+        // identity/position view first; if it cannot advance a pending
+        // sequence, preserve that prefix for the committed-text view below.
+        // This is what makes `.char(r'$')` layout-independent while still
+        // giving positional and modified gestures precedence.
+        if (_dispatchKeyEvent(
+              key,
+              lane: text == null ? _BindingLane.all : _BindingLane.key,
+              preservePendingOnMiss:
+                  text != null || _isLoneModifierKey(key.code),
+            ) ==
+            KeyEventResult.handled) {
           return KeyEventResult.handled;
         }
       }
@@ -211,6 +236,7 @@ class InputDispatcher {
         return _dispatchText(
           TextInputEvent(text),
           keyAlreadyWalked: key != null && key.type != KeyEventType.up,
+          keyView: key != null && key.type != KeyEventType.up ? key : null,
         );
       }
       return KeyEventResult.ignored;
@@ -247,7 +273,15 @@ class InputDispatcher {
           event.code.isCharacter &&
           event.type != KeyEventType.up &&
           event.modifiers.every((m) => m == KeyModifier.shift);
-      final result = _dispatchKeyEvent(event);
+      final result = _dispatchKeyEvent(
+        event,
+        lane: splitText ? _BindingLane.key : _BindingLane.all,
+        // The DOM sends a printable keydown before its authoritative `input`
+        // event. Lone modifiers likewise compose the next gesture instead of
+        // being gesture steps themselves. Neither may break a prefix merely
+        // because its other half has not arrived yet.
+        preservePendingOnMiss: splitText || _isLoneModifierKey(event.code),
+      );
       if (splitText) {
         if (result == KeyEventResult.handled) {
           // Drop the paired insertion, and only that one.
@@ -598,7 +632,12 @@ class InputDispatcher {
     }
   }
 
-  KeyEventResult _dispatchKeyEvent(KeyEvent event, {String? textOrigin}) {
+  KeyEventResult _dispatchKeyEvent(
+    KeyEvent event, {
+    String? textOrigin,
+    _BindingLane lane = _BindingLane.all,
+    bool preservePendingOnMiss = false,
+  }) {
     // Releases are transparent to bindings (RFC 0018 §5): a binding fires on
     // down/repeat only. Guarding here keeps a release from disturbing a
     // pending sequence, and means enabling Kitty event-type reporting can't
@@ -607,20 +646,31 @@ class InputDispatcher {
     if (event.type == KeyEventType.up) return KeyEventResult.ignored;
     // 1. Pending sequence handling.
     if (_matchablePending != null) {
-      final result = _tryPendingSequence(event, textOrigin: textOrigin);
+      final result = _tryPendingSequence(
+        event,
+        textOrigin: textOrigin,
+        lane: lane,
+        preserveOnMiss: preservePendingOnMiss,
+      );
       if (result != null) return result;
       // Sequence cancelled; the held events were replayed. The current
       // event runs through full dispatch so it can start a fresh
       // sequence if applicable.
     }
-    return _dispatchPlain(event, textOrigin: textOrigin);
+    return _dispatchPlain(event, textOrigin: textOrigin, lane: lane);
   }
 
-  /// Runs the pending-sequence machinery for [event]: completes or
-  /// advances the sequence (non-null result), or cancels it — replaying
-  /// every held event direct-only — and returns null so the caller
-  /// dispatches [event] through its own normal path.
-  KeyEventResult? _tryPendingSequence(KeyEvent event, {String? textOrigin}) {
+  /// Runs the pending-sequence machinery for [event]. A non-null result means
+  /// the sequence completed, advanced, or deliberately held its prefix for
+  /// another view of the same physical step. Otherwise it cancels the
+  /// sequence, replays every held event direct-only, and returns null so the
+  /// caller dispatches [event] through its own normal path.
+  KeyEventResult? _tryPendingSequence(
+    KeyEvent event, {
+    String? textOrigin,
+    _BindingLane lane = _BindingLane.all,
+    bool preserveOnMiss = false,
+  }) {
     var pending = _pending;
     if (pending == null) return null;
     final activeCandidates = pending.candidates
@@ -638,10 +688,11 @@ class InputDispatcher {
         events: pending.events,
         candidates: activeCandidates,
         texts: pending.texts,
+        lanes: pending.lanes,
       );
       _pending = pending;
     }
-    final completed = pending.tryComplete(event);
+    final completed = pending.tryComplete(event, lane, textOrigin);
     if (completed != null) {
       _clearPending();
       return _fire(completed.binding, completed.sequence, [
@@ -650,12 +701,19 @@ class InputDispatcher {
       ]);
     }
     // Could the event extend the sequence by one more step?
-    final survivors = pending.surviveOneMoreStep(event);
+    final survivors = pending.surviveOneMoreStep(event, lane, textOrigin);
     if (survivors.isNotEmpty) {
-      _pending = pending.advance(event, survivors, textOrigin);
+      _pending = pending.advance(event, survivors, textOrigin, lane);
       _timer?.cancel();
       _timer = Timer(sequenceTimeout, _onTimeout);
       return KeyEventResult.handled;
+    }
+    if (preserveOnMiss) {
+      // This event is only a partial view of the user's next input step (a
+      // modifier transition, or a printable key half whose committed text will
+      // follow). Observation already saw it; the command lane waits without
+      // advancing, cancelling, or extending the original timeout.
+      return KeyEventResult.ignored;
     }
     // Sequence didn't complete and didn't continue: cancel and
     // redispatch every event that was held; the caller dispatches the
@@ -715,7 +773,12 @@ class InputDispatcher {
   KeyEventResult _dispatchText(
     TextInputEvent event, {
     bool keyAlreadyWalked = false,
+    KeyEvent? keyView,
   }) {
+    // A correlated batch already owns a truthful physical event. Reuse it for
+    // the binding receipt while matching the authoritative committed text;
+    // legacy and split DOM text still synthesize the compatibility event.
+    final keyEvent = keyView ?? _keyEventForText(event.text);
     // An armed capture outranks every routed lane — including this one
     // (§17.2, "text-derived on legacy").
     //
@@ -730,15 +793,17 @@ class InputDispatcher {
     // Ahead of the pending-sequence check too: a capture is sequence-
     // bypassing by design, so an awaiter beats a half-typed chord.
     if (!keyAlreadyWalked && _capture != null) {
-      final captured = _keyEventForText(event.text);
-      if (captured != null && _tryCapture(captured)) {
+      if (keyEvent != null && _tryCapture(keyEvent)) {
         return KeyEventResult.handled;
       }
     }
-    if (_matchablePending != null && !keyAlreadyWalked) {
-      final keyEvent = _keyEventForText(event.text);
+    if (_matchablePending != null) {
       if (keyEvent != null) {
-        final result = _tryPendingSequence(keyEvent, textOrigin: event.text);
+        final result = _tryPendingSequence(
+          keyEvent,
+          textOrigin: event.text,
+          lane: _BindingLane.text,
+        );
         if (result != null) return result;
       } else {
         // Multi-grapheme text (an input burst) can't be a sequence step.
@@ -751,17 +816,19 @@ class InputDispatcher {
       return textResult;
     }
 
-    // Reconstructing a key from text is the LEGACY bridge: on a terminal that
-    // reports printables only as bytes, this is the sole way a `j` binding
-    // can ever match. A batch already offered its real key half to the same
-    // lanes one stage earlier (§6), so doing it again would walk the whole
-    // chain twice per keystroke — with a strictly worse key, since a
-    // text-derived one carries no position.
-    if (keyAlreadyWalked) return KeyEventResult.ignored;
-
-    final keyEvent = _keyEventForText(event.text);
+    // Character bindings are text-driven on every surface. On legacy input
+    // this reconstruction is the only view of the press, so it also remains
+    // the compatibility bridge to detectors (Tree/DataTable typeahead). On
+    // correlated and DOM input the key view already visited detectors, so the
+    // text view visits binding scopes only. That gives each binding one
+    // eligible stage and each detector one physical delivery.
     if (keyEvent != null) {
-      return _dispatchKeyEvent(keyEvent, textOrigin: event.text);
+      return _dispatchPlain(
+        keyEvent,
+        textOrigin: event.text,
+        lane: _BindingLane.text,
+        visitDetectors: !keyAlreadyWalked,
+      );
     }
 
     return KeyEventResult.ignored;
@@ -824,7 +891,13 @@ class InputDispatcher {
         delivered = true;
         continue;
       }
-      _dispatchPlain(pending.events[i], allowSequenceStart: false);
+      _dispatchPlain(
+        pending.events[i],
+        allowSequenceStart: false,
+        textOrigin: pending.texts[i],
+        lane: pending.lanes[i],
+        visitDetectors: true,
+      );
     }
     return delivered || _firedCount != firedBefore;
   }
@@ -890,6 +963,8 @@ class InputDispatcher {
     KeyEvent event, {
     bool allowSequenceStart = true,
     String? textOrigin,
+    _BindingLane lane = _BindingLane.all,
+    bool visitDetectors = true,
   }) {
     // Precedence (vim-style):
     //
@@ -914,12 +989,23 @@ class InputDispatcher {
       if (source != null) {
         if (allowSequenceStart) {
           final seqsHere = <KeyBinding>[];
-          _collectSequenceStarts(source.activeBindings, event, seqsHere);
+          _collectSequenceStarts(
+            source.activeBindings,
+            event,
+            seqsHere,
+            lane,
+            textOrigin,
+          );
           sequenceCandidates.addAll(seqsHere);
           // Defer direct firing while any sequence is still on the
           // table (here or accumulated from a deeper node).
           if (sequenceCandidates.isEmpty) {
-            final hit = _findDirectMatch(source.activeBindings, event);
+            final hit = _findDirectMatch(
+              source.activeBindings,
+              event,
+              lane,
+              textOrigin,
+            );
             if (hit != null) {
               final result = _fire(hit.binding, hit.sequence, [event]);
               // Bindings that call event.bubble() return
@@ -931,7 +1017,12 @@ class InputDispatcher {
           }
         } else {
           // Replay mode: pre-sequence-rule semantics.
-          final hit = _findDirectMatch(source.activeBindings, event);
+          final hit = _findDirectMatch(
+            source.activeBindings,
+            event,
+            lane,
+            textOrigin,
+          );
           if (hit != null) {
             final result = _fire(hit.binding, hit.sequence, [event]);
             if (result == KeyEventResult.handled) return result;
@@ -943,7 +1034,7 @@ class InputDispatcher {
       // KeyDetector floor (RFC 0020 §17): a detector on this node peeks at
       // the event and consumes only what it uses. Propagate-by-default, so
       // an unconsumed key continues up the chain.
-      final detector = node.keyDetector;
+      final detector = visitDetectors ? node.keyDetector : null;
       if (detector != null &&
           KeyDispatchContext.run(() => detector(event), entitled: true)) {
         return KeyEventResult.handled;
@@ -963,7 +1054,7 @@ class InputDispatcher {
 
     // Sequence start, if any candidates emerged from the chain.
     if (allowSequenceStart && sequenceCandidates.isNotEmpty) {
-      _startPending(event, sequenceCandidates, textOrigin);
+      _startPending(event, sequenceCandidates, textOrigin, lane);
       return KeyEventResult.handled;
     }
 
@@ -987,6 +1078,8 @@ class InputDispatcher {
   static ({KeyBinding binding, KeySequence sequence})? _findDirectMatch(
     Iterable<KeyBinding> bindings,
     KeyEvent event,
+    _BindingLane lane,
+    String? textOrigin,
   ) {
     for (final binding in bindings) {
       if (!binding.enabled) continue;
@@ -994,7 +1087,7 @@ class InputDispatcher {
       if (!_phaseEligible(binding, event)) continue;
       for (final sequence in binding.sequences) {
         if (sequence.isSequence) continue;
-        if (sequence.matches(event)) {
+        if (_matchesStepInLane(sequence, 0, event, lane, textOrigin)) {
           return (binding: binding, sequence: sequence);
         }
       }
@@ -1008,6 +1101,8 @@ class InputDispatcher {
     Iterable<KeyBinding> bindings,
     KeyEvent event,
     List<KeyBinding> out,
+    _BindingLane lane,
+    String? textOrigin,
   ) {
     for (final binding in bindings) {
       if (!binding.enabled) continue;
@@ -1017,7 +1112,7 @@ class InputDispatcher {
       if (event.type == KeyEventType.repeat) continue;
       for (final sequence in binding.sequences) {
         if (!sequence.isSequence) continue;
-        if (sequence.matchesStepAt(0, event)) {
+        if (_matchesStepInLane(sequence, 0, event, lane, textOrigin)) {
           out.add(binding);
           break;
         }
@@ -1029,12 +1124,14 @@ class InputDispatcher {
     KeyEvent firstEvent,
     List<KeyBinding> candidates,
     String? textOrigin,
+    _BindingLane lane,
   ) {
     _clearPending();
     _pending = _PendingSequence(
       events: [firstEvent],
       candidates: candidates,
       texts: [textOrigin],
+      lanes: [lane],
     );
     _timer = Timer(sequenceTimeout, _onTimeout);
   }
@@ -1215,6 +1312,7 @@ class _PendingSequence {
     required this.events,
     required this.candidates,
     required this.texts,
+    required this.lanes,
   });
 
   /// The events held by the dispatcher so far. `events[0]` is the
@@ -1232,17 +1330,32 @@ class _PendingSequence {
   /// focused text claimant, not just direct key dispatch.
   final List<String?> texts;
 
+  /// Which command view matched each held event. This keeps aliases honest:
+  /// a physical match cannot later masquerade as a logical-text prefix merely
+  /// because both views happen to share a codepoint on one layout.
+  final List<_BindingLane> lanes;
+
   /// Tries to complete a candidate sequence with [event] as its final
   /// step. Returns the binding to fire and the specific alias that
   /// completed, or null if none completes here.
-  ({KeyBinding binding, KeySequence sequence})? tryComplete(KeyEvent event) {
+  ({KeyBinding binding, KeySequence sequence})? tryComplete(
+    KeyEvent event,
+    _BindingLane lane,
+    String? textOrigin,
+  ) {
     final matchedSoFar = events.length;
     for (final binding in candidates) {
       for (final sequence in binding.sequences) {
         if (!sequence.isSequence) continue;
         if (sequence.stepCount != matchedSoFar + 1) continue;
-        if (_prefixMatches(sequence, events) &&
-            sequence.matchesStepAt(matchedSoFar, event)) {
+        if (_prefixMatches(sequence, events, lanes, texts) &&
+            _matchesStepInLane(
+              sequence,
+              matchedSoFar,
+              event,
+              lane,
+              textOrigin,
+            )) {
           return (binding: binding, sequence: sequence);
         }
       }
@@ -1254,15 +1367,25 @@ class _PendingSequence {
   /// matched as a strict prefix after appending [event] (i.e. still
   /// has at least one more step to go). Empty list means the pending
   /// state must be cancelled.
-  List<KeyBinding> surviveOneMoreStep(KeyEvent event) {
+  List<KeyBinding> surviveOneMoreStep(
+    KeyEvent event,
+    _BindingLane lane,
+    String? textOrigin,
+  ) {
     final matchedSoFar = events.length;
     final out = <KeyBinding>[];
     for (final binding in candidates) {
       for (final sequence in binding.sequences) {
         if (!sequence.isSequence) continue;
         if (sequence.stepCount <= matchedSoFar + 1) continue;
-        if (_prefixMatches(sequence, events) &&
-            sequence.matchesStepAt(matchedSoFar, event)) {
+        if (_prefixMatches(sequence, events, lanes, texts) &&
+            _matchesStepInLane(
+              sequence,
+              matchedSoFar,
+              event,
+              lane,
+              textOrigin,
+            )) {
           out.add(binding);
           break;
         }
@@ -1277,18 +1400,46 @@ class _PendingSequence {
     KeyEvent event,
     List<KeyBinding> survivors,
     String? textOrigin,
+    _BindingLane lane,
   ) {
     return _PendingSequence(
       events: [...events, event],
       candidates: survivors,
       texts: [...texts, textOrigin],
+      lanes: [...lanes, lane],
     );
   }
 }
 
-bool _prefixMatches(KeySequence sequence, List<KeyEvent> events) {
+bool _prefixMatches(
+  KeySequence sequence,
+  List<KeyEvent> events,
+  List<_BindingLane> lanes,
+  List<String?> texts,
+) {
   for (var i = 0; i < events.length; i++) {
-    if (!sequence.matchesStepAt(i, events[i])) return false;
+    if (!_matchesStepInLane(sequence, i, events[i], lanes[i], texts[i])) {
+      return false;
+    }
   }
   return true;
+}
+
+bool _matchesStepInLane(
+  KeySequence sequence,
+  int index,
+  KeyEvent event,
+  _BindingLane lane,
+  String? textOrigin,
+) {
+  return sequence.matchesStepAt(
+    index,
+    event,
+    textDriven: switch (lane) {
+      _BindingLane.all => null,
+      _BindingLane.key => false,
+      _BindingLane.text => true,
+    },
+    committedText: lane == _BindingLane.text ? textOrigin : null,
+  );
 }

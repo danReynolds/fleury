@@ -1848,9 +1848,8 @@ TextArea(
     widget: 'KeyDetector',
     category: 'Inputs & controls',
     blurb:
-        'Propagate-by-default in one screen: a pane owns the arrow keys while '
-        'it can move, and lets them bubble to the app at its edge — the '
-        'scroll-region-yields-at-its-boundary pattern.',
+        'A visible event trace shows the pane consuming arrows while it can '
+        'move, then passing the same key to its ancestor at the edge.',
     cols: 64,
     rows: 12,
     interactive: true,
@@ -3130,11 +3129,7 @@ class _KeyBindingsTourState extends State<_KeyBindingsTour> {
             _last = 'Jumped to top';
           }),
         ),
-        KeyBinding(
-          .space.c,
-          label: 'Clear ★',
-          onTrigger: (_) => _clearSaved(),
-        ),
+        KeyBinding(.space.c, label: 'Clear ★', onTrigger: (_) => _clearSaved()),
       ],
       child: Focus(
         autofocus: true,
@@ -3197,10 +3192,36 @@ class _KeyDetectorTour extends StatefulWidget {
 }
 
 class _KeyDetectorTourState extends State<_KeyDetectorTour> {
-  static const _count = 5;
+  static const _count = 3;
   int _cursor = 0;
-  String _status = 'press ↑ / ↓ — the pane keeps them until it reaches an edge';
-  bool _bubbled = false;
+  int _paneHandled = 0;
+  int _appHandled = 0;
+  String _lastKey = '—';
+  String _paneResult = 'waiting';
+  String _appResult = 'waiting';
+  bool _lastBubbled = false;
+
+  void _handleAtApp(String key) {
+    setState(() {
+      _lastKey = key;
+      _paneResult = 'PASSED · at edge';
+      _appResult = 'HANDLED';
+      _appHandled++;
+      _lastBubbled = true;
+    });
+  }
+
+  void _handleInPane(KeyEvent event, String key, int nextCursor) {
+    setState(() {
+      _cursor = nextCursor;
+      _lastKey = key;
+      _paneResult = 'HANDLED · moved';
+      _appResult = '— not reached';
+      _paneHandled++;
+      _lastBubbled = false;
+    });
+    event.consume();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -3212,57 +3233,79 @@ class _KeyDetectorTourState extends State<_KeyDetectorTour> {
         KeyBinding(
           KeyCode.arrowDown,
           label: 'App ↓',
-          onTrigger: (_) => setState(() {
-            _bubbled = true;
-            _status = '↓ bubbled to the app — the pane was at its last row';
-          }),
+          onTrigger: (_) => _handleAtApp('↓'),
         ),
         KeyBinding(
           KeyCode.arrowUp,
           label: 'App ↑',
-          onTrigger: (_) => setState(() {
-            _bubbled = true;
-            _status = '↑ bubbled to the app — the pane was at its first row';
-          }),
+          onTrigger: (_) => _handleAtApp('↑'),
         ),
       ],
-      child: Focus(
-        autofocus: true,
-        child: KeyDetector(
-          onKey: (e) {
-            if (e.code == KeyCode.arrowDown && _cursor < _count - 1) {
-              setState(() {
-                _cursor++;
-                _bubbled = false;
-                _status = 'pane consumed ↓ (row ${_cursor + 1})';
-              });
-              e.consume();
-            } else if (e.code == KeyCode.arrowUp && _cursor > 0) {
-              setState(() {
-                _cursor--;
-                _bubbled = false;
-                _status = 'pane consumed ↑ (row ${_cursor + 1})';
-              });
-              e.consume();
-            }
-            // At an edge: do nothing → the arrow continues to the ancestor.
-          },
+      child: KeyDetector(
+        onKey: (e) {
+          if (e.code == KeyCode.arrowDown && _cursor < _count - 1) {
+            _handleInPane(e, '↓', _cursor + 1);
+          } else if (e.code == KeyCode.arrowUp && _cursor > 0) {
+            _handleInPane(e, '↑', _cursor - 1);
+          }
+          // At an edge: do nothing → the arrow continues to the ancestor.
+        },
+        child: Focus(
+          autofocus: true,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Padding(
-                padding: const EdgeInsets.all(1),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 1),
+                child: Text('CLICK · THEN ↓ ↓ ↓', style: CellStyle(bold: true)),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 1),
                 child: Text(
-                  _status,
+                  'first 2 move; #3 bubbles',
+                  style: CellStyle(dim: true),
+                ),
+              ),
+              const SizedBox(height: 1),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 1),
+                child: Text('last key  $_lastKey'),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 1),
+                child: Text(
+                  'PANE  $_paneResult',
                   style: CellStyle(
-                    bold: true,
-                    foreground: _bubbled ? theme.colorScheme.warning : null,
+                    bold: _paneResult != 'waiting',
+                    foreground: _lastBubbled
+                        ? theme.colorScheme.warning
+                        : _paneResult == 'waiting'
+                        ? null
+                        : theme.colorScheme.primary,
                   ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 1),
+                child: Text(
+                  'APP   $_appResult',
+                  style: CellStyle(
+                    bold: _lastBubbled,
+                    dim: !_lastBubbled,
+                    foreground: _lastBubbled ? theme.colorScheme.warning : null,
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 1),
+                child: Text(
+                  'pane $_paneHandled · app $_appHandled',
+                  style: const CellStyle(dim: true),
                 ),
               ),
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 1),
-                child: Text('── scroll pane ──'),
+                child: Text('── inner pane ──'),
               ),
               for (var i = 0; i < _count; i++)
                 Padding(
