@@ -65,4 +65,27 @@ void main() {
       expect(c.transform(1.0), 1.0);
     });
   });
+
+  group('Curve.flipped', () {
+    test('reverses and inverts the source curve', () {
+      final flipped = Curves.easeOut.flipped;
+
+      expect(flipped.transform(0), 0);
+      expect(flipped.transform(0.25), closeTo(0.0625, 0.000001));
+      expect(flipped.transform(0.5), closeTo(0.25, 0.000001));
+      expect(flipped.transform(1), 1);
+    });
+
+    test('a curve and its flip retrace the same values', () {
+      final curve = Curves.easeOutCubic;
+      final flipped = curve.flipped;
+
+      for (final t in <double>[0, 0.1, 0.25, 0.5, 0.75, 0.9, 1]) {
+        expect(
+          1 - flipped.transform(t),
+          closeTo(curve.transform(1 - t), 0.000001),
+        );
+      }
+    });
+  });
 }

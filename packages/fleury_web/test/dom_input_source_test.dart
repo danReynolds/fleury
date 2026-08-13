@@ -110,11 +110,7 @@ void main() {
           keyEventFromBrowser(
             web.KeyboardEvent(
               'keydown',
-              web.KeyboardEventInit(
-                key: r'$',
-                code: 'Digit4',
-                shiftKey: true,
-              ),
+              web.KeyboardEventInit(key: r'$', code: 'Digit4', shiftKey: true),
             ),
           ),
           const KeyEvent(
@@ -478,7 +474,7 @@ void main() {
   });
 
   test(
-    'DomInputSource synthesizes a tap from click when pointerup is missing',
+    'DomInputSource closes the original press when pointerup is missing',
     () {
       final events = <TuiEvent>[];
       final host = web.document.createElement('div');
@@ -520,6 +516,19 @@ void main() {
             buttons: 1,
             bubbles: true,
             cancelable: true,
+          ),
+        ),
+      );
+      host.dispatchEvent(
+        web.PointerEvent(
+          'lostpointercapture',
+          web.PointerEventInit(
+            pointerId: 1,
+            clientX: 25,
+            clientY: 65,
+            button: -1,
+            buttons: 0,
+            bubbles: true,
           ),
         ),
       );
@@ -590,6 +599,7 @@ void main() {
           clientX: 25,
           clientY: 65,
           button: 0,
+          detail: 1,
           bubbles: true,
           cancelable: true,
         ),
@@ -677,6 +687,7 @@ void main() {
           clientX: 25,
           clientY: 65,
           button: 0,
+          detail: 1,
           bubbles: true,
           cancelable: true,
         ),
@@ -698,6 +709,113 @@ void main() {
       ),
     ]);
   });
+
+  test(
+    'DomInputSource keeps click suppression through lost pointer capture',
+    () {
+      final events = <TuiEvent>[];
+      final host = web.document.createElement('div');
+      final textArea =
+          web.document.createElement('textarea') as web.HTMLTextAreaElement;
+      web.document.body!.appendChild(host);
+      final source = DomInputSource(
+        hostElement: host,
+        textArea: textArea,
+        cellMetrics: _FakeMetrics(
+          const MeasuredCellBox(
+            cssCellWidth: 10,
+            cssCellHeight: 20,
+            cssCanvasWidth: 80,
+            cssCanvasHeight: 60,
+            cssCanvasLeft: 10,
+            cssCanvasTop: 20,
+            devicePixelRatio: 1,
+            cols: 8,
+            rows: 3,
+          ),
+        ),
+      );
+      addTearDown(() {
+        source.dispose();
+        host.parentNode?.removeChild(host);
+      });
+
+      source.start(events.add);
+
+      host.dispatchEvent(
+        web.PointerEvent(
+          'pointerdown',
+          web.PointerEventInit(
+            pointerId: 1,
+            clientX: 25,
+            clientY: 65,
+            button: 0,
+            buttons: 1,
+            bubbles: true,
+            cancelable: true,
+          ),
+        ),
+      );
+      host.dispatchEvent(
+        web.PointerEvent(
+          'pointerup',
+          web.PointerEventInit(
+            pointerId: 1,
+            clientX: 25,
+            clientY: 65,
+            button: -1,
+            buttons: 0,
+            bubbles: true,
+            cancelable: true,
+          ),
+        ),
+      );
+      host.dispatchEvent(
+        web.PointerEvent(
+          'lostpointercapture',
+          web.PointerEventInit(
+            pointerId: 1,
+            clientX: 25,
+            clientY: 65,
+            button: -1,
+            buttons: 0,
+            bubbles: true,
+          ),
+        ),
+      );
+      host.dispatchEvent(
+        web.MouseEvent(
+          'click',
+          web.MouseEventInit(
+            // A render between pointerup and click may move the painted
+            // control under the browser's compatibility click. It is still
+            // the same physical gesture and must not synthesize another tap.
+            clientX: 35,
+            clientY: 65,
+            button: 0,
+            detail: 1,
+            bubbles: true,
+            cancelable: true,
+          ),
+        ),
+      );
+
+      expect(events, [
+        const MouseEvent(
+          kind: MouseEventKind.down,
+          button: MouseButton.left,
+          col: 1,
+          row: 2,
+        ),
+        const MouseEvent(
+          kind: MouseEventKind.up,
+          button: MouseButton.left,
+          col: 1,
+          row: 2,
+        ),
+      ]);
+    },
+  );
 
   test(
     'DomInputSource uses in-process clipboard when paste data is missing',

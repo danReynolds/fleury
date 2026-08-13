@@ -130,6 +130,98 @@ String? _firstSpanColorContaining(web.Element host, String text) {
   return null;
 }
 
+int _nextPointerId = 1;
+
+/// Activates the painted terminal control a browser user actually clicks.
+///
+/// Semantic controls intentionally have a direct activation path for agents
+/// and assistive technology. Navigation examples also need coverage through
+/// the cell grid's pointer hit testing, which is the path exercised by the
+/// guide itself.
+void _tapPaintedText(web.Element host, String label) {
+  final spans = host.querySelectorAll('.fleury-screen .fleury-row span');
+  web.Element? painted;
+  for (var i = 0; i < spans.length; i++) {
+    final span = spans.item(i);
+    if (span is! web.Element) continue;
+    if ((span.textContent ?? '').contains(label)) {
+      painted = span;
+      break;
+    }
+  }
+  if (painted == null) fail('No painted text named "$label"');
+
+  final rect = painted.getBoundingClientRect();
+  final clientX = (rect.left + rect.width / 2).round();
+  final clientY = (rect.top + rect.height / 2).round();
+  final screen = host.querySelector('.fleury-screen')!;
+  final pointerId = _nextPointerId++;
+  screen.dispatchEvent(
+    web.PointerEvent(
+      'pointerdown',
+      web.PointerEventInit(
+        pointerId: pointerId,
+        clientX: clientX,
+        clientY: clientY,
+        button: 0,
+        buttons: 1,
+        bubbles: true,
+        cancelable: true,
+      ),
+    ),
+  );
+  screen.dispatchEvent(
+    web.PointerEvent(
+      'pointerup',
+      web.PointerEventInit(
+        pointerId: pointerId,
+        clientX: clientX,
+        clientY: clientY,
+        button: -1,
+        buttons: 0,
+        bubbles: true,
+        cancelable: true,
+      ),
+    ),
+  );
+  // Real browsers release pointer capture before delivering the compatibility
+  // click. Replaying the full sequence guards against one physical tap being
+  // interpreted twice by the web host.
+  screen.dispatchEvent(
+    web.PointerEvent(
+      'lostpointercapture',
+      web.PointerEventInit(
+        pointerId: pointerId,
+        clientX: clientX,
+        clientY: clientY,
+        button: -1,
+        buttons: 0,
+        bubbles: true,
+      ),
+    ),
+  );
+  screen.dispatchEvent(
+    web.MouseEvent(
+      'click',
+      web.MouseEventInit(
+        clientX: clientX,
+        clientY: clientY,
+        button: 0,
+        detail: 1,
+        bubbles: true,
+        cancelable: true,
+      ),
+    ),
+  );
+}
+
+String? _rootRouteDepth(web.Element host) => host
+    .querySelector(
+      '.fleury-semantics [role="navigation"]'
+      '[aria-label="root navigator"]',
+    )
+    ?.getAttribute('data-fleury-value');
+
 void main() {
   test('docs fallback cancels a held animation-frame callback', () async {
     void Function()? heldFrame;
@@ -180,7 +272,12 @@ void main() {
     fixture.flush.fire();
     await fixture.app.awaitSemanticIdle();
 
-    expect(field.value, 'deploy !');
+    // A semantic flush may reconcile this control by replacing its DOM node;
+    // assert against the current accessibility surface, not the stale handle
+    // captured before the edit.
+    final updatedField =
+        semantics.querySelector('[role="textbox"]')! as web.HTMLInputElement;
+    expect(updatedField.value, 'deploy !');
     expect(fixture.host.textContent, contains('deploy !'));
   });
 
@@ -424,7 +521,9 @@ void main() {
       'approvalprompt.basic': <String>['Approve', 'Deny'],
       'commandpalette.basic': <String>['Ctrl-P'],
       'table.basic': <String>['lin'],
-      'progressbar.basic': <String>['█'],
+      // Full blocks are deliberately converted to exact CSS rectangles by the
+      // web renderer, so assert painted fill rather than a font glyph.
+      'progressbar.basic': <String>[],
       // Demos seeded/expanded/sized for a more legible resting state.
       'tree.basic': <String>['main.dart'], // expanded, not a lone "▸ lib/"
       'treetable.basic': <String>['main.dart'], // 'lib' branch expanded
@@ -446,6 +545,18 @@ void main() {
       final fixture = await _mountExample(entry.key, useManifestSize: true);
       final painted =
           fixture.host.querySelector('.fleury-screen')?.textContent ?? '';
+      if (entry.key == 'progressbar.basic') {
+        final spans = fixture.host.querySelectorAll('.fleury-screen span');
+        var hasPaintedFill = false;
+        for (var i = 0; i < spans.length; i++) {
+          final style = (spans.item(i) as web.Element).getAttribute('style');
+          if (style != null && style.contains('background-image:')) {
+            hasPaintedFill = true;
+            break;
+          }
+        }
+        if (!hasPaintedFill) missing.add('progressbar.basic → painted fill');
+      }
       for (final needle in entry.value) {
         if (!painted.contains(needle)) missing.add('${entry.key} → "$needle"');
       }
@@ -550,6 +661,556 @@ void main() {
     );
     expect(focused?.textContent, contains('First'));
   });
+
+  test(
+    'navigation.basics makes push, present, and both pop paths explicit',
+    () async {
+      final fixture = await _mountExample(
+        'navigation.basics',
+        useManifestSize: true,
+      );
+
+      web.Element? focusedButton() => fixture.host.querySelector(
+        '.fleury-semantics [role="button"][data-fleury-focused="true"]',
+      );
+
+      Future<void> settle() async {
+        await Future<void>.delayed(Duration.zero);
+        for (var i = 0; i < 6 && fixture.flush.pending; i++) {
+          fixture.flush.fire();
+          await Future<void>.delayed(Duration.zero);
+        }
+        await fixture.app.awaitSemanticIdle();
+      }
+
+      expect(fixture.host.textContent, contains('HOME · STACK DEPTH 1'));
+      expect(focusedButton()?.textContent, contains('Push details'));
+      expect(_rootRouteDepth(fixture.host), '1');
+
+      _tapPaintedText(fixture.host, 'Push details');
+      await settle();
+      expect(fixture.host.textContent, contains('DETAILS · STACK DEPTH 2'));
+      expect(focusedButton()?.textContent, contains('Present dialog'));
+      expect(_rootRouteDepth(fixture.host), '2');
+
+      _tapPaintedText(fixture.host, 'Present dialog');
+      await settle();
+      expect(fixture.host.textContent, contains('PRESENTED DIALOG'));
+      expect(focusedButton()?.textContent, contains('Confirm and pop'));
+      expect(_rootRouteDepth(fixture.host), '3');
+      expect(
+        fixture.host.querySelector('.fleury-screen')?.textContent,
+        contains('Confirm and pop'),
+        reason: 'the dialog action must be painted, not only semantic',
+      );
+
+      _tapPaintedText(fixture.host, 'Confirm and pop');
+      await settle();
+      expect(fixture.host.textContent, contains('dialog: confirmed'));
+      expect(focusedButton()?.textContent, contains('Present dialog'));
+      expect(_rootRouteDepth(fixture.host), '2');
+
+      _tapPaintedText(fixture.host, 'Pop without result');
+      await settle();
+      expect(fixture.host.textContent, contains('result: none'));
+      expect(_rootRouteDepth(fixture.host), '1');
+
+      _tapPaintedText(fixture.host, 'Push details');
+      await settle();
+      expect(_rootRouteDepth(fixture.host), '2');
+      _tapPaintedText(fixture.host, 'Pop with result');
+      await settle();
+      expect(fixture.host.textContent, contains('result: done'));
+      expect(focusedButton()?.textContent, contains('Push details'));
+      expect(_rootRouteDepth(fixture.host), '1');
+    },
+  );
+
+  test('navigation.placement moves a real presented route', () async {
+    final fixture = await _mountExample(
+      'navigation.placement',
+      useManifestSize: true,
+    );
+    final keyboardCapture =
+        fixture.host.querySelector('textarea') as web.HTMLTextAreaElement;
+
+    Future<void> settle() async {
+      await Future<void>.delayed(Duration.zero);
+      for (var i = 0; i < 6 && fixture.flush.pending; i++) {
+        fixture.flush.fire();
+        await Future<void>.delayed(Duration.zero);
+      }
+      await fixture.app.awaitSemanticIdle();
+    }
+
+    Future<void> press(String key) async {
+      keyboardCapture.dispatchEvent(
+        web.KeyboardEvent(
+          'keydown',
+          web.KeyboardEventInit(
+            key: key,
+            code: key,
+            bubbles: true,
+            cancelable: true,
+          ),
+        ),
+      );
+      await settle();
+    }
+
+    web.Element buttonNamed(String label) {
+      final buttons = fixture.host.querySelectorAll(
+        '.fleury-semantics [role="button"]',
+      );
+      for (var i = 0; i < buttons.length; i++) {
+        final button = buttons.item(i)! as web.Element;
+        if ((button.textContent ?? '').contains(label)) return button;
+      }
+      fail('No semantic button named "$label"');
+    }
+
+    web.Element paintedText(String label) {
+      final spans = fixture.host.querySelectorAll(
+        '.fleury-screen .fleury-row span',
+      );
+      for (var i = 0; i < spans.length; i++) {
+        final span = spans.item(i)! as web.Element;
+        if ((span.textContent ?? '').contains(label)) return span;
+      }
+      fail('No painted text named "$label"');
+    }
+
+    web.HTMLElement placementSelect() =>
+        fixture.host.querySelector(
+              '.fleury-semantics [role="button"][aria-label="Dialog placement"]',
+            )!
+            as web.HTMLElement;
+
+    placementSelect().click();
+    await settle();
+    await press('ArrowUp');
+    await press('Enter');
+    final topLeft = paintedText('PLACED DIALOG').getBoundingClientRect();
+    final hostBounds = fixture.host.getBoundingClientRect();
+    expect(topLeft.left - hostBounds.left, lessThan(hostBounds.width / 3));
+    expect(topLeft.top - hostBounds.top, lessThan(hostBounds.height / 3));
+
+    (buttonNamed('Close') as web.HTMLElement).click();
+    await settle();
+    placementSelect().click();
+    await settle();
+    await press('ArrowDown');
+    await press('ArrowDown');
+    await press('Enter');
+    final bottomRight = paintedText('PLACED DIALOG').getBoundingClientRect();
+    expect(bottomRight.left, greaterThan(topLeft.left));
+    expect(bottomRight.top, greaterThan(topLeft.top));
+  });
+
+  test(
+    'navigation.guard blocks only after editing and allows back after save',
+    () async {
+      final fixture = await _mountExample(
+        'navigation.guard',
+        useManifestSize: true,
+      );
+      final keyboardCapture =
+          fixture.host.querySelector('textarea[aria-hidden="true"]')!
+              as web.HTMLTextAreaElement;
+
+      Future<void> settle() async {
+        await Future<void>.delayed(Duration.zero);
+        for (var i = 0; i < 6 && fixture.flush.pending; i++) {
+          fixture.flush.fire();
+          await Future<void>.delayed(Duration.zero);
+        }
+        await fixture.app.awaitSemanticIdle();
+      }
+
+      expect(_rootRouteDepth(fixture.host), '1');
+      _tapPaintedText(fixture.host, 'Edit draft');
+      await settle();
+      expect(_rootRouteDepth(fixture.host), '2');
+
+      _tapPaintedText(fixture.host, 'Back');
+      await settle();
+      expect(fixture.host.textContent, contains('DRAFTS'));
+      expect(_rootRouteDepth(fixture.host), '1');
+
+      _tapPaintedText(fixture.host, 'Edit draft');
+      await settle();
+      expect(_rootRouteDepth(fixture.host), '2');
+      final draftField = fixture.host.querySelector(
+        '.fleury-semantics [role="textbox"][aria-label="Draft text"]',
+      );
+      expect(draftField, isNotNull);
+      (draftField! as web.HTMLElement).click();
+      await settle();
+      keyboardCapture.dispatchEvent(
+        web.InputEvent(
+          'input',
+          web.InputEventInit(
+            data: ' updated',
+            inputType: 'insertText',
+            bubbles: true,
+            cancelable: true,
+          ),
+        ),
+      );
+      await settle();
+      expect(fixture.host.textContent, contains('Unsaved changes'));
+
+      _tapPaintedText(fixture.host, 'Back');
+      await settle();
+      expect(fixture.host.textContent, contains('Back blocked — save first'));
+      expect(fixture.host.textContent, contains('EDITOR'));
+      expect(_rootRouteDepth(fixture.host), '2');
+
+      _tapPaintedText(fixture.host, 'Save');
+      await settle();
+      _tapPaintedText(fixture.host, 'Back');
+      await settle();
+      expect(fixture.host.textContent, contains('DRAFTS'));
+      expect(
+        fixture.host.textContent,
+        contains('saved: Release notes updated'),
+      );
+      expect(fixture.host.textContent, isNot(contains('EDITOR')));
+      expect(_rootRouteDepth(fixture.host), '1');
+
+      _tapPaintedText(fixture.host, 'Edit draft');
+      await settle();
+      final reopenedDraftField = fixture.host.querySelector(
+        '.fleury-semantics [role="textbox"][aria-label="Draft text"]',
+      );
+      expect(reopenedDraftField, isA<web.HTMLInputElement>());
+      expect(
+        (reopenedDraftField! as web.HTMLInputElement).value,
+        'Release notes updated',
+      );
+    },
+  );
+
+  test('navigation.transitions exposes animated and instant choices', () async {
+    final fixture = await _mountExample(
+      'navigation.transitions',
+      useManifestSize: true,
+    );
+
+    Future<void> settle({Duration delay = Duration.zero}) async {
+      if (delay > Duration.zero) await Future<void>.delayed(delay);
+      for (var i = 0; i < 12 && fixture.flush.pending; i++) {
+        fixture.flush.fire();
+        await Future<void>.delayed(Duration.zero);
+      }
+      await fixture.app.awaitSemanticIdle();
+    }
+
+    web.Element buttonNamed(String label) {
+      final buttons = fixture.host.querySelectorAll(
+        '.fleury-semantics [role="button"]',
+      );
+      for (var i = 0; i < buttons.length; i++) {
+        final button = buttons.item(i)! as web.Element;
+        if ((button.textContent ?? '').contains(label)) return button;
+      }
+      fail('No semantic button named "$label"');
+    }
+
+    _tapPaintedText(fixture.host, 'Slide');
+    await settle();
+    expect(
+      fixture.host.querySelector('.fleury-semantics [role="menu"]'),
+      isNotNull,
+      reason: 'clicking the picker opens it',
+    );
+    _tapPaintedText(fixture.host, 'Slide');
+    await settle();
+    expect(
+      fixture.host.querySelector('.fleury-semantics [role="menu"]'),
+      isNull,
+      reason: 'clicking the open picker closes it',
+    );
+
+    (buttonNamed('Preview push') as web.HTMLElement).click();
+    await settle(delay: const Duration(milliseconds: 260));
+    expect(fixture.host.textContent, contains('SLIDE · PUSHED SCREEN'));
+    (buttonNamed('Preview pop') as web.HTMLElement).click();
+    await settle(delay: const Duration(milliseconds: 260));
+    expect(fixture.host.textContent, contains('ROUTE TRANSITIONS'));
+  });
+
+  test(
+    'navigation.nested-flow completes its inner stack as one outer route',
+    () async {
+      final fixture = await _mountExample(
+        'navigation.nested-flow',
+        useManifestSize: true,
+      );
+      final keyboardCapture =
+          fixture.host.querySelector('textarea') as web.HTMLTextAreaElement;
+
+      Future<void> settle() async {
+        await Future<void>.delayed(Duration.zero);
+        for (var i = 0; i < 6 && fixture.flush.pending; i++) {
+          fixture.flush.fire();
+          await Future<void>.delayed(Duration.zero);
+        }
+        await fixture.app.awaitSemanticIdle();
+      }
+
+      web.Element buttonNamed(String label) {
+        final buttons = fixture.host.querySelectorAll(
+          '.fleury-semantics [role="button"]',
+        );
+        for (var i = 0; i < buttons.length; i++) {
+          final button = buttons.item(i)! as web.Element;
+          if ((button.textContent ?? '').contains(label)) return button;
+        }
+        fail('No semantic button named "$label"');
+      }
+
+      Future<void> pressEscape() async {
+        keyboardCapture.dispatchEvent(
+          web.KeyboardEvent(
+            'keydown',
+            web.KeyboardEventInit(
+              key: 'Escape',
+              code: 'Escape',
+              bubbles: true,
+              cancelable: true,
+            ),
+          ),
+        );
+        await settle();
+      }
+
+      expect(fixture.host.textContent, contains('PROJECTS · OUTER STACK 1'));
+      expect(_rootRouteDepth(fixture.host), '1');
+      (buttonNamed('Start setup') as web.HTMLElement).click();
+      await settle();
+      expect(fixture.host.textContent, contains('SETUP · OUTER STACK 2'));
+      expect(fixture.host.textContent, contains('INNER STEP 1 OF 3'));
+      expect(_rootRouteDepth(fixture.host), '2');
+      (buttonNamed('Next step') as web.HTMLElement).click();
+      await settle();
+      expect(fixture.host.textContent, contains('INNER STEP 2 OF 3'));
+      expect(fixture.host.textContent, contains('SETUP · OUTER STACK 2'));
+      expect(_rootRouteDepth(fixture.host), '2');
+      (buttonNamed('Next step') as web.HTMLElement).click();
+      await settle();
+      expect(fixture.host.textContent, contains('INNER STEP 3 OF 3'));
+      await pressEscape();
+      expect(fixture.host.textContent, contains('INNER STEP 2 OF 3'));
+      expect(fixture.host.textContent, contains('SETUP · OUTER STACK 2'));
+      (buttonNamed('Next step') as web.HTMLElement).click();
+      await settle();
+      (buttonNamed('Finish setup') as web.HTMLElement).click();
+      await settle();
+      expect(
+        fixture.host.textContent,
+        contains('PROJECT READY · OUTER STACK 2'),
+      );
+      expect(fixture.host.textContent, isNot(contains('INNER STEP')));
+      expect(_rootRouteDepth(fixture.host), '2');
+      (buttonNamed('Back to projects') as web.HTMLElement).click();
+      await settle();
+      expect(fixture.host.textContent, contains('PROJECTS · OUTER STACK 1'));
+      expect(_rootRouteDepth(fixture.host), '1');
+    },
+  );
+
+  test(
+    'forms.project exposes validation and a successful typed submit',
+    () async {
+      final fixture = await _mountExample(
+        'forms.project',
+        useManifestSize: true,
+      );
+      final keyboardCapture =
+          fixture.host.querySelector('textarea[aria-hidden="true"]')!
+              as web.HTMLTextAreaElement;
+
+      Future<void> settle() async {
+        await Future<void>.delayed(Duration.zero);
+        for (var i = 0; i < 6 && fixture.flush.pending; i++) {
+          fixture.flush.fire();
+          await Future<void>.delayed(Duration.zero);
+        }
+        await fixture.app.awaitSemanticIdle();
+      }
+
+      Future<void> typeText(String value) async {
+        keyboardCapture.dispatchEvent(
+          web.InputEvent(
+            'input',
+            web.InputEventInit(
+              data: value,
+              inputType: 'insertText',
+              bubbles: true,
+              cancelable: true,
+            ),
+          ),
+        );
+        await settle();
+      }
+
+      web.Element buttonNamed(String label) {
+        final buttons = fixture.host.querySelectorAll(
+          '.fleury-semantics [role="button"]',
+        );
+        for (var i = 0; i < buttons.length; i++) {
+          final button = buttons.item(i)! as web.Element;
+          if ((button.textContent ?? '').contains(label)) return button;
+        }
+        fail('No semantic button named "$label"');
+      }
+
+      expect(fixture.host.textContent, contains('Fill in the project details'));
+      (buttonNamed('Create') as web.HTMLElement).click();
+      await settle();
+      expect(fixture.host.textContent, contains('status: Fix 2 field(s)'));
+      expect(
+        fixture.host.querySelector('.fleury-screen')?.textContent,
+        allOf(contains('Name is required'), contains('Slug is required')),
+        reason: 'field errors must be painted beside the controls',
+      );
+
+      final textboxes = fixture.host.querySelectorAll(
+        '.fleury-semantics [role="textbox"]',
+      );
+      (textboxes.item(0)! as web.HTMLElement).click();
+      await settle();
+      await typeText('Fleury');
+      (textboxes.item(1)! as web.HTMLElement).click();
+      await settle();
+      await typeText('fleury-app');
+      final checkbox = fixture.host.querySelector(
+        '.fleury-semantics [role="checkbox"]',
+      )!;
+      (checkbox as web.HTMLElement).click();
+      await settle();
+      (buttonNamed('Create') as web.HTMLElement).click();
+      await settle();
+
+      expect(fixture.host.textContent, contains('status: Created Fleury'));
+      expect(
+        fixture.host
+            .querySelector('.fleury-semantics [role="checkbox"]')
+            ?.getAttribute('aria-checked'),
+        'true',
+      );
+    },
+  );
+
+  test(
+    'lists.tasks pages, activates, and keeps the selection visible',
+    () async {
+      final fixture = await _mountExample('lists.tasks', useManifestSize: true);
+      final keyboardCapture =
+          fixture.host.querySelector('textarea') as web.HTMLTextAreaElement;
+
+      Future<void> press(String key, {String? code}) async {
+        keyboardCapture.dispatchEvent(
+          web.KeyboardEvent(
+            'keydown',
+            web.KeyboardEventInit(
+              key: key,
+              code: code ?? key,
+              bubbles: true,
+              cancelable: true,
+            ),
+          ),
+        );
+        await Future<void>.delayed(Duration.zero);
+        for (var i = 0; i < 6 && fixture.flush.pending; i++) {
+          fixture.flush.fire();
+          await Future<void>.delayed(Duration.zero);
+        }
+        await fixture.app.awaitSemanticIdle();
+      }
+
+      expect(fixture.host.textContent, contains('selected: 1 / 1000'));
+      await press('ArrowDown');
+      expect(fixture.host.textContent, contains('selected: 2 / 1000'));
+      await press('PageDown');
+      expect(
+        fixture.host.textContent,
+        isNot(contains('selected: 2 / 1000')),
+        reason: 'PageDown should advance by the visible page',
+      );
+      await press('End');
+      expect(fixture.host.textContent, contains('selected: 1000 / 1000'));
+      expect(
+        fixture.host.querySelector('.fleury-screen')?.textContent,
+        contains('Task 1000'),
+        reason: 'the viewport must follow the selected row',
+      );
+      await press('Enter', code: 'Enter');
+      expect(fixture.host.textContent, contains('last: Opened task 1000'));
+      await press('Home');
+      expect(fixture.host.textContent, contains('selected: 1 / 1000'));
+    },
+  );
+
+  test(
+    'layout.responsive changes actual pane geometry at its breakpoint',
+    () async {
+      final fixture = await _mountExample(
+        'layout.responsive',
+        useManifestSize: true,
+      );
+
+      Future<void> settle() async {
+        await Future<void>.delayed(Duration.zero);
+        for (var i = 0; i < 6 && fixture.flush.pending; i++) {
+          fixture.flush.fire();
+          await Future<void>.delayed(Duration.zero);
+        }
+        await fixture.app.awaitSemanticIdle();
+      }
+
+      web.Element paintedText(String label) {
+        final spans = fixture.host.querySelectorAll(
+          '.fleury-screen .fleury-row span',
+        );
+        for (var i = 0; i < spans.length; i++) {
+          final span = spans.item(i)! as web.Element;
+          if ((span.textContent ?? '').trim() == label) return span;
+        }
+        fail('No painted text named "$label"');
+      }
+
+      web.Element buttonNamed(String label) {
+        final buttons = fixture.host.querySelectorAll(
+          '.fleury-semantics [role="button"]',
+        );
+        for (var i = 0; i < buttons.length; i++) {
+          final button = buttons.item(i)! as web.Element;
+          if ((button.textContent ?? '').contains(label)) return button;
+        }
+        fail('No semantic button named "$label"');
+      }
+
+      expect(fixture.host.textContent, contains('WIDE · TWO PANES'));
+      final wideFiles = paintedText('Files').getBoundingClientRect();
+      final widePreview = paintedText('Preview').getBoundingClientRect();
+      expect(widePreview.left, greaterThan(wideFiles.right));
+      expect((widePreview.top - wideFiles.top).abs(), lessThan(2));
+
+      (buttonNamed('Narrow') as web.HTMLElement).click();
+      await settle();
+      expect(fixture.host.textContent, contains('NARROW · STACKED'));
+      final narrowFiles = paintedText('Files').getBoundingClientRect();
+      final narrowPreview = paintedText('Preview').getBoundingClientRect();
+      expect(narrowPreview.top, greaterThan(narrowFiles.bottom));
+      expect((narrowPreview.left - narrowFiles.left).abs(), lessThan(2));
+
+      (buttonNamed('Wide') as web.HTMLElement).click();
+      await settle();
+      expect(fixture.host.textContent, contains('WIDE · TWO PANES'));
+    },
+  );
 
   test('focus.explorer demonstrates traversal and a trapped modal', () async {
     final fixture = await _mountExample(

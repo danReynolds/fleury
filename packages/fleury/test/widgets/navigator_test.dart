@@ -21,6 +21,24 @@ String _screen(FleuryTester tester, {int cols = 12, int rows = 1}) {
   return out.join('\n').trimRight();
 }
 
+int _columnOf(
+  FleuryTester tester,
+  String grapheme, {
+  int cols = 300,
+  int rows = 1,
+}) {
+  final buffer = tester.render(size: CellSize(cols, rows));
+  for (var row = 0; row < rows; row++) {
+    for (var col = 0; col < cols; col++) {
+      final cell = buffer.atColRow(col, row);
+      if (cell.role == CellRole.leading && cell.grapheme == grapheme) {
+        return col;
+      }
+    }
+  }
+  fail('No leading cell with grapheme "$grapheme"');
+}
+
 /// Captures the BuildContext its build runs under.
 class _Capture extends StatelessWidget {
   const _Capture({required this.sink, required this.label});
@@ -788,7 +806,7 @@ void main() {
       ),
     );
     home!.push<void>(
-      const Text('x', style: CellStyle(foreground: RgbColor(255, 255, 255))),
+      const Text('xx', style: CellStyle(foreground: RgbColor(255, 255, 255))),
       transition: RouteTransition(
         enter: Effects.fadeIn(),
         exit: Effects.fadeOut(),
@@ -805,6 +823,272 @@ void main() {
     expect(fg, isA<RgbColor>());
     final c = fg as RgbColor;
     expect(c.r, inExclusiveRange(0, 255), reason: 'partway faded in');
+  });
+
+  testWidgets('built-in slide pop retraces its push trajectory', (tester) {
+    BuildContext? home;
+    tester.pumpWidget(
+      Navigator(
+        home: _Capture(sink: (x) => home = x, label: 'h'),
+      ),
+    );
+
+    home!.push<void>(const Text('x'), transition: RouteTransition.slide);
+    tester.pump(const Duration(milliseconds: 50));
+    final earlyPushColumn = _columnOf(tester, 'x');
+
+    tester.pump(const Duration(milliseconds: 200));
+    home!.navigator.pop();
+    tester.pump(const Duration(milliseconds: 200));
+    final latePopColumn = _columnOf(tester, 'x');
+
+    expect(
+      latePopColumn,
+      earlyPushColumn,
+      reason:
+          'the route at 75% through pop should occupy the same position as '
+          '25% through push',
+    );
+  });
+
+  testWidgets('built-in fade cross-fades the covered page', (tester) {
+    BuildContext? home;
+    tester.pumpWidget(
+      Navigator(
+        home: _CaptureChild(
+          sink: (x) => home = x,
+          child: const Text(
+            'h',
+            style: CellStyle(foreground: RgbColor(255, 255, 255)),
+          ),
+        ),
+      ),
+    );
+
+    home!.push<void>(
+      const Padding(
+        padding: EdgeInsets.only(left: 1),
+        child: Text('x', style: CellStyle(foreground: RgbColor(255, 255, 255))),
+      ),
+      transition: RouteTransition.fade,
+    );
+    tester.pump(const Duration(milliseconds: 125));
+
+    final buffer = tester.render(size: const CellSize(3, 1));
+    final covered = buffer.atColRow(0, 0).style.foreground as RgbColor;
+    final entering = buffer.atColRow(1, 0).style.foreground as RgbColor;
+    expect(
+      covered.r,
+      inExclusiveRange(0, 255),
+      reason: 'the covered page fades out during the incoming fade',
+    );
+    expect(
+      entering.r,
+      inExclusiveRange(0, 255),
+      reason: 'the incoming page fades in at the same time',
+    );
+
+    tester.pump(const Duration(milliseconds: 124));
+    final nearlyCovered = tester
+        .render(size: const CellSize(3, 1))
+        .atColRow(0, 0);
+    expect(
+      nearlyCovered.grapheme,
+      isNull,
+      reason:
+          'the old page stops covering the buffer before final opaque '
+          'occlusion',
+    );
+
+    tester.pump(const Duration(milliseconds: 1));
+    final terminalCovered = tester
+        .render(size: const CellSize(3, 1))
+        .atColRow(0, 0);
+    expect(
+      terminalCovered.grapheme,
+      isNull,
+      reason: 'the exact completion frame cannot flash the covered page',
+    );
+  });
+
+  testWidgets('built-in fade cross-fades the revealed page on pop', (tester) {
+    BuildContext? home;
+    tester.pumpWidget(
+      Navigator(
+        home: _CaptureChild(
+          sink: (x) => home = x,
+          child: const Text(
+            'h',
+            style: CellStyle(foreground: RgbColor(255, 255, 255)),
+          ),
+        ),
+      ),
+    );
+
+    home!.push<void>(
+      const Padding(
+        padding: EdgeInsets.only(left: 1),
+        child: Text('x', style: CellStyle(foreground: RgbColor(255, 255, 255))),
+      ),
+      transition: RouteTransition.fade,
+    );
+    tester.pump(RouteTransition.defaultDuration);
+
+    home!.navigator.pop();
+    tester.pump(const Duration(milliseconds: 125));
+
+    final buffer = tester.render(size: const CellSize(3, 1));
+    final revealed = buffer.atColRow(0, 0).style.foreground as RgbColor;
+    final leaving = buffer.atColRow(1, 0).style.foreground as RgbColor;
+    expect(
+      revealed.r,
+      inExclusiveRange(0, 255),
+      reason: 'the revealed page fades in during the outgoing fade',
+    );
+    expect(
+      leaving.r,
+      inExclusiveRange(0, 255),
+      reason: 'the leaving page fades out on the same clock',
+    );
+
+    tester.pump(const Duration(milliseconds: 126));
+    final settled = tester.render(size: const CellSize(3, 1));
+    expect((settled.atColRow(0, 0).style.foreground as RgbColor).r, 255);
+  });
+
+  testWidgets('built-in fade uses the same dominant layer in both directions', (
+    tester,
+  ) {
+    BuildContext? home;
+    tester.pumpWidget(
+      Navigator(
+        home: _CaptureChild(
+          sink: (x) => home = x,
+          child: const Text(
+            'h',
+            style: CellStyle(foreground: RgbColor(255, 255, 255)),
+          ),
+        ),
+      ),
+    );
+
+    home!.push<void>(
+      const Text('x', style: CellStyle(foreground: RgbColor(255, 255, 255))),
+      transition: RouteTransition.fade,
+    );
+    tester.pump(const Duration(milliseconds: 50));
+    expect(
+      tester.render(size: const CellSize(2, 1)).atColRow(0, 0).grapheme,
+      'h',
+      reason: 'the covered route dominates early in a push',
+    );
+    tester.pump(const Duration(milliseconds: 150));
+    expect(
+      tester.render(size: const CellSize(2, 1)).atColRow(0, 0).grapheme,
+      'x',
+      reason: 'the entering route dominates late in a push',
+    );
+    tester.pump(const Duration(milliseconds: 50));
+
+    home!.navigator.pop();
+    tester.pump(const Duration(milliseconds: 50));
+    expect(
+      tester.render(size: const CellSize(2, 1)).atColRow(0, 0).grapheme,
+      'x',
+      reason: 'the leaving route dominates early in a pop',
+    );
+    tester.pump(const Duration(milliseconds: 150));
+    expect(
+      tester.render(size: const CellSize(2, 1)).atColRow(0, 0).grapheme,
+      'h',
+      reason: 'the revealed route dominates late in a pop',
+    );
+    expect(
+      tester.render(size: const CellSize(2, 1)).atColRow(1, 0).grapheme,
+      isNull,
+      reason:
+          'content unique to the outgoing route must not ghost until the '
+          'completion frame',
+    );
+  });
+
+  testWidgets('presented fade leaves the covered page visible', (tester) {
+    BuildContext? home;
+    tester.pumpWidget(
+      Navigator(
+        home: _CaptureChild(
+          sink: (x) => home = x,
+          child: const Text(
+            'home',
+            style: CellStyle(foreground: RgbColor(255, 255, 255)),
+          ),
+        ),
+      ),
+    );
+
+    home!.present<void>(
+      const Text('dialog'),
+      alignment: Alignment.bottomRight,
+      transition: RouteTransition.fade,
+    );
+    tester.pump(const Duration(milliseconds: 125));
+
+    final foreground =
+        tester
+                .render(size: const CellSize(12, 2))
+                .atColRow(0, 0)
+                .style
+                .foreground
+            as RgbColor;
+    expect(
+      foreground.r,
+      255,
+      reason: 'a modal fades over, rather than fading away, its background',
+    );
+  });
+
+  testWidgets('page fade covers the whole existing route composition', (
+    tester,
+  ) {
+    BuildContext? home;
+    tester.pumpWidget(
+      Navigator(
+        home: _CaptureChild(
+          sink: (x) => home = x,
+          child: const Text(
+            'h',
+            style: CellStyle(foreground: RgbColor(255, 255, 255)),
+          ),
+        ),
+      ),
+    );
+    home!.present<void>(
+      const Text('m', style: CellStyle(foreground: RgbColor(255, 255, 255))),
+      alignment: Alignment.topCenter,
+      transition: RouteTransition.none,
+    );
+    tester.pump();
+    home!.navigator.push<void>(
+      const Padding(
+        padding: EdgeInsets.only(top: 1),
+        child: Text('x', style: CellStyle(foreground: RgbColor(255, 255, 255))),
+      ),
+      transition: RouteTransition.fade,
+    );
+    tester.pump(const Duration(milliseconds: 125));
+
+    final modalForeground =
+        tester
+                .render(size: const CellSize(3, 2))
+                .atColRow(1, 0)
+                .style
+                .foreground
+            as RgbColor;
+    expect(
+      modalForeground.r,
+      inExclusiveRange(0, 255),
+      reason: 'all routes below the entering page fade as one composition',
+    );
   });
 
   group('robustness', () {

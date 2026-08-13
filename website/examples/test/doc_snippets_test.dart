@@ -3,11 +3,17 @@ library;
 
 import 'dart:io';
 
+import 'package:fleury/fleury_core.dart' show Widget;
 import 'package:fleury_test/fleury_test.dart';
 import 'package:test/test.dart';
 
 import '../doc_snippets/filterable_list.dart' as tutorial;
+import '../doc_snippets/forms.dart' as forms;
 import '../doc_snippets/getting_started_app.dart' as getting_started;
+import '../doc_snippets/layout_demo.dart' as layout;
+import '../doc_snippets/list_demo.dart' as lists;
+import '../doc_snippets/navigation_demo.dart' as navigation;
+import '../doc_snippets/navigation_advanced_demos.dart' as navigation_advanced;
 
 /// Guards the compile-checked source behind the prose docs.
 ///
@@ -44,5 +50,48 @@ void main() {
   testWidgets('final tutorial app renders against the real API', (tester) {
     tester.pumpWidget(const tutorial.MyApp());
     expect(tester.renderToString(emptyMark: ' '), contains('Dart'));
+  });
+
+  testWidgets('navigation guide app renders against the real API', (tester) {
+    tester.pumpWidget(navigation.navigationDemoApp());
+    final rendered = tester.renderToString(emptyMark: ' ');
+    expect(rendered, contains('HOME · STACK DEPTH 1'));
+    expect(rendered, contains('Push details'));
+  });
+
+  testWidgets('navigation advanced guide demos render against the real API', (
+    tester,
+  ) {
+    final demos = <(Widget Function(), String)>[
+      (navigation_advanced.placementDemoApp, 'CHOOSE WHERE TO PRESENT'),
+      (navigation_advanced.backGuardDemoApp, 'Edit draft'),
+      (navigation_advanced.transitionDemoApp, 'ROUTE TRANSITIONS'),
+      (navigation_advanced.nestedFlowDemoApp, 'Start setup'),
+    ];
+    for (final (build, expected) in demos) {
+      tester.pumpWidget(build());
+      expect(tester.renderToString(emptyMark: ' '), contains(expected));
+    }
+  });
+
+  testWidgets('forms guide app renders against the real API', (tester) {
+    tester.pumpWidget(forms.formsDemoApp());
+    final rendered = tester.renderToString(emptyMark: ' ');
+    expect(rendered, contains('Create project'));
+    expect(rendered, contains('Private project'));
+  });
+
+  testWidgets('lists guide app renders against the real API', (tester) {
+    tester.pumpWidget(lists.listsDemoApp());
+    final rendered = tester.renderToString(emptyMark: ' ');
+    expect(rendered, contains('TASKS'));
+    expect(rendered, contains('Task 0001'));
+  });
+
+  testWidgets('layout guide app renders against the real API', (tester) {
+    tester.pumpWidget(layout.layoutDemoApp());
+    final rendered = tester.renderToString(emptyMark: ' ');
+    expect(rendered, contains('WIDE · TWO PANES'));
+    expect(rendered, contains('Preview'));
   });
 }

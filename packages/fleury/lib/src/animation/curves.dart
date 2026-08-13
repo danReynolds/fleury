@@ -15,6 +15,14 @@ import 'package:meta/meta.dart';
 abstract class Curve {
   const Curve();
 
+  /// The time-reversed form of this curve.
+  ///
+  /// If this curve maps `t` to `f(t)`, the flipped curve maps it to
+  /// `1 - f(1 - t)`. This is useful when an animation engine interpolates
+  /// from its current value to a lower target: applying [flipped] makes the
+  /// decreasing animation retrace the increasing animation's timing.
+  Curve get flipped => _FlippedCurve(this);
+
   /// Transforms `t`. The default implementation handles the
   /// boundary clamp and forwards to [transformInternal], which
   /// subclasses implement for the actual easing shape.
@@ -28,6 +36,15 @@ abstract class Curve {
   /// for `t` strictly between 0 and 1.
   @protected
   double transformInternal(double t);
+}
+
+class _FlippedCurve extends Curve {
+  const _FlippedCurve(this.curve);
+
+  final Curve curve;
+
+  @override
+  double transformInternal(double t) => 1 - curve.transform(1 - t);
 }
 
 /// Named curves. Each preserves the boundaries and is `const`.

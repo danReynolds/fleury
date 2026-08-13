@@ -25,9 +25,11 @@ changes underneath a doc, the build goes red instead of the docs going stale.
 | `filterable_list.dart` | [Tutorial: a filterable list](../../src/content/docs/tutorial.md) |
 | `keyboard_tour.dart` | [Key handling](../../src/content/docs/guides/focus-and-keyboard.mdx) |
 | `focus_tour.dart` | [Focus management](../../src/content/docs/guides/focus.mdx) |
-| `core_widgets.dart` | Lists & scrolling, Loading data, Input & gestures, Theming (RichText) |
-| `navigation_demo.dart` | [Navigation](../../src/content/docs/guides/navigation.md) |
-| `forms.dart` | [Forms & validation](../../src/content/docs/guides/forms.md) |
+| `core_widgets.dart` | Loading data, Input & gestures, Theming (RichText) |
+| `navigation_demo.dart`, `navigation_advanced_demos.dart` | [Navigation](../../src/content/docs/guides/navigation.mdx) |
+| `forms.dart` | [Forms & validation](../../src/content/docs/guides/forms.mdx) |
+| `list_demo.dart` | [Lists & scrolling](../../src/content/docs/guides/lists-and-scrolling.mdx) |
+| `layout_demo.dart` | [Layout](../../src/content/docs/guides/layout.mdx) |
 | `shared_state.dart` | [State management](../../src/content/docs/guides/state-management.md) |
 | `semantic_actions.dart` | [Built for agents](../../../docs/agents-and-semantics.md) |
 

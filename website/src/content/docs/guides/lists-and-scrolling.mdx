@@ -1,0 +1,198 @@
+---
+title: Lists & scrolling
+description: Navigate large collections, keep the active row visible, and scroll composed content.
+---
+
+import FleuryExample from '../../../components/FleuryExample.astro';
+import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
+
+Scrolling answers two different needs. A collection usually has an active row
+that users move and activate; a document simply has a viewport. Fleury keeps
+those cases explicit:
+
+| You need to… | Use |
+|---|---|
+| Navigate and activate rows | `ListView` |
+| Build a large collection lazily | `ListView.builder` |
+| Scroll one composed child | `ScrollView` |
+| Drive selection or position from code | `ListController` or `ScrollController` |
+
+## Build a navigable list
+
+`ListView.builder` mounts only the visible rows. The builder receives the row
+index and whether that row is the active selection, so selection styling stays
+beside the row it describes:
+
+<CodeDemoSplit file="list_demo.dart" layout="demo-wide">
+<Fragment slot="code">
+```dart
+ListView.builder(
+  itemCount: 1000,
+  autofocus: true,
+  scrollbar: true,
+  edgeBehavior: EdgeBehavior.contain,
+  onSelectionChanged: (index) {
+    setState(() => selected = index);
+  },
+  onActivate: (index) {
+    openTask(index);
+  },
+  itemBuilder: (context, index, selected) => Text(
+    'Task ${(index + 1).toString().padLeft(4, '0')}',
+    style: selected
+        ? Theme.of(context).selectionStyle
+        : CellStyle.empty,
+  ),
+)
+```
+</Fragment>
+<FleuryExample
+  slot="demo"
+  id="lists.tasks"
+  cols={56}
+  rows={17}
+  interactive
+/>
+</CodeDemoSplit>
+
+Click the list, then try its complete keyboard model:
+
+- Up and Down move one item; PageUp and PageDown move by the visible page.
+- Home and End jump to the first and last item.
+- Enter activates the selected task.
+- The mouse wheel moves the selection and viewport without requiring focus.
+
+The example contains 1,000 rows, but only a viewport-sized window is mounted.
+Selection movement automatically scrolls just enough to keep the active row
+visible.
+
+## Eager and lazy lists
+
+Use the eager constructor for a short, fixed collection already expressed as
+widgets:
+
+```dart
+ListView(
+  children: [for (final item in shortcuts) Text(item.label)],
+)
+```
+
+Use `.builder` for data-backed collections and `.separated` when the gaps or
+section dividers are generated. Lazy rows may have different heights; Fleury
+still lays out only the visible window.
+
+`onActivate` runs for Enter and pointer activation. `onSelectionChanged` runs
+when user input moves the cursor, which makes it useful for a preview pane or a
+selection status line.
+
+## Control selection
+
+Supply a `ListController` when application actions need to inspect or move the
+list:
+
+```dart
+final list = ListController(selectedIndex: 0);
+
+list.selectedIndex = 24;
+list.jumpToIndex(24);
+list.jumpToBottom();
+```
+
+The controller also reports `visibleRange`, `itemCount`, and unseen tail items.
+Create it once in `State`, listen when the surrounding UI depends on it, and
+dispose it with that state.
+
+### Preserve identity when data moves
+
+When items can be prepended, filtered, or reordered, identify the data item
+rather than its old index. Supply both directions of the mapping:
+
+```dart
+ListView.builder(
+  itemCount: tasks.length,
+  itemKeyBuilder: (index) => tasks[index].id,
+  findChildIndexCallback: (id) => indexById[id],
+  itemBuilder: buildTask,
+)
+```
+
+Fleury can then preserve the selected item, viewport anchor, and mounted row
+state through the update. Keep the reverse lookup map-backed; it is part of the
+data model, not a scan over every row.
+
+## Scroll composed content
+
+Use `ScrollView` when the content is one tall composition rather than a
+selectable collection:
+
+```dart
+ScrollView(
+  autofocus: true,
+  scrollbar: true,
+  child: Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: sections,
+  ),
+)
+```
+
+A focused `ScrollView` handles Up and Down by one row, PageUp and PageDown by a
+viewport, and Home and End by the full extent. The mouse wheel works while
+hovered even when focus is elsewhere.
+
+Do not put a lazy `ListView.builder` inside a vertical `ScrollView`: both need
+to own the same viewport. Use one lazy list and build headers or separators as
+rows, or use a `Column` inside `ScrollView` for a bounded composition.
+
+## Edge behavior
+
+Lists and scroll regions bubble an arrow they cannot use by default. At the
+first or last item, that lets Fleury's spatial navigation move focus to a
+neighboring control instead of trapping the user.
+
+Use `EdgeBehavior.contain` for a primary list that should retain focus at its
+edges, as the task example does. Leave the default `bubble` for lists embedded
+among other focusable regions.
+
+## Follow the tail
+
+Logs, chats, and transcripts can follow new rows without fighting a reader who
+scrolls upward:
+
+```dart
+final log = ListController(pinToBottom: true);
+
+ListView.builder(
+  controller: log,
+  itemCount: lines.length,
+  itemBuilder: (context, index, selected) => Text(lines[index]),
+)
+```
+
+Moving away from the last item temporarily stops following. Returning to the
+tail resumes it, and `unseenCount` lets the UI expose how many rows arrived
+while the reader was away.
+
+## API reference
+
+| API | What it does |
+|---|---|
+| `ListView` | Renders a bounded, eager collection |
+| `ListView.builder` | Lazily mounts visible data rows |
+| `ListView.separated` | Lazily builds rows and non-selectable separators |
+| `ListController` | Controls selection, viewport anchors, and tail following |
+| `ScrollView` | Scrolls one composed child |
+| `ScrollController` | Reads and changes a plain scroll offset |
+| `scrollbar: true` | Adds a controller-backed visible scrollbar |
+| `EdgeBehavior` | Chooses whether edge keys bubble or remain contained |
+
+## Next steps
+
+- [Focus management](/fleury/guides/focus/) explains why edge arrows can move
+  from a list into a neighboring region.
+- [Layout](/fleury/guides/layout/) shows how `Expanded` gives a list a bounded
+  viewport inside a row or column.
+- Use [DataTable](/fleury/widgets/datatable/) for columnar data and
+  [TreeTable](/fleury/widgets/treetable/) for hierarchical rows.
+- See the [ListView reference](/fleury/widgets/listview/) for every controller
+  and builder option.

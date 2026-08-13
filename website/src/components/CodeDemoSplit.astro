@@ -1,6 +1,6 @@
 ---
-// One source file beside the thing it renders — for guides that show a
-// complete, real snippet and its live output at the same time.
+// One or a few source files beside the thing they render — for guides that
+// show a complete, real snippet and its live output at the same time.
 //
 //   <CodeDemoSplit file="amber_theme.dart">
 //     <Fragment slot="code"> ```dart … ``` </Fragment>
@@ -19,8 +19,12 @@
 // close. The inline demo keeps running, untouched. Styling lives in
 // src/styles/fleury.css.
 interface Props {
-  /** Filename shown in the title bar, e.g. "amber_theme.dart". */
-  file: string;
+  /** Filename shown in the title bar for a single-file example. */
+  file?: string;
+  /** Two to four browseable files for examples whose structure matters. */
+  files?: string[];
+  /** File selected on first render; defaults to the first file. */
+  initialFile?: string;
   /** Caption over the code pane. */
   codeLabel?: string;
   /** Caption over the demo pane. */
@@ -30,10 +34,16 @@ interface Props {
 }
 const {
   file,
+  files,
+  initialFile,
   codeLabel = 'You write',
   demoLabel = 'Fleury renders',
   layout = 'balanced',
 } = Astro.props;
+const sourceFiles = files?.length ? files.slice(0, 4) : [file ?? 'example.dart'];
+const hasFileTabs = sourceFiles.length > 1;
+const requestedFileIndex = initialFile ? sourceFiles.indexOf(initialFile) : 0;
+const initialFileIndex = requestedFileIndex >= 0 ? requestedFileIndex : 0;
 
 const expandIcon =
   '<svg viewBox="0 0 20 20" width="13" height="13" fill="none" ' +
@@ -44,10 +54,27 @@ const expandIcon =
 
 <figure
   class:list={['cds', { 'cds-demo-wide': layout === 'demo-wide' }]}
-  data-file={file}
+  data-file={sourceFiles[0]}
 >
   <header class="cds-bar">
-    <span class="cds-file">{file}</span>
+    {hasFileTabs ? (
+      <div class="cds-file-tabs" role="tablist" aria-label="Example files">
+        {sourceFiles.map((sourceFile, index) => (
+          <button
+            class="cds-file-tab"
+            type="button"
+            role="tab"
+            aria-selected={index === initialFileIndex ? 'true' : 'false'}
+            tabindex={index === initialFileIndex ? 0 : -1}
+            data-cds-file-tab={index}
+          >
+            {sourceFile}
+          </button>
+        ))}
+      </div>
+    ) : (
+      <span class="cds-file">{sourceFiles[0]}</span>
+    )}
     <span class="cds-live"><span class="cds-pulse"></span>live</span>
     <button
       class="cds-toggle"
@@ -61,7 +88,32 @@ const expandIcon =
   <div class="cds-body">
     <section class="cds-pane" data-pane="code">
       <span class="cds-cap">{codeLabel}</span>
-      <div class="cds-scroll"><slot name="code" /></div>
+      <div class="cds-scroll">
+        {hasFileTabs ? (
+          <>
+            <div data-cds-code-file="0" hidden={initialFileIndex !== 0}>
+              <slot name="code-0" />
+            </div>
+            {sourceFiles.length > 1 && (
+              <div data-cds-code-file="1" hidden={initialFileIndex !== 1}>
+                <slot name="code-1" />
+              </div>
+            )}
+            {sourceFiles.length > 2 && (
+              <div data-cds-code-file="2" hidden={initialFileIndex !== 2}>
+                <slot name="code-2" />
+              </div>
+            )}
+            {sourceFiles.length > 3 && (
+              <div data-cds-code-file="3" hidden={initialFileIndex !== 3}>
+                <slot name="code-3" />
+              </div>
+            )}
+          </>
+        ) : (
+          <slot name="code" />
+        )}
+      </div>
     </section>
 
     <section class="cds-pane" data-pane="demo">
@@ -72,7 +124,47 @@ const expandIcon =
 </figure>
 
 <script>
+  const wireFileTabs = (scope: ParentNode) => {
+    const tabs = Array.from(
+      scope.querySelectorAll<HTMLButtonElement>('[data-cds-file-tab]'),
+    );
+    const panes = Array.from(
+      scope.querySelectorAll<HTMLElement>('[data-cds-code-file]'),
+    );
+    if (tabs.length < 2 || panes.length < 2) return;
+
+    const select = (index: number, focus = false) => {
+      tabs.forEach((tab, tabIndex) => {
+        const selected = tabIndex === index;
+        tab.setAttribute('aria-selected', String(selected));
+        tab.tabIndex = selected ? 0 : -1;
+        if (selected && focus) tab.focus();
+      });
+      panes.forEach((pane, paneIndex) => {
+        pane.hidden = paneIndex !== index;
+      });
+    };
+
+    tabs.forEach((tab, index) => {
+      tab.addEventListener('click', () => select(index));
+      tab.addEventListener('keydown', (event) => {
+        let next = index;
+        if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+        else if (event.key === 'ArrowLeft') {
+          next = (index - 1 + tabs.length) % tabs.length;
+        } else if (event.key === 'Home') next = 0;
+        else if (event.key === 'End') next = tabs.length - 1;
+        else return;
+        event.preventDefault();
+        select(next, true);
+      });
+    });
+  };
+
   for (const root of document.querySelectorAll<HTMLElement>('.cds')) {
+    if (root.dataset.cdsWired === 'true') continue;
+    root.dataset.cdsWired = 'true';
+    wireFileTabs(root);
     const toggle = root.querySelector<HTMLButtonElement>('.cds-toggle')!;
     const file = root.dataset.file ?? '';
     const codeLabel =
@@ -99,9 +191,14 @@ const expandIcon =
 
       const bar = document.createElement('div');
       bar.className = 'cds-modal-bar';
-      const fileEl = document.createElement('span');
-      fileEl.className = 'cds-file';
-      fileEl.textContent = file;
+      const sourceHeader = root.querySelector<HTMLElement>(
+        '.cds-file-tabs, .cds-file',
+      );
+      const fileEl = sourceHeader?.cloneNode(true) ?? document.createElement('span');
+      if (!sourceHeader) {
+        (fileEl as HTMLElement).className = 'cds-file';
+        fileEl.textContent = file;
+      }
       const close = document.createElement('button');
       close.type = 'button';
       close.className = 'cds-modal-close';
@@ -140,6 +237,7 @@ const expandIcon =
       body.append(codeCol, demoCol);
       dlg.append(bar, body);
       document.body.appendChild(dlg);
+      wireFileTabs(dlg);
       dlg.showModal();
 
       const handle =

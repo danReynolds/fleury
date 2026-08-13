@@ -324,12 +324,13 @@ class _SelectState<T> extends State<Select<T>> {
         child: GestureDetector(
           onTap: () {
             _triggerFocus.requestFocus();
-            _open();
+            _isOpen ? _close() : _open();
           },
           child: KeyDetector(
             onKey: (event) {
-              if ((_onTriggerKey)(event) == KeyEventResult.handled)
+              if ((_onTriggerKey)(event) == KeyEventResult.handled) {
                 event.consume();
+              }
             },
             child: Focus(
               focusNode: _triggerFocus,
