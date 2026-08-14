@@ -680,6 +680,7 @@ const SAMPLE_FILES = {
   agent: 'agent_tui.dart',
   editor: 'editor.dart',
   finance: 'finance.dart',
+  forms: 'forms_showcase.dart',
   asteroids: 'neon_asteroids.dart',
   sprite: 'ansi_sprite_studio.dart',
 };
@@ -736,6 +737,13 @@ const SHOWCASE_GOALS = {
     'on stress mode to filter and sort 2,500 additional rows without changing ' +
     'the workflow. The wide and compact layouts are the same widget tree, so ' +
     'the demo also shows how a data-heavy TUI can remain useful when resized.',
+  forms:
+    'A believable service-deployment flow spread across three screens: service ' +
+    'details, runtime choices, and a final review before an asynchronous deploy.\n\n' +
+    'The application owns its values and layout while `Form` coordinates the ' +
+    'behavior that should be consistent: validation, first-invalid focus, server ' +
+    'errors, and duplicate-safe submission. Each screen is an ordinary route, so ' +
+    'going back preserves the draft without a form schema or wizard abstraction.',
   asteroids:
     'A complete arcade game rendered into terminal cells: fixed-step physics, ' +
     'toroidal wrapping, swept collisions, asteroid splitting, particles, ' +
@@ -774,6 +782,10 @@ const SHOWCASE_TRY = {
   finance:
     '*Try it: search for `Netflix`, sort or filter the ledger, then enable ' +
     'Stress +2,500 to exercise the same workflow over a large fixture.*',
+  forms:
+    '*Try it: continue with an empty name to see first-invalid focus, then use ' +
+    'the reserved name `fleury` to trigger a server error. Complete the flow and ' +
+    'go back once to see the app-owned draft survive navigation.*',
   asteroids:
     '*Try it: press Space to launch, then steer with A/D/W and fire with ' +
     'Space—or click and drag directly in the playfield.*',
@@ -791,7 +803,7 @@ const widgetsUsedIn = (file) => {
   const src = readFileSync(join(SAMPLES_DIR, file), 'utf8');
   const used = [];
   for (const [name, info] of catalog) {
-    if (new RegExp(`\\b${name}\\(`).test(src))
+    if (new RegExp(`\\b${name}(?:<[^>]+>)?\\s*\\(`).test(src))
       used.push({ name, slug: info.slug, category: info.category });
   }
   return used;

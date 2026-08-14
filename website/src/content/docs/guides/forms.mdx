@@ -1,64 +1,75 @@
 ---
 title: Forms & validation
-description: Collect typed values, validate them, and guide users to a successful submit.
+description: Compose ordinary controls into forms with validation, accessible errors, and reliable submission.
 ---
 
 import FleuryExample from '../../../components/FleuryExample.astro';
 import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
 
-Forms turn a group of controls into one reliable interaction: focus moves in a
-predictable order, invalid values explain what needs fixing, and submit returns
-typed values. `FormPanel` provides that behavior from a `FormDefinition`:
+A Fleury form is ordinary UI with a reliable submit boundary. Your application
+owns the values and layout; `Form` coordinates validation, focuses the first
+invalid control, and runs `onSubmit` only when every enabled field is valid.
 
 | You need to… | Use |
 |---|---|
-| Describe fields and validation | `FormDefinition` and `FormFieldSpec` |
-| Render and submit the form | `FormPanel` |
-| Read submitted values | `FormSubmitResult.values` |
-| Control or reset values from outside | `FormController` |
-| Split a long form into steps | `FormWizard` |
+| Validate one value | `FormField` around its control |
+| Validate and submit a group | `Form` |
+| Submit from a button or elsewhere | `FormController` |
+| Integrate a custom composite | `FormField.builder` |
 
-## Build a project form
+There are no field names, schemas, value maps, or required panel layouts.
 
-Describe each field once, then hand the definition to `FormPanel`. It creates
-the controls, owns their focus order, validates on submit, and keeps each error
-beside the field that produced it:
+## Build a form
+
+Own values exactly as you would without a form. Wrap each value control in a
+`FormField`, then put the resulting layout inside `Form`:
 
 <CodeDemoSplit file="forms.dart" layout="demo-wide">
 <Fragment slot="code">
 ```dart
-final projectForm = FormDefinition(
-  title: 'Create project',
-  submitLabel: 'Create',
-  showCancel: false,
-  fields: [
-    FormFieldSpec.text(
-      id: 'name',
-      label: 'Name',
-      required: true,
-    ),
-    FormFieldSpec.text(
-      id: 'slug',
-      label: 'Slug',
-      required: true,
-      validator: (value, values) =>
-          RegExp(r'^[a-z0-9-]+$').hasMatch('$value')
-              ? null
-              : 'Use lowercase letters, numbers, and hyphens',
-    ),
-    FormFieldSpec.checkbox(
-      id: 'private',
-      label: 'Private project',
-    ),
-  ],
-);
+final form = FormController();
+final name = TextEditingController();
+final slug = TextEditingController();
+var private = true;
 
-FormPanel(
-  definition: projectForm,
-  layout: FormPanelLayout.inline,
-  onSubmit: (result) {
-    if (result.valid) createProject(result.values);
-  },
+Form(
+  controller: form,
+  onSubmit: () => createProject(
+    name: name.text.trim(),
+    slug: slug.text.trim(),
+    private: private,
+  ),
+  child: Column(
+    children: [
+      FormField(
+        validator: () => name.text.trim().isEmpty
+            ? 'Enter a project name.'
+            : null,
+        child: TextInput(
+          controller: name,
+          semanticLabel: 'Name',
+        ),
+      ),
+      FormField(
+        validator: () => RegExp(r'^[a-z0-9-]+$').hasMatch(slug.text)
+            ? null
+            : 'Use lowercase letters, numbers, and hyphens.',
+        child: TextInput(
+          controller: slug,
+          semanticLabel: 'Slug',
+          onSubmit: (_) => form.submit(),
+        ),
+      ),
+      FormField(
+        child: Checkbox(
+          value: private,
+          label: 'Private project',
+          onChanged: (value) => setState(() => private = value),
+        ),
+      ),
+      Button(label: 'Create', onPressed: form.submit),
+    ],
+  ),
 )
 ```
 </Fragment>
@@ -71,151 +82,147 @@ FormPanel(
 />
 </CodeDemoSplit>
 
-Try the complete validation loop:
+Try submitting immediately. Both text errors appear and focus moves to **Name**.
+Enter a name, try an invalid slug, then correct it and submit. Once an error has
+been shown, editing that field revalidates it so stale feedback disappears.
 
-1. Activate **Create** while the fields are empty. Both required errors appear.
-2. Enter a name, then enter a slug with spaces or uppercase letters. The slug
-   explains the accepted format.
-3. Correct the slug, optionally toggle **Private project**, and submit again.
-   The status line confirms the typed result.
+## How fields participate
 
-Errors are quiet until the first submit. After that, editing an invalid field
-revalidates it immediately, so resolved errors disappear without another
-submit.
-
-## Choose field types
-
-Each `FormFieldSpec` factory selects the matching control and value type:
-
-| Field | Value |
-|---|---|
-| `text`, `path`, `secret` | `String` |
-| `number` | `num?` |
-| `date` | `DateTime` |
-| `select` | the selected option value |
-| `multiSelect` | `List<Object?>` |
-| `checkbox` | `bool` |
-
-Use the options on the field spec instead of rebuilding validation around the
-control. For example, number fields accept `min`, `max`, decimal, and negative
-policies; multi-select fields accept minimum and maximum selection counts; path
-fields can require a file or directory.
+`FormField(child: …)` finds one first-party value control below it. The control
+automatically receives invalid styling and semantics, reports edits, and becomes
+the field's focus target. Harmless layout wrappers are fine:
 
 ```dart
-FormFieldSpec.number(
-  id: 'replicas',
-  label: 'Replicas',
-  initialValue: 2,
-  min: 1,
-  max: 20,
+FormField(
+  validator: validateName,
+  child: SizedBox(
+    width: 32,
+    child: TextInput(controller: name),
+  ),
 )
 ```
 
-## Validate values
+This works with Fleury's text inputs, selection controls, toggles, date and
+color pickers, steppers, and range sliders. A `FormField` represents one logical
+value, so wrapping multiple value controls is intentionally rejected in debug
+builds; use the custom-field escape hatch for a composite value.
 
-Set `required: true` for presence. Add `validator` when validity depends on a
-field's content or its relationship to the rest of the form. A validator
-returns `null` when valid or a useful correction when invalid:
+The visible error message is rendered below the child by default. Set
+`showErrorMessage: false` to place it yourself, or provide `errorBuilder` for a
+different presentation. The associated control still exposes the error through
+semantics.
+
+## Submission
+
+`submit()` validates every mounted, enabled field before calling `onSubmit`.
+It returns `false` when validation rejects the form and `true` after the submit
+callback completes. Concurrent calls share the same in-flight submission.
+
+Use `isSubmitting` to disable actions and show progress:
 
 ```dart
-FormFieldSpec.text(
-  id: 'confirmation',
-  label: 'Type the project name',
-  validator: (value, values) => value == values['name']
-      ? null
-      : 'Enter the same project name',
+ListenableBuilder(
+  listenable: form,
+  builder: (context, child) => Button(
+    label: form.isSubmitting ? 'Creating…' : 'Create',
+    onPressed: form.isSubmitting ? null : form.submit,
+  ),
 )
 ```
 
-Use `asyncValidator` for checks that must await a service, such as confirming a
-slug is available. `FormPanel` exposes the validating state, ignores duplicate
-submits while validation is running, and calls `onSubmit` only after the result
-is ready.
-
-## Read submitted values
-
-`onSubmit` receives a `FormSubmitResult` whether the attempt is valid or not.
-Inspect `valid` before persisting, then use the typed helpers on `FormValues`:
-
-```dart
-void saveProject(FormSubmitResult result) {
-  if (!result.valid) return;
-
-  final name = result.values.text('name');
-  final private = result.values.boolValue('private');
-  persistProject(name: name, private: private);
-}
-```
-
-The result also carries an `errors` map for status summaries, logs, or tests.
-Secret fields remain redacted in snapshots and semantics; application code can
-still intentionally read them from the submit values.
+You can omit the controller when submission stays inside the subtree and call
+`Form.of(context).submit()`. Pass a controller when a shortcut, command, app
+bar, or parent region needs to validate or submit the form. Create it once,
+dispose it with its owning `State`, and attach it to only one mounted form at a
+time.
 
 ## Advanced patterns
 
-### External form state
+### Server errors
 
-Give the panel a `FormController` when another part of the screen must set,
-inspect, validate, or reset values:
-
-```dart
-final form = FormController(projectForm);
-
-form.setValue('name', 'Fleury');
-form.validateField('name');
-form.reset(values: {'private': true});
-
-FormPanel(definition: projectForm, controller: form)
-```
-
-Own and dispose an external controller with the surrounding `State`. If no
-controller is supplied, `FormPanel` creates and disposes one automatically.
-
-### Multi-step forms
-
-Use `FormWizard` when all fields belong to one result but should not appear on
-one screen. Steps reference field IDs from the same definition, so values and
-validation remain centralized:
+Keep service-returned errors in application state and pass the current one to
+`FormField.error`. It is displayed, announced, and blocks submission like a
+local validator error. Clear it when the user edits the value:
 
 ```dart
-FormWizard(
-  definition: projectForm,
-  steps: const [
-    FormWizardStep(id: 'details', title: 'Details', fieldIds: ['name', 'slug']),
-    FormWizardStep(id: 'access', title: 'Access', fieldIds: ['private']),
-  ],
-  onSubmit: saveProject,
+FormField(
+  error: nameError,
+  validator: validateName,
+  child: TextInput(
+    controller: name,
+    onChanged: (_) => setState(() => nameError = null),
+  ),
 )
 ```
 
-### Custom composition
+`form.clearErrors()` hides errors produced by validators without erasing any
+values. Controlled server errors remain until your application clears them.
 
-Hand-build a form when fields must be interleaved with a highly custom layout.
-Own each `TextEditingController` in `State`, dispose it, rebuild from
-`onChanged`, show errors through `validationError`, and disable an unavailable
-action with `onPressed: null`. The same validation functions can be shared with
-your application model.
+### Custom error styling
+
+Controls use `ThemeData.errorStyle` while invalid. Override `errorStyle` on an
+individual control when it needs different chrome. Pass `CellStyle.empty` to
+keep that control visually neutral while retaining its error message and
+semantics:
+
+```dart
+TextInput(
+  controller: query,
+  errorStyle: CellStyle.empty,
+)
+```
+
+### Custom controls
+
+Use `FormField.builder` when one logical value is represented by a custom or
+multi-control widget. Supply the focus destination, call `valueChanged()` after
+the app-owned value changes, and use `field.error` for custom invalid chrome or
+semantics:
+
+```dart
+FormField.builder(
+  focusNode: startFocus,
+  validator: () => end.isBefore(start)
+      ? 'End must follow start.'
+      : null,
+  builder: (context, field) => DateRangeEditor(
+    start: start,
+    end: end,
+    focusNode: startFocus,
+    error: field.error,
+    onChanged: (range) {
+      setState(() {
+        start = range.start;
+        end = range.end;
+      });
+      field.valueChanged();
+    },
+  ),
+)
+```
+
+### Multi-screen flows
+
+Forms do not impose a wizard abstraction. Keep the values in the parent state,
+render one `Form` for the current screen, and advance from that form's
+`onSubmit`. Only mounted fields validate, while the app-owned values naturally
+survive moving forward and back. Use a nested `Navigator` when the flow needs
+its own back stack; otherwise a simple step value is enough.
 
 ## API reference
 
 | API | What it does |
 |---|---|
-| `FormDefinition` | Holds the form title, fields, and action labels |
-| `FormFieldSpec` | Describes one typed control and its validation |
-| `FormPanel` | Renders, focuses, validates, and submits a definition |
-| `FormController` | Exposes values, errors, validation, and reset |
-| `FormSubmitResult` | Returns validity, typed values, and errors |
-| `FormWizard` | Presents one definition across ordered steps |
+| `Form` | Coordinates descendant validation and valid submission |
+| `FormField` | Validates one app-owned value and presents its error |
+| `FormField.builder` | Integrates a custom or composite value control |
+| `FormFieldState` | Exposes `error`, `focusNode`, `validate()`, and `valueChanged()` |
+| `FormController` | Validates, submits, clears validator errors, and reports submission state |
 
 ## Next steps
 
-- [Focus management](/fleury/guides/focus/) explains the automatic traversal
-  used between form controls.
-- [Key handling](/fleury/guides/focus-and-keyboard/) covers screen-level submit
-  shortcuts and commands.
-- [Navigation](/fleury/guides/navigation/) shows how to return a form result or
-  guard a screen with unsaved values.
-- See the individual widget references for
-  [TextInput](/fleury/widgets/textinput/),
-  [Select](/fleury/widgets/select/), and
-  [FormWizard](/fleury/widgets/formwizard/).
+- [Focus management](/fleury/guides/focus/) explains traversal and first-invalid focus.
+- [Key handling](/fleury/guides/focus-and-keyboard/) covers screen-level submit shortcuts.
+- [Navigation](/fleury/guides/navigation/) shows multi-screen flows and unsaved-change guards.
+- See [TextInput](/fleury/widgets/textinput/), [Select](/fleury/widgets/select/),
+  and [Checkbox](/fleury/widgets/checkbox/) for individual control behavior.

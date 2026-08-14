@@ -1,3 +1,4 @@
+import 'dart:async' show scheduleMicrotask;
 import 'dart:convert';
 import 'dart:io' as io;
 import 'dart:math' as math;
@@ -376,37 +377,20 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
     ),
   ),
   Story(
-    id: 'forms.panels',
-    title: 'Forms and Wizards',
+    id: 'forms.workflow',
+    title: 'Forms',
     category: 'Forms',
     description:
-        'Declarative field specs, inline forms, and multi-step form flows.',
+        'A realistic service deployment flow with composed controls, '
+        'validation, server errors, retained values, and async submission.',
     widgets: const <String>[
-      'FormDefinition',
-      'FormFieldSpec',
-      'FormPanel',
-      'FormWizard',
-      'FormWizardStep',
+      'Form',
+      'FormField',
+      'FormFieldState',
       'FormController',
     ],
-    controls: const <StoryControl>[
-      StoryControl.option(
-        id: 'layout',
-        label: 'View',
-        options: <String>['Panel', 'Wizard'],
-      ),
-    ],
-    variants: const <StoryVariant>[
-      StoryVariant(
-        id: 'wizard',
-        label: 'Wizard',
-        description: 'Multi-step form layout instead of inline panel.',
-        controlValues: <String, Object?>{'layout': 1},
-      ),
-    ],
-    initialHeight: 20,
-    builder: (context) =>
-        _FormsStory(wizard: context.option('layout') == 'Wizard'),
+    initialHeight: 24,
+    builder: (context) => const _FormsStory(),
   ),
   Story(
     id: 'visualization.charts',
@@ -904,13 +888,14 @@ const Map<String, String> _widgetDescriptions = <String, String>{
   'TreeTableNode': 'Tree-table row model carrying labels, keys, and cells.',
   'TreeTableController':
       'Programmatic expansion, selection, and focus for tree tables.',
-  'FormDefinition': 'Declarative form schema for repeatable terminal forms.',
-  'FormFieldSpec':
-      'Typed form field definitions for text, select, number, and checkbox rows.',
-  'FormPanel': 'Inline form rendering for dense settings and task setup.',
-  'FormWizard': 'Multi-step form flow for guided terminal workflows.',
-  'FormWizardStep': 'Step grouping metadata for wizard-style forms.',
-  'FormController': 'Form state coordination and validation entry point.',
+  'Form':
+      'Value-less validation and submission boundary for composed controls.',
+  'FormField':
+      'Validation boundary with automatic first-party control integration.',
+  'FormFieldState':
+      'Custom-control escape hatch for validation, errors, and focus.',
+  'FormController':
+      'External validation, submission, progress, and error-reset commands.',
   'BarChart': 'Stacked and labeled bars for categorical metrics.',
   'LineChart':
       'Series charting with axes, grids, legends, and optional cursor interaction.',
@@ -988,8 +973,6 @@ const Map<String, Map<String, Object?>> _widgetDefaultControls =
       'TreeTable': <String, Object?>{'filter': 0},
       'TreeTableNode': <String, Object?>{'filter': 0},
       'TreeTableController': <String, Object?>{'filter': 0},
-      'FormWizard': <String, Object?>{'layout': 1},
-      'FormWizardStep': <String, Object?>{'layout': 1},
       'BarChart': <String, Object?>{'mode': 0},
       'LineChart': <String, Object?>{'mode': 0, 'interactive': 1},
       'AreaChart': <String, Object?>{'mode': 0},
@@ -1086,12 +1069,10 @@ const Map<String, String> _widgetUsage = <String, String>{
   'TreeTableNode': '↑/↓ rows · ←/→ expand / collapse',
   'TreeTableController': '↑/↓ rows · ←/→ expand / collapse',
   // Forms
-  'FormPanel': 'Tab between fields · Enter submits',
-  'FormWizard': 'Tab fields · Enter advances steps',
+  'Form': 'Tab between fields · Enter activates controls',
+  'FormField': 'Invalid submit focuses the first field',
+  'FormFieldState': 'Invalid submit focuses the custom field',
   'FormController': 'Tab between fields · Enter submits',
-  'FormDefinition': 'Tab between fields · Enter submits',
-  'FormFieldSpec': 'Tab between fields · Enter submits',
-  'FormWizardStep': 'Tab fields · Enter advances steps',
   // Visualization (interactive only)
   'LineChart': '←/→ moves the cursor when interactive',
   // Files
@@ -2296,70 +2277,274 @@ class _TreesStory extends StatelessWidget {
   }
 }
 
-class _FormsStory extends StatelessWidget {
-  _FormsStory({required this.wizard});
+class _FormsStory extends StatefulWidget {
+  const _FormsStory();
 
-  final bool wizard;
+  @override
+  State<_FormsStory> createState() => _FormsStoryState();
+}
 
-  final FormDefinition _definition = FormDefinition(
-    title: 'Run benchmark',
-    submitLabel: 'Run',
-    fields: <FormFieldSpec>[
-      FormFieldSpec.text(
-        id: 'scenario',
-        label: 'Scenario',
-        initialValue: 'sb6_data_table',
-      ),
-      FormFieldSpec.select(
-        id: 'peer',
-        label: 'Peer',
-        initialValue: 'ratatui',
-        options: const <FormOption>[
-          FormOption(value: 'ratatui', label: 'Ratatui'),
-          FormOption(value: 'bubbletea', label: 'Bubble Tea'),
-          FormOption(value: 'ink', label: 'Ink'),
+class _FormsStoryState extends State<_FormsStory> {
+  final _form = FormController();
+  final _serviceName = TextEditingController();
+  final _description = TextEditingController(
+    text: 'Processes incoming webhook events.',
+  );
+
+  int _step = 0;
+  String? _nameError;
+  bool _private = true;
+  String _environment = 'Production';
+  String _region = 'Toronto';
+  num _replicas = 2;
+  Set<String> _telemetry = <String>{'Logs', 'Metrics'};
+  bool _autoDeploy = true;
+  bool _confirmed = false;
+
+  @override
+  void dispose() {
+    _form.dispose();
+    _serviceName.dispose();
+    _description.dispose();
+    super.dispose();
+  }
+
+  void _back() => setState(() => _step--);
+
+  Future<void> _submitDetails() async {
+    await Future<void>.delayed(const Duration(milliseconds: 220));
+    if (_serviceName.text.trim().toLowerCase() == 'fleury') {
+      setState(() => _nameError = 'That service name is already in use.');
+      scheduleMicrotask(_form.validate);
+      return;
+    }
+    setState(() => _step = 1);
+  }
+
+  void _submitRuntime() => setState(() => _step = 2);
+
+  Future<void> _deploy() async {
+    await Future<void>.delayed(const Duration(milliseconds: 450));
+    setState(() => _step = 3);
+  }
+
+  void _reset() {
+    _serviceName.text = '';
+    _description.text = 'Processes incoming webhook events.';
+    setState(() {
+      _step = 0;
+      _nameError = null;
+      _private = true;
+      _environment = 'Production';
+      _region = 'Toronto';
+      _replicas = 2;
+      _telemetry = <String>{'Logs', 'Metrics'};
+      _autoDeploy = true;
+      _confirmed = false;
+    });
+  }
+
+  Widget _actions({required String nextLabel}) {
+    return ListenableBuilder(
+      listenable: _form,
+      builder: (context, child) => Row(
+        children: <Widget>[
+          if (_step > 0)
+            Button(label: 'Back', onPressed: _form.isSubmitting ? null : _back),
+          if (_step > 0) const SizedBox(width: 2),
+          Button(
+            label: _form.isSubmitting ? 'Checking…' : nextLabel,
+            onPressed: _form.isSubmitting ? null : _form.submit,
+          ),
         ],
       ),
-      FormFieldSpec.number(
-        id: 'replicates',
-        label: 'Replicates',
-        initialValue: 3,
-        min: 1,
-        max: 20,
+    );
+  }
+
+  Widget _details() {
+    return Form(
+      controller: _form,
+      semanticLabel: 'Create service details',
+      onSubmit: _submitDetails,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text('CREATE SERVICE  ·  1 OF 3'),
+          const Text('Name'),
+          FormField(
+            error: _nameError,
+            validator: () => _serviceName.text.trim().isEmpty
+                ? 'Enter a service name.'
+                : null,
+            child: SizedBox(
+              width: 38,
+              child: TextInput(
+                controller: _serviceName,
+                autofocus: true,
+                semanticLabel: 'Service name',
+                placeholder: 'webhook-worker',
+                onChanged: (_) {
+                  if (_nameError != null) setState(() => _nameError = null);
+                },
+                onSubmit: (_) => _form.submit(),
+              ),
+            ),
+          ),
+          const Text('Description'),
+          FormField(
+            validator: () => _description.text.trim().length < 10
+                ? 'Add a little more detail.'
+                : null,
+            child: SizedBox(
+              width: 46,
+              child: TextArea(
+                controller: _description,
+                semanticLabel: 'Description',
+                minLines: 2,
+                maxLines: 2,
+              ),
+            ),
+          ),
+          FormField(
+            child: Checkbox(
+              value: _private,
+              label: 'Private service',
+              onChanged: (value) => setState(() => _private = value),
+            ),
+          ),
+          const Text('Tip: try the reserved name “fleury”.'),
+          _actions(nextLabel: 'Continue'),
+        ],
       ),
-      FormFieldSpec.checkbox(
-        id: 'bare_metal',
-        label: 'Bare metal run',
-        initialValue: true,
+    );
+  }
+
+  Widget _runtime() {
+    return Form(
+      controller: _form,
+      semanticLabel: 'Create service deployment',
+      onSubmit: _submitRuntime,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text('DEPLOYMENT  ·  2 OF 3'),
+          const Text('Environment'),
+          FormField(
+            child: Select<String>(
+              value: _environment,
+              semanticLabel: 'Environment',
+              autofocus: true,
+              options: const <SelectOption<String>>[
+                SelectOption(value: 'Production', label: 'Production'),
+                SelectOption(value: 'Staging', label: 'Staging'),
+                SelectOption(value: 'Development', label: 'Development'),
+              ],
+              onChanged: (value) => setState(() => _environment = value),
+            ),
+          ),
+          const Text('Region'),
+          FormField(
+            child: RadioGroup<String>(
+              value: _region,
+              semanticLabel: 'Region',
+              axis: Axis.horizontal,
+              options: const <RadioOption<String>>[
+                RadioOption(value: 'Toronto', label: 'Toronto'),
+                RadioOption(value: 'Virginia', label: 'Virginia'),
+                RadioOption(value: 'Frankfurt', label: 'Frankfurt'),
+              ],
+              onChanged: (value) => setState(() => _region = value),
+            ),
+          ),
+          FormField(
+            child: Stepper(
+              value: _replicas,
+              label: 'Replicas',
+              min: 1,
+              max: 8,
+              onChanged: (value) => setState(() => _replicas = value),
+            ),
+          ),
+          const Text('Telemetry'),
+          FormField(
+            validator: () =>
+                _telemetry.isEmpty ? 'Choose at least one signal.' : null,
+            child: MultiSelect<String>(
+              values: _telemetry,
+              semanticLabel: 'Telemetry',
+              options: const <SelectOption<String>>[
+                SelectOption(value: 'Logs', label: 'Logs'),
+                SelectOption(value: 'Metrics', label: 'Metrics'),
+                SelectOption(value: 'Traces', label: 'Traces'),
+              ],
+              onChanged: (values) => setState(() => _telemetry = values),
+            ),
+          ),
+          FormField(
+            child: Switch(
+              value: _autoDeploy,
+              label: 'Deploy on merge',
+              onChanged: (value) => setState(() => _autoDeploy = value),
+            ),
+          ),
+          _actions(nextLabel: 'Review'),
+        ],
       ),
-    ],
-  );
+    );
+  }
+
+  Widget _review() {
+    final visibility = _private ? 'Private' : 'Public';
+    return Form(
+      controller: _form,
+      semanticLabel: 'Review service',
+      onSubmit: _deploy,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text('REVIEW  ·  3 OF 3'),
+          Text('Service      ${_serviceName.text.trim()}'),
+          Text('Access       $visibility'),
+          Text('Target       $_environment / $_region'),
+          Text('Replicas     ${_replicas.toInt()}'),
+          Text('Telemetry    ${_telemetry.join(', ')}'),
+          Text('Auto deploy  ${_autoDeploy ? 'On' : 'Off'}'),
+          const SizedBox(height: 1),
+          FormField(
+            validator: () =>
+                _confirmed ? null : 'Confirm the production deployment.',
+            child: Checkbox(
+              value: _confirmed,
+              autofocus: true,
+              label: 'I reviewed these settings',
+              onChanged: (value) => setState(() => _confirmed = value),
+            ),
+          ),
+          _actions(nextLabel: 'Deploy service'),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (wizard) {
-      return FormWizard(
-        definition: _definition,
-        layout: FormPanelLayout.inline,
-        steps: const <FormWizardStep>[
-          FormWizardStep(
-            id: 'scenario',
-            title: 'Scenario',
-            fieldIds: <String>['scenario', 'peer'],
-          ),
-          FormWizardStep(
-            id: 'run',
-            title: 'Run',
-            fieldIds: <String>['replicates', 'bare_metal'],
-          ),
+    if (_step == 3) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text('✓ SERVICE DEPLOYED'),
+          Text('${_serviceName.text.trim()} is live in $_region.'),
+          Text('${_replicas.toInt()} replicas · $_environment'),
+          const SizedBox(height: 1),
+          Button(label: 'Create another', onPressed: _reset),
         ],
       );
     }
-    return FormPanel(
-      definition: _definition,
-      layout: FormPanelLayout.inline,
-      fieldWidth: 24,
-    );
+    return switch (_step) {
+      0 => _details(),
+      1 => _runtime(),
+      _ => _review(),
+    };
   }
 }
 

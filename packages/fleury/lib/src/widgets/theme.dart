@@ -136,6 +136,7 @@ final class ThemeData {
     this.mutedStyle = const CellStyle(dim: true),
     this.selectionStyle = const CellStyle(inverse: true),
     this.focusedStyle = const CellStyle(bold: true),
+    this.errorStyle = const CellStyle(foreground: Colors.red, underline: true),
     this.borderStyle = BorderStyle.rounded,
     this.colorScheme = ColorScheme.standard,
     this.extensions = const [],
@@ -180,6 +181,11 @@ final class ThemeData {
   /// this attribute remains.
   final CellStyle focusedStyle;
 
+  /// Invalid-control and validation-message style.
+  ///
+  /// The underline is a non-color cue that remains under `NO_COLOR`.
+  final CellStyle errorStyle;
+
   /// Default box-drawing style for framed surfaces.
   final BorderStyle borderStyle;
 
@@ -205,6 +211,7 @@ final class ThemeData {
     CellStyle? mutedStyle,
     CellStyle? selectionStyle,
     CellStyle? focusedStyle,
+    CellStyle? errorStyle,
     BorderStyle? borderStyle,
     ColorScheme? colorScheme,
     List<Object>? extensions,
@@ -214,6 +221,7 @@ final class ThemeData {
     mutedStyle: mutedStyle ?? this.mutedStyle,
     selectionStyle: selectionStyle ?? this.selectionStyle,
     focusedStyle: focusedStyle ?? this.focusedStyle,
+    errorStyle: errorStyle ?? this.errorStyle,
     borderStyle: borderStyle ?? this.borderStyle,
     colorScheme: colorScheme ?? this.colorScheme,
     extensions: extensions ?? this.extensions,
@@ -227,6 +235,7 @@ final class ThemeData {
       other.mutedStyle == mutedStyle &&
       other.selectionStyle == selectionStyle &&
       other.focusedStyle == focusedStyle &&
+      other.errorStyle == errorStyle &&
       other.borderStyle == borderStyle &&
       other.colorScheme == colorScheme &&
       listEquals(other.extensions, extensions);
@@ -238,6 +247,7 @@ final class ThemeData {
     mutedStyle,
     selectionStyle,
     focusedStyle,
+    errorStyle,
     borderStyle,
     colorScheme,
     Object.hashAll(extensions),

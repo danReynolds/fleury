@@ -30,9 +30,11 @@ import 'clipboard_scope.dart';
 import '../semantics/semantics.dart';
 import '../input/events.dart';
 import 'focus.dart';
+import 'form_control.dart';
 import 'framework.dart';
 import 'keyboard.dart';
 import 'media_query.dart';
+import 'theme.dart';
 import 'text_input.dart'
     show TextClipboardPolicy, TextEditingController, textClipboardSemanticState;
 import 'tui_binding.dart';
@@ -55,6 +57,7 @@ class TextArea extends StatefulWidget {
     this.enabled = true,
     this.readOnly = false,
     this.validationError,
+    this.errorStyle,
     this.semanticLabel,
     this.semanticState = SemanticState.empty,
     this.clipboardPolicy = TextClipboardPolicy.allowed,
@@ -111,8 +114,17 @@ class TextArea extends StatefulWidget {
   /// Whether navigation and selection remain available while edits are blocked.
   final bool readOnly;
 
-  /// Validation message exposed in semantics, or null when the value is valid.
+  /// Validation message attached directly to this area, or null when valid.
+  ///
+  /// Use this when the area is not inside a `FormField`. An enclosing
+  /// `FormField` supplies its current error automatically.
   final String? validationError;
+
+  /// Style merged onto the area while its value is invalid.
+  ///
+  /// null uses [ThemeData.errorStyle]. [CellStyle.empty] suppresses the
+  /// visual reaction while preserving validation semantics and messages.
+  final CellStyle? errorStyle;
 
   /// Label exposed through the semantic app graph.
   ///
@@ -155,6 +167,7 @@ class _TextAreaState extends State<TextArea>
   late String _lastNotifiedText;
   bool _ownsController = false;
   bool _ownsFocusNode = false;
+  FormControlRegistration? _formRegistration;
   TextPasteSession? _pasteSession;
   final Queue<({String text, bool isFinal})> _queuedPasteSegments =
       Queue<({String text, bool isFinal})>();
@@ -229,12 +242,36 @@ class _TextAreaState extends State<TextArea>
             oldWidget.readOnly != widget.readOnly)) {
       _discardScheduledPaste();
     }
+    _formRegistration?.updateClaim(
+      this,
+      focusNode: _focusNode,
+      enabled: widget.enabled,
+      validationError: widget.validationError,
+    );
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     Focus.maybeOf(context); // rebuild on focus change (cursor visibility)
+    final registration = FormControlScope.maybeOf(context);
+    if (!identical(registration, _formRegistration)) {
+      _formRegistration?.release(this);
+      _formRegistration = registration;
+      registration?.claim(
+        this,
+        focusNode: _focusNode,
+        enabled: widget.enabled,
+        validationError: widget.validationError,
+      );
+    } else {
+      registration?.updateClaim(
+        this,
+        focusNode: _focusNode,
+        enabled: widget.enabled,
+        validationError: widget.validationError,
+      );
+    }
   }
 
   void _onChange() {
@@ -243,6 +280,7 @@ class _TextAreaState extends State<TextArea>
     if (text != _lastNotifiedText) {
       _lastNotifiedText = text;
       widget.onChanged?.call(text);
+      _formRegistration?.controlValueChanged(this);
     }
   }
 
@@ -721,12 +759,21 @@ class _TextAreaState extends State<TextArea>
     _focusNode.textInputClaimant = null;
     _focusNode.textCompositionClaimant = null;
     if (_ownsFocusNode) _focusNode.dispose();
+    _formRegistration?.release(this);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final focused = _focusNode.hasFocus;
+    final validationError = _formRegistration?.error ?? widget.validationError;
+    final invalidStyle = widget.errorStyle ?? Theme.of(context).errorStyle;
+    final displayStyle = validationError == null
+        ? widget.style
+        : widget.style.merge(invalidStyle);
+    final displayPlaceholderStyle = validationError == null
+        ? widget.placeholderStyle
+        : widget.placeholderStyle.merge(invalidStyle);
     return Semantics(
       role: SemanticRole.textArea,
       label:
@@ -737,7 +784,7 @@ class _TextAreaState extends State<TextArea>
           : _controller.text,
       enabled: widget.enabled,
       focused: focused,
-      validationError: widget.validationError,
+      validationError: validationError,
       actions: {
         if (widget.enabled) SemanticAction.focus,
         if (_canEdit) SemanticAction.clear,
@@ -779,11 +826,11 @@ class _TextAreaState extends State<TextArea>
             selection: _controller.selection,
             placeholder: widget.placeholder,
             placeholderStyle: widget.enabled
-                ? widget.placeholderStyle
-                : widget.placeholderStyle.merge(const CellStyle(dim: true)),
+                ? displayPlaceholderStyle
+                : displayPlaceholderStyle.merge(const CellStyle(dim: true)),
             style: widget.enabled
-                ? widget.style
-                : widget.style.merge(const CellStyle(dim: true)),
+                ? displayStyle
+                : displayStyle.merge(const CellStyle(dim: true)),
             cursorStyle: widget.cursorStyle,
             cursorVisible: focused,
             minLines: widget.minLines,

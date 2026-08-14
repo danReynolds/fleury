@@ -1,4 +1,5 @@
 import 'package:fleury/fleury_core.dart';
+import 'package:fleury/fleury_internal.dart';
 
 /// Which of the two handles a [RangeSlider] is editing.
 enum _ActiveHandle { low, high }
@@ -45,6 +46,7 @@ class RangeSlider extends StatefulWidget {
     this.showValues = false,
     this.focusNode,
     this.autofocus = false,
+    this.errorStyle,
   }) : assert(min < max, 'min must be < max'),
        assert(step > 0, 'step must be > 0');
 
@@ -81,6 +83,10 @@ class RangeSlider extends StatefulWidget {
   /// Whether the slider should request focus when mounted.
   final bool autofocus;
 
+  /// Invalid style for the active track and handles. null uses the theme;
+  /// [CellStyle.empty] keeps the slider visually neutral.
+  final CellStyle? errorStyle;
+
   @override
   State<RangeSlider> createState() => _RangeSliderState();
 }
@@ -88,6 +94,7 @@ class RangeSlider extends StatefulWidget {
 class _RangeSliderState extends State<RangeSlider> {
   late FocusNode _node;
   bool _owns = false;
+  FormControlRegistration? _formRegistration;
   _ActiveHandle _active = _ActiveHandle.low;
 
   // Painted track geometry (written by the render object) and the handle a
@@ -112,16 +119,34 @@ class _RangeSliderState extends State<RangeSlider> {
       _node = widget.focusNode ?? FocusNode(debugLabel: 'range-slider');
       _owns = widget.focusNode == null;
     }
+    _syncFormClaim();
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     Focus.maybeOf(context); // rebuild on focus change
+    final registration = FormControlScope.maybeOf(context);
+    if (!identical(registration, _formRegistration)) {
+      _formRegistration?.release(this);
+      _formRegistration = registration;
+      registration?.claim(this, focusNode: _node, enabled: _enabled);
+    } else {
+      _syncFormClaim();
+    }
+  }
+
+  void _syncFormClaim() =>
+      _formRegistration?.updateClaim(this, focusNode: _node, enabled: _enabled);
+
+  void _emit((num low, num high) values) {
+    widget.onChanged?.call(values);
+    _formRegistration?.controlValueChanged(this);
   }
 
   @override
   void dispose() {
+    _formRegistration?.release(this);
     if (_owns) _node.dispose();
     super.dispose();
   }
@@ -136,10 +161,10 @@ class _RangeSliderState extends State<RangeSlider> {
     final (lo, hi) = _normalized;
     if (_active == _ActiveHandle.low) {
       final next = (lo + delta).clamp(widget.min, hi);
-      if (next != lo) widget.onChanged!((next, hi));
+      if (next != lo) _emit((next, hi));
     } else {
       final next = (hi + delta).clamp(lo, widget.max);
-      if (next != hi) widget.onChanged!((lo, next));
+      if (next != hi) _emit((lo, next));
     }
   }
 
@@ -148,10 +173,10 @@ class _RangeSliderState extends State<RangeSlider> {
     final (lo, hi) = _normalized;
     if (_active == _ActiveHandle.low) {
       final next = target.clamp(widget.min, hi);
-      if (next != lo) widget.onChanged!((next, hi));
+      if (next != lo) _emit((next, hi));
     } else {
       final next = target.clamp(lo, widget.max);
-      if (next != hi) widget.onChanged!((lo, next));
+      if (next != hi) _emit((lo, next));
     }
   }
 
@@ -172,10 +197,10 @@ class _RangeSliderState extends State<RangeSlider> {
     final (lo, hi) = _normalized;
     if (which == _ActiveHandle.low) {
       final next = value.clamp(widget.min, hi);
-      if (next != lo) widget.onChanged!((next, hi));
+      if (next != lo) _emit((next, hi));
     } else {
       final next = value.clamp(lo, widget.max);
-      if (next != hi) widget.onChanged!((lo, next));
+      if (next != hi) _emit((lo, next));
     }
   }
 
@@ -285,6 +310,11 @@ class _RangeSliderState extends State<RangeSlider> {
     final canIncrement = enabled && _active == _ActiveHandle.low
         ? lo < hi
         : enabled && hi < widget.max;
+    final validationError = _formRegistration?.error;
+    final invalidStyle = validationError == null
+        ? null
+        : (widget.errorStyle ?? theme.errorStyle);
+    final selectedStyle = CellStyle(foreground: theme.colorScheme.primary);
     final slider = _RawRangeSlider(
       values: _normalized,
       min: widget.min,
@@ -293,7 +323,9 @@ class _RangeSliderState extends State<RangeSlider> {
       focused: enabled && _node.hasFocus,
       geometry: _geom,
       selectedStyle: enabled
-          ? CellStyle(foreground: theme.colorScheme.primary)
+          ? (invalidStyle == null
+                ? selectedStyle
+                : selectedStyle.merge(invalidStyle))
           : theme.mutedStyle,
       trackStyle: theme.mutedStyle,
     );
@@ -305,6 +337,7 @@ class _RangeSliderState extends State<RangeSlider> {
           label: widget.label,
           value: '$lo-$hi',
           enabled: false,
+          validationError: validationError,
           state: SemanticState({
             'lowValue': lo,
             'highValue': hi,
@@ -329,6 +362,7 @@ class _RangeSliderState extends State<RangeSlider> {
         label: widget.label,
         value: '$lo-$hi',
         focused: _node.hasFocus,
+        validationError: validationError,
         actions: {
           SemanticAction.focus,
           if (canIncrement) SemanticAction.increment,

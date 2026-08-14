@@ -13,5 +13,6 @@ export 'src/editor.dart'
     show EditorApp, EditorModel, EditorPersonality, VimMode;
 export 'src/finance.dart' show FinanceApp;
 export 'src/file_manager.dart' show FileManagerApp;
+export 'src/forms_showcase.dart' show FormsShowcaseApp;
 export 'src/neon_asteroids.dart' show NeonAsteroidsApp;
 export 'src/scaffold.dart' show SampleScaffold, fleurySampleTheme;

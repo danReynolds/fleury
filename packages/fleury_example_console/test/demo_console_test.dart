@@ -897,7 +897,7 @@ void main() {
     );
   });
 
-  testWidgets('connection screen proves shared form semantics and submit', (
+  testWidgets('connection screen validates and submits app-owned values', (
     tester,
   ) async {
     tester.pumpWidget(const DemoConsoleApp());
@@ -905,149 +905,54 @@ void main() {
     final nav = await _invoke(tester, demoCommandGoConnection);
     expect(nav.status, CommandInvocationStatus.completed);
     expect(_demoApp(tester).state.activeScreenId, 'connection');
-    expect(tester.exists(text('Connection setup')), isTrue);
+    expect(tester.exists(text('CONNECTION SETUP')), isTrue);
 
     tester.render(size: const CellSize(90, 28));
-    var form = tester.semantics().single(
+    final form = tester.semantics().single(
       role: SemanticRole.form,
       label: 'Connection setup',
-      action: SemanticAction.increment,
+      action: SemanticAction.submit,
     );
-    expect(form.state['fieldCount'], 9);
-    expect(form.state['visibleFieldCount'], 3);
-    expect(form.state['layout'], 'wizard');
-    expect(form.state['stepCount'], 3);
-    expect(form.state['currentStepId'], 'connection-basics');
-    expect(form.state['hasAsyncValidators'], isTrue);
-    var fallbackForm = tester.accessibilitySnapshot().single(
-      role: SemanticRole.form,
-      label: 'Connection setup',
-      action: SemanticAction.increment,
+    expect(form.busy, isFalse);
+    final rejected = await tester.invokeSemanticAction(
+      SemanticAction.submit,
+      node: form,
     );
-    var fallbackState = fallbackForm.states.join('\n');
-    expect(fallbackState, contains('layout wizard'));
-    expect(fallbackState, contains('3 visible fields'));
-    expect(fallbackState, contains('step 1 of 3'));
-    expect(fallbackState, contains('current step Basics'));
-    expect(fallbackState, contains('current step id connection-basics'));
-
-    final project = tester.semantics().single(
-      role: SemanticRole.formField,
-      label: 'Project',
-    );
-    expect(project.state['hasAsyncValidator'], isTrue);
+    expect(rejected.completed, isTrue);
+    await _flushAsyncUi(tester);
+    expect(tester.exists(text('Enter a project name.')), isTrue);
     expect(
-      tester.semantics().where(role: SemanticRole.formField, label: 'Features'),
-      isEmpty,
+      tester
+          .semantics()
+          .single(role: SemanticRole.textField, label: 'Project')
+          .validationError,
+      'Enter a project name.',
     );
-
-    tester.type('dune');
-    final basicsNext = await tester.invokeSemanticAction(
-      SemanticAction.increment,
-      role: SemanticRole.form,
-      label: 'Connection setup',
-    );
-    expect(basicsNext.completed, isTrue);
-    await _flushAsyncUi(tester);
-
-    form = tester.semantics().single(
-      role: SemanticRole.form,
-      label: 'Connection setup',
-      action: SemanticAction.increment,
-    );
-    expect(form.state['visibleFieldCount'], 4);
-    expect(form.state['currentStepId'], 'connection-runtime');
-    expect(form.actions, contains(SemanticAction.decrement));
-    fallbackForm = tester.accessibilitySnapshot().single(
-      role: SemanticRole.form,
-      label: 'Connection setup',
-      action: SemanticAction.increment,
-    );
-    fallbackState = fallbackForm.states.join('\n');
-    expect(fallbackState, contains('4 visible fields'));
-    expect(fallbackState, contains('step 2 of 3'));
-    expect(fallbackState, contains('current step Runtime'));
-
-    final features = tester.semantics().single(
-      role: SemanticRole.formField,
-      label: 'Features',
-      value: 'Logs, Metrics',
-    );
-    expect(features.state['fieldType'], 'multiSelect');
-    expect(features.state['selectedOptionCount'], 2);
-    expect(features.state['maxSelected'], 3);
-
-    final configPath = tester.semantics().single(
-      role: SemanticRole.formField,
-      label: 'Config path',
-      value: 'config/demo.yaml',
-    );
-    expect(configPath.state['fieldType'], 'path');
-    expect(configPath.state['pathKind'], 'file');
-    expect(configPath.state['allowRelative'], isTrue);
-
-    final retries = tester.semantics().single(
-      role: SemanticRole.formField,
-      label: 'Retry limit',
-      value: '3',
-    );
-    expect(retries.state['fieldType'], 'number');
-    expect(retries.state['max'], 10);
-
-    final launchDate = tester.semantics().single(
-      role: SemanticRole.formField,
-      label: 'Launch date',
-      value: '2026-01-15',
-    );
-    expect(launchDate.state['fieldType'], 'date');
-    expect(launchDate.state['firstDate'], '2026-01-01');
-    expect(launchDate.state['lastDate'], '2026-12-31');
-
-    final runtimeNext = await tester.invokeSemanticAction(
-      SemanticAction.increment,
-      role: SemanticRole.form,
-      label: 'Connection setup',
-    );
-    expect(runtimeNext.completed, isTrue);
-    await _flushAsyncUi(tester);
-
-    form = tester.semantics().single(
-      role: SemanticRole.form,
-      label: 'Connection setup',
-      action: SemanticAction.submit,
-    );
-    expect(form.state['visibleFieldCount'], 2);
-    expect(form.state['currentStepId'], 'connection-secret');
-    fallbackForm = tester.accessibilitySnapshot().single(
-      role: SemanticRole.form,
-      label: 'Connection setup',
-      action: SemanticAction.submit,
-    );
-    fallbackState = fallbackForm.states.join('\n');
-    expect(fallbackState, contains('2 visible fields'));
-    expect(fallbackState, contains('step 3 of 3'));
-    expect(fallbackState, contains('current step Secret'));
-    expect(fallbackState, contains('can go back'));
-
-    final apiKey = tester.semantics().single(
-      role: SemanticRole.formField,
-      label: 'API key',
-    );
-    expect(apiKey.value, isNull);
-    expect(apiKey.state['redacted'], isTrue);
 
     await tester.invokeSemanticAction(
-      SemanticAction.focus,
-      role: SemanticRole.formField,
-      label: 'API key',
+      SemanticAction.setValue,
+      role: SemanticRole.textField,
+      label: 'Project',
+      payload: 'dune',
     );
-    tester.type('secret-token');
     await tester.invokeSemanticAction(
-      SemanticAction.focus,
-      role: SemanticRole.formField,
+      SemanticAction.setValue,
+      role: SemanticRole.button,
+      label: 'Environment',
+      payload: 'prod',
+    );
+    await tester.invokeSemanticAction(
+      SemanticAction.setValue,
+      role: SemanticRole.button,
+      label: 'Region',
+      payload: 'eu-west-1',
+    );
+    await tester.invokeSemanticAction(
+      SemanticAction.setValue,
+      role: SemanticRole.checkbox,
       label: 'I understand this changes remote state',
+      payload: true,
     );
-    tester.type(' ');
     final submit = await tester.invokeSemanticAction(
       SemanticAction.submit,
       role: SemanticRole.form,
@@ -1056,21 +961,10 @@ void main() {
     expect(submit.completed, isTrue);
     await _flushAsyncUi(tester);
 
-    form = tester.semantics().single(role: SemanticRole.form);
-    expect(form.state['submitted'], isTrue);
-    expect(form.state['valid'], isTrue);
-    expect(form.state['errorCount'], 0);
-
     await _invoke(tester, demoCommandGoTranscript);
     tester.render(size: const CellSize(90, 28));
     expect(
-      tester.exists(
-        text(
-          '[log] connection: configured dune dev us-east-1 '
-          'features logs,metrics config config/demo.yaml 2026-01-15 '
-          'retries 3',
-        ),
-      ),
+      tester.exists(text('[log] connection: configured dune prod eu-west-1')),
       isTrue,
     );
   });

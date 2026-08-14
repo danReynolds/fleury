@@ -208,7 +208,7 @@ class _ColourRoles extends StatelessWidget {
   );
 }
 
-/// The three [ThemeData] style fields, each shown applied and named after the
+/// The [ThemeData] text styles, each shown applied and named after the
 /// field that produced it.
 class _TextStyles extends StatelessWidget {
   const _TextStyles();
@@ -228,6 +228,7 @@ class _TextStyles extends StatelessWidget {
         _sample(context, theme.mutedStyle, 'mutedStyle'),
         _sample(context, theme.selectionStyle, 'selectionStyle'),
         _sample(context, theme.focusedStyle, 'focusedStyle'),
+        _sample(context, theme.errorStyle, 'errorStyle'),
       ],
     );
   }

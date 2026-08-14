@@ -1,4 +1,5 @@
 import 'package:fleury/fleury_core.dart';
+import 'package:fleury/fleury_internal.dart';
 
 /// A grid of color swatches. The preview cursor is bracketed with the theme's
 /// focus style while the committed swatch remains marked; arrow chords preview
@@ -29,6 +30,7 @@ class ColorPicker extends StatefulWidget {
     this.semanticColorLabelBuilder,
     this.focusNode,
     this.autofocus = false,
+    this.errorStyle,
   }) : assert(columns >= 1, 'columns must be >= 1'),
        assert(swatchWidth >= 1, 'swatchWidth must be >= 1');
 
@@ -62,6 +64,10 @@ class ColorPicker extends StatefulWidget {
   /// Whether the picker requests focus when mounted.
   final bool autofocus;
 
+  /// Invalid style for the preview cursor. null uses the theme;
+  /// [CellStyle.empty] keeps the picker visually neutral.
+  final CellStyle? errorStyle;
+
   @override
   State<ColorPicker> createState() => _ColorPickerState();
 }
@@ -70,6 +76,7 @@ class _ColorPickerState extends State<ColorPicker>
     implements TextInputClaimant {
   late FocusNode _node;
   bool _owns = false;
+  FormControlRegistration? _formRegistration;
 
   /// The highlighted candidate — where the keyboard cursor sits. Arrows move
   /// this *without* committing; Enter / Space / a click commit it to
@@ -136,18 +143,36 @@ class _ColorPickerState extends State<ColorPicker>
     if (widget.value != oldWidget.value && !_node.hasFocus) {
       _cursor = _indexOf(widget.value);
     }
+    _syncFormClaim();
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     Focus.maybeOf(context);
+    final registration = FormControlScope.maybeOf(context);
+    if (!identical(registration, _formRegistration)) {
+      _formRegistration?.release(this);
+      _formRegistration = registration;
+      registration?.claim(this, focusNode: _node, enabled: _enabled);
+    } else {
+      _syncFormClaim();
+    }
+  }
+
+  void _syncFormClaim() =>
+      _formRegistration?.updateClaim(this, focusNode: _node, enabled: _enabled);
+
+  void _emit(Color color) {
+    widget.onChanged?.call(color);
+    _formRegistration?.controlValueChanged(this);
   }
 
   @override
   void dispose() {
     _hexEntry?.remove();
     _node.textInputClaimant = null;
+    _formRegistration?.release(this);
     if (_owns) _node.dispose();
     super.dispose();
   }
@@ -169,7 +194,7 @@ class _ColorPickerState extends State<ColorPicker>
   void _commit() {
     if (!_enabled || _cursor < 0 || _cursor >= _palette.length) return;
     final color = _palette[_cursor];
-    if (color != widget.value) widget.onChanged!(color);
+    if (color != widget.value) _emit(color);
   }
 
   /// Esc: abandon the in-progress browse, restoring the colour (and cursor)
@@ -177,7 +202,7 @@ class _ColorPickerState extends State<ColorPicker>
   void _cancel() {
     final initial = _initial ?? widget.value;
     setState(() => _cursor = _indexOf(initial));
-    if (_enabled && initial != widget.value) widget.onChanged!(initial);
+    if (_enabled && initial != widget.value) _emit(initial);
   }
 
   void _selectIndex(int index) {
@@ -277,7 +302,7 @@ class _ColorPickerState extends State<ColorPicker>
           borderStyle: theme.borderStyle,
           onSubmit: (color) {
             _closeHex();
-            if (_enabled && color != widget.value) widget.onChanged!(color);
+            if (_enabled && color != widget.value) _emit(color);
           },
           onDismiss: _closeHex,
         ),
@@ -308,6 +333,10 @@ class _ColorPickerState extends State<ColorPicker>
     final selectedIdx = _currentIndex;
     final cols = widget.columns;
     final palette = _palette;
+    final validationError = _formRegistration?.error;
+    final invalidStyle = validationError == null
+        ? null
+        : (widget.errorStyle ?? theme.errorStyle);
 
     final rows = <Widget>[];
     for (var r = 0; r * cols < palette.length; r++) {
@@ -327,11 +356,14 @@ class _ColorPickerState extends State<ColorPicker>
             foreground: color,
           ).merge(enabled ? CellStyle.empty : disabledStyle),
         );
-        final markStyle = !enabled
+        var markStyle = !enabled
             ? disabledStyle
             : isCursor
             ? (focused ? theme.focusedStyle : theme.selectionStyle)
             : theme.mutedStyle;
+        if (enabled && isCursor && invalidStyle != null) {
+          markStyle = markStyle.merge(invalidStyle);
+        }
         final swatchParts = <Widget>[];
         if (isCursor || isCommitted) {
           swatchParts.add(Text(isCursor ? '[' : '‹', style: markStyle));
@@ -413,6 +445,7 @@ class _ColorPickerState extends State<ColorPicker>
             ? null
             : _colorLabel(selectedColor, selectedIdx),
         enabled: false,
+        validationError: validationError,
         state: SemanticState({
           'collectionRowCount': rowCount,
           'collectionColumnCount': visibleColumns,
@@ -436,6 +469,7 @@ class _ColorPickerState extends State<ColorPicker>
           ? null
           : _colorLabel(selectedColor, selectedIdx),
       focused: focused,
+      validationError: validationError,
       actions: const {SemanticAction.focus, SemanticAction.navigate},
       onAction: _handlePickerAction,
       state: SemanticState({

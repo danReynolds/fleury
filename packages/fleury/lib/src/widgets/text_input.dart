@@ -40,9 +40,11 @@ import '../semantics/semantics.dart';
 import '../terminal/capability_requirements.dart';
 import '../input/events.dart';
 import 'focus.dart';
+import 'form_control.dart';
 import 'framework.dart';
 import 'keyboard.dart';
 import 'media_query.dart';
+import 'theme.dart';
 import 'tui_binding.dart';
 
 /// How an editable text widget should treat copy/cut operations.
@@ -549,6 +551,7 @@ class TextInput extends StatefulWidget {
     this.enabled = true,
     this.readOnly = false,
     this.validationError,
+    this.errorStyle,
     this.semanticLabel,
     this.semanticState = SemanticState.empty,
     this.clipboardPolicy,
@@ -636,12 +639,17 @@ class TextInput extends StatefulWidget {
   /// Cursor movement and submit/escape callbacks still work while read-only.
   final bool readOnly;
 
-  /// Validation error attached to the current value.
+  /// Validation error attached directly to this input's current value.
   ///
-  /// Fleury does not run validators inside the widget yet; apps can compute
-  /// validation externally and pass the current error here for semantics,
-  /// tests, and inspector/debug surfaces.
+  /// Use this when the input is not inside a `FormField`. An enclosing
+  /// `FormField` supplies its current error automatically.
   final String? validationError;
+
+  /// Style merged onto the field while its value is invalid.
+  ///
+  /// null uses [ThemeData.errorStyle]. [CellStyle.empty] suppresses the
+  /// visual reaction while preserving validation semantics and messages.
+  final CellStyle? errorStyle;
 
   /// Label exposed through the semantic app graph.
   ///
@@ -713,6 +721,7 @@ class _TextInputState extends State<TextInput>
   late String _lastNotifiedText;
   bool _ownsController = false;
   bool _ownsFocusNode = false;
+  FormControlRegistration? _formRegistration;
   TextPasteSession? _pasteSession;
   final Queue<({String text, bool isFinal})> _queuedPasteSegments =
       Queue<({String text, bool isFinal})>();
@@ -830,6 +839,12 @@ class _TextInputState extends State<TextInput>
       _blinkOn = true; // resume from a visible phase, not a stale OFF one
       _syncBlinkToFocus();
     }
+    _formRegistration?.updateClaim(
+      this,
+      focusNode: _focusNode,
+      enabled: widget.enabled,
+      validationError: widget.validationError,
+    );
   }
 
   @override
@@ -839,6 +854,24 @@ class _TextInputState extends State<TextInput>
     // dependOnInheritedWidgetOfExactType subscribes us to the
     // FocusManagerScope.
     Focus.maybeOf(context);
+    final registration = FormControlScope.maybeOf(context);
+    if (!identical(registration, _formRegistration)) {
+      _formRegistration?.release(this);
+      _formRegistration = registration;
+      registration?.claim(
+        this,
+        focusNode: _focusNode,
+        enabled: widget.enabled,
+        validationError: widget.validationError,
+      );
+    } else {
+      registration?.updateClaim(
+        this,
+        focusNode: _focusNode,
+        enabled: widget.enabled,
+        validationError: widget.validationError,
+      );
+    }
     _syncBlinkToFocus();
   }
 
@@ -911,6 +944,7 @@ class _TextInputState extends State<TextInput>
     if (text != _lastNotifiedText) {
       _lastNotifiedText = text;
       widget.onChanged?.call(text);
+      _formRegistration?.controlValueChanged(this);
     }
   }
 
@@ -1507,6 +1541,7 @@ class _TextInputState extends State<TextInput>
     _focusNode.textInputClaimant = null;
     _focusNode.textCompositionClaimant = null;
     if (_ownsFocusNode) _focusNode.dispose();
+    _formRegistration?.release(this);
     super.dispose();
   }
 
@@ -1520,6 +1555,14 @@ class _TextInputState extends State<TextInput>
     final history = widget.historyController;
     final completion = widget.completionController;
     final completionState = completion?.state;
+    final validationError = _formRegistration?.error ?? widget.validationError;
+    final invalidStyle = widget.errorStyle ?? Theme.of(context).errorStyle;
+    final displayStyle = validationError == null
+        ? widget.style
+        : widget.style.merge(invalidStyle);
+    final displayPlaceholderStyle = validationError == null
+        ? widget.placeholderStyle
+        : widget.placeholderStyle.merge(invalidStyle);
     return Semantics(
       role: SemanticRole.textField,
       label:
@@ -1528,7 +1571,7 @@ class _TextInputState extends State<TextInput>
       value: _semanticValue,
       enabled: widget.enabled,
       focused: focused,
-      validationError: widget.validationError,
+      validationError: validationError,
       actions: {
         if (widget.enabled) SemanticAction.focus,
         if (widget.enabled && !widget.readOnly) SemanticAction.clear,
@@ -1590,11 +1633,11 @@ class _TextInputState extends State<TextInput>
             selection: _controller.selection,
             placeholder: widget.placeholder,
             placeholderStyle: widget.enabled
-                ? widget.placeholderStyle
-                : widget.placeholderStyle.merge(const CellStyle(dim: true)),
+                ? displayPlaceholderStyle
+                : displayPlaceholderStyle.merge(const CellStyle(dim: true)),
             style: widget.enabled
-                ? widget.style
-                : widget.style.merge(const CellStyle(dim: true)),
+                ? displayStyle
+                : displayStyle.merge(const CellStyle(dim: true)),
             cursorStyle: widget.cursorStyle,
             cursorVisible: cursorVisible,
             obscureText: widget.obscureText,

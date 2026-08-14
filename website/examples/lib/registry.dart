@@ -825,90 +825,62 @@ TextArea(
   ),
   ExampleInfo(
     id: 'form.basic',
-    widget: 'FormPanel',
+    widget: 'Form',
     category: 'Inputs & controls',
     blurb:
-        'A declarative, validated form that runs in terminal and browser apps '
-        'alike.',
+        'A composable validation and submission boundary that leaves values '
+        'and layout in application code.',
     cols: 54,
     rows: 14,
     interactive: true,
-    code: '''FormPanel(
-  definition: FormDefinition(
-    title: 'Project settings',
-    fields: <FormFieldSpec>[
-      FormFieldSpec.text(id: 'name', label: 'Name', required: true),
-      FormFieldSpec.checkbox(id: 'private', label: 'Private project'),
-    ],
-  ),
-  onSubmit: (result) => saveSettings(result.values),
-)''',
-    builder: () => _framed(
-      FormPanel(
-        definition: FormDefinition(
-          title: 'Project settings',
-          fields: <FormFieldSpec>[
-            FormFieldSpec.text(
-              id: 'name',
-              label: 'Name',
-              initialValue: 'fleury',
-              required: true,
-            ),
-            FormFieldSpec.checkbox(id: 'private', label: 'Private project'),
-          ],
-        ),
-        layout: FormPanelLayout.inline,
-        onSubmit: (_) {},
-      ),
+    code: '''Form(
+  controller: form,
+  onSubmit: saveProject,
+  child: Column(children: [
+    FormField(
+      validator: () => name.text.isEmpty ? 'Enter a name.' : null,
+      child: TextInput(controller: name),
     ),
+    Button(label: 'Save', onPressed: form.submit),
+  ]),
+)''',
+    builder: () => const _ProjectFormTour(),
   ),
   ExampleInfo(
-    id: 'formwizard.basic',
-    widget: 'FormWizard',
+    id: 'formfield.basic',
+    widget: 'FormField',
     category: 'Inputs & controls',
-    blurb: 'A validated form split into an ordered sequence of steps.',
+    blurb:
+        'One validated value with automatic control styling, semantics, and '
+        'first-invalid focus.',
     cols: 54,
-    rows: 13,
+    rows: 14,
     interactive: true,
-    code: '''FormWizard(
-  definition: definition,
-  steps: const <FormWizardStep>[
-    FormWizardStep(id: 'project', title: 'Project', fieldIds: ['name']),
-    FormWizardStep(id: 'access', title: 'Access', fieldIds: ['private']),
-  ],
-  onSubmit: handleSubmit,
+    code: '''FormField(
+  validator: () => slug.text.isEmpty ? 'Enter a slug.' : null,
+  child: TextInput(
+    controller: slug,
+    semanticLabel: 'Slug',
+  ),
 )''',
-    builder: () => _framed(
-      FormWizard(
-        definition: FormDefinition(
-          title: 'Create project',
-          fields: <FormFieldSpec>[
-            FormFieldSpec.text(
-              id: 'name',
-              label: 'Name',
-              initialValue: 'fleury-app',
-              required: true,
-            ),
-            FormFieldSpec.checkbox(id: 'private', label: 'Private project'),
-          ],
-        ),
-        steps: const <FormWizardStep>[
-          FormWizardStep(
-            id: 'project',
-            title: 'Project',
-            fieldIds: <String>['name'],
-          ),
-          FormWizardStep(
-            id: 'access',
-            title: 'Access',
-            fieldIds: <String>['private'],
-          ),
-        ],
-        layout: FormPanelLayout.inline,
-        fieldWidth: 24,
-        onSubmit: (_) {},
-      ),
-    ),
+    builder: () => const _ProjectFormTour(),
+  ),
+  ExampleInfo(
+    id: 'formcontroller.basic',
+    widget: 'FormController',
+    category: 'Inputs & controls',
+    blurb:
+        'An optional command surface for validating, submitting, clearing '
+        'errors, and observing submission progress.',
+    cols: 54,
+    rows: 14,
+    interactive: true,
+    code: '''final form = FormController();
+
+await form.submit();
+form.validate();
+form.clearErrors();''',
+    builder: () => const _ProjectFormTour(),
   ),
   ExampleInfo(
     id: 'button.basic',
@@ -1818,6 +1790,19 @@ TextArea(
     builder: () => const FinanceApp(),
   ),
   ExampleInfo(
+    id: 'showcase.forms',
+    widget: 'Service deployment',
+    category: 'Showcases',
+    blurb:
+        'A multi-screen service deployment flow with app-owned values, '
+        'automatic validation, server errors, retained state, and async '
+        'submission.',
+    cols: 84,
+    rows: 30,
+    interactive: true,
+    builder: () => const FormsShowcaseApp(),
+  ),
+  ExampleInfo(
     id: 'showcase.asteroids',
     widget: 'Neon Asteroids',
     category: 'Showcases',
@@ -1832,7 +1817,7 @@ TextArea(
   ),
   ExampleInfo(
     id: 'forms.project',
-    widget: 'FormPanel',
+    widget: 'Form',
     category: 'Guide examples',
     blurb:
         'A project form that validates on submit, keeps errors next to their '
@@ -3211,8 +3196,7 @@ class _ThemePreview extends StatelessWidget {
   }
 }
 
-/// A guide-level FormPanel example with visible invalid and successful submit
-/// states instead of the reference gallery's pre-filled happy path.
+/// A guide-level form with visible invalid and successful submit states.
 class _ProjectFormTour extends StatefulWidget {
   const _ProjectFormTour();
 
@@ -3221,45 +3205,76 @@ class _ProjectFormTour extends StatefulWidget {
 }
 
 class _ProjectFormTourState extends State<_ProjectFormTour> {
-  late final FormDefinition _definition = FormDefinition(
-    title: 'Create project',
-    submitLabel: 'Create',
-    showCancel: false,
-    fields: [
-      FormFieldSpec.text(id: 'name', label: 'Name', required: true),
-      FormFieldSpec.text(
-        id: 'slug',
-        label: 'Slug',
-        required: true,
-        validator: (value, _) {
-          final slug = (value ?? '').toString();
-          return RegExp(r'^[a-z0-9-]+$').hasMatch(slug)
-              ? null
-              : 'Use lowercase letters, numbers, and hyphens';
-        },
-      ),
-      FormFieldSpec.checkbox(id: 'private', label: 'Private project'),
-    ],
-  );
-
+  final _form = FormController();
+  final _name = TextEditingController();
+  final _slug = TextEditingController();
+  bool _private = true;
   String _status = 'Fill in the project details';
 
-  void _submit(FormSubmitResult result) => setState(() {
-    _status = result.valid
-        ? 'Created ${result.values.text('name')}'
-        : 'Fix ${result.errors.length} field(s)';
+  @override
+  void dispose() {
+    _form.dispose();
+    _name.dispose();
+    _slug.dispose();
+    super.dispose();
+  }
+
+  void _submit() => setState(() {
+    _status = 'Created ${_name.text.trim()} (${_slug.text.trim()})';
   });
 
   @override
   Widget build(BuildContext context) => _framed(
     Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        FormPanel(
-          definition: _definition,
-          layout: FormPanelLayout.inline,
-          fieldWidth: 26,
+      children: <Widget>[
+        const Text('Create project'),
+        Form(
+          controller: _form,
           onSubmit: _submit,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const Text('Name'),
+              FormField(
+                validator: () =>
+                    _name.text.trim().isEmpty ? 'Enter a project name.' : null,
+                child: TextInput(
+                  controller: _name,
+                  autofocus: true,
+                  semanticLabel: 'Name',
+                  placeholder: 'Fleury app',
+                ),
+              ),
+              const Text('Slug'),
+              FormField(
+                validator: () =>
+                    RegExp(r'^[a-z0-9-]+$').hasMatch(_slug.text.trim())
+                    ? null
+                    : 'Use lowercase letters, numbers, and hyphens.',
+                child: TextInput(
+                  controller: _slug,
+                  semanticLabel: 'Slug',
+                  placeholder: 'fleury-app',
+                  onSubmit: (_) => _form.submit(),
+                ),
+              ),
+              FormField(
+                child: Checkbox(
+                  value: _private,
+                  label: 'Private project',
+                  onChanged: (value) => setState(() => _private = value),
+                ),
+              ),
+              ListenableBuilder(
+                listenable: _form,
+                builder: (context, child) => Button(
+                  label: _form.isSubmitting ? 'Creating…' : 'Create',
+                  onPressed: _form.isSubmitting ? null : _form.submit,
+                ),
+              ),
+            ],
+          ),
         ),
         const Spacer(),
         Text('status: $_status'),
