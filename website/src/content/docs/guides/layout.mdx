@@ -1,0 +1,225 @@
+---
+title: Layout
+description: Compose responsive terminal interfaces from rows, columns, flexible space, and local constraints.
+---
+
+import FleuryExample from '../../../components/FleuryExample.astro';
+import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
+
+Fleury lays out whole terminal cells. Parents describe the space available,
+children choose a size within it, and the parent positions them. In practice,
+most interfaces come from a small set of composable widgets:
+
+| You need to… | Use |
+|---|---|
+| Arrange children horizontally or vertically | `Row` and `Column` |
+| Give a child the remaining space | `Expanded` |
+| Add a fixed gap or bound | `SizedBox` |
+| Add space inside a region | `Padding` |
+| Adapt to the local width | `LayoutBuilder` |
+
+## Build a responsive workspace
+
+This workspace uses fixed gaps, weighted panes, and one local breakpoint. The
+same child becomes two panes when wide and a vertical stack when narrow:
+
+<CodeDemoSplit file="layout_demo.dart" layout="demo-wide">
+<Fragment slot="code">
+```dart
+LayoutBuilder(
+  builder: (context, constraints) {
+    final wide = (constraints.maxCols ?? 0) >= 60;
+
+    if (wide) {
+      return Row(
+        children: [
+          Expanded(flex: 2, child: FilesPanel()),
+          const SizedBox(width: 1),
+          Expanded(flex: 3, child: PreviewPanel()),
+        ],
+      );
+    }
+
+    return Column(
+      children: [
+        Expanded(child: FilesPanel()),
+        const SizedBox(height: 1),
+        Expanded(child: PreviewPanel()),
+      ],
+    );
+  },
+)
+```
+</Fragment>
+<FleuryExample
+  slot="demo"
+  id="layout.responsive"
+  cols={74}
+  rows={18}
+  interactive
+/>
+</CodeDemoSplit>
+
+Activate **Narrow** and **Wide** to change only the workspace's parent width.
+The heading confirms which branch `LayoutBuilder` selected. This is the same
+behavior a pane gets when its window, neighboring sidebar, or embedding surface
+changes size.
+
+## Rows and columns
+
+`Row` lays out children horizontally and `Column` vertically. Their main axis
+follows that direction; the cross axis runs across it:
+
+```dart
+Column(
+  crossAxisAlignment: CrossAxisAlignment.start,
+  children: [
+    const Text('Project'),
+    Text(project.name),
+  ],
+)
+```
+
+Use `mainAxisAlignment` to distribute children along the main axis and
+`crossAxisAlignment` to align them across it. `stretch` fills the available
+cross-axis space. Set `mainAxisSize: MainAxisSize.min` when a row or column
+should hug its contents instead of taking all available space.
+
+## Fixed and flexible space
+
+Children start at their natural size. Wrap a child in `Expanded` when it should
+take the main-axis space left after fixed children and gaps:
+
+```dart
+Row(
+  children: [
+    const SizedBox(width: 18, child: Sidebar()),
+    const SizedBox(width: 1),
+    const Expanded(child: Editor()),
+  ],
+)
+```
+
+Multiple expanded children divide the space by `flex`. In the workspace demo,
+`2` and `3` make Files receive two-fifths and Preview three-fifths. Any leftover
+cell from integer division is assigned deterministically.
+
+`Flexible(fit: FlexFit.loose)` offers a child up to its share without forcing
+it to fill. `Spacer()` is an expanded empty gap; `SizedBox` is a fixed gap or
+bound.
+
+## Spacing and framing
+
+`Padding` adds interior space in whole cells:
+
+```dart
+Padding(
+  padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+  child: ProjectDetails(),
+)
+```
+
+Use `Container` when size, margin, padding, background, border, and alignment
+belong to one visual region:
+
+```dart
+Container(
+  width: 28,
+  padding: const EdgeInsets.all(1),
+  color: Theme.of(context).colorScheme.surface,
+  border: const BoxBorder(style: BorderStyle.rounded),
+  child: const Text('Build complete'),
+)
+```
+
+Container width and height are outer dimensions, including the border. A
+28-cell bordered container has 26 interior columns before padding.
+
+## Responsive layout
+
+`LayoutBuilder` reads the constraints of the exact place where it appears.
+Use it when a reusable pane should respond to its own width, as in the demo.
+
+`MediaQuery.sizeOf(context)` reads the entire surface size and rebuilds on
+resize. Use it for app-wide decisions such as hiding global chrome below a
+terminal width; prefer `LayoutBuilder` for components nested inside that app.
+
+```dart
+final surface = MediaQuery.sizeOf(context);
+final compact = surface.cols < 80;
+```
+
+Both react automatically when a terminal or browser surface resizes. You do
+not listen to resize events yourself.
+
+## Advanced patterns
+
+### Direct constraints
+
+`ConstrainedBox` adds minimum or maximum dimensions without overriding a
+tighter parent. An unbounded maximum is represented by `null`, so check before
+using it as a number:
+
+```dart
+ConstrainedBox(
+  minWidth: 24,
+  maxWidth: 48,
+  child: SearchPanel(),
+)
+```
+
+`IntrinsicWidth` and `IntrinsicHeight` ask a child for its natural extent. They
+are useful for matching a small group to its widest label, but require an extra
+measurement pass; do not wrap large subtrees speculatively.
+
+### Wrap and layer
+
+`Wrap` flows children into another run when the next one no longer fits:
+
+```dart
+Wrap(
+  spacing: 1,
+  runSpacing: 1,
+  children: tags.map((tag) => Tag(label: tag)).toList(),
+)
+```
+
+`Stack` paints children at one origin, with later children above earlier ones.
+Use `Positioned` for a fixed offset, and `IndexedStack` when one child is visible
+but inactive children must remain mounted—for example, stateful tab bodies.
+
+### Aspect ratio and cell shape
+
+`AspectRatio` uses cell counts, not physical pixels. Terminal cells are usually
+taller than they are wide, so `aspectRatio: 2.0` reads as visually square more
+often than `1.0`. Treat that as a presentation choice, not guaranteed terminal
+geometry.
+
+### Overflow
+
+When a row or column cannot fit its children, Fleury clips them and paints a red
+`▓` marker on the overflowing edge. Fix the constraint mismatch: add an
+`Expanded`, choose a compact layout, bound the child, or make the content
+scroll. Do not hide the marker without addressing the layout.
+
+## API reference
+
+| API | What it does |
+|---|---|
+| `Row`, `Column`, `Flex` | Arrange children on one main axis |
+| `Expanded`, `Flexible`, `Spacer` | Allocate remaining main-axis space |
+| `SizedBox`, `ConstrainedBox` | Add fixed or bounded dimensions |
+| `Padding`, `Container` | Add spacing and visual framing |
+| `Center`, `Align` | Position one child within available space |
+| `LayoutBuilder` | Builds from local `CellConstraints` |
+| `MediaQuery.sizeOf` | Reads the full surface size in cells |
+| `Wrap`, `Stack`, `IndexedStack` | Flow, layer, or preserve alternate children |
+
+## Next steps
+
+- [Lists & scrolling](/fleury/guides/lists-and-scrolling/) shows how to give
+  long content a bounded viewport.
+- [Widgets & state](/fleury/concepts/widgets-and-state/) explains how layout
+  widgets participate in the widget tree and rebuild lifecycle.
+- Browse the [widget reference](/fleury/widgets/) for focused examples of every
+  layout primitive.

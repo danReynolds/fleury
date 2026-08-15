@@ -69,13 +69,26 @@ class RouteTransition {
     required this.exit,
     this.duration,
     this.curve,
-  }) : isInstant = false;
+    this.reverseCurve,
+  }) : _crossFadeCoveredRoute = false,
+       isInstant = false;
+
+  const RouteTransition._crossFade({
+    required this.enter,
+    required this.exit,
+    this.duration,
+    this.curve,
+  }) : reverseCurve = null,
+       _crossFadeCoveredRoute = true,
+       isInstant = false;
 
   RouteTransition._instant()
     : enter = const NoopEffect(),
       exit = const NoopEffect(),
       duration = Duration.zero,
       curve = null,
+      reverseCurve = null,
+      _crossFadeCoveredRoute = false,
       isInstant = true;
 
   final Effect enter;
@@ -89,17 +102,31 @@ class RouteTransition {
   /// How long the enter/exit plays. When null, the navigator falls back
   /// to [defaultDuration].
   final Duration? duration;
+
+  /// The timing curve used while the route enters.
   final Curve? curve;
+
+  /// An optional distinct timing curve for the route's exit.
+  ///
+  /// When null, the navigator flips [curve] so a pop retraces the push
+  /// timing. Set this only when the reverse motion should intentionally have
+  /// a different character.
+  final Curve? reverseCurve;
+
+  /// Whether a forward page transition also fades the page it covers. This is
+  /// intentionally an implementation detail of the built-in fade: arbitrary
+  /// enter/exit effects do not imply a meaningful covered-route effect.
+  final bool _crossFadeCoveredRoute;
 
   /// The duration a transition plays when none is specified — also the
   /// duration of the built-in presets. One source of truth so a custom
   /// transition with no [duration] matches the presets' feel.
-  static const Duration defaultDuration = Duration(milliseconds: 220);
+  static const Duration defaultDuration = Duration(milliseconds: 250);
 
   /// Cross-fade (the default).
-  static RouteTransition get fade => RouteTransition(
-    enter: Effects.fadeIn(),
-    exit: Effects.fadeOut(),
+  static RouteTransition get fade => RouteTransition._crossFade(
+    enter: Effects.fadeIn(transparent: true),
+    exit: Effects.fadeOut(transparent: true),
     curve: Curves.easeInOut,
     duration: defaultDuration,
   );
@@ -492,7 +519,9 @@ class NavigatorState extends State<Navigator> {
     route.presence
         .to(
           0.0,
-          curve: transition.curve ?? Curves.easeInOut,
+          curve:
+              transition.reverseCurve ??
+              (transition.curve ?? Curves.easeInOut).flipped,
           duration: transition.duration ?? RouteTransition.defaultDuration,
         )
         .then((_) {
@@ -625,6 +654,55 @@ class NavigatorState extends State<Navigator> {
   }
 
   bool _isActive(_Route route) => !route.leaving && identical(route, _topLive);
+
+  /// Progress for fading a route covered by the built-in page cross-fade.
+  ///
+  /// On push, every painted layer below the entering page fades out with the
+  /// page's presence. On pop, the revealed composition fades back in while
+  /// the leaving page fades out. Both directions therefore use one shared
+  /// transition clock instead of revealing either side abruptly. Presented
+  /// routes deliberately do not trigger this: a dialog fades over its
+  /// still-visible background.
+  double? _coveredFadeProgress(int routeIndex) {
+    if (routeIndex < 0 || routeIndex >= _routes.length) return null;
+    final route = _routes[routeIndex];
+    if (route.leaving) return null;
+
+    // A leaving page remains in the stack above the newly active route until
+    // its exit finishes. Use its presence to fade the revealed composition
+    // from hidden (presence 1) to visible (presence 0).
+    _Route? covering;
+    for (var i = _routes.length - 1; i > routeIndex; i--) {
+      final candidate = _routes[i];
+      final transition = candidate.transition;
+      if (candidate.leaving &&
+          candidate.presentAlignment == null &&
+          transition != null &&
+          transition._crossFadeCoveredRoute) {
+        covering = candidate;
+        break;
+      }
+    }
+
+    // Otherwise this is a forward push: the top live page is entering above
+    // the covered composition.
+    covering ??= _topLive;
+    if (covering == null) return null;
+    final coveringIndex = _routes.indexOf(covering);
+    if (routeIndex >= coveringIndex) return null;
+    final transition = covering.transition;
+    if (covering.presentAlignment != null ||
+        transition == null ||
+        !transition._crossFadeCoveredRoute) {
+      return null;
+    }
+    final progress = covering.presence.value;
+    // Keep the covered composition fully faded at the exact terminal frame.
+    // The entering route marks itself opaque in its completion callback; if a
+    // paint lands between value == 1 and that callback, passthrough here would
+    // flash the old content for one frame.
+    return progress.clamp(0.0, 1.0);
+  }
 
   /// Index of the first route to paint: the topmost settled opaque
   /// route. Routes below it are occluded and skipped at paint time.
@@ -854,6 +932,17 @@ class _RouteHost extends StatelessWidget {
                 ? transition.enter.buildSettled(content)
                 : transition.enter.build(content, t.clamp(0.0, 1.0)));
     }
+
+    // Every route keeps this wrapper for its whole lifetime. During the
+    // built-in forward fade it makes the page underneath fade out as the new
+    // page fades in: a real cross-fade, with no abrupt final-frame occlusion.
+    // At rest it is a paint passthrough, and keeping the wrapper stable avoids
+    // remounting route state when another page is pushed or popped.
+    final coveredFadeProgress = navigator._coveredFadeProgress(routeIndex);
+    final coveredFade = Effects.fadeOut(transparent: true);
+    content = coveredFadeProgress == null
+        ? coveredFade.buildSettled(content)
+        : coveredFade.build(content, coveredFadeProgress);
     final routeName = route.screen.runtimeType.toString();
     return Semantics(
       role: SemanticRole.route,

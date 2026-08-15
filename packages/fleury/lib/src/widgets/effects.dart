@@ -172,15 +172,26 @@ class _ClipWidget extends SingleChildRenderObjectWidget {
 RgbColor? _asRgb(Color? c) => c is RgbColor ? c : null;
 
 class _FadeEffect extends Effect {
-  const _FadeEffect({required this.out, required this.surface});
+  const _FadeEffect({
+    required this.out,
+    required this.surface,
+    required this.transparent,
+  });
   final bool out;
   final RgbColor surface;
+  final bool transparent;
 
   @override
   Widget build(Widget child, double t) => _CellEffectWidget(
     composite: (col, row, cell, size) {
       // p: 1 = fully visible, 0 = fully faded into the surface.
       final p = (out ? (1 - t) : t).clamp(0.0, 1.0);
+      // A terminal cell has no alpha channel. In a cross-fade, continuing to
+      // paint a dim cell below half visibility would still overwrite the more
+      // visible route beneath it, and cells unique to an outgoing route would
+      // linger until its final frame. Treat the less-visible half as
+      // transparent so both directions hand each cell to the dominant route.
+      if (transparent && p < 0.5) return null;
       final style = cell.style;
       final fg = _asRgb(style.foreground);
       final bg = _asRgb(style.background);
@@ -411,13 +422,19 @@ abstract final class Effects {
   /// Fades the child in from [surface] (default black). Smoothest on
   /// RGB-colored text; falls back to a coarse `dim` fade otherwise. RGB
   /// backgrounds always interpolate independently so filled cells retain
-  /// their coverage throughout the fade.
-  static Effect fadeIn({RgbColor surface = const RgbColor(0, 0, 0)}) =>
-      _FadeEffect(out: false, surface: surface);
+  /// their coverage throughout the fade. Set [transparent] for a cross-fade:
+  /// cells below half visibility stop covering the layer underneath.
+  static Effect fadeIn({
+    RgbColor surface = const RgbColor(0, 0, 0),
+    bool transparent = false,
+  }) => _FadeEffect(out: false, surface: surface, transparent: transparent);
 
-  /// Fades the child out toward [surface].
-  static Effect fadeOut({RgbColor surface = const RgbColor(0, 0, 0)}) =>
-      _FadeEffect(out: true, surface: surface);
+  /// Fades the child out toward [surface]. Set [transparent] when another
+  /// layer should show through the less-visible half of the fade.
+  static Effect fadeOut({
+    RgbColor surface = const RgbColor(0, 0, 0),
+    bool transparent = false,
+  }) => _FadeEffect(out: true, surface: surface, transparent: transparent);
 
   /// Slides the child in from [from], [distance] cells away.
   static Effect slideIn({Edge from = Edge.bottom, int distance = 1}) =>

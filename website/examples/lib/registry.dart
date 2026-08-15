@@ -831,7 +831,7 @@ TextArea(
         'A declarative, validated form that runs in terminal and browser apps '
         'alike.',
     cols: 54,
-    rows: 12,
+    rows: 14,
     interactive: true,
     code: '''FormPanel(
   definition: FormDefinition(
@@ -1829,6 +1829,117 @@ TextArea(
     rows: 32,
     interactive: true,
     builder: () => const NeonAsteroidsApp(),
+  ),
+  ExampleInfo(
+    id: 'forms.project',
+    widget: 'FormPanel',
+    category: 'Guide examples',
+    blurb:
+        'A project form that validates on submit, keeps errors next to their '
+        'fields, and returns typed values when complete.',
+    cols: 68,
+    rows: 15,
+    interactive: true,
+    builder: () => const _ProjectFormTour(),
+  ),
+  ExampleInfo(
+    id: 'lists.tasks',
+    widget: 'ListView',
+    category: 'Guide examples',
+    blurb:
+        'A thousand-row lazy task list with keyboard selection, activation, '
+        'paging, and a viewport scrollbar.',
+    cols: 56,
+    rows: 17,
+    interactive: true,
+    builder: () => const _TaskListTour(),
+  ),
+  ExampleInfo(
+    id: 'layout.responsive',
+    widget: 'LayoutBuilder',
+    category: 'Guide examples',
+    blurb:
+        'A workspace that switches between two panes and a stacked layout '
+        'from the local width its parent provides.',
+    cols: 74,
+    rows: 18,
+    interactive: true,
+    builder: () => const _ResponsiveWorkspaceTour(),
+  ),
+  ExampleInfo(
+    id: 'navigation.basics',
+    widget: 'Navigator',
+    category: 'Navigation & overlays',
+    blurb:
+        'Push a screen, present a dialog, and pop with or without a typed '
+        'result in one deliberately small flow.',
+    cols: 58,
+    rows: 14,
+    interactive: true,
+    builder: () => Navigator(
+      transition: RouteTransition.none,
+      home: const _NavigationBasicsTour(),
+    ),
+  ),
+  ExampleInfo(
+    id: 'navigation.placement',
+    widget: 'Navigator',
+    category: 'Guide examples',
+    blurb:
+        'Choose a dialog alignment, then see the same presented route move '
+        'to that position.',
+    cols: 66,
+    rows: 16,
+    interactive: true,
+    builder: () => Navigator(
+      transition: RouteTransition.none,
+      home: const _DialogPlacementTour(),
+    ),
+  ),
+  ExampleInfo(
+    id: 'navigation.guard',
+    widget: 'PopScope',
+    category: 'Guide examples',
+    blurb:
+        'An unsaved editor visibly blocks back navigation until the draft is '
+        'saved or deliberately discarded.',
+    cols: 54,
+    rows: 14,
+    interactive: true,
+    builder: () => Navigator(
+      transition: RouteTransition.none,
+      home: const _BackGuardHomeTour(),
+    ),
+  ),
+  ExampleInfo(
+    id: 'navigation.transitions',
+    widget: 'RouteTransition',
+    category: 'Guide examples',
+    blurb:
+        'Compare fade, slide, and instant route changes using the built-in '
+        'production transitions.',
+    cols: 58,
+    rows: 12,
+    interactive: true,
+    builder: () => Navigator(
+      transition: RouteTransition.none,
+      home: const _TransitionTour(),
+    ),
+  ),
+  ExampleInfo(
+    id: 'navigation.nested-flow',
+    widget: 'Navigator',
+    category: 'Guide examples',
+    blurb:
+        'An outer app route contains a three-step inner flow, then replaces '
+        'the whole flow with one completed screen.',
+    cols: 64,
+    rows: 17,
+    interactive: true,
+    builder: () => Navigator(
+      transition: RouteTransition.none,
+      home: const _NestedProjectsTour(),
+    ),
   ),
   ExampleInfo(
     id: 'focus.explorer',
@@ -3098,6 +3209,647 @@ class _ThemePreview extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A guide-level FormPanel example with visible invalid and successful submit
+/// states instead of the reference gallery's pre-filled happy path.
+class _ProjectFormTour extends StatefulWidget {
+  const _ProjectFormTour();
+
+  @override
+  State<_ProjectFormTour> createState() => _ProjectFormTourState();
+}
+
+class _ProjectFormTourState extends State<_ProjectFormTour> {
+  late final FormDefinition _definition = FormDefinition(
+    title: 'Create project',
+    submitLabel: 'Create',
+    showCancel: false,
+    fields: [
+      FormFieldSpec.text(id: 'name', label: 'Name', required: true),
+      FormFieldSpec.text(
+        id: 'slug',
+        label: 'Slug',
+        required: true,
+        validator: (value, _) {
+          final slug = (value ?? '').toString();
+          return RegExp(r'^[a-z0-9-]+$').hasMatch(slug)
+              ? null
+              : 'Use lowercase letters, numbers, and hyphens';
+        },
+      ),
+      FormFieldSpec.checkbox(id: 'private', label: 'Private project'),
+    ],
+  );
+
+  String _status = 'Fill in the project details';
+
+  void _submit(FormSubmitResult result) => setState(() {
+    _status = result.valid
+        ? 'Created ${result.values.text('name')}'
+        : 'Fix ${result.errors.length} field(s)';
+  });
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        FormPanel(
+          definition: _definition,
+          layout: FormPanelLayout.inline,
+          fieldWidth: 26,
+          onSubmit: _submit,
+        ),
+        const Spacer(),
+        Text('status: $_status'),
+      ],
+    ),
+  );
+}
+
+/// A primary list where containment is deliberate: the demo is entirely about
+/// list navigation, so edge arrows should stay in the list instead of moving
+/// to unrelated guide chrome.
+class _TaskListTour extends StatefulWidget {
+  const _TaskListTour();
+
+  @override
+  State<_TaskListTour> createState() => _TaskListTourState();
+}
+
+class _TaskListTourState extends State<_TaskListTour> {
+  static const _count = 1000;
+  var _selected = 0;
+  String _lastAction = 'Choose a task';
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text('TASKS', style: CellStyle(bold: true)),
+        Text('selected: ${_selected + 1} / $_count'),
+        const SizedBox(height: 1),
+        Expanded(
+          child: ListView.builder(
+            itemCount: _count,
+            autofocus: true,
+            edgeBehavior: EdgeBehavior.contain,
+            scrollbar: true,
+            onSelectionChanged: (index) => setState(() => _selected = index),
+            onActivate: (index) => setState(() {
+              _lastAction = 'Opened task ${index + 1}';
+            }),
+            itemBuilder: (context, index, selected) => Text(
+              '${selected ? '›' : ' '} Task ${(index + 1).toString().padLeft(4, '0')}',
+              style: selected
+                  ? Theme.of(context).selectionStyle
+                  : CellStyle.empty,
+            ),
+          ),
+        ),
+        const SizedBox(height: 1),
+        Text('last: $_lastAction'),
+      ],
+    ),
+  );
+}
+
+/// A local-breakpoint demo: its buttons change only the child envelope, so the
+/// LayoutBuilder proves that panes adapt to parent constraints rather than the
+/// global browser or terminal size.
+class _ResponsiveWorkspaceTour extends StatefulWidget {
+  const _ResponsiveWorkspaceTour();
+
+  @override
+  State<_ResponsiveWorkspaceTour> createState() =>
+      _ResponsiveWorkspaceTourState();
+}
+
+class _ResponsiveWorkspaceTourState extends State<_ResponsiveWorkspaceTour> {
+  var _width = 68;
+
+  Widget _files() => const Panel(
+    title: 'Files',
+    child: Padding(
+      padding: EdgeInsets.all(1),
+      child: Text('README.md\nlib/\ntest/'),
+    ),
+  );
+
+  Widget _preview() => const Panel(
+    title: 'Preview',
+    child: Padding(
+      padding: EdgeInsets.all(1),
+      child: Text('# Fleury\n\nA framework for terminal apps.'),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Button(
+              label: 'Narrow',
+              autofocus: true,
+              onPressed: () => setState(() => _width = 42),
+            ),
+            const SizedBox(width: 1),
+            Button(label: 'Wide', onPressed: () => setState(() => _width = 68)),
+          ],
+        ),
+        const SizedBox(height: 1),
+        Expanded(
+          child: SizedBox(
+            width: _width,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final wide = (constraints.maxCols ?? 0) >= 60;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      wide ? 'WIDE · TWO PANES' : 'NARROW · STACKED',
+                      style: const CellStyle(bold: true),
+                    ),
+                    const SizedBox(height: 1),
+                    Expanded(
+                      child: wide
+                          ? Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Expanded(flex: 2, child: _files()),
+                                const SizedBox(width: 1),
+                                Expanded(flex: 3, child: _preview()),
+                              ],
+                            )
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Expanded(child: _files()),
+                                const SizedBox(height: 1),
+                                Expanded(child: _preview()),
+                              ],
+                            ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+enum _NavigationResult { done }
+
+/// The first navigation example intentionally teaches only the three stack
+/// operations. Each screen labels its depth so the behavior is readable
+/// without reverse-engineering project-specific state.
+class _NavigationBasicsTour extends StatefulWidget {
+  const _NavigationBasicsTour();
+
+  @override
+  State<_NavigationBasicsTour> createState() => _NavigationBasicsTourState();
+}
+
+class _NavigationBasicsTourState extends State<_NavigationBasicsTour> {
+  String _result = 'none';
+
+  Future<void> _openDetails() async {
+    final result = await context.push<_NavigationResult>(
+      const _NavigationDetailsTour(),
+    );
+    if (!mounted || result == null) return;
+    setState(() => _result = result.name);
+  }
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('HOME · STACK DEPTH 1', style: CellStyle(bold: true)),
+        const SizedBox(height: 1),
+        Button(label: 'Push details', autofocus: true, onPressed: _openDetails),
+        const Spacer(),
+        Text('result: $_result'),
+      ],
+    ),
+  );
+}
+
+class _NavigationDetailsTour extends StatefulWidget {
+  const _NavigationDetailsTour();
+
+  @override
+  State<_NavigationDetailsTour> createState() => _NavigationDetailsTourState();
+}
+
+class _NavigationDetailsTourState extends State<_NavigationDetailsTour> {
+  String _dialogResult = 'not shown';
+
+  Future<void> _presentDialog() async {
+    final confirmed = await context.present<bool>(
+      const _NavigationConfirmationDialog(),
+    );
+    if (!mounted) return;
+    setState(() => _dialogResult = confirmed == true ? 'confirmed' : 'closed');
+  }
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('DETAILS · STACK DEPTH 2', style: CellStyle(bold: true)),
+        Text('dialog: $_dialogResult'),
+        const SizedBox(height: 1),
+        Button(
+          label: 'Present dialog',
+          autofocus: true,
+          onPressed: _presentDialog,
+        ),
+        Button(
+          label: 'Pop with result',
+          onPressed: () => context.pop(_NavigationResult.done),
+        ),
+        Button(label: 'Pop without result', onPressed: context.pop),
+      ],
+    ),
+  );
+}
+
+class _NavigationConfirmationDialog extends StatelessWidget {
+  const _NavigationConfirmationDialog();
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 34,
+    height: 7,
+    child: Panel(
+      title: 'PRESENTED DIALOG',
+      focused: true,
+      child: Center(
+        child: Button(
+          label: 'Confirm and pop',
+          autofocus: true,
+          onPressed: () => context.pop(true),
+        ),
+      ),
+    ),
+  );
+}
+
+class _DialogPlacementTour extends StatefulWidget {
+  const _DialogPlacementTour();
+
+  @override
+  State<_DialogPlacementTour> createState() => _DialogPlacementTourState();
+}
+
+class _DialogPlacementTourState extends State<_DialogPlacementTour> {
+  Alignment _alignment = Alignment.center;
+
+  Future<void> _show(Alignment alignment) async {
+    setState(() => _alignment = alignment);
+    await context.present<void>(
+      const _PlacedDialogTour(),
+      alignment: alignment,
+      transition: RouteTransition.none,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('CHOOSE WHERE TO PRESENT', style: CellStyle(bold: true)),
+        const SizedBox(height: 1),
+        Select<Alignment>(
+          semanticLabel: 'Dialog placement',
+          autofocus: true,
+          value: _alignment,
+          options: const [
+            SelectOption(value: Alignment.topLeft, label: 'Top left'),
+            SelectOption(value: Alignment.center, label: 'Center'),
+            SelectOption(value: Alignment.bottomRight, label: 'Bottom right'),
+          ],
+          onChanged: _show,
+        ),
+        const Spacer(),
+        const Text('Choosing an option presents the dialog.'),
+      ],
+    ),
+  );
+}
+
+class _PlacedDialogTour extends StatelessWidget {
+  const _PlacedDialogTour();
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 26,
+    height: 6,
+    child: Panel(
+      title: 'PLACED DIALOG',
+      focused: true,
+      child: Center(
+        child: Button(label: 'Close', autofocus: true, onPressed: context.pop),
+      ),
+    ),
+  );
+}
+
+class _BackGuardHomeTour extends StatefulWidget {
+  const _BackGuardHomeTour();
+
+  @override
+  State<_BackGuardHomeTour> createState() => _BackGuardHomeTourState();
+}
+
+class _BackGuardHomeTourState extends State<_BackGuardHomeTour> {
+  String _savedText = 'Release notes';
+
+  void _saveDraft(String value) => setState(() => _savedText = value);
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('DRAFTS', style: CellStyle(bold: true)),
+        Text('saved: $_savedText'),
+        const SizedBox(height: 1),
+        Button(
+          label: 'Edit draft',
+          autofocus: true,
+          onPressed: () => context.push<void>(
+            _GuardedEditorTour(initialText: _savedText, onSave: _saveDraft),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _GuardedEditorTour extends StatefulWidget {
+  const _GuardedEditorTour({required this.initialText, required this.onSave});
+
+  final String initialText;
+  final void Function(String) onSave;
+
+  @override
+  State<_GuardedEditorTour> createState() => _GuardedEditorTourState();
+}
+
+class _GuardedEditorTourState extends State<_GuardedEditorTour> {
+  late final TextEditingController _controller;
+  late String _savedText;
+  bool _dirty = false;
+  String _status = 'No unsaved changes';
+
+  @override
+  void initState() {
+    super.initState();
+    _savedText = widget.initialText;
+    _controller = TextEditingController(text: _savedText);
+  }
+
+  void _handleChanged(String value) {
+    final dirty = value != _savedText;
+    setState(() {
+      _dirty = dirty;
+      _status = dirty ? 'Unsaved changes' : 'No unsaved changes';
+    });
+  }
+
+  void _save() {
+    final value = _controller.text;
+    widget.onSave(value);
+    setState(() {
+      _savedText = value;
+      _dirty = false;
+      _status = 'Saved — back is allowed';
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => PopScope(
+    canPop: !_dirty,
+    onBlocked: () => setState(() => _status = 'Back blocked — save first'),
+    child: _framed(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('EDITOR', style: CellStyle(bold: true)),
+          Text('status: $_status'),
+          const SizedBox(height: 1),
+          TextInput(
+            autofocus: true,
+            semanticLabel: 'Draft text',
+            controller: _controller,
+            onChanged: _handleChanged,
+          ),
+          const SizedBox(height: 1),
+          Button(
+            label: 'Back',
+            onPressed: () => Navigator.of(context).maybePop(),
+          ),
+          Button(label: 'Save', onPressed: _save),
+          Button(label: 'Discard', onPressed: context.pop),
+        ],
+      ),
+    ),
+  );
+}
+
+enum _TransitionKind { fade, slide, none }
+
+class _TransitionTour extends StatefulWidget {
+  const _TransitionTour();
+
+  @override
+  State<_TransitionTour> createState() => _TransitionTourState();
+}
+
+class _TransitionTourState extends State<_TransitionTour> {
+  _TransitionKind _kind = _TransitionKind.slide;
+
+  RouteTransition get _previewTransition => switch (_kind) {
+    _TransitionKind.fade => RouteTransition.fade,
+    _TransitionKind.slide => RouteTransition.slide,
+    _TransitionKind.none => RouteTransition.none,
+  };
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('ROUTE TRANSITIONS', style: CellStyle(bold: true)),
+        const SizedBox(height: 1),
+        Select<_TransitionKind>(
+          semanticLabel: 'Transition',
+          autofocus: true,
+          value: _kind,
+          options: const [
+            SelectOption(value: _TransitionKind.fade, label: 'Fade'),
+            SelectOption(value: _TransitionKind.slide, label: 'Slide'),
+            SelectOption(value: _TransitionKind.none, label: 'None'),
+          ],
+          onChanged: (value) => setState(() => _kind = value),
+        ),
+        Button(
+          label: 'Preview push',
+          onPressed: () => context.push<void>(
+            _TransitionScreenTour(kind: _kind),
+            transition: _previewTransition,
+          ),
+        ),
+        const Spacer(),
+        const Text('Using Fleury\'s production transition presets.'),
+      ],
+    ),
+  );
+}
+
+class _TransitionScreenTour extends StatelessWidget {
+  const _TransitionScreenTour({required this.kind});
+
+  final _TransitionKind kind;
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('${kind.name.toUpperCase()} · PUSHED SCREEN'),
+        const Spacer(),
+        Button(label: 'Preview pop', autofocus: true, onPressed: context.pop),
+      ],
+    ),
+  );
+}
+
+class _NestedProjectsTour extends StatelessWidget {
+  const _NestedProjectsTour();
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('PROJECTS · OUTER STACK 1', style: CellStyle(bold: true)),
+        const SizedBox(height: 1),
+        Button(
+          label: 'Start setup',
+          autofocus: true,
+          onPressed: () => context.push<void>(const _NestedSetupTour()),
+        ),
+      ],
+    ),
+  );
+}
+
+class _NestedSetupTour extends StatelessWidget {
+  const _NestedSetupTour();
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text('SETUP · OUTER STACK 2', style: CellStyle(bold: true)),
+        const SizedBox(height: 1),
+        Expanded(
+          child: Panel(
+            title: 'INNER FLOW',
+            child: Navigator(
+              transition: RouteTransition.none,
+              home: const _NestedFlowStepTour(step: 1),
+            ),
+          ),
+        ),
+        const SizedBox(height: 1),
+        const Text('The inner stack advances inside one outer route.'),
+      ],
+    ),
+  );
+}
+
+class _NestedFlowStepTour extends StatelessWidget {
+  const _NestedFlowStepTour({required this.step});
+
+  final int step;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.all(1),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('INNER STEP $step OF 3'),
+        Text(switch (step) {
+          1 => 'Choose a project',
+          2 => 'Configure access',
+          _ => 'Review and finish',
+        }),
+        const Spacer(),
+        if (step < 3)
+          Button(
+            label: 'Next step',
+            autofocus: true,
+            onPressed: () =>
+                context.push<void>(_NestedFlowStepTour(step: step + 1)),
+          )
+        else
+          Button(
+            label: 'Finish setup',
+            autofocus: true,
+            onPressed: () => context.rootNavigator.pushReplacement<void>(
+              const _NestedProjectReadyTour(),
+            ),
+          ),
+        if (step > 1) Button(label: 'Previous', onPressed: context.pop),
+        Button(label: 'Cancel setup', onPressed: context.rootNavigator.pop),
+      ],
+    ),
+  );
+}
+
+class _NestedProjectReadyTour extends StatelessWidget {
+  const _NestedProjectReadyTour();
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('PROJECT READY · OUTER STACK 2'),
+        const Text('The entire inner history was removed together.'),
+        const Spacer(),
+        Button(
+          label: 'Back to projects',
+          autofocus: true,
+          onPressed: context.pop,
+        ),
+      ],
+    ),
+  );
 }
 
 /// The guide's focus explorer. The docs host supplies the same automatic

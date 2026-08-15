@@ -340,6 +340,43 @@ void main() {
       expect(picked, 'blue');
     });
 
+    testWidgets('clicking the open trigger closes the list', (tester) {
+      tester.pumpWidget(const _Host(initial: 'red'));
+
+      void clickTrigger() {
+        final trigger = _find(tester, 'Red')!;
+        tester.sendMouse(
+          MouseEvent(
+            kind: MouseEventKind.down,
+            button: MouseButton.left,
+            col: trigger.col,
+            row: trigger.row,
+          ),
+        );
+        tester.sendMouse(
+          MouseEvent(
+            kind: MouseEventKind.up,
+            button: MouseButton.left,
+            col: trigger.col,
+            row: trigger.row,
+          ),
+        );
+      }
+
+      clickTrigger();
+      expect(_screen(tester).contains('Blue'), isTrue, reason: 'opened');
+
+      clickTrigger();
+      expect(_screen(tester).contains('Blue'), isFalse, reason: 'closed');
+      expect(
+        tester
+            .semantics()
+            .single(role: SemanticRole.button, label: 'Color')
+            .expanded,
+        isFalse,
+      );
+    });
+
     group('semantics', () {
       testWidgets('trigger semantic action opens the option menu', (
         tester,

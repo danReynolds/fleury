@@ -1098,7 +1098,7 @@ th:nth-last-child(-n + 2) .ct::after {
   font-size: var(--sl-text-lg);
 }
 
-/* ── CodeDemoSplit (.cds): one source file beside what it renders ───────────*/
+/* ── CodeDemoSplit (.cds): source beside what it renders ───────────────────*/
 /* A terminal-window card that honours the site's panel look (dark gradient,
    fleury-green live cue, mono chrome). Inline it stacks or goes two-column;
    "Expand" opens a full playground modal — code left, running demo right. */
@@ -1140,6 +1140,48 @@ th:nth-last-child(-n + 2) .ct::after {
   font-family: var(--sl-font-mono, ui-monospace, monospace);
   font-size: 0.85rem;
   color: var(--sl-color-gray-2);
+}
+.cds-file-tabs {
+  align-self: stretch;
+  display: flex;
+  min-width: 0;
+  margin-block: -0.5rem;
+  overflow-x: auto;
+}
+.cds-file-tab {
+  position: relative;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0.55rem 0.8rem 0.5rem;
+  border: 0;
+  border-right: 1px solid var(--cds-line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--sl-color-gray-3);
+  font-family: var(--sl-font-mono, ui-monospace, monospace);
+  font-size: 0.78rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.cds-file-tab[aria-selected='true'] {
+  background: color-mix(in srgb, var(--cds-accent) 7%, transparent);
+  color: var(--sl-color-gray-1);
+}
+.cds-file-tab[aria-selected='true']::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  background: var(--cds-accent);
+}
+.cds-file-tab:hover {
+  color: var(--sl-color-white);
+  background: color-mix(in srgb, var(--cds-accent) 10%, transparent);
+}
+.cds-file-tab:focus-visible {
+  z-index: 1;
+  outline: 2px solid var(--cds-accent);
+  outline-offset: -2px;
 }
 .cds-live {
   margin-left: auto;
@@ -1266,6 +1308,8 @@ th:nth-last-child(-n + 2) .ct::after {
    context can trap it behind the backdrop. Code left, a freshly-mounted demo
    right — the inline demo keeps running untouched. */
 .cds-modal {
+  --cds-line: color-mix(in srgb, var(--sl-color-gray-4) 55%, transparent);
+  --cds-accent: #3ddc97;
   /* Explicitly centered: a global reset zeroes the UA margin:auto that
      normally centers a modal <dialog>, leaving it pinned top-left. */
   inset: 0;

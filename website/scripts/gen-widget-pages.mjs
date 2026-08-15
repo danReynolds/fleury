@@ -349,7 +349,14 @@ const all = JSON.parse(readFileSync(MANIFEST, 'utf8'));
 // catalog entry). 'Showcases' = full apps, their own section. 'Theming' =
 // embeds on the theming guide — they demonstrate a *theme*, which is data
 // rather than a widget, so there is no class to build an API reference from.
-const GUIDE_EMBED_CATEGORIES = new Set(['Showcases', 'Home', 'Theming']);
+// 'Guide examples' are outcome-oriented compositions that may reuse a widget
+// which already has a canonical reference example.
+const GUIDE_EMBED_CATEGORIES = new Set([
+  'Showcases',
+  'Home',
+  'Theming',
+  'Guide examples',
+]);
 const widgets = all.filter(
   (e) =>
     !GUIDE_EMBED_CATEGORIES.has(e.category) &&

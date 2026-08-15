@@ -1,96 +1,111 @@
-// Compile-checked source behind the Navigation guide. Exercises route-local
-// commands, context.push/context.pop, returned results, PopScope, and a route
-// transition against the real API. Guarded by ../test/doc_snippets_test.dart.
+// Compile-checked source behind the Navigation guide. It keeps the first
+// example deliberately small: push a screen, present a dialog, and pop with
+// or without a typed result. Guarded by ../test/doc_snippets_test.dart.
 
 import 'dart:async';
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
 
-const _openDetail = CommandId('navigation.open-detail');
-const _confirmDetail = CommandId('navigation.confirm-detail');
+void main() => runApp(navigationDemoApp());
 
-void main() =>
-    runApp(const FleuryApp(title: 'Navigation demo', home: HomeScreen()));
+Widget navigationDemoApp() =>
+    const FleuryApp(title: 'Navigation', home: NavigationHome());
 
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+enum DetailsResult { done }
+
+class NavigationHome extends StatefulWidget {
+  const NavigationHome({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<NavigationHome> createState() => _NavigationHomeState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  var _confirmed = false;
+class _NavigationHomeState extends State<NavigationHome> {
+  String _result = 'none';
 
-  Future<void> _showDetail(BuildContext context) async {
-    final confirmed = await context.push<bool>(
-      const DetailScreen(),
-      transition: RouteTransition.slide,
-    );
-    if (mounted && confirmed == true) {
-      setState(() => _confirmed = true);
-    }
+  Future<void> _openDetails(BuildContext context) async {
+    final result = await context.push<DetailsResult>(const DetailsScreen());
+    if (!mounted || result == null) return;
+    setState(() => _result = result.name);
   }
 
   @override
-  Widget build(BuildContext context) => CommandScope(
-    commands: [
-      AppCommand(
-        id: _openDetail,
-        title: 'Open detail',
-        category: 'Navigation',
-        shortcuts: [KeySequence.ctrl.o],
-        semanticAction: SemanticAction.navigate,
-        run: (command) {
-          final source = command.buildContext;
-          if (source != null) unawaited(_showDetail(source));
-        },
-      ),
-    ],
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.all(1),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(_confirmed ? 'Detail confirmed' : 'Home'),
+        const Text('HOME · STACK DEPTH 1', style: CellStyle(bold: true)),
         const SizedBox(height: 1),
         Button(
-          label: 'Open detail',
-          onPressed: () => unawaited(_showDetail(context)),
+          label: 'Push details',
+          autofocus: true,
+          onPressed: () => unawaited(_openDetails(context)),
         ),
         const Spacer(),
-        const KeyHintBar(),
+        Text('result: $_result'),
       ],
     ),
   );
 }
 
-class DetailScreen extends StatelessWidget {
-  const DetailScreen({super.key});
+class DetailsScreen extends StatefulWidget {
+  const DetailsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: true,
-    child: CommandScope(
-      commands: [
-        AppCommand(
-          id: _confirmDetail,
-          title: 'Confirm and go back',
-          category: 'Navigation',
-          shortcuts: [KeySequence.ctrl.enter],
-          semanticAction: SemanticAction.activate,
-          run: (command) => command.buildContext?.pop(true),
+  State<DetailsScreen> createState() => _DetailsScreenState();
+}
+
+class _DetailsScreenState extends State<DetailsScreen> {
+  String _dialogResult = 'not shown';
+
+  Future<void> _presentDialog(BuildContext context) async {
+    final confirmed = await context.present<bool>(const ConfirmationDialog());
+    if (!mounted) return;
+    setState(() => _dialogResult = confirmed == true ? 'confirmed' : 'closed');
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.all(1),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('DETAILS · STACK DEPTH 2', style: CellStyle(bold: true)),
+        Text('dialog: $_dialogResult'),
+        const SizedBox(height: 1),
+        Button(
+          label: 'Present dialog',
+          autofocus: true,
+          onPressed: () => unawaited(_presentDialog(context)),
         ),
+        Button(
+          label: 'Pop with result',
+          onPressed: () => context.pop(DetailsResult.done),
+        ),
+        Button(label: 'Pop without result', onPressed: context.pop),
       ],
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Detail'),
-          const SizedBox(height: 1),
-          Button(label: 'Confirm', onPressed: () => context.pop(true)),
-          Button(label: 'Cancel', onPressed: () => context.pop(false)),
-          const Spacer(),
-          const KeyHintBar(),
-        ],
+    ),
+  );
+}
+
+class ConfirmationDialog extends StatelessWidget {
+  const ConfirmationDialog({super.key});
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 34,
+    height: 7,
+    child: Panel(
+      title: 'PRESENTED DIALOG',
+      focused: true,
+      child: Center(
+        child: Button(
+          label: 'Confirm and pop',
+          autofocus: true,
+          onPressed: () => context.pop(true),
+        ),
       ),
     ),
   );

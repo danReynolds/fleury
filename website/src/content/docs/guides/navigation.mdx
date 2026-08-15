@@ -1,0 +1,357 @@
+---
+title: Navigation
+description: Move between screens, present dialogs, and return results without losing state or focus.
+---
+
+import FleuryExample from '../../../components/FleuryExample.astro';
+import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
+
+Navigation moves users through an app while preserving where they came from.
+Give `FleuryApp` a `home` widget and it creates the root `Navigator` for you:
+
+```dart
+void main() => runApp(
+  const FleuryApp(title: 'Projects', home: ProjectsScreen()),
+);
+```
+
+The navigator keeps a stack of screens. Opening a screen adds it to the stack;
+returning removes it and reveals the screen underneath with its state and focus
+restored.
+
+| You need to… | Use |
+|---|---|
+| Open the next screen | `context.push(screen)` |
+| Show a temporary dialog or sheet | `context.present(dialog)` |
+| Return to the previous route | `context.pop()` |
+| Return a value | `context.pop(result)` |
+
+## Push, present, and pop
+
+This first example stays deliberately literal. Each screen labels its stack
+depth, and each action names the operation it performs:
+
+<CodeDemoSplit file="navigation_demo.dart" layout="demo-wide">
+<Fragment slot="code">
+```dart
+enum DetailsResult { done }
+
+Future<void> openDetails(BuildContext context) async {
+  final result = await context.push<DetailsResult>(const DetailsScreen());
+
+  if (result != null) showResult(result);
+}
+
+Future<void> showConfirmation(BuildContext context) async {
+  final confirmed = await context.present<bool>(
+    const ConfirmationDialog(),
+  );
+
+  showDialogResult(confirmed == true);
+}
+```
+</Fragment>
+<FleuryExample
+  slot="demo"
+  id="navigation.basics"
+  cols={58}
+  rows={14}
+  interactive
+/>
+</CodeDemoSplit>
+
+Try the operations in isolation:
+
+1. Activate **Push details**. The home route stays mounted underneath stack
+   depth 2.
+2. Activate **Present dialog**, then **Confirm and pop**. The details screen
+   remains open and reports the dialog result.
+3. Activate **Pop without result**. The home screen returns unchanged.
+4. Push details again and choose **Pop with result**. The awaiting home screen
+   now reports `done`.
+
+Routes stay mounted while covered, so their widget state, scroll positions, and
+form values remain intact. Each route also gets automatic focus traversal and
+its own focus memory. You do not wire either behavior screen by screen.
+
+## Screens and dialogs
+
+Use `push` for a new step in the user's journey. A pushed screen fills the
+navigator and Esc returns to the screen beneath it:
+
+```dart
+final result = await context.push<ProjectResult>(
+  const ProjectScreen(),
+);
+```
+
+Fleury does not expose Flutter-style `RouteSettings` or a named-route table.
+The navigator stores the typed screen widget itself, and any screen data uses
+its ordinary constructor. `popUntil<ProjectScreen>()` therefore matches by
+widget type; the runtime type is otherwise only a diagnostic and semantics
+label.
+
+Use `present` for a temporary decision or tool that belongs over the current
+screen. The covered screen remains painted, while focus and unhandled keys stay
+inside the presented route until it closes:
+
+```dart
+final confirmed = await context.present<bool>(
+  const DeleteProjectDialog(),
+);
+```
+
+Both methods return a `Future<T?>`. The route supplies `T` when it closes:
+
+```dart
+context.pop(true); // completes the awaiting Future<bool?>
+```
+
+An ordinary back or dismissal returns `null`. Use a non-nullable result value
+only when the user completed an explicit action.
+
+### Dialog placement
+
+Dialogs are centered by default. Use `alignment` for a sheet or anchored tool;
+the frame and padding remain ordinary widgets:
+
+```dart
+context.present<void>(
+  const CommandSheet(),
+  alignment: Alignment.bottomCenter,
+  barrierColor: Colors.black,
+);
+```
+
+Set `barrierDismissible: false` when Esc must not dismiss the route. Close it
+explicitly with `context.pop()` after the required action succeeds.
+
+Choose a placement below. Selecting an option immediately presents the same
+dialog there; close it to try another position:
+
+<CodeDemoSplit file="navigation_advanced_demos.dart" layout="demo-wide">
+<Fragment slot="code">
+```dart
+Select<Alignment>(
+  value: placement,
+  options: const [
+    SelectOption(value: Alignment.topLeft, label: 'Top left'),
+    SelectOption(value: Alignment.center, label: 'Center'),
+    SelectOption(value: Alignment.bottomRight, label: 'Bottom right'),
+  ],
+  onChanged: (alignment) => context.present<void>(
+    const PlacedDialog(),
+    alignment: alignment,
+  ),
+)
+```
+</Fragment>
+<FleuryExample
+  slot="demo"
+  id="navigation.placement"
+  cols={66}
+  rows={16}
+  interactive
+/>
+</CodeDemoSplit>
+
+## Guarding back
+
+Wrap a screen in `PopScope` when Esc or another user-initiated back action
+should pause—for example, while an editor has unsaved changes:
+
+<CodeDemoSplit file="navigation_advanced_demos.dart" layout="demo-wide">
+<Fragment slot="code">
+```dart
+PopScope(
+  canPop: !hasUnsavedChanges,
+  onBlocked: showSaveMessage,
+  child: TextInput(
+    autofocus: true,
+    onChanged: (text) => setState(() {
+      hasUnsavedChanges = text != savedText;
+    }),
+  ),
+),
+```
+</Fragment>
+<FleuryExample
+  slot="demo"
+  id="navigation.guard"
+  cols={54}
+  rows={14}
+  interactive
+/>
+</CodeDemoSplit>
+
+When `canPop` is false, the screen stays open and `onBlocked` runs. This guard
+applies to `maybePop`, including Fleury's Esc handling. A programmatic
+`context.pop()` is unconditional, so a successful confirmation can still close
+the screen.
+
+In the demo, open the editor and **Back** immediately: it succeeds because
+nothing changed. Open it again, type in the field, and choose Back; the guard now
+blocks the request. **Save** clears the dirty state so the same back action can
+close the screen. Reopen the editor and the saved value is still there.
+**Discard** demonstrates an intentional programmatic pop.
+
+## Advanced patterns
+
+### Transitions
+
+Override the transition for one route when its movement adds useful context:
+
+```dart
+context.push(
+  const ProjectScreen(),
+  transition: RouteTransition.slide,
+);
+```
+
+Fleury includes `fade`, `slide`, and `none`. You can also set the default once on
+a custom `Navigator` with its `transition` property.
+
+The built-in presets share one motion path in both directions: pop uses the
+flipped forward curve so it retraces the push. A custom `RouteTransition` can
+set `reverseCurve` when an intentionally different return motion communicates
+something useful.
+
+Use the picker to compare all three in both directions. The live example uses
+the same built-in transition timing as an application:
+
+<FleuryExample
+  id="navigation.transitions"
+  cols={58}
+  rows={12}
+  interactive
+/>
+
+### Replacing and resetting
+
+Most navigation is `push` and `pop`. These operations handle the stack-changing
+cases:
+
+| Operation | Typical use |
+|---|---|
+| `pushReplacement(screen)` | Replace sign-in with the signed-in screen |
+| `pushAndClear(screen)` | Log out and remove the authenticated history |
+| `popUntil<Screen>()` | Return to a known screen type |
+| `popToRoot()` | Return to this navigator's first screen |
+
+Routes are widgets, not named route strings. Passing the screen directly keeps
+constructor arguments typed and makes `popUntil<T>()` type-safe.
+
+### Nested navigators
+
+`FleuryApp(home: ...)` inserts the root navigator automatically. Add another
+`Navigator` only when one outer screen needs a self-contained history: a setup
+flow, a file browser beside an editor, or a tab with its own back stack.
+
+Follow the files from left to right: `FleuryApp` supplies the root navigator,
+Projects pushes one setup route onto it, `SetupFlow` declares the second
+navigator, and each setup step pushes onto that nearest inner navigator.
+Finishing replaces the one outer setup route, removing its whole inner history
+together; Back then returns directly to Projects:
+
+<CodeDemoSplit
+  files={['app.dart', 'projects_screen.dart', 'setup_flow.dart', 'setup_step.dart']}
+  initialFile="setup_flow.dart"
+  layout="demo-wide"
+>
+<Fragment slot="code-0">
+```dart
+FleuryApp(
+  title: 'Projects',
+  // Supplying home inserts the app's root Navigator.
+  home: const ProjectsScreen(),
+);
+```
+</Fragment>
+<Fragment slot="code-1">
+```dart
+class ProjectsScreen extends StatelessWidget {
+  const ProjectsScreen({super.key});
+
+  // This context belongs to the root Navigator.
+  @override
+  Widget build(BuildContext context) => Button(
+    label: 'Start setup',
+    onPressed: () => context.push<void>(const SetupFlow()),
+  );
+}
+```
+</Fragment>
+<Fragment slot="code-2">
+```dart
+class SetupFlow extends StatelessWidget {
+  const SetupFlow({super.key});
+
+  @override
+  // This is the nested Navigator. Its stack lives inside one root route.
+  Widget build(BuildContext context) => Navigator(
+    home: const SetupStep(step: 1),
+  );
+}
+```
+</Fragment>
+<Fragment slot="code-3">
+```dart
+class SetupStep extends StatelessWidget {
+  const SetupStep({required this.step});
+
+  final int step;
+
+  @override
+  Widget build(BuildContext context) => step < 3
+      ? Button(
+          label: 'Next step',
+          onPressed: () => context.push<void>(
+            SetupStep(step: step + 1), // nearest: nested Navigator
+          ),
+        )
+      : Button(
+          label: 'Finish setup',
+          onPressed: () => context.rootNavigator.pushReplacement<void>(
+            const ProjectReadyScreen(), // replaces the whole setup flow
+          ),
+        );
+}
+```
+</Fragment>
+<FleuryExample
+  slot="demo"
+  id="navigation.nested-flow"
+  cols={64}
+  rows={17}
+  interactive
+/>
+</CodeDemoSplit>
+
+Inside the flow, `context.push`, `context.pop`, and `Navigator.of(context)`
+target the nearest navigator. The outer route is unaffected while those inner
+steps change. `context.rootNavigator` is the deliberate escape hatch for
+finishing or cancelling the whole flow, or for opening an app-wide route.
+
+## API reference
+
+| API | What it does |
+|---|---|
+| `FleuryApp(home: screen)` | Creates the app's root navigator |
+| `context.push<T>(screen)` | Pushes a full screen and awaits its result |
+| `context.present<T>(screen)` | Presents a focus-contained route over the current screen |
+| `context.pop([result])` | Closes the current route, optionally with a result |
+| `Navigator.of(context)` | Gets the nearest navigator state |
+| `context.rootNavigator` | Gets the app's root navigator state |
+| `PopScope` | Guards user-initiated back attempts |
+| `RouteTransition` | Controls route enter and exit animation |
+
+## Next steps
+
+- [Focus management](/fleury/guides/focus/) explains traversal, focus memory,
+  and presented-route containment in detail.
+- [Key handling](/fleury/guides/focus-and-keyboard/) shows how keyboard
+  shortcuts invoke screen-owned actions.
+- [App entry points](/fleury/concepts/app-entry/) covers `home`, `child`, and
+  custom root shells.
+- The [app-shell example](https://github.com/danReynolds/fleury/blob/main/packages/fleury_widgets/example/app_shell_demo.dart)
+  combines a custom root shell, commands, and navigation results.

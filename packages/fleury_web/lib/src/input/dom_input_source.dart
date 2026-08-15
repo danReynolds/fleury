@@ -52,7 +52,8 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
   String? _suppressNextInputText;
   var _compositionSuppressionGeneration = 0;
   MouseButton _pressedButton = MouseButton.none;
-  CellOffset? _lastPointerUpCell;
+  MouseButton _captureLostButton = MouseButton.none;
+  var _suppressNextPointerClick = false;
 
   @override
   void start(TuiInputSink onEvent) {
@@ -80,7 +81,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     _add(_pointerTarget, 'pointerdown', _handlePointerDown);
     _add(_pointerTarget, 'pointerup', _handlePointerUp);
     _add(_pointerTarget, 'pointercancel', _handlePointerCancel);
-    _add(_pointerTarget, 'lostpointercapture', _handlePointerCancel);
+    _add(_pointerTarget, 'lostpointercapture', _handleLostPointerCapture);
     _add(_pointerTarget, 'pointermove', _handlePointerMove);
     _add(_pointerTarget, 'click', _handleClick);
     _add(_pointerTarget, 'wheel', _handleWheel);
@@ -112,7 +113,8 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     _suppressNextInputText = null;
     _compositionSuppressionGeneration += 1;
     _pressedButton = MouseButton.none;
-    _lastPointerUpCell = null;
+    _captureLostButton = MouseButton.none;
+    _suppressNextPointerClick = false;
     _focusCoordinator?.handleBrowserFocusOut(WebFocusTarget.keyboardCapture);
     _clearTextArea();
     final textArea = _activeTextArea;
@@ -482,6 +484,11 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
   }
 
   void _handlePointerDown(web.Event raw) {
+    // A new physical gesture supersedes any orphaned compatibility-click
+    // marker left by a prior gesture (for example, if the browser omitted its
+    // click because the original target detached).
+    _suppressNextPointerClick = false;
+    _captureLostButton = MouseButton.none;
     // A cell-grid link owns its whole gesture: let the browser navigate the
     // href natively. Capturing the pointer here would retarget the click away
     // from the anchor, and routing it as an app pointer event would consume it.
@@ -492,7 +499,6 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     final cell = _cellForPointer(event);
     if (button == MouseButton.none || cell == null) return;
     _pressedButton = button;
-    _lastPointerUpCell = null;
     try {
       _pointerTarget.setPointerCapture(event.pointerId);
     } catch (_) {
@@ -521,6 +527,9 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     if (button == MouseButton.none && _pressedButton != MouseButton.none) {
       button = _pressedButton;
     }
+    if (button == MouseButton.none && _captureLostButton != MouseButton.none) {
+      button = _captureLostButton;
+    }
     final cell = _cellForPointer(event);
     if (button == MouseButton.none || cell == null) return;
     try {
@@ -530,8 +539,9 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     } catch (_) {
       // Best-effort counterpart to pointerdown capture.
     }
-    _lastPointerUpCell = cell;
+    _suppressNextPointerClick = true;
     _pressedButton = MouseButton.none;
+    _captureLostButton = MouseButton.none;
     raw.preventDefault();
     _emit(
       MouseEvent(
@@ -554,7 +564,20 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
       // Best-effort counterpart to pointerdown capture.
     }
     _pressedButton = MouseButton.none;
-    _lastPointerUpCell = null;
+    _captureLostButton = MouseButton.none;
+    _suppressNextPointerClick = false;
+  }
+
+  void _handleLostPointerCapture(web.Event _) {
+    // Pointer capture is normally released between pointerup and click. If it
+    // arrives earlier, stop drag routing but remember which press still needs
+    // its up event. `pointercancel` owns true cancellation; a later pointerup or
+    // compatibility click can close this interrupted press without emitting a
+    // second down.
+    if (_pressedButton != MouseButton.none) {
+      _captureLostButton = _pressedButton;
+      _pressedButton = MouseButton.none;
+    }
   }
 
   void _handlePointerMove(web.Event raw) {
@@ -575,32 +598,40 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
   }
 
   void _handleClick(web.Event raw) {
+    final event = raw as web.MouseEvent;
+    if (event.button != 0) return;
+    final followsCompletedPointerGesture = _suppressNextPointerClick;
+    _suppressNextPointerClick = false;
+    if (followsCompletedPointerGesture && event.detail > 0) {
+      // The pointer gesture already produced the app tap. Suppress its browser
+      // compatibility click even if rendering changed the cell or DOM target
+      // between pointerup and click.
+      raw.preventDefault();
+      return;
+    }
     // The critical link fix: a click on a cell-grid link anchor must reach the
     // browser's default action (navigation). preventDefault() below would cancel
     // it, so bail before then — and don't route it as an app tap either.
     if (_cellGridLinkAnchor(raw) != null) return;
-    final event = raw as web.MouseEvent;
-    if (event.button != 0) return;
     final cell = _cellForPointer(event);
     if (cell == null) return;
-    if (_lastPointerUpCell == cell) {
-      _lastPointerUpCell = null;
-      return;
-    }
     raw.preventDefault();
     final modifiers = _modifiersFromMouse(event);
-    if (_pressedButton != MouseButton.none) {
+    final openButton = _pressedButton != MouseButton.none
+        ? _pressedButton
+        : _captureLostButton;
+    if (openButton != MouseButton.none) {
       _emit(
         MouseEvent(
           kind: MouseEventKind.up,
-          button: _pressedButton,
+          button: openButton,
           col: cell.col,
           row: cell.row,
           modifiers: modifiers,
         ),
       );
       _pressedButton = MouseButton.none;
-      _lastPointerUpCell = null;
+      _captureLostButton = MouseButton.none;
       return;
     }
     _emit(

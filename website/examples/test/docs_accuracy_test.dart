@@ -242,7 +242,7 @@ void main() {
         p.join(repo.path, 'packages/fleury/lib/src/widgets/basic.dart'),
       ).readAsStringSync();
       final layout = File(
-        p.join(repo.path, 'website/src/content/docs/guides/layout.md'),
+        p.join(repo.path, 'website/src/content/docs/guides/layout.mdx'),
       ).readAsStringSync();
       final flutter = File(
         p.join(repo.path, 'website/src/content/docs/coming-from-flutter.md'),
