@@ -194,6 +194,41 @@ void main() {
       controller.dispose();
       text.dispose();
     });
+
+    testWidgets('replacing a controller cancels pending validation safely', (
+      tester,
+    ) async {
+      final first = FormController();
+      final second = FormController();
+      final text = TextEditingController(text: 'Atlas');
+      var submits = 0;
+
+      Widget build(FormController controller) => _textForm(
+        controller: controller,
+        text: text,
+        onSubmit: () => submits++,
+      );
+
+      tester.pumpWidget(build(first));
+      final pending = first.submit();
+
+      // Retain the Form state but replace its externally-owned controller
+      // before the post-frame validation phase runs.
+      tester.pumpWidget(build(second));
+      tester.pump();
+      expect(await pending, isFalse);
+      expect(submits, 0);
+      expect(first.isAttached, isFalse);
+      expect(second.isAttached, isTrue);
+
+      expect(await _submit(tester, second), isTrue);
+      expect(submits, 1);
+
+      tester.pumpWidget(const Text('gone'));
+      first.dispose();
+      second.dispose();
+      text.dispose();
+    });
   });
 
   group('FormField', () {

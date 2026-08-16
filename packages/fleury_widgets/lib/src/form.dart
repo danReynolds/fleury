@@ -46,6 +46,7 @@ final class FormController extends ChangeNotifier {
   Future<bool> _runSubmission(int generation, Future<bool> validation) async {
     try {
       if (!await validation) return false;
+      if (_submissionGeneration != generation) return false;
       final host = _requireHost();
       _setSubmitting(true);
       await host.submit();
@@ -92,12 +93,13 @@ final class FormController extends ChangeNotifier {
   }
 
   void _detach(_FormHost host) {
-    if (identical(_host, host)) _host = null;
-    if (_submitting) {
+    if (!identical(_host, host)) return;
+    _host = null;
+    if (_submission != null) {
       _submissionGeneration++;
       _submission = null;
-      _setSubmitting(false);
     }
+    if (_submitting) _setSubmitting(false);
   }
 
   void _setSubmitting(bool value) {
