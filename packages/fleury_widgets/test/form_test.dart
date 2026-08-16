@@ -41,6 +41,49 @@ final class _CaptureFormController extends StatelessWidget {
   }
 }
 
+final class _ServerErrorHarness extends StatefulWidget {
+  const _ServerErrorHarness({
+    super.key,
+    required this.controller,
+    required this.text,
+  });
+
+  final FormController controller;
+  final TextEditingController text;
+
+  @override
+  State<_ServerErrorHarness> createState() => _ServerErrorHarnessState();
+}
+
+final class _ServerErrorHarnessState extends State<_ServerErrorHarness> {
+  String? _error;
+
+  Future<bool> reject() {
+    setState(() => _error = 'Name already exists.');
+    return widget.controller.validate();
+  }
+
+  @override
+  Widget build(BuildContext context) => _textForm(
+    controller: widget.controller,
+    text: widget.text,
+    externalError: _error,
+    onSubmit: () {},
+  );
+}
+
+Future<bool> _validate(FleuryTester tester, FormController controller) {
+  final validation = controller.validate();
+  tester.pump();
+  return validation;
+}
+
+Future<bool> _submit(FleuryTester tester, FormController controller) {
+  final submission = controller.submit();
+  tester.pump();
+  return submission;
+}
+
 void main() {
   group('FormController', () {
     test('rejects commands while unattached', () {
@@ -80,8 +123,8 @@ void main() {
         ),
       );
 
-      expect(await controller.submit(), isFalse);
-      expect(await controller.submit(), isFalse);
+      expect(await _submit(tester, controller), isFalse);
+      expect(await _submit(tester, controller), isFalse);
       expect(submits, 0);
 
       tester.pumpWidget(const Text('gone'));
@@ -110,6 +153,7 @@ void main() {
       final first = controller.submit();
       final second = controller.submit();
       expect(identical(first, second), isTrue);
+      tester.pump();
       await Future<void>.delayed(Duration.zero);
       expect(controller.isSubmitting, isTrue);
       expect(submits, 1);
@@ -138,6 +182,7 @@ void main() {
       );
 
       final submission = controller.submit();
+      tester.pump();
       await Future<void>.delayed(Duration.zero);
       expect(controller.isSubmitting, isTrue);
       tester.pumpWidget(const Text('gone'));
@@ -154,7 +199,7 @@ void main() {
   group('FormField', () {
     testWidgets('validation reveals an error and focuses the first field', (
       tester,
-    ) {
+    ) async {
       final controller = FormController();
       final first = TextEditingController();
       final second = TextEditingController();
@@ -178,7 +223,7 @@ void main() {
         ),
       );
 
-      expect(controller.validate(), isFalse);
+      expect(await _validate(tester, controller), isFalse);
       tester.pump();
       expect(
         tester.renderToString(size: const CellSize(40, 6)),
@@ -205,14 +250,14 @@ void main() {
       second.dispose();
     });
 
-    testWidgets('editing clears a revealed validator error', (tester) {
+    testWidgets('editing clears a revealed validator error', (tester) async {
       final controller = FormController();
       final text = TextEditingController();
       tester.pumpWidget(
         _textForm(controller: controller, text: text, onSubmit: () {}),
       );
 
-      expect(controller.validate(), isFalse);
+      expect(await _validate(tester, controller), isFalse);
       tester.pump();
       expect(
         tester.renderToString(size: const CellSize(30, 3)),
@@ -225,7 +270,7 @@ void main() {
         tester.renderToString(size: const CellSize(30, 3)),
         isNot(contains('Enter a name.')),
       );
-      expect(controller.validate(), isTrue);
+      expect(await _validate(tester, controller), isTrue);
 
       tester.pumpWidget(const Text('gone'));
       controller.dispose();
@@ -247,20 +292,49 @@ void main() {
         ),
       );
 
-      expect(controller.validate(), isFalse);
+      expect(await _validate(tester, controller), isFalse);
       controller.clearErrors();
       tester.pump();
       expect(
         tester.renderToString(size: const CellSize(40, 3)),
         contains('Name already exists.'),
       );
-      expect(await controller.submit(), isFalse);
+      expect(await _submit(tester, controller), isFalse);
       expect(submits, 0);
 
       tester.pumpWidget(const Text('gone'));
       controller.dispose();
       text.dispose();
     });
+
+    testWidgets(
+      'validation observes a controlled error set immediately beforehand',
+      (tester) async {
+        final controller = FormController();
+        final text = TextEditingController(text: 'atlas');
+        final harnessKey = GlobalKey<_ServerErrorHarnessState>();
+        tester.pumpWidget(
+          _ServerErrorHarness(
+            key: harnessKey,
+            controller: controller,
+            text: text,
+          ),
+        );
+
+        final validation = harnessKey.currentState!.reject();
+        tester.pump();
+        expect(await validation, isFalse);
+        tester.pump();
+        expect(
+          tester.renderToString(size: const CellSize(40, 3)),
+          contains('Name already exists.'),
+        );
+
+        tester.pumpWidget(const Text('gone'));
+        controller.dispose();
+        text.dispose();
+      },
+    );
 
     testWidgets('disabled fields are skipped', (tester) async {
       final controller = FormController();
@@ -275,8 +349,8 @@ void main() {
         ),
       );
 
-      expect(controller.validate(), isTrue);
-      expect(await controller.submit(), isTrue);
+      expect(await _validate(tester, controller), isTrue);
+      expect(await _submit(tester, controller), isTrue);
       expect(submits, 1);
 
       tester.pumpWidget(const Text('gone'));
@@ -286,7 +360,7 @@ void main() {
 
     testWidgets('errorStyle can suppress invalid chrome without semantics', (
       tester,
-    ) {
+    ) async {
       final controller = FormController();
       final text = TextEditingController();
       tester.pumpWidget(
@@ -298,7 +372,7 @@ void main() {
         ),
       );
 
-      controller.validate();
+      await _validate(tester, controller);
       tester.pump();
       final node = tester.semantics().single(
         role: SemanticRole.textField,
@@ -315,7 +389,7 @@ void main() {
 
     testWidgets('builder supports a custom composite and explicit focus', (
       tester,
-    ) {
+    ) async {
       final controller = FormController();
       final focus = FocusNode(debugLabel: 'custom-field');
       tester.pumpWidget(
@@ -335,7 +409,7 @@ void main() {
         ),
       );
 
-      expect(controller.validate(), isFalse);
+      expect(await _validate(tester, controller), isFalse);
       tester.pump();
       expect(focus.hasFocus, isTrue);
       expect(
@@ -348,7 +422,7 @@ void main() {
       focus.dispose();
     });
 
-    testWidgets('nested forms validate independently', (tester) {
+    testWidgets('nested forms validate independently', (tester) async {
       final outer = FormController();
       final inner = FormController();
       final outerText = TextEditingController(text: 'valid');
@@ -376,8 +450,8 @@ void main() {
         ),
       );
 
-      expect(outer.validate(), isTrue);
-      expect(inner.validate(), isFalse);
+      expect(await _validate(tester, outer), isTrue);
+      expect(await _validate(tester, inner), isFalse);
 
       tester.pumpWidget(const Text('gone'));
       outer.dispose();
@@ -388,7 +462,7 @@ void main() {
 
     testWidgets('selection controls participate without manual binding', (
       tester,
-    ) {
+    ) async {
       final controller = FormController();
       tester.pumpWidget(
         Form(
@@ -420,7 +494,7 @@ void main() {
         ),
       );
 
-      expect(controller.validate(), isFalse);
+      expect(await _validate(tester, controller), isFalse);
       tester.pump();
       expect(
         tester
@@ -638,7 +712,7 @@ void main() {
     ];
 
     for (final (name, role, buildControl) in cases) {
-      testWidgets('$name receives the enclosing field error', (tester) {
+      testWidgets('$name receives the enclosing field error', (tester) async {
         final controller = FormController();
         tester.pumpWidget(
           Form(
@@ -651,7 +725,7 @@ void main() {
           ),
         );
 
-        expect(controller.validate(), isFalse);
+        expect(await _validate(tester, controller), isFalse);
         tester.pump();
         expect(
           tester

@@ -18,6 +18,7 @@ void main() {
       SemanticAction.submit,
       role: SemanticRole.form,
     );
+    tester.pump();
     await Future<void>.delayed(Duration.zero);
     tester.pump();
     expect(rendered(), contains('Enter a service name.'));
@@ -32,6 +33,7 @@ void main() {
       SemanticAction.submit,
       role: SemanticRole.form,
     );
+    tester.pump();
     await Future<void>.delayed(const Duration(milliseconds: 240));
     tester.pump();
     expect(rendered(), contains('That service name is already in use.'));
@@ -46,6 +48,7 @@ void main() {
       SemanticAction.submit,
       role: SemanticRole.form,
     );
+    tester.pump();
     await Future<void>.delayed(const Duration(milliseconds: 240));
     tester.pump(const Duration(milliseconds: 300));
     expect(rendered(), contains('Deployment'));
@@ -54,6 +57,8 @@ void main() {
       SemanticAction.submit,
       role: SemanticRole.form,
     );
+    tester.pump();
+    await Future<void>.delayed(Duration.zero);
     tester.pump(const Duration(milliseconds: 300));
     expect(rendered(), contains('Review'));
     expect(rendered(), contains('webhook-worker'));
@@ -62,6 +67,7 @@ void main() {
       SemanticAction.submit,
       role: SemanticRole.form,
     );
+    tester.pump();
     await Future<void>.delayed(Duration.zero);
     tester.pump();
     expect(rendered(), contains('Confirm the production deployment.'));
@@ -76,6 +82,7 @@ void main() {
       SemanticAction.submit,
       role: SemanticRole.form,
     );
+    tester.pump();
     await Future<void>.delayed(const Duration(milliseconds: 470));
     tester.pump(const Duration(milliseconds: 300));
     expect(rendered(), contains('DEPLOYMENT COMPLETE'));

@@ -25,6 +25,7 @@ void main() {
       SemanticAction.submit,
       role: SemanticRole.form,
     );
+    tester.pump();
     await Future<void>.delayed(Duration.zero);
     tester.pump();
     expect(rendered(), contains('Enter a service name.'));
@@ -39,6 +40,7 @@ void main() {
       SemanticAction.submit,
       role: SemanticRole.form,
     );
+    tester.pump();
     await Future<void>.delayed(const Duration(milliseconds: 240));
     tester.pump();
     expect(rendered(), contains('That service name is already in use.'));
@@ -53,6 +55,7 @@ void main() {
       SemanticAction.submit,
       role: SemanticRole.form,
     );
+    tester.pump();
     await Future<void>.delayed(const Duration(milliseconds: 240));
     tester.pump();
     expect(rendered(), contains('DEPLOYMENT  ·  2 OF 3'));
@@ -63,6 +66,7 @@ void main() {
       SemanticAction.submit,
       role: SemanticRole.form,
     );
+    tester.pump();
     await Future<void>.delayed(Duration.zero);
     tester.pump();
     expect(rendered(), contains('REVIEW  ·  3 OF 3'));
@@ -72,6 +76,7 @@ void main() {
       SemanticAction.submit,
       role: SemanticRole.form,
     );
+    tester.pump();
     await Future<void>.delayed(Duration.zero);
     tester.pump();
     expect(rendered(), contains('Confirm the production deployment.'));
@@ -86,6 +91,7 @@ void main() {
       SemanticAction.submit,
       role: SemanticRole.form,
     );
+    tester.pump();
     await Future<void>.delayed(const Duration(milliseconds: 470));
     tester.pump();
     expect(rendered(), contains('SERVICE DEPLOYED'));

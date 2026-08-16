@@ -1,4 +1,3 @@
-import 'dart:async' show scheduleMicrotask;
 import 'dart:convert';
 import 'dart:io' as io;
 import 'dart:math' as math;
@@ -2315,7 +2314,7 @@ class _FormsStoryState extends State<_FormsStory> {
     await Future<void>.delayed(const Duration(milliseconds: 220));
     if (_serviceName.text.trim().toLowerCase() == 'fleury') {
       setState(() => _nameError = 'That service name is already in use.');
-      scheduleMicrotask(_form.validate);
+      await _form.validate();
       return;
     }
     setState(() => _step = 1);

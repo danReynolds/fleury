@@ -878,7 +878,7 @@ TextArea(
     code: '''final form = FormController();
 
 await form.submit();
-form.validate();
+await form.validate();
 form.clearErrors();''',
     builder: () => const _ProjectFormTour(),
   ),

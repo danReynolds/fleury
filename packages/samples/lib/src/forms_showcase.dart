@@ -1,4 +1,4 @@
-import 'dart:async' show scheduleMicrotask, unawaited;
+import 'dart:async' show unawaited;
 
 import 'package:fleury/fleury_core.dart';
 import 'package:fleury_widgets/fleury_widgets_web.dart';
@@ -103,7 +103,7 @@ class _ServiceDetailsScreenState extends State<_ServiceDetailsScreen> {
     if (!mounted) return;
     if (widget.draft.name.text.trim().toLowerCase() == 'fleury') {
       setState(() => _nameError = 'That service name is already in use.');
-      scheduleMicrotask(_form.validate);
+      await _form.validate();
       return;
     }
     unawaited(

@@ -1,4 +1,4 @@
-import 'dart:async' show FutureOr, scheduleMicrotask, unawaited;
+import 'dart:async' show Completer, FutureOr, scheduleMicrotask, unawaited;
 
 import 'package:fleury/fleury_core.dart';
 import 'package:fleury/fleury_internal.dart';
@@ -24,7 +24,11 @@ final class FormController extends ChangeNotifier {
   bool get isSubmitting => _submitting;
 
   /// Validates every mounted, enabled field and focuses the first invalid one.
-  bool validate() => _requireHost().validate();
+  ///
+  /// Validation runs after pending application-state changes have had a chance
+  /// to rebuild the fields, so callers can update controlled errors and then
+  /// immediately await this method without scheduling their own microtask.
+  Future<bool> validate() => _requireHost().validate();
 
   /// Validates the form and, only when valid, awaits its submit callback.
   ///
@@ -34,15 +38,15 @@ final class FormController extends ChangeNotifier {
     final active = _submission;
     if (active != null) return active;
     final generation = ++_submissionGeneration;
-    final future = Future<bool>.microtask(() => _runSubmission(generation));
+    final future = _runSubmission(generation, validate());
     _submission = future;
     return future;
   }
 
-  Future<bool> _runSubmission(int generation) async {
+  Future<bool> _runSubmission(int generation, Future<bool> validation) async {
     try {
+      if (!await validation) return false;
       final host = _requireHost();
-      if (!host.validate()) return false;
       _setSubmitting(true);
       await host.submit();
       return true;
@@ -115,7 +119,7 @@ final class FormController extends ChangeNotifier {
 }
 
 abstract interface class _FormHost {
-  bool validate();
+  Future<bool> validate();
   FutureOr<void> submit();
   void clearErrors();
 }
@@ -168,6 +172,7 @@ class Form extends StatefulWidget {
 final class _FormWidgetState extends State<Form> implements _FormHost {
   late FormController _controller;
   bool _ownsController = false;
+  Completer<bool>? _pendingValidation;
 
   @override
   void initState() {
@@ -205,7 +210,24 @@ final class _FormWidgetState extends State<Form> implements _FormHost {
   }
 
   @override
-  bool validate() {
+  Future<bool> validate() {
+    final active = _pendingValidation;
+    if (active != null) return active.future;
+
+    final validation = Completer<bool>();
+    _pendingValidation = validation;
+    TuiBinding.of(context).addPostFrameCallback((_) {
+      if (!validation.isCompleted) {
+        validation.complete(mounted && _validateNow());
+      }
+      if (identical(_pendingValidation, validation)) {
+        _pendingValidation = null;
+      }
+    });
+    return validation.future;
+  }
+
+  bool _validateNow() {
     FormFieldState? firstInvalid;
     for (final field in _fieldsInTraversalOrder()) {
       if (!field.validate()) firstInvalid ??= field;
@@ -226,6 +248,11 @@ final class _FormWidgetState extends State<Form> implements _FormHost {
 
   @override
   void dispose() {
+    final validation = _pendingValidation;
+    _pendingValidation = null;
+    if (validation != null && !validation.isCompleted) {
+      validation.complete(false);
+    }
     _controller._detach(this);
     if (_ownsController) _controller.dispose();
     super.dispose();

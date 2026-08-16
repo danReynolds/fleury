@@ -21,8 +21,9 @@ There are no field names, schemas, value maps, or required panel layouts.
 
 ## Build a form
 
-Own values exactly as you would without a form. Wrap each value control in a
-`FormField`, then put the resulting layout inside `Form`:
+Own values exactly as you would without a form. Wrap controls that need
+validation or external-error handling in `FormField`, then put the resulting
+layout inside `Form`. Other controls remain ordinary app-owned widgets:
 
 <CodeDemoSplit file="forms.dart" layout="demo-wide">
 <Fragment slot="code">
@@ -60,12 +61,10 @@ Form(
           onSubmit: (_) => form.submit(),
         ),
       ),
-      FormField(
-        child: Checkbox(
-          value: private,
-          label: 'Private project',
-          onChanged: (value) => setState(() => private = value),
-        ),
+      Checkbox(
+        value: private,
+        label: 'Private project',
+        onChanged: (value) => setState(() => private = value),
       ),
       Button(label: 'Create', onPressed: form.submit),
     ],
@@ -117,6 +116,10 @@ semantics.
 `submit()` validates every mounted, enabled field before calling `onSubmit`.
 It returns `false` when validation rejects the form and `true` after the submit
 callback completes. Concurrent calls share the same in-flight submission.
+
+`validate()` waits until pending application-state updates have rebuilt the
+fields. This makes it safe to set a controlled error and immediately
+`await form.validate()` without manually scheduling work.
 
 Use `isSubmitting` to disable actions and show progress:
 
