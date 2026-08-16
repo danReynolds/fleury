@@ -49,7 +49,7 @@ const Map<String, List<String>> _semanticCatalog = {
   'file_browser': ['tree', 'treeItem'],
   'file_mention_picker': ['fileMention', 'fileMentionPicker'],
   'file_picker': ['tree', 'treeItem'],
-  'form': ['app', 'form', 'formField', 'region'],
+  'form': ['form'],
   'gauge': ['chart'],
   'heatmap': ['chart'],
   'histogram': ['chart'],
@@ -164,6 +164,13 @@ void main() {
     });
     testWidgets('Dialog → dialog', (t) {
       _expectRole(t, const Dialog(child: Text('body')), SemanticRole.dialog);
+    });
+    testWidgets('Form → form', (t) {
+      _expectRole(
+        t,
+        Form(onSubmit: () {}, child: const Text('body')),
+        SemanticRole.form,
+      );
     });
     testWidgets('DataTable → table', (t) {
       _expectRole(

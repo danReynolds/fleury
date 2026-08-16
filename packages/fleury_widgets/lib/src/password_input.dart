@@ -44,6 +44,7 @@ class PasswordInput extends StatefulWidget {
     this.canReveal = true,
     this.revealChord,
     this.validationError,
+    this.errorStyle,
     this.semanticLabel,
     this.semanticState = SemanticState.empty,
   });
@@ -100,6 +101,10 @@ class PasswordInput extends StatefulWidget {
   /// Optional validation error displayed by the underlying input.
   final String? validationError;
 
+  /// Invalid style for the underlying text field. null uses the theme;
+  /// [CellStyle.empty] keeps the field visually neutral.
+  final CellStyle? errorStyle;
+
   /// Label exposed through the semantic app graph.
   final String? semanticLabel;
 
@@ -134,6 +139,7 @@ class _PasswordInputState extends State<PasswordInput> {
       enabled: widget.enabled,
       readOnly: widget.readOnly,
       validationError: widget.validationError,
+      errorStyle: widget.errorStyle,
       // Stays redacted even while visually revealed: showing the glyphs is a
       // local convenience, copying or reading the value out is not.
       clipboardPolicy: TextClipboardPolicy.redacted,

@@ -1,4 +1,5 @@
 import 'package:fleury/fleury_core.dart';
+import 'package:fleury/fleury_internal.dart';
 
 import 'calendar_heatmap.dart' show CalendarWeekStart;
 
@@ -39,6 +40,7 @@ class DatePicker extends StatefulWidget {
     this.label,
     this.focusNode,
     this.autofocus = false,
+    this.errorStyle,
   });
 
   /// Currently-selected day (only the y/m/d portion is read).
@@ -68,6 +70,10 @@ class DatePicker extends StatefulWidget {
   /// Whether the picker requests focus when mounted.
   final bool autofocus;
 
+  /// Invalid style for the selected date and header. null uses the theme;
+  /// [CellStyle.empty] keeps the picker visually neutral.
+  final CellStyle? errorStyle;
+
   @override
   State<DatePicker> createState() => _DatePickerState();
 }
@@ -75,6 +81,7 @@ class DatePicker extends StatefulWidget {
 class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
   late FocusNode _node;
   bool _owns = false;
+  FormControlRegistration? _formRegistration;
 
   bool get _enabled => widget.onChanged != null;
 
@@ -113,17 +120,35 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
       _node.textInputClaimant = this;
       _owns = widget.focusNode == null;
     }
+    _syncFormClaim();
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     Focus.maybeOf(context); // rebuild on focus change
+    final registration = FormControlScope.maybeOf(context);
+    if (!identical(registration, _formRegistration)) {
+      _formRegistration?.release(this);
+      _formRegistration = registration;
+      registration?.claim(this, focusNode: _node, enabled: _enabled);
+    } else {
+      _syncFormClaim();
+    }
+  }
+
+  void _syncFormClaim() =>
+      _formRegistration?.updateClaim(this, focusNode: _node, enabled: _enabled);
+
+  void _emit(DateTime value) {
+    widget.onChanged?.call(value);
+    _formRegistration?.controlValueChanged(this);
   }
 
   @override
   void dispose() {
     _node.textInputClaimant = null;
+    _formRegistration?.release(this);
     if (_owns) _node.dispose();
     super.dispose();
   }
@@ -153,10 +178,11 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
     var today = _midnight(DateTime.now());
     final first = widget.firstDate;
     final last = widget.lastDate;
-    if (first != null && today.isBefore(_midnight(first)))
+    if (first != null && today.isBefore(_midnight(first))) {
       today = _midnight(first);
+    }
     if (last != null && today.isAfter(_midnight(last))) today = _midnight(last);
-    if (today != _midnight(widget.value)) widget.onChanged!(today);
+    if (today != _midnight(widget.value)) _emit(today);
   }
 
   @override
@@ -174,7 +200,7 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
     if (parsed == null) return;
     final next = _midnight(parsed);
     if (_inBounds(next) && next != _midnight(widget.value)) {
-      widget.onChanged!(next);
+      _emit(next);
     }
   }
 
@@ -211,7 +237,7 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
     if (!_enabled) return;
     var next = _midnight(widget.value).add(delta);
     if (!_inBounds(next)) return; // clamp by ignoring
-    widget.onChanged!(next);
+    _emit(next);
   }
 
   void _shiftMonth(int delta) {
@@ -224,7 +250,7 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
     final day = v.day > lastDayOfTarget ? lastDayOfTarget : v.day;
     final next = DateTime(target.year, target.month, day);
     if (!_inBounds(next)) return;
-    widget.onChanged!(next);
+    _emit(next);
   }
 
   void _jumpInMonth(int day) {
@@ -233,7 +259,7 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
     final lastDay = DateTime(v.year, v.month + 1, 0).day;
     final next = DateTime(v.year, v.month, day.clamp(1, lastDay));
     if (!_inBounds(next)) return;
-    widget.onChanged!(next);
+    _emit(next);
   }
 
   KeyEventResult _onKey(KeyEvent event) {
@@ -307,6 +333,10 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
         enabled && _inBounds(_midnight(v).subtract(const Duration(days: 1)));
     final canIncrement =
         enabled && _inBounds(_midnight(v).add(const Duration(days: 1)));
+    final validationError = _formRegistration?.error;
+    final invalidStyle = validationError == null
+        ? null
+        : (widget.errorStyle ?? theme.errorStyle);
 
     // Build the 7-column day grid as rows. Each row is a List<Widget>
     // of cells (blank, in-bounds day, or out-of-bounds dimmed day).
@@ -332,17 +362,15 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
             }
           : null;
       if (selected) {
-        row.add(
-          _Cell(
-            cellText,
-            style: !enabled
-                ? disabledStyle
-                : focused
-                ? theme.focusedStyle
-                : theme.selectionStyle,
-            onTap: onTap,
-          ),
-        );
+        var selectedStyle = !enabled
+            ? disabledStyle
+            : focused
+            ? theme.focusedStyle
+            : theme.selectionStyle;
+        if (enabled && invalidStyle != null) {
+          selectedStyle = selectedStyle.merge(invalidStyle);
+        }
+        row.add(_Cell(cellText, style: selectedStyle, onTap: onTap));
       } else if (!inB) {
         row.add(_Cell(cellText, style: const CellStyle(dim: true)));
       } else if (!enabled) {
@@ -382,11 +410,17 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
             ),
             Text(
               '${_months[v.month - 1]} ${v.year}',
-              style: !enabled
-                  ? disabledStyle
-                  : focused
-                  ? theme.focusedStyle
-                  : const CellStyle(bold: true),
+              style:
+                  (!enabled
+                          ? disabledStyle
+                          : focused
+                          ? theme.focusedStyle
+                          : const CellStyle(bold: true))
+                      .merge(
+                        enabled
+                            ? invalidStyle ?? CellStyle.empty
+                            : CellStyle.empty,
+                      ),
             ),
             _MonthArrow(
               ' >',
@@ -421,6 +455,7 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
         label: widget.label,
         value: _formatDate(v),
         enabled: false,
+        validationError: validationError,
         state: SemanticState({
           'selectedDate': _formatDate(v),
           'visibleMonth': _formatMonth(v),
@@ -444,6 +479,7 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
       label: widget.label,
       value: _formatDate(v),
       focused: focused,
+      validationError: validationError,
       actions: {
         SemanticAction.focus,
         if (canIncrement) SemanticAction.increment,

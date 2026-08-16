@@ -1,4 +1,5 @@
 import 'package:fleury/fleury_core.dart';
+import 'package:fleury/fleury_internal.dart';
 
 import 'option_label.dart';
 
@@ -41,6 +42,7 @@ class Select<T> extends StatefulWidget {
     this.focusNode,
     this.autofocus = false,
     this.semanticLabel,
+    this.errorStyle,
   });
 
   /// Choices shown in the opened dropdown.
@@ -77,6 +79,10 @@ class Select<T> extends StatefulWidget {
   /// fallback, or future adapters need to refer to the picker itself.
   final String? semanticLabel;
 
+  /// Invalid style for the trigger. null uses the theme;
+  /// [CellStyle.empty] keeps it visually neutral.
+  final CellStyle? errorStyle;
+
   @override
   State<Select<T>> createState() => _SelectState<T>();
 }
@@ -88,6 +94,7 @@ class _SelectState<T> extends State<Select<T>> {
   bool _ownsFocus = false;
   OverlayEntry? _entry;
   FocusNode? _priorFocus;
+  FormControlRegistration? _formRegistration;
 
   bool get _isOpen => _entry != null;
 
@@ -112,12 +119,36 @@ class _SelectState<T> extends State<Select<T>> {
           widget.focusNode ?? FocusNode(debugLabel: 'select-trigger');
       _ownsFocus = widget.focusNode == null;
     }
+    _syncFormClaim();
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     Focus.maybeOf(context); // rebuild on focus change (focus cue)
+    final registration = FormControlScope.maybeOf(context);
+    if (!identical(registration, _formRegistration)) {
+      _formRegistration?.release(this);
+      _formRegistration = registration;
+      registration?.claim(
+        this,
+        focusNode: _triggerFocus,
+        enabled: widget.onChanged != null,
+      );
+    } else {
+      _syncFormClaim();
+    }
+  }
+
+  void _syncFormClaim() => _formRegistration?.updateClaim(
+    this,
+    focusNode: _triggerFocus,
+    enabled: widget.onChanged != null,
+  );
+
+  void _commit(T value) {
+    widget.onChanged?.call(value);
+    _formRegistration?.controlValueChanged(this);
   }
 
   String get _currentLabel {
@@ -178,7 +209,7 @@ class _SelectState<T> extends State<Select<T>> {
           onHighlighted: widget.onHighlightChanged,
           onPicked: (value) {
             _close();
-            widget.onChanged?.call(value);
+            _commit(value);
           },
           onDismiss: () {
             _close();
@@ -219,7 +250,7 @@ class _SelectState<T> extends State<Select<T>> {
       if (!o.enabled) continue;
       final label = sanitizeOptionLabel(o.label);
       if (label == wanted || '${o.value}' == wanted) {
-        if (o.value != widget.value) widget.onChanged!(o.value);
+        if (o.value != widget.value) _commit(o.value);
         return;
       }
       fuzzy ??=
@@ -228,12 +259,13 @@ class _SelectState<T> extends State<Select<T>> {
           : null;
     }
     if (fuzzy != null && fuzzy.value != widget.value) {
-      widget.onChanged!(fuzzy.value);
+      _commit(fuzzy.value);
     }
   }
 
   @override
   void dispose() {
+    _formRegistration?.release(this);
     _entry?.remove();
     if (_ownsFocus) _triggerFocus.dispose();
     super.dispose();
@@ -245,11 +277,16 @@ class _SelectState<T> extends State<Select<T>> {
     final theme = Theme.of(context);
     final enabled = widget.onChanged != null;
     final focused = _triggerFocus.hasFocus;
-    final style = !enabled
+    final validationError = _formRegistration?.error;
+    final invalidStyle = validationError == null
+        ? null
+        : (widget.errorStyle ?? theme.errorStyle);
+    var style = !enabled
         ? theme.mutedStyle
         : focused
         ? theme.selectionStyle
         : CellStyle.empty;
+    if (enabled && invalidStyle != null) style = style.merge(invalidStyle);
     final text = '$_currentLabel ${_isOpen ? '▴' : '▾'}';
     if (!enabled) {
       return BoundsObserver(
@@ -259,6 +296,7 @@ class _SelectState<T> extends State<Select<T>> {
           label: widget.semanticLabel ?? _currentLabel,
           value: _currentLabel,
           enabled: false,
+          validationError: validationError,
           expanded: false,
           state: SemanticState({
             'menuItemCount': widget.options.length,
@@ -278,6 +316,7 @@ class _SelectState<T> extends State<Select<T>> {
         value: _currentLabel,
         focused: _triggerFocus.hasFocus,
         expanded: _isOpen,
+        validationError: validationError,
         actions: <SemanticAction>{
           SemanticAction.focus,
           if (widget.options.isNotEmpty) SemanticAction.activate,
@@ -360,6 +399,7 @@ class MultiSelect<T> extends StatefulWidget {
     this.emptyLabel = 'No options',
     this.focusNode,
     this.autofocus = false,
+    this.errorStyle,
   });
 
   /// Ordered choices; disabled options remain visible but cannot be toggled.
@@ -383,6 +423,10 @@ class MultiSelect<T> extends StatefulWidget {
   /// Whether the list requests focus when mounted.
   final bool autofocus;
 
+  /// Invalid style for the option list. null uses the theme;
+  /// [CellStyle.empty] keeps it visually neutral.
+  final CellStyle? errorStyle;
+
   @override
   State<MultiSelect<T>> createState() => _MultiSelectState<T>();
 }
@@ -392,6 +436,7 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
   late FocusNode _focusNode;
   bool _ownsFocusNode = false;
   int _highlightedIndex = 0;
+  FormControlRegistration? _formRegistration;
 
   bool get _enabled => widget.onChanged != null;
 
@@ -410,13 +455,30 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
       _attachFocusNode(widget.focusNode);
     }
     _highlightedIndex = _clampToEnabled(_highlightedIndex);
+    _syncFormClaim();
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     Focus.maybeOf(context);
+    final registration = FormControlScope.maybeOf(context);
+    if (!identical(registration, _formRegistration)) {
+      _formRegistration?.release(this);
+      _formRegistration = registration;
+      registration?.claim(this, focusNode: _focusNode, enabled: _enabled);
+    } else {
+      _syncFormClaim();
+    }
   }
+
+  void _syncFormClaim() => _formRegistration?.updateClaim(
+    this,
+    focusNode: _focusNode,
+    enabled: _enabled,
+  );
+
+  void _reportValueChanged() => _formRegistration?.controlValueChanged(this);
 
   void _attachFocusNode(FocusNode? node) {
     _focusNode = node ?? FocusNode(debugLabel: 'multi-select');
@@ -473,6 +535,7 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
     final next = Set<T>.of(widget.values);
     if (!next.add(option.value)) next.remove(option.value);
     widget.onChanged!(Set<T>.unmodifiable(next));
+    _reportValueChanged();
   }
 
   void _toggleHighlighted() {
@@ -497,6 +560,7 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
       next.addAll(enabledValues);
     }
     widget.onChanged!(Set<T>.unmodifiable(next));
+    _reportValueChanged();
   }
 
   KeyEventResult _onKey(KeyEvent event) {
@@ -543,6 +607,7 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
 
   @override
   void dispose() {
+    _formRegistration?.release(this);
     _detachFocusNode();
     super.dispose();
   }
@@ -553,7 +618,11 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
     final theme = Theme.of(context);
     final enabled = _enabled;
     final focused = enabled && _focusNode.hasFocus;
-    final child = widget.options.isEmpty
+    final validationError = _formRegistration?.error;
+    final invalidStyle = validationError == null
+        ? null
+        : (widget.errorStyle ?? theme.errorStyle);
+    final rawChild = widget.options.isEmpty
         ? Text(widget.emptyLabel, allowSelect: false, style: theme.mutedStyle)
         : Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -562,11 +631,15 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
                 _optionRow(theme, i, focused, enabled),
             ],
           );
+    final child = enabled && invalidStyle != null
+        ? DefaultTextStyle.merge(style: invalidStyle, child: rawChild)
+        : rawChild;
     final semantics = Semantics(
       role: SemanticRole.list,
       label: widget.semanticLabel,
       focused: focused,
       enabled: enabled,
+      validationError: validationError,
       actions: enabled
           ? const <SemanticAction>{
               SemanticAction.focus,

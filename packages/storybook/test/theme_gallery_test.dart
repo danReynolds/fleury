@@ -103,7 +103,12 @@ void main() {
         expect(output, contains(role), reason: 'undemoed colour role: $role');
       }
       // Every ThemeData text style, named after the field that produced it.
-      for (final field in ['mutedStyle', 'selectionStyle', 'focusedStyle']) {
+      for (final field in [
+        'mutedStyle',
+        'selectionStyle',
+        'focusedStyle',
+        'errorStyle',
+      ]) {
         expect(output, contains(field), reason: 'undemoed style: $field');
       }
       // The border style and the two panel focus states are called out, so

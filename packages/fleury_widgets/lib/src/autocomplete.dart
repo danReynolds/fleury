@@ -27,6 +27,7 @@ class Autocomplete<T extends Object> extends StatefulWidget {
     this.fieldSemanticLabel,
     this.semanticLabel,
     this.semanticState = SemanticState.empty,
+    this.errorStyle,
     this.onSelect,
     this.maxVisible = 6,
   });
@@ -69,6 +70,10 @@ class Autocomplete<T extends Object> extends StatefulWidget {
 
   /// Extra semantic state merged into the underlying text-field node.
   final SemanticState semanticState;
+
+  /// Invalid style for the underlying text field. null uses the theme;
+  /// [CellStyle.empty] keeps the field visually neutral.
+  final CellStyle? errorStyle;
 
   /// Called with the selected option when the user picks a suggestion.
   final void Function(T value)? onSelect;
@@ -456,6 +461,7 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
           placeholder: widget.placeholder,
           semanticLabel: widget.fieldSemanticLabel,
           semanticState: widget.semanticState,
+          errorStyle: widget.errorStyle,
           keymap: _textKeymap,
         ),
       ),

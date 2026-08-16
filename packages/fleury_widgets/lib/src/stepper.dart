@@ -1,4 +1,5 @@
 import 'package:fleury/fleury_core.dart';
+import 'package:fleury/fleury_internal.dart';
 
 /// A numeric stepper: `[ − 42 + ]`. Focusable; arrow chords (and +/−)
 /// adjust the value by [step], PageUp / PageDown by [largeStep], Home /
@@ -29,6 +30,7 @@ class Stepper extends StatefulWidget {
     this.label,
     this.focusNode,
     this.autofocus = false,
+    this.errorStyle,
   });
 
   /// Current value.
@@ -63,6 +65,10 @@ class Stepper extends StatefulWidget {
   /// Whether the stepper should request focus when mounted.
   final bool autofocus;
 
+  /// Invalid style for the value and frame. null uses the theme;
+  /// [CellStyle.empty] keeps the stepper visually neutral.
+  final CellStyle? errorStyle;
+
   @override
   State<Stepper> createState() => _StepperState();
 }
@@ -70,6 +76,7 @@ class Stepper extends StatefulWidget {
 class _StepperState extends State<Stepper> implements TextInputClaimant {
   late FocusNode _node;
   bool _owns = false;
+  FormControlRegistration? _formRegistration;
 
   /// In-progress direct numeric entry. Null when not typing; the typed
   /// string otherwise (committed on Enter or focus loss, dropped on Esc).
@@ -95,6 +102,7 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
       _node.textInputClaimant = this;
       _owns = widget.focusNode == null;
     }
+    _syncFormClaim();
   }
 
   void _handleFocusChange(bool hasFocus) {
@@ -106,11 +114,28 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
   void didChangeDependencies() {
     super.didChangeDependencies();
     Focus.maybeOf(context); // rebuild on focus change
+    final registration = FormControlScope.maybeOf(context);
+    if (!identical(registration, _formRegistration)) {
+      _formRegistration?.release(this);
+      _formRegistration = registration;
+      registration?.claim(this, focusNode: _node, enabled: _enabled);
+    } else {
+      _syncFormClaim();
+    }
+  }
+
+  void _syncFormClaim() =>
+      _formRegistration?.updateClaim(this, focusNode: _node, enabled: _enabled);
+
+  void _emit(num value) {
+    widget.onChanged?.call(value);
+    _formRegistration?.controlValueChanged(this);
   }
 
   @override
   void dispose() {
     _node.textInputClaimant = null;
+    _formRegistration?.release(this);
     if (_owns) _node.dispose();
     super.dispose();
   }
@@ -124,13 +149,13 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
   void _nudge(num delta) {
     if (!_enabled) return;
     final next = _clamp(widget.value + delta);
-    if (next != widget.value) widget.onChanged!(next);
+    if (next != widget.value) _emit(next);
   }
 
   void _jump(num target) {
     if (!_enabled) return;
     final next = _clamp(target);
-    if (next != widget.value) widget.onChanged!(next);
+    if (next != widget.value) _emit(next);
   }
 
   /// Whether a single typed [text] character extends the entry buffer.
@@ -154,7 +179,7 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
     final parsed = raw == null ? null : num.tryParse(raw);
     if (parsed != null) {
       final next = _clamp(parsed);
-      if (next != widget.value) widget.onChanged!(next);
+      if (next != widget.value) _emit(next);
     }
     if (mounted) setState(() {});
   }
@@ -262,11 +287,18 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
     final canInc =
         enabled && (widget.max == null || widget.value < widget.max!);
     final muted = theme.mutedStyle;
-    final focusStyle = !enabled
+    final validationError = _formRegistration?.error;
+    final invalidStyle = validationError == null
+        ? null
+        : (widget.errorStyle ?? theme.errorStyle);
+    var focusStyle = !enabled
         ? muted
         : focused
         ? theme.focusedStyle
         : CellStyle.empty;
+    if (enabled && invalidStyle != null) {
+      focusStyle = focusStyle.merge(invalidStyle);
+    }
     final dim = const CellStyle(dim: true);
     Widget body() => Row(
       children: [
@@ -307,6 +339,7 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
         label: widget.label,
         value: widget.value,
         enabled: false,
+        validationError: validationError,
         state: SemanticState({
           'numericValue': widget.value,
           if (widget.min != null) 'min': widget.min,
@@ -326,6 +359,7 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
       label: widget.label,
       value: widget.value,
       focused: focused,
+      validationError: validationError,
       actions: {
         SemanticAction.focus,
         if (canInc) SemanticAction.increment,

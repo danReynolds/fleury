@@ -291,7 +291,7 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
   final _changesDiff = DiffViewController(selectedIndex: 7);
   final _sourceCode = CodeViewController(selectedIndex: 7);
   final _docsMarkdown = MarkdownViewController(selectedIndex: 5);
-  final _connectionForm = FormController(_connectionFormDefinition);
+  final _connectionForm = FormController();
   final _task = TaskController<void>(id: 'fake-task', label: 'Fake task');
   final _logIndexTask = TaskController<LogRegionSearchIndex>(
     id: 'demo-log-index',
@@ -1369,21 +1369,9 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
     });
   }
 
-  void _submitConnection(FormSubmitResult result) {
+  void _submitConnection(String summary) {
     _mutate(() {
-      if (result.valid) {
-        _append(
-          'connection',
-          'configured ${result.values.text('project')} '
-              '${result.values['environment']} ${result.values['region']} '
-              'features ${result.values.listValue('features').join(',')} '
-              'config ${result.values.path('configPath')} '
-              '${_demoDate(result.values.dateValue('launchDate'))} '
-              'retries ${result.values['retries']}',
-        );
-      } else {
-        _append('connection', 'invalid form ${result.errors.length} errors');
-      }
+      _append('connection', summary);
     });
   }
 
@@ -2224,141 +2212,93 @@ const _demoFileMentions = [
   ),
 ];
 
-final _connectionFormDefinition = FormDefinition(
-  title: 'Connection setup',
-  submitLabel: 'Connect',
-  fields: [
-    FormFieldSpec.text(
-      id: 'project',
-      label: 'Project',
-      placeholder: 'my-project',
-      required: true,
-      asyncValidator: _validateConnectionProject,
-    ),
-    FormFieldSpec.select(
-      id: 'environment',
-      label: 'Environment',
-      initialValue: 'dev',
-      required: true,
-      options: const [
-        FormOption(value: 'dev', label: 'Development'),
-        FormOption(value: 'prod', label: 'Production'),
-      ],
-    ),
-    FormFieldSpec.select(
-      id: 'region',
-      label: 'Region',
-      initialValue: 'us-east-1',
-      required: true,
-      options: const [
-        FormOption(value: 'us-east-1', label: 'US East'),
-        FormOption(value: 'eu-west-1', label: 'EU West'),
-      ],
-    ),
-    FormFieldSpec.multiSelect(
-      id: 'features',
-      label: 'Features',
-      initialValues: const ['logs', 'metrics'],
-      required: true,
-      minSelected: 1,
-      maxSelected: 3,
-      options: const [
-        FormOption(value: 'logs', label: 'Logs'),
-        FormOption(value: 'metrics', label: 'Metrics'),
-        FormOption(value: 'traces', label: 'Traces'),
-        FormOption(value: 'deploy', label: 'Deploy', enabled: false),
-      ],
-    ),
-    FormFieldSpec.path(
-      id: 'configPath',
-      label: 'Config path',
-      initialValue: 'config/demo.yaml',
-      placeholder: 'config/demo.yaml',
-      required: true,
-      pathKind: FormPathKind.file,
-      mustExist: false,
-      allowRelative: true,
-    ),
-    FormFieldSpec.number(
-      id: 'retries',
-      label: 'Retry limit',
-      initialValue: 3,
-      min: 0,
-      max: 10,
-      allowNegative: false,
-      required: true,
-    ),
-    FormFieldSpec.date(
-      id: 'launchDate',
-      label: 'Launch date',
-      initialValue: DateTime(2026, 1, 15),
-      firstDate: DateTime(2026, 1, 1),
-      lastDate: DateTime(2026, 12, 31),
-      weekStartsOn: CalendarWeekStart.monday,
-      required: true,
-    ),
-    FormFieldSpec.secret(
-      id: 'apiKey',
-      label: 'API key',
-      placeholder: 'token',
-      required: true,
-    ),
-    FormFieldSpec.checkbox(
-      id: 'confirm',
-      label: 'I understand this changes remote state',
-      required: true,
-    ),
-  ],
-);
-
-const _connectionWizardSteps = [
-  FormWizardStep(
-    id: 'connection-basics',
-    title: 'Basics',
-    fieldIds: ['project', 'environment', 'region'],
-  ),
-  FormWizardStep(
-    id: 'connection-runtime',
-    title: 'Runtime',
-    fieldIds: ['features', 'configPath', 'retries', 'launchDate'],
-  ),
-  FormWizardStep(
-    id: 'connection-secret',
-    title: 'Secret',
-    fieldIds: ['apiKey', 'confirm'],
-  ),
-];
-
-Future<String?> _validateConnectionProject(
-  Object? value,
-  FormValues values,
-) async {
-  await Future<void>.delayed(Duration.zero);
-  final project = value?.toString().trim().toLowerCase() ?? '';
-  if (project == 'reserved') return 'Project is reserved.';
-  return null;
-}
-
-String _demoDate(DateTime? value) {
-  if (value == null) return 'no-date';
-  final month = value.month.toString().padLeft(2, '0');
-  final day = value.day.toString().padLeft(2, '0');
-  return '${value.year}-$month-$day';
-}
-
-class _ConnectionScreen extends StatelessWidget {
+class _ConnectionScreen extends StatefulWidget {
   const _ConnectionScreen({required this.controller, required this.onSubmit});
 
   final FormController controller;
-  final void Function(FormSubmitResult result) onSubmit;
+  final void Function(String summary) onSubmit;
+
+  @override
+  State<_ConnectionScreen> createState() => _ConnectionScreenState();
+}
+
+class _ConnectionScreenState extends State<_ConnectionScreen> {
+  final _project = TextEditingController();
+  String _environment = 'dev';
+  String _region = 'us-east-1';
+  bool _confirmed = false;
+
+  @override
+  void dispose() {
+    _project.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return FormWizard(
-      definition: _connectionFormDefinition,
-      steps: _connectionWizardSteps,
-      controller: controller,
-      onSubmit: onSubmit,
+    return Form(
+      controller: widget.controller,
+      semanticLabel: 'Connection setup',
+      onSubmit: () => widget.onSubmit(
+        'configured ${_project.text.trim()} $_environment $_region',
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text('CONNECTION SETUP'),
+          const Text('Project'),
+          FormField(
+            validator: () =>
+                _project.text.trim().isEmpty ? 'Enter a project name.' : null,
+            child: TextInput(
+              controller: _project,
+              semanticLabel: 'Project',
+              placeholder: 'my-project',
+            ),
+          ),
+          const Text('Environment'),
+          FormField(
+            child: Select<String>(
+              value: _environment,
+              semanticLabel: 'Environment',
+              options: const <SelectOption<String>>[
+                SelectOption(value: 'dev', label: 'Development'),
+                SelectOption(value: 'prod', label: 'Production'),
+              ],
+              onChanged: (value) => setState(() => _environment = value),
+            ),
+          ),
+          const Text('Region'),
+          FormField(
+            child: Select<String>(
+              value: _region,
+              semanticLabel: 'Region',
+              options: const <SelectOption<String>>[
+                SelectOption(value: 'us-east-1', label: 'US East'),
+                SelectOption(value: 'eu-west-1', label: 'EU West'),
+              ],
+              onChanged: (value) => setState(() => _region = value),
+            ),
+          ),
+          FormField(
+            validator: () => _confirmed ? null : 'Confirm before connecting.',
+            child: Checkbox(
+              value: _confirmed,
+              label: 'I understand this changes remote state',
+              onChanged: (value) => setState(() => _confirmed = value),
+            ),
+          ),
+          ListenableBuilder(
+            listenable: widget.controller,
+            builder: (context, child) => Button(
+              label: widget.controller.isSubmitting ? 'Connecting…' : 'Connect',
+              onPressed: widget.controller.isSubmitting
+                  ? null
+                  : widget.controller.submit,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

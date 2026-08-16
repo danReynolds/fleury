@@ -151,9 +151,10 @@ but isn't in onboarding); and a **Focus vs KeyBindings vs FocusNode decision
 tree**. (These overlap the readiness doc's "state-management story needs a
 concise authored guide.")
 
-### B3 — web-safe `Form` — **LANDED 2026-07-04**
+### B3 — web-safe `Form` — **SUPERSEDED 2026-08-14**
 
-`FormPanel` now compiles to JavaScript and runs on all three surfaces. It was
+Historical note: `FormPanel` compiled to JavaScript and ran on all three
+surfaces. It was
 excluded from the web barrel only because of a single `dart:io` call —
 `FileSystemEntity.typeSync` in the path field's `mustExist` validation — plus an
 import of the native `fleury.dart` umbrella (everything it uses is in
@@ -178,6 +179,10 @@ the path-field as a native extension is feasible and would close the gap.
 Separately, the spec-based `Form` (`FormFieldSpec.text(...)`, closed field-type
 enum) diverges from Flutter's widget-based `Form`/`TextFormField` — worth a
 deliberate ratify-or-revisit.
+
+That revisit replaced the schema API with the compositional, value-less
+`Form`/`FormField` design recorded in the decision log. The former conditional
+filesystem probe and `FormPanel` projection no longer exist.
 
 ### B4 — Boilerplate: `FocusNode`×N + scaffold *(later)*
 
