@@ -137,10 +137,10 @@ testWidgets('dashboard layout is stable', (tester) {
 });
 ```
 
-Goldens live under `test/goldens/` as plain text. A missing golden is written on
-the first run (the test bootstraps itself); after an intentional UI change, run
-with `FLEURY_UPDATE_GOLDENS=1` to rewrite them — and review the file diff before
-committing, the same discipline as any golden workflow.
+Goldens live under `test/goldens/` as plain text. A missing golden fails the
+test so CI cannot silently accept a deleted baseline. To create a golden or
+accept an intentional UI change, run with `FLEURY_UPDATE_GOLDENS=1` and review
+the file diff before committing.
 
 ## The parity oracle
 

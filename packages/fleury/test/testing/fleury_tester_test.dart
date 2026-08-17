@@ -463,23 +463,38 @@ void main() {
   });
 
   group('Goldens', () {
-    test(
-      'writes the file on first run (and matches itself thereafter)',
-      () async {
-        final tempDir = Directory.systemTemp.createTempSync('fleury_goldens_');
-        addTearDown(() => tempDir.deleteSync(recursive: true));
+    test('fails without writing when the golden is missing', () {
+      final tempDir = Directory.systemTemp.createTempSync('fleury_goldens_');
+      addTearDown(() => tempDir.deleteSync(recursive: true));
+      final file = File('${tempDir.path}/a.txt');
 
-        // First run: file does not exist. Matcher should write + pass.
-        const value = 'hello world\n';
-        expect(value, matchesGolden('a.txt', directory: tempDir.path));
-        final file = File('${tempDir.path}/a.txt');
-        expect(file.existsSync(), isTrue);
-        expect(file.readAsStringSync(), value);
+      expect(
+        () => expect(
+          'hello world\n',
+          matchesGolden('a.txt', directory: tempDir.path),
+        ),
+        throwsA(
+          isA<TestFailure>().having(
+            (e) => e.message,
+            'message',
+            allOf(
+              contains('golden file not found'),
+              contains('FLEURY_UPDATE_GOLDENS=1'),
+            ),
+          ),
+        ),
+      );
+      expect(file.existsSync(), isFalse);
+    });
 
-        // Second run with identical content: should still pass.
-        expect(value, matchesGolden('a.txt', directory: tempDir.path));
-      },
-    );
+    test('matches an existing golden', () {
+      final tempDir = Directory.systemTemp.createTempSync('fleury_goldens_');
+      addTearDown(() => tempDir.deleteSync(recursive: true));
+      const value = 'hello world\n';
+      File('${tempDir.path}/a.txt').writeAsStringSync(value);
+
+      expect(value, matchesGolden('a.txt', directory: tempDir.path));
+    });
 
     test('fails with a diff when content drifts', () {
       final tempDir = Directory.systemTemp.createTempSync('fleury_goldens_');
@@ -493,7 +508,7 @@ void main() {
           isA<TestFailure>().having(
             (e) => e.message,
             'message',
-            allOf(contains('expected'), contains('actual')),
+            allOf(contains('expected\n'), contains('actual\n')),
           ),
         ),
       );
