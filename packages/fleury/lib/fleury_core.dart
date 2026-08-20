@@ -97,8 +97,12 @@ export 'src/rendering/cell.dart'
         CellStyle,
         Color,
         Colors,
+        ControlState,
+        ControlStyle,
         IndexedColor,
-        RgbColor;
+        resolveControlStyle,
+        RgbColor,
+        StatefulCellStyle;
 export 'src/rendering/cell_buffer.dart'
     show
         CellBuffer,

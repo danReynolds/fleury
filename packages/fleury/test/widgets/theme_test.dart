@@ -29,6 +29,20 @@ void main() {
       expect(seen.selectionStyle, const CellStyle(bold: true));
     });
 
+    testWidgets('carries the shared control style through the theme', (tester) {
+      late ThemeData seen;
+      const data = ThemeData(
+        controlStyle: CellStyle.state(focused: CellStyle(underline: true)),
+      );
+      tester.pumpWidget(
+        Theme(data: data, child: _Capture((c) => seen = Theme.of(c))),
+      );
+
+      expect(seen.controlStyle, data.controlStyle);
+      expect(data.copyWith(), data);
+      expect(data.hashCode, data.copyWith().hashCode);
+    });
+
     testWidgets('maybeOf is null without an ancestor', (tester) {
       ThemeData? seen = ThemeData.fallback;
       tester.pumpWidget(_Capture((c) => seen = Theme.maybeOf(c)));
@@ -206,6 +220,25 @@ void main() {
       final plain = renderAt(ColorMode.none);
       expect(plain, isNot(contains('38;'))); // no foreground color set
       expect(plain, contains('1m')); // bold survives the color strip
+    });
+
+    test('a resolved invalid control cue survives NO_COLOR end to end', () {
+      final style = resolveControlStyle(
+        cascade: const [
+          CellStyle.state(
+            invalid: CellStyle(foreground: Colors.red, underline: true),
+          ),
+        ],
+        states: const {ControlState.invalid},
+      );
+      final buffer = CellBuffer(const CellSize(1, 1))
+        ..writeGrapheme(const CellOffset(0, 0), 'x', style: style);
+      final sink = StringAnsiSink();
+
+      AnsiRenderer(colorMode: ColorMode.none).renderFull(buffer, sink);
+
+      expect(sink.output, isNot(contains('38;')));
+      expect(sink.output, contains('4m'));
     });
   });
 }

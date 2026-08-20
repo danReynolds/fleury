@@ -137,6 +137,7 @@ final class ThemeData {
     this.selectionStyle = const CellStyle(inverse: true),
     this.focusedStyle = const CellStyle(bold: true),
     this.errorStyle = const CellStyle(foreground: Colors.red, underline: true),
+    this.controlStyle,
     this.borderStyle = BorderStyle.rounded,
     this.colorScheme = ColorScheme.standard,
     this.extensions = const [],
@@ -186,6 +187,13 @@ final class ThemeData {
   /// The underline is a non-color cue that remains under `NO_COLOR`.
   final CellStyle errorStyle;
 
+  /// App-wide styling for interactive control states.
+  ///
+  /// A plain [CellStyle] changes every control's base appearance without
+  /// removing its built-in state cues. Use [CellStyle.state] when a state
+  /// should look different. Individual widget styles merge over this value.
+  final ControlStyle? controlStyle;
+
   /// Default box-drawing style for framed surfaces.
   final BorderStyle borderStyle;
 
@@ -212,6 +220,7 @@ final class ThemeData {
     CellStyle? selectionStyle,
     CellStyle? focusedStyle,
     CellStyle? errorStyle,
+    ControlStyle? controlStyle,
     BorderStyle? borderStyle,
     ColorScheme? colorScheme,
     List<Object>? extensions,
@@ -222,6 +231,7 @@ final class ThemeData {
     selectionStyle: selectionStyle ?? this.selectionStyle,
     focusedStyle: focusedStyle ?? this.focusedStyle,
     errorStyle: errorStyle ?? this.errorStyle,
+    controlStyle: controlStyle ?? this.controlStyle,
     borderStyle: borderStyle ?? this.borderStyle,
     colorScheme: colorScheme ?? this.colorScheme,
     extensions: extensions ?? this.extensions,
@@ -236,6 +246,7 @@ final class ThemeData {
       other.selectionStyle == selectionStyle &&
       other.focusedStyle == focusedStyle &&
       other.errorStyle == errorStyle &&
+      other.controlStyle == controlStyle &&
       other.borderStyle == borderStyle &&
       other.colorScheme == colorScheme &&
       listEquals(other.extensions, extensions);
@@ -248,6 +259,7 @@ final class ThemeData {
     selectionStyle,
     focusedStyle,
     errorStyle,
+    controlStyle,
     borderStyle,
     colorScheme,
     Object.hashAll(extensions),

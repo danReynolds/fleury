@@ -243,10 +243,24 @@ class _TextStyles extends StatelessWidget {
   );
 }
 
-/// Widgets whose theming isn't visible in the mock app above: the focus
-/// treatment on an input, control selection, and the raised `surface` fill.
-class _Controls extends StatelessWidget {
+/// Widgets whose theming isn't visible in the mock app above: interactive
+/// states and the raised `surface` fill.
+class _Controls extends StatefulWidget {
   const _Controls();
+
+  @override
+  State<_Controls> createState() => _ControlsState();
+}
+
+class _ControlsState extends State<_Controls> {
+  final _query = TextEditingController(text: 'search query');
+  bool _checked = true;
+
+  @override
+  void dispose() {
+    _query.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -257,22 +271,33 @@ class _Controls extends StatelessWidget {
         SizedBox(
           width: 30,
           child: TextInput(
-            controller: TextEditingController(text: 'search query'),
+            controller: _query,
             semanticLabel: 'Styleguide input',
           ),
         ),
-        // TextInput has no frame of its own: its focus cue is the cursor,
-        // which appears only while focused, and an empty field shows the
-        // placeholder dimmed.
-        const _Caption('TextInput · cursor appears on focus'),
+        const _Caption('TextInput · focused / hovered'),
         Row(
           children: <Widget>[
-            Checkbox(value: true, onChanged: (_) {}, label: 'checked'),
+            Checkbox(
+              value: _checked,
+              onChanged: (value) => setState(() => _checked = value),
+              label: 'selected',
+            ),
             const Text('   '),
-            Checkbox(value: false, onChanged: (_) {}, label: 'unchecked'),
+            const Checkbox(value: false, onChanged: null, label: 'disabled'),
           ],
         ),
-        const _Caption('Checkbox · control selection'),
+        const _Caption('Checkbox · selected / disabled'),
+        SizedBox(
+          width: 30,
+          child: TextInput(
+            placeholder: 'invalid control',
+            validationError: 'Required',
+            semanticLabel: 'Invalid styleguide input',
+          ),
+        ),
+        const _Caption('TextInput · invalid'),
+        const _Caption('states come from ThemeData.controlStyle'),
         const SizedBox(height: 1),
         // `surface` is the one role with no place in the mock app: it fills
         // dialogs and popups, which need an opaque backdrop rather than the

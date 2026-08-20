@@ -69,13 +69,13 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
         'A styleguide for each built-in palette — Nord, Dracula, Gruvbox, '
         'Solarized (dark + light), Catppuccin Mocha, Tokyo Night, One Dark. '
         'The top half shows the theme on real UI; below it every ColorScheme '
-        'role and ThemeData style field is demonstrated and named, so a theme '
-        'author can see the whole surface they control. Use the Theme '
+        'role, text role, and interactive control state is demonstrated and '
+        'named, so a theme author can see the whole surface they control. Use the Theme '
         'dropdown to switch palettes — it re-themes as you arrow through it.',
     widgets: const <String>['Themes'],
     // Tall enough for the stacked (narrow-pane) layout: both panes plus the
     // three labelled reference sections.
-    initialHeight: 56,
+    initialHeight: 60,
     builder: (context) => const ThemeGallery(),
   ),
   Story(

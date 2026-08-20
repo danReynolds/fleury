@@ -66,7 +66,6 @@ const _demoIndexYieldPolicy = TaskYieldPolicy(
 );
 
 const _demoWidgetTheme = FleuryWidgetTheme(
-  controlFocusStyle: CellStyle(bold: true, foreground: AnsiColor(14)),
   progressFilledStyle: CellStyle(foreground: AnsiColor(10)),
   progressTrackStyle: CellStyle(dim: true),
   dataSelectedStyle: CellStyle(inverse: true, foreground: AnsiColor(14)),
@@ -95,6 +94,9 @@ const _demoTheme = ThemeData(
   ),
   focusedStyle: CellStyle(bold: true, foreground: AnsiColor(14)),
   selectionStyle: CellStyle(inverse: true, bold: true),
+  controlStyle: CellStyle.state(
+    focused: CellStyle(bold: true, foreground: AnsiColor(14)),
+  ),
 );
 
 final class RunRecord {

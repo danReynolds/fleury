@@ -2027,6 +2027,19 @@ form.clearErrors();''',
 runApp(const MyApp(), theme: tokyoNight);''',
     builder: () => const _ThemePickerExample(),
   ),
+  ExampleInfo(
+    id: 'themes.control_states',
+    widget: 'Themes',
+    category: 'Theming',
+    blurb:
+        'One control style adapts to focus, hover, selection, validation, and '
+        'disabled state without changing each widget separately.',
+    cols: 52,
+    rows: 13,
+    interactive: true,
+    code: _controlStateSource,
+    builder: () => const _ControlStateTour(),
+  ),
 ];
 
 /// id → builder, derived from [exampleList].
@@ -3112,6 +3125,10 @@ const ThemeData _customTheme = ThemeData(
   mutedStyle: CellStyle(dim: true),
   selectionStyle: CellStyle(inverse: true),
   focusedStyle: CellStyle(bold: true),
+  controlStyle: CellStyle.state(
+    focused: CellStyle(inverse: true, bold: true),
+    invalid: CellStyle(foreground: RgbColor(0xE5, 0x6B, 0x5B), underline: true),
+  ),
   borderStyle: BorderStyle.rounded,
 );
 
@@ -3135,6 +3152,13 @@ const amber = ThemeData(
   mutedStyle: CellStyle(dim: true),
   selectionStyle: CellStyle(inverse: true),
   focusedStyle: CellStyle(bold: true),
+  controlStyle: CellStyle.state(
+    focused: CellStyle(inverse: true, bold: true),
+    invalid: CellStyle(
+      foreground: RgbColor(0xE5, 0x6B, 0x5B),
+      underline: true,
+    ),
+  ),
   borderStyle: BorderStyle.rounded,
 );
 
@@ -3191,6 +3215,114 @@ class _ThemePreview extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+const String _controlStateSource = '''
+const theme = ThemeData(
+  controlStyle: CellStyle.state(
+    focused: CellStyle(inverse: true, bold: true),
+    hovered: CellStyle(underline: true),
+    selected: CellStyle(foreground: Colors.green, bold: true),
+    invalid: CellStyle(foreground: Colors.red, underline: true),
+    disabled: CellStyle(dim: true),
+  ),
+);
+
+Form(
+  controller: form,
+  onSubmit: deploy,
+  child: Column(children: [
+    FormField(
+      validator: () => name.text.isEmpty ? 'Enter a service name.' : null,
+      child: TextInput(controller: name, placeholder: 'Service name'),
+    ),
+    Checkbox(value: approved, label: 'Approved', onChanged: setApproved),
+    Button(label: 'Deploy', onPressed: form.submit),
+  ]),
+)''';
+
+/// Interactive proof that one theme-level state style reaches different
+/// control families without forcing ordinary per-widget styling.
+class _ControlStateTour extends StatefulWidget {
+  const _ControlStateTour();
+
+  @override
+  State<_ControlStateTour> createState() => _ControlStateTourState();
+}
+
+class _ControlStateTourState extends State<_ControlStateTour> {
+  final _form = FormController();
+  final _name = TextEditingController();
+  bool _approved = true;
+  String _status = 'Submit empty to reveal validation';
+
+  @override
+  void dispose() {
+    _form.dispose();
+    _name.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final outer = Theme.of(context);
+    return Theme(
+      data: outer.copyWith(
+        controlStyle: const CellStyle.state(
+          focused: CellStyle(inverse: true, bold: true),
+          hovered: CellStyle(underline: true),
+          selected: CellStyle(foreground: Colors.green, bold: true),
+          invalid: CellStyle(foreground: Colors.red, underline: true),
+          disabled: CellStyle(dim: true),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(1),
+        child: Form(
+          controller: _form,
+          onSubmit: () => setState(() => _status = 'Ready to deploy'),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const Text('CONTROL STATES', style: CellStyle(bold: true)),
+              Text(
+                'Tab or click · hover in the browser',
+                style: outer.mutedStyle,
+              ),
+              const SizedBox(height: 1),
+              FormField(
+                validator: () =>
+                    _name.text.trim().isEmpty ? 'Enter a service name.' : null,
+                child: SizedBox(
+                  width: 30,
+                  child: TextInput(
+                    controller: _name,
+                    autofocus: true,
+                    placeholder: 'Service name',
+                    semanticLabel: 'Service name',
+                  ),
+                ),
+              ),
+              Checkbox(
+                value: _approved,
+                label: 'Approved',
+                onChanged: (value) => setState(() => _approved = value),
+              ),
+              Row(
+                children: <Widget>[
+                  Button(label: 'Deploy', onPressed: _form.submit),
+                  const Text('  '),
+                  const Button(label: 'Queued', onPressed: null),
+                ],
+              ),
+              const SizedBox(height: 1),
+              Text(_status, style: outer.mutedStyle),
+            ],
+          ),
+        ),
       ),
     );
   }

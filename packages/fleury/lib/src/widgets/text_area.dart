@@ -34,6 +34,7 @@ import 'form_control.dart';
 import 'framework.dart';
 import 'keyboard.dart';
 import 'media_query.dart';
+import 'pointer.dart';
 import 'theme.dart';
 import 'text_input.dart'
     show TextClipboardPolicy, TextEditingController, textClipboardSemanticState;
@@ -57,7 +58,6 @@ class TextArea extends StatefulWidget {
     this.enabled = true,
     this.readOnly = false,
     this.validationError,
-    this.errorStyle,
     this.semanticLabel,
     this.semanticState = SemanticState.empty,
     this.clipboardPolicy = TextClipboardPolicy.allowed,
@@ -102,8 +102,11 @@ class TextArea extends StatefulWidget {
   /// Style for the [placeholder] text. Defaults to dim.
   final CellStyle placeholderStyle;
 
-  /// Style applied to editable text.
-  final CellStyle style;
+  /// Style applied to editable text and its interactive states.
+  ///
+  /// Pass a plain [CellStyle] for the common case. Use [CellStyle.state] only
+  /// when focus, hover, disabled, or invalid should look different locally.
+  final ControlStyle style;
 
   /// Style applied to the grapheme cell under the visible cursor.
   final CellStyle cursorStyle;
@@ -119,12 +122,6 @@ class TextArea extends StatefulWidget {
   /// Use this when the area is not inside a `FormField`. An enclosing
   /// `FormField` supplies its current error automatically.
   final String? validationError;
-
-  /// Style merged onto the area while its value is invalid.
-  ///
-  /// null uses [ThemeData.errorStyle]. [CellStyle.empty] suppresses the
-  /// visual reaction while preserving validation semantics and messages.
-  final CellStyle? errorStyle;
 
   /// Label exposed through the semantic app graph.
   ///
@@ -167,6 +164,7 @@ class _TextAreaState extends State<TextArea>
   late String _lastNotifiedText;
   bool _ownsController = false;
   bool _ownsFocusNode = false;
+  bool _hovered = false;
   FormControlRegistration? _formRegistration;
   TextPasteSession? _pasteSession;
   final Queue<({String text, bool isFinal})> _queuedPasteSegments =
@@ -767,14 +765,28 @@ class _TextAreaState extends State<TextArea>
   Widget build(BuildContext context) {
     final focused = _focusNode.hasFocus;
     final validationError = _formRegistration?.error ?? widget.validationError;
-    final invalidStyle = widget.errorStyle ?? Theme.of(context).errorStyle;
-    final displayStyle = validationError == null
-        ? widget.style
-        : widget.style.merge(invalidStyle);
-    final displayPlaceholderStyle = validationError == null
-        ? widget.placeholderStyle
-        : widget.placeholderStyle.merge(invalidStyle);
-    return Semantics(
+    final theme = Theme.of(context);
+    final displayStyle = resolveControlStyle(
+      cascade: [
+        CellStyle.state(
+          focused: CellStyle(
+            foreground: theme.colorScheme.focus,
+          ).merge(theme.focusedStyle),
+          disabled: theme.mutedStyle,
+          invalid: theme.errorStyle,
+        ),
+        theme.controlStyle,
+        widget.style,
+      ],
+      states: {
+        if (_hovered) ControlState.hovered,
+        if (focused) ControlState.focused,
+        if (!widget.enabled) ControlState.disabled,
+        if (validationError != null) ControlState.invalid,
+      },
+    );
+    final displayPlaceholderStyle = displayStyle.merge(widget.placeholderStyle);
+    final content = Semantics(
       role: SemanticRole.textArea,
       label:
           widget.semanticLabel ??
@@ -825,12 +837,8 @@ class _TextAreaState extends State<TextArea>
             text: _controller.text,
             selection: _controller.selection,
             placeholder: widget.placeholder,
-            placeholderStyle: widget.enabled
-                ? displayPlaceholderStyle
-                : displayPlaceholderStyle.merge(const CellStyle(dim: true)),
-            style: widget.enabled
-                ? displayStyle
-                : displayStyle.merge(const CellStyle(dim: true)),
+            placeholderStyle: displayPlaceholderStyle,
+            style: displayStyle,
             cursorStyle: widget.cursorStyle,
             cursorVisible: focused,
             minLines: widget.minLines,
@@ -838,6 +846,15 @@ class _TextAreaState extends State<TextArea>
           ),
         ),
       ),
+    );
+    return MouseRegion(
+      onEnter: () {
+        if (!_hovered) setState(() => _hovered = true);
+      },
+      onExit: () {
+        if (_hovered) setState(() => _hovered = false);
+      },
+      child: content,
     );
   }
 }

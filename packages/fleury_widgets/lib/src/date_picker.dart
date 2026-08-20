@@ -40,7 +40,7 @@ class DatePicker extends StatefulWidget {
     this.label,
     this.focusNode,
     this.autofocus = false,
-    this.errorStyle,
+    this.style,
   });
 
   /// Currently-selected day (only the y/m/d portion is read).
@@ -70,9 +70,8 @@ class DatePicker extends StatefulWidget {
   /// Whether the picker requests focus when mounted.
   final bool autofocus;
 
-  /// Invalid style for the selected date and header. null uses the theme;
-  /// [CellStyle.empty] keeps the picker visually neutral.
-  final CellStyle? errorStyle;
+  /// Base and optional state styling for the selected date and header.
+  final ControlStyle? style;
 
   @override
   State<DatePicker> createState() => _DatePickerState();
@@ -81,6 +80,7 @@ class DatePicker extends StatefulWidget {
 class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
   late FocusNode _node;
   bool _owns = false;
+  bool _hovered = false;
   FormControlRegistration? _formRegistration;
 
   bool get _enabled => widget.onChanged != null;
@@ -334,9 +334,30 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
     final canIncrement =
         enabled && _inBounds(_midnight(v).add(const Duration(days: 1)));
     final validationError = _formRegistration?.error;
-    final invalidStyle = validationError == null
-        ? null
-        : (widget.errorStyle ?? theme.errorStyle);
+    CellStyle resolvePickerStyle({
+      bool selected = false,
+      bool unavailable = false,
+      CellStyle base = CellStyle.empty,
+    }) => resolveControlStyle(
+      cascade: [
+        CellStyle.state(
+          base: base,
+          selected: theme.selectionStyle,
+          focused: theme.focusedStyle,
+          disabled: theme.mutedStyle,
+          invalid: theme.errorStyle,
+        ),
+        theme.controlStyle,
+        widget.style,
+      ],
+      states: {
+        if (_hovered) ControlState.hovered,
+        if (selected) ControlState.selected,
+        if (selected && focused) ControlState.focused,
+        if (!enabled || unavailable) ControlState.disabled,
+        if (selected && validationError != null) ControlState.invalid,
+      },
+    );
 
     // Build the 7-column day grid as rows. Each row is a List<Widget>
     // of cells (blank, in-bounds day, or out-of-bounds dimmed day).
@@ -362,21 +383,19 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
             }
           : null;
       if (selected) {
-        var selectedStyle = !enabled
-            ? disabledStyle
-            : focused
-            ? theme.focusedStyle
-            : theme.selectionStyle;
-        if (enabled && invalidStyle != null) {
-          selectedStyle = selectedStyle.merge(invalidStyle);
-        }
-        row.add(_Cell(cellText, style: selectedStyle, onTap: onTap));
+        row.add(
+          _Cell(
+            cellText,
+            style: resolvePickerStyle(selected: true),
+            onTap: onTap,
+          ),
+        );
       } else if (!inB) {
-        row.add(_Cell(cellText, style: const CellStyle(dim: true)));
+        row.add(_Cell(cellText, style: resolvePickerStyle(unavailable: true)));
       } else if (!enabled) {
-        row.add(_Cell(cellText, style: disabledStyle));
+        row.add(_Cell(cellText, style: resolvePickerStyle()));
       } else {
-        row.add(_Cell(cellText, onTap: onTap));
+        row.add(_Cell(cellText, style: resolvePickerStyle(), onTap: onTap));
       }
       if (row.length == 7) {
         rows.add(row);
@@ -410,17 +429,10 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
             ),
             Text(
               '${_months[v.month - 1]} ${v.year}',
-              style:
-                  (!enabled
-                          ? disabledStyle
-                          : focused
-                          ? theme.focusedStyle
-                          : const CellStyle(bold: true))
-                      .merge(
-                        enabled
-                            ? invalidStyle ?? CellStyle.empty
-                            : CellStyle.empty,
-                      ),
+              style: resolvePickerStyle(
+                selected: true,
+                base: const CellStyle(bold: true),
+              ),
             ),
             _MonthArrow(
               ' >',
@@ -471,7 +483,7 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
         child: body,
       );
       // styled component, not selectable text
-      return SelectionArea.disabled(child: picker);
+      return _withHover(SelectionArea.disabled(child: picker));
     }
 
     final Widget picker = Semantics(
@@ -533,8 +545,18 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
       ),
     );
     // styled component, not selectable text
-    return SelectionArea.disabled(child: picker);
+    return _withHover(SelectionArea.disabled(child: picker));
   }
+
+  Widget _withHover(Widget child) => MouseRegion(
+    onEnter: () {
+      if (!_hovered) setState(() => _hovered = true);
+    },
+    onExit: () {
+      if (_hovered) setState(() => _hovered = false);
+    },
+    child: child,
+  );
 }
 
 /// A fixed-width 3-column cell used for the day grid and the day-of-week

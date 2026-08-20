@@ -79,7 +79,6 @@ class CompletionTextInput extends StatefulWidget {
     this.enabled = true,
     this.readOnly = false,
     this.validationError,
-    this.errorStyle,
     this.semanticLabel,
     this.semanticState = SemanticState.empty,
     this.clipboardPolicy,
@@ -129,8 +128,8 @@ class CompletionTextInput extends StatefulWidget {
   /// Style used for [placeholder].
   final CellStyle placeholderStyle;
 
-  /// Style used for entered text.
-  final CellStyle style;
+  /// Style used for entered text and interaction states.
+  final ControlStyle style;
 
   /// Style applied to the cursor cell.
   final CellStyle cursorStyle;
@@ -149,10 +148,6 @@ class CompletionTextInput extends StatefulWidget {
 
   /// Optional validation error displayed by the underlying input.
   final String? validationError;
-
-  /// Invalid style for the underlying text field. null uses the theme;
-  /// [CellStyle.empty] keeps the field visually neutral.
-  final CellStyle? errorStyle;
 
   /// Label exposed through the underlying text-field semantic node.
   ///
@@ -476,7 +471,6 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
         enabled: widget.enabled,
         readOnly: widget.readOnly,
         validationError: widget.validationError,
-        errorStyle: widget.errorStyle,
         semanticLabel: widget.semanticLabel,
         semanticState: widget.semanticState,
         clipboardPolicy: widget.clipboardPolicy,

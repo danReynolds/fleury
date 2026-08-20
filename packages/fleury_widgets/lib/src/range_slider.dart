@@ -46,7 +46,7 @@ class RangeSlider extends StatefulWidget {
     this.showValues = false,
     this.focusNode,
     this.autofocus = false,
-    this.errorStyle,
+    this.style,
   }) : assert(min < max, 'min must be < max'),
        assert(step > 0, 'step must be > 0');
 
@@ -83,9 +83,8 @@ class RangeSlider extends StatefulWidget {
   /// Whether the slider should request focus when mounted.
   final bool autofocus;
 
-  /// Invalid style for the active track and handles. null uses the theme;
-  /// [CellStyle.empty] keeps the slider visually neutral.
-  final CellStyle? errorStyle;
+  /// Base and optional state styling for the track and handles.
+  final ControlStyle? style;
 
   @override
   State<RangeSlider> createState() => _RangeSliderState();
@@ -94,6 +93,7 @@ class RangeSlider extends StatefulWidget {
 class _RangeSliderState extends State<RangeSlider> {
   late FocusNode _node;
   bool _owns = false;
+  bool _hovered = false;
   FormControlRegistration? _formRegistration;
   _ActiveHandle _active = _ActiveHandle.low;
 
@@ -311,10 +311,38 @@ class _RangeSliderState extends State<RangeSlider> {
         ? lo < hi
         : enabled && hi < widget.max;
     final validationError = _formRegistration?.error;
-    final invalidStyle = validationError == null
-        ? null
-        : (widget.errorStyle ?? theme.errorStyle);
-    final selectedStyle = CellStyle(foreground: theme.colorScheme.primary);
+    final states = {
+      if (_hovered) ControlState.hovered,
+      if (enabled && _node.hasFocus) ControlState.focused,
+      if (!enabled) ControlState.disabled,
+      if (validationError != null) ControlState.invalid,
+    };
+    final trackStyle = resolveControlStyle(
+      cascade: [
+        CellStyle.state(
+          base: theme.mutedStyle,
+          focused: theme.focusedStyle,
+          disabled: theme.mutedStyle,
+          invalid: theme.errorStyle,
+        ),
+        theme.controlStyle,
+        widget.style,
+      ],
+      states: states,
+    );
+    final selectedStyle = resolveControlStyle(
+      cascade: [
+        CellStyle.state(
+          selected: CellStyle(foreground: theme.colorScheme.primary),
+          focused: theme.focusedStyle,
+          disabled: theme.mutedStyle,
+          invalid: theme.errorStyle,
+        ),
+        theme.controlStyle,
+        widget.style,
+      ],
+      states: {...states, ControlState.selected},
+    );
     final slider = _RawRangeSlider(
       values: _normalized,
       min: widget.min,
@@ -322,12 +350,8 @@ class _RangeSliderState extends State<RangeSlider> {
       active: _active,
       focused: enabled && _node.hasFocus,
       geometry: _geom,
-      selectedStyle: enabled
-          ? (invalidStyle == null
-                ? selectedStyle
-                : selectedStyle.merge(invalidStyle))
-          : theme.mutedStyle,
-      trackStyle: theme.mutedStyle,
+      selectedStyle: selectedStyle,
+      trackStyle: trackStyle,
     );
     if (!enabled) {
       final Widget decorated = _decorate(
@@ -353,7 +377,7 @@ class _RangeSliderState extends State<RangeSlider> {
         ),
       );
       // styled component, not selectable text
-      return SelectionArea.disabled(child: decorated);
+      return _withHover(SelectionArea.disabled(child: decorated));
     }
     final Widget decorated = _decorate(
       context,
@@ -427,8 +451,18 @@ class _RangeSliderState extends State<RangeSlider> {
       ),
     );
     // styled component, not selectable text
-    return SelectionArea.disabled(child: decorated);
+    return _withHover(SelectionArea.disabled(child: decorated));
   }
+
+  Widget _withHover(Widget child) => MouseRegion(
+    onEnter: () {
+      if (!_hovered) setState(() => _hovered = true);
+    },
+    onExit: () {
+      if (_hovered) setState(() => _hovered = false);
+    },
+    child: child,
+  );
 
   /// Wraps the interactive track with a value readout and endpoint labels when
   /// [RangeSlider.showValues] is set; otherwise returns the track unchanged.

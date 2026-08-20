@@ -44,6 +44,7 @@ import 'form_control.dart';
 import 'framework.dart';
 import 'keyboard.dart';
 import 'media_query.dart';
+import 'pointer.dart';
 import 'theme.dart';
 import 'tui_binding.dart';
 
@@ -551,7 +552,6 @@ class TextInput extends StatefulWidget {
     this.enabled = true,
     this.readOnly = false,
     this.validationError,
-    this.errorStyle,
     this.semanticLabel,
     this.semanticState = SemanticState.empty,
     this.clipboardPolicy,
@@ -604,8 +604,11 @@ class TextInput extends StatefulWidget {
   /// Style for the [placeholder] text. Defaults to dim.
   final CellStyle placeholderStyle;
 
-  /// Base style for the rendered text.
-  final CellStyle style;
+  /// Style for the rendered text and its interactive states.
+  ///
+  /// Pass a plain [CellStyle] for the common case. Use [CellStyle.state] only
+  /// when focus, hover, disabled, or invalid should look different locally.
+  final ControlStyle style;
 
   /// Style merged on top of [style] at the cursor cell. Defaults to
   /// `inverse: true` — a block cursor.
@@ -644,12 +647,6 @@ class TextInput extends StatefulWidget {
   /// Use this when the input is not inside a `FormField`. An enclosing
   /// `FormField` supplies its current error automatically.
   final String? validationError;
-
-  /// Style merged onto the field while its value is invalid.
-  ///
-  /// null uses [ThemeData.errorStyle]. [CellStyle.empty] suppresses the
-  /// visual reaction while preserving validation semantics and messages.
-  final CellStyle? errorStyle;
 
   /// Label exposed through the semantic app graph.
   ///
@@ -721,6 +718,7 @@ class _TextInputState extends State<TextInput>
   late String _lastNotifiedText;
   bool _ownsController = false;
   bool _ownsFocusNode = false;
+  bool _hovered = false;
   FormControlRegistration? _formRegistration;
   TextPasteSession? _pasteSession;
   final Queue<({String text, bool isFinal})> _queuedPasteSegments =
@@ -1556,14 +1554,28 @@ class _TextInputState extends State<TextInput>
     final completion = widget.completionController;
     final completionState = completion?.state;
     final validationError = _formRegistration?.error ?? widget.validationError;
-    final invalidStyle = widget.errorStyle ?? Theme.of(context).errorStyle;
-    final displayStyle = validationError == null
-        ? widget.style
-        : widget.style.merge(invalidStyle);
-    final displayPlaceholderStyle = validationError == null
-        ? widget.placeholderStyle
-        : widget.placeholderStyle.merge(invalidStyle);
-    return Semantics(
+    final theme = Theme.of(context);
+    final displayStyle = resolveControlStyle(
+      cascade: [
+        CellStyle.state(
+          focused: CellStyle(
+            foreground: theme.colorScheme.focus,
+          ).merge(theme.focusedStyle),
+          disabled: theme.mutedStyle,
+          invalid: theme.errorStyle,
+        ),
+        theme.controlStyle,
+        widget.style,
+      ],
+      states: {
+        if (_hovered) ControlState.hovered,
+        if (focused) ControlState.focused,
+        if (!widget.enabled) ControlState.disabled,
+        if (validationError != null) ControlState.invalid,
+      },
+    );
+    final displayPlaceholderStyle = displayStyle.merge(widget.placeholderStyle);
+    final content = Semantics(
       role: SemanticRole.textField,
       label:
           widget.semanticLabel ??
@@ -1632,12 +1644,8 @@ class _TextInputState extends State<TextInput>
             text: _controller.text,
             selection: _controller.selection,
             placeholder: widget.placeholder,
-            placeholderStyle: widget.enabled
-                ? displayPlaceholderStyle
-                : displayPlaceholderStyle.merge(const CellStyle(dim: true)),
-            style: widget.enabled
-                ? displayStyle
-                : displayStyle.merge(const CellStyle(dim: true)),
+            placeholderStyle: displayPlaceholderStyle,
+            style: displayStyle,
             cursorStyle: widget.cursorStyle,
             cursorVisible: cursorVisible,
             obscureText: widget.obscureText,
@@ -1645,6 +1653,15 @@ class _TextInputState extends State<TextInput>
           ),
         ),
       ),
+    );
+    return MouseRegion(
+      onEnter: () {
+        if (!_hovered) setState(() => _hovered = true);
+      },
+      onExit: () {
+        if (_hovered) setState(() => _hovered = false);
+      },
+      child: content,
     );
   }
 }

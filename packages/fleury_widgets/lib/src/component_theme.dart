@@ -7,8 +7,6 @@ import 'package:fleury/fleury_core.dart';
 /// needs. Add it to `ThemeData.extensions` and retrieve it with [of].
 final class FleuryWidgetTheme {
   const FleuryWidgetTheme({
-    this.controlFocusStyle,
-    this.disabledStyle,
     this.switchOnStyle,
     this.switchOffStyle,
     this.progressFilledStyle,
@@ -43,8 +41,6 @@ final class FleuryWidgetTheme {
 
   static const standard = FleuryWidgetTheme();
 
-  final CellStyle? controlFocusStyle;
-  final CellStyle? disabledStyle;
   final CellStyle? switchOnStyle;
   final CellStyle? switchOffStyle;
   final CellStyle? progressFilledStyle;
@@ -81,12 +77,6 @@ final class FleuryWidgetTheme {
 
   static FleuryWidgetTheme from(ThemeData theme) =>
       theme.extension<FleuryWidgetTheme>() ?? standard;
-
-  CellStyle resolveControlFocus(ThemeData theme) =>
-      controlFocusStyle ?? theme.focusedStyle;
-
-  CellStyle resolveDisabled(ThemeData theme) =>
-      disabledStyle ?? theme.mutedStyle;
 
   CellStyle resolveSwitchOn(ThemeData theme) =>
       switchOnStyle ?? CellStyle(foreground: theme.colorScheme.primary);
@@ -202,8 +192,6 @@ final class FleuryWidgetTheme {
       markdownRuleStyle ?? theme.mutedStyle;
 
   FleuryWidgetTheme copyWith({
-    CellStyle? controlFocusStyle,
-    CellStyle? disabledStyle,
     CellStyle? switchOnStyle,
     CellStyle? switchOffStyle,
     CellStyle? progressFilledStyle,
@@ -236,8 +224,6 @@ final class FleuryWidgetTheme {
     CellStyle? markdownRuleStyle,
   }) {
     return FleuryWidgetTheme(
-      controlFocusStyle: controlFocusStyle ?? this.controlFocusStyle,
-      disabledStyle: disabledStyle ?? this.disabledStyle,
       switchOnStyle: switchOnStyle ?? this.switchOnStyle,
       switchOffStyle: switchOffStyle ?? this.switchOffStyle,
       progressFilledStyle: progressFilledStyle ?? this.progressFilledStyle,
@@ -276,8 +262,6 @@ final class FleuryWidgetTheme {
   @override
   bool operator ==(Object other) {
     return other is FleuryWidgetTheme &&
-        other.controlFocusStyle == controlFocusStyle &&
-        other.disabledStyle == disabledStyle &&
         other.switchOnStyle == switchOnStyle &&
         other.switchOffStyle == switchOffStyle &&
         other.progressFilledStyle == progressFilledStyle &&
@@ -312,8 +296,6 @@ final class FleuryWidgetTheme {
 
   @override
   int get hashCode => Object.hashAll([
-    controlFocusStyle,
-    disabledStyle,
     switchOnStyle,
     switchOffStyle,
     progressFilledStyle,

@@ -69,11 +69,22 @@ void main() {
       expect(src, contains('mutedStyle'));
       expect(src, contains('selectionStyle'));
       expect(src, contains('focusedStyle'));
+      expect(src, contains('controlStyle'));
       expect(src, contains('borderStyle'));
       expect(customThemeForTest.borderStyle, BorderStyle.rounded);
       expect(customThemeForTest.mutedStyle.dim, isTrue);
       expect(customThemeForTest.selectionStyle.inverse, isTrue);
       expect(customThemeForTest.focusedStyle.bold, isTrue);
+      expect(
+        customThemeForTest.controlStyle?.styleFor(ControlState.focused)?.bold,
+        isTrue,
+      );
+      expect(
+        customThemeForTest.controlStyle
+            ?.styleFor(ControlState.invalid)
+            ?.underline,
+        isTrue,
+      );
     });
 
     test('the theme sets every opaque role a preview needs', () {

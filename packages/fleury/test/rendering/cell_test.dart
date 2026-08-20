@@ -74,6 +74,151 @@ void main() {
     });
   });
 
+  group('CellStyle.state', () {
+    test('is const and behaves like its base outside state resolution', () {
+      const style = CellStyle.state(
+        base: CellStyle(foreground: AnsiColor(6), bold: true),
+        focused: CellStyle(underline: true),
+      );
+
+      expect(style, isA<StatefulCellStyle>());
+      expect(style.foreground, const AnsiColor(6));
+      expect(style.bold, isTrue);
+      expect(style.underline, isFalse);
+    });
+
+    test('plain local styles change the base without erasing state cues', () {
+      const defaults = CellStyle.state(
+        focused: CellStyle(bold: true),
+        invalid: CellStyle(underline: true),
+      );
+
+      final resolved = resolveControlStyle(
+        cascade: const [
+          defaults,
+          CellStyle(foreground: AnsiColor(5)),
+        ],
+        states: const {ControlState.focused, ControlState.invalid},
+      );
+
+      expect(resolved.foreground, const AnsiColor(5));
+      expect(resolved.bold, isTrue);
+      expect(resolved.underline, isTrue);
+    });
+
+    test('the highest non-null patch wins for each state as one unit', () {
+      const theme = CellStyle.state(
+        focused: CellStyle(foreground: AnsiColor(4), bold: true),
+      );
+      const local = CellStyle.state(focused: CellStyle(underline: true));
+
+      final resolved = resolveControlStyle(
+        cascade: const [theme, local],
+        states: const {ControlState.focused},
+      );
+
+      expect(resolved.foreground, isNull);
+      expect(resolved.boldOrNull, isNull);
+      expect(resolved.underline, isTrue);
+    });
+
+    test('null inherits while CellStyle.empty suppresses a state cue', () {
+      const theme = CellStyle.state(
+        base: CellStyle(foreground: AnsiColor(2)),
+        focused: CellStyle(inverse: true),
+      );
+      const inherit = CellStyle.state();
+      const suppress = CellStyle.state(focused: CellStyle.empty);
+
+      final inherited = resolveControlStyle(
+        cascade: const [theme, inherit],
+        states: const {ControlState.focused},
+      );
+      final suppressed = resolveControlStyle(
+        cascade: const [theme, suppress],
+        states: const {ControlState.focused},
+      );
+
+      expect(inherited.foreground, const AnsiColor(2));
+      expect(inherited.inverse, isTrue);
+      expect(suppressed.foreground, const AnsiColor(2));
+      expect(suppressed.inverseOrNull, isNull);
+    });
+
+    test('active states compose in deterministic paint order', () {
+      const style = CellStyle.state(
+        selected: CellStyle(background: AnsiColor(4)),
+        hovered: CellStyle(dim: false),
+        focused: CellStyle(bold: true),
+        invalid: CellStyle(foreground: AnsiColor(1), underline: true),
+      );
+
+      final resolved = resolveControlStyle(
+        cascade: const [style],
+        states: const {
+          ControlState.selected,
+          ControlState.hovered,
+          ControlState.focused,
+          ControlState.invalid,
+        },
+      );
+
+      expect(resolved.background, const AnsiColor(4));
+      expect(resolved.dimOrNull, isFalse);
+      expect(resolved.bold, isTrue);
+      expect(resolved.foreground, const AnsiColor(1));
+      expect(resolved.underline, isTrue);
+    });
+
+    test('disabled is exclusive of transient and value states', () {
+      const style = CellStyle.state(
+        selected: CellStyle(inverse: true),
+        focused: CellStyle(bold: true),
+        disabled: CellStyle(dim: true),
+        invalid: CellStyle(underline: true),
+      );
+
+      final resolved = resolveControlStyle(
+        cascade: const [style],
+        states: const {
+          ControlState.selected,
+          ControlState.focused,
+          ControlState.disabled,
+          ControlState.invalid,
+        },
+      );
+
+      expect(resolved.dim, isTrue);
+      expect(resolved.inverseOrNull, isNull);
+      expect(resolved.boldOrNull, isNull);
+      expect(resolved.underlineOrNull, isNull);
+    });
+
+    test(
+      'stateful styles have value equality and preserve states on merge',
+      () {
+        const a = CellStyle.state(
+          base: CellStyle(foreground: AnsiColor(2)),
+          focused: CellStyle(bold: true),
+        );
+        const b = CellStyle.state(
+          base: CellStyle(foreground: AnsiColor(2)),
+          focused: CellStyle(bold: true),
+        );
+
+        expect(a, b);
+        expect(a.hashCode, b.hashCode);
+        expect(
+          a.merge(const CellStyle(background: AnsiColor(0))),
+          const CellStyle.state(
+            base: CellStyle(foreground: AnsiColor(2), background: AnsiColor(0)),
+            focused: CellStyle(bold: true),
+          ),
+        );
+      },
+    );
+  });
+
   group('CellStyle.linkUri (OSC 8 carrier)', () {
     test('defaults to null; empty and const singletons carry no link', () {
       expect(const CellStyle().linkUri, isNull);

@@ -42,7 +42,7 @@ class Select<T> extends StatefulWidget {
     this.focusNode,
     this.autofocus = false,
     this.semanticLabel,
-    this.errorStyle,
+    this.style,
   });
 
   /// Choices shown in the opened dropdown.
@@ -79,9 +79,8 @@ class Select<T> extends StatefulWidget {
   /// fallback, or future adapters need to refer to the picker itself.
   final String? semanticLabel;
 
-  /// Invalid style for the trigger. null uses the theme;
-  /// [CellStyle.empty] keeps it visually neutral.
-  final CellStyle? errorStyle;
+  /// Base and optional state styling for the closed trigger.
+  final ControlStyle? style;
 
   @override
   State<Select<T>> createState() => _SelectState<T>();
@@ -95,6 +94,7 @@ class _SelectState<T> extends State<Select<T>> {
   OverlayEntry? _entry;
   FocusNode? _priorFocus;
   FormControlRegistration? _formRegistration;
+  bool _hovered = false;
 
   bool get _isOpen => _entry != null;
 
@@ -278,109 +278,131 @@ class _SelectState<T> extends State<Select<T>> {
     final enabled = widget.onChanged != null;
     final focused = _triggerFocus.hasFocus;
     final validationError = _formRegistration?.error;
-    final invalidStyle = validationError == null
-        ? null
-        : (widget.errorStyle ?? theme.errorStyle);
-    var style = !enabled
-        ? theme.mutedStyle
-        : focused
-        ? theme.selectionStyle
-        : CellStyle.empty;
-    if (enabled && invalidStyle != null) style = style.merge(invalidStyle);
+    final style = resolveControlStyle(
+      cascade: [
+        CellStyle.state(
+          focused: theme.selectionStyle,
+          disabled: theme.mutedStyle,
+          invalid: theme.errorStyle,
+        ),
+        theme.controlStyle,
+        widget.style,
+      ],
+      states: {
+        if (_hovered) ControlState.hovered,
+        if (focused) ControlState.focused,
+        if (!enabled) ControlState.disabled,
+        if (validationError != null) ControlState.invalid,
+      },
+    );
     final text = '$_currentLabel ${_isOpen ? '▴' : '▾'}';
     if (!enabled) {
-      return BoundsObserver(
+      return _withHover(
+        BoundsObserver(
+          notifier: _bounds,
+          child: Semantics(
+            role: SemanticRole.button,
+            label: widget.semanticLabel ?? _currentLabel,
+            value: _currentLabel,
+            enabled: false,
+            validationError: validationError,
+            expanded: false,
+            state: SemanticState({
+              'menuItemCount': widget.options.length,
+              'open': false,
+              'selectedKey': widget.value,
+              'selectedOptionLabel': _currentLabel,
+            }),
+            child: Text(text, allowSelect: false, style: style),
+          ),
+        ),
+      );
+    }
+    return _withHover(
+      BoundsObserver(
         notifier: _bounds,
         child: Semantics(
           role: SemanticRole.button,
           label: widget.semanticLabel ?? _currentLabel,
           value: _currentLabel,
-          enabled: false,
+          focused: _triggerFocus.hasFocus,
+          expanded: _isOpen,
           validationError: validationError,
-          expanded: false,
+          actions: <SemanticAction>{
+            SemanticAction.focus,
+            if (widget.options.isNotEmpty) SemanticAction.activate,
+            if (widget.options.isNotEmpty)
+              _isOpen ? SemanticAction.close : SemanticAction.open,
+            if (widget.options.isNotEmpty) SemanticAction.setValue,
+          },
           state: SemanticState({
             'menuItemCount': widget.options.length,
-            'open': false,
+            'open': _isOpen,
             'selectedKey': widget.value,
             'selectedOptionLabel': _currentLabel,
+            // The settable domain: each enabled option's label and stringified
+            // value, in the exact forms `_selectByPayload` matches on, so an agent
+            // (and the WS-9 valueSchema) sees precisely what set_value accepts.
+            'options': <Object?>[
+              for (final o in widget.options)
+                if (o.enabled)
+                  <String, Object?>{
+                    'label': sanitizeOptionLabel(o.label),
+                    'value': '${o.value}',
+                  },
+            ],
           }),
-          child: Text(text, allowSelect: false, style: style),
-        ),
-      );
-    }
-    return BoundsObserver(
-      notifier: _bounds,
-      child: Semantics(
-        role: SemanticRole.button,
-        label: widget.semanticLabel ?? _currentLabel,
-        value: _currentLabel,
-        focused: _triggerFocus.hasFocus,
-        expanded: _isOpen,
-        validationError: validationError,
-        actions: <SemanticAction>{
-          SemanticAction.focus,
-          if (widget.options.isNotEmpty) SemanticAction.activate,
-          if (widget.options.isNotEmpty)
-            _isOpen ? SemanticAction.close : SemanticAction.open,
-          if (widget.options.isNotEmpty) SemanticAction.setValue,
-        },
-        state: SemanticState({
-          'menuItemCount': widget.options.length,
-          'open': _isOpen,
-          'selectedKey': widget.value,
-          'selectedOptionLabel': _currentLabel,
-          // The settable domain: each enabled option's label and stringified
-          // value, in the exact forms `_selectByPayload` matches on, so an agent
-          // (and the WS-9 valueSchema) sees precisely what set_value accepts.
-          'options': <Object?>[
-            for (final o in widget.options)
-              if (o.enabled)
-                <String, Object?>{
-                  'label': sanitizeOptionLabel(o.label),
-                  'value': '${o.value}',
-                },
-          ],
-        }),
-        onAction: (action) {
-          switch (action) {
-            case SemanticAction.focus:
-              _triggerFocus.requestFocus();
-              return;
-            case SemanticAction.activate:
-              _isOpen ? _close() : _open();
-              return;
-            case SemanticAction.open:
-              _open();
-              return;
-            case SemanticAction.close:
-              _close();
-              return;
-            case _:
-              return;
-          }
-        },
-        onSetValue: _selectByPayload,
-        child: GestureDetector(
-          onTap: () {
-            _triggerFocus.requestFocus();
-            _isOpen ? _close() : _open();
+          onAction: (action) {
+            switch (action) {
+              case SemanticAction.focus:
+                _triggerFocus.requestFocus();
+                return;
+              case SemanticAction.activate:
+                _isOpen ? _close() : _open();
+                return;
+              case SemanticAction.open:
+                _open();
+                return;
+              case SemanticAction.close:
+                _close();
+                return;
+              case _:
+                return;
+            }
           },
-          child: KeyDetector(
-            onKey: (event) {
-              if ((_onTriggerKey)(event) == KeyEventResult.handled) {
-                event.consume();
-              }
+          onSetValue: _selectByPayload,
+          child: GestureDetector(
+            onTap: () {
+              _triggerFocus.requestFocus();
+              _isOpen ? _close() : _open();
             },
-            child: Focus(
-              focusNode: _triggerFocus,
-              autofocus: widget.autofocus,
-              child: Text(text, allowSelect: false, style: style),
+            child: KeyDetector(
+              onKey: (event) {
+                if ((_onTriggerKey)(event) == KeyEventResult.handled) {
+                  event.consume();
+                }
+              },
+              child: Focus(
+                focusNode: _triggerFocus,
+                autofocus: widget.autofocus,
+                child: Text(text, allowSelect: false, style: style),
+              ),
             ),
           ),
         ),
       ),
     );
   }
+
+  Widget _withHover(Widget child) => MouseRegion(
+    onEnter: () {
+      if (!_hovered) setState(() => _hovered = true);
+    },
+    onExit: () {
+      if (_hovered) setState(() => _hovered = false);
+    },
+    child: child,
+  );
 }
 
 /// A keyboard-navigable list of checkable options.
@@ -399,7 +421,7 @@ class MultiSelect<T> extends StatefulWidget {
     this.emptyLabel = 'No options',
     this.focusNode,
     this.autofocus = false,
-    this.errorStyle,
+    this.style,
   });
 
   /// Ordered choices; disabled options remain visible but cannot be toggled.
@@ -423,9 +445,8 @@ class MultiSelect<T> extends StatefulWidget {
   /// Whether the list requests focus when mounted.
   final bool autofocus;
 
-  /// Invalid style for the option list. null uses the theme;
-  /// [CellStyle.empty] keeps it visually neutral.
-  final CellStyle? errorStyle;
+  /// Base and optional state styling for each option row.
+  final ControlStyle? style;
 
   @override
   State<MultiSelect<T>> createState() => _MultiSelectState<T>();
@@ -436,6 +457,7 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
   late FocusNode _focusNode;
   bool _ownsFocusNode = false;
   int _highlightedIndex = 0;
+  int? _hoveredIndex;
   FormControlRegistration? _formRegistration;
 
   bool get _enabled => widget.onChanged != null;
@@ -619,11 +641,26 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
     final enabled = _enabled;
     final focused = enabled && _focusNode.hasFocus;
     final validationError = _formRegistration?.error;
-    final invalidStyle = validationError == null
-        ? null
-        : (widget.errorStyle ?? theme.errorStyle);
     final rawChild = widget.options.isEmpty
-        ? Text(widget.emptyLabel, allowSelect: false, style: theme.mutedStyle)
+        ? Text(
+            widget.emptyLabel,
+            allowSelect: false,
+            style: resolveControlStyle(
+              cascade: [
+                CellStyle.state(
+                  base: theme.mutedStyle,
+                  disabled: theme.mutedStyle,
+                  invalid: theme.errorStyle,
+                ),
+                theme.controlStyle,
+                widget.style,
+              ],
+              states: {
+                if (!enabled) ControlState.disabled,
+                if (validationError != null) ControlState.invalid,
+              },
+            ),
+          )
         : Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -631,9 +668,6 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
                 _optionRow(theme, i, focused, enabled),
             ],
           );
-    final child = enabled && invalidStyle != null
-        ? DefaultTextStyle.merge(style: invalidStyle, child: rawChild)
-        : rawChild;
     final semantics = Semantics(
       role: SemanticRole.list,
       label: widget.semanticLabel,
@@ -664,7 +698,7 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
               }
             }
           : null,
-      child: child,
+      child: rawChild,
     );
     if (!enabled) return semantics;
     return KeyDetector(
@@ -684,11 +718,24 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
     final optionEnabled = enabled && option.enabled;
     final selected = widget.values.contains(option.value);
     final highlighted = focused && index == _highlightedIndex;
-    final style = !optionEnabled
-        ? theme.mutedStyle
-        : highlighted
-        ? theme.selectionStyle
-        : CellStyle.empty;
+    final style = resolveControlStyle(
+      cascade: [
+        CellStyle.state(
+          focused: theme.selectionStyle,
+          disabled: theme.mutedStyle,
+          invalid: theme.errorStyle,
+        ),
+        theme.controlStyle,
+        widget.style,
+      ],
+      states: {
+        if (_hoveredIndex == index) ControlState.hovered,
+        if (highlighted) ControlState.focused,
+        if (selected) ControlState.selected,
+        if (!optionEnabled) ControlState.disabled,
+        if (_formRegistration?.error != null) ControlState.invalid,
+      },
+    );
     final safeLabel = sanitizeOptionLabel(option.label);
     final text = '${selected ? '[x]' : '[ ]'} $safeLabel';
     final row = optionEnabled
@@ -701,43 +748,51 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
             child: Text(text, allowSelect: false, style: style),
           )
         : Text(text, allowSelect: false, style: style);
-    return Semantics(
-      role: SemanticRole.checkbox,
-      label: safeLabel,
-      value: option.value,
-      enabled: optionEnabled,
-      focused: highlighted,
-      selected: selected,
-      checked: selected,
-      actions: optionEnabled
-          ? const <SemanticAction>{
-              SemanticAction.focus,
-              SemanticAction.activate,
-            }
-          : const <SemanticAction>{},
-      state: SemanticState({
-        'itemIndex': index,
-        'itemPosition': index + 1,
-        'itemCount': widget.options.length,
-      }),
-      onAction: optionEnabled
-          ? (action) {
-              switch (action) {
-                case SemanticAction.focus:
-                  _focusNode.requestFocus();
-                  setState(() => _highlightedIndex = index);
-                  return;
-                case SemanticAction.activate:
-                  _focusNode.requestFocus();
-                  setState(() => _highlightedIndex = index);
-                  _toggle(index);
-                  return;
-                case _:
-                  return;
+    return MouseRegion(
+      onEnter: () {
+        if (_hoveredIndex != index) setState(() => _hoveredIndex = index);
+      },
+      onExit: () {
+        if (_hoveredIndex == index) setState(() => _hoveredIndex = null);
+      },
+      child: Semantics(
+        role: SemanticRole.checkbox,
+        label: safeLabel,
+        value: option.value,
+        enabled: optionEnabled,
+        focused: highlighted,
+        selected: selected,
+        checked: selected,
+        actions: optionEnabled
+            ? const <SemanticAction>{
+                SemanticAction.focus,
+                SemanticAction.activate,
               }
-            }
-          : null,
-      child: row,
+            : const <SemanticAction>{},
+        state: SemanticState({
+          'itemIndex': index,
+          'itemPosition': index + 1,
+          'itemCount': widget.options.length,
+        }),
+        onAction: optionEnabled
+            ? (action) {
+                switch (action) {
+                  case SemanticAction.focus:
+                    _focusNode.requestFocus();
+                    setState(() => _highlightedIndex = index);
+                    return;
+                  case SemanticAction.activate:
+                    _focusNode.requestFocus();
+                    setState(() => _highlightedIndex = index);
+                    _toggle(index);
+                    return;
+                  case _:
+                    return;
+                }
+              }
+            : null,
+        child: row,
+      ),
     );
   }
 }

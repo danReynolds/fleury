@@ -11,7 +11,7 @@ Widget _textForm({
   required FutureOr<void> Function() onSubmit,
   String? externalError,
   bool enabled = true,
-  CellStyle? errorStyle,
+  ControlStyle? style,
 }) {
   return Form(
     controller: controller,
@@ -23,7 +23,7 @@ Widget _textForm({
       child: TextInput(
         controller: text,
         semanticLabel: 'Name',
-        errorStyle: errorStyle,
+        style: style ?? CellStyle.empty,
       ),
     ),
   );
@@ -393,7 +393,7 @@ void main() {
       text.dispose();
     });
 
-    testWidgets('errorStyle can suppress invalid chrome without semantics', (
+    testWidgets('style can suppress invalid chrome without semantics', (
       tester,
     ) async {
       final controller = FormController();
@@ -402,7 +402,7 @@ void main() {
         _textForm(
           controller: controller,
           text: text,
-          errorStyle: CellStyle.empty,
+          style: const CellStyle.state(invalid: CellStyle.empty),
           onSubmit: () {},
         ),
       );

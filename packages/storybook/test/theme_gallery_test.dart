@@ -108,6 +108,7 @@ void main() {
         'selectionStyle',
         'focusedStyle',
         'errorStyle',
+        'controlStyle',
       ]) {
         expect(output, contains(field), reason: 'undemoed style: $field');
       }

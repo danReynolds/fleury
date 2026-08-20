@@ -30,7 +30,7 @@ class Stepper extends StatefulWidget {
     this.label,
     this.focusNode,
     this.autofocus = false,
-    this.errorStyle,
+    this.style,
   });
 
   /// Current value.
@@ -65,9 +65,8 @@ class Stepper extends StatefulWidget {
   /// Whether the stepper should request focus when mounted.
   final bool autofocus;
 
-  /// Invalid style for the value and frame. null uses the theme;
-  /// [CellStyle.empty] keeps the stepper visually neutral.
-  final CellStyle? errorStyle;
+  /// Base and optional state styling for the value and frame.
+  final ControlStyle? style;
 
   @override
   State<Stepper> createState() => _StepperState();
@@ -76,6 +75,7 @@ class Stepper extends StatefulWidget {
 class _StepperState extends State<Stepper> implements TextInputClaimant {
   late FocusNode _node;
   bool _owns = false;
+  bool _hovered = false;
   FormControlRegistration? _formRegistration;
 
   /// In-progress direct numeric entry. Null when not typing; the typed
@@ -288,17 +288,23 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
         enabled && (widget.max == null || widget.value < widget.max!);
     final muted = theme.mutedStyle;
     final validationError = _formRegistration?.error;
-    final invalidStyle = validationError == null
-        ? null
-        : (widget.errorStyle ?? theme.errorStyle);
-    var focusStyle = !enabled
-        ? muted
-        : focused
-        ? theme.focusedStyle
-        : CellStyle.empty;
-    if (enabled && invalidStyle != null) {
-      focusStyle = focusStyle.merge(invalidStyle);
-    }
+    final controlStyle = resolveControlStyle(
+      cascade: [
+        CellStyle.state(
+          focused: theme.focusedStyle,
+          disabled: theme.mutedStyle,
+          invalid: theme.errorStyle,
+        ),
+        theme.controlStyle,
+        widget.style,
+      ],
+      states: {
+        if (_hovered) ControlState.hovered,
+        if (focused) ControlState.focused,
+        if (!enabled) ControlState.disabled,
+        if (validationError != null) ControlState.invalid,
+      },
+    );
     final dim = const CellStyle(dim: true);
     Widget body() => Row(
       children: [
@@ -306,7 +312,7 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
           Text(widget.label!, style: muted),
           const Text(' '),
         ],
-        Text('[', style: focusStyle),
+        Text('[', style: controlStyle),
         GestureDetector(
           onTap: enabled
               ? () {
@@ -314,11 +320,14 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
                   _nudge(-widget.step);
                 }
               : null,
-          child: Text(' − ', style: canDec ? focusStyle : dim),
+          child: Text(
+            ' − ',
+            style: canDec ? controlStyle : controlStyle.merge(dim),
+          ),
         ),
         Text(
           _buffer != null ? '$_buffer▏' : _format(widget.value),
-          style: focusStyle,
+          style: controlStyle,
         ),
         GestureDetector(
           onTap: enabled
@@ -327,97 +336,104 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
                   _nudge(widget.step);
                 }
               : null,
-          child: Text(' + ', style: canInc ? focusStyle : dim),
+          child: Text(
+            ' + ',
+            style: canInc ? controlStyle : controlStyle.merge(dim),
+          ),
         ),
-        Text(']', style: focusStyle),
+        Text(']', style: controlStyle),
       ],
     );
 
     if (!enabled) {
-      return Semantics(
+      return _withHover(
+        Semantics(
+          role: SemanticRole.spinButton,
+          label: widget.label,
+          value: widget.value,
+          enabled: false,
+          validationError: validationError,
+          state: SemanticState({
+            'numericValue': widget.value,
+            if (widget.min != null) 'min': widget.min,
+            if (widget.max != null) 'max': widget.max,
+            'step': widget.step,
+            'largeStep': widget.largeStep,
+            'canIncrement': false,
+            'canDecrement': false,
+          }),
+          // A stepper is a styled control, not selectable text.
+          child: SelectionArea.disabled(child: body()),
+        ),
+      );
+    }
+
+    return _withHover(
+      Semantics(
         role: SemanticRole.spinButton,
         label: widget.label,
         value: widget.value,
-        enabled: false,
+        focused: focused,
         validationError: validationError,
+        actions: {
+          SemanticAction.focus,
+          if (canInc) SemanticAction.increment,
+          if (canDec) SemanticAction.decrement,
+          SemanticAction.setValue,
+        },
         state: SemanticState({
           'numericValue': widget.value,
           if (widget.min != null) 'min': widget.min,
           if (widget.max != null) 'max': widget.max,
           'step': widget.step,
           'largeStep': widget.largeStep,
-          'canIncrement': false,
-          'canDecrement': false,
+          'canIncrement': canInc,
+          'canDecrement': canDec,
         }),
-        // A stepper is a styled control, not selectable text.
-        child: SelectionArea.disabled(child: body()),
-      );
-    }
-
-    return Semantics(
-      role: SemanticRole.spinButton,
-      label: widget.label,
-      value: widget.value,
-      focused: focused,
-      validationError: validationError,
-      actions: {
-        SemanticAction.focus,
-        if (canInc) SemanticAction.increment,
-        if (canDec) SemanticAction.decrement,
-        SemanticAction.setValue,
-      },
-      state: SemanticState({
-        'numericValue': widget.value,
-        if (widget.min != null) 'min': widget.min,
-        if (widget.max != null) 'max': widget.max,
-        'step': widget.step,
-        'largeStep': widget.largeStep,
-        'canIncrement': canInc,
-        'canDecrement': canDec,
-      }),
-      onAction: (action) {
-        switch (action) {
-          case SemanticAction.focus:
-            _node.requestFocus();
-            return;
-          case SemanticAction.increment:
-            _node.requestFocus();
-            if (canInc) _nudge(widget.step);
-            return;
-          case SemanticAction.decrement:
-            _node.requestFocus();
-            if (canDec) _nudge(-widget.step);
-            return;
-          case _:
-            return;
-        }
-      },
-      // Set an exact value in one call (clamped to [min,max]) — same as typing
-      // the digits and committing, without the keystroke dance.
-      onSetValue: (payload) {
-        final next = coerceSemanticNum(payload);
-        if (next != null) _jump(next);
-      },
-      child: FocusDetector(
-        onFocusChange: _handleFocusChange,
-        child: KeyDetector(
-          onKey: (event) {
-            if ((_onKey)(event) == KeyEventResult.handled) event.consume();
-          },
-          child: Focus(
-            focusNode: _node,
-            autofocus: widget.autofocus,
-            // Wheel over the stepper nudges the value (the spinner convention).
-            // It doesn't steal focus, so wheeling past it in a scrollable form
-            // isn't disruptive.
-            child: PointerScrollListener(
-              router: PointerRouterScope.maybeOf(context),
-              onScrollUp: () => _nudge(widget.step),
-              onScrollDown: () => _nudge(-widget.step),
-              child: GestureDetector(
-                onTap: () => _node.requestFocus(),
-                // A stepper is a styled control, not selectable text.
-                child: SelectionArea.disabled(child: body()),
+        onAction: (action) {
+          switch (action) {
+            case SemanticAction.focus:
+              _node.requestFocus();
+              return;
+            case SemanticAction.increment:
+              _node.requestFocus();
+              if (canInc) _nudge(widget.step);
+              return;
+            case SemanticAction.decrement:
+              _node.requestFocus();
+              if (canDec) _nudge(-widget.step);
+              return;
+            case _:
+              return;
+          }
+        },
+        // Set an exact value in one call (clamped to [min,max]) — same as typing
+        // the digits and committing, without the keystroke dance.
+        onSetValue: (payload) {
+          final next = coerceSemanticNum(payload);
+          if (next != null) _jump(next);
+        },
+        child: FocusDetector(
+          onFocusChange: _handleFocusChange,
+          child: KeyDetector(
+            onKey: (event) {
+              if ((_onKey)(event) == KeyEventResult.handled) event.consume();
+            },
+            child: Focus(
+              focusNode: _node,
+              autofocus: widget.autofocus,
+              // Wheel over the stepper nudges the value (the spinner convention).
+              // It doesn't steal focus, so wheeling past it in a scrollable form
+              // isn't disruptive.
+              child: PointerScrollListener(
+                router: PointerRouterScope.maybeOf(context),
+                onScrollUp: () => _nudge(widget.step),
+                onScrollDown: () => _nudge(-widget.step),
+                child: GestureDetector(
+                  onTap: () => _node.requestFocus(),
+                  // A stepper is a styled control, not selectable text.
+                  child: SelectionArea.disabled(child: body()),
+                ),
               ),
             ),
           ),
@@ -425,4 +441,14 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
       ),
     );
   }
+
+  Widget _withHover(Widget child) => MouseRegion(
+    onEnter: () {
+      if (!_hovered) setState(() => _hovered = true);
+    },
+    onExit: () {
+      if (_hovered) setState(() => _hovered = false);
+    },
+    child: child,
+  );
 }
