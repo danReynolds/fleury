@@ -7,10 +7,10 @@
 //       matchesGolden('text_input_focused.txt'),
 //     );
 //
-// On first run (or when FLEURY_UPDATE_GOLDENS=1 is set in the
-// environment), the matcher writes the actual output to the golden
-// file and passes. On subsequent runs it loads the file and asserts
-// equality, failing with a unified diff when they don't match.
+// When FLEURY_UPDATE_GOLDENS=1 is set in the environment, the matcher
+// writes the actual output to the golden file and passes. Otherwise it
+// loads the existing file and asserts equality, failing when the file is
+// missing or with a unified diff when the contents don't match.
 //
 // File resolution: goldens live under <package_root>/test/goldens/
 // by default. `package_root` is the working directory `dart test`
@@ -40,8 +40,8 @@ bool get _updateRequested {
 /// `test/goldens/`.
 ///
 /// Set the `FLEURY_UPDATE_GOLDENS` environment variable to `1` to
-/// rewrite goldens instead of asserting. Missing goldens are
-/// always written (so first runs bootstrap themselves).
+/// create or rewrite goldens instead of asserting. Without update mode,
+/// a missing golden is a test failure.
 ///
 /// [directory] overrides the default `test/goldens` root, resolved
 /// relative to [Directory.current].
@@ -54,21 +54,27 @@ class _GoldenMatcher extends Matcher {
   final String name;
   final String directory;
 
-  static const _expectedKey = Object();
-  static const _actualKey = Object();
-  static const _pathKey = Object();
-  static const _wroteKey = Object();
+  static final _expectedKey = Object();
+  static final _actualKey = Object();
+  static final _pathKey = Object();
+  static final _missingKey = Object();
 
   @override
   bool matches(dynamic item, Map<dynamic, dynamic> matchState) {
     final actual = item.toString();
     final file = File('$directory/$name');
 
-    if (_updateRequested || !file.existsSync()) {
+    if (_updateRequested) {
       file.parent.createSync(recursive: true);
       file.writeAsStringSync(actual);
-      matchState[_wroteKey] = file.path;
       return true;
+    }
+
+    if (!file.existsSync()) {
+      matchState[_actualKey] = actual;
+      matchState[_pathKey] = file.path;
+      matchState[_missingKey] = true;
+      return false;
     }
 
     final expected = file.readAsStringSync();
@@ -94,6 +100,14 @@ class _GoldenMatcher extends Matcher {
     final expected = matchState[_expectedKey] as String? ?? '';
     final actual = matchState[_actualKey] as String? ?? '';
     final path = matchState[_pathKey] as String? ?? '?';
+    if (matchState[_missingKey] == true) {
+      return mismatchDescription
+        ..add('\ngolden file not found: $path')
+        ..add(
+          '\n\nTo create it: re-run with FLEURY_UPDATE_GOLDENS=1 set, '
+          'then review the new file before committing.',
+        );
+    }
     return mismatchDescription
       ..add('\n--- expected (from $path) ---\n')
       ..add(expected)

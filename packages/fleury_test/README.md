@@ -38,6 +38,10 @@ the exact root you supply, `pumpFleuryHome` only when you want the tester to
 construct a canonical `FleuryApp(home: ...)` shell, `sendKey` and semantic
 actions for interaction, and `matchesGolden` for file-backed screen snapshots.
 
+Missing golden files fail by default, keeping a deleted baseline from passing
+silently in CI. Create or update them deliberately with
+`FLEURY_UPDATE_GOLDENS=1 dart test`, then review the file diff.
+
 Benchmarks and non-test snapshot tools that deliberately do not want
 `package:test` can use the lower-level
 `package:fleury/fleury_test_support.dart` harness.

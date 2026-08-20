@@ -178,15 +178,15 @@ class TuiBindingScope extends InheritedWidget {
 /// ```dart
 /// class _MyWidgetState extends State<MyWidget>
 ///     with SingleTickerProviderStateMixin {
-///   late final Ticker _ticker = createTicker((elapsed) {
-///     // called each frame with the time since the ticker started
-///     setState(() { /* read elapsed */ });
-///   })..start();
+///   Ticker? _ticker;
 ///
 ///   @override
-///   void dispose() {
-///     _ticker.dispose();
-///     super.dispose();
+///   void didChangeDependencies() {
+///     super.didChangeDependencies();
+///     _ticker ??= createTicker((elapsed) {
+///       // called each frame with the time since the ticker started
+///       setState(() { /* read elapsed */ });
+///     })..start();
 ///   }
 /// }
 /// ```

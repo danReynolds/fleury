@@ -133,8 +133,8 @@ For whole-screen regression, assert against a golden:
 expect(tester.renderToString(), matchesGolden('counter/initial.txt'));
 ```
 
-Goldens write themselves on first run and update with
-`FLEURY_UPDATE_GOLDENS=1 dart test` — review the diff before committing.
+Missing goldens fail by default. Create or update them with
+`FLEURY_UPDATE_GOLDENS=1 dart test`, then review the diff before committing.
 
 ## Animation
 

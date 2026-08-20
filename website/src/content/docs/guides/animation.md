@@ -210,16 +210,16 @@ mixin is for:
 ```dart
 class _ClockState extends State<Clock>
     with SingleTickerProviderStateMixin {
-  late final Ticker _ticker = createTicker(_onTick)..start();
+  Ticker? _ticker;
   Duration _elapsed = Duration.zero;
 
-  void _onTick(Duration elapsed) => setState(() => _elapsed = elapsed);
-
   @override
-  void dispose() {
-    _ticker.dispose();
-    super.dispose();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _ticker ??= createTicker(_onTick)..start();
   }
+
+  void _onTick(Duration elapsed) => setState(() => _elapsed = elapsed);
 
   @override
   Widget build(BuildContext context) => Text('${_elapsed.inSeconds}s');

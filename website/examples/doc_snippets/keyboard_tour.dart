@@ -119,10 +119,16 @@ class _ShipControlsState extends State<ShipControls>
   static const _right = KeyPosition.d;
 
   late final Keyboard _keyboard = Keyboard.of(context); // safe to cache
-  late final Ticker _ticker = createTicker(_tick)..start();
+  Ticker? _ticker;
 
   double _heading = 0;
   double get heading => _heading;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _ticker ??= createTicker(_tick)..start();
+  }
 
   void _tick(Duration elapsed) {
     // ONE immutable read for the whole frame, so every step below agrees
@@ -138,12 +144,6 @@ class _ShipControlsState extends State<ShipControls>
 
   void _accelerate() {}
   void _fire() {}
-
-  @override
-  void dispose() {
-    _ticker.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
