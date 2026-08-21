@@ -73,8 +73,9 @@ class PasswordInput extends StatefulWidget {
   /// Style used for [placeholder].
   final CellStyle placeholderStyle;
 
-  /// Style used for entered text, obscuring glyphs, and interaction states.
-  final ControlStyle style;
+  /// Entered-text base styling, plus optional hover, focus, disabled, and
+  /// invalid state entries from [CellStyle.state].
+  final CellStyle style;
 
   /// Style applied to the cursor cell.
   final CellStyle cursorStyle;

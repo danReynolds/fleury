@@ -163,10 +163,11 @@ values. Controlled server errors remain until your application clears them.
 
 ### Custom error styling
 
-Controls use `ThemeData.controlStyle.invalid` when supplied, falling back to
-`ThemeData.errorStyle`. Override the `invalid` state on an individual control
-when it needs different chrome. Pass `CellStyle.empty` to keep that control
-visually neutral while retaining its error message and semantics:
+Controls use the `invalid` entry in `CellStyle.state(...)` supplied to
+`ThemeData.controlStyle`, falling back to `ThemeData.errorStyle`. Override the
+`invalid` state on an individual control when it needs different chrome. Pass
+`CellStyle.empty` to keep that control visually neutral while retaining its
+error message and semantics:
 
 ```dart
 TextInput(

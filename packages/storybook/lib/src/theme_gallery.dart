@@ -216,15 +216,14 @@ class _TextStyles extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.theme;
-    final cs = context.colors;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         const _Section('Text styles', note: 'ThemeData'),
-        // One shape for all four rows so the labels form a column — the
+        // One shape for every row so the labels form a column — the
         // sample is padded to a fixed width rather than each row spacing
         // itself, which is what threw the alignment off.
-        _sample(context, CellStyle(foreground: cs.foreground), 'unstyled'),
+        _sample(context, theme.textStyle, 'textStyle'),
         _sample(context, theme.mutedStyle, 'mutedStyle'),
         _sample(context, theme.selectionStyle, 'selectionStyle'),
         _sample(context, theme.focusedStyle, 'focusedStyle'),
@@ -297,7 +296,11 @@ class _ControlsState extends State<_Controls> {
           ),
         ),
         const _Caption('TextInput · invalid'),
-        const _Caption('states come from ThemeData.controlStyle'),
+        _Caption(
+          context.theme.controlStyle == null
+              ? 'controlStyle · unset (widget defaults)'
+              : 'controlStyle · ThemeData.controlStyle',
+        ),
         const SizedBox(height: 1),
         // `surface` is the one role with no place in the mock app: it fills
         // dialogs and popups, which need an opaque backdrop rather than the

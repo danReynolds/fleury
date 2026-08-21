@@ -44,13 +44,6 @@ const amber = ThemeData(
   mutedStyle: CellStyle(dim: true),
   selectionStyle: CellStyle(inverse: true),
   focusedStyle: CellStyle(bold: true),
-  controlStyle: CellStyle.state(
-    focused: CellStyle(inverse: true, bold: true),
-    invalid: CellStyle(
-      foreground: RgbColor(0xE5, 0x6B, 0x5B),
-      underline: true,
-    ),
-  ),
   borderStyle: BorderStyle.rounded,
 );
 
@@ -159,7 +152,7 @@ focused or disabled but is never selected or invalid.
 The same `style` property accepts either kind of value:
 
 ```dart
-// One appearance in every state; inherited state cues remain.
+// One base style; inherited state cues remain.
 Button(
   label: 'Deploy',
   style: const CellStyle(foreground: Colors.cyan),
@@ -180,14 +173,18 @@ Use `CellStyle.empty` for a state when a widget should deliberately suppress an
 inherited cue. Its semantics are unchanged:
 
 ```dart
-TextInput(
-  controller: query,
-  style: const CellStyle.state(invalid: CellStyle.empty),
+FormField(
+  validator: () => query.text.isEmpty ? 'Enter a query.' : null,
+  child: TextInput(
+    controller: query,
+    style: const CellStyle.state(invalid: CellStyle.empty),
+  ),
 )
 ```
 
-The validation message still renders and assistive tooling still receives the
-error; only that input's invalid chrome is neutral.
+When the field reports an error, its validation message still renders and
+assistive tooling still receives it; only that input's invalid chrome is
+neutral.
 
 ## Theme roles
 
@@ -228,8 +225,55 @@ dialog or popup must fully cover content behind it.
 | `borderStyle` | Default box-drawing shape |
 
 `controlStyle` is the shared interactive-state policy. `errorStyle` remains the
-semantic text style for messages; setting `controlStyle.invalid` lets control
-chrome differ from message text.
+semantic text style for messages; the `invalid` entry in the
+`CellStyle.state(...)` assigned to `controlStyle` lets control chrome differ
+from message text.
+
+## Specialized widgets
+
+`ThemeData` stays focused on roles shared by the whole framework. The
+`fleury_widgets` package adds `FleuryWidgetTheme` for surfaces with their own
+visual vocabulary, such as progress tracks, data tables, logs, code, diffs,
+JSON, and Markdown:
+
+```dart
+final theme = ThemeData.dark().copyWith(
+  extensions: const [
+    FleuryWidgetTheme(
+      progressFilledStyle: CellStyle(foreground: Colors.mint),
+      dataSelectedStyle: CellStyle(inverse: true, bold: true),
+      logErrorStyle: CellStyle(foreground: Colors.red, bold: true),
+    ),
+  ],
+);
+```
+
+Use `ThemeData.controlStyle` for interaction states shared by action and form
+controls. Use `FleuryWidgetTheme` for the named parts and content states of
+specialized widgets. App-specific theme roles can use the same
+`ThemeData.extensions` mechanism.
+
+Read an extension where it is used:
+
+```dart
+final widgets = FleuryWidgetTheme.of(context);
+final appTheme = Theme.of(context).extension<AppTheme>();
+```
+
+## Light and dark values
+
+`ThemeData.brightness` is declared app intent; Fleury does not guess the
+terminal's background. Use it when a value needs a light and dark variant:
+
+```dart
+final shadow = context.adaptive(
+  light: const AnsiColor(8),
+  dark: const AnsiColor(0),
+);
+```
+
+For code outside a widget build method, use
+`theme.brightness.pick(light: ..., dark: ...)`.
 
 ## Theme scope and precedence
 
@@ -258,6 +302,28 @@ exclusive, keeping unavailable controls visually stable.
 
 Most applications only need the first two levels. Local state entries are an
 escape hatch for an exceptional control, not required wiring.
+
+### Custom controls
+
+A reusable control can participate in the same cascade without inventing its
+own styling protocol:
+
+```dart
+final style = resolveControlStyle(
+  cascade: [
+    const CellStyle(dim: true),
+    Theme.of(context).controlStyle,
+    widget.style,
+  ],
+  states: {
+    if (focused) ControlState.focused,
+    if (!enabled) ControlState.disabled,
+  },
+);
+```
+
+Emit only states that describe the control's real behavior, then paint with the
+resolved plain `CellStyle`.
 
 ## Rich text and backgrounds
 

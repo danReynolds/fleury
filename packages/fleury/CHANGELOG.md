@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **State-aware control styling.** Every core control keeps its existing
+  `style: CellStyle(...)` common case and also accepts
+  `CellStyle.state(...)` for focused, hovered, selected, disabled, and invalid
+  treatments. `ThemeData.controlStyle` applies the same sparse policy app-wide.
+  `TextInput.errorStyle` and `TextArea.errorStyle` are replaced by
+  `style: CellStyle.state(invalid: ...)`; use `CellStyle.empty` to suppress
+  inherited invalid chrome without changing validation semantics.
+
 - **Focus boundaries.** `FocusScope.modal` is now `trapFocus`, describing its
   single responsibility: Tab, spatial traversal, pointer focus, and direct
   focus requests stay inside the subtree. Key propagation is independent;

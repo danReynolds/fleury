@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Unified control styling.** Buttons, toggles, choices, selectors, steppers,
+  sliders, date/color pickers, and input wrappers now use their ordinary
+  `style` property for both `CellStyle(...)` and `CellStyle.state(...)`.
+  Per-control `errorStyle` properties are replaced by the `invalid` state, and
+  `FleuryWidgetTheme.controlFocusStyle` / `disabledStyle` move to
+  `ThemeData.controlStyle`.
+
 - `CanvasContext.drawLine` gains `width:` — stroke thickness in sub-cell
   pixels (visual weight survives bounds changes), rasterized as a stamped
   round brush: gap-free diagonals, rounded caps and joints, cached per

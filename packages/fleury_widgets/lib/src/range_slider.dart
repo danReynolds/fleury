@@ -83,8 +83,9 @@ class RangeSlider extends StatefulWidget {
   /// Whether the slider should request focus when mounted.
   final bool autofocus;
 
-  /// Base and optional state styling for the track and handles.
-  final ControlStyle? style;
+  /// Base styling for the track and handles, plus optional hover, focus,
+  /// selected, disabled, and invalid state entries from [CellStyle.state].
+  final CellStyle? style;
 
   @override
   State<RangeSlider> createState() => _RangeSliderState();

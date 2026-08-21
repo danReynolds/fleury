@@ -64,8 +64,9 @@ class ColorPicker extends StatefulWidget {
   /// Whether the picker requests focus when mounted.
   final bool autofocus;
 
-  /// Base and optional state styling for the preview and committed markers.
-  final ControlStyle? style;
+  /// Base styling for markers, plus optional hover, focus, selected, disabled,
+  /// and invalid state entries from [CellStyle.state].
+  final CellStyle? style;
 
   @override
   State<ColorPicker> createState() => _ColorPickerState();

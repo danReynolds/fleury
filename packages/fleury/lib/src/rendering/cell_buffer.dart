@@ -9,6 +9,14 @@ import 'width_resolver.dart';
 
 export 'inline_image.dart';
 
+CellStyle _paintStyle(CellStyle style) {
+  var result = style;
+  while (result is StatefulCellStyle) {
+    result = result.base;
+  }
+  return result;
+}
+
 /// A two-dimensional grid of [Cell]s representing one frame of the terminal
 /// rendering output.
 ///
@@ -392,7 +400,7 @@ final class CellBuffer {
       position.col,
       position.row,
       grapheme,
-      style: style,
+      style: _paintStyle(style),
       widthResolver: widthResolver,
       policy: policy,
     );
@@ -408,6 +416,7 @@ final class CellBuffer {
     WidthResolver widthResolver = const DefaultWidthResolver(),
     CellWidthPolicy policy = CellWidthPolicy.spec,
   }) {
+    assert(style is! StatefulCellStyle, 'stateful styles must resolve first');
     final width = widthResolver.widthOfGrapheme(grapheme, policy);
     if (width == 0) return 0;
     // Include adjacent cells because writing can evict wide-cell neighbors.
@@ -447,6 +456,7 @@ final class CellBuffer {
     WidthResolver widthResolver = const DefaultWidthResolver(),
     CellWidthPolicy policy = CellWidthPolicy.spec,
   }) {
+    final paintStyle = _paintStyle(style);
     var col = position.col;
     final startCol = col;
     final row = position.row;
@@ -460,7 +470,7 @@ final class CellBuffer {
           col,
           row,
           grapheme,
-          style: style,
+          style: paintStyle,
           widthResolver: widthResolver,
           policy: policy,
         );

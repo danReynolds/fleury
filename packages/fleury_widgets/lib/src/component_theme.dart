@@ -7,8 +7,7 @@ import 'package:fleury/fleury_core.dart';
 /// needs. Add it to `ThemeData.extensions` and retrieve it with [of].
 final class FleuryWidgetTheme {
   const FleuryWidgetTheme({
-    this.switchOnStyle,
-    this.switchOffStyle,
+    this.switchTrackStyle,
     this.progressFilledStyle,
     this.progressTrackStyle,
     this.dataSelectedStyle,
@@ -41,8 +40,8 @@ final class FleuryWidgetTheme {
 
   static const standard = FleuryWidgetTheme();
 
-  final CellStyle? switchOnStyle;
-  final CellStyle? switchOffStyle;
+  /// Track styling for a switch, including its selected state.
+  final CellStyle? switchTrackStyle;
   final CellStyle? progressFilledStyle;
   final CellStyle? progressTrackStyle;
   final CellStyle? dataSelectedStyle;
@@ -78,11 +77,17 @@ final class FleuryWidgetTheme {
   static FleuryWidgetTheme from(ThemeData theme) =>
       theme.extension<FleuryWidgetTheme>() ?? standard;
 
-  CellStyle resolveSwitchOn(ThemeData theme) =>
-      switchOnStyle ?? CellStyle(foreground: theme.colorScheme.primary);
-
-  CellStyle resolveSwitchOff(ThemeData theme) =>
-      switchOffStyle ?? theme.mutedStyle;
+  CellStyle resolveSwitchTrack(ThemeData theme, {required bool selected}) =>
+      resolveControlStyle(
+        cascade: [
+          CellStyle.state(
+            base: theme.mutedStyle,
+            selected: CellStyle(foreground: theme.colorScheme.primary),
+          ),
+          switchTrackStyle,
+        ],
+        states: {if (selected) ControlState.selected},
+      );
 
   CellStyle resolveProgressFilled(ThemeData theme) =>
       progressFilledStyle ?? CellStyle.empty;
@@ -192,8 +197,7 @@ final class FleuryWidgetTheme {
       markdownRuleStyle ?? theme.mutedStyle;
 
   FleuryWidgetTheme copyWith({
-    CellStyle? switchOnStyle,
-    CellStyle? switchOffStyle,
+    CellStyle? switchTrackStyle,
     CellStyle? progressFilledStyle,
     CellStyle? progressTrackStyle,
     CellStyle? dataSelectedStyle,
@@ -224,8 +228,7 @@ final class FleuryWidgetTheme {
     CellStyle? markdownRuleStyle,
   }) {
     return FleuryWidgetTheme(
-      switchOnStyle: switchOnStyle ?? this.switchOnStyle,
-      switchOffStyle: switchOffStyle ?? this.switchOffStyle,
+      switchTrackStyle: switchTrackStyle ?? this.switchTrackStyle,
       progressFilledStyle: progressFilledStyle ?? this.progressFilledStyle,
       progressTrackStyle: progressTrackStyle ?? this.progressTrackStyle,
       dataSelectedStyle: dataSelectedStyle ?? this.dataSelectedStyle,
@@ -262,8 +265,7 @@ final class FleuryWidgetTheme {
   @override
   bool operator ==(Object other) {
     return other is FleuryWidgetTheme &&
-        other.switchOnStyle == switchOnStyle &&
-        other.switchOffStyle == switchOffStyle &&
+        other.switchTrackStyle == switchTrackStyle &&
         other.progressFilledStyle == progressFilledStyle &&
         other.progressTrackStyle == progressTrackStyle &&
         other.dataSelectedStyle == dataSelectedStyle &&
@@ -296,8 +298,7 @@ final class FleuryWidgetTheme {
 
   @override
   int get hashCode => Object.hashAll([
-    switchOnStyle,
-    switchOffStyle,
+    switchTrackStyle,
     progressFilledStyle,
     progressTrackStyle,
     dataSelectedStyle,

@@ -4,59 +4,62 @@
 // the page keeps rendering a picture while displaying code that no longer
 // produced it.
 //
-// This asserts every colour in the displayed source is a colour the real theme
-// actually has, and vice versa.
+// This asserts every named role in the displayed source and guide matches the
+// live theme, so swapping two colors cannot pass by preserving the same set.
+
+import 'dart:io';
 
 import 'package:fleury/fleury_core.dart';
 import 'package:fleury_doc_examples/registry.dart';
+import 'package:fleury_test/fleury_test.dart';
 import 'package:test/test.dart';
-
-/// Every `RgbColor(0xNN, 0xNN, 0xNN)` in [source], as comparable colours.
-Set<int> _colorsInSource(String source) {
-  final re = RegExp(
-    r'RgbColor\(\s*0x([0-9A-Fa-f]{2})\s*,\s*0x([0-9A-Fa-f]{2})\s*,\s*0x([0-9A-Fa-f]{2})\s*\)',
-  );
-  return {
-    for (final m in re.allMatches(source))
-      (int.parse(m.group(1)!, radix: 16) << 16) |
-          (int.parse(m.group(2)!, radix: 16) << 8) |
-          int.parse(m.group(3)!, radix: 16),
-  };
-}
 
 int _packed(Color? c) {
   final rgb = c!.toRgb();
   return (rgb.r << 16) | (rgb.g << 8) | rgb.b;
 }
 
+String get _guide =>
+    File('../src/content/docs/guides/theming.mdx').readAsStringSync();
+
 void main() {
   group('the guide shows the theme it renders', () {
-    test('every colour in the source is in the theme, and vice versa', () {
+    test('every named color role matches the rendered theme', () {
       final scheme = customThemeForTest.colorScheme;
-      final inTheme = <int>{
-        _packed(scheme.background),
-        _packed(scheme.foreground),
-        _packed(scheme.surface),
-        _packed(scheme.primary),
-        _packed(scheme.focus),
-        _packed(scheme.success),
-        _packed(scheme.warning),
-        _packed(scheme.error),
-        _packed(scheme.info),
+      final roles = <String, (Color?, String)>{
+        'background': (scheme.background, '0x1C, 0x18, 0x14'),
+        'foreground': (scheme.foreground, '0xEB, 0xDB, 0xB2'),
+        'surface': (scheme.surface, '0x2A, 0x24, 0x1E'),
+        'primary': (scheme.primary, '0xE8, 0xA3, 0x3D'),
+        'focus': (scheme.focus, '0xF2, 0xC5, 0x5C'),
+        'success': (scheme.success, '0x8E, 0xC0, 0x7C'),
+        'warning': (scheme.warning, '0xE8, 0xA3, 0x3D'),
+        'error': (scheme.error, '0xE5, 0x6B, 0x5B'),
+        'info': (scheme.info, '0x83, 0xA5, 0x98'),
       };
-      final inSource = _colorsInSource(customThemeSourceForTest);
-
-      String hex(int v) => '#${v.toRadixString(16).padLeft(6, '0')}';
-      expect(
-        inSource.difference(inTheme).map(hex),
-        isEmpty,
-        reason: 'the displayed source has colours the theme does not',
-      );
-      expect(
-        inTheme.difference(inSource).map(hex),
-        isEmpty,
-        reason: 'the theme has colours the displayed source does not',
-      );
+      for (final MapEntry(key: role, value: (color, literal))
+          in roles.entries) {
+        expect(
+          customThemeSourceForTest,
+          contains('$role: RgbColor($literal)'),
+          reason: 'displayed source must name the $role value',
+        );
+        expect(
+          _guide,
+          contains('$role: RgbColor($literal)'),
+          reason: 'guide source must name the live $role value',
+        );
+        final bytes = literal
+            .split(', ')
+            .map((part) => int.parse(part.substring(2), radix: 16))
+            .toList();
+        final expected = (bytes[0] << 16) | (bytes[1] << 8) | bytes[2];
+        expect(
+          _packed(color),
+          expected,
+          reason: 'live $role must match source',
+        );
+      }
     });
 
     test('the source names the styles the theme actually sets', () {
@@ -69,21 +72,19 @@ void main() {
       expect(src, contains('mutedStyle'));
       expect(src, contains('selectionStyle'));
       expect(src, contains('focusedStyle'));
-      expect(src, contains('controlStyle'));
       expect(src, contains('borderStyle'));
       expect(customThemeForTest.borderStyle, BorderStyle.rounded);
       expect(customThemeForTest.mutedStyle.dim, isTrue);
       expect(customThemeForTest.selectionStyle.inverse, isTrue);
       expect(customThemeForTest.focusedStyle.bold, isTrue);
+      expect(customThemeForTest.controlStyle, isNull);
       expect(
-        customThemeForTest.controlStyle?.styleFor(ControlState.focused)?.bold,
-        isTrue,
+        _guide,
+        contains('FleuryApp(theme: amber, home: const Dashboard());'),
       );
       expect(
-        customThemeForTest.controlStyle
-            ?.styleFor(ControlState.invalid)
-            ?.underline,
-        isTrue,
+        customThemeSourceForTest,
+        contains('FleuryApp(theme: amber, home: const Dashboard());'),
       );
     });
 
@@ -95,5 +96,73 @@ void main() {
       expect(scheme.foreground, isNotNull);
       expect(scheme.surface, isNotNull);
     });
+  });
+
+  testWidgets('control-state source and live demo cover the same setup', (
+    tester,
+  ) {
+    final example = exampleList.singleWhere(
+      (example) => example.id == 'themes.control_states',
+    );
+    final source = example.code!;
+    const stateLines = [
+      'focused: CellStyle(inverse: true, bold: true)',
+      'hovered: CellStyle(underline: true)',
+      'selected: CellStyle(foreground: Colors.green, bold: true)',
+      'invalid: CellStyle(foreground: Colors.red, underline: true)',
+      'disabled: CellStyle(dim: true)',
+    ];
+    for (final line in stateLines) {
+      expect(source, contains(line), reason: 'registry source omitted $line');
+      expect(_guide, contains(line), reason: 'guide source omitted $line');
+    }
+    expect(source, controlStateSourceForTest);
+    expect(
+      source,
+      contains('FleuryApp(theme: theme, home: const DeploymentForm());'),
+    );
+    expect(
+      _guide,
+      contains('FleuryApp(theme: theme, home: const DeploymentForm());'),
+    );
+
+    final focused = resolveControlStyle(
+      cascade: [controlStateStyleForTest],
+      states: const {ControlState.focused},
+    );
+    final hovered = resolveControlStyle(
+      cascade: [controlStateStyleForTest],
+      states: const {ControlState.hovered},
+    );
+    final selected = resolveControlStyle(
+      cascade: [controlStateStyleForTest],
+      states: const {ControlState.selected},
+    );
+    final invalid = resolveControlStyle(
+      cascade: [controlStateStyleForTest],
+      states: const {ControlState.invalid},
+    );
+    final disabled = resolveControlStyle(
+      cascade: [controlStateStyleForTest],
+      states: const {ControlState.disabled},
+    );
+    expect(focused.inverse, isTrue);
+    expect(focused.bold, isTrue);
+    expect(hovered.underline, isTrue);
+    expect(selected.foreground, Colors.green);
+    expect(selected.bold, isTrue);
+    expect(invalid.foreground, Colors.red);
+    expect(invalid.underline, isTrue);
+    expect(disabled.dim, isTrue);
+
+    tester.pumpWidget(example.builder());
+    final output = tester.renderToString(
+      size: CellSize(example.cols, example.rows),
+      emptyMark: ' ',
+    );
+    expect(output, contains('Service name'));
+    expect(output, contains('Approved'));
+    expect(output, contains('Deploy'));
+    expect(output, contains('Queued'));
   });
 }

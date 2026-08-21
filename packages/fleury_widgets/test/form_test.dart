@@ -5,13 +5,29 @@ import 'package:fleury_test/fleury_test.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
 import 'package:test/test.dart';
 
+const _invalidControlColor = RgbColor(1, 2, 3);
+const _invalidControlStyle = CellStyle.state(
+  invalid: CellStyle(foreground: _invalidControlColor),
+);
+
+bool _hasForeground(FleuryTester tester, Color color) {
+  const size = CellSize(80, 20);
+  final buffer = tester.render(size: size);
+  for (var row = 0; row < size.rows; row++) {
+    for (var col = 0; col < size.cols; col++) {
+      if (buffer.atColRow(col, row).style.foreground == color) return true;
+    }
+  }
+  return false;
+}
+
 Widget _textForm({
   required FormController controller,
   required TextEditingController text,
   required FutureOr<void> Function() onSubmit,
   String? externalError,
   bool enabled = true,
-  ControlStyle? style,
+  CellStyle? style,
 }) {
   return Form(
     controller: controller,
@@ -626,22 +642,34 @@ void main() {
       (
         'TextInput',
         SemanticRole.textField,
-        () => const TextInput(semanticLabel: 'Control'),
+        () => const TextInput(
+          semanticLabel: 'Control',
+          style: _invalidControlStyle,
+        ),
       ),
       (
         'TextArea',
         SemanticRole.textArea,
-        () => const TextArea(semanticLabel: 'Control'),
+        () => const TextArea(
+          semanticLabel: 'Control',
+          style: _invalidControlStyle,
+        ),
       ),
       (
         'PasswordInput',
         SemanticRole.textField,
-        () => const PasswordInput(semanticLabel: 'Control'),
+        () => const PasswordInput(
+          semanticLabel: 'Control',
+          style: _invalidControlStyle,
+        ),
       ),
       (
         'NumberInput',
         SemanticRole.textField,
-        () => const NumberInput(semanticLabel: 'Control'),
+        () => const NumberInput(
+          semanticLabel: 'Control',
+          style: _invalidControlStyle,
+        ),
       ),
       (
         'CompletionTextInput',
@@ -649,6 +677,7 @@ void main() {
         () => CompletionTextInput(
           semanticLabel: 'Control',
           provider: (_) => const <TextCompletionOption>[],
+          style: _invalidControlStyle,
         ),
       ),
       (
@@ -657,22 +686,38 @@ void main() {
         () => Autocomplete<String>(
           options: const <String>['alpha'],
           fieldSemanticLabel: 'Control',
+          style: _invalidControlStyle,
         ),
       ),
       (
         'Checkbox',
         SemanticRole.checkbox,
-        () => Checkbox(value: false, label: 'Control', onChanged: (_) {}),
+        () => Checkbox(
+          value: false,
+          label: 'Control',
+          onChanged: (_) {},
+          style: _invalidControlStyle,
+        ),
       ),
       (
         'Toggle',
         SemanticRole.toggle,
-        () => Toggle(value: false, label: 'Control', onChanged: (_) {}),
+        () => Toggle(
+          value: false,
+          label: 'Control',
+          onChanged: (_) {},
+          style: _invalidControlStyle,
+        ),
       ),
       (
         'Switch',
         SemanticRole.toggle,
-        () => Switch(value: false, label: 'Control', onChanged: (_) {}),
+        () => Switch(
+          value: false,
+          label: 'Control',
+          onChanged: (_) {},
+          style: _invalidControlStyle,
+        ),
       ),
       (
         'RadioGroup',
@@ -684,6 +729,7 @@ void main() {
             RadioOption(value: 'one', label: 'One'),
           ],
           onChanged: (_) {},
+          style: _invalidControlStyle,
         ),
       ),
       (
@@ -696,6 +742,7 @@ void main() {
             SelectOption(value: 'one', label: 'One'),
           ],
           onChanged: (_) {},
+          style: _invalidControlStyle,
         ),
       ),
       (
@@ -708,12 +755,18 @@ void main() {
             SelectOption(value: 'one', label: 'One'),
           ],
           onChanged: (_) {},
+          style: _invalidControlStyle,
         ),
       ),
       (
         'Stepper',
         SemanticRole.spinButton,
-        () => Stepper(value: 1, label: 'Control', onChanged: (_) {}),
+        () => Stepper(
+          value: 1,
+          label: 'Control',
+          onChanged: (_) {},
+          style: _invalidControlStyle,
+        ),
       ),
       (
         'RangeSlider',
@@ -724,6 +777,7 @@ void main() {
           max: 3,
           label: 'Control',
           onChanged: (_) {},
+          style: _invalidControlStyle,
         ),
       ),
       (
@@ -733,6 +787,7 @@ void main() {
           value: DateTime(2026, 8, 14),
           label: 'Control',
           onChanged: (_) {},
+          style: _invalidControlStyle,
         ),
       ),
       (
@@ -742,6 +797,7 @@ void main() {
           value: Colors.red,
           semanticLabel: 'Control',
           onChanged: (_) {},
+          style: _invalidControlStyle,
         ),
       ),
     ];
@@ -768,6 +824,11 @@ void main() {
               .single(role: role, label: 'Control')
               .validationError,
           'Invalid value.',
+        );
+        expect(
+          _hasForeground(tester, _invalidControlColor),
+          isTrue,
+          reason: '$name must paint its invalid state as well as expose it',
         );
 
         tester.pumpWidget(const Text('gone'));

@@ -123,12 +123,13 @@ final class ColorScheme {
   );
 }
 
-/// The themeable defaults shared down the tree via [Theme]. Widgets read
-/// these as the *fallback* for their style parameters: a `null` style
-/// arg resolves to the matching theme role, and an explicit arg always
-/// wins. The default [ThemeData] reproduces the framework's built-in
-/// looks, so wrapping (or not wrapping) a subtree in a [Theme] changes
-/// nothing until you actually customize a field.
+/// The themeable defaults shared down the tree via [Theme].
+///
+/// Semantic roles provide framework defaults. Interactive control styles
+/// cascade from widget defaults through [controlStyle] to the widget's local
+/// style, merging base paint while preserving inherited state cues. The
+/// default [ThemeData] reproduces the framework's built-in appearance, so a
+/// [Theme] changes nothing until one of its fields is customized.
 final class ThemeData {
   const ThemeData({
     this.brightness = Brightness.dark,
@@ -187,12 +188,12 @@ final class ThemeData {
   /// The underline is a non-color cue that remains under `NO_COLOR`.
   final CellStyle errorStyle;
 
-  /// App-wide styling for interactive control states.
+  /// App-wide styling for shared action- and form-control states.
   ///
   /// A plain [CellStyle] changes every control's base appearance without
   /// removing its built-in state cues. Use [CellStyle.state] when a state
   /// should look different. Individual widget styles merge over this value.
-  final ControlStyle? controlStyle;
+  final CellStyle? controlStyle;
 
   /// Default box-drawing style for framed surfaces.
   final BorderStyle borderStyle;
@@ -220,7 +221,7 @@ final class ThemeData {
     CellStyle? selectionStyle,
     CellStyle? focusedStyle,
     CellStyle? errorStyle,
-    ControlStyle? controlStyle,
+    CellStyle? controlStyle,
     BorderStyle? borderStyle,
     ColorScheme? colorScheme,
     List<Object>? extensions,

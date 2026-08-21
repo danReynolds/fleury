@@ -98,7 +98,6 @@ export 'src/rendering/cell.dart'
         Color,
         Colors,
         ControlState,
-        ControlStyle,
         IndexedColor,
         resolveControlStyle,
         RgbColor,

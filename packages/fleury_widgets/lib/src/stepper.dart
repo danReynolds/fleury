@@ -65,8 +65,9 @@ class Stepper extends StatefulWidget {
   /// Whether the stepper should request focus when mounted.
   final bool autofocus;
 
-  /// Base and optional state styling for the value and frame.
-  final ControlStyle? style;
+  /// Base styling for the value and frame, plus optional hover, focus,
+  /// disabled, and invalid state entries from [CellStyle.state].
+  final CellStyle? style;
 
   @override
   State<Stepper> createState() => _StepperState();

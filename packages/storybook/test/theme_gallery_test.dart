@@ -104,6 +104,7 @@ void main() {
       }
       // Every ThemeData text style, named after the field that produced it.
       for (final field in [
+        'textStyle',
         'mutedStyle',
         'selectionStyle',
         'focusedStyle',
@@ -112,6 +113,12 @@ void main() {
       ]) {
         expect(output, contains(field), reason: 'undemoed style: $field');
       }
+      expect(
+        fleuryThemes.every((theme) => theme.data.controlStyle == null),
+        isTrue,
+        reason: 'bundled themes currently inherit widget state defaults',
+      );
+      expect(output, contains('controlStyle · unset (widget defaults)'));
       // The border style and the two panel focus states are called out, so
       // the chrome reads as a demonstrated state rather than an accident.
       expect(output, contains('borderStyle'));
@@ -119,6 +126,28 @@ void main() {
       expect(output, contains('at rest'));
       // Brightness is visible — it drives the surface fallback.
       expect(output, contains(fleuryThemes.first.data.brightness.name));
+    });
+
+    testWidgets('plain custom control styles are labelled truthfully', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        const ThemeGallery(
+          themes: [
+            NamedTheme(
+              'Custom',
+              ThemeData(controlStyle: CellStyle(foreground: Colors.cyan)),
+            ),
+          ],
+        ),
+      );
+
+      final output = tester.renderToString(
+        size: const CellSize(84, 60),
+        emptyMark: ' ',
+      );
+      expect(output, contains('controlStyle · ThemeData.controlStyle'));
+      expect(output, isNot(contains('states · ThemeData.controlStyle')));
     });
 
     testWidgets('the sample wears the selected palette', (tester) {

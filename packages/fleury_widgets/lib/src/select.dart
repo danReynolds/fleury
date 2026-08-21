@@ -79,8 +79,9 @@ class Select<T> extends StatefulWidget {
   /// fallback, or future adapters need to refer to the picker itself.
   final String? semanticLabel;
 
-  /// Base and optional state styling for the closed trigger.
-  final ControlStyle? style;
+  /// Base styling for the closed trigger, plus optional hover, focus, disabled,
+  /// and invalid state entries from [CellStyle.state].
+  final CellStyle? style;
 
   @override
   State<Select<T>> createState() => _SelectState<T>();
@@ -445,8 +446,9 @@ class MultiSelect<T> extends StatefulWidget {
   /// Whether the list requests focus when mounted.
   final bool autofocus;
 
-  /// Base and optional state styling for each option row.
-  final ControlStyle? style;
+  /// Base styling for each option row, plus optional hover, focus, selected,
+  /// disabled, and invalid state entries from [CellStyle.state].
+  final CellStyle? style;
 
   @override
   State<MultiSelect<T>> createState() => _MultiSelectState<T>();

@@ -7,27 +7,20 @@ import 'package:meta/meta.dart';
 /// checked value. Unsupported states are simply never emitted.
 enum ControlState { hovered, focused, selected, disabled, invalid }
 
-/// A style a control can resolve for its current [ControlState]s.
-///
-/// Most callers pass a plain [CellStyle]. Use [CellStyle.state] only when the
-/// control should look different in one of its supported states.
-abstract base class ControlStyle {
-  const ControlStyle();
-
-  /// Appearance shared by every state.
-  CellStyle get base;
-
-  /// The optional patch for [state], or null to inherit a lower-priority
-  /// control-style layer.
-  CellStyle? styleFor(ControlState state);
-}
-
 const List<ControlState> _controlStatePaintOrder = [
   ControlState.selected,
   ControlState.hovered,
   ControlState.focused,
   ControlState.invalid,
 ];
+
+CellStyle _plainCellStyle(CellStyle style) {
+  var result = style;
+  while (result is StatefulCellStyle) {
+    result = result.base;
+  }
+  return result;
+}
 
 /// Resolves [cascade] from lowest to highest priority.
 ///
@@ -36,13 +29,13 @@ const List<ControlState> _controlStatePaintOrder = [
 /// [CellStyle.empty] therefore suppresses a lower-priority state cue. Disabled
 /// is exclusive of transient/value states.
 CellStyle resolveControlStyle({
-  required Iterable<ControlStyle?> cascade,
+  required Iterable<CellStyle?> cascade,
   Set<ControlState> states = const {},
 }) {
   final layers = [for (final style in cascade) ?style];
   var result = CellStyle.empty;
   for (final layer in layers) {
-    result = result.merge(layer.base);
+    result = result.merge(_plainCellStyle(layer));
   }
 
   final active = states.contains(ControlState.disabled)
@@ -51,9 +44,13 @@ CellStyle resolveControlStyle({
   for (final state in active) {
     CellStyle? patch;
     for (final layer in layers) {
-      patch = layer.styleFor(state) ?? patch;
+      if (layer is StatefulCellStyle) {
+        patch = layer._styleFor(state) ?? patch;
+      }
     }
-    if (patch != null) result = result.merge(patch.base);
+    if (patch != null) {
+      result = result.merge(_plainCellStyle(patch));
+    }
   }
   return result;
 }
@@ -273,7 +270,7 @@ final class Colors {
 /// child style turn *off* an attribute it inherited, rather than only
 /// being able to add to it.
 @immutable
-final class CellStyle extends ControlStyle {
+final class CellStyle {
   const CellStyle({
     Color? foreground,
     Color? background,
@@ -306,7 +303,7 @@ final class CellStyle extends ControlStyle {
     CellStyle? selected,
     CellStyle? disabled,
     CellStyle? invalid,
-  }) = StatefulCellStyle;
+  }) = StatefulCellStyle._;
 
   final Color? _foreground;
   final Color? _background;
@@ -354,12 +351,6 @@ final class CellStyle extends ControlStyle {
   String? get linkUri => _linkUri;
 
   static const CellStyle empty = CellStyle();
-
-  @override
-  CellStyle get base => this;
-
-  @override
-  CellStyle? styleFor(ControlState state) => null;
 
   CellStyle copyWith({
     Color? foreground,
@@ -491,7 +482,7 @@ final class CellStyle extends ControlStyle {
 /// fallback in APIs that do not resolve control state.
 @immutable
 final class StatefulCellStyle extends CellStyle {
-  const StatefulCellStyle({
+  const StatefulCellStyle._({
     this.base = CellStyle.empty,
     this.hovered,
     this.focused,
@@ -501,7 +492,6 @@ final class StatefulCellStyle extends CellStyle {
   }) : assert(base is! StatefulCellStyle, 'base must be a plain CellStyle'),
        super();
 
-  @override
   final CellStyle base;
   final CellStyle? hovered;
   final CellStyle? focused;
@@ -536,8 +526,7 @@ final class StatefulCellStyle extends CellStyle {
   @override
   String? get linkUri => base.linkUri;
 
-  @override
-  CellStyle? styleFor(ControlState state) => switch (state) {
+  CellStyle? _styleFor(ControlState state) => switch (state) {
     ControlState.hovered => hovered,
     ControlState.focused => focused,
     ControlState.selected => selected,
@@ -545,7 +534,7 @@ final class StatefulCellStyle extends CellStyle {
     ControlState.invalid => invalid,
   };
 
-  StatefulCellStyle _withBase(CellStyle nextBase) => StatefulCellStyle(
+  StatefulCellStyle _withBase(CellStyle nextBase) => StatefulCellStyle._(
     base: nextBase,
     hovered: hovered,
     focused: focused,
@@ -582,7 +571,7 @@ final class StatefulCellStyle extends CellStyle {
   @override
   StatefulCellStyle merge(CellStyle other) {
     if (other is StatefulCellStyle) {
-      return StatefulCellStyle(
+      return StatefulCellStyle._(
         base: base.merge(other.base),
         hovered: other.hovered ?? hovered,
         focused: other.focused ?? focused,

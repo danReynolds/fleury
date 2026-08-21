@@ -240,6 +240,54 @@ void main() {
       expect(sink.output, isNot(contains('38;')));
       expect(sink.output, contains('4m'));
     });
+
+    testWidgets('TextInput state styling wins over placeholder styling', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        const Theme(
+          data: ThemeData(
+            controlStyle: CellStyle.state(
+              invalid: CellStyle(foreground: AnsiColor(1)),
+            ),
+          ),
+          child: TextInput(
+            placeholder: 'Required',
+            placeholderStyle: CellStyle(foreground: AnsiColor(6)),
+            validationError: 'Required',
+          ),
+        ),
+      );
+
+      final buffer = tester.render(size: const CellSize(20, 1));
+      expect(buffer.atColRow(0, 0).style.foreground, const AnsiColor(1));
+    });
+
+    testWidgets('TextArea state styling wins over placeholder styling', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        const Theme(
+          data: ThemeData(
+            controlStyle: CellStyle.state(
+              invalid: CellStyle(foreground: AnsiColor(1)),
+            ),
+          ),
+          child: SizedBox(
+            width: 20,
+            height: 2,
+            child: TextArea(
+              placeholder: 'Required',
+              placeholderStyle: CellStyle(foreground: AnsiColor(6)),
+              validationError: 'Required',
+            ),
+          ),
+        ),
+      );
+
+      final buffer = tester.render(size: const CellSize(20, 2));
+      expect(buffer.atColRow(0, 0).style.foreground, const AnsiColor(1));
+    });
   });
 }
 

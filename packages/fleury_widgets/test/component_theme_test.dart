@@ -14,6 +14,21 @@ MouseEvent _moveTo(int col, int row) => MouseEvent(
   row: row,
 );
 
+int _cellsWithForeground(
+  FleuryTester tester,
+  Color color, {
+  CellSize size = const CellSize(40, 10),
+}) {
+  final buffer = tester.render(size: size);
+  var count = 0;
+  for (var row = 0; row < size.rows; row++) {
+    for (var col = 0; col < size.cols; col++) {
+      if (buffer.atColRow(col, row).style.foreground == color) count++;
+    }
+  }
+  return count;
+}
+
 void main() {
   test('FleuryWidgetTheme participates in ThemeData extension lookup', () {
     const componentTheme = FleuryWidgetTheme(
@@ -29,6 +44,30 @@ void main() {
         progressTrackStyle: CellStyle(dim: true),
       ),
     );
+  });
+
+  testWidgets('switch track theme uses base and selected state styling', (
+    tester,
+  ) {
+    Widget themedSwitch(bool value) => Theme(
+      data: const ThemeData(
+        extensions: [
+          FleuryWidgetTheme(
+            switchTrackStyle: CellStyle.state(
+              base: CellStyle(foreground: AnsiColor(8)),
+              selected: CellStyle(foreground: AnsiColor(2)),
+            ),
+          ),
+        ],
+      ),
+      child: Switch(value: value, onChanged: _ignoreBool),
+    );
+
+    tester.pumpWidget(themedSwitch(false));
+    expect(_styleAt(tester, 1, 0).foreground, const AnsiColor(8));
+
+    tester.pumpWidget(themedSwitch(true));
+    expect(_styleAt(tester, 1, 0).foreground, const AnsiColor(2));
   });
 
   testWidgets('control focus style comes from ThemeData.controlStyle', (
@@ -183,6 +222,109 @@ void main() {
 
     tester.sendMouse(_moveTo(2, 3));
     expect(_styleAt(tester, 0, 0).underline, isFalse);
+  });
+
+  testWidgets('TextInput and PasswordInput forward focused styling', (tester) {
+    const focused = AnsiColor(13);
+    tester.pumpWidget(
+      const TextInput(
+        autofocus: true,
+        placeholder: 'Name',
+        style: CellStyle.state(focused: CellStyle(foreground: focused)),
+      ),
+    );
+    expect(_cellsWithForeground(tester, focused), greaterThan(0));
+
+    tester.pumpWidget(
+      const PasswordInput(
+        autofocus: true,
+        placeholder: 'Secret',
+        style: CellStyle.state(focused: CellStyle(foreground: focused)),
+      ),
+    );
+    expect(_cellsWithForeground(tester, focused), greaterThan(0));
+  });
+
+  testWidgets('Select, Stepper, and RangeSlider emit focused styling', (
+    tester,
+  ) {
+    const focused = AnsiColor(13);
+    tester.pumpWidget(
+      Select<String>(
+        options: const [SelectOption(value: 'a', label: 'Alpha')],
+        value: 'a',
+        autofocus: true,
+        onChanged: _ignoreString,
+        style: const CellStyle.state(focused: CellStyle(foreground: focused)),
+      ),
+    );
+    expect(_styleAt(tester, 0, 0).foreground, focused);
+
+    tester.pumpWidget(
+      Stepper(
+        value: 1,
+        autofocus: true,
+        onChanged: _ignoreNum,
+        style: const CellStyle.state(focused: CellStyle(foreground: focused)),
+      ),
+    );
+    expect(_styleAt(tester, 0, 0).foreground, focused);
+
+    tester.pumpWidget(
+      RangeSlider(
+        values: const (2, 8),
+        min: 0,
+        max: 10,
+        autofocus: true,
+        onChanged: _ignoreRange,
+        style: const CellStyle.state(focused: CellStyle(foreground: focused)),
+      ),
+    );
+    expect(_cellsWithForeground(tester, focused), greaterThan(0));
+  });
+
+  testWidgets('MultiSelect emits selected styling', (tester) {
+    const selected = AnsiColor(13);
+    tester.pumpWidget(
+      MultiSelect<String>(
+        options: const [SelectOption(value: 'a', label: 'Alpha')],
+        values: const {'a'},
+        onChanged: _ignoreStrings,
+        style: const CellStyle.state(selected: CellStyle(foreground: selected)),
+      ),
+    );
+
+    expect(_cellsWithForeground(tester, selected), greaterThan(0));
+  });
+
+  testWidgets('ColorPicker emits selected styling', (tester) {
+    const selected = AnsiColor(13);
+    tester.pumpWidget(
+      ColorPicker(
+        value: const AnsiColor(0),
+        onChanged: _ignoreColor,
+        style: const CellStyle.state(selected: CellStyle(foreground: selected)),
+      ),
+    );
+
+    expect(_cellsWithForeground(tester, selected), greaterThan(0));
+  });
+
+  testWidgets('DatePicker selected styling targets the selected date', (
+    tester,
+  ) {
+    const selected = AnsiColor(13);
+    tester.pumpWidget(
+      DatePicker(
+        value: DateTime(2024, 1, 15),
+        onChanged: _ignoreDate,
+        style: const CellStyle.state(selected: CellStyle(foreground: selected)),
+      ),
+    );
+
+    final buffer = tester.render(size: const CellSize(30, 8));
+    expect(buffer.atColRow(2, 0).style.foreground, isNot(selected));
+    expect(buffer.atColRow(3, 4).style.foreground, selected);
   });
 
   testWidgets('changing ThemeData updates mounted control styling', (tester) {
@@ -456,6 +598,12 @@ void main() {
 }
 
 void _ignoreBool(bool _) {}
+void _ignoreColor(Color _) {}
+void _ignoreDate(DateTime _) {}
+void _ignoreNum(num _) {}
+void _ignoreRange((num, num) _) {}
+void _ignoreString(String _) {}
+void _ignoreStrings(Set<String> _) {}
 void _noop() {}
 
 String _dataCell(int rowIndex, String columnId) => 'row-$rowIndex';

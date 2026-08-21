@@ -106,7 +106,7 @@ class TextArea extends StatefulWidget {
   ///
   /// Pass a plain [CellStyle] for the common case. Use [CellStyle.state] only
   /// when focus, hover, disabled, or invalid should look different locally.
-  final ControlStyle style;
+  final CellStyle style;
 
   /// Style applied to the grapheme cell under the visible cursor.
   final CellStyle cursorStyle;
@@ -766,26 +766,27 @@ class _TextAreaState extends State<TextArea>
     final focused = _focusNode.hasFocus;
     final validationError = _formRegistration?.error ?? widget.validationError;
     final theme = Theme.of(context);
-    final displayStyle = resolveControlStyle(
-      cascade: [
-        CellStyle.state(
-          focused: CellStyle(
-            foreground: theme.colorScheme.focus,
-          ).merge(theme.focusedStyle),
-          disabled: theme.mutedStyle,
-          invalid: theme.errorStyle,
-        ),
-        theme.controlStyle,
-        widget.style,
-      ],
-      states: {
-        if (_hovered) ControlState.hovered,
-        if (focused) ControlState.focused,
-        if (!widget.enabled) ControlState.disabled,
-        if (validationError != null) ControlState.invalid,
-      },
+    final defaultStyle = CellStyle.state(
+      focused: CellStyle(
+        foreground: theme.colorScheme.focus,
+      ).merge(theme.focusedStyle),
+      disabled: theme.mutedStyle,
+      invalid: theme.errorStyle,
     );
-    final displayPlaceholderStyle = displayStyle.merge(widget.placeholderStyle);
+    final states = {
+      if (_hovered) ControlState.hovered,
+      if (focused) ControlState.focused,
+      if (!widget.enabled) ControlState.disabled,
+      if (validationError != null) ControlState.invalid,
+    };
+    final cascade = [defaultStyle, theme.controlStyle, widget.style];
+    final displayStyle = resolveControlStyle(cascade: cascade, states: states);
+    // Placeholder paint is a base-layer customization. Active state patches
+    // still win, so an empty invalid field does not hide its invalid cue.
+    final displayPlaceholderStyle = resolveControlStyle(
+      cascade: [...cascade, widget.placeholderStyle],
+      states: states,
+    );
     final content = Semantics(
       role: SemanticRole.textArea,
       label:

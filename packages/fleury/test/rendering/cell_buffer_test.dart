@@ -122,6 +122,27 @@ void main() {
       expect(buf.atColRow(4, 0).grapheme, 'o');
     });
 
+    test('stores only the base of a stateful style in painted cells', () {
+      const first = CellStyle.state(
+        base: CellStyle(foreground: AnsiColor(6)),
+        focused: CellStyle(bold: true),
+      );
+      const second = CellStyle.state(
+        base: CellStyle(foreground: AnsiColor(6)),
+        invalid: CellStyle(underline: true),
+      );
+      final buf = CellBuffer(const CellSize(2, 1))
+        ..writeGrapheme(const CellOffset(0, 0), 'A', style: first)
+        ..writeText(const CellOffset(1, 0), 'B', style: second);
+
+      expect(
+        buf.atColRow(0, 0).style,
+        const CellStyle(foreground: AnsiColor(6)),
+      );
+      expect(buf.atColRow(1, 0).style, buf.atColRow(0, 0).style);
+      expect(buf.atColRow(0, 0).style, isNot(isA<StatefulCellStyle>()));
+    });
+
     test('writeText stops at the right edge instead of overflowing', () {
       final buf = CellBuffer(const CellSize(3, 1));
       final advanced = buf.writeText(const CellOffset(0, 0), 'hello');

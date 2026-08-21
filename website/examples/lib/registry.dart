@@ -3125,10 +3125,6 @@ const ThemeData _customTheme = ThemeData(
   mutedStyle: CellStyle(dim: true),
   selectionStyle: CellStyle(inverse: true),
   focusedStyle: CellStyle(bold: true),
-  controlStyle: CellStyle.state(
-    focused: CellStyle(inverse: true, bold: true),
-    invalid: CellStyle(foreground: RgbColor(0xE5, 0x6B, 0x5B), underline: true),
-  ),
   borderStyle: BorderStyle.rounded,
 );
 
@@ -3152,17 +3148,10 @@ const amber = ThemeData(
   mutedStyle: CellStyle(dim: true),
   selectionStyle: CellStyle(inverse: true),
   focusedStyle: CellStyle(bold: true),
-  controlStyle: CellStyle.state(
-    focused: CellStyle(inverse: true, bold: true),
-    invalid: CellStyle(
-      foreground: RgbColor(0xE5, 0x6B, 0x5B),
-      underline: true,
-    ),
-  ),
   borderStyle: BorderStyle.rounded,
 );
 
-runApp(const MyApp(), theme: amber);''';
+FleuryApp(theme: amber, home: const Dashboard());''';
 
 /// Exposed for the drift test in test/theme_source_parity_test.dart.
 ThemeData get customThemeForTest => _customTheme;
@@ -3220,6 +3209,14 @@ class _ThemePreview extends StatelessWidget {
   }
 }
 
+const CellStyle _controlStateStyle = CellStyle.state(
+  focused: CellStyle(inverse: true, bold: true),
+  hovered: CellStyle(underline: true),
+  selected: CellStyle(foreground: Colors.green, bold: true),
+  invalid: CellStyle(foreground: Colors.red, underline: true),
+  disabled: CellStyle(dim: true),
+);
+
 const String _controlStateSource = '''
 const theme = ThemeData(
   controlStyle: CellStyle.state(
@@ -3231,18 +3228,11 @@ const theme = ThemeData(
   ),
 );
 
-Form(
-  controller: form,
-  onSubmit: deploy,
-  child: Column(children: [
-    FormField(
-      validator: () => name.text.isEmpty ? 'Enter a service name.' : null,
-      child: TextInput(controller: name, placeholder: 'Service name'),
-    ),
-    Checkbox(value: approved, label: 'Approved', onChanged: setApproved),
-    Button(label: 'Deploy', onPressed: form.submit),
-  ]),
-)''';
+FleuryApp(theme: theme, home: const DeploymentForm());''';
+
+/// Exposed for the guide/source/live parity test.
+CellStyle get controlStateStyleForTest => _controlStateStyle;
+String get controlStateSourceForTest => _controlStateSource;
 
 /// Interactive proof that one theme-level state style reaches different
 /// control families without forcing ordinary per-widget styling.
@@ -3270,15 +3260,7 @@ class _ControlStateTourState extends State<_ControlStateTour> {
   Widget build(BuildContext context) {
     final outer = Theme.of(context);
     return Theme(
-      data: outer.copyWith(
-        controlStyle: const CellStyle.state(
-          focused: CellStyle(inverse: true, bold: true),
-          hovered: CellStyle(underline: true),
-          selected: CellStyle(foreground: Colors.green, bold: true),
-          invalid: CellStyle(foreground: Colors.red, underline: true),
-          disabled: CellStyle(dim: true),
-        ),
-      ),
+      data: outer.copyWith(controlStyle: _controlStateStyle),
       child: Padding(
         padding: const EdgeInsets.all(1),
         child: Form(

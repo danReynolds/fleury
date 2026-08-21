@@ -31,7 +31,7 @@ class _FocusableControl extends StatefulWidget {
 
   final void Function()? onActivate;
   final Widget Function(CellStyle style, bool enabled) builder;
-  final ControlStyle defaultStyle;
+  final CellStyle defaultStyle;
   final SemanticRole semanticRole;
   final String? semanticLabel;
   final Object? semanticValue;
@@ -48,7 +48,7 @@ class _FocusableControl extends StatefulWidget {
   final bool autofocus;
   final bool participatesInForm;
   final String? validationError;
-  final ControlStyle? style;
+  final CellStyle? style;
 
   bool get enabled => onActivate != null;
 
@@ -245,7 +245,7 @@ Widget _row(String indicator, String? label, CellStyle style) {
   );
 }
 
-ControlStyle _defaultControlStyle(ThemeData theme) => CellStyle.state(
+CellStyle _defaultControlStyle(ThemeData theme) => CellStyle.state(
   focused: theme.focusedStyle,
   disabled: theme.mutedStyle,
   invalid: theme.errorStyle,
@@ -281,8 +281,9 @@ class Checkbox extends StatelessWidget {
   /// Whether the checkbox requests focus when mounted.
   final bool autofocus;
 
-  /// Base and optional state styling for this checkbox.
-  final ControlStyle? style;
+  /// Base styling, plus optional hover, focus, selected, disabled, and invalid
+  /// state entries from [CellStyle.state].
+  final CellStyle? style;
 
   @override
   Widget build(BuildContext context) {
@@ -339,8 +340,9 @@ class Toggle extends StatelessWidget {
   /// Whether the toggle requests focus when mounted.
   final bool autofocus;
 
-  /// Base and optional state styling for this toggle.
-  final ControlStyle? style;
+  /// Base styling, plus optional hover, focus, selected, disabled, and invalid
+  /// state entries from [CellStyle.state].
+  final CellStyle? style;
 
   @override
   Widget build(BuildContext context) {
@@ -403,8 +405,9 @@ class Switch extends StatelessWidget {
   /// Whether the switch requests focus when mounted.
   final bool autofocus;
 
-  /// Base and optional state styling for this switch.
-  final ControlStyle? style;
+  /// Base styling, plus optional hover, focus, selected, disabled, and invalid
+  /// state entries from [CellStyle.state].
+  final CellStyle? style;
 
   @override
   Widget build(BuildContext context) {
@@ -430,9 +433,8 @@ class Switch extends StatelessWidget {
       participatesInForm: true,
       builder: (resolvedStyle, enabled) {
         final trackStyle = enabled
-            ? (value
-                      ? widgetTheme.resolveSwitchOn(theme)
-                      : widgetTheme.resolveSwitchOff(theme))
+            ? widgetTheme
+                  .resolveSwitchTrack(theme, selected: value)
                   .merge(resolvedStyle)
             : resolvedStyle;
         return Row(
@@ -462,8 +464,19 @@ class Radio<T> extends StatelessWidget {
     this.focusNode,
     this.autofocus = false,
     this.style,
-    this.validationError,
-  });
+  }) : _validationError = null;
+
+  const Radio._form({
+    super.key,
+    required this.value,
+    required this.groupValue,
+    required this.onChanged,
+    required String? validationError,
+    this.label,
+    this.focusNode,
+    this.autofocus = false,
+    this.style,
+  }) : _validationError = validationError;
 
   /// Value emitted when this radio is activated.
   final T value;
@@ -483,11 +496,11 @@ class Radio<T> extends StatelessWidget {
   /// Whether this radio requests focus when mounted.
   final bool autofocus;
 
-  /// Base and optional state styling for this radio.
-  final ControlStyle? style;
+  /// Base styling, plus optional hover, focus, selected, and disabled state
+  /// entries from [CellStyle.state].
+  final CellStyle? style;
 
-  /// Validation error supplied by a composite control such as [RadioGroup].
-  final String? validationError;
+  final String? _validationError;
 
   @override
   Widget build(BuildContext context) {
@@ -505,7 +518,7 @@ class Radio<T> extends StatelessWidget {
       semanticChecked: selected,
       semanticSelected: selected,
       styleSelected: selected,
-      validationError: validationError,
+      validationError: _validationError,
       builder: (style, enabled) => _row(selected ? '(o)' : '( )', label, style),
     );
   }
@@ -571,8 +584,9 @@ class RadioGroup<T> extends StatefulWidget {
   /// initial focus.
   final bool autofocus;
 
-  /// Base and optional state styling for every radio in the group.
-  final ControlStyle? style;
+  /// Base styling for every radio, plus optional hover, focus, selected,
+  /// disabled, and invalid state entries from [CellStyle.state].
+  final CellStyle? style;
 
   @override
   State<RadioGroup<T>> createState() => _RadioGroupState<T>();
@@ -701,7 +715,7 @@ class _RadioGroupState<T> extends State<RadioGroup<T>> {
         : widget.options.indexWhere((option) => option.enabled);
     final radios = <Widget>[
       for (var i = 0; i < widget.options.length; i++)
-        Radio<T>(
+        Radio<T>._form(
           value: widget.options[i].value,
           groupValue: widget.value,
           label: widget.options[i].label,
@@ -781,8 +795,9 @@ class Button extends StatelessWidget {
   /// Whether the button requests focus when mounted.
   final bool autofocus;
 
-  /// Base and optional state styling for this button.
-  final ControlStyle? style;
+  /// Base styling, plus optional hover, focus, and disabled state entries from
+  /// [CellStyle.state].
+  final CellStyle? style;
 
   static Color? _color(ButtonVariant variant, ColorScheme scheme) =>
       switch (variant) {
