@@ -10,6 +10,7 @@
 import 'dart:io';
 
 import 'package:fleury/fleury_core.dart';
+import 'package:fleury/fleury_internal.dart';
 import 'package:fleury_doc_examples/registry.dart';
 import 'package:fleury_test/fleury_test.dart';
 import 'package:test/test.dart';
@@ -75,9 +76,9 @@ void main() {
       expect(src, contains('borderStyle'));
       expect(customThemeForTest.borderStyle, BorderStyle.rounded);
       expect(customThemeForTest.mutedStyle.dim, isTrue);
-      expect(customThemeForTest.selectionStyle.inverse, isTrue);
+      expect(customThemeForTest.selectionStyle.reverse, isTrue);
       expect(customThemeForTest.focusedStyle.bold, isTrue);
-      expect(customThemeForTest.controlStyle, isNull);
+      expect(customThemeForTest.interactionStyle, isNull);
       expect(
         _guide,
         contains('FleuryApp(theme: amber, home: const Dashboard());'),
@@ -98,7 +99,7 @@ void main() {
     });
   });
 
-  testWidgets('control-state source and live demo cover the same setup', (
+  testWidgets('interaction-state source and live demo cover the same setup', (
     tester,
   ) {
     final example = exampleList.singleWhere(
@@ -106,7 +107,7 @@ void main() {
     );
     final source = example.code!;
     const stateLines = [
-      'focused: CellStyle(inverse: true, bold: true)',
+      'focused: CellStyle(reverse: true, bold: true)',
       'hovered: CellStyle(underline: true)',
       'selected: CellStyle(foreground: Colors.green, bold: true)',
       'invalid: CellStyle(foreground: Colors.red, underline: true)',
@@ -116,7 +117,7 @@ void main() {
       expect(source, contains(line), reason: 'registry source omitted $line');
       expect(_guide, contains(line), reason: 'guide source omitted $line');
     }
-    expect(source, controlStateSourceForTest);
+    expect(source, interactionStyleSourceForTest);
     expect(
       source,
       contains('FleuryApp(theme: theme, home: const DeploymentForm());'),
@@ -126,27 +127,27 @@ void main() {
       contains('FleuryApp(theme: theme, home: const DeploymentForm());'),
     );
 
-    final focused = resolveControlStyle(
-      cascade: [controlStateStyleForTest],
-      states: const {ControlState.focused},
+    final focused = resolveCellStyle(
+      cascade: [interactionStyleForTest],
+      states: const {CellStyleState.focused},
     );
-    final hovered = resolveControlStyle(
-      cascade: [controlStateStyleForTest],
-      states: const {ControlState.hovered},
+    final hovered = resolveCellStyle(
+      cascade: [interactionStyleForTest],
+      states: const {CellStyleState.hovered},
     );
-    final selected = resolveControlStyle(
-      cascade: [controlStateStyleForTest],
-      states: const {ControlState.selected},
+    final selected = resolveCellStyle(
+      cascade: [interactionStyleForTest],
+      states: const {CellStyleState.selected},
     );
-    final invalid = resolveControlStyle(
-      cascade: [controlStateStyleForTest],
-      states: const {ControlState.invalid},
+    final invalid = resolveCellStyle(
+      cascade: [interactionStyleForTest],
+      states: const {CellStyleState.invalid},
     );
-    final disabled = resolveControlStyle(
-      cascade: [controlStateStyleForTest],
-      states: const {ControlState.disabled},
+    final disabled = resolveCellStyle(
+      cascade: [interactionStyleForTest],
+      states: const {CellStyleState.disabled},
     );
-    expect(focused.inverse, isTrue);
+    expect(focused.reverse, isTrue);
     expect(focused.bold, isTrue);
     expect(hovered.underline, isTrue);
     expect(selected.foreground, Colors.green);
@@ -164,5 +165,31 @@ void main() {
     expect(output, contains('Approved'));
     expect(output, contains('Deploy'));
     expect(output, contains('Queued'));
+  });
+
+  testWidgets('theme-role demo covers each shared text role', (tester) {
+    final example = exampleList.singleWhere(
+      (example) => example.id == 'themes.roles',
+    );
+    final theme = rolePreviewThemeForTest;
+
+    expect(theme.textStyle.foreground, Colors.white);
+    expect(theme.mutedStyle.dim, isTrue);
+    expect(theme.selectionStyle.reverse, isTrue);
+    expect(theme.focusedStyle.foreground, Colors.cyan);
+    expect(theme.focusedStyle.bold, isTrue);
+    expect(theme.errorStyle.foreground, Colors.red);
+    expect(theme.errorStyle.underline, isTrue);
+    expect(theme.borderStyle, BorderStyle.double);
+
+    tester.pumpWidget(example.builder());
+    final output = tester.renderToString(
+      size: CellSize(example.cols, example.rows),
+      emptyMark: ' ',
+    );
+    expect(output, contains('THEME ROLES'));
+    expect(output, contains('Default text'));
+    expect(output, contains('Same widget, different role'));
+    expect(output, contains('borderStyle frames this panel'));
   });
 }

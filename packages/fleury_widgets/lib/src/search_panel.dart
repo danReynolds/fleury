@@ -934,6 +934,6 @@ CellStyle _searchResultStyle(
       ? theme.selectionStyle
       : selected
       ? theme.mutedStyle
-      : CellStyle.empty;
+      : CellStyle.none;
   return enabled ? style : style.merge(const CellStyle(dim: true));
 }

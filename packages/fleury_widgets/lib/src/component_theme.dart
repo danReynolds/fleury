@@ -1,4 +1,5 @@
 import 'package:fleury/fleury_core.dart';
+import 'package:fleury/fleury_internal.dart';
 
 /// Component-level defaults for `fleury_widgets`.
 ///
@@ -78,7 +79,7 @@ final class FleuryWidgetTheme {
       theme.extension<FleuryWidgetTheme>() ?? standard;
 
   CellStyle resolveSwitchTrack(ThemeData theme, {required bool selected}) =>
-      resolveControlStyle(
+      resolveCellStyle(
         cascade: [
           CellStyle.state(
             base: theme.mutedStyle,
@@ -86,11 +87,11 @@ final class FleuryWidgetTheme {
           ),
           switchTrackStyle,
         ],
-        states: {if (selected) ControlState.selected},
+        states: {if (selected) CellStyleState.selected},
       );
 
   CellStyle resolveProgressFilled(ThemeData theme) =>
-      progressFilledStyle ?? CellStyle.empty;
+      progressFilledStyle ?? CellStyle.none;
 
   CellStyle resolveProgressTrack(ThemeData theme) =>
       progressTrackStyle ?? const CellStyle(dim: true);
@@ -99,7 +100,7 @@ final class FleuryWidgetTheme {
       dataSelectedStyle ?? theme.selectionStyle;
 
   CellStyle resolveDataSeparator(ThemeData theme) =>
-      dataSeparatorStyle ?? CellStyle.empty;
+      dataSeparatorStyle ?? CellStyle.none;
 
   CellStyle resolveDataEmpty(ThemeData theme) =>
       dataEmptyStyle ?? theme.mutedStyle;
@@ -110,7 +111,7 @@ final class FleuryWidgetTheme {
   CellStyle resolveLogDebug(ThemeData theme) =>
       logDebugStyle ?? const CellStyle(dim: true);
 
-  CellStyle resolveLogInfo(ThemeData theme) => logInfoStyle ?? CellStyle.empty;
+  CellStyle resolveLogInfo(ThemeData theme) => logInfoStyle ?? CellStyle.none;
 
   CellStyle resolveLogWarning(ThemeData theme) =>
       logWarningStyle ??
@@ -125,7 +126,7 @@ final class FleuryWidgetTheme {
       CellStyle(bold: true, foreground: theme.colorScheme.success);
 
   CellStyle resolveCodeBlank(ThemeData theme) =>
-      codeBlankStyle ?? CellStyle.empty;
+      codeBlankStyle ?? CellStyle.none;
 
   CellStyle resolveCodeComment(ThemeData theme) =>
       codeCommentStyle ?? const CellStyle(dim: true);
@@ -144,7 +145,7 @@ final class FleuryWidgetTheme {
       codeStringStyle ?? const CellStyle(foreground: AnsiColor(10));
 
   CellStyle resolveCodePlain(ThemeData theme) =>
-      codePlainStyle ?? CellStyle.empty;
+      codePlainStyle ?? CellStyle.none;
 
   CellStyle resolveDiffAddition(ThemeData theme) =>
       diffAdditionStyle ?? const CellStyle(foreground: AnsiColor(10));
@@ -164,12 +165,12 @@ final class FleuryWidgetTheme {
       diffMetadataStyle ?? const CellStyle(dim: true);
 
   CellStyle resolveJsonError(ThemeData theme) =>
-      jsonErrorStyle ?? CellStyle.empty;
+      jsonErrorStyle ?? theme.errorStyle;
 
   CellStyle resolveMarkdownHeading(ThemeData theme, int? level) {
     final lvl = level ?? 1;
     // Color reinforces the depth hierarchy on top of the structural cues
-    // (H1 inverse bar, H2+ underline): primary for H1, info for H2, and no
+    // (H1 reverse bar, H2+ underline): primary for H1, info for H2, and no
     // tint for H3 so the emphasis recedes with depth. An explicit
     // markdownHeadingStyle still overrides everything.
     final color = switch (lvl) {
@@ -180,7 +181,7 @@ final class FleuryWidgetTheme {
     final fallback = CellStyle(
       bold: true,
       underline: lvl > 1,
-      inverse: lvl == 1,
+      reverse: lvl == 1,
       foreground: color,
     );
     return markdownHeadingStyle ?? fallback;

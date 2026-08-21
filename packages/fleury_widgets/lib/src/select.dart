@@ -279,21 +279,21 @@ class _SelectState<T> extends State<Select<T>> {
     final enabled = widget.onChanged != null;
     final focused = _triggerFocus.hasFocus;
     final validationError = _formRegistration?.error;
-    final style = resolveControlStyle(
+    final style = resolveCellStyle(
       cascade: [
         CellStyle.state(
           focused: theme.selectionStyle,
           disabled: theme.mutedStyle,
           invalid: theme.errorStyle,
         ),
-        theme.controlStyle,
+        theme.interactionStyle,
         widget.style,
       ],
       states: {
-        if (_hovered) ControlState.hovered,
-        if (focused) ControlState.focused,
-        if (!enabled) ControlState.disabled,
-        if (validationError != null) ControlState.invalid,
+        if (_hovered) CellStyleState.hovered,
+        if (focused) CellStyleState.focused,
+        if (!enabled) CellStyleState.disabled,
+        if (validationError != null) CellStyleState.invalid,
       },
     );
     final text = '$_currentLabel ${_isOpen ? '▴' : '▾'}';
@@ -647,19 +647,19 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
         ? Text(
             widget.emptyLabel,
             allowSelect: false,
-            style: resolveControlStyle(
+            style: resolveCellStyle(
               cascade: [
                 CellStyle.state(
                   base: theme.mutedStyle,
                   disabled: theme.mutedStyle,
                   invalid: theme.errorStyle,
                 ),
-                theme.controlStyle,
+                theme.interactionStyle,
                 widget.style,
               ],
               states: {
-                if (!enabled) ControlState.disabled,
-                if (validationError != null) ControlState.invalid,
+                if (!enabled) CellStyleState.disabled,
+                if (validationError != null) CellStyleState.invalid,
               },
             ),
           )
@@ -720,22 +720,22 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
     final optionEnabled = enabled && option.enabled;
     final selected = widget.values.contains(option.value);
     final highlighted = focused && index == _highlightedIndex;
-    final style = resolveControlStyle(
+    final style = resolveCellStyle(
       cascade: [
         CellStyle.state(
           focused: theme.selectionStyle,
           disabled: theme.mutedStyle,
           invalid: theme.errorStyle,
         ),
-        theme.controlStyle,
+        theme.interactionStyle,
         widget.style,
       ],
       states: {
-        if (_hoveredIndex == index) ControlState.hovered,
-        if (highlighted) ControlState.focused,
-        if (selected) ControlState.selected,
-        if (!optionEnabled) ControlState.disabled,
-        if (_formRegistration?.error != null) ControlState.invalid,
+        if (_hoveredIndex == index) CellStyleState.hovered,
+        if (highlighted) CellStyleState.focused,
+        if (selected) CellStyleState.selected,
+        if (!optionEnabled) CellStyleState.disabled,
+        if (_formRegistration?.error != null) CellStyleState.invalid,
       },
     );
     final safeLabel = sanitizeOptionLabel(option.label);
@@ -1038,7 +1038,7 @@ class _SelectListState<T> extends State<_SelectList<T>> {
                                 text,
                                 style: selected
                                     ? widget.selectionStyle
-                                    : CellStyle.empty,
+                                    : CellStyle.none,
                               ),
                             )
                           : Text(text, style: widget.mutedStyle);

@@ -3,5 +3,6 @@
 /// These APIs are not part of the application-facing widget surface.
 library;
 
+export 'src/rendering/cell.dart' show CellStyleState, resolveCellStyle;
 export 'src/widgets/form_control.dart'
     show FormControlRegistration, FormControlScope;

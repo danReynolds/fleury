@@ -1,7 +1,7 @@
 import 'package:fleury/fleury_host.dart';
 
 /// Default foreground/background used when a cell leaves them unset (and as
-/// the swap targets for `inverse`). Match these to the host page's theme.
+/// the swap targets for `reverse`). Match these to the host page's theme.
 const RgbColor kDefaultForeground = RgbColor(208, 208, 208);
 const RgbColor kDefaultBackground = RgbColor(30, 30, 30);
 
@@ -33,7 +33,7 @@ const String kFillsCellBoxCss =
 String cellStyleToCss(CellStyle style) {
   Color? fg = style.foreground;
   Color? bg = style.background;
-  if (style.inverse) {
+  if (style.reverse) {
     final swappedFg = bg ?? kDefaultBackground;
     final swappedBg = fg ?? kDefaultForeground;
     fg = swappedFg;
@@ -101,7 +101,7 @@ String rgbCss(Color color) {
 String blockElementCss(CellStyle style, List<BlockRect> rects) {
   Color? fg = style.foreground;
   Color? bg = style.background;
-  if (style.inverse) {
+  if (style.reverse) {
     final swappedFg = bg ?? kDefaultBackground;
     bg = fg ?? kDefaultForeground;
     fg = swappedFg;
@@ -161,7 +161,7 @@ const List<String> _eighths = [
 String boxDrawingCss(CellStyle style, int mask) {
   Color? fg = style.foreground;
   Color? bg = style.background;
-  if (style.inverse) {
+  if (style.reverse) {
     final swappedFg = bg ?? kDefaultBackground;
     bg = fg ?? kDefaultForeground;
     fg = swappedFg;

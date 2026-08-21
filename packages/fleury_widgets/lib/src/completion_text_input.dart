@@ -72,8 +72,8 @@ class CompletionTextInput extends StatefulWidget {
     this.onCompletionAccepted,
     this.placeholder = '',
     this.placeholderStyle = const CellStyle(dim: true),
-    this.style = CellStyle.empty,
-    this.cursorStyle = const CellStyle(inverse: true),
+    this.style = CellStyle.none,
+    this.cursorStyle = const CellStyle(reverse: true),
     this.blinkInterval = const Duration(milliseconds: 500),
     this.enableBlink = true,
     this.enabled = true,
@@ -189,7 +189,7 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
   final ListController _list = ListController(selectedIndex: 0);
   FocusManager? _manager;
   OverlayEntry? _entry;
-  CellStyle _selectionStyle = const CellStyle(inverse: true);
+  CellStyle _selectionStyle = const CellStyle(reverse: true);
   BorderStyle _borderStyle = BorderStyle.rounded;
 
   @override
@@ -425,7 +425,7 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
                   },
                   child: Text(
                     '${selected ? '› ' : '  '}$label',
-                    style: selected ? _selectionStyle : CellStyle.empty,
+                    style: selected ? _selectionStyle : CellStyle.none,
                   ),
                 ),
               );

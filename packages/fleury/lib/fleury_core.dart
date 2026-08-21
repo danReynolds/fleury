@@ -97,9 +97,7 @@ export 'src/rendering/cell.dart'
         CellStyle,
         Color,
         Colors,
-        ControlState,
         IndexedColor,
-        resolveControlStyle,
         RgbColor,
         StatefulCellStyle;
 export 'src/rendering/cell_buffer.dart'

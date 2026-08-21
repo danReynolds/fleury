@@ -8,7 +8,7 @@
 // Then:
 //
 //   - Drag the mouse across any paragraph to highlight it. The
-//     selected cells render with inverse video.
+//     selected cells render with reverse video.
 //   - Double-click on a word to select just that word.
 //   - Triple-click anywhere on a line to select the whole line.
 //   - Drag from one paragraph into another — selection crosses the

@@ -35,7 +35,7 @@ class Spinner extends StatelessWidget {
     this.style = SpinnerStyle.braille,
     this.label,
     this.frameInterval = const Duration(milliseconds: 80),
-    this.cellStyle = CellStyle.empty,
+    this.cellStyle = CellStyle.none,
   });
 
   /// Glyph set to cycle through.

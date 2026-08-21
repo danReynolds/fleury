@@ -289,21 +289,21 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
         enabled && (widget.max == null || widget.value < widget.max!);
     final muted = theme.mutedStyle;
     final validationError = _formRegistration?.error;
-    final controlStyle = resolveControlStyle(
+    final interactionStyle = resolveCellStyle(
       cascade: [
         CellStyle.state(
           focused: theme.focusedStyle,
           disabled: theme.mutedStyle,
           invalid: theme.errorStyle,
         ),
-        theme.controlStyle,
+        theme.interactionStyle,
         widget.style,
       ],
       states: {
-        if (_hovered) ControlState.hovered,
-        if (focused) ControlState.focused,
-        if (!enabled) ControlState.disabled,
-        if (validationError != null) ControlState.invalid,
+        if (_hovered) CellStyleState.hovered,
+        if (focused) CellStyleState.focused,
+        if (!enabled) CellStyleState.disabled,
+        if (validationError != null) CellStyleState.invalid,
       },
     );
     final dim = const CellStyle(dim: true);
@@ -313,7 +313,7 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
           Text(widget.label!, style: muted),
           const Text(' '),
         ],
-        Text('[', style: controlStyle),
+        Text('[', style: interactionStyle),
         GestureDetector(
           onTap: enabled
               ? () {
@@ -323,12 +323,12 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
               : null,
           child: Text(
             ' − ',
-            style: canDec ? controlStyle : controlStyle.merge(dim),
+            style: canDec ? interactionStyle : interactionStyle.merge(dim),
           ),
         ),
         Text(
           _buffer != null ? '$_buffer▏' : _format(widget.value),
-          style: controlStyle,
+          style: interactionStyle,
         ),
         GestureDetector(
           onTap: enabled
@@ -339,10 +339,10 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
               : null,
           child: Text(
             ' + ',
-            style: canInc ? controlStyle : controlStyle.merge(dim),
+            style: canInc ? interactionStyle : interactionStyle.merge(dim),
           ),
         ),
-        Text(']', style: controlStyle),
+        Text(']', style: interactionStyle),
       ],
     );
 

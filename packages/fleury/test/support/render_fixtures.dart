@@ -95,8 +95,8 @@ class _RenderBoom extends RenderObject {
     CellRect? clipRect,
   }) {
     // Partial write BEFORE the throw: atomicity must bury it.
-    buffer.writeText(offset, 'part', style: CellStyle.empty);
+    buffer.writeText(offset, 'part', style: CellStyle.none);
     if (_mode == BoomMode.paint) throw StateError('paint-boom');
-    buffer.writeText(offset, 'healthy###', style: CellStyle.empty);
+    buffer.writeText(offset, 'healthy###', style: CellStyle.none);
   }
 }

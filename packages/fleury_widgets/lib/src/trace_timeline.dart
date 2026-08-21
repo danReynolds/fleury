@@ -900,6 +900,6 @@ CellStyle _rowStyle(
     ),
     TraceTimelineStatus.cancelled => const CellStyle(foreground: AnsiColor(8)),
     TraceTimelineStatus.warning => const CellStyle(foreground: AnsiColor(11)),
-    TraceTimelineStatus.info => CellStyle.empty,
+    TraceTimelineStatus.info => CellStyle.none,
   };
 }

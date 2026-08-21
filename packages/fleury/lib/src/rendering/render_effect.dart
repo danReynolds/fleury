@@ -44,7 +44,7 @@ typedef CellComposite =
 /// A composite is deliberately paint-only: focus, caret, semantic, and pointer
 /// geometry stays at the child's stable layout position while inherited clips
 /// still apply. Use [RenderClip] when interaction geometry must be clipped with
-/// the visible region; an arbitrary per-cell transform has no general inverse
+/// the visible region; an arbitrary per-cell transform has no general reverse
 /// that could safely remap descendant interaction regions.
 class RenderCellEffect extends RenderObject
     implements RenderObjectWithSingleChild {

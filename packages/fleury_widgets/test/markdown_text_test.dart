@@ -416,7 +416,7 @@ void main() {
   });
 
   group('MarkdownText — blocks', () {
-    testWidgets('# heading renders bold + inverse + a color tint', (tester) {
+    testWidgets('# heading renders bold + reverse + a color tint', (tester) {
       tester.pumpWidget(const MarkdownText('# Title\nbody'));
       final buf = tester.render(size: const CellSize(20, 2));
       expect(
@@ -426,7 +426,7 @@ void main() {
           't',
           'l',
           'e',
-        }, (s) => s.bold && s.inverse && s.foreground != null),
+        }, (s) => s.bold && s.reverse && s.foreground != null),
         isTrue,
       );
     });
@@ -439,7 +439,7 @@ void main() {
           'S',
           'u',
           'b',
-        }, (s) => s.bold && s.underline && !s.inverse && s.foreground != null),
+        }, (s) => s.bold && s.underline && !s.reverse && s.foreground != null),
         isTrue,
       );
     });

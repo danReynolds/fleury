@@ -192,7 +192,7 @@ class ListViewSelectionChangeBenchmark extends BenchmarkBase {
         itemCount: 1000,
         itemBuilder: (ctx, i, sel) => Text(
           'Item $i',
-          style: sel ? const CellStyle(inverse: true) : CellStyle.empty,
+          style: sel ? const CellStyle(reverse: true) : CellStyle.none,
         ),
       ),
     );

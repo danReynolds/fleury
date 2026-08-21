@@ -2028,16 +2028,28 @@ runApp(const MyApp(), theme: tokyoNight);''',
     builder: () => const _ThemePickerExample(),
   ),
   ExampleInfo(
+    id: 'themes.roles',
+    widget: 'Themes',
+    category: 'Theming',
+    blurb:
+        'Apply each semantic text role to the same preview while the theme\'s '
+        'border role frames it.',
+    cols: 48,
+    rows: 10,
+    interactive: true,
+    builder: () => const _ThemeRoleTour(),
+  ),
+  ExampleInfo(
     id: 'themes.control_states',
     widget: 'Themes',
     category: 'Theming',
     blurb:
-        'One control style adapts to focus, hover, selection, validation, and '
+        'One interaction style adapts to focus, hover, selection, validation, and '
         'disabled state without changing each widget separately.',
     cols: 52,
     rows: 13,
     interactive: true,
-    code: _controlStateSource,
+    code: _interactionStyleSource,
     builder: () => const _ControlStateTour(),
   ),
 ];
@@ -3087,7 +3099,7 @@ class _ThemePickerExampleState extends State<_ThemePickerExample> {
                     : '  ${fleuryThemes[i].name}',
                 style: selected
                     ? Theme.of(context).selectionStyle
-                    : CellStyle.empty,
+                    : CellStyle.none,
               );
             },
           ),
@@ -3102,6 +3114,86 @@ class _ThemePickerExampleState extends State<_ThemePickerExample> {
       ],
     );
   }
+}
+
+enum _ThemeTextRole { text, muted, selection, focused, error }
+
+extension on _ThemeTextRole {
+  String get label => switch (this) {
+    _ThemeTextRole.text => 'Default text',
+    _ThemeTextRole.muted => 'Muted',
+    _ThemeTextRole.selection => 'Selection',
+    _ThemeTextRole.focused => 'Focused',
+    _ThemeTextRole.error => 'Error',
+  };
+}
+
+const _rolePreviewTheme = ThemeData(
+  textStyle: CellStyle(foreground: Colors.white),
+  mutedStyle: CellStyle(dim: true),
+  selectionStyle: CellStyle(reverse: true),
+  focusedStyle: CellStyle(foreground: Colors.cyan, bold: true),
+  errorStyle: CellStyle(foreground: Colors.red, underline: true),
+  borderStyle: BorderStyle.double,
+);
+
+ThemeData get rolePreviewThemeForTest => _rolePreviewTheme;
+
+/// Lets the guide compare the theme's semantic text roles on one widget.
+class _ThemeRoleTour extends StatefulWidget {
+  const _ThemeRoleTour();
+
+  @override
+  State<_ThemeRoleTour> createState() => _ThemeRoleTourState();
+}
+
+class _ThemeRoleTourState extends State<_ThemeRoleTour> {
+  _ThemeTextRole _role = _ThemeTextRole.text;
+
+  CellStyle _styleFor(ThemeData theme) => switch (_role) {
+    _ThemeTextRole.text => theme.textStyle,
+    _ThemeTextRole.muted => theme.mutedStyle,
+    _ThemeTextRole.selection => theme.selectionStyle,
+    _ThemeTextRole.focused => theme.focusedStyle,
+    _ThemeTextRole.error => theme.errorStyle,
+  };
+
+  @override
+  Widget build(BuildContext context) => Theme(
+    data: _rolePreviewTheme,
+    child: Panel(
+      title: 'THEME ROLES',
+      child: Padding(
+        padding: const EdgeInsets.all(1),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Select<_ThemeTextRole>(
+              autofocus: true,
+              semanticLabel: 'Theme role',
+              value: _role,
+              options: [
+                for (final role in _ThemeTextRole.values)
+                  SelectOption(value: role, label: role.label),
+              ],
+              onHighlightChanged: (role) => setState(() => _role = role),
+              onChanged: (role) => setState(() => _role = role),
+            ),
+            const SizedBox(height: 1),
+            Text(
+              'Same widget, different role',
+              style: _styleFor(_rolePreviewTheme),
+            ),
+            const SizedBox(height: 1),
+            Text(
+              'borderStyle frames this panel',
+              style: _rolePreviewTheme.mutedStyle,
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 /// A hand-written theme for the "creating a theme" guide section.
@@ -3123,7 +3215,7 @@ const ThemeData _customTheme = ThemeData(
     info: RgbColor(0x83, 0xA5, 0x98),
   ),
   mutedStyle: CellStyle(dim: true),
-  selectionStyle: CellStyle(inverse: true),
+  selectionStyle: CellStyle(reverse: true),
   focusedStyle: CellStyle(bold: true),
   borderStyle: BorderStyle.rounded,
 );
@@ -3146,7 +3238,7 @@ const amber = ThemeData(
     info: RgbColor(0x83, 0xA5, 0x98),
   ),
   mutedStyle: CellStyle(dim: true),
-  selectionStyle: CellStyle(inverse: true),
+  selectionStyle: CellStyle(reverse: true),
   focusedStyle: CellStyle(bold: true),
   borderStyle: BorderStyle.rounded,
 );
@@ -3209,18 +3301,18 @@ class _ThemePreview extends StatelessWidget {
   }
 }
 
-const CellStyle _controlStateStyle = CellStyle.state(
-  focused: CellStyle(inverse: true, bold: true),
+const CellStyle _interactionStyle = CellStyle.state(
+  focused: CellStyle(reverse: true, bold: true),
   hovered: CellStyle(underline: true),
   selected: CellStyle(foreground: Colors.green, bold: true),
   invalid: CellStyle(foreground: Colors.red, underline: true),
   disabled: CellStyle(dim: true),
 );
 
-const String _controlStateSource = '''
+const String _interactionStyleSource = '''
 const theme = ThemeData(
-  controlStyle: CellStyle.state(
-    focused: CellStyle(inverse: true, bold: true),
+  interactionStyle: CellStyle.state(
+    focused: CellStyle(reverse: true, bold: true),
     hovered: CellStyle(underline: true),
     selected: CellStyle(foreground: Colors.green, bold: true),
     invalid: CellStyle(foreground: Colors.red, underline: true),
@@ -3231,8 +3323,8 @@ const theme = ThemeData(
 FleuryApp(theme: theme, home: const DeploymentForm());''';
 
 /// Exposed for the guide/source/live parity test.
-CellStyle get controlStateStyleForTest => _controlStateStyle;
-String get controlStateSourceForTest => _controlStateSource;
+CellStyle get interactionStyleForTest => _interactionStyle;
+String get interactionStyleSourceForTest => _interactionStyleSource;
 
 /// Interactive proof that one theme-level state style reaches different
 /// control families without forcing ordinary per-widget styling.
@@ -3260,7 +3352,7 @@ class _ControlStateTourState extends State<_ControlStateTour> {
   Widget build(BuildContext context) {
     final outer = Theme.of(context);
     return Theme(
-      data: outer.copyWith(controlStyle: _controlStateStyle),
+      data: outer.copyWith(interactionStyle: _interactionStyle),
       child: Padding(
         padding: const EdgeInsets.all(1),
         child: Form(
@@ -3434,7 +3526,7 @@ class _TaskListTourState extends State<_TaskListTour> {
               '${selected ? '›' : ' '} Task ${(index + 1).toString().padLeft(4, '0')}',
               style: selected
                   ? Theme.of(context).selectionStyle
-                  : CellStyle.empty,
+                  : CellStyle.none,
             ),
           ),
         ),

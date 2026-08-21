@@ -352,9 +352,9 @@ class _ColorPickerState extends State<ColorPicker>
           '█' * widget.swatchWidth,
           style: CellStyle(
             foreground: color,
-          ).merge(enabled ? CellStyle.empty : disabledStyle),
+          ).merge(enabled ? CellStyle.none : disabledStyle),
         );
-        final markStyle = resolveControlStyle(
+        final markStyle = resolveCellStyle(
           cascade: [
             CellStyle.state(
               base: isCursor ? theme.selectionStyle : theme.mutedStyle,
@@ -362,15 +362,15 @@ class _ColorPickerState extends State<ColorPicker>
               disabled: theme.mutedStyle,
               invalid: theme.errorStyle,
             ),
-            theme.controlStyle,
+            theme.interactionStyle,
             widget.style,
           ],
           states: {
-            if (_hovered && isCursor) ControlState.hovered,
-            if (isCursor && focused) ControlState.focused,
-            if (isCommitted) ControlState.selected,
-            if (!enabled) ControlState.disabled,
-            if (isCursor && validationError != null) ControlState.invalid,
+            if (_hovered && isCursor) CellStyleState.hovered,
+            if (isCursor && focused) CellStyleState.focused,
+            if (isCommitted) CellStyleState.selected,
+            if (!enabled) CellStyleState.disabled,
+            if (isCursor && validationError != null) CellStyleState.invalid,
           },
         );
         final swatchParts = <Widget>[];

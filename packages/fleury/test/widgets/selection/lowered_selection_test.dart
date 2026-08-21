@@ -103,15 +103,15 @@ void main() {
 
       for (var col = 2; col <= 6; col += 2) {
         expect(
-          buf.atColRow(col, 0).style.inverse,
+          buf.atColRow(col, 0).style.reverse,
           isTrue,
           reason:
               'atom cell $col must be highlighted — no endpoint can rest '
               'inside the source cluster',
         );
       }
-      expect(buf.atColRow(0, 0).style.inverse, isFalse, reason: "'a' outside");
-      expect(buf.atColRow(9, 0).style.inverse, isFalse, reason: "'b' outside");
+      expect(buf.atColRow(0, 0).style.reverse, isFalse, reason: "'a' outside");
+      expect(buf.atColRow(9, 0).style.reverse, isFalse, reason: "'b' outside");
     });
 
     testWidgets('identity path: wrapped plain-text copy is unchanged', (
@@ -163,7 +163,7 @@ void main() {
             TextSpan(text: '\u{1F469}\u{200D}\u{1F466}'),
           ],
         ),
-        base: CellStyle.empty,
+        base: CellStyle.none,
         textPolicy: _split,
       )..layout(const CellConstraints(maxCols: 10));
       final buf = CellBuffer(const CellSize(10, 1));

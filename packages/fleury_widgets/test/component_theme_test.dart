@@ -70,13 +70,13 @@ void main() {
     expect(_styleAt(tester, 1, 0).foreground, const AnsiColor(2));
   });
 
-  testWidgets('control focus style comes from ThemeData.controlStyle', (
+  testWidgets('control focus style comes from ThemeData.interactionStyle', (
     tester,
   ) {
     tester.pumpWidget(
       Theme(
         data: const ThemeData(
-          controlStyle: CellStyle.state(
+          interactionStyle: CellStyle.state(
             focused: CellStyle(underline: true, bold: false),
           ),
         ),
@@ -89,13 +89,13 @@ void main() {
     expect(style.bold, isFalse);
   });
 
-  testWidgets('disabled button style comes from ThemeData.controlStyle', (
+  testWidgets('disabled button style comes from ThemeData.interactionStyle', (
     tester,
   ) {
     tester.pumpWidget(
       Theme(
         data: const ThemeData(
-          controlStyle: CellStyle.state(
+          interactionStyle: CellStyle.state(
             disabled: CellStyle(foreground: AnsiColor(13)),
           ),
         ),
@@ -111,7 +111,9 @@ void main() {
     tester.pumpWidget(
       const Theme(
         data: ThemeData(
-          controlStyle: CellStyle.state(focused: CellStyle(underline: true)),
+          interactionStyle: CellStyle.state(
+            focused: CellStyle(underline: true),
+          ),
         ),
         child: Checkbox(
           value: false,
@@ -133,7 +135,7 @@ void main() {
     tester.pumpWidget(
       const Theme(
         data: ThemeData(
-          controlStyle: CellStyle.state(
+          interactionStyle: CellStyle.state(
             focused: CellStyle(foreground: AnsiColor(5), bold: true),
           ),
         ),
@@ -152,17 +154,19 @@ void main() {
     expect(style.underline, isTrue);
   });
 
-  testWidgets('CellStyle.empty suppresses one inherited state cue', (tester) {
+  testWidgets('CellStyle.none suppresses one inherited state cue', (tester) {
     tester.pumpWidget(
       const Theme(
         data: ThemeData(
-          controlStyle: CellStyle.state(focused: CellStyle(underline: true)),
+          interactionStyle: CellStyle.state(
+            focused: CellStyle(underline: true),
+          ),
         ),
         child: Checkbox(
           value: false,
           autofocus: true,
           onChanged: _ignoreBool,
-          style: CellStyle.state(focused: CellStyle.empty),
+          style: CellStyle.state(focused: CellStyle.none),
         ),
       ),
     );
@@ -176,7 +180,9 @@ void main() {
     tester.pumpWidget(
       Theme(
         data: const ThemeData(
-          controlStyle: CellStyle.state(selected: CellStyle(underline: true)),
+          interactionStyle: CellStyle.state(
+            selected: CellStyle(underline: true),
+          ),
         ),
         child: Column(
           children: [
@@ -210,7 +216,9 @@ void main() {
     tester.pumpWidget(
       Theme(
         data: const ThemeData(
-          controlStyle: CellStyle.state(hovered: CellStyle(underline: true)),
+          interactionStyle: CellStyle.state(
+            hovered: CellStyle(underline: true),
+          ),
         ),
         child: Button(label: 'Run', onPressed: _noop),
       ),
@@ -329,7 +337,7 @@ void main() {
 
   testWidgets('changing ThemeData updates mounted control styling', (tester) {
     Widget themed(Color color) => Theme(
-      data: ThemeData(controlStyle: CellStyle(foreground: color)),
+      data: ThemeData(interactionStyle: CellStyle(foreground: color)),
       child: const Checkbox(value: false, onChanged: _ignoreBool),
     );
 
@@ -546,6 +554,23 @@ void main() {
     );
 
     expect(_styleAt(tester, 0, 0).foreground, const AnsiColor(9));
+  });
+
+  testWidgets('JsonView invalid document falls back to ThemeData.errorStyle', (
+    tester,
+  ) {
+    tester.pumpWidget(
+      Theme(
+        data: const ThemeData(
+          errorStyle: CellStyle(foreground: AnsiColor(1), underline: true),
+        ),
+        child: JsonView.string('{ bad json'),
+      ),
+    );
+
+    final style = _styleAt(tester, 0, 0);
+    expect(style.foreground, const AnsiColor(1));
+    expect(style.underline, isTrue);
   });
 
   testWidgets('explicit ProgressBar styles override component theme', (tester) {

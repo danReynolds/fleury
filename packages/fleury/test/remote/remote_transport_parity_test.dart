@@ -316,7 +316,7 @@ void main() {
 }
 
 CellStyle _style(Random rng) => switch (rng.nextInt(3)) {
-  0 => CellStyle.empty,
+  0 => CellStyle.none,
   1 => const CellStyle(bold: true),
   _ => CellStyle(foreground: RgbColor(rng.nextInt(256), 0, 0)),
 };

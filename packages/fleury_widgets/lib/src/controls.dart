@@ -147,18 +147,18 @@ class _FocusableControlState extends State<_FocusableControl>
   Widget build(BuildContext context) {
     final validationError = _formRegistration?.error ?? widget.validationError;
     final focused = _node.hasFocus;
-    final resolvedStyle = resolveControlStyle(
+    final resolvedStyle = resolveCellStyle(
       cascade: [
         widget.defaultStyle,
-        Theme.of(context).controlStyle,
+        Theme.of(context).interactionStyle,
         widget.style,
       ],
       states: {
-        if (_hovered) ControlState.hovered,
-        if (focused) ControlState.focused,
-        if (widget.styleSelected) ControlState.selected,
-        if (!widget.enabled) ControlState.disabled,
-        if (validationError != null) ControlState.invalid,
+        if (_hovered) CellStyleState.hovered,
+        if (focused) CellStyleState.focused,
+        if (widget.styleSelected) CellStyleState.selected,
+        if (!widget.enabled) CellStyleState.disabled,
+        if (validationError != null) CellStyleState.invalid,
       },
     );
     final Widget content = !widget.enabled

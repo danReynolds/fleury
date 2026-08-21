@@ -391,7 +391,7 @@ final class CellBuffer {
   int writeGrapheme(
     CellOffset position,
     String grapheme, {
-    CellStyle style = CellStyle.empty,
+    CellStyle style = CellStyle.none,
     WidthResolver widthResolver = const DefaultWidthResolver(),
     CellWidthPolicy policy = CellWidthPolicy.spec,
   }) {
@@ -412,7 +412,7 @@ final class CellBuffer {
     int col,
     int row,
     String grapheme, {
-    CellStyle style = CellStyle.empty,
+    CellStyle style = CellStyle.none,
     WidthResolver widthResolver = const DefaultWidthResolver(),
     CellWidthPolicy policy = CellWidthPolicy.spec,
   }) {
@@ -452,7 +452,7 @@ final class CellBuffer {
   int writeText(
     CellOffset position,
     String text, {
-    CellStyle style = CellStyle.empty,
+    CellStyle style = CellStyle.none,
     WidthResolver widthResolver = const DefaultWidthResolver(),
     CellWidthPolicy policy = CellWidthPolicy.spec,
   }) {

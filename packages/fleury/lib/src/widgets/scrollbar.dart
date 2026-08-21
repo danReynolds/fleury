@@ -30,7 +30,7 @@ class Scrollbar extends StatefulWidget {
     required this.child,
     this.thickness = 1,
     this.trackStyle = const CellStyle(dim: true),
-    this.thumbStyle = CellStyle.empty,
+    this.thumbStyle = CellStyle.none,
   }) : _metrics = (() => (
          controller.contentExtent,
          controller.viewportExtent,
@@ -47,7 +47,7 @@ class Scrollbar extends StatefulWidget {
     required this.child,
     this.thickness = 1,
     this.trackStyle = const CellStyle(dim: true),
-    this.thumbStyle = CellStyle.empty,
+    this.thumbStyle = CellStyle.none,
   }) : _metrics = (() {
          final range = controller.visibleRange;
          if (range == null) {

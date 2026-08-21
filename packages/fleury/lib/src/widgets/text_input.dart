@@ -7,7 +7,7 @@
 //     TextInputClaimant / TextCompositionClaimant, so the InputDispatcher
 //     routes typed printable text and IME composition directly to it. Handles
 //     special chords (Backspace, arrows, Enter, etc.) via KeyDetector.
-//   - RenderTextInput — paints the text plus a one-cell inverse
+//   - RenderTextInput — paints the text plus a one-cell reverse
 //     cursor at the current selection position.
 //
 // What's intentionally not here yet:
@@ -543,8 +543,8 @@ class TextInput extends StatefulWidget {
     this.onEscape,
     this.placeholder = '',
     this.placeholderStyle = const CellStyle(dim: true),
-    this.style = CellStyle.empty,
-    this.cursorStyle = const CellStyle(inverse: true),
+    this.style = CellStyle.none,
+    this.cursorStyle = const CellStyle(reverse: true),
     this.blinkInterval = const Duration(milliseconds: 500),
     this.enableBlink = true,
     this.obscureText = false,
@@ -611,7 +611,7 @@ class TextInput extends StatefulWidget {
   final CellStyle style;
 
   /// Style merged on top of [style] at the cursor cell. Defaults to
-  /// `inverse: true` — a block cursor.
+  /// `reverse: true` — a block cursor.
   final CellStyle cursorStyle;
 
   /// On/off cadence for the blinking cursor. Default matches
@@ -1563,16 +1563,16 @@ class _TextInputState extends State<TextInput>
       invalid: theme.errorStyle,
     );
     final states = {
-      if (_hovered) ControlState.hovered,
-      if (focused) ControlState.focused,
-      if (!widget.enabled) ControlState.disabled,
-      if (validationError != null) ControlState.invalid,
+      if (_hovered) CellStyleState.hovered,
+      if (focused) CellStyleState.focused,
+      if (!widget.enabled) CellStyleState.disabled,
+      if (validationError != null) CellStyleState.invalid,
     };
-    final cascade = [defaultStyle, theme.controlStyle, widget.style];
-    final displayStyle = resolveControlStyle(cascade: cascade, states: states);
+    final cascade = [defaultStyle, theme.interactionStyle, widget.style];
+    final displayStyle = resolveCellStyle(cascade: cascade, states: states);
     // Placeholder paint is a base-layer customization. Active state patches
     // still win, so an empty invalid field does not hide its invalid cue.
-    final displayPlaceholderStyle = resolveControlStyle(
+    final displayPlaceholderStyle = resolveCellStyle(
       cascade: [...cascade, widget.placeholderStyle],
       states: states,
     );
@@ -1729,7 +1729,7 @@ class _TextInputDisplay extends LeafRenderObjectWidget {
   }
 }
 
-/// Paints the [text] of a [TextInput] with a one-cell inverse cursor
+/// Paints the [text] of a [TextInput] with a one-cell reverse cursor
 /// at the current [selection] code-unit index.
 ///
 /// Layout: width = text intrinsic width (in cells) + 1 for the
@@ -1741,8 +1741,8 @@ class RenderTextInput extends RenderObject {
     required TextSelection selection,
     String placeholder = '',
     CellStyle placeholderStyle = const CellStyle(dim: true),
-    CellStyle style = CellStyle.empty,
-    CellStyle cursorStyle = const CellStyle(inverse: true),
+    CellStyle style = CellStyle.none,
+    CellStyle cursorStyle = const CellStyle(reverse: true),
     bool cursorVisible = true,
     bool obscureText = false,
     String obscuringCharacter = '•',

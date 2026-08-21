@@ -764,7 +764,7 @@ class _BufferView extends StatelessWidget {
 
   Widget _line(String text, int? cursorCol) {
     if (cursorCol == null) return Text(text.isEmpty ? ' ' : text);
-    const cursorStyle = CellStyle(inverse: true);
+    const cursorStyle = CellStyle(reverse: true);
     final char = cursorCol < text.length ? text[cursorCol] : ' ';
     final after = cursorCol < text.length ? text.substring(cursorCol + 1) : '';
     return Row(

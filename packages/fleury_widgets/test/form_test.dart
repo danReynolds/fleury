@@ -39,7 +39,7 @@ Widget _textForm({
       child: TextInput(
         controller: text,
         semanticLabel: 'Name',
-        style: style ?? CellStyle.empty,
+        style: style ?? CellStyle.none,
       ),
     ),
   );
@@ -418,7 +418,7 @@ void main() {
         _textForm(
           controller: controller,
           text: text,
-          style: const CellStyle.state(invalid: CellStyle.empty),
+          style: const CellStyle.state(invalid: CellStyle.none),
           onSubmit: () {},
         ),
       );

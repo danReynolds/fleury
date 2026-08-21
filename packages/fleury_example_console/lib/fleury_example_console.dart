@@ -68,7 +68,7 @@ const _demoIndexYieldPolicy = TaskYieldPolicy(
 const _demoWidgetTheme = FleuryWidgetTheme(
   progressFilledStyle: CellStyle(foreground: AnsiColor(10)),
   progressTrackStyle: CellStyle(dim: true),
-  dataSelectedStyle: CellStyle(inverse: true, foreground: AnsiColor(14)),
+  dataSelectedStyle: CellStyle(reverse: true, foreground: AnsiColor(14)),
   dataSeparatorStyle: CellStyle(foreground: AnsiColor(8)),
   logWarningStyle: CellStyle(bold: true, foreground: AnsiColor(11)),
   logErrorStyle: CellStyle(bold: true, foreground: AnsiColor(9)),
@@ -93,8 +93,8 @@ const _demoTheme = ThemeData(
     info: AnsiColor(12),
   ),
   focusedStyle: CellStyle(bold: true, foreground: AnsiColor(14)),
-  selectionStyle: CellStyle(inverse: true, bold: true),
-  controlStyle: CellStyle.state(
+  selectionStyle: CellStyle(reverse: true, bold: true),
+  interactionStyle: CellStyle.state(
     focused: CellStyle(bold: true, foreground: AnsiColor(14)),
   ),
 );
@@ -1594,7 +1594,7 @@ class _Sidebar extends StatelessWidget {
                 '${screen.id == activeScreenId ? '>' : ' '} ${screen.title}',
                 style: screen.id == activeScreenId
                     ? const CellStyle(foreground: AnsiColor(10), bold: true)
-                    : CellStyle.empty,
+                    : CellStyle.none,
               ),
             ),
           const SizedBox(height: 1),

@@ -134,7 +134,7 @@ The table is intentionally boring: most of the muscle memory is valid.
 
 | Flutter | Fleury | Why |
 |---|---|---|
-| `TextStyle` | `CellStyle` | A cell has foreground/background color and terminal attributes such as bold, dim, underline, and inverse. It does not have fonts. |
+| `TextStyle` | `CellStyle` | A cell has foreground/background color and terminal attributes such as bold, dim, underline, and reverse. It does not have fonts. |
 | `BoxConstraints` | `CellConstraints` | Constraints are integer cells; `null` represents unbounded. |
 | `Offset` / `Size` | `CellOffset` / `CellSize` | Coordinates and dimensions are whole cells. |
 | `AnimatedBuilder` | `ListenableBuilder` | Rebuild from any `Listenable`: an `Animation`, a `ChangeNotifier`, or another notifier. |

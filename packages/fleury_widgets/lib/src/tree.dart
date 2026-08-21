@@ -76,7 +76,7 @@ class Tree<T> extends StatefulWidget {
   /// Called when Enter activates a leaf node.
   final void Function(TreeNode<T> node)? onSelect;
 
-  /// Style for the highlighted row. Defaults to inverse video.
+  /// Style for the highlighted row. Defaults to reverse video.
   final CellStyle? selectedStyle;
 
   /// Branch nodes shallower than this depth start expanded. `0` (the default)
@@ -420,7 +420,7 @@ class _TreeRowWidget<T> extends StatelessWidget {
             ? selectedStyle
             : selected
             ? Theme.of(context).mutedStyle
-            : CellStyle.empty,
+            : CellStyle.none,
       ),
     );
   }

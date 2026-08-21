@@ -53,8 +53,8 @@ class TextArea extends StatefulWidget {
     this.onSubmit,
     this.placeholder = '',
     this.placeholderStyle = const CellStyle(dim: true),
-    this.style = CellStyle.empty,
-    this.cursorStyle = const CellStyle(inverse: true),
+    this.style = CellStyle.none,
+    this.cursorStyle = const CellStyle(reverse: true),
     this.enabled = true,
     this.readOnly = false,
     this.validationError,
@@ -774,16 +774,16 @@ class _TextAreaState extends State<TextArea>
       invalid: theme.errorStyle,
     );
     final states = {
-      if (_hovered) ControlState.hovered,
-      if (focused) ControlState.focused,
-      if (!widget.enabled) ControlState.disabled,
-      if (validationError != null) ControlState.invalid,
+      if (_hovered) CellStyleState.hovered,
+      if (focused) CellStyleState.focused,
+      if (!widget.enabled) CellStyleState.disabled,
+      if (validationError != null) CellStyleState.invalid,
     };
-    final cascade = [defaultStyle, theme.controlStyle, widget.style];
-    final displayStyle = resolveControlStyle(cascade: cascade, states: states);
+    final cascade = [defaultStyle, theme.interactionStyle, widget.style];
+    final displayStyle = resolveCellStyle(cascade: cascade, states: states);
     // Placeholder paint is a base-layer customization. Active state patches
     // still win, so an empty invalid field does not hide its invalid cue.
-    final displayPlaceholderStyle = resolveControlStyle(
+    final displayPlaceholderStyle = resolveCellStyle(
       cascade: [...cascade, widget.placeholderStyle],
       states: states,
     );
@@ -972,8 +972,8 @@ class RenderTextArea extends RenderObject {
     required TextSelection selection,
     String placeholder = '',
     CellStyle placeholderStyle = const CellStyle(dim: true),
-    CellStyle style = CellStyle.empty,
-    CellStyle cursorStyle = const CellStyle(inverse: true),
+    CellStyle style = CellStyle.none,
+    CellStyle cursorStyle = const CellStyle(reverse: true),
     bool cursorVisible = true,
     int minLines = 1,
     int? maxLines,

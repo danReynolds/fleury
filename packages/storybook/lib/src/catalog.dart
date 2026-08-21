@@ -1392,7 +1392,7 @@ class _SelectionScrollStoryState extends State<_SelectionScrollStory> {
               '${selected ? '>' : ' '} Lazy row ${index + 1}',
               style: selected
                   ? Theme.of(context).selectionStyle
-                  : CellStyle.empty,
+                  : CellStyle.none,
             ),
           ),
         ),

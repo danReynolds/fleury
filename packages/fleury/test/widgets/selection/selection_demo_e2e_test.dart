@@ -89,7 +89,7 @@ void main() {
         expect(
           driver.output.contains('\x1B[7m'),
           isTrue,
-          reason: 'inverse-video should be emitted for the highlighted cells',
+          reason: 'reverse-video should be emitted for the highlighted cells',
         );
 
         // The status row mirrors selection text via onSelectionChanged.

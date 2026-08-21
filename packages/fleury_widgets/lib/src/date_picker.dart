@@ -338,8 +338,8 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
       bool selected = false,
       bool focusTarget = false,
       bool unavailable = false,
-      CellStyle base = CellStyle.empty,
-    }) => resolveControlStyle(
+      CellStyle base = CellStyle.none,
+    }) => resolveCellStyle(
       cascade: [
         CellStyle.state(
           base: base,
@@ -348,14 +348,14 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
           disabled: theme.mutedStyle,
           invalid: theme.errorStyle,
         ),
-        theme.controlStyle,
+        theme.interactionStyle,
         widget.style,
       ],
       states: {
-        if (selected) ControlState.selected,
-        if (focusTarget && focused) ControlState.focused,
-        if (!enabled || unavailable) ControlState.disabled,
-        if (focusTarget && validationError != null) ControlState.invalid,
+        if (selected) CellStyleState.selected,
+        if (focusTarget && focused) CellStyleState.focused,
+        if (!enabled || unavailable) CellStyleState.disabled,
+        if (focusTarget && validationError != null) CellStyleState.invalid,
       },
     );
 
@@ -553,7 +553,7 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
 /// header so columns line up regardless of which days have one or two
 /// digits. Pass [onTap] to make the cell clickable (an in-bounds day).
 class _Cell extends StatelessWidget {
-  const _Cell(this.text, {this.style = CellStyle.empty, this.onTap});
+  const _Cell(this.text, {this.style = CellStyle.none, this.onTap});
   final String text;
   final CellStyle style;
   final void Function()? onTap;

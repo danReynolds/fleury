@@ -18,7 +18,7 @@ void box(
   int y,
   int w,
   int h, {
-  CellStyle style = CellStyle.empty,
+  CellStyle style = CellStyle.none,
 }) {
   b.writeText(CellOffset(x, y), '┌${'─' * (w - 2)}┐', style: style);
   for (var r = 1; r < h - 1; r++) {
@@ -114,8 +114,8 @@ CellBuffer dashboard() {
   );
   b.writeText(
     const CellOffset(15, 11),
-    ' highlighted row (inverse) ',
-    style: const CellStyle(foreground: Colors.amber, inverse: true),
+    ' highlighted row (reverse) ',
+    style: const CellStyle(foreground: Colors.amber, reverse: true),
   );
 
   // A truecolor gradient swatch row.

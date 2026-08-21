@@ -152,7 +152,7 @@ class OutputCaptureConsole extends StatelessWidget {
               '${logs.length} ${logs.length == 1 ? 'line' : 'lines'}',
               innerW,
             ),
-            const CellStyle(inverse: true, bold: true),
+            const CellStyle(reverse: true, bold: true),
             innerW,
           ),
           ..._body(theme, logs.lines, logRows, innerW),

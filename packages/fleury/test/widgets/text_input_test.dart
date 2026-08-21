@@ -125,10 +125,10 @@ void main() {
         const TextSelection(baseOffset: 1, extentOffset: 3),
       );
       final buf = tester.render(size: const CellSize(6, 1));
-      expect(buf.atColRow(0, 0).style.inverse, isFalse);
-      expect(buf.atColRow(1, 0).style.inverse, isTrue);
-      expect(buf.atColRow(2, 0).style.inverse, isTrue);
-      expect(buf.atColRow(3, 0).style.inverse, isFalse);
+      expect(buf.atColRow(0, 0).style.reverse, isFalse);
+      expect(buf.atColRow(1, 0).style.reverse, isTrue);
+      expect(buf.atColRow(2, 0).style.reverse, isTrue);
+      expect(buf.atColRow(3, 0).style.reverse, isFalse);
 
       tester.type('X');
       expect(controller.text, 'aXd');
@@ -1309,7 +1309,7 @@ void main() {
       expect(buf.atColRow(1, 0).grapheme, 'e');
       expect(buf.atColRow(2, 0).grapheme, 'f');
       expect(buf.atColRow(3, 0).grapheme, ' ');
-      expect(buf.atColRow(3, 0).style.inverse, isTrue);
+      expect(buf.atColRow(3, 0).style.reverse, isTrue);
     });
 
     testWidgets('scrolls back when the cursor moves to the start', (tester) {
@@ -1323,7 +1323,7 @@ void main() {
       final buf = tester.render(size: const CellSize(4, 1));
 
       expect(buf.atColRow(0, 0).grapheme, 'a');
-      expect(buf.atColRow(0, 0).style.inverse, isTrue);
+      expect(buf.atColRow(0, 0).style.reverse, isTrue);
       expect(buf.atColRow(1, 0).grapheme, 'b');
       expect(buf.atColRow(2, 0).grapheme, 'c');
       expect(buf.atColRow(3, 0).grapheme, 'd');
@@ -1342,7 +1342,7 @@ void main() {
       expect(buf.atColRow(0, 0).grapheme, 'c');
       expect(buf.atColRow(1, 0).grapheme, 'd');
       expect(buf.atColRow(2, 0).grapheme, ' ');
-      expect(buf.atColRow(2, 0).style.inverse, isTrue);
+      expect(buf.atColRow(2, 0).style.reverse, isTrue);
       expect(buf.atColRow(3, 0).grapheme, isNull);
     });
 
@@ -1366,7 +1366,7 @@ void main() {
       expect(buf.atColRow(1, 0).grapheme, '*');
       expect(buf.atColRow(2, 0).grapheme, '*');
       expect(buf.atColRow(3, 0).grapheme, ' ');
-      expect(buf.atColRow(3, 0).style.inverse, isTrue);
+      expect(buf.atColRow(3, 0).style.reverse, isTrue);
     });
 
     testWidgets('keeps the active end of a selection visible', (tester) {
@@ -1382,8 +1382,8 @@ void main() {
       expect(buf.atColRow(1, 0).grapheme, 'f');
       expect(buf.atColRow(2, 0).grapheme, 'g');
       expect(buf.atColRow(3, 0).grapheme, 'h');
-      expect(buf.atColRow(0, 0).style.inverse, isTrue);
-      expect(buf.atColRow(3, 0).style.inverse, isTrue);
+      expect(buf.atColRow(0, 0).style.reverse, isTrue);
+      expect(buf.atColRow(3, 0).style.reverse, isTrue);
     });
   });
 
@@ -1463,10 +1463,10 @@ void main() {
         const TextInput(autofocus: true, enableBlink: false, placeholder: 'go'),
       );
       final buf = tester.render(size: const CellSize(10, 1));
-      // First placeholder cell carries the cursor (inverse) merged onto dim.
+      // First placeholder cell carries the cursor (reverse) merged onto dim.
       expect(buf.atColRow(0, 0).grapheme, 'g');
-      expect(buf.atColRow(0, 0).style.inverse, isTrue);
-      expect(buf.atColRow(1, 0).style.inverse, isFalse);
+      expect(buf.atColRow(0, 0).style.reverse, isTrue);
+      expect(buf.atColRow(1, 0).style.reverse, isFalse);
     });
   });
 }

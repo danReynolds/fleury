@@ -94,7 +94,7 @@ class MarkdownText extends StatelessWidget {
     final hyperlinks = MediaQuery.capabilitiesOf(context).hyperlinks;
     final result = _renderBlocks(
       data,
-      baseStyle ?? CellStyle.empty,
+      baseStyle ?? CellStyle.none,
       headingColor: headingColor,
       hyperlinks: hyperlinks,
       inlineLinkUrls: inlineLinkUrls,
@@ -803,7 +803,7 @@ class _MarkdownViewState extends State<MarkdownView> {
                 selected: selected,
                 activeSelection: activeSelected,
                 copyEnabled: copyEnabled,
-                baseStyle: widget.baseStyle ?? CellStyle.empty,
+                baseStyle: widget.baseStyle ?? CellStyle.none,
                 componentTheme: FleuryWidgetTheme.of(context),
                 onActivate: () => _selectBlockAt(index),
                 onCopy: () => _copyBlockAt(index),
@@ -903,7 +903,7 @@ class _MarkdownBlockWidget extends StatelessWidget {
               ? theme.selectionStyle
               : selected
               ? theme.mutedStyle
-              : CellStyle.empty,
+              : CellStyle.none,
         );
     final line =
         block.kind == MarkdownBlockKind.codeFence ||
@@ -1109,7 +1109,7 @@ String? _urlScheme(String url) {
           // H1 inverts for emphasis; H2/H3 just bold + underline. A color
           // tint (when provided) reinforces the depth hierarchy.
           underline: level > 1,
-          inverse: level == 1,
+          reverse: level == 1,
           foreground: headingColor?.call(level),
         ),
       );
@@ -1392,7 +1392,7 @@ void _collectMarkdownLinks(
   required List<MarkdownLink> links,
   required int blockIndex,
 }) {
-  _inline(src, CellStyle.empty, links: links, blockIndex: blockIndex);
+  _inline(src, CellStyle.none, links: links, blockIndex: blockIndex);
 }
 
 String _plainInlineText(String src) {

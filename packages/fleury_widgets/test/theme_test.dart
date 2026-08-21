@@ -17,12 +17,12 @@ void main() {
       ),
     );
     final buf = tester.render(size: const CellSize(8, 1));
-    // Row 0 ('a') is selected; the marker cell should be bold (not inverse).
+    // Row 0 ('a') is selected; the marker cell should be bold (not reverse).
     expect(buf.atColRow(2, 0).style.bold, isTrue);
     expect(
-      buf.atColRow(2, 0).style.inverse,
+      buf.atColRow(2, 0).style.reverse,
       isFalse,
-      reason: 'theme overrode the default inverse selection',
+      reason: 'theme overrode the default reverse selection',
     );
   });
 
@@ -45,7 +45,7 @@ void main() {
       for (var c = 0; c < 20; c++) {
         if (buf.atColRow(c, r).grapheme == 'N') {
           expect(buf.atColRow(c, r).style.underline, isTrue);
-          expect(buf.atColRow(c, r).style.inverse, isFalse);
+          expect(buf.atColRow(c, r).style.reverse, isFalse);
           found = true;
           break;
         }

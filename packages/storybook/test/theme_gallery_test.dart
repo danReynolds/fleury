@@ -109,16 +109,16 @@ void main() {
         'selectionStyle',
         'focusedStyle',
         'errorStyle',
-        'controlStyle',
+        'interactionStyle',
       ]) {
         expect(output, contains(field), reason: 'undemoed style: $field');
       }
       expect(
-        fleuryThemes.every((theme) => theme.data.controlStyle == null),
+        fleuryThemes.every((theme) => theme.data.interactionStyle == null),
         isTrue,
         reason: 'bundled themes currently inherit widget state defaults',
       );
-      expect(output, contains('controlStyle · unset (widget defaults)'));
+      expect(output, contains('interactionStyle · unset (widget defaults)'));
       // The border style and the two panel focus states are called out, so
       // the chrome reads as a demonstrated state rather than an accident.
       expect(output, contains('borderStyle'));
@@ -136,7 +136,7 @@ void main() {
           themes: [
             NamedTheme(
               'Custom',
-              ThemeData(controlStyle: CellStyle(foreground: Colors.cyan)),
+              ThemeData(interactionStyle: CellStyle(foreground: Colors.cyan)),
             ),
           ],
         ),
@@ -146,8 +146,8 @@ void main() {
         size: const CellSize(84, 60),
         emptyMark: ' ',
       );
-      expect(output, contains('controlStyle · ThemeData.controlStyle'));
-      expect(output, isNot(contains('states · ThemeData.controlStyle')));
+      expect(output, contains('interactionStyle · ThemeData.interactionStyle'));
+      expect(output, isNot(contains('states · ThemeData.interactionStyle')));
     });
 
     testWidgets('the sample wears the selected palette', (tester) {

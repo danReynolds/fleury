@@ -190,8 +190,8 @@ class _ChatAppState extends State<ChatApp> {
           final isActive = index == _activeChannel;
           final prefix = isActive ? '* ' : '  ';
           final style = selected && _isFocused(context, _sidebarFocus)
-              ? const CellStyle(inverse: true)
-              : (isActive ? const CellStyle(bold: true) : CellStyle.empty);
+              ? const CellStyle(reverse: true)
+              : (isActive ? const CellStyle(bold: true) : CellStyle.none);
           return Text(
             '$prefix${_channels[index]}',
             style: style,
@@ -234,8 +234,8 @@ class _ChatAppState extends State<ChatApp> {
               itemCount: messages.length,
               itemBuilder: (ctx, index, selected) {
                 final style = selected && _isFocused(context, _messagesFocus)
-                    ? const CellStyle(inverse: true)
-                    : CellStyle.empty;
+                    ? const CellStyle(reverse: true)
+                    : CellStyle.none;
                 return Text(messages[index], style: style);
               },
             ),
@@ -366,8 +366,8 @@ class _CommandPaletteState extends State<_CommandPalette> {
                 return Text(
                   ' ${widget.channels[channelIndex]}',
                   style: selected
-                      ? const CellStyle(inverse: true)
-                      : CellStyle.empty,
+                      ? const CellStyle(reverse: true)
+                      : CellStyle.none,
                   softWrap: false,
                 );
               },

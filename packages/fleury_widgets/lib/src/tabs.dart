@@ -111,7 +111,7 @@ class Tabs extends StatefulWidget {
   /// content split clear. Defaults to false — a bare strip-over-content layout.
   final bool bordered;
 
-  /// Style for the active tab's label. Defaults to inverse video.
+  /// Style for the active tab's label. Defaults to reverse video.
   final CellStyle? activeStyle;
 
   /// Style for inactive tab labels. Defaults to dim.

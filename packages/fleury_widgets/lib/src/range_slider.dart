@@ -313,12 +313,12 @@ class _RangeSliderState extends State<RangeSlider> {
         : enabled && hi < widget.max;
     final validationError = _formRegistration?.error;
     final states = {
-      if (_hovered) ControlState.hovered,
-      if (enabled && _node.hasFocus) ControlState.focused,
-      if (!enabled) ControlState.disabled,
-      if (validationError != null) ControlState.invalid,
+      if (_hovered) CellStyleState.hovered,
+      if (enabled && _node.hasFocus) CellStyleState.focused,
+      if (!enabled) CellStyleState.disabled,
+      if (validationError != null) CellStyleState.invalid,
     };
-    final trackStyle = resolveControlStyle(
+    final trackStyle = resolveCellStyle(
       cascade: [
         CellStyle.state(
           base: theme.mutedStyle,
@@ -326,12 +326,12 @@ class _RangeSliderState extends State<RangeSlider> {
           disabled: theme.mutedStyle,
           invalid: theme.errorStyle,
         ),
-        theme.controlStyle,
+        theme.interactionStyle,
         widget.style,
       ],
       states: states,
     );
-    final selectedStyle = resolveControlStyle(
+    final selectedStyle = resolveCellStyle(
       cascade: [
         CellStyle.state(
           selected: CellStyle(foreground: theme.colorScheme.primary),
@@ -339,10 +339,10 @@ class _RangeSliderState extends State<RangeSlider> {
           disabled: theme.mutedStyle,
           invalid: theme.errorStyle,
         ),
-        theme.controlStyle,
+        theme.interactionStyle,
         widget.style,
       ],
-      states: {...states, ControlState.selected},
+      states: {...states, CellStyleState.selected},
     );
     final slider = _RawRangeSlider(
       values: _normalized,

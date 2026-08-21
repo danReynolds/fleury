@@ -49,7 +49,7 @@ ThemeData storybookThemeFor(StorybookThemeMode mode) {
     StorybookThemeMode.dark => ThemeData.dark(),
     StorybookThemeMode.light => ThemeData.light(),
     StorybookThemeMode.highContrast => ThemeData.dark().copyWith(
-      selectionStyle: const CellStyle(inverse: true, bold: true),
+      selectionStyle: const CellStyle(reverse: true, bold: true),
       focusedStyle: const CellStyle(bold: true, underline: true),
       mutedStyle: const CellStyle(dim: false, foreground: AnsiColor(8)),
       borderStyle: BorderStyle.ascii,

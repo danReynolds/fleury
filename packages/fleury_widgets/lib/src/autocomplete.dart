@@ -27,7 +27,7 @@ class Autocomplete<T extends Object> extends StatefulWidget {
     this.fieldSemanticLabel,
     this.semanticLabel,
     this.semanticState = SemanticState.empty,
-    this.style = CellStyle.empty,
+    this.style = CellStyle.none,
     this.onSelect,
     this.maxVisible = 6,
   });
@@ -120,7 +120,7 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
 
   // Captured from the in-tree theme on each build; the dropdown lives in
   // an Overlay (outside this subtree) so it can't read the theme itself.
-  CellStyle _selectionStyle = const CellStyle(inverse: true);
+  CellStyle _selectionStyle = const CellStyle(reverse: true);
   BorderStyle _borderStyle = BorderStyle.rounded;
 
   String _display(T option) => widget.displayStringForOption(option);
@@ -360,7 +360,7 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
                   },
                   child: Text(
                     '${selected ? '› ' : '  '}$label',
-                    style: selected ? _selectionStyle : CellStyle.empty,
+                    style: selected ? _selectionStyle : CellStyle.none,
                   ),
                 ),
               );

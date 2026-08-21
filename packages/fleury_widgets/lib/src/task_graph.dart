@@ -469,7 +469,7 @@ class _TaskGraphRow extends StatelessWidget {
           ? Theme.of(context).selectionStyle
           : selected
           ? Theme.of(context).mutedStyle
-          : CellStyle.empty,
+          : CellStyle.none,
     );
     return Semantics(
       role: SemanticRole.task,

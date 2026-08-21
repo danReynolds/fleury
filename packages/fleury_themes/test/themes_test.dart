@@ -64,7 +64,7 @@ void main() {
 
   test('brightness matches the palette it describes', () {
     // Solarized ships both; everything else here is dark. Brightness drives
-    // the surface fallback and `context.adaptive`, so a wrong value is a real
+    // the surface fallback and `context.theme.adaptive`, so a wrong value is a real
     // bug rather than metadata.
     for (final theme in fleuryThemes) {
       final expected = theme.name.toLowerCase().contains('light')

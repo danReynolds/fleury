@@ -336,7 +336,7 @@ final class AnsiRenderer {
       // change drives an OSC 8 transition and never a spurious SGR reset, and
       // (with hyperlinks off) a link never perturbs the SGR byte stream at all.
       // For link-free styles these visual comparisons are exactly `==` /
-      // `== CellStyle.empty`, so the non-link path is byte-for-byte unchanged.
+      // `== CellStyle.none`, so the non-link path is byte-for-byte unchanged.
       // Emit a combined SGR delta where the terminal state is known; fall back
       // to reset+set where it is not. Visually-empty runs only emit a reset when
       // transitioning out of a previously emitted non-empty style.
@@ -575,7 +575,7 @@ final class AnsiRenderer {
     String? emittedLink,
   ) {
     if (fromCol >= toCol) return null;
-    var currentStyle = emittedStyle ?? CellStyle.empty;
+    var currentStyle = emittedStyle ?? CellStyle.none;
     var emittedSgr = false;
     final out = StringBuffer();
     for (var col = fromCol; col < toCol; col++) {
@@ -593,7 +593,7 @@ final class AnsiRenderer {
       switch (cell.role) {
         case CellRole.empty:
           // Rewriting an empty cell as a space is only exact when the current
-          // (visual) style's background/inverse matches the cell's; require a
+          // (visual) style's background/reverse matches the cell's; require a
           // visual-style match like content cells. linkUri is handled by the
           // bail above, so compare visual style here.
           if (!cell.style.sameVisualStyleAs(currentStyle)) {
@@ -659,7 +659,7 @@ final class AnsiRenderer {
     CellStyle to, {
     required bool resetFirst,
   }) {
-    if (resetFirst || from == null || from == CellStyle.empty) {
+    if (resetFirst || from == null || from == CellStyle.none) {
       return _encodeStyle(to, resetFirst: resetFirst);
     }
 
@@ -693,8 +693,8 @@ final class AnsiRenderer {
     );
     _appendBoolAttrDelta(
       params,
-      from.inverse,
-      to.inverse,
+      from.reverse,
+      to.reverse,
       setCode: '7',
       resetCode: '27',
     );
@@ -722,7 +722,7 @@ final class AnsiRenderer {
     if (style.dim) params.add('2');
     if (style.italic) params.add('3');
     if (style.underline) params.add('4');
-    if (style.inverse) params.add('7');
+    if (style.reverse) params.add('7');
     if (style.strikethrough) params.add('9');
   }
 

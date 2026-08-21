@@ -44,21 +44,21 @@ void main() {
       );
     });
 
-    test('inverse counts: the swapped background fills too', () {
-      // `inverse` synthesises a background from the foreground. It paints, so
+    test('reverse counts: the swapped background fills too', () {
+      // `reverse` synthesises a background from the foreground. It paints, so
       // it fills — gating on the *effective* background, not the declared one.
       final css = cellStyleToCss(
-        const CellStyle(foreground: RgbColor(10, 20, 30), inverse: true),
+        const CellStyle(foreground: RgbColor(10, 20, 30), reverse: true),
       );
       expect(css, contains('background-color:rgb(10, 20, 30)'));
-      _expectFillsCellBox(css, reason: 'inverse paints a background');
+      _expectFillsCellBox(css, reason: 'reverse paints a background');
     });
 
     test('a selection-style cell fills (the visible regression)', () {
-      // selectionStyle is inverse in every shipped theme; this is the row that
+      // selectionStyle is reverse in every shipped theme; this is the row that
       // showed seams in the theme styleguide.
       _expectFillsCellBox(
-        cellStyleToCss(const CellStyle(inverse: true)),
+        cellStyleToCss(const CellStyle(reverse: true)),
         reason: 'selected rows paint a full-width background',
       );
     });
@@ -165,7 +165,7 @@ void main() {
       buffer.writeText(
         const CellOffset(0, 1),
         'selected',
-        style: const CellStyle(inverse: true),
+        style: const CellStyle(reverse: true),
       );
       final html = renderScreenHtml(buffer);
 

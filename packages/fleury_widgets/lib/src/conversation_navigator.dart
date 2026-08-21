@@ -967,6 +967,6 @@ CellStyle _rowStyle(
     ConversationStatus.archived => theme.mutedStyle,
     ConversationStatus.active ||
     ConversationStatus.idle ||
-    ConversationStatus.complete => CellStyle.empty,
+    ConversationStatus.complete => CellStyle.none,
   };
 }

@@ -971,7 +971,7 @@ class _DetailsPanel extends StatelessWidget {
           Text(
             '#${action.sequence} ${action.name}${_actionDataLabel(action)}',
             style: action.storyId == story.id
-                ? CellStyle.empty
+                ? CellStyle.none
                 : theme.mutedStyle,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,

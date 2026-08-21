@@ -17,7 +17,6 @@ state-specific styling is available when you need it.
 | Theme one subtree | `Theme(data: …, child: …)` |
 | Style one widget | `style: CellStyle(…)` |
 | Change focus, selection, or validation styling | `CellStyle.state(…)` |
-| Mix styles within one line | `RichText` and `TextSpan` |
 
 ## Create a theme
 
@@ -42,7 +41,7 @@ const amber = ThemeData(
     info: RgbColor(0x83, 0xA5, 0x98),
   ),
   mutedStyle: CellStyle(dim: true),
-  selectionStyle: CellStyle(inverse: true),
+  selectionStyle: CellStyle(reverse: true),
   focusedStyle: CellStyle(bold: true),
   borderStyle: BorderStyle.rounded,
 );
@@ -85,7 +84,9 @@ state changes. The same `CellStyle` works on `Text`, `Button`, `Checkbox`,
 ### CellStyle
 
 A `CellStyle` describes terminal paint: foreground and background colors plus
-attributes such as bold, dim, italic, underline, inverse, and strikethrough.
+attributes such as bold, dim, italic, underline, reverse, and strikethrough.
+`reverse: true` uses the terminal's reverse-video attribute, swapping the
+foreground and background colors.
 
 ```dart
 const CellStyle(
@@ -100,8 +101,8 @@ boolean attribute to `false` turns that inherited attribute off.
 
 ## Style control states
 
-Use `CellStyle.state` only when a control should look different as the user
-interacts with it. Put it on `ThemeData.controlStyle` to set the app-wide
+Use `CellStyle.state` only when an interactive widget should look different as
+its state changes. Put it on `ThemeData.interactionStyle` to set the app-wide
 policy, or pass it to one widget's ordinary `style` property for a local
 exception:
 
@@ -109,8 +110,8 @@ exception:
 <Fragment slot="code">
 ```dart
 const theme = ThemeData(
-  controlStyle: CellStyle.state(
-    focused: CellStyle(inverse: true, bold: true),
+  interactionStyle: CellStyle.state(
+    focused: CellStyle(reverse: true, bold: true),
     hovered: CellStyle(underline: true),
     selected: CellStyle(foreground: Colors.green, bold: true),
     invalid: CellStyle(foreground: Colors.red, underline: true),
@@ -163,21 +164,22 @@ Button(
 Button(
   label: 'Deploy',
   style: const CellStyle.state(
-    focused: CellStyle(inverse: true, underline: true),
+    focused: CellStyle(reverse: true, underline: true),
   ),
   onPressed: deploy,
 )
 ```
 
-Use `CellStyle.empty` for a state when a widget should deliberately suppress an
-inherited cue. Its semantics are unchanged:
+Use `CellStyle.none` for a state when a widget should deliberately suppress an
+inherited cue. It means “apply no paint for this state”; semantics are
+unchanged:
 
 ```dart
 FormField(
   validator: () => query.text.isEmpty ? 'Enter a query.' : null,
   child: TextInput(
     controller: query,
-    style: const CellStyle.state(invalid: CellStyle.empty),
+    style: const CellStyle.state(invalid: CellStyle.none),
   ),
 )
 ```
@@ -224,34 +226,48 @@ dialog or popup must fully cover content behind it.
 | `errorStyle` | Validation messages and default invalid cue |
 | `borderStyle` | Default box-drawing shape |
 
-`controlStyle` is the shared interactive-state policy. `errorStyle` remains the
-semantic text style for messages; the `invalid` entry in the
-`CellStyle.state(...)` assigned to `controlStyle` lets control chrome differ
+Use the picker to apply each text role to the same sample. The surrounding
+panel uses `borderStyle`, which changes box-drawing glyphs rather than cell
+paint:
+
+<FleuryExample id="themes.roles" cols={48} rows={10} interactive />
+
+`interactionStyle` is the shared interactive-state policy. `errorStyle`
+remains the semantic text style for messages; the `invalid` entry in the
+`CellStyle.state(...)` assigned to `interactionStyle` lets widget chrome differ
 from message text.
 
 ## Specialized widgets
 
 `ThemeData` stays focused on roles shared by the whole framework. The
-`fleury_widgets` package adds `FleuryWidgetTheme` for surfaces with their own
-visual vocabulary, such as progress tracks, data tables, logs, code, diffs,
-JSON, and Markdown:
+`fleury_widgets` package adds `FleuryWidgetTheme` only for independently
+painted parts and domain-specific content that those shared roles cannot name:
+
+| Surface | Additional roles |
+|---|---|
+| Switch and progress | switch track; filled and unfilled progress |
+| Data views | selection, separators, and empty state |
+| Logs and structured text | severity, code tokens, diff lines, JSON errors, and Markdown blocks |
+
+The surface is intentionally flat: it avoids a separate theme class for every
+widget while keeping each independently rendered part customizable.
 
 ```dart
 final theme = ThemeData.dark().copyWith(
   extensions: const [
     FleuryWidgetTheme(
       progressFilledStyle: CellStyle(foreground: Colors.mint),
-      dataSelectedStyle: CellStyle(inverse: true, bold: true),
+      dataSelectedStyle: CellStyle(reverse: true, bold: true),
       logErrorStyle: CellStyle(foreground: Colors.red, bold: true),
     ),
   ],
 );
 ```
 
-Use `ThemeData.controlStyle` for interaction states shared by action and form
+Use `ThemeData.interactionStyle` for interaction states shared by action and form
 controls. Use `FleuryWidgetTheme` for the named parts and content states of
-specialized widgets. App-specific theme roles can use the same
-`ThemeData.extensions` mechanism.
+specialized widgets. Local widget style properties still win. App-specific
+theme roles can use the same `ThemeData.extensions` mechanism.
 
 Read an extension where it is used:
 
@@ -262,11 +278,19 @@ final appTheme = Theme.of(context).extension<AppTheme>();
 
 ## Light and dark values
 
-`ThemeData.brightness` is declared app intent; Fleury does not guess the
-terminal's background. Use it when a value needs a light and dark variant:
+Choose the mode when you construct the app theme. `ThemeData.dark()` and
+`ThemeData.light()` set `brightness` for you, or pass it explicitly to
+`ThemeData(...)`:
 
 ```dart
-final shadow = context.adaptive(
+FleuryApp(theme: ThemeData.dark(), home: const Dashboard());
+```
+
+Fleury does not guess the terminal's background. When another value needs a
+light and dark variant, read the choice through the ambient theme:
+
+```dart
+final shadow = context.theme.adaptive(
   light: const AnsiColor(8),
   dark: const AnsiColor(0),
 );
@@ -292,7 +316,7 @@ Theme(
 Control styling resolves from broadest to narrowest:
 
 1. The widget's built-in defaults.
-2. `ThemeData.controlStyle`.
+2. `ThemeData.interactionStyle`.
 3. The widget's `style` property.
 
 Base styles merge through all three layers. For a state, the nearest non-null
@@ -302,65 +326,6 @@ exclusive, keeping unavailable controls visually stable.
 
 Most applications only need the first two levels. Local state entries are an
 escape hatch for an exceptional control, not required wiring.
-
-### Custom controls
-
-A reusable control can participate in the same cascade without inventing its
-own styling protocol:
-
-```dart
-final style = resolveControlStyle(
-  cascade: [
-    const CellStyle(dim: true),
-    Theme.of(context).controlStyle,
-    widget.style,
-  ],
-  states: {
-    if (focused) ControlState.focused,
-    if (!enabled) ControlState.disabled,
-  },
-);
-```
-
-Emit only states that describe the control's real behavior, then paint with the
-resolved plain `CellStyle`.
-
-## Rich text and backgrounds
-
-A `Text` widget has one style. Use `RichText` when one line needs multiple
-styles:
-
-```dart
-RichText(
-  text: TextSpan(
-    children: [
-      const TextSpan(text: 'deploy '),
-      TextSpan(
-        text: 'ok',
-        style: CellStyle(foreground: colors.success, bold: true),
-      ),
-      const TextSpan(text: ' in 1.2s'),
-    ],
-  ),
-)
-```
-
-Backgrounds are not painted automatically. Fill a region explicitly when its
-cells need a background:
-
-```dart
-Container(
-  color: Theme.of(context).colorScheme.background,
-  child: const Dashboard(),
-)
-```
-
-## Terminal-safe cues
-
-`NO_COLOR` and two-color terminals remove color while preserving attributes.
-A focus or error cue carried only by hue can disappear; pair color with bold,
-underline, inverse, a glyph, or another non-color signal. Fleury's defaults do
-this, and the state examples above follow the same convention.
 
 ## Community themes
 

@@ -1,4 +1,5 @@
 import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_internal.dart';
 import '../support/harness.dart';
 import 'package:test/test.dart';
 
@@ -13,6 +14,11 @@ class _Capture extends StatelessWidget {
 }
 
 void main() {
+  test('ThemeData.adaptive follows the declared brightness', () {
+    expect(ThemeData.light().adaptive(light: 'light', dark: 'dark'), 'light');
+    expect(ThemeData.dark().adaptive(light: 'light', dark: 'dark'), 'dark');
+  });
+
   group('Theme.of', () {
     testWidgets('falls back to ThemeData.fallback with no ancestor', (tester) {
       late ThemeData seen;
@@ -29,16 +35,18 @@ void main() {
       expect(seen.selectionStyle, const CellStyle(bold: true));
     });
 
-    testWidgets('carries the shared control style through the theme', (tester) {
+    testWidgets('carries the shared interaction style through the theme', (
+      tester,
+    ) {
       late ThemeData seen;
       const data = ThemeData(
-        controlStyle: CellStyle.state(focused: CellStyle(underline: true)),
+        interactionStyle: CellStyle.state(focused: CellStyle(underline: true)),
       );
       tester.pumpWidget(
         Theme(data: data, child: _Capture((c) => seen = Theme.of(c))),
       );
 
-      expect(seen.controlStyle, data.controlStyle);
+      expect(seen.interactionStyle, data.interactionStyle);
       expect(data.copyWith(), data);
       expect(data.hashCode, data.copyWith().hashCode);
     });
@@ -78,7 +86,7 @@ void main() {
     testWidgets('no DefaultTextStyle leaves Text unstyled', (tester) {
       tester.pumpWidget(const Text('hi'));
       final buf = tester.render(size: const CellSize(4, 1));
-      expect(buf.atColRow(0, 0).style, CellStyle.empty);
+      expect(buf.atColRow(0, 0).style, CellStyle.none);
     });
 
     testWidgets('Theme cascades its textStyle to descendant Text', (tester) {
@@ -223,13 +231,13 @@ void main() {
     });
 
     test('a resolved invalid control cue survives NO_COLOR end to end', () {
-      final style = resolveControlStyle(
+      final style = resolveCellStyle(
         cascade: const [
           CellStyle.state(
             invalid: CellStyle(foreground: Colors.red, underline: true),
           ),
         ],
-        states: const {ControlState.invalid},
+        states: const {CellStyleState.invalid},
       );
       final buffer = CellBuffer(const CellSize(1, 1))
         ..writeGrapheme(const CellOffset(0, 0), 'x', style: style);
@@ -247,7 +255,7 @@ void main() {
       tester.pumpWidget(
         const Theme(
           data: ThemeData(
-            controlStyle: CellStyle.state(
+            interactionStyle: CellStyle.state(
               invalid: CellStyle(foreground: AnsiColor(1)),
             ),
           ),
@@ -269,7 +277,7 @@ void main() {
       tester.pumpWidget(
         const Theme(
           data: ThemeData(
-            controlStyle: CellStyle.state(
+            interactionStyle: CellStyle.state(
               invalid: CellStyle(foreground: AnsiColor(1)),
             ),
           ),

@@ -43,7 +43,7 @@ class _TaskListState extends State<TaskList> {
               '${selected ? '›' : ' '} Task ${(index + 1).toString().padLeft(4, '0')}',
               style: selected
                   ? Theme.of(context).selectionStyle
-                  : CellStyle.empty,
+                  : CellStyle.none,
             ),
           ),
         ),

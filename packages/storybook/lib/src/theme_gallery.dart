@@ -297,9 +297,9 @@ class _ControlsState extends State<_Controls> {
         ),
         const _Caption('TextInput · invalid'),
         _Caption(
-          context.theme.controlStyle == null
-              ? 'controlStyle · unset (widget defaults)'
-              : 'controlStyle · ThemeData.controlStyle',
+          context.theme.interactionStyle == null
+              ? 'interactionStyle · unset (widget defaults)'
+              : 'interactionStyle · ThemeData.interactionStyle',
         ),
         const SizedBox(height: 1),
         // `surface` is the one role with no place in the mock app: it fills

@@ -18,7 +18,7 @@ void main() {
         size: const CellSize(80, 24),
         fullRepaint: true,
         styleTable: const [
-          CellStyle.empty,
+          CellStyle.none,
           CellStyle(foreground: RgbColor(200, 100, 50), bold: true),
           CellStyle(foreground: IndexedColor(120)),
         ],
@@ -1042,7 +1042,7 @@ void main() {
       final outsidePatch = RemotePlan(
         size: const CellSize(10, 4),
         fullRepaint: false,
-        styleTable: const [CellStyle.empty],
+        styleTable: const [CellStyle.none],
         patches: const [
           RemoteRowPatch(
             row: 4,

@@ -16,7 +16,7 @@ const String _severityDot = '●';
 
 CellStyle _styleForSeverity(ToastSeverity severity, ColorScheme colors) =>
     switch (severity) {
-      ToastSeverity.info => CellStyle.empty, // neutral by design
+      ToastSeverity.info => CellStyle.none, // neutral by design
       ToastSeverity.success => CellStyle(foreground: colors.success),
       ToastSeverity.warning => CellStyle(foreground: colors.warning),
       ToastSeverity.error => CellStyle(foreground: colors.error),
