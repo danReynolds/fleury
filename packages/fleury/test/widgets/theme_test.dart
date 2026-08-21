@@ -35,18 +35,18 @@ void main() {
       expect(seen.selectionStyle, const CellStyle(bold: true));
     });
 
-    testWidgets('carries the shared interaction style through the theme', (
+    testWidgets('carries the shared interactive style through the theme', (
       tester,
     ) {
       late ThemeData seen;
       const data = ThemeData(
-        interactionStyle: CellStyle.state(focused: CellStyle(underline: true)),
+        interactiveStyle: CellStyle.state(focused: CellStyle(underline: true)),
       );
       tester.pumpWidget(
         Theme(data: data, child: _Capture((c) => seen = Theme.of(c))),
       );
 
-      expect(seen.interactionStyle, data.interactionStyle);
+      expect(seen.interactiveStyle, data.interactiveStyle);
       expect(data.copyWith(), data);
       expect(data.hashCode, data.copyWith().hashCode);
     });
@@ -255,7 +255,7 @@ void main() {
       tester.pumpWidget(
         const Theme(
           data: ThemeData(
-            interactionStyle: CellStyle.state(
+            interactiveStyle: CellStyle.state(
               invalid: CellStyle(foreground: AnsiColor(1)),
             ),
           ),
@@ -277,7 +277,7 @@ void main() {
       tester.pumpWidget(
         const Theme(
           data: ThemeData(
-            interactionStyle: CellStyle.state(
+            interactiveStyle: CellStyle.state(
               invalid: CellStyle(foreground: AnsiColor(1)),
             ),
           ),

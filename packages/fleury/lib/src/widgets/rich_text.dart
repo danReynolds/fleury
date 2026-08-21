@@ -663,7 +663,7 @@ class RenderRichText extends RenderObject
       // span's own foreground/background so styled spans still get
       // the selection highlight.
       final cellStyle = isOffsetSelected(off)
-          ? g.style.merge(const CellStyle(reverse: true))
+          ? g.style.merge(const CellStyle(inverse: true))
           : g.style;
       buffer.writeGrapheme(
         CellOffset(col, row),

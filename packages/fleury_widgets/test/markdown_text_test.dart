@@ -426,7 +426,7 @@ void main() {
           't',
           'l',
           'e',
-        }, (s) => s.bold && s.reverse && s.foreground != null),
+        }, (s) => s.bold && s.inverse && s.foreground != null),
         isTrue,
       );
     });
@@ -439,7 +439,7 @@ void main() {
           'S',
           'u',
           'b',
-        }, (s) => s.bold && s.underline && !s.reverse && s.foreground != null),
+        }, (s) => s.bold && s.underline && !s.inverse && s.foreground != null),
         isTrue,
       );
     });

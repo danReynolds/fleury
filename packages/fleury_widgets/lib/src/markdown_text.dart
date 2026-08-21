@@ -1109,7 +1109,7 @@ String? _urlScheme(String url) {
           // H1 inverts for emphasis; H2/H3 just bold + underline. A color
           // tint (when provided) reinforces the depth hierarchy.
           underline: level > 1,
-          reverse: level == 1,
+          inverse: level == 1,
           foreground: headingColor?.call(level),
         ),
       );

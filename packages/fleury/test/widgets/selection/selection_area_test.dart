@@ -84,12 +84,12 @@ void main() {
 
       final buf = tester.render(size: const CellSize(10, 1));
       // Selected cells carry the reverse-video style.
-      expect(buf.atColRow(2, 0).style.reverse, isTrue);
-      expect(buf.atColRow(3, 0).style.reverse, isTrue);
-      expect(buf.atColRow(4, 0).style.reverse, isTrue);
+      expect(buf.atColRow(2, 0).style.inverse, isTrue);
+      expect(buf.atColRow(3, 0).style.inverse, isTrue);
+      expect(buf.atColRow(4, 0).style.inverse, isTrue);
       // Unselected cells don't.
-      expect(buf.atColRow(0, 0).style.reverse, isFalse);
-      expect(buf.atColRow(5, 0).style.reverse, isFalse);
+      expect(buf.atColRow(0, 0).style.inverse, isFalse);
+      expect(buf.atColRow(5, 0).style.inverse, isFalse);
     });
 
     testWidgets('drag across two Text widgets reports the concatenation', (

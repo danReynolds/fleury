@@ -120,7 +120,7 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
 
   // Captured from the in-tree theme on each build; the dropdown lives in
   // an Overlay (outside this subtree) so it can't read the theme itself.
-  CellStyle _selectionStyle = const CellStyle(reverse: true);
+  CellStyle _selectionStyle = const CellStyle(inverse: true);
   BorderStyle _borderStyle = BorderStyle.rounded;
 
   String _display(T option) => widget.displayStringForOption(option);

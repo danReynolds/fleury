@@ -11,10 +11,10 @@ import '../support/harness.dart';
 import 'package:test/test.dart';
 
 /// True when the cell at [col] of the first row paints with the
-/// reverse style — the cue we render the cursor with.
+/// inverse style — the cue we render the cursor with.
 bool _cursorVisibleAt(FleuryTester tester, int col) {
   final buffer = tester.render(size: const CellSize(20, 1));
-  return buffer.atColRow(col, 0).style.reverse == true;
+  return buffer.atColRow(col, 0).style.inverse == true;
 }
 
 void main() {

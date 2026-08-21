@@ -54,7 +54,7 @@ class TextArea extends StatefulWidget {
     this.placeholder = '',
     this.placeholderStyle = const CellStyle(dim: true),
     this.style = CellStyle.none,
-    this.cursorStyle = const CellStyle(reverse: true),
+    this.cursorStyle = const CellStyle(inverse: true),
     this.enabled = true,
     this.readOnly = false,
     this.validationError,
@@ -779,7 +779,7 @@ class _TextAreaState extends State<TextArea>
       if (!widget.enabled) CellStyleState.disabled,
       if (validationError != null) CellStyleState.invalid,
     };
-    final cascade = [defaultStyle, theme.interactionStyle, widget.style];
+    final cascade = [defaultStyle, theme.interactiveStyle, widget.style];
     final displayStyle = resolveCellStyle(cascade: cascade, states: states);
     // Placeholder paint is a base-layer customization. Active state patches
     // still win, so an empty invalid field does not hide its invalid cue.
@@ -973,7 +973,7 @@ class RenderTextArea extends RenderObject {
     String placeholder = '',
     CellStyle placeholderStyle = const CellStyle(dim: true),
     CellStyle style = CellStyle.none,
-    CellStyle cursorStyle = const CellStyle(reverse: true),
+    CellStyle cursorStyle = const CellStyle(inverse: true),
     bool cursorVisible = true,
     int minLines = 1,
     int? maxLines,

@@ -593,7 +593,7 @@ final class AnsiRenderer {
       switch (cell.role) {
         case CellRole.empty:
           // Rewriting an empty cell as a space is only exact when the current
-          // (visual) style's background/reverse matches the cell's; require a
+          // (visual) style's background/inverse matches the cell's; require a
           // visual-style match like content cells. linkUri is handled by the
           // bail above, so compare visual style here.
           if (!cell.style.sameVisualStyleAs(currentStyle)) {
@@ -693,8 +693,8 @@ final class AnsiRenderer {
     );
     _appendBoolAttrDelta(
       params,
-      from.reverse,
-      to.reverse,
+      from.inverse,
+      to.inverse,
       setCode: '7',
       resetCode: '27',
     );
@@ -722,7 +722,7 @@ final class AnsiRenderer {
     if (style.dim) params.add('2');
     if (style.italic) params.add('3');
     if (style.underline) params.add('4');
-    if (style.reverse) params.add('7');
+    if (style.inverse) params.add('7');
     if (style.strikethrough) params.add('9');
   }
 

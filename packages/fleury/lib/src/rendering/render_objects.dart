@@ -451,7 +451,7 @@ class RenderText extends RenderObject
       // highlight (reverse) when this grapheme falls inside the
       // current selection range.
       final cellStyle = isOffsetSelected(off)
-          ? _style.merge(const CellStyle(reverse: true))
+          ? _style.merge(const CellStyle(inverse: true))
           : _style;
       buffer.writeGrapheme(
         CellOffset(col, row),

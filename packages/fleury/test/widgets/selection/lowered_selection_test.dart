@@ -103,15 +103,15 @@ void main() {
 
       for (var col = 2; col <= 6; col += 2) {
         expect(
-          buf.atColRow(col, 0).style.reverse,
+          buf.atColRow(col, 0).style.inverse,
           isTrue,
           reason:
               'atom cell $col must be highlighted — no endpoint can rest '
               'inside the source cluster',
         );
       }
-      expect(buf.atColRow(0, 0).style.reverse, isFalse, reason: "'a' outside");
-      expect(buf.atColRow(9, 0).style.reverse, isFalse, reason: "'b' outside");
+      expect(buf.atColRow(0, 0).style.inverse, isFalse, reason: "'a' outside");
+      expect(buf.atColRow(9, 0).style.inverse, isFalse, reason: "'b' outside");
     });
 
     testWidgets('identity path: wrapped plain-text copy is unchanged', (

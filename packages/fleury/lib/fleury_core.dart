@@ -98,8 +98,7 @@ export 'src/rendering/cell.dart'
         Color,
         Colors,
         IndexedColor,
-        RgbColor,
-        StatefulCellStyle;
+        RgbColor;
 export 'src/rendering/cell_buffer.dart'
     show
         CellBuffer,

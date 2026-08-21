@@ -54,7 +54,7 @@ These are the obvious-win changes we've already landed, in order:
 | **`AnsiRenderer` batched writes** | Internal `StringBuffer`; one `sink.write` per frame instead of ~50 | Fewer `IOSink` queue operations; cleaner profile |
 | **`CellBuffer._writeGraphemeAt(col, row, ...)`** | Internal raw-coord write avoids per-grapheme `CellOffset` allocation in `writeText` | Eliminates O(text length) heap allocations in dense paint loops |
 | **Front/back buffer pool in `runTui`** | Allocate two buffers once per terminal size; alternate roles each frame | One `CellBuffer` + its `List<Cell>` allocation per size change, not per frame |
-| **Style-reset elision for default-styled runs** | Don't emit `\x1B[0m` on `null → CellStyle.empty` transitions (only on `non-empty → empty`) | Plain-text frames have zero SGR bytes |
+| **Style-reset elision for default-styled runs** | Don't emit `\x1B[0m` on `null → CellStyle.none` transitions (only on `non-empty → empty`) | Plain-text frames have zero SGR bytes |
 
 ## 3. Performance posture (as of this writing)
 

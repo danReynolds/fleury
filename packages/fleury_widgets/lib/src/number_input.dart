@@ -32,7 +32,7 @@ class NumberInput extends StatefulWidget {
     this.placeholder = '',
     this.placeholderStyle = const CellStyle(dim: true),
     this.style = CellStyle.none,
-    this.cursorStyle = const CellStyle(reverse: true),
+    this.cursorStyle = const CellStyle(inverse: true),
     this.semanticLabel,
     this.focusNode,
     this.autofocus = false,

@@ -37,7 +37,7 @@ class PasswordInput extends StatefulWidget {
     this.placeholder = '',
     this.placeholderStyle = const CellStyle(dim: true),
     this.style = CellStyle.none,
-    this.cursorStyle = const CellStyle(reverse: true),
+    this.cursorStyle = const CellStyle(inverse: true),
     this.obscuringCharacter = '•',
     this.enabled = true,
     this.readOnly = false,

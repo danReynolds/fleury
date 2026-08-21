@@ -1,6 +1,6 @@
 import 'package:meta/meta.dart';
 
-/// A state used internally while resolving a [StatefulCellStyle].
+/// A state used internally while resolving a value from [CellStyle.state].
 ///
 /// Widgets use only the states that make sense for their surface. For example,
 /// a button never becomes [selected], while a checkbox uses [selected] for its
@@ -16,11 +16,17 @@ const List<CellStyleState> _cellStyleStatePaintOrder = [
 
 CellStyle _plainCellStyle(CellStyle style) {
   var result = style;
-  while (result is StatefulCellStyle) {
+  while (result is _StatefulCellStyle) {
     result = result.base;
   }
   return result;
 }
+
+/// Internal bridge for renderers that must store only concrete cell paint.
+CellStyle plainCellStyle(CellStyle style) => _plainCellStyle(style);
+
+/// Whether [style] contains unresolved control-state entries.
+bool hasCellStyleStates(CellStyle style) => style is _StatefulCellStyle;
 
 /// Resolves [cascade] from lowest to highest priority.
 ///
@@ -44,7 +50,7 @@ CellStyle resolveCellStyle({
   for (final state in active) {
     CellStyle? patch;
     for (final layer in layers) {
-      if (layer is StatefulCellStyle) {
+      if (layer is _StatefulCellStyle) {
         patch = layer._styleFor(state) ?? patch;
       }
     }
@@ -278,7 +284,7 @@ final class CellStyle {
     bool? dim,
     bool? italic,
     bool? underline,
-    bool? reverse,
+    bool? inverse,
     bool? strikethrough,
     String? linkUri,
   }) : _foreground = foreground,
@@ -287,7 +293,7 @@ final class CellStyle {
        _dim = dim,
        _italic = italic,
        _underline = underline,
-       _reverse = reverse,
+       _inverse = inverse,
        _strikethrough = strikethrough,
        _linkUri = linkUri;
 
@@ -303,7 +309,7 @@ final class CellStyle {
     CellStyle? selected,
     CellStyle? disabled,
     CellStyle? invalid,
-  }) = StatefulCellStyle._;
+  }) = _StatefulCellStyle._;
 
   final Color? _foreground;
   final Color? _background;
@@ -311,7 +317,7 @@ final class CellStyle {
   final bool? _dim;
   final bool? _italic;
   final bool? _underline;
-  final bool? _reverse;
+  final bool? _inverse;
   final bool? _strikethrough;
 
   /// OSC 8 hyperlink target for this run, or null. Emitted by the ANSI
@@ -336,8 +342,11 @@ final class CellStyle {
   bool get italic => italicOrNull ?? false;
   bool get underline => underlineOrNull ?? false;
 
-  /// Whether reverse video swaps the foreground and background colors.
-  bool get reverse => reverseOrNull ?? false;
+  /// Whether inverse video swaps the effective foreground and background.
+  ///
+  /// Terminal renderers emit the standard SGR reverse-video attribute; other
+  /// renderers reproduce the same visual exchange.
+  bool get inverse => inverseOrNull ?? false;
   bool get strikethrough => strikethroughOrNull ?? false;
 
   /// Raw tri-state attributes (null = unset, distinct from false). The
@@ -348,7 +357,7 @@ final class CellStyle {
   bool? get dimOrNull => _dim;
   bool? get italicOrNull => _italic;
   bool? get underlineOrNull => _underline;
-  bool? get reverseOrNull => _reverse;
+  bool? get inverseOrNull => _inverse;
   bool? get strikethroughOrNull => _strikethrough;
   String? get linkUri => _linkUri;
 
@@ -365,7 +374,7 @@ final class CellStyle {
     bool? dim,
     bool? italic,
     bool? underline,
-    bool? reverse,
+    bool? inverse,
     bool? strikethrough,
     String? linkUri,
   }) {
@@ -376,7 +385,7 @@ final class CellStyle {
       dim: dim ?? dimOrNull,
       italic: italic ?? italicOrNull,
       underline: underline ?? underlineOrNull,
-      reverse: reverse ?? reverseOrNull,
+      inverse: inverse ?? inverseOrNull,
       strikethrough: strikethrough ?? strikethroughOrNull,
       linkUri: linkUri ?? this.linkUri,
     );
@@ -387,7 +396,7 @@ final class CellStyle {
   /// sets them (on or off) and inherited from this otherwise — so an
   /// override can both add and remove attributes.
   CellStyle merge(CellStyle other) {
-    if (other is StatefulCellStyle) {
+    if (other is _StatefulCellStyle) {
       return other._withBase(merge(other.base));
     }
     return CellStyle(
@@ -397,7 +406,7 @@ final class CellStyle {
       dim: other.dimOrNull ?? dimOrNull,
       italic: other.italicOrNull ?? italicOrNull,
       underline: other.underlineOrNull ?? underlineOrNull,
-      reverse: other.reverseOrNull ?? reverseOrNull,
+      inverse: other.inverseOrNull ?? inverseOrNull,
       strikethrough: other.strikethroughOrNull ?? strikethroughOrNull,
       linkUri: other.linkUri ?? linkUri,
     );
@@ -418,7 +427,7 @@ final class CellStyle {
           other.dimOrNull == dimOrNull &&
           other.italicOrNull == italicOrNull &&
           other.underlineOrNull == underlineOrNull &&
-          other.reverseOrNull == reverseOrNull &&
+          other.inverseOrNull == inverseOrNull &&
           other.strikethroughOrNull == strikethroughOrNull &&
           // Trailing: cheapest to reach only after the visual fields match, and
           // REQUIRED so link-differing cells don't merge (see [linkUri]).
@@ -433,7 +442,7 @@ final class CellStyle {
     dimOrNull,
     italicOrNull,
     underlineOrNull,
-    reverseOrNull,
+    inverseOrNull,
     strikethroughOrNull,
     linkUri,
   );
@@ -452,7 +461,7 @@ final class CellStyle {
           dimOrNull == other.dimOrNull &&
           italicOrNull == other.italicOrNull &&
           underlineOrNull == other.underlineOrNull &&
-          reverseOrNull == other.reverseOrNull &&
+          inverseOrNull == other.inverseOrNull &&
           strikethroughOrNull == other.strikethroughOrNull);
 
   /// Whether every *visual* attribute is unset (so the style emits no SGR),
@@ -471,7 +480,7 @@ final class CellStyle {
       if (dim) 'dim',
       if (italic) 'italic',
       if (underline) 'underline',
-      if (reverse) 'reverse',
+      if (inverse) 'inverse',
       if (strikethrough) 'strikethrough',
     ];
     return 'CellStyle('
@@ -487,15 +496,15 @@ final class CellStyle {
 /// Its inherited paint fields mirror [base], providing a deterministic
 /// fallback in APIs that do not resolve control state.
 @immutable
-final class StatefulCellStyle extends CellStyle {
-  const StatefulCellStyle._({
+final class _StatefulCellStyle extends CellStyle {
+  const _StatefulCellStyle._({
     this.base = CellStyle.none,
     this.hovered,
     this.focused,
     this.selected,
     this.disabled,
     this.invalid,
-  }) : assert(base is! StatefulCellStyle, 'base must be a plain CellStyle'),
+  }) : assert(base is! _StatefulCellStyle, 'base must be a plain CellStyle'),
        super();
 
   final CellStyle base;
@@ -524,7 +533,7 @@ final class StatefulCellStyle extends CellStyle {
   bool? get underlineOrNull => base.underlineOrNull;
 
   @override
-  bool? get reverseOrNull => base.reverseOrNull;
+  bool? get inverseOrNull => base.inverseOrNull;
 
   @override
   bool? get strikethroughOrNull => base.strikethroughOrNull;
@@ -540,7 +549,7 @@ final class StatefulCellStyle extends CellStyle {
     CellStyleState.invalid => invalid,
   };
 
-  StatefulCellStyle _withBase(CellStyle nextBase) => StatefulCellStyle._(
+  _StatefulCellStyle _withBase(CellStyle nextBase) => _StatefulCellStyle._(
     base: nextBase,
     hovered: hovered,
     focused: focused,
@@ -550,14 +559,14 @@ final class StatefulCellStyle extends CellStyle {
   );
 
   @override
-  StatefulCellStyle copyWith({
+  _StatefulCellStyle copyWith({
     Color? foreground,
     Color? background,
     bool? bold,
     bool? dim,
     bool? italic,
     bool? underline,
-    bool? reverse,
+    bool? inverse,
     bool? strikethrough,
     String? linkUri,
   }) => _withBase(
@@ -568,16 +577,16 @@ final class StatefulCellStyle extends CellStyle {
       dim: dim,
       italic: italic,
       underline: underline,
-      reverse: reverse,
+      inverse: inverse,
       strikethrough: strikethrough,
       linkUri: linkUri,
     ),
   );
 
   @override
-  StatefulCellStyle merge(CellStyle other) {
-    if (other is StatefulCellStyle) {
-      return StatefulCellStyle._(
+  _StatefulCellStyle merge(CellStyle other) {
+    if (other is _StatefulCellStyle) {
+      return _StatefulCellStyle._(
         base: base.merge(other.base),
         hovered: other.hovered ?? hovered,
         focused: other.focused ?? focused,
@@ -592,7 +601,7 @@ final class StatefulCellStyle extends CellStyle {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is StatefulCellStyle &&
+      other is _StatefulCellStyle &&
           other.base == base &&
           other.hovered == hovered &&
           other.focused == focused &&
@@ -602,7 +611,7 @@ final class StatefulCellStyle extends CellStyle {
 
   @override
   int get hashCode => Object.hash(
-    StatefulCellStyle,
+    _StatefulCellStyle,
     base,
     hovered,
     focused,

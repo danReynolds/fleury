@@ -70,13 +70,13 @@ void main() {
     expect(_styleAt(tester, 1, 0).foreground, const AnsiColor(2));
   });
 
-  testWidgets('control focus style comes from ThemeData.interactionStyle', (
+  testWidgets('control focus style comes from ThemeData.interactiveStyle', (
     tester,
   ) {
     tester.pumpWidget(
       Theme(
         data: const ThemeData(
-          interactionStyle: CellStyle.state(
+          interactiveStyle: CellStyle.state(
             focused: CellStyle(underline: true, bold: false),
           ),
         ),
@@ -89,13 +89,13 @@ void main() {
     expect(style.bold, isFalse);
   });
 
-  testWidgets('disabled button style comes from ThemeData.interactionStyle', (
+  testWidgets('disabled button style comes from ThemeData.interactiveStyle', (
     tester,
   ) {
     tester.pumpWidget(
       Theme(
         data: const ThemeData(
-          interactionStyle: CellStyle.state(
+          interactiveStyle: CellStyle.state(
             disabled: CellStyle(foreground: AnsiColor(13)),
           ),
         ),
@@ -111,7 +111,7 @@ void main() {
     tester.pumpWidget(
       const Theme(
         data: ThemeData(
-          interactionStyle: CellStyle.state(
+          interactiveStyle: CellStyle.state(
             focused: CellStyle(underline: true),
           ),
         ),
@@ -135,7 +135,7 @@ void main() {
     tester.pumpWidget(
       const Theme(
         data: ThemeData(
-          interactionStyle: CellStyle.state(
+          interactiveStyle: CellStyle.state(
             focused: CellStyle(foreground: AnsiColor(5), bold: true),
           ),
         ),
@@ -158,7 +158,7 @@ void main() {
     tester.pumpWidget(
       const Theme(
         data: ThemeData(
-          interactionStyle: CellStyle.state(
+          interactiveStyle: CellStyle.state(
             focused: CellStyle(underline: true),
           ),
         ),
@@ -180,7 +180,7 @@ void main() {
     tester.pumpWidget(
       Theme(
         data: const ThemeData(
-          interactionStyle: CellStyle.state(
+          interactiveStyle: CellStyle.state(
             selected: CellStyle(underline: true),
           ),
         ),
@@ -216,7 +216,7 @@ void main() {
     tester.pumpWidget(
       Theme(
         data: const ThemeData(
-          interactionStyle: CellStyle.state(
+          interactiveStyle: CellStyle.state(
             hovered: CellStyle(underline: true),
           ),
         ),
@@ -337,7 +337,7 @@ void main() {
 
   testWidgets('changing ThemeData updates mounted control styling', (tester) {
     Widget themed(Color color) => Theme(
-      data: ThemeData(interactionStyle: CellStyle(foreground: color)),
+      data: ThemeData(interactiveStyle: CellStyle(foreground: color)),
       child: const Checkbox(value: false, onChanged: _ignoreBool),
     );
 
@@ -365,6 +365,22 @@ void main() {
 
     expect(_styleAt(tester, 0, 0).foreground, const AnsiColor(10));
     expect(_styleAt(tester, 7, 0).foreground, const AnsiColor(8));
+  });
+
+  testWidgets('ProgressBar inherits semantic theme roles by default', (tester) {
+    tester.pumpWidget(
+      Theme(
+        data: const ThemeData(
+          mutedStyle: CellStyle(foreground: AnsiColor(8)),
+          colorScheme: ColorScheme(primary: AnsiColor(6)),
+        ),
+        child: SizedBox(width: 10, child: ProgressBar(value: 0.5)),
+      ),
+    );
+
+    expect(_styleAt(tester, 0, 0).foreground, const AnsiColor(6));
+    expect(_styleAt(tester, 7, 0).foreground, const AnsiColor(8));
+    expect(_styleAt(tester, 7, 0).dim, isTrue);
   });
 
   testWidgets('data widget selection and separators use component theme', (

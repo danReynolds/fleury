@@ -21,10 +21,10 @@ const amber = ThemeData(
     info: RgbColor(0x83, 0xA5, 0x98),
   ),
   mutedStyle: CellStyle(dim: true),
-  selectionStyle: CellStyle(reverse: true),
+  selectionStyle: CellStyle(inverse: true),
   focusedStyle: CellStyle(bold: true),
-  interactionStyle: CellStyle.state(
-    focused: CellStyle(reverse: true, bold: true),
+  interactiveStyle: CellStyle.state(
+    focused: CellStyle(inverse: true, bold: true),
     hovered: CellStyle(underline: true),
     selected: CellStyle(foreground: Colors.green, bold: true),
     invalid: CellStyle(foreground: Colors.red, underline: true),

@@ -91,10 +91,10 @@ final class FleuryWidgetTheme {
       );
 
   CellStyle resolveProgressFilled(ThemeData theme) =>
-      progressFilledStyle ?? CellStyle.none;
+      progressFilledStyle ?? CellStyle(foreground: theme.colorScheme.primary);
 
   CellStyle resolveProgressTrack(ThemeData theme) =>
-      progressTrackStyle ?? const CellStyle(dim: true);
+      progressTrackStyle ?? theme.mutedStyle.merge(const CellStyle(dim: true));
 
   CellStyle resolveDataSelected(ThemeData theme) =>
       dataSelectedStyle ?? theme.selectionStyle;
@@ -181,7 +181,7 @@ final class FleuryWidgetTheme {
     final fallback = CellStyle(
       bold: true,
       underline: lvl > 1,
-      reverse: lvl == 1,
+      inverse: lvl == 1,
       foreground: color,
     );
     return markdownHeadingStyle ?? fallback;

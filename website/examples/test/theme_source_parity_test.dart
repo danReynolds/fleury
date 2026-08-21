@@ -76,9 +76,9 @@ void main() {
       expect(src, contains('borderStyle'));
       expect(customThemeForTest.borderStyle, BorderStyle.rounded);
       expect(customThemeForTest.mutedStyle.dim, isTrue);
-      expect(customThemeForTest.selectionStyle.reverse, isTrue);
+      expect(customThemeForTest.selectionStyle.inverse, isTrue);
       expect(customThemeForTest.focusedStyle.bold, isTrue);
-      expect(customThemeForTest.interactionStyle, isNull);
+      expect(customThemeForTest.interactiveStyle, isNull);
       expect(
         _guide,
         contains('FleuryApp(theme: amber, home: const Dashboard());'),
@@ -107,7 +107,7 @@ void main() {
     );
     final source = example.code!;
     const stateLines = [
-      'focused: CellStyle(reverse: true, bold: true)',
+      'focused: CellStyle(inverse: true, bold: true)',
       'hovered: CellStyle(underline: true)',
       'selected: CellStyle(foreground: Colors.green, bold: true)',
       'invalid: CellStyle(foreground: Colors.red, underline: true)',
@@ -117,7 +117,7 @@ void main() {
       expect(source, contains(line), reason: 'registry source omitted $line');
       expect(_guide, contains(line), reason: 'guide source omitted $line');
     }
-    expect(source, interactionStyleSourceForTest);
+    expect(source, interactiveStyleSourceForTest);
     expect(
       source,
       contains('FleuryApp(theme: theme, home: const DeploymentForm());'),
@@ -128,26 +128,26 @@ void main() {
     );
 
     final focused = resolveCellStyle(
-      cascade: [interactionStyleForTest],
+      cascade: [interactiveStyleForTest],
       states: const {CellStyleState.focused},
     );
     final hovered = resolveCellStyle(
-      cascade: [interactionStyleForTest],
+      cascade: [interactiveStyleForTest],
       states: const {CellStyleState.hovered},
     );
     final selected = resolveCellStyle(
-      cascade: [interactionStyleForTest],
+      cascade: [interactiveStyleForTest],
       states: const {CellStyleState.selected},
     );
     final invalid = resolveCellStyle(
-      cascade: [interactionStyleForTest],
+      cascade: [interactiveStyleForTest],
       states: const {CellStyleState.invalid},
     );
     final disabled = resolveCellStyle(
-      cascade: [interactionStyleForTest],
+      cascade: [interactiveStyleForTest],
       states: const {CellStyleState.disabled},
     );
-    expect(focused.reverse, isTrue);
+    expect(focused.inverse, isTrue);
     expect(focused.bold, isTrue);
     expect(hovered.underline, isTrue);
     expect(selected.foreground, Colors.green);
@@ -175,7 +175,7 @@ void main() {
 
     expect(theme.textStyle.foreground, Colors.white);
     expect(theme.mutedStyle.dim, isTrue);
-    expect(theme.selectionStyle.reverse, isTrue);
+    expect(theme.selectionStyle.inverse, isTrue);
     expect(theme.focusedStyle.foreground, Colors.cyan);
     expect(theme.focusedStyle.bold, isTrue);
     expect(theme.errorStyle.foreground, Colors.red);
@@ -189,7 +189,28 @@ void main() {
     );
     expect(output, contains('THEME ROLES'));
     expect(output, contains('Default text'));
-    expect(output, contains('Same widget, different role'));
-    expect(output, contains('borderStyle frames this panel'));
+    expect(output, contains('Text'));
+    expect(output, contains('Deploy ready'));
+    expect(output, contains('Button'));
+    expect(output, contains('Deploy'));
+    expect(output, contains('Checkbox'));
+    expect(output, contains('Approved'));
+    expect(output, contains('TextInput'));
+    expect(output, contains('api-gateway'));
+    expect(output, contains('Local style preview'));
+    expect(output, contains('borderStyle frames the panel'));
+
+    tester.sendKey(const KeyEvent(KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+    tester.sendKey(const KeyEvent(KeyCode.escape));
+    tester.pump();
+    expect(
+      tester
+          .semantics()
+          .single(role: SemanticRole.button, label: 'Theme role')
+          .value,
+      'Default text',
+      reason: 'Esc should abandon a highlighted role preview',
+    );
   });
 }

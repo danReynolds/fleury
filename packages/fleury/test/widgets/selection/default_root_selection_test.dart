@@ -80,7 +80,7 @@ void main() {
 
       _dragSelect(tester, fromCol: 0, toCol: 11);
       // The dragged cells are highlighted.
-      expect(tester.render(size: _size).atColRow(0, 0).style.reverse, isTrue);
+      expect(tester.render(size: _size).atColRow(0, 0).style.inverse, isTrue);
 
       tester.press(KeySequence.ctrl.c);
       expect(tester.clipboard.readInProcess(), 'hello world');
@@ -88,7 +88,7 @@ void main() {
       // The copy cleared the selection: the highlight is gone, so a following
       // Ctrl+C finds nothing, bubbles, and (in a real app) reaches the runApp
       // quit guard instead of copying again.
-      expect(tester.render(size: _size).atColRow(0, 0).style.reverse, isFalse);
+      expect(tester.render(size: _size).atColRow(0, 0).style.inverse, isFalse);
     });
 
     testWidgets('Ctrl+A is not bound by default (no keyboard select-all)', (
@@ -193,7 +193,7 @@ void main() {
       expect(at, isNotNull, reason: 'the route is up');
       _dragSelect(tester, fromCol: at!.col, toCol: at.col + 20, row: at.row);
       expect(
-        tester.render(size: _modalSize).atColRow(at.col, at.row).style.reverse,
+        tester.render(size: _modalSize).atColRow(at.col, at.row).style.inverse,
         isTrue,
         reason: 'the drag highlighted it',
       );
@@ -233,7 +233,7 @@ void main() {
         reason: 'the first Esc cleared the selection, not the route',
       );
       expect(
-        tester.render(size: _modalSize).atColRow(at.col, at.row).style.reverse,
+        tester.render(size: _modalSize).atColRow(at.col, at.row).style.inverse,
         isFalse,
         reason: 'the selection is gone',
       );

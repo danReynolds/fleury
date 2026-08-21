@@ -362,7 +362,7 @@ class _ColorPickerState extends State<ColorPicker>
               disabled: theme.mutedStyle,
               invalid: theme.errorStyle,
             ),
-            theme.interactionStyle,
+            theme.interactiveStyle,
             widget.style,
           ],
           states: {

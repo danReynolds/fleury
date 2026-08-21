@@ -401,10 +401,10 @@ void main() {
         size: const CellSize(8, 5),
       );
       // Header row 0, body rows at 1..3. Row 0 (body) selected by default.
-      expect(buf.atColRow(0, 0).style.reverse, isFalse, reason: 'header');
+      expect(buf.atColRow(0, 0).style.inverse, isFalse, reason: 'header');
       expect(buf.atColRow(0, 1).grapheme, 'A');
-      expect(buf.atColRow(0, 1).style.reverse, isTrue, reason: 'selected body');
-      expect(buf.atColRow(0, 2).style.reverse, isFalse, reason: 'next row');
+      expect(buf.atColRow(0, 1).style.inverse, isTrue, reason: 'selected body');
+      expect(buf.atColRow(0, 2).style.inverse, isFalse, reason: 'next row');
     });
 
     testWidgets('the highlight fills the gap between columns too', (tester) {
@@ -413,7 +413,7 @@ void main() {
       );
       // 'Al' occupies cols 0-1, gap at col 2, 'Age'/age column after.
       expect(
-        buf.atColRow(2, 1).style.reverse,
+        buf.atColRow(2, 1).style.inverse,
         isTrue,
         reason: 'inter-column gap is part of the selected bar',
       );
@@ -425,19 +425,19 @@ void main() {
       tester.sendKey(const KeyEvent(KeyCode.arrowDown));
       var buf = tester.render(size: const CellSize(8, 5));
       expect(
-        buf.atColRow(0, 1).style.reverse,
+        buf.atColRow(0, 1).style.inverse,
         isFalse,
         reason: 'row 0 blurred',
       );
       expect(
-        buf.atColRow(0, 2).style.reverse,
+        buf.atColRow(0, 2).style.inverse,
         isTrue,
         reason: 'row 1 selected',
       );
 
       tester.sendKey(const KeyEvent(KeyCode.arrowUp));
       buf = tester.render(size: const CellSize(8, 5));
-      expect(buf.atColRow(0, 1).style.reverse, isTrue, reason: 'back to row 0');
+      expect(buf.atColRow(0, 1).style.inverse, isTrue, reason: 'back to row 0');
     });
 
     testWidgets('Enter fires onSelect with the body-row index', (tester) {
@@ -491,7 +491,7 @@ void main() {
       c.selectedIndex = 2;
       final buf = tester.render(size: const CellSize(8, 5));
       expect(
-        buf.atColRow(0, 3).style.reverse,
+        buf.atColRow(0, 3).style.inverse,
         isTrue,
         reason: 'row 2 selected',
       );

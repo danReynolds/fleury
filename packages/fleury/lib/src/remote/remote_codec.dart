@@ -408,7 +408,7 @@ void _writeStyle(_Writer w, CellStyle s, {required bool includeLinks}) {
   bit(1, s.dimOrNull);
   bit(2, s.italicOrNull);
   bit(3, s.underlineOrNull);
-  bit(4, s.reverseOrNull);
+  bit(4, s.inverseOrNull);
   bit(5, s.strikethroughOrNull);
   final hasLink = includeLinks && s.linkUri != null;
   if (hasLink) setMask |= 1 << 6;
@@ -439,7 +439,7 @@ CellStyle _readStyle(_Reader r) {
     dim: bit(1),
     italic: bit(2),
     underline: bit(3),
-    reverse: bit(4),
+    inverse: bit(4),
     strikethrough: bit(5),
     linkUri: linkUri,
   );

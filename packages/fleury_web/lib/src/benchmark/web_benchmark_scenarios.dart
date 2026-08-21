@@ -568,7 +568,7 @@ Widget _cursorBlink(
           controller: inputController,
           autofocus: true,
           enableBlink: false,
-          cursorStyle: CellStyle(reverse: step.isEven),
+          cursorStyle: CellStyle(inverse: step.isEven),
         ),
       ),
       for (var row = 2; row < scenario.rows; row++)

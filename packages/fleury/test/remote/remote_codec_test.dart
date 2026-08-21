@@ -19,7 +19,11 @@ void main() {
         fullRepaint: true,
         styleTable: const [
           CellStyle.none,
-          CellStyle(foreground: RgbColor(200, 100, 50), bold: true),
+          CellStyle(
+            foreground: RgbColor(200, 100, 50),
+            bold: true,
+            inverse: true,
+          ),
           CellStyle(foreground: IndexedColor(120)),
         ],
         patches: const [
@@ -39,6 +43,7 @@ void main() {
       expect(decoded.fullRepaint, isTrue);
       expect(decoded.scrollUpRows, isNull);
       expect(decoded.styleTable, plan.styleTable);
+      expect(decoded.styleTable[1].inverse, isTrue);
       expect(decoded.patches, hasLength(1));
       final patch = decoded.patches.single;
       expect(patch.row, 0);
@@ -1135,6 +1140,7 @@ CellStyle _randomStyle(Random rng) {
     bold: triState(),
     italic: triState(),
     underline: triState(),
+    inverse: triState(),
   );
 }
 

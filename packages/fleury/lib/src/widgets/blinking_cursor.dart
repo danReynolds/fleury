@@ -17,7 +17,7 @@ class BlinkingCursor extends StatelessWidget {
   const BlinkingCursor({
     super.key,
     this.glyph = '█',
-    this.style = const CellStyle(reverse: true),
+    this.style = const CellStyle(inverse: true),
     this.blinkInterval = const Duration(milliseconds: 500),
   });
 

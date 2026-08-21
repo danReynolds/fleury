@@ -82,7 +82,6 @@ void main() {
         focused: CellStyle(underline: true),
       );
 
-      expect(style, isA<StatefulCellStyle>());
       expect(style.foreground, const AnsiColor(6));
       expect(style.bold, isTrue);
       expect(style.underline, isFalse);
@@ -126,7 +125,7 @@ void main() {
     test('null inherits while CellStyle.none suppresses a state cue', () {
       const theme = CellStyle.state(
         base: CellStyle(foreground: AnsiColor(2)),
-        focused: CellStyle(reverse: true),
+        focused: CellStyle(inverse: true),
       );
       const inherit = CellStyle.state();
       const suppress = CellStyle.state(focused: CellStyle.none);
@@ -141,9 +140,9 @@ void main() {
       );
 
       expect(inherited.foreground, const AnsiColor(2));
-      expect(inherited.reverse, isTrue);
+      expect(inherited.inverse, isTrue);
       expect(suppressed.foreground, const AnsiColor(2));
-      expect(suppressed.reverseOrNull, isNull);
+      expect(suppressed.inverseOrNull, isNull);
     });
 
     test('active states compose in deterministic paint order', () {
@@ -173,7 +172,7 @@ void main() {
 
     test('disabled is exclusive of transient and value states', () {
       const style = CellStyle.state(
-        selected: CellStyle(reverse: true),
+        selected: CellStyle(inverse: true),
         focused: CellStyle(bold: true),
         disabled: CellStyle(dim: true),
         invalid: CellStyle(underline: true),
@@ -190,7 +189,7 @@ void main() {
       );
 
       expect(resolved.dim, isTrue);
-      expect(resolved.reverseOrNull, isNull);
+      expect(resolved.inverseOrNull, isNull);
       expect(resolved.boldOrNull, isNull);
       expect(resolved.underlineOrNull, isNull);
     });

@@ -126,7 +126,7 @@ final class ColorScheme {
 /// The themeable defaults shared down the tree via [Theme].
 ///
 /// Semantic roles provide framework defaults. Interactive control styles
-/// cascade from widget defaults through [interactionStyle] to the widget's local
+/// cascade from widget defaults through [interactiveStyle] to the widget's local
 /// style, merging base paint while preserving inherited state cues. The
 /// default [ThemeData] reproduces the framework's built-in appearance, so a
 /// [Theme] changes nothing until one of its fields is customized.
@@ -135,10 +135,10 @@ final class ThemeData {
     this.brightness = Brightness.dark,
     this.textStyle = CellStyle.none,
     this.mutedStyle = const CellStyle(dim: true),
-    this.selectionStyle = const CellStyle(reverse: true),
+    this.selectionStyle = const CellStyle(inverse: true),
     this.focusedStyle = const CellStyle(bold: true),
     this.errorStyle = const CellStyle(foreground: Colors.red, underline: true),
-    this.interactionStyle,
+    this.interactiveStyle,
     this.borderStyle = BorderStyle.rounded,
     this.colorScheme = ColorScheme.standard,
     this.extensions = const [],
@@ -200,7 +200,7 @@ final class ThemeData {
   /// A plain [CellStyle] changes every control's base appearance without
   /// removing its built-in state cues. Use [CellStyle.state] when a state
   /// should look different. Individual widget styles merge over this value.
-  final CellStyle? interactionStyle;
+  final CellStyle? interactiveStyle;
 
   /// Default box-drawing style for framed surfaces.
   final BorderStyle borderStyle;
@@ -228,7 +228,7 @@ final class ThemeData {
     CellStyle? selectionStyle,
     CellStyle? focusedStyle,
     CellStyle? errorStyle,
-    CellStyle? interactionStyle,
+    CellStyle? interactiveStyle,
     BorderStyle? borderStyle,
     ColorScheme? colorScheme,
     List<Object>? extensions,
@@ -239,7 +239,7 @@ final class ThemeData {
     selectionStyle: selectionStyle ?? this.selectionStyle,
     focusedStyle: focusedStyle ?? this.focusedStyle,
     errorStyle: errorStyle ?? this.errorStyle,
-    interactionStyle: interactionStyle ?? this.interactionStyle,
+    interactiveStyle: interactiveStyle ?? this.interactiveStyle,
     borderStyle: borderStyle ?? this.borderStyle,
     colorScheme: colorScheme ?? this.colorScheme,
     extensions: extensions ?? this.extensions,
@@ -254,7 +254,7 @@ final class ThemeData {
       other.selectionStyle == selectionStyle &&
       other.focusedStyle == focusedStyle &&
       other.errorStyle == errorStyle &&
-      other.interactionStyle == interactionStyle &&
+      other.interactiveStyle == interactiveStyle &&
       other.borderStyle == borderStyle &&
       other.colorScheme == colorScheme &&
       listEquals(other.extensions, extensions);
@@ -267,7 +267,7 @@ final class ThemeData {
     selectionStyle,
     focusedStyle,
     errorStyle,
-    interactionStyle,
+    interactiveStyle,
     borderStyle,
     colorScheme,
     Object.hashAll(extensions),

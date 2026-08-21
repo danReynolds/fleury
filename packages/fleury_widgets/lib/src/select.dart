@@ -286,7 +286,7 @@ class _SelectState<T> extends State<Select<T>> {
           disabled: theme.mutedStyle,
           invalid: theme.errorStyle,
         ),
-        theme.interactionStyle,
+        theme.interactiveStyle,
         widget.style,
       ],
       states: {
@@ -654,7 +654,7 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
                   disabled: theme.mutedStyle,
                   invalid: theme.errorStyle,
                 ),
-                theme.interactionStyle,
+                theme.interactiveStyle,
                 widget.style,
               ],
               states: {
@@ -727,7 +727,7 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
           disabled: theme.mutedStyle,
           invalid: theme.errorStyle,
         ),
-        theme.interactionStyle,
+        theme.interactiveStyle,
         widget.style,
       ],
       states: {

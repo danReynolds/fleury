@@ -348,7 +348,7 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
           disabled: theme.mutedStyle,
           invalid: theme.errorStyle,
         ),
-        theme.interactionStyle,
+        theme.interactiveStyle,
         widget.style,
       ],
       states: {

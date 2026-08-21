@@ -150,7 +150,7 @@ class _FocusableControlState extends State<_FocusableControl>
     final resolvedStyle = resolveCellStyle(
       cascade: [
         widget.defaultStyle,
-        Theme.of(context).interactionStyle,
+        Theme.of(context).interactiveStyle,
         widget.style,
       ],
       states: {

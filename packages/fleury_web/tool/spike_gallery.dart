@@ -115,7 +115,7 @@ CellBuffer dashboard() {
   b.writeText(
     const CellOffset(15, 11),
     ' highlighted row (reverse) ',
-    style: const CellStyle(foreground: Colors.amber, reverse: true),
+    style: const CellStyle(foreground: Colors.amber, inverse: true),
   );
 
   // A truecolor gradient swatch row.

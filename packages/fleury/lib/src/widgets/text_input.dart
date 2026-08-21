@@ -544,7 +544,7 @@ class TextInput extends StatefulWidget {
     this.placeholder = '',
     this.placeholderStyle = const CellStyle(dim: true),
     this.style = CellStyle.none,
-    this.cursorStyle = const CellStyle(reverse: true),
+    this.cursorStyle = const CellStyle(inverse: true),
     this.blinkInterval = const Duration(milliseconds: 500),
     this.enableBlink = true,
     this.obscureText = false,
@@ -611,7 +611,7 @@ class TextInput extends StatefulWidget {
   final CellStyle style;
 
   /// Style merged on top of [style] at the cursor cell. Defaults to
-  /// `reverse: true` — a block cursor.
+  /// `inverse: true` — a block cursor.
   final CellStyle cursorStyle;
 
   /// On/off cadence for the blinking cursor. Default matches
@@ -1568,7 +1568,7 @@ class _TextInputState extends State<TextInput>
       if (!widget.enabled) CellStyleState.disabled,
       if (validationError != null) CellStyleState.invalid,
     };
-    final cascade = [defaultStyle, theme.interactionStyle, widget.style];
+    final cascade = [defaultStyle, theme.interactiveStyle, widget.style];
     final displayStyle = resolveCellStyle(cascade: cascade, states: states);
     // Placeholder paint is a base-layer customization. Active state patches
     // still win, so an empty invalid field does not hide its invalid cue.
@@ -1742,7 +1742,7 @@ class RenderTextInput extends RenderObject {
     String placeholder = '',
     CellStyle placeholderStyle = const CellStyle(dim: true),
     CellStyle style = CellStyle.none,
-    CellStyle cursorStyle = const CellStyle(reverse: true),
+    CellStyle cursorStyle = const CellStyle(inverse: true),
     bool cursorVisible = true,
     bool obscureText = false,
     String obscuringCharacter = '•',

@@ -140,7 +140,6 @@ void main() {
         const CellStyle(foreground: AnsiColor(6)),
       );
       expect(buf.atColRow(1, 0).style, buf.atColRow(0, 0).style);
-      expect(buf.atColRow(0, 0).style, isNot(isA<StatefulCellStyle>()));
     });
 
     test('writeText stops at the right edge instead of overflowing', () {

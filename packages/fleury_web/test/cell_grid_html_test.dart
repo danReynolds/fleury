@@ -157,7 +157,7 @@ void main() {
           b.writeText(
             const CellOffset(0, 0),
             'SEL',
-            style: const CellStyle(foreground: Colors.red, reverse: true),
+            style: const CellStyle(foreground: Colors.red, inverse: true),
           );
         }),
       );

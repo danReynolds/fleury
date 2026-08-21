@@ -296,7 +296,7 @@ class _FlashEffect extends Effect {
           style.copyWith(foreground: rgbColorLerp(fg, color, tri)),
         );
       }
-      return CellPlacement(col, row, style.copyWith(reverse: tri > 0.5));
+      return CellPlacement(col, row, style.copyWith(inverse: tri > 0.5));
     },
     child: child,
   );

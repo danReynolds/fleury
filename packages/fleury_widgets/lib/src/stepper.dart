@@ -289,14 +289,14 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
         enabled && (widget.max == null || widget.value < widget.max!);
     final muted = theme.mutedStyle;
     final validationError = _formRegistration?.error;
-    final interactionStyle = resolveCellStyle(
+    final interactiveStyle = resolveCellStyle(
       cascade: [
         CellStyle.state(
           focused: theme.focusedStyle,
           disabled: theme.mutedStyle,
           invalid: theme.errorStyle,
         ),
-        theme.interactionStyle,
+        theme.interactiveStyle,
         widget.style,
       ],
       states: {
@@ -313,7 +313,7 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
           Text(widget.label!, style: muted),
           const Text(' '),
         ],
-        Text('[', style: interactionStyle),
+        Text('[', style: interactiveStyle),
         GestureDetector(
           onTap: enabled
               ? () {
@@ -323,12 +323,12 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
               : null,
           child: Text(
             ' − ',
-            style: canDec ? interactionStyle : interactionStyle.merge(dim),
+            style: canDec ? interactiveStyle : interactiveStyle.merge(dim),
           ),
         ),
         Text(
           _buffer != null ? '$_buffer▏' : _format(widget.value),
-          style: interactionStyle,
+          style: interactiveStyle,
         ),
         GestureDetector(
           onTap: enabled
@@ -339,10 +339,10 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
               : null,
           child: Text(
             ' + ',
-            style: canInc ? interactionStyle : interactionStyle.merge(dim),
+            style: canInc ? interactiveStyle : interactiveStyle.merge(dim),
           ),
         ),
-        Text(']', style: interactionStyle),
+        Text(']', style: interactiveStyle),
       ],
     );
 
