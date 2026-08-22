@@ -58,11 +58,13 @@ void main() {
     expect(rendered(), contains('Dark'));
     expect(rendered(), contains('Border'));
     expect(rendered(), contains('Rounded'));
-    expect(rendered(), contains('Palette'));
+    expect(rendered(), contains('Theme colors'));
     expect(rendered(), contains('Role'));
-    expect(rendered(), contains('Accent'));
-    expect(rendered(), contains('Accent color'));
-    expect(rendered(), contains('Headings, selection, and primary'));
+    expect(rendered(), contains('Primary'));
+    expect(rendered(), contains('Primary color'));
+    expect(rendered(), contains('ANSI palette'));
+    expect(rendered(), contains('Headings, selected values, and'));
+    expect(rendered(), contains('primary actions.'));
     expect(rendered(), contains('Reset custom theme'));
 
     await tester.invokeSemanticAction(
@@ -77,23 +79,26 @@ void main() {
     expect(rendered(), contains('Double-line border'));
 
     expect(
-      tester.semantics().single(role: SemanticRole.list, label: 'Accent color'),
+      tester.semantics().single(
+        role: SemanticRole.list,
+        label: 'Primary color',
+      ),
       isNotNull,
     );
 
     await tester.invokeSemanticAction(
       SemanticAction.select,
       role: SemanticRole.radio,
-      label: 'Accent option 8',
+      label: 'Primary: ANSI 7 (#E5E5E5)',
     );
     tester.pump();
     expect(_styleAt(tester, 'Form controls').foreground, const AnsiColor(7));
     expect(
       tester
           .semantics()
-          .single(role: SemanticRole.list, label: 'Accent color')
+          .single(role: SemanticRole.list, label: 'Primary color')
           .value,
-      'Accent option 8',
+      'Primary: ANSI 7 (#E5E5E5)',
     );
 
     await tester.invokeSemanticAction(
@@ -120,7 +125,7 @@ void main() {
           .semantics()
           .single(role: SemanticRole.list, label: 'Error color')
           .value,
-      'Error option 10',
+      'Error: ANSI 9 (#FF0000)',
     );
 
     await tester.invokeSemanticAction(

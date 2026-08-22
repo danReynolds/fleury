@@ -5,7 +5,7 @@ import 'component_theme.dart';
 
 /// Shared focus, hover, validation, and activation behavior for controls.
 /// Enter or Space activates ([onActivate]) when enabled. The [builder] gets
-/// the fully resolved style for the control's current state.
+/// the fully resolved style and active style states for the control.
 ///
 /// Enter arrives as a `KeyEvent`; Space arrives as inserted text, so the
 /// control claims text input and consumes a single space (declining all
@@ -30,7 +30,12 @@ class _FocusableControl extends StatefulWidget {
   });
 
   final void Function()? onActivate;
-  final Widget Function(CellStyle style, bool enabled) builder;
+  final Widget Function(
+    CellStyle style,
+    bool enabled,
+    Set<CellStyleState> states,
+  )
+  builder;
   final CellStyle defaultStyle;
   final SemanticRole semanticRole;
   final String? semanticLabel;
@@ -147,19 +152,20 @@ class _FocusableControlState extends State<_FocusableControl>
   Widget build(BuildContext context) {
     final validationError = _formRegistration?.error ?? widget.validationError;
     final focused = _node.hasFocus;
+    final states = <CellStyleState>{
+      if (_hovered) CellStyleState.hovered,
+      if (focused) CellStyleState.focused,
+      if (widget.styleSelected) CellStyleState.selected,
+      if (!widget.enabled) CellStyleState.disabled,
+      if (validationError != null) CellStyleState.invalid,
+    };
     final resolvedStyle = resolveCellStyle(
       cascade: [
         widget.defaultStyle,
         Theme.of(context).interactiveStyle,
         widget.style,
       ],
-      states: {
-        if (_hovered) CellStyleState.hovered,
-        if (focused) CellStyleState.focused,
-        if (widget.styleSelected) CellStyleState.selected,
-        if (!widget.enabled) CellStyleState.disabled,
-        if (validationError != null) CellStyleState.invalid,
-      },
+      states: states,
     );
     final Widget content = !widget.enabled
         ? Semantics(
@@ -170,7 +176,7 @@ class _FocusableControlState extends State<_FocusableControl>
             checked: widget.semanticChecked,
             enabled: false,
             validationError: validationError,
-            child: widget.builder(resolvedStyle, false),
+            child: widget.builder(resolvedStyle, false, states),
           )
         : Semantics(
             role: widget.semanticRole,
@@ -216,7 +222,7 @@ class _FocusableControlState extends State<_FocusableControl>
                 child: Focus(
                   focusNode: _node,
                   autofocus: widget.autofocus,
-                  child: widget.builder(resolvedStyle, true),
+                  child: widget.builder(resolvedStyle, true, states),
                 ),
               ),
             ),
@@ -306,7 +312,8 @@ class Checkbox extends StatelessWidget {
       semanticChecked: value,
       styleSelected: value,
       participatesInForm: true,
-      builder: (style, enabled) => _row(value ? '[x]' : '[ ]', label, style),
+      builder: (style, enabled, states) =>
+          _row(value ? '[x]' : '[ ]', label, style),
     );
   }
 }
@@ -365,7 +372,8 @@ class Toggle extends StatelessWidget {
       semanticChecked: value,
       styleSelected: value,
       participatesInForm: true,
-      builder: (style, enabled) => _row(value ? '[ o]' : '[o ]', label, style),
+      builder: (style, enabled, states) =>
+          _row(value ? '[ o]' : '[o ]', label, style),
     );
   }
 }
@@ -431,11 +439,17 @@ class Switch extends StatelessWidget {
       semanticChecked: value,
       styleSelected: value,
       participatesInForm: true,
-      builder: (resolvedStyle, enabled) {
+      builder: (resolvedStyle, enabled, states) {
         final trackStyle = enabled
-            ? widgetTheme
-                  .resolveSwitchTrack(theme, selected: value)
-                  .merge(resolvedStyle)
+            ? widgetTheme.resolveSwitchTrack(
+                theme,
+                states: states,
+                cascade: [
+                  _defaultControlStyle(theme),
+                  theme.interactiveStyle,
+                  style,
+                ],
+              )
             : resolvedStyle;
         return Row(
           children: [
@@ -519,7 +533,8 @@ class Radio<T> extends StatelessWidget {
       semanticSelected: selected,
       styleSelected: selected,
       validationError: _validationError,
-      builder: (style, enabled) => _row(selected ? '(o)' : '( )', label, style),
+      builder: (style, enabled, states) =>
+          _row(selected ? '(o)' : '( )', label, style),
     );
   }
 }
@@ -855,7 +870,7 @@ class Button extends StatelessWidget {
       onActivate: onPressed,
       semanticRole: SemanticRole.button,
       semanticLabel: label,
-      builder: (style, enabled) => _text(context, content, style),
+      builder: (style, enabled, states) => _text(context, content, style),
     );
   }
 }

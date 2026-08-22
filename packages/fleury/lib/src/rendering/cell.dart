@@ -361,6 +361,30 @@ final class CellStyle {
   bool? get strikethroughOrNull => _strikethrough;
   String? get linkUri => _linkUri;
 
+  /// Resolves a style cascade for an interactive control.
+  ///
+  /// This is the public integration point for reusable controls that want the
+  /// same base, theme, local, and state precedence as Fleury's built-in
+  /// controls. Application code normally passes [CellStyle.interactive] to a
+  /// widget's `style` property instead of calling this method directly.
+  static CellStyle resolve({
+    required Iterable<CellStyle?> cascade,
+    bool hovered = false,
+    bool focused = false,
+    bool selected = false,
+    bool disabled = false,
+    bool invalid = false,
+  }) => resolveCellStyle(
+    cascade: cascade,
+    states: {
+      if (hovered) CellStyleState.hovered,
+      if (focused) CellStyleState.focused,
+      if (selected) CellStyleState.selected,
+      if (disabled) CellStyleState.disabled,
+      if (invalid) CellStyleState.invalid,
+    },
+  );
+
   /// No paint overrides.
   ///
   /// As a state entry in [CellStyle.interactive], this deliberately suppresses an

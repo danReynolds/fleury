@@ -11,11 +11,11 @@ class ThemingShowcaseApp extends StatefulWidget {
   State<ThemingShowcaseApp> createState() => _ThemingShowcaseAppState();
 }
 
-enum _PaletteRole { accent, focus, success, warning, error, info }
+enum _PaletteRole { primary, focus, success, warning, error, info }
 
 extension on _PaletteRole {
   String get label => switch (this) {
-    _PaletteRole.accent => 'Accent',
+    _PaletteRole.primary => 'Primary',
     _PaletteRole.focus => 'Focus',
     _PaletteRole.success => 'Success',
     _PaletteRole.warning => 'Warning',
@@ -24,7 +24,7 @@ extension on _PaletteRole {
   };
 
   String get purpose => switch (this) {
-    _PaletteRole.accent => 'Headings, selection, and primary actions.',
+    _PaletteRole.primary => 'Headings, selected values, and primary actions.',
     _PaletteRole.focus => 'Keyboard focus and active regions.',
     _PaletteRole.success => 'Successful and healthy states.',
     _PaletteRole.warning => 'Warnings and attention states.',
@@ -65,7 +65,7 @@ class _ThemingShowcaseAppState extends State<ThemingShowcaseApp> {
   Color _warning = const AnsiColor(11);
   Color _error = const AnsiColor(9);
   Color _info = const AnsiColor(14);
-  _PaletteRole _paletteRole = _PaletteRole.accent;
+  _PaletteRole _paletteRole = _PaletteRole.primary;
   String _environment = 'Production';
   bool _logs = true;
   bool _autoDeploy = true;
@@ -114,7 +114,7 @@ class _ThemingShowcaseAppState extends State<ThemingShowcaseApp> {
       _isCustom ? 'Custom' : fleuryThemes[_shownThemeIndex].name;
 
   Color get _paletteColor => switch (_paletteRole) {
-    _PaletteRole.accent => _primary,
+    _PaletteRole.primary => _primary,
     _PaletteRole.focus => _focus,
     _PaletteRole.success => _success,
     _PaletteRole.warning => _warning,
@@ -124,7 +124,7 @@ class _ThemingShowcaseAppState extends State<ThemingShowcaseApp> {
 
   void _setPaletteColor(Color color) => setState(() {
     switch (_paletteRole) {
-      case _PaletteRole.accent:
+      case _PaletteRole.primary:
         _primary = color;
         break;
       case _PaletteRole.focus:
@@ -186,8 +186,11 @@ class _ThemingShowcaseAppState extends State<ThemingShowcaseApp> {
                       SelectOption(value: index, label: theme.name),
                     SelectOption(value: _customIndex, label: 'Custom'),
                   ],
-                  onHighlightChanged: (value) =>
-                      setState(() => _shownThemeIndex = value),
+                  onHighlightChanged: (value) {
+                    if (value != null) {
+                      setState(() => _shownThemeIndex = value);
+                    }
+                  },
                   onChanged: (value) => setState(() {
                     _appliedThemeIndex = value;
                     _shownThemeIndex = value;
@@ -196,7 +199,7 @@ class _ThemingShowcaseAppState extends State<ThemingShowcaseApp> {
                 const SizedBox(width: 2),
                 Text(
                   _isCustom
-                      ? 'Edit colors, brightness, and borders live.'
+                      ? 'Edit primary, focus, and status colors live.'
                       : 'The same UI, rendered by $_activeName.',
                   style: theme.mutedStyle,
                 ),
@@ -279,7 +282,7 @@ class _ThemingShowcaseAppState extends State<ThemingShowcaseApp> {
             ],
           ),
           const SizedBox(height: 1),
-          const Text('Palette roles', style: CellStyle(bold: true)),
+          const Text('Theme colors', style: CellStyle(bold: true)),
           Row(
             children: <Widget>[
               const SizedBox(width: 8, child: Text('Role')),
@@ -301,14 +304,15 @@ class _ThemingShowcaseAppState extends State<ThemingShowcaseApp> {
             '${_paletteRole.label} color',
             style: const CellStyle(bold: true),
           ),
+          const Text('ANSI palette'),
           ColorPicker(
             value: _paletteColor,
             colors: _palette,
             columns: 4,
             swatchWidth: 3,
             semanticLabel: '${_paletteRole.label} color',
-            semanticColorLabelBuilder: (_, index) =>
-                '${_paletteRole.label} option ${index + 1}',
+            semanticColorLabelBuilder: (color, _) =>
+                '${_paletteRole.label}: ${_colorLabel(color)}',
             onChanged: _setPaletteColor,
           ),
           const SizedBox(height: 1),
@@ -479,6 +483,15 @@ String _borderLabel(BorderStyle style) => switch (style) {
   BorderStyle.rounded => 'Rounded',
   BorderStyle.ascii => 'ASCII',
 };
+
+String _colorLabel(Color color) {
+  final rgb = color.toRgb();
+  final hex = <int>[rgb.r, rgb.g, rgb.b]
+      .map((channel) => channel.toRadixString(16).padLeft(2, '0'))
+      .join()
+      .toUpperCase();
+  return color is AnsiColor ? 'ANSI ${color.index} (#$hex)' : '#$hex';
+}
 
 class _ThemeRoleInspector extends StatelessWidget {
   const _ThemeRoleInspector();

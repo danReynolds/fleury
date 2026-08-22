@@ -746,14 +746,11 @@ const SHOWCASE_GOALS = {
     'errors, and duplicate-safe submission. Each screen is an ordinary route, so ' +
     'going back preserves the draft without a form schema or wizard abstraction.',
   themes:
-    'A live theme studio built around one consistent application surface. Pick ' +
-    'any bundled community theme to compare it honestly, or switch to Custom ' +
-    'and edit semantic colors, brightness, and borders while the widget ' +
-    'gallery shows live interaction states.\n\n' +
-    'The preview combines ordinary text, form controls, status colors, progress, ' +
-    'selected data, enabled actions, and disabled actions. That breadth makes a ' +
-    'theme prove that its roles work together instead of looking good in a single ' +
-    'curated swatch row.',
+    'A live studio for comparing every bundled community theme against the same ' +
+    'application surface. Switch to Custom to edit primary, focus, and status ' +
+    'colors, brightness, and borders.\n\n' +
+    'The preview keeps ordinary text, form controls, status colors, progress, ' +
+    'selected data, and actions visible together so each change is easy to see.',
   asteroids:
     'A complete arcade game rendered into terminal cells: fixed-step physics, ' +
     'toroidal wrapping, swept collisions, asteroid splitting, particles, ' +

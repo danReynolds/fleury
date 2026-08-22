@@ -51,9 +51,9 @@ final class ColorScheme {
   /// Accent for interactive/active affordances.
   final Color primary;
 
-  /// Accent for the focused pane / control. A themeable role to use in place
-  /// of a raw palette index — pair it with [ThemeData.focusedStyle] (bold) so
-  /// the focus cue survives `NO_COLOR`: the color drops, the bold remains.
+  /// Accent available to focused regions and text-entry controls. Pair it with
+  /// [ThemeData.focusedStyle] when a focus cue must survive `NO_COLOR`: the
+  /// color drops while the attribute remains.
   final Color focus;
 
   /// Status roles.

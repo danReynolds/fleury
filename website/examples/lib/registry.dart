@@ -2023,7 +2023,7 @@ form.clearErrors();''',
     cols: 38,
     rows: 14,
     code: _customThemeSource,
-    builder: () => const Theme(data: _customTheme, child: _ThemePreview()),
+    builder: () => Theme(data: _customTheme, child: const _ThemePreview()),
   ),
   ExampleInfo(
     id: 'themes.gallery',
@@ -3229,15 +3229,21 @@ class _CellStyleTour extends StatelessWidget {
 void _noop() {}
 
 const String _localInteractiveSource = '''
-Button(
-  label: 'Local focus',
-  style: const CellStyle.interactive(
-    focused: CellStyle(
-      foreground: Colors.cyan,
-      underline: true,
+Row(
+  children: [
+    Button(label: 'Theme focus', onPressed: deploy),
+    SizedBox(width: 2),
+    Button(
+      label: 'Local focus',
+      style: CellStyle.interactive(
+        focused: CellStyle(
+          foreground: Colors.cyan,
+          underline: true,
+        ),
+      ),
+      onPressed: deploy,
     ),
-  ),
-  onPressed: deploy,
+  ],
 )''';
 
 class _LocalStateTour extends StatelessWidget {
@@ -3336,51 +3342,36 @@ class _InvalidNoneTourState extends State<_InvalidNoneTour> {
   );
 }
 
-/// A hand-written theme for the "creating a theme" guide section.
+/// A small customization of Fleury's dark starting theme.
 ///
-/// Deliberately small: the nine roles it actually needs, the three text styles,
-/// and a border style — enough to be a real theme, short enough to read beside
-/// its own render. Kept in sync with [_customThemeSource] by a test.
-const ThemeData _customTheme = ThemeData(
-  brightness: Brightness.dark,
-  colorScheme: ColorScheme(
-    background: RgbColor(0x1C, 0x18, 0x14),
-    foreground: RgbColor(0xEB, 0xDB, 0xB2),
-    surface: RgbColor(0x2A, 0x24, 0x1E),
-    primary: RgbColor(0xE8, 0xA3, 0x3D),
-    focus: RgbColor(0xF2, 0xC5, 0x5C),
-    success: RgbColor(0x8E, 0xC0, 0x7C),
-    warning: RgbColor(0xE8, 0xA3, 0x3D),
-    error: RgbColor(0xE5, 0x6B, 0x5B),
-    info: RgbColor(0x83, 0xA5, 0x98),
-  ),
-  mutedStyle: CellStyle(dim: true),
-  selectionStyle: CellStyle(inverse: true),
-  focusedStyle: CellStyle(bold: true),
-  borderStyle: BorderStyle.rounded,
-);
+/// Kept in sync with [_customThemeSource] by a test so the code beside the
+/// preview remains the code that produced it.
+final ThemeData _customTheme = _buildCustomTheme();
+
+ThemeData _buildCustomTheme() {
+  final base = ThemeData.dark();
+  return base.copyWith(
+    colorScheme: base.colorScheme.copyWith(
+      primary: const RgbColor(0xE8, 0xA3, 0x3D),
+      focus: const RgbColor(0xF2, 0xC5, 0x5C),
+      warning: const RgbColor(0xE8, 0xA3, 0x3D),
+    ),
+    borderStyle: BorderStyle.double,
+  );
+}
 
 /// The literal source of [_customTheme], shown beside its render on the
 /// theming guide. A test asserts the two agree, so the page cannot drift into
 /// showing code that is not what produced the picture.
 const String _customThemeSource = '''
-const amber = ThemeData(
-  brightness: Brightness.dark,
-  colorScheme: ColorScheme(
-    background: RgbColor(0x1C, 0x18, 0x14),
-    foreground: RgbColor(0xEB, 0xDB, 0xB2),
-    surface: RgbColor(0x2A, 0x24, 0x1E),
+final base = ThemeData.dark();
+final amber = base.copyWith(
+  colorScheme: base.colorScheme.copyWith(
     primary: RgbColor(0xE8, 0xA3, 0x3D),
     focus: RgbColor(0xF2, 0xC5, 0x5C),
-    success: RgbColor(0x8E, 0xC0, 0x7C),
     warning: RgbColor(0xE8, 0xA3, 0x3D),
-    error: RgbColor(0xE5, 0x6B, 0x5B),
-    info: RgbColor(0x83, 0xA5, 0x98),
   ),
-  mutedStyle: CellStyle(dim: true),
-  selectionStyle: CellStyle(inverse: true),
-  focusedStyle: CellStyle(bold: true),
-  borderStyle: BorderStyle.rounded,
+  borderStyle: BorderStyle.double,
 );
 
 FleuryApp(theme: amber, home: const Dashboard());''';
@@ -3450,17 +3441,13 @@ const CellStyle _interactiveStyle = CellStyle.interactive(
 );
 
 const String _interactiveStylesSource = '''
-const theme = ThemeData(
-  interactiveStyle: CellStyle.interactive(
-    focused: CellStyle(inverse: true, bold: true),
-    hovered: CellStyle(underline: true),
-    selected: CellStyle(foreground: Colors.green, bold: true),
-    invalid: CellStyle(foreground: Colors.red, underline: true),
-    disabled: CellStyle(dim: true),
-  ),
-);
-
-FleuryApp(theme: theme, home: const DeploymentForm());''';
+const interactions = CellStyle.interactive(
+  focused: CellStyle(inverse: true, bold: true),
+  hovered: CellStyle(underline: true),
+  selected: CellStyle(foreground: Colors.green, bold: true),
+  invalid: CellStyle(foreground: Colors.red, underline: true),
+  disabled: CellStyle(dim: true),
+);''';
 
 /// Exposed for the guide/source/live parity test.
 CellStyle get interactiveStyleForTest => _interactiveStyle;

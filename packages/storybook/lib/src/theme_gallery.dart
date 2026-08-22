@@ -55,7 +55,9 @@ class _ThemeGalleryState extends State<ThemeGallery> {
                 _applied = i;
                 _shown = i;
               }),
-              onHighlightChanged: (i) => setState(() => _shown = i),
+              onHighlightChanged: (i) {
+                if (i != null) setState(() => _shown = i);
+              },
               semanticLabel: 'Preview theme',
             ),
             const Text('   '),

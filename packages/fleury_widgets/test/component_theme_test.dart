@@ -70,6 +70,41 @@ void main() {
     expect(_styleAt(tester, 1, 0).foreground, const AnsiColor(2));
   });
 
+  testWidgets('plain switch style preserves the selected track cue', (tester) {
+    tester.pumpWidget(
+      const Theme(
+        data: ThemeData(colorScheme: ColorScheme(primary: AnsiColor(2))),
+        child: Switch(
+          value: true,
+          style: CellStyle(foreground: AnsiColor(5)),
+          onChanged: _ignoreBool,
+        ),
+      ),
+    );
+
+    expect(_styleAt(tester, 0, 0).foreground, const AnsiColor(5));
+    expect(_styleAt(tester, 1, 0).foreground, const AnsiColor(2));
+  });
+
+  testWidgets('interactive switch style can override the selected track cue', (
+    tester,
+  ) {
+    tester.pumpWidget(
+      const Theme(
+        data: ThemeData(colorScheme: ColorScheme(primary: AnsiColor(2))),
+        child: Switch(
+          value: true,
+          style: CellStyle.interactive(
+            selected: CellStyle(foreground: AnsiColor(5)),
+          ),
+          onChanged: _ignoreBool,
+        ),
+      ),
+    );
+
+    expect(_styleAt(tester, 1, 0).foreground, const AnsiColor(5));
+  });
+
   testWidgets('control focus style comes from ThemeData.interactiveStyle', (
     tester,
   ) {

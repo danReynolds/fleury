@@ -1,5 +1,5 @@
-// The theming guide shows a hand-written theme's source beside its live
-// render. Those are two artifacts — a `const ThemeData` and a string — so
+// The theming guide shows a customized theme's source beside its live render.
+// Those are two artifacts — a `ThemeData` and a string — so
 // nothing stops them drifting apart, and the failure is silent and dishonest:
 // the page keeps rendering a picture while displaying code that no longer
 // produced it.
@@ -25,18 +25,12 @@ String get _guide =>
 
 void main() {
   group('the guide shows the theme it renders', () {
-    test('every named color role matches the rendered theme', () {
+    test('every customized color role matches the rendered theme', () {
       final scheme = customThemeForTest.colorScheme;
       final roles = <String, (Color?, String)>{
-        'background': (scheme.background, '0x1C, 0x18, 0x14'),
-        'foreground': (scheme.foreground, '0xEB, 0xDB, 0xB2'),
-        'surface': (scheme.surface, '0x2A, 0x24, 0x1E'),
         'primary': (scheme.primary, '0xE8, 0xA3, 0x3D'),
         'focus': (scheme.focus, '0xF2, 0xC5, 0x5C'),
-        'success': (scheme.success, '0x8E, 0xC0, 0x7C'),
         'warning': (scheme.warning, '0xE8, 0xA3, 0x3D'),
-        'error': (scheme.error, '0xE5, 0x6B, 0x5B'),
-        'info': (scheme.info, '0x83, 0xA5, 0x98'),
       };
       for (final MapEntry(key: role, value: (color, literal))
           in roles.entries) {
@@ -63,21 +57,14 @@ void main() {
       }
     });
 
-    test('the source names the styles the theme actually sets', () {
+    test('the source starts from dark defaults and names its border', () {
       final src = customThemeSourceForTest;
-      expect(src, contains('brightness: Brightness.dark'));
+      expect(src, contains('final base = ThemeData.dark()'));
+      expect(_guide, contains('final base = ThemeData.dark()'));
       expect(customThemeForTest.brightness, Brightness.dark);
-
-      // Each style field the theme customises must be visible in the source —
-      // they are the point of the section that shows it.
-      expect(src, contains('mutedStyle'));
-      expect(src, contains('selectionStyle'));
-      expect(src, contains('focusedStyle'));
-      expect(src, contains('borderStyle'));
-      expect(customThemeForTest.borderStyle, BorderStyle.rounded);
-      expect(customThemeForTest.mutedStyle.dim, isTrue);
-      expect(customThemeForTest.selectionStyle.inverse, isTrue);
-      expect(customThemeForTest.focusedStyle.bold, isTrue);
+      expect(src, contains('borderStyle: BorderStyle.double'));
+      expect(_guide, contains('borderStyle: BorderStyle.double'));
+      expect(customThemeForTest.borderStyle, BorderStyle.double);
       expect(customThemeForTest.interactiveStyle, isNull);
       expect(
         _guide,
@@ -87,15 +74,6 @@ void main() {
         customThemeSourceForTest,
         contains('FleuryApp(theme: amber, home: const Dashboard());'),
       );
-    });
-
-    test('the theme sets every opaque role a preview needs', () {
-      // background/foreground/surface nullable-by-default: a demo theme that
-      // left them unset would render against the page, not itself.
-      final scheme = customThemeForTest.colorScheme;
-      expect(scheme.background, isNotNull);
-      expect(scheme.foreground, isNotNull);
-      expect(scheme.surface, isNotNull);
     });
   });
 
@@ -118,14 +96,8 @@ void main() {
       expect(_guide, contains(line), reason: 'guide source omitted $line');
     }
     expect(source, interactiveStyleSourceForTest);
-    expect(
-      source,
-      contains('FleuryApp(theme: theme, home: const DeploymentForm());'),
-    );
-    expect(
-      _guide,
-      contains('FleuryApp(theme: theme, home: const DeploymentForm());'),
-    );
+    expect(source, contains('const interactions = CellStyle.interactive('));
+    expect(_guide, contains('const interactions = CellStyle.interactive('));
 
     final focused = resolveCellStyle(
       cascade: [interactiveStyleForTest],

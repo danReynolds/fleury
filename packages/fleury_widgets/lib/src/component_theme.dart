@@ -78,17 +78,21 @@ final class FleuryWidgetTheme {
   static FleuryWidgetTheme from(ThemeData theme) =>
       theme.extension<FleuryWidgetTheme>() ?? standard;
 
-  CellStyle resolveSwitchTrack(ThemeData theme, {required bool selected}) =>
-      resolveCellStyle(
-        cascade: [
-          CellStyle.interactive(
-            base: theme.mutedStyle,
-            selected: CellStyle(foreground: theme.colorScheme.primary),
-          ),
-          switchTrackStyle,
-        ],
-        states: {if (selected) CellStyleState.selected},
-      );
+  CellStyle resolveSwitchTrack(
+    ThemeData theme, {
+    required Iterable<CellStyle?> cascade,
+    required Set<CellStyleState> states,
+  }) => resolveCellStyle(
+    cascade: [
+      CellStyle.interactive(
+        base: theme.mutedStyle,
+        selected: CellStyle(foreground: theme.colorScheme.primary),
+      ),
+      switchTrackStyle,
+      ...cascade,
+    ],
+    states: states,
+  );
 
   CellStyle resolveProgressFilled(ThemeData theme) =>
       progressFilledStyle ?? CellStyle(foreground: theme.colorScheme.primary);

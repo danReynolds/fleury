@@ -1,3 +1,5 @@
+import 'dart:async' show scheduleMicrotask;
+
 import 'package:fleury/fleury_core.dart';
 import 'package:fleury/fleury_internal.dart';
 
@@ -61,7 +63,7 @@ class Select<T> extends StatefulWidget {
   /// Fires again with the applied [value] when the list is dismissed without a
   /// pick (Esc, click-away), so a preview never outlives the dropdown that
   /// drove it. [onChanged] still reports the commit.
-  final void Function(T value)? onHighlightChanged;
+  final void Function(T? value)? onHighlightChanged;
 
   /// Text shown when [value] is null.
   final String placeholder;
@@ -110,9 +112,18 @@ class _SelectState<T> extends State<Select<T>> {
   void didUpdateWidget(Select<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.onChanged == null && oldWidget.onChanged != null) {
-      Focus.of(context).releaseFocusTrapIn(_trapContentKey.currentContext);
-      _entry?.remove();
-      _entry = null;
+      final appliedValue = widget.value;
+      final onRollback = widget.onHighlightChanged;
+      final wasOpen = _isOpen;
+      _close(rebuild: false);
+      if (wasOpen) {
+        // A preview callback commonly updates the parent that just rebuilt us.
+        // Deliver the rollback after this update rather than setting parent
+        // state from inside didUpdateWidget.
+        scheduleMicrotask(() {
+          if (mounted) onRollback?.call(appliedValue);
+        });
+      }
     }
     if (widget.focusNode != oldWidget.focusNode) {
       if (_ownsFocus) _triggerFocus.dispose();
@@ -227,21 +238,21 @@ class _SelectState<T> extends State<Select<T>> {
     setState(() {}); // flip the open indicator
   }
 
-  void _close() {
+  void _close({bool rebuild = true}) {
     Focus.of(context).releaseFocusTrapIn(_trapContentKey.currentContext);
     _entry?.remove();
     _entry = null;
     final prior = _priorFocus;
+    _priorFocus = null;
     if (prior != null && prior.isAttached) prior.requestFocus();
-    if (mounted) setState(() {});
+    if (rebuild && mounted) setState(() {});
   }
 
   void _dismiss() {
     _close();
     // Undo any live preview the list drove, so dismissing leaves the consumer
     // showing `value` again rather than the last highlight.
-    final applied = widget.value;
-    if (applied != null) widget.onHighlightChanged?.call(applied);
+    widget.onHighlightChanged?.call(widget.value);
   }
 
   /// Picks the option matching [payload] (by label or value string) without
@@ -366,13 +377,13 @@ class _SelectState<T> extends State<Select<T>> {
                 _triggerFocus.requestFocus();
                 return;
               case SemanticAction.activate:
-                _isOpen ? _close() : _open();
+                _isOpen ? _dismiss() : _open();
                 return;
               case SemanticAction.open:
                 _open();
                 return;
               case SemanticAction.close:
-                _close();
+                _dismiss();
                 return;
               case _:
                 return;
@@ -382,7 +393,7 @@ class _SelectState<T> extends State<Select<T>> {
           child: GestureDetector(
             onTap: () {
               _triggerFocus.requestFocus();
-              _isOpen ? _close() : _open();
+              _isOpen ? _dismiss() : _open();
             },
             child: KeyDetector(
               onKey: (event) {
