@@ -30,7 +30,7 @@ class ColorPicker extends StatefulWidget {
     this.semanticColorLabelBuilder,
     this.focusNode,
     this.autofocus = false,
-    this.errorStyle,
+    this.style,
   }) : assert(columns >= 1, 'columns must be >= 1'),
        assert(swatchWidth >= 1, 'swatchWidth must be >= 1');
 
@@ -64,9 +64,9 @@ class ColorPicker extends StatefulWidget {
   /// Whether the picker requests focus when mounted.
   final bool autofocus;
 
-  /// Invalid style for the preview cursor. null uses the theme;
-  /// [CellStyle.empty] keeps the picker visually neutral.
-  final CellStyle? errorStyle;
+  /// Base styling for markers, plus optional hover, focus, selected, disabled,
+  /// and invalid state entries from [CellStyle.interactive].
+  final CellStyle? style;
 
   @override
   State<ColorPicker> createState() => _ColorPickerState();
@@ -76,6 +76,7 @@ class _ColorPickerState extends State<ColorPicker>
     implements TextInputClaimant {
   late FocusNode _node;
   bool _owns = false;
+  bool _hovered = false;
   FormControlRegistration? _formRegistration;
 
   /// The highlighted candidate — where the keyboard cursor sits. Arrows move
@@ -334,9 +335,6 @@ class _ColorPickerState extends State<ColorPicker>
     final cols = widget.columns;
     final palette = _palette;
     final validationError = _formRegistration?.error;
-    final invalidStyle = validationError == null
-        ? null
-        : (widget.errorStyle ?? theme.errorStyle);
 
     final rows = <Widget>[];
     for (var r = 0; r * cols < palette.length; r++) {
@@ -354,16 +352,27 @@ class _ColorPickerState extends State<ColorPicker>
           '█' * widget.swatchWidth,
           style: CellStyle(
             foreground: color,
-          ).merge(enabled ? CellStyle.empty : disabledStyle),
+          ).merge(enabled ? CellStyle.none : disabledStyle),
         );
-        var markStyle = !enabled
-            ? disabledStyle
-            : isCursor
-            ? (focused ? theme.focusedStyle : theme.selectionStyle)
-            : theme.mutedStyle;
-        if (enabled && isCursor && invalidStyle != null) {
-          markStyle = markStyle.merge(invalidStyle);
-        }
+        final markStyle = resolveCellStyle(
+          cascade: [
+            CellStyle.interactive(
+              base: isCursor ? theme.selectionStyle : theme.mutedStyle,
+              focused: theme.focusedStyle,
+              disabled: theme.mutedStyle,
+              invalid: theme.errorStyle,
+            ),
+            theme.interactiveStyle,
+            widget.style,
+          ],
+          states: {
+            if (_hovered && isCursor) CellStyleState.hovered,
+            if (isCursor && focused) CellStyleState.focused,
+            if (isCommitted) CellStyleState.selected,
+            if (!enabled) CellStyleState.disabled,
+            if (isCursor && validationError != null) CellStyleState.invalid,
+          },
+        );
         final swatchParts = <Widget>[];
         if (isCursor || isCommitted) {
           swatchParts.add(Text(isCursor ? '[' : '‹', style: markStyle));
@@ -460,7 +469,7 @@ class _ColorPickerState extends State<ColorPicker>
         child: body,
       );
       // styled component, not selectable text
-      return SelectionArea.disabled(child: picker);
+      return _withHover(SelectionArea.disabled(child: picker));
     }
     final Widget picker = Semantics(
       role: SemanticRole.list,
@@ -501,8 +510,18 @@ class _ColorPickerState extends State<ColorPicker>
       ),
     );
     // styled component, not selectable text
-    return SelectionArea.disabled(child: picker);
+    return _withHover(SelectionArea.disabled(child: picker));
   }
+
+  Widget _withHover(Widget child) => MouseRegion(
+    onEnter: () {
+      if (!_hovered) setState(() => _hovered = true);
+    },
+    onExit: () {
+      if (_hovered) setState(() => _hovered = false);
+    },
+    child: child,
+  );
 
   String _colorLabel(Color color, int index) {
     final builder = widget.semanticColorLabelBuilder;

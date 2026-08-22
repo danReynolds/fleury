@@ -681,6 +681,7 @@ const SAMPLE_FILES = {
   editor: 'editor.dart',
   finance: 'finance.dart',
   forms: 'forms_showcase.dart',
+  themes: 'theming_showcase.dart',
   asteroids: 'neon_asteroids.dart',
   sprite: 'ansi_sprite_studio.dart',
 };
@@ -744,6 +745,12 @@ const SHOWCASE_GOALS = {
     'behavior that should be consistent: validation, first-invalid focus, server ' +
     'errors, and duplicate-safe submission. Each screen is an ordinary route, so ' +
     'going back preserves the draft without a form schema or wizard abstraction.',
+  themes:
+    'A live studio for comparing every bundled community theme against the same ' +
+    'application surface. Switch to Custom to edit primary, focus, and status ' +
+    'colors, brightness, and borders.\n\n' +
+    'The preview keeps ordinary text, form controls, status colors, progress, ' +
+    'selected data, and actions visible together so each change is easy to see.',
   asteroids:
     'A complete arcade game rendered into terminal cells: fixed-step physics, ' +
     'toroidal wrapping, swept collisions, asteroid splitting, particles, ' +
@@ -786,6 +793,9 @@ const SHOWCASE_TRY = {
     '*Try it: continue with an empty name to see first-invalid focus, then use ' +
     'the reserved name `fleury` to trigger a server error. Complete the flow and ' +
     'go back once to see the app-owned draft survive navigation.*',
+  themes:
+    '*Try it: arrow through the Theme picker, then choose Custom, select a ' +
+    'palette role, and change its color—the full widget gallery updates immediately.*',
   asteroids:
     '*Try it: press Space to launch, then steer with A/D/W and fire with ' +
     'Space—or click and drag directly in the playfield.*',

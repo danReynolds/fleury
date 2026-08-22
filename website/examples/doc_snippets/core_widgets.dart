@@ -65,7 +65,7 @@ class _DemoAppState extends State<DemoApp> {
                         items[i],
                         style: selected || _hovered
                             ? const CellStyle(inverse: true)
-                            : CellStyle.empty,
+                            : CellStyle.none,
                       ),
                     ),
                   ),

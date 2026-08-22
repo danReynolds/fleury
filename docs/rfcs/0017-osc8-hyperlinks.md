@@ -98,7 +98,7 @@ Why a field on `CellStyle` rather than a parallel structure:
   cells and drop the link.
 - **A simple null-or-value field.** Unlike the bool attributes, a link has no
   tri-state "explicitly off" need — absence is null, presence is the URI.
-  `CellStyle.empty` and the shared const singletons keep `linkUri == null` and
+  `CellStyle.none` and the shared const singletons keep `linkUri == null` and
   are unaffected. `merge` takes the other's link when set, else keeps this one —
   matching how colors and attributes already merge.
 

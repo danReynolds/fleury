@@ -5,7 +5,7 @@ import 'package:fleury_web/src/dom_grid/cell_grid_html.dart';
 import 'package:test/test.dart';
 
 /// Strips the span markup back to the visible glyphs, one `\n`-joined line
-/// per row div — the inverse of the renderer, for the fidelity invariant.
+/// per row div — the reverse of the renderer, for the fidelity invariant.
 String _visibleText(String html) {
   final rows = html
       .split('<div class="r">')
@@ -151,7 +151,7 @@ void main() {
       expect(html, contains('color:rgb(0, 205, 0)')); // ANSI green → RGB
     });
 
-    test('inverse swaps foreground into the background channel', () {
+    test('reverse swaps foreground into the background channel', () {
       final html = renderFrameHtml(
         frame(6, 1, (b) {
           b.writeText(

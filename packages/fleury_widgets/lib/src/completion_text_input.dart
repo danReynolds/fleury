@@ -72,14 +72,13 @@ class CompletionTextInput extends StatefulWidget {
     this.onCompletionAccepted,
     this.placeholder = '',
     this.placeholderStyle = const CellStyle(dim: true),
-    this.style = CellStyle.empty,
+    this.style = CellStyle.none,
     this.cursorStyle = const CellStyle(inverse: true),
     this.blinkInterval = const Duration(milliseconds: 500),
     this.enableBlink = true,
     this.enabled = true,
     this.readOnly = false,
     this.validationError,
-    this.errorStyle,
     this.semanticLabel,
     this.semanticState = SemanticState.empty,
     this.clipboardPolicy,
@@ -129,7 +128,8 @@ class CompletionTextInput extends StatefulWidget {
   /// Style used for [placeholder].
   final CellStyle placeholderStyle;
 
-  /// Style used for entered text.
+  /// Entered-text base styling, plus optional hover, focus, disabled, and
+  /// invalid state entries from [CellStyle.interactive].
   final CellStyle style;
 
   /// Style applied to the cursor cell.
@@ -149,10 +149,6 @@ class CompletionTextInput extends StatefulWidget {
 
   /// Optional validation error displayed by the underlying input.
   final String? validationError;
-
-  /// Invalid style for the underlying text field. null uses the theme;
-  /// [CellStyle.empty] keeps the field visually neutral.
-  final CellStyle? errorStyle;
 
   /// Label exposed through the underlying text-field semantic node.
   ///
@@ -429,7 +425,7 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
                   },
                   child: Text(
                     '${selected ? '› ' : '  '}$label',
-                    style: selected ? _selectionStyle : CellStyle.empty,
+                    style: selected ? _selectionStyle : CellStyle.none,
                   ),
                 ),
               );
@@ -476,7 +472,6 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
         enabled: widget.enabled,
         readOnly: widget.readOnly,
         validationError: widget.validationError,
-        errorStyle: widget.errorStyle,
         semanticLabel: widget.semanticLabel,
         semanticState: widget.semanticState,
         clipboardPolicy: widget.clipboardPolicy,

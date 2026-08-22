@@ -1145,7 +1145,7 @@ class _DebugPanelState extends State<DebugPanel> {
       '$label ${_us(latest).padLeft(7)} $spark',
       style: overBudget
           ? const CellStyle(foreground: RgbColor(255, 120, 120))
-          : CellStyle.empty,
+          : CellStyle.none,
     );
   }
 

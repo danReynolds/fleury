@@ -31,9 +31,8 @@ class NumberInput extends StatefulWidget {
     this.allowDecimal = false,
     this.placeholder = '',
     this.placeholderStyle = const CellStyle(dim: true),
-    this.style = CellStyle.empty,
+    this.style = CellStyle.none,
     this.cursorStyle = const CellStyle(inverse: true),
-    this.errorStyle,
     this.semanticLabel,
     this.focusNode,
     this.autofocus = false,
@@ -101,15 +100,12 @@ class NumberInput extends StatefulWidget {
   /// Style used for [placeholder].
   final CellStyle placeholderStyle;
 
-  /// Style used for entered numeric text.
+  /// Entered-text base styling, plus optional hover, focus, disabled, and
+  /// invalid state entries from [CellStyle.interactive].
   final CellStyle style;
 
   /// Style applied to the cursor cell.
   final CellStyle cursorStyle;
-
-  /// Invalid style for the underlying text field. null uses the theme;
-  /// [CellStyle.empty] keeps the field visually neutral.
-  final CellStyle? errorStyle;
 
   /// Label exposed through the semantic app graph.
   ///
@@ -289,7 +285,6 @@ class _NumberInputState extends State<NumberInput> {
       placeholderStyle: widget.placeholderStyle,
       style: widget.style,
       cursorStyle: widget.cursorStyle,
-      errorStyle: widget.errorStyle,
       semanticLabel: widget.semanticLabel,
       semanticState: _semanticState(),
       onSubmit: (text) {

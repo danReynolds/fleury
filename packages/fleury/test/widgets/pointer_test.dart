@@ -382,5 +382,46 @@ void main() {
       tester.sendMouse(_at(MouseEventKind.up, 2, 0));
       expect(taps, 1);
     });
+
+    testWidgets('an absorb boundary handles outside taps but not descendants', (
+      tester,
+    ) {
+      var underneathTaps = 0;
+      var boundaryTaps = 0;
+      var popupTaps = 0;
+      tester.pumpWidget(
+        Stack(
+          children: <Widget>[
+            GestureDetector(
+              onTap: () => underneathTaps++,
+              child: const SizedBox.expand(),
+            ),
+            AbsorbPointer(
+              onTap: () => boundaryTaps++,
+              child: const SizedBox.expand(),
+            ),
+            Positioned(
+              left: 1,
+              top: 0,
+              width: 3,
+              height: 1,
+              child: GestureDetector(
+                onTap: () => popupTaps++,
+                child: const Text('pop'),
+              ),
+            ),
+          ],
+        ),
+      );
+      tester.render(size: const CellSize(8, 2));
+
+      tester.sendMouse(_at(MouseEventKind.down, 6, 1));
+      tester.sendMouse(_at(MouseEventKind.up, 6, 1));
+      expect((underneathTaps, boundaryTaps, popupTaps), (0, 1, 0));
+
+      tester.sendMouse(_at(MouseEventKind.down, 2, 0));
+      tester.sendMouse(_at(MouseEventKind.up, 2, 0));
+      expect((underneathTaps, boundaryTaps, popupTaps), (0, 1, 1));
+    });
   });
 }

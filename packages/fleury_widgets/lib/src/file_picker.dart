@@ -252,7 +252,7 @@ class _FilePickerState extends State<FilePicker> {
     final name = _displayName(e);
     final style = isSelected
         ? (focused ? theme.selectionStyle : theme.mutedStyle)
-        : CellStyle.empty;
+        : CellStyle.none;
     final safePath = _safeText(e.path);
     final canOpen = _canOpen(e);
     return Semantics(

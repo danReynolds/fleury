@@ -228,7 +228,7 @@ sealed class _Block {
 Widget _bulleted(
   ThemeData theme,
   String body, {
-  CellStyle style = CellStyle.empty,
+  CellStyle style = CellStyle.none,
 }) {
   return Row(
     crossAxisAlignment: CrossAxisAlignment.start,

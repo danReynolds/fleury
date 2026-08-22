@@ -38,7 +38,7 @@
     {
       "id": "selection-highlight",
       "name": "Selection extend",
-      "note": "inverse-highlight churn as a selection grows; SGR lever",
+      "note": "reverse-highlight churn as a selection grows; SGR lever",
       "firstPaint": {
         "total": 83,
         "content": 64,

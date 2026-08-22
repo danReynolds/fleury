@@ -35,7 +35,7 @@ void main() {
       final b = HalfBlockBuffer(1, 1);
       b.setPixel(0, 0);
       final buf = CellBuffer(const CellSize(1, 1));
-      b.writeTo(buf, CellOffset.zero, CellStyle.empty);
+      b.writeTo(buf, CellOffset.zero, CellStyle.none);
       expect(buf.atColRow(0, 0).grapheme, '▀');
     });
 
@@ -46,7 +46,7 @@ void main() {
       b.writeTo(
         buf,
         CellOffset.zero,
-        CellStyle.empty,
+        CellStyle.none,
         glyphTier: GlyphTier.ascii,
       );
       expect(buf.atColRow(0, 0).grapheme, ':');
@@ -56,7 +56,7 @@ void main() {
       final b = HalfBlockBuffer(1, 1);
       b.setPixel(0, 1);
       final buf = CellBuffer(const CellSize(1, 1));
-      b.writeTo(buf, CellOffset.zero, CellStyle.empty);
+      b.writeTo(buf, CellOffset.zero, CellStyle.none);
       expect(buf.atColRow(0, 0).grapheme, '▄');
     });
 
@@ -65,7 +65,7 @@ void main() {
       b.setPixel(0, 0);
       b.setPixel(0, 1);
       final buf = CellBuffer(const CellSize(1, 1));
-      b.writeTo(buf, CellOffset.zero, CellStyle.empty);
+      b.writeTo(buf, CellOffset.zero, CellStyle.none);
       expect(buf.atColRow(0, 0).grapheme, '█');
     });
 
@@ -75,7 +75,7 @@ void main() {
       b.setPixel(0, -1);
       b.setPixel(99, 99);
       final buf = CellBuffer(const CellSize(1, 1));
-      b.writeTo(buf, CellOffset.zero, CellStyle.empty);
+      b.writeTo(buf, CellOffset.zero, CellStyle.none);
       expect(buf.atColRow(0, 0).grapheme, isNull);
     });
   });
@@ -91,7 +91,7 @@ void main() {
       final b = QuadrantBuffer(1, 1);
       b.setPixel(0, 0);
       final buf = CellBuffer(const CellSize(1, 1));
-      b.writeTo(buf, CellOffset.zero, CellStyle.empty);
+      b.writeTo(buf, CellOffset.zero, CellStyle.none);
       expect(buf.atColRow(0, 0).grapheme, '▘');
     });
 
@@ -102,7 +102,7 @@ void main() {
       b.writeTo(
         buf,
         CellOffset.zero,
-        CellStyle.empty,
+        CellStyle.none,
         glyphTier: GlyphTier.ascii,
       );
       expect(buf.atColRow(0, 0).grapheme, '.');
@@ -112,7 +112,7 @@ void main() {
       final b = QuadrantBuffer(1, 1);
       b.setPixel(1, 0);
       final buf = CellBuffer(const CellSize(1, 1));
-      b.writeTo(buf, CellOffset.zero, CellStyle.empty);
+      b.writeTo(buf, CellOffset.zero, CellStyle.none);
       expect(buf.atColRow(0, 0).grapheme, '▝');
     });
 
@@ -121,7 +121,7 @@ void main() {
       b.setPixel(0, 0);
       b.setPixel(1, 1);
       final buf = CellBuffer(const CellSize(1, 1));
-      b.writeTo(buf, CellOffset.zero, CellStyle.empty);
+      b.writeTo(buf, CellOffset.zero, CellStyle.none);
       expect(buf.atColRow(0, 0).grapheme, '▚');
     });
 
@@ -132,7 +132,7 @@ void main() {
       b.setPixel(0, 1);
       b.setPixel(1, 1);
       final buf = CellBuffer(const CellSize(1, 1));
-      b.writeTo(buf, CellOffset.zero, CellStyle.empty);
+      b.writeTo(buf, CellOffset.zero, CellStyle.none);
       expect(buf.atColRow(0, 0).grapheme, '█');
     });
 
@@ -140,7 +140,7 @@ void main() {
       final b = QuadrantBuffer(1, 1);
       b.setPixel(0, 0, const AnsiColor(2));
       final buf = CellBuffer(const CellSize(1, 1));
-      b.writeTo(buf, CellOffset.zero, CellStyle.empty);
+      b.writeTo(buf, CellOffset.zero, CellStyle.none);
       expect(buf.atColRow(0, 0).style.foreground, const AnsiColor(2));
     });
   });
@@ -224,12 +224,12 @@ void main() {
         }
       }
       final fb = CellBuffer(const CellSize(1, 1));
-      full.writeTo(fb, CellOffset.zero, CellStyle.empty);
+      full.writeTo(fb, CellOffset.zero, CellStyle.none);
       expect(fb.atColRow(0, 0).grapheme, '█');
 
       final one = SextantBuffer(1, 1)..setPixel(0, 0); // top-left → SEXTANT-1
       final ob = CellBuffer(const CellSize(1, 1));
-      one.writeTo(ob, CellOffset.zero, CellStyle.empty);
+      one.writeTo(ob, CellOffset.zero, CellStyle.none);
       expect(ob.atColRow(0, 0).grapheme, String.fromCharCode(0x1FB00));
     });
   });
@@ -249,13 +249,13 @@ void main() {
         }
       }
       final fb = CellBuffer(const CellSize(1, 1));
-      full.writeTo(fb, CellOffset.zero, CellStyle.empty);
+      full.writeTo(fb, CellOffset.zero, CellStyle.none);
       expect(fb.atColRow(0, 0).grapheme, '█');
 
       // (px=0, py=1) → bit 2 → BLOCK OCTANT-3 (U+1CD00).
       final one = OctantBuffer(1, 1)..setPixel(0, 1);
       final ob = CellBuffer(const CellSize(1, 1));
-      one.writeTo(ob, CellOffset.zero, CellStyle.empty);
+      one.writeTo(ob, CellOffset.zero, CellStyle.none);
       expect(ob.atColRow(0, 0).grapheme, String.fromCharCode(0x1CD00));
     });
 
@@ -265,7 +265,7 @@ void main() {
         for (var x = 0; x < 2; x++) {
           final b = OctantBuffer(1, 1)..setPixel(x, y);
           final buf = CellBuffer(const CellSize(1, 1));
-          b.writeTo(buf, CellOffset.zero, CellStyle.empty);
+          b.writeTo(buf, CellOffset.zero, CellStyle.none);
           expect(
             buf.atColRow(0, 0).grapheme,
             isNot(' '),

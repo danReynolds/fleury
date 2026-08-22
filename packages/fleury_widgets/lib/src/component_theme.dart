@@ -1,4 +1,5 @@
 import 'package:fleury/fleury_core.dart';
+import 'package:fleury/fleury_internal.dart';
 
 /// Component-level defaults for `fleury_widgets`.
 ///
@@ -7,10 +8,7 @@ import 'package:fleury/fleury_core.dart';
 /// needs. Add it to `ThemeData.extensions` and retrieve it with [of].
 final class FleuryWidgetTheme {
   const FleuryWidgetTheme({
-    this.controlFocusStyle,
-    this.disabledStyle,
-    this.switchOnStyle,
-    this.switchOffStyle,
+    this.switchTrackStyle,
     this.progressFilledStyle,
     this.progressTrackStyle,
     this.dataSelectedStyle,
@@ -43,10 +41,8 @@ final class FleuryWidgetTheme {
 
   static const standard = FleuryWidgetTheme();
 
-  final CellStyle? controlFocusStyle;
-  final CellStyle? disabledStyle;
-  final CellStyle? switchOnStyle;
-  final CellStyle? switchOffStyle;
+  /// Track styling for a switch, including its selected state.
+  final CellStyle? switchTrackStyle;
   final CellStyle? progressFilledStyle;
   final CellStyle? progressTrackStyle;
   final CellStyle? dataSelectedStyle;
@@ -82,29 +78,33 @@ final class FleuryWidgetTheme {
   static FleuryWidgetTheme from(ThemeData theme) =>
       theme.extension<FleuryWidgetTheme>() ?? standard;
 
-  CellStyle resolveControlFocus(ThemeData theme) =>
-      controlFocusStyle ?? theme.focusedStyle;
-
-  CellStyle resolveDisabled(ThemeData theme) =>
-      disabledStyle ?? theme.mutedStyle;
-
-  CellStyle resolveSwitchOn(ThemeData theme) =>
-      switchOnStyle ?? CellStyle(foreground: theme.colorScheme.primary);
-
-  CellStyle resolveSwitchOff(ThemeData theme) =>
-      switchOffStyle ?? theme.mutedStyle;
+  CellStyle resolveSwitchTrack(
+    ThemeData theme, {
+    required Iterable<CellStyle?> cascade,
+    required Set<CellStyleState> states,
+  }) => resolveCellStyle(
+    cascade: [
+      CellStyle.interactive(
+        base: theme.mutedStyle,
+        selected: CellStyle(foreground: theme.colorScheme.primary),
+      ),
+      switchTrackStyle,
+      ...cascade,
+    ],
+    states: states,
+  );
 
   CellStyle resolveProgressFilled(ThemeData theme) =>
-      progressFilledStyle ?? CellStyle.empty;
+      progressFilledStyle ?? CellStyle(foreground: theme.colorScheme.primary);
 
   CellStyle resolveProgressTrack(ThemeData theme) =>
-      progressTrackStyle ?? const CellStyle(dim: true);
+      progressTrackStyle ?? theme.mutedStyle.merge(const CellStyle(dim: true));
 
   CellStyle resolveDataSelected(ThemeData theme) =>
       dataSelectedStyle ?? theme.selectionStyle;
 
   CellStyle resolveDataSeparator(ThemeData theme) =>
-      dataSeparatorStyle ?? CellStyle.empty;
+      dataSeparatorStyle ?? CellStyle.none;
 
   CellStyle resolveDataEmpty(ThemeData theme) =>
       dataEmptyStyle ?? theme.mutedStyle;
@@ -115,7 +115,7 @@ final class FleuryWidgetTheme {
   CellStyle resolveLogDebug(ThemeData theme) =>
       logDebugStyle ?? const CellStyle(dim: true);
 
-  CellStyle resolveLogInfo(ThemeData theme) => logInfoStyle ?? CellStyle.empty;
+  CellStyle resolveLogInfo(ThemeData theme) => logInfoStyle ?? CellStyle.none;
 
   CellStyle resolveLogWarning(ThemeData theme) =>
       logWarningStyle ??
@@ -130,7 +130,7 @@ final class FleuryWidgetTheme {
       CellStyle(bold: true, foreground: theme.colorScheme.success);
 
   CellStyle resolveCodeBlank(ThemeData theme) =>
-      codeBlankStyle ?? CellStyle.empty;
+      codeBlankStyle ?? CellStyle.none;
 
   CellStyle resolveCodeComment(ThemeData theme) =>
       codeCommentStyle ?? const CellStyle(dim: true);
@@ -149,7 +149,7 @@ final class FleuryWidgetTheme {
       codeStringStyle ?? const CellStyle(foreground: AnsiColor(10));
 
   CellStyle resolveCodePlain(ThemeData theme) =>
-      codePlainStyle ?? CellStyle.empty;
+      codePlainStyle ?? CellStyle.none;
 
   CellStyle resolveDiffAddition(ThemeData theme) =>
       diffAdditionStyle ?? const CellStyle(foreground: AnsiColor(10));
@@ -169,12 +169,12 @@ final class FleuryWidgetTheme {
       diffMetadataStyle ?? const CellStyle(dim: true);
 
   CellStyle resolveJsonError(ThemeData theme) =>
-      jsonErrorStyle ?? CellStyle.empty;
+      jsonErrorStyle ?? theme.errorStyle;
 
   CellStyle resolveMarkdownHeading(ThemeData theme, int? level) {
     final lvl = level ?? 1;
     // Color reinforces the depth hierarchy on top of the structural cues
-    // (H1 inverse bar, H2+ underline): primary for H1, info for H2, and no
+    // (H1 reverse bar, H2+ underline): primary for H1, info for H2, and no
     // tint for H3 so the emphasis recedes with depth. An explicit
     // markdownHeadingStyle still overrides everything.
     final color = switch (lvl) {
@@ -202,10 +202,7 @@ final class FleuryWidgetTheme {
       markdownRuleStyle ?? theme.mutedStyle;
 
   FleuryWidgetTheme copyWith({
-    CellStyle? controlFocusStyle,
-    CellStyle? disabledStyle,
-    CellStyle? switchOnStyle,
-    CellStyle? switchOffStyle,
+    CellStyle? switchTrackStyle,
     CellStyle? progressFilledStyle,
     CellStyle? progressTrackStyle,
     CellStyle? dataSelectedStyle,
@@ -236,10 +233,7 @@ final class FleuryWidgetTheme {
     CellStyle? markdownRuleStyle,
   }) {
     return FleuryWidgetTheme(
-      controlFocusStyle: controlFocusStyle ?? this.controlFocusStyle,
-      disabledStyle: disabledStyle ?? this.disabledStyle,
-      switchOnStyle: switchOnStyle ?? this.switchOnStyle,
-      switchOffStyle: switchOffStyle ?? this.switchOffStyle,
+      switchTrackStyle: switchTrackStyle ?? this.switchTrackStyle,
       progressFilledStyle: progressFilledStyle ?? this.progressFilledStyle,
       progressTrackStyle: progressTrackStyle ?? this.progressTrackStyle,
       dataSelectedStyle: dataSelectedStyle ?? this.dataSelectedStyle,
@@ -276,10 +270,7 @@ final class FleuryWidgetTheme {
   @override
   bool operator ==(Object other) {
     return other is FleuryWidgetTheme &&
-        other.controlFocusStyle == controlFocusStyle &&
-        other.disabledStyle == disabledStyle &&
-        other.switchOnStyle == switchOnStyle &&
-        other.switchOffStyle == switchOffStyle &&
+        other.switchTrackStyle == switchTrackStyle &&
         other.progressFilledStyle == progressFilledStyle &&
         other.progressTrackStyle == progressTrackStyle &&
         other.dataSelectedStyle == dataSelectedStyle &&
@@ -312,10 +303,7 @@ final class FleuryWidgetTheme {
 
   @override
   int get hashCode => Object.hashAll([
-    controlFocusStyle,
-    disabledStyle,
-    switchOnStyle,
-    switchOffStyle,
+    switchTrackStyle,
     progressFilledStyle,
     progressTrackStyle,
     dataSelectedStyle,

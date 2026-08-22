@@ -107,7 +107,7 @@ class Table extends StatefulWidget {
     this.columnWidths,
     this.columnSpacing = 1,
     this.headerSeparator = true,
-    this.separatorStyle = CellStyle.empty,
+    this.separatorStyle = CellStyle.none,
     this.selectable = false,
     this.controller,
     this.focusNode,
@@ -167,7 +167,7 @@ class Table extends StatefulWidget {
   final void Function(int index)? onSelect;
 
   /// Style merged into the highlighted row. Defaults to the theme's
-  /// selection style (inverse video).
+  /// selection style (reverse video).
   final CellStyle? selectedStyle;
 
   /// Label exposed through the semantic app graph.

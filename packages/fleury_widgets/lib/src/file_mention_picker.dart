@@ -893,5 +893,5 @@ CellStyle _rowStyle(
   if (!enabled) return theme.mutedStyle;
   if (activeSelection) return theme.selectionStyle;
   if (selected) return theme.mutedStyle;
-  return CellStyle.empty;
+  return CellStyle.none;
 }

@@ -7,7 +7,7 @@
 //     TextInputClaimant / TextCompositionClaimant, so the InputDispatcher
 //     routes typed printable text and IME composition directly to it. Handles
 //     special chords (Backspace, arrows, Enter, etc.) via KeyDetector.
-//   - RenderTextInput — paints the text plus a one-cell inverse
+//   - RenderTextInput — paints the text plus a one-cell reverse
 //     cursor at the current selection position.
 //
 // What's intentionally not here yet:
@@ -44,6 +44,7 @@ import 'form_control.dart';
 import 'framework.dart';
 import 'keyboard.dart';
 import 'media_query.dart';
+import 'pointer.dart';
 import 'theme.dart';
 import 'tui_binding.dart';
 
@@ -542,7 +543,7 @@ class TextInput extends StatefulWidget {
     this.onEscape,
     this.placeholder = '',
     this.placeholderStyle = const CellStyle(dim: true),
-    this.style = CellStyle.empty,
+    this.style = CellStyle.none,
     this.cursorStyle = const CellStyle(inverse: true),
     this.blinkInterval = const Duration(milliseconds: 500),
     this.enableBlink = true,
@@ -551,7 +552,6 @@ class TextInput extends StatefulWidget {
     this.enabled = true,
     this.readOnly = false,
     this.validationError,
-    this.errorStyle,
     this.semanticLabel,
     this.semanticState = SemanticState.empty,
     this.clipboardPolicy,
@@ -604,7 +604,10 @@ class TextInput extends StatefulWidget {
   /// Style for the [placeholder] text. Defaults to dim.
   final CellStyle placeholderStyle;
 
-  /// Base style for the rendered text.
+  /// Style for the rendered text and its interactive states.
+  ///
+  /// Pass a plain [CellStyle] for the common case. Use [CellStyle.interactive] only
+  /// when focus, hover, disabled, or invalid should look different locally.
   final CellStyle style;
 
   /// Style merged on top of [style] at the cursor cell. Defaults to
@@ -644,12 +647,6 @@ class TextInput extends StatefulWidget {
   /// Use this when the input is not inside a `FormField`. An enclosing
   /// `FormField` supplies its current error automatically.
   final String? validationError;
-
-  /// Style merged onto the field while its value is invalid.
-  ///
-  /// null uses [ThemeData.errorStyle]. [CellStyle.empty] suppresses the
-  /// visual reaction while preserving validation semantics and messages.
-  final CellStyle? errorStyle;
 
   /// Label exposed through the semantic app graph.
   ///
@@ -721,6 +718,7 @@ class _TextInputState extends State<TextInput>
   late String _lastNotifiedText;
   bool _ownsController = false;
   bool _ownsFocusNode = false;
+  bool _hovered = false;
   FormControlRegistration? _formRegistration;
   TextPasteSession? _pasteSession;
   final Queue<({String text, bool isFinal})> _queuedPasteSegments =
@@ -1556,14 +1554,29 @@ class _TextInputState extends State<TextInput>
     final completion = widget.completionController;
     final completionState = completion?.state;
     final validationError = _formRegistration?.error ?? widget.validationError;
-    final invalidStyle = widget.errorStyle ?? Theme.of(context).errorStyle;
-    final displayStyle = validationError == null
-        ? widget.style
-        : widget.style.merge(invalidStyle);
-    final displayPlaceholderStyle = validationError == null
-        ? widget.placeholderStyle
-        : widget.placeholderStyle.merge(invalidStyle);
-    return Semantics(
+    final theme = Theme.of(context);
+    final defaultStyle = CellStyle.interactive(
+      focused: CellStyle(
+        foreground: theme.colorScheme.focus,
+      ).merge(theme.focusedStyle),
+      disabled: theme.mutedStyle,
+      invalid: theme.errorStyle,
+    );
+    final states = {
+      if (_hovered) CellStyleState.hovered,
+      if (focused) CellStyleState.focused,
+      if (!widget.enabled) CellStyleState.disabled,
+      if (validationError != null) CellStyleState.invalid,
+    };
+    final cascade = [defaultStyle, theme.interactiveStyle, widget.style];
+    final displayStyle = resolveCellStyle(cascade: cascade, states: states);
+    // Placeholder paint is a base-layer customization. Active state patches
+    // still win, so an empty invalid field does not hide its invalid cue.
+    final displayPlaceholderStyle = resolveCellStyle(
+      cascade: [...cascade, widget.placeholderStyle],
+      states: states,
+    );
+    final content = Semantics(
       role: SemanticRole.textField,
       label:
           widget.semanticLabel ??
@@ -1632,12 +1645,8 @@ class _TextInputState extends State<TextInput>
             text: _controller.text,
             selection: _controller.selection,
             placeholder: widget.placeholder,
-            placeholderStyle: widget.enabled
-                ? displayPlaceholderStyle
-                : displayPlaceholderStyle.merge(const CellStyle(dim: true)),
-            style: widget.enabled
-                ? displayStyle
-                : displayStyle.merge(const CellStyle(dim: true)),
+            placeholderStyle: displayPlaceholderStyle,
+            style: displayStyle,
             cursorStyle: widget.cursorStyle,
             cursorVisible: cursorVisible,
             obscureText: widget.obscureText,
@@ -1645,6 +1654,15 @@ class _TextInputState extends State<TextInput>
           ),
         ),
       ),
+    );
+    return MouseRegion(
+      onEnter: () {
+        if (!_hovered) setState(() => _hovered = true);
+      },
+      onExit: () {
+        if (_hovered) setState(() => _hovered = false);
+      },
+      child: content,
     );
   }
 }
@@ -1711,7 +1729,7 @@ class _TextInputDisplay extends LeafRenderObjectWidget {
   }
 }
 
-/// Paints the [text] of a [TextInput] with a one-cell inverse cursor
+/// Paints the [text] of a [TextInput] with a one-cell reverse cursor
 /// at the current [selection] code-unit index.
 ///
 /// Layout: width = text intrinsic width (in cells) + 1 for the
@@ -1723,7 +1741,7 @@ class RenderTextInput extends RenderObject {
     required TextSelection selection,
     String placeholder = '',
     CellStyle placeholderStyle = const CellStyle(dim: true),
-    CellStyle style = CellStyle.empty,
+    CellStyle style = CellStyle.none,
     CellStyle cursorStyle = const CellStyle(inverse: true),
     bool cursorVisible = true,
     bool obscureText = false,

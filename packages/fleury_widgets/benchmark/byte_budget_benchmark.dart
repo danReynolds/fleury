@@ -104,7 +104,7 @@ final _scenarios = <_Scenario>[
   _Scenario(
     'selection-highlight',
     'Selection extend',
-    'inverse-highlight churn as a selection grows; SGR lever',
+    'reverse-highlight churn as a selection grows; SGR lever',
     (tester, capture) {
       tester.pumpWidget(
         const SelectionArea(

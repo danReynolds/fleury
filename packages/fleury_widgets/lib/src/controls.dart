@@ -3,10 +3,9 @@ import 'package:fleury/fleury_internal.dart';
 
 import 'component_theme.dart';
 
-/// Shared focus + activation chrome for the form controls. Focusable;
+/// Shared focus, hover, validation, and activation behavior for controls.
 /// Enter or Space activates ([onActivate]) when enabled. The [builder] gets
-/// whether the control currently holds focus and whether it is enabled so it
-/// can show focus and disabled cues.
+/// the fully resolved style and active style states for the control.
 ///
 /// Enter arrives as a `KeyEvent`; Space arrives as inserted text, so the
 /// control claims text input and consumes a single space (declining all
@@ -16,25 +15,34 @@ class _FocusableControl extends StatefulWidget {
     required this.onActivate,
     required this.builder,
     required this.semanticRole,
+    required this.defaultStyle,
     this.semanticLabel,
     this.semanticValue,
     this.semanticChecked,
     this.semanticSelected = false,
+    this.styleSelected = false,
     this.onSetValue,
     this.focusNode,
     this.autofocus = false,
     this.participatesInForm = false,
-    this.errorStyle,
+    this.validationError,
+    this.style,
   });
 
   final void Function()? onActivate;
-  final Widget Function(bool focused, bool enabled, CellStyle? invalidStyle)
+  final Widget Function(
+    CellStyle style,
+    bool enabled,
+    Set<CellStyleState> states,
+  )
   builder;
+  final CellStyle defaultStyle;
   final SemanticRole semanticRole;
   final String? semanticLabel;
   final Object? semanticValue;
   final bool? semanticChecked;
   final bool semanticSelected;
+  final bool styleSelected;
 
   /// When non-null, the control advertises [SemanticAction.setValue] and routes
   /// the payload here — letting an agent set the value directly (idempotent),
@@ -44,7 +52,8 @@ class _FocusableControl extends StatefulWidget {
   final FocusNode? focusNode;
   final bool autofocus;
   final bool participatesInForm;
-  final CellStyle? errorStyle;
+  final String? validationError;
+  final CellStyle? style;
 
   bool get enabled => onActivate != null;
 
@@ -56,6 +65,7 @@ class _FocusableControlState extends State<_FocusableControl>
     implements TextInputClaimant {
   late FocusNode _node;
   bool _owns = false;
+  bool _hovered = false;
   FormControlRegistration? _formRegistration;
 
   @override
@@ -140,10 +150,23 @@ class _FocusableControlState extends State<_FocusableControl>
 
   @override
   Widget build(BuildContext context) {
-    final validationError = _formRegistration?.error;
-    final invalidStyle = validationError == null
-        ? null
-        : (widget.errorStyle ?? Theme.of(context).errorStyle);
+    final validationError = _formRegistration?.error ?? widget.validationError;
+    final focused = _node.hasFocus;
+    final states = <CellStyleState>{
+      if (_hovered) CellStyleState.hovered,
+      if (focused) CellStyleState.focused,
+      if (widget.styleSelected) CellStyleState.selected,
+      if (!widget.enabled) CellStyleState.disabled,
+      if (validationError != null) CellStyleState.invalid,
+    };
+    final resolvedStyle = resolveCellStyle(
+      cascade: [
+        widget.defaultStyle,
+        Theme.of(context).interactiveStyle,
+        widget.style,
+      ],
+      states: states,
+    );
     final Widget content = !widget.enabled
         ? Semantics(
             role: widget.semanticRole,
@@ -153,13 +176,13 @@ class _FocusableControlState extends State<_FocusableControl>
             checked: widget.semanticChecked,
             enabled: false,
             validationError: validationError,
-            child: widget.builder(false, false, invalidStyle),
+            child: widget.builder(resolvedStyle, false, states),
           )
         : Semantics(
             role: widget.semanticRole,
             label: widget.semanticLabel,
             value: widget.semanticValue,
-            focused: _node.hasFocus,
+            focused: focused,
             selected: widget.semanticSelected,
             checked: widget.semanticChecked,
             enabled: true,
@@ -199,7 +222,7 @@ class _FocusableControlState extends State<_FocusableControl>
                 child: Focus(
                   focusNode: _node,
                   autofocus: widget.autofocus,
-                  child: widget.builder(_node.hasFocus, true, invalidStyle),
+                  child: widget.builder(resolvedStyle, true, states),
                 ),
               ),
             ),
@@ -207,25 +230,19 @@ class _FocusableControlState extends State<_FocusableControl>
     // A form control is a styled, interactive component — not selectable text.
     // Opt its label out of the ambient text selection, the way a browser makes
     // `<button>` text non-selectable. Standalone Text stays selectable.
-    return SelectionArea.disabled(child: content);
+    return MouseRegion(
+      onEnter: () {
+        if (!_hovered) setState(() => _hovered = true);
+      },
+      onExit: () {
+        if (_hovered) setState(() => _hovered = false);
+      },
+      child: SelectionArea.disabled(child: content),
+    );
   }
 }
 
-Widget _row(
-  String indicator,
-  String? label,
-  bool focused,
-  bool enabled,
-  CellStyle focusStyle,
-  CellStyle disabledStyle,
-  CellStyle? invalidStyle,
-) {
-  var style = !enabled
-      ? disabledStyle
-      : focused
-      ? focusStyle
-      : CellStyle.empty;
-  if (enabled && invalidStyle != null) style = style.merge(invalidStyle);
+Widget _row(String indicator, String? label, CellStyle style) {
   return Row(
     children: [
       Text(indicator, style: style),
@@ -233,6 +250,12 @@ Widget _row(
     ],
   );
 }
+
+CellStyle _defaultControlStyle(ThemeData theme) => CellStyle.interactive(
+  focused: theme.focusedStyle,
+  disabled: theme.mutedStyle,
+  invalid: theme.errorStyle,
+);
 
 /// A boolean checkbox: `[x]` checked, `[ ]` unchecked. Enter toggles when
 /// focused, calling [onChanged] with the new value. A controlled widget —
@@ -246,7 +269,7 @@ class Checkbox extends StatelessWidget {
     this.label,
     this.focusNode,
     this.autofocus = false,
-    this.errorStyle,
+    this.style,
   });
 
   /// Controlled checked state rendered by the checkbox.
@@ -264,15 +287,16 @@ class Checkbox extends StatelessWidget {
   /// Whether the checkbox requests focus when mounted.
   final bool autofocus;
 
-  /// Invalid style for this control. null uses the theme;
-  /// [CellStyle.empty] keeps it visually neutral.
-  final CellStyle? errorStyle;
+  /// Base styling, plus optional hover, focus, selected, disabled, and invalid
+  /// state entries from [CellStyle.interactive].
+  final CellStyle? style;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final widgetTheme = FleuryWidgetTheme.from(theme);
     return _FocusableControl(
+      defaultStyle: _defaultControlStyle(theme),
+      style: style,
       focusNode: focusNode,
       autofocus: autofocus,
       onActivate: onChanged == null ? null : () => onChanged!(!value),
@@ -286,17 +310,10 @@ class Checkbox extends StatelessWidget {
       semanticLabel: label,
       semanticValue: value,
       semanticChecked: value,
+      styleSelected: value,
       participatesInForm: true,
-      errorStyle: errorStyle,
-      builder: (focused, enabled, invalidStyle) => _row(
-        value ? '[x]' : '[ ]',
-        label,
-        focused,
-        enabled,
-        widgetTheme.resolveControlFocus(theme),
-        widgetTheme.resolveDisabled(theme),
-        invalidStyle,
-      ),
+      builder: (style, enabled, states) =>
+          _row(value ? '[x]' : '[ ]', label, style),
     );
   }
 }
@@ -312,7 +329,7 @@ class Toggle extends StatelessWidget {
     this.label,
     this.focusNode,
     this.autofocus = false,
-    this.errorStyle,
+    this.style,
   });
 
   /// Controlled on/off state rendered by the toggle.
@@ -330,15 +347,16 @@ class Toggle extends StatelessWidget {
   /// Whether the toggle requests focus when mounted.
   final bool autofocus;
 
-  /// Invalid style for this control. null uses the theme;
-  /// [CellStyle.empty] keeps it visually neutral.
-  final CellStyle? errorStyle;
+  /// Base styling, plus optional hover, focus, selected, disabled, and invalid
+  /// state entries from [CellStyle.interactive].
+  final CellStyle? style;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final widgetTheme = FleuryWidgetTheme.from(theme);
     return _FocusableControl(
+      defaultStyle: _defaultControlStyle(theme),
+      style: style,
       focusNode: focusNode,
       autofocus: autofocus,
       onActivate: onChanged == null ? null : () => onChanged!(!value),
@@ -352,17 +370,10 @@ class Toggle extends StatelessWidget {
       semanticLabel: label,
       semanticValue: value,
       semanticChecked: value,
+      styleSelected: value,
       participatesInForm: true,
-      errorStyle: errorStyle,
-      builder: (focused, enabled, invalidStyle) => _row(
-        value ? '[ o]' : '[o ]',
-        label,
-        focused,
-        enabled,
-        widgetTheme.resolveControlFocus(theme),
-        widgetTheme.resolveDisabled(theme),
-        invalidStyle,
-      ),
+      builder: (style, enabled, states) =>
+          _row(value ? '[ o]' : '[o ]', label, style),
     );
   }
 }
@@ -384,7 +395,7 @@ class Switch extends StatelessWidget {
     this.label,
     this.focusNode,
     this.autofocus = false,
-    this.errorStyle,
+    this.style,
   });
 
   /// Controlled on/off state that positions and colors the switch handle.
@@ -402,15 +413,17 @@ class Switch extends StatelessWidget {
   /// Whether the switch requests focus when mounted.
   final bool autofocus;
 
-  /// Invalid style for this control. null uses the theme;
-  /// [CellStyle.empty] keeps it visually neutral.
-  final CellStyle? errorStyle;
+  /// Base styling, plus optional hover, focus, selected, disabled, and invalid
+  /// state entries from [CellStyle.interactive].
+  final CellStyle? style;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final widgetTheme = FleuryWidgetTheme.from(theme);
     return _FocusableControl(
+      defaultStyle: _defaultControlStyle(theme),
+      style: style,
       focusNode: focusNode,
       autofocus: autofocus,
       onActivate: onChanged == null ? null : () => onChanged!(!value),
@@ -424,30 +437,26 @@ class Switch extends StatelessWidget {
       semanticLabel: label,
       semanticValue: value,
       semanticChecked: value,
+      styleSelected: value,
       participatesInForm: true,
-      errorStyle: errorStyle,
-      builder: (focused, enabled, invalidStyle) {
-        final disabledStyle = widgetTheme.resolveDisabled(theme);
-        var trackStyle = !enabled
-            ? disabledStyle
-            : value
-            ? widgetTheme.resolveSwitchOn(theme)
-            : widgetTheme.resolveSwitchOff(theme);
-        var focusBracket = !enabled
-            ? disabledStyle
-            : focused
-            ? widgetTheme.resolveControlFocus(theme)
-            : CellStyle.empty;
-        if (enabled && invalidStyle != null) {
-          trackStyle = trackStyle.merge(invalidStyle);
-          focusBracket = focusBracket.merge(invalidStyle);
-        }
+      builder: (resolvedStyle, enabled, states) {
+        final trackStyle = enabled
+            ? widgetTheme.resolveSwitchTrack(
+                theme,
+                states: states,
+                cascade: [
+                  _defaultControlStyle(theme),
+                  theme.interactiveStyle,
+                  style,
+                ],
+              )
+            : resolvedStyle;
         return Row(
           children: [
-            Text('[', style: focusBracket),
+            Text('[', style: resolvedStyle),
             Text(value ? '━━━●' : '●━━━', style: trackStyle),
-            Text(']', style: focusBracket),
-            if (label != null) Text(' $label', style: focusBracket),
+            Text(']', style: resolvedStyle),
+            if (label != null) Text(' $label', style: resolvedStyle),
           ],
         );
       },
@@ -468,7 +477,20 @@ class Radio<T> extends StatelessWidget {
     this.label,
     this.focusNode,
     this.autofocus = false,
-  });
+    this.style,
+  }) : _validationError = null;
+
+  const Radio._form({
+    super.key,
+    required this.value,
+    required this.groupValue,
+    required this.onChanged,
+    required String? validationError,
+    this.label,
+    this.focusNode,
+    this.autofocus = false,
+    this.style,
+  }) : _validationError = validationError;
 
   /// Value emitted when this radio is activated.
   final T value;
@@ -488,12 +510,19 @@ class Radio<T> extends StatelessWidget {
   /// Whether this radio requests focus when mounted.
   final bool autofocus;
 
+  /// Base styling, plus optional hover, focus, selected, and disabled state
+  /// entries from [CellStyle.interactive].
+  final CellStyle? style;
+
+  final String? _validationError;
+
   @override
   Widget build(BuildContext context) {
     final selected = value == groupValue;
     final theme = Theme.of(context);
-    final widgetTheme = FleuryWidgetTheme.from(theme);
     return _FocusableControl(
+      defaultStyle: _defaultControlStyle(theme),
+      style: style,
       focusNode: focusNode,
       autofocus: autofocus,
       onActivate: onChanged == null ? null : () => onChanged!(value),
@@ -502,15 +531,10 @@ class Radio<T> extends StatelessWidget {
       semanticValue: value,
       semanticChecked: selected,
       semanticSelected: selected,
-      builder: (focused, enabled, invalidStyle) => _row(
-        selected ? '(o)' : '( )',
-        label,
-        focused,
-        enabled,
-        widgetTheme.resolveControlFocus(theme),
-        widgetTheme.resolveDisabled(theme),
-        invalidStyle,
-      ),
+      styleSelected: selected,
+      validationError: _validationError,
+      builder: (style, enabled, states) =>
+          _row(selected ? '(o)' : '( )', label, style),
     );
   }
 }
@@ -548,7 +572,7 @@ class RadioGroup<T> extends StatefulWidget {
     this.spacing = 2,
     this.semanticLabel = 'Radio group',
     this.autofocus = false,
-    this.errorStyle,
+    this.style,
   });
 
   /// The currently selected value.
@@ -575,9 +599,9 @@ class RadioGroup<T> extends StatefulWidget {
   /// initial focus.
   final bool autofocus;
 
-  /// Invalid style for the group. null uses the theme;
-  /// [CellStyle.empty] keeps its radios visually neutral.
-  final CellStyle? errorStyle;
+  /// Base styling for every radio, plus optional hover, focus, selected,
+  /// disabled, and invalid state entries from [CellStyle.interactive].
+  final CellStyle? style;
 
   @override
   State<RadioGroup<T>> createState() => _RadioGroupState<T>();
@@ -706,12 +730,14 @@ class _RadioGroupState<T> extends State<RadioGroup<T>> {
         : widget.options.indexWhere((option) => option.enabled);
     final radios = <Widget>[
       for (var i = 0; i < widget.options.length; i++)
-        Radio<T>(
+        Radio<T>._form(
           value: widget.options[i].value,
           groupValue: widget.value,
           label: widget.options[i].label,
           focusNode: _nodes[i],
           autofocus: widget.autofocus && i == autofocusIndex,
+          style: widget.style,
+          validationError: _formRegistration?.error,
           onChanged: widget.options[i].enabled && widget.onChanged != null
               ? _select
               : null,
@@ -730,12 +756,6 @@ class _RadioGroupState<T> extends State<RadioGroup<T>> {
     // The group's onKey is closer to the focused radio than the app's root
     // directional traversal, so consuming the arrows here adds selection.
     final validationError = _formRegistration?.error;
-    final invalidStyle = validationError == null
-        ? null
-        : (widget.errorStyle ?? Theme.of(context).errorStyle);
-    final styledLayout = invalidStyle == null
-        ? layout
-        : DefaultTextStyle.merge(style: invalidStyle, child: layout);
     return Semantics(
       role: SemanticRole.region,
       label: widget.semanticLabel,
@@ -744,7 +764,7 @@ class _RadioGroupState<T> extends State<RadioGroup<T>> {
         onKey: (event) {
           if ((_onKey)(event) == KeyEventResult.handled) event.consume();
         },
-        child: Focus(canRequestFocus: false, child: styledLayout),
+        child: Focus(canRequestFocus: false, child: layout),
       ),
     );
   }
@@ -772,6 +792,7 @@ class Button extends StatelessWidget {
     this.variant = ButtonVariant.normal,
     this.focusNode,
     this.autofocus = false,
+    this.style,
   });
 
   /// Text shown inside the `[ … ]` button frame.
@@ -788,6 +809,10 @@ class Button extends StatelessWidget {
 
   /// Whether the button requests focus when mounted.
   final bool autofocus;
+
+  /// Base styling, plus optional hover, focus, and disabled state entries from
+  /// [CellStyle.interactive].
+  final CellStyle? style;
 
   static Color? _color(ButtonVariant variant, ColorScheme scheme) =>
       switch (variant) {
@@ -831,31 +856,21 @@ class Button extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final widgetTheme = FleuryWidgetTheme.from(theme);
     final content = '[ $label ]';
-
-    if (onPressed == null) {
-      return Semantics(
-        role: SemanticRole.button,
-        label: label,
-        enabled: false,
-        // A control is a styled component, not selectable text (like a disabled
-        // `<button>`). The enabled path opts out via _FocusableControl.
-        child: _text(context, content, widgetTheme.resolveDisabled(theme)),
-      );
-    }
     final base = CellStyle(foreground: _color(variant, theme.colorScheme));
     return _FocusableControl(
+      defaultStyle: CellStyle.interactive(
+        base: base,
+        focused: theme.selectionStyle,
+        disabled: theme.mutedStyle,
+      ),
+      style: style,
       focusNode: focusNode,
       autofocus: autofocus,
-      onActivate: onPressed!,
+      onActivate: onPressed,
       semanticRole: SemanticRole.button,
       semanticLabel: label,
-      builder: (focused, enabled, invalidStyle) => _text(
-        context,
-        content,
-        focused ? base.merge(theme.selectionStyle) : base,
-      ),
+      builder: (style, enabled, states) => _text(context, content, style),
     );
   }
 }

@@ -32,7 +32,7 @@ class KeyHintBar extends StatelessWidget {
     super.key,
     this.maxBindings = 12,
     this.separator = ' · ',
-    this.style = CellStyle.empty,
+    this.style = CellStyle.none,
     this.keyStyle,
   });
 

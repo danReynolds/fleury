@@ -24,7 +24,7 @@ class BlinkingCursor extends StatelessWidget {
   /// Single-character glyph painted on "on" frames.
   final String glyph;
 
-  /// Cell style for the cursor glyph. Defaults to inverse, which
+  /// Cell style for the cursor glyph. Defaults to reverse, which
   /// reads as a block cursor on most terminals.
   final CellStyle style;
 
@@ -40,7 +40,7 @@ class BlinkingCursor extends StatelessWidget {
         final visible = frame.isEven;
         return Text(
           visible ? glyph : ' ',
-          style: visible ? style : CellStyle.empty,
+          style: visible ? style : CellStyle.none,
           softWrap: false,
         );
       },

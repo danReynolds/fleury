@@ -41,7 +41,7 @@ class _Host extends StatefulWidget {
   });
   final String? initial;
   final void Function(String)? onPick;
-  final void Function(String)? onHighlight;
+  final void Function(String?)? onHighlight;
   final List<SelectOption<String>> options;
   @override
   State<_Host> createState() => _HostState();
@@ -70,6 +70,39 @@ class _HostState extends State<_Host> {
     );
   }
 }
+
+class _EnabledHost extends StatelessWidget {
+  const _EnabledHost({
+    required this.enabled,
+    required this.priorFocus,
+    this.onHighlight,
+  });
+
+  final bool enabled;
+  final FocusNode priorFocus;
+  final void Function(String?)? onHighlight;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Button(
+        label: 'Previous',
+        autofocus: true,
+        focusNode: priorFocus,
+        onPressed: _noop,
+      ),
+      Select<String>(
+        value: null,
+        options: _options,
+        semanticLabel: 'Color',
+        onChanged: enabled ? (_) {} : null,
+        onHighlightChanged: onHighlight,
+      ),
+    ],
+  );
+}
+
+void _noop() {}
 
 class _MultiHost extends StatefulWidget {
   const _MultiHost({this.initial = const <String>{}});
@@ -200,6 +233,47 @@ void main() {
       expect(result.status, SemanticActionInvocationStatus.disabled);
     });
 
+    testWidgets('disabling an open select retires and rewinds its preview', (
+      tester,
+    ) async {
+      final previews = <String?>[];
+      final priorFocus = FocusNode(debugLabel: 'prior-control');
+      tester.pumpWidget(
+        _EnabledHost(
+          enabled: true,
+          priorFocus: priorFocus,
+          onHighlight: previews.add,
+        ),
+      );
+      await tester.invokeSemanticAction(
+        SemanticAction.open,
+        role: SemanticRole.button,
+        label: 'Color',
+      );
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      expect(previews.last, 'green');
+
+      tester.pumpWidget(
+        _EnabledHost(
+          enabled: false,
+          priorFocus: priorFocus,
+          onHighlight: previews.add,
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        previews.last,
+        isNull,
+        reason: 'restores the committed null value',
+      );
+      expect(tester.semantics().where(role: SemanticRole.menu), isEmpty);
+      expect(tester.focusManager.focusedNode, same(priorFocus));
+
+      tester.pumpWidget(const Text('gone'));
+      priorFocus.dispose();
+    });
+
     testWidgets('Enter opens the list anchored below the trigger', (tester) {
       tester.pumpWidget(const _Host());
       tester.sendKey(const KeyEvent(KeyCode.enter));
@@ -235,7 +309,7 @@ void main() {
     });
 
     testWidgets('arrowing the open list live-previews the highlight', (tester) {
-      final previews = <String>[];
+      final previews = <String?>[];
       String? picked;
       tester.pumpWidget(
         _Host(
@@ -246,11 +320,13 @@ void main() {
       );
       tester.sendKey(const KeyEvent(KeyCode.enter)); // open at Red
       tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // -> Green
-      expect(previews, <String>['green'], reason: 'preview without committing');
+      expect(previews, <String?>[
+        'green',
+      ], reason: 'preview without committing');
       expect(picked, isNull, reason: 'nothing committed until Enter');
 
       tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // -> Blue
-      expect(previews, <String>['green', 'blue']);
+      expect(previews, <String?>['green', 'blue']);
       tester.sendKey(const KeyEvent(KeyCode.enter)); // commit
       expect(picked, 'blue');
     });
@@ -258,7 +334,7 @@ void main() {
     testWidgets('dismissing rewinds the preview to the applied value', (
       tester,
     ) {
-      final previews = <String>[];
+      final previews = <String?>[];
       tester.pumpWidget(_Host(initial: 'red', onHighlight: previews.add));
       tester.sendKey(const KeyEvent(KeyCode.enter)); // open at Red
       tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // preview Green
@@ -268,6 +344,16 @@ void main() {
         'red',
         reason: 'a preview must not outlive the dropdown that drove it',
       );
+    });
+
+    testWidgets('dismissing rewinds a nullable applied value', (tester) {
+      final previews = <String?>[];
+      tester.pumpWidget(_Host(onHighlight: previews.add));
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      tester.sendKey(const KeyEvent(KeyCode.escape));
+
+      expect(previews.last, isNull);
     });
 
     testWidgets('the open list marks the currently-selected option', (tester) {
@@ -340,8 +426,47 @@ void main() {
       expect(picked, 'blue');
     });
 
+    testWidgets('hover moves the open-list highlight and live preview', (
+      tester,
+    ) {
+      final previews = <String?>[];
+      String? picked;
+      tester.pumpWidget(
+        _Host(
+          initial: 'red',
+          onPick: (value) => picked = value,
+          onHighlight: previews.add,
+        ),
+      );
+
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      final blue = _find(tester, 'Blue')!;
+      tester.sendMouse(
+        MouseEvent(
+          kind: MouseEventKind.moved,
+          button: MouseButton.none,
+          col: blue.col,
+          row: blue.row,
+        ),
+      );
+
+      expect(previews, <String?>['blue']);
+      expect(
+        tester
+            .semantics()
+            .single(role: SemanticRole.menuItem, label: 'Blue')
+            .selected,
+        isTrue,
+      );
+      expect(picked, isNull, reason: 'hover previews but does not commit');
+
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      expect(picked, 'blue', reason: 'Enter commits the hovered option');
+    });
+
     testWidgets('clicking the open trigger closes the list', (tester) {
-      tester.pumpWidget(const _Host(initial: 'red'));
+      final previews = <String?>[];
+      tester.pumpWidget(_Host(initial: 'red', onHighlight: previews.add));
 
       void clickTrigger() {
         final trigger = _find(tester, 'Red')!;
@@ -365,9 +490,12 @@ void main() {
 
       clickTrigger();
       expect(_screen(tester).contains('Blue'), isTrue, reason: 'opened');
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      expect(previews.last, 'green');
 
       clickTrigger();
       expect(_screen(tester).contains('Blue'), isFalse, reason: 'closed');
+      expect(previews.last, 'red', reason: 'dismissal restores the commit');
       expect(
         tester
             .semantics()
@@ -375,6 +503,47 @@ void main() {
             .expanded,
         isFalse,
       );
+    });
+
+    testWidgets('click-away dismisses without activating content behind', (
+      tester,
+    ) {
+      var behindPressed = false;
+      tester.pumpWidget(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const _Host(initial: 'red'),
+            const SizedBox(height: 6),
+            Button(label: 'Behind', onPressed: () => behindPressed = true),
+          ],
+        ),
+      );
+
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      expect(tester.semantics().where(role: SemanticRole.menu), isNotEmpty);
+
+      final behind = _find(tester, 'Behind', cols: 24, rows: 12)!;
+      tester.sendMouse(
+        MouseEvent(
+          kind: MouseEventKind.down,
+          button: MouseButton.left,
+          col: behind.col,
+          row: behind.row,
+        ),
+      );
+      tester.sendMouse(
+        MouseEvent(
+          kind: MouseEventKind.up,
+          button: MouseButton.left,
+          col: behind.col,
+          row: behind.row,
+        ),
+      );
+
+      expect(tester.semantics().where(role: SemanticRole.menu), isEmpty);
+      expect(behindPressed, isFalse);
+      expect(tester.focusManager.focusedNode?.debugLabel, 'select-trigger');
     });
 
     group('semantics', () {
@@ -456,7 +625,8 @@ void main() {
 
       testWidgets('trigger semantic close restores focus after retiring the '
           'trap', (tester) async {
-        tester.pumpWidget(const _Host(initial: 'red'));
+        final previews = <String?>[];
+        tester.pumpWidget(_Host(initial: 'red', onHighlight: previews.add));
 
         await tester.invokeSemanticAction(
           SemanticAction.open,
@@ -464,6 +634,8 @@ void main() {
           label: 'Color',
         );
         tester.render(size: const CellSize(30, 8));
+        tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+        expect(previews.last, 'green');
 
         final result = await tester.invokeSemanticAction(
           SemanticAction.close,
@@ -472,6 +644,7 @@ void main() {
         );
 
         expect(result.completed, isTrue);
+        expect(previews.last, 'red');
         expect(tester.semantics().where(role: SemanticRole.menu), isEmpty);
         expect(tester.focusManager.focusedNode?.debugLabel, 'select-trigger');
       });

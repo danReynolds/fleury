@@ -623,7 +623,7 @@ void main() {
     });
 
     testWidgets('flipping trapFocus on starts confining Tab', (tester) {
-      // The inverse: a scope starts open, then enables trapFocus in update().
+      // The reverse: a scope starts open, then enables trapFocus in update().
       // The manager must learn about the trap without remounting the subtree.
       final inA = FocusNode(debugLabel: 'inA');
       final inB = FocusNode(debugLabel: 'inB');

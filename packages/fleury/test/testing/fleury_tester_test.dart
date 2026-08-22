@@ -591,7 +591,7 @@ class _RenderPaintPulse extends RenderObject {
     buffer.writeGrapheme(
       offset,
       _holder.value >= 1.0 ? 'D' : 'p',
-      style: CellStyle.empty,
+      style: CellStyle.none,
     );
   }
 }

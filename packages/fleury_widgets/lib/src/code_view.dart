@@ -615,7 +615,7 @@ class _CodeLineWidget extends StatelessWidget {
           ? theme.selectionStyle
           : selected
           ? theme.mutedStyle
-          : CellStyle.empty,
+          : CellStyle.none,
     );
     return Semantics(
       role: SemanticRole.codeLine,

@@ -17,12 +17,12 @@ void main() {
       ),
     );
     final buf = tester.render(size: const CellSize(8, 1));
-    // Row 0 ('a') is selected; the marker cell should be bold (not inverse).
+    // Row 0 ('a') is selected; the marker cell should be bold (not reverse).
     expect(buf.atColRow(2, 0).style.bold, isTrue);
     expect(
       buf.atColRow(2, 0).style.inverse,
       isFalse,
-      reason: 'theme overrode the default inverse selection',
+      reason: 'theme overrode the default reverse selection',
     );
   });
 

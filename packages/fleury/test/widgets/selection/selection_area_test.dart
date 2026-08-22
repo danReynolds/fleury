@@ -72,7 +72,7 @@ void main() {
       expect(captured!.plainText, 'llo w');
     });
 
-    testWidgets('the selected cells render with inverse highlight', (
+    testWidgets('the selected cells render with reverse highlight', (
       tester,
     ) async {
       tester.pumpWidget(SelectionArea(child: const Text('abcdefg')));
@@ -83,7 +83,7 @@ void main() {
       tester.sendMouse(_drag(5, 0));
 
       final buf = tester.render(size: const CellSize(10, 1));
-      // Selected cells carry the inverse-video style.
+      // Selected cells carry the reverse-video style.
       expect(buf.atColRow(2, 0).style.inverse, isTrue);
       expect(buf.atColRow(3, 0).style.inverse, isTrue);
       expect(buf.atColRow(4, 0).style.inverse, isTrue);

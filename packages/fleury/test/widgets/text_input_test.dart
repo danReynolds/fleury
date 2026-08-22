@@ -1463,7 +1463,7 @@ void main() {
         const TextInput(autofocus: true, enableBlink: false, placeholder: 'go'),
       );
       final buf = tester.render(size: const CellSize(10, 1));
-      // First placeholder cell carries the cursor (inverse) merged onto dim.
+      // First placeholder cell carries the cursor (reverse) merged onto dim.
       expect(buf.atColRow(0, 0).grapheme, 'g');
       expect(buf.atColRow(0, 0).style.inverse, isTrue);
       expect(buf.atColRow(1, 0).style.inverse, isFalse);

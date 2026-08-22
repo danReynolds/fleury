@@ -555,7 +555,7 @@ class _MessageRow extends StatelessWidget {
           ? theme.selectionStyle
           : selected
           ? theme.mutedStyle
-          : CellStyle.empty,
+          : CellStyle.none,
     );
     return Semantics(
       role: SemanticRole.message,
@@ -709,6 +709,6 @@ CellStyle _styleForMessage(MessageEntry message) {
     MessageRole.assistant => const CellStyle(foreground: AnsiColor(10)),
     MessageRole.system => const CellStyle(foreground: AnsiColor(12)),
     MessageRole.tool => const CellStyle(foreground: AnsiColor(11)),
-    MessageRole.log || MessageRole.event => CellStyle.empty,
+    MessageRole.log || MessageRole.event => CellStyle.none,
   };
 }

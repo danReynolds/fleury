@@ -977,7 +977,7 @@ class _LogRow extends StatelessWidget {
           ? theme.selectionStyle
           : selected
           ? theme.mutedStyle
-          : CellStyle.empty,
+          : CellStyle.none,
     );
     return Semantics(
       role: SemanticRole.listItem,

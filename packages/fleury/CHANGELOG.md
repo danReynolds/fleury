@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **State-aware control styling.** Every core control keeps its existing
+  `style: CellStyle(...)` common case and also accepts
+  `CellStyle.interactive(...)` for focused, hovered, selected, disabled, and invalid
+  treatments. `ThemeData.interactiveStyle` applies the same sparse policy
+  app-wide.
+  `TextInput.errorStyle` and `TextArea.errorStyle` are replaced by
+  `style: CellStyle.interactive(invalid: ...)`; use `CellStyle.none` to suppress
+  inherited invalid chrome without changing validation semantics.
+  `CellStyle.none` replaces `CellStyle.empty` for an explicit no-paint state;
+  the reverse-video attribute remains the `inverse` flag and now documents its
+  foreground/background swap directly.
+
 - **Focus boundaries.** `FocusScope.modal` is now `trapFocus`, describing its
   single responsibility: Tab, spatial traversal, pointer focus, and direct
   focus requests stay inside the subtree. Key propagation is independent;

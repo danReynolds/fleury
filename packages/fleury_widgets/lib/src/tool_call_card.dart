@@ -208,7 +208,7 @@ class _ToolCallCardState extends State<ToolCallCard> {
           Text(
             '${record.error == null ? 'Output' : 'Error'}: ${formattedOutput.text}',
             style: record.error == null
-                ? CellStyle.empty
+                ? CellStyle.none
                 : const CellStyle(foreground: AnsiColor(9)),
           ),
         if (record.progressCurrent != null || record.progressTotal != null)

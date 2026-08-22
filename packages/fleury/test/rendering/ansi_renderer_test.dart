@@ -513,6 +513,29 @@ void main() {
       expect(sink.output, '\x1B[H\x1B[31;1mA\x1B[0m');
     });
 
+    test('inverse video emits SGR 7 and clears with SGR 27', () {
+      final prev = CellBuffer(const CellSize(2, 1));
+      final next = CellBuffer(const CellSize(2, 1))
+        ..writeGrapheme(
+          const CellOffset(0, 0),
+          'A',
+          style: const CellStyle(inverse: true),
+        )
+        ..writeGrapheme(
+          const CellOffset(1, 0),
+          'B',
+          style: const CellStyle(bold: true),
+        );
+      final sink = StringAnsiSink();
+
+      const AnsiRenderer(
+        synchronizedOutput: false,
+      ).renderDiff(prev, next, sink);
+
+      expect(sink.output, contains('\x1B[7mA'));
+      expect(sink.output, contains('\x1B[1;27mB'));
+    });
+
     test('resets style at end of frame when any style was emitted', () {
       final prev = CellBuffer(const CellSize(3, 1));
       final next = CellBuffer(const CellSize(3, 1));

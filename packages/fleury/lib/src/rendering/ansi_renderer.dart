@@ -336,7 +336,7 @@ final class AnsiRenderer {
       // change drives an OSC 8 transition and never a spurious SGR reset, and
       // (with hyperlinks off) a link never perturbs the SGR byte stream at all.
       // For link-free styles these visual comparisons are exactly `==` /
-      // `== CellStyle.empty`, so the non-link path is byte-for-byte unchanged.
+      // `== CellStyle.none`, so the non-link path is byte-for-byte unchanged.
       // Emit a combined SGR delta where the terminal state is known; fall back
       // to reset+set where it is not. Visually-empty runs only emit a reset when
       // transitioning out of a previously emitted non-empty style.
@@ -575,7 +575,7 @@ final class AnsiRenderer {
     String? emittedLink,
   ) {
     if (fromCol >= toCol) return null;
-    var currentStyle = emittedStyle ?? CellStyle.empty;
+    var currentStyle = emittedStyle ?? CellStyle.none;
     var emittedSgr = false;
     final out = StringBuffer();
     for (var col = fromCol; col < toCol; col++) {
@@ -659,7 +659,7 @@ final class AnsiRenderer {
     CellStyle to, {
     required bool resetFirst,
   }) {
-    if (resetFirst || from == null || from == CellStyle.empty) {
+    if (resetFirst || from == null || from == CellStyle.none) {
       return _encodeStyle(to, resetFirst: resetFirst);
     }
 

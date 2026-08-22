@@ -518,7 +518,7 @@ class FocusManager extends ChangeNotifier {
   /// Excludes the outermost [ExcludeFocus] marker(s) inside [root]
   /// immediately, ahead of the rebuild that will flip them on.
   ///
-  /// This is the inverse of [liftExclusionIn]. [Navigator.pop] uses both to
+  /// This is the reverse of [liftExclusionIn]. [Navigator.pop] uses both to
   /// make its logical route switch atomic for focus: the leaving route becomes
   /// inert at the same instant the revealed route becomes eligible, even
   /// though both marker widgets update on the next frame.

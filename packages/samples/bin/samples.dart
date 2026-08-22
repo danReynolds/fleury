@@ -8,8 +8,8 @@ import 'package:fleury_samples/samples.dart';
 ///   dart run packages/samples/bin/samples.dart <app>
 ///   fleury dev samples <app>            (via tool/fleury_dev.dart)
 ///
-/// Apps: dashboard | files | editor | agent | finance | forms | asteroids |
-/// sprite | debug.
+/// Apps: dashboard | files | editor | agent | finance | forms | themes |
+/// asteroids | sprite | debug.
 const Map<String, (String, Widget Function())>
 _apps = <String, (String, Widget Function())>{
   'dashboard': ('htop-style live system monitor', DashboardApp.new),
@@ -21,6 +21,10 @@ _apps = <String, (String, Widget Function())>{
     FinanceApp.new,
   ),
   'forms': ('multi-screen validated service deployment', FormsShowcaseApp.new),
+  'themes': (
+    'community theme gallery and live theme studio',
+    ThemingShowcaseApp.new,
+  ),
   'asteroids': ('real-time neon vector arcade game', NeonAsteroidsApp.new),
   'sprite': (
     'paint and animate portable ANSI sprites',

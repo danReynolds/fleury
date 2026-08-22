@@ -252,9 +252,9 @@ void main() {
         columnSpacing: 1,
         hasHeader: false,
         headerSeparator: false,
-        separatorStyle: CellStyle.empty,
+        separatorStyle: CellStyle.none,
         selectedRow: null,
-        selectedStyle: CellStyle.empty,
+        selectedStyle: CellStyle.none,
         onVisibleRange: (_, _) {},
       );
       final a = _CountingCell(const CellSize(2, 1));

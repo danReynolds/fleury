@@ -40,7 +40,7 @@ class DatePicker extends StatefulWidget {
     this.label,
     this.focusNode,
     this.autofocus = false,
-    this.errorStyle,
+    this.style,
   });
 
   /// Currently-selected day (only the y/m/d portion is read).
@@ -70,9 +70,9 @@ class DatePicker extends StatefulWidget {
   /// Whether the picker requests focus when mounted.
   final bool autofocus;
 
-  /// Invalid style for the selected date and header. null uses the theme;
-  /// [CellStyle.empty] keeps the picker visually neutral.
-  final CellStyle? errorStyle;
+  /// Base styling, plus optional focus, selected, disabled, and invalid state
+  /// entries from [CellStyle.interactive].
+  final CellStyle? style;
 
   @override
   State<DatePicker> createState() => _DatePickerState();
@@ -334,9 +334,30 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
     final canIncrement =
         enabled && _inBounds(_midnight(v).add(const Duration(days: 1)));
     final validationError = _formRegistration?.error;
-    final invalidStyle = validationError == null
-        ? null
-        : (widget.errorStyle ?? theme.errorStyle);
+    CellStyle resolvePickerStyle({
+      bool selected = false,
+      bool focusTarget = false,
+      bool unavailable = false,
+      CellStyle base = CellStyle.none,
+    }) => resolveCellStyle(
+      cascade: [
+        CellStyle.interactive(
+          base: base,
+          selected: theme.selectionStyle,
+          focused: theme.focusedStyle,
+          disabled: theme.mutedStyle,
+          invalid: theme.errorStyle,
+        ),
+        theme.interactiveStyle,
+        widget.style,
+      ],
+      states: {
+        if (selected) CellStyleState.selected,
+        if (focusTarget && focused) CellStyleState.focused,
+        if (!enabled || unavailable) CellStyleState.disabled,
+        if (focusTarget && validationError != null) CellStyleState.invalid,
+      },
+    );
 
     // Build the 7-column day grid as rows. Each row is a List<Widget>
     // of cells (blank, in-bounds day, or out-of-bounds dimmed day).
@@ -362,21 +383,19 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
             }
           : null;
       if (selected) {
-        var selectedStyle = !enabled
-            ? disabledStyle
-            : focused
-            ? theme.focusedStyle
-            : theme.selectionStyle;
-        if (enabled && invalidStyle != null) {
-          selectedStyle = selectedStyle.merge(invalidStyle);
-        }
-        row.add(_Cell(cellText, style: selectedStyle, onTap: onTap));
+        row.add(
+          _Cell(
+            cellText,
+            style: resolvePickerStyle(selected: true, focusTarget: true),
+            onTap: onTap,
+          ),
+        );
       } else if (!inB) {
-        row.add(_Cell(cellText, style: const CellStyle(dim: true)));
+        row.add(_Cell(cellText, style: resolvePickerStyle(unavailable: true)));
       } else if (!enabled) {
-        row.add(_Cell(cellText, style: disabledStyle));
+        row.add(_Cell(cellText, style: resolvePickerStyle()));
       } else {
-        row.add(_Cell(cellText, onTap: onTap));
+        row.add(_Cell(cellText, style: resolvePickerStyle(), onTap: onTap));
       }
       if (row.length == 7) {
         rows.add(row);
@@ -410,17 +429,10 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
             ),
             Text(
               '${_months[v.month - 1]} ${v.year}',
-              style:
-                  (!enabled
-                          ? disabledStyle
-                          : focused
-                          ? theme.focusedStyle
-                          : const CellStyle(bold: true))
-                      .merge(
-                        enabled
-                            ? invalidStyle ?? CellStyle.empty
-                            : CellStyle.empty,
-                      ),
+              style: resolvePickerStyle(
+                focusTarget: true,
+                base: const CellStyle(bold: true),
+              ),
             ),
             _MonthArrow(
               ' >',
@@ -541,7 +553,7 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
 /// header so columns line up regardless of which days have one or two
 /// digits. Pass [onTap] to make the cell clickable (an in-bounds day).
 class _Cell extends StatelessWidget {
-  const _Cell(this.text, {this.style = CellStyle.empty, this.onTap});
+  const _Cell(this.text, {this.style = CellStyle.none, this.onTap});
   final String text;
   final CellStyle style;
   final void Function()? onTap;

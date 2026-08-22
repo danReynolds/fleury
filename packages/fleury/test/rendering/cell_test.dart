@@ -1,4 +1,5 @@
 import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_internal.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -27,11 +28,11 @@ void main() {
   });
 
   group('CellStyle', () {
-    test('empty is the no-op style', () {
-      const empty = CellStyle.empty;
-      expect(empty.foreground, isNull);
-      expect(empty.background, isNull);
-      expect(empty.bold, isFalse);
+    test('none is the no-op style', () {
+      const none = CellStyle.none;
+      expect(none.foreground, isNull);
+      expect(none.background, isNull);
+      expect(none.bold, isFalse);
     });
 
     test('copyWith overrides only the specified fields', () {
@@ -74,10 +75,154 @@ void main() {
     });
   });
 
+  group('CellStyle.interactive', () {
+    test('is const and behaves like its base outside state resolution', () {
+      const style = CellStyle.interactive(
+        base: CellStyle(foreground: AnsiColor(6), bold: true),
+        focused: CellStyle(underline: true),
+      );
+
+      expect(style.foreground, const AnsiColor(6));
+      expect(style.bold, isTrue);
+      expect(style.underline, isFalse);
+    });
+
+    test('plain local styles change the base without erasing state cues', () {
+      const defaults = CellStyle.interactive(
+        focused: CellStyle(bold: true),
+        invalid: CellStyle(underline: true),
+      );
+
+      final resolved = resolveCellStyle(
+        cascade: const [
+          defaults,
+          CellStyle(foreground: AnsiColor(5)),
+        ],
+        states: const {CellStyleState.focused, CellStyleState.invalid},
+      );
+
+      expect(resolved.foreground, const AnsiColor(5));
+      expect(resolved.bold, isTrue);
+      expect(resolved.underline, isTrue);
+    });
+
+    test('the highest non-null patch wins for each state as one unit', () {
+      const theme = CellStyle.interactive(
+        focused: CellStyle(foreground: AnsiColor(4), bold: true),
+      );
+      const local = CellStyle.interactive(focused: CellStyle(underline: true));
+
+      final resolved = resolveCellStyle(
+        cascade: const [theme, local],
+        states: const {CellStyleState.focused},
+      );
+
+      expect(resolved.foreground, isNull);
+      expect(resolved.boldOrNull, isNull);
+      expect(resolved.underline, isTrue);
+    });
+
+    test('null inherits while CellStyle.none suppresses a state cue', () {
+      const theme = CellStyle.interactive(
+        base: CellStyle(foreground: AnsiColor(2)),
+        focused: CellStyle(inverse: true),
+      );
+      const inherit = CellStyle.interactive();
+      const suppress = CellStyle.interactive(focused: CellStyle.none);
+
+      final inherited = resolveCellStyle(
+        cascade: const [theme, inherit],
+        states: const {CellStyleState.focused},
+      );
+      final suppressed = resolveCellStyle(
+        cascade: const [theme, suppress],
+        states: const {CellStyleState.focused},
+      );
+
+      expect(inherited.foreground, const AnsiColor(2));
+      expect(inherited.inverse, isTrue);
+      expect(suppressed.foreground, const AnsiColor(2));
+      expect(suppressed.inverseOrNull, isNull);
+    });
+
+    test('active states compose in deterministic paint order', () {
+      const style = CellStyle.interactive(
+        selected: CellStyle(background: AnsiColor(4)),
+        hovered: CellStyle(dim: false),
+        focused: CellStyle(bold: true),
+        invalid: CellStyle(foreground: AnsiColor(1), underline: true),
+      );
+
+      final resolved = resolveCellStyle(
+        cascade: const [style],
+        states: const {
+          CellStyleState.selected,
+          CellStyleState.hovered,
+          CellStyleState.focused,
+          CellStyleState.invalid,
+        },
+      );
+
+      expect(resolved.background, const AnsiColor(4));
+      expect(resolved.dimOrNull, isFalse);
+      expect(resolved.bold, isTrue);
+      expect(resolved.foreground, const AnsiColor(1));
+      expect(resolved.underline, isTrue);
+    });
+
+    test('disabled is exclusive of transient and value states', () {
+      const style = CellStyle.interactive(
+        selected: CellStyle(inverse: true),
+        focused: CellStyle(bold: true),
+        disabled: CellStyle(dim: true),
+        invalid: CellStyle(underline: true),
+      );
+
+      final resolved = resolveCellStyle(
+        cascade: const [style],
+        states: const {
+          CellStyleState.selected,
+          CellStyleState.focused,
+          CellStyleState.disabled,
+          CellStyleState.invalid,
+        },
+      );
+
+      expect(resolved.dim, isTrue);
+      expect(resolved.inverseOrNull, isNull);
+      expect(resolved.boldOrNull, isNull);
+      expect(resolved.underlineOrNull, isNull);
+    });
+
+    test(
+      'interaction-aware styles have value equality and preserve states',
+      () {
+        const a = CellStyle.interactive(
+          base: CellStyle(foreground: AnsiColor(2)),
+          focused: CellStyle(bold: true),
+        );
+        const b = CellStyle.interactive(
+          base: CellStyle(foreground: AnsiColor(2)),
+          focused: CellStyle(bold: true),
+        );
+
+        expect(a, b);
+        expect(a.hashCode, b.hashCode);
+        expect(
+          a.merge(const CellStyle(background: AnsiColor(0))),
+          const CellStyle.interactive(
+            base: CellStyle(foreground: AnsiColor(2), background: AnsiColor(0)),
+            focused: CellStyle(bold: true),
+          ),
+        );
+      },
+    );
+  });
+
   group('CellStyle.linkUri (OSC 8 carrier)', () {
     test('defaults to null; empty and const singletons carry no link', () {
       expect(const CellStyle().linkUri, isNull);
-      expect(CellStyle.empty.linkUri, isNull);
+      expect(CellStyle.none.linkUri, isNull);
     });
 
     test('== distinguishes styles that differ only by link', () {
@@ -142,7 +287,7 @@ void main() {
 
     test('a link-only style is visually empty', () {
       expect(const CellStyle(linkUri: 'https://x').isVisuallyEmpty, isTrue);
-      expect(CellStyle.empty.isVisuallyEmpty, isTrue);
+      expect(CellStyle.none.isVisuallyEmpty, isTrue);
       expect(const CellStyle(bold: true).isVisuallyEmpty, isFalse);
       // isVisuallyEmpty matches `== empty` for link-free styles.
       expect(const CellStyle(bold: false).isVisuallyEmpty, isFalse);
@@ -153,7 +298,7 @@ void main() {
         const CellStyle(linkUri: 'https://x').toString(),
         contains('link=https://x'),
       );
-      expect(CellStyle.empty.toString(), isNot(contains('link=')));
+      expect(CellStyle.none.toString(), isNot(contains('link=')));
     });
   });
 

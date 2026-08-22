@@ -667,7 +667,7 @@ class _DiffLineWidget extends StatelessWidget {
           ? theme.selectionStyle
           : selected
           ? theme.mutedStyle
-          : CellStyle.empty,
+          : CellStyle.none,
     );
     return Semantics(
       role: SemanticRole.diffLine,
@@ -814,6 +814,6 @@ CellStyle _styleForKind(
     DiffLineKind.fileHeader => widgetTheme.resolveDiffFileHeader(theme),
     DiffLineKind.metadata ||
     DiffLineKind.marker => widgetTheme.resolveDiffMetadata(theme),
-    DiffLineKind.context => CellStyle.empty,
+    DiffLineKind.context => CellStyle.none,
   };
 }

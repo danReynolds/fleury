@@ -1,5 +1,66 @@
 import 'package:meta/meta.dart';
 
+/// A state used internally while resolving a value from [CellStyle.interactive].
+///
+/// Widgets use only the states that make sense for their surface. For example,
+/// a button never becomes [selected], while a checkbox uses [selected] for its
+/// checked value. Unsupported states are simply never emitted.
+enum CellStyleState { hovered, focused, selected, disabled, invalid }
+
+const List<CellStyleState> _cellStyleStatePaintOrder = [
+  CellStyleState.selected,
+  CellStyleState.hovered,
+  CellStyleState.focused,
+  CellStyleState.invalid,
+];
+
+CellStyle _plainCellStyle(CellStyle style) {
+  var result = style;
+  while (result is _InteractiveCellStyle) {
+    result = result.base;
+  }
+  return result;
+}
+
+/// Internal bridge for renderers that must store only concrete cell paint.
+CellStyle plainCellStyle(CellStyle style) => _plainCellStyle(style);
+
+/// Whether [style] contains unresolved control-state entries.
+bool hasCellStyleStates(CellStyle style) => style is _InteractiveCellStyle;
+
+/// Resolves [cascade] from lowest to highest priority.
+///
+/// Base styles merge in order. For each active state, the highest-priority
+/// non-null patch wins as a unit and is then merged over the base. An explicit
+/// [CellStyle.none] therefore suppresses a lower-priority state cue. Disabled
+/// is exclusive of transient/value states.
+CellStyle resolveCellStyle({
+  required Iterable<CellStyle?> cascade,
+  Set<CellStyleState> states = const {},
+}) {
+  final layers = [for (final style in cascade) ?style];
+  var result = CellStyle.none;
+  for (final layer in layers) {
+    result = result.merge(_plainCellStyle(layer));
+  }
+
+  final active = states.contains(CellStyleState.disabled)
+      ? const [CellStyleState.disabled]
+      : _cellStyleStatePaintOrder.where(states.contains);
+  for (final state in active) {
+    CellStyle? patch;
+    for (final layer in layers) {
+      if (layer is _InteractiveCellStyle) {
+        patch = layer._styleFor(state) ?? patch;
+      }
+    }
+    if (patch != null) {
+      result = result.merge(_plainCellStyle(patch));
+    }
+  }
+  return result;
+}
+
 /// A terminal color expressed in one of three palettes.
 ///
 /// The renderer chooses the closest representable color based on the
@@ -217,24 +278,41 @@ final class Colors {
 @immutable
 final class CellStyle {
   const CellStyle({
-    this.foreground,
-    this.background,
+    Color? foreground,
+    Color? background,
     bool? bold,
     bool? dim,
     bool? italic,
     bool? underline,
     bool? inverse,
     bool? strikethrough,
-    this.linkUri,
-  }) : _bold = bold,
+    String? linkUri,
+  }) : _foreground = foreground,
+       _background = background,
+       _bold = bold,
        _dim = dim,
        _italic = italic,
        _underline = underline,
        _inverse = inverse,
-       _strikethrough = strikethrough;
+       _strikethrough = strikethrough,
+       _linkUri = linkUri;
 
-  final Color? foreground;
-  final Color? background;
+  /// A cell style whose paint varies with the control's current state.
+  ///
+  /// [base] is also the fallback when this value is used by a non-control API
+  /// such as `Text(style:)`. A null state entry inherits the corresponding
+  /// theme/widget default; [CellStyle.none] explicitly suppresses it.
+  const factory CellStyle.interactive({
+    CellStyle base,
+    CellStyle? hovered,
+    CellStyle? focused,
+    CellStyle? selected,
+    CellStyle? disabled,
+    CellStyle? invalid,
+  }) = _InteractiveCellStyle._;
+
+  final Color? _foreground;
+  final Color? _background;
   final bool? _bold;
   final bool? _dim;
   final bool? _italic;
@@ -255,14 +333,21 @@ final class CellStyle {
   /// [operator ==] and [hashCode], which is REQUIRED: the diff renderer and the
   /// wire style-dedupe key on style equality, and merging two cells that differ
   /// only by their link would silently drop the link.
-  final String? linkUri;
+  final String? _linkUri;
 
-  bool get bold => _bold ?? false;
-  bool get dim => _dim ?? false;
-  bool get italic => _italic ?? false;
-  bool get underline => _underline ?? false;
-  bool get inverse => _inverse ?? false;
-  bool get strikethrough => _strikethrough ?? false;
+  Color? get foreground => _foreground;
+  Color? get background => _background;
+  bool get bold => boldOrNull ?? false;
+  bool get dim => dimOrNull ?? false;
+  bool get italic => italicOrNull ?? false;
+  bool get underline => underlineOrNull ?? false;
+
+  /// Whether inverse video swaps the effective foreground and background.
+  ///
+  /// Terminal renderers emit the standard SGR reverse-video attribute; other
+  /// renderers reproduce the same visual exchange.
+  bool get inverse => inverseOrNull ?? false;
+  bool get strikethrough => strikethroughOrNull ?? false;
 
   /// Raw tri-state attributes (null = unset, distinct from false). The
   /// resolved getters above collapse null to false for rendering; these
@@ -274,8 +359,37 @@ final class CellStyle {
   bool? get underlineOrNull => _underline;
   bool? get inverseOrNull => _inverse;
   bool? get strikethroughOrNull => _strikethrough;
+  String? get linkUri => _linkUri;
 
-  static const CellStyle empty = CellStyle();
+  /// Resolves a style cascade for an interactive control.
+  ///
+  /// This is the public integration point for reusable controls that want the
+  /// same base, theme, local, and state precedence as Fleury's built-in
+  /// controls. Application code normally passes [CellStyle.interactive] to a
+  /// widget's `style` property instead of calling this method directly.
+  static CellStyle resolve({
+    required Iterable<CellStyle?> cascade,
+    bool hovered = false,
+    bool focused = false,
+    bool selected = false,
+    bool disabled = false,
+    bool invalid = false,
+  }) => resolveCellStyle(
+    cascade: cascade,
+    states: {
+      if (hovered) CellStyleState.hovered,
+      if (focused) CellStyleState.focused,
+      if (selected) CellStyleState.selected,
+      if (disabled) CellStyleState.disabled,
+      if (invalid) CellStyleState.invalid,
+    },
+  );
+
+  /// No paint overrides.
+  ///
+  /// As a state entry in [CellStyle.interactive], this deliberately suppresses an
+  /// inherited cue for that state.
+  static const CellStyle none = CellStyle();
 
   CellStyle copyWith({
     Color? foreground,
@@ -291,12 +405,12 @@ final class CellStyle {
     return CellStyle(
       foreground: foreground ?? this.foreground,
       background: background ?? this.background,
-      bold: bold ?? _bold,
-      dim: dim ?? _dim,
-      italic: italic ?? _italic,
-      underline: underline ?? _underline,
-      inverse: inverse ?? _inverse,
-      strikethrough: strikethrough ?? _strikethrough,
+      bold: bold ?? boldOrNull,
+      dim: dim ?? dimOrNull,
+      italic: italic ?? italicOrNull,
+      underline: underline ?? underlineOrNull,
+      inverse: inverse ?? inverseOrNull,
+      strikethrough: strikethrough ?? strikethroughOrNull,
       linkUri: linkUri ?? this.linkUri,
     );
   }
@@ -306,15 +420,18 @@ final class CellStyle {
   /// sets them (on or off) and inherited from this otherwise — so an
   /// override can both add and remove attributes.
   CellStyle merge(CellStyle other) {
+    if (other is _InteractiveCellStyle) {
+      return other._withBase(merge(other.base));
+    }
     return CellStyle(
       foreground: other.foreground ?? foreground,
       background: other.background ?? background,
-      bold: other._bold ?? _bold,
-      dim: other._dim ?? _dim,
-      italic: other._italic ?? _italic,
-      underline: other._underline ?? _underline,
-      inverse: other._inverse ?? _inverse,
-      strikethrough: other._strikethrough ?? _strikethrough,
+      bold: other.boldOrNull ?? boldOrNull,
+      dim: other.dimOrNull ?? dimOrNull,
+      italic: other.italicOrNull ?? italicOrNull,
+      underline: other.underlineOrNull ?? underlineOrNull,
+      inverse: other.inverseOrNull ?? inverseOrNull,
+      strikethrough: other.strikethroughOrNull ?? strikethroughOrNull,
       linkUri: other.linkUri ?? linkUri,
     );
   }
@@ -326,29 +443,31 @@ final class CellStyle {
       // constantly. This resolves most in-run comparisons before any field is
       // read, offsetting the extra `linkUri` compare below.
       identical(this, other) ||
-      other is CellStyle &&
+      other.runtimeType == runtimeType &&
+          other is CellStyle &&
           other.foreground == foreground &&
           other.background == background &&
-          other._bold == _bold &&
-          other._dim == _dim &&
-          other._italic == _italic &&
-          other._underline == _underline &&
-          other._inverse == _inverse &&
-          other._strikethrough == _strikethrough &&
+          other.boldOrNull == boldOrNull &&
+          other.dimOrNull == dimOrNull &&
+          other.italicOrNull == italicOrNull &&
+          other.underlineOrNull == underlineOrNull &&
+          other.inverseOrNull == inverseOrNull &&
+          other.strikethroughOrNull == strikethroughOrNull &&
           // Trailing: cheapest to reach only after the visual fields match, and
           // REQUIRED so link-differing cells don't merge (see [linkUri]).
           other.linkUri == linkUri;
 
   @override
   int get hashCode => Object.hash(
+    runtimeType,
     foreground,
     background,
-    _bold,
-    _dim,
-    _italic,
-    _underline,
-    _inverse,
-    _strikethrough,
+    boldOrNull,
+    dimOrNull,
+    italicOrNull,
+    underlineOrNull,
+    inverseOrNull,
+    strikethroughOrNull,
     linkUri,
   );
 
@@ -362,21 +481,21 @@ final class CellStyle {
       identical(this, other) ||
       (foreground == other.foreground &&
           background == other.background &&
-          _bold == other._bold &&
-          _dim == other._dim &&
-          _italic == other._italic &&
-          _underline == other._underline &&
-          _inverse == other._inverse &&
-          _strikethrough == other._strikethrough);
+          boldOrNull == other.boldOrNull &&
+          dimOrNull == other.dimOrNull &&
+          italicOrNull == other.italicOrNull &&
+          underlineOrNull == other.underlineOrNull &&
+          inverseOrNull == other.inverseOrNull &&
+          strikethroughOrNull == other.strikethroughOrNull);
 
   /// Whether every *visual* attribute is unset (so the style emits no SGR),
-  /// IGNORING [linkUri]. For a link-free style this matches `== CellStyle.empty`;
+  /// IGNORING [linkUri]. For a link-free style this matches `== CellStyle.none`;
   /// a link-only style is visually empty (it emits an OSC 8 link but no SGR).
   ///
-  /// Defined in terms of [sameVisualStyleAs] against the const [empty] singleton
+  /// Defined in terms of [sameVisualStyleAs] against the const [none] singleton
   /// (no per-call allocation) so the visual field list lives in exactly one
   /// place — a future visual attribute can't be forgotten here.
-  bool get isVisuallyEmpty => sameVisualStyleAs(empty);
+  bool get isVisuallyEmpty => sameVisualStyleAs(none);
 
   @override
   String toString() {
@@ -393,6 +512,143 @@ final class CellStyle {
         '${flags.isEmpty ? '' : ', ${flags.join(',')}'}'
         '${linkUri == null ? '' : ', link=$linkUri'})';
   }
+}
+
+/// The immutable value created by [CellStyle.interactive].
+///
+/// It remains a [CellStyle] so existing `style:` call sites stay lightweight.
+/// Its inherited paint fields mirror [base], providing a deterministic
+/// fallback in APIs that do not resolve control state.
+@immutable
+final class _InteractiveCellStyle extends CellStyle {
+  const _InteractiveCellStyle._({
+    this.base = CellStyle.none,
+    this.hovered,
+    this.focused,
+    this.selected,
+    this.disabled,
+    this.invalid,
+  }) : assert(base is! _InteractiveCellStyle, 'base must be a plain CellStyle'),
+       super();
+
+  final CellStyle base;
+  final CellStyle? hovered;
+  final CellStyle? focused;
+  final CellStyle? selected;
+  final CellStyle? disabled;
+  final CellStyle? invalid;
+
+  @override
+  Color? get foreground => base.foreground;
+
+  @override
+  Color? get background => base.background;
+
+  @override
+  bool? get boldOrNull => base.boldOrNull;
+
+  @override
+  bool? get dimOrNull => base.dimOrNull;
+
+  @override
+  bool? get italicOrNull => base.italicOrNull;
+
+  @override
+  bool? get underlineOrNull => base.underlineOrNull;
+
+  @override
+  bool? get inverseOrNull => base.inverseOrNull;
+
+  @override
+  bool? get strikethroughOrNull => base.strikethroughOrNull;
+
+  @override
+  String? get linkUri => base.linkUri;
+
+  CellStyle? _styleFor(CellStyleState state) => switch (state) {
+    CellStyleState.hovered => hovered,
+    CellStyleState.focused => focused,
+    CellStyleState.selected => selected,
+    CellStyleState.disabled => disabled,
+    CellStyleState.invalid => invalid,
+  };
+
+  _InteractiveCellStyle _withBase(CellStyle nextBase) =>
+      _InteractiveCellStyle._(
+        base: nextBase,
+        hovered: hovered,
+        focused: focused,
+        selected: selected,
+        disabled: disabled,
+        invalid: invalid,
+      );
+
+  @override
+  _InteractiveCellStyle copyWith({
+    Color? foreground,
+    Color? background,
+    bool? bold,
+    bool? dim,
+    bool? italic,
+    bool? underline,
+    bool? inverse,
+    bool? strikethrough,
+    String? linkUri,
+  }) => _withBase(
+    base.copyWith(
+      foreground: foreground,
+      background: background,
+      bold: bold,
+      dim: dim,
+      italic: italic,
+      underline: underline,
+      inverse: inverse,
+      strikethrough: strikethrough,
+      linkUri: linkUri,
+    ),
+  );
+
+  @override
+  _InteractiveCellStyle merge(CellStyle other) {
+    if (other is _InteractiveCellStyle) {
+      return _InteractiveCellStyle._(
+        base: base.merge(other.base),
+        hovered: other.hovered ?? hovered,
+        focused: other.focused ?? focused,
+        selected: other.selected ?? selected,
+        disabled: other.disabled ?? disabled,
+        invalid: other.invalid ?? invalid,
+      );
+    }
+    return _withBase(base.merge(other));
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _InteractiveCellStyle &&
+          other.base == base &&
+          other.hovered == hovered &&
+          other.focused == focused &&
+          other.selected == selected &&
+          other.disabled == disabled &&
+          other.invalid == invalid;
+
+  @override
+  int get hashCode => Object.hash(
+    _InteractiveCellStyle,
+    base,
+    hovered,
+    focused,
+    selected,
+    disabled,
+    invalid,
+  );
+
+  @override
+  String toString() =>
+      'CellStyle.interactive(base: $base, hovered: $hovered, focused: $focused, '
+      'selected: $selected, disabled: $disabled, invalid: $invalid)';
 }
 
 /// How a [Cell] participates in a (possibly wide) grapheme.
@@ -426,14 +682,14 @@ final class Cell {
   const Cell.empty()
     : grapheme = null,
       role = CellRole.empty,
-      style = CellStyle.empty;
+      style = CellStyle.none;
 
   const Cell.leading({
     required String this.grapheme,
-    this.style = CellStyle.empty,
+    this.style = CellStyle.none,
   }) : role = CellRole.leading;
 
-  const Cell.continuation({this.style = CellStyle.empty})
+  const Cell.continuation({this.style = CellStyle.none})
     : grapheme = null,
       role = CellRole.continuation;
 
@@ -442,7 +698,7 @@ final class Cell {
   const Cell.overlay()
     : grapheme = null,
       role = CellRole.overlay,
-      style = CellStyle.empty;
+      style = CellStyle.none;
 
   /// The grapheme owned by this cell. Always null on `empty`,
   /// `continuation`, and `overlay` cells.

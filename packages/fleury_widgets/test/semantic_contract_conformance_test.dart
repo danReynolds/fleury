@@ -39,7 +39,7 @@ const Map<String, List<String>> _semanticCatalog = {
   'command_palette': ['command', 'commandPalette'],
   'completion_text_input': ['menu', 'menuItem'],
   'context_panel': ['contextItem', 'contextPanel'],
-  'controls': ['button', 'region'],
+  'controls': ['button', 'checkbox', 'radio', 'region', 'toggle'],
   'conversation_navigator': ['conversation', 'conversationNavigator'],
   'data_table': ['table', 'tableCell', 'tableRow'],
   'date_picker': ['datePicker'],
@@ -192,7 +192,9 @@ void main() {
       final dir = Directory('lib/src');
       expect(dir.existsSync(), isTrue, reason: 'run from the package root');
 
-      final pattern = RegExp(r'role:\s*SemanticRole\.(\w+)');
+      // Shared control shells take the semantic role as a constructor
+      // argument, while ordinary widgets pass it directly to Semantics.
+      final pattern = RegExp(r'(?:role|semanticRole):\s*SemanticRole\.(\w+)');
       final fromSource = <String, List<String>>{};
       for (final entity in dir.listSync()) {
         if (entity is! File || !entity.path.endsWith('.dart')) continue;

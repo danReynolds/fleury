@@ -1107,6 +1107,7 @@ th:nth-last-child(-n + 2) .ct::after {
   --cds-line: color-mix(in srgb, var(--sl-color-gray-4) 55%, transparent);
   --cds-accent: #3ddc97;
   width: min(78rem, calc(100% + 14rem));
+  container-type: inline-size;
   margin: 1.5rem calc((100% - min(78rem, calc(100% + 14rem))) / 2) 2.25rem;
   border: 1px solid var(--cds-line);
   border-radius: var(--cds-radius);
@@ -1284,7 +1285,7 @@ th:nth-last-child(-n + 2) .ct::after {
 }
 
 /* Two columns inline when the breakout is genuinely wide enough for both. ─*/
-@media (min-width: 88rem) {
+@container (min-width: 52rem) {
   .cds:not(.is-fs) .cds-body {
     grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
     /* Top-align so both captions pin to the same line — stretch let the

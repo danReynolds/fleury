@@ -55,7 +55,9 @@ class _ThemeGalleryState extends State<ThemeGallery> {
                 _applied = i;
                 _shown = i;
               }),
-              onHighlightChanged: (i) => setState(() => _shown = i),
+              onHighlightChanged: (i) {
+                if (i != null) setState(() => _shown = i);
+              },
               semanticLabel: 'Preview theme',
             ),
             const Text('   '),
@@ -216,15 +218,14 @@ class _TextStyles extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.theme;
-    final cs = context.colors;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         const _Section('Text styles', note: 'ThemeData'),
-        // One shape for all four rows so the labels form a column — the
+        // One shape for every row so the labels form a column — the
         // sample is padded to a fixed width rather than each row spacing
         // itself, which is what threw the alignment off.
-        _sample(context, CellStyle(foreground: cs.foreground), 'unstyled'),
+        _sample(context, theme.textStyle, 'textStyle'),
         _sample(context, theme.mutedStyle, 'mutedStyle'),
         _sample(context, theme.selectionStyle, 'selectionStyle'),
         _sample(context, theme.focusedStyle, 'focusedStyle'),
@@ -243,10 +244,24 @@ class _TextStyles extends StatelessWidget {
   );
 }
 
-/// Widgets whose theming isn't visible in the mock app above: the focus
-/// treatment on an input, control selection, and the raised `surface` fill.
-class _Controls extends StatelessWidget {
+/// Widgets whose theming isn't visible in the mock app above: interactive
+/// states and the raised `surface` fill.
+class _Controls extends StatefulWidget {
   const _Controls();
+
+  @override
+  State<_Controls> createState() => _ControlsState();
+}
+
+class _ControlsState extends State<_Controls> {
+  final _query = TextEditingController(text: 'search query');
+  bool _checked = true;
+
+  @override
+  void dispose() {
+    _query.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -257,22 +272,37 @@ class _Controls extends StatelessWidget {
         SizedBox(
           width: 30,
           child: TextInput(
-            controller: TextEditingController(text: 'search query'),
+            controller: _query,
             semanticLabel: 'Styleguide input',
           ),
         ),
-        // TextInput has no frame of its own: its focus cue is the cursor,
-        // which appears only while focused, and an empty field shows the
-        // placeholder dimmed.
-        const _Caption('TextInput · cursor appears on focus'),
+        const _Caption('TextInput · focused / hovered'),
         Row(
           children: <Widget>[
-            Checkbox(value: true, onChanged: (_) {}, label: 'checked'),
+            Checkbox(
+              value: _checked,
+              onChanged: (value) => setState(() => _checked = value),
+              label: 'selected',
+            ),
             const Text('   '),
-            Checkbox(value: false, onChanged: (_) {}, label: 'unchecked'),
+            const Checkbox(value: false, onChanged: null, label: 'disabled'),
           ],
         ),
-        const _Caption('Checkbox · control selection'),
+        const _Caption('Checkbox · selected / disabled'),
+        SizedBox(
+          width: 30,
+          child: TextInput(
+            placeholder: 'invalid control',
+            validationError: 'Required',
+            semanticLabel: 'Invalid styleguide input',
+          ),
+        ),
+        const _Caption('TextInput · invalid'),
+        _Caption(
+          context.theme.interactiveStyle == null
+              ? 'interactiveStyle · unset (widget defaults)'
+              : 'interactiveStyle · ThemeData.interactiveStyle',
+        ),
         const SizedBox(height: 1),
         // `surface` is the one role with no place in the mock app: it fills
         // dialogs and popups, which need an opaque backdrop rather than the
