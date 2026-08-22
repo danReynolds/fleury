@@ -71,7 +71,7 @@ class DatePicker extends StatefulWidget {
   final bool autofocus;
 
   /// Base styling, plus optional focus, selected, disabled, and invalid state
-  /// entries from [CellStyle.state].
+  /// entries from [CellStyle.interactive].
   final CellStyle? style;
 
   @override
@@ -341,7 +341,7 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
       CellStyle base = CellStyle.none,
     }) => resolveCellStyle(
       cascade: [
-        CellStyle.state(
+        CellStyle.interactive(
           base: base,
           selected: theme.selectionStyle,
           focused: theme.focusedStyle,

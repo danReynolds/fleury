@@ -1808,8 +1808,8 @@ form.clearErrors();''',
     category: 'Showcases',
     blurb:
         'A live gallery for every bundled community theme, plus a custom '
-        'editor for semantic colors, brightness, and borders with live '
-        'widget-state feedback.',
+        'editor that selects one semantic role at a time, then changes its '
+        'color, brightness, or borders with live widget-state feedback.',
     cols: 108,
     rows: 34,
     interactive: true,
@@ -2041,29 +2041,61 @@ runApp(const MyApp(), theme: tokyoNight);''',
     builder: () => const _ThemePickerExample(),
   ),
   ExampleInfo(
-    id: 'themes.roles',
+    id: 'themes.local_style',
     widget: 'Themes',
     category: 'Theming',
-    blurb:
-        'Preview each shared text-style role on the same organized set of '
-        'text, input, and action widgets.',
-    cols: 56,
-    rows: 14,
+    blurb: 'Apply one local CellStyle override to a text input.',
+    cols: 34,
+    rows: 4,
     interactive: true,
-    builder: () => const _ThemeRoleTour(),
+    code: _localStyleSource,
+    builder: () => const _LocalStyleTour(),
   ),
   ExampleInfo(
-    id: 'themes.control_states',
+    id: 'themes.cell_style',
+    widget: 'Themes',
+    category: 'Theming',
+    blurb: 'Compare default text with one styled line.',
+    cols: 34,
+    rows: 5,
+    code: _cellStyleSource,
+    builder: () => const _CellStyleTour(),
+  ),
+  ExampleInfo(
+    id: 'themes.local_interactive',
+    widget: 'Themes',
+    category: 'Theming',
+    blurb: 'Compare an inherited focus cue with a local interactive override.',
+    cols: 46,
+    rows: 8,
+    interactive: true,
+    code: _localInteractiveSource,
+    builder: () => const _LocalStateTour(),
+  ),
+  ExampleInfo(
+    id: 'themes.invalid_none',
     widget: 'Themes',
     category: 'Theming',
     blurb:
-        'One state-aware style adapts to focus, hover, selection, validation, and '
+        'Suppress invalid chrome locally while retaining the visible and '
+        'semantic validation error.',
+    cols: 48,
+    rows: 9,
+    interactive: true,
+    code: _invalidNoneSource,
+    builder: () => const _InvalidNoneTour(),
+  ),
+  ExampleInfo(
+    id: 'themes.interactive_styles',
+    widget: 'Themes',
+    category: 'Theming',
+    blurb:
+        'One interactive style adapts to focus, hover, selection, validation, and '
         'disabled state without changing each widget separately.',
     cols: 52,
     rows: 13,
-    interactive: true,
-    code: _interactiveStyleSource,
-    builder: () => const _ControlStateTour(),
+    code: _interactiveStylesSource,
+    builder: () => const _InteractiveStyleTour(),
   ),
 ];
 
@@ -3129,127 +3161,179 @@ class _ThemePickerExampleState extends State<_ThemePickerExample> {
   }
 }
 
-enum _ThemeTextRole { text, muted, selection, focused, error }
+const String _localStyleSource = '''
+TextInput(
+  controller: query,
+  style: const CellStyle(foreground: Colors.cyan),
+)''';
 
-extension on _ThemeTextRole {
-  String get label => switch (this) {
-    _ThemeTextRole.text => 'Default text',
-    _ThemeTextRole.muted => 'Muted',
-    _ThemeTextRole.selection => 'Selection',
-    _ThemeTextRole.focused => 'Focused',
-    _ThemeTextRole.error => 'Error',
-  };
-}
-
-const _rolePreviewTheme = ThemeData(
-  textStyle: CellStyle(foreground: Colors.white),
-  mutedStyle: CellStyle(dim: true),
-  selectionStyle: CellStyle(inverse: true),
-  focusedStyle: CellStyle(foreground: Colors.cyan, bold: true),
-  errorStyle: CellStyle(foreground: Colors.red, underline: true),
-  borderStyle: BorderStyle.double,
-);
-
-ThemeData get rolePreviewThemeForTest => _rolePreviewTheme;
-
-/// Lets the guide compare the theme's semantic text roles on one widget.
-class _ThemeRoleTour extends StatefulWidget {
-  const _ThemeRoleTour();
+class _LocalStyleTour extends StatefulWidget {
+  const _LocalStyleTour();
 
   @override
-  State<_ThemeRoleTour> createState() => _ThemeRoleTourState();
+  State<_LocalStyleTour> createState() => _LocalStyleTourState();
 }
 
-class _ThemeRoleTourState extends State<_ThemeRoleTour> {
-  final _input = TextEditingController(text: 'api-gateway');
-  _ThemeTextRole _appliedRole = _ThemeTextRole.text;
-  _ThemeTextRole _shownRole = _ThemeTextRole.text;
-  bool _checked = true;
+class _LocalStyleTourState extends State<_LocalStyleTour> {
+  final _query = TextEditingController(text: 'api-gateway');
 
   @override
   void dispose() {
-    _input.dispose();
+    _query.dispose();
     super.dispose();
   }
 
-  CellStyle _styleFor(ThemeData theme) => switch (_shownRole) {
-    _ThemeTextRole.text => theme.textStyle,
-    _ThemeTextRole.muted => theme.mutedStyle,
-    _ThemeTextRole.selection => theme.selectionStyle,
-    _ThemeTextRole.focused => theme.focusedStyle,
-    _ThemeTextRole.error => theme.errorStyle,
-  };
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 24,
+    child: TextInput(
+      controller: _query,
+      style: const CellStyle(foreground: Colors.cyan),
+    ),
+  );
+}
+
+const String _cellStyleSource = '''
+Column(children: [
+  Text('Default text'),
+  Text(
+    'Styled text',
+    style: CellStyle(
+      foreground: RgbColor(0x3D, 0xDC, 0x97),
+      bold: true,
+      underline: true,
+    ),
+  ),
+]);''';
+
+class _CellStyleTour extends StatelessWidget {
+  const _CellStyleTour();
 
   @override
-  Widget build(BuildContext context) {
-    final style = _styleFor(_rolePreviewTheme);
-    return Theme(
-      data: _rolePreviewTheme,
-      child: Panel(
-        title: 'THEME ROLES',
-        child: Padding(
-          padding: const EdgeInsets.all(1),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Select<_ThemeTextRole>(
-                autofocus: true,
-                semanticLabel: 'Theme role',
-                value: _appliedRole,
-                options: [
-                  for (final role in _ThemeTextRole.values)
-                    SelectOption(value: role, label: role.label),
-                ],
-                onHighlightChanged: (role) => setState(() => _shownRole = role),
-                onChanged: (role) => setState(() {
-                  _appliedRole = role;
-                  _shownRole = role;
-                }),
-              ),
-              const SizedBox(height: 1),
-              Row(
-                children: [
-                  const SizedBox(width: 11, child: Text('Text')),
-                  Text('Deploy ready', style: style),
-                ],
-              ),
-              Row(
-                children: [
-                  const SizedBox(width: 11, child: Text('Button')),
-                  Button(label: 'Deploy', style: style, onPressed: () {}),
-                ],
-              ),
-              Row(
-                children: [
-                  const SizedBox(width: 11, child: Text('Checkbox')),
-                  Checkbox(
-                    value: _checked,
-                    label: 'Approved',
-                    style: style,
-                    onChanged: (value) => setState(() => _checked = value),
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  const SizedBox(width: 11, child: Text('TextInput')),
-                  SizedBox(
-                    width: 22,
-                    child: TextInput(controller: _input, style: style),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 1),
-              Text(
-                'Local style preview · borderStyle frames the panel',
-                style: _rolePreviewTheme.mutedStyle,
+  Widget build(BuildContext context) => const Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      Text('Default text'),
+      Text(
+        'Styled text',
+        style: CellStyle(
+          foreground: RgbColor(0x3D, 0xDC, 0x97),
+          bold: true,
+          underline: true,
+        ),
+      ),
+    ],
+  );
+}
+
+void _noop() {}
+
+const String _localInteractiveSource = '''
+Button(
+  label: 'Local focus',
+  style: const CellStyle.interactive(
+    focused: CellStyle(
+      foreground: Colors.cyan,
+      underline: true,
+    ),
+  ),
+  onPressed: deploy,
+)''';
+
+class _LocalStateTour extends StatelessWidget {
+  const _LocalStateTour();
+
+  @override
+  Widget build(BuildContext context) => Theme(
+    data: Theme.of(context).copyWith(
+      interactiveStyle: const CellStyle.interactive(
+        focused: CellStyle(inverse: true, bold: true),
+      ),
+    ),
+    child: const Padding(
+      padding: EdgeInsets.all(1),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text('LOCAL INTERACTION STYLE', style: CellStyle(bold: true)),
+          Text('Tab or click to compare focus cues'),
+          Row(
+            children: <Widget>[
+              Button(label: 'Theme focus', autofocus: true, onPressed: _noop),
+              SizedBox(width: 2),
+              Button(
+                label: 'Local focus',
+                style: CellStyle.interactive(
+                  focused: CellStyle(foreground: Colors.cyan, underline: true),
+                ),
+                onPressed: _noop,
               ),
             ],
           ),
-        ),
+        ],
       ),
-    );
+    ),
+  );
+}
+
+const String _invalidNoneSource = '''
+FormField(
+  validator: () => query.text.isEmpty ? 'Enter a query.' : null,
+  child: TextInput(
+    controller: query,
+    style: const CellStyle.interactive(
+      invalid: CellStyle.none,
+    ),
+  ),
+)''';
+
+class _InvalidNoneTour extends StatefulWidget {
+  const _InvalidNoneTour();
+
+  @override
+  State<_InvalidNoneTour> createState() => _InvalidNoneTourState();
+}
+
+class _InvalidNoneTourState extends State<_InvalidNoneTour> {
+  final _form = FormController();
+  final _query = TextEditingController();
+
+  @override
+  void dispose() {
+    _form.dispose();
+    _query.dispose();
+    super.dispose();
   }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.all(1),
+    child: Form(
+      controller: _form,
+      onSubmit: () {},
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text('NEUTRAL INVALID CHROME', style: CellStyle(bold: true)),
+          const Text('Submit empty: the message stays visible'),
+          FormField(
+            validator: () => _query.text.isEmpty ? 'Enter a query.' : null,
+            child: SizedBox(
+              width: 30,
+              child: TextInput(
+                controller: _query,
+                autofocus: true,
+                semanticLabel: 'Query',
+                placeholder: 'Query',
+                style: const CellStyle.interactive(invalid: CellStyle.none),
+              ),
+            ),
+          ),
+          Button(label: 'Submit', onPressed: _form.submit),
+        ],
+      ),
+    ),
+  );
 }
 
 /// A hand-written theme for the "creating a theme" guide section.
@@ -3357,7 +3441,7 @@ class _ThemePreview extends StatelessWidget {
   }
 }
 
-const CellStyle _interactiveStyle = CellStyle.state(
+const CellStyle _interactiveStyle = CellStyle.interactive(
   focused: CellStyle(inverse: true, bold: true),
   hovered: CellStyle(underline: true),
   selected: CellStyle(foreground: Colors.green, bold: true),
@@ -3365,9 +3449,9 @@ const CellStyle _interactiveStyle = CellStyle.state(
   disabled: CellStyle(dim: true),
 );
 
-const String _interactiveStyleSource = '''
+const String _interactiveStylesSource = '''
 const theme = ThemeData(
-  interactiveStyle: CellStyle.state(
+  interactiveStyle: CellStyle.interactive(
     focused: CellStyle(inverse: true, bold: true),
     hovered: CellStyle(underline: true),
     selected: CellStyle(foreground: Colors.green, bold: true),
@@ -3380,78 +3464,40 @@ FleuryApp(theme: theme, home: const DeploymentForm());''';
 
 /// Exposed for the guide/source/live parity test.
 CellStyle get interactiveStyleForTest => _interactiveStyle;
-String get interactiveStyleSourceForTest => _interactiveStyleSource;
+String get interactiveStyleSourceForTest => _interactiveStylesSource;
 
-/// Interactive proof that one theme-level state style reaches different
-/// control families without forcing ordinary per-widget styling.
-class _ControlStateTour extends StatefulWidget {
-  const _ControlStateTour();
-
-  @override
-  State<_ControlStateTour> createState() => _ControlStateTourState();
-}
-
-class _ControlStateTourState extends State<_ControlStateTour> {
-  final _form = FormController();
-  final _name = TextEditingController();
-  bool _approved = true;
-  String _status = 'Submit empty to reveal validation';
-
-  @override
-  void dispose() {
-    _form.dispose();
-    _name.dispose();
-    super.dispose();
-  }
+/// Visual legend for the styles carried by one interaction-aware value.
+class _InteractiveStyleTour extends StatelessWidget {
+  const _InteractiveStyleTour();
 
   @override
   Widget build(BuildContext context) {
     final outer = Theme.of(context);
     return Theme(
       data: outer.copyWith(interactiveStyle: _interactiveStyle),
-      child: Padding(
+      child: const Padding(
         padding: const EdgeInsets.all(1),
-        child: Form(
-          controller: _form,
-          onSubmit: () => setState(() => _status = 'Ready to deploy'),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              const Text('CONTROL STATES', style: CellStyle(bold: true)),
-              Text(
-                'Tab or click · hover in the browser',
-                style: outer.mutedStyle,
-              ),
-              const SizedBox(height: 1),
-              FormField(
-                validator: () =>
-                    _name.text.trim().isEmpty ? 'Enter a service name.' : null,
-                child: SizedBox(
-                  width: 30,
-                  child: TextInput(
-                    controller: _name,
-                    autofocus: true,
-                    placeholder: 'Service name',
-                    semanticLabel: 'Service name',
-                  ),
-                ),
-              ),
-              Checkbox(
-                value: _approved,
-                label: 'Approved',
-                onChanged: (value) => setState(() => _approved = value),
-              ),
-              Row(
-                children: <Widget>[
-                  Button(label: 'Deploy', onPressed: _form.submit),
-                  const Text('  '),
-                  const Button(label: 'Queued', onPressed: null),
-                ],
-              ),
-              const SizedBox(height: 1),
-              Text(_status, style: outer.mutedStyle),
-            ],
-          ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text('INTERACTION STYLES', style: CellStyle(bold: true)),
+            SizedBox(height: 1),
+            Text('base      ordinary control paint'),
+            Text(
+              'focused   inverse + bold',
+              style: CellStyle(inverse: true, bold: true),
+            ),
+            Text('hovered   underline', style: CellStyle(underline: true)),
+            Text(
+              'selected  green + bold',
+              style: CellStyle(foreground: Colors.green, bold: true),
+            ),
+            Text(
+              'invalid   red + underline',
+              style: CellStyle(foreground: Colors.red, underline: true),
+            ),
+            Text('disabled  dim', style: CellStyle(dim: true)),
+          ],
         ),
       ),
     );

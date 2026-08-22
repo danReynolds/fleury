@@ -748,7 +748,7 @@ const SHOWCASE_GOALS = {
   themes:
     'A live theme studio built around one consistent application surface. Pick ' +
     'any bundled community theme to compare it honestly, or switch to Custom ' +
-    'and edit semantic accents, brightness, and borders while the widget ' +
+    'and edit semantic colors, brightness, and borders while the widget ' +
     'gallery shows live interaction states.\n\n' +
     'The preview combines ordinary text, form controls, status colors, progress, ' +
     'selected data, enabled actions, and disabled actions. That breadth makes a ' +
@@ -797,8 +797,8 @@ const SHOWCASE_TRY = {
     'the reserved name `fleury` to trigger a server error. Complete the flow and ' +
     'go back once to see the app-owned draft survive navigation.*',
   themes:
-    '*Try it: arrow through the Theme picker, then choose Custom and change an ' +
-    'accent with a color picker—the full widget gallery updates immediately.*',
+    '*Try it: arrow through the Theme picker, then choose Custom, select a ' +
+    'palette role, and change its color—the full widget gallery updates immediately.*',
   asteroids:
     '*Try it: press Space to launch, then steer with A/D/W and fire with ' +
     'Space—or click and drag directly in the playfield.*',

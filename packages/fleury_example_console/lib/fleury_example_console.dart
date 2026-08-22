@@ -94,7 +94,7 @@ const _demoTheme = ThemeData(
   ),
   focusedStyle: CellStyle(bold: true, foreground: AnsiColor(14)),
   selectionStyle: CellStyle(inverse: true, bold: true),
-  interactiveStyle: CellStyle.state(
+  interactiveStyle: CellStyle.interactive(
     focused: CellStyle(bold: true, foreground: AnsiColor(14)),
   ),
 );

@@ -53,7 +53,7 @@ void main() {
       data: const ThemeData(
         extensions: [
           FleuryWidgetTheme(
-            switchTrackStyle: CellStyle.state(
+            switchTrackStyle: CellStyle.interactive(
               base: CellStyle(foreground: AnsiColor(8)),
               selected: CellStyle(foreground: AnsiColor(2)),
             ),
@@ -76,7 +76,7 @@ void main() {
     tester.pumpWidget(
       Theme(
         data: const ThemeData(
-          interactiveStyle: CellStyle.state(
+          interactiveStyle: CellStyle.interactive(
             focused: CellStyle(underline: true, bold: false),
           ),
         ),
@@ -95,7 +95,7 @@ void main() {
     tester.pumpWidget(
       Theme(
         data: const ThemeData(
-          interactiveStyle: CellStyle.state(
+          interactiveStyle: CellStyle.interactive(
             disabled: CellStyle(foreground: AnsiColor(13)),
           ),
         ),
@@ -111,7 +111,7 @@ void main() {
     tester.pumpWidget(
       const Theme(
         data: ThemeData(
-          interactiveStyle: CellStyle.state(
+          interactiveStyle: CellStyle.interactive(
             focused: CellStyle(underline: true),
           ),
         ),
@@ -135,7 +135,7 @@ void main() {
     tester.pumpWidget(
       const Theme(
         data: ThemeData(
-          interactiveStyle: CellStyle.state(
+          interactiveStyle: CellStyle.interactive(
             focused: CellStyle(foreground: AnsiColor(5), bold: true),
           ),
         ),
@@ -143,7 +143,7 @@ void main() {
           value: false,
           autofocus: true,
           onChanged: _ignoreBool,
-          style: CellStyle.state(focused: CellStyle(underline: true)),
+          style: CellStyle.interactive(focused: CellStyle(underline: true)),
         ),
       ),
     );
@@ -158,7 +158,7 @@ void main() {
     tester.pumpWidget(
       const Theme(
         data: ThemeData(
-          interactiveStyle: CellStyle.state(
+          interactiveStyle: CellStyle.interactive(
             focused: CellStyle(underline: true),
           ),
         ),
@@ -166,7 +166,7 @@ void main() {
           value: false,
           autofocus: true,
           onChanged: _ignoreBool,
-          style: CellStyle.state(focused: CellStyle.none),
+          style: CellStyle.interactive(focused: CellStyle.none),
         ),
       ),
     );
@@ -180,7 +180,7 @@ void main() {
     tester.pumpWidget(
       Theme(
         data: const ThemeData(
-          interactiveStyle: CellStyle.state(
+          interactiveStyle: CellStyle.interactive(
             selected: CellStyle(underline: true),
           ),
         ),
@@ -202,7 +202,7 @@ void main() {
       const Checkbox(
         value: true,
         onChanged: null,
-        style: CellStyle.state(
+        style: CellStyle.interactive(
           selected: CellStyle(foreground: AnsiColor(2)),
           disabled: CellStyle(foreground: AnsiColor(13)),
         ),
@@ -216,7 +216,7 @@ void main() {
     tester.pumpWidget(
       Theme(
         data: const ThemeData(
-          interactiveStyle: CellStyle.state(
+          interactiveStyle: CellStyle.interactive(
             hovered: CellStyle(underline: true),
           ),
         ),
@@ -238,7 +238,7 @@ void main() {
       const TextInput(
         autofocus: true,
         placeholder: 'Name',
-        style: CellStyle.state(focused: CellStyle(foreground: focused)),
+        style: CellStyle.interactive(focused: CellStyle(foreground: focused)),
       ),
     );
     expect(_cellsWithForeground(tester, focused), greaterThan(0));
@@ -247,7 +247,7 @@ void main() {
       const PasswordInput(
         autofocus: true,
         placeholder: 'Secret',
-        style: CellStyle.state(focused: CellStyle(foreground: focused)),
+        style: CellStyle.interactive(focused: CellStyle(foreground: focused)),
       ),
     );
     expect(_cellsWithForeground(tester, focused), greaterThan(0));
@@ -263,7 +263,9 @@ void main() {
         value: 'a',
         autofocus: true,
         onChanged: _ignoreString,
-        style: const CellStyle.state(focused: CellStyle(foreground: focused)),
+        style: const CellStyle.interactive(
+          focused: CellStyle(foreground: focused),
+        ),
       ),
     );
     expect(_styleAt(tester, 0, 0).foreground, focused);
@@ -273,7 +275,9 @@ void main() {
         value: 1,
         autofocus: true,
         onChanged: _ignoreNum,
-        style: const CellStyle.state(focused: CellStyle(foreground: focused)),
+        style: const CellStyle.interactive(
+          focused: CellStyle(foreground: focused),
+        ),
       ),
     );
     expect(_styleAt(tester, 0, 0).foreground, focused);
@@ -285,7 +289,9 @@ void main() {
         max: 10,
         autofocus: true,
         onChanged: _ignoreRange,
-        style: const CellStyle.state(focused: CellStyle(foreground: focused)),
+        style: const CellStyle.interactive(
+          focused: CellStyle(foreground: focused),
+        ),
       ),
     );
     expect(_cellsWithForeground(tester, focused), greaterThan(0));
@@ -298,7 +304,9 @@ void main() {
         options: const [SelectOption(value: 'a', label: 'Alpha')],
         values: const {'a'},
         onChanged: _ignoreStrings,
-        style: const CellStyle.state(selected: CellStyle(foreground: selected)),
+        style: const CellStyle.interactive(
+          selected: CellStyle(foreground: selected),
+        ),
       ),
     );
 
@@ -311,7 +319,9 @@ void main() {
       ColorPicker(
         value: const AnsiColor(0),
         onChanged: _ignoreColor,
-        style: const CellStyle.state(selected: CellStyle(foreground: selected)),
+        style: const CellStyle.interactive(
+          selected: CellStyle(foreground: selected),
+        ),
       ),
     );
 
@@ -326,7 +336,9 @@ void main() {
       DatePicker(
         value: DateTime(2024, 1, 15),
         onChanged: _ignoreDate,
-        style: const CellStyle.state(selected: CellStyle(foreground: selected)),
+        style: const CellStyle.interactive(
+          selected: CellStyle(foreground: selected),
+        ),
       ),
     );
 

@@ -101,7 +101,7 @@ class NumberInput extends StatefulWidget {
   final CellStyle placeholderStyle;
 
   /// Entered-text base styling, plus optional hover, focus, disabled, and
-  /// invalid state entries from [CellStyle.state].
+  /// invalid state entries from [CellStyle.interactive].
   final CellStyle style;
 
   /// Style applied to the cursor cell.

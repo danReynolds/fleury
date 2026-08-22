@@ -606,7 +606,7 @@ class TextInput extends StatefulWidget {
 
   /// Style for the rendered text and its interactive states.
   ///
-  /// Pass a plain [CellStyle] for the common case. Use [CellStyle.state] only
+  /// Pass a plain [CellStyle] for the common case. Use [CellStyle.interactive] only
   /// when focus, hover, disabled, or invalid should look different locally.
   final CellStyle style;
 
@@ -1555,7 +1555,7 @@ class _TextInputState extends State<TextInput>
     final completionState = completion?.state;
     final validationError = _formRegistration?.error ?? widget.validationError;
     final theme = Theme.of(context);
-    final defaultStyle = CellStyle.state(
+    final defaultStyle = CellStyle.interactive(
       focused: CellStyle(
         foreground: theme.colorScheme.focus,
       ).merge(theme.focusedStyle),

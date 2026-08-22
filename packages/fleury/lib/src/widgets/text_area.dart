@@ -104,7 +104,7 @@ class TextArea extends StatefulWidget {
 
   /// Style applied to editable text and its interactive states.
   ///
-  /// Pass a plain [CellStyle] for the common case. Use [CellStyle.state] only
+  /// Pass a plain [CellStyle] for the common case. Use [CellStyle.interactive] only
   /// when focus, hover, disabled, or invalid should look different locally.
   final CellStyle style;
 
@@ -766,7 +766,7 @@ class _TextAreaState extends State<TextArea>
     final focused = _focusNode.hasFocus;
     final validationError = _formRegistration?.error ?? widget.validationError;
     final theme = Theme.of(context);
-    final defaultStyle = CellStyle.state(
+    final defaultStyle = CellStyle.interactive(
       focused: CellStyle(
         foreground: theme.colorScheme.focus,
       ).merge(theme.focusedStyle),

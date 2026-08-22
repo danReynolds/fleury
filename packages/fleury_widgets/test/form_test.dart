@@ -6,7 +6,7 @@ import 'package:fleury_widgets/fleury_widgets.dart';
 import 'package:test/test.dart';
 
 const _invalidControlColor = RgbColor(1, 2, 3);
-const _invalidControlStyle = CellStyle.state(
+const _invalidControlStyle = CellStyle.interactive(
   invalid: CellStyle(foreground: _invalidControlColor),
 );
 
@@ -418,7 +418,7 @@ void main() {
         _textForm(
           controller: controller,
           text: text,
-          style: const CellStyle.state(invalid: CellStyle.none),
+          style: const CellStyle.interactive(invalid: CellStyle.none),
           onSubmit: () {},
         ),
       );

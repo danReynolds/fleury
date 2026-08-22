@@ -21,8 +21,8 @@ final class SelectOption<T> {
 /// [placeholder]) that, when activated, opens a floating list of [options]
 /// anchored just below it.
 ///
-/// Enter or Down — or a click — opens it; arrows move the highlight
-/// (skipping disabled options), Enter or a click picks one (calling
+/// Enter or Down — or a click — opens it; arrows or pointer hover move the
+/// highlight (skipping disabled options), Enter or a click picks one (calling
 /// [onChanged] and closing), Esc closes without changing the value. A
 /// bullet marks the currently-selected option as you navigate. Focus is
 /// trapped in the open list and returns to the trigger on close.
@@ -80,7 +80,7 @@ class Select<T> extends StatefulWidget {
   final String? semanticLabel;
 
   /// Base styling for the closed trigger, plus optional hover, focus, disabled,
-  /// and invalid state entries from [CellStyle.state].
+  /// and invalid state entries from [CellStyle.interactive].
   final CellStyle? style;
 
   @override
@@ -196,30 +196,29 @@ class _SelectState<T> extends State<Select<T>> {
     ); // resolved in-tree, threaded into the overlay
     _priorFocus = manager.focusedNode;
     final entry = OverlayEntry(
-      builder: (_) => BoundsAnchor(
-        notifier: _bounds,
-        child: _SelectList<T>(
-          trapContentKey: _trapContentKey,
-          options: widget.options,
-          semanticLabel: widget.semanticLabel,
-          initialIndex: _initialIndex(),
-          appliedIndex: _appliedIndex(),
-          selectionStyle: theme.selectionStyle,
-          mutedStyle: theme.mutedStyle,
-          borderStyle: theme.borderStyle,
-          onHighlighted: widget.onHighlightChanged,
-          onPicked: (value) {
-            _close();
-            _commit(value);
-          },
-          onDismiss: () {
-            _close();
-            // Undo any live preview the list drove, so dismissing leaves the
-            // consumer showing `value` again rather than the last highlight.
-            final applied = widget.value;
-            if (applied != null) widget.onHighlightChanged?.call(applied);
-          },
-        ),
+      builder: (_) => Stack(
+        children: <Widget>[
+          AbsorbPointer(onTap: _dismiss, child: const SizedBox.expand()),
+          BoundsAnchor(
+            notifier: _bounds,
+            child: _SelectList<T>(
+              trapContentKey: _trapContentKey,
+              options: widget.options,
+              semanticLabel: widget.semanticLabel,
+              initialIndex: _initialIndex(),
+              appliedIndex: _appliedIndex(),
+              selectionStyle: theme.selectionStyle,
+              mutedStyle: theme.mutedStyle,
+              borderStyle: theme.borderStyle,
+              onHighlighted: widget.onHighlightChanged,
+              onPicked: (value) {
+                _close();
+                _commit(value);
+              },
+              onDismiss: _dismiss,
+            ),
+          ),
+        ],
       ),
     );
     _entry = entry;
@@ -235,6 +234,14 @@ class _SelectState<T> extends State<Select<T>> {
     final prior = _priorFocus;
     if (prior != null && prior.isAttached) prior.requestFocus();
     if (mounted) setState(() {});
+  }
+
+  void _dismiss() {
+    _close();
+    // Undo any live preview the list drove, so dismissing leaves the consumer
+    // showing `value` again rather than the last highlight.
+    final applied = widget.value;
+    if (applied != null) widget.onHighlightChanged?.call(applied);
   }
 
   /// Picks the option matching [payload] (by label or value string) without
@@ -281,7 +288,7 @@ class _SelectState<T> extends State<Select<T>> {
     final validationError = _formRegistration?.error;
     final style = resolveCellStyle(
       cascade: [
-        CellStyle.state(
+        CellStyle.interactive(
           focused: theme.selectionStyle,
           disabled: theme.mutedStyle,
           invalid: theme.errorStyle,
@@ -447,7 +454,7 @@ class MultiSelect<T> extends StatefulWidget {
   final bool autofocus;
 
   /// Base styling for each option row, plus optional hover, focus, selected,
-  /// disabled, and invalid state entries from [CellStyle.state].
+  /// disabled, and invalid state entries from [CellStyle.interactive].
   final CellStyle? style;
 
   @override
@@ -649,7 +656,7 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
             allowSelect: false,
             style: resolveCellStyle(
               cascade: [
-                CellStyle.state(
+                CellStyle.interactive(
                   base: theme.mutedStyle,
                   disabled: theme.mutedStyle,
                   invalid: theme.errorStyle,
@@ -722,7 +729,7 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
     final highlighted = focused && index == _highlightedIndex;
     final style = resolveCellStyle(
       cascade: [
-        CellStyle.state(
+        CellStyle.interactive(
           focused: theme.selectionStyle,
           disabled: theme.mutedStyle,
           invalid: theme.errorStyle,
@@ -1032,13 +1039,20 @@ class _SelectListState<T> extends State<_SelectList<T>> {
                       final safeLabel = sanitizeOptionLabel(option.label);
                       final text = '$marker$safeLabel';
                       final row = option.enabled
-                          ? GestureDetector(
-                              onTap: () => _pick(i),
-                              child: Text(
-                                text,
-                                style: selected
-                                    ? widget.selectionStyle
-                                    : CellStyle.none,
+                          ? MouseRegion(
+                              onEnter: () {
+                                if (_list.selectedIndex != i) {
+                                  _list.selectedIndex = i;
+                                }
+                              },
+                              child: GestureDetector(
+                                onTap: () => _pick(i),
+                                child: Text(
+                                  text,
+                                  style: selected
+                                      ? widget.selectionStyle
+                                      : CellStyle.none,
+                                ),
                               ),
                             )
                           : Text(text, style: widget.mutedStyle);

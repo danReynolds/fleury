@@ -245,7 +245,7 @@ Widget _row(String indicator, String? label, CellStyle style) {
   );
 }
 
-CellStyle _defaultControlStyle(ThemeData theme) => CellStyle.state(
+CellStyle _defaultControlStyle(ThemeData theme) => CellStyle.interactive(
   focused: theme.focusedStyle,
   disabled: theme.mutedStyle,
   invalid: theme.errorStyle,
@@ -282,7 +282,7 @@ class Checkbox extends StatelessWidget {
   final bool autofocus;
 
   /// Base styling, plus optional hover, focus, selected, disabled, and invalid
-  /// state entries from [CellStyle.state].
+  /// state entries from [CellStyle.interactive].
   final CellStyle? style;
 
   @override
@@ -341,7 +341,7 @@ class Toggle extends StatelessWidget {
   final bool autofocus;
 
   /// Base styling, plus optional hover, focus, selected, disabled, and invalid
-  /// state entries from [CellStyle.state].
+  /// state entries from [CellStyle.interactive].
   final CellStyle? style;
 
   @override
@@ -406,7 +406,7 @@ class Switch extends StatelessWidget {
   final bool autofocus;
 
   /// Base styling, plus optional hover, focus, selected, disabled, and invalid
-  /// state entries from [CellStyle.state].
+  /// state entries from [CellStyle.interactive].
   final CellStyle? style;
 
   @override
@@ -497,7 +497,7 @@ class Radio<T> extends StatelessWidget {
   final bool autofocus;
 
   /// Base styling, plus optional hover, focus, selected, and disabled state
-  /// entries from [CellStyle.state].
+  /// entries from [CellStyle.interactive].
   final CellStyle? style;
 
   final String? _validationError;
@@ -585,7 +585,7 @@ class RadioGroup<T> extends StatefulWidget {
   final bool autofocus;
 
   /// Base styling for every radio, plus optional hover, focus, selected,
-  /// disabled, and invalid state entries from [CellStyle.state].
+  /// disabled, and invalid state entries from [CellStyle.interactive].
   final CellStyle? style;
 
   @override
@@ -796,7 +796,7 @@ class Button extends StatelessWidget {
   final bool autofocus;
 
   /// Base styling, plus optional hover, focus, and disabled state entries from
-  /// [CellStyle.state].
+  /// [CellStyle.interactive].
   final CellStyle? style;
 
   static Color? _color(ButtonVariant variant, ColorScheme scheme) =>
@@ -844,7 +844,7 @@ class Button extends StatelessWidget {
     final content = '[ $label ]';
     final base = CellStyle(foreground: _color(variant, theme.colorScheme));
     return _FocusableControl(
-      defaultStyle: CellStyle.state(
+      defaultStyle: CellStyle.interactive(
         base: base,
         focused: theme.selectionStyle,
         disabled: theme.mutedStyle,

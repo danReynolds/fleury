@@ -66,7 +66,7 @@ class Stepper extends StatefulWidget {
   final bool autofocus;
 
   /// Base styling for the value and frame, plus optional hover, focus,
-  /// disabled, and invalid state entries from [CellStyle.state].
+  /// disabled, and invalid state entries from [CellStyle.interactive].
   final CellStyle? style;
 
   @override
@@ -291,7 +291,7 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
     final validationError = _formRegistration?.error;
     final interactiveStyle = resolveCellStyle(
       cascade: [
-        CellStyle.state(
+        CellStyle.interactive(
           focused: theme.focusedStyle,
           disabled: theme.mutedStyle,
           invalid: theme.errorStyle,

@@ -75,9 +75,9 @@ void main() {
     });
   });
 
-  group('CellStyle.state', () {
+  group('CellStyle.interactive', () {
     test('is const and behaves like its base outside state resolution', () {
-      const style = CellStyle.state(
+      const style = CellStyle.interactive(
         base: CellStyle(foreground: AnsiColor(6), bold: true),
         focused: CellStyle(underline: true),
       );
@@ -88,7 +88,7 @@ void main() {
     });
 
     test('plain local styles change the base without erasing state cues', () {
-      const defaults = CellStyle.state(
+      const defaults = CellStyle.interactive(
         focused: CellStyle(bold: true),
         invalid: CellStyle(underline: true),
       );
@@ -107,10 +107,10 @@ void main() {
     });
 
     test('the highest non-null patch wins for each state as one unit', () {
-      const theme = CellStyle.state(
+      const theme = CellStyle.interactive(
         focused: CellStyle(foreground: AnsiColor(4), bold: true),
       );
-      const local = CellStyle.state(focused: CellStyle(underline: true));
+      const local = CellStyle.interactive(focused: CellStyle(underline: true));
 
       final resolved = resolveCellStyle(
         cascade: const [theme, local],
@@ -123,12 +123,12 @@ void main() {
     });
 
     test('null inherits while CellStyle.none suppresses a state cue', () {
-      const theme = CellStyle.state(
+      const theme = CellStyle.interactive(
         base: CellStyle(foreground: AnsiColor(2)),
         focused: CellStyle(inverse: true),
       );
-      const inherit = CellStyle.state();
-      const suppress = CellStyle.state(focused: CellStyle.none);
+      const inherit = CellStyle.interactive();
+      const suppress = CellStyle.interactive(focused: CellStyle.none);
 
       final inherited = resolveCellStyle(
         cascade: const [theme, inherit],
@@ -146,7 +146,7 @@ void main() {
     });
 
     test('active states compose in deterministic paint order', () {
-      const style = CellStyle.state(
+      const style = CellStyle.interactive(
         selected: CellStyle(background: AnsiColor(4)),
         hovered: CellStyle(dim: false),
         focused: CellStyle(bold: true),
@@ -171,7 +171,7 @@ void main() {
     });
 
     test('disabled is exclusive of transient and value states', () {
-      const style = CellStyle.state(
+      const style = CellStyle.interactive(
         selected: CellStyle(inverse: true),
         focused: CellStyle(bold: true),
         disabled: CellStyle(dim: true),
@@ -195,13 +195,13 @@ void main() {
     });
 
     test(
-      'stateful styles have value equality and preserve states on merge',
+      'interaction-aware styles have value equality and preserve states',
       () {
-        const a = CellStyle.state(
+        const a = CellStyle.interactive(
           base: CellStyle(foreground: AnsiColor(2)),
           focused: CellStyle(bold: true),
         );
-        const b = CellStyle.state(
+        const b = CellStyle.interactive(
           base: CellStyle(foreground: AnsiColor(2)),
           focused: CellStyle(bold: true),
         );
@@ -210,7 +210,7 @@ void main() {
         expect(a.hashCode, b.hashCode);
         expect(
           a.merge(const CellStyle(background: AnsiColor(0))),
-          const CellStyle.state(
+          const CellStyle.interactive(
             base: CellStyle(foreground: AnsiColor(2), background: AnsiColor(0)),
             focused: CellStyle(bold: true),
           ),

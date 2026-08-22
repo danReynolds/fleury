@@ -1,6 +1,6 @@
 import 'package:meta/meta.dart';
 
-/// A state used internally while resolving a value from [CellStyle.state].
+/// A state used internally while resolving a value from [CellStyle.interactive].
 ///
 /// Widgets use only the states that make sense for their surface. For example,
 /// a button never becomes [selected], while a checkbox uses [selected] for its
@@ -16,7 +16,7 @@ const List<CellStyleState> _cellStyleStatePaintOrder = [
 
 CellStyle _plainCellStyle(CellStyle style) {
   var result = style;
-  while (result is _StatefulCellStyle) {
+  while (result is _InteractiveCellStyle) {
     result = result.base;
   }
   return result;
@@ -26,7 +26,7 @@ CellStyle _plainCellStyle(CellStyle style) {
 CellStyle plainCellStyle(CellStyle style) => _plainCellStyle(style);
 
 /// Whether [style] contains unresolved control-state entries.
-bool hasCellStyleStates(CellStyle style) => style is _StatefulCellStyle;
+bool hasCellStyleStates(CellStyle style) => style is _InteractiveCellStyle;
 
 /// Resolves [cascade] from lowest to highest priority.
 ///
@@ -50,7 +50,7 @@ CellStyle resolveCellStyle({
   for (final state in active) {
     CellStyle? patch;
     for (final layer in layers) {
-      if (layer is _StatefulCellStyle) {
+      if (layer is _InteractiveCellStyle) {
         patch = layer._styleFor(state) ?? patch;
       }
     }
@@ -302,14 +302,14 @@ final class CellStyle {
   /// [base] is also the fallback when this value is used by a non-control API
   /// such as `Text(style:)`. A null state entry inherits the corresponding
   /// theme/widget default; [CellStyle.none] explicitly suppresses it.
-  const factory CellStyle.state({
+  const factory CellStyle.interactive({
     CellStyle base,
     CellStyle? hovered,
     CellStyle? focused,
     CellStyle? selected,
     CellStyle? disabled,
     CellStyle? invalid,
-  }) = _StatefulCellStyle._;
+  }) = _InteractiveCellStyle._;
 
   final Color? _foreground;
   final Color? _background;
@@ -363,7 +363,7 @@ final class CellStyle {
 
   /// No paint overrides.
   ///
-  /// As a state entry in [CellStyle.state], this deliberately suppresses an
+  /// As a state entry in [CellStyle.interactive], this deliberately suppresses an
   /// inherited cue for that state.
   static const CellStyle none = CellStyle();
 
@@ -396,7 +396,7 @@ final class CellStyle {
   /// sets them (on or off) and inherited from this otherwise — so an
   /// override can both add and remove attributes.
   CellStyle merge(CellStyle other) {
-    if (other is _StatefulCellStyle) {
+    if (other is _InteractiveCellStyle) {
       return other._withBase(merge(other.base));
     }
     return CellStyle(
@@ -490,21 +490,21 @@ final class CellStyle {
   }
 }
 
-/// The immutable value created by [CellStyle.state].
+/// The immutable value created by [CellStyle.interactive].
 ///
 /// It remains a [CellStyle] so existing `style:` call sites stay lightweight.
 /// Its inherited paint fields mirror [base], providing a deterministic
 /// fallback in APIs that do not resolve control state.
 @immutable
-final class _StatefulCellStyle extends CellStyle {
-  const _StatefulCellStyle._({
+final class _InteractiveCellStyle extends CellStyle {
+  const _InteractiveCellStyle._({
     this.base = CellStyle.none,
     this.hovered,
     this.focused,
     this.selected,
     this.disabled,
     this.invalid,
-  }) : assert(base is! _StatefulCellStyle, 'base must be a plain CellStyle'),
+  }) : assert(base is! _InteractiveCellStyle, 'base must be a plain CellStyle'),
        super();
 
   final CellStyle base;
@@ -549,17 +549,18 @@ final class _StatefulCellStyle extends CellStyle {
     CellStyleState.invalid => invalid,
   };
 
-  _StatefulCellStyle _withBase(CellStyle nextBase) => _StatefulCellStyle._(
-    base: nextBase,
-    hovered: hovered,
-    focused: focused,
-    selected: selected,
-    disabled: disabled,
-    invalid: invalid,
-  );
+  _InteractiveCellStyle _withBase(CellStyle nextBase) =>
+      _InteractiveCellStyle._(
+        base: nextBase,
+        hovered: hovered,
+        focused: focused,
+        selected: selected,
+        disabled: disabled,
+        invalid: invalid,
+      );
 
   @override
-  _StatefulCellStyle copyWith({
+  _InteractiveCellStyle copyWith({
     Color? foreground,
     Color? background,
     bool? bold,
@@ -584,9 +585,9 @@ final class _StatefulCellStyle extends CellStyle {
   );
 
   @override
-  _StatefulCellStyle merge(CellStyle other) {
-    if (other is _StatefulCellStyle) {
-      return _StatefulCellStyle._(
+  _InteractiveCellStyle merge(CellStyle other) {
+    if (other is _InteractiveCellStyle) {
+      return _InteractiveCellStyle._(
         base: base.merge(other.base),
         hovered: other.hovered ?? hovered,
         focused: other.focused ?? focused,
@@ -601,7 +602,7 @@ final class _StatefulCellStyle extends CellStyle {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is _StatefulCellStyle &&
+      other is _InteractiveCellStyle &&
           other.base == base &&
           other.hovered == hovered &&
           other.focused == focused &&
@@ -611,7 +612,7 @@ final class _StatefulCellStyle extends CellStyle {
 
   @override
   int get hashCode => Object.hash(
-    _StatefulCellStyle,
+    _InteractiveCellStyle,
     base,
     hovered,
     focused,
@@ -622,7 +623,7 @@ final class _StatefulCellStyle extends CellStyle {
 
   @override
   String toString() =>
-      'CellStyle.state(base: $base, hovered: $hovered, focused: $focused, '
+      'CellStyle.interactive(base: $base, hovered: $hovered, focused: $focused, '
       'selected: $selected, disabled: $disabled, invalid: $invalid)';
 }
 

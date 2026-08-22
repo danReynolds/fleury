@@ -65,7 +65,7 @@ class ColorPicker extends StatefulWidget {
   final bool autofocus;
 
   /// Base styling for markers, plus optional hover, focus, selected, disabled,
-  /// and invalid state entries from [CellStyle.state].
+  /// and invalid state entries from [CellStyle.interactive].
   final CellStyle? style;
 
   @override
@@ -356,7 +356,7 @@ class _ColorPickerState extends State<ColorPicker>
         );
         final markStyle = resolveCellStyle(
           cascade: [
-            CellStyle.state(
+            CellStyle.interactive(
               base: isCursor ? theme.selectionStyle : theme.mutedStyle,
               focused: theme.focusedStyle,
               disabled: theme.mutedStyle,

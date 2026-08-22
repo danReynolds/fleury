@@ -340,6 +340,44 @@ void main() {
       expect(picked, 'blue');
     });
 
+    testWidgets('hover moves the open-list highlight and live preview', (
+      tester,
+    ) {
+      final previews = <String>[];
+      String? picked;
+      tester.pumpWidget(
+        _Host(
+          initial: 'red',
+          onPick: (value) => picked = value,
+          onHighlight: previews.add,
+        ),
+      );
+
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      final blue = _find(tester, 'Blue')!;
+      tester.sendMouse(
+        MouseEvent(
+          kind: MouseEventKind.moved,
+          button: MouseButton.none,
+          col: blue.col,
+          row: blue.row,
+        ),
+      );
+
+      expect(previews, <String>['blue']);
+      expect(
+        tester
+            .semantics()
+            .single(role: SemanticRole.menuItem, label: 'Blue')
+            .selected,
+        isTrue,
+      );
+      expect(picked, isNull, reason: 'hover previews but does not commit');
+
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      expect(picked, 'blue', reason: 'Enter commits the hovered option');
+    });
+
     testWidgets('clicking the open trigger closes the list', (tester) {
       tester.pumpWidget(const _Host(initial: 'red'));
 
@@ -375,6 +413,47 @@ void main() {
             .expanded,
         isFalse,
       );
+    });
+
+    testWidgets('click-away dismisses without activating content behind', (
+      tester,
+    ) {
+      var behindPressed = false;
+      tester.pumpWidget(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const _Host(initial: 'red'),
+            const SizedBox(height: 6),
+            Button(label: 'Behind', onPressed: () => behindPressed = true),
+          ],
+        ),
+      );
+
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      expect(tester.semantics().where(role: SemanticRole.menu), isNotEmpty);
+
+      final behind = _find(tester, 'Behind', cols: 24, rows: 12)!;
+      tester.sendMouse(
+        MouseEvent(
+          kind: MouseEventKind.down,
+          button: MouseButton.left,
+          col: behind.col,
+          row: behind.row,
+        ),
+      );
+      tester.sendMouse(
+        MouseEvent(
+          kind: MouseEventKind.up,
+          button: MouseButton.left,
+          col: behind.col,
+          row: behind.row,
+        ),
+      );
+
+      expect(tester.semantics().where(role: SemanticRole.menu), isEmpty);
+      expect(behindPressed, isFalse);
+      expect(tester.focusManager.focusedNode?.debugLabel, 'select-trigger');
     });
 
     group('semantics', () {

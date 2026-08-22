@@ -72,7 +72,7 @@ class Autocomplete<T extends Object> extends StatefulWidget {
   final SemanticState semanticState;
 
   /// Text-field base styling, plus optional hover, focus, disabled, and invalid
-  /// state entries from [CellStyle.state].
+  /// state entries from [CellStyle.interactive].
   final CellStyle style;
 
   /// Called with the selected option when the user picks a suggestion.

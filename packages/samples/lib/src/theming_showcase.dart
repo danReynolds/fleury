@@ -11,6 +11,28 @@ class ThemingShowcaseApp extends StatefulWidget {
   State<ThemingShowcaseApp> createState() => _ThemingShowcaseAppState();
 }
 
+enum _PaletteRole { accent, focus, success, warning, error, info }
+
+extension on _PaletteRole {
+  String get label => switch (this) {
+    _PaletteRole.accent => 'Accent',
+    _PaletteRole.focus => 'Focus',
+    _PaletteRole.success => 'Success',
+    _PaletteRole.warning => 'Warning',
+    _PaletteRole.error => 'Error',
+    _PaletteRole.info => 'Info',
+  };
+
+  String get purpose => switch (this) {
+    _PaletteRole.accent => 'Headings, selection, and primary actions.',
+    _PaletteRole.focus => 'Keyboard focus and active regions.',
+    _PaletteRole.success => 'Successful and healthy states.',
+    _PaletteRole.warning => 'Warnings and attention states.',
+    _PaletteRole.error => 'Errors and invalid controls.',
+    _PaletteRole.info => 'Informational status.',
+  };
+}
+
 class _ThemingShowcaseAppState extends State<ThemingShowcaseApp> {
   static final int _customIndex = fleuryThemes.length;
   static const _palette = <Color>[
@@ -43,9 +65,11 @@ class _ThemingShowcaseAppState extends State<ThemingShowcaseApp> {
   Color _warning = const AnsiColor(11);
   Color _error = const AnsiColor(9);
   Color _info = const AnsiColor(14);
+  _PaletteRole _paletteRole = _PaletteRole.accent;
   String _environment = 'Production';
   bool _logs = true;
   bool _autoDeploy = true;
+  num _replicas = 3;
   String _status = 'Ready to deploy';
 
   bool get _isCustom => _shownThemeIndex == _customIndex;
@@ -62,7 +86,7 @@ class _ThemingShowcaseAppState extends State<ThemingShowcaseApp> {
       selectionStyle: const CellStyle(inverse: true, bold: true),
       focusedStyle: CellStyle(foreground: _focus, bold: true),
       errorStyle: CellStyle(foreground: _error, underline: true),
-      interactiveStyle: CellStyle.state(
+      interactiveStyle: CellStyle.interactive(
         focused: CellStyle(foreground: _focus, bold: true),
         selected: CellStyle(foreground: _primary, bold: true),
         invalid: CellStyle(foreground: _error, underline: true),
@@ -88,6 +112,38 @@ class _ThemingShowcaseAppState extends State<ThemingShowcaseApp> {
 
   String get _activeName =>
       _isCustom ? 'Custom' : fleuryThemes[_shownThemeIndex].name;
+
+  Color get _paletteColor => switch (_paletteRole) {
+    _PaletteRole.accent => _primary,
+    _PaletteRole.focus => _focus,
+    _PaletteRole.success => _success,
+    _PaletteRole.warning => _warning,
+    _PaletteRole.error => _error,
+    _PaletteRole.info => _info,
+  };
+
+  void _setPaletteColor(Color color) => setState(() {
+    switch (_paletteRole) {
+      case _PaletteRole.accent:
+        _primary = color;
+        break;
+      case _PaletteRole.focus:
+        _focus = color;
+        break;
+      case _PaletteRole.success:
+        _success = color;
+        break;
+      case _PaletteRole.warning:
+        _warning = color;
+        break;
+      case _PaletteRole.error:
+        _error = color;
+        break;
+      case _PaletteRole.info:
+        _info = color;
+        break;
+    }
+  });
 
   void _resetCustom() => setState(() {
     _brightness = Brightness.dark;
@@ -152,7 +208,7 @@ class _ThemingShowcaseAppState extends State<ThemingShowcaseApp> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
                   SizedBox(
-                    width: 43,
+                    width: 39,
                     child: _isCustom
                         ? _customEditor()
                         : const _ThemeRoleInspector(),
@@ -177,7 +233,8 @@ class _ThemingShowcaseAppState extends State<ThemingShowcaseApp> {
         children: <Widget>[
           Row(
             children: <Widget>[
-              const SizedBox(width: 9, child: Text('Mode')),
+              const SizedBox(width: 8, child: Text('Mode')),
+              const SizedBox(width: 1),
               Select<Brightness>(
                 semanticLabel: 'Brightness',
                 value: _brightness,
@@ -191,63 +248,74 @@ class _ThemingShowcaseAppState extends State<ThemingShowcaseApp> {
           ),
           Row(
             children: <Widget>[
-              const SizedBox(width: 9, child: Text('Border')),
+              const SizedBox(width: 8, child: Text('Border')),
+              const SizedBox(width: 1),
               Select<BorderStyle>(
                 semanticLabel: 'Border',
                 value: _borderStyle,
                 options: <SelectOption<BorderStyle>>[
                   for (final style in BorderStyle.values)
-                    SelectOption(value: style, label: style.name),
+                    SelectOption(value: style, label: _borderLabel(style)),
                 ],
                 onChanged: (value) => setState(() => _borderStyle = value),
               ),
             ],
           ),
           const SizedBox(height: 1),
-          _colorField('Accent', 'Accent color', _primary, (color) {
-            setState(() => _primary = color);
-          }),
-          _colorField('Focus', 'Focus color', _focus, (color) {
-            setState(() => _focus = color);
-          }),
-          _colorField('Success', 'Success color', _success, (color) {
-            setState(() => _success = color);
-          }),
-          _colorField('Warning', 'Warning color', _warning, (color) {
-            setState(() => _warning = color);
-          }),
-          _colorField('Error', 'Error color', _error, (color) {
-            setState(() => _error = color);
-          }),
-          _colorField('Info', 'Info color', _info, (color) {
-            setState(() => _info = color);
-          }),
+          Row(
+            children: <Widget>[
+              const SizedBox(width: 8, child: Text('Preview')),
+              const SizedBox(width: 1),
+              Container(
+                width: 22,
+                height: 3,
+                alignment: Alignment.center,
+                border: BoxBorder(
+                  style: _borderStyle,
+                  cellStyle: CellStyle(foreground: _primary),
+                ),
+                child: Text('${_borderLabel(_borderStyle)} border'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 1),
+          const Text('Palette roles', style: CellStyle(bold: true)),
+          Row(
+            children: <Widget>[
+              const SizedBox(width: 8, child: Text('Role')),
+              const SizedBox(width: 1),
+              Select<_PaletteRole>(
+                semanticLabel: 'Palette role',
+                value: _paletteRole,
+                options: <SelectOption<_PaletteRole>>[
+                  for (final role in _PaletteRole.values)
+                    SelectOption(value: role, label: role.label),
+                ],
+                onChanged: (value) => setState(() => _paletteRole = value),
+              ),
+            ],
+          ),
+          Text(_paletteRole.purpose, style: context.theme.mutedStyle),
+          const SizedBox(height: 1),
+          Text(
+            '${_paletteRole.label} color',
+            style: const CellStyle(bold: true),
+          ),
+          ColorPicker(
+            value: _paletteColor,
+            colors: _palette,
+            columns: 4,
+            swatchWidth: 3,
+            semanticLabel: '${_paletteRole.label} color',
+            semanticColorLabelBuilder: (_, index) =>
+                '${_paletteRole.label} option ${index + 1}',
+            onChanged: _setPaletteColor,
+          ),
           const SizedBox(height: 1),
           Button(label: 'Reset custom theme', onPressed: _resetCustom),
         ],
       ),
     ),
-  );
-
-  Widget _colorField(
-    String label,
-    String semanticLabel,
-    Color value,
-    void Function(Color) onChanged,
-  ) => Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: <Widget>[
-      SizedBox(width: 9, child: Text(label)),
-      ColorPicker(
-        value: value,
-        colors: _palette,
-        columns: 8,
-        swatchWidth: 1,
-        semanticLabel: semanticLabel,
-        semanticColorLabelBuilder: (_, index) => '$label option ${index + 1}',
-        onChanged: onChanged,
-      ),
-    ],
   );
 
   Widget _widgetGallery(ThemeData theme) => Panel(
@@ -257,102 +325,160 @@ class _ThemingShowcaseAppState extends State<ThemingShowcaseApp> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text('Form controls', style: theme.focusedStyle),
-          Row(
-            children: <Widget>[
-              const SizedBox(width: 11, child: Text('Service')),
-              SizedBox(
-                width: 27,
-                child: FormField(
-                  error: _service.text.trim().isEmpty
-                      ? 'Service name is required.'
-                      : null,
-                  child: TextInput(
-                    controller: _service,
-                    semanticLabel: 'Service name',
-                    onChanged: (_) => setState(() {}),
-                  ),
+          _galleryHeading(theme, 'Form controls'),
+          const SizedBox(height: 1),
+          _galleryRow(
+            'Service',
+            SizedBox(
+              width: 27,
+              child: FormField(
+                error: _service.text.trim().isEmpty
+                    ? 'Service name is required.'
+                    : null,
+                child: TextInput(
+                  controller: _service,
+                  semanticLabel: 'Service name',
+                  onChanged: (_) => setState(() {}),
                 ),
               ),
-            ],
+            ),
           ),
-          Row(
-            children: <Widget>[
-              const SizedBox(width: 11, child: Text('Environment')),
-              Select<String>(
-                semanticLabel: 'Environment',
-                value: _environment,
-                options: const <SelectOption<String>>[
-                  SelectOption(value: 'Development', label: 'Development'),
-                  SelectOption(value: 'Staging', label: 'Staging'),
-                  SelectOption(value: 'Production', label: 'Production'),
-                ],
-                onChanged: (value) => setState(() => _environment = value),
-              ),
-            ],
+          _galleryRow(
+            'Environment',
+            Select<String>(
+              semanticLabel: 'Environment',
+              value: _environment,
+              options: const <SelectOption<String>>[
+                SelectOption(value: 'Development', label: 'Development'),
+                SelectOption(value: 'Staging', label: 'Staging'),
+                SelectOption(value: 'Production', label: 'Production'),
+              ],
+              onChanged: (value) => setState(() => _environment = value),
+            ),
           ),
-          Row(
-            children: <Widget>[
-              Checkbox(
-                value: _logs,
-                label: 'Logs',
-                onChanged: (value) => setState(() => _logs = value),
-              ),
-              const SizedBox(width: 3),
-              Switch(
-                value: _autoDeploy,
-                label: 'Auto deploy',
-                onChanged: (value) => setState(() => _autoDeploy = value),
-              ),
-            ],
+          _galleryRow(
+            'Logging',
+            Checkbox(
+              value: _logs,
+              label: 'Enabled',
+              onChanged: (value) => setState(() => _logs = value),
+            ),
           ),
-          const SizedBox(height: 1),
-          Text('Status and progress', style: theme.focusedStyle),
-          const SizedBox(width: 39, child: Gauge(value: 0.68, label: 'CPU')),
-          const SizedBox(width: 39, child: ProgressBar(value: 0.42)),
-          Wrap(
-            children: <Widget>[
-              Text(
-                'success  ',
-                style: CellStyle(foreground: theme.colorScheme.success),
-              ),
-              Text(
-                'warning  ',
-                style: CellStyle(foreground: theme.colorScheme.warning),
-              ),
-              Text(
-                'error  ',
-                style: CellStyle(foreground: theme.colorScheme.error),
-              ),
-              Text(
-                'info',
-                style: CellStyle(foreground: theme.colorScheme.info),
-              ),
-            ],
+          _galleryRow(
+            'Automation',
+            Switch(
+              value: _autoDeploy,
+              label: 'Auto deploy',
+              onChanged: (value) => setState(() => _autoDeploy = value),
+            ),
+          ),
+          _galleryRow(
+            'Replicas',
+            Stepper(
+              value: _replicas,
+              min: 1,
+              max: 9,
+              onChanged: (value) => setState(() => _replicas = value),
+            ),
           ),
           const SizedBox(height: 1),
-          Text('Data and actions', style: theme.focusedStyle),
-          Text('> api-gateway   healthy   42%', style: theme.selectionStyle),
-          Text('  worker-01     running   18%', style: theme.textStyle),
-          Text('  cron-cleanup  paused     0%', style: theme.mutedStyle),
+          _galleryHeading(theme, 'Status and progress'),
           const SizedBox(height: 1),
-          Row(
-            children: <Widget>[
-              Button(
-                label: 'Deploy',
-                variant: ButtonVariant.primary,
-                onPressed: () => setState(() => _status = 'Deploy queued'),
-              ),
-              const SizedBox(width: 1),
-              const Button(label: 'Unavailable', onPressed: null),
-            ],
+          _galleryRow(
+            'CPU',
+            const SizedBox(
+              width: 34,
+              child: Gauge(value: 0.68, showPercentage: true),
+            ),
           ),
-          Text(_status, style: theme.mutedStyle),
+          _galleryRow(
+            'Deployment',
+            const Row(
+              children: <Widget>[
+                SizedBox(width: 28, child: ProgressBar(value: 0.42)),
+                Text(' 42%'),
+              ],
+            ),
+          ),
+          _galleryRow(
+            'States',
+            Wrap(
+              children: <Widget>[
+                Text(
+                  'success  ',
+                  style: CellStyle(foreground: theme.colorScheme.success),
+                ),
+                Text(
+                  'warning  ',
+                  style: CellStyle(foreground: theme.colorScheme.warning),
+                ),
+                Text(
+                  'error  ',
+                  style: CellStyle(foreground: theme.colorScheme.error),
+                ),
+                Text(
+                  'info',
+                  style: CellStyle(foreground: theme.colorScheme.info),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 1),
+          _galleryHeading(theme, 'Data and actions'),
+          const SizedBox(height: 1),
+          _galleryRow(
+            'Selected',
+            Text('api-gateway  healthy  42%', style: theme.selectionStyle),
+          ),
+          _galleryRow(
+            'Default',
+            Text('worker-01    running  18%', style: theme.textStyle),
+          ),
+          _galleryRow(
+            'Muted',
+            Text('cron-cleanup paused    0%', style: theme.mutedStyle),
+          ),
+          const SizedBox(height: 1),
+          _galleryRow(
+            'Actions',
+            Row(
+              children: <Widget>[
+                Button(
+                  label: 'Deploy',
+                  variant: ButtonVariant.primary,
+                  onPressed: () => setState(() => _status = 'Deploy queued'),
+                ),
+                const SizedBox(width: 1),
+                const Button(label: 'Unavailable', onPressed: null),
+              ],
+            ),
+          ),
+          _galleryRow('Result', Text(_status, style: theme.mutedStyle)),
         ],
       ),
     ),
   );
+
+  Widget _galleryHeading(ThemeData theme, String label) => Text(
+    label,
+    style: CellStyle(foreground: theme.colorScheme.primary, bold: true),
+  );
+
+  Widget _galleryRow(String label, Widget child) => Row(
+    children: <Widget>[
+      SizedBox(width: 13, child: Text(label)),
+      const SizedBox(width: 1),
+      child,
+    ],
+  );
 }
+
+String _borderLabel(BorderStyle style) => switch (style) {
+  BorderStyle.single => 'Single-line',
+  BorderStyle.double => 'Double-line',
+  BorderStyle.rounded => 'Rounded',
+  BorderStyle.ascii => 'ASCII',
+};
 
 class _ThemeRoleInspector extends StatelessWidget {
   const _ThemeRoleInspector();

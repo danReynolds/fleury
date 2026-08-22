@@ -122,12 +122,12 @@ void main() {
       expect(buf.atColRow(4, 0).grapheme, 'o');
     });
 
-    test('stores only the base of a stateful style in painted cells', () {
-      const first = CellStyle.state(
+    test('stores only the base of an interaction-aware style in cells', () {
+      const first = CellStyle.interactive(
         base: CellStyle(foreground: AnsiColor(6)),
         focused: CellStyle(bold: true),
       );
-      const second = CellStyle.state(
+      const second = CellStyle.interactive(
         base: CellStyle(foreground: AnsiColor(6)),
         invalid: CellStyle(underline: true),
       );

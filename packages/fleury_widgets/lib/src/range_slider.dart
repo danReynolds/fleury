@@ -84,7 +84,7 @@ class RangeSlider extends StatefulWidget {
   final bool autofocus;
 
   /// Base styling for the track and handles, plus optional hover, focus,
-  /// selected, disabled, and invalid state entries from [CellStyle.state].
+  /// selected, disabled, and invalid state entries from [CellStyle.interactive].
   final CellStyle? style;
 
   @override
@@ -320,7 +320,7 @@ class _RangeSliderState extends State<RangeSlider> {
     };
     final trackStyle = resolveCellStyle(
       cascade: [
-        CellStyle.state(
+        CellStyle.interactive(
           base: theme.mutedStyle,
           focused: theme.focusedStyle,
           disabled: theme.mutedStyle,
@@ -333,7 +333,7 @@ class _RangeSliderState extends State<RangeSlider> {
     );
     final selectedStyle = resolveCellStyle(
       cascade: [
-        CellStyle.state(
+        CellStyle.interactive(
           selected: CellStyle(foreground: theme.colorScheme.primary),
           focused: theme.focusedStyle,
           disabled: theme.mutedStyle,

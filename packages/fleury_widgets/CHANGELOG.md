@@ -4,7 +4,7 @@
 
 - **Unified control styling.** Buttons, toggles, choices, selectors, steppers,
   sliders, date/color pickers, and input wrappers now use their ordinary
-  `style` property for both `CellStyle(...)` and `CellStyle.state(...)`.
+  `style` property for both `CellStyle(...)` and `CellStyle.interactive(...)`.
   Per-control `errorStyle` properties are replaced by the `invalid` state, and
   `FleuryWidgetTheme.controlFocusStyle` / `disabledStyle` move to
   `ThemeData.interactiveStyle`.

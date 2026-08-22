@@ -410,7 +410,10 @@ final class CellBuffer {
     WidthResolver widthResolver = const DefaultWidthResolver(),
     CellWidthPolicy policy = CellWidthPolicy.spec,
   }) {
-    assert(!hasCellStyleStates(style), 'stateful styles must resolve first');
+    assert(
+      !hasCellStyleStates(style),
+      'interaction-aware styles must resolve first',
+    );
     final width = widthResolver.widthOfGrapheme(grapheme, policy);
     if (width == 0) return 0;
     // Include adjacent cells because writing can evict wide-cell neighbors.

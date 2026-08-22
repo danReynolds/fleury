@@ -103,7 +103,7 @@ void main() {
     tester,
   ) {
     final example = exampleList.singleWhere(
-      (example) => example.id == 'themes.control_states',
+      (example) => example.id == 'themes.interactive_styles',
     );
     final source = example.code!;
     const stateLines = [
@@ -161,56 +161,60 @@ void main() {
       size: CellSize(example.cols, example.rows),
       emptyMark: ' ',
     );
-    expect(output, contains('Service name'));
-    expect(output, contains('Approved'));
-    expect(output, contains('Deploy'));
-    expect(output, contains('Queued'));
+    expect(output, contains('INTERACTION STYLES'));
+    expect(output, contains('base'));
+    expect(output, contains('focused'));
+    expect(output, contains('hovered'));
+    expect(output, contains('selected'));
+    expect(output, contains('invalid'));
+    expect(output, contains('disabled'));
   });
 
-  testWidgets('theme-role demo covers each shared text role', (tester) {
-    final example = exampleList.singleWhere(
-      (example) => example.id == 'themes.roles',
+  testWidgets('visual style examples render the code paths the guide shows', (
+    tester,
+  ) async {
+    for (final (id, expected) in <(String, List<String>)>[
+      ('themes.local_style', ['api-gateway']),
+      ('themes.cell_style', ['Default text', 'Styled text']),
+      (
+        'themes.local_interactive',
+        ['LOCAL INTERACTION STYLE', 'Theme focus', 'Local focus'],
+      ),
+      ('themes.invalid_none', ['NEUTRAL INVALID CHROME', 'Submit']),
+    ]) {
+      final example = exampleList.singleWhere((example) => example.id == id);
+      expect(example.code, isNotNull, reason: '$id must show its source');
+      tester.pumpWidget(example.builder());
+      final output = tester.renderToString(
+        size: CellSize(example.cols, example.rows),
+        emptyMark: ' ',
+      );
+      for (final text in expected) {
+        expect(output, contains(text), reason: '$id omitted $text');
+      }
+    }
+
+    final invalid = exampleList.singleWhere(
+      (example) => example.id == 'themes.invalid_none',
     );
-    final theme = rolePreviewThemeForTest;
-
-    expect(theme.textStyle.foreground, Colors.white);
-    expect(theme.mutedStyle.dim, isTrue);
-    expect(theme.selectionStyle.inverse, isTrue);
-    expect(theme.focusedStyle.foreground, Colors.cyan);
-    expect(theme.focusedStyle.bold, isTrue);
-    expect(theme.errorStyle.foreground, Colors.red);
-    expect(theme.errorStyle.underline, isTrue);
-    expect(theme.borderStyle, BorderStyle.double);
-
-    tester.pumpWidget(example.builder());
+    tester.pumpWidget(invalid.builder());
+    await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.button,
+      label: 'Submit',
+    );
+    tester.pump();
     final output = tester.renderToString(
-      size: CellSize(example.cols, example.rows),
+      size: CellSize(invalid.cols, invalid.rows),
       emptyMark: ' ',
     );
-    expect(output, contains('THEME ROLES'));
-    expect(output, contains('Default text'));
-    expect(output, contains('Text'));
-    expect(output, contains('Deploy ready'));
-    expect(output, contains('Button'));
-    expect(output, contains('Deploy'));
-    expect(output, contains('Checkbox'));
-    expect(output, contains('Approved'));
-    expect(output, contains('TextInput'));
-    expect(output, contains('api-gateway'));
-    expect(output, contains('Local style preview'));
-    expect(output, contains('borderStyle frames the panel'));
-
-    tester.sendKey(const KeyEvent(KeyCode.enter));
-    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
-    tester.sendKey(const KeyEvent(KeyCode.escape));
-    tester.pump();
+    expect(output, contains('Enter a query.'));
     expect(
       tester
           .semantics()
-          .single(role: SemanticRole.button, label: 'Theme role')
-          .value,
-      'Default text',
-      reason: 'Esc should abandon a highlighted role preview',
+          .single(role: SemanticRole.textField, label: 'Query')
+          .validationError,
+      'Enter a query.',
     );
   });
 }

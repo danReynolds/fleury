@@ -589,7 +589,15 @@ class PointerScrollListener extends SingleChildRenderObjectWidget {
 /// (e.g. buttons inside the overlay) paint later, register on top of this
 /// boundary, and keep working.
 class AbsorbPointer extends SingleChildRenderObjectWidget {
-  const AbsorbPointer({super.key, required Widget super.child});
+  const AbsorbPointer({super.key, this.onTap, required Widget super.child});
+
+  /// Called when a left-button tap lands on this boundary.
+  ///
+  /// Descendant pointer regions still win because they paint above the
+  /// boundary. This is useful for a full-screen popup barrier: taps on the
+  /// popup reach its controls, while taps anywhere else dismiss it without
+  /// activating content underneath.
+  final PointerTapCallback? onTap;
 
   static void _noop() {}
   static void _noopAt(int col, int row) {}
@@ -602,7 +610,7 @@ class AbsorbPointer extends SingleChildRenderObjectWidget {
   RenderObject createRenderObject(BuildContext context) =>
       RenderPointerListener()
         ..router = PointerRouterScope.maybeOf(context)
-        ..onTap = _noop
+        ..onTap = onTap ?? _noop
         ..onSecondaryTap = _noop
         ..onDragStart = _noopAt
         ..onDragUpdate = _noopAt
@@ -619,7 +627,9 @@ class AbsorbPointer extends SingleChildRenderObjectWidget {
     BuildContext context,
     covariant RenderPointerListener renderObject,
   ) {
-    renderObject.router = PointerRouterScope.maybeOf(context);
+    renderObject
+      ..router = PointerRouterScope.maybeOf(context)
+      ..onTap = onTap ?? _noop;
   }
 }
 

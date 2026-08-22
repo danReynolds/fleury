@@ -40,7 +40,9 @@ void main() {
     ) {
       late ThemeData seen;
       const data = ThemeData(
-        interactiveStyle: CellStyle.state(focused: CellStyle(underline: true)),
+        interactiveStyle: CellStyle.interactive(
+          focused: CellStyle(underline: true),
+        ),
       );
       tester.pumpWidget(
         Theme(data: data, child: _Capture((c) => seen = Theme.of(c))),
@@ -233,7 +235,7 @@ void main() {
     test('a resolved invalid control cue survives NO_COLOR end to end', () {
       final style = resolveCellStyle(
         cascade: const [
-          CellStyle.state(
+          CellStyle.interactive(
             invalid: CellStyle(foreground: Colors.red, underline: true),
           ),
         ],
@@ -255,7 +257,7 @@ void main() {
       tester.pumpWidget(
         const Theme(
           data: ThemeData(
-            interactiveStyle: CellStyle.state(
+            interactiveStyle: CellStyle.interactive(
               invalid: CellStyle(foreground: AnsiColor(1)),
             ),
           ),
@@ -277,7 +279,7 @@ void main() {
       tester.pumpWidget(
         const Theme(
           data: ThemeData(
-            interactiveStyle: CellStyle.state(
+            interactiveStyle: CellStyle.interactive(
               invalid: CellStyle(foreground: AnsiColor(1)),
             ),
           ),

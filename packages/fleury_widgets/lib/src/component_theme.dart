@@ -81,7 +81,7 @@ final class FleuryWidgetTheme {
   CellStyle resolveSwitchTrack(ThemeData theme, {required bool selected}) =>
       resolveCellStyle(
         cascade: [
-          CellStyle.state(
+          CellStyle.interactive(
             base: theme.mutedStyle,
             selected: CellStyle(foreground: theme.colorScheme.primary),
           ),

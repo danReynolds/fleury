@@ -198,7 +198,7 @@ final class ThemeData {
   /// App-wide styling for shared action- and form-control states.
   ///
   /// A plain [CellStyle] changes every control's base appearance without
-  /// removing its built-in state cues. Use [CellStyle.state] when a state
+  /// removing its built-in state cues. Use [CellStyle.interactive] when a state
   /// should look different. Individual widget styles merge over this value.
   final CellStyle? interactiveStyle;
 
