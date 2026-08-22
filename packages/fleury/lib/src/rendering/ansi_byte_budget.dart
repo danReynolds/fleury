@@ -12,7 +12,7 @@ import 'ansi_renderer.dart';
 ///
 /// Categories map to what [AnsiRenderer] emits:
 ///   - [content]: printable graphemes (the actual information).
-///   - [sgr]:     `CSI … m` — style set/reset (color, bold, inverse, …).
+///   - [sgr]:     `CSI … m` — style set/reset (color, bold, reverse, …).
 ///   - [cursor]:  CSI cursor moves/positioning (`A`/`B`/`C`/`D`, `H`/`f`,
 ///                and related row/column positioning commands).
 ///   - [sync]:      `CSI ? 2026 h/l` — the per-frame synchronized-output

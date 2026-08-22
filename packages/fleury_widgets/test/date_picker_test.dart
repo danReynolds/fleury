@@ -320,8 +320,8 @@ void main() {
               buf.atColRow(c + 1, r).grapheme == '5') {
             // Make sure both digits share a non-empty style (focus
             // highlight, since autofocus is true).
-            expect(buf.atColRow(c, r).style, isNot(CellStyle.empty));
-            expect(buf.atColRow(c + 1, r).style, isNot(CellStyle.empty));
+            expect(buf.atColRow(c, r).style, isNot(CellStyle.none));
+            expect(buf.atColRow(c + 1, r).style, isNot(CellStyle.none));
             found = true;
           }
         }

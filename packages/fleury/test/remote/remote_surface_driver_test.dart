@@ -1822,7 +1822,7 @@ final class _LinkProbe extends StatelessWidget {
       'link',
       style: hyperlinks
           ? CellStyle(underline: true, linkUri: url)
-          : CellStyle.empty,
+          : CellStyle.none,
     );
   }
 }

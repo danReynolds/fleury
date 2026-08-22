@@ -899,7 +899,7 @@ CellStyle _rowStyle(
   if (activeSelection) return theme.selectionStyle;
   if (selected) return theme.mutedStyle;
   return switch (file.status) {
-    PatchReviewStatus.pending => CellStyle.empty,
+    PatchReviewStatus.pending => CellStyle.none,
     PatchReviewStatus.reviewing => const CellStyle(foreground: AnsiColor(14)),
     PatchReviewStatus.approved => const CellStyle(foreground: AnsiColor(10)),
     PatchReviewStatus.changesRequested => const CellStyle(

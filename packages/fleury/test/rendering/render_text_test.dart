@@ -257,7 +257,7 @@ void main() {
                   'abc',
                   style: model.accent
                       ? const CellStyle(bold: true)
-                      : CellStyle.empty,
+                      : CellStyle.none,
                 ),
                 const Text('steady'),
               ],

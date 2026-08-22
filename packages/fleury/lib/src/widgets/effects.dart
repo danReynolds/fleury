@@ -444,7 +444,7 @@ abstract final class Effects {
   static Effect slideOut({Edge to = Edge.bottom, int distance = 1}) =>
       _SlideEffect(edge: to, distance: distance, out: true);
 
-  /// One pulse of [color] (or inverse, for non-RGB text), peaking
+  /// One pulse of [color] (or reverse, for non-RGB text), peaking
   /// mid-animation and returning. Emphasis / "this just changed."
   static Effect flash({RgbColor color = const RgbColor(255, 220, 90)}) =>
       _FlashEffect(color: color);

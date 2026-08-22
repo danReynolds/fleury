@@ -609,7 +609,7 @@ class _FileBrowserRow extends StatelessWidget {
         ? Theme.of(context).selectionStyle
         : selected
         ? Theme.of(context).mutedStyle
-        : CellStyle.empty;
+        : CellStyle.none;
     final sanitizedPath = _sanitizeFileText(entry.path);
     return Semantics(
       role: SemanticRole.treeItem,

@@ -22,7 +22,7 @@ void main() {
       b.setPixel(0, 0);
       // Render and read the codepoint of cell (0, 0).
       final buffer = CellBuffer(const CellSize(1, 1));
-      b.writeTo(buffer, CellOffset.zero, CellStyle.empty);
+      b.writeTo(buffer, CellOffset.zero, CellStyle.none);
       expect(buffer.atColRow(0, 0).grapheme!.codeUnitAt(0), 0x2800 + (1 << 0));
     });
 
@@ -33,7 +33,7 @@ void main() {
       b.writeTo(
         buffer,
         CellOffset.zero,
-        CellStyle.empty,
+        CellStyle.none,
         glyphTier: GlyphTier.ascii,
       );
       expect(buffer.atColRow(0, 0).grapheme, '.');
@@ -43,7 +43,7 @@ void main() {
       final b = BrailleBuffer(1, 1);
       b.setPixel(1, 3);
       final buffer = CellBuffer(const CellSize(1, 1));
-      b.writeTo(buffer, CellOffset.zero, CellStyle.empty);
+      b.writeTo(buffer, CellOffset.zero, CellStyle.none);
       expect(buffer.atColRow(0, 0).grapheme!.codeUnitAt(0), 0x2800 + (1 << 7));
     });
 
@@ -66,7 +66,7 @@ void main() {
         b.setPixel(px, py);
       }
       final buffer = CellBuffer(const CellSize(1, 1));
-      b.writeTo(buffer, CellOffset.zero, CellStyle.empty);
+      b.writeTo(buffer, CellOffset.zero, CellStyle.none);
       expect(buffer.atColRow(0, 0).grapheme!.codeUnitAt(0), 0x28FF);
     });
 
@@ -78,7 +78,7 @@ void main() {
       b.setPixel(99, 99);
       // Buffer remains empty.
       final buffer = CellBuffer(const CellSize(1, 1));
-      b.writeTo(buffer, CellOffset.zero, CellStyle.empty);
+      b.writeTo(buffer, CellOffset.zero, CellStyle.none);
       expect(buffer.atColRow(0, 0).grapheme, isNull);
     });
 
@@ -86,7 +86,7 @@ void main() {
       final b = BrailleBuffer(2, 2); // 4×8 pixels
       b.drawLine(0, 0, 3, 7);
       final buffer = CellBuffer(const CellSize(2, 2));
-      b.writeTo(buffer, CellOffset.zero, CellStyle.empty);
+      b.writeTo(buffer, CellOffset.zero, CellStyle.none);
       // (0,0) lands in cell (0,0); (3,7) lands in cell (1,1).
       expect(buffer.atColRow(0, 0).grapheme, isNotNull);
       expect(buffer.atColRow(1, 1).grapheme, isNotNull);
@@ -99,7 +99,7 @@ void main() {
         b.setPixel(x, 1);
       }
       final buffer = CellBuffer(const CellSize(3, 1));
-      b.writeTo(buffer, CellOffset.zero, CellStyle.empty);
+      b.writeTo(buffer, CellOffset.zero, CellStyle.none);
       // All three cells in row 0 should have braille; nothing else exists.
       for (var c = 0; c < 3; c++) {
         expect(buffer.atColRow(c, 0).grapheme, isNotNull);
@@ -110,7 +110,7 @@ void main() {
       final b = BrailleBuffer(1, 1);
       b.setPixel(0, 0, const AnsiColor(3));
       final buffer = CellBuffer(const CellSize(1, 1));
-      b.writeTo(buffer, CellOffset.zero, CellStyle.empty);
+      b.writeTo(buffer, CellOffset.zero, CellStyle.none);
       expect(buffer.atColRow(0, 0).style.foreground, const AnsiColor(3));
     });
 
@@ -119,7 +119,7 @@ void main() {
       b.setPixel(0, 0, const AnsiColor(1));
       b.setPixel(1, 0, const AnsiColor(2));
       final buffer = CellBuffer(const CellSize(1, 1));
-      b.writeTo(buffer, CellOffset.zero, CellStyle.empty);
+      b.writeTo(buffer, CellOffset.zero, CellStyle.none);
       expect(buffer.atColRow(0, 0).style.foreground, const AnsiColor(2));
     });
 
@@ -127,7 +127,7 @@ void main() {
       final b = BrailleBuffer(1, 1);
       b.setPixel(0, 0);
       final buffer = CellBuffer(const CellSize(3, 3));
-      b.writeTo(buffer, const CellOffset(2, 1), CellStyle.empty);
+      b.writeTo(buffer, const CellOffset(2, 1), CellStyle.none);
       // Only the destination cell should have a braille glyph.
       expect(buffer.atColRow(2, 1).grapheme, isNotNull);
       expect(buffer.atColRow(0, 0).grapheme, isNull);
@@ -137,7 +137,7 @@ void main() {
       final b = BrailleBuffer(2, 1);
       b.setPixel(0, 0); // light only the left cell
       final buffer = CellBuffer(const CellSize(2, 1));
-      b.writeTo(buffer, CellOffset.zero, CellStyle.empty);
+      b.writeTo(buffer, CellOffset.zero, CellStyle.none);
       expect(buffer.atColRow(0, 0).grapheme, isNotNull);
       expect(
         buffer.atColRow(1, 0).grapheme,

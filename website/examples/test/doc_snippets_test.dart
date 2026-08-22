@@ -14,6 +14,7 @@ import '../doc_snippets/layout_demo.dart' as layout;
 import '../doc_snippets/list_demo.dart' as lists;
 import '../doc_snippets/navigation_demo.dart' as navigation;
 import '../doc_snippets/navigation_advanced_demos.dart' as navigation_advanced;
+import '../doc_snippets/theming.dart' as theming;
 
 /// Guards the compile-checked source behind the prose docs.
 ///
@@ -93,5 +94,14 @@ void main() {
     final rendered = tester.renderToString(emptyMark: ' ');
     expect(rendered, contains('WIDE · TWO PANES'));
     expect(rendered, contains('Preview'));
+  });
+
+  testWidgets('theming guide app renders against the real API', (tester) {
+    tester.pumpWidget(theming.themingDemoApp());
+    final rendered = tester.renderToString(emptyMark: ' ');
+    expect(rendered, contains('Service name'));
+    expect(rendered, contains('Approved'));
+    expect(rendered, contains('Deploy'));
+    expect(rendered, contains('Queued'));
   });
 }

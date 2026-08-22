@@ -398,7 +398,7 @@ final class DataTableColumn {
     required this.id,
     required this.title,
     this.width = const FlexColumnWidth(),
-    this.style = CellStyle.empty,
+    this.style = CellStyle.none,
     this.headerStyle = const CellStyle(bold: true),
     this.sortable = false,
   });

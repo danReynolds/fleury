@@ -46,7 +46,7 @@ class RangeSlider extends StatefulWidget {
     this.showValues = false,
     this.focusNode,
     this.autofocus = false,
-    this.errorStyle,
+    this.style,
   }) : assert(min < max, 'min must be < max'),
        assert(step > 0, 'step must be > 0');
 
@@ -83,9 +83,9 @@ class RangeSlider extends StatefulWidget {
   /// Whether the slider should request focus when mounted.
   final bool autofocus;
 
-  /// Invalid style for the active track and handles. null uses the theme;
-  /// [CellStyle.empty] keeps the slider visually neutral.
-  final CellStyle? errorStyle;
+  /// Base styling for the track and handles, plus optional hover, focus,
+  /// selected, disabled, and invalid state entries from [CellStyle.interactive].
+  final CellStyle? style;
 
   @override
   State<RangeSlider> createState() => _RangeSliderState();
@@ -94,6 +94,7 @@ class RangeSlider extends StatefulWidget {
 class _RangeSliderState extends State<RangeSlider> {
   late FocusNode _node;
   bool _owns = false;
+  bool _hovered = false;
   FormControlRegistration? _formRegistration;
   _ActiveHandle _active = _ActiveHandle.low;
 
@@ -311,10 +312,38 @@ class _RangeSliderState extends State<RangeSlider> {
         ? lo < hi
         : enabled && hi < widget.max;
     final validationError = _formRegistration?.error;
-    final invalidStyle = validationError == null
-        ? null
-        : (widget.errorStyle ?? theme.errorStyle);
-    final selectedStyle = CellStyle(foreground: theme.colorScheme.primary);
+    final states = {
+      if (_hovered) CellStyleState.hovered,
+      if (enabled && _node.hasFocus) CellStyleState.focused,
+      if (!enabled) CellStyleState.disabled,
+      if (validationError != null) CellStyleState.invalid,
+    };
+    final trackStyle = resolveCellStyle(
+      cascade: [
+        CellStyle.interactive(
+          base: theme.mutedStyle,
+          focused: theme.focusedStyle,
+          disabled: theme.mutedStyle,
+          invalid: theme.errorStyle,
+        ),
+        theme.interactiveStyle,
+        widget.style,
+      ],
+      states: states,
+    );
+    final selectedStyle = resolveCellStyle(
+      cascade: [
+        CellStyle.interactive(
+          selected: CellStyle(foreground: theme.colorScheme.primary),
+          focused: theme.focusedStyle,
+          disabled: theme.mutedStyle,
+          invalid: theme.errorStyle,
+        ),
+        theme.interactiveStyle,
+        widget.style,
+      ],
+      states: {...states, CellStyleState.selected},
+    );
     final slider = _RawRangeSlider(
       values: _normalized,
       min: widget.min,
@@ -322,12 +351,8 @@ class _RangeSliderState extends State<RangeSlider> {
       active: _active,
       focused: enabled && _node.hasFocus,
       geometry: _geom,
-      selectedStyle: enabled
-          ? (invalidStyle == null
-                ? selectedStyle
-                : selectedStyle.merge(invalidStyle))
-          : theme.mutedStyle,
-      trackStyle: theme.mutedStyle,
+      selectedStyle: selectedStyle,
+      trackStyle: trackStyle,
     );
     if (!enabled) {
       final Widget decorated = _decorate(
@@ -353,7 +378,7 @@ class _RangeSliderState extends State<RangeSlider> {
         ),
       );
       // styled component, not selectable text
-      return SelectionArea.disabled(child: decorated);
+      return _withHover(SelectionArea.disabled(child: decorated));
     }
     final Widget decorated = _decorate(
       context,
@@ -427,8 +452,18 @@ class _RangeSliderState extends State<RangeSlider> {
       ),
     );
     // styled component, not selectable text
-    return SelectionArea.disabled(child: decorated);
+    return _withHover(SelectionArea.disabled(child: decorated));
   }
+
+  Widget _withHover(Widget child) => MouseRegion(
+    onEnter: () {
+      if (!_hovered) setState(() => _hovered = true);
+    },
+    onExit: () {
+      if (_hovered) setState(() => _hovered = false);
+    },
+    child: child,
+  );
 
   /// Wraps the interactive track with a value readout and endpoint labels when
   /// [RangeSlider.showValues] is set; otherwise returns the track unchanged.

@@ -60,7 +60,7 @@ void main() {
 
       expect(row.runs, hasLength(3));
       expect(row.runs[0].text, 'ab');
-      expect(row.runs[0].style, CellStyle.empty);
+      expect(row.runs[0].style, CellStyle.none);
       expect(row.runs[1].text, 'cd');
       expect(row.runs[1].style.foreground, Colors.green);
       expect(row.runs[2].kind, CellRunKind.emptyText);
@@ -124,14 +124,11 @@ void main() {
         0,
       );
 
-      expect(
-        row.runs.take(3).map((r) => (r.kind, r.text, r.widthCols)),
-        [
-          (CellRunKind.blockElement, '█', 1),
-          (CellRunKind.blockElement, '▅', 1),
-          (CellRunKind.blockElement, '█', 1),
-        ],
-      );
+      expect(row.runs.take(3).map((r) => (r.kind, r.text, r.widthCols)), [
+        (CellRunKind.blockElement, '█', 1),
+        (CellRunKind.blockElement, '▅', 1),
+        (CellRunKind.blockElement, '█', 1),
+      ]);
       expect(row.runs[2].style.foreground, Colors.red);
     });
 

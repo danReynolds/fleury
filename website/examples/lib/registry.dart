@@ -1803,6 +1803,19 @@ form.clearErrors();''',
     builder: () => const FormsShowcaseApp(),
   ),
   ExampleInfo(
+    id: 'showcase.themes',
+    widget: 'Theme studio',
+    category: 'Showcases',
+    blurb:
+        'A live gallery for every bundled community theme, plus a custom '
+        'editor that selects one semantic role at a time, then changes its '
+        'color, brightness, or borders with live widget-state feedback.',
+    cols: 108,
+    rows: 34,
+    interactive: true,
+    builder: () => const ThemingShowcaseApp(),
+  ),
+  ExampleInfo(
     id: 'showcase.asteroids',
     widget: 'Neon Asteroids',
     category: 'Showcases',
@@ -2010,7 +2023,7 @@ form.clearErrors();''',
     cols: 38,
     rows: 14,
     code: _customThemeSource,
-    builder: () => const Theme(data: _customTheme, child: _ThemePreview()),
+    builder: () => Theme(data: _customTheme, child: const _ThemePreview()),
   ),
   ExampleInfo(
     id: 'themes.gallery',
@@ -2026,6 +2039,63 @@ form.clearErrors();''',
 
 runApp(const MyApp(), theme: tokyoNight);''',
     builder: () => const _ThemePickerExample(),
+  ),
+  ExampleInfo(
+    id: 'themes.local_style',
+    widget: 'Themes',
+    category: 'Theming',
+    blurb: 'Apply one local CellStyle override to a text input.',
+    cols: 34,
+    rows: 4,
+    interactive: true,
+    code: _localStyleSource,
+    builder: () => const _LocalStyleTour(),
+  ),
+  ExampleInfo(
+    id: 'themes.cell_style',
+    widget: 'Themes',
+    category: 'Theming',
+    blurb: 'Compare default text with one styled line.',
+    cols: 34,
+    rows: 5,
+    code: _cellStyleSource,
+    builder: () => const _CellStyleTour(),
+  ),
+  ExampleInfo(
+    id: 'themes.local_interactive',
+    widget: 'Themes',
+    category: 'Theming',
+    blurb: 'Compare an inherited focus cue with a local interactive override.',
+    cols: 46,
+    rows: 8,
+    interactive: true,
+    code: _localInteractiveSource,
+    builder: () => const _LocalStateTour(),
+  ),
+  ExampleInfo(
+    id: 'themes.invalid_none',
+    widget: 'Themes',
+    category: 'Theming',
+    blurb:
+        'Suppress invalid chrome locally while retaining the visible and '
+        'semantic validation error.',
+    cols: 48,
+    rows: 9,
+    interactive: true,
+    code: _invalidNoneSource,
+    builder: () => const _InvalidNoneTour(),
+  ),
+  ExampleInfo(
+    id: 'themes.interactive_styles',
+    widget: 'Themes',
+    category: 'Theming',
+    blurb:
+        'One interactive style adapts to focus, hover, selection, validation, and '
+        'disabled state without changing each widget separately.',
+    cols: 52,
+    rows: 13,
+    code: _interactiveStylesSource,
+    builder: () => const _InteractiveStyleTour(),
   ),
 ];
 
@@ -3074,7 +3144,7 @@ class _ThemePickerExampleState extends State<_ThemePickerExample> {
                     : '  ${fleuryThemes[i].name}',
                 style: selected
                     ? Theme.of(context).selectionStyle
-                    : CellStyle.empty,
+                    : CellStyle.none,
               );
             },
           ),
@@ -3091,54 +3161,220 @@ class _ThemePickerExampleState extends State<_ThemePickerExample> {
   }
 }
 
-/// A hand-written theme for the "creating a theme" guide section.
-///
-/// Deliberately small: the nine roles it actually needs, the three text styles,
-/// and a border style — enough to be a real theme, short enough to read beside
-/// its own render. Kept in sync with [_customThemeSource] by a test.
-const ThemeData _customTheme = ThemeData(
-  brightness: Brightness.dark,
-  colorScheme: ColorScheme(
-    background: RgbColor(0x1C, 0x18, 0x14),
-    foreground: RgbColor(0xEB, 0xDB, 0xB2),
-    surface: RgbColor(0x2A, 0x24, 0x1E),
-    primary: RgbColor(0xE8, 0xA3, 0x3D),
-    focus: RgbColor(0xF2, 0xC5, 0x5C),
-    success: RgbColor(0x8E, 0xC0, 0x7C),
-    warning: RgbColor(0xE8, 0xA3, 0x3D),
-    error: RgbColor(0xE5, 0x6B, 0x5B),
-    info: RgbColor(0x83, 0xA5, 0x98),
+const String _localStyleSource = '''
+TextInput(
+  controller: query,
+  style: const CellStyle(foreground: Colors.cyan),
+)''';
+
+class _LocalStyleTour extends StatefulWidget {
+  const _LocalStyleTour();
+
+  @override
+  State<_LocalStyleTour> createState() => _LocalStyleTourState();
+}
+
+class _LocalStyleTourState extends State<_LocalStyleTour> {
+  final _query = TextEditingController(text: 'api-gateway');
+
+  @override
+  void dispose() {
+    _query.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 24,
+    child: TextInput(
+      controller: _query,
+      style: const CellStyle(foreground: Colors.cyan),
+    ),
+  );
+}
+
+const String _cellStyleSource = '''
+Column(children: [
+  Text('Default text'),
+  Text(
+    'Styled text',
+    style: CellStyle(
+      foreground: RgbColor(0x3D, 0xDC, 0x97),
+      bold: true,
+      underline: true,
+    ),
   ),
-  mutedStyle: CellStyle(dim: true),
-  selectionStyle: CellStyle(inverse: true),
-  focusedStyle: CellStyle(bold: true),
-  borderStyle: BorderStyle.rounded,
-);
+]);''';
+
+class _CellStyleTour extends StatelessWidget {
+  const _CellStyleTour();
+
+  @override
+  Widget build(BuildContext context) => const Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      Text('Default text'),
+      Text(
+        'Styled text',
+        style: CellStyle(
+          foreground: RgbColor(0x3D, 0xDC, 0x97),
+          bold: true,
+          underline: true,
+        ),
+      ),
+    ],
+  );
+}
+
+void _noop() {}
+
+const String _localInteractiveSource = '''
+Row(
+  children: [
+    Button(label: 'Theme focus', onPressed: deploy),
+    SizedBox(width: 2),
+    Button(
+      label: 'Local focus',
+      style: CellStyle.interactive(
+        focused: CellStyle(
+          foreground: Colors.cyan,
+          underline: true,
+        ),
+      ),
+      onPressed: deploy,
+    ),
+  ],
+)''';
+
+class _LocalStateTour extends StatelessWidget {
+  const _LocalStateTour();
+
+  @override
+  Widget build(BuildContext context) => Theme(
+    data: Theme.of(context).copyWith(
+      interactiveStyle: const CellStyle.interactive(
+        focused: CellStyle(inverse: true, bold: true),
+      ),
+    ),
+    child: const Padding(
+      padding: EdgeInsets.all(1),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text('LOCAL INTERACTION STYLE', style: CellStyle(bold: true)),
+          Text('Tab or click to compare focus cues'),
+          Row(
+            children: <Widget>[
+              Button(label: 'Theme focus', autofocus: true, onPressed: _noop),
+              SizedBox(width: 2),
+              Button(
+                label: 'Local focus',
+                style: CellStyle.interactive(
+                  focused: CellStyle(foreground: Colors.cyan, underline: true),
+                ),
+                onPressed: _noop,
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+const String _invalidNoneSource = '''
+FormField(
+  validator: () => query.text.isEmpty ? 'Enter a query.' : null,
+  child: TextInput(
+    controller: query,
+    style: const CellStyle.interactive(
+      invalid: CellStyle.none,
+    ),
+  ),
+)''';
+
+class _InvalidNoneTour extends StatefulWidget {
+  const _InvalidNoneTour();
+
+  @override
+  State<_InvalidNoneTour> createState() => _InvalidNoneTourState();
+}
+
+class _InvalidNoneTourState extends State<_InvalidNoneTour> {
+  final _form = FormController();
+  final _query = TextEditingController();
+
+  @override
+  void dispose() {
+    _form.dispose();
+    _query.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.all(1),
+    child: Form(
+      controller: _form,
+      onSubmit: () {},
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text('NEUTRAL INVALID CHROME', style: CellStyle(bold: true)),
+          const Text('Submit empty: the message stays visible'),
+          FormField(
+            validator: () => _query.text.isEmpty ? 'Enter a query.' : null,
+            child: SizedBox(
+              width: 30,
+              child: TextInput(
+                controller: _query,
+                autofocus: true,
+                semanticLabel: 'Query',
+                placeholder: 'Query',
+                style: const CellStyle.interactive(invalid: CellStyle.none),
+              ),
+            ),
+          ),
+          Button(label: 'Submit', onPressed: _form.submit),
+        ],
+      ),
+    ),
+  );
+}
+
+/// A small customization of Fleury's dark starting theme.
+///
+/// Kept in sync with [_customThemeSource] by a test so the code beside the
+/// preview remains the code that produced it.
+final ThemeData _customTheme = _buildCustomTheme();
+
+ThemeData _buildCustomTheme() {
+  final base = ThemeData.dark();
+  return base.copyWith(
+    colorScheme: base.colorScheme.copyWith(
+      primary: const RgbColor(0xE8, 0xA3, 0x3D),
+      focus: const RgbColor(0xF2, 0xC5, 0x5C),
+      warning: const RgbColor(0xE8, 0xA3, 0x3D),
+    ),
+    borderStyle: BorderStyle.double,
+  );
+}
 
 /// The literal source of [_customTheme], shown beside its render on the
 /// theming guide. A test asserts the two agree, so the page cannot drift into
 /// showing code that is not what produced the picture.
 const String _customThemeSource = '''
-const amber = ThemeData(
-  brightness: Brightness.dark,
-  colorScheme: ColorScheme(
-    background: RgbColor(0x1C, 0x18, 0x14),
-    foreground: RgbColor(0xEB, 0xDB, 0xB2),
-    surface: RgbColor(0x2A, 0x24, 0x1E),
+final base = ThemeData.dark();
+final amber = base.copyWith(
+  colorScheme: base.colorScheme.copyWith(
     primary: RgbColor(0xE8, 0xA3, 0x3D),
     focus: RgbColor(0xF2, 0xC5, 0x5C),
-    success: RgbColor(0x8E, 0xC0, 0x7C),
     warning: RgbColor(0xE8, 0xA3, 0x3D),
-    error: RgbColor(0xE5, 0x6B, 0x5B),
-    info: RgbColor(0x83, 0xA5, 0x98),
   ),
-  mutedStyle: CellStyle(dim: true),
-  selectionStyle: CellStyle(inverse: true),
-  focusedStyle: CellStyle(bold: true),
-  borderStyle: BorderStyle.rounded,
+  borderStyle: BorderStyle.double,
 );
 
-runApp(const MyApp(), theme: amber);''';
+FleuryApp(theme: amber, home: const Dashboard());''';
 
 /// Exposed for the drift test in test/theme_source_parity_test.dart.
 ThemeData get customThemeForTest => _customTheme;
@@ -3191,6 +3427,65 @@ class _ThemePreview extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+const CellStyle _interactiveStyle = CellStyle.interactive(
+  focused: CellStyle(inverse: true, bold: true),
+  hovered: CellStyle(underline: true),
+  selected: CellStyle(foreground: Colors.green, bold: true),
+  invalid: CellStyle(foreground: Colors.red, underline: true),
+  disabled: CellStyle(dim: true),
+);
+
+const String _interactiveStylesSource = '''
+const interactions = CellStyle.interactive(
+  focused: CellStyle(inverse: true, bold: true),
+  hovered: CellStyle(underline: true),
+  selected: CellStyle(foreground: Colors.green, bold: true),
+  invalid: CellStyle(foreground: Colors.red, underline: true),
+  disabled: CellStyle(dim: true),
+);''';
+
+/// Exposed for the guide/source/live parity test.
+CellStyle get interactiveStyleForTest => _interactiveStyle;
+String get interactiveStyleSourceForTest => _interactiveStylesSource;
+
+/// Visual legend for the styles carried by one interaction-aware value.
+class _InteractiveStyleTour extends StatelessWidget {
+  const _InteractiveStyleTour();
+
+  @override
+  Widget build(BuildContext context) {
+    final outer = Theme.of(context);
+    return Theme(
+      data: outer.copyWith(interactiveStyle: _interactiveStyle),
+      child: const Padding(
+        padding: const EdgeInsets.all(1),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text('INTERACTION STYLES', style: CellStyle(bold: true)),
+            SizedBox(height: 1),
+            Text('base      ordinary control paint'),
+            Text(
+              'focused   inverse + bold',
+              style: CellStyle(inverse: true, bold: true),
+            ),
+            Text('hovered   underline', style: CellStyle(underline: true)),
+            Text(
+              'selected  green + bold',
+              style: CellStyle(foreground: Colors.green, bold: true),
+            ),
+            Text(
+              'invalid   red + underline',
+              style: CellStyle(foreground: Colors.red, underline: true),
+            ),
+            Text('disabled  dim', style: CellStyle(dim: true)),
+          ],
+        ),
       ),
     );
   }
@@ -3320,7 +3615,7 @@ class _TaskListTourState extends State<_TaskListTour> {
               '${selected ? '›' : ' '} Task ${(index + 1).toString().padLeft(4, '0')}',
               style: selected
                   ? Theme.of(context).selectionStyle
-                  : CellStyle.empty,
+                  : CellStyle.none,
             ),
           ),
         ),

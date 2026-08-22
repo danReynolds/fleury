@@ -1896,7 +1896,7 @@ class _LayoutCounterPane extends StatelessWidget {
             children: [
               Text(
                 'Layout count: $count',
-                style: accent ? const CellStyle(bold: true) : CellStyle.empty,
+                style: accent ? const CellStyle(bold: true) : CellStyle.none,
               ),
               Text('Stable text: ${counter.stableText}'),
               const Text('Only this pane changes.'),

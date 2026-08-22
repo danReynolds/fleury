@@ -146,7 +146,7 @@ void main() {
     ) {
       final r = RenderRichText(
         span: span,
-        base: CellStyle.empty,
+        base: CellStyle.none,
         textPolicy: policy,
       )..layout(CellConstraints(maxCols: cols));
       final buf = CellBuffer(CellSize(cols, 2));
@@ -189,7 +189,7 @@ void main() {
             TextSpan(text: '\u{1F469}\u{200D}\u{1F466}'),
           ],
         ),
-        base: CellStyle.empty,
+        base: CellStyle.none,
         textPolicy: split,
       )..layout(const CellConstraints(maxCols: 8));
       final buf = CellBuffer(const CellSize(8, 1));

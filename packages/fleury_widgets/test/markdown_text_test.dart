@@ -416,7 +416,7 @@ void main() {
   });
 
   group('MarkdownText — blocks', () {
-    testWidgets('# heading renders bold + inverse + a color tint', (tester) {
+    testWidgets('# heading renders bold + reverse + a color tint', (tester) {
       tester.pumpWidget(const MarkdownText('# Title\nbody'));
       final buf = tester.render(size: const CellSize(20, 2));
       expect(

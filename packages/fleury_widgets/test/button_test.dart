@@ -80,7 +80,7 @@ void main() {
     testWidgets('focused button shows the selection highlight', (tester) {
       tester.pumpWidget(Button(label: 'Go', autofocus: true, onPressed: () {}));
       final buf = tester.render(size: const CellSize(10, 1));
-      // The default selectionStyle is inverse.
+      // The default selectionStyle uses inverse video.
       expect(buf.atColRow(0, 0).style.inverse, isTrue);
     });
 

@@ -642,6 +642,6 @@ CellStyle _commandStyle(
   required bool selected,
   required bool enabled,
 }) {
-  final style = selected ? theme.selectionStyle : CellStyle.empty;
+  final style = selected ? theme.selectionStyle : CellStyle.none;
   return enabled ? style : style.merge(const CellStyle(dim: true));
 }

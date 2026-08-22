@@ -28,6 +28,7 @@ changes underneath a doc, the build goes red instead of the docs going stale.
 | `core_widgets.dart` | Loading data, Input & gestures, Theming (RichText) |
 | `navigation_demo.dart`, `navigation_advanced_demos.dart` | [Navigation](../../src/content/docs/guides/navigation.mdx) |
 | `forms.dart` | [Forms & validation](../../src/content/docs/guides/forms.mdx) |
+| `theming.dart` | [Theming](../../src/content/docs/guides/theming.mdx) |
 | `list_demo.dart` | [Lists & scrolling](../../src/content/docs/guides/lists-and-scrolling.mdx) |
 | `layout_demo.dart` | [Layout](../../src/content/docs/guides/layout.mdx) |
 | `shared_state.dart` | [State management](../../src/content/docs/guides/state-management.md) |

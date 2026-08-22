@@ -135,7 +135,7 @@ final class CellSpanBuilder {
             col: col,
             text: ' ',
             widthCols: 1,
-            style: CellStyle.empty,
+            style: CellStyle.none,
             kind: CellRunKind.emptyText,
           );
           col += 1;
@@ -202,7 +202,7 @@ final class CellSpanBuilder {
             col: col,
             text: ' ',
             widthCols: 1,
-            style: CellStyle.empty,
+            style: CellStyle.none,
             kind: CellRunKind.emptyText,
           );
           col += 1;

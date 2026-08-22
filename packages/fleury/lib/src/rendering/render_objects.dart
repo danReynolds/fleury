@@ -61,7 +61,7 @@ class RenderText extends RenderObject
     implements Selectable {
   RenderText({
     required String text,
-    CellStyle style = CellStyle.empty,
+    CellStyle style = CellStyle.none,
     bool softWrap = true,
     int? maxLines,
     TextOverflow overflow = TextOverflow.clip,
@@ -448,7 +448,7 @@ class RenderText extends RenderObject
       final w = _widthResolver.widthOfGrapheme(grapheme, _policy);
       if (col + w > contentMaxCol) break;
       // Cell style is the painting style merged with a selection
-      // highlight (inverse) when this grapheme falls inside the
+      // highlight (reverse) when this grapheme falls inside the
       // current selection range.
       final cellStyle = isOffsetSelected(off)
           ? _style.merge(const CellStyle(inverse: true))

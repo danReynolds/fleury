@@ -554,7 +554,7 @@ class _MenuBodyState extends State<_MenuBody> {
                                   ? widget.mutedStyle
                                   : sel
                                   ? widget.selectionStyle
-                                  : CellStyle.empty,
+                                  : CellStyle.none,
                             );
                             return _semanticMenuItem(
                               entry: entry,
@@ -576,7 +576,7 @@ class _MenuBodyState extends State<_MenuBody> {
                                   ? widget.mutedStyle
                                   : sel
                                   ? widget.selectionStyle
-                                  : CellStyle.empty,
+                                  : CellStyle.none,
                             );
                             final item = _semanticMenuItem(
                               entry: entry,

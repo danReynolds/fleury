@@ -51,9 +51,9 @@ final class ColorScheme {
   /// Accent for interactive/active affordances.
   final Color primary;
 
-  /// Accent for the focused pane / control. A themeable role to use in place
-  /// of a raw palette index — pair it with [ThemeData.focusedStyle] (bold) so
-  /// the focus cue survives `NO_COLOR`: the color drops, the bold remains.
+  /// Accent available to focused regions and text-entry controls. Pair it with
+  /// [ThemeData.focusedStyle] when a focus cue must survive `NO_COLOR`: the
+  /// color drops while the attribute remains.
   final Color focus;
 
   /// Status roles.
@@ -123,20 +123,22 @@ final class ColorScheme {
   );
 }
 
-/// The themeable defaults shared down the tree via [Theme]. Widgets read
-/// these as the *fallback* for their style parameters: a `null` style
-/// arg resolves to the matching theme role, and an explicit arg always
-/// wins. The default [ThemeData] reproduces the framework's built-in
-/// looks, so wrapping (or not wrapping) a subtree in a [Theme] changes
-/// nothing until you actually customize a field.
+/// The themeable defaults shared down the tree via [Theme].
+///
+/// Semantic roles provide framework defaults. Interactive control styles
+/// cascade from widget defaults through [interactiveStyle] to the widget's local
+/// style, merging base paint while preserving inherited state cues. The
+/// default [ThemeData] reproduces the framework's built-in appearance, so a
+/// [Theme] changes nothing until one of its fields is customized.
 final class ThemeData {
   const ThemeData({
     this.brightness = Brightness.dark,
-    this.textStyle = CellStyle.empty,
+    this.textStyle = CellStyle.none,
     this.mutedStyle = const CellStyle(dim: true),
     this.selectionStyle = const CellStyle(inverse: true),
     this.focusedStyle = const CellStyle(bold: true),
     this.errorStyle = const CellStyle(foreground: Colors.red, underline: true),
+    this.interactiveStyle,
     this.borderStyle = BorderStyle.rounded,
     this.colorScheme = ColorScheme.standard,
     this.extensions = const [],
@@ -158,6 +160,13 @@ final class ThemeData {
 
   /// Dark or light tuning — a hint for app/extension color choices.
   final Brightness brightness;
+
+  /// Picks a value for this theme's declared [brightness].
+  ///
+  /// Fleury does not infer the terminal background, so this reflects the
+  /// application's explicit light/dark choice.
+  T adaptive<T>({required T light, required T dark}) =>
+      brightness.pick(light: light, dark: dark);
 
   /// Typed, app-defined theme extensions. Unlike Flutter's
   /// `ThemeExtension`, an extension here is any plain object — no
@@ -186,6 +195,13 @@ final class ThemeData {
   /// The underline is a non-color cue that remains under `NO_COLOR`.
   final CellStyle errorStyle;
 
+  /// App-wide styling for shared action- and form-control states.
+  ///
+  /// A plain [CellStyle] changes every control's base appearance without
+  /// removing its built-in state cues. Use [CellStyle.interactive] when a state
+  /// should look different. Individual widget styles merge over this value.
+  final CellStyle? interactiveStyle;
+
   /// Default box-drawing style for framed surfaces.
   final BorderStyle borderStyle;
 
@@ -212,6 +228,7 @@ final class ThemeData {
     CellStyle? selectionStyle,
     CellStyle? focusedStyle,
     CellStyle? errorStyle,
+    CellStyle? interactiveStyle,
     BorderStyle? borderStyle,
     ColorScheme? colorScheme,
     List<Object>? extensions,
@@ -222,6 +239,7 @@ final class ThemeData {
     selectionStyle: selectionStyle ?? this.selectionStyle,
     focusedStyle: focusedStyle ?? this.focusedStyle,
     errorStyle: errorStyle ?? this.errorStyle,
+    interactiveStyle: interactiveStyle ?? this.interactiveStyle,
     borderStyle: borderStyle ?? this.borderStyle,
     colorScheme: colorScheme ?? this.colorScheme,
     extensions: extensions ?? this.extensions,
@@ -236,6 +254,7 @@ final class ThemeData {
       other.selectionStyle == selectionStyle &&
       other.focusedStyle == focusedStyle &&
       other.errorStyle == errorStyle &&
+      other.interactiveStyle == interactiveStyle &&
       other.borderStyle == borderStyle &&
       other.colorScheme == colorScheme &&
       listEquals(other.extensions, extensions);
@@ -248,6 +267,7 @@ final class ThemeData {
     selectionStyle,
     focusedStyle,
     errorStyle,
+    interactiveStyle,
     borderStyle,
     colorScheme,
     Object.hashAll(extensions),
@@ -302,10 +322,10 @@ class DefaultTextStyle extends InheritedWidget {
 
   final CellStyle style;
 
-  /// The cascaded style in scope, or [CellStyle.empty] when none.
+  /// The cascaded style in scope, or [CellStyle.none] when none.
   static CellStyle of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<DefaultTextStyle>()?.style ??
-      CellStyle.empty;
+      CellStyle.none;
 
   /// Layers [style] *on top of* the ambient default for [child], rather
   /// than replacing it — so an inner scope can add a color without
@@ -356,27 +376,11 @@ extension FleuryThemeContext on BuildContext {
   /// dependency on the same InheritedWidget — equivalent to
   /// [theme]`.colorScheme`.
   ColorScheme get colors => Theme.of(this).colorScheme;
-
-  /// Picks [light] or [dark] by the ambient [ThemeData.brightness] — the
-  /// reusable form of the `theme.brightness == Brightness.dark ? … : …`
-  /// branch, which is the single most common theming choice. Works for any
-  /// type (a [Color], a [CellStyle], a whole widget). Establishes a theme
-  /// dependency (via [theme]).
-  ///
-  /// ```dart
-  /// final line = context.adaptive(light: Colors.black, dark: Colors.white);
-  /// ```
-  ///
-  /// Because Fleury deliberately does not probe the terminal background,
-  /// [ThemeData.brightness] is the app's *declared* intent, not a detected
-  /// fact — so this resolves the app's choice, it does not guess the terminal.
-  T adaptive<T>({required T light, required T dark}) =>
-      theme.brightness.pick(light: light, dark: dark);
 }
 
 /// Picks a value by [Brightness], for the context-free cases (theme
-/// construction, render objects) where [FleuryThemeContext.adaptive] can't
-/// reach. This is Fleury's analog of Lip Gloss's `LightDark`.
+/// construction and render objects). This is Fleury's analog of Lip Gloss's
+/// `LightDark`.
 extension BrightnessPick on Brightness {
   T pick<T>({required T light, required T dark}) =>
       this == Brightness.dark ? dark : light;

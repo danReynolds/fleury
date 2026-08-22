@@ -163,7 +163,7 @@ void main() {
             TextSpan(text: '\u{1F469}\u{200D}\u{1F466}'),
           ],
         ),
-        base: CellStyle.empty,
+        base: CellStyle.none,
         textPolicy: _split,
       )..layout(const CellConstraints(maxCols: 10));
       final buf = CellBuffer(const CellSize(10, 1));

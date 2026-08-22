@@ -212,7 +212,7 @@ final class KeyboardScope extends InheritedNotifier<KeyboardStateNotifier> {
 /// )
 /// ```
 ///
-/// **Propagate by default** — the inverse of a binding, and deliberately so
+/// **Propagate by default** — the reverse of a binding, and deliberately so
 /// (RFC 0020 §16): a binding *declared* a match, so consumption is its
 /// semantics; a detector is peeking, so observation is the base state. That
 /// also inverts the failure mode of the `Focus.onKey` it replaces, where a

@@ -1,3 +1,5 @@
+import 'dart:async' show scheduleMicrotask;
+
 import 'package:fleury/fleury_core.dart';
 import 'package:fleury/fleury_internal.dart';
 
@@ -21,8 +23,8 @@ final class SelectOption<T> {
 /// [placeholder]) that, when activated, opens a floating list of [options]
 /// anchored just below it.
 ///
-/// Enter or Down — or a click — opens it; arrows move the highlight
-/// (skipping disabled options), Enter or a click picks one (calling
+/// Enter or Down — or a click — opens it; arrows or pointer hover move the
+/// highlight (skipping disabled options), Enter or a click picks one (calling
 /// [onChanged] and closing), Esc closes without changing the value. A
 /// bullet marks the currently-selected option as you navigate. Focus is
 /// trapped in the open list and returns to the trigger on close.
@@ -42,7 +44,7 @@ class Select<T> extends StatefulWidget {
     this.focusNode,
     this.autofocus = false,
     this.semanticLabel,
-    this.errorStyle,
+    this.style,
   });
 
   /// Choices shown in the opened dropdown.
@@ -61,7 +63,7 @@ class Select<T> extends StatefulWidget {
   /// Fires again with the applied [value] when the list is dismissed without a
   /// pick (Esc, click-away), so a preview never outlives the dropdown that
   /// drove it. [onChanged] still reports the commit.
-  final void Function(T value)? onHighlightChanged;
+  final void Function(T? value)? onHighlightChanged;
 
   /// Text shown when [value] is null.
   final String placeholder;
@@ -79,9 +81,9 @@ class Select<T> extends StatefulWidget {
   /// fallback, or future adapters need to refer to the picker itself.
   final String? semanticLabel;
 
-  /// Invalid style for the trigger. null uses the theme;
-  /// [CellStyle.empty] keeps it visually neutral.
-  final CellStyle? errorStyle;
+  /// Base styling for the closed trigger, plus optional hover, focus, disabled,
+  /// and invalid state entries from [CellStyle.interactive].
+  final CellStyle? style;
 
   @override
   State<Select<T>> createState() => _SelectState<T>();
@@ -95,6 +97,7 @@ class _SelectState<T> extends State<Select<T>> {
   OverlayEntry? _entry;
   FocusNode? _priorFocus;
   FormControlRegistration? _formRegistration;
+  bool _hovered = false;
 
   bool get _isOpen => _entry != null;
 
@@ -109,9 +112,18 @@ class _SelectState<T> extends State<Select<T>> {
   void didUpdateWidget(Select<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.onChanged == null && oldWidget.onChanged != null) {
-      Focus.of(context).releaseFocusTrapIn(_trapContentKey.currentContext);
-      _entry?.remove();
-      _entry = null;
+      final appliedValue = widget.value;
+      final onRollback = widget.onHighlightChanged;
+      final wasOpen = _isOpen;
+      _close(rebuild: false);
+      if (wasOpen) {
+        // A preview callback commonly updates the parent that just rebuilt us.
+        // Deliver the rollback after this update rather than setting parent
+        // state from inside didUpdateWidget.
+        scheduleMicrotask(() {
+          if (mounted) onRollback?.call(appliedValue);
+        });
+      }
     }
     if (widget.focusNode != oldWidget.focusNode) {
       if (_ownsFocus) _triggerFocus.dispose();
@@ -195,30 +207,29 @@ class _SelectState<T> extends State<Select<T>> {
     ); // resolved in-tree, threaded into the overlay
     _priorFocus = manager.focusedNode;
     final entry = OverlayEntry(
-      builder: (_) => BoundsAnchor(
-        notifier: _bounds,
-        child: _SelectList<T>(
-          trapContentKey: _trapContentKey,
-          options: widget.options,
-          semanticLabel: widget.semanticLabel,
-          initialIndex: _initialIndex(),
-          appliedIndex: _appliedIndex(),
-          selectionStyle: theme.selectionStyle,
-          mutedStyle: theme.mutedStyle,
-          borderStyle: theme.borderStyle,
-          onHighlighted: widget.onHighlightChanged,
-          onPicked: (value) {
-            _close();
-            _commit(value);
-          },
-          onDismiss: () {
-            _close();
-            // Undo any live preview the list drove, so dismissing leaves the
-            // consumer showing `value` again rather than the last highlight.
-            final applied = widget.value;
-            if (applied != null) widget.onHighlightChanged?.call(applied);
-          },
-        ),
+      builder: (_) => Stack(
+        children: <Widget>[
+          AbsorbPointer(onTap: _dismiss, child: const SizedBox.expand()),
+          BoundsAnchor(
+            notifier: _bounds,
+            child: _SelectList<T>(
+              trapContentKey: _trapContentKey,
+              options: widget.options,
+              semanticLabel: widget.semanticLabel,
+              initialIndex: _initialIndex(),
+              appliedIndex: _appliedIndex(),
+              selectionStyle: theme.selectionStyle,
+              mutedStyle: theme.mutedStyle,
+              borderStyle: theme.borderStyle,
+              onHighlighted: widget.onHighlightChanged,
+              onPicked: (value) {
+                _close();
+                _commit(value);
+              },
+              onDismiss: _dismiss,
+            ),
+          ),
+        ],
       ),
     );
     _entry = entry;
@@ -227,13 +238,21 @@ class _SelectState<T> extends State<Select<T>> {
     setState(() {}); // flip the open indicator
   }
 
-  void _close() {
+  void _close({bool rebuild = true}) {
     Focus.of(context).releaseFocusTrapIn(_trapContentKey.currentContext);
     _entry?.remove();
     _entry = null;
     final prior = _priorFocus;
+    _priorFocus = null;
     if (prior != null && prior.isAttached) prior.requestFocus();
-    if (mounted) setState(() {});
+    if (rebuild && mounted) setState(() {});
+  }
+
+  void _dismiss() {
+    _close();
+    // Undo any live preview the list drove, so dismissing leaves the consumer
+    // showing `value` again rather than the last highlight.
+    widget.onHighlightChanged?.call(widget.value);
   }
 
   /// Picks the option matching [payload] (by label or value string) without
@@ -278,109 +297,131 @@ class _SelectState<T> extends State<Select<T>> {
     final enabled = widget.onChanged != null;
     final focused = _triggerFocus.hasFocus;
     final validationError = _formRegistration?.error;
-    final invalidStyle = validationError == null
-        ? null
-        : (widget.errorStyle ?? theme.errorStyle);
-    var style = !enabled
-        ? theme.mutedStyle
-        : focused
-        ? theme.selectionStyle
-        : CellStyle.empty;
-    if (enabled && invalidStyle != null) style = style.merge(invalidStyle);
+    final style = resolveCellStyle(
+      cascade: [
+        CellStyle.interactive(
+          focused: theme.selectionStyle,
+          disabled: theme.mutedStyle,
+          invalid: theme.errorStyle,
+        ),
+        theme.interactiveStyle,
+        widget.style,
+      ],
+      states: {
+        if (_hovered) CellStyleState.hovered,
+        if (focused) CellStyleState.focused,
+        if (!enabled) CellStyleState.disabled,
+        if (validationError != null) CellStyleState.invalid,
+      },
+    );
     final text = '$_currentLabel ${_isOpen ? '▴' : '▾'}';
     if (!enabled) {
-      return BoundsObserver(
+      return _withHover(
+        BoundsObserver(
+          notifier: _bounds,
+          child: Semantics(
+            role: SemanticRole.button,
+            label: widget.semanticLabel ?? _currentLabel,
+            value: _currentLabel,
+            enabled: false,
+            validationError: validationError,
+            expanded: false,
+            state: SemanticState({
+              'menuItemCount': widget.options.length,
+              'open': false,
+              'selectedKey': widget.value,
+              'selectedOptionLabel': _currentLabel,
+            }),
+            child: Text(text, allowSelect: false, style: style),
+          ),
+        ),
+      );
+    }
+    return _withHover(
+      BoundsObserver(
         notifier: _bounds,
         child: Semantics(
           role: SemanticRole.button,
           label: widget.semanticLabel ?? _currentLabel,
           value: _currentLabel,
-          enabled: false,
+          focused: _triggerFocus.hasFocus,
+          expanded: _isOpen,
           validationError: validationError,
-          expanded: false,
+          actions: <SemanticAction>{
+            SemanticAction.focus,
+            if (widget.options.isNotEmpty) SemanticAction.activate,
+            if (widget.options.isNotEmpty)
+              _isOpen ? SemanticAction.close : SemanticAction.open,
+            if (widget.options.isNotEmpty) SemanticAction.setValue,
+          },
           state: SemanticState({
             'menuItemCount': widget.options.length,
-            'open': false,
+            'open': _isOpen,
             'selectedKey': widget.value,
             'selectedOptionLabel': _currentLabel,
+            // The settable domain: each enabled option's label and stringified
+            // value, in the exact forms `_selectByPayload` matches on, so an agent
+            // (and the WS-9 valueSchema) sees precisely what set_value accepts.
+            'options': <Object?>[
+              for (final o in widget.options)
+                if (o.enabled)
+                  <String, Object?>{
+                    'label': sanitizeOptionLabel(o.label),
+                    'value': '${o.value}',
+                  },
+            ],
           }),
-          child: Text(text, allowSelect: false, style: style),
-        ),
-      );
-    }
-    return BoundsObserver(
-      notifier: _bounds,
-      child: Semantics(
-        role: SemanticRole.button,
-        label: widget.semanticLabel ?? _currentLabel,
-        value: _currentLabel,
-        focused: _triggerFocus.hasFocus,
-        expanded: _isOpen,
-        validationError: validationError,
-        actions: <SemanticAction>{
-          SemanticAction.focus,
-          if (widget.options.isNotEmpty) SemanticAction.activate,
-          if (widget.options.isNotEmpty)
-            _isOpen ? SemanticAction.close : SemanticAction.open,
-          if (widget.options.isNotEmpty) SemanticAction.setValue,
-        },
-        state: SemanticState({
-          'menuItemCount': widget.options.length,
-          'open': _isOpen,
-          'selectedKey': widget.value,
-          'selectedOptionLabel': _currentLabel,
-          // The settable domain: each enabled option's label and stringified
-          // value, in the exact forms `_selectByPayload` matches on, so an agent
-          // (and the WS-9 valueSchema) sees precisely what set_value accepts.
-          'options': <Object?>[
-            for (final o in widget.options)
-              if (o.enabled)
-                <String, Object?>{
-                  'label': sanitizeOptionLabel(o.label),
-                  'value': '${o.value}',
-                },
-          ],
-        }),
-        onAction: (action) {
-          switch (action) {
-            case SemanticAction.focus:
-              _triggerFocus.requestFocus();
-              return;
-            case SemanticAction.activate:
-              _isOpen ? _close() : _open();
-              return;
-            case SemanticAction.open:
-              _open();
-              return;
-            case SemanticAction.close:
-              _close();
-              return;
-            case _:
-              return;
-          }
-        },
-        onSetValue: _selectByPayload,
-        child: GestureDetector(
-          onTap: () {
-            _triggerFocus.requestFocus();
-            _isOpen ? _close() : _open();
+          onAction: (action) {
+            switch (action) {
+              case SemanticAction.focus:
+                _triggerFocus.requestFocus();
+                return;
+              case SemanticAction.activate:
+                _isOpen ? _dismiss() : _open();
+                return;
+              case SemanticAction.open:
+                _open();
+                return;
+              case SemanticAction.close:
+                _dismiss();
+                return;
+              case _:
+                return;
+            }
           },
-          child: KeyDetector(
-            onKey: (event) {
-              if ((_onTriggerKey)(event) == KeyEventResult.handled) {
-                event.consume();
-              }
+          onSetValue: _selectByPayload,
+          child: GestureDetector(
+            onTap: () {
+              _triggerFocus.requestFocus();
+              _isOpen ? _dismiss() : _open();
             },
-            child: Focus(
-              focusNode: _triggerFocus,
-              autofocus: widget.autofocus,
-              child: Text(text, allowSelect: false, style: style),
+            child: KeyDetector(
+              onKey: (event) {
+                if ((_onTriggerKey)(event) == KeyEventResult.handled) {
+                  event.consume();
+                }
+              },
+              child: Focus(
+                focusNode: _triggerFocus,
+                autofocus: widget.autofocus,
+                child: Text(text, allowSelect: false, style: style),
+              ),
             ),
           ),
         ),
       ),
     );
   }
+
+  Widget _withHover(Widget child) => MouseRegion(
+    onEnter: () {
+      if (!_hovered) setState(() => _hovered = true);
+    },
+    onExit: () {
+      if (_hovered) setState(() => _hovered = false);
+    },
+    child: child,
+  );
 }
 
 /// A keyboard-navigable list of checkable options.
@@ -399,7 +440,7 @@ class MultiSelect<T> extends StatefulWidget {
     this.emptyLabel = 'No options',
     this.focusNode,
     this.autofocus = false,
-    this.errorStyle,
+    this.style,
   });
 
   /// Ordered choices; disabled options remain visible but cannot be toggled.
@@ -423,9 +464,9 @@ class MultiSelect<T> extends StatefulWidget {
   /// Whether the list requests focus when mounted.
   final bool autofocus;
 
-  /// Invalid style for the option list. null uses the theme;
-  /// [CellStyle.empty] keeps it visually neutral.
-  final CellStyle? errorStyle;
+  /// Base styling for each option row, plus optional hover, focus, selected,
+  /// disabled, and invalid state entries from [CellStyle.interactive].
+  final CellStyle? style;
 
   @override
   State<MultiSelect<T>> createState() => _MultiSelectState<T>();
@@ -436,6 +477,7 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
   late FocusNode _focusNode;
   bool _ownsFocusNode = false;
   int _highlightedIndex = 0;
+  int? _hoveredIndex;
   FormControlRegistration? _formRegistration;
 
   bool get _enabled => widget.onChanged != null;
@@ -619,11 +661,26 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
     final enabled = _enabled;
     final focused = enabled && _focusNode.hasFocus;
     final validationError = _formRegistration?.error;
-    final invalidStyle = validationError == null
-        ? null
-        : (widget.errorStyle ?? theme.errorStyle);
     final rawChild = widget.options.isEmpty
-        ? Text(widget.emptyLabel, allowSelect: false, style: theme.mutedStyle)
+        ? Text(
+            widget.emptyLabel,
+            allowSelect: false,
+            style: resolveCellStyle(
+              cascade: [
+                CellStyle.interactive(
+                  base: theme.mutedStyle,
+                  disabled: theme.mutedStyle,
+                  invalid: theme.errorStyle,
+                ),
+                theme.interactiveStyle,
+                widget.style,
+              ],
+              states: {
+                if (!enabled) CellStyleState.disabled,
+                if (validationError != null) CellStyleState.invalid,
+              },
+            ),
+          )
         : Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -631,9 +688,6 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
                 _optionRow(theme, i, focused, enabled),
             ],
           );
-    final child = enabled && invalidStyle != null
-        ? DefaultTextStyle.merge(style: invalidStyle, child: rawChild)
-        : rawChild;
     final semantics = Semantics(
       role: SemanticRole.list,
       label: widget.semanticLabel,
@@ -664,7 +718,7 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
               }
             }
           : null,
-      child: child,
+      child: rawChild,
     );
     if (!enabled) return semantics;
     return KeyDetector(
@@ -684,11 +738,24 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
     final optionEnabled = enabled && option.enabled;
     final selected = widget.values.contains(option.value);
     final highlighted = focused && index == _highlightedIndex;
-    final style = !optionEnabled
-        ? theme.mutedStyle
-        : highlighted
-        ? theme.selectionStyle
-        : CellStyle.empty;
+    final style = resolveCellStyle(
+      cascade: [
+        CellStyle.interactive(
+          focused: theme.selectionStyle,
+          disabled: theme.mutedStyle,
+          invalid: theme.errorStyle,
+        ),
+        theme.interactiveStyle,
+        widget.style,
+      ],
+      states: {
+        if (_hoveredIndex == index) CellStyleState.hovered,
+        if (highlighted) CellStyleState.focused,
+        if (selected) CellStyleState.selected,
+        if (!optionEnabled) CellStyleState.disabled,
+        if (_formRegistration?.error != null) CellStyleState.invalid,
+      },
+    );
     final safeLabel = sanitizeOptionLabel(option.label);
     final text = '${selected ? '[x]' : '[ ]'} $safeLabel';
     final row = optionEnabled
@@ -701,43 +768,51 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
             child: Text(text, allowSelect: false, style: style),
           )
         : Text(text, allowSelect: false, style: style);
-    return Semantics(
-      role: SemanticRole.checkbox,
-      label: safeLabel,
-      value: option.value,
-      enabled: optionEnabled,
-      focused: highlighted,
-      selected: selected,
-      checked: selected,
-      actions: optionEnabled
-          ? const <SemanticAction>{
-              SemanticAction.focus,
-              SemanticAction.activate,
-            }
-          : const <SemanticAction>{},
-      state: SemanticState({
-        'itemIndex': index,
-        'itemPosition': index + 1,
-        'itemCount': widget.options.length,
-      }),
-      onAction: optionEnabled
-          ? (action) {
-              switch (action) {
-                case SemanticAction.focus:
-                  _focusNode.requestFocus();
-                  setState(() => _highlightedIndex = index);
-                  return;
-                case SemanticAction.activate:
-                  _focusNode.requestFocus();
-                  setState(() => _highlightedIndex = index);
-                  _toggle(index);
-                  return;
-                case _:
-                  return;
+    return MouseRegion(
+      onEnter: () {
+        if (_hoveredIndex != index) setState(() => _hoveredIndex = index);
+      },
+      onExit: () {
+        if (_hoveredIndex == index) setState(() => _hoveredIndex = null);
+      },
+      child: Semantics(
+        role: SemanticRole.checkbox,
+        label: safeLabel,
+        value: option.value,
+        enabled: optionEnabled,
+        focused: highlighted,
+        selected: selected,
+        checked: selected,
+        actions: optionEnabled
+            ? const <SemanticAction>{
+                SemanticAction.focus,
+                SemanticAction.activate,
               }
-            }
-          : null,
-      child: row,
+            : const <SemanticAction>{},
+        state: SemanticState({
+          'itemIndex': index,
+          'itemPosition': index + 1,
+          'itemCount': widget.options.length,
+        }),
+        onAction: optionEnabled
+            ? (action) {
+                switch (action) {
+                  case SemanticAction.focus:
+                    _focusNode.requestFocus();
+                    setState(() => _highlightedIndex = index);
+                    return;
+                  case SemanticAction.activate:
+                    _focusNode.requestFocus();
+                    setState(() => _highlightedIndex = index);
+                    _toggle(index);
+                    return;
+                  case _:
+                    return;
+                }
+              }
+            : null,
+        child: row,
+      ),
     );
   }
 }
@@ -975,13 +1050,20 @@ class _SelectListState<T> extends State<_SelectList<T>> {
                       final safeLabel = sanitizeOptionLabel(option.label);
                       final text = '$marker$safeLabel';
                       final row = option.enabled
-                          ? GestureDetector(
-                              onTap: () => _pick(i),
-                              child: Text(
-                                text,
-                                style: selected
-                                    ? widget.selectionStyle
-                                    : CellStyle.empty,
+                          ? MouseRegion(
+                              onEnter: () {
+                                if (_list.selectedIndex != i) {
+                                  _list.selectedIndex = i;
+                                }
+                              },
+                              child: GestureDetector(
+                                onTap: () => _pick(i),
+                                child: Text(
+                                  text,
+                                  style: selected
+                                      ? widget.selectionStyle
+                                      : CellStyle.none,
+                                ),
                               ),
                             )
                           : Text(text, style: widget.mutedStyle);

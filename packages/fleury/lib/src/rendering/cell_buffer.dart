@@ -9,6 +9,8 @@ import 'width_resolver.dart';
 
 export 'inline_image.dart';
 
+CellStyle _paintStyle(CellStyle style) => plainCellStyle(style);
+
 /// A two-dimensional grid of [Cell]s representing one frame of the terminal
 /// rendering output.
 ///
@@ -383,7 +385,7 @@ final class CellBuffer {
   int writeGrapheme(
     CellOffset position,
     String grapheme, {
-    CellStyle style = CellStyle.empty,
+    CellStyle style = CellStyle.none,
     WidthResolver widthResolver = const DefaultWidthResolver(),
     CellWidthPolicy policy = CellWidthPolicy.spec,
   }) {
@@ -392,7 +394,7 @@ final class CellBuffer {
       position.col,
       position.row,
       grapheme,
-      style: style,
+      style: _paintStyle(style),
       widthResolver: widthResolver,
       policy: policy,
     );
@@ -404,10 +406,14 @@ final class CellBuffer {
     int col,
     int row,
     String grapheme, {
-    CellStyle style = CellStyle.empty,
+    CellStyle style = CellStyle.none,
     WidthResolver widthResolver = const DefaultWidthResolver(),
     CellWidthPolicy policy = CellWidthPolicy.spec,
   }) {
+    assert(
+      !hasCellStyleStates(style),
+      'interaction-aware styles must resolve first',
+    );
     final width = widthResolver.widthOfGrapheme(grapheme, policy);
     if (width == 0) return 0;
     // Include adjacent cells because writing can evict wide-cell neighbors.
@@ -443,10 +449,11 @@ final class CellBuffer {
   int writeText(
     CellOffset position,
     String text, {
-    CellStyle style = CellStyle.empty,
+    CellStyle style = CellStyle.none,
     WidthResolver widthResolver = const DefaultWidthResolver(),
     CellWidthPolicy policy = CellWidthPolicy.spec,
   }) {
+    final paintStyle = _paintStyle(style);
     var col = position.col;
     final startCol = col;
     final row = position.row;
@@ -460,7 +467,7 @@ final class CellBuffer {
           col,
           row,
           grapheme,
-          style: style,
+          style: paintStyle,
           widthResolver: widthResolver,
           policy: policy,
         );

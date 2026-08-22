@@ -753,7 +753,7 @@ CellStyle _rowStyle(
   if (selected) return theme.mutedStyle;
   return switch (item.priority) {
     ContextItemPriority.low => theme.mutedStyle,
-    ContextItemPriority.normal => CellStyle.empty,
+    ContextItemPriority.normal => CellStyle.none,
     ContextItemPriority.high => const CellStyle(foreground: AnsiColor(11)),
     ContextItemPriority.critical => const CellStyle(
       bold: true,

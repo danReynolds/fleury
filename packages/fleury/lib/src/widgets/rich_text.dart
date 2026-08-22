@@ -526,7 +526,7 @@ class RenderRichText extends RenderObject
       return w;
     }
 
-    const emptySpace = _Glyph(' ', 1, CellStyle.empty);
+    const emptySpace = _Glyph(' ', 1, CellStyle.none);
     for (var i = 0; i < words.length; i++) {
       final w = words[i];
       // The space preceding this word. Re-emit the ORIGINAL space glyph (with
@@ -658,7 +658,7 @@ class RenderRichText extends RenderObject
     var off = lineStartOffset;
     for (final g in line) {
       if (col + g.width > contentMaxCol) break;
-      // Per-glyph style merged with inverse-video when this cell
+      // Per-glyph style merged with reverse-video when this cell
       // falls inside the live selection. Inverse cascades over the
       // span's own foreground/background so styled spans still get
       // the selection highlight.

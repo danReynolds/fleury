@@ -34,6 +34,7 @@ import 'form_control.dart';
 import 'framework.dart';
 import 'keyboard.dart';
 import 'media_query.dart';
+import 'pointer.dart';
 import 'theme.dart';
 import 'text_input.dart'
     show TextClipboardPolicy, TextEditingController, textClipboardSemanticState;
@@ -52,12 +53,11 @@ class TextArea extends StatefulWidget {
     this.onSubmit,
     this.placeholder = '',
     this.placeholderStyle = const CellStyle(dim: true),
-    this.style = CellStyle.empty,
+    this.style = CellStyle.none,
     this.cursorStyle = const CellStyle(inverse: true),
     this.enabled = true,
     this.readOnly = false,
     this.validationError,
-    this.errorStyle,
     this.semanticLabel,
     this.semanticState = SemanticState.empty,
     this.clipboardPolicy = TextClipboardPolicy.allowed,
@@ -102,7 +102,10 @@ class TextArea extends StatefulWidget {
   /// Style for the [placeholder] text. Defaults to dim.
   final CellStyle placeholderStyle;
 
-  /// Style applied to editable text.
+  /// Style applied to editable text and its interactive states.
+  ///
+  /// Pass a plain [CellStyle] for the common case. Use [CellStyle.interactive] only
+  /// when focus, hover, disabled, or invalid should look different locally.
   final CellStyle style;
 
   /// Style applied to the grapheme cell under the visible cursor.
@@ -119,12 +122,6 @@ class TextArea extends StatefulWidget {
   /// Use this when the area is not inside a `FormField`. An enclosing
   /// `FormField` supplies its current error automatically.
   final String? validationError;
-
-  /// Style merged onto the area while its value is invalid.
-  ///
-  /// null uses [ThemeData.errorStyle]. [CellStyle.empty] suppresses the
-  /// visual reaction while preserving validation semantics and messages.
-  final CellStyle? errorStyle;
 
   /// Label exposed through the semantic app graph.
   ///
@@ -167,6 +164,7 @@ class _TextAreaState extends State<TextArea>
   late String _lastNotifiedText;
   bool _ownsController = false;
   bool _ownsFocusNode = false;
+  bool _hovered = false;
   FormControlRegistration? _formRegistration;
   TextPasteSession? _pasteSession;
   final Queue<({String text, bool isFinal})> _queuedPasteSegments =
@@ -767,14 +765,29 @@ class _TextAreaState extends State<TextArea>
   Widget build(BuildContext context) {
     final focused = _focusNode.hasFocus;
     final validationError = _formRegistration?.error ?? widget.validationError;
-    final invalidStyle = widget.errorStyle ?? Theme.of(context).errorStyle;
-    final displayStyle = validationError == null
-        ? widget.style
-        : widget.style.merge(invalidStyle);
-    final displayPlaceholderStyle = validationError == null
-        ? widget.placeholderStyle
-        : widget.placeholderStyle.merge(invalidStyle);
-    return Semantics(
+    final theme = Theme.of(context);
+    final defaultStyle = CellStyle.interactive(
+      focused: CellStyle(
+        foreground: theme.colorScheme.focus,
+      ).merge(theme.focusedStyle),
+      disabled: theme.mutedStyle,
+      invalid: theme.errorStyle,
+    );
+    final states = {
+      if (_hovered) CellStyleState.hovered,
+      if (focused) CellStyleState.focused,
+      if (!widget.enabled) CellStyleState.disabled,
+      if (validationError != null) CellStyleState.invalid,
+    };
+    final cascade = [defaultStyle, theme.interactiveStyle, widget.style];
+    final displayStyle = resolveCellStyle(cascade: cascade, states: states);
+    // Placeholder paint is a base-layer customization. Active state patches
+    // still win, so an empty invalid field does not hide its invalid cue.
+    final displayPlaceholderStyle = resolveCellStyle(
+      cascade: [...cascade, widget.placeholderStyle],
+      states: states,
+    );
+    final content = Semantics(
       role: SemanticRole.textArea,
       label:
           widget.semanticLabel ??
@@ -825,12 +838,8 @@ class _TextAreaState extends State<TextArea>
             text: _controller.text,
             selection: _controller.selection,
             placeholder: widget.placeholder,
-            placeholderStyle: widget.enabled
-                ? displayPlaceholderStyle
-                : displayPlaceholderStyle.merge(const CellStyle(dim: true)),
-            style: widget.enabled
-                ? displayStyle
-                : displayStyle.merge(const CellStyle(dim: true)),
+            placeholderStyle: displayPlaceholderStyle,
+            style: displayStyle,
             cursorStyle: widget.cursorStyle,
             cursorVisible: focused,
             minLines: widget.minLines,
@@ -838,6 +847,15 @@ class _TextAreaState extends State<TextArea>
           ),
         ),
       ),
+    );
+    return MouseRegion(
+      onEnter: () {
+        if (!_hovered) setState(() => _hovered = true);
+      },
+      onExit: () {
+        if (_hovered) setState(() => _hovered = false);
+      },
+      child: content,
     );
   }
 }
@@ -954,7 +972,7 @@ class RenderTextArea extends RenderObject {
     required TextSelection selection,
     String placeholder = '',
     CellStyle placeholderStyle = const CellStyle(dim: true),
-    CellStyle style = CellStyle.empty,
+    CellStyle style = CellStyle.none,
     CellStyle cursorStyle = const CellStyle(inverse: true),
     bool cursorVisible = true,
     int minLines = 1,

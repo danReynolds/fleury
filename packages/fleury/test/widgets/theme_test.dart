@@ -1,4 +1,5 @@
 import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_internal.dart';
 import '../support/harness.dart';
 import 'package:test/test.dart';
 
@@ -13,6 +14,11 @@ class _Capture extends StatelessWidget {
 }
 
 void main() {
+  test('ThemeData.adaptive follows the declared brightness', () {
+    expect(ThemeData.light().adaptive(light: 'light', dark: 'dark'), 'light');
+    expect(ThemeData.dark().adaptive(light: 'light', dark: 'dark'), 'dark');
+  });
+
   group('Theme.of', () {
     testWidgets('falls back to ThemeData.fallback with no ancestor', (tester) {
       late ThemeData seen;
@@ -27,6 +33,24 @@ void main() {
         Theme(data: data, child: _Capture((c) => seen = Theme.of(c))),
       );
       expect(seen.selectionStyle, const CellStyle(bold: true));
+    });
+
+    testWidgets('carries the shared interactive style through the theme', (
+      tester,
+    ) {
+      late ThemeData seen;
+      const data = ThemeData(
+        interactiveStyle: CellStyle.interactive(
+          focused: CellStyle(underline: true),
+        ),
+      );
+      tester.pumpWidget(
+        Theme(data: data, child: _Capture((c) => seen = Theme.of(c))),
+      );
+
+      expect(seen.interactiveStyle, data.interactiveStyle);
+      expect(data.copyWith(), data);
+      expect(data.hashCode, data.copyWith().hashCode);
     });
 
     testWidgets('maybeOf is null without an ancestor', (tester) {
@@ -64,7 +88,7 @@ void main() {
     testWidgets('no DefaultTextStyle leaves Text unstyled', (tester) {
       tester.pumpWidget(const Text('hi'));
       final buf = tester.render(size: const CellSize(4, 1));
-      expect(buf.atColRow(0, 0).style, CellStyle.empty);
+      expect(buf.atColRow(0, 0).style, CellStyle.none);
     });
 
     testWidgets('Theme cascades its textStyle to descendant Text', (tester) {
@@ -206,6 +230,73 @@ void main() {
       final plain = renderAt(ColorMode.none);
       expect(plain, isNot(contains('38;'))); // no foreground color set
       expect(plain, contains('1m')); // bold survives the color strip
+    });
+
+    test('a resolved invalid control cue survives NO_COLOR end to end', () {
+      final style = resolveCellStyle(
+        cascade: const [
+          CellStyle.interactive(
+            invalid: CellStyle(foreground: Colors.red, underline: true),
+          ),
+        ],
+        states: const {CellStyleState.invalid},
+      );
+      final buffer = CellBuffer(const CellSize(1, 1))
+        ..writeGrapheme(const CellOffset(0, 0), 'x', style: style);
+      final sink = StringAnsiSink();
+
+      AnsiRenderer(colorMode: ColorMode.none).renderFull(buffer, sink);
+
+      expect(sink.output, isNot(contains('38;')));
+      expect(sink.output, contains('4m'));
+    });
+
+    testWidgets('TextInput state styling wins over placeholder styling', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        const Theme(
+          data: ThemeData(
+            interactiveStyle: CellStyle.interactive(
+              invalid: CellStyle(foreground: AnsiColor(1)),
+            ),
+          ),
+          child: TextInput(
+            placeholder: 'Required',
+            placeholderStyle: CellStyle(foreground: AnsiColor(6)),
+            validationError: 'Required',
+          ),
+        ),
+      );
+
+      final buffer = tester.render(size: const CellSize(20, 1));
+      expect(buffer.atColRow(0, 0).style.foreground, const AnsiColor(1));
+    });
+
+    testWidgets('TextArea state styling wins over placeholder styling', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        const Theme(
+          data: ThemeData(
+            interactiveStyle: CellStyle.interactive(
+              invalid: CellStyle(foreground: AnsiColor(1)),
+            ),
+          ),
+          child: SizedBox(
+            width: 20,
+            height: 2,
+            child: TextArea(
+              placeholder: 'Required',
+              placeholderStyle: CellStyle(foreground: AnsiColor(6)),
+              validationError: 'Required',
+            ),
+          ),
+        ),
+      );
+
+      final buffer = tester.render(size: const CellSize(20, 2));
+      expect(buffer.atColRow(0, 0).style.foreground, const AnsiColor(1));
     });
   });
 }

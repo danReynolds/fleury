@@ -74,7 +74,7 @@ final class Text extends StatelessWidget implements WidgetUpdatePruner {
   const Text(
     this.data, {
     super.key,
-    this.style = CellStyle.empty,
+    this.style = CellStyle.none,
     this.softWrap = true,
     this.maxLines,
     this.overflow = TextOverflow.clip,

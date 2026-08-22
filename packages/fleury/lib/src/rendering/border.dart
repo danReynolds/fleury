@@ -21,7 +21,7 @@ enum BorderStyle { single, double, rounded, ascii }
 final class BoxBorder {
   const BoxBorder({
     this.style = BorderStyle.single,
-    this.cellStyle = CellStyle.empty,
+    this.cellStyle = CellStyle.none,
   });
 
   /// Box-drawing variant.
