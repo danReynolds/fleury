@@ -1841,6 +1841,63 @@ form.clearErrors();''',
     builder: () => const _ProjectFormTour(),
   ),
   ExampleInfo(
+    id: 'state.local-counter',
+    widget: 'State',
+    category: 'Guide examples',
+    blurb: 'A counter updates its own widget subtree with setState.',
+    cols: 34,
+    rows: 9,
+    interactive: true,
+    builder: () => const _LocalCounterTour(),
+  ),
+  ExampleInfo(
+    id: 'state.shared-counter',
+    widget: 'State',
+    category: 'Guide examples',
+    blurb:
+        'A parent-owned counter passes its value and update callback to two '
+        'ordinary child widgets.',
+    cols: 34,
+    rows: 9,
+    interactive: true,
+    builder: () => const _SharedCounterTour(),
+  ),
+  ExampleInfo(
+    id: 'state.value-notifier',
+    widget: 'ValueListenableBuilder',
+    category: 'Guide examples',
+    blurb:
+        'A connection service exposes one typed observable value without '
+        'needing a larger model.',
+    cols: 38,
+    rows: 9,
+    interactive: true,
+    builder: () => const _ValueNotifierTour(),
+  ),
+  ExampleInfo(
+    id: 'state.deployment',
+    widget: 'ListenableBuilder',
+    category: 'Guide examples',
+    blurb:
+        'A small app-owned model groups deployment progress and pause actions.',
+    cols: 42,
+    rows: 11,
+    interactive: true,
+    builder: () => const _DeploymentTour(),
+  ),
+  ExampleInfo(
+    id: 'state.inherited-notifier',
+    widget: 'InheritedNotifier',
+    category: 'Guide examples',
+    blurb:
+        'A nested status reader watches an inherited deployment model while '
+        'an action reads it without subscribing.',
+    cols: 44,
+    rows: 11,
+    interactive: true,
+    builder: () => const _InheritedNotifierTour(),
+  ),
+  ExampleInfo(
     id: 'lists.tasks',
     widget: 'ListView',
     category: 'Guide examples',
@@ -3488,6 +3545,264 @@ class _InteractiveStyleTour extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// A guide-level example for local widget state.
+class _LocalCounterTour extends StatefulWidget {
+  const _LocalCounterTour();
+
+  @override
+  State<_LocalCounterTour> createState() => _LocalCounterTourState();
+}
+
+class _LocalCounterTourState extends State<_LocalCounterTour> {
+  int _count = 0;
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Text('COUNTER', style: CellStyle(bold: true)),
+        const SizedBox(height: 1),
+        Text('Count: $_count'),
+        Button(label: 'Increment', onPressed: () => setState(() => _count++)),
+      ],
+    ),
+  );
+}
+
+/// A guide-level example for lifting widget state to a common parent.
+class _SharedCounterTour extends StatefulWidget {
+  const _SharedCounterTour();
+
+  @override
+  State<_SharedCounterTour> createState() => _SharedCounterTourState();
+}
+
+class _SharedCounterTourState extends State<_SharedCounterTour> {
+  int _count = 0;
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Text('SHARED COUNTER', style: CellStyle(bold: true)),
+        const SizedBox(height: 1),
+        _CounterValue(value: _count),
+        _CounterButton(onPressed: () => setState(() => _count++)),
+      ],
+    ),
+  );
+}
+
+class _CounterValue extends StatelessWidget {
+  const _CounterValue({required this.value});
+
+  final int value;
+
+  @override
+  Widget build(BuildContext context) => Text('Count: $value');
+}
+
+class _CounterButton extends StatelessWidget {
+  const _CounterButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) =>
+      Button(label: 'Increment', onPressed: onPressed);
+}
+
+/// A service that exposes one observable value without becoming a larger model.
+class _ConnectionService {
+  final online = ValueNotifier<bool>(false);
+
+  void toggle() => online.value = !online.value;
+
+  void dispose() => online.dispose();
+}
+
+/// A guide-level example for a service-owned observable value.
+class _ValueNotifierTour extends StatefulWidget {
+  const _ValueNotifierTour();
+
+  @override
+  State<_ValueNotifierTour> createState() => _ValueNotifierTourState();
+}
+
+class _ValueNotifierTourState extends State<_ValueNotifierTour> {
+  final _connection = _ConnectionService();
+
+  @override
+  void dispose() {
+    _connection.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    ValueListenableBuilder<bool>(
+      valueListenable: _connection.online,
+      builder: (context, isOnline, child) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text('CONNECTION', style: CellStyle(bold: true)),
+          const SizedBox(height: 1),
+          Text(isOnline ? 'Online' : 'Offline'),
+          Button(
+            label: isOnline ? 'Disconnect' : 'Connect',
+            onPressed: _connection.toggle,
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// A small app-owned model with related values and actions.
+class _Deployment extends ChangeNotifier {
+  int _completed = 1;
+  bool _paused = false;
+
+  int get completed => _completed;
+  bool get paused => _paused;
+
+  void completeNext() {
+    if (_paused || _completed == 3) return;
+    _completed++;
+    notifyListeners();
+  }
+
+  void togglePaused() {
+    _paused = !_paused;
+    notifyListeners();
+  }
+}
+
+class _DeploymentTour extends StatefulWidget {
+  const _DeploymentTour();
+
+  @override
+  State<_DeploymentTour> createState() => _DeploymentTourState();
+}
+
+class _DeploymentTourState extends State<_DeploymentTour> {
+  final _deployment = _Deployment();
+
+  @override
+  void dispose() {
+    _deployment.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      _framed(_DeploymentView(deployment: _deployment));
+}
+
+class _DeploymentView extends StatelessWidget {
+  const _DeploymentView({required this.deployment});
+
+  final _Deployment deployment;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: deployment,
+    builder: (context, child) => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Text('DEPLOYMENT', style: CellStyle(bold: true)),
+        const SizedBox(height: 1),
+        Text('${deployment.completed} of 3 complete'),
+        Text(deployment.paused ? 'Paused' : 'Running'),
+        const SizedBox(height: 1),
+        Row(
+          children: <Widget>[
+            Button(label: 'Complete next', onPressed: deployment.completeNext),
+            Button(
+              label: deployment.paused ? 'Resume' : 'Pause',
+              onPressed: deployment.togglePaused,
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
+class _DeploymentScope extends InheritedNotifier<_Deployment> {
+  const _DeploymentScope({
+    required _Deployment deployment,
+    required super.child,
+  }) : super(notifier: deployment);
+
+  static _Deployment watch(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_DeploymentScope>()!.notifier;
+
+  static _Deployment read(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<_DeploymentScope>()!.notifier;
+}
+
+class _InheritedNotifierTour extends StatefulWidget {
+  const _InheritedNotifierTour();
+
+  @override
+  State<_InheritedNotifierTour> createState() => _InheritedNotifierTourState();
+}
+
+class _InheritedNotifierTourState extends State<_InheritedNotifierTour> {
+  final _deployment = _Deployment();
+
+  @override
+  void dispose() {
+    _deployment.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => _DeploymentScope(
+    deployment: _deployment,
+    child: _framed(const _NestedWorkspace()),
+  );
+}
+
+class _NestedWorkspace extends StatelessWidget {
+  const _NestedWorkspace();
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: <Widget>[
+      const Text('WORKSPACE', style: CellStyle(bold: true)),
+      const Text('Nested reader · no forwarded model'),
+      const SizedBox(height: 1),
+      const _WorkspaceBody(),
+      Button(
+        label: 'Complete next',
+        onPressed: () => _DeploymentScope.read(context).completeNext(),
+      ),
+    ],
+  );
+}
+
+class _WorkspaceBody extends StatelessWidget {
+  const _WorkspaceBody();
+
+  @override
+  Widget build(BuildContext context) => const _NestedDeploymentStatus();
+}
+
+class _NestedDeploymentStatus extends StatelessWidget {
+  const _NestedDeploymentStatus();
+
+  @override
+  Widget build(BuildContext context) {
+    final deployment = _DeploymentScope.watch(context);
+    return Text('${deployment.completed} of 3 complete');
   }
 }
 

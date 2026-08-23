@@ -1,0 +1,385 @@
+---
+title: State management
+description: Keep UI state in widgets or share it with lightweight notifiers.
+---
+
+import FleuryExample from '../../../components/FleuryExample.astro';
+import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
+
+Fleury rebuilds widgets when the state they use changes. A stateful widget can
+own UI state directly. When state has its own lifecycle or several listeners,
+put it in a notifier.
+
+| You need to… | Use |
+|---|---|
+| Keep UI state in a widget or nearby subtree | `State` + `setState` |
+| Share observable state outside one widget | [Notifiers](#notifiers) |
+| Render a future or stream | [`FutureBuilder` or `StreamBuilder`](/fleury/guides/loading-data/) |
+| Reach deeply nested widgets | [`InheritedWidget` or `InheritedNotifier`](#sharing-state-through-the-tree), or an external state package |
+
+## Local state
+
+A stateful widget can keep values that affect its own UI. Change the value
+inside `setState`; Fleury then schedules that widget's subtree to rebuild:
+
+<CodeDemoSplit layout="demo-wide">
+<Fragment slot="code">
+```dart
+class Counter extends StatefulWidget {
+  @override
+  State<Counter> createState() => _CounterState();
+}
+
+class _CounterState extends State<Counter> {
+  int count = 0;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      Text('Count: $count'),
+      Button(
+        label: 'Increment',
+        onPressed: () => setState(() => count++),
+      ),
+    ],
+  );
+}
+```
+</Fragment>
+<FleuryExample
+  slot="demo"
+  id="state.local-counter"
+  cols={34}
+  rows={9}
+  interactive
+/>
+</CodeDemoSplit>
+
+### Sharing local state
+
+When nearby widgets use the same value, their parent can hold it and pass the
+current value and a callback to each child:
+
+<CodeDemoSplit
+  files={['shared_counter.dart', 'counter_widgets.dart']}
+  initialFile="shared_counter.dart"
+  layout="demo-wide"
+>
+<Fragment slot="code-0">
+```dart
+class _SharedCounterState extends State<SharedCounter> {
+  int count = 0;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      CounterValue(value: count),
+      CounterButton(
+        onPressed: () => setState(() => count++),
+      ),
+    ],
+  );
+}
+```
+</Fragment>
+<Fragment slot="code-1">
+```dart
+class CounterValue extends StatelessWidget {
+  const CounterValue({required this.value});
+  final int value;
+
+  @override
+  Widget build(BuildContext context) => Text('Count: $value');
+}
+
+class CounterButton extends StatelessWidget {
+  const CounterButton({required this.onPressed});
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) =>
+      Button(label: 'Increment', onPressed: onPressed);
+}
+```
+</Fragment>
+<FleuryExample
+  slot="demo"
+  id="state.shared-counter"
+  cols={34}
+  rows={9}
+  interactive
+/>
+</CodeDemoSplit>
+
+The children stay ordinary widgets. The parent owns the shared value, data
+flows down through constructors, and the callback carries the user action back
+up.
+
+## Notifiers
+
+Notifiers keep observable state outside any one widget. Both
+`ChangeNotifier` and `ValueNotifier` implement the lightweight `Listenable`
+contract, so widgets can rebuild when they publish a change.
+
+### ChangeNotifier
+
+Use `ChangeNotifier` when related values and actions belong together. This
+deployment model owns progress and pause behavior, while `ListenableBuilder`
+keeps the UI current:
+
+<CodeDemoSplit
+  files={['deployment.dart', 'deployment_view.dart']}
+  initialFile="deployment.dart"
+  layout="demo-wide"
+>
+<Fragment slot="code-0">
+```dart
+class Deployment extends ChangeNotifier {
+  int _completed = 1;
+  bool _paused = false;
+
+  int get completed => _completed;
+  bool get paused => _paused;
+
+  void completeNext() {
+    if (_paused || _completed == 3) return;
+    _completed++;
+    notifyListeners();
+  }
+
+  void togglePaused() {
+    _paused = !_paused;
+    notifyListeners();
+  }
+}
+```
+</Fragment>
+<Fragment slot="code-1">
+```dart
+class _DeploymentViewState extends State<DeploymentView> {
+  final deployment = Deployment();
+
+  @override
+  void dispose() {
+    deployment.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: deployment,
+    builder: (context, child) => Column(
+      children: [
+        Text('${deployment.completed} of 3 complete'),
+        Text(deployment.paused ? 'Paused' : 'Running'),
+        Button(label: 'Complete next', onPressed: deployment.completeNext),
+        Button(
+          label: deployment.paused ? 'Resume' : 'Pause',
+          onPressed: deployment.togglePaused,
+        ),
+      ],
+    ),
+  );
+}
+```
+</Fragment>
+<FleuryExample
+  slot="demo"
+  id="state.deployment"
+  cols={42}
+  rows={11}
+  interactive
+/>
+</CodeDemoSplit>
+
+Create the notifier once and dispose it with its owner. Because the model is
+separate from the widget tree, its behavior can be tested without rendering
+widgets.
+
+### ValueNotifier
+
+`ValueNotifier<T>` is a `ChangeNotifier` specialized for one typed value. It is
+useful when a controller or service exposes one changing value without needing
+a larger model:
+
+<CodeDemoSplit
+  files={['connection_service.dart', 'connection_panel.dart']}
+  initialFile="connection_service.dart"
+  layout="demo-wide"
+>
+<Fragment slot="code-0">
+```dart
+class ConnectionService {
+  final online = ValueNotifier<bool>(false);
+
+  void toggle() => online.value = !online.value;
+  void dispose() => online.dispose();
+}
+```
+</Fragment>
+<Fragment slot="code-1">
+```dart
+class _ConnectionPanelState extends State<ConnectionPanel> {
+  final connection = ConnectionService();
+
+  @override
+  void dispose() {
+    connection.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
+    valueListenable: connection.online,
+    builder: (context, online, child) => Row(
+      children: [
+        Text(online ? 'Online' : 'Offline'),
+        Button(
+          label: online ? 'Disconnect' : 'Connect',
+          onPressed: connection.toggle,
+        ),
+      ],
+    ),
+  );
+}
+```
+</Fragment>
+<FleuryExample
+  slot="demo"
+  id="state.value-notifier"
+  cols={38}
+  rows={9}
+  interactive
+/>
+</CodeDemoSplit>
+
+Assigning an equal value does not notify listeners. Prefer immutable values;
+mutating a list or map in place does not replace it.
+
+### Keeping rebuilds narrow
+
+Place a listenable builder near the text, list, or panel that reads the model
+instead of wrapping an entire screen. For a large child that does not depend on
+the model, the optional `child` argument can preserve that element subtree:
+
+```dart
+ListenableBuilder(
+  listenable: deployment,
+  child: const DeploymentChartFrame(),
+  builder: (context, child) => Panel(
+    title: '${deployment.completed} complete',
+    child: child!,
+  ),
+)
+```
+
+Call `notifyListeners()` once after a logical change. Avoid exposing mutable
+collections that callers can change without notifying.
+
+## Sharing state through the tree
+
+`InheritedWidget` is the base mechanism for sharing immutable configuration
+with descendants and rebuilding the widgets that depend on it when the value is
+replaced. `Theme` and `MediaQuery` use this pattern. `InheritedNotifier` extends
+the same mechanism for a `Listenable`, rebuilding dependents when the notifier
+publishes a change.
+
+Use an inherited scope when many intermediate widgets would otherwise forward
+the same model without reading it:
+
+<CodeDemoSplit
+  files={['deployment_scope.dart', 'nested_widgets.dart']}
+  initialFile="deployment_scope.dart"
+  layout="demo-wide"
+>
+<Fragment slot="code-0">
+```dart
+class DeploymentScope extends InheritedNotifier<Deployment> {
+  const DeploymentScope({
+    required Deployment deployment,
+    required super.child,
+  }) : super(notifier: deployment);
+
+  static Deployment watch(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<DeploymentScope>()!
+      .notifier;
+
+  static Deployment read(BuildContext context) => context
+      .getInheritedWidgetOfExactType<DeploymentScope>()!
+      .notifier;
+}
+
+DeploymentScope(
+  deployment: deployment,
+  child: const Workspace(),
+)
+```
+</Fragment>
+<Fragment slot="code-1">
+```dart
+class Workspace extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      const WorkspaceBody(), // no model forwarded
+      Button(
+        label: 'Complete next',
+        onPressed: () => DeploymentScope.read(context).completeNext(),
+      ),
+    ],
+  );
+}
+
+class WorkspaceBody extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => const NestedStatus();
+}
+
+class NestedStatus extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final deployment = DeploymentScope.watch(context);
+    return Text('${deployment.completed} of 3 complete');
+  }
+}
+```
+</Fragment>
+<FleuryExample
+  slot="demo"
+  id="state.inherited-notifier"
+  cols={44}
+  rows={11}
+  interactive
+/>
+</CodeDemoSplit>
+
+`watch` and `read` are small helpers defined by this application's
+`DeploymentScope`, not special Fleury methods. `watch` registers a dependency
+while building UI. `read` retrieves the model without subscribing, which is
+useful inside an event callback. The scope distributes an existing model; its
+owner still creates and disposes it.
+
+Fleury does not prescribe a global store or provider graph. If your application
+benefits from selectors, immutable reducers, generated providers, or dependency
+injection, those can remain an application-level or package-level choice.
+
+## API reference
+
+| API | What it does |
+|---|---|
+| `setState` | Runs a local mutation and schedules that `State` to rebuild |
+| `Listenable` | Common notification contract used by listenable builders |
+| `ValueNotifier<T>` | Publishes one replaceable value |
+| `ValueListenableBuilder<T>` | Rebuilds from the current typed value |
+| `ChangeNotifier` | Publishes changes from an app-owned model or controller |
+| `ListenableBuilder` | Rebuilds a narrow subtree when a `Listenable` notifies |
+| `InheritedWidget` | Shares replaceable configuration with descendants |
+| `InheritedNotifier<T>` | Shares an existing listenable with descendants |
+
+## Next steps
+
+- [Widgets & state](/fleury/concepts/widgets-and-state/) covers `State`, lifecycle, and `BuildContext`.
+- [Loading data](/fleury/guides/loading-data/) covers futures, streams, refresh, and stale results.
+- [Testing](/fleury/guides/testing/) shows how to exercise widget state and semantic actions.
+- See [ListenableBuilder](/fleury/widgets/listenablebuilder/) and
+  [ValueListenableBuilder](/fleury/widgets/valuelistenablebuilder/) for widget API details.

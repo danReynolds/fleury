@@ -62,8 +62,8 @@ final class Selection {
 }
 
 /// A snapshot of how much of one [Selectable]'s content is currently
-/// selected. Published as a `ValueListenable` so the rendering tree
-/// repaints automatically when a leaf's selection changes.
+/// selected. Selectables notify their registrars when this geometry changes so
+/// the rendering tree can repaint the affected selection.
 @immutable
 final class SelectionGeometry {
   const SelectionGeometry({

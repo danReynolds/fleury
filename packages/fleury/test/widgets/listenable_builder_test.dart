@@ -156,4 +156,58 @@ void main() {
       expect(builds, after);
     });
   });
+
+  group('ValueListenableBuilder', () {
+    test('passes the current typed value on every rebuild', () {
+      final value = ValueNotifier<int>(1);
+      final seen = <int>[];
+      final owner = BuildOwner();
+
+      owner.mountRoot(
+        ValueListenableBuilder<int>(
+          valueListenable: value,
+          builder: (context, current, child) {
+            seen.add(current);
+            return Text('$current');
+          },
+        ),
+      );
+      value.value = 2;
+      owner.flushBuild();
+
+      expect(seen, <int>[1, 2]);
+    });
+
+    test('inherits listener swapping and child reuse', () {
+      final first = ValueNotifier<int>(1);
+      final second = ValueNotifier<int>(10);
+      final owner = BuildOwner();
+      final root = owner.mountRoot(
+        ValueListenableBuilder<int>(
+          valueListenable: first,
+          child: const _Capture(),
+          builder: (context, current, child) => child!,
+        ),
+      );
+      final initialState = _findState<CaptureState>(root);
+      final initialBuilds = initialState.buildCount;
+
+      owner.updateRoot(
+        root,
+        ValueListenableBuilder<int>(
+          valueListenable: second,
+          child: const _Capture(),
+          builder: (context, current, child) => child!,
+        ),
+      );
+      first.value = 2;
+      owner.flushBuild();
+      second.value = 11;
+      owner.flushBuild();
+
+      final currentState = _findState<CaptureState>(root);
+      expect(identical(initialState, currentState), isTrue);
+      expect(currentState.buildCount, initialBuilds);
+    });
+  });
 }

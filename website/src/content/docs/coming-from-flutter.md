@@ -254,7 +254,8 @@ in Flutter.
 | `InkWell` / ripples | `GestureDetector`, `MouseRegion`, focus styles, and key hints. |
 | `Scaffold`, `AppBar`, Material layout chrome | Compose Fleury widgets directly; terminal apps usually want denser app-specific chrome. |
 | `CustomScrollView` / slivers / `GridView` | `ListView`, `ListView.builder`, `ScrollView`, `Wrap`, or purpose-built table/tree widgets. |
-| `ValueListenableBuilder` / plain `Builder` | `ListenableBuilder` or a small `StatelessWidget`. |
+| `ValueListenableBuilder` / `ValueNotifier` | Same names and typed value-listening model. |
+| Plain `Builder` | A small `StatelessWidget`. |
 | `FittedBox` / `FractionallySizedBox` / `OverflowBox` | `LayoutBuilder`, `ConstrainedBox`, explicit cell sizing, and wrapping/clipping behavior. |
 | `Hero` / route-shared element transitions | `Reveal`, route transitions, or simpler terminal-native motion. |
 

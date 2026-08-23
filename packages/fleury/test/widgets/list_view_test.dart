@@ -2051,8 +2051,7 @@ void main() {
   });
 }
 
-/// A minimal ChangeNotifier for driving a per-row rebuild (ValueNotifier is
-/// not exported).
+/// A purpose-built ChangeNotifier for driving a per-row rebuild.
 class _Bump extends ChangeNotifier {
   int value = 0;
   void bump() {

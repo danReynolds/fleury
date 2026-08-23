@@ -15,11 +15,22 @@ abstract interface class Listenable {
   void removeListener(VoidCallback listener);
 }
 
+/// A [Listenable] that exposes one current value.
+///
+/// Use [ValueNotifier] for a mutable implementation, or implement this
+/// interface when another object already owns the value and only needs to
+/// publish changes.
+abstract interface class ValueListenable<T> implements Listenable {
+  /// The current value.
+  T get value;
+}
+
 /// Concrete [Listenable] with a `notifyListeners` hook for subclasses.
 ///
-/// Mirrors `package:flutter/foundation.dart`'s `ChangeNotifier` minus
-/// the debug-mode disposed-after-use assertions (worth adding later
-/// alongside other diagnostics).
+/// Its listener and re-entrancy behavior follows Flutter's `ChangeNotifier`,
+/// while lifecycle misuse fails in every build mode: adding or notifying after
+/// [dispose] throws a [StateError]. Removing a listener after disposal remains
+/// a safe no-op so dependents can tear down in either order.
 ///
 /// Notification honors the `Listenable` contract: a listener removed (or the
 /// notifier disposed) *during* a `notifyListeners` pass is not invoked
@@ -43,11 +54,15 @@ mixin class ChangeNotifier implements Listenable {
   /// Whether at least one listener is registered.
   bool get hasListeners => _count > 0;
 
+  void _checkNotDisposed(String operation) {
+    if (_disposed) {
+      throw StateError('$operation called on disposed $runtimeType.');
+    }
+  }
+
   @override
   void addListener(VoidCallback listener) {
-    if (_disposed) {
-      throw StateError('addListener called on disposed ChangeNotifier.');
-    }
+    _checkNotDisposed('addListener');
     if (_count == _listeners.length) {
       final newCapacity = _count == 0 ? 1 : _count * 2;
       final grown = List<VoidCallback?>.filled(newCapacity, null);
@@ -90,7 +105,8 @@ mixin class ChangeNotifier implements Listenable {
   /// during notification (or lost to [dispose]) is skipped.
   @protected
   void notifyListeners() {
-    if (_disposed || _count == 0) return;
+    _checkNotDisposed('notifyListeners');
+    if (_count == 0) return;
     _notificationDepth += 1;
     // Snapshot the length only; read live slots each step so a mid-pass
     // removal/dispose (which nulls slots in place) is observed.
@@ -123,7 +139,8 @@ mixin class ChangeNotifier implements Listenable {
   /// Marks this notifier as disposed and drops its listeners. Nulls the slots
   /// in place (rather than replacing the backing list) so a [dispose] called
   /// from within a listener leaves any in-progress [notifyListeners] walk
-  /// reading valid, now-empty slots. After dispose, [addListener] throws.
+  /// reading valid, now-empty slots. After disposal, [addListener] and
+  /// [notifyListeners] throw; [removeListener] remains safe for cleanup.
   @mustCallSuper
   void dispose() {
     _disposed = true;
@@ -132,4 +149,29 @@ mixin class ChangeNotifier implements Listenable {
     }
     _count = 0;
   }
+}
+
+/// A [ChangeNotifier] that publishes one mutable [value].
+///
+/// Listeners are notified only when the replacement is not equal to the
+/// current value according to `==`. Prefer immutable values: mutating the
+/// contents of a collection in place does not replace it and therefore does
+/// not notify listeners.
+class ValueNotifier<T> extends ChangeNotifier implements ValueListenable<T> {
+  ValueNotifier(this._value);
+
+  T _value;
+
+  @override
+  T get value => _value;
+
+  set value(T value) {
+    _checkNotDisposed('value assignment');
+    if (_value == value) return;
+    _value = value;
+    notifyListeners();
+  }
+
+  @override
+  String toString() => '${super.toString()}($value)';
 }

@@ -22,26 +22,12 @@ const _size = CellSize(40, 8);
   return null;
 }
 
-/// Minimal external state holder (this framework has ChangeNotifier, not
-/// ValueNotifier), so a change can relayout the observed widget WITHOUT
-/// touching any consumer's subtree.
-class _Value<T> with ChangeNotifier {
-  _Value(this._value);
-  T _value;
-  T get value => _value;
-  set value(T next) {
-    if (next == _value) return;
-    _value = next;
-    notifyListeners();
-  }
-}
-
 void main() {
   testWidgets('a mounted BoundsAnchor tracks bounds when layout moves them', (
     tester,
   ) {
     final chip = BoundsNotifier();
-    final label = _Value<String>('ab');
+    final label = ValueNotifier<String>('ab');
     tester.pumpWidget(
       ListenableBuilder(
         listenable: label,
@@ -193,7 +179,7 @@ void main() {
 
     testWidgets('a consumer stops listening when it leaves the tree', (tester) {
       final chip = BoundsNotifier();
-      final show = _Value<bool>(true);
+      final show = ValueNotifier<bool>(true);
       tester.pumpWidget(
         ListenableBuilder(
           listenable: show,
@@ -221,7 +207,7 @@ void main() {
 
     testWidgets('an unmounting observer clears the observation', (tester) {
       final chip = BoundsNotifier();
-      final show = _Value<bool>(true);
+      final show = ValueNotifier<bool>(true);
       tester.pumpWidget(
         ListenableBuilder(
           listenable: show,
@@ -262,7 +248,7 @@ void main() {
       // here would leave a float tracking bounds it no longer follows.
       final first = BoundsNotifier();
       final second = BoundsNotifier();
-      final useSecond = _Value<bool>(false);
+      final useSecond = ValueNotifier<bool>(false);
 
       tester.pumpWidget(
         ListenableBuilder(

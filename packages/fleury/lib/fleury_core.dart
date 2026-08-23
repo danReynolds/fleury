@@ -11,7 +11,8 @@
 library;
 
 // Foundation
-export 'src/foundation/change_notifier.dart' show ChangeNotifier, Listenable;
+export 'src/foundation/change_notifier.dart'
+    show ChangeNotifier, Listenable, ValueListenable, ValueNotifier;
 export 'src/foundation/fleury_error.dart' show FleuryError;
 export 'src/foundation/geometry.dart' show CellSize, CellOffset, CellRect;
 export 'src/foundation/key.dart' show Key, LocalKey, ValueKey, UniqueKey;
@@ -395,7 +396,8 @@ export 'src/widgets/pointer.dart'
         PointerPositionCallback;
 export 'src/widgets/scroll_view.dart' show ScrollController, ScrollView;
 export 'src/widgets/scrollbar.dart' show Scrollbar;
-export 'src/widgets/listenable_builder.dart' show ListenableBuilder;
+export 'src/widgets/listenable_builder.dart'
+    show ListenableBuilder, ValueListenableBuilder;
 export 'src/widgets/blinking_cursor.dart' show BlinkingCursor;
 export 'src/widgets/clipboard_scope.dart' show ClipboardScope;
 export 'src/widgets/error_boundary.dart'

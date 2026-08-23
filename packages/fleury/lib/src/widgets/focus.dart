@@ -422,7 +422,13 @@ class FocusManager extends ChangeNotifier {
   /// on a dependent.
   void _notifyManagerScopeChanged() {
     if (_disposed) return;
-    scheduleMicrotask(notifyListeners);
+    scheduleMicrotask(() {
+      // The manager may be disposed after this notification is queued but
+      // before the microtask runs (for example, when a short-lived test or
+      // runtime tears down immediately after its first build).
+      if (_disposed) return;
+      notifyListeners();
+    });
   }
 
   /// Called by [KeyBindings] when its binding list changes in place (a
