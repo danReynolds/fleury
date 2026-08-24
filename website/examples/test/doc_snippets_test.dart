@@ -156,19 +156,34 @@ void main() {
     );
   });
 
-  testWidgets('state management guide inherited reader rebuilds', (
+  testWidgets('state management guide inherited widget updates its reader', (
     tester,
   ) async {
-    tester.pumpWidget(state_management.inheritedStateDemoApp());
-    expect(tester.renderToString(emptyMark: ' '), contains('1 of 3 complete'));
+    tester.pumpWidget(state_management.inheritedWidgetDemoApp());
+    expect(tester.renderToString(emptyMark: ' '), contains('Count: 0'));
 
     await tester.invokeSemanticAction(
       SemanticAction.activate,
       role: SemanticRole.button,
-      label: 'Complete next',
+      label: 'Increment',
     );
     tester.pump();
-    expect(tester.renderToString(emptyMark: ' '), contains('2 of 3 complete'));
+    expect(tester.renderToString(emptyMark: ' '), contains('Count: 1'));
+  });
+
+  testWidgets('state management guide inherited notifier updates its reader', (
+    tester,
+  ) async {
+    tester.pumpWidget(state_management.inheritedNotifierDemoApp());
+    expect(tester.renderToString(emptyMark: ' '), contains('Count: 0'));
+
+    await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.button,
+      label: 'Increment',
+    );
+    tester.pump();
+    expect(tester.renderToString(emptyMark: ' '), contains('Count: 1'));
   });
 
   testWidgets('lists guide app renders against the real API', (tester) {

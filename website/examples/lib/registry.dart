@@ -1886,14 +1886,26 @@ form.clearErrors();''',
     builder: () => const _DeploymentTour(),
   ),
   ExampleInfo(
+    id: 'state.inherited-widget',
+    widget: 'InheritedWidget',
+    category: 'Guide examples',
+    blurb:
+        'A counter scope shares parent-owned state with a nested reader through '
+        'BuildContext.',
+    cols: 38,
+    rows: 9,
+    interactive: true,
+    builder: () => const _InheritedCounterTour(),
+  ),
+  ExampleInfo(
     id: 'state.inherited-notifier',
     widget: 'InheritedNotifier',
     category: 'Guide examples',
     blurb:
-        'A nested status reader watches an inherited deployment model while '
-        'an action reads it without subscribing.',
-    cols: 44,
-    rows: 11,
+        'The same counter scope listens to a model that publishes its own '
+        'changes.',
+    cols: 38,
+    rows: 9,
     interactive: true,
     builder: () => const _InheritedNotifierTour(),
   ),
@@ -3617,6 +3629,55 @@ class _CounterButton extends StatelessWidget {
       Button(label: 'Increment', onPressed: onPressed);
 }
 
+class _InheritedCounterScope extends InheritedWidget {
+  const _InheritedCounterScope({required this.count, required super.child});
+
+  final int count;
+
+  static int of(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<_InheritedCounterScope>()!
+      .count;
+
+  @override
+  bool updateShouldNotify(_InheritedCounterScope oldWidget) =>
+      count != oldWidget.count;
+}
+
+class _InheritedCounterTour extends StatefulWidget {
+  const _InheritedCounterTour();
+
+  @override
+  State<_InheritedCounterTour> createState() => _InheritedCounterTourState();
+}
+
+class _InheritedCounterTourState extends State<_InheritedCounterTour> {
+  int _count = 0;
+
+  @override
+  Widget build(BuildContext context) => _InheritedCounterScope(
+    count: _count,
+    child: _framed(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text('INHERITED COUNTER', style: CellStyle(bold: true)),
+          const SizedBox(height: 1),
+          const _NestedCounterValue(),
+          Button(label: 'Increment', onPressed: () => setState(() => _count++)),
+        ],
+      ),
+    ),
+  );
+}
+
+class _NestedCounterValue extends StatelessWidget {
+  const _NestedCounterValue();
+
+  @override
+  Widget build(BuildContext context) =>
+      Text('Count: ${_InheritedCounterScope.of(context)}');
+}
+
 /// A service that exposes one observable value without becoming a larger model.
 class _ConnectionService {
   final online = ValueNotifier<bool>(false);
@@ -3734,17 +3795,24 @@ class _DeploymentView extends StatelessWidget {
   );
 }
 
-class _DeploymentScope extends InheritedNotifier<_Deployment> {
-  const _DeploymentScope({
-    required _Deployment deployment,
+class _CounterModel extends ChangeNotifier {
+  int count = 0;
+
+  void increment() {
+    count++;
+    notifyListeners();
+  }
+}
+
+class _CounterNotifierScope extends InheritedNotifier<_CounterModel> {
+  const _CounterNotifierScope({
+    required _CounterModel counter,
     required super.child,
-  }) : super(notifier: deployment);
+  }) : super(notifier: counter);
 
-  static _Deployment watch(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<_DeploymentScope>()!.notifier;
-
-  static _Deployment read(BuildContext context) =>
-      context.getInheritedWidgetOfExactType<_DeploymentScope>()!.notifier;
+  static _CounterModel of(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<_CounterNotifierScope>()!
+      .notifier;
 }
 
 class _InheritedNotifierTour extends StatefulWidget {
@@ -3755,54 +3823,36 @@ class _InheritedNotifierTour extends StatefulWidget {
 }
 
 class _InheritedNotifierTourState extends State<_InheritedNotifierTour> {
-  final _deployment = _Deployment();
+  final _counter = _CounterModel();
 
   @override
   void dispose() {
-    _deployment.dispose();
+    _counter.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => _DeploymentScope(
-    deployment: _deployment,
-    child: _framed(const _NestedWorkspace()),
+  Widget build(BuildContext context) => _CounterNotifierScope(
+    counter: _counter,
+    child: _framed(const _NotifierCounterPanel()),
   );
 }
 
-class _NestedWorkspace extends StatelessWidget {
-  const _NestedWorkspace();
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: <Widget>[
-      const Text('WORKSPACE', style: CellStyle(bold: true)),
-      const Text('Nested reader · no forwarded model'),
-      const SizedBox(height: 1),
-      const _WorkspaceBody(),
-      Button(
-        label: 'Complete next',
-        onPressed: () => _DeploymentScope.read(context).completeNext(),
-      ),
-    ],
-  );
-}
-
-class _WorkspaceBody extends StatelessWidget {
-  const _WorkspaceBody();
-
-  @override
-  Widget build(BuildContext context) => const _NestedDeploymentStatus();
-}
-
-class _NestedDeploymentStatus extends StatelessWidget {
-  const _NestedDeploymentStatus();
+class _NotifierCounterPanel extends StatelessWidget {
+  const _NotifierCounterPanel();
 
   @override
   Widget build(BuildContext context) {
-    final deployment = _DeploymentScope.watch(context);
-    return Text('${deployment.completed} of 3 complete');
+    final counter = _CounterNotifierScope.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Text('NOTIFIER COUNTER', style: CellStyle(bold: true)),
+        const SizedBox(height: 1),
+        Text('Count: ${counter.count}'),
+        Button(label: 'Increment', onPressed: counter.increment),
+      ],
+    );
   }
 }
 

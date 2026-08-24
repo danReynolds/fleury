@@ -21,8 +21,11 @@ Widget valueNotifierDemoApp() =>
 Widget stateManagementDemoApp() =>
     const FleuryApp(title: 'Deployment', home: DeploymentScreen());
 
-Widget inheritedStateDemoApp() =>
-    const FleuryApp(title: 'Workspace', home: ScopedDeploymentScreen());
+Widget inheritedWidgetDemoApp() =>
+    const FleuryApp(title: 'Counter scope', home: InheritedCounterScreen());
+
+Widget inheritedNotifierDemoApp() =>
+    const FleuryApp(title: 'Notifier counter', home: NotifierCounterScreen());
 
 class LocalCounter extends StatefulWidget {
   const LocalCounter({super.key});
@@ -87,6 +90,113 @@ class CounterButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       Button(label: 'Increment', onPressed: onPressed);
+}
+
+class CounterScope extends InheritedWidget {
+  const CounterScope({super.key, required this.count, required super.child});
+
+  final int count;
+
+  static int of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<CounterScope>()!.count;
+
+  @override
+  bool updateShouldNotify(CounterScope oldWidget) => count != oldWidget.count;
+}
+
+class InheritedCounterScreen extends StatefulWidget {
+  const InheritedCounterScreen({super.key});
+
+  @override
+  State<InheritedCounterScreen> createState() => _InheritedCounterScreenState();
+}
+
+class _InheritedCounterScreenState extends State<InheritedCounterScreen> {
+  int count = 0;
+
+  @override
+  Widget build(BuildContext context) => CounterScope(
+    count: count,
+    child: Padding(
+      padding: const EdgeInsets.all(1),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const NestedCount(),
+          Button(label: 'Increment', onPressed: () => setState(() => count++)),
+        ],
+      ),
+    ),
+  );
+}
+
+class NestedCount extends StatelessWidget {
+  const NestedCount({super.key});
+
+  @override
+  Widget build(BuildContext context) =>
+      Text('Count: ${CounterScope.of(context)}');
+}
+
+class CounterModel extends ChangeNotifier {
+  int count = 0;
+
+  void increment() {
+    count++;
+    notifyListeners();
+  }
+}
+
+class CounterNotifierScope extends InheritedNotifier<CounterModel> {
+  const CounterNotifierScope({
+    super.key,
+    required CounterModel counter,
+    required super.child,
+  }) : super(notifier: counter);
+
+  static CounterModel of(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<CounterNotifierScope>()!
+      .notifier;
+}
+
+class NotifierCounterScreen extends StatefulWidget {
+  const NotifierCounterScreen({super.key});
+
+  @override
+  State<NotifierCounterScreen> createState() => _NotifierCounterScreenState();
+}
+
+class _NotifierCounterScreenState extends State<NotifierCounterScreen> {
+  final counter = CounterModel();
+
+  @override
+  void dispose() {
+    counter.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      CounterNotifierScope(counter: counter, child: const CounterPanel());
+}
+
+class CounterPanel extends StatelessWidget {
+  const CounterPanel({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final counter = CounterNotifierScope.of(context);
+    return Padding(
+      padding: const EdgeInsets.all(1),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text('Count: ${counter.count}'),
+          Button(label: 'Increment', onPressed: counter.increment),
+        ],
+      ),
+    );
+  }
 }
 
 class ConnectionService {
@@ -195,76 +305,4 @@ class DeploymentView extends StatelessWidget {
       ),
     ),
   );
-}
-
-class DeploymentScope extends InheritedNotifier<Deployment> {
-  const DeploymentScope({
-    super.key,
-    required Deployment deployment,
-    required super.child,
-  }) : super(notifier: deployment);
-
-  static Deployment watch(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<DeploymentScope>()!.notifier;
-
-  static Deployment read(BuildContext context) =>
-      context.getInheritedWidgetOfExactType<DeploymentScope>()!.notifier;
-}
-
-class ScopedDeploymentScreen extends StatefulWidget {
-  const ScopedDeploymentScreen({super.key});
-
-  @override
-  State<ScopedDeploymentScreen> createState() => _ScopedDeploymentScreenState();
-}
-
-class _ScopedDeploymentScreenState extends State<ScopedDeploymentScreen> {
-  final _deployment = Deployment();
-
-  @override
-  void dispose() {
-    _deployment.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) =>
-      DeploymentScope(deployment: _deployment, child: const Workspace());
-}
-
-class Workspace extends StatelessWidget {
-  const Workspace({super.key});
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(1),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        const Text('WORKSPACE', style: CellStyle(bold: true)),
-        const WorkspaceBody(),
-        Button(
-          label: 'Complete next',
-          onPressed: () => DeploymentScope.read(context).completeNext(),
-        ),
-      ],
-    ),
-  );
-}
-
-class WorkspaceBody extends StatelessWidget {
-  const WorkspaceBody({super.key});
-
-  @override
-  Widget build(BuildContext context) => const NestedDeploymentStatus();
-}
-
-class NestedDeploymentStatus extends StatelessWidget {
-  const NestedDeploymentStatus({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final deployment = DeploymentScope.watch(context);
-    return Text('${deployment.completed} of 3 complete');
-  }
 }
