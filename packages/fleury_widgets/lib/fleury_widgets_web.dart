@@ -1,5 +1,5 @@
 /// Web-safe subset of `fleury_widgets.dart`. Re-exports every widget EXCEPT the
-/// 6 that depend on `dart:io` — directly (file I/O, image decoding, log capture,
+/// 5 that depend on `dart:io` — directly (file I/O, log capture,
 /// process running) or transitively (widgets built on the log/process widgets)
 /// — and so cannot compile to JavaScript with dart2js. It also omits the
 /// supporting `WorkflowSnapshot` model: its current `LogEntry` dependency lives
@@ -8,8 +8,8 @@
 /// docs/serving-and-embedding.md). The excluded APIs still run over the
 /// `fleury serve` path.
 ///
-/// Excluded widgets: file_browser, file_picker, image, log_region,
-/// process_panel, terminal_output_region.
+/// Excluded widgets: file_browser, file_picker, log_region, process_panel,
+/// terminal_output_region.
 /// Excluded supporting model: workflow_snapshot.
 library;
 
@@ -126,6 +126,7 @@ export 'src/form.dart' show FormController, Form, FormField, FormFieldState;
 export 'src/gauge.dart' show Gauge;
 export 'src/heatmap.dart' show Heatmap;
 export 'src/histogram.dart' show Histogram;
+export 'src/image.dart' show Image, ImageFit, ImageGlyph, ImageSource;
 export 'src/area_chart.dart' show AreaChart, AreaSeries;
 export 'src/line_chart.dart'
     show

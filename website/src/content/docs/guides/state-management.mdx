@@ -1,6 +1,6 @@
 ---
 title: State management
-description: Manage local, observable, async, and tree-scoped state.
+description: Manage local, observable, and tree-scoped state.
 ---
 
 import FleuryExample from '../../../components/FleuryExample.astro';
@@ -15,7 +15,6 @@ independently in a notifier, or be shared with a subtree through `BuildContext`.
 | Local state owned by a widget | `StatefulWidget` and `setState` |
 | Shared state with an independent owner | [Notifiers](#notifiers) |
 | Contextual state scoped to a widget subtree | [Inherited widgets](#sharing-state-through-the-tree) |
-| Async state from a future or stream | [`FutureBuilder`](/fleury/guides/loading-data/) or [`StreamBuilder`](/fleury/guides/loading-data/) |
 
 ## Local state
 

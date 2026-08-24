@@ -3,12 +3,15 @@
 // (fleury_host) and the web-safe widget barrel (fleury_widgets_web) — never the
 // full `fleury.dart` / `fleury_widgets.dart` umbrellas, which pull in native
 // drivers and the dart:io-backed widgets.
+import 'dart:async';
 import 'dart:math';
 
 import 'package:fleury/fleury_core.dart';
 import 'package:fleury_samples/samples.dart';
 import 'package:fleury_themes/fleury_themes.dart';
 import 'package:fleury_widgets/fleury_widgets_web.dart';
+import 'package:http/http.dart' as http;
+import 'package:image/image.dart' as img;
 
 /// Builds the root widget for one live example.
 typedef ExampleBuilder = Widget Function();
@@ -1841,6 +1844,38 @@ form.clearErrors();''',
     builder: () => const _ProjectFormTour(),
   ),
   ExampleInfo(
+    id: 'loading.snapshot',
+    widget: 'FutureBuilder',
+    category: 'Guide examples',
+    blurb: 'Switch among the user-visible states of one asynchronous result.',
+    cols: 48,
+    rows: 12,
+    interactive: true,
+    builder: () => const _SnapshotLoadingTour(),
+  ),
+  ExampleInfo(
+    id: 'loading.image',
+    widget: 'Image',
+    category: 'Guide examples',
+    blurb:
+        'Fetch, decode, and render a real photo with a reloadable '
+        'FutureBuilder.',
+    cols: 54,
+    rows: 16,
+    interactive: true,
+    builder: () => const _NetworkImageLoadingTour(),
+  ),
+  ExampleInfo(
+    id: 'loading.stream',
+    widget: 'StreamBuilder',
+    category: 'Guide examples',
+    blurb: 'Receive a star map one packet at a time from a controlled stream.',
+    cols: 48,
+    rows: 14,
+    interactive: true,
+    builder: () => const _StreamLoadingTour(),
+  ),
+  ExampleInfo(
     id: 'state.local-counter',
     widget: 'State',
     category: 'Guide examples',
@@ -3558,6 +3593,312 @@ class _InteractiveStyleTour extends StatelessWidget {
       ),
     );
   }
+}
+
+enum _SnapshotPreview { disconnected, waiting, error, empty, success }
+
+Future<List<String>>? _futureFor(_SnapshotPreview preview) => switch (preview) {
+  _SnapshotPreview.disconnected => null,
+  _SnapshotPreview.waiting => Completer<List<String>>().future,
+  _SnapshotPreview.error => Future<List<String>>.error(
+    StateError('Connection lost'),
+  ),
+  _SnapshotPreview.empty => Future<List<String>>.value(const <String>[]),
+  _SnapshotPreview.success => Future<List<String>>.value(const <String>[
+    'alpha.log',
+    'beta.log',
+  ]),
+};
+
+Widget _snapshotStateCard(
+  BuildContext context,
+  AsyncSnapshot<List<String>> snapshot,
+) {
+  final colors = Theme.of(context).colorScheme;
+  final files = snapshot.data ?? const <String>[];
+  late final String symbol;
+  late final String label;
+  late final String detail;
+  late final Color accent;
+
+  if (snapshot.connectionState == ConnectionState.none) {
+    symbol = '○';
+    label = 'DISCONNECTED';
+    detail = 'Choose a source to begin.';
+    accent = colors.foreground ?? Colors.white;
+  } else if (snapshot.hasError) {
+    symbol = '×';
+    label = 'ERROR';
+    detail = 'Connection lost. Try again.';
+    accent = colors.error;
+  } else if (snapshot.connectionState == ConnectionState.waiting) {
+    symbol = '◌';
+    label = 'LOADING';
+    detail = 'Loading files…';
+    accent = colors.info;
+  } else if (files.isEmpty) {
+    symbol = '◇';
+    label = 'EMPTY';
+    detail = 'The request completed with no files.';
+    accent = colors.warning;
+  } else {
+    symbol = '✓';
+    label = 'READY';
+    detail = '${files.length} files loaded';
+    accent = colors.success;
+  }
+
+  return Container(
+    border: BoxBorder(
+      style: Theme.of(context).borderStyle,
+      cellStyle: CellStyle(foreground: accent),
+    ),
+    padding: const EdgeInsets.symmetric(horizontal: 1),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            Text(symbol, style: CellStyle(foreground: accent, bold: true)),
+            const SizedBox(width: 1),
+            Text(label, style: CellStyle(foreground: accent, bold: true)),
+          ],
+        ),
+        Text(detail),
+        if (label == 'READY')
+          for (final file in files) Text('  $file'),
+      ],
+    ),
+  );
+}
+
+class _SnapshotLoadingTour extends StatefulWidget {
+  const _SnapshotLoadingTour();
+
+  @override
+  State<_SnapshotLoadingTour> createState() => _SnapshotLoadingTourState();
+}
+
+class _SnapshotLoadingTourState extends State<_SnapshotLoadingTour> {
+  var _preview = _SnapshotPreview.waiting;
+  late Future<List<String>>? _future = _futureFor(_preview);
+
+  void _show(_SnapshotPreview preview) => setState(() {
+    _preview = preview;
+    _future = _futureFor(preview);
+  });
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Text('PREVIEW ASYNC UI', style: CellStyle(bold: true)),
+        Select<_SnapshotPreview>(
+          value: _preview,
+          semanticLabel: 'Snapshot state',
+          onChanged: _show,
+          options: const <SelectOption<_SnapshotPreview>>[
+            SelectOption(
+              value: _SnapshotPreview.disconnected,
+              label: 'Disconnected',
+            ),
+            SelectOption(value: _SnapshotPreview.waiting, label: 'Loading'),
+            SelectOption(value: _SnapshotPreview.error, label: 'Error'),
+            SelectOption(value: _SnapshotPreview.empty, label: 'Empty'),
+            SelectOption(value: _SnapshotPreview.success, label: 'Success'),
+          ],
+        ),
+        const SizedBox(height: 1),
+        FutureBuilder<List<String>>(
+          future: _future,
+          builder: _snapshotStateCard,
+        ),
+      ],
+    ),
+  );
+}
+
+Future<img.Image> _fetchDemoPhoto(int seed) async {
+  final response = await http.get(
+    Uri.parse('https://picsum.photos/seed/fleury-$seed/480/240.jpg'),
+  );
+  if (response.statusCode != 200) {
+    throw StateError('Photo request failed (${response.statusCode})');
+  }
+  return img.decodeImage(response.bodyBytes) ??
+      (throw const FormatException('Response was not an image'));
+}
+
+class _NetworkImageLoadingTour extends StatefulWidget {
+  const _NetworkImageLoadingTour();
+
+  @override
+  State<_NetworkImageLoadingTour> createState() =>
+      _NetworkImageLoadingTourState();
+}
+
+class _NetworkImageLoadingTourState extends State<_NetworkImageLoadingTour> {
+  var _seed = 1;
+  late Future<img.Image> _photo = _fetchDemoPhoto(_seed);
+
+  void _reload() => setState(() => _photo = _fetchDemoPhoto(++_seed));
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    FutureBuilder<img.Image>(
+      future: _photo,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const Text('Could not load a photo.'),
+              Button(label: 'Retry', onPressed: _reload),
+            ],
+          );
+        }
+
+        final photo = snapshot.data;
+        if (photo == null) return const Text('Loading a photo from the web…');
+        final refreshing = snapshot.connectionState == ConnectionState.waiting;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(refreshing ? 'Loading a new photo…' : 'Photo $_seed'),
+            const SizedBox(height: 1),
+            SizedBox(
+              width: 48,
+              height: 10,
+              child: Image.decoded(
+                photo,
+                fit: ImageFit.cover,
+                semanticLabel: 'Random landscape photo',
+              ),
+            ),
+            const SizedBox(height: 1),
+            Button(
+              label: 'Load another',
+              onPressed: refreshing ? null : _reload,
+            ),
+          ],
+        );
+      },
+    ),
+  );
+}
+
+class _DemoTransmission {
+  static const chunks = <String>[
+    '          *',
+    '         / \\',
+    '    *---*   *',
+    '     \\   \\ /',
+    '      *---*',
+  ];
+
+  final _controller = StreamController<List<String>>();
+  var _received = 0;
+
+  Stream<List<String>> get updates => _controller.stream;
+
+  void receiveNext() {
+    if (_received == chunks.length) return;
+    _received++;
+    _controller.add(chunks.take(_received).toList());
+    if (_received == chunks.length) _controller.close();
+  }
+
+  void dispose() {
+    if (!_controller.isClosed) _controller.close();
+  }
+}
+
+class _StreamLoadingTour extends StatefulWidget {
+  const _StreamLoadingTour();
+
+  @override
+  State<_StreamLoadingTour> createState() => _StreamLoadingTourState();
+}
+
+class _StreamLoadingTourState extends State<_StreamLoadingTour> {
+  late _DemoTransmission _transmission;
+  late Stream<List<String>> _updates;
+
+  @override
+  void initState() {
+    super.initState();
+    _start();
+  }
+
+  void _start() {
+    _transmission = _DemoTransmission();
+    _updates = _transmission.updates;
+  }
+
+  void _restart() {
+    _transmission.dispose();
+    setState(_start);
+  }
+
+  @override
+  void dispose() {
+    _transmission.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    StreamBuilder<List<String>>(
+      stream: _updates,
+      initialData: const <String>[],
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              const Text('STAR MAP TRANSMISSION', style: CellStyle(bold: true)),
+              const Text('Signal lost.'),
+              Button(label: 'Restart', onPressed: _restart),
+            ],
+          );
+        }
+
+        final lines = snapshot.requireData;
+        final status = switch (snapshot.connectionState) {
+          ConnectionState.none => 'OFFLINE',
+          ConnectionState.waiting => 'CONNECTING',
+          ConnectionState.active => 'LIVE',
+          ConnectionState.done => 'COMPLETE',
+        };
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Text('STAR MAP TRANSMISSION', style: CellStyle(bold: true)),
+            Text(
+              '$status · ${lines.length}/${_DemoTransmission.chunks.length} packets',
+            ),
+            const SizedBox(height: 1),
+            for (final line in lines) Text(line),
+            const SizedBox(height: 1),
+            Row(
+              children: <Widget>[
+                Button(
+                  label: 'Next packet',
+                  onPressed: snapshot.connectionState == ConnectionState.done
+                      ? null
+                      : _transmission.receiveNext,
+                ),
+                const SizedBox(width: 1),
+                Button(label: 'Restart', onPressed: _restart),
+              ],
+            ),
+          ],
+        );
+      },
+    ),
+  );
 }
 
 /// A guide-level example for local widget state.

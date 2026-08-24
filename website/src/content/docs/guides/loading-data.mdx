@@ -1,0 +1,393 @@
+---
+title: Loading data
+description: Render one result or continuing updates with FutureBuilder and StreamBuilder.
+---
+
+import FleuryExample from '../../../components/FleuryExample.astro';
+import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
+
+Apps often need to wait for data, then show a result—or an error—when it
+arrives. Use `FutureBuilder` for one result and `StreamBuilder` for values that
+keep arriving.
+
+| The source produces… | Dart type | Build with |
+|---|---|---|
+| One eventual result | `Future<T>` | `FutureBuilder<T>` |
+| Values over time | `Stream<T>` | `StreamBuilder<T>` |
+| App-owned values changed by actions | A field or notifier | [State management](/fleury/guides/state-management/) |
+
+The builders do not fetch, parse, cache, or save anything. They listen to an
+async source and pass its latest `AsyncSnapshot<T>` to your UI.
+
+## Preview each state
+
+A snapshot combines a connection state with either data or an error. Use the
+dropdown to connect a different `Future` and see the resulting UI:
+
+<CodeDemoSplit
+  files={[
+    'preview_source.dart',
+    'async_state_card.dart',
+    'snapshot_explorer.dart',
+  ]}
+  initialFile="snapshot_explorer.dart"
+  layout="demo-wide"
+>
+<Fragment slot="code-0">
+```dart
+import 'dart:async';
+
+enum Preview { disconnected, waiting, error, empty, success }
+
+Future<List<String>>? futureFor(Preview preview) => switch (preview) {
+  Preview.disconnected => null,
+  Preview.waiting => Completer<List<String>>().future,
+  Preview.error => Future<List<String>>.error(
+    StateError('Connection lost'),
+  ),
+  Preview.empty => Future<List<String>>.value(const []),
+  Preview.success => Future<List<String>>.value(
+    const ['alpha.log', 'beta.log'],
+  ),
+};
+```
+</Fragment>
+<Fragment slot="code-1">
+```dart
+class AsyncStateCard extends StatelessWidget {
+  const AsyncStateCard({required this.snapshot});
+
+  final AsyncSnapshot<List<String>> snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final files = snapshot.data ?? const <String>[];
+
+    late final String symbol, label, detail;
+    late final Color accent;
+    if (snapshot.connectionState == ConnectionState.none) {
+      (symbol, label, detail, accent) =
+          ('○', 'DISCONNECTED', 'Choose a source to begin.',
+           colors.foreground ?? Colors.white);
+    } else if (snapshot.hasError) {
+      (symbol, label, detail, accent) =
+          ('×', 'ERROR', 'Connection lost. Try again.', colors.error);
+    } else if (snapshot.connectionState == ConnectionState.waiting) {
+      (symbol, label, detail, accent) =
+          ('◌', 'LOADING', 'Loading files…', colors.info);
+    } else if (files.isEmpty) {
+      (symbol, label, detail, accent) =
+          ('◇', 'EMPTY', 'The request completed with no files.', colors.warning);
+    } else {
+      (symbol, label, detail, accent) =
+          ('✓', 'READY', '${files.length} files loaded', colors.success);
+    }
+
+    return Container(
+      border: BoxBorder(
+        style: Theme.of(context).borderStyle,
+        cellStyle: CellStyle(foreground: accent),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 1),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Text(symbol, style: CellStyle(foreground: accent, bold: true)),
+            const SizedBox(width: 1),
+            Text(label, style: CellStyle(foreground: accent, bold: true)),
+          ]),
+          Text(detail),
+          if (label == 'READY') for (final file in files) Text('  $file'),
+        ],
+      ),
+    );
+  }
+}
+```
+</Fragment>
+<Fragment slot="code-2">
+```dart
+class _SnapshotExplorerState extends State<SnapshotExplorer> {
+  var _preview = Preview.waiting;
+  late Future<List<String>>? _future = futureFor(_preview);
+
+  void _show(Preview preview) => setState(() {
+    _preview = preview;
+    _future = futureFor(preview);
+  });
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      Select<Preview>(
+        value: _preview,
+        semanticLabel: 'Snapshot state',
+        onChanged: _show,
+        options: const [
+          SelectOption(value: Preview.disconnected, label: 'Disconnected'),
+          SelectOption(value: Preview.waiting, label: 'Loading'),
+          SelectOption(value: Preview.error, label: 'Error'),
+          SelectOption(value: Preview.empty, label: 'Empty'),
+          SelectOption(value: Preview.success, label: 'Success'),
+        ],
+      ),
+      FutureBuilder<List<String>>(
+        future: _future,
+        builder: (context, snapshot) =>
+            AsyncStateCard(snapshot: snapshot),
+      ),
+    ],
+  );
+}
+```
+</Fragment>
+<FleuryExample
+  slot="demo"
+  id="loading.snapshot"
+  title="Choose the async result the builder should render"
+  cols={48}
+  rows={12}
+  interactive
+/>
+</CodeDemoSplit>
+
+Most future-backed views need loading, error, empty, and success UI. Check
+`hasError` before reading data, and keep side effects out of the builder because
+it may run more than once.
+
+## Loading with futures
+
+Use `FutureBuilder` when a request produces one result. This example keeps the
+future in state, fetches and decodes a real photo from
+[Lorem Picsum](https://picsum.photos/), and renders waiting, error, refresh, and
+success UI.
+
+```shell
+dart pub add http image
+```
+
+<CodeDemoSplit
+  files={['photo_source.dart', 'photo_viewer.dart']}
+  initialFile="photo_viewer.dart"
+  layout="demo-wide"
+>
+<Fragment slot="code-0">
+```dart
+import 'package:http/http.dart' as http;
+import 'package:image/image.dart' as img;
+
+Future<img.Image> fetchPhoto(int seed) async {
+  final response = await http.get(
+    Uri.parse(
+      'https://picsum.photos/seed/fleury-$seed/480/240.jpg',
+    ),
+  );
+  if (response.statusCode != 200) {
+    throw StateError('Photo request failed (${response.statusCode})');
+  }
+
+  return img.decodeImage(response.bodyBytes) ??
+      (throw const FormatException('Response was not an image'));
+}
+```
+</Fragment>
+<Fragment slot="code-1">
+```dart
+class _PhotoViewerState extends State<PhotoViewer> {
+  var _seed = 1;
+  late Future<img.Image> _photo = fetchPhoto(_seed);
+
+  void _reload() => setState(() {
+    _photo = fetchPhoto(++_seed);
+  });
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<img.Image>(
+    future: _photo,
+    builder: (context, snapshot) {
+      if (snapshot.hasError) {
+        return Column(children: [
+          const Text('Could not load a photo.'),
+          Button(label: 'Retry', onPressed: _reload),
+        ]);
+      }
+
+      final photo = snapshot.data;
+      if (photo == null) {
+        return const Text('Loading a photo from the web…');
+      }
+
+      final refreshing =
+          snapshot.connectionState == ConnectionState.waiting;
+      return Column(children: [
+        if (refreshing) const Text('Loading a new photo…'),
+        SizedBox(
+          width: 48,
+          height: 10,
+          child: Image.decoded(
+            photo,
+            fit: ImageFit.cover,
+            semanticLabel: 'Random landscape photo',
+          ),
+        ),
+        Button(
+          label: 'Load another',
+          onPressed: refreshing ? null : _reload,
+        ),
+      ]);
+    },
+  );
+}
+```
+</Fragment>
+<FleuryExample
+  slot="demo"
+  id="loading.image"
+  title="Load one result, then refresh it"
+  cols={54}
+  rows={16}
+  interactive
+/>
+</CodeDemoSplit>
+
+Create the future once, outside `build`. Reloading replaces it intentionally;
+the previous image stays visible while the next request waits. A late result
+from the old future is ignored, but the underlying request is not cancelled.
+
+On browser surfaces and terminals with inline-image support, `Image` renders
+true pixels. Other terminals fall back to colored glyph art from the same
+decoded image.
+
+## Streaming updates
+
+Use `StreamBuilder` when values keep arriving. This demo treats a tiny star-map
+transmission as five packets; each click emits a larger snapshot until the stream
+closes.
+
+<CodeDemoSplit
+  files={['transmission_source.dart', 'transmission_view.dart']}
+  initialFile="transmission_source.dart"
+  layout="demo-wide"
+>
+<Fragment slot="code-0">
+```dart
+import 'dart:async';
+
+class Transmission {
+  static const chunks = <String>[
+    '          *',
+    '         / \\',
+    '    *---*   *',
+    '     \\   \\ /',
+    '      *---*',
+  ];
+
+  final _controller = StreamController<List<String>>();
+  var _received = 0;
+
+  Stream<List<String>> get updates => _controller.stream;
+
+  void receiveNext() {
+    if (_received == chunks.length) return;
+    _received++;
+    _controller.add(chunks.take(_received).toList());
+    if (_received == chunks.length) _controller.close();
+  }
+
+  void dispose() {
+    if (!_controller.isClosed) _controller.close();
+  }
+}
+```
+</Fragment>
+<Fragment slot="code-1">
+```dart
+class _TransmissionViewState extends State<TransmissionView> {
+  late Transmission transmission;
+  late Stream<List<String>> updates;
+
+  @override
+  void initState() {
+    super.initState();
+    start();
+  }
+
+  void start() {
+    transmission = Transmission();
+    updates = transmission.updates;
+  }
+
+  void restart() {
+    transmission.dispose();
+    setState(start);
+  }
+
+  @override
+  void dispose() {
+    transmission.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => StreamBuilder<List<String>>(
+    stream: updates,
+    initialData: const [],
+    builder: (context, snapshot) {
+      final lines = snapshot.requireData;
+      final status = switch (snapshot.connectionState) {
+        ConnectionState.none => 'OFFLINE',
+        ConnectionState.waiting => 'CONNECTING',
+        ConnectionState.active => 'LIVE',
+        ConnectionState.done => 'COMPLETE',
+      };
+      final complete = snapshot.connectionState == ConnectionState.done;
+      return Column(children: [
+        Text('$status · ${lines.length}/5 packets'),
+        for (final line in lines) Text(line),
+        Row(children: [
+          Button(
+            label: 'Next packet',
+            onPressed: complete ? null : transmission.receiveNext,
+          ),
+          const SizedBox(width: 1),
+          Button(label: 'Restart', onPressed: restart),
+        ]),
+      ]);
+    },
+  );
+}
+```
+</Fragment>
+<FleuryExample
+  slot="demo"
+  id="loading.stream"
+  title="Receive the star map one packet at a time"
+  cols={48}
+  rows={14}
+  interactive
+/>
+</CodeDemoSplit>
+
+Create the stream outside `build` so rebuilds do not reconnect. `initialData`
+fills the first frame; later snapshots move through `waiting`, `active`, and
+`done`. The widget cancels its subscription when removed, while the owner still
+closes resources such as the controller above.
+
+Dart's [stream guide](https://dart.dev/libraries/async/using-streams) covers
+transforming, listening to, and creating streams in more depth.
+
+## When builders stop being enough
+
+Builders fit one subtree reflecting one async source. Move the work into an
+app-owned model or repository when widgets share it or you need caching,
+pagination, optimistic updates, coordinated sources, or offline policy. The UI
+can listen to that model with the tools in [State management](/fleury/guides/state-management/).
+
+## API reference
+
+- [FutureBuilder](/fleury/widgets/futurebuilder/)
+- [StreamBuilder](/fleury/widgets/streambuilder/)
+- [Image](/fleury/widgets/image/)

@@ -75,13 +75,16 @@ That gives a simple rule for any code that might run in the browser:
 
 `fleury_widgets` follows exactly this split:
 
-- **Most widgets are web-safe** — charts, lists, inputs, layout, document
-  viewers, agent surfaces. They import the host SPI and compile to JS.
+- **Most widgets are web-safe** — charts, lists, inputs, layout, images loaded
+  from bytes or decoded pixels, document viewers, and agent surfaces. They
+  import the host SPI and compile to JS.
 - **A few are native-only**, because they genuinely touch the platform: file I/O,
   process execution, and stdout/stderr log capture. Examples: `FileBrowser`,
-  `FilePicker`, `Image`, `ProcessPanel`, `LogRegion`, `TerminalOutputRegion`.
-  These can render over the **served** target — the server has `dart:io` — but
-  can't compile into a client-side bundle.
+  `FilePicker`, `ProcessPanel`, `LogRegion`, and `TerminalOutputRegion`. These
+  can render over the **served** target — the server has `dart:io` — but can't
+  compile into a client-side bundle. `Image` itself is web-safe; only
+  `Image.file` needs the native filesystem, so browser apps load bytes
+  asynchronously and use `Image.bytes` or `Image.decoded`.
 - **`WorkflowSnapshot` is a supporting model, not a widget or an I/O service.**
   Its current `LogEntry` dependency lives in the native-only log library, so it
   is also omitted from `fleury_widgets_web.dart` today. Use it in terminal or

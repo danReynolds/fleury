@@ -1,11 +1,13 @@
 @TestOn('vm')
 library;
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:fleury/fleury_core.dart'
-    show SemanticAction, SemanticRole, Widget;
+    show AsyncSnapshot, ConnectionState, SemanticAction, SemanticRole, Widget;
 import 'package:fleury_test/fleury_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:test/test.dart';
 
 import '../doc_snippets/filterable_list.dart' as tutorial;
@@ -13,6 +15,7 @@ import '../doc_snippets/forms.dart' as forms;
 import '../doc_snippets/getting_started_app.dart' as getting_started;
 import '../doc_snippets/layout_demo.dart' as layout;
 import '../doc_snippets/list_demo.dart' as lists;
+import '../doc_snippets/loading_data.dart' as loading_data;
 import '../doc_snippets/navigation_demo.dart' as navigation;
 import '../doc_snippets/navigation_advanced_demos.dart' as navigation_advanced;
 import '../doc_snippets/shared_state.dart' as state_management;
@@ -184,6 +187,94 @@ void main() {
     );
     tester.pump();
     expect(tester.renderToString(emptyMark: ' '), contains('Count: 1'));
+  });
+
+  testWidgets('loading data guide snapshot explorer starts in waiting', (
+    tester,
+  ) {
+    tester.pumpWidget(const loading_data.SnapshotExplorer());
+    expect(tester.renderToString(emptyMark: ' '), contains('Loading files…'));
+  });
+
+  testWidgets('loading data guide snapshot card distinguishes every outcome', (
+    tester,
+  ) {
+    final cases = <(AsyncSnapshot<List<String>>, String)>[
+      (const AsyncSnapshot<List<String>>.nothing(), 'DISCONNECTED'),
+      (const AsyncSnapshot<List<String>>.waiting(), 'LOADING'),
+      (
+        AsyncSnapshot<List<String>>.withError(
+          ConnectionState.done,
+          StateError('Connection lost'),
+        ),
+        'ERROR',
+      ),
+      (
+        const AsyncSnapshot<List<String>>.withData(
+          ConnectionState.done,
+          <String>[],
+        ),
+        'EMPTY',
+      ),
+      (
+        const AsyncSnapshot<List<String>>.withData(
+          ConnectionState.done,
+          <String>['alpha.log'],
+        ),
+        'READY',
+      ),
+    ];
+
+    for (final (snapshot, label) in cases) {
+      tester.pumpWidget(loading_data.AsyncStateCard(snapshot: snapshot));
+      expect(tester.renderToString(emptyMark: ' '), contains(label));
+    }
+
+    tester.pumpWidget(
+      const loading_data.AsyncStateCard(
+        snapshot: AsyncSnapshot<List<String>>.withData(
+          ConnectionState.waiting,
+          <String>['stale.log'],
+        ),
+      ),
+    );
+    expect(tester.renderToString(emptyMark: ' '), isNot(contains('stale.log')));
+  });
+
+  testWidgets('loading data guide photo viewer renders a decoded image', (
+    tester,
+  ) async {
+    final photo = Completer<img.Image>();
+    tester.pumpWidget(loading_data.PhotoViewer(loadPhoto: () => photo.future));
+    expect(
+      tester.renderToString(emptyMark: ' '),
+      contains('Loading a photo from the web…'),
+    );
+
+    photo.complete(img.Image(width: 2, height: 2));
+    await tester.settle();
+    expect(tester.renderToString(emptyMark: ' '), contains('Load another'));
+  });
+
+  testWidgets('loading data guide stream grows and completes', (tester) async {
+    tester.pumpWidget(const loading_data.TransmissionView());
+    expect(
+      tester.renderToString(emptyMark: ' '),
+      contains('CONNECTING · 0/5 packets'),
+    );
+
+    for (var packet = 1; packet <= 5; packet++) {
+      await tester.invokeSemanticAction(
+        SemanticAction.activate,
+        role: SemanticRole.button,
+        label: 'Next packet',
+      );
+      await tester.settle();
+    }
+    expect(
+      tester.renderToString(emptyMark: ' '),
+      contains('COMPLETE · 5/5 packets'),
+    );
   });
 
   testWidgets('lists guide app renders against the real API', (tester) {
