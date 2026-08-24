@@ -19,6 +19,8 @@ dependencies:
     path: ../../packages/fleury_web
   fleury_samples:
     path: ../../packages/samples
+  http: ^1.6.0
+  image: ^4.5.4
   web: ^1.1.1
 
 dev_dependencies:

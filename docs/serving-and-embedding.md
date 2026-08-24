@@ -149,8 +149,9 @@ authenticating reverse proxy.
 **Properties**
 
 - **Full fidelity.** The app is the real native program, so *every* widget works
-  — including the `dart:io`-backed ones (`FileBrowser`, `Image`, `ProcessPanel`,
-  log/terminal regions). It has a filesystem, processes, and environment.
+  — including the `dart:io`-backed ones (`FileBrowser`, `ProcessPanel`,
+  log/terminal regions) and native-only constructors such as `Image.file`. It
+  has a filesystem, processes, and environment.
 - **Browser-visible.** A running terminal app becomes a local URL for preview,
   debugging, and trusted pairing.
 - The wire is tuned: cell-range patches with a style table and varints,

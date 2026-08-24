@@ -1,8 +1,11 @@
-import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_core.dart';
 import 'package:image/image.dart' as img;
+
+import 'image_file_stub.dart'
+    if (dart.library.io) 'image_file_io.dart'
+    as image_file;
 
 /// Per-cell symbol palette the half-block painter uses to encode the
 /// source. Trade more glyph diversity for sharper edges and better
@@ -79,6 +82,9 @@ abstract class ImageSource {
   /// Backed by a file on disk. On a cache miss, read synchronously during the
   /// first [decode].
   ///
+  /// Browser hosts should load bytes asynchronously and use [ImageSource.bytes]
+  /// or [ImageSource.decoded]; direct file paths are not available there.
+  ///
   /// Decoded images are cached cross-instance keyed by absolute path,
   /// so mounting the same `logo.png` in N widgets decodes once. Call
   /// [evictFile] to drop the cache for a path that has changed on
@@ -99,7 +105,7 @@ abstract class ImageSource {
   /// Drop the cached decode for [path]. Call after writing to the file
   /// to force the next [decode] to re-read from disk.
   static void evictFile(String path) {
-    _FileSource._cache.remove(File(path).absolute.path);
+    _FileSource._cache.remove(image_file.canonicalPath(path));
   }
 
   /// Drop every cached file decode. Useful in long-running sessions
@@ -133,10 +139,10 @@ class _FileSource implements ImageSource {
 
   @override
   img.Image decode() {
-    final key = File(_path).absolute.path;
+    final key = image_file.canonicalPath(_path);
     final hit = _cache[key];
     if (hit != null) return hit;
-    final bytes = File(_path).readAsBytesSync();
+    final bytes = image_file.readBytes(_path);
     final decoded =
         img.decodeImage(bytes) ??
         (throw ArgumentError('ImageSource.file: could not decode $_path'));
@@ -188,6 +194,8 @@ class Image extends StatefulWidget {
   /// Shorthand for `Image(source: ImageSource.file(path))` — the
   /// common path for asset-style usage. Mirrors Flutter's
   /// `Image.file(File(path))`.
+  ///
+  /// Browser hosts should use [Image.bytes] or [Image.decoded] instead.
   Image.file(
     /// File path read by the synchronously decoded, shared file cache.
     String path, {
