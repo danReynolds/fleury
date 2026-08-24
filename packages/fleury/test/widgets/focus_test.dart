@@ -156,6 +156,19 @@ void main() {
         _stateError('FocusManager has been disposed.'),
       );
     });
+
+    test(
+      'manager disposal cancels a queued scope-change notification',
+      () async {
+        final manager = FocusManager();
+        manager.notifyBindingsChanged();
+
+        manager.dispose();
+        await Future<void>.delayed(Duration.zero);
+
+        expect(manager.hasListeners, isFalse);
+      },
+    );
   });
 
   group('Focus.onKey routing', () {

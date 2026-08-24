@@ -1,107 +1,308 @@
-// Backs website/src/content/docs/guides/state-management.md — sharing state
-// across widgets with a ChangeNotifier model + ListenableBuilder, the same
-// pattern Flutter uses. Kept as a real, analyzed program.
+// Compile-checked source behind the State management guide. It gives one
+// ChangeNotifier model a clear owner and demonstrates constructor-based and
+// inherited access to the same model.
 //
 // Run it:  dart run doc_snippets/shared_state.dart
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury_widgets/fleury_widgets.dart';
 
-/// A plain model — no framework base class beyond ChangeNotifier. Mutate
-/// through methods and call notifyListeners(); every ListenableBuilder bound
-/// to it rebuilds.
-class CartModel extends ChangeNotifier {
-  final List<String> _items = [];
+void main() => runApp(stateManagementDemoApp());
 
-  List<String> get items => List.unmodifiable(_items);
-  int get count => _items.length;
+Widget localStateDemoApp() =>
+    const FleuryApp(title: 'Counter', home: LocalCounter());
 
-  void add(String item) {
-    _items.add(item);
-    notifyListeners();
-  }
+Widget sharedStateDemoApp() =>
+    const FleuryApp(title: 'Shared counter', home: SharedCounter());
 
-  void clear() {
-    _items.clear();
-    notifyListeners();
-  }
-}
+Widget valueNotifierDemoApp() =>
+    const FleuryApp(title: 'Connection', home: ConnectionPanel());
 
-void main() => runApp(const ShopApp());
+Widget stateManagementDemoApp() =>
+    const FleuryApp(title: 'Deployment', home: DeploymentScreen());
 
-class ShopApp extends StatefulWidget {
-  const ShopApp({super.key});
+Widget inheritedWidgetDemoApp() =>
+    const FleuryApp(title: 'Counter scope', home: InheritedCounterScreen());
+
+Widget inheritedNotifierDemoApp() =>
+    const FleuryApp(title: 'Notifier counter', home: NotifierCounterScreen());
+
+class LocalCounter extends StatefulWidget {
+  const LocalCounter({super.key});
 
   @override
-  State<ShopApp> createState() => _ShopAppState();
+  State<LocalCounter> createState() => _LocalCounterState();
 }
 
-class _ShopAppState extends State<ShopApp> {
-  // The model outlives any single widget's build. Own it where it belongs
-  // (here, the app root) and dispose it with the State.
-  final _cart = CartModel();
+class _LocalCounterState extends State<LocalCounter> {
+  int count = 0;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.all(1),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text('Count: $count'),
+        Button(label: 'Increment', onPressed: () => setState(() => count++)),
+      ],
+    ),
+  );
+}
+
+class SharedCounter extends StatefulWidget {
+  const SharedCounter({super.key});
+
+  @override
+  State<SharedCounter> createState() => _SharedCounterState();
+}
+
+class _SharedCounterState extends State<SharedCounter> {
+  int count = 0;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.all(1),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        CounterValue(value: count),
+        CounterButton(onPressed: () => setState(() => count++)),
+      ],
+    ),
+  );
+}
+
+class CounterValue extends StatelessWidget {
+  const CounterValue({super.key, required this.value});
+
+  final int value;
+
+  @override
+  Widget build(BuildContext context) => Text('Count: $value');
+}
+
+class CounterButton extends StatelessWidget {
+  const CounterButton({super.key, required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) =>
+      Button(label: 'Increment', onPressed: onPressed);
+}
+
+class CounterScope extends InheritedWidget {
+  const CounterScope({super.key, required this.count, required super.child});
+
+  final int count;
+
+  static int of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<CounterScope>()!.count;
+
+  @override
+  bool updateShouldNotify(CounterScope oldWidget) => count != oldWidget.count;
+}
+
+class InheritedCounterScreen extends StatefulWidget {
+  const InheritedCounterScreen({super.key});
+
+  @override
+  State<InheritedCounterScreen> createState() => _InheritedCounterScreenState();
+}
+
+class _InheritedCounterScreenState extends State<InheritedCounterScreen> {
+  int count = 0;
+
+  @override
+  Widget build(BuildContext context) => CounterScope(
+    count: count,
+    child: Padding(
+      padding: const EdgeInsets.all(1),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const NestedCount(),
+          Button(label: 'Increment', onPressed: () => setState(() => count++)),
+        ],
+      ),
+    ),
+  );
+}
+
+class NestedCount extends StatelessWidget {
+  const NestedCount({super.key});
+
+  @override
+  Widget build(BuildContext context) =>
+      Text('Count: ${CounterScope.of(context)}');
+}
+
+class CounterModel extends ChangeNotifier {
+  int count = 0;
+
+  void increment() {
+    count++;
+    notifyListeners();
+  }
+}
+
+class CounterNotifierScope extends InheritedNotifier<CounterModel> {
+  const CounterNotifierScope({
+    super.key,
+    required CounterModel counter,
+    required super.child,
+  }) : super(notifier: counter);
+
+  static CounterModel of(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<CounterNotifierScope>()!
+      .notifier;
+}
+
+class NotifierCounterScreen extends StatefulWidget {
+  const NotifierCounterScreen({super.key});
+
+  @override
+  State<NotifierCounterScreen> createState() => _NotifierCounterScreenState();
+}
+
+class _NotifierCounterScreenState extends State<NotifierCounterScreen> {
+  final counter = CounterModel();
 
   @override
   void dispose() {
-    _cart.dispose();
+    counter.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) {
-    return KeyBindings(
-      bindings: [
-        KeyBinding(
-          const KeyCode.char('a'),
-          onTrigger: (_) => _cart.add('Item ${_cart.count + 1}'),
-        ),
-        KeyBinding(const KeyCode.char('c'), onTrigger: (_) => _cart.clear()),
-      ],
-      child: Padding(
-        padding: const EdgeInsets.all(1),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Two widgets, one source of truth. Neither is a child of the
-            // other — a ListenableBuilder rebuilds just its subtree when the
-            // model changes, so the header and the list stay in sync without
-            // threading state through constructors.
-            _CartBadge(cart: _cart),
-            const SizedBox(height: 1),
-            const Text('a: add item   c: clear'),
-            const SizedBox(height: 1),
-            Expanded(child: _CartList(cart: _cart)),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) =>
+      CounterNotifierScope(counter: counter, child: const CounterPanel());
 }
 
-class _CartBadge extends StatelessWidget {
-  const _CartBadge({required this.cart});
-  final CartModel cart;
+class CounterPanel extends StatelessWidget {
+  const CounterPanel({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: cart,
-      builder: (context, _) => Text('Cart: ${cart.count} item(s)'),
-    );
-  }
-}
-
-class _CartList extends StatelessWidget {
-  const _CartList({required this.cart});
-  final CartModel cart;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: cart,
-      builder: (context, _) => Column(
+    final counter = CounterNotifierScope.of(context);
+    return Padding(
+      padding: const EdgeInsets.all(1),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [for (final item in cart.items) Text('• $item')],
+        children: <Widget>[
+          Text('Count: ${counter.count}'),
+          Button(label: 'Increment', onPressed: counter.increment),
+        ],
       ),
     );
   }
+}
+
+class ConnectionService {
+  final online = ValueNotifier<bool>(false);
+
+  void toggle() => online.value = !online.value;
+
+  void dispose() => online.dispose();
+}
+
+class ConnectionPanel extends StatefulWidget {
+  const ConnectionPanel({super.key});
+
+  @override
+  State<ConnectionPanel> createState() => _ConnectionPanelState();
+}
+
+class _ConnectionPanelState extends State<ConnectionPanel> {
+  final connection = ConnectionService();
+
+  @override
+  void dispose() {
+    connection.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.all(1),
+    child: ValueListenableBuilder<bool>(
+      valueListenable: connection.online,
+      builder: (context, online, child) => Row(
+        children: <Widget>[
+          Text(online ? 'Online' : 'Offline'),
+          Button(
+            label: online ? 'Disconnect' : 'Connect',
+            onPressed: connection.toggle,
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class Deployment extends ChangeNotifier {
+  int _completed = 1;
+  bool _paused = false;
+
+  int get completed => _completed;
+  bool get paused => _paused;
+
+  void completeNext() {
+    if (_paused || _completed == 3) return;
+    _completed++;
+    notifyListeners();
+  }
+
+  void togglePaused() {
+    _paused = !_paused;
+    notifyListeners();
+  }
+}
+
+class DeploymentScreen extends StatefulWidget {
+  const DeploymentScreen({super.key});
+
+  @override
+  State<DeploymentScreen> createState() => _DeploymentScreenState();
+}
+
+class _DeploymentScreenState extends State<DeploymentScreen> {
+  final _deployment = Deployment();
+
+  @override
+  void dispose() {
+    _deployment.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => DeploymentView(deployment: _deployment);
+}
+
+class DeploymentView extends StatelessWidget {
+  const DeploymentView({super.key, required this.deployment});
+
+  final Deployment deployment;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: deployment,
+    builder: (context, child) => Padding(
+      padding: const EdgeInsets.all(1),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text('DEPLOYMENT', style: CellStyle(bold: true)),
+          Text('${deployment.completed} of 3 complete'),
+          Text(deployment.paused ? 'Paused' : 'Running'),
+          Button(label: 'Complete next', onPressed: deployment.completeNext),
+          Button(
+            label: deployment.paused ? 'Resume' : 'Pause',
+            onPressed: deployment.togglePaused,
+          ),
+        ],
+      ),
+    ),
+  );
 }

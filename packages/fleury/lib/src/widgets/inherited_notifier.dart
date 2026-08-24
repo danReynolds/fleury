@@ -8,9 +8,8 @@ import 'framework.dart';
 /// `FocusManager`, a `ChangeNotifier`-backed app state) and have
 /// dependents rebuild automatically when the model fires.
 ///
-/// Mirrors Flutter's `InheritedNotifier` minus the listening on
-/// `notifier` itself — we do it explicitly via the element's
-/// lifecycle to keep things readable.
+/// Like Flutter's `InheritedNotifier`, the element owns the notifier
+/// subscription so it follows mount, widget replacement, and unmount.
 abstract class InheritedNotifier<T extends Listenable> extends InheritedWidget {
   const InheritedNotifier({
     super.key,
@@ -61,13 +60,23 @@ class _InheritedNotifierElement<T extends Listenable> extends InheritedElement {
 
   @override
   void update(covariant InheritedNotifier<T> newWidget) {
-    if (!identical(_attachedNotifier, newWidget.notifier)) {
-      _detach();
+    final oldNotifier = _attachedNotifier;
+    final newNotifier = newWidget.notifier;
+    if (identical(oldNotifier, newNotifier)) {
       super.update(newWidget);
-      _attach(newWidget.notifier);
-    } else {
-      super.update(newWidget);
+      return;
     }
+
+    // Keep the replacement notifier live throughout the synchronous child
+    // rebuild performed by super.update. A descendant may notify while it is
+    // rebuilding; attaching afterwards would lose that event.
+    newNotifier.addListener(_listener);
+    oldNotifier?.removeListener(_listener);
+    _attachedNotifier = newNotifier;
+    // Element.update installs newWidget before rebuilding its child. If that
+    // rebuild throws, the element still exposes newWidget, so it must remain
+    // subscribed to newNotifier rather than rolling back only the listener.
+    super.update(newWidget);
   }
 
   @override

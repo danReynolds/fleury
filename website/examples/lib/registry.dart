@@ -1841,6 +1841,75 @@ form.clearErrors();''',
     builder: () => const _ProjectFormTour(),
   ),
   ExampleInfo(
+    id: 'state.local-counter',
+    widget: 'State',
+    category: 'Guide examples',
+    blurb: 'A counter updates its own widget subtree with setState.',
+    cols: 34,
+    rows: 9,
+    interactive: true,
+    builder: () => const _LocalCounterTour(),
+  ),
+  ExampleInfo(
+    id: 'state.shared-counter',
+    widget: 'State',
+    category: 'Guide examples',
+    blurb:
+        'A parent-owned counter passes its value and update callback to two '
+        'ordinary child widgets.',
+    cols: 34,
+    rows: 9,
+    interactive: true,
+    builder: () => const _SharedCounterTour(),
+  ),
+  ExampleInfo(
+    id: 'state.value-notifier',
+    widget: 'ValueListenableBuilder',
+    category: 'Guide examples',
+    blurb:
+        'A connection service exposes one typed observable value without '
+        'needing a larger model.',
+    cols: 38,
+    rows: 9,
+    interactive: true,
+    builder: () => const _ValueNotifierTour(),
+  ),
+  ExampleInfo(
+    id: 'state.deployment',
+    widget: 'ListenableBuilder',
+    category: 'Guide examples',
+    blurb:
+        'A small app-owned model groups deployment progress and pause actions.',
+    cols: 42,
+    rows: 11,
+    interactive: true,
+    builder: () => const _DeploymentTour(),
+  ),
+  ExampleInfo(
+    id: 'state.inherited-widget',
+    widget: 'InheritedWidget',
+    category: 'Guide examples',
+    blurb:
+        'A counter scope shares parent-owned state with a nested reader through '
+        'BuildContext.',
+    cols: 38,
+    rows: 9,
+    interactive: true,
+    builder: () => const _InheritedCounterTour(),
+  ),
+  ExampleInfo(
+    id: 'state.inherited-notifier',
+    widget: 'InheritedNotifier',
+    category: 'Guide examples',
+    blurb:
+        'The same counter scope listens to a model that publishes its own '
+        'changes.',
+    cols: 38,
+    rows: 9,
+    interactive: true,
+    builder: () => const _InheritedNotifierTour(),
+  ),
+  ExampleInfo(
     id: 'lists.tasks',
     widget: 'ListView',
     category: 'Guide examples',
@@ -3487,6 +3556,302 @@ class _InteractiveStyleTour extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// A guide-level example for local widget state.
+class _LocalCounterTour extends StatefulWidget {
+  const _LocalCounterTour();
+
+  @override
+  State<_LocalCounterTour> createState() => _LocalCounterTourState();
+}
+
+class _LocalCounterTourState extends State<_LocalCounterTour> {
+  int _count = 0;
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Text('COUNTER', style: CellStyle(bold: true)),
+        const SizedBox(height: 1),
+        Text('Count: $_count'),
+        Button(label: 'Increment', onPressed: () => setState(() => _count++)),
+      ],
+    ),
+  );
+}
+
+/// A guide-level example for lifting widget state to a common parent.
+class _SharedCounterTour extends StatefulWidget {
+  const _SharedCounterTour();
+
+  @override
+  State<_SharedCounterTour> createState() => _SharedCounterTourState();
+}
+
+class _SharedCounterTourState extends State<_SharedCounterTour> {
+  int _count = 0;
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Text('SHARED COUNTER', style: CellStyle(bold: true)),
+        const SizedBox(height: 1),
+        _CounterValue(value: _count),
+        _CounterButton(onPressed: () => setState(() => _count++)),
+      ],
+    ),
+  );
+}
+
+class _CounterValue extends StatelessWidget {
+  const _CounterValue({required this.value});
+
+  final int value;
+
+  @override
+  Widget build(BuildContext context) => Text('Count: $value');
+}
+
+class _CounterButton extends StatelessWidget {
+  const _CounterButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) =>
+      Button(label: 'Increment', onPressed: onPressed);
+}
+
+class _InheritedCounterScope extends InheritedWidget {
+  const _InheritedCounterScope({required this.count, required super.child});
+
+  final int count;
+
+  static int of(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<_InheritedCounterScope>()!
+      .count;
+
+  @override
+  bool updateShouldNotify(_InheritedCounterScope oldWidget) =>
+      count != oldWidget.count;
+}
+
+class _InheritedCounterTour extends StatefulWidget {
+  const _InheritedCounterTour();
+
+  @override
+  State<_InheritedCounterTour> createState() => _InheritedCounterTourState();
+}
+
+class _InheritedCounterTourState extends State<_InheritedCounterTour> {
+  int _count = 0;
+
+  @override
+  Widget build(BuildContext context) => _InheritedCounterScope(
+    count: _count,
+    child: _framed(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text('INHERITED COUNTER', style: CellStyle(bold: true)),
+          const SizedBox(height: 1),
+          const _NestedCounterValue(),
+          Button(label: 'Increment', onPressed: () => setState(() => _count++)),
+        ],
+      ),
+    ),
+  );
+}
+
+class _NestedCounterValue extends StatelessWidget {
+  const _NestedCounterValue();
+
+  @override
+  Widget build(BuildContext context) =>
+      Text('Count: ${_InheritedCounterScope.of(context)}');
+}
+
+/// A service that exposes one observable value without becoming a larger model.
+class _ConnectionService {
+  final online = ValueNotifier<bool>(false);
+
+  void toggle() => online.value = !online.value;
+
+  void dispose() => online.dispose();
+}
+
+/// A guide-level example for a service-owned observable value.
+class _ValueNotifierTour extends StatefulWidget {
+  const _ValueNotifierTour();
+
+  @override
+  State<_ValueNotifierTour> createState() => _ValueNotifierTourState();
+}
+
+class _ValueNotifierTourState extends State<_ValueNotifierTour> {
+  final _connection = _ConnectionService();
+
+  @override
+  void dispose() {
+    _connection.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    ValueListenableBuilder<bool>(
+      valueListenable: _connection.online,
+      builder: (context, isOnline, child) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text('CONNECTION', style: CellStyle(bold: true)),
+          const SizedBox(height: 1),
+          Text(isOnline ? 'Online' : 'Offline'),
+          Button(
+            label: isOnline ? 'Disconnect' : 'Connect',
+            onPressed: _connection.toggle,
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// A small app-owned model with related values and actions.
+class _Deployment extends ChangeNotifier {
+  int _completed = 1;
+  bool _paused = false;
+
+  int get completed => _completed;
+  bool get paused => _paused;
+
+  void completeNext() {
+    if (_paused || _completed == 3) return;
+    _completed++;
+    notifyListeners();
+  }
+
+  void togglePaused() {
+    _paused = !_paused;
+    notifyListeners();
+  }
+}
+
+class _DeploymentTour extends StatefulWidget {
+  const _DeploymentTour();
+
+  @override
+  State<_DeploymentTour> createState() => _DeploymentTourState();
+}
+
+class _DeploymentTourState extends State<_DeploymentTour> {
+  final _deployment = _Deployment();
+
+  @override
+  void dispose() {
+    _deployment.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      _framed(_DeploymentView(deployment: _deployment));
+}
+
+class _DeploymentView extends StatelessWidget {
+  const _DeploymentView({required this.deployment});
+
+  final _Deployment deployment;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: deployment,
+    builder: (context, child) => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Text('DEPLOYMENT', style: CellStyle(bold: true)),
+        const SizedBox(height: 1),
+        Text('${deployment.completed} of 3 complete'),
+        Text(deployment.paused ? 'Paused' : 'Running'),
+        const SizedBox(height: 1),
+        Row(
+          children: <Widget>[
+            Button(label: 'Complete next', onPressed: deployment.completeNext),
+            Button(
+              label: deployment.paused ? 'Resume' : 'Pause',
+              onPressed: deployment.togglePaused,
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
+class _CounterModel extends ChangeNotifier {
+  int count = 0;
+
+  void increment() {
+    count++;
+    notifyListeners();
+  }
+}
+
+class _CounterNotifierScope extends InheritedNotifier<_CounterModel> {
+  const _CounterNotifierScope({
+    required _CounterModel counter,
+    required super.child,
+  }) : super(notifier: counter);
+
+  static _CounterModel of(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<_CounterNotifierScope>()!
+      .notifier;
+}
+
+class _InheritedNotifierTour extends StatefulWidget {
+  const _InheritedNotifierTour();
+
+  @override
+  State<_InheritedNotifierTour> createState() => _InheritedNotifierTourState();
+}
+
+class _InheritedNotifierTourState extends State<_InheritedNotifierTour> {
+  final _counter = _CounterModel();
+
+  @override
+  void dispose() {
+    _counter.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => _CounterNotifierScope(
+    counter: _counter,
+    child: _framed(const _NotifierCounterPanel()),
+  );
+}
+
+class _NotifierCounterPanel extends StatelessWidget {
+  const _NotifierCounterPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    final counter = _CounterNotifierScope.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Text('NOTIFIER COUNTER', style: CellStyle(bold: true)),
+        const SizedBox(height: 1),
+        Text('Count: ${counter.count}'),
+        Button(label: 'Increment', onPressed: counter.increment),
+      ],
     );
   }
 }

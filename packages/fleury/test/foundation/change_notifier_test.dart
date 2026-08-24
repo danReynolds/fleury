@@ -9,6 +9,10 @@ class _Counter extends ChangeNotifier {
   }
 }
 
+class _Emitter extends ChangeNotifier {
+  void emit() => notifyListeners();
+}
+
 void main() {
   group('ChangeNotifier', () {
     test('fires every registered listener on notifyListeners', () {
@@ -52,6 +56,21 @@ void main() {
       final c = _Counter();
       c.dispose();
       expect(() => c.addListener(() {}), throwsA(isA<StateError>()));
+    });
+
+    test('dispose prevents further notifications', () {
+      final notifier = _Emitter()..dispose();
+
+      expect(notifier.emit, throwsA(isA<StateError>()));
+    });
+
+    test('removeListener remains safe after disposal', () {
+      final notifier = _Emitter();
+      void listener() {}
+      notifier.addListener(listener);
+      notifier.dispose();
+
+      expect(() => notifier.removeListener(listener), returnsNormally);
     });
 
     test('a listener that adds another listener during notification '
@@ -189,6 +208,38 @@ void main() {
       c.increment();
 
       expect(calls, 1, reason: 'the surviving occurrence fires exactly once');
+    });
+  });
+
+  group('ValueNotifier', () {
+    test('publishes replacements and exposes the current value', () {
+      final value = ValueNotifier<int>(1);
+      final seen = <int>[];
+      value.addListener(() => seen.add(value.value));
+
+      value.value = 2;
+      value.value = 3;
+
+      expect(value.value, 3);
+      expect(seen, <int>[2, 3]);
+    });
+
+    test('does not notify when the replacement is equal', () {
+      final value = ValueNotifier<String>('ready');
+      var calls = 0;
+      value.addListener(() => calls += 1);
+
+      value.value = 'ready';
+
+      expect(calls, 0);
+    });
+
+    test('rejects assignments after disposal without changing the value', () {
+      final value = ValueNotifier<bool>(false)..dispose();
+
+      expect(() => value.addListener(() {}), throwsA(isA<StateError>()));
+      expect(() => value.value = true, throwsA(isA<StateError>()));
+      expect(value.value, isFalse);
     });
   });
 }

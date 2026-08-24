@@ -87,3 +87,32 @@ class _ListenableBuilderState extends State<ListenableBuilder> {
     return widget.builder(context, widget.child);
   }
 }
+
+/// Builds a widget from the current value of a [ValueListenable].
+///
+/// This is the typed single-value counterpart to [ListenableBuilder]. The
+/// optional [child] is passed through unchanged on every rebuild.
+class ValueListenableBuilder<T> extends StatelessWidget {
+  const ValueListenableBuilder({
+    super.key,
+    required this.valueListenable,
+    required this.builder,
+    this.child,
+  });
+
+  /// The value source to observe.
+  final ValueListenable<T> valueListenable;
+
+  /// Builds from the current value whenever [valueListenable] notifies.
+  final Widget Function(BuildContext context, T value, Widget? child) builder;
+
+  /// A subtree that does not depend on the value and can be reused.
+  final Widget? child;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: valueListenable,
+    child: child,
+    builder: (context, child) => builder(context, valueListenable.value, child),
+  );
+}

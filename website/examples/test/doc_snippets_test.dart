@@ -3,7 +3,8 @@ library;
 
 import 'dart:io';
 
-import 'package:fleury/fleury_core.dart' show Widget;
+import 'package:fleury/fleury_core.dart'
+    show SemanticAction, SemanticRole, Widget;
 import 'package:fleury_test/fleury_test.dart';
 import 'package:test/test.dart';
 
@@ -14,6 +15,7 @@ import '../doc_snippets/layout_demo.dart' as layout;
 import '../doc_snippets/list_demo.dart' as lists;
 import '../doc_snippets/navigation_demo.dart' as navigation;
 import '../doc_snippets/navigation_advanced_demos.dart' as navigation_advanced;
+import '../doc_snippets/shared_state.dart' as state_management;
 import '../doc_snippets/theming.dart' as theming;
 
 /// Guards the compile-checked source behind the prose docs.
@@ -80,6 +82,108 @@ void main() {
     final rendered = tester.renderToString(emptyMark: ' ');
     expect(rendered, contains('Create project'));
     expect(rendered, contains('Private project'));
+  });
+
+  testWidgets('state management guide local counter updates', (tester) async {
+    tester.pumpWidget(state_management.localStateDemoApp());
+    expect(tester.renderToString(emptyMark: ' '), contains('Count: 0'));
+
+    await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.button,
+      label: 'Increment',
+    );
+    tester.pump();
+    expect(tester.renderToString(emptyMark: ' '), contains('Count: 1'));
+  });
+
+  testWidgets('state management guide shared counter updates its reader', (
+    tester,
+  ) async {
+    tester.pumpWidget(state_management.sharedStateDemoApp());
+    expect(tester.renderToString(emptyMark: ' '), contains('Count: 0'));
+
+    await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.button,
+      label: 'Increment',
+    );
+    tester.pump();
+    expect(tester.renderToString(emptyMark: ' '), contains('Count: 1'));
+  });
+
+  testWidgets('state management guide value notifier updates its reader', (
+    tester,
+  ) async {
+    tester.pumpWidget(state_management.valueNotifierDemoApp());
+    expect(tester.renderToString(emptyMark: ' '), contains('Offline'));
+
+    await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.button,
+      label: 'Connect',
+    );
+    tester.pump();
+    expect(tester.renderToString(emptyMark: ' '), contains('Online'));
+  });
+
+  testWidgets('state management guide model updates its reader', (
+    tester,
+  ) async {
+    tester.pumpWidget(state_management.stateManagementDemoApp());
+    expect(
+      tester.renderToString(emptyMark: ' '),
+      allOf(contains('1 of 3 complete'), contains('Running')),
+    );
+
+    await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.button,
+      label: 'Complete next',
+    );
+    tester.pump();
+    expect(tester.renderToString(emptyMark: ' '), contains('2 of 3 complete'));
+
+    await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.button,
+      label: 'Pause',
+    );
+    tester.pump();
+    expect(
+      tester.renderToString(emptyMark: ' '),
+      allOf(contains('2 of 3 complete'), contains('Paused')),
+    );
+  });
+
+  testWidgets('state management guide inherited widget updates its reader', (
+    tester,
+  ) async {
+    tester.pumpWidget(state_management.inheritedWidgetDemoApp());
+    expect(tester.renderToString(emptyMark: ' '), contains('Count: 0'));
+
+    await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.button,
+      label: 'Increment',
+    );
+    tester.pump();
+    expect(tester.renderToString(emptyMark: ' '), contains('Count: 1'));
+  });
+
+  testWidgets('state management guide inherited notifier updates its reader', (
+    tester,
+  ) async {
+    tester.pumpWidget(state_management.inheritedNotifierDemoApp());
+    expect(tester.renderToString(emptyMark: ' '), contains('Count: 0'));
+
+    await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.button,
+      label: 'Increment',
+    );
+    tester.pump();
+    expect(tester.renderToString(emptyMark: ' '), contains('Count: 1'));
   });
 
   testWidgets('lists guide app renders against the real API', (tester) {
