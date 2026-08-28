@@ -25,7 +25,7 @@ class AnimatedCounter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) =>
-      AnimationBuilder<int>(value, builder: (context, v) => Text('$v'));
+      AnimationBuilder<int>(value, builder: (context, v, child) => Text('$v'));
 }
 
 // ---------------------------------------------------------------------------
@@ -44,15 +44,15 @@ class ExpandablePanel extends StatelessWidget {
   Widget build(BuildContext context) => AnimationBuilder<int>(
     open ? 30 : 0,
     spring: Spring.snappy,
-    builder: (context, width) => SizedBox(width: width, child: child),
+    child: child,
+    builder: (context, width, child) => SizedBox(width: width, child: child),
   );
 }
 
 // ---------------------------------------------------------------------------
 // 3. One driver, many props: a single 0..1 "selectedness" Animation
-//    drives indent, weight, and color together (the Compose
-//    updateTransition pattern). Add a derived property by reading the
-//    same value — the choreography comes free.
+//    drives indent, weight, and color together. Add a derived property by
+//    reading the same value — the choreography comes free.
 // ---------------------------------------------------------------------------
 
 class SelectableRow extends StatelessWidget {
@@ -64,7 +64,7 @@ class SelectableRow extends StatelessWidget {
   Widget build(BuildContext context) => AnimationBuilder<double>(
     selected ? 1.0 : 0.0,
     spring: Spring.snappy,
-    builder: (context, t) {
+    builder: (context, t, child) {
       final indent = (t * 2).round(); // 0..2 cells
       final bold = t > 0.5; // cell-quantized: weight is a bool
       final fg = rgbColorLerp(
@@ -116,10 +116,10 @@ class _RecordingDotState extends State<RecordingDot> {
 }
 
 // ---------------------------------------------------------------------------
-// 5. Sequence + await: a toast that slides in, holds, slides out, then
-//    calls onDismissed. The entire lifecycle is one run([...]); the
-//    returned future fires when it finishes. run() before the widget
-//    is on screen is deferred and plays on first display.
+// 5. Chain + await: a toast that slides in, pauses, slides out, then
+//    calls onDismissed. The entire lifecycle is one fluent run; its returned
+//    future fires when it finishes. A run requested before the widget is on
+//    screen is deferred and begins on first display.
 // ---------------------------------------------------------------------------
 
 class Toast extends StatefulWidget {
@@ -138,17 +138,24 @@ class _ToastState extends State<Toast> {
   @override
   void initState() {
     super.initState();
-    _x
-        .run([
-          AnimationStep.to(0, spring: Spring.snappy),
-          const AnimationStep.hold(Duration(seconds: 2)),
-          AnimationStep.to(
+    _play();
+  }
+
+  Future<void> _play() async {
+    try {
+      await _x
+          .to(0, spring: Spring.snappy)
+          .delay(const Duration(seconds: 2))
+          .to(
             _hidden,
             curve: Curves.easeIn,
             duration: const Duration(milliseconds: 200),
-          ),
-        ])
-        .then((_) => widget.onDismissed());
+          )
+          .orCancel;
+    } on TickerCanceled {
+      return;
+    }
+    if (mounted) widget.onDismissed();
   }
 
   @override
@@ -169,7 +176,7 @@ class _ToastState extends State<Toast> {
 
 // ---------------------------------------------------------------------------
 // 6. Emphasis: a count badge that flashes when it changes, then
-//    settles back. A two-step run on a color Animation.
+//    settles back. A two-target run on a color Animation.
 // ---------------------------------------------------------------------------
 
 class BadgeFlash extends StatefulWidget {
@@ -189,18 +196,17 @@ class _BadgeFlashState extends State<BadgeFlash> {
   void didUpdateWidget(BadgeFlash old) {
     super.didUpdateWidget(old);
     if (widget.count != old.count) {
-      _bg.run([
-        AnimationStep.to(
-          _flash,
-          curve: Curves.easeOut,
-          duration: const Duration(milliseconds: 120),
-        ),
-        AnimationStep.to(
-          _base,
-          curve: Curves.easeIn,
-          duration: const Duration(milliseconds: 450),
-        ),
-      ]);
+      _bg
+          .to(
+            _flash,
+            curve: Curves.easeOut,
+            duration: const Duration(milliseconds: 120),
+          )
+          .to(
+            _base,
+            curve: Curves.easeIn,
+            duration: const Duration(milliseconds: 450),
+          );
     }
   }
 
@@ -236,7 +242,7 @@ class HealthDot extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AnimationBuilder<RgbColor>(
     rgbColorLerp(_bad, _good, health.clamp(0, 1)),
-    builder: (context, c) => Text('■', style: CellStyle(foreground: c)),
+    builder: (context, c, child) => Text('■', style: CellStyle(foreground: c)),
   );
 }
 

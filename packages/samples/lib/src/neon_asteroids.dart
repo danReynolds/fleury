@@ -82,8 +82,9 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
 
     // Gameplay is functional, not decorative, so it keeps its fixed-step clock
     // even when animation is disabled. Attract/game-over motion is decorative
-    // and stays still under reduced/disabled policies. TickerMode still
-    // suspends a hidden route. Reveal/Animate independently obey the policy.
+    // and stays still when animation is disabled. TickerMode still
+    // suspends a hidden route. AnimatedVisibility/Animate independently obey
+    // the policy.
     final ticker = _ticker ??= binding.createTicker(_onTick);
     final tickerModeEnabled = TickerMode.of(context);
     if (ticker.muted && tickerModeEnabled) {
@@ -409,12 +410,12 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
           style: const CellStyle(foreground: _cyan, bold: true),
         ),
         const Expanded(child: SizedBox.shrink()),
-        Reveal(
+        AnimatedVisibility(
           visible:
               _game.ship.shieldTicks > 0 &&
               _game.phase == NeonAsteroidsPhase.playing,
-          enter: Effects.reveal(from: Edge.left),
-          exit: Effects.conceal(to: Edge.right),
+          enter: Effects.wipeIn(from: Edge.left),
+          exit: Effects.wipeOut(to: Edge.right),
           duration: const Duration(milliseconds: 220),
           child: _shieldLabel(),
         ),
@@ -422,8 +423,7 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
         Text(phaseLabel, style: const CellStyle(foreground: _violet)),
         SizedBox(width: tiny ? 1 : 2),
         Animate(
-          key: ValueKey<String>('lives-${_game.impactEvent}'),
-          play: _game.impactEvent > 0,
+          trigger: _game.impactEvent,
           effects: <Effect>[Effects.flash(color: _coral)],
           duration: const Duration(milliseconds: 280),
           child: Text(
@@ -433,8 +433,7 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
         ),
         SizedBox(width: tiny ? 1 : 2),
         Animate(
-          key: ValueKey<String>('score-${_game.scoreEvent}'),
-          play: _game.scoreEvent > 0,
+          trigger: _game.scoreEvent,
           effects: <Effect>[Effects.flash(color: _amber)],
           duration: const Duration(milliseconds: 320),
           child: Text(
@@ -572,9 +571,9 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
         style: BorderStyle.rounded,
         cellStyle: CellStyle(foreground: _cyanDim),
       ),
-      child: Reveal(
+      child: AnimatedVisibility(
         visible: true,
-        enter: Effects.fadeIn(surface: _void) + Effects.reveal(from: Edge.left),
+        enter: Effects.fadeIn(surface: _void) + Effects.wipeIn(from: Edge.left),
         duration: const Duration(milliseconds: 420),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -619,7 +618,7 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
         style: BorderStyle.rounded,
         cellStyle: CellStyle(foreground: color),
       ),
-      child: Reveal(
+      child: AnimatedVisibility(
         visible: true,
         enter: Effects.fadeIn(surface: _void),
         duration: const Duration(milliseconds: 220),

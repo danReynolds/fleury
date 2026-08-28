@@ -170,29 +170,32 @@ instead of restarting:
 
 ```dart
 // A number that springs toward its target whenever `value` changes.
-AnimationBuilder<int>(value, builder: (context, v) => Text('$v'))
+AnimationBuilder<int>(value, builder: (context, v, child) => Text('$v'))
 
 // A panel that springs open/closed — toggle rapidly and it stays smooth.
 AnimationBuilder<int>(
   open ? 30 : 0,
   spring: Spring.snappy,
-  builder: (context, width) => SizedBox(width: width, child: child),
+  child: child,
+  builder: (context, width, child) => SizedBox(width: width, child: child),
 )
 ```
 
-For sequences, loops, or an animation you drive imperatively, hold an
-`Animation<T>` in your `State` and run steps against it:
+For chained motion, loops, or an animation you drive imperatively, own an
+`Animation<T>` in your `State` and append targets and delays directly:
 
 ```dart
 final _x = Animation<int>(28);
 
-// A toast: slide in, hold, slide out. The returned future fires at the end.
-await _x.run([
-  AnimationStep.to(0, spring: Spring.snappy),
-  const AnimationStep.hold(Duration(seconds: 2)),
-  AnimationStep.to(28,
-      curve: Curves.easeIn, duration: const Duration(milliseconds: 200)),
-]);
+// A toast: slide in, delay, slide out. The returned future fires at the end.
+await _x
+    .to(0, spring: Spring.snappy)
+    .delay(const Duration(seconds: 2))
+    .to(
+      28,
+      curve: Curves.easeIn,
+      duration: const Duration(milliseconds: 200),
+    );
 
 // A pulsing dot: ping-pong forever; settles to nothing when off-screen.
 final _c = Animation<RgbColor>(const RgbColor(120, 0, 0))
@@ -227,9 +230,8 @@ FrameBuilder(
   subtree (hidden tab, modal background). Internal elapsed-time
   state continues to advance so re-enabling resumes at the
   correct value; no replay of missed frames.
-- `AnimationPolicy.disabled` on the binding — globally suppress
-  decorative animations; springs and `run` sequences settle to their
-  target instantly.
+- `AnimationPolicy.disabled` on the binding — show final animation
+  states immediately in tests and non-interactive hosts.
 
 ### Examples
 

@@ -98,7 +98,7 @@ The audit used these peer conventions as guardrails:
 | `ListView`, `ListController`, `ScrollView`, `ScrollController`, `Scrollbar` | Flutter scrollables, Bubbles viewport, Ratatui scrollbar | Good | Controller lifecycle and scroll semantics are already hardened. |
 | `FutureBuilder`, `StreamBuilder`, `AsyncSnapshot` | Flutter async builders | Good | Signatures match the expected mental model. Keep docs warning against inline future creation. |
 | `ListenableBuilder` | Flutter `ListenableBuilder` | Improved | `listenable:` is now the primary parameter, with deprecated `animation:` compatibility. |
-| `FrameBuilder`, `AnimationBuilder`, `TickerMode`, `Animate`, `Effects`, `Reveal`, `Spinner` | Flutter animation widgets, Ink/Ratatui spinners | Good | TUI animation policy exists and the API is readable. No immediate change. |
+| `FrameBuilder`, `AnimationBuilder`, `TickerMode`, `Animate`, `Effects`, `AnimatedVisibility`, `Spinner` | Flutter animation widgets, Ink/Ratatui spinners | Good | TUI animation policy exists and the API is readable. No immediate change. |
 | `SelectionArea`, `Selectable`, `SelectionScope`, `SelectionRegistrar`, `RepaintBoundary` | Flutter selection/paint boundaries | Good | Advanced but coherent. Keep as lower-level primitives until examples prove higher-level sugar. |
 | `TextInput`, `TextArea`, `BlinkingCursor` | Flutter `TextField`, Bubbles text input/area, Ink text input | Good | Rich terminal editing contract is justified. `enabled` and `readOnly` already exist on completion input; keep parity pressure on core docs. |
 

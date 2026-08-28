@@ -33,6 +33,7 @@ changes underneath a doc, the build goes red instead of the docs going stale.
 | `layout_demo.dart` | [Layout](../../src/content/docs/guides/layout.mdx) |
 | `shared_state.dart` | [State management](../../src/content/docs/guides/state-management.mdx) |
 | `loading_data.dart` | [Loading data](../../src/content/docs/guides/loading-data.mdx) |
+| `animation.dart` | [Animation](../../src/content/docs/guides/animation.mdx) |
 | `semantic_actions.dart` | [Built for agents](../../../docs/agents-and-semantics.md) |
 
 Keep each entrypoint a complete program with real imports and a `main`; shared

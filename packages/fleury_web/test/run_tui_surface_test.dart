@@ -618,7 +618,7 @@ void main() {
   test(
     'metrics resize is enqueued and applied during the next frame',
     () async {
-      final root = web.document.createElement('div');
+      final root = web.document.createElement('div') as web.HTMLElement;
       final metrics = _FakeMetrics(_box(cols: 8, rows: 2));
       final surface = DomGridSurface(root: root, size: CellSize.zero);
       final flush = _FakeFlush();
@@ -632,8 +632,8 @@ void main() {
 
       expect(surface.size, const CellSize(8, 2));
       expect(surface.rowElements, hasLength(2));
-      expect(root.getAttribute('style'), contains('width:80px'));
-      expect(root.getAttribute('style'), contains('height:40px'));
+      expect(root.style.getPropertyValue('width'), '80px');
+      expect(root.style.getPropertyValue('height'), '40px');
       flush.fire();
       await host.awaitSemanticIdle();
 
@@ -648,8 +648,8 @@ void main() {
 
       expect(surface.size, const CellSize(12, 3));
       expect(surface.rowElements, hasLength(3));
-      expect(root.getAttribute('style'), contains('width:120px'));
-      expect(root.getAttribute('style'), contains('height:60px'));
+      expect(root.style.getPropertyValue('width'), '120px');
+      expect(root.style.getPropertyValue('height'), '60px');
       expect(root.textContent, contains('metric host'));
 
       await host.dispose();

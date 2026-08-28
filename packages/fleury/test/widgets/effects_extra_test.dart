@@ -1,4 +1,4 @@
-// Second-cut effects: reveal/conceal, expand/collapse, shimmer,
+// Second-cut effects: wipe in/out, expand/shrink, shimmer,
 // pulse, shake.
 
 import 'package:fleury/fleury.dart';
@@ -18,17 +18,36 @@ String _row(FleuryTester tester, int cols, {int row = 0, int? height}) {
 }
 
 void main() {
-  group('reveal', () {
-    testWidgets('typewriter: reveals columns left→right', (tester) {
+  test('Effects exposes the canonical built-in vocabulary', () {
+    final effects = <Effect>[
+      Effects.fadeIn(),
+      Effects.fadeOut(),
+      Effects.slideIn(),
+      Effects.slideOut(),
+      Effects.wipeIn(),
+      Effects.wipeOut(),
+      Effects.expand(),
+      Effects.shrink(),
+      Effects.flash(),
+      Effects.shimmer(),
+      Effects.pulse(),
+      Effects.shake(),
+    ];
+
+    expect(effects, hasLength(12));
+  });
+
+  group('wipeIn', () {
+    testWidgets('wipes columns into view left→right', (tester) {
       tester.pumpWidget(
         const Text('hello')
             .animate(
               curve: Curves.linear,
               duration: const Duration(milliseconds: 100),
             )
-            .reveal(from: Edge.left),
+            .wipeIn(from: Edge.left),
       );
-      // t=0: nothing revealed.
+      // t=0: nothing is visible.
       expect(_row(tester, 6), '');
       // ~t=0.6: first 3 of 5 cols.
       tester.pump(const Duration(milliseconds: 60));
@@ -39,7 +58,7 @@ void main() {
     });
   });
 
-  group('expand / collapse', () {
+  group('expand / shrink', () {
     testWidgets('expand vertical grows the box height (layout '
         'reflows)', (tester) {
       // A 2-line child inside a Column; expanding clips its height.
@@ -64,6 +83,53 @@ void main() {
       expect(_row(tester, 6, row: 0, height: 3), 'A');
       expect(_row(tester, 6, row: 1, height: 3), 'B');
       expect(_row(tester, 6, row: 2, height: 3), 'after');
+    });
+
+    testWidgets('shrink vertical reduces height before reaching zero', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        Column(
+          children: [
+            const Column(children: [Text('A'), Text('B'), Text('C'), Text('D')])
+                .animate(
+                  curve: Curves.linear,
+                  duration: const Duration(milliseconds: 100),
+                )
+                .shrink(axis: Axis.vertical),
+            const Text('after'),
+          ],
+        ),
+      );
+      expect(_row(tester, 6, row: 4, height: 5), 'after');
+
+      tester.pump(const Duration(milliseconds: 50));
+      expect(_row(tester, 6, row: 0, height: 3), 'A');
+      expect(_row(tester, 6, row: 1, height: 3), 'B');
+      expect(_row(tester, 6, row: 2, height: 3), 'after');
+
+      tester.pump(const Duration(milliseconds: 50));
+      expect(_row(tester, 6, row: 0, height: 1), 'after');
+    });
+
+    testWidgets('alignment chooses the edge revealed by expand', (tester) {
+      tester.pumpWidget(
+        Column(
+          children: [
+            const Column(children: [Text('A'), Text('B'), Text('C'), Text('D')])
+                .animate(
+                  curve: Curves.linear,
+                  duration: const Duration(milliseconds: 100),
+                )
+                .expand(axis: Axis.vertical, alignment: Alignment.bottomLeft),
+            const Text('after'),
+          ],
+        ),
+      );
+
+      tester.pump(const Duration(milliseconds: 25));
+      expect(_row(tester, 6, row: 0, height: 2), 'D');
+      expect(_row(tester, 6, row: 1, height: 2), 'after');
     });
 
     testWidgets('vertical clipping carries a partial true-pixel image', (
@@ -93,6 +159,56 @@ void main() {
       final placement = full.imagePlacements.single;
       expect([placement.cols, placement.rows], [4, 2]);
       expect(placement.isClipped, isFalse);
+    });
+
+    testWidgets('a fully collapsed box retires semantic bounds', (tester) {
+      tester.pumpWidget(
+        const Semantics(
+              id: SemanticNodeId('collapsing'),
+              role: SemanticRole.status,
+              label: 'Collapsing',
+              child: Text('status'),
+            )
+            .animate(
+              curve: Curves.linear,
+              duration: Duration(milliseconds: 100),
+            )
+            .shrink(axis: Axis.vertical),
+      );
+
+      tester.render(size: const CellSize(10, 1));
+      var node = tester.semantics().nodeById(
+        const SemanticNodeId('collapsing'),
+      );
+      expect(node?.bounds, CellRect.fromLTWH(0, 0, 6, 1));
+
+      tester.pump(const Duration(milliseconds: 100));
+      tester.render(size: const CellSize(10, 1));
+      node = tester.semantics().nodeById(const SemanticNodeId('collapsing'));
+      expect(node?.bounds, isNull);
+    });
+  });
+
+  group('slide images', () {
+    testWidgets('translation preserves true-pixel image placement', (tester) {
+      tester.pumpWidget(
+        const ImageLeaf()
+            .animate(
+              curve: Curves.linear,
+              duration: const Duration(milliseconds: 100),
+            )
+            .slideIn(from: Edge.right),
+      );
+
+      tester.pump(const Duration(milliseconds: 50));
+      final buffer = tester.render(size: const CellSize(8, 2));
+      final placement = buffer.imagePlacements.single;
+      expect(
+        [placement.col, placement.row, placement.cols, placement.rows],
+        [2, 0, 4, 2],
+      );
+      expect([placement.boxCols, placement.boxRows], [4, 2]);
+      expect([placement.boxOffsetCol, placement.boxOffsetRow], [0, 0]);
     });
   });
 

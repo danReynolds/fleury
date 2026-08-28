@@ -19,6 +19,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     required web.Element hostElement,
     required CellMetrics cellMetrics,
     web.Element? pointerTarget,
+    this.pointerCursorResolver,
     web.HTMLTextAreaElement? textArea,
     web.Document? document,
     WebFocusCoordinator? focusCoordinator,
@@ -34,6 +35,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
 
   final web.Element _hostElement;
   final web.Element _pointerTarget;
+  final bool Function(CellOffset cell)? pointerCursorResolver;
   final CellMetrics _cellMetrics;
   final web.Document _document;
   final web.HTMLTextAreaElement? _textArea;
@@ -54,12 +56,14 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
   MouseButton _pressedButton = MouseButton.none;
   MouseButton _captureLostButton = MouseButton.none;
   var _suppressNextPointerClick = false;
+  String? _cursorBeforeStart;
 
   @override
   void start(TuiInputSink onEvent) {
     if (_started) return;
     _started = true;
     _onEvent = onEvent;
+    _cursorBeforeStart = _pointerStyle?.getPropertyValue('cursor');
 
     final textArea = _textArea ?? _createTextArea();
     _activeTextArea = textArea;
@@ -83,6 +87,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     _add(_pointerTarget, 'pointercancel', _handlePointerCancel);
     _add(_pointerTarget, 'lostpointercapture', _handleLostPointerCapture);
     _add(_pointerTarget, 'pointermove', _handlePointerMove);
+    _add(_pointerTarget, 'pointerleave', _handlePointerLeave);
     _add(_pointerTarget, 'click', _handleClick);
     _add(_pointerTarget, 'wheel', _handleWheel);
 
@@ -101,6 +106,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
   @override
   void dispose() {
     _sweepOpenPresses();
+    _restorePointerCursor();
     for (final listener in _listeners.reversed) {
       listener.target.removeEventListener(listener.type, listener.callback);
     }
@@ -115,6 +121,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     _pressedButton = MouseButton.none;
     _captureLostButton = MouseButton.none;
     _suppressNextPointerClick = false;
+    _cursorBeforeStart = null;
     _focusCoordinator?.handleBrowserFocusOut(WebFocusTarget.keyboardCapture);
     _clearTextArea();
     final textArea = _activeTextArea;
@@ -583,7 +590,11 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
   void _handlePointerMove(web.Event raw) {
     final event = raw as web.PointerEvent;
     final cell = _cellForPointer(event);
-    if (cell == null) return;
+    if (cell == null) {
+      _restorePointerCursor();
+      return;
+    }
+    _syncPointerCursor(cell);
     final dragging = event.buttons != 0 && _pressedButton != MouseButton.none;
     raw.preventDefault();
     _emit(
@@ -595,6 +606,34 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
         modifiers: _modifiersFromMouse(event),
       ),
     );
+  }
+
+  void _handlePointerLeave(web.Event _) => _restorePointerCursor();
+
+  web.CSSStyleDeclaration? get _pointerStyle =>
+      _pointerTarget.isA<web.HTMLElement>()
+      ? (_pointerTarget as web.HTMLElement).style
+      : null;
+
+  void _syncPointerCursor(CellOffset cell) {
+    final style = _pointerStyle;
+    if (style == null) return;
+    if (pointerCursorResolver?.call(cell) ?? false) {
+      style.setProperty('cursor', 'pointer');
+    } else {
+      _restorePointerCursor();
+    }
+  }
+
+  void _restorePointerCursor() {
+    final style = _pointerStyle;
+    if (style == null) return;
+    final previous = _cursorBeforeStart;
+    if (previous == null || previous.isEmpty) {
+      style.removeProperty('cursor');
+    } else {
+      style.setProperty('cursor', previous);
+    }
   }
 
   void _handleClick(web.Event raw) {

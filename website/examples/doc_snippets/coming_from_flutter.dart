@@ -1,7 +1,7 @@
 // Compile-checked source behind "Coming from Flutter"
 // (website/src/content/docs/coming-from-flutter.md). Keeps the core migration
 // examples honest: runApp, KeyBindings, context.push/context.pop,
-// AnimationBuilder, Reveal, and Effects.
+// AnimationBuilder, AnimatedVisibility, and Effects.
 
 import 'dart:async';
 
@@ -61,12 +61,12 @@ class DetailScreen extends StatelessWidget {
           onTrigger: (_) => context.pop(),
         ),
       ],
-      child: Reveal(
+      child: AnimatedVisibility(
         visible: true,
         enter: Effects.expand() + Effects.fadeIn(),
         child: AnimationBuilder<double>(
           0.8,
-          builder: (context, t) =>
+          builder: (context, t, child) =>
               Text('animated value: ${t.toStringAsFixed(2)}'),
         ),
       ),

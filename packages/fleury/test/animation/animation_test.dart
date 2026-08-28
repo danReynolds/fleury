@@ -23,6 +23,61 @@ class _Show extends StatelessWidget {
 }
 
 void main() {
+  group('diagnostics and timing validation', () {
+    test('debugLabel identifies the animation', () {
+      final animation = Animation(0.0, debugLabel: 'download progress');
+      expect(animation.toString(), contains('download progress'));
+      expect(animation.toString(), contains('value: 0.0'));
+      animation.dispose();
+    });
+
+    test('to rejects contradictory or ignored timing options', () {
+      final animation = Animation(0.0);
+
+      expect(
+        () => animation.to(1.0, spring: Spring.snappy, curve: Curves.linear),
+        throwsArgumentError,
+      );
+      expect(
+        () => animation.to(1.0, duration: const Duration(milliseconds: 100)),
+        throwsArgumentError,
+      );
+      expect(
+        () => animation.to(
+          1.0,
+          curve: Curves.linear,
+          duration: const Duration(milliseconds: -1),
+        ),
+        throwsArgumentError,
+      );
+
+      expect(animation.target, 0.0, reason: 'invalid calls change no state');
+      animation.dispose();
+    });
+
+    test('rejects invalid spring response and loop periods', () {
+      final animation = Animation(0.0);
+
+      expect(
+        () => animation.to(1.0, spring: const Spring(response: Duration.zero)),
+        throwsArgumentError,
+      );
+      expect(
+        () => animation.loop(between: (0.0, 1.0), period: Duration.zero),
+        throwsArgumentError,
+      );
+      expect(
+        () => animation.loop(
+          between: (0.0, 1.0),
+          period: const Duration(milliseconds: -1),
+        ),
+        throwsArgumentError,
+      );
+
+      animation.dispose();
+    });
+  });
+
   group('construction + snap', () {
     testWidgets('starts at its initial value, not moving', (tester) {
       final m = Animation(0.0);
@@ -119,6 +174,29 @@ void main() {
       tester.pump(const Duration(milliseconds: 200));
       expect(m.value, closeTo(1.0, 1e-9));
       expect(m.isMoving, isFalse);
+    });
+
+    testWidgets('a curve clears velocity before a later spring', (tester) {
+      final m = Animation(0.0);
+      _host(tester, m);
+
+      m.to(100.0, spring: Spring.snappy);
+      tester.pump(const Duration(milliseconds: 50));
+      m.to(
+        0.0,
+        curve: Curves.linear,
+        duration: const Duration(milliseconds: 100),
+      );
+      tester.pump(const Duration(milliseconds: 50));
+
+      final current = m.value;
+      m.to(current, spring: Spring.snappy);
+      tester.pump(const Duration(milliseconds: 16));
+      expect(
+        m.value,
+        closeTo(current, 1e-9),
+        reason: 'the spring must not inherit velocity from before the curve',
+      );
     });
   });
 
@@ -347,8 +425,8 @@ void main() {
         _stateError('Animation.loop() called after dispose.'),
       );
       expect(
-        () => m.run([AnimationStep.to(0.25)]),
-        _stateError('Animation.run() called after dispose.'),
+        () => active.delay(const Duration(milliseconds: 10)),
+        throwsStateError,
       );
       await expectLater(active.orCancel, throwsA(isA<TickerCanceled>()));
     });

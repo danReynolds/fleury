@@ -417,7 +417,8 @@ void main() {
         expect(output, contains('● LIVE'));
 
         // The live Canvas sits directly behind this animated card. Keep the
-        // opaque frame outside Reveal: during live fade/reveal progress,
+        // opaque frame outside AnimatedVisibility: during live fade/reveal
+        // progress,
         // background-only spaces can be dropped or masked and expose braille
         // playfield pixels. Only the card's inner content animates.
         final lines = output.split('\n');

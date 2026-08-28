@@ -1,5 +1,4 @@
-// Animation<T>: a value that you read directly, retarget with one verb,
-// and never have to dispose.
+// Animation<T>: a value that you read directly and retarget with one verb.
 //
 // Animation is the continuous-animation front door. It holds a current
 // value (always readable via `value`), a target, and an engine that
@@ -12,18 +11,21 @@
 //   fill.to(0.8);                       // spring (default)
 //   fill.to(0.8, spring: Spring.snappy);
 //   fill.to(0.8, curve: Curves.easeOut, duration: 300.ms);
+//   fill.to(0.8).delay(300.ms).to(0.2); // append a timed chain
 //   fill.snap(0.0);                     // jump, no animation
 //   fill.value                          // current interpolated value
 //
 // Animation runs on the existing TickerScheduler (one shared timer for
 // the whole app) and respects AnimationPolicy + TickerMode through
 // the Ticker it owns. It attaches to the runtime's TuiBinding the
-// first time a widget displays it; retargeting before first display
-// snaps (you can't animate something not yet on screen).
+// first time a widget displays it; retargeting before first display is
+// deferred so animate-on-appear runs can begin once mounted.
 //
-// Consumption: a widget reads `animation.value`. Today vian AnimationBuilder
-// (animation_builder.dart); a later step makes reading `value` during a
-// build auto-subscribe the element.
+// Consumption: reading `animation.value` during build auto-subscribes that
+// element. AnimationBuilder (animation_builder.dart) owns this lifecycle for
+// declarative target-following; manually owned animations must be disposed.
+
+import 'dart:async';
 
 import 'package:meta/meta.dart';
 
@@ -130,7 +132,7 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
   /// Creates a animation holding [value]. [type] is required only for
   /// non-built-in [T]; built-ins ([double], [int], [RgbColor],
   /// [CellOffset]) resolve automatically.
-  Animation(T value, {AnimationType<T>? type})
+  Animation(T value, {AnimationType<T>? type, this.debugLabel})
     : _type = type ?? AnimationType.of<T>(),
       _value = value {
     _position = _type.toVector(value);
@@ -139,6 +141,9 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
   }
 
   final AnimationType<T> _type;
+
+  /// A label included in diagnostics for this animation.
+  final String? debugLabel;
 
   T _value;
   late List<double> _position;
@@ -157,7 +162,7 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
   Duration _curveStart = Duration.zero;
   List<double> _curveFrom = const [];
   Duration _lastElapsed = Duration.zero;
-  TickerFuture? _active;
+  TickerFuture<T>? _active;
 
   // Loop state (set by loop()).
   bool _looping = false;
@@ -167,18 +172,19 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
   Curve _loopCurve = Curves.linear;
   Duration _loopPeriod = Duration.zero;
 
-  // Sequence state (set by run()).
-  List<AnimationStep<T>>? _queue;
+  // Commands appended through `animation.to(...).delay(...).to(...)`.
+  List<_AnimationCommand<T>>? _queue;
   int _queueIndex = 0;
+  int _deferredCompletionGeneration = 0;
 
   // An animation requested before attach, replayed on attach.
   void Function()? _pendingOnAttach;
 
-  // Bumped by [_beginRequest] on every to() / loop() / run(). [_tick]
+  // Bumped by [_beginRequest] on every to() / loop(). [_tick]
   // captures it before running user listeners and bails if it changed:
   // a listener that retargets during the settling tick re-arms a fresh
   // request that must play out on later ticks, not be consumed by this
-  // tick's stale settle / loop / sequence branches.
+  // tick's stale settle / loop / chained-run branches.
   int _requestGeneration = 0;
 
   /// Elements that read [value] during their build, auto-subscribed
@@ -285,9 +291,11 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
   /// interrupting a curve restarts from the current value with zero
   /// velocity.
   ///
-  /// Returns a [TickerFuture]: `await` it for settle;
-  /// `await .orCancel` to see retargets/stops as [TickerCanceled].
-  TickerFuture to(
+  /// Returns a [TickerFuture]. Append `.delay(...)` and `.to(...)` to describe
+  /// later segments in the same run. Awaiting the result waits until the whole
+  /// chain finishes or is superseded; await `.orCancel` when subsequent work
+  /// should run only after it reaches its final target naturally.
+  TickerFuture<T> to(
     T target, {
     Spring? spring,
     Curve? curve,
@@ -296,13 +304,17 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
     if (_disposed) {
       throw StateError('Animation.to() called after dispose.');
     }
+    _validateTiming(spring: spring, curve: curve, duration: duration);
     _target = _type.toVector(target);
-    final future = _beginRequest();
-    _runOrDefer(() {
-      if (_snapIfNoAnimation()) return;
-      _ensureTicking();
-      _arm(spring: spring, curve: curve, duration: duration);
-    });
+    final future = _beginChainedRequest(
+      _AnimationCommand<T>.to(
+        target,
+        spring: spring,
+        curve: curve,
+        duration: duration,
+      ),
+    );
+    _runOrDefer(() => _startQueuedRequest(future));
     return future;
   }
 
@@ -314,13 +326,16 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
   /// The returned [TickerFuture] only completes if the loop is later
   /// superseded by [to] / [snap] / [stop] (as a cancel) — a loop has
   /// no natural end.
-  TickerFuture loop({
+  TickerFuture<T> loop({
     required (T, T) between,
     Duration period = const Duration(milliseconds: 600),
     Curve curve = Curves.linear,
     bool mirror = true,
   }) {
     if (_disposed) throw StateError('Animation.loop() called after dispose.');
+    if (period <= Duration.zero) {
+      throw ArgumentError.value(period, 'period', 'must be greater than zero');
+    }
     final a = _type.toVector(between.$1);
     final b = _type.toVector(between.$2);
     final future = _beginRequest();
@@ -350,31 +365,6 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
       _target = List<double>.of(b);
       _curveStart = _lastElapsed;
       _notify();
-    });
-    return future;
-  }
-
-  /// Runs a sequence of [steps] back-to-back, each starting when the
-  /// previous settles. Steps are [AnimationStep.to] (retarget) or
-  /// [AnimationStep.hold] (wait, clock-driven so it's FakeClock-safe).
-  /// The returned future completes when the last step settles.
-  TickerFuture run(List<AnimationStep<T>> steps) {
-    if (_disposed) throw StateError('Animation.run() called after dispose.');
-    if (steps.isEmpty) return TickerFuture.complete();
-    final future = _beginRequest();
-    _runOrDefer(() {
-      if (_policy == AnimationPolicy.disabled) {
-        for (final s in steps) {
-          if (!s._isHold) _target = _type.toVector(s._target as T);
-        }
-        _snapToTarget();
-        _completeActive();
-        return;
-      }
-      _queue = steps;
-      _queueIndex = 0;
-      _ensureTicking();
-      _applyStep(steps[_queueIndex++]);
     });
     return future;
   }
@@ -413,8 +403,8 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
     _value = _type.fromVector(_position);
     final generation = _requestGeneration;
     _notify();
-    // A listener invoked by _notify may have retargeted (to / loop /
-    // run), which re-arms a fresh request via _beginRequest. The
+    // A listener invoked by _notify may have retargeted (to / loop), which
+    // re-arms a fresh request via _beginRequest. The
     // `settled` snapshot above belongs to the now-superseded request;
     // falling through would snap to the freshly-set target and complete
     // the new future instantly. Let the new request play out on the
@@ -440,10 +430,10 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
       return;
     }
 
-    // Sequence: advance to the next step without stopping.
+    // Chained run: advance to the next command without stopping.
     final queue = _queue;
     if (queue != null && _queueIndex < queue.length) {
-      _applyStep(queue[_queueIndex++]);
+      _applyCommand(queue[_queueIndex++]);
       _curveStart = elapsed;
       return;
     }
@@ -495,16 +485,108 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
     _value = _type.fromVector(_position);
   }
 
-  /// Cancels any in-flight animation, clears loop/sequence state, and
+  /// Cancels any in-flight animation, clears loop/chained state, and
   /// installs a fresh completion future. Returns the new future.
-  TickerFuture _beginRequest() {
+  TickerFuture<T> _beginRequest() {
     _stopFutureOnly(canceled: true);
     _looping = false;
     _queue = null;
     _requestGeneration++;
-    final future = TickerFuture.pending();
+    final future = TickerFuture<T>.pending();
     _active = future;
     return future;
+  }
+
+  TickerFuture<T> _beginChainedRequest(_AnimationCommand<T> first) {
+    _stopFutureOnly(canceled: true);
+    _looping = false;
+    _queue = <_AnimationCommand<T>>[first];
+    _queueIndex = 0;
+    _requestGeneration++;
+
+    late final TickerFuture<T> future;
+    future = TickerFuture<T>.pending(
+      appendTo: (target, {spring, curve, duration}) => _appendCommand(
+        future,
+        _AnimationCommand<T>.to(
+          target,
+          spring: spring,
+          curve: curve,
+          duration: duration,
+        ),
+      ),
+      appendDelay: (duration) =>
+          _appendCommand(future, _AnimationCommand<T>.delay(duration)),
+    );
+    _active = future;
+    return future;
+  }
+
+  TickerFuture<T> _appendCommand(
+    TickerFuture<T> future,
+    _AnimationCommand<T> command,
+  ) {
+    if (_disposed) {
+      throw StateError('Cannot append to a disposed Animation.');
+    }
+    if (!identical(_active, future)) {
+      throw StateError('Cannot append to a completed animation run.');
+    }
+    if (command._isDelay) {
+      final duration = command.duration!;
+      if (duration.isNegative) {
+        throw ArgumentError.value(duration, 'duration', 'must not be negative');
+      }
+    } else {
+      _validateTiming(
+        spring: command.spring,
+        curve: command.curve,
+        duration: command.duration,
+      );
+    }
+
+    _queue!.add(command);
+    if (_scheduler != null && _policy == AnimationPolicy.disabled) {
+      _applyDisabledCommands();
+      _scheduleDeferredCompletion(future);
+    }
+    return future;
+  }
+
+  void _startQueuedRequest(TickerFuture<T> future) {
+    if (!identical(_active, future)) return;
+    if (_policy == AnimationPolicy.disabled) {
+      _applyDisabledCommands();
+      _scheduleDeferredCompletion(future);
+      return;
+    }
+    _ensureTicking();
+    final queue = _queue!;
+    _applyCommand(queue[_queueIndex++]);
+  }
+
+  void _applyDisabledCommands() {
+    final queue = _queue!;
+    while (_queueIndex < queue.length) {
+      final command = queue[_queueIndex++];
+      if (!command._isDelay) {
+        _target = _type.toVector(command._target as T);
+      }
+    }
+    _snapToTarget();
+    _notify();
+  }
+
+  void _scheduleDeferredCompletion(TickerFuture<T> future) {
+    final generation = ++_deferredCompletionGeneration;
+    scheduleMicrotask(() {
+      if (generation != _deferredCompletionGeneration ||
+          !identical(_active, future)) {
+        return;
+      }
+      _queue = null;
+      _completeActive();
+    });
   }
 
   /// Runs [start] now if attached, else defers it until [attach].
@@ -515,15 +597,6 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
       _pendingOnAttach = null;
       start();
     }
-  }
-
-  /// When the policy is [AnimationPolicy.disabled], snaps to the
-  /// current target, completes the active future, and returns true.
-  bool _snapIfNoAnimation() {
-    if (_policy != AnimationPolicy.disabled) return false;
-    _snapToTarget();
-    _completeActive();
-    return true;
   }
 
   void _completeActive() {
@@ -541,40 +614,37 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
   }
 
   /// Configures the engine (spring or curve) for a retarget from the
-  /// current position, applying the active [AnimationPolicy.reduced]
-  /// shortening. [_target] must already be set.
+  /// current position. [_target] must already be set.
   void _arm({Spring? spring, Curve? curve, Duration? duration}) {
-    final reduced = _policy == AnimationPolicy.reduced;
     _curveFrom = List<double>.of(_position);
     _curveStart = _lastElapsed;
     if (curve != null) {
       _spring = null;
       _curve = curve;
-      var d = duration ?? const Duration(milliseconds: 250);
-      if (reduced) d = Duration(microseconds: d.inMicroseconds ~/ 2);
-      _curveDuration = d;
+      _curveDuration = duration ?? const Duration(milliseconds: 250);
+      // Curves are position-only. A later spring must not inherit velocity
+      // from a spring that ran before this curve began.
+      _velocity = List<double>.filled(_position.length, 0.0);
     } else {
       _curve = null;
-      var s = spring ?? Spring.smooth;
-      if (reduced) {
-        s = Spring(
-          response: Duration(microseconds: s.response.inMicroseconds ~/ 2),
-        );
-      }
-      _spring = s;
+      _spring = spring ?? Spring.smooth;
     }
   }
 
-  /// Configures the engine for one [AnimationStep] of a sequence. A hold
-  /// is a curve to the current value over its duration (clock-driven,
-  /// so it advances under FakeClock).
-  void _applyStep(AnimationStep<T> step) {
-    if (step._isHold) {
+  /// Configures the engine for one command in a chained run. A delay is a
+  /// curve to the current value over its duration, so it advances through the
+  /// same clock used by tests and ordinary animation segments.
+  void _applyCommand(_AnimationCommand<T> command) {
+    if (command._isDelay) {
       _target = List<double>.of(_position);
-      _arm(curve: Curves.linear, duration: step.duration);
+      _arm(curve: Curves.linear, duration: command.duration);
     } else {
-      _target = _type.toVector(step._target as T);
-      _arm(spring: step.spring, curve: step.curve, duration: step.duration);
+      _target = _type.toVector(command._target as T);
+      _arm(
+        spring: command.spring,
+        curve: command.curve,
+        duration: command.duration,
+      );
     }
   }
 
@@ -603,26 +673,66 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
     _snapToTarget();
     _notify();
   }
+
+  @override
+  String toString() {
+    final label = debugLabel;
+    return label == null
+        ? 'Animation<$T>(value: $_value, target: $target)'
+        : 'Animation<$T>($label; value: $_value, target: $target)';
+  }
 }
 
-/// One step in a [Animation.run] sequence: either a retarget
-/// ([AnimationStep.to]) or a clock-driven wait ([AnimationStep.hold]).
-class AnimationStep<T> {
-  /// Retarget to [target] (spring by default, or curve+duration).
-  const AnimationStep.to(T target, {this.spring, this.curve, this.duration})
-    : _target = target,
-      _isHold = false;
+void _validateTiming({Spring? spring, Curve? curve, Duration? duration}) {
+  if (spring != null && curve != null) {
+    throw ArgumentError('spring and curve are mutually exclusive');
+  }
+  if (duration != null && curve == null) {
+    throw ArgumentError.value(
+      duration,
+      'duration',
+      'requires a curve; configure spring timing on Spring',
+    );
+  }
+  if (duration?.isNegative ?? false) {
+    throw ArgumentError.value(duration, 'duration', 'must not be negative');
+  }
+  if (spring != null) {
+    if (spring.response <= Duration.zero) {
+      throw ArgumentError.value(
+        spring.response,
+        'spring.response',
+        'must be greater than zero',
+      );
+    }
+    if (spring.bounce < 0 || spring.bounce >= 1) {
+      throw ArgumentError.value(
+        spring.bounce,
+        'spring.bounce',
+        'must be in [0, 1)',
+      );
+    }
+  }
+}
 
-  /// Wait [duration] before the next step, holding the current value.
-  const AnimationStep.hold(this.duration)
-    : _target = null,
+class _AnimationCommand<T> {
+  const _AnimationCommand.to(T target, {this.spring, this.curve, this.duration})
+    : _target = target,
+      _isDelay = false,
+      assert(spring == null || curve == null),
+      assert(duration == null || curve != null);
+
+  const _AnimationCommand.delay(Duration duration)
+    // ignore: prefer_initializing_formals
+    : duration = duration,
+      _target = null,
       spring = null,
       curve = null,
-      _isHold = true;
+      _isDelay = true;
 
   final T? _target;
   final Spring? spring;
   final Curve? curve;
   final Duration? duration;
-  final bool _isHold;
+  final bool _isDelay;
 }

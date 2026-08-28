@@ -1876,6 +1876,116 @@ form.clearErrors();''',
     builder: () => const _StreamLoadingTour(),
   ),
   ExampleInfo(
+    id: 'animation.state',
+    widget: 'Animation',
+    category: 'Guide examples',
+    blurb:
+        'Launch an orbital courier whose route, color, progress, and status '
+        'all follow one animated value.',
+    cols: 60,
+    rows: 15,
+    interactive: true,
+    builder: () => const _AnimationStateTour(),
+  ),
+  ExampleInfo(
+    id: 'animation.manual',
+    widget: 'Animation',
+    category: 'Guide examples',
+    blurb:
+        'Own, chain, await, and interrupt one animated value while building '
+        'a route.',
+    cols: 48,
+    rows: 11,
+    interactive: true,
+    builder: () => const _ManualAnimationTour(),
+  ),
+  ExampleInfo(
+    id: 'animation.progress',
+    widget: 'AnimationBuilder',
+    category: 'Guide examples',
+    blurb:
+        'Move a package between two destinations and inspect the double value '
+        'that AnimationBuilder supplies.',
+    cols: 48,
+    rows: 12,
+    interactive: true,
+    builder: () => const _AnimationProgressTour(),
+  ),
+  ExampleInfo(
+    id: 'animation.timing',
+    widget: 'AnimationBuilder',
+    category: 'Guide examples',
+    blurb:
+        'Compare a status panel whose width and accent share timing with one '
+        'whose properties settle independently.',
+    cols: 54,
+    rows: 15,
+    interactive: true,
+    builder: () => const _AnimationTimingTour(),
+  ),
+  ExampleInfo(
+    id: 'animation.effects',
+    widget: 'Animate',
+    category: 'Guide examples',
+    blurb: 'Mount a connection status with a chained fade-and-slide entrance.',
+    cols: 48,
+    rows: 10,
+    interactive: true,
+    builder: () => const _EntranceEffectTour(),
+  ),
+  ExampleInfo(
+    id: 'animation.trigger',
+    widget: 'Animate',
+    category: 'Guide examples',
+    blurb: 'Animate a real form submission for both error and success.',
+    cols: 48,
+    rows: 14,
+    interactive: true,
+    builder: () => const _ValidationFeedbackTour(),
+  ),
+  ExampleInfo(
+    id: 'animation.presence',
+    widget: 'AnimatedVisibility',
+    category: 'Guide examples',
+    blurb: 'Choose and compare Fleury entrance and exit effects.',
+    cols: 58,
+    rows: 19,
+    interactive: true,
+    builder: () => const _EffectPickerTour(),
+  ),
+  ExampleInfo(
+    id: 'animation.chain',
+    widget: 'Animation',
+    category: 'Guide examples',
+    blurb:
+        'Drive and await a multi-step packet route from an application '
+        'event.',
+    cols: 48,
+    rows: 13,
+    interactive: true,
+    builder: () => const _AnimationChainTour(),
+  ),
+  ExampleInfo(
+    id: 'animation.frames',
+    widget: 'FrameBuilder',
+    category: 'Guide examples',
+    blurb: 'Cycle through the authored frames of a packet transfer.',
+    cols: 48,
+    rows: 12,
+    interactive: true,
+    builder: () => const _FrameCadenceTour(),
+  ),
+  ExampleInfo(
+    id: 'animation.ticker',
+    widget: 'Ticker',
+    category: 'Guide examples',
+    blurb: 'Advance a small simulation from elapsed time on each tick.',
+    cols: 48,
+    rows: 11,
+    interactive: true,
+    builder: () => const _TickerSimulationTour(),
+  ),
+  ExampleInfo(
     id: 'state.local-counter',
     widget: 'State',
     category: 'Guide examples',
@@ -3899,6 +4009,883 @@ class _StreamLoadingTourState extends State<_StreamLoadingTour> {
       },
     ),
   );
+}
+
+class _AnimationStateTour extends StatefulWidget {
+  const _AnimationStateTour();
+
+  @override
+  State<_AnimationStateTour> createState() => _AnimationStateTourState();
+}
+
+class _AnimationStateTourState extends State<_AnimationStateTour> {
+  static const _idle = RgbColor(115, 125, 140);
+  static const _arrived = RgbColor(70, 220, 145);
+
+  late final Animation<double> _progress = Animation<double>(
+    0.0,
+    debugLabel: 'orbital courier progress',
+  );
+  var _launched = false;
+
+  void _toggleMission() {
+    if (_launched) {
+      setState(() => _launched = false);
+      _progress.to(
+        0.0,
+        curve: Curves.easeInOut,
+        duration: const Duration(milliseconds: 1400),
+      );
+      return;
+    }
+
+    setState(() => _launched = true);
+    _launch();
+  }
+
+  Future<void> _launch() async {
+    try {
+      await _progress
+          .to(
+            0.12,
+            curve: Curves.easeOut,
+            duration: const Duration(milliseconds: 700),
+          )
+          .delay(const Duration(milliseconds: 450))
+          .to(
+            0.58,
+            curve: Curves.easeInOut,
+            duration: const Duration(milliseconds: 1600),
+          )
+          .delay(const Duration(milliseconds: 400))
+          .to(
+            1.0,
+            curve: Curves.easeOut,
+            duration: const Duration(milliseconds: 1800),
+          )
+          .orCancel;
+    } on TickerCanceled {
+      // Reset or a newer launch replaced this flight.
+    }
+  }
+
+  String _statusFor(double progress) {
+    if (!_launched && progress > 0.02) return 'RETURN · Recalling courier';
+    if (progress > 0.98) return '4/4 DELIVERY · Payload secured';
+    if (progress > 0.60) return '3/4 TRANSFER · Matching orbital speed';
+    if (progress > 0.13) return '2/4 ASCENT · Clearing the atmosphere';
+    if (progress > 0.01) return '1/4 IGNITION · Engines nominal';
+    return 'READY · Awaiting flight plan';
+  }
+
+  @override
+  void dispose() {
+    _progress.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final visual = _progress.value.clamp(0.0, 1.0);
+    final position = (visual * 30).round();
+    final filled = (visual * 30).round();
+    final accent = rgbColorLerp(_idle, _arrived, visual);
+    final route =
+        '${List<String>.filled(position, '·').join()}◆'
+        '${List<String>.filled(30 - position, '·').join()}';
+    final gauge =
+        '${List<String>.filled(filled, '█').join()}'
+        '${List<String>.filled(30 - filled, '░').join()}';
+
+    return _framed(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text('ORBITAL COURIER', style: CellStyle(bold: true)),
+          const Text('A tiny package. One very large delivery.'),
+          const SizedBox(height: 1),
+          Button(
+            label: _launched ? 'Reset mission' : 'Launch',
+            onPressed: _toggleMission,
+          ),
+          const SizedBox(height: 1),
+          Container(
+            width: 52,
+            height: 7,
+            border: BoxBorder(
+              style: Theme.of(context).borderStyle,
+              cellStyle: CellStyle(foreground: accent),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 1),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  'EARTH $route ORBIT',
+                  style: CellStyle(foreground: accent),
+                ),
+                Text('$gauge ${(visual * 100).round()}%'),
+                Text(_statusFor(visual), style: CellStyle(foreground: accent)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ManualAnimationTour extends StatefulWidget {
+  const _ManualAnimationTour();
+
+  @override
+  State<_ManualAnimationTour> createState() => _ManualAnimationTourState();
+}
+
+class _ManualAnimationTourState extends State<_ManualAnimationTour> {
+  final _progress = Animation<double>(0.0, debugLabel: 'manual package route');
+  var _running = false;
+
+  Future<void> _runRoute() async {
+    setState(() => _running = true);
+    try {
+      await _progress
+          .to(
+            1.0,
+            curve: Curves.easeInOut,
+            duration: const Duration(milliseconds: 700),
+          )
+          .delay(const Duration(milliseconds: 600))
+          .to(
+            0.0,
+            curve: Curves.easeInOut,
+            duration: const Duration(milliseconds: 700),
+          )
+          .orCancel;
+    } on TickerCanceled {
+      return;
+    }
+    if (mounted) setState(() => _running = false);
+  }
+
+  void _returnNow() {
+    setState(() => _running = false);
+    _progress.to(
+      0.0,
+      curve: Curves.easeOut,
+      duration: const Duration(milliseconds: 450),
+    );
+  }
+
+  @override
+  void dispose() {
+    _progress.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = _progress.value;
+    final position = (progress * 24).round();
+    final route =
+        '${List<String>.filled(position, '─').join()}◆'
+        '${List<String>.filled(24 - position, '·').join()}';
+
+    return _framed(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text('RAW ANIMATION', style: CellStyle(bold: true)),
+          const Text('Own it to chain, await, and interrupt motion.'),
+          const SizedBox(height: 1),
+          Button(
+            label: _running ? 'Return now' : 'Run route',
+            onPressed: _running ? _returnNow : _runRoute,
+          ),
+          const SizedBox(height: 1),
+          Text('DEPOT $route STATION'),
+          Text('progress.value: ${progress.toStringAsFixed(2)}'),
+        ],
+      ),
+    );
+  }
+}
+
+class _AnimationProgressTour extends StatefulWidget {
+  const _AnimationProgressTour();
+
+  @override
+  State<_AnimationProgressTour> createState() => _AnimationProgressTourState();
+}
+
+class _AnimationProgressTourState extends State<_AnimationProgressTour> {
+  var _delivered = false;
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Text('PACKAGE ROUTE', style: CellStyle(bold: true)),
+        const Text('Change the target; the builder interpolates the value.'),
+        const SizedBox(height: 1),
+        Button(
+          label: _delivered ? 'Return to depot' : 'Send to station',
+          onPressed: () => setState(() => _delivered = !_delivered),
+        ),
+        const SizedBox(height: 1),
+        AnimationBuilder<double>(
+          _delivered ? 1.0 : 0.0,
+          curve: Curves.easeInOut,
+          duration: const Duration(milliseconds: 1100),
+          builder: (context, double progress, _) {
+            final position = (progress * 24).round();
+            final route =
+                '${List<String>.filled(position, '─').join()}◆'
+                '${List<String>.filled(24 - position, '·').join()}';
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text('DEPOT $route STATION'),
+                Text('progress: ${progress.toStringAsFixed(2)} · double'),
+                Container(
+                  height: 1,
+                  child: progress > 0.995
+                      ? const Text(
+                              '✦ PACKAGE DELIVERED ✦',
+                              style: CellStyle(
+                                foreground: RgbColor(70, 220, 145),
+                                bold: true,
+                              ),
+                            )
+                            .animate(
+                              duration: const Duration(milliseconds: 650),
+                            )
+                            .flash(color: const RgbColor(120, 255, 190))
+                            .slideIn(from: Edge.bottom)
+                      : const Text(''),
+                ),
+              ],
+            );
+          },
+        ),
+      ],
+    ),
+  );
+}
+
+class _AnimationTimingTour extends StatefulWidget {
+  const _AnimationTimingTour();
+
+  @override
+  State<_AnimationTimingTour> createState() => _AnimationTimingTourState();
+}
+
+Widget _sharedTimingStatus(bool active) {
+  const inactive = RgbColor(110, 120, 135);
+  const activeColor = RgbColor(70, 220, 145);
+
+  return AnimationBuilder<double>(
+    active ? 1.0 : 0.0,
+    curve: Curves.easeOut,
+    duration: const Duration(milliseconds: 800),
+    builder: (context, double progress, _) {
+      final width = 22 + (20 * progress).round();
+      final accent = rgbColorLerp(inactive, activeColor, progress);
+      return Container(
+        width: width,
+        height: 3,
+        border: BoxBorder(
+          style: Theme.of(context).borderStyle,
+          cellStyle: CellStyle(foreground: accent),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 1),
+        child: Text('TOGETHER ${(progress * 100).round()}%'),
+      );
+    },
+  );
+}
+
+Widget _independentTimingStatus(bool active) {
+  const inactive = RgbColor(110, 120, 135);
+  const activeColor = RgbColor(70, 220, 145);
+
+  return AnimationBuilder<int>(
+    active ? 42 : 22,
+    curve: Curves.easeOut,
+    duration: const Duration(milliseconds: 180),
+    builder: (context, width, _) => AnimationBuilder<double>(
+      active ? 1.0 : 0.0,
+      curve: Curves.easeOut,
+      duration: const Duration(milliseconds: 800),
+      builder: (context, double colorProgress, _) => Container(
+        width: width,
+        height: 3,
+        border: BoxBorder(
+          style: Theme.of(context).borderStyle,
+          cellStyle: CellStyle(
+            foreground: rgbColorLerp(inactive, activeColor, colorProgress),
+          ),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 1),
+        child: Text('ACCENT ${(colorProgress * 100).round()}%'),
+      ),
+    ),
+  );
+}
+
+class _AnimationTimingTourState extends State<_AnimationTimingTour> {
+  var _enabled = false;
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Text('TIMING COMPARISON', style: CellStyle(bold: true)),
+        const SizedBox(height: 1),
+        Button(
+          label: _enabled ? 'Reset' : 'Animate',
+          onPressed: () => setState(() => _enabled = !_enabled),
+        ),
+        const Text('Shared timing: width + color together'),
+        _sharedTimingStatus(_enabled),
+        const SizedBox(height: 1),
+        const Text('Independent timing: width 180 ms · accent 800 ms'),
+        _independentTimingStatus(_enabled),
+      ],
+    ),
+  );
+}
+
+class _EntranceEffectTour extends StatefulWidget {
+  const _EntranceEffectTour();
+
+  @override
+  State<_EntranceEffectTour> createState() => _EntranceEffectTourState();
+}
+
+class _EntranceEffectTourState extends State<_EntranceEffectTour> {
+  var _connected = false;
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Text('RELAY CONNECTION', style: CellStyle(bold: true)),
+        const Text('The effect runs when the status enters the tree.'),
+        const SizedBox(height: 1),
+        Button(
+          label: _connected ? 'Disconnect' : 'Connect',
+          onPressed: () => setState(() => _connected = !_connected),
+        ),
+        const SizedBox(height: 1),
+        if (_connected)
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child:
+                const Text(
+                      '● Connected to relay',
+                      style: CellStyle(foreground: RgbColor(70, 220, 145)),
+                    )
+                    .animate(
+                      duration: const Duration(milliseconds: 600),
+                      curve: Curves.linear,
+                    )
+                    .fadeIn()
+                    .slideIn(from: Edge.left),
+          )
+        else
+          const Text(
+            '○ Offline',
+            style: CellStyle(foreground: RgbColor(115, 125, 140)),
+          ),
+      ],
+    ),
+  );
+}
+
+enum _EntryEffectChoice { fade, slide, wipe, expand }
+
+enum _ExitEffectChoice { fade, slide, wipe, shrink }
+
+class _EffectPickerTour extends StatefulWidget {
+  const _EffectPickerTour();
+
+  @override
+  State<_EffectPickerTour> createState() => _EffectPickerTourState();
+}
+
+class _EffectPickerTourState extends State<_EffectPickerTour> {
+  var _entry = _EntryEffectChoice.fade;
+  var _exit = _ExitEffectChoice.fade;
+  var _visible = true;
+
+  Effect get _entryEffect => switch (_entry) {
+    _EntryEffectChoice.fade => Effects.fadeIn(),
+    _EntryEffectChoice.slide => Effects.slideIn(from: Edge.left),
+    _EntryEffectChoice.wipe => Effects.wipeIn(from: Edge.left),
+    _EntryEffectChoice.expand => Effects.expand(),
+  };
+
+  Effect get _exitEffect => switch (_exit) {
+    _ExitEffectChoice.fade => Effects.fadeOut(),
+    _ExitEffectChoice.slide => Effects.slideOut(to: Edge.right),
+    _ExitEffectChoice.wipe => Effects.wipeOut(to: Edge.right),
+    _ExitEffectChoice.shrink => Effects.shrink(),
+  };
+
+  Duration get _transitionDuration {
+    if (_visible) {
+      return switch (_entry) {
+        _EntryEffectChoice.fade => const Duration(milliseconds: 400),
+        _EntryEffectChoice.slide ||
+        _EntryEffectChoice.wipe => const Duration(milliseconds: 800),
+        _EntryEffectChoice.expand => const Duration(milliseconds: 300),
+      };
+    }
+    return switch (_exit) {
+      _ExitEffectChoice.fade => const Duration(milliseconds: 400),
+      _ExitEffectChoice.slide ||
+      _ExitEffectChoice.wipe => const Duration(milliseconds: 800),
+      _ExitEffectChoice.shrink => const Duration(milliseconds: 300),
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Text('ENTRANCE + EXIT LAB', style: CellStyle(bold: true)),
+        const Text('Choose a pair, then toggle the sample.'),
+        const SizedBox(height: 1),
+        Row(
+          children: <Widget>[
+            SizedBox(
+              width: 25,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Text('ENTER'),
+                  Select<_EntryEffectChoice>(
+                    semanticLabel: 'Entrance effect',
+                    autofocus: true,
+                    value: _entry,
+                    options: const <SelectOption<_EntryEffectChoice>>[
+                      SelectOption(
+                        value: _EntryEffectChoice.fade,
+                        label: 'Fade in',
+                      ),
+                      SelectOption(
+                        value: _EntryEffectChoice.slide,
+                        label: 'Slide in',
+                      ),
+                      SelectOption(
+                        value: _EntryEffectChoice.wipe,
+                        label: 'Wipe in',
+                      ),
+                      SelectOption(
+                        value: _EntryEffectChoice.expand,
+                        label: 'Expand',
+                      ),
+                    ],
+                    onChanged: (value) => setState(() => _entry = value),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(
+              width: 25,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Text('EXIT'),
+                  Select<_ExitEffectChoice>(
+                    semanticLabel: 'Exit effect',
+                    value: _exit,
+                    options: const <SelectOption<_ExitEffectChoice>>[
+                      SelectOption(
+                        value: _ExitEffectChoice.fade,
+                        label: 'Fade out',
+                      ),
+                      SelectOption(
+                        value: _ExitEffectChoice.slide,
+                        label: 'Slide out',
+                      ),
+                      SelectOption(
+                        value: _ExitEffectChoice.wipe,
+                        label: 'Wipe out',
+                      ),
+                      SelectOption(
+                        value: _ExitEffectChoice.shrink,
+                        label: 'Shrink',
+                      ),
+                    ],
+                    onChanged: (value) => setState(() => _exit = value),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 1),
+        Button(
+          label: _visible ? 'Hide sample' : 'Show sample',
+          onPressed: () => setState(() => _visible = !_visible),
+        ),
+        const SizedBox(height: 1),
+        AnimatedVisibility(
+          visible: _visible,
+          enter: _entryEffect,
+          exit: _exitEffect,
+          duration: _transitionDuration,
+          curve: Curves.linear,
+          child: Container(
+            width: 24,
+            border: BoxBorder(style: Theme.of(context).borderStyle),
+            padding: const EdgeInsets.symmetric(horizontal: 1),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text('DEPLOY PREVIEW', style: CellStyle(bold: true)),
+                Text('✓ Resolve'),
+                Text('✓ Analyze'),
+                Text('✓ Test'),
+                Text('✓ Package'),
+                Text('✓ Sign'),
+                Text('✓ Publish'),
+              ],
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _ValidationFeedbackTour extends StatefulWidget {
+  const _ValidationFeedbackTour();
+
+  @override
+  State<_ValidationFeedbackTour> createState() =>
+      _ValidationFeedbackTourState();
+}
+
+class _ValidationFeedbackTourState extends State<_ValidationFeedbackTour> {
+  final _name = TextEditingController();
+  final _nameFocus = FocusNode(debugLabel: 'pilot name');
+  var _submitCount = 0;
+  var _message = 'Enter a pilot name, then validate it.';
+  var _success = false;
+
+  void _submit() {
+    final name = _name.text.trim();
+    setState(() {
+      _submitCount++;
+      _success = name.isNotEmpty;
+      _message = _success
+          ? '✓ $name is cleared for launch'
+          : '✕ Enter any non-empty name';
+    });
+    _nameFocus.requestFocus();
+  }
+
+  Widget _feedback() {
+    final color = _success
+        ? const RgbColor(70, 220, 145)
+        : const RgbColor(255, 90, 90);
+    final feedback =
+        Text(
+          _message,
+          style: CellStyle(foreground: _submitCount == 0 ? null : color),
+        ).animate(
+          trigger: _submitCount,
+          curve: Curves.easeOut,
+          duration: const Duration(milliseconds: 650),
+        );
+    return feedback.wipeIn(from: Edge.left);
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _nameFocus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Text('FORM VALIDATION', style: CellStyle(bold: true)),
+        const SizedBox(height: 1),
+        const Text('Pilot name'),
+        Container(
+          width: 32,
+          border: BoxBorder(style: Theme.of(context).borderStyle),
+          padding: const EdgeInsets.symmetric(horizontal: 1),
+          child: SizedBox(
+            width: 28,
+            child: TextInput(
+              controller: _name,
+              focusNode: _nameFocus,
+              autofocus: true,
+              semanticLabel: 'Pilot name',
+              placeholder: 'Type any name',
+              onSubmit: (_) => _submit(),
+            ),
+          ),
+        ),
+        const SizedBox(height: 1),
+        _feedback(),
+        const SizedBox(height: 1),
+        Button(label: 'Validate pilot', onPressed: _submit),
+      ],
+    ),
+  );
+}
+
+class _AnimationChainTour extends StatefulWidget {
+  const _AnimationChainTour();
+
+  @override
+  State<_AnimationChainTour> createState() => _AnimationChainTourState();
+}
+
+class _PacketRouteController {
+  final position = Animation<int>(0, debugLabel: 'packet route position');
+
+  Future<void> send() async {
+    position.snap(0);
+    await position
+        .to(
+          10,
+          curve: Curves.easeInOut,
+          duration: const Duration(milliseconds: 900),
+        )
+        .delay(const Duration(milliseconds: 350))
+        .to(
+          20,
+          curve: Curves.easeInOut,
+          duration: const Duration(milliseconds: 1000),
+        )
+        .delay(const Duration(milliseconds: 350))
+        .to(
+          30,
+          curve: Curves.easeOut,
+          duration: const Duration(milliseconds: 1100),
+        )
+        .orCancel;
+  }
+
+  void dispose() => position.dispose();
+}
+
+class _AnimationChainTourState extends State<_AnimationChainTour> {
+  final _route = _PacketRouteController();
+  var _sending = false;
+
+  Future<void> _send() async {
+    setState(() => _sending = true);
+    try {
+      await _route.send();
+    } on TickerCanceled {
+      return;
+    }
+    if (mounted) setState(() => _sending = false);
+  }
+
+  @override
+  void dispose() {
+    _route.dispose();
+    super.dispose();
+  }
+
+  String _statusFor(int position) {
+    if (!_sending && position >= 30) return '✓ Packet archived';
+    if (!_sending) return 'Ready at depot';
+    if (position < 10) return '1/3 · Sending to relay A';
+    if (position == 10) return '1/3 · Paused at relay A';
+    if (position < 20) return '2/3 · Forwarding through relay B';
+    if (position == 20) return '2/3 · Paused at relay B';
+    return '3/3 · Delivering to archive';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final position = _route.position.value.clamp(0, 30);
+    final route = List<String>.filled(31, '·');
+    route[10] = '1';
+    route[20] = '2';
+    route[30] = '◆';
+    route[position] = position >= 30 ? '◉' : '●';
+    return _framed(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text('PACKET ROUTE', style: CellStyle(bold: true)),
+          const Text('Cross two relays, then deliver to the archive.'),
+          const SizedBox(height: 1),
+          Text(route.join()),
+          const Text('DEPOT    R1        R2        ARCHIVE'),
+          Text(_statusFor(position)),
+          const SizedBox(height: 1),
+          Button(
+            label: _sending
+                ? 'Restart route'
+                : position >= 30
+                ? 'Send another'
+                : 'Send packet',
+            onPressed: _send,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FrameCadenceTour extends StatefulWidget {
+  const _FrameCadenceTour();
+
+  @override
+  State<_FrameCadenceTour> createState() => _FrameCadenceTourState();
+}
+
+class _FrameCadenceTourState extends State<_FrameCadenceTour> {
+  static const _frames = <String>[
+    '●··········◇',
+    '──●········◇',
+    '────●······◇',
+    '──────●····◇',
+    '────────●··◇',
+    '──────────◆',
+  ];
+
+  var _fast = true;
+  var _running = true;
+
+  Duration get _interval => Duration(milliseconds: _fast ? 180 : 650);
+
+  @override
+  Widget build(BuildContext context) => _framed(
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Text('PACKET TRANSFER', style: CellStyle(bold: true)),
+        const Text(
+          'Each step is an authored frame, not an interpolated value.',
+        ),
+        const SizedBox(height: 1),
+        Row(
+          children: <Widget>[
+            Button(
+              label: _fast ? 'Slow down' : 'Speed up',
+              onPressed: () => setState(() => _fast = !_fast),
+            ),
+            const SizedBox(width: 1),
+            Button(
+              label: _running ? 'Pause' : 'Resume',
+              onPressed: () => setState(() => _running = !_running),
+            ),
+          ],
+        ),
+        const SizedBox(height: 1),
+        FrameBuilder(
+          interval: _interval,
+          enabled: _running,
+          builder: (context, frame, _, delta) {
+            final index = frame % _frames.length;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text('UPLINK ${_frames[index]} ARCHIVE'),
+                Text(
+                  'authored frame ${index + 1}/${_frames.length} · '
+                  '${delta.inMilliseconds} ms',
+                ),
+              ],
+            );
+          },
+        ),
+      ],
+    ),
+  );
+}
+
+class _TickerSimulationTour extends StatefulWidget {
+  const _TickerSimulationTour();
+
+  @override
+  State<_TickerSimulationTour> createState() => _TickerSimulationTourState();
+}
+
+class _TickerSimulationTourState extends State<_TickerSimulationTour>
+    with SingleTickerProviderStateMixin {
+  static const _trackWidth = 28.0;
+  Ticker? _ticker;
+  Duration _lastElapsed = Duration.zero;
+  var _position = 0.0;
+  var _velocity = 12.0;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _ticker ??= createTicker(_onTick)..start();
+  }
+
+  void _onTick(Duration elapsed) {
+    final seconds = (elapsed - _lastElapsed).inMicroseconds / 1000000;
+    _lastElapsed = elapsed;
+    var next = _position + (_velocity * seconds);
+    if (next >= _trackWidth) {
+      next = _trackWidth - (next - _trackWidth);
+      _velocity = -_velocity.abs();
+    } else if (next <= 0) {
+      next = -next;
+      _velocity = _velocity.abs();
+    }
+    setState(() => _position = next.clamp(0.0, _trackWidth));
+  }
+
+  void _toggle() => setState(() {
+    final ticker = _ticker!;
+    if (ticker.isActive) {
+      ticker.stop();
+    } else {
+      _lastElapsed = Duration.zero;
+      ticker.start();
+    }
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final position = _position.round();
+    final track =
+        '${List<String>.filled(position, '─').join()}●'
+        '${List<String>.filled(_trackWidth.round() - position, '·').join()}';
+    return _framed(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text('SIMULATION CLOCK', style: CellStyle(bold: true)),
+          const Text('Position advances from elapsed time on every tick.'),
+          const SizedBox(height: 1),
+          Text('|$track|'),
+          Text('position ${_position.toStringAsFixed(1)} cells'),
+          const SizedBox(height: 1),
+          Button(
+            label: _ticker?.isActive == true
+                ? 'Pause simulation'
+                : 'Resume simulation',
+            onPressed: _toggle,
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// A guide-level example for local widget state.
