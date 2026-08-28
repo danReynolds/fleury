@@ -537,12 +537,23 @@ void main() {
       ], // full bar, meter intact
       'autocomplete.basic': <String>['Apple'], // seeded query opens the matches
       'tracetimeline.basic': <String>['Publish report'], // third event fits
+      // The preview's text can fit while its final border row is clipped.
+      'animation.presence': <String>['✓ Publish'],
       // The tutorial-page embed: the full language list fits its frame.
       'tutorial.filter': <String>['10 of 10', 'Dart', 'Haskell'],
     };
     final missing = <String>[];
     for (final entry in checks.entries) {
       final fixture = await _mountExample(entry.key, useManifestSize: true);
+      if (entry.key == 'animation.presence') {
+        // Let the initial fade reach its passthrough state; at progress zero
+        // the effect intentionally recolors every cell and is not a useful
+        // oracle for the resting border geometry.
+        await Future<void>.delayed(const Duration(milliseconds: 450));
+        for (var i = 0; i < 4 && fixture.flush.pending; i++) {
+          fixture.flush.fire();
+        }
+      }
       final painted =
           fixture.host.querySelector('.fleury-screen')?.textContent ?? '';
       if (entry.key == 'progressbar.basic') {
@@ -556,6 +567,33 @@ void main() {
           }
         }
         if (!hasPaintedFill) missing.add('progressbar.basic → painted fill');
+      }
+      if (entry.key == 'animation.presence') {
+        final rows = fixture.host.querySelectorAll('.fleury-row');
+        var publishRow = -1;
+        for (var i = 0; i < rows.length; i++) {
+          if (((rows.item(i) as web.Element).textContent ?? '').contains(
+            '✓ Publish',
+          )) {
+            publishRow = i;
+            break;
+          }
+        }
+        var hasBottomBorder = false;
+        if (publishRow >= 0 && publishRow + 1 < rows.length) {
+          final spans = (rows.item(publishRow + 1) as web.Element)
+              .querySelectorAll('span');
+          for (var i = 0; i < spans.length; i++) {
+            final style = (spans.item(i) as web.Element).getAttribute('style');
+            if (style != null && style.contains('background-image:')) {
+              hasBottomBorder = true;
+              break;
+            }
+          }
+        }
+        if (!hasBottomBorder) {
+          missing.add('animation.presence → painted bottom border');
+        }
       }
       for (final needle in entry.value) {
         if (!painted.contains(needle)) missing.add('${entry.key} → "$needle"');

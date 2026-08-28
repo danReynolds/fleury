@@ -25,6 +25,7 @@ final class SemanticDomPresenter
   final Map<String, String> _ownTextById = {};
   final Map<String, web.Text> _textNodesById = {};
   final Map<String, JSFunction> _clickListenersById = {};
+  final List<CellRect> _pointerCursorRegions = <CellRect>[];
   SemanticActionRequestHandler? _onSemanticActionRequest;
 
   web.Element get rootElement => _root;
@@ -45,6 +46,7 @@ final class SemanticDomPresenter
     SemanticTree tree, {
     SemanticTreeUpdate? update,
   }) {
+    _syncPointerCursorRegions(tree.root);
     if (update != null && !update.hasChanges && _elementsById.isNotEmpty) {
       return SemanticPresentationStats.retained(nodeCount: tree.nodeCount);
     }
@@ -60,6 +62,25 @@ final class SemanticDomPresenter
     return stats.toPresentationStats(update);
   }
 
+  /// Whether an enabled, pointer-actionable semantic node covers [cell].
+  ///
+  /// The painted cell grid cannot express a browser cursor by itself. The
+  /// browser input layer uses this semantic geometry to show the ordinary hand
+  /// cursor over buttons without adding invisible DOM overlays that would
+  /// intercept Fleury's pointer routing.
+  bool showsPointerCursorAt(CellOffset cell) {
+    for (var i = _pointerCursorRegions.length - 1; i >= 0; i--) {
+      final bounds = _pointerCursorRegions[i];
+      if (cell.col >= bounds.left &&
+          cell.col < bounds.right &&
+          cell.row >= bounds.top &&
+          cell.row < bounds.bottom) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   @override
   Future<void> dispose() async {
     _onSemanticActionRequest = null;
@@ -72,6 +93,27 @@ final class SemanticDomPresenter
     _ownTextById.clear();
     _textNodesById.clear();
     _clickListenersById.clear();
+    _pointerCursorRegions.clear();
+  }
+
+  void _syncPointerCursorRegions(SemanticNode root) {
+    _pointerCursorRegions.clear();
+
+    void visit(SemanticNode node) {
+      final bounds = node.bounds;
+      if (bounds != null &&
+          !bounds.size.isEmpty &&
+          node.enabled &&
+          _usesPointerCursor(node.role) &&
+          node.actions.isNotEmpty) {
+        _pointerCursorRegions.add(bounds);
+      }
+      for (final child in node.children) {
+        visit(child);
+      }
+    }
+
+    visit(root);
   }
 
   void _configureRoot() {
@@ -671,6 +713,22 @@ SemanticAction? _semanticActionByName(String name) {
   }
   return null;
 }
+
+bool _usesPointerCursor(SemanticRole role) => const <SemanticRole>{
+  SemanticRole.link,
+  SemanticRole.button,
+  SemanticRole.command,
+  SemanticRole.approval,
+  SemanticRole.checkbox,
+  SemanticRole.radio,
+  SemanticRole.toggle,
+  SemanticRole.spinButton,
+  SemanticRole.slider,
+  SemanticRole.datePicker,
+  SemanticRole.menuItem,
+  SemanticRole.tab,
+  SemanticRole.treeItem,
+}.contains(role);
 
 const _rootStyle =
     'position:absolute;left:-10000px;top:auto;width:1px;height:1px;'

@@ -160,6 +160,31 @@ void main() {
       ]);
     });
 
+    test('metric refresh preserves host-owned inline cursor state', () {
+      final root = web.document.createElement('div') as web.HTMLElement;
+      final surface = DomGridSurface(root: root, size: size);
+      root.style.setProperty('cursor', 'pointer');
+
+      surface.resize(
+        size,
+        metrics: const MeasuredCellBox(
+          cssCellWidth: 10,
+          cssCellHeight: 20,
+          cssCanvasWidth: 80,
+          cssCanvasHeight: 60,
+          devicePixelRatio: 1,
+          cols: 8,
+          rows: 3,
+          layoutCellWidth: 9.5,
+          layoutCellHeight: 20,
+        ),
+      );
+
+      expect(root.style.getPropertyValue('cursor'), 'pointer');
+      expect(root.style.getPropertyValue('letter-spacing'), '0.5px');
+      expect(root.style.getPropertyValue('line-height'), '20px');
+    });
+
     test('retains row elements and replaces only dirty row children', () {
       final root = web.document.createElement('div');
       final surface = DomGridSurface(root: root, size: size);

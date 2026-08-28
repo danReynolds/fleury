@@ -1,15 +1,13 @@
-// Reveal: presence animation for a single child.
+// AnimatedVisibility: presence animation for a single child.
 //
 // Toggling [visible] plays an [enter] effect when the child appears
 // and an [exit] effect when it leaves — and, crucially, keeps the
-// child mounted until the exit finishes, then drops it. Because we
-// own the element lifecycle we can defer unmount cleanly, sidestepping
-// the fragility that plagues `AnimatePresence`-style APIs elsewhere.
+// child mounted until the exit finishes, then drops it.
 //
-//   Reveal(
+//   AnimatedVisibility(
 //     visible: showDetails,
 //     enter: Effects.expand() + Effects.fadeIn(),
-//     exit: Effects.collapse(),
+//     exit: Effects.shrink(),
 //     child: Details(),
 //   );
 //
@@ -19,14 +17,15 @@
 
 import '../animation/animation.dart';
 import '../animation/curves.dart';
+import '../animation/ticker_future.dart';
 import 'basic.dart' show EmptyBox;
 import 'effects.dart';
 import 'framework.dart';
 
 /// Animates [child] in and out as [visible] toggles, deferring unmount
 /// until the [exit] effect completes.
-class Reveal extends StatefulWidget {
-  const Reveal({
+class AnimatedVisibility extends StatefulWidget {
+  const AnimatedVisibility({
     required this.visible,
     required this.child,
     this.enter,
@@ -51,14 +50,15 @@ class Reveal extends StatefulWidget {
   final Curve? curve;
 
   @override
-  State<Reveal> createState() => _RevealState();
+  State<AnimatedVisibility> createState() => _AnimatedVisibilityState();
 }
 
-class _RevealState extends State<Reveal> {
+class _AnimatedVisibilityState extends State<AnimatedVisibility> {
   // 1 = fully present, 0 = fully absent.
   late final Animation<double> _t = Animation(0.0);
   bool _present = false;
   bool _exiting = false;
+  var _transitionGeneration = 0;
 
   Duration get _duration =>
       widget.duration ?? const Duration(milliseconds: 250);
@@ -78,7 +78,7 @@ class _RevealState extends State<Reveal> {
   }
 
   @override
-  void didUpdateWidget(Reveal old) {
+  void didUpdateWidget(AnimatedVisibility old) {
     super.didUpdateWidget(old);
     if (widget.visible == old.visible) return;
     if (widget.visible) {
@@ -89,6 +89,7 @@ class _RevealState extends State<Reveal> {
   }
 
   void _appear() {
+    _transitionGeneration++;
     setState(() {
       _present = true;
       _exiting = false;
@@ -101,6 +102,7 @@ class _RevealState extends State<Reveal> {
   }
 
   void _leave() {
+    final generation = ++_transitionGeneration;
     if (widget.exit == null) {
       setState(() {
         _present = false;
@@ -110,20 +112,27 @@ class _RevealState extends State<Reveal> {
       return;
     }
     setState(() => _exiting = true);
-    _t.to(0.0, curve: _curve, duration: _duration).then((_) {
-      // Fires on natural completion or cancel (a re-show supersedes
-      // the exit). Only drop the child if we're still meant to be
-      // gone.
-      if (!mounted || widget.visible) return;
-      setState(() {
-        _present = false;
-        _exiting = false;
-      });
+    _finishExit(generation);
+  }
+
+  Future<void> _finishExit(int generation) async {
+    try {
+      await _t.to(0.0, curve: _curve, duration: _duration).orCancel;
+    } on TickerCanceled {
+      return;
+    }
+    if (!mounted || generation != _transitionGeneration || widget.visible) {
+      return;
+    }
+    setState(() {
+      _present = false;
+      _exiting = false;
     });
   }
 
   @override
   void dispose() {
+    _transitionGeneration++;
     _t.dispose();
     super.dispose();
   }
@@ -132,12 +141,21 @@ class _RevealState extends State<Reveal> {
   Widget build(BuildContext context) {
     if (!_present) return const EmptyBox();
     final t = _t.value; // subscribe to frame advances
-    if (_exiting) {
-      // exit effects map 0 = present → 1 = gone, so feed (1 - t).
-      return widget.exit!.build(widget.child, (1 - t).clamp(0.0, 1.0));
-    }
+    var result = widget.child;
+
+    // Keep both effect trees mounted while the child is present. Enter and
+    // exit effects can use different wrapper types; swapping between those
+    // roots when visibility changes would otherwise remount a stateful child.
+    // The inactive effect receives its identity endpoint.
     final enter = widget.enter;
-    if (enter == null) return widget.child;
-    return enter.build(widget.child, t);
+    if (enter != null) {
+      result = enter.build(result, _exiting ? 1.0 : t);
+    }
+    final exit = widget.exit;
+    if (exit != null) {
+      final progress = _exiting ? (1 - t).clamp(0.0, 1.0) : 0.0;
+      result = exit.build(result, progress);
+    }
+    return result;
   }
 }

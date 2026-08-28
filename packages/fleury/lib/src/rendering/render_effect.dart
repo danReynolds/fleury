@@ -1,5 +1,5 @@
-// RenderCellEffect: the compositing primitive behind every animated
-// effect (fade, slide, flash, reveal, tint, shimmer, …).
+// RenderCellEffect: the compositing primitive behind cell-style animated
+// effects (fade, flash, wipe, tint, shimmer, …).
 //
 // On a cell grid there's no alpha or pixel buffer, so effects can't
 // recolor or move arbitrary child content in place. Instead this
@@ -8,8 +8,7 @@
 // per-cell function. That function can:
 //
 //   - recolor / restyle the cell    (fade, tint, flash, shimmer)
-//   - move it                       (slide, shake)
-//   - drop it                       (reveal / clip)
+//   - drop it                       (wipe / clip)
 //
 // Layout is transparent: the effect reports its child's size, so it
 // never disturbs surrounding layout — only paint changes.
@@ -150,9 +149,157 @@ class RenderCellEffect extends RenderObject
   }
 }
 
-/// Clips a child to a fraction of its natural size along each axis,
-/// reporting the *clipped* size so surrounding layout reflows. Used
-/// by `expand` / `collapse` — the box grows/shrinks and siblings move.
+/// Paints a child at an integer-cell translation without changing layout.
+///
+/// Unlike [RenderCellEffect]'s arbitrary per-cell mapping, translation has a
+/// well-defined inverse. That lets this render object move the whole painted
+/// rectangle — text, opaque blank cells, and inline-image placements — while
+/// keeping focus, pointer, caret, and semantic geometry at the same visible
+/// position. Painted cells may overflow the stable layout box, while descendant
+/// interaction geometry is clipped to that box. This mirrors a box transform:
+/// the translated content stays visible, but it does not create a new hit-test
+/// region outside the space its parent allocated.
+class RenderCellTranslation extends RenderObject
+    implements RenderObjectWithSingleChild {
+  RenderCellTranslation({
+    double horizontalFraction = 0,
+    double verticalFraction = 0,
+    CellOffset cellOffset = CellOffset.zero,
+    RenderObject? child,
+  }) : _horizontalFraction = horizontalFraction,
+       _verticalFraction = verticalFraction,
+       _cellOffset = cellOffset {
+    if (child != null) this.child = child;
+  }
+
+  double _horizontalFraction;
+  set horizontalFraction(double value) {
+    if (_horizontalFraction == value) return;
+    final before = _resolvedOffset;
+    _horizontalFraction = value;
+    if (before == null || before != _resolvedOffset) markNeedsPaintOnly();
+  }
+
+  double _verticalFraction;
+  set verticalFraction(double value) {
+    if (_verticalFraction == value) return;
+    final before = _resolvedOffset;
+    _verticalFraction = value;
+    if (before == null || before != _resolvedOffset) markNeedsPaintOnly();
+  }
+
+  CellOffset _cellOffset;
+  set cellOffset(CellOffset value) {
+    if (_cellOffset == value) return;
+    final before = _resolvedOffset;
+    _cellOffset = value;
+    if (before == null || before != _resolvedOffset) markNeedsPaintOnly();
+  }
+
+  RenderObject? _child;
+  CellSize? _childSize;
+
+  @override
+  RenderObject? get child => _child;
+
+  @override
+  set child(RenderObject? value) {
+    if (identical(_child, value)) return;
+    if (_child != null) dropChild(_child!);
+    _child = value;
+    _childSize = null;
+    if (value != null) adoptChild(value);
+  }
+
+  CellOffset? get _resolvedOffset {
+    final childSize = _childSize;
+    if (childSize == null) return null;
+    return CellOffset(
+      _cellOffset.col + (childSize.cols * _horizontalFraction).round(),
+      _cellOffset.row + (childSize.rows * _verticalFraction).round(),
+    );
+  }
+
+  @override
+  CellSize performLayout(CellConstraints constraints) {
+    final c = _child;
+    if (c == null) return constraints.constrain(CellSize.zero);
+    final childSize = c.layout(constraints);
+    _childSize = childSize;
+    return childSize;
+  }
+
+  @override
+  void paint(
+    CellBuffer buffer,
+    CellOffset offset, {
+    CellOffset? screenOffset,
+    CellRect? clipRect,
+  }) {
+    final c = _child;
+    final translation = _resolvedOffset;
+    if (c == null || translation == null || c.size.isEmpty) return;
+    if (translation == CellOffset.zero) {
+      c.paint(
+        buffer,
+        offset,
+        screenOffset: screenOffset ?? offset,
+        clipRect: clipRect,
+      );
+      return;
+    }
+
+    final screen = screenOffset ?? offset;
+    final ownScreenRect = CellRect(offset: screen, size: size);
+    final inheritedHitBox = clipRect?.intersect(ownScreenRect);
+    final effectiveGeometryClip = clipRect == null
+        ? ownScreenRect
+        : inheritedHitBox ?? CellRect(offset: screen, size: CellSize.zero);
+    final scratch = CellBuffer(c.size);
+
+    // The child records geometry where it is visibly painted, not at its
+    // stable layout origin. Interaction remains bounded by the layout box even
+    // though the translated cells themselves may overflow it.
+    paintWithGeometryClip(ownScreenRect, () {
+      c.paint(
+        scratch,
+        CellOffset.zero,
+        screenOffset: screen + translation,
+        clipRect: effectiveGeometryClip,
+      );
+    });
+
+    final translatedChildRect = CellRect(
+      offset: screen + translation,
+      size: c.size,
+    );
+    final visible =
+        clipRect?.intersect(translatedChildRect) ??
+        (clipRect == null ? translatedChildRect : null);
+    if (visible == null) return;
+
+    final sourceRect = CellRect.fromLTWH(
+      visible.left - translatedChildRect.left,
+      visible.top - translatedChildRect.top,
+      visible.size.cols,
+      visible.size.rows,
+    );
+    final destination = CellOffset(
+      offset.col + visible.left - ownScreenRect.left,
+      offset.row + visible.top - ownScreenRect.top,
+    );
+    _compositePaintedRect(
+      source: scratch,
+      sourceRect: sourceRect,
+      destination: buffer,
+      destinationOffset: destination,
+    );
+  }
+}
+
+/// Clips an aligned slice of a child to a fraction of its natural size along
+/// each axis, reporting the *clipped* size so surrounding layout reflows. Used
+/// by `expand` / `shrink` — the box grows/shrinks and siblings move.
 ///
 /// Distinct from [RenderCellEffect], which is layout-transparent
 /// (reveal-in-place). Here the size itself animates.
@@ -160,27 +307,53 @@ class RenderClip extends RenderObject implements RenderObjectWithSingleChild {
   RenderClip({
     double widthFactor = 1.0,
     double heightFactor = 1.0,
+    int horizontalAlignment = -1,
+    int verticalAlignment = -1,
     RenderObject? child,
   }) : _widthFactor = widthFactor,
-       _heightFactor = heightFactor {
+       _heightFactor = heightFactor,
+       _horizontalAlignment = horizontalAlignment,
+       _verticalAlignment = verticalAlignment,
+       assert(horizontalAlignment >= -1 && horizontalAlignment <= 1),
+       assert(verticalAlignment >= -1 && verticalAlignment <= 1) {
     if (child != null) this.child = child;
   }
 
   double _widthFactor;
   set widthFactor(double v) {
     if (_widthFactor == v) return;
+    final before = _projectedSize;
     _widthFactor = v;
-    markNeedsLayout();
+    if (before == null || before != _projectedSize) markNeedsLayout();
   }
 
   double _heightFactor;
   set heightFactor(double v) {
     if (_heightFactor == v) return;
+    final before = _projectedSize;
     _heightFactor = v;
-    markNeedsLayout();
+    if (before == null || before != _projectedSize) markNeedsLayout();
+  }
+
+  int _horizontalAlignment;
+  set horizontalAlignment(int value) {
+    assert(value >= -1 && value <= 1);
+    if (_horizontalAlignment == value) return;
+    _horizontalAlignment = value;
+    markNeedsPaintOnly();
+  }
+
+  int _verticalAlignment;
+  set verticalAlignment(int value) {
+    assert(value >= -1 && value <= 1);
+    if (_verticalAlignment == value) return;
+    _verticalAlignment = value;
+    markNeedsPaintOnly();
   }
 
   RenderObject? _child;
+  CellSize? _naturalSize;
+  CellConstraints? _lastConstraints;
   @override
   RenderObject? get child => _child;
   @override
@@ -188,7 +361,21 @@ class RenderClip extends RenderObject implements RenderObjectWithSingleChild {
     if (identical(_child, value)) return;
     if (_child != null) dropChild(_child!);
     _child = value;
+    _naturalSize = null;
+    _lastConstraints = null;
     if (value != null) adoptChild(value);
+  }
+
+  CellSize? get _projectedSize {
+    final natural = _naturalSize;
+    final constraints = _lastConstraints;
+    if (natural == null || constraints == null) return null;
+    return constraints.constrain(
+      CellSize(
+        (natural.cols * _widthFactor).round().clamp(0, natural.cols),
+        (natural.rows * _heightFactor).round().clamp(0, natural.rows),
+      ),
+    );
   }
 
   @override
@@ -196,11 +383,9 @@ class RenderClip extends RenderObject implements RenderObjectWithSingleChild {
     final c = _child;
     if (c == null) return constraints.constrain(CellSize.zero);
     final natural = c.layout(constraints.loosen());
-    final clipped = CellSize(
-      (natural.cols * _widthFactor).round().clamp(0, natural.cols),
-      (natural.rows * _heightFactor).round().clamp(0, natural.rows),
-    );
-    return constraints.constrain(clipped);
+    _naturalSize = natural;
+    _lastConstraints = constraints;
+    return _projectedSize!;
   }
 
   @override
@@ -213,12 +398,13 @@ class RenderClip extends RenderObject implements RenderObjectWithSingleChild {
     final c = _child;
     if (c == null) return;
     final clipped = size;
-    if (clipped.isEmpty) return;
+    if (c.size.isEmpty) return;
 
     final scratch = CellBuffer(c.size);
     final screen = screenOffset ?? offset;
     final ownScreenRect = CellRect(offset: screen, size: clipped);
     final inheritedIntersection = clipRect?.intersect(ownScreenRect);
+    final visibleBox = clipRect == null ? ownScreenRect : inheritedIntersection;
     final effectiveClip = clipRect == null
         ? ownScreenRect
         : inheritedIntersection ??
@@ -228,43 +414,77 @@ class RenderClip extends RenderObject implements RenderObjectWithSingleChild {
       c.paint(
         scratch,
         CellOffset.zero,
-        screenOffset: screen,
+        screenOffset: screen - _alignedSourceOffset(c.size, clipped),
         clipRect: effectiveClip,
       );
     });
+    if (visibleBox == null || clipped.isEmpty) return;
 
-    final cols = buffer.size.cols;
-    final rows = buffer.size.rows;
-    for (var row = 0; row < clipped.rows; row++) {
-      for (var col = 0; col < clipped.cols; col++) {
-        final cell = scratch.atColRow(col, row);
-        if (cell.role != CellRole.leading) continue;
-        // A wide glyph whose continuation falls outside the clipped box would
-        // spill one column past `clipped.cols` (writeGrapheme re-derives width
-        // 2 and writes the continuation), evicting the sibling there. Drop it
-        // rather than split it — wide graphemes are dropped, never split.
-        if (col + 1 >= clipped.cols &&
-            col + 1 < scratch.size.cols &&
-            scratch.atColRow(col + 1, row).role == CellRole.continuation) {
-          continue;
-        }
-        final tc = offset.col + col;
-        final tr = offset.row + row;
-        if (tc < 0 || tr < 0 || tc >= cols || tr >= rows) continue;
-        buffer.writeGrapheme(
-          CellOffset(tc, tr),
-          cell.grapheme!,
-          style: cell.style,
-        );
-      }
-    }
-    // Placements are stored off-grid and therefore are not carried by the
-    // leading-cell loop above. Composite the same clipped rectangle so image
-    // pixels follow expand/collapse geometry exactly.
-    buffer.compositeImageRectFrom(
-      scratch,
-      CellRect(offset: CellOffset.zero, size: clipped),
-      offset,
+    final targetLocal = visibleBox.offset - ownScreenRect.offset;
+    final alignedSource = _alignedSourceOffset(c.size, clipped);
+    final sourceRect = CellRect(
+      offset: alignedSource + targetLocal,
+      size: visibleBox.size,
+    );
+    _compositePaintedRect(
+      source: scratch,
+      sourceRect: sourceRect,
+      destination: buffer,
+      destinationOffset: offset + targetLocal,
     );
   }
+
+  CellOffset _alignedSourceOffset(CellSize natural, CellSize clipped) =>
+      CellOffset(
+        _alignedStart(natural.cols, clipped.cols, _horizontalAlignment),
+        _alignedStart(natural.rows, clipped.rows, _verticalAlignment),
+      );
+}
+
+int _alignedStart(int natural, int visible, int alignment) {
+  final slack = natural - visible;
+  if (alignment < 0) return 0;
+  if (alignment > 0) return slack;
+  return slack ~/ 2;
+}
+
+/// Transparently composites a clipped painted-cell rectangle and its image
+/// placements. Empty cells remain transparent; wide glyphs are dropped rather
+/// than split when the source rectangle cuts through their trailing cell.
+void _compositePaintedRect({
+  required CellBuffer source,
+  required CellRect sourceRect,
+  required CellBuffer destination,
+  required CellOffset destinationOffset,
+}) {
+  final cols = destination.size.cols;
+  final rows = destination.size.rows;
+  for (var row = 0; row < sourceRect.size.rows; row++) {
+    final sourceRow = sourceRect.top + row;
+    for (var col = 0; col < sourceRect.size.cols; col++) {
+      final sourceCol = sourceRect.left + col;
+      final cell = source.atColRow(sourceCol, sourceRow);
+      if (cell.role != CellRole.leading) continue;
+      if (col + 1 >= sourceRect.size.cols &&
+          sourceCol + 1 < source.size.cols &&
+          source.atColRow(sourceCol + 1, sourceRow).role ==
+              CellRole.continuation) {
+        continue;
+      }
+      final targetCol = destinationOffset.col + col;
+      final targetRow = destinationOffset.row + row;
+      if (targetCol < 0 ||
+          targetRow < 0 ||
+          targetCol >= cols ||
+          targetRow >= rows) {
+        continue;
+      }
+      destination.writeGrapheme(
+        CellOffset(targetCol, targetRow),
+        cell.grapheme!,
+        style: cell.style,
+      );
+    }
+  }
+  destination.compositeImageRectFrom(source, sourceRect, destinationOffset);
 }

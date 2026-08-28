@@ -219,6 +219,7 @@ final class BrowserPresentationHost {
         hostElement: host,
         pointerTarget: surfaceRoot,
         cellMetrics: metrics,
+        pointerCursorResolver: semanticPresenter?.showsPointerCursorAt,
         focusCoordinator: webFocusCoordinator,
         clipboard: webClipboard,
       );

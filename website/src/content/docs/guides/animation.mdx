@@ -1,0 +1,670 @@
+---
+title: Animation
+description: Add state-driven motion, effects, chained animation, and authored frames to Fleury apps.
+---
+
+import FleuryExample from '../../../components/FleuryExample.astro';
+import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
+
+Animation helps people follow changes in your app. It can show where an item
+went, draw attention to a result, or keep a multi-step action understandable.
+Fleury provides a few APIs for these different jobs, all driven by the same
+animation system.
+
+Start with this orbital courier:
+
+<FleuryExample
+  id="animation.state"
+  title="Send a package into orbit"
+  cols={60}
+  rows={15}
+  interactive
+/>
+
+Press **Launch**. The courier moves through ignition, ascent, transfer, and
+delivery over about five seconds. Press **Reset mission** at any point to
+interrupt the launch and return it to the depot.
+
+One animation drives the route, progress bar, color, and status, keeping every
+part of the mission in sync from launch through delivery.
+
+## Choose the right animation tool
+
+| You want to… | Use |
+|---|---|
+| Own, retarget, await, or chain a value | `Animation<T>` |
+| Follow a target stored in widget state | `AnimationBuilder<T>` |
+| Run visual effects on a widget | `Animate` |
+| Advance authored pictures at a chosen interval | `FrameBuilder` |
+| Update a simulation on every app-scheduler tick | `Ticker` |
+
+## Working with animations
+
+### Own an animated value
+
+`Animation<T>` is the core primitive. Own one when application code needs to
+retarget a value, await it, or use the same progress in several places.
+
+This widget owns a `double` that runs from `0.0` at the depot to `1.0` at the
+station. Reading `progress.value` during `build` subscribes the widget to the
+animation, so it rebuilds as the value changes:
+
+<CodeDemoSplit file="manual_route.dart" layout="demo-wide">
+<Fragment slot="code">
+```dart
+class _ManualRouteState extends State<ManualRoute> {
+  final progress = Animation<double>(0.0);
+  var running = false;
+
+  Future<void> runRoute() async {
+    setState(() => running = true);
+    try {
+      await progress
+          .to(1.0, curve: Curves.easeInOut, duration: 700.ms)
+          .delay(600.ms)
+          .to(0.0, curve: Curves.easeInOut, duration: 700.ms)
+          .orCancel;
+    } on TickerCanceled {
+      return;
+    }
+    if (mounted) setState(() => running = false);
+  }
+
+  void returnNow() {
+    setState(() => running = false);
+    progress.to(
+      0.0,
+      curve: Curves.easeOut,
+      duration: 450.ms,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final value = progress.value;
+    final position = (value * 24).round();
+    return Column(
+      children: [
+        Button(
+          label: running ? 'Return now' : 'Run route',
+          onPressed: running ? returnNow : runRoute,
+        ),
+        Text('Package position: $position'),
+      ],
+    );
+  }
+
+  @override
+  void dispose() {
+    progress.dispose();
+    super.dispose();
+  }
+}
+```
+</Fragment>
+<FleuryExample
+  slot="demo"
+  id="animation.manual"
+  title="Own, chain, and interrupt an Animation value"
+  cols={48}
+  rows={11}
+  interactive
+/>
+</CodeDemoSplit>
+
+Press **Run route**. The package moves to the station, waits there for 600 ms,
+then returns. Press **Return now** while it is moving or waiting: the direct
+call on `progress` cancels the appended run and retargets from the current
+value. The orbital courier above uses the same primitive for a longer route.
+
+### Let `AnimationBuilder` manage a state-driven target
+
+When the destination already lives in widget state, `AnimationBuilder<T>`
+removes the ownership and disposal work. Give it the latest target; when that
+target changes, the builder moves from its current value to the new one.
+
+This demo sends a package between two destinations. The explicit
+`AnimationBuilder<double>` type means the builder receives a `double` named
+`progress`, ranging from `0.0` at the depot to `1.0` at the station:
+
+<CodeDemoSplit file="package_route.dart" layout="demo-wide">
+<Fragment slot="code">
+```dart
+class _PackageRouteState extends State<PackageRoute> {
+  var delivered = false;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      Button(
+        label: delivered ? 'Return to depot' : 'Send to station',
+        onPressed: () => setState(() => delivered = !delivered),
+      ),
+      AnimationBuilder<double>(
+        delivered ? 1.0 : 0.0,
+        curve: Curves.easeInOut,
+        duration: const Duration(milliseconds: 1100),
+        builder: (context, double progress, _) {
+          final position = (progress * 24).round();
+          return PackageTrack(position: position, progress: progress);
+        },
+      ),
+    ],
+  );
+}
+```
+</Fragment>
+<FleuryExample
+  slot="demo"
+  id="animation.progress"
+  title="Move between two state-driven destinations"
+  cols={48}
+  rows={12}
+  interactive
+/>
+</CodeDemoSplit>
+
+When the package reaches the station, the demo mounts a short completion
+effect. Fleury interpolates `double`, `int`, `RgbColor`, and `CellOffset`
+directly.
+
+### Use shared or independent timing
+
+One animated value can drive several visual properties. Use that when size,
+color, and progress should stay synchronized. Give properties separate
+builders when they need different durations.
+
+The two status rails below end in the same state. The first uses one
+`double progress` for width and color. In the second, width finishes in 180 ms
+while the color continues for 800 ms:
+
+<CodeDemoSplit
+  files={['shared_progress.dart', 'independent_timing.dart']}
+  initialFile="shared_progress.dart"
+  layout="demo-wide"
+>
+<Fragment slot="code-0">
+```dart
+Widget sharedTimingStatus(bool active) {
+  const inactive = RgbColor(110, 120, 135);
+  const activeColor = RgbColor(70, 220, 145);
+
+  return AnimationBuilder<double>(
+    active ? 1.0 : 0.0,
+    curve: Curves.easeOut,
+    duration: const Duration(milliseconds: 800),
+    builder: (context, double progress, _) {
+      final width = 22 + (20 * progress).round();
+      final accent = rgbColorLerp(inactive, activeColor, progress);
+      return Container(
+        width: width,
+        height: 3,
+        border: BoxBorder(cellStyle: CellStyle(foreground: accent)),
+        child: Text('TOGETHER ${(progress * 100).round()}%'),
+      );
+    },
+  );
+}
+```
+</Fragment>
+<Fragment slot="code-1">
+```dart
+Widget independentTimingStatus(bool active) {
+  return AnimationBuilder<int>(
+    active ? 42 : 22,
+    curve: Curves.easeOut,
+    duration: const Duration(milliseconds: 180),
+    builder: (context, int width, _) => AnimationBuilder<double>(
+      active ? 1.0 : 0.0,
+      curve: Curves.easeOut,
+      duration: const Duration(milliseconds: 800),
+      builder: (context, double colorProgress, _) => StatusRail(
+        width: width,
+        accent: rgbColorLerp(inactive, activeColor, colorProgress),
+      ),
+    ),
+  );
+}
+```
+</Fragment>
+<FleuryExample
+  slot="demo"
+  id="animation.timing"
+  title="Compare shared and independent timing"
+  cols={54}
+  rows={15}
+  interactive
+/>
+</CodeDemoSplit>
+
+Press **Animate** and compare the two rails. Shared progress keeps related
+properties synchronized. Separate builders let each property finish on its own
+schedule.
+
+## Apply visual effects
+
+An `Effect` describes a visual change such as a fade, slide, flash, or shake.
+`Animate` is the widget that runs one or more effects on its child:
+
+```dart
+Animate(
+  duration: const Duration(milliseconds: 600),
+  curve: Curves.linear,
+  effects: [Effects.fadeIn(), Effects.slideIn(from: Edge.left)],
+  child: const Text('● Connected to relay'),
+)
+```
+
+The `.animate()` extension is fluent shorthand for constructing `Animate`.
+This is equivalent to the code above:
+
+```dart
+const Text('● Connected to relay')
+    .animate(
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.linear,
+    )
+    .fadeIn()
+    .slideIn(from: Edge.left)
+```
+
+Both forms run the same `Effect` values with `Animation<double>`; they are not
+separate animation systems. This example mounts a connection status and runs
+the fade and slide together:
+
+<CodeDemoSplit file="connection_status.dart" layout="demo-wide">
+<Fragment slot="code">
+```dart
+if (connected)
+  Padding(
+    padding: const EdgeInsets.only(left: 4),
+    child: const Text('● Connected to relay')
+        .animate(
+          duration: const Duration(milliseconds: 600),
+          curve: Curves.linear,
+        )
+        .fadeIn()
+        .slideIn(from: Edge.left),
+  )
+else
+  const Text('○ Offline')
+```
+</Fragment>
+<FleuryExample
+  slot="demo"
+  id="animation.effects"
+  title="Run effects on a mounted widget"
+  cols={48}
+  rows={10}
+  interactive
+/>
+</CodeDemoSplit>
+
+Press **Connect** to mount the status and run the effects. `Animate` handles
+the visual change; the surrounding `if` still decides whether the child is in
+the tree.
+
+The built-in effects cover entrance and exit motion (`fadeIn`, `fadeOut`,
+`slideIn`, `slideOut`, `wipeIn`, `wipeOut`, `expand`, `shrink`), feedback
+(`flash`, `shake`), and looping motion (`pulse`, `shimmer`).
+
+A slide travels one child width or height by default. Terminal motion lands on
+whole cells, so a linear curve and a duration that exposes several cell
+positions usually reads best. Pass `distance:` when you want a shorter,
+fixed-cell nudge instead of a full entrance or exit.
+
+### Replay feedback from an action
+
+An effect normally runs once when `Animate` mounts. To replay it without
+remounting the widget, set `trigger` to a value that changes for each action. A
+counter works well for repeated submissions.
+
+This form increments `submitCount` on every submission. Empty input shows red
+feedback; a valid pilot name shows green feedback:
+
+<CodeDemoSplit file="pilot_validation.dart" layout="demo-wide">
+<Fragment slot="code">
+```dart
+void submit() {
+  final value = name.text.trim();
+  setState(() {
+    submitCount++;
+    success = value.isNotEmpty;
+    message = success
+        ? '✓ $value is cleared for launch'
+        : '✕ Enter any non-empty name';
+  });
+  nameFocus.requestFocus();
+}
+
+Widget feedback() {
+  final color = success
+      ? const RgbColor(70, 220, 145)
+      : const RgbColor(255, 90, 90);
+  final effect = Text(
+    message,
+    style: CellStyle(foreground: color),
+  ).animate(
+    trigger: submitCount,
+    duration: const Duration(milliseconds: 650),
+  );
+
+  return effect.wipeIn(from: Edge.left);
+}
+```
+</Fragment>
+<FleuryExample
+  slot="demo"
+  id="animation.trigger"
+  title="Replay validation feedback"
+  cols={48}
+  rows={14}
+  interactive
+/>
+</CodeDemoSplit>
+
+Submit the empty field more than once to see the error replay. Then enter a
+non-empty name and submit again to see the success state. Both outcomes replay
+when `submitCount` changes.
+
+### Animate visibility changes
+
+`Animate` only runs effects on the child it receives. When an exit must finish
+before the child is removed, use `AnimatedVisibility`. It owns that additional
+lifecycle: `visible` controls whether the child belongs in the tree, while
+`enter` and `exit` describe each side of the change.
+
+The picker below maps each selection to an `Effect`, then passes the selected
+pair to `AnimatedVisibility`:
+
+<CodeDemoSplit
+  files={['effect_picker.dart', 'effect_mapping.dart']}
+  initialFile="effect_picker.dart"
+  layout="demo-wide"
+>
+<Fragment slot="code-0">
+```dart
+Column(
+  children: [
+    Select<EntryEffect>(
+      semanticLabel: 'Entrance effect',
+      value: entry,
+      options: entryOptions,
+      onChanged: (value) => setState(() => entry = value),
+    ),
+    Select<ExitEffect>(
+      semanticLabel: 'Exit effect',
+      value: exit,
+      options: exitOptions,
+      onChanged: (value) => setState(() => exit = value),
+    ),
+    AnimatedVisibility(
+      visible: visible,
+      enter: entryEffect(entry),
+      exit: exitEffect(exit),
+      duration: visible ? entryDuration(entry) : exitDuration(exit),
+      curve: Curves.linear,
+      child: const BuildPreview(),
+    ),
+  ],
+)
+```
+</Fragment>
+<Fragment slot="code-1">
+```dart
+enum EntryEffect { fade, slide, wipe, expand }
+enum ExitEffect { fade, slide, wipe, shrink }
+
+const entryOptions = <SelectOption<EntryEffect>>[
+  SelectOption(value: EntryEffect.fade, label: 'Fade in'),
+  SelectOption(value: EntryEffect.slide, label: 'Slide in'),
+  SelectOption(value: EntryEffect.wipe, label: 'Wipe in'),
+  SelectOption(value: EntryEffect.expand, label: 'Expand'),
+];
+
+const exitOptions = <SelectOption<ExitEffect>>[
+  SelectOption(value: ExitEffect.fade, label: 'Fade out'),
+  SelectOption(value: ExitEffect.slide, label: 'Slide out'),
+  SelectOption(value: ExitEffect.wipe, label: 'Wipe out'),
+  SelectOption(value: ExitEffect.shrink, label: 'Shrink'),
+];
+
+Effect entryEffect(EntryEffect effect) => switch (effect) {
+  EntryEffect.fade => Effects.fadeIn(),
+  EntryEffect.slide => Effects.slideIn(from: Edge.left),
+  EntryEffect.wipe => Effects.wipeIn(from: Edge.left),
+  EntryEffect.expand => Effects.expand(),
+};
+
+Effect exitEffect(ExitEffect effect) => switch (effect) {
+  ExitEffect.fade => Effects.fadeOut(),
+  ExitEffect.slide => Effects.slideOut(to: Edge.right),
+  ExitEffect.wipe => Effects.wipeOut(to: Edge.right),
+  ExitEffect.shrink => Effects.shrink(),
+};
+
+Duration entryDuration(EntryEffect effect) => switch (effect) {
+  EntryEffect.fade => const Duration(milliseconds: 400),
+  EntryEffect.slide || EntryEffect.wipe => const Duration(milliseconds: 800),
+  EntryEffect.expand => const Duration(milliseconds: 300),
+};
+
+Duration exitDuration(ExitEffect effect) => switch (effect) {
+  ExitEffect.fade => const Duration(milliseconds: 400),
+  ExitEffect.slide || ExitEffect.wipe => const Duration(milliseconds: 800),
+  ExitEffect.shrink => const Duration(milliseconds: 300),
+};
+```
+</Fragment>
+<FleuryExample
+  slot="demo"
+  id="animation.presence"
+  title="Compare entrance and exit effects"
+  cols={58}
+  rows={19}
+  interactive
+/>
+</CodeDemoSplit>
+
+Choose an entrance and exit, then hide and show the sample. The picker contains
+only lifecycle effects; `flash` and `shake` are feedback, while `pulse` and
+`shimmer` loop. Its seven-row preview gives `expand` and `shrink` several
+visible cell states. The horizontal effects use more time because they cross 24
+columns; the size effects cross only nine rows. Matching duration to cell travel
+keeps both near one visible step per animation-clock update. Show the sample
+again before its exit finishes to reverse from the current value while keeping
+the same child mounted.
+
+## Chain targets and delays
+
+Own an `Animation<T>` when application code needs to await several stages or
+replace a route while it is running. This packet crosses two relays, pauses at
+each one, and finishes at an archive:
+
+<CodeDemoSplit
+  files={['packet_controller.dart', 'packet_route.dart']}
+  initialFile="packet_controller.dart"
+  layout="demo-wide"
+>
+<Fragment slot="code-0">
+```dart
+class PacketController {
+  final position = Animation<int>(0, debugLabel: 'packet position');
+
+  Future<void> send() async {
+    position.snap(0);
+    await position
+        .to(10, curve: Curves.easeInOut, duration: 900.ms)
+        .delay(350.ms)
+        .to(20, curve: Curves.easeInOut, duration: 1000.ms)
+        .delay(350.ms)
+        .to(30, curve: Curves.easeOut, duration: 1100.ms)
+        .orCancel;
+  }
+
+  void dispose() => position.dispose();
+}
+```
+</Fragment>
+<Fragment slot="code-1">
+```dart
+Future<void> send() async {
+  setState(() => sending = true);
+  try {
+    await packet.send();
+  } on TickerCanceled {
+    return;
+  }
+  if (mounted) setState(() => sending = false);
+}
+```
+</Fragment>
+<FleuryExample
+  slot="demo"
+  id="animation.chain"
+  title="Send a packet through a multi-step route"
+  cols={48}
+  rows={13}
+  interactive
+/>
+</CodeDemoSplit>
+
+Press **Send packet** and watch the current relay and route update over about
+four seconds. Press **Restart route** while it is moving to replace the active
+run. The first `.to()` starts immediately; calls made on its returned future
+append work. `.delay()` keeps the current value for a clock-driven duration, and
+the final future represents the whole chain.
+
+Await `.orCancel` when later work should only run after the final target is
+reached. A separate call on `position` replaces the entire active chain, while
+calling `.to()` on the returned future appends another target:
+
+```dart
+final run = position.to(10); // starts now
+run.to(20);                  // appends to this run
+position.to(0);              // replaces and cancels the run
+```
+
+Dispose a manually owned animation with its owner; `AnimationBuilder` handles
+that lifecycle for state-driven targets.
+
+## Cycle through authored frames
+
+Some motion is a set of distinct pictures rather than values to interpolate:
+a typing indicator, cursor blink, progress sprite, or ASCII character cycle.
+`FrameBuilder` rebuilds at the interval you choose and supplies an increasing
+integer frame. It still shares Fleury's app-level scheduler; the widget simply
+waits until its interval has elapsed before advancing.
+
+This packet transfer has six authored frames:
+
+<CodeDemoSplit file="packet_transfer.dart" layout="demo-wide">
+<Fragment slot="code">
+```dart
+const frames = [
+  '●··········◇',
+  '──●········◇',
+  '────●······◇',
+  '──────●····◇',
+  '────────●··◇',
+  '──────────◆',
+];
+
+FrameBuilder(
+  interval: interval,
+  enabled: running,
+  builder: (context, frame, _, delta) {
+    final index = frame % frames.length;
+    return Text('UPLINK ${frames[index]} ARCHIVE');
+  },
+)
+```
+</Fragment>
+<FleuryExample
+  slot="demo"
+  id="animation.frames"
+  title="Cycle through a packet transfer frame by frame"
+  cols={48}
+  rows={12}
+  interactive
+/>
+</CodeDemoSplit>
+
+Change the speed, then pause and resume it. `frame` starts at zero and counts
+up at the selected interval; modulo maps it onto the six pictures. Use Fleury's
+`Spinner` when its built-in frames are enough, and `FrameBuilder` when the
+frames belong to your app.
+
+## Advance a simulation with a ticker
+
+A `Ticker` runs a callback on Fleury’s animation clock. By default, that clock
+wakes every 33 ms—an update cadence of about 30 Hz—while at least one ticker is
+active, and stops when the last ticker stops. If every tick changes the UI and
+every requested frame is presented, that corresponds to roughly 30 frames per
+second (FPS). Each callback receives the total elapsed time since its ticker
+started.
+
+FPS is presentation throughput, not a promise that simulation time advances in
+fixed 33 ms steps. The event loop can delay a callback or frame, so update
+simulations from elapsed time. This fits game loops, physics, particles, and
+other motion that advances continuously rather than toward a target.
+
+<CodeDemoSplit file="ticker_simulation.dart" layout="demo-wide">
+<Fragment slot="code">
+```dart
+class _SimulationState extends State<Simulation>
+    with SingleTickerProviderStateMixin {
+  Ticker? ticker;
+  Duration previous = Duration.zero;
+  var position = 0.0;
+  var velocity = 12.0;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    ticker ??= createTicker(onTick)..start();
+  }
+
+  void onTick(Duration elapsed) {
+    final seconds = (elapsed - previous).inMicroseconds / 1000000;
+    previous = elapsed;
+    setState(() => position += velocity * seconds);
+  }
+}
+```
+</Fragment>
+<FleuryExample
+  slot="demo"
+  id="animation.ticker"
+  title="Move a simulated object from elapsed time"
+  cols={48}
+  rows={11}
+  interactive
+/>
+</CodeDemoSplit>
+
+`SingleTickerProviderStateMixin` creates the ticker from the scheduler already
+owned by the current Fleury app, mutes it with `TickerMode`, and disposes it
+with the state. Application code creates and controls its ticker; it does not
+create another scheduler.
+
+The cadence is shared across an app, not configured per ticker. Ordinary
+`runApp` applications use the 33 ms default. A custom host can provide a
+`TickerScheduler(frameInterval: …)` through its `TuiBinding`. The separate
+`runApp(frameInterval: …)` option limits how often frames are presented; it
+does not change how often ticker callbacks run.
+
+The choice is straightforward:
+
+- Use `Animation` for a value moving toward a target.
+- Use `FrameBuilder` for authored frames at a chosen interval.
+- Use `Ticker` when your own simulation advances from elapsed time.
+
+## Next steps
+
+- [Navigation transitions](/fleury/guides/navigation/#transitions) show how
+  motion can preserve context between screens.
+- [Theming](/fleury/guides/theming/) covers the colors and styles animated
+  widgets inherit.
+- [Neon Asteroids](/fleury/showcases/asteroids/) is a complete game loop built
+  on direct ticker control.

@@ -25,7 +25,7 @@ void main() {
     expect(tester.renderToString(size: const CellSize(6, 1)), '100\n');
   });
 
-  testWidgets('Toast plays slide-in / hold / slide-out then fires '
+  testWidgets('Toast plays slide-in / delay / slide-out then fires '
       'onDismissed', (tester) async {
     var dismissed = false;
     tester.pumpWidget(
@@ -39,9 +39,9 @@ void main() {
       'hi\n',
       reason: 'slid in to the left edge',
     );
-    expect(dismissed, isFalse, reason: 'still in the hold');
+    expect(dismissed, isFalse, reason: 'still in the delay');
 
-    // Through the 2s hold and the slide-out.
+    // Through the 2s delay and the slide-out.
     tester.pump(const Duration(seconds: 2));
     tester.pump(const Duration(milliseconds: 300));
     await Future<void>.delayed(Duration.zero);

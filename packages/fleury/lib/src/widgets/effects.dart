@@ -1,10 +1,11 @@
 // Effects: fluent, composable entrance / emphasis / exit animations.
 //
-//   const Text('saved').animate(Effects.fadeIn() + Effects.slideIn());
-//   errorText.animate(Effects.flash(), play: hasError);
+//   const Text('saved').animate().fadeIn().slideIn();
+//   errorText.animate(trigger: errorRevision).flash();
 //
-// An Effect maps a single progress value (0..1) to a wrapped widget,
-// compositing the child's painted cells via RenderCellEffect. Effects
+// An Effect maps a single progress value (0..1) to a wrapped widget. Color and
+// reveal effects composite painted cells; spatial effects use dedicated
+// translation and aligned-clip render objects. Effects
 // run in parallel — `a + b` applies both at the same progress — and
 // each targets a different visual channel (color, position) so they
 // stack cleanly. Everything bottoms out in Animation, so effects
@@ -20,11 +21,12 @@ import 'dart:math' as math;
 import '../animation/animation.dart';
 import '../animation/curves.dart';
 import '../animation/lerp.dart';
-import '../foundation/geometry.dart' show CellSize;
+import '../foundation/geometry.dart' show CellOffset, CellSize;
 import '../rendering/cell.dart';
 import '../rendering/render_effect.dart';
 import '../rendering/render_flex.dart' show Axis;
 import '../rendering/render_object.dart';
+import 'align.dart' show Alignment;
 import 'framework.dart';
 
 /// A screen edge an effect moves toward / from.
@@ -139,20 +141,26 @@ class _CellEffectWidget extends SingleChildRenderObjectWidget {
   }
 }
 
-/// Bridges an expand/collapse clip to the render layer.
+/// Bridges an expand/shrink clip to the render layer.
 class _ClipWidget extends SingleChildRenderObjectWidget {
   const _ClipWidget({
     required this.widthFactor,
     required this.heightFactor,
+    required this.alignment,
     required Widget super.child,
   });
 
   final double widthFactor;
   final double heightFactor;
+  final Alignment alignment;
 
   @override
-  RenderObject createRenderObject(BuildContext context) =>
-      RenderClip(widthFactor: widthFactor, heightFactor: heightFactor);
+  RenderObject createRenderObject(BuildContext context) => RenderClip(
+    widthFactor: widthFactor,
+    heightFactor: heightFactor,
+    horizontalAlignment: _horizontalAlignment(alignment),
+    verticalAlignment: _verticalAlignment(alignment),
+  );
 
   @override
   void updateRenderObject(
@@ -161,9 +169,55 @@ class _ClipWidget extends SingleChildRenderObjectWidget {
   ) {
     renderObject
       ..widthFactor = widthFactor
-      ..heightFactor = heightFactor;
+      ..heightFactor = heightFactor
+      ..horizontalAlignment = _horizontalAlignment(alignment)
+      ..verticalAlignment = _verticalAlignment(alignment);
   }
 }
+
+class _TranslateWidget extends SingleChildRenderObjectWidget {
+  const _TranslateWidget({
+    this.horizontalFraction = 0,
+    this.verticalFraction = 0,
+    this.cellOffset = CellOffset.zero,
+    required Widget super.child,
+  });
+
+  final double horizontalFraction;
+  final double verticalFraction;
+  final CellOffset cellOffset;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      RenderCellTranslation(
+        horizontalFraction: horizontalFraction,
+        verticalFraction: verticalFraction,
+        cellOffset: cellOffset,
+      );
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    covariant RenderCellTranslation renderObject,
+  ) {
+    renderObject
+      ..horizontalFraction = horizontalFraction
+      ..verticalFraction = verticalFraction
+      ..cellOffset = cellOffset;
+  }
+}
+
+int _horizontalAlignment(Alignment alignment) => switch (alignment) {
+  Alignment.topLeft || Alignment.centerLeft || Alignment.bottomLeft => -1,
+  Alignment.topCenter || Alignment.center || Alignment.bottomCenter => 0,
+  Alignment.topRight || Alignment.centerRight || Alignment.bottomRight => 1,
+};
+
+int _verticalAlignment(Alignment alignment) => switch (alignment) {
+  Alignment.topLeft || Alignment.topCenter || Alignment.topRight => -1,
+  Alignment.centerLeft || Alignment.center || Alignment.centerRight => 0,
+  Alignment.bottomLeft || Alignment.bottomCenter || Alignment.bottomRight => 1,
+};
 
 // ---------------------------------------------------------------------------
 // Concrete effects
@@ -255,26 +309,40 @@ class _SlideEffect extends Effect {
     required this.out,
   });
   final Edge edge;
-  final int distance;
+  final int? distance;
   final bool out;
 
   @override
-  Widget build(Widget child, double t) => _CellEffectWidget(
-    composite: (col, row, cell, size) {
-      // Displacement fraction: in → starts displaced, ends 0;
-      // out → starts 0, ends displaced.
-      final amt = (out ? t : (1 - t)).clamp(0.0, 1.0);
-      final d = (distance * amt).round();
-      final (dx, dy) = switch (edge) {
-        Edge.top => (0, -d),
-        Edge.bottom => (0, d),
-        Edge.left => (-d, 0),
-        Edge.right => (d, 0),
+  Widget build(Widget child, double t) {
+    // Displacement fraction: in → starts displaced, ends 0;
+    // out → starts 0, ends displaced.
+    final amount = (out ? t : (1 - t)).clamp(0.0, 1.0);
+    final fixedDistance = distance;
+    if (fixedDistance != null) {
+      final d = (fixedDistance * amount).round();
+      final offset = switch (edge) {
+        Edge.top => CellOffset(0, -d),
+        Edge.bottom => CellOffset(0, d),
+        Edge.left => CellOffset(-d, 0),
+        Edge.right => CellOffset(d, 0),
       };
-      return CellPlacement(col + dx, row + dy, cell.style);
-    },
-    child: child,
-  );
+      return _TranslateWidget(cellOffset: offset, child: child);
+    }
+    final (horizontal, vertical) = switch (edge) {
+      Edge.top => (0.0, -amount),
+      Edge.bottom => (0.0, amount),
+      Edge.left => (-amount, 0.0),
+      Edge.right => (amount, 0.0),
+    };
+    return _TranslateWidget(
+      horizontalFraction: horizontal,
+      verticalFraction: vertical,
+      child: child,
+    );
+  }
+
+  @override
+  Widget buildSettled(Widget child) => _TranslateWidget(child: child);
 }
 
 class _FlashEffect extends Effect {
@@ -302,15 +370,15 @@ class _FlashEffect extends Effect {
   );
 }
 
-class _RevealEffect extends Effect {
-  const _RevealEffect({required this.edge, required this.conceal});
+class _WipeEffect extends Effect {
+  const _WipeEffect({required this.edge, required this.out});
   final Edge edge; // direction the wipe travels from
-  final bool conceal;
+  final bool out;
 
   @override
   Widget build(Widget child, double t) => _CellEffectWidget(
     composite: (col, row, cell, size) {
-      final p = (conceal ? (1 - t) : t).clamp(0.0, 1.0);
+      final p = (out ? (1 - t) : t).clamp(0.0, 1.0);
       final visible = switch (edge) {
         Edge.left => col < (size.cols * p).round(),
         Edge.right => col >= size.cols - (size.cols * p).round(),
@@ -324,19 +392,33 @@ class _RevealEffect extends Effect {
 }
 
 class _ExpandEffect extends Effect {
-  const _ExpandEffect({required this.axis, required this.collapse});
+  const _ExpandEffect({
+    required this.axis,
+    required this.alignment,
+    required this.shrink,
+  });
   final Axis axis;
-  final bool collapse;
+  final Alignment alignment;
+  final bool shrink;
 
   @override
   Widget build(Widget child, double t) {
-    final p = (collapse ? (1 - t) : t).clamp(0.0, 1.0);
+    final p = (shrink ? (1 - t) : t).clamp(0.0, 1.0);
     return _ClipWidget(
       widthFactor: axis == Axis.horizontal ? p : 1.0,
       heightFactor: axis == Axis.vertical ? p : 1.0,
+      alignment: alignment,
       child: child,
     );
   }
+
+  @override
+  Widget buildSettled(Widget child) => _ClipWidget(
+    widthFactor: 1,
+    heightFactor: 1,
+    alignment: alignment,
+    child: child,
+  );
 }
 
 class _ShimmerEffect extends Effect {
@@ -402,17 +484,18 @@ class _ShakeEffect extends Effect {
   final int amplitude;
 
   @override
-  Widget build(Widget child, double t) => _CellEffectWidget(
-    composite: (col, row, cell, size) {
-      // Damped oscillation that settles to 0 at t = 1.
-      final wobble = math.sin(t * math.pi * 6) * (1 - t);
-      final d = (amplitude * wobble).round();
-      final dx = axis == Axis.horizontal ? d : 0;
-      final dy = axis == Axis.vertical ? d : 0;
-      return CellPlacement(col + dx, row + dy, cell.style);
-    },
-    child: child,
-  );
+  Widget build(Widget child, double t) {
+    // Damped oscillation that settles to 0 at t = 1.
+    final wobble = math.sin(t * math.pi * 6) * (1 - t);
+    final d = (amplitude * wobble).round();
+    return _TranslateWidget(
+      cellOffset: axis == Axis.horizontal ? CellOffset(d, 0) : CellOffset(0, d),
+      child: child,
+    );
+  }
+
+  @override
+  Widget buildSettled(Widget child) => _TranslateWidget(child: child);
 }
 
 /// Factory for the built-in effects. Compose with `+`:
@@ -436,36 +519,42 @@ abstract final class Effects {
     bool transparent = false,
   }) => _FadeEffect(out: true, surface: surface, transparent: transparent);
 
-  /// Slides the child in from [from], [distance] cells away.
-  static Effect slideIn({Edge from = Edge.bottom, int distance = 1}) =>
+  /// Slides the child in from [from]. By default it begins one whole child
+  /// extent away; pass [distance] to use a fixed number of cells instead.
+  static Effect slideIn({Edge from = Edge.bottom, int? distance}) =>
       _SlideEffect(edge: from, distance: distance, out: false);
 
-  /// Slides the child out toward [to].
-  static Effect slideOut({Edge to = Edge.bottom, int distance = 1}) =>
+  /// Slides the child out toward [to]. By default it travels one whole child
+  /// extent; pass [distance] to use a fixed number of cells instead.
+  static Effect slideOut({Edge to = Edge.bottom, int? distance}) =>
       _SlideEffect(edge: to, distance: distance, out: true);
+
+  /// Wipes the child progressively into view from [from].
+  /// In-place (layout unchanged) — content appears, the box stays.
+  static Effect wipeIn({Edge from = Edge.left}) =>
+      _WipeEffect(edge: from, out: false);
+
+  /// Wipes the child out of view toward [to] without changing layout.
+  static Effect wipeOut({Edge to = Edge.left}) =>
+      _WipeEffect(edge: to, out: true);
+
+  /// Grows the box from zero along [axis], revealing content from [alignment]
+  /// and reflowing siblings. The accordion / cell analog of scale-up.
+  static Effect expand({
+    Axis axis = Axis.vertical,
+    Alignment alignment = Alignment.topLeft,
+  }) => _ExpandEffect(axis: axis, alignment: alignment, shrink: false);
+
+  /// Shrinks the box toward [alignment] (reverse of [expand]).
+  static Effect shrink({
+    Axis axis = Axis.vertical,
+    Alignment alignment = Alignment.topLeft,
+  }) => _ExpandEffect(axis: axis, alignment: alignment, shrink: true);
 
   /// One pulse of [color] (or reverse, for non-RGB text), peaking
   /// mid-animation and returning. Emphasis / "this just changed."
   static Effect flash({RgbColor color = const RgbColor(255, 220, 90)}) =>
       _FlashEffect(color: color);
-
-  /// Typewriter / wipe: reveals the child progressively from [from].
-  /// In-place (layout unchanged) — content appears, the box stays.
-  static Effect reveal({Edge from = Edge.left}) =>
-      _RevealEffect(edge: from, conceal: false);
-
-  /// Reverse of [reveal] — wipes the child away toward [to].
-  static Effect conceal({Edge to = Edge.left}) =>
-      _RevealEffect(edge: to, conceal: true);
-
-  /// Grows the box from zero along [axis], clipping content and
-  /// reflowing siblings. The accordion / cell analog of scale-up.
-  static Effect expand({Axis axis = Axis.vertical}) =>
-      _ExpandEffect(axis: axis, collapse: false);
-
-  /// Shrinks the box to zero along [axis] (reverse of [expand]).
-  static Effect collapse({Axis axis = Axis.vertical}) =>
-      _ExpandEffect(axis: axis, collapse: true);
 
   /// A bright highlight band sweeps across the child — the skeleton-
   /// loader effect. Loops automatically.
@@ -495,15 +584,19 @@ abstract final class Effects {
 ///
 /// Each effect method appends to the stack and returns a new [Animate],
 /// so the chain reads top-to-bottom as the effects applied. Effects run
-/// in parallel (each targets a different channel). With [play] true (the
-/// default) the chain runs forward on mount — an entrance.
+/// in parallel (each targets a different channel).
+///
+/// With no [trigger], the chain runs once on mount — an entrance. Pass a
+/// non-null event revision or token to [trigger] for replayable emphasis:
+/// the first build rests at the finished state, then each changed token
+/// restarts the effect from the beginning.
 class Animate extends StatefulWidget {
   const Animate({
     required this.child,
     this.effects = const <Effect>[],
     this.duration,
     this.curve,
-    this.play = true,
+    this.trigger,
     this.repeat = false,
     super.key,
   });
@@ -512,7 +605,14 @@ class Animate extends StatefulWidget {
   final List<Effect> effects;
   final Duration? duration;
   final Curve? curve;
-  final bool play;
+
+  /// Replays the effect when this non-null token changes.
+  ///
+  /// Leave null for the default mount-time entrance. A trigger is usually an
+  /// incrementing revision (`saveRevision++`) rather than a boolean: every
+  /// distinct value represents a new event, including consecutive events of
+  /// the same kind.
+  final Object? trigger;
 
   /// Loops the progress forever (also implied by a looping effect
   /// like shimmer / pulse).
@@ -522,7 +622,7 @@ class Animate extends StatefulWidget {
     effects: <Effect>[...effects, effect],
     duration: duration,
     curve: curve,
-    play: play,
+    trigger: trigger,
     repeat: repeat,
     key: key,
     child: child,
@@ -539,21 +639,28 @@ class Animate extends StatefulWidget {
   Animate fadeOut({RgbColor surface = const RgbColor(0, 0, 0)}) =>
       _add(Effects.fadeOut(surface: surface));
 
-  Animate slideIn({Edge from = Edge.bottom, int distance = 1}) =>
+  Animate slideIn({Edge from = Edge.bottom, int? distance}) =>
       _add(Effects.slideIn(from: from, distance: distance));
 
-  Animate slideOut({Edge to = Edge.bottom, int distance = 1}) =>
+  Animate slideOut({Edge to = Edge.bottom, int? distance}) =>
       _add(Effects.slideOut(to: to, distance: distance));
 
-  Animate reveal({Edge from = Edge.left}) => _add(Effects.reveal(from: from));
+  Animate wipeIn({Edge from = Edge.left}) => _add(Effects.wipeIn(from: from));
 
-  Animate conceal({Edge to = Edge.left}) => _add(Effects.conceal(to: to));
+  Animate wipeOut({Edge to = Edge.left}) => _add(Effects.wipeOut(to: to));
 
-  Animate expand({Axis axis = Axis.vertical}) =>
-      _add(Effects.expand(axis: axis));
+  Animate expand({
+    Axis axis = Axis.vertical,
+    Alignment alignment = Alignment.topLeft,
+  }) => _add(Effects.expand(axis: axis, alignment: alignment));
 
-  Animate collapse({Axis axis = Axis.vertical}) =>
-      _add(Effects.collapse(axis: axis));
+  Animate shrink({
+    Axis axis = Axis.vertical,
+    Alignment alignment = Alignment.topLeft,
+  }) => _add(Effects.shrink(axis: axis, alignment: alignment));
+
+  Animate flash({RgbColor color = const RgbColor(255, 220, 90)}) =>
+      _add(Effects.flash(color: color));
 
   Animate shimmer({
     RgbColor highlight = const RgbColor(255, 255, 255),
@@ -566,15 +673,14 @@ class Animate extends StatefulWidget {
   Animate shake({Axis axis = Axis.horizontal, int amplitude = 1}) =>
       _add(Effects.shake(axis: axis, amplitude: amplitude));
 
-  Animate flash({RgbColor color = const RgbColor(255, 220, 90)}) =>
-      _add(Effects.flash(color: color));
-
   @override
   State<Animate> createState() => _AnimateState();
 }
 
 class _AnimateState extends State<Animate> {
-  late final Animation<double> _t = Animation(widget.play ? 0.0 : 1.0);
+  late final Animation<double> _t = Animation(
+    widget.trigger == null ? 0.0 : 1.0,
+  );
 
   Duration get _duration =>
       widget.duration ?? const Duration(milliseconds: 300);
@@ -582,12 +688,15 @@ class _AnimateState extends State<Animate> {
 
   bool get _loops => widget.repeat || widget.effects.any((e) => e.loops);
 
+  bool _loopsFor(Animate candidate) =>
+      candidate.repeat || candidate.effects.any((effect) => effect.loops);
+
   @override
   void initState() {
     super.initState();
     if (_loops) {
       _t.loop(between: (0.0, 1.0), period: _duration, mirror: false);
-    } else if (widget.play) {
+    } else if (widget.trigger == null) {
       _t.to(1.0, curve: _curve, duration: _duration);
     }
   }
@@ -595,8 +704,24 @@ class _AnimateState extends State<Animate> {
   @override
   void didUpdateWidget(Animate old) {
     super.didUpdateWidget(old);
-    if (widget.play != old.play && !_loops) {
-      _t.to(widget.play ? 1.0 : 0.0, curve: _curve, duration: _duration);
+    final wasLooping = _loopsFor(old);
+    if (_loops != wasLooping) {
+      if (_loops) {
+        _t.loop(between: (0.0, 1.0), period: _duration, mirror: false);
+      } else {
+        _t.snap(1.0);
+      }
+      return;
+    }
+    if (_loops) {
+      if (widget.duration != old.duration || widget.curve != old.curve) {
+        _t.loop(between: (0.0, 1.0), period: _duration, mirror: false);
+      }
+      return;
+    }
+    if (widget.trigger != null && widget.trigger != old.trigger) {
+      _t.snap(0.0);
+      _t.to(1.0, curve: _curve, duration: _duration);
     }
   }
 
@@ -621,19 +746,20 @@ class _AnimateState extends State<Animate> {
 ///
 ///     text.animate().fadeIn().slideIn();
 ///     loader.animate().shimmer();          // auto-loops
-///     field.animate(play: invalid).shake();
+///     field.animate(trigger: errorRevision).shake();
 extension AnimateExtension on Widget {
   /// Starts an [Animate] chain over this widget. [duration] / [curve]
-  /// apply to the whole chain; [play] runs it forward on mount.
+  /// apply to the whole chain. With no [trigger] it plays on mount; with a
+  /// non-null trigger it rests on mount and replays whenever the token changes.
   Animate animate({
     Duration? duration,
     Curve? curve,
-    bool play = true,
+    Object? trigger,
     bool repeat = false,
   }) => Animate(
     duration: duration,
     curve: curve,
-    play: play,
+    trigger: trigger,
     repeat: repeat,
     child: this,
   );

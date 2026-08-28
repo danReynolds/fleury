@@ -78,8 +78,7 @@ export 'src/animation/curves.dart' show Curve, Curves;
 export 'src/animation/frame_ticker.dart' show FrameTicker;
 export 'src/animation/lerp.dart'
     show DiscreteLerp, Lerp, doubleLerp, intLerp, rgbColorLerp;
-export 'src/animation/animation.dart'
-    show Animation, AnimationStep, AnimationType;
+export 'src/animation/animation.dart' show Animation, AnimationType;
 export 'src/animation/spring.dart' show Spring;
 export 'src/animation/ticker.dart' show Ticker, TickerCallback, TickerProvider;
 export 'src/animation/ticker_future.dart' show TickerCanceled, TickerFuture;
@@ -406,7 +405,7 @@ export 'src/widgets/frame_builder.dart' show FrameBuilder;
 export 'src/widgets/animation_builder.dart' show AnimationBuilder;
 export 'src/widgets/effects.dart'
     show Animate, AnimateExtension, Edge, Effect, Effects;
-export 'src/widgets/presence.dart' show Reveal;
+export 'src/widgets/animated_visibility.dart' show AnimatedVisibility;
 export 'src/widgets/selection/selectable.dart'
     show Selectable, SelectionRegistrant, SelectionRegistrar, SelectionScope;
 export 'src/widgets/selection/selection.dart'

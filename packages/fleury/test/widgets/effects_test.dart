@@ -20,6 +20,25 @@ Cell _cellAt(FleuryTester tester, int col, int row, {CellSize? size}) =>
 CellRole _roleAt(FleuryTester tester, int col, int row, {CellSize? size}) =>
     _cellAt(tester, col, row, size: size).role;
 
+void _tap(FleuryTester tester, int col, int row) {
+  tester.sendMouse(
+    MouseEvent(
+      kind: MouseEventKind.down,
+      button: MouseButton.left,
+      col: col,
+      row: row,
+    ),
+  );
+  tester.sendMouse(
+    MouseEvent(
+      kind: MouseEventKind.up,
+      button: MouseButton.left,
+      col: col,
+      row: row,
+    ),
+  );
+}
+
 void main() {
   group('fadeIn', () {
     testWidgets('RGB text fades from the surface color up to its own', (
@@ -143,6 +162,77 @@ void main() {
       // Settled in place at column 0.
       expect(_roleAt(tester, 0, 0), CellRole.leading);
     });
+
+    testWidgets('default distance advances once per child-width cell', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        const Text('ABCD')
+            .animate(
+              curve: Curves.linear,
+              duration: const Duration(milliseconds: 100),
+            )
+            .slideIn(from: Edge.right),
+      );
+
+      String frame() {
+        final buffer = tester.render(size: const CellSize(8, 1));
+        return List.generate(8, (col) {
+          final cell = buffer.atColRow(col, 0);
+          return cell.role == CellRole.leading ? cell.grapheme! : ' ';
+        }).join();
+      }
+
+      expect(frame(), '    ABCD');
+      tester.pump(const Duration(milliseconds: 25));
+      expect(frame(), '   ABCD ');
+      tester.pump(const Duration(milliseconds: 25));
+      expect(frame(), '  ABCD  ');
+      tester.pump(const Duration(milliseconds: 25));
+      expect(frame(), ' ABCD   ');
+      tester.pump(const Duration(milliseconds: 25));
+      expect(frame(), 'ABCD    ');
+    });
+
+    testWidgets('visible geometry follows the translation inside its hit box', (
+      tester,
+    ) {
+      var taps = 0;
+      tester.pumpWidget(
+        Semantics(
+              id: const SemanticNodeId('moving-action'),
+              role: SemanticRole.button,
+              label: 'Moving action',
+              actions: const {SemanticAction.activate},
+              child: GestureDetector(
+                onTap: () => taps++,
+                child: const Text('ABCD'),
+              ),
+            )
+            .animate(
+              curve: Curves.linear,
+              duration: const Duration(milliseconds: 100),
+            )
+            .slideIn(from: Edge.right),
+      );
+
+      tester.render(size: const CellSize(8, 1));
+      var node = tester.semantics().nodeById(
+        const SemanticNodeId('moving-action'),
+      );
+      expect(node?.bounds, isNull, reason: 'the start is outside its hit box');
+      _tap(tester, 4, 0);
+      expect(taps, 0, reason: 'paint overflow must not enlarge the hit box');
+
+      tester.pump(const Duration(milliseconds: 50));
+      tester.render(size: const CellSize(8, 1));
+      node = tester.semantics().nodeById(const SemanticNodeId('moving-action'));
+      expect(node?.bounds, CellRect.fromLTWH(2, 0, 2, 1));
+      _tap(tester, 2, 0);
+      expect(taps, 1, reason: 'the visible in-bounds portion is interactive');
+      _tap(tester, 4, 0);
+      expect(taps, 1, reason: 'overflow remains outside the stable hit box');
+    });
   });
 
   group('flash', () {
@@ -167,6 +257,75 @@ void main() {
       // End (t=1): back to base.
       tester.pump(const Duration(milliseconds: 50));
       expect(_fgAt(tester, 0, 0), base);
+    });
+
+    testWidgets('trigger rests on mount and replays for each changed token', (
+      tester,
+    ) {
+      const base = RgbColor(100, 100, 100);
+
+      Widget build(int revision) =>
+          const Text('!', style: CellStyle(foreground: base))
+              .animate(
+                trigger: revision,
+                curve: Curves.linear,
+                duration: const Duration(milliseconds: 100),
+              )
+              .flash(color: const RgbColor(255, 0, 0));
+
+      tester.pumpWidget(build(0));
+      expect(_fgAt(tester, 0, 0), base);
+      expect(
+        tester.scheduler.activeTickerCount,
+        0,
+        reason: 'a trigger-driven effect does not play on mount',
+      );
+
+      tester.pumpWidget(build(1));
+      expect(_fgAt(tester, 0, 0), base, reason: 'replay starts at t=0');
+      expect(tester.scheduler.activeTickerCount, 1);
+      tester.pump(const Duration(milliseconds: 50));
+      expect(_fgAt(tester, 0, 0)!.r, greaterThan(base.r));
+      tester.pump(const Duration(milliseconds: 50));
+      expect(_fgAt(tester, 0, 0), base);
+
+      tester.pumpWidget(build(1));
+      expect(
+        tester.scheduler.activeTickerCount,
+        0,
+        reason: 'rebuilding with the same token is not a new event',
+      );
+
+      tester.pumpWidget(build(2));
+      tester.pump(const Duration(milliseconds: 50));
+      expect(_fgAt(tester, 0, 0)!.r, greaterThan(base.r));
+    });
+
+    testWidgets('a new trigger restarts an in-flight effect', (tester) {
+      const base = RgbColor(100, 100, 100);
+
+      Widget build(int revision) =>
+          const Text('!', style: CellStyle(foreground: base))
+              .animate(
+                trigger: revision,
+                curve: Curves.linear,
+                duration: const Duration(milliseconds: 100),
+              )
+              .flash(color: const RgbColor(255, 0, 0));
+
+      tester.pumpWidget(build(0));
+      tester.pumpWidget(build(1));
+      tester.pump(const Duration(milliseconds: 50));
+      expect(_fgAt(tester, 0, 0)!.r, greaterThan(base.r));
+
+      tester.pumpWidget(build(2));
+      expect(
+        _fgAt(tester, 0, 0),
+        base,
+        reason: 'the latest event restarts progress at the beginning',
+      );
+      tester.pump(const Duration(milliseconds: 50));
+      expect(_fgAt(tester, 0, 0)!.r, greaterThan(base.r));
     });
   });
 
@@ -219,6 +378,28 @@ void main() {
       expect(tester.scheduler.activeTickerCount, 1);
       tester.pump(const Duration(milliseconds: 200));
       expect(tester.scheduler.activeTickerCount, 0);
+    });
+
+    testWidgets('repeat can start and stop after mount', (tester) {
+      Widget build(bool repeat) =>
+          const Text('a', style: CellStyle(foreground: RgbColor(1, 2, 3)))
+              .animate(
+                repeat: repeat,
+                curve: Curves.linear,
+                duration: const Duration(milliseconds: 100),
+              )
+              .flash();
+
+      tester.pumpWidget(build(false));
+      tester.pump(const Duration(milliseconds: 100));
+      expect(tester.scheduler.activeTickerCount, 0);
+
+      tester.pumpWidget(build(true));
+      expect(tester.scheduler.activeTickerCount, 1);
+
+      tester.pumpWidget(build(false));
+      expect(tester.scheduler.activeTickerCount, 0);
+      expect(_fgAt(tester, 0, 0), const RgbColor(1, 2, 3));
     });
   });
 }

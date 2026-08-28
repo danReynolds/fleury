@@ -1,6 +1,6 @@
 // Render-level guards for the scratch-blit effect render objects.
 //
-// RenderClip (expand/collapse) paints its child into a scratch buffer and
+// RenderClip (expand/shrink) paints its child into a scratch buffer and
 // copies the clipped rectangle into the frame. A wide glyph landing on the
 // last clipped column must be DROPPED, never split: re-deriving its width and
 // writing the continuation would land one column past the reported size and
