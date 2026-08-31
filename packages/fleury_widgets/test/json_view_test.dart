@@ -373,4 +373,49 @@ void main() {
     expect(json.state['valid'], isFalse);
     expect(json.state['sourceLength'], 4);
   });
+
+  testWidgets('unbounded Column with content does not throw', (tester) {
+    tester.pumpWidget(
+      Column(
+        children: [
+          JsonView(
+            semanticLabel: 'Payload',
+            value: const {'a': 1, 'b': 2, 'c': 3},
+          ),
+        ],
+      ),
+    );
+    expect(() => tester.render(size: const CellSize(80, 20)), returnsNormally);
+    expect(
+      tester.renderToString(size: const CellSize(80, 20), emptyMark: ' '),
+      contains(r'$'),
+    );
+  });
+
+  testWidgets('Expanded JsonView fills a bounded pane', (tester) {
+    final value = {for (var i = 0; i < 40; i++) 'k$i': i};
+    final controller = JsonViewController();
+    tester.pumpWidget(
+      Column(
+        children: [
+          const Text('hdr'),
+          Expanded(
+            child: JsonView(
+              semanticLabel: 'Payload',
+              value: value,
+              controller: controller,
+            ),
+          ),
+        ],
+      ),
+    );
+    tester.render(size: const CellSize(40, 30));
+    final range = controller.visibleRange;
+    expect(range, isNotNull);
+    expect(
+      range!.last - range.first + 1,
+      greaterThan(24),
+      reason: 'an Expanded pane must fill, not take the unbounded 24-row cap',
+    );
+  });
 }

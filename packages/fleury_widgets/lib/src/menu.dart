@@ -119,22 +119,27 @@ class _MenuState extends State<Menu> {
       context,
     ); // resolved in-tree, threaded into the overlay
     final entry = OverlayEntry(
-      builder: (_) => BoundsAnchor(
-        notifier: _bounds,
-        child: _MenuBody(
-          trapContentKey: _trapContentKey,
-          entries: widget.items,
-          semanticLabel: widget.semanticLabel,
-          depth: 0,
-          selectionStyle: theme.selectionStyle,
-          mutedStyle: theme.mutedStyle,
-          borderStyle: theme.borderStyle,
-          onLeafSelected: (action) {
-            _close();
-            action();
-          },
-          onDismiss: _close,
-        ),
+      builder: (_) => Stack(
+        children: <Widget>[
+          AbsorbPointer(onTap: _close, child: const SizedBox.expand()),
+          BoundsAnchor(
+            notifier: _bounds,
+            child: _MenuBody(
+              trapContentKey: _trapContentKey,
+              entries: widget.items,
+              semanticLabel: widget.semanticLabel,
+              depth: 0,
+              selectionStyle: theme.selectionStyle,
+              mutedStyle: theme.mutedStyle,
+              borderStyle: theme.borderStyle,
+              onLeafSelected: (action) {
+                _close();
+                action();
+              },
+              onDismiss: _close,
+            ),
+          ),
+        ],
       ),
     );
     _entry = entry;
@@ -271,10 +276,12 @@ class _MenuBodyState extends State<_MenuBody> {
   );
   final FocusNode _focus = FocusNode(debugLabel: 'menu');
   late final GlobalKey _trapContentKey = widget.trapContentKey ?? GlobalKey();
-  final BoundsNotifier _selfBounds = BoundsNotifier();
-  // Anchors the currently-selected submenu row so its child panel opens beside
-  // *that row*, not the panel's top corner.
-  final BoundsNotifier _submenuAnchor = BoundsNotifier();
+  // One notifier per submenu row so moving selection never remounts a
+  // BoundsObserver onto a notifier that still has a writer claimed.
+  late final List<BoundsNotifier?> _submenuAnchors = [
+    for (final entry in widget.entries)
+      entry is SubMenu ? BoundsNotifier() : null,
+  ];
   OverlayEntry? _childEntry;
 
   bool _selectable(int i) {
@@ -371,11 +378,15 @@ class _MenuBodyState extends State<_MenuBody> {
 
   void _openSubmenu(SubMenu sub) {
     if (sub.items.isEmpty || _childEntry != null) return;
+    final selected = _list.selectedIndex;
+    if (selected == null) return;
+    final anchor = _submenuAnchors[selected];
+    if (anchor == null) return;
     final overlay = Overlay.of(context);
     final manager = Focus.of(context);
     final entry = OverlayEntry(
       builder: (_) => BoundsAnchor(
-        notifier: _submenuAnchor,
+        notifier: anchor,
         alignment: Alignment.topRight,
         anchorAlignment: Alignment.topLeft,
         gap: 1,
@@ -522,79 +533,70 @@ class _MenuBodyState extends State<_MenuBody> {
             child: Focus(
               focusNode: _focus,
               autofocus: true,
-              child: BoundsObserver(
-                notifier: _selfBounds,
-                // Popup supplies the float contract: opaque fill, frame, and chrome
-                // semantics, so the app underneath can't bleed through.
-                child: Container.framed(
-                  border: BoxBorder(style: widget.borderStyle),
-                  child: SizedBox(
-                    width: width,
-                    height: widget.entries.length,
-                    child: ListView.builder(
-                      controller: _list,
-                      selectionActive: true,
-                      itemCount: widget.entries.length,
-                      itemBuilder: (_, i, selected) {
-                        final entry = widget.entries[i];
-                        switch (entry) {
-                          case MenuSeparator():
-                            return Text('─' * width, style: widget.mutedStyle);
-                          case MenuItem(:final label, :final enabled):
-                            final sel = enabled && selected;
-                            final child = Text(
-                              _rowText(
-                                sanitizeOptionLabel(label),
-                                selected: sel,
-                                isSub: false,
-                                hasIndicator: hasSubmenu,
-                                width: width,
-                              ),
-                              style: !enabled
-                                  ? widget.mutedStyle
-                                  : sel
-                                  ? widget.selectionStyle
-                                  : CellStyle.none,
-                            );
-                            return _semanticMenuItem(
-                              entry: entry,
-                              index: i,
-                              selected: selected,
-                              child: child,
-                            );
-                          case SubMenu(:final label, :final enabled):
-                            final sel = enabled && selected;
-                            final child = Text(
-                              _rowText(
-                                sanitizeOptionLabel(label),
-                                selected: sel,
-                                isSub: true,
-                                hasIndicator: hasSubmenu,
-                                width: width,
-                              ),
-                              style: !enabled
-                                  ? widget.mutedStyle
-                                  : sel
-                                  ? widget.selectionStyle
-                                  : CellStyle.none,
-                            );
-                            final item = _semanticMenuItem(
-                              entry: entry,
-                              index: i,
-                              selected: selected,
-                              child: child,
-                            );
-                            // Anchor the selected submenu row so its child panel
-                            // opens aligned to it (not the panel corner).
-                            return sel
-                                ? BoundsObserver(
-                                    notifier: _submenuAnchor,
-                                    child: item,
-                                  )
-                                : item;
-                        }
-                      },
-                    ),
+              child: Container.framed(
+                border: BoxBorder(style: widget.borderStyle),
+                child: SizedBox(
+                  width: width,
+                  height: widget.entries.length,
+                  child: ListView.builder(
+                    controller: _list,
+                    selectionActive: true,
+                    itemCount: widget.entries.length,
+                    itemBuilder: (_, i, selected) {
+                      final entry = widget.entries[i];
+                      switch (entry) {
+                        case MenuSeparator():
+                          return Text('─' * width, style: widget.mutedStyle);
+                        case MenuItem(:final label, :final enabled):
+                          final sel = enabled && selected;
+                          final child = Text(
+                            _rowText(
+                              sanitizeOptionLabel(label),
+                              selected: sel,
+                              isSub: false,
+                              hasIndicator: hasSubmenu,
+                              width: width,
+                            ),
+                            style: !enabled
+                                ? widget.mutedStyle
+                                : sel
+                                ? widget.selectionStyle
+                                : CellStyle.none,
+                          );
+                          return _semanticMenuItem(
+                            entry: entry,
+                            index: i,
+                            selected: selected,
+                            child: child,
+                          );
+                        case SubMenu(:final label, :final enabled):
+                          final sel = enabled && selected;
+                          final child = Text(
+                            _rowText(
+                              sanitizeOptionLabel(label),
+                              selected: sel,
+                              isSub: true,
+                              hasIndicator: hasSubmenu,
+                              width: width,
+                            ),
+                            style: !enabled
+                                ? widget.mutedStyle
+                                : sel
+                                ? widget.selectionStyle
+                                : CellStyle.none,
+                          );
+                          final item = _semanticMenuItem(
+                            entry: entry,
+                            index: i,
+                            selected: selected,
+                            child: child,
+                          );
+                          final anchor = _submenuAnchors[i];
+                          return anchor == null
+                              ? item
+                              : BoundsObserver(notifier: anchor, child: item);
+                      }
+                    },
                   ),
                 ),
               ),

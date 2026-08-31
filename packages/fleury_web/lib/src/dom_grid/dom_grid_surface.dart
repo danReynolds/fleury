@@ -47,13 +47,6 @@ final class DomGridSurface implements FrameSurface {
   CellSize get size => _size;
 
   @override
-  WebSurfaceCapabilities get capabilities => const WebSurfaceCapabilities(
-    supportsTrueColor: true,
-    supportsSemanticLinks: false,
-    supportsGlyphOverlay: false,
-  );
-
-  @override
   FrameSurfacePresentationStats present(
     CellBuffer previous,
     CellBuffer next,

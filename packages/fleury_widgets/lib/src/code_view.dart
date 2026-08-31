@@ -289,11 +289,37 @@ String exportCodeSelection(
   };
 }
 
+/// Viewport rows when [CodeView] is given an unbounded height (a non-flex
+/// [Column] child). Bounded parents still fill; this is not a cap on a
+/// full-pane viewer.
+const int _kUnboundedViewportRows = 24;
+
+/// Gives the inner [ListView] a finite height under unbounded `maxRows`,
+/// so it does not throw `ListView needs a bounded height`. Bounded
+/// constraints pass through unchanged so an [Expanded] pane still fills.
+Widget _unboundedListViewport({required int itemCount, required Widget child}) {
+  return LayoutBuilder(
+    builder: (_, constraints) {
+      if (constraints.hasBoundedHeight || itemCount <= 0) return child;
+      final height = itemCount < _kUnboundedViewportRows
+          ? itemCount
+          : _kUnboundedViewportRows;
+      return SizedBox(height: height, child: child);
+    },
+  );
+}
+
 /// A read-only source viewer: a line-number gutter, coarse per-line styling
 /// (comments, imports, keywords, and strings each get a tone), and a
 /// keyboard-movable line selection. Ctrl+C copies the selected line or the
 /// whole document, and source text is sanitized so stray escape sequences
 /// can't corrupt the frame.
+///
+/// The view fills a bounded height (an [Expanded] pane). Under an unbounded
+/// height (a non-flex [Column] child) it sizes itself to a short viewport
+/// (at most 24 rows, or the line count if smaller) so the inner list has
+/// somewhere to window. That is not a cap on a full-pane viewer — wrap in
+/// [Expanded] to take remaining space.
 class CodeView extends StatefulWidget {
   CodeView({
     super.key,
@@ -543,6 +569,8 @@ class _CodeViewState extends State<CodeView> {
         child: list,
       );
     }
+
+    list = _unboundedListViewport(itemCount: lines.length, child: list);
 
     return FocusDetector(
       onFocusChange: _onFocusDetectorChange,

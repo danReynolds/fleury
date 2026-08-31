@@ -653,6 +653,7 @@ Future<AppExit> _runAppImpl(
 
   void handleDriverEvent(TuiEvent event) {
     if (disposed || exit.isCompleted) return;
+    var dispatchResult = KeyEventResult.ignored;
     try {
       DebugEvents.emitInput(event);
       if (event is ResizeEvent) {
@@ -696,7 +697,6 @@ Future<AppExit> _runAppImpl(
         return;
       }
 
-      KeyEventResult dispatchResult = KeyEventResult.ignored;
       if (event is KeyEvent ||
           event is TextInputEvent ||
           event is TextCompositionEvent ||
@@ -705,21 +705,6 @@ Future<AppExit> _runAppImpl(
           event is InputBatch) {
         dispatchResult = dispatcher.dispatch(event);
         semanticsPipeline?.markSemanticsDirty();
-      }
-
-      // Ctrl+C exits only when the app did not handle it first. Structured
-      // browser sessions are exempt because browser Cmd+C maps to Ctrl+C.
-      if (event is KeyEvent &&
-          // Once per physical press: a release always dispatches as
-          // `ignored` (the fence), so without this an app that handled the
-          // press would still exit on the up (RFC 0020 §6).
-          event.type != KeyEventType.up &&
-          event.code.character == 'c' &&
-          event.hasCtrl &&
-          dispatchResult != KeyEventResult.handled &&
-          surfaceSink == null) {
-        if (!exit.isCompleted) exit.complete(const AppExit.requested());
-        return;
       }
 
       EventResponse? response;
@@ -741,6 +726,21 @@ Future<AppExit> _runAppImpl(
       // A throwing app handler must not kill the input loop.
       errorReporter.report(error, stack);
       scheduleFrame('event-error');
+    } finally {
+      // Quit-chord lives in `finally` so a throwing copy/selection handler
+      // still exits (banner, not a stuck process). Handled Ctrl+C (copy)
+      // does not quit. Structured browser sessions are exempt because
+      // browser Cmd+C maps to Ctrl+C.
+      if (!disposed &&
+          !exit.isCompleted &&
+          event is KeyEvent &&
+          event.type != KeyEventType.up &&
+          event.code.character == 'c' &&
+          event.hasCtrl &&
+          dispatchResult != KeyEventResult.handled &&
+          surfaceSink == null) {
+        exit.complete(const AppExit.requested());
+      }
     }
   }
 

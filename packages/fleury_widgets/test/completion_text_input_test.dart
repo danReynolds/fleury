@@ -17,6 +17,34 @@ Iterable<TextCompletionOption> _commandProvider(TextCompletionRequest request) {
 String _screen(FleuryTester tester, {int cols = 32, int rows = 8}) =>
     tester.renderToString(size: CellSize(cols, rows), emptyMark: ' ');
 
+void _expectWideGlyph(FleuryTester tester, String grapheme) {
+  final buf = tester.render(size: const CellSize(24, 8));
+  var found = false;
+  for (var r = 0; r < buf.size.rows; r++) {
+    for (var c = 0; c < buf.size.cols; c++) {
+      final cell = buf.atColRow(c, r);
+      if (cell.grapheme != grapheme) continue;
+      expect(cell.role, CellRole.leading);
+      expect(
+        c + 1 < buf.size.cols,
+        isTrue,
+        reason: '$grapheme must not be clipped at the right edge',
+      );
+      expect(
+        buf.atColRow(c + 1, r).role,
+        CellRole.continuation,
+        reason: '$grapheme is 2 cells, not 1 UTF-16 unit',
+      );
+      found = true;
+    }
+  }
+  expect(
+    found,
+    isTrue,
+    reason: 'expected $grapheme to be visible in the popup',
+  );
+}
+
 void main() {
   testWidgets('typing opens a provider-backed completion menu', (tester) {
     TextCompletionRequest? lastRequest;
@@ -282,5 +310,25 @@ void main() {
     final row = tester.semantics().single(role: SemanticRole.menuItem);
     expect(row.label, contains(replacementCharacter));
     expect(row.label, isNot(contains('secret')));
+  });
+
+  testWidgets('popup width uses display cells, not UTF-16 units', (tester) {
+    Iterable<TextCompletionOption> provider(TextCompletionRequest request) {
+      if (request.query.contains('中')) {
+        return const [TextCompletionOption(label: '中')];
+      }
+      if (request.query.contains('🚀')) {
+        return const [TextCompletionOption(label: '🚀')];
+      }
+      return const [];
+    }
+
+    tester.pumpWidget(CompletionTextInput(provider: provider, autofocus: true));
+    tester.type('中');
+    _expectWideGlyph(tester, '中');
+
+    tester.pumpWidget(CompletionTextInput(provider: provider, autofocus: true));
+    tester.type('🚀');
+    _expectWideGlyph(tester, '🚀');
   });
 }

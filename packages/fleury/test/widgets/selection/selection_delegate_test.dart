@@ -25,9 +25,9 @@ Matcher _stateError(String message) => throwsA(
 /// need real Selectables (RenderText et al.) to implement, so we
 /// exercise it here against the dispatcher.
 class _StubSelectable extends ChangeNotifier implements Selectable {
-  _StubSelectable({required this.bounds, required this.text});
+  _StubSelectable({this.bounds, required this.text});
 
-  final CellRect bounds;
+  CellRect? bounds;
   final String text;
 
   SelectionGeometry _geometry = SelectionGeometry.empty;
@@ -111,8 +111,14 @@ class _StubSelectable extends ChangeNotifier implements Selectable {
     return sOff < eOff ? (start: sOff, end: eOff) : (start: eOff, end: sOff);
   }
 
+  void paintAt(CellRect rect) {
+    bounds = rect;
+    notifyListeners();
+  }
+
   _EdgeRelation _relate(CellOffset p) {
     final r = bounds;
+    if (r == null) return const _EdgeRelation.none();
     final endRow = r.offset.row + r.size.rows - 1;
     if (p.row < r.offset.row) return const _EdgeRelation.before();
     if (p.row > endRow) return const _EdgeRelation.after();
@@ -126,10 +132,12 @@ class _StubSelectable extends ChangeNotifier implements Selectable {
   @override
   CellOffset? nextGraphemeBoundary(CellOffset from, int dCol, int dRow) {
     // Stub: treat every cell as one grapheme.
-    if (from.row != bounds.offset.row) return null;
+    final r = bounds;
+    if (r == null) return null;
+    if (from.row != r.offset.row) return null;
     final col = from.col + dCol;
     final row = from.row + dRow;
-    if (col < bounds.offset.col || col > bounds.offset.col + text.length) {
+    if (col < r.offset.col || col > r.offset.col + text.length) {
       return null;
     }
     return CellOffset(col, row);
@@ -422,6 +430,50 @@ void main() {
       delegate.add(b);
       expect(delegate.getSelectedText(), 'ello\ngoodbye');
     });
+
+    test(
+      'a Selectable that paints after add joins the in-flight selection',
+      () {
+        final a = _StubSelectable(
+          bounds: const CellRect(
+            offset: CellOffset(0, 0),
+            size: CellSize(5, 1),
+          ),
+          text: 'hello',
+        );
+        final delegate = SelectionContainerDelegate()..add(a);
+        delegate.dispatchSelectionEvent(
+          const SelectionEdgeUpdateEvent(
+            globalPosition: CellOffset(1, 0),
+            isStart: true,
+          ),
+        );
+        delegate.dispatchSelectionEvent(
+          const SelectionEdgeUpdateEvent(
+            globalPosition: CellOffset(7, 1),
+            isStart: false,
+          ),
+        );
+        expect(delegate.getSelectedText(), 'ello');
+
+        final b = _StubSelectable(text: 'goodbye');
+        delegate.add(b);
+        expect(
+          delegate.getSelectedText(),
+          'ello',
+          reason: 'unpainted newcomer cannot resolve edges yet',
+        );
+
+        b.paintAt(
+          const CellRect(offset: CellOffset(0, 1), size: CellSize(7, 1)),
+        );
+        expect(
+          delegate.getSelectedText(),
+          'ello\ngoodbye',
+          reason: 'first paint must replay the in-flight edges',
+        );
+      },
+    );
 
     test(
       'dispose keeps final state readable and blocks new selection work',

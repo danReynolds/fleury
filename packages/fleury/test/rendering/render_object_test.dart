@@ -179,6 +179,18 @@ void main() {
         contains('paint:_CountingRenderObject'),
       );
     });
+
+    test('debug invalidation collector does not invoke the source thunk '
+        'when nobody is listening', () {
+      DebugInvalidations.reset();
+      var allocated = false;
+      DebugInvalidations.recordLayout(() {
+        allocated = true;
+        return 'ShouldNotAllocate';
+      });
+      expect(allocated, isFalse);
+      expect(DebugInvalidations.drain(), isEmpty);
+    });
   });
 
   group('RenderObjectWithChildren replacement dirtiness', () {

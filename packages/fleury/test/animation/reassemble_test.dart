@@ -124,6 +124,24 @@ void main() {
         returnsNormally,
       );
     });
+
+    testWidgets('dispose drops the identical reassemble callback', (tester) {
+      final scheduler = tester.binding.tickerScheduler;
+      final before = scheduler.reassembleCallbackCount;
+      final m = Animation(0.0);
+      tester.pumpWidget(_Show(m));
+      expect(
+        scheduler.reassembleCallbackCount,
+        before + 1,
+        reason: 'attach registers one reassemble callback',
+      );
+      m.dispose();
+      expect(
+        scheduler.reassembleCallbackCount,
+        before,
+        reason: 'identity-based unregister must drop the cached tear-off',
+      );
+    });
   });
 
   group('FrameTicker hot reload', () {

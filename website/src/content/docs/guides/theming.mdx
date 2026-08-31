@@ -35,7 +35,7 @@ final amber = base.copyWith(
   borderStyle: BorderStyle.double,
 );
 
-FleuryApp(theme: amber, home: const Dashboard());
+FleuryApp(title: 'Dashboard', theme: amber, home: const Dashboard());
 ```
 </Fragment>
 <FleuryExample slot="demo" id="themes.custom" cols={38} rows={14} surfaceTheme="site" />
@@ -165,7 +165,7 @@ Choose the mode when you construct the app theme. `ThemeData.dark()` and
 `ThemeData(...)`:
 
 ```dart
-FleuryApp(theme: ThemeData.dark(), home: const Dashboard());
+FleuryApp(title: 'Dashboard', theme: ThemeData.dark(), home: const Dashboard());
 ```
 
 Fleury does not guess the terminal's background. When another value needs a
@@ -216,9 +216,10 @@ Gruvbox Dark, Tokyo Night, Catppuccin Mocha, One Dark, and Solarized in dark
 and light variants, and contributions can add more:
 
 ```dart
+import 'package:fleury/fleury.dart';
 import 'package:fleury_themes/fleury_themes.dart';
 
-FleuryApp(theme: tokyoNight, home: const Dashboard());
+FleuryApp(title: 'Dashboard', theme: tokyoNight, home: const Dashboard());
 ```
 
 Arrow through the live picker to compare the same UI across every palette:

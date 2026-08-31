@@ -44,7 +44,7 @@ const String serveIndexHtml = r'''
   </style>
 </head>
 <body>
-  <div id="fleury-remote" tabindex="0"></div>
+  <div id="fleury-remote"></div>
   <div id="status">connecting…</div>
   <script>
     const status = document.getElementById('status');

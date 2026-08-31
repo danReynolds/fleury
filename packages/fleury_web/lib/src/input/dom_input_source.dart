@@ -56,6 +56,8 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
   MouseButton _pressedButton = MouseButton.none;
   MouseButton _captureLostButton = MouseButton.none;
   var _suppressNextPointerClick = false;
+  MouseEvent? _lastPointerMove;
+  MeasuredCellBox? _lastPointerMoveMetrics;
   String? _cursorBeforeStart;
 
   @override
@@ -90,6 +92,11 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     _add(_pointerTarget, 'pointerleave', _handlePointerLeave);
     _add(_pointerTarget, 'click', _handleClick);
     _add(_pointerTarget, 'wheel', _handleWheel);
+    // Capture-phase: clicking the status overlay, host padding, or any other
+    // non-AT node blurs the hidden textarea. Restore unless the new focus is
+    // a semantic_dom_presenter node (AT must keep those). Do not listen for
+    // keys on document — that would steal from the semantic tree.
+    _add(_document, 'focusin', _handleDocumentFocusIn, capture: true);
 
     _clearTextArea();
     textArea.focus();
@@ -108,7 +115,15 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     _sweepOpenPresses();
     _restorePointerCursor();
     for (final listener in _listeners.reversed) {
-      listener.target.removeEventListener(listener.type, listener.callback);
+      if (listener.capture) {
+        listener.target.removeEventListener(
+          listener.type,
+          listener.callback,
+          web.EventListenerOptions(capture: true),
+        );
+      } else {
+        listener.target.removeEventListener(listener.type, listener.callback);
+      }
     }
     _listeners.clear();
     _onEvent = null;
@@ -121,6 +136,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     _pressedButton = MouseButton.none;
     _captureLostButton = MouseButton.none;
     _suppressNextPointerClick = false;
+    _clearLastPointerMove();
     _cursorBeforeStart = null;
     _focusCoordinator?.handleBrowserFocusOut(WebFocusTarget.keyboardCapture);
     _clearTextArea();
@@ -135,14 +151,20 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
   void _add(
     web.EventTarget target,
     String type,
-    void Function(web.Event event) handler,
-  ) {
+    void Function(web.Event event) handler, {
+    bool capture = false,
+  }) {
     final callback = ((web.Event event) {
       if (!_started) return;
       handler(event);
     }).toJS;
-    target.addEventListener(type, callback);
-    _listeners.add(_DomListener(target, type, callback));
+    final options = capture ? web.AddEventListenerOptions(capture: true) : null;
+    if (options != null) {
+      target.addEventListener(type, callback, options);
+    } else {
+      target.addEventListener(type, callback);
+    }
+    _listeners.add(_DomListener(target, type, callback, capture: capture));
   }
 
   web.HTMLTextAreaElement _createTextArea() {
@@ -299,11 +321,11 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     if (event.metaKey && !_isModifierKey(event.key)) {
       // macOS browsers swallow keyup for non-modifier keys while Cmd is
       // held (cross-engine, RFC 0020 §10): keys under Meta get press-only
-      // semantics — the down, then an immediate synthesized release —
-      // rather than an unclosable press. Hold durations under Meta are
-      // undefined by contract.
+      // semantics — the down or auto-repeat, then an immediate synthesized
+      // release — rather than an unclosable press. Hold durations under
+      // Meta are undefined by contract.
       _emit(tuiEvent);
-      if (tuiEvent.type == KeyEventType.down) {
+      if (tuiEvent.type != KeyEventType.up) {
         _emit(
           KeyEvent(
             tuiEvent.code,
@@ -483,6 +505,22 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     _focusCoordinator?.handleBrowserFocusIn(WebFocusTarget.keyboardCapture);
   }
 
+  void _handleDocumentFocusIn(web.Event raw) {
+    final active = _document.activeElement;
+    if (identical(active, _activeTextArea)) return;
+    if (_isAssistiveOrSemanticTarget(active)) return;
+    ensureKeyboardCapture();
+  }
+
+  /// Semantic-DOM mirror nodes (and their descendants) are AT focus
+  /// targets. Keyboard capture must not steal from them.
+  bool _isAssistiveOrSemanticTarget(web.Element? element) {
+    if (element == null) return false;
+    if (identical(element, _activeTextArea)) return false;
+    return element.closest('.fleury-semantic-node') != null ||
+        element.closest('.fleury-semantics') != null;
+  }
+
   void _handleTextAreaFocusOut(web.Event raw) {
     // Keyboard-capture blur is authority loss for held keys: the release
     // will be delivered to whatever got focus, never to us.
@@ -506,6 +544,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     final cell = _cellForPointer(event);
     if (button == MouseButton.none || cell == null) return;
     _pressedButton = button;
+    _clearLastPointerMove();
     try {
       _pointerTarget.setPointerCapture(event.pointerId);
     } catch (_) {
@@ -549,6 +588,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     _suppressNextPointerClick = true;
     _pressedButton = MouseButton.none;
     _captureLostButton = MouseButton.none;
+    _clearLastPointerMove();
     raw.preventDefault();
     _emit(
       MouseEvent(
@@ -573,6 +613,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     _pressedButton = MouseButton.none;
     _captureLostButton = MouseButton.none;
     _suppressNextPointerClick = false;
+    _clearLastPointerMove();
   }
 
   void _handleLostPointerCapture(web.Event _) {
@@ -584,31 +625,47 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     if (_pressedButton != MouseButton.none) {
       _captureLostButton = _pressedButton;
       _pressedButton = MouseButton.none;
+      _clearLastPointerMove();
     }
+  }
+
+  void _clearLastPointerMove() {
+    _lastPointerMove = null;
+    _lastPointerMoveMetrics = null;
   }
 
   void _handlePointerMove(web.Event raw) {
     final event = raw as web.PointerEvent;
     final cell = _cellForPointer(event);
     if (cell == null) {
+      _clearLastPointerMove();
       _restorePointerCursor();
       return;
     }
     _syncPointerCursor(cell);
     final dragging = event.buttons != 0 && _pressedButton != MouseButton.none;
     raw.preventDefault();
-    _emit(
-      MouseEvent(
-        kind: dragging ? MouseEventKind.drag : MouseEventKind.moved,
-        button: dragging ? _pressedButton : MouseButton.none,
-        col: cell.col,
-        row: cell.row,
-        modifiers: _modifiersFromMouse(event),
-      ),
+    final next = MouseEvent(
+      kind: dragging ? MouseEventKind.drag : MouseEventKind.moved,
+      button: dragging ? _pressedButton : MouseButton.none,
+      col: cell.col,
+      row: cell.row,
+      modifiers: _modifiersFromMouse(event),
     );
+    final metrics = _cellMetrics.cachedMeasurement;
+    if (next == _lastPointerMove &&
+        identical(metrics, _lastPointerMoveMetrics)) {
+      return;
+    }
+    _lastPointerMove = next;
+    _lastPointerMoveMetrics = metrics;
+    _emit(next);
   }
 
-  void _handlePointerLeave(web.Event _) => _restorePointerCursor();
+  void _handlePointerLeave(web.Event _) {
+    _clearLastPointerMove();
+    _restorePointerCursor();
+  }
 
   web.CSSStyleDeclaration? get _pointerStyle =>
       _pointerTarget.isA<web.HTMLElement>()
@@ -706,6 +763,11 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     if (event.deltaY == 0) return;
     final cell = _cellForPointer(event);
     if (cell == null) return;
+    // Chrome (and others) implement pinch-zoom as ctrl+wheel (⌘+wheel on
+    // macOS). Swallowing that gesture would block browser zoom, which is an
+    // accessibility feature. Leave the default action alone and do not emit
+    // an app scroll for it.
+    if (event.ctrlKey || event.metaKey) return;
     raw.preventDefault();
 
     // One scroll step per row of travel (content-following). Fall back to a
@@ -973,11 +1035,17 @@ web.Element? _cellGridLinkAnchor(web.Event event) {
 }
 
 final class _DomListener {
-  const _DomListener(this.target, this.type, this.callback);
+  const _DomListener(
+    this.target,
+    this.type,
+    this.callback, {
+    this.capture = false,
+  });
 
   final web.EventTarget target;
   final String type;
   final JSFunction callback;
+  final bool capture;
 }
 
 const _caretPlacementAttributeNames = <String>[

@@ -17,8 +17,8 @@ enum SnapshotPreview { disconnected, waiting, error, empty, success }
 Future<List<String>>? futureFor(SnapshotPreview preview) => switch (preview) {
   SnapshotPreview.disconnected => null,
   SnapshotPreview.waiting => Completer<List<String>>().future,
-  SnapshotPreview.error => Future<List<String>>.error(
-    StateError('Connection lost'),
+  SnapshotPreview.error => Future<List<String>>(
+    () => throw StateError('Connection lost'),
   ),
   SnapshotPreview.empty => Future<List<String>>.value(const <String>[]),
   SnapshotPreview.success => Future<List<String>>.value(const <String>[

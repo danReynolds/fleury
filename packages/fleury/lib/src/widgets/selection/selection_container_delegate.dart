@@ -39,6 +39,7 @@ import 'selection_event.dart';
 class SelectionContainerDelegate extends ChangeNotifier
     implements SelectionRegistrar {
   final List<Selectable> _selectables = <Selectable>[];
+  final Set<Selectable> _awaitingFirstPaint = <Selectable>{};
   bool _disposed = false;
   Selection? _selection;
   CellOffset? _pendingStartEdge;
@@ -110,11 +111,15 @@ class SelectionContainerDelegate extends ChangeNotifier
     // mounted (e.g. a new row scrolled into view), re-dispatch the
     // active edges so the newcomer can paint its share.
     _reapplyActiveEdgesTo(selectable);
+    if (_hasActiveEdges && selectable.cellBounds == null) {
+      _awaitingFirstPaint.add(selectable);
+    }
   }
 
   @override
   void remove(Selectable selectable) {
     if (_disposed) return;
+    _awaitingFirstPaint.remove(selectable);
     if (_selectables.remove(selectable)) {
       selectable.removeListener(_onSelectableChanged);
     }
@@ -138,6 +143,7 @@ class SelectionContainerDelegate extends ChangeNotifier
       case SelectionClearEvent():
         _pendingStartEdge = null;
         _pendingEndEdge = null;
+        _awaitingFirstPaint.clear();
       case SelectionGranularEvent():
         // Granular events position both edges in one shot. The
         // affected Selectable returns SelectionResult.end and pushes
@@ -175,12 +181,26 @@ class SelectionContainerDelegate extends ChangeNotifier
     return list;
   }
 
+  bool get _hasActiveEdges =>
+      _pendingStartEdge != null || _pendingEndEdge != null;
+
   /// When a Selectable's geometry changes (e.g. its repaint settled),
   /// notify the area so it can repaint highlights and emit
   /// `onSelectionChanged`. The change came FROM a Selectable so we
   /// don't bounce the event back through `dispatchSelectionEvent`.
+
   void _onSelectableChanged() {
     if (_disposed) return;
+    if (_awaitingFirstPaint.isNotEmpty && _hasActiveEdges) {
+      final ready = [
+        for (final selectable in _awaitingFirstPaint)
+          if (selectable.cellBounds != null) selectable,
+      ];
+      for (final selectable in ready) {
+        _awaitingFirstPaint.remove(selectable);
+        _reapplyActiveEdgesTo(selectable);
+      }
+    }
     notifyListeners();
   }
 
@@ -250,6 +270,7 @@ class SelectionContainerDelegate extends ChangeNotifier
       s.removeListener(_onSelectableChanged);
     }
     _selectables.clear();
+    _awaitingFirstPaint.clear();
     _disposed = true;
     super.dispose();
   }

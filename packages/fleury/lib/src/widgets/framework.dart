@@ -851,7 +851,7 @@ abstract class Element implements BuildContext {
     if (_lifecycle != _ElementLifecycle.active) return;
     if (_dirty) return;
     _dirty = true;
-    DebugInvalidations.recordBuild(_debugInvalidationLabel);
+    DebugInvalidations.recordBuild(() => _debugInvalidationLabel);
     _owner?.scheduleBuildFor(this);
   }
 

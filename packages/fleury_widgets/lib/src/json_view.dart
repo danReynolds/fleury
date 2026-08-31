@@ -337,6 +337,26 @@ List<JsonViewRow> buildJsonViewRows(
   return List<JsonViewRow>.unmodifiable(rows);
 }
 
+/// Viewport rows when [JsonView] is given an unbounded height (a non-flex
+/// [Column] child). Bounded parents still fill; this is not a cap on a
+/// full-pane viewer.
+const int _kUnboundedViewportRows = 24;
+
+/// Gives the inner [ListView] a finite height under unbounded `maxRows`,
+/// so it does not throw `ListView needs a bounded height`. Bounded
+/// constraints pass through unchanged so an [Expanded] pane still fills.
+Widget _unboundedListViewport({required int itemCount, required Widget child}) {
+  return LayoutBuilder(
+    builder: (_, constraints) {
+      if (constraints.hasBoundedHeight || itemCount <= 0) return child;
+      final height = itemCount < _kUnboundedViewportRows
+          ? itemCount
+          : _kUnboundedViewportRows;
+      return SizedBox(height: height, child: child);
+    },
+  );
+}
+
 /// Exports a [JsonViewRow] as sanitized text.
 String exportJsonViewRow(
   JsonViewRow row, {
@@ -355,6 +375,12 @@ String exportJsonViewRow(
 /// in place, values are colored by type, and Ctrl+C copies the selected
 /// node's subtree as JSON (or just its visible line). Invalid source is
 /// rendered as a parse-error state instead of throwing.
+///
+/// The view fills a bounded height (an [Expanded] pane). Under an unbounded
+/// height (a non-flex [Column] child) it sizes itself to a short viewport
+/// (at most 24 rows, or the visible row count if smaller) so the inner list
+/// has somewhere to window. That is not a cap on a full-pane viewer — wrap
+/// in [Expanded] to take remaining space.
 class JsonView extends StatefulWidget {
   JsonView({
     super.key,
@@ -683,6 +709,8 @@ class _JsonViewState extends State<JsonView> {
         child: list,
       );
     }
+
+    list = _unboundedListViewport(itemCount: rows.length, child: list);
 
     return FocusDetector(
       onFocusChange: _onFocusDetectorChange,

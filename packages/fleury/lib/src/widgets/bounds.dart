@@ -122,7 +122,10 @@ class _BoundsObserverElement extends SingleChildRenderObjectElement {
 
   @override
   void unmount() {
-    (renderObject as RenderBoundsObserver).detachFromBounds();
+    final object = renderObject;
+    if (object is RenderBoundsObserver) {
+      object.detachFromBounds();
+    }
     super.unmount();
   }
 }

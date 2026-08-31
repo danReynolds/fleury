@@ -44,9 +44,13 @@ reloads on save. Edit in vim, Zed, IntelliJ, anything — saving is the trigger.
   'dart --enable-vm-service=0 run bin/main.dart'`) — the browser preview then
   updates live — but there is never a restart there (the serve socket accepts
   exactly one connection).
-- One caveat: a dev restart re-runs `main()` without the original CLI
-  arguments (a process cannot recover its own argv for a sibling spawn). An
-  app that must re-see argv can set `FLEURY_HOT_RELOAD=0`.
+- Pass `main()`'s arguments through to `runApp` so a hot restart sees the
+  same CLI argv. A process cannot recover its own script arguments for a
+  sibling spawn:
+
+  ```dart
+  Future<void> main(List<String> args) => runApp(const MyApp(), args: args);
+  ```
 
 ## Quick start (VS Code)
 

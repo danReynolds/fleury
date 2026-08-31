@@ -142,6 +142,40 @@ void main() {
     _expectOpaque(tester, showing: 'Duplicate file');
   });
 
+  testWidgets('a ColorPicker hex popover is opaque and short', (tester) {
+    tester.pumpWidget(
+      _wall(
+        Navigator(
+          home: ColorPicker(
+            value: const AnsiColor(1),
+            autofocus: true,
+            onChanged: (_) {},
+          ),
+        ),
+      ),
+    );
+    tester.render(size: _size);
+    tester.type('#');
+    _expectOpaque(tester, showing: 'Hex');
+    final interior = _interior(_screen(tester)).toList();
+    expect(
+      interior.length,
+      lessThanOrEqualTo(4),
+      reason: 'hex popover must shrink to its contents, not fill the terminal',
+    );
+  });
+
+  testWidgets('an Autocomplete dropdown is opaque', (tester) {
+    tester.pumpWidget(
+      _wall(
+        const Autocomplete<String>(options: ['Alpha', 'B'], autofocus: true),
+      ),
+    );
+    tester.render(size: _size);
+    tester.type('a');
+    _expectOpaque(tester, showing: 'Alpha');
+  });
+
   testWidgets('a CommandPalette is opaque', (tester) {
     // The palette used to hand-pad every interior line with full-width blanks
     // to stay opaque; it sits on a Surface now, so the padding is gone and

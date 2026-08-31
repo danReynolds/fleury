@@ -482,7 +482,9 @@ final class SemanticsWireEncoder {
   }
 
   /// Forgets the peer's state so the next encode re-sends a full frame.
-  /// Call when a new peer connects on a reused encoder.
+  ///
+  /// Reset after a failed send / oversized FULL; a new session constructs a
+  /// new encoder.
   void reset() {
     _sent = const {};
     _sentNodeByteLengths = const {};

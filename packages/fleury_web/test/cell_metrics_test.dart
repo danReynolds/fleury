@@ -301,11 +301,31 @@ void main() {
 
     metrics.measure();
     expect(metrics.isDirty, isFalse);
+
+    final armed = metrics.resolutionMediaQuery;
+    expect(armed, isNotNull);
+    expect(armed!.media, contains('resolution'));
+    final beforeResolutionEventCount = dirtyCount;
+    armed.dispatchEvent(web.Event('change'));
+
+    expect(dirtyCount, beforeResolutionEventCount + 1);
+    expect(metrics.isDirty, isTrue);
+    expect(
+      metrics.resolutionMediaQuery,
+      isNot(same(armed)),
+      reason: 'a DPR change re-arms a query for the new ratio',
+    );
+
+    metrics.measure();
+    expect(metrics.isDirty, isFalse);
+    final rearmed = metrics.resolutionMediaQuery;
     metrics.dispose();
 
     final beforeDisposedEventCount = dirtyCount;
     web.document.fonts.dispatchEvent(web.Event('loadingdone'));
     web.window.dispatchEvent(web.Event('resize'));
+    armed.dispatchEvent(web.Event('change'));
+    rearmed?.dispatchEvent(web.Event('change'));
     expect(dirtyCount, beforeDisposedEventCount);
   });
 }

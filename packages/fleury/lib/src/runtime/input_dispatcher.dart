@@ -669,6 +669,14 @@ class InputDispatcher {
     _BindingLane lane = _BindingLane.all,
     bool preserveOnMiss = false,
   }) {
+    // RFC 0020 §14.4: a repeat never completes, advances, or cancels a
+    // pending sequence, and must not extend the timeout. Holding `g`
+    // after the leader `g` must not fire `gg`; a held Space leader stays
+    // armed. `ignored` keeps the sequence pending without consuming the
+    // event as a step (same contract as [preserveOnMiss]).
+    if (event.type == KeyEventType.repeat) {
+      return KeyEventResult.ignored;
+    }
     var pending = _pending;
     if (pending == null) return null;
     final activeCandidates = pending.candidates

@@ -383,6 +383,29 @@ void main() {
       tester.render(size: const CellSize(10, 4));
     });
 
+    testWidgets('constant series at 1e16 does not throw and paints', (tester) {
+      // |x| ≥ 2^53 makes `xmin + 1` a no-op; Y ±0.5 dies at 2^52. The
+      // resulting zero span used to `/0` and throw from `.round()`.
+      const huge = 1e16;
+      tester.pumpWidget(
+        SizedBox(
+          width: 30,
+          height: 8,
+          child: LineChart(
+            series: const [
+              LineSeries([(huge, huge), (huge, huge), (huge, huge)]),
+            ],
+          ),
+        ),
+      );
+      expect(() => tester.render(size: const CellSize(30, 8)), returnsNormally);
+      expect(
+        _hasBraille(tester, 30, 8),
+        isTrue,
+        reason: 'a degenerate 1e16 series must still paint',
+      );
+    });
+
     testWidgets('all-equal y values render a flat line, no NaN', (tester) {
       // Autoscaled y range would be zero-width. The chart must guard
       // against div-by-zero and still produce a visible glyph.

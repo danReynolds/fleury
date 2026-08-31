@@ -240,16 +240,6 @@ void main() {
     });
   });
 
-  group('WebSurfaceCapabilities', () {
-    test('defaults match retained DOM surface assumptions', () {
-      const capabilities = WebSurfaceCapabilities();
-
-      expect(capabilities.supportsTrueColor, isTrue);
-      expect(capabilities.supportsSemanticLinks, isFalse);
-      expect(capabilities.supportsGlyphOverlay, isFalse);
-    });
-  });
-
   group('FrameSurface', () {
     test('fake surface can consume a presentation plan', () {
       final damage = RenderDamageTracker();
@@ -292,9 +282,6 @@ final class _FakeFrameSurface implements FrameSurface {
 
   @override
   CellSize size;
-
-  @override
-  WebSurfaceCapabilities get capabilities => const WebSurfaceCapabilities();
 
   final presentedPlans = <FramePresentationPlan>[];
 

@@ -52,13 +52,14 @@ import '../rendering/render_navigator.dart';
 import '../rendering/render_object.dart';
 import '../semantics/semantics.dart';
 import 'align.dart' show Align, Alignment;
-import 'basic.dart' show Container;
+import 'basic.dart' show Container, SizedBox;
 import 'effects.dart';
 import 'focus.dart';
 import 'focus_traversal.dart';
 import 'error_boundary.dart';
 import 'framework.dart';
 import 'key_bindings.dart';
+import 'pointer.dart' show AbsorbPointer;
 import 'selection/selection_area.dart';
 import 'tui_binding.dart';
 
@@ -410,7 +411,9 @@ class NavigatorState extends State<Navigator> {
   /// nothing painted beneath shows through it — a modal is never see-through.
   /// [barrierColor] optionally fills the surround (over the screen behind);
   /// null leaves it composited. [barrierDismissible] (default true) controls
-  /// whether Esc dismisses it.
+  /// whether Esc *or a pointer tap on the surround* dismisses it. The
+  /// surround always absorbs pointer events so they cannot reach the screen
+  /// behind, even when the barrier is not dismissible.
   ///
   /// Framing (a border, padding, an edge for a sheet) is just widgets — wrap
   /// [screen] — and [alignment] is the only placement knob you usually need.
@@ -854,6 +857,14 @@ class _RouteHost extends StatelessWidget {
       if (barrier != null) {
         content = Container(color: barrier, child: content);
       }
+      // Absorb the whole route slot so clicks cannot fall through to the
+      // screen behind. Descendant regions (the presented content) paint
+      // later and still receive their own taps. A dismissible barrier
+      // pops on surround taps — the pointer counterpart of Esc.
+      content = AbsorbPointer(
+        onTap: route.barrierDismissible ? () => navigator.maybePop() : null,
+        child: SizedBox.expand(child: content),
+      );
       screen = content;
     }
 
@@ -1119,7 +1130,9 @@ extension NavigatorContext on BuildContext {
 
   /// Presents [screen] as a modal over the current screen (centered by
   /// default), on an opaque fill. Dismiss with [pop]. [barrierColor]
-  /// fills the surround; [barrierDismissible] (default true) controls Esc.
+  /// fills the surround; [barrierDismissible] (default true) controls Esc
+  /// and pointer-outside dismiss. The surround always absorbs pointer
+  /// events so they cannot reach the screen behind.
   Future<T?> present<T>(
     Widget screen, {
     Alignment alignment = Alignment.center,

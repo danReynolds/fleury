@@ -242,6 +242,7 @@ class _SelectionAreaState extends State<SelectionArea> {
   }
 
   void _handleSelectionChanged() {
+    if (widget.onSelectionChanged == null) return;
     final text = _delegate.getSelectedText();
     if (text == _lastReportedText) return;
     _lastReportedText = text;

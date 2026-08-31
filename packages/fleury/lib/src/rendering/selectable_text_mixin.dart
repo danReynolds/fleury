@@ -107,6 +107,8 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
   SelectionGeometry _selectionGeometry = SelectionGeometry.empty;
   TextEdgeRelation _selStart = const TextEdgeRelation.none();
   TextEdgeRelation _selEnd = const TextEdgeRelation.none();
+  CellOffset? _startScreen;
+  CellOffset? _endScreen;
 
   /// The full painted rect of this Selectable in SCREEN coordinates,
   /// including any portion currently scrolled off-screen. Returned to
@@ -182,6 +184,11 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
   SelectionResult dispatchSelectionEvent(SelectionEvent event) {
     switch (event) {
       case SelectionEdgeUpdateEvent(:final globalPosition, :final isStart):
+        if (isStart) {
+          _startScreen = globalPosition;
+        } else {
+          _endScreen = globalPosition;
+        }
         final rel = _relateScreenPoint(globalPosition);
         if (isStart) {
           _selStart = rel;
@@ -191,6 +198,8 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
         _recomputeGeometry();
         return rel.asSelectionResult();
       case SelectionClearEvent():
+        _startScreen = null;
+        _endScreen = null;
         _selStart = const TextEdgeRelation.none();
         _selEnd = const TextEdgeRelation.none();
         _recomputeGeometry();
@@ -198,6 +207,8 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
       case SelectionGranularEvent(:final granularity, :final globalPosition):
         switch (granularity) {
           case SelectionGranularity.all:
+            _startScreen = null;
+            _endScreen = null;
             _selStart = const TextEdgeRelation.inside(0);
             _selEnd = TextEdgeRelation.inside(contentLength);
             _recomputeGeometry();
@@ -460,9 +471,12 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
     final range = getSelectionRange();
     if (range == null || range.start == range.end) return null;
     final flat = _flatText();
+    final start = range.start.clamp(0, flat.length);
+    final end = range.end.clamp(0, flat.length);
+    if (start >= end) return null;
     final groups = loweredGroups;
     if (groups.isEmpty) {
-      return SelectedContent(plainText: flat.substring(range.start, range.end));
+      return SelectedContent(plainText: flat.substring(start, end));
     }
     // Copy answers from SOURCE (RFC 0019 decision 3): each lowered group's
     // flat range — which may contain a forced line break between atoms — is
@@ -470,15 +484,15 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
     // is already group-snapped by getSelectionRange, so groups intersecting
     // it are fully contained.
     final out = StringBuffer();
-    var cursor = range.start;
+    var cursor = start;
     for (final group in groups) {
-      if (group.end <= range.start) continue;
-      if (group.start >= range.end) break;
-      out.write(flat.substring(cursor, group.start));
+      if (group.end <= start) continue;
+      if (group.start >= end) break;
+      out.write(flat.substring(cursor, group.start.clamp(0, flat.length)));
       out.write(group.source);
-      cursor = group.end;
+      cursor = group.end.clamp(0, flat.length);
     }
-    out.write(flat.substring(cursor, range.end));
+    out.write(flat.substring(cursor, end));
     return SelectedContent(plainText: out.toString());
   }
 
@@ -503,8 +517,8 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
       }
     }
 
-    final sOff = resolve(s, e);
-    final eOff = resolve(e, s);
+    final sOff = resolve(s, e).clamp(0, length);
+    final eOff = resolve(e, s).clamp(0, length);
     if (sOff == eOff) return null;
     final ordered = sOff < eOff
         ? (start: sOff, end: eOff)
@@ -596,6 +610,23 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
   }
 
   String _flatText() => selectionLines.join('\n');
+
+  /// Re-resolve cached flat offsets from the last screen-space edges.
+  ///
+  /// Call once when paint geometry or laid-out lines change — never from
+  /// [isOffsetSelected] / the per-grapheme paint walk. Screen edges stay
+  /// stable across resize and content edits; cached offsets do not.
+  void resyncSelectionFromScreenEdges() {
+    if (_startScreen == null && _endScreen == null) return;
+    if (selectionPaintRect == null) return;
+    if (_startScreen != null) {
+      _selStart = _relateScreenPoint(_startScreen!);
+    }
+    if (_endScreen != null) {
+      _selEnd = _relateScreenPoint(_endScreen!);
+    }
+    _recomputeGeometry();
+  }
 
   void _recomputeGeometry() {
     final range = getSelectionRange();

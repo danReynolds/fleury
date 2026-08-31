@@ -185,6 +185,55 @@ void main() {
       expect(buf.atColRow(1, 0).grapheme, 'i');
     });
 
+    testWidgets('rebuilding with a new maxWidth relayouts the child', (tester) {
+      tester.pumpWidget(
+        const ConstrainedBox(
+          maxWidth: 3,
+          child: Text('hello world', softWrap: false),
+        ),
+      );
+      var buf = tester.render(size: const CellSize(10, 1));
+      expect(buf.atColRow(2, 0).grapheme, 'l');
+      expect(buf.atColRow(3, 0).grapheme, isNull);
+
+      tester.pumpWidget(
+        const ConstrainedBox(
+          maxWidth: 8,
+          child: Text('hello world', softWrap: false),
+        ),
+      );
+      buf = tester.render(size: const CellSize(10, 1));
+      // maxWidth 8 → 'hello wo'; col 8 is outside the box.
+      expect(buf.atColRow(6, 0).grapheme, 'w');
+      expect(buf.atColRow(7, 0).grapheme, 'o');
+      expect(buf.atColRow(8, 0).grapheme, isNull);
+    });
+
+    testWidgets('rebuilding with a new minWidth relayouts the child', (tester) {
+      tester.pumpWidget(
+        const Row(
+          children: [
+            ConstrainedBox(minWidth: 6, child: Text('hi')),
+            Text('|'),
+          ],
+        ),
+      );
+      var buf = tester.render(size: const CellSize(10, 1));
+      expect(buf.atColRow(6, 0).grapheme, '|');
+
+      tester.pumpWidget(
+        const Row(
+          children: [
+            ConstrainedBox(minWidth: 3, child: Text('hi')),
+            Text('|'),
+          ],
+        ),
+      );
+      buf = tester.render(size: const CellSize(10, 1));
+      expect(buf.atColRow(3, 0).grapheme, '|');
+      expect(buf.atColRow(6, 0).grapheme, isNull);
+    });
+
     testWidgets('maxHeight under a stretch (tight cross-axis) parent yields the '
         'parent bound, not an impossible min>max', (tester) {
       // CrossAxisAlignment.stretch delivers tight cross-axis (row) constraints

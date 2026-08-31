@@ -178,6 +178,42 @@ void main() {
       );
     });
 
+    testWidgets('wide CJK log lines stay opaque across the row', (tester) {
+      final b = _buffer(['中文']);
+      tester.pumpWidget(
+        LogBufferScope(
+          buffer: b,
+          child: Stack(
+            children: [
+              LayoutBuilder(
+                builder: (c, cc) => Column(
+                  children: [
+                    for (var i = 0; i < (cc.maxRows ?? 0); i++)
+                      Text('#' * (cc.maxCols ?? 0)),
+                  ],
+                ),
+              ),
+              const OutputCaptureConsole(height: 6),
+            ],
+          ),
+        ),
+      );
+      final rows = tester
+          .renderToString(size: const CellSize(20, 10))
+          .split('\n');
+      final panelInterior = rows.where((r) => r.contains('│')).toList();
+      expect(panelInterior, isNotEmpty);
+      expect(
+        panelInterior.every((r) => !r.contains('#')),
+        isTrue,
+        reason: 'wide glyphs must not leave unpadded holes in the panel',
+      );
+      expect(
+        tester.renderToString(size: const CellSize(20, 10)).contains('中文'),
+        isTrue,
+      );
+    });
+
     testWidgets('stderr lines are tagged and colored', (tester) {
       final b = _buffer(['boom'], source: LogSource.stderr);
       tester.pumpWidget(

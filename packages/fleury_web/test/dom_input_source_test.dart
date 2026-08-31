@@ -958,13 +958,14 @@ void main() {
   test('DomInputSource restores keyboard capture on pointer down', () {
     final events = <TuiEvent>[];
     final host = web.document.createElement('div');
-    final otherInput =
-        web.document.createElement('input') as web.HTMLInputElement;
+    final semantic = web.document.createElement('div') as web.HTMLElement;
+    semantic.className = 'fleury-semantic-node';
+    semantic.setAttribute('tabindex', '-1');
     final textArea =
         web.document.createElement('textarea') as web.HTMLTextAreaElement;
     final focusCoordinator = WebFocusCoordinator();
     web.document.body!.appendChild(host);
-    web.document.body!.appendChild(otherInput);
+    web.document.body!.appendChild(semantic);
     final source = DomInputSource(
       hostElement: host,
       textArea: textArea,
@@ -984,16 +985,15 @@ void main() {
     addTearDown(() {
       source.dispose();
       host.parentNode?.removeChild(host);
-      otherInput.parentNode?.removeChild(otherInput);
+      semantic.parentNode?.removeChild(semantic);
     });
 
     source.start(events.add);
     expect(web.document.activeElement, same(textArea));
     expect(focusCoordinator.browserFocusTarget, WebFocusTarget.keyboardCapture);
 
-    otherInput.focus();
-    expect(web.document.activeElement, same(otherInput));
-    textArea.dispatchEvent(web.FocusEvent('focusout'));
+    semantic.focus();
+    expect(web.document.activeElement, same(semantic));
     expect(focusCoordinator.browserFocusTarget, isNull);
 
     host.dispatchEvent(
@@ -1014,6 +1014,90 @@ void main() {
     expect(web.document.activeElement, same(textArea));
     expect(focusCoordinator.browserFocusTarget, WebFocusTarget.keyboardCapture);
     expect(events, isNotEmpty);
+  });
+
+  test('DomInputSource restores capture after focus leaves the grid', () {
+    final host = web.document.createElement('div');
+    final overlay = web.document.createElement('div') as web.HTMLElement;
+    overlay.setAttribute('tabindex', '-1');
+    overlay.textContent = 'connecting…';
+    final textArea =
+        web.document.createElement('textarea') as web.HTMLTextAreaElement;
+    final focusCoordinator = WebFocusCoordinator();
+    web.document.body!.appendChild(host);
+    web.document.body!.appendChild(overlay);
+    final source = DomInputSource(
+      hostElement: host,
+      textArea: textArea,
+      focusCoordinator: focusCoordinator,
+      cellMetrics: _FakeMetrics(
+        const MeasuredCellBox(
+          cssCellWidth: 10,
+          cssCellHeight: 20,
+          cssCanvasWidth: 80,
+          cssCanvasHeight: 60,
+          devicePixelRatio: 1,
+          cols: 8,
+          rows: 3,
+        ),
+      ),
+    );
+    addTearDown(() {
+      source.dispose();
+      host.parentNode?.removeChild(host);
+      overlay.parentNode?.removeChild(overlay);
+    });
+
+    source.start((_) {});
+    expect(web.document.activeElement, same(textArea));
+
+    overlay.focus();
+    expect(
+      web.document.activeElement,
+      same(textArea),
+      reason: 'focus outside the grid returns to the hidden textarea',
+    );
+    expect(focusCoordinator.browserFocusTarget, WebFocusTarget.keyboardCapture);
+  });
+
+  test('DomInputSource does not steal focus from a semantic AT target', () {
+    final host = web.document.createElement('div');
+    final semantic = web.document.createElement('div') as web.HTMLElement;
+    semantic.className = 'fleury-semantic-node';
+    semantic.setAttribute('data-fleury-semantic-id', 'run');
+    semantic.setAttribute('tabindex', '-1');
+    final textArea =
+        web.document.createElement('textarea') as web.HTMLTextAreaElement;
+    web.document.body!.appendChild(host);
+    web.document.body!.appendChild(semantic);
+    final source = DomInputSource(
+      hostElement: host,
+      textArea: textArea,
+      cellMetrics: _FakeMetrics(
+        const MeasuredCellBox(
+          cssCellWidth: 10,
+          cssCellHeight: 20,
+          cssCanvasWidth: 80,
+          cssCanvasHeight: 60,
+          devicePixelRatio: 1,
+          cols: 8,
+          rows: 3,
+        ),
+      ),
+    );
+    addTearDown(() {
+      source.dispose();
+      host.parentNode?.removeChild(host);
+      semantic.parentNode?.removeChild(semantic);
+    });
+
+    source.start((_) {});
+    semantic.focus();
+    expect(
+      web.document.activeElement,
+      same(semantic),
+      reason: 'AT/semantic nodes keep browser focus',
+    );
   });
 
   test('DomInputSource clears injected textarea at start and dispose', () {
@@ -1216,6 +1300,125 @@ void main() {
         row: 2,
       ),
     ]);
+  });
+
+  test('DomInputSource coalesces identical pointer moves', () {
+    final events = <TuiEvent>[];
+    final host = web.document.createElement('div');
+    final textArea =
+        web.document.createElement('textarea') as web.HTMLTextAreaElement;
+    web.document.body!.appendChild(host);
+    final source = DomInputSource(
+      hostElement: host,
+      textArea: textArea,
+      cellMetrics: _FakeMetrics(
+        const MeasuredCellBox(
+          cssCellWidth: 10,
+          cssCellHeight: 20,
+          cssCanvasWidth: 80,
+          cssCanvasHeight: 60,
+          cssCanvasLeft: 10,
+          cssCanvasTop: 20,
+          devicePixelRatio: 1,
+          cols: 8,
+          rows: 3,
+        ),
+      ),
+    );
+    addTearDown(() {
+      source.dispose();
+      host.parentNode?.removeChild(host);
+    });
+    source.start(events.add);
+
+    web.PointerEvent move(int clientX, int clientY) => web.PointerEvent(
+      'pointermove',
+      web.PointerEventInit(
+        clientX: clientX,
+        clientY: clientY,
+        bubbles: true,
+        cancelable: true,
+      ),
+    );
+
+    host.dispatchEvent(move(25, 45));
+    host.dispatchEvent(move(26, 46));
+    host.dispatchEvent(move(35, 45));
+
+    expect(events, [
+      const MouseEvent(
+        kind: MouseEventKind.moved,
+        button: MouseButton.none,
+        col: 1,
+        row: 1,
+      ),
+      const MouseEvent(
+        kind: MouseEventKind.moved,
+        button: MouseButton.none,
+        col: 2,
+        row: 1,
+      ),
+    ]);
+  });
+
+  test('DomInputSource leaves ctrl and meta wheel to the browser', () {
+    final events = <TuiEvent>[];
+    final host = web.document.createElement('div');
+    final textArea =
+        web.document.createElement('textarea') as web.HTMLTextAreaElement;
+    web.document.body!.appendChild(host);
+    final source = DomInputSource(
+      hostElement: host,
+      textArea: textArea,
+      cellMetrics: _FakeMetrics(
+        const MeasuredCellBox(
+          cssCellWidth: 10,
+          cssCellHeight: 20,
+          cssCanvasWidth: 80,
+          cssCanvasHeight: 60,
+          cssCanvasLeft: 10,
+          cssCanvasTop: 20,
+          devicePixelRatio: 1,
+          cols: 8,
+          rows: 3,
+        ),
+      ),
+    );
+    addTearDown(() {
+      source.dispose();
+      host.parentNode?.removeChild(host);
+    });
+    source.start(events.add);
+
+    final ctrlWheel = web.WheelEvent(
+      'wheel',
+      web.WheelEventInit(
+        clientX: 15,
+        clientY: 25,
+        deltaY: -20,
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      ),
+    );
+    host.dispatchEvent(ctrlWheel);
+    expect(ctrlWheel.defaultPrevented, isFalse, reason: 'browser zoom');
+    expect(events, isEmpty);
+
+    final metaWheel = web.WheelEvent(
+      'wheel',
+      web.WheelEventInit(
+        clientX: 15,
+        clientY: 25,
+        deltaY: 20,
+        metaKey: true,
+        bubbles: true,
+        cancelable: true,
+      ),
+    );
+    host.dispatchEvent(metaWheel);
+    expect(metaWheel.defaultPrevented, isFalse, reason: 'browser zoom');
+    expect(events, isEmpty);
   });
 
   test('DomInputSource shows a hand cursor over semantic click targets', () {

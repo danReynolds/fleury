@@ -98,6 +98,46 @@ void main() {
       tester.sendKey(_repeat(KeyCode.g));
       expect(fired, 0, reason: 'holding g must not arm or complete gg');
     });
+
+    testWidgets('a repeat never completes a pending sequence', (tester) {
+      var fired = 0;
+      tester.pumpFleuryHome(
+        KeyBindings(
+          bindings: [KeyBinding(KeySequence.g.g, onTrigger: (_) => fired++)],
+          child: const Focus(autofocus: true, child: Text('x')),
+        ),
+      );
+      tester.pump();
+
+      tester.sendKey(_down(KeyCode.g));
+      tester.sendKey(_repeat(KeyCode.g));
+      expect(fired, 0, reason: 'g down then g repeat must not fire gg');
+      tester.sendKey(_down(KeyCode.g));
+      expect(fired, 1, reason: 'the sequence stayed armed for a real second g');
+    });
+
+    testWidgets('a repeat leaves a pending leader armed', (tester) {
+      PendingKeySequenceMatch? pending;
+      tester.pumpFleuryHome(
+        KeyBindings(
+          bindings: [KeyBinding(KeySequence.space.f, onTrigger: (_) {})],
+          child: _Probe((context) {
+            pending = KeyBindings.pendingOf(context);
+            return const Focus(autofocus: true, child: Text('x'));
+          }),
+        ),
+      );
+      tester.pump();
+
+      tester.sendKey(_down(KeyCode.space));
+      expect(pending, isNotNull, reason: 'Space leader arms the sequence');
+      tester.sendKey(_repeat(KeyCode.space));
+      expect(
+        pending,
+        isNotNull,
+        reason: 'Space repeat must leave pendingOf armed',
+      );
+    });
   });
 
   group('KeyBinding.hold (§14.5)', () {

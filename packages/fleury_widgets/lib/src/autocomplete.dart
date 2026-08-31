@@ -273,10 +273,15 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
   }
 
   Widget _suggestions() {
-    var width = 0;
+    final policy = MediaQuery.textPolicyOf(context).widths;
+    const resolver = DefaultWidthResolver();
+    var width = 1;
     for (final o in _filtered) {
-      final len = sanitizeOptionLabel(_display(o)).length;
-      if (len > width) width = len;
+      final measured = resolver.widthOfText(
+        sanitizeOptionLabel(_display(o)),
+        policy,
+      );
+      if (measured > width) width = measured;
     }
     final height = _filtered.length > widget.maxVisible
         ? widget.maxVisible
@@ -311,60 +316,62 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
             return;
         }
       },
-      child: Container(
-        border: BoxBorder(style: _borderStyle),
-        child: SizedBox(
-          width: width + 2,
-          height: height,
-          child: ListView.builder(
-            controller: _list,
-            selectionActive: true,
-            itemCount: _filtered.length,
-            itemBuilder: (_, i, selected) {
-              final label = sanitizeOptionLabel(_display(_filtered[i]));
-              return Semantics(
-                role: SemanticRole.menuItem,
-                label: label,
-                value: label,
-                focused: _focusNode.hasFocus && selected,
-                selected: selected,
-                actions: const <SemanticAction>{
-                  SemanticAction.select,
-                  SemanticAction.activate,
-                },
-                state: SemanticState({
-                  'menuDepth': 0,
-                  'menuItemIndex': i,
-                  'menuItemPosition': i + 1,
-                  'menuItemCount': _filtered.length,
-                  'entryKind': 'suggestion',
-                  'completionQuery': _controller.text,
-                }),
-                onAction: (action) {
-                  switch (action) {
-                    case SemanticAction.select:
-                    case SemanticAction.activate:
+      child: SelectionArea.disabled(
+        child: Container.framed(
+          border: BoxBorder(style: _borderStyle),
+          child: SizedBox(
+            width: width + 2,
+            height: height,
+            child: ListView.builder(
+              controller: _list,
+              selectionActive: true,
+              itemCount: _filtered.length,
+              itemBuilder: (_, i, selected) {
+                final label = sanitizeOptionLabel(_display(_filtered[i]));
+                return Semantics(
+                  role: SemanticRole.menuItem,
+                  label: label,
+                  value: label,
+                  focused: _focusNode.hasFocus && selected,
+                  selected: selected,
+                  actions: const <SemanticAction>{
+                    SemanticAction.select,
+                    SemanticAction.activate,
+                  },
+                  state: SemanticState({
+                    'menuDepth': 0,
+                    'menuItemIndex': i,
+                    'menuItemPosition': i + 1,
+                    'menuItemCount': _filtered.length,
+                    'entryKind': 'suggestion',
+                    'completionQuery': _controller.text,
+                  }),
+                  onAction: (action) {
+                    switch (action) {
+                      case SemanticAction.select:
+                      case SemanticAction.activate:
+                        _list.selectedIndex = i;
+                        _pick();
+                        return;
+                      case _:
+                        return;
+                    }
+                  },
+                  // Click a suggestion to accept it — the same select+pick the
+                  // keyboard's Tab/Enter performs.
+                  child: GestureDetector(
+                    onTap: () {
                       _list.selectedIndex = i;
                       _pick();
-                      return;
-                    case _:
-                      return;
-                  }
-                },
-                // Click a suggestion to accept it — the same select+pick the
-                // keyboard's Tab/Enter performs.
-                child: GestureDetector(
-                  onTap: () {
-                    _list.selectedIndex = i;
-                    _pick();
-                  },
-                  child: Text(
-                    '${selected ? '› ' : '  '}$label',
-                    style: selected ? _selectionStyle : CellStyle.none,
+                    },
+                    child: Text(
+                      '${selected ? '› ' : '  '}$label',
+                      style: selected ? _selectionStyle : CellStyle.none,
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
         ),
       ),

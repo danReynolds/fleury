@@ -107,6 +107,10 @@ class TickerScheduler {
   /// to assert "no ticker leak."
   int get activeTickerCount => _callbacks.length;
 
+  /// Number of currently registered reassemble callbacks. Used by tests
+  /// to assert an [Animation] / [FrameTicker] did not leak its callback.
+  int get reassembleCallbackCount => _reassembleCallbacks.length;
+
   /// Registers [callback] to receive a clock reading on every tick.
   /// Idempotent: re-registering the same callback is a no-op.
   /// Starts the underlying periodic source if this was the first

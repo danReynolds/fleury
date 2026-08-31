@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0
 
 - **State-aware control styling.** Every core control keeps its existing
   `style: CellStyle(...)` common case and also accepts
@@ -68,8 +68,6 @@
   live; restart is intentionally disabled there. Hot restart is also
   available from the debug shell: `Ctrl+G`, then `F5` (dev-supervisor
   sessions).
-
-## 0.1.0
 
 Initial public release.
 

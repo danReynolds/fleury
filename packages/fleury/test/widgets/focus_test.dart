@@ -151,10 +151,6 @@ void main() {
         () => manager.focusPrevious(),
         _stateError('FocusManager has been disposed.'),
       );
-      expect(
-        () => manager.dispatchKey(_key('x')),
-        _stateError('FocusManager has been disposed.'),
-      );
     });
 
     test(
@@ -174,6 +170,7 @@ void main() {
   group('Focus.onKey routing', () {
     test('delivers key to focused node\'s onKey first', () {
       final manager = FocusManager();
+      final dispatcher = InputDispatcher(focusManager: manager);
       final owner = BuildOwner();
       final received = <String>[];
 
@@ -195,12 +192,13 @@ void main() {
         ),
       );
 
-      manager.dispatchKey(_key('a'));
+      dispatcher.dispatch(_key('a'));
       expect(received, ['inner:a']);
     });
 
     test('bubbles up through ancestor Focus widgets when child ignores', () {
       final manager = FocusManager();
+      final dispatcher = InputDispatcher(focusManager: manager);
       final owner = BuildOwner();
       final received = <String>[];
 
@@ -224,12 +222,13 @@ void main() {
         ),
       );
 
-      manager.dispatchKey(_key('x'));
+      dispatcher.dispatch(_key('x'));
       expect(received, ['inner:x', 'outer:x']);
     });
 
     test('handled key does not reach ancestors', () {
       final manager = FocusManager();
+      final dispatcher = InputDispatcher(focusManager: manager);
       final owner = BuildOwner();
       final received = <String>[];
 
@@ -254,7 +253,7 @@ void main() {
         ),
       );
 
-      manager.dispatchKey(_key('x'));
+      dispatcher.dispatch(_key('x'));
       expect(received, ['inner:x']);
     });
   });
@@ -262,6 +261,7 @@ void main() {
   group('FocusScope', () {
     test('ordinary scope does not block bubble-up', () {
       final manager = FocusManager();
+      final dispatcher = InputDispatcher(focusManager: manager);
       final owner = BuildOwner();
       final received = <String>[];
 
@@ -287,12 +287,13 @@ void main() {
         ),
       );
 
-      manager.dispatchKey(_key('a'));
+      dispatcher.dispatch(_key('a'));
       expect(received, ['inner', 'app']);
     });
 
     test('trapFocus does not change key-event propagation', () {
       final manager = FocusManager();
+      final dispatcher = InputDispatcher(focusManager: manager);
       final owner = BuildOwner();
       final received = <String>[];
 
@@ -319,7 +320,7 @@ void main() {
         ),
       );
 
-      manager.dispatchKey(_key('a'));
+      dispatcher.dispatch(_key('a'));
       expect(
         received,
         ['inner', 'app'],
@@ -428,18 +429,20 @@ void main() {
     test('a reused node reattaches to a new element — ANCESTOR bindings stay '
         'live after unmount + remount', () {
       // A widget that holds a long-lived node, unmounts, then remounts reuses
-      // the node but builds a FRESH element. dispatchKey walks UP from
-      // `node._element`; if `_register` keeps the stale pointer, that walk
-      // traverses the defunct tree and never reaches the remounted ANCESTOR
-      // bindings (the focused node's own handler still fires — the head of the
-      // chain — so the bug only shows for ancestors, as it did in the app).
+      // the node but builds a FRESH element. InputDispatcher walks UP from
+      // `node._element` via activeChain(); if `_register` keeps the stale
+      // pointer, that walk traverses the defunct tree and never reaches the
+      // remounted ANCESTOR bindings (the focused node's own handler still
+      // fires — the head of the chain — so the bug only shows for ancestors,
+      // as it did in the app).
       final manager = FocusManager();
+      final dispatcher = InputDispatcher(focusManager: manager);
       final node = FocusNode(debugLabel: 'reused');
       var hits = 0;
       final owner = BuildOwner();
 
       // The focused child bubbles (returns ignored); an ANCESTOR Focus counts
-      // the hit. The hit only lands if dispatchKey's upward walk from the
+      // the hit. The hit only lands if the dispatcher's upward walk from the
       // child's element reaches the ancestor.
       Widget host({required bool show}) => FocusManagerScope(
         manager: manager,
@@ -466,7 +469,7 @@ void main() {
 
       var root = owner.mountRoot(host(show: true));
       node.requestFocus();
-      manager.dispatchKey(_key('a'));
+      dispatcher.dispatch(_key('a'));
       expect(
         hits,
         1,
@@ -477,7 +480,7 @@ void main() {
       root = owner.updateRoot(root, host(show: true)); // remounts, reusing node
 
       node.requestFocus();
-      manager.dispatchKey(_key('a'));
+      dispatcher.dispatch(_key('a'));
       expect(
         hits,
         2,
@@ -495,6 +498,7 @@ void main() {
       // every subsequent key into a handler whose State is disposed, which
       // throws on first widget access and bypasses the Ctrl+C exit guard.
       final manager = FocusManager();
+      final dispatcher = InputDispatcher(focusManager: manager);
       final node = FocusNode(debugLabel: 'kept');
       var deadHits = 0;
       var liveHits = 0;
@@ -549,7 +553,7 @@ void main() {
       // Detectors are focus-scoped (RFC 0020 §17), so the live half is
       // reached by focusing a surviving node rather than ambiently.
       liveNode.requestFocus();
-      manager.dispatchKey(_key('a'));
+      dispatcher.dispatch(_key('a'));
       expect(deadHits, 0);
       expect(liveHits, 1, reason: 'the live chain still receives keys');
     });

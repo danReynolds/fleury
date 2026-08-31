@@ -146,21 +146,19 @@ class OutputCaptureConsole extends StatelessWidget {
 
         final children = <Widget>[
           // Reversed header bar: a left accent block, the title, and a count.
-          _bar(
-            _between(
-              '▌ $title',
-              '${logs.length} ${logs.length == 1 ? 'line' : 'lines'}',
-              innerW,
-            ),
+          _splitBar(
+            '▌ $title',
+            '${logs.length} ${logs.length == 1 ? 'line' : 'lines'}',
             const CellStyle(inverse: true, bold: true),
             innerW,
           ),
           ..._body(theme, logs.lines, logRows, innerW),
           if (hasFooter)
             _bar(
-              _rightAlign('$toggleHint to hide ', innerW),
+              '$toggleHint to hide ',
               theme.mutedStyle,
               innerW,
+              alignment: Alignment.centerRight,
             ),
         ];
 
@@ -196,9 +194,10 @@ class OutputCaptureConsole extends StatelessWidget {
       return [
         for (var i = 0; i < logRows; i++)
           _bar(
-            i == logRows ~/ 2 ? _center('no output yet', innerW) : '',
+            i == logRows ~/ 2 ? 'no output yet' : '',
             theme.mutedStyle,
             innerW,
+            alignment: i == logRows ~/ 2 ? Alignment.center : null,
           ),
       ];
     }
@@ -220,27 +219,48 @@ class OutputCaptureConsole extends StatelessWidget {
     ];
   }
 
-  // One opaque, full-width row (padded/truncated so every cell is painted).
-  static Widget _bar(String text, CellStyle style, int width) => Text(
-    _fit(text, width),
-    style: style,
-    maxLines: 1,
-    overflow: TextOverflow.clip,
-  );
-
-  static String _fit(String s, int w) =>
-      s.length >= w ? s.substring(0, w) : s.padRight(w);
-
-  static String _between(String left, String right, int w) {
-    final gap = w - left.length - right.length;
-    return gap < 1 ? _fit(left, w) : '$left${' ' * gap}$right';
+  // One opaque, full-width row. Opacity comes from [Container.filled], not
+  // from padding the string to `width` by UTF-16 length (wide glyphs would
+  // leave holes).
+  static Widget _bar(
+    String text,
+    CellStyle style,
+    int width, {
+    Alignment? alignment,
+  }) {
+    return SizedBox(
+      width: width,
+      height: 1,
+      child: Container.filled(
+        alignment: alignment,
+        child: Text(
+          text,
+          style: style,
+          maxLines: 1,
+          overflow: TextOverflow.clip,
+        ),
+      ),
+    );
   }
 
-  static String _rightAlign(String s, int w) =>
-      s.length >= w ? _fit(s, w) : '${' ' * (w - s.length)}$s';
-
-  static String _center(String s, int w) {
-    if (s.length >= w) return _fit(s, w);
-    return _fit('${' ' * ((w - s.length) ~/ 2)}$s', w);
+  static Widget _splitBar(
+    String left,
+    String right,
+    CellStyle style,
+    int width,
+  ) {
+    return SizedBox(
+      width: width,
+      height: 1,
+      child: Container.filled(
+        child: Row(
+          children: [
+            Text(left, style: style, maxLines: 1, overflow: TextOverflow.clip),
+            const Spacer(),
+            Text(right, style: style, maxLines: 1, overflow: TextOverflow.clip),
+          ],
+        ),
+      ),
+    );
   }
 }

@@ -5,6 +5,20 @@ import 'package:test/test.dart';
 
 DateTime _d(int y, int m, int d) => DateTime(y, m, d);
 
+// The DST regression only manifests in a zone that actually observes the
+// autumn fall-back / spring-forward transitions (a 25h / 23h civil day). The
+// dev tool pins `TZ=America/New_York` for the fleury_widgets test run (see
+// calendar_heatmap_test.dart). In a fixed-offset zone the buggy and fixed
+// date math agree, so skip instead of asserting nothing.
+bool _hasFallBack2026() =>
+    DateTime(2026, 11, 2).difference(DateTime(2026, 11, 1)).inHours == 25;
+bool _hasSpringForward2026() =>
+    DateTime(2026, 3, 9).difference(DateTime(2026, 3, 8)).inHours == 23;
+
+final Object _dstSkip = _hasFallBack2026() && _hasSpringForward2026()
+    ? false
+    : 'requires a DST timezone (run with TZ=America/New_York)';
+
 /// A full left-click (press + release) at one cell. Render first so the
 /// pointer router has the current paint-time rects.
 void _clickAt(FleuryTester tester, {required int col, required int row}) {
@@ -469,6 +483,80 @@ void main() {
         ),
       );
     });
+
+    testWidgets('fall-back DST: Right and Down step calendar days, not 24h', (
+      tester,
+    ) {
+      // America/New_York fall-back is Nov 1 2026 (a 25h civil day).
+      // add(Duration(days: 1)) from midnight lands on Nov 1 23:00, so Right
+      // stuck on the same date; +7 days (168h) lands on Nov 7 23:00.
+      DateTime? selected;
+      tester.pumpWidget(
+        DatePicker(
+          value: DateTime(2026, 11, 1),
+          autofocus: true,
+          onChanged: (d) => selected = d,
+        ),
+      );
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight));
+      expect(
+        selected,
+        DateTime(2026, 11, 2),
+        reason: 'Right on the 25h day must advance one calendar day',
+      );
+
+      selected = null;
+      tester.pumpWidget(
+        DatePicker(
+          value: DateTime(2026, 11, 1),
+          autofocus: true,
+          onChanged: (d) => selected = d,
+        ),
+      );
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      expect(
+        selected,
+        DateTime(2026, 11, 8),
+        reason: 'Down must add 7 calendar days, not 168 hours',
+      );
+    }, skip: _dstSkip);
+
+    testWidgets('spring-forward DST: Left and Up do not skip the short day', (
+      tester,
+    ) {
+      // America/New_York spring-forward is Mar 8 2026 (a 23h civil day).
+      // subtract 24h from Mar 9 midnight lands on Mar 7 23:00, skipping
+      // Mar 8; -7 days from Mar 15 skips it the same way.
+      DateTime? selected;
+      tester.pumpWidget(
+        DatePicker(
+          value: DateTime(2026, 3, 9),
+          autofocus: true,
+          onChanged: (d) => selected = d,
+        ),
+      );
+      tester.sendKey(const KeyEvent(KeyCode.arrowLeft));
+      expect(
+        selected,
+        DateTime(2026, 3, 8),
+        reason: 'Left from Mar 9 must land on the 23h day, not skip it',
+      );
+
+      selected = null;
+      tester.pumpWidget(
+        DatePicker(
+          value: DateTime(2026, 3, 15),
+          autofocus: true,
+          onChanged: (d) => selected = d,
+        ),
+      );
+      tester.sendKey(const KeyEvent(KeyCode.arrowUp));
+      expect(
+        selected,
+        DateTime(2026, 3, 8),
+        reason: 'Up must subtract 7 calendar days, not 168 hours',
+      );
+    }, skip: _dstSkip);
 
     testWidgets('semantic setValue jumps to an exact ISO date (B4)', (
       tester,

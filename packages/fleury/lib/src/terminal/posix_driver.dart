@@ -411,18 +411,18 @@ class PosixTerminalDriver
     // pushed to (§8.1). It never blocks the app: an unanswered query
     // simply leaves capabilities conservative.
     final negotiationClock = Stopwatch()..start();
+    // Snapshot before any probe await: restore can complete during a query
+    // and null `_mode`. Evaluating `_mode!` as a probe argument after a yield
+    // would throw a null-check instead of the named abort below.
+    final onAlternateScreen = _mode!.alternateScreen;
     await _negotiateKeyboard(negotiationClock);
+    _throwIfRestoredDuringEnter(enterGeneration);
     await _negotiateSynchronizedOutput(negotiationClock);
+    _throwIfRestoredDuringEnter(enterGeneration);
     await _maybeProbeImageProtocol(negotiationClock);
-    await _maybeProbeAmbiguousWidth(_mode!.alternateScreen, negotiationClock);
-
-    // A concurrent force-restore can complete while a bounded startup probe is
-    // awaiting its reply. Never reactivate a driver whose lifecycle moved on.
-    if (_restoring || enterGeneration != _lifecycleGeneration) {
-      throw StateError(
-        'PosixTerminalDriver was restored while enter was negotiating.',
-      );
-    }
+    _throwIfRestoredDuringEnter(enterGeneration);
+    await _maybeProbeAmbiguousWidth(onAlternateScreen, negotiationClock);
+    _throwIfRestoredDuringEnter(enterGeneration);
 
     _resizeSubscription = _watchSignal(ProcessSignal.sigwinch, (_) {
       if (!_events.isClosed) _events.add(ResizeEvent(size));
@@ -518,15 +518,18 @@ class PosixTerminalDriver
         !_lifecycleIsSafe(flags)) {
       // Partial lifecycle: leave the mode before the app sees any input,
       // and re-establish the safe tier on the SAME screen buffer.
+      final state = _terminalState;
+      if (state == null) return;
       _stdout.write(
         '\x1B[<1u'
         '\x1B[>${KeyboardProtocolMode.disambiguated.requestedFlags}u',
       );
-      _terminalState!.effectiveMode = terminalModeWithKeyboardProtocol(
+      state.effectiveMode = terminalModeWithKeyboardProtocol(
         effective,
         KeyboardProtocolMode.disambiguated,
       );
       await _stdout.flush();
+      if (_terminalState == null) return;
       int? after;
       final fallbackTimeout = _nextProbeTimeout(negotiationClock);
       if (fallbackTimeout != null) {
@@ -558,17 +561,28 @@ class PosixTerminalDriver
   /// protocol itself. Pop the attempted Kitty frame so a partial
   /// implementation cannot remain stacked under the legacy parser.
   Future<void> _restoreLegacyKeyboard(TerminalMode effective) async {
+    if (_terminalState == null) return;
     try {
       _stdout.write('\x1B[<1u');
       await _stdout.flush();
     } on Object {
       return;
     }
+    final state = _terminalState;
+    if (state == null) return;
     _confirmedKeyboardFlags = null;
-    _terminalState!.effectiveMode = terminalModeWithKeyboardProtocol(
+    state.effectiveMode = terminalModeWithKeyboardProtocol(
       effective,
       KeyboardProtocolMode.legacy,
     );
+  }
+
+  void _throwIfRestoredDuringEnter(int enterGeneration) {
+    if (_restoring || enterGeneration != _lifecycleGeneration) {
+      throw StateError(
+        'PosixTerminalDriver was restored while enter was negotiating.',
+      );
+    }
   }
 
   /// Lifecycle is only safe to keep when text survives it: event types (2),

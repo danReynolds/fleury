@@ -332,4 +332,48 @@ void main() {
       expect(tester.clipboard.readInProcess(), isNot(contains('\x1b]52')));
     });
   });
+
+  testWidgets('unbounded Column with content does not throw', (tester) {
+    tester.pumpWidget(
+      Column(
+        children: [CodeView(source: _sampleCode, semanticLabel: 'Src')],
+      ),
+    );
+    expect(() => tester.render(size: const CellSize(80, 20)), returnsNormally);
+    expect(
+      tester.renderToString(size: const CellSize(80, 20), emptyMark: ' '),
+      contains('import'),
+    );
+  });
+
+  testWidgets('Expanded CodeView fills a bounded pane', (tester) {
+    final source = List.generate(40, (i) => 'line ${i + 1};').join('\n');
+    final controller = CodeViewController();
+    tester.pumpWidget(
+      Column(
+        children: [
+          const Text('hdr'),
+          Expanded(
+            child: CodeView(
+              source: source,
+              controller: controller,
+              semanticLabel: 'Src',
+            ),
+          ),
+        ],
+      ),
+    );
+    tester.render(size: const CellSize(40, 30));
+    final range = controller.visibleRange;
+    expect(range, isNotNull);
+    expect(
+      range!.last - range.first + 1,
+      greaterThan(24),
+      reason: 'an Expanded pane must fill, not take the unbounded 24-row cap',
+    );
+    expect(
+      tester.renderToString(size: const CellSize(40, 30), emptyMark: ' '),
+      contains('line 29;'),
+    );
+  });
 }

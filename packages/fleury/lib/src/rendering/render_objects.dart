@@ -159,6 +159,7 @@ class RenderText extends RenderObject
       _intrinsicWidth = nextIntrinsicWidth;
       _lines = <String>[display];
       _moreLinesTruncated = false;
+      resyncSelectionFromScreenEdges();
       markNeedsPaintOnly();
       return;
     }
@@ -272,6 +273,7 @@ class RenderText extends RenderObject
     if (_text.isEmpty) {
       _lines = const <String>[];
       _moreLinesTruncated = false;
+      resyncSelectionFromScreenEdges();
       return constraints.constrain(CellSize.zero);
     }
     final maxCols = constraints.maxCols;
@@ -289,6 +291,7 @@ class RenderText extends RenderObject
       final cols = maxCols == null
           ? _intrinsicWidth
           : (_intrinsicWidth < maxCols ? _intrinsicWidth : maxCols);
+      resyncSelectionFromScreenEdges();
       return constraints.constrain(CellSize(cols, 1));
     }
 
@@ -328,6 +331,7 @@ class RenderText extends RenderObject
 
     _cachedConstraints = constraints;
     _cachedSize = result;
+    resyncSelectionFromScreenEdges();
     return result;
   }
 
@@ -625,8 +629,15 @@ class RenderText extends RenderObject
   CellRect? _selectionClipRect;
 
   void _updateRetainedSelectionGeometry(CellRect? bounds, CellRect? clipRect) {
+    final firstPaint = _selectionPaintRect == null && bounds != null;
+    final changed =
+        _selectionPaintRect != bounds ||
+        _selectionClipRect != (bounds == null ? null : clipRect);
     _selectionPaintRect = bounds;
     _selectionClipRect = bounds == null ? null : clipRect;
+    if (!changed) return;
+    resyncSelectionFromScreenEdges();
+    if (firstPaint) notifyListeners();
   }
 
   // ignore: prefer_function_declarations_over_variables

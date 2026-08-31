@@ -299,7 +299,6 @@ class _ColorPickerState extends State<ColorPicker>
         notifier: _bounds,
         child: _HexEntry(
           initial: widget.value.toRgb(),
-          background: theme.colorScheme.background,
           borderStyle: theme.borderStyle,
           onSubmit: (color) {
             _closeHex();
@@ -571,14 +570,12 @@ Map<String, Object?> _colorComponents(Color color) {
 class _HexEntry extends StatefulWidget {
   const _HexEntry({
     required this.initial,
-    required this.background,
     required this.borderStyle,
     required this.onSubmit,
     required this.onDismiss,
   });
 
   final RgbColor initial;
-  final Color? background;
   final BorderStyle borderStyle;
   final void Function(Color color) onSubmit;
   final void Function() onDismiss;
@@ -615,36 +612,38 @@ class _HexEntryState extends State<_HexEntry> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
-      color: widget.background,
-      border: BoxBorder(style: widget.borderStyle),
-      padding: const EdgeInsets.symmetric(horizontal: 1),
-      child: SizedBox(
-        width: 12,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              _invalid ? 'Use RRGGBB' : 'Hex code',
-              style: _invalid
-                  ? CellStyle(foreground: theme.colorScheme.error)
-                  : theme.mutedStyle,
-            ),
-            Row(
-              children: [
-                Text('#', style: theme.mutedStyle),
-                Expanded(
-                  child: TextInput(
-                    controller: _controller,
-                    autofocus: true,
-                    placeholder: 'RRGGBB',
-                    onSubmit: _submit,
-                    onEscape: widget.onDismiss,
+    return SelectionArea.disabled(
+      child: Container.framed(
+        border: BoxBorder(style: widget.borderStyle),
+        padding: const EdgeInsets.symmetric(horizontal: 1),
+        child: SizedBox(
+          width: 12,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                _invalid ? 'Use RRGGBB' : 'Hex code',
+                style: _invalid
+                    ? CellStyle(foreground: theme.colorScheme.error)
+                    : theme.mutedStyle,
+              ),
+              Row(
+                children: [
+                  Text('#', style: theme.mutedStyle),
+                  Expanded(
+                    child: TextInput(
+                      controller: _controller,
+                      autofocus: true,
+                      placeholder: 'RRGGBB',
+                      onSubmit: _submit,
+                      onEscape: widget.onDismiss,
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

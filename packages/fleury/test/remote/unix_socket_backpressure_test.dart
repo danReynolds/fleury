@@ -139,6 +139,42 @@ void main() {
   });
 
   test(
+    'a second close() on the graceful path joins and does not throw',
+    () async {
+      await start(highWaterMark: 64 * 1024);
+      final received = BytesBuilder(copy: true);
+      final drained = Completer<void>();
+      accepted.listen(
+        received.add,
+        onDone: () {
+          if (!drained.isCompleted) drained.complete();
+        },
+      );
+
+      final bye = Uint8List.fromList([0xC, 0x1, 0x0, 0x5, 0xE]);
+      transport.send(OutputFrame(bye));
+      final first = transport.close();
+      final second = transport.close();
+      await Future.wait([first, second]);
+      await transport.close();
+      await drained.future.timeout(const Duration(seconds: 5));
+
+      final decoder = FrameDecoder();
+      decoder.feed(received.takeBytes());
+      final frames = decoder.drain().toList();
+      expect(
+        frames,
+        hasLength(1),
+        reason: 'double-awaited close still delivers',
+      );
+      expect((frames.single as OutputFrame).bytes, bye);
+
+      await server.close();
+      tmp.deleteSync(recursive: true);
+    },
+  );
+
+  test(
     'a clean close delivers a frame queued behind an in-flight flush',
     () async {
       // Case B: the pump is already flushing frame 1 when the final frame is

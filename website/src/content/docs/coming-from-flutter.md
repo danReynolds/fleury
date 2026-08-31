@@ -53,7 +53,7 @@ class _CounterAppState extends State<CounterApp> {
         KeyBinding(
           KeySequence.space,
           label: 'Increment',
-          onTrigger: () => setState(() => _count++),
+          onTrigger: (_) => setState(() => _count++),
         ),
       ],
       child: Center(
@@ -195,8 +195,8 @@ Flutter's `Shortcuts` / `Actions` stack is intentionally simpler in Fleury:
 ```dart
 KeyBindings(
   bindings: [
-    KeyBinding(KeySequence.ctrl.s, label: 'Save', onTrigger: save),
-    KeyBinding(KeySequence.escape, label: 'Cancel', onTrigger: cancel),
+    KeyBinding(KeySequence.ctrl.s, label: 'Save', onTrigger: (_) => save()),
+    KeyBinding(KeySequence.escape, label: 'Cancel', onTrigger: (_) => cancel()),
   ],
   child: editor,
 )

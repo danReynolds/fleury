@@ -2,29 +2,30 @@ import 'debug_events.dart';
 
 /// Debug-only collector for frame invalidation causes.
 ///
-/// The hot path checks [DebugEvents.hasListeners] before allocating labels, so
-/// production runs with no debug subscriber pay only a branch. `runApp` drains
-/// the pending sources once per emitted [FrameEvent].
+/// [recordBuild] / [recordLayout] / [recordPaint] take a source thunk and
+/// check [DebugEvents.hasListeners] before invoking it, so production runs
+/// with no debug subscriber pay only a branch. `runApp` drains the pending
+/// sources once per emitted [FrameEvent].
 final class DebugInvalidations {
   DebugInvalidations._();
 
   static final Map<String, int> _pending = <String, int>{};
 
-  static void recordBuild(String source) {
+  static void recordBuild(String Function() source) {
     _record('build', source);
   }
 
-  static void recordLayout(String source) {
+  static void recordLayout(String Function() source) {
     _record('layout', source);
   }
 
-  static void recordPaint(String source) {
+  static void recordPaint(String Function() source) {
     _record('paint', source);
   }
 
-  static void _record(String kind, String source) {
+  static void _record(String kind, String Function() source) {
     if (!DebugEvents.hasListeners) return;
-    final key = '$kind:$source';
+    final key = '$kind:${source()}';
     _pending[key] = (_pending[key] ?? 0) + 1;
   }
 

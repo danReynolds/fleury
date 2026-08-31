@@ -882,18 +882,12 @@ class RenderLineChart extends RenderObject {
     // explicit range is taken literally.
     var (xmin, xmax) = _effectiveRange(_xRange, _xExtents, _padding);
     var (ymin, ymax) = _effectiveRange(_yRange, _yExtents, _padding);
-    // Degenerate single-value ranges: pad so the line has something to draw.
-    if (xmax == xmin) {
-      xmax = xmin + 1;
-    }
-    if (ymax == ymin) {
-      // Pad symmetrically so a constant series sits mid-plot. Padding only
-      // upward pins it to the baseline, where an area fill has zero height and
-      // renders completely blank — the chart's own autoscale would be what
-      // made the data invisible.
-      ymin -= 0.5;
-      ymax += 0.5;
-    }
+    // Degenerate / non-finite spans: `xmax = xmin + 1` is a no-op for
+    // |xmin| ≥ 2^53, and Y ±0.5 dies at 2^52, then `/0` → `.round()` throws.
+    // Widen relatively so interpolation has a finite, non-zero span; a
+    // constant series still sits mid-plot.
+    (xmin, xmax) = _ensureSpan(xmin, xmax);
+    (ymin, ymax) = _ensureSpan(ymin, ymax);
 
     // Grid first, so braille paints over it where they overlap.
     if (_showGrid) {
@@ -929,19 +923,8 @@ class RenderLineChart extends RenderObject {
 
     // Convert logical coordinates to pixel space. Non-finite inputs are
     // clipped to a sentinel the buffer ignores (out-of-bounds).
-    int toPx(num x) {
-      final d = x.toDouble();
-      if (!d.isFinite) return -1;
-      final t = (d - xmin) / (xmax - xmin);
-      return (t * (pxW - 1)).round();
-    }
-
-    int toPy(num y) {
-      final d = y.toDouble();
-      if (!d.isFinite) return -1;
-      final t = (d - ymin) / (ymax - ymin);
-      return ((1 - t) * (pxH - 1)).round();
-    }
+    int toPx(num x) => _project(x, xmin, xmax, pxW);
+    int toPy(num y) => _project(y, ymin, ymax, pxH, invert: true);
 
     // Clips a data-space segment to the visible [xmin,xmax]×[ymin,ymax] rect,
     // returning null when it falls entirely outside. Rasterizing the clipped
@@ -1265,8 +1248,9 @@ class RenderLineChart extends RenderObject {
   ) {
     if (plotCols <= 0 || plotRows <= 0) return;
     final span = ymax - ymin;
-    if (span <= 0) return;
+    if (!span.isFinite || span == 0) return;
     final xspan = xmax - xmin;
+    if (!xspan.isFinite) return;
     final totalEighths = plotRows * 8;
     // A one-point series spans no segment for _sampleSeriesY to interpolate
     // across, so fill just the column holding it — the area counterpart of the
@@ -1279,9 +1263,13 @@ class RenderLineChart extends RenderObject {
       final value = soloValue.toDouble();
       if (!x.isFinite || !value.isFinite || x < xmin || x > xmax) return;
       soloY = value;
-      soloColumn = xspan <= 0
-          ? 0
-          : (((x - xmin) / xspan) * plotCols).floor().clamp(0, plotCols - 1);
+      if (xspan <= 0) {
+        soloColumn = 0;
+      } else {
+        final tx = (x - xmin) / xspan;
+        if (!tx.isFinite) return;
+        soloColumn = (tx * plotCols).floor().clamp(0, plotCols - 1);
+      }
     }
     for (var c = 0; c < plotCols; c++) {
       final double? y;
@@ -1295,8 +1283,9 @@ class RenderLineChart extends RenderObject {
         y = _sampleSeriesY(s.points, xAt);
       }
       if (y == null || !y.isFinite) continue;
-      final hEighths = (((y - ymin) / span).clamp(0.0, 1.0) * totalEighths)
-          .round();
+      final ty = (y - ymin) / span;
+      if (!ty.isFinite) continue;
+      final hEighths = (ty.clamp(0.0, 1.0) * totalEighths).round();
       if (hEighths <= 0) continue;
       for (var r = 0; r < plotRows; r++) {
         final rowFromBottom = plotRows - 1 - r;
@@ -1411,8 +1400,9 @@ class RenderLineChart extends RenderObject {
     if (ref.y != null) {
       final y = ref.y!.toDouble();
       if (!y.isFinite || y < ymin || y > ymax) return;
-      final t = (y - ymin) / (ymax - ymin);
-      final row = offset.row + ((1 - t) * (plotRows - 1)).round();
+      final rowIndex = _project(y, ymin, ymax, plotRows, invert: true);
+      if (rowIndex < 0) return;
+      final row = offset.row + rowIndex;
       final glyph = switch (ref.style) {
         ReferenceStyle.solid => '─',
         ReferenceStyle.dashed => '╌',
@@ -1428,8 +1418,9 @@ class RenderLineChart extends RenderObject {
     } else if (ref.x != null) {
       final x = ref.x!.toDouble();
       if (!x.isFinite || x < xmin || x > xmax) return;
-      final t = (x - xmin) / (xmax - xmin);
-      final col = offset.col + plotLeft + (t * (plotCols - 1)).round();
+      final colIndex = _project(x, xmin, xmax, plotCols);
+      if (colIndex < 0) return;
+      final col = offset.col + plotLeft + colIndex;
       final glyph = switch (ref.style) {
         ReferenceStyle.solid => '│',
         ReferenceStyle.dashed => '╎',
@@ -1473,8 +1464,9 @@ class RenderLineChart extends RenderObject {
         final y = ref.y!.toDouble();
         if (!y.isFinite || y < ymin || y > ymax) continue;
         if (label.length > plotCols) continue;
-        final t = (y - ymin) / (ymax - ymin);
-        final row = offset.row + ((1 - t) * (plotRows - 1)).round();
+        final rowIndex = _project(y, ymin, ymax, plotRows, invert: true);
+        if (rowIndex < 0) continue;
+        final row = offset.row + rowIndex;
         final labelRow = row > offset.row ? row - 1 : row + 1;
         if (labelRow < offset.row || labelRow >= offset.row + plotRows) {
           continue;
@@ -1491,8 +1483,9 @@ class RenderLineChart extends RenderObject {
         final x = ref.x!.toDouble();
         if (!x.isFinite || x < xmin || x > xmax) continue;
         if (label.length >= plotCols) continue;
-        final t = (x - xmin) / (xmax - xmin);
-        final col = offset.col + plotLeft + (t * (plotCols - 1)).round();
+        final colIndex = _project(x, xmin, xmax, plotCols);
+        if (colIndex < 0) continue;
+        final col = offset.col + plotLeft + colIndex;
         final plotRightAbs = offset.col + plotLeft + plotCols;
         var labelLeft = col + 1;
         if (labelLeft + label.length > plotRightAbs) {
@@ -1523,8 +1516,9 @@ class RenderLineChart extends RenderObject {
   ) {
     final x = cursorX.toDouble();
     if (!x.isFinite) return;
-    final t = (x - xmin) / (xmax - xmin);
-    final col = offset.col + plotLeft + (t * (plotCols - 1)).round();
+    final colIndex = _project(x, xmin, xmax, plotCols);
+    if (colIndex < 0) return;
+    final col = offset.col + plotLeft + colIndex;
     for (var r = 0; r < plotRows; r++) {
       buffer.writeGrapheme(
         CellOffset(col, offset.row + r),
@@ -1586,8 +1580,9 @@ class RenderLineChart extends RenderObject {
     // Follow the cursor: prefer 2 cols to its right; flip to the left
     // when that would overflow, then clamp to the plot edges as a last
     // resort.
-    final t = (x - xmin) / (xmax - xmin);
-    final cursorCol = offset.col + plotLeft + (t * (plotCols - 1)).round();
+    final colIndex = _project(x, xmin, xmax, plotCols);
+    if (colIndex < 0) return;
+    final cursorCol = offset.col + plotLeft + colIndex;
     final plotLeftAbs = offset.col + plotLeft;
     final plotRightAbs = plotLeftAbs + plotCols;
     var boxCol = cursorCol + 2;
@@ -1814,9 +1809,60 @@ class RenderLineChart extends RenderObject {
     if (padding <= 0) return auto;
     final (lo, hi) = auto;
     final span = hi - lo;
-    if (span <= 0) return auto; // degenerate — clamp logic handles it.
+    if (span <= 0) return auto; // degenerate — [_ensureSpan] handles it.
     final pad = span * padding;
     return (lo - pad, hi + pad);
+  }
+
+  /// Widen a degenerate or non-finite `[lo, hi]` so interpolation has a
+  /// non-zero finite span. Zero becomes `±1`; other origins expand by
+  /// `max(|origin| * 1e-9, an ulp that actually changes origin)`.
+  static (double, double) _ensureSpan(double lo, double hi) {
+    final span = hi - lo;
+    if (span.isFinite && span != 0) return (lo, hi);
+    final origin = lo.isFinite ? lo : (hi.isFinite ? hi : 0.0);
+    if (!origin.isFinite || origin == 0) return (-1.0, 1.0);
+    var delta = origin.abs() * 1e-9;
+    if (!delta.isFinite ||
+        origin + delta == origin ||
+        origin - delta == origin) {
+      delta = _ulpDelta(origin);
+    }
+    if (!delta.isFinite || delta == 0) delta = 1.0;
+    return (origin - delta, origin + delta);
+  }
+
+  static double _ulpDelta(double x) {
+    const epsilon = 2.220446049250313e-16; // 2^-52
+    var delta = x.abs() * epsilon;
+    if (!delta.isFinite || delta == 0) return 1.0;
+    if (x + delta == x || x - delta == x) delta *= 2;
+    if (!delta.isFinite || x + delta == x) {
+      final mag = x.abs();
+      return mag.isFinite && mag != 0 ? mag : 1.0;
+    }
+    return delta;
+  }
+
+  /// Map [value] in `[lo, hi]` onto `0..extent-1`. [invert] puts [hi] at 0
+  /// (y-up). Returns [fallback] when the interpolation is non-finite so
+  /// `.round()` never sees NaN/∞.
+  static int _project(
+    num value,
+    double lo,
+    double hi,
+    int extent, {
+    bool invert = false,
+    int fallback = -1,
+  }) {
+    if (extent <= 0) return fallback;
+    final d = value.toDouble();
+    if (!d.isFinite) return fallback;
+    final t = (d - lo) / (hi - lo);
+    if (!t.isFinite) return fallback;
+    final scaled = (invert ? 1 - t : t) * (extent - 1);
+    if (!scaled.isFinite) return fallback;
+    return scaled.round();
   }
 
   static void _writeAt(

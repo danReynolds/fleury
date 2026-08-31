@@ -96,6 +96,34 @@ void main() {
       await driver.dispose();
     });
 
+    test(
+      'Ctrl+C still exits when a handler throws (copy-fail quit hatch)',
+      () async {
+        final driver = FakeTerminalDriver();
+        final future = runApp(
+          const Text('hi'),
+          driver: driver,
+          enableHotReload: false,
+          onEvent: (event) {
+            if (event is KeyEvent &&
+                event.hasCtrl &&
+                event.code.character == 'c') {
+              throw Exception('copy-boom');
+            }
+            return null;
+          },
+        );
+        await pump();
+
+        driver.enqueue(
+          const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+        );
+        final exit = await future.timeout(const Duration(seconds: 2));
+        expect(exit.signal, isNull, reason: 'throwing copy still quits');
+        await driver.dispose();
+      },
+    );
+
     test('unhandled Ctrl+C resolves AppExit.requested (regression)', () async {
       final driver = FakeTerminalDriver();
       final future = runApp(

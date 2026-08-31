@@ -22,7 +22,6 @@ export 'package:fleury/fleury_host.dart'
 /// and scheduling stay in the host/runtime layer.
 abstract interface class FrameSurface {
   CellSize get size;
-  WebSurfaceCapabilities get capabilities;
 
   FrameSurfacePresentationStats present(
     CellBuffer previous,
@@ -32,23 +31,6 @@ abstract interface class FrameSurface {
 
   void resize(CellSize size, {MeasuredCellBox? metrics});
   Future<void> dispose();
-}
-
-/// Capabilities of a web visual surface.
-///
-/// Inline images are deliberately absent: the surface is text/grid only,
-/// and true-pixel image placements are rendered by the host-assembled
-/// `InlineImageOverlay` layer above it.
-final class WebSurfaceCapabilities {
-  const WebSurfaceCapabilities({
-    this.supportsTrueColor = true,
-    this.supportsSemanticLinks = false,
-    this.supportsGlyphOverlay = false,
-  });
-
-  final bool supportsTrueColor;
-  final bool supportsSemanticLinks;
-  final bool supportsGlyphOverlay;
 }
 
 /// Count data reported by a visual [FrameSurface] after one presentation.

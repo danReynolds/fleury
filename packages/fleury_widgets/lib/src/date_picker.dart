@@ -141,7 +141,7 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
       _formRegistration?.updateClaim(this, focusNode: _node, enabled: _enabled);
 
   void _emit(DateTime value) {
-    widget.onChanged?.call(value);
+    widget.onChanged?.call(_midnight(value));
     _formRegistration?.controlValueChanged(this);
   }
 
@@ -190,6 +190,15 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
 
   DateTime _midnight(DateTime d) => DateTime(d.year, d.month, d.day);
 
+  /// One calendar day, not 24 hours. `DateTime.add(Duration(days: n))` is a
+  /// 24h offset, so fall-back DST sticks on the 25h day and spring-forward
+  /// skips the 23h day. [DateTime] `(y, m, d + n)` always lands on local
+  /// midnight of the civil date.
+  DateTime _addCalendarDays(DateTime d, int days) {
+    final m = _midnight(d);
+    return DateTime(m.year, m.month, m.day + days);
+  }
+
   void _setDateFromPayload(Object? payload) {
     if (!_enabled) return;
     final parsed = payload is DateTime
@@ -233,9 +242,9 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
     return widget.weekStartsOn == CalendarWeekStart.monday ? wd - 1 : wd % 7;
   }
 
-  void _move(Duration delta) {
+  void _move(int days) {
     if (!_enabled) return;
-    var next = _midnight(widget.value).add(delta);
+    final next = _addCalendarDays(widget.value, days);
     if (!_inBounds(next)) return; // clamp by ignoring
     _emit(next);
   }
@@ -276,22 +285,19 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
       case KeyCode.arrowLeft:
         return moveOrEscape(
           atEdge: column == 0 || value.day == 1,
-          move: () => _move(const Duration(days: -1)),
+          move: () => _move(-1),
         );
       case KeyCode.arrowRight:
         return moveOrEscape(
           atEdge: column == 6 || value.day == lastDay,
-          move: () => _move(const Duration(days: 1)),
+          move: () => _move(1),
         );
       case KeyCode.arrowUp:
-        return moveOrEscape(
-          atEdge: value.day - 7 < 1,
-          move: () => _move(const Duration(days: -7)),
-        );
+        return moveOrEscape(atEdge: value.day - 7 < 1, move: () => _move(-7));
       case KeyCode.arrowDown:
         return moveOrEscape(
           atEdge: value.day + 7 > lastDay,
-          move: () => _move(const Duration(days: 7)),
+          move: () => _move(7),
         );
       case KeyCode.pageUp:
         _shiftMonth(-1);
@@ -329,10 +335,8 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
     final firstOfMonth = DateTime(v.year, v.month, 1);
     final lastDay = DateTime(v.year, v.month + 1, 0).day;
     final leadingBlanks = _backToWeekStart(firstOfMonth);
-    final canDecrement =
-        enabled && _inBounds(_midnight(v).subtract(const Duration(days: 1)));
-    final canIncrement =
-        enabled && _inBounds(_midnight(v).add(const Duration(days: 1)));
+    final canDecrement = enabled && _inBounds(_addCalendarDays(v, -1));
+    final canIncrement = enabled && _inBounds(_addCalendarDays(v, 1));
     final validationError = _formRegistration?.error;
     CellStyle resolvePickerStyle({
       bool selected = false,
@@ -517,11 +521,11 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
             return;
           case SemanticAction.increment:
             _node.requestFocus();
-            if (canIncrement) _move(const Duration(days: 1));
+            if (canIncrement) _move(1);
             return;
           case SemanticAction.decrement:
             _node.requestFocus();
-            if (canDecrement) _move(const Duration(days: -1));
+            if (canDecrement) _move(-1);
             return;
           case _:
             return;

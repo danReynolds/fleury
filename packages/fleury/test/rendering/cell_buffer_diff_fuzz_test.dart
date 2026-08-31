@@ -13,7 +13,6 @@
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:collection/collection.dart';
 import 'package:fleury/fleury_host.dart';
 import 'package:test/test.dart';
 
@@ -78,7 +77,7 @@ _Reference _referenceDiff(CellBuffer previous, CellBuffer next) {
   // Whole-value comparison: listing fields here would be a transcription of
   // the implementation's list, so a field missing from BOTH would be
   // structurally invisible — which is how the fit/box fields went uncompared.
-  final samePlacements = const ListEquality<InlineImagePlacement>().equals(
+  final samePlacements = _samePlacements(
     next.imagePlacements,
     previous.imagePlacements,
   );
@@ -113,6 +112,17 @@ _Reference _referenceDiff(CellBuffer previous, CellBuffer next) {
     dirtyCells: dirtyCells,
     hasOverlayCells: hasOverlayCells,
   );
+}
+
+bool _samePlacements(
+  List<InlineImagePlacement> next,
+  List<InlineImagePlacement> previous,
+) {
+  if (next.length != previous.length) return false;
+  for (var i = 0; i < next.length; i++) {
+    if (next[i] != previous[i]) return false;
+  }
+  return true;
 }
 
 /// Paints pseudo-random but reproducible content: narrow and wide graphemes,

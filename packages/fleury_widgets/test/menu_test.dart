@@ -53,6 +53,21 @@ void main() {
     expect(out.contains('Paste'), isTrue);
   });
 
+  testWidgets('clicking outside a menu dismisses it', (tester) {
+    tester.pumpWidget(
+      Menu(trigger: const Text('Edit'), autofocus: true, items: items((_) {})),
+    );
+    tester.sendKey(const KeyEvent(KeyCode.enter));
+    tester.render(size: const CellSize(16, 8));
+    expect(_screen(tester).contains('Copy'), isTrue, reason: 'menu is open');
+    _clickAt(tester, col: 15, row: 7);
+    expect(
+      _screen(tester).contains('Copy'),
+      isFalse,
+      reason: 'a tap on the surround closes the menu',
+    );
+  });
+
   testWidgets('clicking the trigger opens the menu (pointer users)', (tester) {
     tester.pumpWidget(Menu(trigger: const Text('Edit'), items: items((_) {})));
     // Render so the pointer router has the trigger's paint-time rect, then
@@ -225,6 +240,35 @@ void main() {
         ),
       ],
     );
+
+    testWidgets('moving between adjacent submenu rows does not throw', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        Menu(
+          trigger: const Text('Edit'),
+          autofocus: true,
+          items: [
+            SubMenu(
+              label: 'File',
+              items: [MenuItem(label: 'New', onSelect: () {})],
+            ),
+            SubMenu(
+              label: 'View',
+              items: [MenuItem(label: 'Zoom', onSelect: () {})],
+            ),
+          ],
+        ),
+      );
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      tester.render(size: const CellSize(40, 8));
+      expect(() {
+        tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+        tester.render(size: const CellSize(40, 8));
+        tester.sendKey(const KeyEvent(KeyCode.arrowUp));
+        tester.render(size: const CellSize(40, 8));
+      }, returnsNormally);
+    });
 
     testWidgets('Right opens a submenu to the right', (tester) {
       tester.pumpWidget(fileMenu((_) {}));

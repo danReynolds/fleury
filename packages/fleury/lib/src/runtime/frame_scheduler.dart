@@ -61,6 +61,7 @@ class FrameScheduler {
 
   Duration? _lastRenderAt;
   bool _pending = false;
+  bool _inFrame = false;
   bool _disposed = false;
   String _reason = 'scheduled';
   FrameFlushCancellation? _cancelScheduledFlush;
@@ -78,10 +79,16 @@ class FrameScheduler {
     }
     _pending = true;
     _reason = reason;
-    _schedule(_waitBeforeFlush());
+    // A request that lands *during* `_onRender` (build, layout, paint, or
+    // a post-frame callback flushed before `_onRender` returns) must not
+    // enqueue a microtask. Duration.zero is mapped to `scheduleMicrotask`
+    // by the default scheduler, and a microtask chain of "chunk → setState
+    // → frame → chunk" starves timers, I/O, and signals. Drop to the event
+    // loop so Ctrl+C / SIGINT can land between chunks.
+    _schedule(_waitBeforeFlush(), forceEventLoop: _inFrame);
   }
 
-  void _schedule(Duration delay) {
+  void _schedule(Duration delay, {bool forceEventLoop = false}) {
     final token = ++_scheduleToken;
     var ranSynchronously = false;
     void flush() {
@@ -89,6 +96,16 @@ class FrameScheduler {
       if (token != _scheduleToken) return;
       _cancelScheduledFlush = null;
       _flush();
+    }
+
+    if (forceEventLoop && delay <= Duration.zero) {
+      final timer = Timer(Duration.zero, flush);
+      if (!ranSynchronously && token == _scheduleToken && _pending) {
+        _cancelScheduledFlush = timer.cancel;
+      } else {
+        timer.cancel();
+      }
+      return;
     }
 
     final cancel = _flushScheduler(delay, flush);
@@ -118,7 +135,12 @@ class FrameScheduler {
     _lastRenderAt = _clock.now;
     final reason = _reason;
     _reason = 'scheduled';
-    _onRender(reason);
+    _inFrame = true;
+    try {
+      _onRender(reason);
+    } finally {
+      _inFrame = false;
+    }
   }
 
   void dispose() {

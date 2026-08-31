@@ -1123,7 +1123,7 @@ class _TextInputState extends State<TextInput>
       if (!_pasteActive || generation != _pasteGeneration) return false;
 
       final session = _pasteSession!;
-      final chunk = session.nextChunk();
+      final chunk = session.nextWork();
       if (chunk == null) {
         _pasteSession = null;
         if (_currentPasteSegmentIsFinal) _completePaste();
@@ -1188,7 +1188,10 @@ class _TextInputState extends State<TextInput>
   void _runScheduledPasteChunk(int generation) {
     if (!mounted || generation != _pasteGeneration) return;
     _pasteChunkScheduled = false;
-    _applyNextPasteChunk(generation);
+    final watch = Stopwatch()..start();
+    while (watch.elapsed < TextPastePolicy.frameBudget) {
+      if (!_applyNextPasteChunk(generation)) break;
+    }
     _updatePasteProgress();
     if (mounted) setState(() {});
     _scheduleNextPasteChunk(generation);

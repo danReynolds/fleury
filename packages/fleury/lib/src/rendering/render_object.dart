@@ -929,7 +929,7 @@ abstract class RenderObject {
   /// that can affect size, child constraints, child offsets, or layout-derived
   /// paint state.
   void markNeedsLayout() {
-    DebugInvalidations.recordLayout(runtimeType.toString());
+    DebugInvalidations.recordLayout(() => runtimeType.toString());
     _markNeedsLayoutUp();
     _markEnclosingRepaintBoundariesDirty();
   }
@@ -954,7 +954,7 @@ abstract class RenderObject {
   /// offsets, or layout-derived paint state. Use [markNeedsPaintOnly] only
   /// after verifying that the value cannot affect layout.
   void markNeedsPaint() {
-    DebugInvalidations.recordPaint(runtimeType.toString());
+    DebugInvalidations.recordPaint(() => runtimeType.toString());
     _markNeedsLayoutUp();
     _markEnclosingRepaintBoundariesDirty();
   }
@@ -967,7 +967,7 @@ abstract class RenderObject {
   /// dirty, so the next same-constraint layout call can reuse cached sizes.
   @protected
   void markNeedsPaintOnly() {
-    DebugInvalidations.recordPaint(runtimeType.toString());
+    DebugInvalidations.recordPaint(() => runtimeType.toString());
     _rootFrameDamage?.recordVisualChange();
     _markEnclosingRepaintBoundariesDirty();
   }

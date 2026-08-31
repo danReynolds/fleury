@@ -327,13 +327,16 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
     final visible = options.length > widget.maxVisible
         ? widget.maxVisible
         : options.length;
-    var width = 0;
+    final policy = MediaQuery.textPolicyOf(context).widths;
+    const resolver = DefaultWidthResolver();
+    var width = 1;
     for (final option in options) {
       final detail = option.detail;
       final label = sanitizeOptionLabel(
         detail == null ? option.label : '${option.label}  $detail',
       );
-      if (label.length > width) width = label.length;
+      final measured = resolver.widthOfText(label, policy);
+      if (measured > width) width = measured;
     }
     _list.selectedIndex = state.selectedIndex;
     return Semantics(

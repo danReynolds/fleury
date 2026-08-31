@@ -272,6 +272,7 @@ class RenderRichText extends RenderObject
     closeGroup();
     _selectionLines = out;
     _loweredGroups = groups;
+    resyncSelectionFromScreenEdges();
   }
 
   set textPolicy(TextPresentationPolicy value) {
@@ -636,8 +637,15 @@ class RenderRichText extends RenderObject
   }
 
   void _updateRetainedSelectionGeometry(CellRect? bounds, CellRect? clipRect) {
+    final firstPaint = _selectionPaintRect == null && bounds != null;
+    final changed =
+        _selectionPaintRect != bounds ||
+        _selectionClipRect != (bounds == null ? null : clipRect);
     _selectionPaintRect = bounds;
     _selectionClipRect = bounds == null ? null : clipRect;
+    if (!changed) return;
+    resyncSelectionFromScreenEdges();
+    if (firstPaint) notifyListeners();
   }
 
   // ignore: prefer_function_declarations_over_variables

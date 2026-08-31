@@ -473,6 +473,37 @@ void main() {
       focus.dispose();
     });
 
+    testWidgets(
+      'builder without focusNode asserts when submit focuses an invalid field',
+      (tester) async {
+        final controller = FormController();
+        tester.pumpWidget(
+          Form(
+            controller: controller,
+            onSubmit: () {},
+            child: FormField.builder(
+              validator: () => 'Choose a range.',
+              builder: (context, field) => const Text('range'),
+            ),
+          ),
+        );
+
+        await expectLater(
+          _submit(tester, controller),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              contains('field.focusNode'),
+            ),
+          ),
+        );
+
+        tester.pumpWidget(const Text('gone'));
+        controller.dispose();
+      },
+    );
+
     testWidgets('nested forms validate independently', (tester) async {
       final outer = FormController();
       final inner = FormController();

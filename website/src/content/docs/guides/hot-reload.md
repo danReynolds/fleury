@@ -49,9 +49,13 @@ in the same terminal session.
 Reload keeps state and is the default loop; restart is for the changes reload
 can't apply.
 
-One caveat: a dev restart re-runs `main()` without the original CLI arguments
-(a process cannot recover its own argv for a sibling spawn). An app that must
-re-see argv can set `FLEURY_HOT_RELOAD=0` and restart manually.
+Pass `main()`'s arguments through to `runApp` so a hot restart sees the same
+CLI argv. A process cannot recover its own script arguments for a sibling
+spawn:
+
+```dart
+Future<void> main(List<String> args) => runApp(const MyApp(), args: args);
+```
 
 ## In an editor debug session
 

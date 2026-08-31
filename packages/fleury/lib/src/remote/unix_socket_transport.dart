@@ -120,6 +120,7 @@ final class UnixSocketFrameTransport implements RemoteFrameTransport {
   Future<void>? _pumpFuture;
   Completer<void>? _drained;
   Future<void>? _abortTeardown;
+  Future<void>? _closeTeardown;
 
   /// A graceful [close] waits at most this long for the send pump to flush
   /// already-queued frames (the final ByeFrame / plan) before giving up and
@@ -269,7 +270,11 @@ final class UnixSocketFrameTransport implements RemoteFrameTransport {
   @override
   Future<void> close() async {
     if (_closed) {
-      await _abortTeardown;
+      await (_abortTeardown ?? _closeTeardown);
+      return;
+    }
+    if (_closeTeardown != null) {
+      await _closeTeardown;
       return;
     }
     final backlogged = _pendingSendBytes > sendHighWaterMark;
@@ -283,6 +288,11 @@ final class UnixSocketFrameTransport implements RemoteFrameTransport {
       return;
     }
 
+    _closeTeardown ??= _gracefulClose();
+    await _closeTeardown;
+  }
+
+  Future<void> _gracefulClose() async {
     // Clean shutdown: let the pump DRAIN the whole queue first — including a
     // ByeFrame just enqueued behind an in-flight flush — before marking the
     // transport closed. Flipping _closed now would make the pump's

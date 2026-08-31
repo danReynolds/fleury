@@ -42,8 +42,8 @@ enum Preview { disconnected, waiting, error, empty, success }
 Future<List<String>>? futureFor(Preview preview) => switch (preview) {
   Preview.disconnected => null,
   Preview.waiting => Completer<List<String>>().future,
-  Preview.error => Future<List<String>>.error(
-    StateError('Connection lost'),
+  Preview.error => Future<List<String>>(
+    () => throw StateError('Connection lost'),
   ),
   Preview.empty => Future<List<String>>.value(const []),
   Preview.success => Future<List<String>>.value(

@@ -44,6 +44,18 @@ void main() {
         r'KeyBinding(\.event)?\([^)]*onEvent:',
         dotAll: true,
       );
+      // `onTrigger` is `void Function(KeyBindingEvent)` — a zero-arity
+      // closure does not compile. The README / migration snippets drifted
+      // here once already.
+      final zeroArityOnTrigger = RegExp(r'onTrigger:\s*\(\s*\)');
+      // `KeyEvent` takes a positional `KeyCode`, not named `char`/`keyCode`.
+      final namedKeyEvent = RegExp(r'KeyEvent\s*\(\s*(char:|keyCode:)');
+      // `runApp` has no `theme:` parameter; pass it on `FleuryApp`.
+      // Nested `FleuryApp(..., theme:)` inside `runApp(...)` is the correct
+      // form and must not match — only a `theme:` argument of `runApp` itself.
+      final runAppTheme = RegExp(
+        r'runApp\s*\((?:[^()]|\([^()]*\))*\btheme:',
+      );
       final rawStringSemanticId = RegExp(
         r'''Semantics\s*\(\s*id:\s*(?:const\s+)?['"]''',
       );
@@ -59,6 +71,18 @@ void main() {
             'onEvent:/KeyBinding.event — removed in RFC 0020; a handler '
                 'always takes the event (use onTrigger:)',
             removedBindingHandler,
+          ),
+          (
+            'zero-arity onTrigger (handler always takes KeyBindingEvent)',
+            zeroArityOnTrigger,
+          ),
+          (
+            'KeyEvent named char:/keyCode: (positional KeyCode)',
+            namedKeyEvent,
+          ),
+          (
+            'runApp(..., theme:) — theme belongs on FleuryApp',
+            runAppTheme,
           ),
           (
             'raw String passed as Semantics.id (use SemanticNodeId)',
@@ -149,6 +173,28 @@ void main() {
         '$snippet\n$sharedTree',
         isNot(contains("package:fleury_widgets/fleury_widgets.dart")),
       );
+    });
+
+    test('fleury README counter matches the compile-checked example', () {
+      final readme = File(
+        p.join(repo.path, 'packages/fleury/README.md'),
+      ).readAsStringSync();
+      final example = File(
+        p.join(repo.path, 'packages/fleury/example/counter_quickstart.dart'),
+      ).readAsStringSync();
+      final firstImport = example.indexOf("import 'package:fleury/fleury.dart';");
+      expect(firstImport, isNonNegative);
+      expect(
+        _firstDartFence(readme).trim(),
+        example.substring(firstImport).trim(),
+      );
+    });
+
+    test('testing README snippet constructs KeyEvent positionally', () {
+      final readme = File(
+        p.join(repo.path, 'packages/fleury/README.md'),
+      ).readAsStringSync();
+      expect(readme, contains("const KeyEvent(KeyCode.char(' '))"));
     });
 
     test('fleury_web README embeds the compile-checked mountApp example', () {
@@ -263,6 +309,28 @@ void main() {
       expect(guide, contains('semantic updates are diffed and sent'));
       expect(guide, contains('when the exposed tree or its painted coverage'));
       expect(guide, isNot(contains('cell-diff + semantics frames')));
+    });
+
+    test('hot-reload guidance forwards argv through runApp', () {
+      final surfaces = <File>[
+        File(p.join(repo.path, 'packages/fleury/doc/hot_reload.md')),
+        File(
+          p.join(repo.path, 'website/src/content/docs/guides/hot-reload.md'),
+        ),
+      ];
+      for (final file in surfaces) {
+        final text = file.readAsStringSync();
+        expect(
+          text,
+          contains('runApp(const MyApp(), args: args)'),
+          reason: p.relative(file.path, from: repo.path),
+        );
+        expect(
+          text,
+          isNot(contains('re-see argv')),
+          reason: p.relative(file.path, from: repo.path),
+        );
+      }
     });
 
     test('hot-reload guidance requires a real VM source reload', () {

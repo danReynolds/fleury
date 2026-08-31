@@ -155,6 +155,10 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
   AnimationPolicy _policy = AnimationPolicy.enabled;
   bool _disposed = false;
 
+  /// Cached tear-off so register / unregister see identical callbacks
+  /// (the scheduler's set is identity-based).
+  late final VoidCallback _onReassemble = _handleReassemble;
+
   // Active-animation engine state.
   Spring? _spring; // non-null => spring engine
   Curve? _curve; // non-null => curve engine
@@ -663,7 +667,7 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
     canceled ? f.cancel() : f.completeNaturally();
   }
 
-  void _onReassemble() {
+  void _handleReassemble() {
     if (_disposed) return;
     // After hot reload, settle at the current target with no in-flight
     // animation so freshly-loaded code starts from a defined state.

@@ -47,6 +47,87 @@ const browserInputTraceFixtures = <TraceMap>[
     ],
   },
   {
+    'name':
+        'Meta+key repeat still synth-releases so a later keyup cannot wedge',
+    'browserEvents': <TraceMap>[
+      {
+        'target': 'textArea',
+        'event': 'keydown',
+        'key': 'Meta',
+        'code': 'MetaLeft',
+        'metaKey': true,
+      },
+      {
+        'target': 'textArea',
+        'event': 'keydown',
+        'key': 's',
+        'code': 'KeyS',
+        'metaKey': true,
+      },
+      {
+        'target': 'textArea',
+        'event': 'keydown',
+        'key': 's',
+        'code': 'KeyS',
+        'metaKey': true,
+        'repeat': true,
+      },
+      {
+        'target': 'textArea',
+        'event': 'keyup',
+        'key': 'Meta',
+        'code': 'MetaLeft',
+      },
+      {'target': 'textArea', 'event': 'keyup', 'key': 's', 'code': 'KeyS'},
+    ],
+    'expectedFleuryEvents': <TraceMap>[
+      {
+        'type': 'key',
+        'keyCode': 'leftSuper',
+        'keyEventType': 'down',
+        'modifiers': <String>[],
+        'position': 'metaLeft',
+      },
+      {
+        'type': 'key',
+        'char': 's',
+        'keyEventType': 'down',
+        'modifiers': <String>['ctrl'],
+        'position': 's',
+      },
+      {
+        'type': 'key',
+        'char': 's',
+        'keyEventType': 'up',
+        'modifiers': <String>['ctrl'],
+        'position': 's',
+        'synthesized': true,
+      },
+      {
+        'type': 'key',
+        'char': 's',
+        'keyEventType': 'repeat',
+        'modifiers': <String>['ctrl'],
+        'position': 's',
+      },
+      {
+        'type': 'key',
+        'char': 's',
+        'keyEventType': 'up',
+        'modifiers': <String>['ctrl'],
+        'position': 's',
+        'synthesized': true,
+      },
+      {
+        'type': 'key',
+        'keyCode': 'leftSuper',
+        'keyEventType': 'up',
+        'modifiers': <String>[],
+        'position': 'metaLeft',
+      },
+    ],
+  },
+  {
     'name': 'meta printable shortcut normalizes to ctrl shortcut',
     'browserEvents': <TraceMap>[
       {
@@ -482,5 +563,27 @@ const browserInputTraceFixtures = <TraceMap>[
         'modifiers': <String>[],
       },
     ],
+  },
+  {
+    'name': 'ctrl+wheel is browser zoom, not app scroll',
+    'browserEvents': <TraceMap>[
+      {
+        'target': 'host',
+        'event': 'wheel',
+        'clientX': 15,
+        'clientY': 25,
+        'deltaY': -20,
+        'ctrlKey': true,
+      },
+      {
+        'target': 'host',
+        'event': 'wheel',
+        'clientX': 15,
+        'clientY': 25,
+        'deltaY': 20,
+        'metaKey': true,
+      },
+    ],
+    'expectedFleuryEvents': <TraceMap>[],
   },
 ];

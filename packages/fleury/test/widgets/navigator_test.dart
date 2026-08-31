@@ -342,6 +342,100 @@ void main() {
     },
   );
 
+  testWidgets('present() absorbs pointer events on the surround', (tester) {
+    var taps = 0;
+    BuildContext? home;
+    tester.pumpWidget(
+      Navigator(
+        home: _CaptureChild(
+          sink: (x) => home = x,
+          child: GestureDetector(
+            onTap: () => taps++,
+            child: const Text('HOMEBTN'),
+          ),
+        ),
+      ),
+    );
+    home!.present<void>(const Text('DIALOG'), transition: RouteTransition.none);
+    tester.pump();
+    tester.render(size: const CellSize(20, 8));
+
+    tester.sendMouse(
+      const MouseEvent(
+        kind: MouseEventKind.down,
+        button: MouseButton.left,
+        col: 0,
+        row: 0,
+      ),
+    );
+    tester.sendMouse(
+      const MouseEvent(
+        kind: MouseEventKind.up,
+        button: MouseButton.left,
+        col: 0,
+        row: 0,
+      ),
+    );
+    expect(
+      taps,
+      0,
+      reason: 'clicks behind a presented route must not fall through',
+    );
+    expect(
+      home!.navigator.depth,
+      1,
+      reason: 'a tap on the surround pops a dismissible modal',
+    );
+  });
+
+  testWidgets(
+    'present(barrierDismissible: false) absorbs clicks without popping',
+    (tester) {
+      var taps = 0;
+      BuildContext? home;
+      tester.pumpWidget(
+        Navigator(
+          home: _CaptureChild(
+            sink: (x) => home = x,
+            child: GestureDetector(
+              onTap: () => taps++,
+              child: const Text('HOMEBTN'),
+            ),
+          ),
+        ),
+      );
+      home!.present<void>(
+        const Focus(autofocus: true, child: Text('locked')),
+        barrierDismissible: false,
+        transition: RouteTransition.none,
+      );
+      tester.pump();
+      tester.render(size: const CellSize(20, 8));
+      tester.sendMouse(
+        const MouseEvent(
+          kind: MouseEventKind.down,
+          button: MouseButton.left,
+          col: 0,
+          row: 0,
+        ),
+      );
+      tester.sendMouse(
+        const MouseEvent(
+          kind: MouseEventKind.up,
+          button: MouseButton.left,
+          col: 0,
+          row: 0,
+        ),
+      );
+      expect(taps, 0);
+      expect(
+        home!.navigator.depth,
+        2,
+        reason: 'a non-dismissible modal stays put on a surround tap',
+      );
+    },
+  );
+
   testWidgets('present(barrierDismissible: false) ignores Esc', (tester) {
     BuildContext? home;
     tester.pumpWidget(

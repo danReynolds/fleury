@@ -2,6 +2,7 @@
 // cap. A fake clock and a fake flush scheduler drive timing synchronously.
 
 import '../support/harness.dart' show FakeClock;
+import 'package:fleury/fleury_core.dart' show SystemClock;
 import 'package:fleury/fleury_host.dart' show FrameScheduler;
 import 'package:test/test.dart';
 
@@ -125,6 +126,30 @@ void main() {
       flush.fire();
       expect(out, ['a', 'b']);
     });
+  });
+
+  test('a request during onRender does not chain as microtasks', () async {
+    var renders = 0;
+    late FrameScheduler scheduler;
+    scheduler = FrameScheduler(
+      clock: const SystemClock(),
+      onRender: (_) {
+        renders++;
+        if (renders < 8) scheduler.requestFrame('nested');
+      },
+    );
+    scheduler.requestFrame('first');
+    // Drain the microtask queue only. Nested frames must wait for a
+    // Timer (event-loop turn), or paste chunking starves SIGINT.
+    await Future<void>.value();
+    expect(
+      renders,
+      1,
+      reason: 'in-frame follow-up must not be a microtask chain',
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(renders, 2);
+    scheduler.dispose();
   });
 
   test('dispose makes further requests no-ops', () {

@@ -17,6 +17,14 @@ final class TextPastePolicy {
   /// exceed this value when one grapheme is larger than [chunkSize].
   final int chunkSize;
 
+  /// Per-frame code-unit slice for a large remaining paste. One coalesced
+  /// insert of this size is O(n); hundreds of [chunkSize] inserts are O(n²).
+  static const int bulkSliceCodeUnits = 32 * 1024;
+
+  /// Wall time a single paste tick may spend applying slices before yielding
+  /// so the event loop can take SIGINT / input.
+  static const Duration frameBudget = Duration(milliseconds: 8);
+
   bool shouldChunk(String text) => text.length > largePasteThreshold;
 
   Iterable<String> chunks(String text) sync* {
@@ -71,10 +79,12 @@ final class TextPasteSession {
   TextPasteSession({required String text, required TextPastePolicy policy})
     : _text = text,
       totalLength = text.length,
+      _chunkSize = policy.chunkSize,
       _chunks = policy.chunks(text).iterator;
 
   final String _text;
   final int totalLength;
+  final int _chunkSize;
   final Iterator<String> _chunks;
   int _insertedLength = 0;
   bool _complete = false;
@@ -100,6 +110,48 @@ final class TextPasteSession {
     _insertedLength += chunk.length;
     if (_insertedLength >= totalLength) _complete = true;
     return chunk;
+  }
+
+  /// Next work item: a policy-sized piece for small remainders, otherwise a
+  /// grapheme-safe bulk slice so a megabyte paste is tens of inserts, not
+  /// hundreds. Uses [takeUpTo] so the cursor stays consistent with bulk
+  /// drain; do not mix with [nextChunk] on the same session.
+  String? nextWork() {
+    final remaining = totalLength - _insertedLength;
+    if (remaining <= 0) {
+      _complete = true;
+      return null;
+    }
+    final cap = remaining > _chunkSize * 4
+        ? TextPastePolicy.bulkSliceCodeUnits
+        : _chunkSize;
+    return takeUpTo(cap);
+  }
+
+  /// Takes up to [maxCodeUnits] of unapplied text, never splitting a grapheme.
+  /// A single grapheme larger than [maxCodeUnits] is still emitted whole.
+  String? takeUpTo(int maxCodeUnits) {
+    assert(maxCodeUnits > 0);
+    if (_complete) return null;
+    final remaining = totalLength - _insertedLength;
+    if (remaining <= 0) {
+      _complete = true;
+      return null;
+    }
+    if (remaining <= maxCodeUnits) return takeRemaining();
+    final rest = _text.substring(_insertedLength);
+    var size = 0;
+    final buffer = StringBuffer();
+    for (final grapheme in rest.characters) {
+      final nextSize = size + grapheme.length;
+      if (size > 0 && nextSize > maxCodeUnits) break;
+      buffer.write(grapheme);
+      size = nextSize;
+    }
+    final slice = buffer.toString();
+    _insertedLength += slice.length;
+    if (_insertedLength >= totalLength) _complete = true;
+    return slice.isEmpty ? null : slice;
   }
 
   /// Takes all unapplied text as one bulk chunk.

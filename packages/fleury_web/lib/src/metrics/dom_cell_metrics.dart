@@ -47,11 +47,16 @@ final class DomCellMetrics implements CellMetrics {
   void Function()? _onMetricsDirty;
   JSFunction? _fontLoadListener;
   JSFunction? _windowResizeListener;
+  web.MediaQueryList? _resolutionQuery;
+  JSFunction? _resolutionListener;
   MeasuredCellBox? _cached;
   var _dirty = true;
   var _fontObserverGeneration = 0;
 
   bool get isDirty => _dirty;
+
+  /// The resolution media-query currently armed while observing, if any.
+  web.MediaQueryList? get resolutionMediaQuery => _resolutionQuery;
 
   @override
   MeasuredCellBox? get cachedMeasurement => _cached;
@@ -155,6 +160,7 @@ final class DomCellMetrics implements CellMetrics {
     _resizeObserver?.disconnect();
     _removeFontListeners();
     _removeWindowResizeListener();
+    _removeResolutionListener();
     _onMetricsDirty = onMetricsDirty;
     _resizeObserver = web.ResizeObserver(
       ((JSArray<web.ResizeObserverEntry> _, web.ResizeObserver __) {
@@ -163,6 +169,7 @@ final class DomCellMetrics implements CellMetrics {
     )..observe(_container);
     _observeWindowResize();
     _observeFontReadiness();
+    _observeDevicePixelRatio();
   }
 
   @override
@@ -197,6 +204,7 @@ final class DomCellMetrics implements CellMetrics {
     _onMetricsDirty = null;
     _removeFontListeners();
     _removeWindowResizeListener();
+    _removeResolutionListener();
     _resizeObserver?.disconnect();
     _resizeObserver = null;
     final parent = _probe.parentNode;
@@ -243,6 +251,35 @@ final class DomCellMetrics implements CellMetrics {
     if (listener == null) return;
     _window.removeEventListener('resize', listener);
     _windowResizeListener = null;
+  }
+
+  void _observeDevicePixelRatio() {
+    _removeResolutionListener();
+    // Cell boxes snap to whole device pixels, so a DPR change (monitor move,
+    // browser zoom) must invalidate even when CSS layout size is unchanged.
+    // `(resolution: <dpr>dppx)` matches only the current ratio; once it
+    // flips we re-arm for the new value.
+    final query = _window.matchMedia(
+      '(resolution: ${_window.devicePixelRatio}dppx)',
+    );
+    final listener = ((web.Event _) {
+      _notifyMetricsDirty();
+      if (_onMetricsDirty == null) return;
+      _observeDevicePixelRatio();
+    }).toJS;
+    _resolutionQuery = query;
+    _resolutionListener = listener;
+    query.addEventListener('change', listener);
+  }
+
+  void _removeResolutionListener() {
+    final query = _resolutionQuery;
+    final listener = _resolutionListener;
+    if (query != null && listener != null) {
+      query.removeEventListener('change', listener);
+    }
+    _resolutionQuery = null;
+    _resolutionListener = null;
   }
 
   void _notifyMetricsDirty() {

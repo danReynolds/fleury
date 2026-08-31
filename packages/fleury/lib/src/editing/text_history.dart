@@ -39,11 +39,6 @@ final class TextHistoryController extends ChangeNotifier {
   /// The draft captured before entering history browsing.
   String? get draft => _draft;
 
-  bool get canNavigatePrevious =>
-      _entries.isNotEmpty && (_selectedIndex == null || _selectedIndex! > 0);
-
-  bool get canNavigateNext => _selectedIndex != null;
-
   /// Stores an accepted field value.
   ///
   /// Empty values are skipped by default. Consecutive duplicate entries are

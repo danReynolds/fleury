@@ -12,6 +12,20 @@ import 'package:fleury/fleury.dart';
 import '../../support/harness.dart';
 import 'package:test/test.dart';
 
+class _MutableText extends StatefulWidget {
+  const _MutableText({super.key, required this.initial});
+  final String initial;
+  @override
+  State<_MutableText> createState() => _MutableTextState();
+}
+
+class _MutableTextState extends State<_MutableText> {
+  late String label = widget.initial;
+  void setLabel(String value) => setState(() => label = value);
+  @override
+  Widget build(BuildContext context) => Text(label);
+}
+
 MouseEvent _down(int col, int row) => MouseEvent(
   kind: MouseEventKind.down,
   button: MouseButton.left,
@@ -189,6 +203,26 @@ void main() {
         const KeyEvent(KeyCode.char('a'), modifiers: {KeyModifier.ctrl}),
       );
       expect(captured?.plainText, 'abc');
+    });
+
+    testWidgets('Ctrl+C after the text shrinks does not throw', (tester) async {
+      final key = GlobalKey<_MutableTextState>();
+      tester.pumpWidget(
+        SelectionArea(child: _MutableText(key: key, initial: 'hello world')),
+      );
+      tester.render(size: const CellSize(20, 1));
+      tester.sendMouse(_down(0, 0));
+      tester.sendMouse(_drag(11, 0));
+      tester.sendMouse(_up(11, 0));
+      key.currentState!.setLabel('hi');
+      tester.pump();
+      tester.render(size: const CellSize(20, 1));
+      expect(
+        () => tester.sendKey(
+          const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+        ),
+        returnsNormally,
+      );
     });
 
     testWidgets('Ctrl+C copies the selection via the ambient clipboard', (
@@ -984,6 +1018,24 @@ void main() {
       tester.sendMouse(_up(5, 0));
 
       expect(captured, isNull);
+    });
+  });
+
+  group('SelectionArea — no onSelectionChanged', () {
+    testWidgets('DefaultRootSelection drag still selects and copies', (tester) {
+      tester.pumpWidget(const Text('hello world'));
+      tester.render(size: const CellSize(20, 1));
+
+      tester.sendMouse(_down(0, 0));
+      tester.sendMouse(_drag(5, 0));
+      tester.sendMouse(_up(5, 0));
+
+      final buf = tester.render(size: const CellSize(20, 1));
+      expect(buf.atColRow(0, 0).style.inverse, isTrue);
+      expect(buf.atColRow(4, 0).style.inverse, isTrue);
+
+      tester.press(KeySequence.ctrl.c);
+      expect(tester.clipboard.readInProcess(), 'hello');
     });
   });
 

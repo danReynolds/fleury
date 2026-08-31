@@ -4,14 +4,17 @@ Ready-made themes for [Fleury](https://github.com/danReynolds/fleury), mapped
 onto Fleury's `ColorScheme` roles.
 
 ```dart
+import 'package:fleury/fleury.dart';
 import 'package:fleury_themes/fleury_themes.dart';
 
-void main() => runApp(const MyApp(), theme: tokyoNight);
+void main() => runApp(
+  const FleuryApp(title: 'My app', theme: tokyoNight, home: MyApp()),
+);
 ```
 
 That's the whole API. Each theme is a plain `const ThemeData`, so it costs
-nothing at runtime and works anywhere a theme is accepted — `runApp`, a `Theme`
-around a subtree, a test.
+nothing at runtime and works anywhere a theme is accepted — `FleuryApp`, a
+`Theme` around a subtree, a test.
 
 ## The themes
 

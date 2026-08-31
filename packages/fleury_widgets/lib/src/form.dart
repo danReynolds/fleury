@@ -220,7 +220,13 @@ final class _FormWidgetState extends State<Form> implements _FormHost {
     _pendingValidation = validation;
     TuiBinding.of(context).addPostFrameCallback((_) {
       if (!validation.isCompleted) {
-        validation.complete(mounted && _validateNow());
+        try {
+          validation.complete(mounted && _validateNow());
+        } catch (error, stack) {
+          if (!validation.isCompleted) {
+            validation.completeError(error, stack);
+          }
+        }
       }
       if (identical(_pendingValidation, validation)) {
         _pendingValidation = null;
@@ -234,7 +240,7 @@ final class _FormWidgetState extends State<Form> implements _FormHost {
     for (final field in _fieldsInTraversalOrder()) {
       if (!field.validate()) firstInvalid ??= field;
     }
-    firstInvalid?.focusNode.requestFocus();
+    firstInvalid?._requestFirstInvalidFocus();
     return firstInvalid == null;
   }
 
@@ -317,7 +323,8 @@ class FormField extends StatefulWidget {
   ///
   /// Use this for one logical value represented by a custom or multi-control
   /// widget. The builder must call [FormFieldState.valueChanged] when its
-  /// app-owned value changes.
+  /// app-owned value changes, and must attach [FormFieldState.focusNode] (or
+  /// pass [focusNode] and attach that node) so first-invalid focus can land.
   const FormField.builder({
     super.key,
     required Widget Function(BuildContext context, FormFieldState field)
@@ -389,6 +396,19 @@ final class FormFieldState extends State<FormField>
       widget.focusNode ??
       _controlClaim?.focusNode ??
       (_ownedFocusNode ??= FocusNode(debugLabel: 'form-field'));
+
+  void _requestFirstInvalidFocus() {
+    final node = focusNode;
+    assert(() {
+      if (widget.builder == null || node.isAttached) return true;
+      throw StateError(
+        'FormField.builder did not attach field.focusNode. Pass '
+        'focusNode to FormField.builder and attach it, or wrap the '
+        'control in Focus(focusNode: field.focusNode, ...).',
+      );
+    }());
+    node.requestFocus();
+  }
 
   /// Reports that the app-owned value represented by a custom field changed.
   ///

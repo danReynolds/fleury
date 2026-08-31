@@ -99,6 +99,63 @@ void main() {
     expect(sc.offset, sc.maxOffset, reason: 'dragged to the bottom');
   });
 
+  testWidgets('drag mapping inside a RepaintBoundary uses screen coordinates', (
+    tester,
+  ) {
+    // Paint records geometry for mouse mapping. Inside a repaint boundary
+    // `offset` is scratch-local (often 0) while mouse events are screen
+    // coords — a bar not at screen row 0 must still treat a click on its
+    // visual top as fraction 0.
+    final sc = ScrollController();
+    tester.pumpWidget(
+      Column(
+        children: [
+          const SizedBox(height: 2, child: Text('pad')),
+          Expanded(
+            child: RepaintBoundary(
+              child: Scrollbar(
+                controller: sc,
+                child: ScrollView(
+                  controller: sc,
+                  child: Column(
+                    children: [for (var i = 0; i < 10; i++) Text('row$i')],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    tester.render(size: const CellSize(6, 6)); // 2 pad + 4 viewport
+    expect(sc.offset, 0);
+
+    // Gutter at col 5; bar occupies screen rows 2–5. Clicking the visual
+    // top (row 2) must not jump — with buffer-local top=0 it would map
+    // as 2/3 of the way down the track.
+    tester.sendMouse(
+      const MouseEvent(
+        kind: MouseEventKind.down,
+        button: MouseButton.left,
+        col: 5,
+        row: 2,
+      ),
+    );
+    tester.render(size: const CellSize(6, 6));
+    expect(sc.offset, 0, reason: 'click at the visual top of the bar');
+
+    tester.sendMouse(
+      const MouseEvent(
+        kind: MouseEventKind.drag,
+        button: MouseButton.left,
+        col: 5,
+        row: 5,
+      ),
+    );
+    tester.render(size: const CellSize(6, 6));
+    expect(sc.offset, sc.maxOffset, reason: 'drag to the visual bottom');
+  });
+
   testWidgets('clicking the track jumps toward that position', (tester) {
     final sc = ScrollController();
     tester.pumpWidget(

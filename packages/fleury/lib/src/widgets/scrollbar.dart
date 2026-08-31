@@ -279,8 +279,11 @@ class _RenderScrollbar extends RenderObject {
   }) {
     if (size.isEmpty) return;
     final h = size.rows;
+    // Mouse events are screen coordinates. Inside a repaint boundary `offset`
+    // is scratch-local (often 0); BoundsNotifier / GestureDetector / Focus
+    // already map hits with [screenOffset].
     _geometry
-      ..top = offset.row
+      ..top = (screenOffset ?? offset).row
       ..height = h;
 
     final (content, viewport, scrollOffset) = _metrics();

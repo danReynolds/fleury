@@ -8,6 +8,34 @@ const _fruits = ['apple', 'apricot', 'banana', 'cherry'];
 String _screen(FleuryTester tester, {int cols = 16, int rows = 8}) =>
     tester.renderToString(size: CellSize(cols, rows), emptyMark: ' ');
 
+void _expectWideGlyph(FleuryTester tester, String grapheme) {
+  final buf = tester.render(size: const CellSize(24, 8));
+  var found = false;
+  for (var r = 0; r < buf.size.rows; r++) {
+    for (var c = 0; c < buf.size.cols; c++) {
+      final cell = buf.atColRow(c, r);
+      if (cell.grapheme != grapheme) continue;
+      expect(cell.role, CellRole.leading);
+      expect(
+        c + 1 < buf.size.cols,
+        isTrue,
+        reason: '$grapheme must not be clipped at the right edge',
+      );
+      expect(
+        buf.atColRow(c + 1, r).role,
+        CellRole.continuation,
+        reason: '$grapheme is 2 cells, not 1 UTF-16 unit',
+      );
+      found = true;
+    }
+  }
+  expect(
+    found,
+    isTrue,
+    reason: 'expected $grapheme to be visible in the popup',
+  );
+}
+
 void main() {
   testWidgets('no dropdown until typing matches', (tester) {
     tester.pumpWidget(const Autocomplete(options: _fruits, autofocus: true));
@@ -487,6 +515,20 @@ void main() {
     final row = tester.semantics().single(role: SemanticRole.menuItem);
     expect(row.label, contains(replacementCharacter));
     expect(row.label, isNot(contains('secret')));
+  });
+
+  testWidgets('popup width uses display cells, not UTF-16 units', (tester) {
+    tester.pumpWidget(
+      const Autocomplete(options: ['中', '🚀'], autofocus: true),
+    );
+    tester.type('中');
+    _expectWideGlyph(tester, '中');
+
+    tester.pumpWidget(
+      const Autocomplete(options: ['中', '🚀'], autofocus: true),
+    );
+    tester.type('🚀');
+    _expectWideGlyph(tester, '🚀');
   });
 }
 

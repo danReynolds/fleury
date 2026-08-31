@@ -78,7 +78,7 @@ class _RecordingStdout implements Stdout {
 }
 
 class _ControlledFlushStdout extends _RecordingStdout {
-  _ControlledFlushStdout();
+  _ControlledFlushStdout({super.terminal});
 
   final List<Completer<void>> flushes = <Completer<void>>[];
 
@@ -364,6 +364,52 @@ void main() {
       }
     },
   );
+
+  test('restore during enter negotiation throws a named StateError', () async {
+    final input = _FakeStdin(terminal: true);
+    final out = _ControlledFlushStdout(terminal: true);
+    final driver = PosixTerminalDriver(
+      stdinOverride: input,
+      stdoutOverride: out,
+      terminalModeController: _FakeModeController(<String>[]),
+    );
+
+    final entering = driver.enter(TerminalMode.interactive);
+    await out.waitForFlushCount(1);
+
+    final restoring = driver.restore();
+    var settled = false;
+    Object? enterError;
+    unawaited(
+      Future.wait<void>([
+        entering.then<void>(
+          (_) {},
+          onError: (Object error, StackTrace stack) {
+            enterError = error;
+          },
+        ),
+        restoring,
+      ]).whenComplete(() => settled = true),
+    );
+
+    for (var i = 0; i < 200 && !settled; i++) {
+      for (final flush in List<Completer<void>>.of(out.flushes)) {
+        if (!flush.isCompleted) flush.complete();
+      }
+      await Future<void>.delayed(Duration.zero);
+    }
+
+    expect(settled, isTrue, reason: 'enter and restore must both settle');
+    expect(
+      enterError,
+      isA<StateError>().having(
+        (error) => error.message,
+        'message',
+        'PosixTerminalDriver was restored while enter was negotiating.',
+      ),
+    );
+    await input.close();
+  });
 
   test('restore invalidates a suspend continuation waiting on flush', () async {
     final input = _FakeStdin(terminal: true);

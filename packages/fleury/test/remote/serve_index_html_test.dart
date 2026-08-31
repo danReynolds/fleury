@@ -21,6 +21,12 @@ void main() {
       expect(serveClientJsPath, '/remote_client.js');
     });
 
+    test('does not make the host a keyboard focus sink', () {
+      // tabindex="0" on #fleury-remote stole focus from the hidden
+      // textarea whenever padding or the status overlay was clicked.
+      expect(serveIndexHtml, isNot(contains('tabindex="0"')));
+    });
+
     test('ships an embedded subset mono font for the browser surface', () {
       final bytes = serveMonoFontBytes();
       // A real, non-trivial woff2 (magic bytes "wOF2").
