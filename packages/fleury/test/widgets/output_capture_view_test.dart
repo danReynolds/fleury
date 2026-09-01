@@ -209,10 +209,7 @@ void main() {
       // the panel's inner width lands INSIDE a surrogate pair.
       final b = _buffer(['a' + '\u{1F468}‍\u{1F469}‍\u{1F466}' * 12]);
       tester.pumpWidget(
-        LogBufferScope(
-          buffer: b,
-          child: const OutputCaptureConsole(height: 6),
-        ),
+        LogBufferScope(buffer: b, child: const OutputCaptureConsole(height: 6)),
       );
       final rows = tester
           .renderToString(size: const CellSize(20, 10))

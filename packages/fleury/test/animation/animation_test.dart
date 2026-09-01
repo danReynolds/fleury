@@ -365,9 +365,7 @@ void main() {
       final baseline = tester.scheduler.reassembleCallbackCount;
 
       const n = 200;
-      final animations = [
-        for (var i = 0; i < n; i++) Animation(0.0),
-      ];
+      final animations = [for (var i = 0; i < n; i++) Animation(0.0)];
       for (final animation in animations) {
         animation.attach(tester.binding);
       }

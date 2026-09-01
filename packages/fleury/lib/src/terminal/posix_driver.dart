@@ -456,7 +456,9 @@ class PosixTerminalDriver
   /// this replaces.
   TerminalMode _checkStillEntering(int enterGeneration) {
     final state = _terminalState;
-    if (_restoring || enterGeneration != _lifecycleGeneration || state == null) {
+    if (_restoring ||
+        enterGeneration != _lifecycleGeneration ||
+        state == null) {
       throw StateError(
         'PosixTerminalDriver was restored while enter was negotiating.',
       );

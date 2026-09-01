@@ -1824,7 +1824,7 @@ void main() {
     });
   });
 
-  group('repeats never advance or reset a pending sequence (RFC 0020 §14.4)', () {
+  group('repeats never advance a pending sequence (§14.4)', () {
     KeyEvent repeat(String c) =>
         KeyEvent(KeyCode.char(c), type: KeyEventType.repeat);
 
@@ -1898,10 +1898,7 @@ void main() {
     test('(b) a 3-step sequence cannot be driven by repeats', () {
       final calls = <String>[];
       final h = harness([
-        KeyBinding(
-          KeySequence.g.g.g,
-          onTrigger: (_) => calls.add('ggg'),
-        ),
+        KeyBinding(KeySequence.g.g.g, onTrigger: (_) => calls.add('ggg')),
       ]);
 
       h.dispatch(_char('g'));
@@ -1931,10 +1928,7 @@ void main() {
         'standing', () {
       final calls = <String>[];
       final h = harness([
-        KeyBinding(
-          KeySequence.space.q,
-          onTrigger: (_) => calls.add('space q'),
-        ),
+        KeyBinding(KeySequence.space.q, onTrigger: (_) => calls.add('space q')),
       ]);
 
       h.dispatch(_code(KeyCode.space));

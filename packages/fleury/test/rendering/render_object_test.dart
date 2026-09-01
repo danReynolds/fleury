@@ -260,7 +260,10 @@ void main() {
       final before = DebugInvalidations.debugLabelsBuilt;
       key.currentState!.bump();
       expect(DebugInvalidations.debugLabelsBuilt, greaterThan(before));
-      expect(DebugInvalidations.drain(), contains('build:_Ticker/_TickerState'));
+      expect(
+        DebugInvalidations.drain(),
+        contains('build:_Ticker/_TickerState'),
+      );
     });
   });
 
