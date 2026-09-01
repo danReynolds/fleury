@@ -122,7 +122,7 @@ import 'package:test/test.dart';
 
 testWidgets('space increments the counter', (tester) {
   tester.pumpWidget(const CounterApp());
-  tester.sendKey(const KeyEvent(char: ' '));
+  tester.sendKey(const KeyEvent(KeyCode.char(' ')));
   tester.pump();
   expect(tester.renderToString(), contains('count: 1'));
 });

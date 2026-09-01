@@ -66,6 +66,11 @@ void main() {
         r'runApp\((?:[^()]|\([^()]*\))*,\s*theme:',
         dotAll: true,
       );
+      // `KeyEvent` takes its `KeyCode` positionally — `const
+      // KeyEvent(KeyCode.enter)`. Docs kept writing the two named forms it
+      // has never had, which fail twice over (unknown name AND a missing
+      // positional argument).
+      final namedKeyEventCode = RegExp(r'KeyEvent\(\s*(?:char|keyCode):');
       final rawStringSemanticId = RegExp(
         r'''Semantics\s*\(\s*id:\s*(?:const\s+)?['"]''',
       );
@@ -91,6 +96,11 @@ void main() {
             'runApp(…, theme:) — runApp takes no theme; pass it to '
                 'FleuryApp(theme:) or a Theme around a subtree',
             runAppTheme,
+          ),
+          (
+            'KeyEvent(char:/keyCode:) — the KeyCode is positional '
+                '(KeyEvent(KeyCode.enter))',
+            namedKeyEventCode,
           ),
           (
             'raw String passed as Semantics.id (use SemanticNodeId)',
