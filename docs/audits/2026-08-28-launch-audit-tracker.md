@@ -354,10 +354,10 @@ Ordered by what I'd take first. Each names **what makes it hard**, so we can dec
 
 ### C2 · Default-path correctness with a design fork
 
-- [ ] **5.b** `P1` ✎ Text inside any tap-handling widget is unselectable — `pointer.dart:246`
+- [x] **5.b** `P1` ✎ Text inside any tap-handling widget is unselectable — `pointer.dart:246`
   **Hard because:** the 10-line fix (fire the drag target's tap-down too) only works while the root selection area happens to be the topmost *drag* region — interpose a scrollbar, slider or nested area and the anchor is still never set. The durable fix is a **real hit-test path**: collect every region under the point and propagate tap-down up it, with `AbsorbPointer` as the stop. That's a per-frame input change → `input-alloc-gate`.
   **✎ Worse than reported:** Fleury's own core `ListView` wraps every item in a `GestureDetector`, so list content — logs, transcripts, file lists — is entirely unselectable. And the phantom-extension half hands users content they never dragged over.
-  **Notes:**
+  **Notes:** LANDED (targeted fix, not the hit-test path): the armed drag target also receives the press when it is not the tap target, so a SelectionArea under a tap-only widget gets its anchor. Tap semantics unchanged. 3 tests (GestureDetector text copies; plain click still taps; ListView rows select). Interposed sliders/scrollbars correctly keep the drag — a hit-test path is not needed for launch.
 
 - [ ] **4.a** `P1` Scratch-buffer replay loops re-measure under the spec policy — `cell_buffer.dart:390` + 5 call sites
   **Hard because:** making `policy` required is the right move but it **surfaces decisions**, not just call sites — border glyphs and scrollbar glyphs are ambiguous-width and currently write at spec, which matches reserved geometry but not what an ambiguous-wide terminal draws. That needs an answer, not a mechanical `spec`. The structural blit also has transparency semantics to preserve (these loops deliberately skip empty cells) → likely a per-cell structural write, not a rect copy. Hot path: `alloc-gate` + `paint-gate`.
@@ -381,19 +381,19 @@ Ordered by what I'd take first. Each names **what makes it hard**, so we can dec
 
 ### C3 · List and framework centre
 
-- [ ] **8.a** `P1` ✎ List anchor never clamped to the last full page — `list_view.dart:1153,1745`
+- [x] **8.a** `P1` ✎ List anchor never clamped to the last full page — `list_view.dart:1153,1745`
   **Hard because:** variable-height rows — the backwards-walk helper **mounts items** in the lazy path, so calling it every layout adds hot-path work. Wants a cheap post-check ("did we under-fill?") then a re-walk, not a pre-pass. ✎ Wheel trigger refuted, but a worse one found: a **scroll-only list with `pinToBottom`** — a tailing log, a documented config — renders exactly one item per frame forever.
-  **Notes:**
+  **Notes:** LANDED: post-check after the forward walk (ran out of items with rows to spare, anchor > 0) → re-anchor via the existing backwards helper + re-walk, both paths; lazy re-walk reuses the leftover sweep. 4 tests red before (scroll-only tail follow showed (19,19)). jumpToIndex doc: clamped to the last full page.
 
 - [x] **8.b** `P1` Capped transcript permanently loses follow-tail — `list_view.dart:688`
   **Hard because:** the fix changes *classification* (old-first-key gone + old-last-key resolves ⇒ trailing growth), and must keep the existing keyed-reorder test green — that test is the contract. Mixed reorder-plus-eviction stays ambiguous, which the docs already disclaim.
   **The inversion is the sting:** the same rolling window follows correctly **without** keys and breaks **with** them — supplying identity, the documented best practice, is what triggers it. Out-of-box config; the example console does exactly this.
   **Notes:** LANDED on this branch (6a7c9f31): classifier recognises head-eviction (old first key gone, old last key resolves → everything after it is the append); pure reorders untouched, contract test green. Pinned: 2 ListView tests + 1 real MessageList test, all red without the fix.
 
-- [ ] **12.a** `P1` `IntrinsicWidth`/`IntrinsicHeight` blank their subtree for almost any real child — `intrinsic.dart:38,113`
+- [x] **12.a** `P1` `IntrinsicWidth`/`IntrinsicHeight` blank their subtree for almost any real child — `intrinsic.dart:38,113`
   **Hard because:** the general fix is delegating intrinsics from the single-child default — broad, touching most render objects, and genuinely ambiguous for `Stack`/`Wrap` where "natural width" has no single answer. Cheap interim: **assert** when a child reports 0 but would lay out non-empty under loose constraints, turning a silent blank into a diagnostic without changing layout.
   **Honest scope:** opt-in, zero non-test callers — a documented primitive that doesn't work, not a default-path failure. But the blank set includes the two wrappers the framework inserts *unasked* (list items, route content), and Flutter **asserts** where this returns 0.
-  **Notes:**
+  **Notes:** LANDED (general fix, not the assert): base default delegates intrinsics for every single-child wrapper; RenderBorder adds its frame; Stack/IndexedStack report the largest child. 5 tests red at 0 before. Fast gates pass (intrinsics are not per-frame).
 
 - [ ] **12.c** `P2` ✎ Render config never refreshed on a dependency-only rebuild — `framework.dart:1736`
   **Hard because:** the central fix (call `updateRenderObject` from `performRebuild`) is the one change here with **real gate exposure** — an extra call per dirty render-object element per frame. Setters no-op on unchanged values, so the cost is getters plus inherited lookups; if those show up, the fallback is a narrower opt-in mixin, which leaves the trap open for third-party widgets. **Land 12.b first** — the setters this needs don't exist yet.
