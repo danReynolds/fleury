@@ -348,9 +348,9 @@ Ordered by what I'd take first. Each names **what makes it hard**, so we can dec
   **✎ Corrections:** not permanently unquittable — a click that reaches the root selection area recovers it (but **5.b** removes that escape over most of an app). Two triggers the first pass missed: **terminal resize alone**, and `RichText`.
   **Notes:** LANDED on this branch (07a51e55): mixin keeps the screen points per edge and re-resolves them lazily when `selectionLines` identity changes (text set, resize re-wrap, policy change); offset-based edges clamp at the same choke point. Also landed the run_app exit-guard hardening (a throwing dispatch is reported and treated as `ignored`, so Ctrl+C still quits). Pinned: 5 selection tests + 1 runtime test, all red without the fix. Gates green. 5.f can build on `_relatedLines`.
 
-- [ ] **5.f** `P2` ↑ A selectable mounting mid-selection can never join it — `selection_container_delegate.dart:190`
+- [x] **5.f** `P2` ↑ A selectable mounting mid-selection can never join it — `selection_container_delegate.dart:190`
   **Pairs with 1.b** — same invalidation machinery. ↑ Raised: not a one-frame lag; scrolling a `ListView.builder` mid-drag evaporates the whole selection. The unmount half is genuinely harder (Flutter has the same limitation) — reasonable to stop there, but **say so** rather than leaving it looking fixed. Its pinning test cannot fail as written (see D1).
-  **Notes:** Partly unblocked by 1.b (07a51e55): the mixin now re-relates cached screen points whenever its lines change; the remaining gap is the delegate replaying edges to a selectable that had NO points yet (first paint after mount).
+  **Notes:** Partly unblocked by 1.b (07a51e55): the mixin now re-relates cached screen points whenever its lines change; the remaining gap is the delegate replaying edges to a selectable that had NO points yet (first paint after mount). VERIFIED on this branch (127e3c3b): a real lazy-list test — drag 4 rows, scroll by one, release, copy — shows the newly mounted item joins and the unmounted one leaves. Already green (1.b re-relate + delegate edge replay); kept as the regression pin, not a red→green fix.
 
 ### C2 · Default-path correctness with a design fork
 
@@ -455,12 +455,12 @@ Ordered by what I'd take first. Each names **what makes it hard**, so we can dec
 - [ ] **15.a** `P1` ✎ Supervisor's 300 ms signal forward collapses the documented 5 s grace — `dev_bootstrap.dart:313`
   **Hard because:** the supervisor is guessing signal provenance from a timer because POSIX provenance isn't reachable from Dart. Proper fix: the child posts a signal **ack** over the VM service connection the supervisor already holds, and the forward is cancelled positively — timer stays only as a backstop for a wedged child. Open: can the ack be posted early enough for a signal during startup, and is it safe mid-respawn?
   **✎ Both directions:** narrower than claimed (sub-300 ms teardowns are fine) but the mechanism is worse — restore cancels the signal subscriptions, and **cancelling the last one restores the OS default disposition**, so a forwarded signal kills the process outright mid-restore, skipping capture teardown and any code after `await runApp`. The emergency tty restore then makes it **look like a clean quit**.
-  **Notes:**
+  **Notes:** PARTIAL (1fe211ce): the worse mechanism is fixed — restore() now holds a no-op SIGINT/SIGTERM shield until cooked mode + final flush are done, so a forwarded signal can no longer kill the process raw mid-restore (test via a signal-watcher seam, red without the shield). The 300 ms provenance guess itself (positive ack over the VM service) is a design call — open.
 
-- [ ] **15.c** `P1` `main()` executes twice — once in the parked supervisor, once in the child — `dev_bootstrap.dart:219`
+- [x] **15.c** `P1` `main()` executes twice — once in the parked supervisor, once in the child — `dev_bootstrap.dart:219`
   **Your call — there is no clean fix.** You cannot un-run code that already ran. Pre-launch this is (a) documenting prominently that everything before `runApp` runs in both processes, and (b) a diagnostic when a first child exits non-zero within a second or two of spawn. The structural fix — a `fleuryMain` wrapper or `dart run fleury:dev` — **trades away the "plain `dart run`, no wrapper" property that is the feature's entire pitch**, so it's an RFC, not a patch.
   **Timing:** the generated scaffold is safe today (`main` is just the run call), so launch day is fine. It breaks the first day a user adds startup work — bind a port, take a lock, subscribe to stdin — which is also the day they're least likely to suspect the framework.
-  **Notes:**
+  **Notes:** LANDED (9599f8cc): hot-reload guide states main() runs twice (+ opt-outs, + Troubleshooting symptom); supervisor prints a stderr hint when the FIRST child exits non-zero within 2 s (pure helper devEarlyExitHint, 4 tests). Structural fix (wrapper) remains an RFC — your call.
 
 - [x] **15.b** `P1` VM options silently dropped on the supervised respawn — `dev_bootstrap.dart:84`
   **Nearly mechanical — flagged only for the deny-list call:** replay `Platform.executableArguments`, but drop the tooling's injected internals and anything colliding with the service setup. Open: are those internal flag names stable enough across SDKs to deny-list, or should it be an allow-list? `--define` and `--enable-asserts` both verified lost. Worth documenting that `DART_VM_OPTIONS` survives as an escape hatch.
@@ -533,20 +533,20 @@ Found by the batch agents in passing. Verified only to the extent stated; triage
   **Notes:** LANDED (WhichKey fix on this branch, on top of a new Stack.fit — loose/expand/passthrough): constant shape = passthrough Stack [expanding filler, app, Positioned popup]; app keeps its slot and its bare constraints, popup box = whole wrapped surface. Probe logged init,init,dispose on reveal before; init only after.
 - [ ] **N2** `P2` The paste chunker is quadratic independent of 1.a — controller-only edits (no render) measure 4/12/62 ms at 128/256/512 KiB, because every 2 KiB chunk re-copies the whole string (`replaceRange`) and `FrameDriver` forces a full frame per post-frame registration. Q10 covers the per-frame coalescing; the string copy is a separate (smaller) fix.
   **Notes:**
-- [ ] **N3** `P2` `MessageListController.jumpToIndex` has 8.e's dead `followTail = false` pattern — `message_list.dart:155-166`; a tail index re-engages follow through the coupling.
-  **Notes:**
+- [x] **N3** `P2` `MessageListController.jumpToIndex` has 8.e's dead `followTail = false` pattern — `message_list.dart:155-166`; a tail index re-engages follow through the coupling.
+  **Notes:** LANDED (4a11c50a): dead `followTail = false` deleted; pinned by the false→true flap seen through the controller notifications.
 - [x] **N4** `P2` Three more surfaces teach the reload-less browser command — `getting-started.mdx:273`, `guides/deployment.md:89`, `coming-from-flutter.md:90`. Same fix as 15.g's docs half.
   **Notes:** LANDED: getting-started, deployment, coming-from-flutter now teach `dart --enable-vm-service=0 run …` with a one-line reason.
 - [x] **N5** `P2` Spawn mode's `--max-sessions` rejection is a 503 before the upgrade, so the client shows a blank page with no message (13.new in the register; same family as 13.d).
   **Notes:** Same bug as 13.new — LANDED via A6 merge (7d53ed57), see 13.new.
-- [ ] **N6** `P3` `probeAmbiguousWidth` (`terminal_probe.dart:251`) — public, tested, no production caller (the driver calls `probeGlyphWidths`). `AmbiguousCharWidth`'s doc still attributes detection to it.
-  **Notes:**
-- [ ] **N7** `P3` `TextProjection.logicalText` — zero production readers after 4.f; its doc ("what copy and semantics answer with") is false.
-  **Notes:**
+- [x] **N6** `P3` `probeAmbiguousWidth` (`terminal_probe.dart:251`) — public, tested, no production caller (the driver calls `probeGlyphWidths`). `AmbiguousCharWidth`'s doc still attributes detection to it.
+  **Notes:** LANDED (577a99c2): probeAmbiguousWidth + its tests removed; the driver path (probeGlyphWidths) is the only one.
+- [x] **N7** `P3` `TextProjection.logicalText` — zero production readers after 4.f; its doc ("what copy and semantics answer with") is false.
+  **Notes:** LANDED (6c18cdd1): TextProjection.logicalText removed; PreparedCluster doc reworded.
 - [ ] **N8** `P3` Seven zero-arity `onTrigger: () =>` in `docs/rfcs/0008` and `0018` — as-proposed design records, not swept by the docs guard. Decide whether RFCs are pinned to current API.
   **Notes:**
-- [ ] **N9** `P3` `RenderObjectElement.renderObject` throws during teardown; any `deactivate`/`unmount` override reaching it compounds one error into two. `maybeRenderObject` now exists (A3); the other overrides were not audited.
-  **Notes:**
+- [x] **N9** `P3` `RenderObjectElement.renderObject` throws during teardown; any `deactivate`/`unmount` override reaching it compounds one error into two. `maybeRenderObject` now exists (A3); the other overrides were not audited.
+  **Notes:** LANDED (27968f9d): raw Text unmount, BoundsAnchor unmount, pointer listener deactivate all go through maybeRenderObject. Pinned: a BoundsAnchor whose createRenderObject throws surfaces one error, not a compound.
 - [ ] **N10** `P3` `LineChart`'s degenerate x padding is asymmetric (lone point at the left edge) while y is symmetric — centring x is a two-character change now, but a visible one.
   **Notes:**
 - [x] **N11** `P3` `test/runtime/dead_control_warning_test.dart` is unformatted on main (`dart format` violation).
