@@ -97,6 +97,7 @@ class _MenuState extends State<Menu> {
   final BoundsNotifier _bounds = BoundsNotifier();
   final FocusNode _triggerFocus = FocusNode(debugLabel: 'menu-trigger');
   final GlobalKey _trapContentKey = GlobalKey();
+
   /// Reaches the root panel's state so [_close] can retire the whole panel
   /// chain's focus traps before restoring focus to the trigger.
   final GlobalKey<_MenuBodyState> _bodyKey = GlobalKey<_MenuBodyState>();
@@ -304,6 +305,7 @@ class _MenuBodyState extends State<_MenuBody> {
   BoundsNotifier _boundsForRow(int index) =>
       _rowBounds.putIfAbsent(index, BoundsNotifier.new);
   OverlayEntry? _childEntry;
+
   /// Reaches the open child panel's state, so a close driven from above can
   /// retire the chain's focus traps deepest-first (see [releaseChainFocusTraps]).
   GlobalKey<_MenuBodyState>? _childKey;
@@ -576,77 +578,80 @@ class _MenuBodyState extends State<_MenuBody> {
             child: Focus(
               focusNode: _focus,
               autofocus: true,
-              // `framed` supplies the float contract: opaque fill plus frame,
-              // so the app underneath can't bleed through.
-              child: Container.framed(
-                border: BoxBorder(style: widget.borderStyle),
-                child: SizedBox(
-                  width: width,
-                  height: widget.entries.length,
-                  child: ListView.builder(
-                    controller: _list,
-                    selectionActive: true,
-                    itemCount: widget.entries.length,
-                    itemBuilder: (_, i, selected) {
-                      final entry = widget.entries[i];
-                      switch (entry) {
-                        case MenuSeparator():
-                          return Text('─' * width, style: widget.mutedStyle);
-                        // Every row is wrapped in its own observer — see
-                        // [_rowBounds]. A submenu reads the notifier of the row
-                        // that opened it.
-                        case MenuItem(:final label, :final enabled):
-                          final sel = enabled && selected;
-                          final child = Text(
-                            _rowText(
-                              sanitizeOptionLabel(label),
-                              selected: sel,
-                              isSub: false,
-                              hasIndicator: hasSubmenu,
-                              width: width,
-                            ),
-                            style: !enabled
-                                ? widget.mutedStyle
-                                : sel
-                                ? widget.selectionStyle
-                                : CellStyle.none,
-                          );
-                          return BoundsObserver(
-                            notifier: _boundsForRow(i),
-                            child: _semanticMenuItem(
-                              entry: entry,
-                              index: i,
-                              selected: selected,
-                              child: child,
-                            ),
-                          );
-                        case SubMenu(:final label, :final enabled):
-                          final sel = enabled && selected;
-                          final child = Text(
-                            _rowText(
-                              sanitizeOptionLabel(label),
-                              selected: sel,
-                              isSub: true,
-                              hasIndicator: hasSubmenu,
-                              width: width,
-                            ),
-                            style: !enabled
-                                ? widget.mutedStyle
-                                : sel
-                                ? widget.selectionStyle
-                                : CellStyle.none,
-                          );
-                          return BoundsObserver(
-                            notifier: _boundsForRow(i),
-                            child: _semanticMenuItem(
-                              entry: entry,
-                              index: i,
-                              selected: selected,
-                              child: child,
-                            ),
-                          );
-                      }
-                    },
+              // `framed` supplies the opaque fill and the frame, so the app
+              // underneath can't bleed through; SelectionArea.disabled says
+              // the menu rows are chrome, not copyable content.
+              child: SelectionArea.disabled(
+                child: Container.framed(
+                  border: BoxBorder(style: widget.borderStyle),
+                  child: SizedBox(
+                    width: width,
+                    height: widget.entries.length,
+                    child: ListView.builder(
+                      controller: _list,
+                      selectionActive: true,
+                      itemCount: widget.entries.length,
+                      itemBuilder: (_, i, selected) {
+                        final entry = widget.entries[i];
+                        switch (entry) {
+                          case MenuSeparator():
+                            return Text('─' * width, style: widget.mutedStyle);
+                          // Every row is wrapped in its own observer — see
+                          // [_rowBounds]. A submenu reads the notifier of the row
+                          // that opened it.
+                          case MenuItem(:final label, :final enabled):
+                            final sel = enabled && selected;
+                            final child = Text(
+                              _rowText(
+                                sanitizeOptionLabel(label),
+                                selected: sel,
+                                isSub: false,
+                                hasIndicator: hasSubmenu,
+                                width: width,
+                              ),
+                              style: !enabled
+                                  ? widget.mutedStyle
+                                  : sel
+                                  ? widget.selectionStyle
+                                  : CellStyle.none,
+                            );
+                            return BoundsObserver(
+                              notifier: _boundsForRow(i),
+                              child: _semanticMenuItem(
+                                entry: entry,
+                                index: i,
+                                selected: selected,
+                                child: child,
+                              ),
+                            );
+                          case SubMenu(:final label, :final enabled):
+                            final sel = enabled && selected;
+                            final child = Text(
+                              _rowText(
+                                sanitizeOptionLabel(label),
+                                selected: sel,
+                                isSub: true,
+                                hasIndicator: hasSubmenu,
+                                width: width,
+                              ),
+                              style: !enabled
+                                  ? widget.mutedStyle
+                                  : sel
+                                  ? widget.selectionStyle
+                                  : CellStyle.none,
+                            );
+                            return BoundsObserver(
+                              notifier: _boundsForRow(i),
+                              child: _semanticMenuItem(
+                                entry: entry,
+                                index: i,
+                                selected: selected,
+                                child: child,
+                              ),
+                            );
+                        }
+                      },
+                    ),
                   ),
                 ),
               ),

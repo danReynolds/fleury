@@ -231,10 +231,9 @@ class _ToasterState extends State<Toaster> {
                     break;
                 }
               },
-              // Popup supplies the float contract (opaque fill, frame,
-              // chrome semantics). A neutral frame — severity lives in the
-              // dot, not the border — with horizontal padding so the content
-              // breathes.
+              // Container.framed supplies the float's skin: opaque fill plus
+              // a neutral frame — severity lives in the dot, not the border —
+              // with horizontal padding so the content breathes.
               child: Container.framed(
                 border: const BoxBorder(style: BorderStyle.rounded),
                 padding: const EdgeInsets.symmetric(horizontal: 1),
@@ -244,9 +243,11 @@ class _ToasterState extends State<Toaster> {
         ],
       ),
     );
-    // Each toast is a Popup, which already carries the chrome semantics
-    // (non-selectable); the layer itself has no text of its own.
-    return layer;
+    // A toast's text is chrome, not content: it must never end up on the
+    // user's clipboard via the app's ambient selection. Stated here rather
+    // than inherited from the fact that an overlay entry happens to mount
+    // outside DefaultRootSelection.
+    return SelectionArea.disabled(child: layer);
   }
 
   SemanticState _toastSemanticState(_Toast toast) {

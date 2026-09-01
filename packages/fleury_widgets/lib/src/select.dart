@@ -1027,79 +1027,83 @@ class _SelectListState<T> extends State<_SelectList<T>> {
             child: Focus(
               focusNode: _focus,
               autofocus: true,
-              // Popup supplies the float contract: opaque fill, frame, and chrome
-              // semantics, so the app underneath can't bleed through.
-              child: Container.framed(
-                border: BoxBorder(style: widget.borderStyle),
-                child: SizedBox(
-                  width: width,
-                  height: widget.options.length,
-                  child: ListView.builder(
-                    controller: _list,
-                    selectionActive: true,
-                    itemCount: widget.options.length,
-                    itemBuilder: (_, i, selected) {
-                      final option = widget.options[i];
-                      // A width-1 marker keeps every row aligned and within the
-                      // computed panel width (a width-2 glyph would wrap).
-                      final marker = i == widget.appliedIndex ? '• ' : '  ';
-                      final safeLabel = sanitizeOptionLabel(option.label);
-                      final text = '$marker$safeLabel';
-                      final row = option.enabled
-                          ? MouseRegion(
-                              onEnter: () {
-                                if (_list.selectedIndex != i) {
-                                  _list.selectedIndex = i;
-                                }
-                              },
-                              child: GestureDetector(
-                                onTap: () => _pick(i),
-                                child: Text(
-                                  text,
-                                  style: selected
-                                      ? widget.selectionStyle
-                                      : CellStyle.none,
+              // Container.framed supplies the opaque fill and the frame, so
+              // the app underneath can't bleed through;
+              // SelectionArea.disabled says the option labels are chrome, not
+              // copyable content.
+              child: SelectionArea.disabled(
+                child: Container.framed(
+                  border: BoxBorder(style: widget.borderStyle),
+                  child: SizedBox(
+                    width: width,
+                    height: widget.options.length,
+                    child: ListView.builder(
+                      controller: _list,
+                      selectionActive: true,
+                      itemCount: widget.options.length,
+                      itemBuilder: (_, i, selected) {
+                        final option = widget.options[i];
+                        // A width-1 marker keeps every row aligned and within the
+                        // computed panel width (a width-2 glyph would wrap).
+                        final marker = i == widget.appliedIndex ? '• ' : '  ';
+                        final safeLabel = sanitizeOptionLabel(option.label);
+                        final text = '$marker$safeLabel';
+                        final row = option.enabled
+                            ? MouseRegion(
+                                onEnter: () {
+                                  if (_list.selectedIndex != i) {
+                                    _list.selectedIndex = i;
+                                  }
+                                },
+                                child: GestureDetector(
+                                  onTap: () => _pick(i),
+                                  child: Text(
+                                    text,
+                                    style: selected
+                                        ? widget.selectionStyle
+                                        : CellStyle.none,
+                                  ),
                                 ),
-                              ),
-                            )
-                          : Text(text, style: widget.mutedStyle);
-                      return Semantics(
-                        role: SemanticRole.menuItem,
-                        label: safeLabel,
-                        value: option.value,
-                        enabled: option.enabled,
-                        focused: _focus.hasFocus && selected,
-                        selected: selected,
-                        checked: i == widget.appliedIndex,
-                        actions: option.enabled
-                            ? const <SemanticAction>{
-                                SemanticAction.select,
-                                SemanticAction.activate,
-                              }
-                            : const <SemanticAction>{},
-                        state: SemanticState({
-                          'menuDepth': 0,
-                          'menuItemIndex': i,
-                          'menuItemPosition': i + 1,
-                          'menuItemCount': widget.options.length,
-                          'entryKind': 'option',
-                          'applied': i == widget.appliedIndex,
-                        }),
-                        onAction: (action) {
-                          if (!option.enabled) return;
-                          switch (action) {
-                            case SemanticAction.select:
-                            case SemanticAction.activate:
-                              _list.selectedIndex = i;
-                              _pick(i);
-                              return;
-                            case _:
-                              return;
-                          }
-                        },
-                        child: row,
-                      );
-                    },
+                              )
+                            : Text(text, style: widget.mutedStyle);
+                        return Semantics(
+                          role: SemanticRole.menuItem,
+                          label: safeLabel,
+                          value: option.value,
+                          enabled: option.enabled,
+                          focused: _focus.hasFocus && selected,
+                          selected: selected,
+                          checked: i == widget.appliedIndex,
+                          actions: option.enabled
+                              ? const <SemanticAction>{
+                                  SemanticAction.select,
+                                  SemanticAction.activate,
+                                }
+                              : const <SemanticAction>{},
+                          state: SemanticState({
+                            'menuDepth': 0,
+                            'menuItemIndex': i,
+                            'menuItemPosition': i + 1,
+                            'menuItemCount': widget.options.length,
+                            'entryKind': 'option',
+                            'applied': i == widget.appliedIndex,
+                          }),
+                          onAction: (action) {
+                            if (!option.enabled) return;
+                            switch (action) {
+                              case SemanticAction.select:
+                              case SemanticAction.activate:
+                                _list.selectedIndex = i;
+                                _pick(i);
+                                return;
+                              case _:
+                                return;
+                            }
+                          },
+                          child: row,
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),
