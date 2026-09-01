@@ -107,6 +107,16 @@ class TickerScheduler {
   /// to assert "no ticker leak."
   int get activeTickerCount => _callbacks.length;
 
+  /// Number of currently registered reassemble callbacks.
+  ///
+  /// The companion leak invariant to [activeTickerCount]: a settled
+  /// animation holds no TICK callback, so [activeTickerCount] alone reads
+  /// zero for an object that is still retained here for the life of the
+  /// scheduler. Registration is identity-based, which makes an uncached
+  /// method tear-off silently unremovable — exactly the leak this counter
+  /// exists to catch.
+  int get reassembleCallbackCount => _reassembleCallbacks.length;
+
   /// Registers [callback] to receive a clock reading on every tick.
   /// Idempotent: re-registering the same callback is a no-op.
   /// Starts the underlying periodic source if this was the first
