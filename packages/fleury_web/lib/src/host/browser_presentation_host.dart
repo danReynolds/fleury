@@ -120,6 +120,7 @@ final class BrowserPresentationHost {
     WebFocusCoordinator? focusCoordinator,
     WebHostInstrumentation instrumentation = const NoopWebHostInstrumentation(),
     SemanticFlushScheduler? semanticFlushScheduler,
+    bool captureKeyboardFromDocument = false,
   }) : _into = into,
        _surfaceElement = surfaceElement,
        _semanticElement = semanticElement,
@@ -128,7 +129,8 @@ final class BrowserPresentationHost {
        _clipboard = clipboard,
        _focusCoordinator = focusCoordinator,
        _instrumentation = instrumentation,
-       _semanticFlushScheduler = semanticFlushScheduler;
+       _semanticFlushScheduler = semanticFlushScheduler,
+       _captureKeyboardFromDocument = captureKeyboardFromDocument;
 
   final web.Element _into;
   final web.Element? _surfaceElement;
@@ -139,6 +141,11 @@ final class BrowserPresentationHost {
   final WebFocusCoordinator? _focusCoordinator;
   final WebHostInstrumentation _instrumentation;
   final SemanticFlushScheduler? _semanticFlushScheduler;
+
+  /// Whether a pointerdown anywhere in the document restores keyboard
+  /// capture. Only `fleury serve`'s page owns the whole document — an
+  /// embedded surface is a guest and recovers capture from its own host only.
+  final bool _captureKeyboardFromDocument;
 
   /// Builds the component set. Exposed separately from [attach] so tests
   /// can assert the assembly is identical across source kinds.
@@ -222,6 +229,7 @@ final class BrowserPresentationHost {
         pointerCursorResolver: semanticPresenter?.showsPointerCursorAt,
         focusCoordinator: webFocusCoordinator,
         clipboard: webClipboard,
+        captureKeyboardFromDocument: _captureKeyboardFromDocument,
       );
       return BrowserHostComponents(
         hostElement: host,

@@ -24,6 +24,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     web.Document? document,
     WebFocusCoordinator? focusCoordinator,
     Clipboard? clipboard,
+    bool captureKeyboardFromDocument = false,
   }) : _hostElement = hostElement,
        _pointerTarget = pointerTarget ?? hostElement,
        _cellMetrics = cellMetrics,
@@ -31,6 +32,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
        _textArea = textArea,
        _focusCoordinator = focusCoordinator,
        _clipboard = clipboard,
+       _captureKeyboardFromDocument = captureKeyboardFromDocument,
        _ownsTextArea = textArea == null;
 
   final web.Element _hostElement;
@@ -41,6 +43,13 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
   final web.HTMLTextAreaElement? _textArea;
   final WebFocusCoordinator? _focusCoordinator;
   final Clipboard? _clipboard;
+
+  /// Whether a pointerdown ANYWHERE in the document should re-acquire
+  /// keyboard capture. True only for `fleury serve`'s page, where the page IS
+  /// the app and its chrome (the `#status` line) lives outside the host. An
+  /// embedded surface is a guest on someone else's page: it recovers capture
+  /// from its own host, never from the rest of the document.
+  final bool _captureKeyboardFromDocument;
   final bool _ownsTextArea;
   final List<_DomListener> _listeners = [];
 
@@ -107,6 +116,20 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     _add(_pointerTarget, 'pointerleave', _handlePointerLeave);
     _add(_pointerTarget, 'click', _handleClick);
     _add(_pointerTarget, 'wheel', _handleWheel);
+    // Capture recovery, one layer out from the grid. The keyboard listeners
+    // are on the hidden textarea above, and only a pointerdown on the GRID
+    // re-focuses it — so a click on the host's own chrome (its padding ring,
+    // or any host area the grid does not cover) blurs the textarea, which
+    // sweeps held keys and drops the coordinator, and the session goes
+    // keyboard-dead with no cue until a click happens to land back on the
+    // grid. Skipped when the grid IS the host: the grid listener above
+    // already covers every pointerdown that could reach this one.
+    if (!identical(_pointerTarget, _hostElement)) {
+      _add(_hostElement, 'pointerdown', _handleCapturePointerDown);
+    }
+    if (_captureKeyboardFromDocument) {
+      _add(_document, 'pointerdown', _handleCapturePointerDown);
+    }
 
     _clearTextArea();
     textArea.focus();
@@ -512,6 +535,17 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     // will be delivered to whatever got focus, never to us.
     _sweepOpenPresses();
     _focusCoordinator?.handleBrowserFocusOut(WebFocusTarget.keyboardCapture);
+  }
+
+  /// Re-acquires keyboard capture for a pointerdown that landed outside the
+  /// cell grid (see the listener registration in [start]). Deliberately does
+  /// nothing else: this event is chrome, not app input.
+  void _handleCapturePointerDown(web.Event raw) {
+    // A cell-grid link owns its whole gesture — same exemption as
+    // [_handlePointerDown]; focusing the textarea mid-gesture could retarget
+    // the anchor's click away from the browser's native navigation.
+    if (_cellGridLinkAnchor(raw) != null) return;
+    ensureKeyboardCapture();
   }
 
   void _handlePointerDown(web.Event raw) {

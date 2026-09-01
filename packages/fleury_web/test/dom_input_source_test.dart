@@ -1878,6 +1878,172 @@ void main() {
     );
     expect((events.last as MouseEvent).kind, MouseEventKind.moved);
   });
+
+  test('a pointerdown on host chrome outside the grid keeps keyboard capture', () {
+    // The keyboard listeners live on the hidden capture textarea, and the
+    // pointerdown that re-acquires it sits on the SURFACE ROOT. On the served
+    // page the host is bigger than the grid (a padding ring, and the host
+    // element itself is focusable chrome), so a click that lands on the host
+    // but not the grid blurs the textarea — which sweeps held keys and clears
+    // the coordinator — and every keystroke is dead until a click happens to
+    // land back inside the grid. No cue, no recovery.
+    final events = <TuiEvent>[];
+    final host = web.document.createElement('div') as web.HTMLElement;
+    final surfaceRoot = web.document.createElement('div');
+    final otherInput =
+        web.document.createElement('input') as web.HTMLInputElement;
+    final textArea =
+        web.document.createElement('textarea') as web.HTMLTextAreaElement;
+    final focusCoordinator = WebFocusCoordinator();
+    host.style.setProperty('padding', '6px');
+    host.appendChild(surfaceRoot);
+    web.document.body!.appendChild(host);
+    web.document.body!.appendChild(otherInput);
+    final source = DomInputSource(
+      hostElement: host,
+      pointerTarget: surfaceRoot,
+      textArea: textArea,
+      focusCoordinator: focusCoordinator,
+      cellMetrics: _FakeMetrics(
+        const MeasuredCellBox(
+          cssCellWidth: 10,
+          cssCellHeight: 20,
+          cssCanvasWidth: 80,
+          cssCanvasHeight: 60,
+          devicePixelRatio: 1,
+          cols: 8,
+          rows: 3,
+        ),
+      ),
+    );
+    addTearDown(() {
+      source.dispose();
+      host.remove();
+      otherInput.remove();
+    });
+
+    source.start(events.add);
+    expect(web.document.activeElement, same(textArea));
+
+    // Focus goes elsewhere (the host's own chrome, a browser control): the
+    // source sweeps and drops capture.
+    otherInput.focus();
+    textArea.dispatchEvent(web.FocusEvent('focusout'));
+    expect(focusCoordinator.browserFocusTarget, isNull);
+
+    // A click on the host, outside the grid, must take capture back.
+    host.dispatchEvent(
+      web.PointerEvent(
+        'pointerdown',
+        web.PointerEventInit(
+          pointerId: 3,
+          clientX: 2,
+          clientY: 2,
+          button: 0,
+          buttons: 1,
+          bubbles: true,
+          cancelable: true,
+        ),
+      ),
+    );
+    expect(web.document.activeElement, same(textArea));
+    expect(focusCoordinator.browserFocusTarget, WebFocusTarget.keyboardCapture);
+
+    // ...and keys reach the app again.
+    textArea.dispatchEvent(
+      web.KeyboardEvent(
+        'keydown',
+        web.KeyboardEventInit(key: 'Enter', bubbles: true, cancelable: true),
+      ),
+    );
+    expect(events.whereType<KeyEvent>().last.code, KeyCode.enter);
+  });
+  test('the served page takes keyboard capture back from document chrome', () {
+    // `fleury serve`'s page has chrome OUTSIDE the host element (the #status
+    // line). The served page IS the app, so a pointerdown anywhere in it must
+    // restore capture; an embedded surface is a guest on someone else's page
+    // and must not steal focus from the rest of it.
+    final host = web.document.createElement('div') as web.HTMLElement;
+    final surfaceRoot = web.document.createElement('div');
+    final status = web.document.createElement('div');
+    final otherInput =
+        web.document.createElement('input') as web.HTMLInputElement;
+    host.appendChild(surfaceRoot);
+    web.document.body!.appendChild(host);
+    web.document.body!.appendChild(status);
+    web.document.body!.appendChild(otherInput);
+    addTearDown(() {
+      status.remove();
+      otherInput.remove();
+      host.remove();
+    });
+
+    const metrics = _FakeMetrics(
+      MeasuredCellBox(
+        cssCellWidth: 10,
+        cssCellHeight: 20,
+        cssCanvasWidth: 80,
+        cssCanvasHeight: 60,
+        devicePixelRatio: 1,
+        cols: 8,
+        rows: 3,
+      ),
+    );
+
+    void blur(web.HTMLTextAreaElement textArea) {
+      otherInput.focus();
+      textArea.dispatchEvent(web.FocusEvent('focusout'));
+    }
+
+    void clickStatus() => status.dispatchEvent(
+      web.PointerEvent(
+        'pointerdown',
+        web.PointerEventInit(
+          pointerId: 4,
+          clientX: 1,
+          clientY: 1,
+          button: 0,
+          buttons: 1,
+          bubbles: true,
+          cancelable: true,
+        ),
+      ),
+    );
+
+    final embedTextArea =
+        web.document.createElement('textarea') as web.HTMLTextAreaElement;
+    final embedded = DomInputSource(
+      hostElement: host,
+      pointerTarget: surfaceRoot,
+      textArea: embedTextArea,
+      cellMetrics: metrics,
+    );
+    addTearDown(embedded.dispose);
+    embedded.start((_) {});
+    blur(embedTextArea);
+    clickStatus();
+    expect(
+      web.document.activeElement,
+      same(otherInput),
+      reason: 'an embedded surface must not grab focus off its own host',
+    );
+    embedded.dispose();
+
+    final serveTextArea =
+        web.document.createElement('textarea') as web.HTMLTextAreaElement;
+    final served = DomInputSource(
+      hostElement: host,
+      pointerTarget: surfaceRoot,
+      textArea: serveTextArea,
+      cellMetrics: metrics,
+      captureKeyboardFromDocument: true,
+    );
+    addTearDown(served.dispose);
+    served.start((_) {});
+    blur(serveTextArea);
+    clickStatus();
+    expect(web.document.activeElement, same(serveTextArea));
+  });
 }
 
 final class _FakeClipboard extends Clipboard {
