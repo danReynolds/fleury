@@ -100,62 +100,6 @@ void main() {
   });
 
   group('mapping properties', () {
-    test('unchanged regions map by identity shift (gate 7)', () {
-      const text = 'ab $_family cd';
-      final projection = projectText(text, policy: _split);
-      // 'a' 'b' ' ' before the cluster: identity.
-      expect(projection.sourceToDisplay(0), 0);
-      expect(projection.sourceToDisplay(3), 3);
-      // After the cluster: shifted by the two dropped joiners.
-      final delta = projection.displayText.length - text.length;
-      expect(projection.sourceToDisplay(text.length), text.length + delta);
-      expect(
-        projection.displayToSource(projection.displayText.length),
-        text.length,
-      );
-    });
-
-    test('boundary round-trip preserves grapheme boundaries (gate 8)', () {
-      const text = 'ab $_family cd 🙂';
-      final projection = projectText(text, policy: _split);
-      var offset = 0;
-      for (final cluster in text.characters) {
-        final display = projection.sourceToDisplay(offset);
-        expect(
-          projection.displayToSource(display),
-          offset,
-          reason: 'boundary at $offset must survive the round trip',
-        );
-        offset += cluster.length;
-      }
-      expect(projection.sourceToDisplay(text.length), isNotNull);
-    });
-
-    test('inside a lowered cluster, affinity snaps to the boundaries', () {
-      const text = _family;
-      final projection = projectText(text, policy: _split);
-      final cluster = projection.changedClusters.single;
-      final inside =
-          cluster.displayRange.start +
-          (cluster.displayAtomRanges.first.end -
-              cluster.displayAtomRanges.first.start);
-      expect(
-        projection.displayToSource(inside),
-        cluster.sourceRange.start,
-        reason: 'upstream affinity → before the logical cluster',
-      );
-      expect(
-        projection.displayToSource(inside, downstream: true),
-        cluster.sourceRange.end,
-        reason: 'downstream affinity → after the logical cluster',
-      );
-      // No endpoint can rest inside the source cluster (decision 14).
-      expect(
-        projection.sourceToDisplay(cluster.sourceRange.start + 2),
-        cluster.displayRange.start,
-      );
-    });
-
     test('clusterAtDisplay finds the group; misses return null', () {
       const text = 'a $_family';
       final projection = projectText(text, policy: _split);

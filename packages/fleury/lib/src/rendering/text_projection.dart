@@ -46,10 +46,14 @@ final class PreparedCluster {
 /// A logical string and its display projection under one
 /// [TextPresentationPolicy].
 ///
-/// Outside [changedClusters] the mapping is the identity shifted by the
-/// cumulative length delta of preceding changes; inside one, offsets snap to
-/// the cluster's boundaries — no offset can rest inside a source cluster
-/// (RFC 0019 decision 14).
+/// [changedClusters] is the whole of the source↔display correspondence:
+/// outside those ranges display IS source, and inside one the cluster is
+/// atomic — no position may rest between its atoms (RFC 0019 decision 14).
+/// Consumers derive what they need from the ranges. Selection, the only
+/// consumer that needs source coordinates, works in the FLAT space of the
+/// wrapped lines rather than this unwrapped display space, so it projects the
+/// ranges into that space once (`RenderText.loweredGroups`) instead of
+/// converting offsets one at a time.
 final class TextProjection {
   const TextProjection._(
     this.logicalText,
@@ -72,45 +76,6 @@ final class TextProjection {
   final List<PreparedCluster> changedClusters;
 
   bool get isIdentity => changedClusters.isEmpty;
-
-  /// Maps a source boundary offset into the display string.
-  ///
-  /// Valid at source grapheme boundaries; an offset strictly inside a lowered
-  /// cluster snaps to the cluster's display start (offsets inside a source
-  /// cluster are not representable positions — decision 14).
-  int sourceToDisplay(int sourceOffset) {
-    var delta = 0;
-    for (final cluster in changedClusters) {
-      if (sourceOffset <= cluster.sourceRange.start) break;
-      if (sourceOffset < cluster.sourceRange.end) {
-        return cluster.displayRange.start;
-      }
-      delta +=
-          (cluster.displayRange.end - cluster.displayRange.start) -
-          (cluster.sourceRange.end - cluster.sourceRange.start);
-    }
-    return sourceOffset + delta;
-  }
-
-  /// Maps a display offset back to a source boundary.
-  ///
-  /// Inside a lowered cluster's display image the answer snaps to the source
-  /// cluster's start ([downstream] false) or end ([downstream] true) — the
-  /// affinity rule selection uses: upstream → before the logical cluster,
-  /// downstream → after it.
-  int displayToSource(int displayOffset, {bool downstream = false}) {
-    var delta = 0;
-    for (final cluster in changedClusters) {
-      if (displayOffset <= cluster.displayRange.start) break;
-      if (displayOffset < cluster.displayRange.end) {
-        return downstream ? cluster.sourceRange.end : cluster.sourceRange.start;
-      }
-      delta +=
-          (cluster.displayRange.end - cluster.displayRange.start) -
-          (cluster.sourceRange.end - cluster.sourceRange.start);
-    }
-    return displayOffset - delta;
-  }
 
   /// The lowered cluster whose display image contains [displayOffset], if any.
   PreparedCluster? clusterAtDisplay(int displayOffset) {
