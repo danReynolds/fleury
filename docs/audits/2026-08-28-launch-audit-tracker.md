@@ -440,11 +440,11 @@ Ordered by what I'd take first. Each names **what makes it hard**, so we can dec
   **Zero test coverage on the whole app-first axis** — no app-first case, no second-browser case, no duplicate-header case.
   **Notes:**
 
-- [ ] **13.a** `P1` ✎ One duplicate-header request kills serve, pre-auth — `bin/fleury.dart:993`
+- [x] **13.a** `P1` ✎ One duplicate-header request kills serve, pre-auth — `bin/fleury.dart:993`
   **Hard because:** ✎ **two layers are required** — reading headers as a list fixes three vectors, but the fifth (missed by the original) throws *inside* the platform library's upgrade check, which is the first statement in the socket branch. So you also need handler try/catch + a zone guard, and in spawn mode the catch must release the admission slot.
   **Judgement:** held at **P1, not P0** — drive-by unreachability was **proven in a real browser** across six vectors. But there's a **non-hostile trigger**: the docs recommend a reverse proxy, and one that *adds* rather than sets the forwarded-proto header kills serve on the first connection. Spawn-mode death leaks the spawn dir permanently; bridge-mode leak is benign.
   **Also decide:** reject an ambiguous multi-valued `Origin` outright rather than taking `.first`? (Two Origin headers is never a real browser.)
-  **Notes:**
+  **Notes:** LANDED on this branch (c3abbebf): headers read as lines (If-None-Match any-match, X-Forwarded-Proto first line, duplicate Origin fails closed), dart:io upgrade check wrapped, both handlers guarded + stream onError. Pinned by 4 raw-socket tests against a real serve process, all red without the fix.
 
 - [ ] **16.g** `P2` Satellite packages exact-pin the core version
   **Your decision, and it's hard to reverse after publish.** Ratify lockstep (and write "republish both satellites with every core release" into the launch checklist), or widen the constraint. **Open question the audit couldn't answer from that area:** does the INIT wire-version check key on the full version or only major/minor? That determines whether patch-level slack is safe.
