@@ -342,7 +342,7 @@ Ordered by what I'd take first. Each names **what makes it hard**, so we can dec
   **Measured:** 64 KiB → 254 ms, 128 KiB → 814 ms, 256 KiB → 3.1 s, 512 KiB → 12.4 s (~4× per doubling); 1 MiB segment ≈ 50 s. Starved isolate ignores **SIGINT, SIGTERM and SIGQUIT** — only SIGKILL, and nothing restores the terminal after it. Browser immune (rAF); **serve is affected**.
   **Notes:** Scheduler half LANDED on this branch (30dc8b00): re-entrant zero-delay flush → Timer (macrotask); idle path unchanged. Pinned in frame_scheduler_test (+2) and integration/frame_chain_yields_test (+2), all red without the fix. Fast gates + wire-gate pass. serve-wire-live fails identically WITHOUT the fix at load avg 117 (parallel batch runs) — re-run quiet before PR. Chunker half NOT done: one-chunk-per-pump is pinned by text_area_test:316-349, so a per-frame budget is a contract change → open question 10.
 
-- [ ] **1.b** `P0` ✎ Stale selection offsets throw on Ctrl+C and disable the exit chord — `selectable_text_mixin.dart:465`
+- [x] **1.b** `P0` ✎ Stale selection offsets throw on Ctrl+C and disable the exit chord — `selectable_text_mixin.dart:465`
   **Hard because:** the one-line clamp stops the throw but leaves the *silent* sibling — when text **grows**, the wrong characters are copied with no error at all, which is quieter and arguably worse. The real fix is to stop caching flat offsets and re-resolve from the delegate's screen coordinates on content/geometry change — which must happen **once at invalidation, never inside the per-grapheme query**, or it lands on `paint-gate`. Shares its machinery with **5.f**; design once.
   **Also decide:** whether `run_app`'s exit guard should survive *any* throwing handler (run it in a `finally`). That converts a whole future class from "unquittable" to "banner, still quits" and is worth doing independently.
   **✎ Corrections:** not permanently unquittable — a click that reaches the root selection area recovers it (but **5.b** removes that escape over most of an app). Two triggers the first pass missed: **terminal resize alone**, and `RichText`.
@@ -369,10 +369,10 @@ Ordered by what I'd take first. Each names **what makes it hard**, so we can dec
   **✎ Worse than reported:** the **selection highlight covers different characters than the selection**, so shift-select + Delete removes the wrong span. In `TextArea` the caret drifts across *rows*. Terminal is partly shielded (xterm/kitty strip C0 from paste); **serve and every programmatic write are not**.
   **Notes:**
 
-- [ ] **7.a** `P1` Cached repaint-boundary blits sever wide-glyph pairs — `cell_buffer.dart:207`
+- [x] **7.a** `P1` Cached repaint-boundary blits sever wide-glyph pairs — `cell_buffer.dart:207`
   **Hard because:** the fix mirrors an existing precedent (evict wide neighbours + widen damage ±1, as the image-placement path already does), but it's on the blit hot path and the damage-widening interacts with the derived-damage model — get it wrong and you either leave the garble or over-damage every frame. Also check the destination-clip sub-case, where clamping can slice the *source* mid-pair.
   **Scope narrowing worth knowing:** ambiguous-wide pins contain the damage and emoji always pin, so cascading drift is **CJK on probe-cleared-narrow terminals** specifically. The full-row fast path can't sever anything. **No test can reach the production overlay path** (see D2).
-  **Notes:**
+  **Notes:** LANDED on this branch (f80db6d5): edge evictions before each row copy + ±1 damage (the image-placement precedent) + source-side orphan clearing for clipped slices; fast path untouched. Pinned: 4 buffer tests + a real-widget ListView-over-CJK test, all red without the fix. wire/alloc/paint gates green.
 
 - [ ] **8.c** `P1` DataTable paints past its own box and corrupts siblings — `data_table.dart:1894`
   **Arguably P0** — writing outside your own rect breaks a framework invariant that damage tracking, repaint caches and the serve wire's damage bounds all rely on, so corruption can persist across frames. Held at P1 only because the author must under-size the table.
