@@ -346,11 +346,11 @@ Ordered by what I'd take first. Each names **what makes it hard**, so we can dec
   **Hard because:** the one-line clamp stops the throw but leaves the *silent* sibling — when text **grows**, the wrong characters are copied with no error at all, which is quieter and arguably worse. The real fix is to stop caching flat offsets and re-resolve from the delegate's screen coordinates on content/geometry change — which must happen **once at invalidation, never inside the per-grapheme query**, or it lands on `paint-gate`. Shares its machinery with **5.f**; design once.
   **Also decide:** whether `run_app`'s exit guard should survive *any* throwing handler (run it in a `finally`). That converts a whole future class from "unquittable" to "banner, still quits" and is worth doing independently.
   **✎ Corrections:** not permanently unquittable — a click that reaches the root selection area recovers it (but **5.b** removes that escape over most of an app). Two triggers the first pass missed: **terminal resize alone**, and `RichText`.
-  **Notes:**
+  **Notes:** LANDED on this branch (07a51e55): mixin keeps the screen points per edge and re-resolves them lazily when `selectionLines` identity changes (text set, resize re-wrap, policy change); offset-based edges clamp at the same choke point. Also landed the run_app exit-guard hardening (a throwing dispatch is reported and treated as `ignored`, so Ctrl+C still quits). Pinned: 5 selection tests + 1 runtime test, all red without the fix. Gates green. 5.f can build on `_relatedLines`.
 
 - [ ] **5.f** `P2` ↑ A selectable mounting mid-selection can never join it — `selection_container_delegate.dart:190`
   **Pairs with 1.b** — same invalidation machinery. ↑ Raised: not a one-frame lag; scrolling a `ListView.builder` mid-drag evaporates the whole selection. The unmount half is genuinely harder (Flutter has the same limitation) — reasonable to stop there, but **say so** rather than leaving it looking fixed. Its pinning test cannot fail as written (see D1).
-  **Notes:**
+  **Notes:** Partly unblocked by 1.b (07a51e55): the mixin now re-relates cached screen points whenever its lines change; the remaining gap is the delegate replaying edges to a selectable that had NO points yet (first paint after mount).
 
 ### C2 · Default-path correctness with a design fork
 
