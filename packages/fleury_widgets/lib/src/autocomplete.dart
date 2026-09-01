@@ -88,6 +88,14 @@ class Autocomplete<T extends Object> extends StatefulWidget {
 }
 
 class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
+  /// Cells the `› ` / `  ` selection marker takes at the head of every row.
+  static const _markerCols = 2;
+
+  /// Cells the dropdown's own frame takes (one border column per side).
+  static const _frameCols = 2;
+
+  static const _widthResolver = DefaultWidthResolver();
+
   static final TextEditingKeymap _textKeymap = TextEditingKeymap(
     List<TextEditingKeyBinding>.unmodifiable(
       TextEditingKeymap.defaultSingleLine.bindings.where(
@@ -231,7 +239,8 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
     }
     if (_entry == null) {
       final entry = OverlayEntry(
-        builder: (_) => BoundsAnchor(notifier: _bounds, child: _suggestions()),
+        builder: (context) =>
+            BoundsAnchor(notifier: _bounds, child: _suggestions(context)),
       );
       _entry = entry;
       Overlay.of(context).insert(entry);
@@ -272,12 +281,26 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
     widget.onSelect?.call(option);
   }
 
-  Widget _suggestions() {
+  Widget _suggestions(BuildContext context) {
+    // Display width, not code units: a BMP wide character (CJK, Kana, Hangul,
+    // fullwidth) is one code unit but two cells, so `length` under-sizes the
+    // box and the rows reflow into each other. Measure with the same ambient
+    // policy layout will use (RFC 0019 — one policy per geometry consumer).
+    final policy = MediaQuery.textPolicyOf(context).widths;
     var width = 0;
     for (final o in _filtered) {
-      final len = sanitizeOptionLabel(_display(o)).length;
-      if (len > width) width = len;
+      final w = _widthResolver.widthOfText(
+        sanitizeOptionLabel(_display(o)),
+        policy,
+      );
+      if (w > width) width = w;
     }
+    // A dropdown can never be wider than the surface it floats on; past that
+    // the rows elide (see the option [Text] below) instead of wrapping.
+    final maxBoxWidth = MediaQuery.sizeOf(context).cols - _frameCols;
+    var boxWidth = width + _markerCols;
+    if (boxWidth > maxBoxWidth) boxWidth = maxBoxWidth;
+    if (boxWidth < 1) boxWidth = 1;
     final height = _filtered.length > widget.maxVisible
         ? widget.maxVisible
         : _filtered.length;
@@ -314,7 +337,7 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
       child: Container(
         border: BoxBorder(style: _borderStyle),
         child: SizedBox(
-          width: width + 2,
+          width: boxWidth,
           height: height,
           child: ListView.builder(
             controller: _list,
@@ -361,6 +384,12 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
                   child: Text(
                     '${selected ? '› ' : '  '}$label',
                     style: selected ? _selectionStyle : CellStyle.none,
+                    // One row per option, always: a label too wide for the box
+                    // is cut with an ellipsis rather than wrapped into the row
+                    // that belongs to the next option.
+                    softWrap: false,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               );
