@@ -166,6 +166,39 @@ void main() {
       );
     });
 
+    test('an explicit override outranks the measurement in the report', () {
+      // RFC 0019 §6.2: FLEURY_* wins outright. The report prints the resolved
+      // capability and the resolved policy in one table, and both are now read
+      // out of the SAME derivation — so a user who forced `wide` cannot be
+      // shown a measured `narrow` above a policy block that says wide.
+      const environment = <String, String>{
+        'TERM': 'xterm-256color',
+        'FLEURY_AMBIGUOUS_WIDTH': 'wide',
+      };
+      final measured = diagnoseTerminal(
+        FakeTerminalDriver(
+          size: const CellSize(80, 24),
+          capabilities: detectTerminalCapabilitiesFromEnvironment(environment),
+        ),
+        environment: environment,
+      ).withMeasuredWidths(
+        WidthMeasurements.of(const {
+          'boxDrawing': 1,
+          'greekAlpha': 1,
+          'degreeSign': 1,
+        }),
+        environment: environment,
+      );
+
+      final policy = measured.widthPolicy!;
+      expect(measured.capabilities.ambiguousCharWidth, AmbiguousCharWidth.wide);
+      expect(policy.policy.widths.ambiguous, CellWidth.two);
+      expect(
+        policy.sourceOf(WidthAxis.ambiguous),
+        WidthDecisionSource.environment,
+      );
+    });
+
     test('diagnoses the multiplexer image fallback explicitly', () {
       const environment = <String, String>{
         'TERM': 'tmux-256color',

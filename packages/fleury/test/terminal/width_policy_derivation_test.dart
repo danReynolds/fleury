@@ -134,6 +134,101 @@ void main() {
     });
   });
 
+  group('the renderer pin gate reads the resolved axis (decision 9)', () {
+    // `pinsAmbiguousWidth` IS what runApp passes as
+    // `AnsiRenderer.ambiguousCharsAreWide`. It used to be derived from the
+    // legacy `capabilities.ambiguousCharWidth` boolean instead, which meant
+    // the renderer's answer and layout's answer came from two rules that
+    // merely happened to agree in all four states. These pin the one rule.
+
+    test('an evidenced narrow ambiguous axis disengages the pin', () {
+      expect(
+        deriveTextPresentationPolicy(
+          measurements: _joining,
+        ).pinsAmbiguousWidth,
+        isFalse,
+        reason: 'probe agreement on 1 cell is evidence',
+      );
+      expect(
+        deriveTextPresentationPolicy(
+          environment: const {'FLEURY_AMBIGUOUS_WIDTH': 'narrow'},
+        ).pinsAmbiguousWidth,
+        isFalse,
+        reason: 'an explicit override is evidence',
+      );
+    });
+
+    test('a wide ambiguous axis keeps the pin engaged', () {
+      expect(
+        deriveTextPresentationPolicy(
+          measurements: _measure(const {
+            'boxDrawing': 2,
+            'greekAlpha': 2,
+            'degreeSign': 2,
+          }),
+        ).pinsAmbiguousWidth,
+        isTrue,
+      );
+      expect(
+        deriveTextPresentationPolicy(
+          environment: const {'FLEURY_AMBIGUOUS_WIDTH': 'wide'},
+        ).pinsAmbiguousWidth,
+        isTrue,
+      );
+    });
+
+    test('unknown keeps the pin engaged — a default is not evidence', () {
+      // The state the old boolean got right only by accident: it defaulted to
+      // `wide`, while the policy's ambiguous axis defaults to `one`. Reading
+      // the width alone would have DISENGAGED the pin on every unprobed
+      // terminal, which is the "Warp garble" this net exists for.
+      expect(
+        deriveTextPresentationPolicy().pinsAmbiguousWidth,
+        isTrue,
+        reason: 'nothing was measured or declared',
+      );
+      final disagreeing = deriveTextPresentationPolicy(
+        measurements: _measure(const {'greekAlpha': 2, 'degreeSign': 2}),
+      );
+      expect(disagreeing.policy.widths.ambiguous, CellWidth.one);
+      expect(
+        disagreeing.pinsAmbiguousWidth,
+        isTrue,
+        reason: 'disagreement resolves narrow for LAYOUT but is not evidence',
+      );
+    });
+
+    test('the reported capability is read out of the same policy', () {
+      // `evidencedAmbiguousCharWidth` and `pinsAmbiguousWidth` are two views
+      // of one derivation, so `fleury diagnose` cannot print a width the
+      // renderer contradicts.
+      for (final resolved in <ResolvedTextPresentationPolicy>[
+        deriveTextPresentationPolicy(),
+        deriveTextPresentationPolicy(measurements: _joining),
+        deriveTextPresentationPolicy(
+          measurements: _measure(const {
+            'boxDrawing': 2,
+            'greekAlpha': 2,
+            'degreeSign': 2,
+          }),
+        ),
+        deriveTextPresentationPolicy(
+          environment: const {'FLEURY_AMBIGUOUS_WIDTH': 'narrow'},
+        ),
+        deriveTextPresentationPolicy(
+          environment: const {'FLEURY_AMBIGUOUS_WIDTH': 'wide'},
+        ),
+      ]) {
+        final reported = evidencedAmbiguousCharWidth(resolved);
+        expect(
+          resolved.pinsAmbiguousWidth,
+          reported != AmbiguousCharWidth.narrow,
+          reason: 'pin engaged exactly when the report is not a proven narrow',
+        );
+      }
+    });
+  });
+
   group('deriveTextPresentationPolicy — lowering', () {
     test('joining terminal: preserve, evidenced', () {
       final resolved = deriveTextPresentationPolicy(measurements: _joining);

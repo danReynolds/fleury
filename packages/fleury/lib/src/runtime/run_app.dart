@@ -1024,8 +1024,10 @@ Future<AppExit> _runAppImpl(
             renderer = AnsiRenderer(
               colorMode: capabilities.colorMode,
               synchronizedOutput: ansi.synchronizedOutput,
-              ambiguousCharsAreWide:
-                  capabilities.ambiguousCharWidth == AmbiguousCharWidth.wide,
+              // RFC 0019 decision 9: the pin keys off the RESOLVED ambiguous
+              // axis — the same policy layout measures with — not a passively
+              // defaulted capability field.
+              ambiguousCharsAreWide: capabilities.textPolicy.pinsAmbiguousWidth,
               hyperlinks: capabilities.hyperlinks,
             );
           case final StructuredTerminalPresentation structured:

@@ -473,6 +473,100 @@ void main() {
       focus.dispose();
     });
 
+    testWidgets(
+      'builder without a focus destination is reported, not silently ignored',
+      (tester) async {
+        // A builder field installs no FormControlScope, so nothing inside it
+        // can claim the field. Omitting focusNode leaves `focusNode` pointing
+        // at an owned node attached to no Focus widget, and requestFocus on an
+        // unattached node no-ops: the form's first-invalid-focus promise fails
+        // with no throw, no blur and no visible symptom. Debug builds say so.
+        final controller = FormController();
+        Object? captured;
+        await runZonedGuarded<Future<void>>(() async {
+          tester.pumpWidget(
+            Form(
+              controller: controller,
+              onSubmit: () {},
+              child: FormField.builder(
+                validator: () => 'Choose a range.',
+                builder: (context, field) => const Text('range'),
+              ),
+            ),
+          );
+          expect(await _validate(tester, controller), isFalse);
+          await Future<void>.delayed(Duration.zero);
+        }, (error, _) => captured = error);
+
+        expect(captured, isA<StateError>());
+        expect('$captured', contains('no focus destination'));
+        expect('$captured', contains('FormField.builder(focusNode: ...)'));
+
+        tester.pumpWidget(const Text('gone'));
+        controller.dispose();
+      },
+    );
+
+    testWidgets('a builder that can be focused is never reported', (
+      tester,
+    ) async {
+      // The other half of the assert: a builder field that supplies its focus
+      // destination validates first-invalid focus for real, and stays silent.
+      final controller = FormController();
+      final focus = FocusNode(debugLabel: 'range');
+      Object? captured;
+      await runZonedGuarded<Future<void>>(() async {
+        tester.pumpWidget(
+          Form(
+            controller: controller,
+            onSubmit: () {},
+            child: FormField.builder(
+              focusNode: focus,
+              validator: () => 'Choose a range.',
+              builder: (context, field) =>
+                  Focus(focusNode: focus, child: const Text('range')),
+            ),
+          ),
+        );
+        expect(await _validate(tester, controller), isFalse);
+        await Future<void>.delayed(Duration.zero);
+      }, (error, _) => captured = error);
+
+      expect(captured, isNull);
+      expect(focus.hasFocus, isTrue);
+
+      tester.pumpWidget(const Text('gone'));
+      controller.dispose();
+      focus.dispose();
+    });
+
+    testWidgets('a valid builder field is never reported', (tester) async {
+      // The check is scoped to the field validation actually wanted to focus.
+      // A builder field that passes never breaks the promise, so it must not
+      // be nagged for omitting a destination it will never use.
+      final controller = FormController();
+      Object? captured;
+      await runZonedGuarded<Future<void>>(() async {
+        tester.pumpWidget(
+          Form(
+            controller: controller,
+            onSubmit: () {},
+            child: FormField.builder(
+              validator: () => null,
+              builder: (context, field) => const Text('range'),
+            ),
+          ),
+        );
+        expect(await _validate(tester, controller), isTrue);
+        await Future<void>.delayed(Duration.zero);
+      }, (error, _) => captured = error);
+
+      expect(captured, isNull);
+
+      tester.pumpWidget(const Text('gone'));
+      controller.dispose();
+    });
+
     testWidgets('nested forms validate independently', (tester) async {
       final outer = FormController();
       final inner = FormController();

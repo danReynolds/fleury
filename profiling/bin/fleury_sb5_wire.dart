@@ -91,8 +91,10 @@ final class _WireTerminalDriver implements TerminalDriver {
   TerminalCapabilities get capabilities =>
       // Models a modern terminal (ambiguous glyphs one column wide), matching
       // the shared WireTerminalDriver and the wire-gate baseline conditions.
-      detectTerminalCapabilitiesFromEnvironment(Platform.environment)
-          .copyWith(ambiguousCharWidth: AmbiguousCharWidth.narrow);
+      // Declared through the environment so the whole capability — the
+      // reported width AND the derived policy the renderer's pin gate reads —
+      // comes from one derivation, exactly as a real session's would.
+      detectTerminalCapabilitiesFromEnvironment(_narrowAmbiguousEnvironment);
 
   @override
   Stream<TuiEvent> get events => _events.stream;
@@ -284,3 +286,12 @@ int _markdownChunkCountFor(int rowCount) {
   if (scaled > 1024) return 1024;
   return scaled;
 }
+
+/// `Platform.environment` with the ambiguous-width axis declared narrow.
+///
+/// One input, so [detectTerminalCapabilitiesFromEnvironment] settles the
+/// reported `ambiguousCharWidth` and the derived text policy together.
+Map<String, String> get _narrowAmbiguousEnvironment => <String, String>{
+  ...Platform.environment,
+  'FLEURY_AMBIGUOUS_WIDTH': 'narrow',
+};

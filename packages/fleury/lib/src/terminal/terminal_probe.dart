@@ -239,34 +239,24 @@ Future<bool> probeSynchronizedOutput(
 /// Actively measures whether the terminal renders East-Asian *Ambiguous*-width
 /// glyphs as one column or two.
 ///
-/// Delegates to the batched [probeGlyphWidths] and answers from the
-/// ambiguous-class representatives under RFC 0019's agreement rule: narrow
-/// only when every representative measured 1, wide only when every one
-/// measured ≥ 2, and null on any disagreement, anomaly, or missing reply — a
-/// single glyph is a signal, not proof, and box drawing in particular is the
-/// character a terminal is most likely to special-case narrow (grids must
-/// work) while rendering the rest of the Ambiguous class wide. Null keeps the
-/// caller's safe (defensive) default. This is the same cursor-measurement
-/// trick vim's `t_u7` uses to auto-set `ambiwidth`.
+/// Delegates to the batched [probeGlyphWidths], then reads the answer out of
+/// the one derived policy ([deriveTextPresentationPolicy] +
+/// [evidencedAmbiguousCharWidth]) rather than re-applying the agreement rule
+/// here: narrow only when every representative measured 1, wide only when
+/// every one measured ≥ 2, and null on any disagreement, anomaly, or missing
+/// reply — a single glyph is a signal, not proof, and box drawing in
+/// particular is the character a terminal is most likely to special-case
+/// narrow (grids must work) while rendering the rest of the Ambiguous class
+/// wide. Null keeps the caller's safe (defensive) default. This is the same
+/// cursor-measurement trick vim's `t_u7` uses to auto-set `ambiwidth`.
 Future<AmbiguousCharWidth?> probeAmbiguousWidth(
   TerminalProbeTransport transport, {
   Duration timeout = const Duration(milliseconds: 150),
 }) async {
   final measured = await probeGlyphWidths(transport, timeout: timeout);
-  return ambiguousWidthFromMeasurements(measured);
-}
-
-/// The agreement-rule derivation shared by [probeAmbiguousWidth], the POSIX
-/// driver, and `fleury diagnose`: one answer for the ambiguous axis, or null
-/// when the evidence doesn't agree.
-AmbiguousCharWidth? ambiguousWidthFromMeasurements(
-  WidthMeasurements measurements,
-) {
-  final widths = measurements.widthsIn(WidthProbeClass.ambiguous);
-  if (widths.isEmpty || widths.any((w) => w == null)) return null;
-  if (widths.every((w) => w == 1)) return AmbiguousCharWidth.narrow;
-  if (widths.every((w) => w! >= 2)) return AmbiguousCharWidth.wide;
-  return null; // Disagreement — conservative, keep the default.
+  return evidencedAmbiguousCharWidth(
+    deriveTextPresentationPolicy(measurements: measured),
+  );
 }
 
 /// The width-disagreement class a probe glyph represents. Classes are

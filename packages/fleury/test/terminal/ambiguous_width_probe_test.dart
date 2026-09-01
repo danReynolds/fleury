@@ -128,38 +128,61 @@ void main() {
     });
   });
 
-  group('ambiguousWidthFromMeasurements', () {
+  group('evidencedAmbiguousCharWidth', () {
+    // The agreement rule has exactly one implementation
+    // (deriveTextPresentationPolicy); this reads its verdict back out as the
+    // legacy two-state capability. `ambiguousWidthFromMeasurements` used to
+    // re-derive the same rule beside it, which is how the renderer's pin gate
+    // and the reported width could have drifted apart.
+    AmbiguousCharWidth? forWidths(Map<String, int> widths) =>
+        evidencedAmbiguousCharWidth(
+          deriveTextPresentationPolicy(
+            measurements: WidthMeasurements.of(widths),
+          ),
+        );
+
     test('derives from measurements without a transport', () {
       expect(
-        ambiguousWidthFromMeasurements(
-          WidthMeasurements.of(const {
-            'boxDrawing': 1,
-            'greekAlpha': 1,
-            'degreeSign': 1,
-          }),
+        forWidths(const {'boxDrawing': 1, 'greekAlpha': 1, 'degreeSign': 1}),
+        AmbiguousCharWidth.narrow,
+      );
+      expect(
+        forWidths(const {'boxDrawing': 2, 'greekAlpha': 2, 'degreeSign': 2}),
+        AmbiguousCharWidth.wide,
+      );
+      expect(
+        evidencedAmbiguousCharWidth(deriveTextPresentationPolicy()),
+        isNull,
+        reason: 'the spec default is not evidence',
+      );
+      expect(
+        forWidths(const {'boxDrawing': 1}),
+        isNull,
+        reason: 'missing representatives block agreement',
+      );
+      expect(
+        forWidths(const {'boxDrawing': 1, 'greekAlpha': 2, 'degreeSign': 1}),
+        isNull,
+        reason: 'disagreement is unknown, never a guess',
+      );
+    });
+
+    test('an environment override is evidence too', () {
+      expect(
+        evidencedAmbiguousCharWidth(
+          deriveTextPresentationPolicy(
+            environment: const {'FLEURY_AMBIGUOUS_WIDTH': 'narrow'},
+          ),
         ),
         AmbiguousCharWidth.narrow,
       );
       expect(
-        ambiguousWidthFromMeasurements(
-          WidthMeasurements.of(const {
-            'boxDrawing': 2,
-            'greekAlpha': 2,
-            'degreeSign': 2,
-          }),
+        evidencedAmbiguousCharWidth(
+          deriveTextPresentationPolicy(
+            environment: const {'FLEURY_AMBIGUOUS_WIDTH': 'wide'},
+          ),
         ),
         AmbiguousCharWidth.wide,
-      );
-      expect(
-        ambiguousWidthFromMeasurements(const WidthMeasurements.empty()),
-        isNull,
-      );
-      expect(
-        ambiguousWidthFromMeasurements(
-          WidthMeasurements.of(const {'boxDrawing': 1}),
-        ),
-        isNull,
-        reason: 'missing representatives block agreement',
       );
     });
   });

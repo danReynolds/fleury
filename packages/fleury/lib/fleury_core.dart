@@ -218,6 +218,7 @@ export 'src/terminal/capabilities.dart'
         detectEmojiWidthFromEnvironment,
         detectVs16WidthFromEnvironment,
         deriveTextPresentationPolicy,
+        evidencedAmbiguousCharWidth,
         parseEnvFlag;
 export 'src/terminal/capability_requirements.dart'
     show
@@ -255,7 +256,6 @@ export 'src/terminal/terminal_probe.dart'
         WidthProbeClass,
         WidthProbeGlyph,
         widthProbeBattery,
-        ambiguousWidthFromMeasurements,
         TerminalProbeReport,
         TerminalProbeResult,
         TerminalProbeStatus,

@@ -37,11 +37,17 @@ enum ImageProtocol {
 ///
 /// Fleury lays them out as one column. When a terminal renders them two columns
 /// wide, its cursor advances further than Fleury's model and rows desync (the
-/// "Warp garble"). Detected by the internal opt-in startup Cursor-Position
-/// probe (`probeAmbiguousWidth`); [wide] is the safe default when unknown, so the
-/// renderer defensively pins each ambiguous cell with an absolute reposition —
-/// correct on any terminal, at a per-cell cursor-byte cost. A confirmed [narrow]
-/// lets the renderer emit compact contiguous runs instead.
+/// "Warp garble"). [wide] is the safe answer when unknown: the renderer
+/// defensively pins each ambiguous cell with an absolute reposition — correct
+/// on any terminal, at a per-cell cursor-byte cost — and a confirmed [narrow]
+/// lets it emit compact contiguous runs instead.
+///
+/// This enum is the REPORTED form of that answer (`fleury diagnose`, the
+/// capability snapshot). Nothing in the render path reads it: the pin gate and
+/// layout both key off the resolved width policy
+/// (`ResolvedTextPresentationPolicy.pinsAmbiguousWidth`), and this value is
+/// read back out of that same policy by [evidencedAmbiguousCharWidth], so the
+/// report can never contradict what was drawn.
 enum AmbiguousCharWidth { narrow, wide }
 
 /// Static snapshot of what the terminal supports.
@@ -83,8 +89,10 @@ final class TerminalCapabilities {
   /// pane transitions. Explicit custom drivers retain control of this value.
   final bool tmuxPassthrough;
 
-  /// How the terminal sizes ambiguous-width glyphs. Defaults to the safe
-  /// [AmbiguousCharWidth.wide] until a startup probe confirms otherwise.
+  /// How the terminal sizes ambiguous-width glyphs, as reported. Defaults to
+  /// the safe [AmbiguousCharWidth.wide] until a startup probe or an explicit
+  /// override settles it in [textPolicy], which is what geometry and the
+  /// renderer actually read (see [AmbiguousCharWidth]).
   final AmbiguousCharWidth ambiguousCharWidth;
 
   /// What the startup probe measured this terminal ACTUALLY drawing, per
@@ -489,6 +497,29 @@ ResolvedTextPresentationPolicy deriveTextPresentationPolicy({
     policy: TextPresentationPolicy(widths: widths, lowering: lowering),
     decisions: Map.unmodifiable(decisions),
   );
+}
+
+/// [resolved]'s ambiguous axis as the two-state [AmbiguousCharWidth], or null
+/// when nothing settled it.
+///
+/// The ONE place a resolved policy becomes the legacy capability answer.
+/// [deriveTextPresentationPolicy] owns the agreement rule — all measured 1, or
+/// all measured ≥ 2, else unknown — and everything that used to re-derive
+/// "narrow or wide?" from raw [WidthMeasurements] now reads it back out
+/// through here instead, so the renderer's pin gate, layout, and
+/// `fleury diagnose` cannot drift apart.
+///
+/// Null means the axis rests on the spec default (RFC 0019 §6.3's `unknown`):
+/// callers keep whatever conservative value they already had rather than
+/// treating "not measured" as "measured narrow".
+AmbiguousCharWidth? evidencedAmbiguousCharWidth(
+  ResolvedTextPresentationPolicy resolved,
+) {
+  if (!resolved.isEvidenced(WidthAxis.ambiguous)) return null;
+  return switch (resolved.policy.widths.ambiguous) {
+    CellWidth.one => AmbiguousCharWidth.narrow,
+    CellWidth.two => AmbiguousCharWidth.wide,
+  };
 }
 
 /// The measured lowering observation → action, or null when unknown.

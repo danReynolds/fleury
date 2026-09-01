@@ -208,6 +208,12 @@ FormField.builder(
 )
 ```
 
+The focus destination is not optional. A builder field is the one field the
+form cannot discover a control inside, so without a `focusNode` attached to a
+focusable widget there is nothing for first-invalid focus to move to. Debug
+builds report that as an error the first time such a field is the first invalid
+one, instead of skipping the focus move silently.
+
 ### Multi-screen flows
 
 Forms do not impose a wizard abstraction. Keep the values in the parent state,

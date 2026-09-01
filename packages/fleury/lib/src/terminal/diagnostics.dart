@@ -438,13 +438,18 @@ final class TerminalDiagnosis {
     WidthMeasurements measured, {
     Map<String, String> environment = const <String, String>{},
   }) {
-    // A measurement outranks the passive default it was taken to settle. The
-    // driver resolves ambiguousCharWidth the same way at startup; without the
-    // same derivation here the report contradicted itself, printing
-    // "Ambiguous width: wide" (the conservative default, because diagnose never
-    // enters the terminal) directly above a measured 1 cell. Same agreement
-    // rule as the driver: all representatives or nothing.
-    final ambiguous = ambiguousWidthFromMeasurements(measured);
+    // A measurement outranks the passive default it was taken to settle.
+    // Without that, the report contradicted itself: "Ambiguous width: wide"
+    // (the conservative default, because diagnose never enters the terminal)
+    // printed directly above a measured 1 cell. Both halves of the report now
+    // come out of ONE derived policy — the same call the driver makes at
+    // startup — so the printed capability and the printed policy are the same
+    // answer by construction, not by two rules agreeing.
+    final widthPolicy = deriveTextPresentationPolicy(
+      measurements: measured,
+      environment: environment,
+    );
+    final ambiguous = evidencedAmbiguousCharWidth(widthPolicy);
     final resolved = ambiguous == null
         ? capabilities.toCapabilities()
         : capabilities.toCapabilities().copyWith(ambiguousCharWidth: ambiguous);
@@ -462,10 +467,7 @@ final class TerminalDiagnosis {
       unsupportedFeatures: unsupportedFeatures,
       activeProbes: activeProbes,
       compatibility: compatibility,
-      widthPolicy: deriveTextPresentationPolicy(
-        measurements: measured,
-        environment: environment,
-      ),
+      widthPolicy: widthPolicy,
     );
   }
 

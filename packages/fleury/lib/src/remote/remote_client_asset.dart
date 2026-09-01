@@ -5217,7 +5217,7 @@ const String _remoteClientJsBase64 =
 /// SDK-independent fingerprint of the client's source closure at build time.
 /// The freshness gate compares this instead of the compiled bytes (which vary
 /// by SDK). Regenerated with the bundle.
-const String remoteClientSourceFingerprint = '7e30587a9d3da541';
+const String remoteClientSourceFingerprint = '0526c86799f5e92f';
 
 /// The compiled client JavaScript bytes.
 Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);

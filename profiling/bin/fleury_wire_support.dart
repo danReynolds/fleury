@@ -27,8 +27,13 @@ final class WireTerminalDriver implements TerminalDriver {
       // which the wire-gate baseline was captured. The renderer emits compact
       // contiguous runs, not the defensive per-cell repositioning it falls back
       // to when a terminal's ambiguous width is unknown.
-      detectTerminalCapabilitiesFromEnvironment(Platform.environment)
-          .copyWith(ambiguousCharWidth: AmbiguousCharWidth.narrow);
+      //
+      // Declared through the environment rather than patched onto the
+      // capability afterwards: the renderer's pin gate reads the DERIVED width
+      // policy (RFC 0019 decision 9), and an override that never reached that
+      // derivation would read as "nobody settled this axis" and keep the pin
+      // engaged — silently changing what this harness measures.
+      detectTerminalCapabilitiesFromEnvironment(_narrowAmbiguousEnvironment);
 
   @override
   Stream<TuiEvent> get events => _events.stream;
@@ -92,3 +97,12 @@ int positiveInt(String arg, String prefix) {
 }
 
 int? _envInt(String name) => int.tryParse(Platform.environment[name] ?? '');
+
+/// `Platform.environment` with the ambiguous-width axis declared narrow.
+///
+/// One input, so [detectTerminalCapabilitiesFromEnvironment] settles the
+/// reported `ambiguousCharWidth` and the derived text policy together.
+Map<String, String> get _narrowAmbiguousEnvironment => <String, String>{
+  ...Platform.environment,
+  'FLEURY_AMBIGUOUS_WIDTH': 'narrow',
+};
