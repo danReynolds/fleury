@@ -2,22 +2,27 @@
 //
 // A floating overlay composites over whatever is already painted — cells are
 // not auto-cleared — so any cell inside its frame that the overlay does not
-// write itself shows the app underneath. That is what `Surface` is for, and
-// every stock float sits on one.
+// write itself shows the app underneath. That is what `Container.framed` is
+// for (opaque fill AND frame), and every stock float sits on one.
 //
 // The leak is invisible until an overlay has an interior cell it doesn't
 // write, so each case here is built to HAVE one:
 //   - a tooltip whose message wraps (the last line is short),
-//   - a select / menu / completion list whose entries differ in length (the
-//     short rows have trailing interior cells),
-//   - a command palette, whose query row is narrower than the palette.
+//   - a select / menu / completion / autocomplete list whose entries differ in
+//     length (the short rows have trailing interior cells),
+//   - a command palette, whose query row is narrower than the palette,
+//   - the ColorPicker's hex popover, whose label row is shorter than its
+//     12-cell field.
 //
-// All of those except Menu were verified to FAIL when their Surface is taken
+// All of those except Menu were verified to FAIL when their fill is taken
 // away — i.e. they were really leaking. Menu is the exception: `_rowText` pads
-// every row to the full width already, so it cannot bleed today and its
-// Surface is belt-and-braces. Its case is kept anyway because what's asserted
-// is the user-visible invariant (nothing shows through), not the mechanism —
-// it stays honest if that padding is ever dropped.
+// every row to the full width already, so it cannot bleed today and its fill
+// is belt-and-braces. Its case is kept anyway because what's asserted is the
+// user-visible invariant (nothing shows through), not the mechanism — it stays
+// honest if that padding is ever dropped.
+//
+// Autocomplete and the ColorPicker hex popover are the two that this file used
+// to MISS, and both were leaking when they were added.
 //
 // The method: paint a wall of `X` behind the overlay, then require the cells
 // between its frame edges to be free of `X`. `_interior` does that per row.
@@ -140,6 +145,37 @@ void main() {
     tester.render(size: _size);
     tester.press(KeySequence.enter); // open the menu
     _expectOpaque(tester, showing: 'Duplicate file');
+  });
+
+  testWidgets('an open Autocomplete dropdown is opaque', (tester) {
+    tester.pumpWidget(
+      _wall(
+        Autocomplete<String>(
+          options: const ['checkout', 'ci'], // short row → interior cells
+          autofocus: true,
+        ),
+      ),
+    );
+    tester.render(size: _size);
+    tester.type('c');
+    _expectOpaque(tester, showing: 'checkout');
+  });
+
+  testWidgets("the ColorPicker's hex popover is opaque", (tester) {
+    tester.pumpWidget(
+      _wall(
+        ColorPicker(
+          value: const AnsiColor(1),
+          columns: 4,
+          autofocus: true,
+          onChanged: (_) {},
+        ),
+      ),
+    );
+    tester.render(size: _size);
+    tester.type('#'); // open the hex-entry popover
+    tester.pump();
+    _expectOpaque(tester, showing: 'Hex code');
   });
 
   testWidgets('a CommandPalette is opaque', (tester) {
