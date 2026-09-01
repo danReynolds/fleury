@@ -176,6 +176,18 @@ When the child exits for real — quit, `Ctrl+C`, a crash — the supervisor
 mirrors its exit code, so scripts and CI see exactly what they'd see without
 it.
 
+**Your `main()` runs twice.** The supervisor *is* your entrypoint, parked
+inside `runApp`; the app is a second process running the same entrypoint. So
+everything in `main()` before `runApp` executes in both — once in the
+supervisor, once in the app. Code that must happen exactly once (binding a
+port, taking a lock, subscribing to stdin, writing a pid file) fails or
+double-runs in the second process. Keep it after `runApp`, guard it with an
+environment check, or run without the supervisor (`FLEURY_HOT_RELOAD=0`, or
+`enableHotReload: false`). The generated scaffold's `main()` is just the
+`runApp` call, so this only matters once you add startup work — and the
+supervisor prints a hint when the first app process exits non-zero within two
+seconds of starting.
+
 ## Troubleshooting
 
 **Nothing happens when I save** — In a plain `dart run`: check you're on a
@@ -186,6 +198,11 @@ Reload** from the command palette, or set `dart.hotReloadOnSave:
 
 **Reload succeeds but the UI doesn't update** — Check `enableHotReload: true`
 (the default) in your `runApp` call.
+
+**The app exits right away under `dart run`, but not with `FLEURY_HOT_RELOAD=0`**
+— Startup work before `runApp` ran twice (see *How it works*): the supervisor
+already bound the port / took the lock / consumed stdin, and the app process
+found it taken. Move that work after `runApp` or guard it.
 
 **"isolate reload failed: missing fields"** — You added a non-nullable field
 to a `State` class without a default; the live instance can't be migrated.

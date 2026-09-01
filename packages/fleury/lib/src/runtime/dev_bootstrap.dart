@@ -184,6 +184,11 @@ final class DevBootstrap {
 
   VmService? _vm;
   Process? _child;
+
+  /// When the current child was spawned and how many have been — the
+  /// inputs of [devEarlyExitHint].
+  DateTime _childSpawnedAt = DateTime.now();
+  int _childCount = 0;
   String? _mainIsolateId;
   SourceWatcher? _watcher;
   final List<StreamSubscription<ProcessSignal>> _signalSubs = [];
@@ -388,6 +393,12 @@ final class DevBootstrap {
         // translate to the conventional 128+n so callers see e.g. 130, and a
         // signal-killed child may have died raw — restore before leaving.
         await _dispose();
+        final hint = devEarlyExitHint(
+          code: code,
+          uptime: DateTime.now().difference(_childSpawnedAt),
+          firstChild: _childCount == 1,
+        );
+        if (hint != null) stderr.writeln(hint);
         if (code < 0) {
           await _emergencyTtyRestore();
           exit(128 - code);
@@ -481,6 +492,8 @@ final class DevBootstrap {
       return false;
     }
     _child = child;
+    _childSpawnedAt = DateTime.now();
+    _childCount++;
     final uri = await _readServiceInfo(infoFile, child);
     if (uri == null) {
       _debugLog('child service info never appeared');
@@ -939,4 +952,33 @@ final class InAppDevReload {
     await _watcher.dispose();
     await _vm.dispose();
   }
+}
+
+/// The stderr hint for a first app process that died almost immediately
+/// under the supervisor, or null when the exit does not look like that.
+///
+/// The supervisor IS the user's entrypoint, parked inside `runApp`; the app
+/// is a second process running the same entrypoint, so everything in `main()`
+/// before `runApp` runs twice. Startup work that can only happen once — bind
+/// a port, take a lock, consume stdin — fails in the second process, on the
+/// first day a user adds such work and with nothing pointing at hot reload.
+/// A non-zero exit within [earlyExitWindow] of the FIRST spawn is the
+/// signature; later children (restarts) and clean exits are not.
+@visibleForTesting
+String? devEarlyExitHint({
+  required int code,
+  required Duration uptime,
+  required bool firstChild,
+  Duration earlyExitWindow = const Duration(seconds: 2),
+}) {
+  if (!firstChild || code <= 0 || uptime > earlyExitWindow) return null;
+  return 'fleury: the app exited with code $code '
+      '${uptime.inMilliseconds} ms after starting under the hot-reload '
+      'supervisor.\n'
+      '  Everything in main() before runApp() runs in BOTH the supervisor '
+      'and the app process it spawns; work that can only happen once '
+      '(bind a port, take a lock, read stdin) fails in the second.\n'
+      '  Move it after runApp(), guard it, or run without the supervisor: '
+      'FLEURY_HOT_RELOAD=0, or enableHotReload: false. '
+      '(hot-reload guide → "How it works")';
 }
