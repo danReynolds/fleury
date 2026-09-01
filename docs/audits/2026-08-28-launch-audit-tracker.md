@@ -462,9 +462,9 @@ Ordered by what I'd take first. Each names **what makes it hard**, so we can dec
   **Timing:** the generated scaffold is safe today (`main` is just the run call), so launch day is fine. It breaks the first day a user adds startup work — bind a port, take a lock, subscribe to stdin — which is also the day they're least likely to suspect the framework.
   **Notes:**
 
-- [ ] **15.b** `P1` VM options silently dropped on the supervised respawn — `dev_bootstrap.dart:84`
+- [x] **15.b** `P1` VM options silently dropped on the supervised respawn — `dev_bootstrap.dart:84`
   **Nearly mechanical — flagged only for the deny-list call:** replay `Platform.executableArguments`, but drop the tooling's injected internals and anything colliding with the service setup. Open: are those internal flag names stable enough across SDKs to deny-list, or should it be an allow-list? `--define` and `--enable-asserts` both verified lost. Worth documenting that `DART_VM_OPTIONS` survives as an escape hatch.
-  **Notes:**
+  **Notes:** LANDED on this branch (a55d068c): replayableVmOptions filter (drops dart run bookkeeping + service-owned flags), replayed ahead of the supervisor flags; 4 new gate tests. Open: DART_VM_OPTIONS already survived via env — worth a doc line.
 
 ---
 
