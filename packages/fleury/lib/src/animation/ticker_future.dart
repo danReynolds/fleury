@@ -1,4 +1,4 @@
-// TickerFuture: the result type for Animation.to / loop / run.
+// TickerFuture<T>: the result type for Animation.to / loop.
 //
 // Implements Future<void> directly so the common case reads
 // naturally:
@@ -21,6 +21,9 @@
 
 import 'dart:async';
 
+import 'curves.dart';
+import 'spring.dart';
+
 /// Thrown by [TickerFuture.orCancel] when the animation it
 /// represents is cancelled before reaching its natural end.
 class TickerCanceled implements Exception {
@@ -30,35 +33,81 @@ class TickerCanceled implements Exception {
   String toString() => 'TickerCanceled';
 }
 
-/// The future returned by `Animation.to` / `loop` / `run`.
+/// The future returned by `Animation.to` or `Animation.loop`.
 ///
-/// `await future` completes when the animation ends — regardless
-/// of whether it ended naturally or was cancelled. To distinguish,
-/// `await future.orCancel`: this completes normally on natural
-/// end, throws [TickerCanceled] on cancel.
-class TickerFuture implements Future<void> {
+/// `await future` completes when that request ends — regardless of whether it
+/// reached its target or was cancelled by a retarget, stop, or disposal. Use
+/// `await future.orCancel` when subsequent work requires natural completion;
+/// it throws [TickerCanceled] on cancellation.
+class TickerFuture<T> implements Future<void> {
   /// Creates a not-yet-resolved future. Resolves via either
   /// [completeNaturally] or [cancel]. Apps don't construct
-  /// [TickerFuture] directly — they receive one from `Animation.to` /
-  /// `loop` / `run`.
-  TickerFuture.pending() : _primary = Completer<void>();
+  /// [TickerFuture] directly — they receive one from `Animation.to` or
+  /// `Animation.loop`.
+  TickerFuture.pending({
+    TickerFuture<T> Function(
+      T target, {
+      Spring? spring,
+      Curve? curve,
+      Duration? duration,
+    })?
+    appendTo,
+    TickerFuture<T> Function(Duration duration)? appendDelay,
+  }) : _appendTo = appendTo,
+       _appendDelay = appendDelay,
+       _primary = Completer<void>();
 
-  /// Creates an already-complete future. Used when a animation is asked
+  /// Creates an already-complete future. Used when an animation is asked
   /// to animate to its current value (zero distance, instant
   /// completion).
   factory TickerFuture.complete() {
-    final f = TickerFuture.pending();
+    final f = TickerFuture<T>.pending();
     f._completed = true;
     f._primary.complete();
     return f;
   }
 
   final Completer<void> _primary;
+  final TickerFuture<T> Function(
+    T target, {
+    Spring? spring,
+    Curve? curve,
+    Duration? duration,
+  })?
+  _appendTo;
+  final TickerFuture<T> Function(Duration duration)? _appendDelay;
   Completer<void>? _secondary;
 
   /// null until resolution; true on natural complete; false on
   /// cancel.
   bool? _completed;
+
+  /// Appends another target to this animation run. This is different from
+  /// calling `Animation.to` again: the latter replaces the active run, while
+  /// this method waits for the preceding segment to settle first.
+  TickerFuture<T> to(
+    T target, {
+    Spring? spring,
+    Curve? curve,
+    Duration? duration,
+  }) {
+    final append = _appendTo;
+    if (append == null || _completed != null) {
+      throw StateError('Cannot append to a completed animation run.');
+    }
+    return append(target, spring: spring, curve: curve, duration: duration);
+  }
+
+  /// Delays the next appended command by [duration], keeping the animation at
+  /// its current value. The delay uses the animation clock, so tests advance
+  /// it deterministically by pumping time.
+  TickerFuture<T> delay(Duration duration) {
+    final append = _appendDelay;
+    if (append == null || _completed != null) {
+      throw StateError('Cannot append to a completed animation run.');
+    }
+    return append(duration);
+  }
 
   /// A future that completes normally on natural animation end,
   /// and rejects with [TickerCanceled] on cancel. Accessing this

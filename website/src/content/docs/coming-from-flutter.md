@@ -223,15 +223,20 @@ For the common "animate when this state value changes" case, use
 ```dart
 AnimationBuilder<double>(
   selected ? 1.0 : 0.0,
-  builder: (context, t) => Text('selected: ${t.toStringAsFixed(2)}'),
+  builder: (context, t, child) =>
+      Text('selected: ${t.toStringAsFixed(2)}'),
 )
 ```
 
-For entrance/exit effects, use `Animate` or `Reveal`:
+For entrance/exit effects, use `Animate` or `AnimatedVisibility`:
 
 ```dart
 Text('Saved').animate().fadeIn().slideIn();
-Reveal(visible: open, enter: Effects.expand(), child: Panel());
+AnimatedVisibility(
+  visible: open,
+  enter: Effects.expand(),
+  child: Panel(),
+);
 ```
 
 ### Routes are widgets, not route names
@@ -257,7 +262,7 @@ in Flutter.
 | `ValueListenableBuilder` / `ValueNotifier` | Same names and typed value-listening model. |
 | Plain `Builder` | A small `StatelessWidget`. |
 | `FittedBox` / `FractionallySizedBox` / `OverflowBox` | `LayoutBuilder`, `ConstrainedBox`, explicit cell sizing, and wrapping/clipping behavior. |
-| `Hero` / route-shared element transitions | `Reveal`, route transitions, or simpler terminal-native motion. |
+| `Hero` / route-shared element transitions | `AnimatedVisibility`, route transitions, or simpler terminal-native motion. |
 
 ## Porting checklist
 

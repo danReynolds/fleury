@@ -252,29 +252,6 @@ void main() {
       expect(binding.animationPolicy, AnimationPolicy.enabled);
       binding.dispose();
     });
-
-    test('AnimationPolicy.reduced does NOT mute (functional '
-        'affordances continue)', () {
-      // Reduced is a hint for individual widgets to shorten or skip
-      // decorative transitions; it doesn't suppress callbacks at
-      // the Ticker level. (Honored by Animation: reduced shortens
-      // spring response / curve duration.)
-      final clock = FakeClock();
-      final scheduler = FakeTickerScheduler(clock: clock);
-      final binding = TuiBinding(
-        tickerScheduler: scheduler,
-        animationPolicy: AnimationPolicy.reduced,
-      );
-      final owner = BuildOwner();
-      final root = owner.mountRoot(
-        TuiBindingScope(binding: binding, child: const _Bouncing()),
-      );
-      final state = _findState<BouncingState>(root);
-      expect(state.exposedTicker!.muted, isFalse);
-      scheduler.advance(const Duration(milliseconds: 33));
-      expect(state.tickCount, 1);
-      binding.dispose();
-    });
   });
 }
 

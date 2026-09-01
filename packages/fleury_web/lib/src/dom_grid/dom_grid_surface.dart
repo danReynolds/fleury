@@ -187,9 +187,24 @@ final class DomGridSurface implements FrameSurface {
   }
 
   void _applyMetricsToRows() {
-    _root.setAttribute('style', _rootStyle());
     final metrics = _metrics;
     if (metrics == null) return;
+    // Metrics are refreshed during every browser frame. Update only the
+    // geometry properties this surface owns: replacing the whole `style`
+    // attribute here also deletes transient host-owned state such as the
+    // pointer cursor installed by DomInputSource, making it flicker between
+    // `pointer` and the browser default while an animation is active.
+    if (_root.isA<web.HTMLElement>()) {
+      final style = (_root as web.HTMLElement).style;
+      style
+        ..setProperty(
+          'letter-spacing',
+          '${metrics.cssCellWidth - metrics.layoutCellWidth}px',
+        )
+        ..setProperty('line-height', '${metrics.cssCellHeight}px')
+        ..setProperty('width', '${metrics.cssCanvasWidth}px')
+        ..setProperty('height', '${metrics.cssCanvasHeight}px');
+    }
     final rowStyle = _rowStyle(metrics);
     for (final row in _rows) {
       row.setAttribute('style', rowStyle);

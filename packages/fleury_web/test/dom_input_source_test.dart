@@ -1218,6 +1218,66 @@ void main() {
     ]);
   });
 
+  test('DomInputSource shows a hand cursor over semantic click targets', () {
+    final host = web.document.createElement('div') as web.HTMLElement;
+    final textArea =
+        web.document.createElement('textarea') as web.HTMLTextAreaElement;
+    host.style.setProperty('cursor', 'crosshair');
+    web.document.body!.appendChild(host);
+    final source = DomInputSource(
+      hostElement: host,
+      textArea: textArea,
+      cellMetrics: _FakeMetrics(
+        const MeasuredCellBox(
+          cssCellWidth: 10,
+          cssCellHeight: 20,
+          cssCanvasWidth: 80,
+          cssCanvasHeight: 60,
+          cssCanvasLeft: 10,
+          cssCanvasTop: 20,
+          devicePixelRatio: 1,
+          cols: 8,
+          rows: 3,
+        ),
+      ),
+      pointerCursorResolver: (cell) => cell == const CellOffset(1, 1),
+    );
+    addTearDown(() {
+      source.dispose();
+      host.parentNode?.removeChild(host);
+    });
+
+    source.start((_) {});
+    host.dispatchEvent(
+      web.PointerEvent(
+        'pointermove',
+        web.PointerEventInit(
+          clientX: 25,
+          clientY: 45,
+          bubbles: true,
+          cancelable: true,
+        ),
+      ),
+    );
+    expect(host.style.getPropertyValue('cursor'), 'pointer');
+
+    host.dispatchEvent(
+      web.PointerEvent(
+        'pointermove',
+        web.PointerEventInit(
+          clientX: 45,
+          clientY: 45,
+          bubbles: true,
+          cancelable: true,
+        ),
+      ),
+    );
+    expect(host.style.getPropertyValue('cursor'), 'crosshair');
+
+    source.dispose();
+    expect(host.style.getPropertyValue('cursor'), 'crosshair');
+  });
+
   test('DomInputSource delegates viewport coordinates to CellMetrics', () {
     final events = <TuiEvent>[];
     final host = web.document.createElement('div');

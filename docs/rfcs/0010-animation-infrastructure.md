@@ -1,6 +1,11 @@
 # RFC 0010: Animation infrastructure for fleury
 
-**Status:** Proposal (revision 3)
+> **Historical design document.** The shipped animation API now uses the
+> mutable `Animation<T>`, `AnimationBuilder`, effects, and `AnimatedVisibility` described in
+> the [animation guide](../../website/src/content/docs/guides/animation.mdx).
+> The controller/tween API sketched below was not adopted.
+
+**Status:** Superseded historical proposal (revision 3)
 **Date:** 2026-05-19 (revised 2026-05-21)
 **Decision point for:** the shape and scope of a terminal-native
   animation system for fleury — what to ship, what to defer,

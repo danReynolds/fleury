@@ -96,6 +96,48 @@ void main() {
       expect(button.querySelector('img'), isNull);
     });
 
+    test('exposes enabled control bounds for the browser pointer cursor', () {
+      final root = web.document.createElement('div');
+      final presenter = SemanticDomPresenter(root: root);
+
+      presenter.present(
+        const SemanticTree(
+          root: SemanticNode(
+            id: SemanticNodeId('root'),
+            role: SemanticRole.app,
+            children: [
+              SemanticNode(
+                id: SemanticNodeId('run'),
+                role: SemanticRole.button,
+                label: 'Run',
+                bounds: CellRect(
+                  offset: CellOffset(2, 3),
+                  size: CellSize(5, 1),
+                ),
+                actions: {SemanticAction.activate},
+              ),
+              SemanticNode(
+                id: SemanticNodeId('disabled'),
+                role: SemanticRole.button,
+                label: 'Disabled',
+                enabled: false,
+                bounds: CellRect(
+                  offset: CellOffset(2, 5),
+                  size: CellSize(8, 1),
+                ),
+                actions: {SemanticAction.activate},
+              ),
+            ],
+          ),
+        ),
+      );
+
+      expect(presenter.showsPointerCursorAt(const CellOffset(2, 3)), isTrue);
+      expect(presenter.showsPointerCursorAt(const CellOffset(6, 3)), isTrue);
+      expect(presenter.showsPointerCursorAt(const CellOffset(7, 3)), isFalse);
+      expect(presenter.showsPointerCursorAt(const CellOffset(3, 5)), isFalse);
+    });
+
     test('projects safe semantic links as anchors', () {
       final root = web.document.createElement('div');
       final presenter = SemanticDomPresenter(root: root);

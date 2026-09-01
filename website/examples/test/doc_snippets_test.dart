@@ -10,6 +10,7 @@ import 'package:fleury_test/fleury_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:test/test.dart';
 
+import '../doc_snippets/animation.dart' as animation;
 import '../doc_snippets/filterable_list.dart' as tutorial;
 import '../doc_snippets/forms.dart' as forms;
 import '../doc_snippets/getting_started_app.dart' as getting_started;
@@ -85,6 +86,232 @@ void main() {
     final rendered = tester.renderToString(emptyMark: ' ');
     expect(rendered, contains('Create project'));
     expect(rendered, contains('Private project'));
+  });
+
+  testWidgets('animation guide trigger demo replays feedback', (tester) async {
+    tester.pumpWidget(const animation.ValidationFeedback());
+    expect(tester.renderToString(emptyMark: ' '), contains('pilot name'));
+
+    await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.button,
+      label: 'Validate pilot',
+    );
+    tester.pump();
+    expect(
+      tester.renderToString(emptyMark: ' '),
+      isNot(contains('Enter any non-empty name')),
+      reason: 'the changed feedback should begin fully concealed',
+    );
+    final field = tester.accessibilitySnapshot().single(
+      role: SemanticRole.textField,
+      label: 'Pilot name',
+    );
+    expect(field.states, contains('focused'));
+    expect(
+      tester.scheduler.activeTickerCount,
+      2,
+      reason: 'feedback and the refocused text caret should both be active',
+    );
+    tester.pump(const Duration(milliseconds: 650));
+    expect(
+      tester.renderToString(emptyMark: ' '),
+      contains('Enter any non-empty name'),
+    );
+
+    await tester.invokeSemanticAction(
+      SemanticAction.setValue,
+      role: SemanticRole.textField,
+      label: 'Pilot name',
+      payload: 'River',
+    );
+    await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.button,
+      label: 'Validate pilot',
+    );
+    tester.pump();
+    tester.pump(const Duration(milliseconds: 650));
+    expect(tester.renderToString(emptyMark: ' '), contains('River is cleared'));
+  });
+
+  testWidgets('animation guide effect picker changes both lifecycle effects', (
+    tester,
+  ) async {
+    tester.pumpWidget(const animation.EffectPicker());
+    tester.pump(const Duration(milliseconds: 700));
+    var rendered = tester.renderToString(emptyMark: ' ');
+    expect(rendered, contains('Fade in'));
+    expect(rendered, contains('Fade out'));
+    expect(rendered, contains('DEPLOY PREVIEW'));
+
+    await tester.invokeSemanticAction(
+      SemanticAction.setValue,
+      role: SemanticRole.button,
+      label: 'Entrance effect',
+      payload: 'Wipe in',
+    );
+    await tester.invokeSemanticAction(
+      SemanticAction.setValue,
+      role: SemanticRole.button,
+      label: 'Exit effect',
+      payload: 'Shrink',
+    );
+    tester.pump();
+    rendered = tester.renderToString(emptyMark: ' ');
+    expect(rendered, contains('Wipe in'));
+    expect(rendered, contains('Shrink'));
+
+    await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.button,
+      label: 'Hide sample',
+    );
+    tester.pump();
+    expect(tester.scheduler.activeTickerCount, 1);
+    tester.pump(const Duration(milliseconds: 700));
+    expect(
+      tester.renderToString(emptyMark: ' '),
+      isNot(contains('DEPLOY PREVIEW')),
+    );
+
+    await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.button,
+      label: 'Show sample',
+    );
+    tester.pump(const Duration(milliseconds: 800));
+    expect(tester.renderToString(emptyMark: ' '), contains('DEPLOY PREVIEW'));
+  });
+
+  testWidgets('animation guide progress demo exposes a double', (tester) async {
+    tester.pumpWidget(const animation.ProgressDemo());
+    expect(
+      tester.renderToString(emptyMark: ' '),
+      contains('progress is a double'),
+    );
+
+    await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.button,
+      label: 'Send to station',
+    );
+    tester.pump(const Duration(milliseconds: 550));
+    expect(tester.scheduler.activeTickerCount, 1);
+  });
+
+  testWidgets('animation guide raw animation can delay and be retargeted', (
+    tester,
+  ) async {
+    tester.pumpWidget(const animation.ManualRoute());
+    expect(
+      tester.renderToString(emptyMark: ' '),
+      contains('progress.value is a double'),
+    );
+
+    await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.button,
+      label: 'Run route',
+    );
+    tester.pump(const Duration(milliseconds: 700));
+    expect(tester.scheduler.activeTickerCount, 1);
+    expect(
+      tester.renderToString(emptyMark: ' '),
+      contains('Package position: 24'),
+    );
+
+    tester.pump(const Duration(milliseconds: 300));
+    expect(
+      tester.renderToString(emptyMark: ' '),
+      contains('Package position: 24'),
+      reason: 'the chained delay keeps the package at the station',
+    );
+
+    await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.button,
+      label: 'Return now',
+    );
+    tester.pump(const Duration(milliseconds: 250));
+    expect(tester.scheduler.activeTickerCount, 1);
+    expect(
+      tester.renderToString(emptyMark: ' '),
+      isNot(contains('Package position: 24')),
+    );
+  });
+
+  testWidgets('animation guide launch reaches orbit without changing height', (
+    tester,
+  ) async {
+    tester.pumpWidget(const animation.MissionLaunch());
+    final idleHeight = tester.renderToString(emptyMark: ' ').split('\n').length;
+
+    await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.button,
+      label: 'Launch',
+    );
+    tester.pump(const Duration(milliseconds: 350));
+    expect(tester.renderToString(emptyMark: ' '), contains('1/4 IGNITION'));
+
+    for (var second = 0; second < 6; second++) {
+      tester.pump(const Duration(seconds: 1));
+    }
+
+    expect(tester.renderToString(emptyMark: ' '), contains('4/4 DELIVERY'));
+    expect(
+      tester.renderToString(emptyMark: ' ').split('\n').length,
+      idleHeight,
+    );
+  });
+
+  testWidgets('animation guide frame demo stops and restarts from frame zero', (
+    tester,
+  ) async {
+    tester.pumpWidget(const animation.PacketTransferFrames());
+    tester.pump(const Duration(milliseconds: 200));
+    expect(
+      tester.renderToString(emptyMark: ' '),
+      contains('authored frame 2/6'),
+    );
+
+    await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.button,
+      label: 'Pause',
+    );
+    tester.pump();
+    expect(tester.scheduler.activeTickerCount, 0);
+
+    await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.button,
+      label: 'Resume',
+    );
+    tester.pump();
+    expect(
+      tester.renderToString(emptyMark: ' '),
+      contains('authored frame 1/6'),
+    );
+    expect(tester.scheduler.activeTickerCount, 1);
+  });
+
+  testWidgets('animation guide ticker demo advances and pauses', (
+    tester,
+  ) async {
+    tester.pumpWidget(const animation.TickerSimulation());
+    tester.pump(const Duration(milliseconds: 500));
+    expect(tester.renderToString(emptyMark: ' '), contains('6.0'));
+    expect(tester.scheduler.activeTickerCount, 1);
+
+    await tester.invokeSemanticAction(
+      SemanticAction.activate,
+      role: SemanticRole.button,
+      label: 'Pause simulation',
+    );
+    tester.pump();
+    expect(tester.scheduler.activeTickerCount, 0);
   });
 
   testWidgets('state management guide local counter updates', (tester) async {

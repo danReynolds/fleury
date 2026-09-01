@@ -1,4 +1,4 @@
-// Animation composition: loop (repeat / ping-pong) and run (sequence).
+// Animation composition: loop (repeat / ping-pong) and fluent chains.
 // All clock-driven, so FakeClock advances them deterministically.
 
 import 'package:fleury/fleury.dart';
@@ -71,22 +71,21 @@ void main() {
     });
   });
 
-  group('run', () {
-    testWidgets('executes steps back to back', (tester) {
+  group('chained runs', () {
+    testWidgets('executes targets back to back', (tester) {
       final m = Animation(0.0);
       _host(tester, m);
-      m.run([
-        AnimationStep.to(
-          1.0,
-          curve: Curves.linear,
-          duration: const Duration(milliseconds: 100),
-        ),
-        AnimationStep.to(
-          0.5,
-          curve: Curves.linear,
-          duration: const Duration(milliseconds: 100),
-        ),
-      ]);
+      m
+          .to(
+            1.0,
+            curve: Curves.linear,
+            duration: const Duration(milliseconds: 100),
+          )
+          .to(
+            0.5,
+            curve: Curves.linear,
+            duration: const Duration(milliseconds: 100),
+          );
       // After first leg.
       tester.pump(const Duration(milliseconds: 100));
       expect(m.value, closeTo(1.0, 0.05));
@@ -95,29 +94,28 @@ void main() {
       expect(m.value, closeTo(0.5, 0.05));
     });
 
-    testWidgets('hold waits between steps (clock-driven)', (tester) {
+    testWidgets('delay waits between steps (clock-driven)', (tester) {
       final m = Animation(0.0);
       _host(tester, m);
-      m.run([
-        AnimationStep.to(
-          1.0,
-          curve: Curves.linear,
-          duration: const Duration(milliseconds: 100),
-        ),
-        const AnimationStep.hold(Duration(milliseconds: 200)),
-        AnimationStep.to(
-          0.0,
-          curve: Curves.linear,
-          duration: const Duration(milliseconds: 100),
-        ),
-      ]);
+      m
+          .to(
+            1.0,
+            curve: Curves.linear,
+            duration: const Duration(milliseconds: 100),
+          )
+          .delay(const Duration(milliseconds: 200))
+          .to(
+            0.0,
+            curve: Curves.linear,
+            duration: const Duration(milliseconds: 100),
+          );
       tester.pump(const Duration(milliseconds: 100)); // reach 1.0
       expect(m.value, closeTo(1.0, 0.05));
-      tester.pump(const Duration(milliseconds: 100)); // mid-hold
-      expect(m.value, closeTo(1.0, 0.05), reason: 'still holding at 1.0');
+      tester.pump(const Duration(milliseconds: 100)); // mid-delay
+      expect(m.value, closeTo(1.0, 0.05), reason: 'still delayed at 1.0');
       tester.pump(
         const Duration(milliseconds: 150),
-      ); // finish hold + start last
+      ); // finish delay + start last
       tester.pump(const Duration(milliseconds: 100)); // finish last leg
       expect(m.value, closeTo(0.0, 0.05));
     });
@@ -127,18 +125,16 @@ void main() {
       _host(tester, m);
       var done = false;
       m
-          .run([
-            AnimationStep.to(
-              1.0,
-              curve: Curves.linear,
-              duration: const Duration(milliseconds: 50),
-            ),
-            AnimationStep.to(
-              2.0,
-              curve: Curves.linear,
-              duration: const Duration(milliseconds: 50),
-            ),
-          ])
+          .to(
+            1.0,
+            curve: Curves.linear,
+            duration: const Duration(milliseconds: 50),
+          )
+          .to(
+            2.0,
+            curve: Curves.linear,
+            duration: const Duration(milliseconds: 50),
+          )
           .then((_) => done = true);
       tester.pump(const Duration(milliseconds: 200));
       await Future<void>.delayed(Duration.zero);
@@ -146,18 +142,66 @@ void main() {
       expect(m.value, closeTo(2.0, 0.05));
       expect(tester.scheduler.activeTickerCount, 0);
     });
+
+    testWidgets('a direct retarget cancels the whole appended run', (
+      tester,
+    ) async {
+      final m = Animation(0.0);
+      _host(tester, m);
+      final run = m
+          .to(
+            1.0,
+            curve: Curves.linear,
+            duration: const Duration(milliseconds: 100),
+          )
+          .delay(const Duration(milliseconds: 200))
+          .to(
+            2.0,
+            curve: Curves.linear,
+            duration: const Duration(milliseconds: 100),
+          );
+
+      tester.pump(const Duration(milliseconds: 50));
+      m.to(
+        0.25,
+        curve: Curves.linear,
+        duration: const Duration(milliseconds: 100),
+      );
+
+      await expectLater(run.orCancel, throwsA(isA<TickerCanceled>()));
+      tester.pump(const Duration(milliseconds: 200));
+      expect(m.value, closeTo(0.25, 0.01));
+    });
+
+    testWidgets('a completed run cannot be extended', (tester) async {
+      final m = Animation(0.0);
+      _host(tester, m);
+      final run = m.to(
+        1.0,
+        curve: Curves.linear,
+        duration: const Duration(milliseconds: 50),
+      );
+      tester.pump(const Duration(milliseconds: 100));
+      await run;
+
+      expect(
+        () => run.delay(const Duration(milliseconds: 10)),
+        throwsStateError,
+      );
+      expect(() => run.to(2.0), throwsStateError);
+    });
   });
 
   group('policy', () {
     testWidgets(
-      'disabled: run snaps to the last target',
+      'disabled: a chained run snaps to the last target',
       (tester) {
         final m = Animation(0.0);
         _host(tester, m);
-        m.run([
-          AnimationStep.to(1.0, curve: Curves.linear),
-          AnimationStep.to(0.7, curve: Curves.linear),
-        ]);
+        m
+            .to(1.0, curve: Curves.linear)
+            .delay(const Duration(seconds: 1))
+            .to(0.7, curve: Curves.linear);
         expect(m.value, 0.7);
         expect(m.isMoving, isFalse);
       },
