@@ -685,14 +685,30 @@ class _ListViewState extends State<ListView> {
     required Object? oldFirstKey,
     required Object? oldLastKey,
   }) {
-    if (newCount <= oldCount) return 0;
     if (oldCount == 0) return newCount;
     if (oldFirstKey == null || oldLastKey == null) return 0;
 
     final first = _validatedIndexForKey(oldFirstKey);
     final last = _validatedIndexForKey(oldLastKey);
-    if (first == null || last == null || last < first) return 0;
+    // The old tail is gone: whatever this was, it was not an append after it.
+    if (last == null) return 0;
 
+    if (first == null) {
+      // Head eviction with the old tail surviving. A rolling window — drop
+      // the oldest, append the newest, the shape of every capped transcript
+      // or log — is exactly this, and it nets ZERO in the count. Classifying
+      // by `newCount - oldCount` reported "no growth", and the keyed-reorder
+      // guard in `_handleCountChange` then read the followed item's new,
+      // second-to-last index as "left the tail" and disengaged following for
+      // good — on the first eviction, silently, with `unseenCount` stuck at
+      // zero. Everything after the surviving tail is the append. (An
+      // eviction mixed with a reorder is ambiguous here; the follow-mode docs
+      // already disclaim mixed updates for [unseenCount], and continuing to
+      // follow is the safe reading for a transcript.)
+      return newCount - 1 - last;
+    }
+
+    if (last < first) return 0;
     // Only classify growth outside the old boundary span. If the old boundary
     // items no longer enclose exactly the old number of rows, the mutation is
     // ambiguous; preserving identity is still safe, but claiming "new at the

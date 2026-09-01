@@ -302,6 +302,45 @@ void main() {
     expect(selected.state.messageId, 'm3');
   });
 
+  testWidgets('a capped transcript keeps following across evictions', (
+    tester,
+  ) {
+    // The out-of-box shape: followTail defaults to true and MessageList keys
+    // every row by identity. Trimming the transcript to a cap on each arrival
+    // is a head-drop plus a tail-append — the count never changes. Following
+    // died on the first eviction and the view silently froze while new
+    // messages kept arriving.
+    final controller = MessageListController();
+    List<MessageEntry> window(int from) => [
+      for (var i = from; i < from + 3; i++)
+        MessageEntry(id: 'm$i', role: MessageRole.user, text: 'msg $i'),
+    ];
+    Widget app(int from) => MessageList(
+      semanticLabel: 'Conversation',
+      controller: controller,
+      messages: window(from),
+    );
+
+    tester.pumpWidget(app(0));
+    tester.render(size: const CellSize(40, 3));
+    expect(controller.followTail, isTrue);
+    expect(controller.selectedIndex, 2);
+
+    tester.pumpWidget(app(1)); // m0 evicted, m3 appended
+    tester.render(size: const CellSize(40, 3));
+    expect(controller.followTail, isTrue, reason: 'first eviction');
+    expect(controller.selectedIndex, 2, reason: 'following moved to m3');
+
+    tester.pumpWidget(app(2)); // m1 evicted, m4 appended
+    tester.render(size: const CellSize(40, 3));
+    expect(controller.followTail, isTrue, reason: 'still following');
+    final list = tester.semantics().single(
+      role: SemanticRole.messageList,
+      label: 'Conversation',
+    );
+    expect(list.state.selectedMessageId, 'm4');
+  });
+
   testWidgets('reorder preserves selection and refreshed message state', (
     tester,
   ) {

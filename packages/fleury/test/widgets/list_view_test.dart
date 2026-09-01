@@ -1481,6 +1481,57 @@ void main() {
       },
     );
 
+    testWidgets('a keyed rolling window (drop oldest, append newest) keeps '
+        'following', (tester) {
+      // A capped transcript or log: every arrival evicts the oldest item, so
+      // the count never changes. Classifying growth by net count reported
+      // zero, and the reorder guard then read the followed item's new
+      // second-to-last index as "left the tail" — follow died on the FIRST
+      // eviction, silently, with unseenCount stuck at 0.
+      var items = <String>['a', 'b', 'c'];
+      final controller = ListController(pinToBottom: true);
+
+      Widget app() => _keyedStringList(items, controller: controller);
+
+      tester.pumpWidget(app());
+      tester.render(size: const CellSize(12, 3));
+      expect(controller.selectedIndex, 2);
+      expect(controller.pinToBottom, isTrue);
+
+      items = ['b', 'c', 'd'];
+      tester.pumpWidget(app());
+      tester.render(size: const CellSize(12, 3));
+      expect(controller.pinToBottom, isTrue, reason: 'an eviction is not a reorder');
+      expect(controller.selectedIndex, 2, reason: 'following moved to d');
+      expect(controller.atBottom, isTrue);
+      expect(controller.unseenCount, 0);
+
+      items = ['c', 'd', 'e'];
+      tester.pumpWidget(app());
+      tester.render(size: const CellSize(12, 3));
+      expect(controller.pinToBottom, isTrue, reason: 'and stays engaged');
+      expect(controller.selectedIndex, 2, reason: 'following moved to e');
+    });
+
+    testWidgets('a keyed rolling window while NOT following counts the '
+        'arrival', (tester) {
+      var items = <String>['a', 'b', 'c'];
+      final controller = ListController(selectedIndex: 1);
+
+      Widget app() => _keyedStringList(items, controller: controller);
+
+      tester.pumpWidget(app());
+      tester.render(size: const CellSize(12, 3));
+      expect(controller.pinToBottom, isFalse);
+
+      items = ['b', 'c', 'd'];
+      tester.pumpWidget(app());
+      tester.render(size: const CellSize(12, 3));
+      expect(controller.selectedIndex, 0, reason: 'selected identity is b');
+      expect(controller.pinToBottom, isFalse);
+      expect(controller.unseenCount, 1, reason: 'd arrived at the tail');
+    });
+
     testWidgets('keyed scroll-only pin remains on the current tail', (tester) {
       var items = <String>['a', 'b', 'c'];
       final controller = ListController(pinToBottom: true);
