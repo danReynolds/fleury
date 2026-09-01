@@ -374,10 +374,10 @@ Ordered by what I'd take first. Each names **what makes it hard**, so we can dec
   **Scope narrowing worth knowing:** ambiguous-wide pins contain the damage and emoji always pin, so cascading drift is **CJK on probe-cleared-narrow terminals** specifically. The full-row fast path can't sever anything. **No test can reach the production overlay path** (see D2).
   **Notes:** LANDED on this branch (f80db6d5): edge evictions before each row copy + ±1 damage (the image-placement precedent) + source-side orphan clearing for clipped slices; fast path untouched. Pinned: 4 buffer tests + a real-widget ListView-over-CJK test, all red without the fix. wire/alloc/paint gates green.
 
-- [ ] **8.c** `P1` DataTable paints past its own box and corrupts siblings — `data_table.dart:1894`
+- [x] **8.c** `P1` DataTable paints past its own box and corrupts siblings — `data_table.dart:1894`
   **Arguably P0** — writing outside your own rect breaks a framework invariant that damage tracking, repaint caches and the serve wire's damage bounds all rely on, so corruption can persist across frames. Held at P1 only because the author must under-size the table.
   **Your call inside it:** clamp and truncate (minimal, symmetric with `_writeRule`/`_fillRow` two methods up), or shrink fixed columns proportionally (changes existing layouts)? And should truncated cells get an ellipsis? ✎ Default flex sizing is safe; the hit-test overhang is inert. Repo's own dashboard/finance samples declare overflowing widths.
-  **Notes:**
+  **Notes:** LANDED (2394ec38): each column gets a painted width cut at the table's right edge (fully clipped columns skipped, builder included) — the rule/fill clamp, applied to header and body cells. No ellipsis (separate visual call). Red at 17 cols before; samples (finance/dashboard) green.
 
 ### C3 · List and framework centre
 
@@ -529,8 +529,8 @@ These block or shape work above and are not mine to answer:
 
 Found by the batch agents in passing. Verified only to the extent stated; triage as new entries.
 
-- [ ] **N1** `P1` `WhichKey` remounts its entire subtree on every popup reveal — `which_key.dart:91` vs `:126` (returns `child` hidden, a `Stack` revealed → different runtimeType in the same slot → every `State` below is destroyed on every leader press that outlives `showDelay`). Measured `initState` ×2. Also the mechanism that makes 2.a deterministic in the shape the keyboard guide recommends. **Fix:** stable `Stack` with a conditionally-empty layer, or route the popup through the overlay.
-  **Notes:**
+- [x] **N1** `P1` `WhichKey` remounts its entire subtree on every popup reveal — `which_key.dart:91` vs `:126` (returns `child` hidden, a `Stack` revealed → different runtimeType in the same slot → every `State` below is destroyed on every leader press that outlives `showDelay`). Measured `initState` ×2. Also the mechanism that makes 2.a deterministic in the shape the keyboard guide recommends. **Fix:** stable `Stack` with a conditionally-empty layer, or route the popup through the overlay.
+  **Notes:** LANDED (WhichKey fix on this branch, on top of a new Stack.fit — loose/expand/passthrough): constant shape = passthrough Stack [expanding filler, app, Positioned popup]; app keeps its slot and its bare constraints, popup box = whole wrapped surface. Probe logged init,init,dispose on reveal before; init only after.
 - [ ] **N2** `P2` The paste chunker is quadratic independent of 1.a — controller-only edits (no render) measure 4/12/62 ms at 128/256/512 KiB, because every 2 KiB chunk re-copies the whole string (`replaceRange`) and `FrameDriver` forces a full frame per post-frame registration. Q10 covers the per-frame coalescing; the string copy is a separate (smaller) fix.
   **Notes:**
 - [ ] **N3** `P2` `MessageListController.jumpToIndex` has 8.e's dead `followTail = false` pattern — `message_list.dart:155-166`; a tail index re-engages follow through the coupling.
