@@ -140,8 +140,12 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
   void _syncFormClaim() =>
       _formRegistration?.updateClaim(this, focusNode: _node, enabled: _enabled);
 
+  /// Publishes a selection. Normalizes to local midnight unconditionally so
+  /// every emitted value honours the picker's contract — a day-granular
+  /// control never hands the app a stray time-of-day, whatever route
+  /// (keyboard, pointer, semantics, paste) produced the date.
   void _emit(DateTime value) {
-    widget.onChanged?.call(value);
+    widget.onChanged?.call(_midnight(value));
     _formRegistration?.controlValueChanged(this);
   }
 
@@ -233,11 +237,28 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
     return widget.weekStartsOn == CalendarWeekStart.monday ? wd - 1 : wd % 7;
   }
 
-  void _move(Duration delta) {
+  /// Steps the cursor by [days] on the *calendar lattice*.
+  ///
+  /// Not `add(Duration(days: n))`: a Duration is absolute elapsed time, while a
+  /// civil day across a DST transition is 23h or 25h — adding 24h to the start
+  /// of a 25h day lands back inside it (the cursor can never leave), and adding
+  /// it to a 23h day lands on the right day at 01:00. The `DateTime`
+  /// constructor normalizes out-of-range day numbers for free (day 0 → the
+  /// previous month's last day, day 32 → the next month) and always yields a
+  /// local midnight.
+  void _move(int days) {
     if (!_enabled) return;
-    var next = _midnight(widget.value).add(delta);
+    final v = _midnight(widget.value);
+    final next = DateTime(v.year, v.month, v.day + days);
     if (!_inBounds(next)) return; // clamp by ignoring
     _emit(next);
+  }
+
+  /// The neighbouring day, on the same calendar lattice as [_move]. Used for
+  /// the semantic `canIncrement` / `canDecrement` probes.
+  DateTime _neighbour(int days) {
+    final v = _midnight(widget.value);
+    return DateTime(v.year, v.month, v.day + days);
   }
 
   void _shiftMonth(int delta) {
@@ -276,22 +297,22 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
       case KeyCode.arrowLeft:
         return moveOrEscape(
           atEdge: column == 0 || value.day == 1,
-          move: () => _move(const Duration(days: -1)),
+          move: () => _move(-1),
         );
       case KeyCode.arrowRight:
         return moveOrEscape(
           atEdge: column == 6 || value.day == lastDay,
-          move: () => _move(const Duration(days: 1)),
+          move: () => _move(1),
         );
       case KeyCode.arrowUp:
         return moveOrEscape(
           atEdge: value.day - 7 < 1,
-          move: () => _move(const Duration(days: -7)),
+          move: () => _move(-7),
         );
       case KeyCode.arrowDown:
         return moveOrEscape(
           atEdge: value.day + 7 > lastDay,
-          move: () => _move(const Duration(days: 7)),
+          move: () => _move(7),
         );
       case KeyCode.pageUp:
         _shiftMonth(-1);
@@ -329,10 +350,8 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
     final firstOfMonth = DateTime(v.year, v.month, 1);
     final lastDay = DateTime(v.year, v.month + 1, 0).day;
     final leadingBlanks = _backToWeekStart(firstOfMonth);
-    final canDecrement =
-        enabled && _inBounds(_midnight(v).subtract(const Duration(days: 1)));
-    final canIncrement =
-        enabled && _inBounds(_midnight(v).add(const Duration(days: 1)));
+    final canDecrement = enabled && _inBounds(_neighbour(-1));
+    final canIncrement = enabled && _inBounds(_neighbour(1));
     final validationError = _formRegistration?.error;
     CellStyle resolvePickerStyle({
       bool selected = false,
@@ -517,11 +536,11 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
             return;
           case SemanticAction.increment:
             _node.requestFocus();
-            if (canIncrement) _move(const Duration(days: 1));
+            if (canIncrement) _move(1);
             return;
           case SemanticAction.decrement:
             _node.requestFocus();
-            if (canDecrement) _move(const Duration(days: -1));
+            if (canDecrement) _move(-1);
             return;
           case _:
             return;
