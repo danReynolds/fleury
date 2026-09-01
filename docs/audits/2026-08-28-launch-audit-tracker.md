@@ -402,7 +402,7 @@ Ordered by what I'd take first. Each names **what makes it hard**, so we can dec
 
 ### C4 · Input authority and terminal policy
 
-- [ ] **2.a** `P1` ✎ Any rebuild between sequence steps silently drops it — `input_dispatcher.dart:728`
+- [x] **2.a** `P1` ✎ Any rebuild between sequence steps silently drops it — `input_dispatcher.dart:728` — LANDED (ace82485): pending re-resolves candidates from the captured KeyBindingSource scopes each step; fires the live handler; which-key refreshes; 5 tests (3 red before); input-alloc +0.2%
   **Hard because:** positional re-resolution has a failure mode worse than the bug — if a rebuild **reorders or shortens** the binding list, an index re-read can fire the *wrong handler*. Needs a structural key (source node + sequence) rather than a raw index, validated against the already-consumed prefix. `input-alloc-gate` covers it, and storing a record per candidate adds allocation.
   ✎ Trigger narrower than reported (a sibling rebuild is harmless — it's a rebuild of the widget that *constructs* the bindings), but that's still the common case under streaming output.
   **Notes:**
