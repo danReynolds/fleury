@@ -85,7 +85,16 @@ List<String> devRespawnArguments({
   required String scriptPath,
   required Uri serviceInfo,
   List<String> args = const [],
+  List<String> vmOptions = const [],
 }) => [
+  // The VM options the user put on THEIR command line come first, so the
+  // child — the process the user actually interacts with — runs the way they
+  // asked: `--define=` reaches String.fromEnvironment, `--enable-asserts`
+  // turns assertions on. Every one of them used to be silently dropped on the
+  // respawn (only the parked supervisor saw them): the app pointed at the
+  // wrong backend, invariants never tripped, and nothing pointed at hot
+  // reload as the cause.
+  ...replayableVmOptions(vmOptions),
   // The service MUST come from VM flags: under a runtime-enabled service
   // (`Service.controlWebServer`) any reload of changed sources crashes the
   // VM's kernel service and hangs the RPC — see the file-header note and
@@ -108,6 +117,44 @@ List<String> devRespawnArguments({
   // Trailing, so the script path stays the first non-flag argument.
   ...args,
 ];
+
+/// The subset of a parent's `Platform.executableArguments` a supervised
+/// respawn replays.
+///
+/// Dropped: the two arguments `dart run` injects for its own bookkeeping
+/// (`--resolved_executable_name=`, `--executable_name=`), which mean nothing
+/// to a direct `dart <script>` spawn; and any flag that would collide with
+/// the supervisor's own service setup — the service must come from the
+/// supervisor's flags (see [devRespawnArguments]), and a pre-existing
+/// `--observe` / `--enable-vm-service` / pause flag on the child would give
+/// it a second server or park it at startup. Everything else — `--define`,
+/// `--enable-asserts`, `--enable-experiment`, `--packages` — is the user's
+/// and is replayed verbatim.
+@visibleForTesting
+List<String> replayableVmOptions(List<String> executableArguments) => [
+  for (final option in executableArguments)
+    if (!_isSupervisorOwnedVmOption(option)) option,
+];
+
+const _supervisorOwnedVmOptions = [
+  '--resolved_executable_name',
+  '--executable_name',
+  '--enable-vm-service',
+  '--observe',
+  '--write-service-info',
+  '--serve-devtools',
+  '--no-serve-devtools',
+  '--pause-isolates-on-start',
+  '--pause-isolates-on-exit',
+  '--pause-isolates-on-unhandled-exceptions',
+];
+
+bool _isSupervisorOwnedVmOption(String option) {
+  for (final owned in _supervisorOwnedVmOptions) {
+    if (option == owned || option.startsWith('$owned=')) return true;
+  }
+  return false;
+}
 
 final class DevBootstrap {
   DevBootstrap._();
@@ -414,6 +461,10 @@ final class DevBootstrap {
           scriptPath: Platform.script.toFilePath(),
           serviceInfo: infoFile.uri,
           args: _args,
+          // The parent is the user's own `dart run …` invocation; the child
+          // must run with the same VM options or `--define`/`--enable-asserts`
+          // silently vanish from the process they interact with.
+          vmOptions: Platform.executableArguments,
         ),
         mode: ProcessStartMode.inheritStdio,
         environment: {
