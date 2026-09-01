@@ -163,6 +163,79 @@ void main() {
       );
     });
 
+    testWidgets('stays opaque under a multi-code-unit grapheme', (tester) {
+      // The opacity contract is "every cell it covers is painted", but the
+      // row padding measured the string in UTF-16 CODE UNITS. A ZWJ family
+      // is 8 code units and 2 cells, so the row was padded 6 cells short and
+      // the wall of X underneath showed through.
+      final b = _buffer(['\u{1F468}‍\u{1F469}‍\u{1F466} hi']);
+      tester.pumpWidget(
+        LogBufferScope(
+          buffer: b,
+          child: Stack(
+            children: [
+              LayoutBuilder(
+                builder: (c, cc) => Column(
+                  children: [
+                    for (var i = 0; i < (cc.maxRows ?? 0); i++)
+                      Text('X' * (cc.maxCols ?? 0)),
+                  ],
+                ),
+              ),
+              const OutputCaptureConsole(height: 6),
+            ],
+          ),
+        ),
+      );
+      final rows = tester
+          .renderToString(size: const CellSize(30, 10))
+          .split('\n');
+      final panelInterior = rows.where((r) => r.contains('│')).toList();
+      expect(panelInterior, isNotEmpty);
+      expect(
+        panelInterior.every((r) => !r.contains('X')),
+        isTrue,
+        reason: 'no wall-of-X cell survives inside the panel',
+      );
+    });
+
+    testWidgets('a too-wide line is truncated on a grapheme boundary', (
+      tester,
+    ) {
+      // Truncating by code unit can cut a cluster in half (half a surrogate
+      // pair, or a base without its ZWJ tail) and produce mojibake. It must
+      // also never overflow the panel's inner width.
+      // The 'a' offsets the clusters by one code unit, so a code-unit cut at
+      // the panel's inner width lands INSIDE a surrogate pair.
+      final b = _buffer(['a' + '\u{1F468}‍\u{1F469}‍\u{1F466}' * 12]);
+      tester.pumpWidget(
+        LogBufferScope(
+          buffer: b,
+          child: const OutputCaptureConsole(height: 6),
+        ),
+      );
+      final rows = tester
+          .renderToString(size: const CellSize(20, 10))
+          .split('\n');
+      final panelInterior = rows.where((r) => r.contains('│')).toList();
+      expect(panelInterior, isNotEmpty);
+      // No lone surrogate anywhere in the rendered panel.
+      for (final row in panelInterior) {
+        for (var i = 0; i < row.length; i++) {
+          final unit = row.codeUnitAt(i);
+          if (unit >= 0xD800 && unit <= 0xDBFF) {
+            expect(
+              i + 1 < row.length &&
+                  row.codeUnitAt(i + 1) >= 0xDC00 &&
+                  row.codeUnitAt(i + 1) <= 0xDFFF,
+              isTrue,
+              reason: 'a high surrogate must keep its pair',
+            );
+          }
+        }
+      }
+    });
+
     testWidgets('shows an empty state', (tester) {
       tester.pumpWidget(
         LogBufferScope(
