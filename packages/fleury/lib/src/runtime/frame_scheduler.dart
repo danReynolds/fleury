@@ -9,24 +9,22 @@ typedef FrameRenderCallback = void Function(String reason);
 typedef FrameFlushCancellation = void Function();
 
 /// Schedules [flush] to run after [delay]. `Duration.zero` means "as soon as
-/// possible" (a microtask). Returns an optional cancellation callback so a
-/// disposed runtime can release delayed timers / browser frame callbacks
-/// instead of retaining the whole session until they fire. Injectable so
-/// tests drive timing deterministically.
+/// possible". Returns an optional cancellation callback so a disposed runtime
+/// can release delayed timers / browser frame callbacks instead of retaining
+/// the whole session until they fire. Injectable so tests drive timing
+/// deterministically.
+///
+/// A scheduler must never satisfy a zero delay with a microtask when it can
+/// be invoked from inside its own flush — a post-frame callback or a
+/// `setState` during the post-frame drain requests the next frame while the
+/// render is still on the stack. Dart drains the microtask queue to empty
+/// before any timer, I/O, or signal runs, so a frame→frame microtask chain
+/// starves the event loop for the chain's whole duration: no input, no
+/// Ctrl+C, no signal delivery. The default scheduler takes a microtask only
+/// when idle and a `Timer` (a macrotask) when re-entrant; the browser
+/// scheduler uses `requestAnimationFrame`, which is a macrotask already.
 typedef FrameFlushScheduler =
     FrameFlushCancellation? Function(Duration delay, void Function() flush);
-
-FrameFlushCancellation? _defaultFlushScheduler(
-  Duration delay,
-  void Function() flush,
-) {
-  if (delay <= Duration.zero) {
-    scheduleMicrotask(flush);
-    return null;
-  }
-  final timer = Timer(delay, flush);
-  return timer.cancel;
-}
 
 /// Coalesces frame requests and optionally caps the render rate.
 ///
@@ -49,12 +47,40 @@ class FrameScheduler {
     this.minFrameInterval = Duration.zero,
     FrameFlushScheduler? flushScheduler,
   }) : _clock = clock,
-       _onRender = onRender,
-       _flushScheduler = flushScheduler ?? _defaultFlushScheduler;
+       _onRender = onRender {
+    _flushScheduler = flushScheduler ?? _defaultFlush;
+  }
 
   final Clock _clock;
   final FrameRenderCallback _onRender;
-  final FrameFlushScheduler _flushScheduler;
+  late final FrameFlushScheduler _flushScheduler;
+
+  /// Depth of [_onRender] calls on the stack (a counter, not a bool: a
+  /// synchronous test scheduler can nest a flush inside a render). Non-zero
+  /// means a request arriving now is re-entrant and must not chain a
+  /// microtask — see [_defaultFlush].
+  int _renderDepth = 0;
+
+  /// The built-in flush: a microtask when the scheduler is idle (the
+  /// historical "as soon as possible"), a `Timer` when a render is on the
+  /// stack or a cap defers the flush.
+  ///
+  /// `Timer(Duration.zero, …)` is a macrotask: the event loop turns once
+  /// before the next frame, so input, signals, and timers get their turn
+  /// between frames instead of after the whole chain. Without this, a
+  /// chunked paste — one post-frame callback per chunk, each scheduling the
+  /// next — ran to completion as one unbroken microtask sequence: a 512 KiB
+  /// paste held the isolate for ~12 s, and a post-frame callback that
+  /// re-registers itself pinned it forever. SIGINT/SIGTERM are event-loop
+  /// deliveries too, so the only exit was SIGKILL.
+  FrameFlushCancellation? _defaultFlush(Duration delay, void Function() flush) {
+    if (delay <= Duration.zero && _renderDepth == 0) {
+      scheduleMicrotask(flush);
+      return null;
+    }
+    final timer = Timer(delay, flush);
+    return timer.cancel;
+  }
 
   /// Minimum time between rendered frames. [Duration.zero] disables the cap.
   final Duration minFrameInterval;
@@ -118,7 +144,12 @@ class FrameScheduler {
     _lastRenderAt = _clock.now;
     final reason = _reason;
     _reason = 'scheduled';
-    _onRender(reason);
+    _renderDepth++;
+    try {
+      _onRender(reason);
+    } finally {
+      _renderDepth--;
+    }
   }
 
   void dispose() {
