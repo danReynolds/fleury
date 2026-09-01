@@ -385,6 +385,53 @@ void main() {
       );
     });
 
+    testWidgets('moving between two adjacent submenu rows re-targets the '
+        'anchor', (tester) {
+      // Only the SELECTED submenu row is wrapped in the BoundsObserver that
+      // anchors the child panel. Moving the selection between two adjacent
+      // SubMenu rows therefore changed BOTH rows' widget type in one build
+      // pass: the new observer's render object claimed the notifier while the
+      // old row's element was still parked in `_inactiveElements` (finalized
+      // only after the flush loop), so the single-writer assert fired with
+      // "This BoundsNotifier already has a BoundsObserver".
+      String? ran;
+      tester.pumpWidget(
+        Menu(
+          trigger: const Text('Menu'),
+          autofocus: true,
+          items: [
+            SubMenu(
+              label: 'File',
+              items: [MenuItem(label: 'New', onSelect: () => ran = 'new')],
+            ),
+            SubMenu(
+              label: 'Edit',
+              items: [MenuItem(label: 'Undo', onSelect: () => ran = 'undo')],
+            ),
+          ],
+        ),
+      );
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // open, File selected
+      tester.render(size: const CellSize(30, 10));
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // File → Edit
+      tester.render(size: const CellSize(30, 10));
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight)); // open Edit's submenu
+
+      final out = _screen(tester, cols: 30, rows: 10);
+      expect(out.contains('Undo'), isTrue, reason: "Edit's submenu opened");
+      expect(out.contains('New'), isFalse, reason: "not File's submenu");
+      // Anchored to the Edit ROW (row 2 of the panel), not the panel corner.
+      final lines = out.split('\n');
+      expect(
+        lines.indexWhere((l) => l.contains('Undo')),
+        lines.indexWhere((l) => l.contains('Edit')),
+        reason: 'the submenu is aligned with the row that opened it',
+      );
+
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // run Undo
+      expect(ran, 'undo');
+    });
+
     testWidgets('closing the whole menu from outside the chain restores '
         'focus to the trigger', (tester) async {
       // Any close driven from OUTSIDE the panel chain — the semantic close

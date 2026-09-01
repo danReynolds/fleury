@@ -1719,6 +1719,15 @@ abstract class RenderObjectElement extends Element {
     return r;
   }
 
+  /// The render object, or null when this element never mounted one — an
+  /// inflate whose `createRenderObject` threw, say.
+  ///
+  /// Teardown overrides (`deactivate`/`unmount`) read this rather than
+  /// [renderObject]: reaching for the throwing getter while unwinding turns
+  /// one failure into two and buries the original.
+  @protected
+  RenderObject? get maybeRenderObject => _renderObject;
+
   @override
   RenderObjectWidget get widget => super.widget as RenderObjectWidget;
 

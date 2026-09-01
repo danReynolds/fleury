@@ -122,7 +122,11 @@ class _BoundsObserverElement extends SingleChildRenderObjectElement {
 
   @override
   void unmount() {
-    (renderObject as RenderBoundsObserver).detachFromBounds();
+    // `maybeRenderObject`, not `renderObject`: an element whose inflate threw
+    // in `createRenderObject` never got one, and the throwing getter would
+    // raise a second, misleading error on top of the first while the tree is
+    // already unwinding.
+    (maybeRenderObject as RenderBoundsObserver?)?.detachFromBounds();
     super.unmount();
   }
 }
