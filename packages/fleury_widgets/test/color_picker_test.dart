@@ -68,20 +68,33 @@ void main() {
       expect(received, const AnsiColor(1));
     });
 
-    testWidgets('# opens a hex-entry popover', (tester) {
+    testWidgets('# opens a hex-entry popover that hugs its content and is '
+        'opaque', (tester) {
+      // Two invariants in one render, because they failed together: the
+      // popover is a float, so (a) it must size to its content instead of
+      // stretching down the whole terminal, and (b) it must paint an opaque
+      // fill so the app underneath can't show through its frame.
       tester.pumpWidget(
         Navigator(
-          home: ColorPicker(
-            value: const AnsiColor(1),
-            autofocus: true,
-            onChanged: (_) {},
+          home: Stack(
+            children: [
+              Column(
+                children: [for (var i = 0; i < 24; i++) Text('X' * 40)],
+              ),
+              ColorPicker(
+                value: const AnsiColor(1),
+                autofocus: true,
+                onChanged: (_) {},
+              ),
+            ],
           ),
         ),
       );
+      tester.render(size: const CellSize(40, 24));
       tester.type('#');
       tester.pump();
       final out = tester.renderToString(
-        size: const CellSize(40, 12),
+        size: const CellSize(40, 24),
         emptyMark: ' ',
       );
       expect(
@@ -89,6 +102,31 @@ void main() {
         isTrue,
         reason: '# opened the hex-entry popover',
       );
+
+      final lines = out.split('\n');
+      final framed = [
+        for (final line in lines)
+          if (line.contains('│')) line,
+      ];
+      // Two content rows ('Hex code' + the '#' field) between top and bottom
+      // rules: 4 rows total, so 2 rows carry side rules.
+      expect(
+        framed.length,
+        2,
+        reason:
+            'the popover hugs its content instead of spanning the terminal.\n'
+            'Screen:\n$out',
+      );
+      for (final line in framed) {
+        final left = line.indexOf('│');
+        final right = line.lastIndexOf('│');
+        expect(
+          line.substring(left + 1, right),
+          isNot(contains('X')),
+          reason:
+              'the wall behind bled through the popover.\nScreen:\n$out',
+        );
+      }
     });
 
     testWidgets('Esc abandons an uncommitted preview', (tester) {
