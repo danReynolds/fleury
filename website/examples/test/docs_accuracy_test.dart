@@ -44,6 +44,15 @@ void main() {
         r'KeyBinding(\.event)?\([^)]*onEvent:',
         dotAll: true,
       );
+      // The same rename left the opposite hole: `onTrigger:` with a
+      // *zero-arity* closure. It reads correct, it is the Flutter muscle
+      // memory, and it does not compile — `KeyBindingHandler` always takes
+      // the event. A separate pattern from `removedBindingHandler` above,
+      // which stays anchored on the deleted `onEvent:` spelling.
+      final zeroArityBindingHandler = RegExp(
+        r'KeyBinding(\.event)?\([^)]*onTrigger:\s*\(\s*\)',
+        dotAll: true,
+      );
       final rawStringSemanticId = RegExp(
         r'''Semantics\s*\(\s*id:\s*(?:const\s+)?['"]''',
       );
@@ -59,6 +68,11 @@ void main() {
             'onEvent:/KeyBinding.event — removed in RFC 0020; a handler '
                 'always takes the event (use onTrigger:)',
             removedBindingHandler,
+          ),
+          (
+            'zero-arity onTrigger: — a KeyBindingHandler always takes the '
+                'event (use onTrigger: (_) =>)',
+            zeroArityBindingHandler,
           ),
           (
             'raw String passed as Semantics.id (use SemanticNodeId)',
@@ -148,6 +162,29 @@ void main() {
       expect(
         '$snippet\n$sharedTree',
         isNot(contains("package:fleury_widgets/fleury_widgets.dart")),
+      );
+    });
+
+    // The README's quickstart already had a compiled twin at
+    // `example/counter_quickstart.dart`, and the two still drifted: the
+    // example took the event (`onTrigger: (_) =>`, the only signature there
+    // is), the README fence did not, and nothing compared them. Pin them
+    // byte-for-byte so the fence is the program the test suite runs.
+    test('fleury README embeds the compile-checked counter example', () {
+      final readme = File(
+        p.join(repo.path, 'packages/fleury/README.md'),
+      ).readAsStringSync();
+      final compiledExample = File(
+        p.join(repo.path, 'packages/fleury/example/counter_quickstart.dart'),
+      ).readAsStringSync();
+      final firstImport = compiledExample.indexOf(
+        "import 'package:fleury/fleury.dart';",
+      );
+
+      expect(firstImport, isNonNegative);
+      expect(
+        _firstDartFence(readme).trim(),
+        compiledExample.substring(firstImport).trim(),
       );
     });
 

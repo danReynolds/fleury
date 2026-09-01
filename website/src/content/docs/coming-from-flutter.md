@@ -53,7 +53,7 @@ class _CounterAppState extends State<CounterApp> {
         KeyBinding(
           KeySequence.space,
           label: 'Increment',
-          onTrigger: () => setState(() => _count++),
+          onTrigger: (_) => setState(() => _count++),
         ),
       ],
       child: Center(
