@@ -1748,12 +1748,34 @@ abstract class RenderObjectElement extends Element {
   @override
   void update(covariant RenderObjectWidget newWidget) {
     super.update(newWidget);
+    _dependenciesChanged = false;
     newWidget.updateRenderObject(this, _renderObject!);
     // Render-object setters own their invalidation. Keeping that decision at
     // the setter is what lets audited paint-only updates avoid relayout while
     // layout-affecting setters still call markNeedsLayout or the conservative
     // markNeedsPaint compatibility path.
     rebuild(force: true);
+  }
+
+  /// Set by an inherited ancestor that notified this element (see
+  /// `InheritedElement._markDependencyChanged`); consumed by [rebuild].
+  bool _dependenciesChanged = false;
+
+  @override
+  void rebuild({bool force = false}) {
+    // A dependency-only rebuild: an inherited widget this element depends on
+    // changed (Theme swapped above a hoisted `const` render-object widget),
+    // but the widget instance did not, so [update] — the only place
+    // `updateRenderObject` ran — never fires. The render object kept the
+    // configuration it read at creation. Re-run `updateRenderObject` here so
+    // it re-reads through its context; the setters own invalidation and no-op
+    // on unchanged values. Only on the flag, so a plain rebuild pays nothing.
+    if (_dependenciesChanged && _lifecycle == _ElementLifecycle.active) {
+      _dependenciesChanged = false;
+      final r = _renderObject;
+      if (r != null) widget.updateRenderObject(this, r);
+    }
+    super.rebuild(force: force);
   }
 
   @override
@@ -2299,12 +2321,15 @@ class InheritedElement extends ComponentElement {
     }
   }
 
-  /// Sets `_dependenciesChanged` on the dependent's State (if any)
-  /// so `didChangeDependencies` fires before its next build. No-op
-  /// for non-stateful dependents — they don't have the hook.
+  /// Sets `_dependenciesChanged` on the dependent's State (if any) so
+  /// `didChangeDependencies` fires before its next build, and on a
+  /// render-object element so its next rebuild re-runs `updateRenderObject`
+  /// (see [RenderObjectElement.rebuild]). No-op for other dependents.
   static void _markDependencyChanged(Element dependent) {
     if (dependent is StatefulElement) {
       dependent._state._dependenciesChanged = true;
+    } else if (dependent is RenderObjectElement) {
+      dependent._dependenciesChanged = true;
     }
   }
 }
