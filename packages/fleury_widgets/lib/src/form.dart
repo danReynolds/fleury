@@ -234,6 +234,7 @@ final class _FormWidgetState extends State<Form> implements _FormHost {
     for (final field in _fieldsInTraversalOrder()) {
       if (!field.validate()) firstInvalid ??= field;
     }
+    firstInvalid?._debugCheckFocusDestination();
     firstInvalid?.focusNode.requestFocus();
     return firstInvalid == null;
   }
@@ -533,6 +534,38 @@ final class FormFieldState extends State<FormField>
       if (identical(claim.control, control)) return claim;
     }
     return null;
+  }
+
+  /// Debug-only: the first invalid field must have a focus destination that
+  /// can actually receive focus.
+  ///
+  /// A [FormField.builder] installs no [FormControlScope], so nothing inside
+  /// it can claim the field. Without [FormField.focusNode], [focusNode] then
+  /// falls back to an owned node attached to no [Focus] widget, and
+  /// `requestFocus` on an unattached node is a documented no-op: the form
+  /// promises to focus the first invalid field and silently doesn't. Nothing
+  /// throws, nothing blurs, the caret never moves — the failure is invisible
+  /// until a user reports it.
+  ///
+  /// Reported from a microtask, like [_scheduleClaimCheck]. The caller runs
+  /// inside the post-frame callback that owns the pending-validation
+  /// completer, so throwing straight through would leave `validate()` (and
+  /// therefore `submit()`) awaiting a future that can never complete — a
+  /// worse failure than the one being diagnosed.
+  void _debugCheckFocusDestination() {
+    assert(() {
+      if (widget.builder == null) return true;
+      if (widget.focusNode != null || _controlClaim != null) return true;
+      scheduleMicrotask(() {
+        throw StateError(
+          'FormField.builder is the first invalid field but has no focus '
+          'destination, so validation cannot focus it. Pass '
+          'FormField.builder(focusNode: ...) and give that same FocusNode to '
+          'a focusable widget the builder renders.',
+        );
+      });
+      return true;
+    }());
   }
 
   void _scheduleClaimCheck() {
