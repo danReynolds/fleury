@@ -530,22 +530,28 @@ class Flexible extends SingleChildRenderObjectWidget {
 /// overwrite earlier ones.
 ///
 /// Non-positioned children determine the stack's size (intrinsic of the
-/// largest non-positioned child). Positioned children float on top with
-/// explicit offsets and (optional) sizes. Children paint in declaration
-/// order; the cell buffer's eviction rules handle wide-grapheme
-/// overlap correctly.
+/// largest non-positioned child) and are constrained per [fit]. Positioned
+/// children float on top with explicit offsets and (optional) sizes.
+/// Children paint in declaration order; the cell buffer's eviction rules
+/// handle wide-grapheme overlap correctly.
 final class Stack extends MultiChildRenderObjectWidget {
-  const Stack({super.key, super.children});
+  const Stack({super.key, this.fit = StackFit.loose, super.children});
+
+  /// How non-positioned children are constrained. [StackFit.passthrough]
+  /// makes a Stack layout-transparent for its first child — the shape of a
+  /// popup layered over an app that must not move the app.
+  final StackFit fit;
 
   @override
-  RenderObject createRenderObject(BuildContext context) => RenderStack();
+  RenderObject createRenderObject(BuildContext context) =>
+      RenderStack(fit: fit);
 
   @override
   void updateRenderObject(
     BuildContext context,
     covariant RenderStack renderObject,
   ) {
-    // RenderStack has no per-frame configuration today.
+    renderObject.fit = fit;
   }
 }
 

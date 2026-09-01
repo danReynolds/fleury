@@ -152,7 +152,7 @@ export 'src/rendering/render_objects.dart'
         TextAlign,
         TextOverflow;
 export 'src/rendering/render_stack.dart'
-    show RenderPositioned, RenderStack, RenderIndexedStack;
+    show RenderPositioned, RenderStack, RenderIndexedStack, StackFit;
 export 'src/rendering/render_wrap.dart' show RenderWrap;
 export 'src/rendering/text_sanitizer.dart'
     show

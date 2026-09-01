@@ -103,6 +103,24 @@ class RenderPositioned extends RenderObject
   }
 }
 
+/// How a [RenderStack] constrains its non-positioned children.
+enum StackFit {
+  /// Children may be as small as they like inside the stack's envelope, and
+  /// the stack sizes itself to the largest of them. The default.
+  loose,
+
+  /// Children are forced to fill the stack's bounded envelope (an unbounded
+  /// axis falls back to the incoming minimum).
+  expand,
+
+  /// Children receive the stack's own incoming constraints, unchanged. A
+  /// wrapper that layers something over an app without touching the app's
+  /// layout uses this: the app lays out exactly as it would bare, and the
+  /// layer goes in a [RenderPositioned] child so it never contributes to the
+  /// stack's size.
+  passthrough,
+}
+
 /// Stacks children at the same origin and lets later siblings overwrite
 /// earlier ones. Non-positioned children determine the stack's size
 /// (intrinsic of the largest); positioned children float on top with
@@ -111,7 +129,16 @@ class RenderPositioned extends RenderObject
 /// This is the primitive behind modals, popovers, status overlays, and
 /// any other "thing on top of thing" surface a TUI needs.
 class RenderStack extends RenderObject implements RenderObjectWithChildren {
-  RenderStack();
+  RenderStack({StackFit fit = StackFit.loose}) : _fit = fit;
+
+  /// How non-positioned children are constrained — see [StackFit].
+  StackFit get fit => _fit;
+  StackFit _fit;
+  set fit(StackFit value) {
+    if (value == _fit) return;
+    _fit = value;
+    markNeedsLayout();
+  }
 
   final List<RenderObject> _children = <RenderObject>[];
   final Map<RenderObject, CellOffset> _childOffsets =
@@ -148,13 +175,23 @@ class RenderStack extends RenderObject implements RenderObjectWithChildren {
       return constraints.constrain(CellSize.zero);
     }
 
-    // Pass 1: non-positioned children with loose constraints. Track the
-    // largest intrinsic so the stack itself knows how big to be.
+    // Pass 1: non-positioned children, constrained per [fit]. Track the
+    // largest so the stack itself knows how big to be.
+    final childConstraints = switch (_fit) {
+      StackFit.loose => constraints.loosen(),
+      StackFit.passthrough => constraints,
+      StackFit.expand => CellConstraints(
+        minCols: constraints.maxCols ?? constraints.minCols,
+        maxCols: constraints.maxCols,
+        minRows: constraints.maxRows ?? constraints.minRows,
+        maxRows: constraints.maxRows,
+      ),
+    };
     var maxCols = 0;
     var maxRows = 0;
     for (final c in _children) {
       if (c is RenderPositioned) continue;
-      final size = c.layout(constraints.loosen());
+      final size = c.layout(childConstraints);
       _childOffsets[c] = CellOffset.zero;
       if (size.cols > maxCols) maxCols = size.cols;
       if (size.rows > maxRows) maxRows = size.rows;
