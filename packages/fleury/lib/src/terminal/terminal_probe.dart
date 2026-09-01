@@ -236,29 +236,6 @@ Future<bool> probeSynchronizedOutput(
   ).isConfirmed;
 }
 
-/// Actively measures whether the terminal renders East-Asian *Ambiguous*-width
-/// glyphs as one column or two.
-///
-/// Delegates to the batched [probeGlyphWidths], then reads the answer out of
-/// the one derived policy ([deriveTextPresentationPolicy] +
-/// [evidencedAmbiguousCharWidth]) rather than re-applying the agreement rule
-/// here: narrow only when every representative measured 1, wide only when
-/// every one measured ≥ 2, and null on any disagreement, anomaly, or missing
-/// reply — a single glyph is a signal, not proof, and box drawing in
-/// particular is the character a terminal is most likely to special-case
-/// narrow (grids must work) while rendering the rest of the Ambiguous class
-/// wide. Null keeps the caller's safe (defensive) default. This is the same
-/// cursor-measurement trick vim's `t_u7` uses to auto-set `ambiwidth`.
-Future<AmbiguousCharWidth?> probeAmbiguousWidth(
-  TerminalProbeTransport transport, {
-  Duration timeout = const Duration(milliseconds: 150),
-}) async {
-  final measured = await probeGlyphWidths(transport, timeout: timeout);
-  return evidencedAmbiguousCharWidth(
-    deriveTextPresentationPolicy(measurements: measured),
-  );
-}
-
 /// The width-disagreement class a probe glyph represents. Classes are
 /// independent: a representative votes only within its own class (RFC 0019
 /// §6.1), so "bare emoji wide, variation sequence narrow" — the common
