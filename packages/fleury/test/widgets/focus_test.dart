@@ -199,8 +199,8 @@ void main() {
     );
   });
 
-  group('Focus.onKey routing', () {
-    test('delivers key to focused node\'s onKey first', () {
+  group('KeyDetector routing through the dispatcher', () {
+    test('delivers key to the focused node\'s detector first', () {
       final manager = FocusManager();
       final dispatcher = _dispatcherFor(manager);
       final owner = BuildOwner();
