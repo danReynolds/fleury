@@ -208,8 +208,10 @@ class ListController extends ChangeNotifier {
     if (changed) notifyListeners();
   }
 
-  /// Scrolls the viewport so [index] is at the top. Selection is not
-  /// changed. Indices outside `0..itemCount-1` are clamped.
+  /// Scrolls the viewport so [index] is at the top — clamped to the last
+  /// full page, so a jump near the end never leaves rows empty below the
+  /// final item. Selection is not changed. Indices outside `0..itemCount-1`
+  /// are clamped.
   void jumpToIndex(int index) {
     _checkNotDisposed();
     final clamped = _itemCount == 0 ? 0 : index.clamp(0, _itemCount - 1);
@@ -1176,11 +1178,31 @@ class _RenderListView extends RenderObject implements RenderObjectWithChildren {
     }
 
     final childCC = CellConstraints(maxCols: maxCols);
-    final (firstVisible, lastVisible) = _layoutFromAnchor(
+    var (firstVisible, lastVisible) = _layoutFromAnchor(
       _scrollAnchor,
       maxRows,
       childCC,
     );
+
+    // (3) Under-filled tail. The anchor sat past the last full page — a
+    // tail jump on a scroll-only list, items removed, a taller viewport — so
+    // the walk ran out of items with rows to spare. Re-anchor so the last
+    // item ends at the bottom, then re-walk. The check is a comparison; the
+    // re-walk runs only when the viewport actually under-filled, never on a
+    // full page, so a following log pays it once and then fills.
+    if (lastVisible == count - 1 &&
+        _filledRows < maxRows &&
+        _scrollAnchor > 0) {
+      final tailAnchor = _anchorThatEndsAt(count - 1, maxRows, childCC);
+      if (tailAnchor < _scrollAnchor) {
+        _scrollAnchor = tailAnchor;
+        (firstVisible, lastVisible) = _layoutFromAnchor(
+          _scrollAnchor,
+          maxRows,
+          childCC,
+        );
+      }
+    }
 
     // (4) Selection below the last visible — recompute anchor so
     // selection is the bottom-most visible item, then re-layout.
@@ -1200,6 +1222,10 @@ class _RenderListView extends RenderObject implements RenderObjectWithChildren {
 
     return constraints.constrain(CellSize(maxCols ?? 0, maxRows));
   }
+
+  /// Rows the last forward walk filled — the under-fill check in
+  /// [performLayout] reads it to decide whether to re-anchor at the tail.
+  int _filledRows = 0;
 
   /// Lays out children starting at [anchor], placing each below the
   /// previous one until [maxRows] is reached. Updates [_childOffsets]
@@ -1223,6 +1249,7 @@ class _RenderListView extends RenderObject implements RenderObjectWithChildren {
       row += size.rows;
       last = i;
     }
+    _filledRows = row;
     return (anchor, last);
   }
 
@@ -1785,6 +1812,34 @@ class _RenderLazyListView extends RenderObject
       newlyVisible,
     );
 
+    // (3) Under-filled tail — see the eager path. Here the backwards probe
+    // mounts items, which is why this runs only on an actual under-fill;
+    // the leftover sweep in (5) reclaims whatever the probe mounted.
+    if (lastVisible == count - 1 &&
+        _filledRows < maxRows &&
+        _scrollAnchor > 0) {
+      final tailAnchor = _anchorThatEndsAt(
+        element,
+        count - 1,
+        maxRows,
+        childCC,
+      );
+      if (tailAnchor < _scrollAnchor) {
+        _scrollAnchor = tailAnchor;
+        _activeByIndex.clear();
+        _childOffsets.clear();
+        final result = _layoutFromAnchor(
+          element,
+          _scrollAnchor,
+          maxRows,
+          childCC,
+          newlyVisible,
+        );
+        firstVisible = result.$1;
+        lastVisible = result.$2;
+      }
+    }
+
     // (4) Selection below the last visible — recompute anchor so the
     // selection becomes the bottom-most visible item, then re-walk.
     if (!hadPendingJump && selected != null && selected > lastVisible) {
@@ -1829,6 +1884,10 @@ class _RenderLazyListView extends RenderObject
     return constraints.constrain(CellSize(maxCols ?? 0, maxRows));
   }
 
+  /// Rows the last forward walk filled — the under-fill check in
+  /// [performLayout] reads it to decide whether to re-anchor at the tail.
+  int _filledRows = 0;
+
   /// Walks items forward from [anchor], mounting each via
   /// [element.createChild] and laying it out, accumulating rows
   /// until [maxRows] is reached or `itemCount` runs out. Updates
@@ -1860,6 +1919,7 @@ class _RenderLazyListView extends RenderObject
       row += size.rows;
       last = i;
     }
+    _filledRows = row;
     return (anchor, last);
   }
 

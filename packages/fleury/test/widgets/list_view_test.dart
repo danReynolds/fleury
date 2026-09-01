@@ -824,6 +824,84 @@ void main() {
     });
   });
 
+  group('tail clamp — the anchor never sits past the last full page', () {
+    // A scroll-only list (no selection) that follows its tail used to anchor
+    // the NEWEST item at the top of the viewport: every frame showed exactly
+    // one item over a blank screen, forever, for a tailing log — a documented
+    // configuration. The "selection below the viewport" re-anchor only ran
+    // when there was a selection. The viewport now re-anchors whenever the
+    // forward walk runs out of items with rows to spare.
+    testWidgets('a scroll-only list following its tail shows a full last '
+        'page (lazy)', (tester) {
+      final controller = ListController();
+      Widget list(int count) => ListView.builder(
+        controller: controller,
+        itemCount: count,
+        itemBuilder: _itemBuilder,
+      );
+      tester.pumpWidget(list(20));
+      tester.render(size: const CellSize(20, 5));
+      controller.selectedIndex = null; // scroll-only
+      controller.jumpToBottom(); // follow the tail
+      tester.render(size: const CellSize(20, 5));
+      expect(controller.visibleRange, (first: 15, last: 19));
+
+      // A new item arrives: still a full page, ending at the new tail.
+      tester.pumpWidget(list(21));
+      tester.render(size: const CellSize(20, 5));
+      expect(controller.visibleRange, (first: 16, last: 20));
+    });
+
+    testWidgets('a scroll-only list following its tail shows a full last '
+        'page (eager)', (tester) {
+      final controller = ListController();
+      Widget list(int count) => ListView(
+        controller: controller,
+        children: [for (var i = 0; i < count; i++) Text('item $i')],
+      );
+      tester.pumpWidget(list(20));
+      tester.render(size: const CellSize(20, 5));
+      controller.selectedIndex = null;
+      controller.jumpToBottom();
+      tester.render(size: const CellSize(20, 5));
+      expect(controller.visibleRange, (first: 15, last: 19));
+    });
+
+    testWidgets('jumpToIndex near the end clamps to the last full page', (
+      tester,
+    ) {
+      final controller = ListController();
+      tester.pumpWidget(
+        ListView.builder(
+          controller: controller,
+          itemCount: 20,
+          itemBuilder: _itemBuilder,
+        ),
+      );
+      tester.render(size: const CellSize(20, 5));
+      controller.jumpToIndex(18);
+      tester.render(size: const CellSize(20, 5));
+      expect(controller.visibleRange, (first: 15, last: 19));
+    });
+
+    testWidgets('a viewport that grows taller re-fills from the tail', (
+      tester,
+    ) {
+      final controller = ListController(selectedIndex: 19);
+      tester.pumpWidget(
+        ListView.builder(
+          controller: controller,
+          itemCount: 20,
+          itemBuilder: _itemBuilder,
+        ),
+      );
+      tester.render(size: const CellSize(20, 5));
+      expect(controller.visibleRange, (first: 15, last: 19));
+      tester.render(size: const CellSize(20, 8));
+      expect(controller.visibleRange, (first: 12, last: 19));
+    });
+  });
+
   group('pinToBottom', () {
     testWidgets('appending items moves the selection to the new last '
         'item', (tester) {
@@ -1501,7 +1579,11 @@ void main() {
       items = ['b', 'c', 'd'];
       tester.pumpWidget(app());
       tester.render(size: const CellSize(12, 3));
-      expect(controller.pinToBottom, isTrue, reason: 'an eviction is not a reorder');
+      expect(
+        controller.pinToBottom,
+        isTrue,
+        reason: 'an eviction is not a reorder',
+      );
       expect(controller.selectedIndex, 2, reason: 'following moved to d');
       expect(controller.atBottom, isTrue);
       expect(controller.unseenCount, 0);
