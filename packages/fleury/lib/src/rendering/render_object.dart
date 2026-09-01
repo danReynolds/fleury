@@ -289,6 +289,42 @@ final class _RetainedPaintGeometryCollector {
 }
 
 /// Stack-scoped collector for general paint-owned screen geometry.
+/// The root paint pass: numbered, with an end-of-pass hook.
+///
+/// Anything that publishes a paint-time fact about a subtree — painted
+/// bounds, for a float anchored to them — stamps the pass it published in.
+/// When the pass ends, a fact not refreshed this pass belongs to a subtree
+/// that no longer paints (a hidden IndexedStack child, a route beneath an
+/// opaque one) and is retracted by its closer. Cached repaint boundaries
+/// replay their retained geometry every pass, so a clean subtree counts as
+/// painted; only a subtree that is neither painted nor replayed goes stale.
+final class PaintPass {
+  PaintPass._();
+
+  static int _current = 0;
+
+  /// The pass currently painting (or the last one, between passes).
+  static int get current => _current;
+
+  static final List<void Function(int pass)> _closers =
+      <void Function(int pass)>[];
+
+  /// Registers [closer] to run when every pass ends, with the pass number.
+  static void addCloser(void Function(int pass) closer) {
+    _closers.add(closer);
+  }
+
+  /// Starts a pass; returns its number.
+  static int begin() => ++_current;
+
+  /// Ends the current pass: runs the closers.
+  static void end() {
+    for (var i = 0; i < _closers.length; i++) {
+      _closers[i](_current);
+    }
+  }
+}
+
 final class RetainedPaintGeometryCapture {
   RetainedPaintGeometryCapture._();
 

@@ -136,7 +136,31 @@ class RenderBoundsObserver extends RenderObject
     implements RenderObjectWithSingleChild {
   RenderBoundsObserver(this._notifier) {
     _notifier.claimWriter(this);
+    _live.add(this);
+    if (!_sweepRegistered) {
+      _sweepRegistered = true;
+      PaintPass.addCloser(_sweepUnpainted);
+    }
   }
+
+  // Every observer with a live claim. When a root paint pass ends, one that
+  // neither painted nor replayed in it belongs to a subtree that stopped
+  // painting while staying mounted — the other IndexedStack tab, a route
+  // beneath an opaque one, an Offstage — and its observation is retracted,
+  // so a float anchored to it hides instead of hovering over whatever now
+  // paints there. Unmount retracts through [detachFromBounds] as before.
+  static final Set<RenderBoundsObserver> _live =
+      Set<RenderBoundsObserver>.identity();
+  static bool _sweepRegistered = false;
+
+  static void _sweepUnpainted(int pass) {
+    for (final observer in _live) {
+      if (observer._publishedPass != pass) observer._notifier.publish(null);
+    }
+  }
+
+  /// The [PaintPass] this observer last published in (paint or replay).
+  int _publishedPass = -1;
 
   BoundsNotifier _notifier;
   set notifier(BoundsNotifier value) {
@@ -150,6 +174,7 @@ class RenderBoundsObserver extends RenderObject
 
   /// Called on unmount: the widget is gone, so the observation is too.
   void detachFromBounds() {
+    _live.remove(this);
     _notifier.publish(null);
     _notifier.releaseWriter(this);
   }
@@ -180,6 +205,7 @@ class RenderBoundsObserver extends RenderObject
     // in root/absolute space, so a scratch-local offset would misplace floats
     // anchored inside composited subtrees.
     final bounds = CellRect(offset: screenOffset ?? offset, size: size);
+    _publishedPass = PaintPass.current;
     _notifier.publish(bounds, clip: clipRect);
     if (RetainedPaintGeometryCapture.isActive) {
       RetainedPaintGeometryCapture.record(
@@ -202,6 +228,7 @@ class RenderBoundsObserver extends RenderObject
   // visibleBounds stays truthful under cached paints.
   // ignore: prefer_function_declarations_over_variables
   late final RetainedPaintGeometryCallback _replayBounds = (bounds, clip) {
+    _publishedPass = PaintPass.current;
     _notifier.publish(bounds, clip: clip);
   };
 }

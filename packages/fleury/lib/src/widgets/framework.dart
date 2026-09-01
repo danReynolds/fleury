@@ -1638,12 +1638,19 @@ class BuildOwner {
     sw?.reset();
     // Root paint: buffer IS the screen, so screenOffset == offset.
     // clipRect == the full screen rect — anything outside is off-screen.
-    rootRender.paint(
-      buffer,
-      CellOffset.zero,
-      screenOffset: CellOffset.zero,
-      clipRect: CellRect(offset: CellOffset.zero, size: buffer.size),
-    );
+    // Bracketed as a numbered PaintPass so paint-time facts (painted bounds)
+    // that no subtree refreshed this pass can be retracted when it ends.
+    PaintPass.begin();
+    try {
+      rootRender.paint(
+        buffer,
+        CellOffset.zero,
+        screenOffset: CellOffset.zero,
+        clipRect: CellRect(offset: CellOffset.zero, size: buffer.size),
+      );
+    } finally {
+      PaintPass.end();
+    }
     final paintElapsed = sw?.elapsed ?? Duration.zero;
 
     onPhaseTiming?.call(buildElapsed, layoutElapsed, paintElapsed);
