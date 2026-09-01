@@ -156,41 +156,41 @@ Severity is the **verified** severity. `↓`/`↑` marks a grade the verificatio
 
 ### A6 · Serve and web
 
-- [ ] **14.a** `P2` ✎ Meta regime leaves a key permanently held after auto-repeat — `dom_input_source.dart:292`
+- [x] **14.a** `P2` ✎ Meta regime leaves a key permanently held after auto-repeat — `dom_input_source.dart:292`
   **Fix:** synthesize the release after a repeat too (`!= KeyEventType.up`) — 2 lines, replayed clean. Worse than reported: the key's bindings then stop firing for the session, and two occurrences permanently demote the whole session to press-only. Open: narrow the branch to macOS?
-  **Notes:**
+  **Notes:** LANDED via A6 merge (fbd46015): Meta-regime repeat also synthesizes its release. Not narrowed to macOS UAs (small payoff, off-macOS Super+key is WM-swallowed anyway).
 
-- [ ] **14.b** `P2` Ctrl/⌘+wheel and pinch-zoom swallowed over the whole page — `dom_input_source.dart:665`
+- [x] **14.b** `P2` Ctrl/⌘+wheel and pinch-zoom swallowed over the whole page — `dom_input_source.dart:665`
   **Fix:** early-return before `preventDefault()` when `ctrlKey`/`metaKey`. Non-passive listener confirmed by measurement in Chrome.
-  **Notes:**
+  **Notes:** LANDED via A6 merge (7d12b957): ctrl/meta + wheel returns before preventDefault and the accumulator.
 
-- [ ] **14.e** `P2` ↑ Clicking outside the grid silently kills all keyboard input — `serve_index_html.dart:35`, `dom_input_source.dart:81`
+- [x] **14.e** `P2` ↑ Clicking outside the grid silently kills all keyboard input — `serve_index_html.dart:35`, `dom_input_source.dart:81`
   **Fix:** host-level (served page: document-level) listener that only re-establishes capture; drop the host's now-pointless `tabindex="0"`, which just makes it a focus sink. All three blur routes verified with real clicks.
-  **Notes:**
+  **Notes:** LANDED via A6 merge (83e58a0f): host-level pointerdown recapture + document-level under captureKeyboardFromDocument (serve only); host loses tabindex. 4 tests incl. end-to-end in remote_client_runner_test.
 
-- [ ] **14.d** `P2` ✎ Every `pointermove` becomes an app mouse event — `dom_input_source.dart:583`
+- [x] **14.d** `P2` ✎ Every `pointermove` becomes an app mouse event — `dom_input_source.dart:583`
   **Fix:** dedupe against the last emitted tuple (include modifiers); clear on button/metrics change. ✎ Cost claim corrected: semantics flush is coalesced to **frame** rate, not pointer rate — the real cost is wire traffic and dispatch. Honouring a motion opt-in is a separate, larger question.
-  **Notes:**
+  **Notes:** LANDED via A6 merge (6d153ca5): same-cell pointermove dedup keyed on kind/cell/buttons/modifiers/MeasuredCellBox identity; cleared on press/release/cancel.
 
-- [ ] **14.g** `P3` `FrameSurface.capabilities` has a test but no reader — and already lies — `frame_presentation.dart:25`
+- [x] **14.g** `P3` `FrameSurface.capabilities` has a test but no reader — and already lies — `frame_presentation.dart:25`
   **Fix:** delete the member, its class and the defaults test. Not public API. It already reports `supportsSemanticLinks: false` while rendering real anchors — the standard argument that an unread field lies.
-  **Notes:**
+  **Notes:** LANDED via A6 merge (2141e422): WebSurfaceCapabilities deleted; boundary test scans lib/ for the identifier.
 
-- [ ] **14.f** `P3` DPR change with no CSS resize never invalidates cell metrics — `dom_cell_metrics.dart:78`
+- [x] **14.f** `P3` DPR change with no CSS resize never invalidates cell metrics — `dom_cell_metrics.dart:78`
   **Fix:** resolution media-query listener (re-armed) or device-pixel content box, routed into the existing dirty signal.
-  **Notes:**
+  **Notes:** LANDED via A6 merge (7abb76e3): matchMedia(resolution) listener re-armed at each new ratio → metrics dirty; torn down on dispose.
 
-- [ ] **13.g** `P3` Transport `close()` not await-idempotent on the graceful path — `unix_socket_transport.dart:269`
+- [x] **13.g** `P3` Transport `close()` not await-idempotent on the graceful path — `unix_socket_transport.dart:269`
   **Fix:** cache the graceful teardown future like the abort paths do. Reachable via the handshake-fuse path.
-  **Notes:**
+  **Notes:** LANDED via A6 merge (00315b50): close() => _closeFuture ??= _close(), so every concurrent caller shares one teardown; real unix-socket test, red before.
 
-- [ ] **13.h** `P3` Semantics encoder's documented reconnect contract has no caller — `remote_semantics.dart:484`
+- [x] **13.h** `P3` Semantics encoder's documented reconnect contract has no caller — `remote_semantics.dart:484`
   **Fix:** call it where a driver begins a session (idempotent-cheap), or narrow the doc and assert reuse is unsupported.
-  **Notes:**
+  **Notes:** LANDED via A6 merge (edba38a7): encoder reset at enter(); injectable encoder makes the contract observable (stale encoder → NO frame at all for a new peer). Adjacent: RemoteTerminalDriver cannot truly re-enter (_handshakeReceived never reset).
 
-- [ ] **13.new** `P2` Hitting the session cap gives a blank page with no message — `bin/fleury.dart:1250`
+- [x] **13.new** `P2` Hitting the session cap gives a blank page with no message — `bin/fleury.dart:1250`
   **Fix:** reject after the upgrade with a close reason the client can display. Same family as 13.d — fix in that pass.
-  **Notes:**
+  **Notes:** LANDED via A6 merge (7d53ed57): over-cap connection is upgraded then closed with 4001 + reason naming --max-sessions (1013 is reserved by dart:io); client shows the server reason. 13.d can reuse the code + banner.
 
 ### A7 · Dead API removal *(one sweep, pre-freeze)*
 
@@ -537,8 +537,8 @@ Found by the batch agents in passing. Verified only to the extent stated; triage
   **Notes:**
 - [ ] **N4** `P2` Three more surfaces teach the reload-less browser command — `getting-started.mdx:273`, `guides/deployment.md:89`, `coming-from-flutter.md:90`. Same fix as 15.g's docs half.
   **Notes:**
-- [ ] **N5** `P2` Spawn mode's `--max-sessions` rejection is a 503 before the upgrade, so the client shows a blank page with no message (13.new in the register; same family as 13.d).
-  **Notes:**
+- [x] **N5** `P2` Spawn mode's `--max-sessions` rejection is a 503 before the upgrade, so the client shows a blank page with no message (13.new in the register; same family as 13.d).
+  **Notes:** Same bug as 13.new — LANDED via A6 merge (7d53ed57), see 13.new.
 - [ ] **N6** `P3` `probeAmbiguousWidth` (`terminal_probe.dart:251`) — public, tested, no production caller (the driver calls `probeGlyphWidths`). `AmbiguousCharWidth`'s doc still attributes detection to it.
   **Notes:**
 - [ ] **N7** `P3` `TextProjection.logicalText` — zero production readers after 4.f; its doc ("what copy and semantics answer with") is false.
