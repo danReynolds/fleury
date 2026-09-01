@@ -1771,6 +1771,113 @@ void main() {
       ),
     ]);
   });
+
+  test('pointer moves inside one cell emit a single event', () {
+    // Browsers fire pointermove at 60-120 Hz. The grid's resolution is a
+    // CELL, so every sample that lands in the same cell with the same buttons
+    // and modifiers is a duplicate the app cannot tell apart — but on the
+    // served path each one costs an InputEventFrame on the wire, a full
+    // host-side dispatch, and a scheduled frame.
+    final events = <TuiEvent>[];
+    final host = web.document.createElement('div');
+    final textArea =
+        web.document.createElement('textarea') as web.HTMLTextAreaElement;
+    web.document.body!.appendChild(host);
+    final source = DomInputSource(
+      hostElement: host,
+      textArea: textArea,
+      cellMetrics: _FakeMetrics(
+        const MeasuredCellBox(
+          cssCellWidth: 10,
+          cssCellHeight: 20,
+          cssCanvasWidth: 80,
+          cssCanvasHeight: 60,
+          cssCanvasLeft: 10,
+          cssCanvasTop: 20,
+          devicePixelRatio: 1,
+          cols: 8,
+          rows: 3,
+        ),
+      ),
+    );
+    addTearDown(() {
+      source.dispose();
+      host.parentNode?.removeChild(host);
+    });
+    source.start(events.add);
+
+    void move(int clientX, int clientY, {bool shiftKey = false}) =>
+        host.dispatchEvent(
+          web.PointerEvent(
+            'pointermove',
+            web.PointerEventInit(
+              pointerId: 1,
+              clientX: clientX,
+              clientY: clientY,
+              shiftKey: shiftKey,
+              bubbles: true,
+              cancelable: true,
+            ),
+          ),
+        );
+    void pointer(String type, {required int button, required int buttons}) =>
+        host.dispatchEvent(
+          web.PointerEvent(
+            type,
+            web.PointerEventInit(
+              pointerId: 1,
+              clientX: 35,
+              clientY: 45,
+              button: button,
+              buttons: buttons,
+              bubbles: true,
+              cancelable: true,
+            ),
+          ),
+        );
+
+    // Ten sub-cell samples across cell (1, 1).
+    for (var i = 0; i < 10; i++) {
+      move(20 + i, 40 + i);
+    }
+    expect(events, [
+      const MouseEvent(
+        kind: MouseEventKind.moved,
+        button: MouseButton.none,
+        col: 1,
+        row: 1,
+      ),
+    ]);
+
+    // Crossing into the next cell is a real change.
+    move(35, 45);
+    expect(events, hasLength(2));
+    expect((events.last as MouseEvent).col, 2);
+
+    // A modifier change at the same cell is a real change too: shift+move
+    // drives selection extension, so it must not be filtered.
+    move(35, 45, shiftKey: true);
+    expect(events, hasLength(3));
+    expect((events.last as MouseEvent).modifiers, {KeyModifier.shift});
+
+    // ...and dropping the modifier again re-emits.
+    move(35, 45);
+    expect(events, hasLength(4));
+
+    // A press/release is a gesture boundary: the identical move that follows
+    // one must reach the app rather than being filtered as a repeat of the
+    // hover move before it.
+    pointer('pointerdown', button: 0, buttons: 1);
+    pointer('pointerup', button: 0, buttons: 0);
+    expect(events, hasLength(6));
+    move(35, 45);
+    expect(
+      events,
+      hasLength(7),
+      reason: 'a completed gesture must reset the duplicate-move filter',
+    );
+    expect((events.last as MouseEvent).kind, MouseEventKind.moved);
+  });
 }
 
 final class _FakeClipboard extends Clipboard {

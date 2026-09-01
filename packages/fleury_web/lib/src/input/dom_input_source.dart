@@ -58,6 +58,23 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
   var _suppressNextPointerClick = false;
   String? _cursorBeforeStart;
 
+  // The last move this source emitted, so an identical re-emit can be
+  // dropped. Browsers fire pointermove at 60-120 Hz while the grid's
+  // resolution is a CELL: every sample landing in the same cell with the same
+  // buttons and modifiers is indistinguishable to the app, but on the served
+  // path each one costs an InputEventFrame on the wire, a full host-side
+  // dispatch, and a scheduled frame. Null kind means "no previous move" —
+  // the state every gesture boundary resets to.
+  MouseEventKind? _lastMoveKind;
+  var _lastMoveCol = -1;
+  var _lastMoveRow = -1;
+  var _lastMoveButtons = -1;
+  Set<KeyModifier> _lastMoveModifiers = const {};
+  // Identity of the measurement the last move was mapped through: a
+  // re-measure (resize, font swap, DPR change) hands out a NEW box, so this
+  // also drops the filter whenever the cell grid itself changed underneath.
+  MeasuredCellBox? _lastMoveMetrics;
+
   @override
   void start(TuiInputSink onEvent) {
     if (_started) return;
@@ -121,6 +138,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     _pressedButton = MouseButton.none;
     _captureLostButton = MouseButton.none;
     _suppressNextPointerClick = false;
+    _forgetLastMove();
     _cursorBeforeStart = null;
     _focusCoordinator?.handleBrowserFocusOut(WebFocusTarget.keyboardCapture);
     _clearTextArea();
@@ -502,6 +520,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     // click because the original target detached).
     _suppressNextPointerClick = false;
     _captureLostButton = MouseButton.none;
+    _forgetLastMove();
     // A cell-grid link owns its whole gesture: let the browser navigate the
     // href natively. Capturing the pointer here would retarget the click away
     // from the anchor, and routing it as an app pointer event would consume it.
@@ -535,6 +554,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     // Counterpart to the pointerdown exemption: a cell-grid link is the
     // browser's to navigate, so don't preventDefault or route it.
     if (_cellGridLinkAnchor(raw) != null) return;
+    _forgetLastMove();
     final event = raw as web.PointerEvent;
     var button = _buttonFor(event.button);
     if (button == MouseButton.none && _pressedButton != MouseButton.none) {
@@ -579,6 +599,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     _pressedButton = MouseButton.none;
     _captureLostButton = MouseButton.none;
     _suppressNextPointerClick = false;
+    _forgetLastMove();
   }
 
   void _handleLostPointerCapture(web.Event _) {
@@ -587,6 +608,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     // its up event. `pointercancel` owns true cancellation; a later pointerup or
     // compatibility click can close this interrupted press without emitting a
     // second down.
+    _forgetLastMove();
     if (_pressedButton != MouseButton.none) {
       _captureLostButton = _pressedButton;
       _pressedButton = MouseButton.none;
@@ -603,16 +625,57 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     _syncPointerCursor(cell);
     final dragging = event.buttons != 0 && _pressedButton != MouseButton.none;
     raw.preventDefault();
+    final kind = dragging ? MouseEventKind.drag : MouseEventKind.moved;
+    final modifiers = _modifiersFromMouse(event);
+    if (_isRepeatedMove(kind, cell, event.buttons, modifiers)) return;
     _emit(
       MouseEvent(
-        kind: dragging ? MouseEventKind.drag : MouseEventKind.moved,
+        kind: kind,
         button: dragging ? _pressedButton : MouseButton.none,
         col: cell.col,
         row: cell.row,
-        modifiers: _modifiersFromMouse(event),
+        modifiers: modifiers,
       ),
     );
   }
+
+  /// Whether this move is indistinguishable from the last one emitted — and,
+  /// when it is not, records it as the new baseline.
+  bool _isRepeatedMove(
+    MouseEventKind kind,
+    CellOffset cell,
+    int buttons,
+    Set<KeyModifier> modifiers,
+  ) {
+    final metrics = _cellMetrics.cachedMeasurement;
+    if (_lastMoveKind == kind &&
+        _lastMoveCol == cell.col &&
+        _lastMoveRow == cell.row &&
+        _lastMoveButtons == buttons &&
+        identical(_lastMoveMetrics, metrics) &&
+        _sameModifiers(_lastMoveModifiers, modifiers)) {
+      return true;
+    }
+    _lastMoveKind = kind;
+    _lastMoveCol = cell.col;
+    _lastMoveRow = cell.row;
+    _lastMoveButtons = buttons;
+    _lastMoveModifiers = modifiers;
+    _lastMoveMetrics = metrics;
+    return false;
+  }
+
+  /// Forgets the last emitted move. Every gesture boundary calls this so a
+  /// press, release, or cancellation can never leave the next move looking
+  /// like a duplicate of the one before it.
+  void _forgetLastMove() {
+    _lastMoveKind = null;
+    _lastMoveModifiers = const {};
+    _lastMoveMetrics = null;
+  }
+
+  static bool _sameModifiers(Set<KeyModifier> a, Set<KeyModifier> b) =>
+      a.length == b.length && a.containsAll(b);
 
   void _handlePointerLeave(web.Event _) => _restorePointerCursor();
 
