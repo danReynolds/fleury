@@ -9,6 +9,8 @@
 
 import 'dart:collection' show UnmodifiableListView;
 
+import 'package:meta/meta.dart';
+
 import '../../foundation/change_notifier.dart';
 import '../../foundation/geometry.dart';
 import 'selectable.dart';
@@ -222,6 +224,10 @@ class SelectionContainerDelegate extends ChangeNotifier
   /// separated paragraphs. Portions on the same row are joined
   /// without a separator (continuing inline text).
   String getSelectedText() {
+    assert(() {
+      debugSelectedTextBuilds++;
+      return true;
+    }());
     final buf = StringBuffer();
     int? lastRow;
     for (final s in _selectablesInReadingOrder()) {
@@ -236,6 +242,16 @@ class SelectionContainerDelegate extends ChangeNotifier
     }
     return buf.toString();
   }
+
+  /// Test-only process-wide count of [getSelectedText] calls.
+  ///
+  /// Building the string walks every registered Selectable and concatenates
+  /// their content, and the delegate notifies at least twice per drag event
+  /// (geometry recompute, then the trailing notify). On the default-on
+  /// selection path ([DefaultRootSelection]) nothing consumes the result, so
+  /// this must not move at all through a whole drag.
+  @visibleForTesting
+  static int debugSelectedTextBuilds = 0;
 
   /// Drops the selection state entirely. Equivalent to dispatching
   /// a [SelectionClearEvent].

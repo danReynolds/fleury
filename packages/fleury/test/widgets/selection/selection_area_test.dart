@@ -1026,4 +1026,71 @@ void main() {
       expect(buf.atColRow(0, 0).grapheme, 'a');
     });
   });
+
+  group('SelectionArea — no onSelectionChanged builds no string', () {
+    void drag(FleuryTester tester) {
+      tester.sendMouse(_down(2, 0));
+      tester.sendMouse(_drag(4, 0));
+      tester.sendMouse(_drag(6, 0));
+      tester.sendMouse(_drag(8, 0));
+      tester.sendMouse(_up(8, 0));
+    }
+
+    testWidgets('with no callback the selected string is never built', (
+      tester,
+    ) async {
+      // The default-on path: DefaultRootSelection wraps every app in a
+      // SelectionArea that passes no onSelectionChanged. The delegate
+      // notifies at least twice per drag event, and each notification was
+      // concatenating every Selectable's content into a string that was then
+      // compared to `_lastReportedText` and dropped.
+      tester.pumpWidget(const SelectionArea(child: Text('hello world')));
+      tester.render(size: const CellSize(20, 1));
+
+      SelectionContainerDelegate.debugSelectedTextBuilds = 0;
+      drag(tester);
+      expect(SelectionContainerDelegate.debugSelectedTextBuilds, 0);
+    });
+
+    testWidgets('the default-on root wrap is on that path', (tester) async {
+      // No explicit SelectionArea at all: the tester installs the same
+      // DefaultRootSelection the runtime does, which passes no callback.
+      tester.pumpWidget(const Text('hello world'));
+      tester.render(size: const CellSize(20, 1));
+
+      SelectionContainerDelegate.debugSelectedTextBuilds = 0;
+      drag(tester);
+      expect(SelectionContainerDelegate.debugSelectedTextBuilds, 0);
+    });
+
+    testWidgets('with a callback it is still built, and deduped', (
+      tester,
+    ) async {
+      final reported = <String?>[];
+      tester.pumpWidget(
+        SelectionArea(
+          onSelectionChanged: (sel) => reported.add(sel?.plainText),
+          child: const Text('hello world'),
+        ),
+      );
+      tester.render(size: const CellSize(20, 1));
+
+      SelectionContainerDelegate.debugSelectedTextBuilds = 0;
+      drag(tester);
+      expect(
+        SelectionContainerDelegate.debugSelectedTextBuilds,
+        greaterThan(0),
+        reason: 'a consumer still gets its string',
+      );
+      expect(reported.last, 'llo wo');
+      // `_lastReportedText` dedupes: the delegate notifies more often than
+      // the selected text actually changes, and the callback must not see a
+      // repeat of the same string.
+      expect(
+        reported.length,
+        lessThan(SelectionContainerDelegate.debugSelectedTextBuilds),
+      );
+      expect(reported.toSet().length, reported.length, reason: 'no repeats');
+    });
+  });
 }

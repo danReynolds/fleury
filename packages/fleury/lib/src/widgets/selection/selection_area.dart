@@ -242,6 +242,13 @@ class _SelectionAreaState extends State<SelectionArea> {
   }
 
   void _handleSelectionChanged() {
+    // Nobody is listening, so nothing needs the string. This is the DEFAULT
+    // path: `DefaultRootSelection` wraps every app root in a SelectionArea
+    // and passes no callback, and the delegate notifies at least twice per
+    // drag event (geometry recompute, then the trailing notify) — each one
+    // walking every registered Selectable to concatenate a string that was
+    // compared against `_lastReportedText` and thrown away.
+    if (widget.onSelectionChanged == null) return;
     final text = _delegate.getSelectedText();
     if (text == _lastReportedText) return;
     _lastReportedText = text;
