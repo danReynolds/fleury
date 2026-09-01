@@ -334,7 +334,10 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
             return;
         }
       },
-      child: Container(
+      // A float: `framed` carries the opaque fill as well as the frame, so a
+      // row shorter than the panel doesn't let the app underneath show through
+      // its trailing interior cells.
+      child: Container.framed(
         border: BoxBorder(style: _borderStyle),
         child: SizedBox(
           width: boxWidth,

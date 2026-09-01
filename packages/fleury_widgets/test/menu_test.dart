@@ -130,6 +130,65 @@ void main() {
     expect(_screen(tester).contains('Delete'), isFalse);
   });
 
+  // The float pointer barrier. An open Menu paints over the app, so it must
+  // own those cells for INPUT too — otherwise a click "on the menu's backdrop"
+  // silently fires whatever is painted underneath. `Select` had this from the
+  // start; `Menu` inserted a bare `BoundsAnchor` and did not.
+  testWidgets('a click outside the open menu dismisses it and does not reach '
+      'the app behind', (tester) {
+    var fired = 0;
+    Widget app() => Column(
+      children: [
+        Menu(trigger: const Text('Edit'), autofocus: true, items: items((_) {})),
+        const SizedBox(height: 5),
+        GestureDetector(
+          onTap: () => fired++,
+          child: const Text('DANGER'),
+        ),
+      ],
+    );
+
+    tester.pumpWidget(app());
+    tester.render(size: const CellSize(20, 10));
+    _clickAt(tester, col: 2, row: 6);
+    expect(fired, 1, reason: 'the button works with no menu open');
+
+    tester.sendKey(const KeyEvent(KeyCode.enter)); // open the menu
+    expect(_screen(tester, cols: 20, rows: 10).contains('Cut'), isTrue);
+    tester.render(size: const CellSize(20, 10)); // register pointer regions
+
+    _clickAt(tester, col: 2, row: 6); // outside the panel, over 'DANGER'
+    expect(
+      fired,
+      1,
+      reason: 'the barrier swallowed the click meant for the app behind',
+    );
+    expect(
+      _screen(tester, cols: 20, rows: 10).contains('Cut'),
+      isFalse,
+      reason: 'clicking outside dismissed the menu',
+    );
+  });
+
+  testWidgets('clicks on the open menu still reach its rows', (tester) {
+    // The barrier is a floor, not a lid: regions inside the panel paint later
+    // and keep winning.
+    String? ran;
+    tester.pumpWidget(
+      Menu(
+        trigger: const Text('Edit'),
+        autofocus: true,
+        items: items((v) => ran = v),
+      ),
+    );
+    tester.sendKey(const KeyEvent(KeyCode.enter)); // open
+    final out = _screen(tester, cols: 20, rows: 10);
+    final row = out.split('\n').indexWhere((r) => r.contains('Copy'));
+    tester.render(size: const CellSize(20, 10));
+    _clickAt(tester, col: 3, row: row);
+    expect(ran, 'copy');
+  });
+
   testWidgets('focus returns to the trigger after close (reopens)', (tester) {
     tester.pumpWidget(
       Menu(trigger: const Text('Edit'), autofocus: true, items: items((_) {})),
@@ -274,6 +333,133 @@ void main() {
         out.contains('▸'),
         isTrue,
         reason: 'cascade indicator still shown',
+      );
+    });
+
+    // The root panel's barrier is the only one in the chain: submenu entries
+    // paint above it, so their own rows keep winning, and an outside click
+    // still lands on the root barrier and closes everything.
+    testWidgets('a submenu leaf is still clickable with the root barrier '
+        'down', (tester) {
+      String? ran;
+      tester.pumpWidget(fileMenu((v) => ran = v));
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // open root
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // → Open
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight)); // open submenu
+      final out = _screen(tester, cols: 30, rows: 10);
+      final row = out.split('\n').indexWhere((r) => r.contains('Browse'));
+      final col = out.split('\n')[row].indexOf('Browse');
+      tester.render(size: const CellSize(30, 10));
+      _clickAt(tester, col: col, row: row);
+      expect(ran, 'browse', reason: 'the submenu row owns its own cells');
+      expect(
+        _screen(tester, cols: 30, rows: 10).contains('New'),
+        isFalse,
+        reason: 'the leaf selection closed the whole chain',
+      );
+      expect(
+        tester.focusManager.focusedNode?.debugLabel,
+        'menu-trigger',
+        reason: 'each panel retired its focus trap on the way out',
+      );
+    });
+
+    testWidgets('a click outside an open submenu closes the whole chain', (
+      tester,
+    ) {
+      tester.pumpWidget(fileMenu((_) {}));
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // open root
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // → Open
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight)); // open submenu
+      expect(_screen(tester, cols: 30, rows: 10).contains('Recent'), isTrue);
+
+      tester.render(size: const CellSize(30, 10));
+      _clickAt(tester, col: 28, row: 9); // far from both panels
+      final out = _screen(tester, cols: 30, rows: 10);
+      expect(out.contains('Recent'), isFalse, reason: 'submenu gone');
+      expect(out.contains('New'), isFalse, reason: 'root panel gone');
+      expect(
+        tester.focusManager.focusedNode?.debugLabel,
+        'menu-trigger',
+        reason: 'the outside click retired the trap and restored focus',
+      );
+    });
+
+    testWidgets('moving between two adjacent submenu rows re-targets the '
+        'anchor', (tester) {
+      // Only the SELECTED submenu row is wrapped in the BoundsObserver that
+      // anchors the child panel. Moving the selection between two adjacent
+      // SubMenu rows therefore changed BOTH rows' widget type in one build
+      // pass: the new observer's render object claimed the notifier while the
+      // old row's element was still parked in `_inactiveElements` (finalized
+      // only after the flush loop), so the single-writer assert fired with
+      // "This BoundsNotifier already has a BoundsObserver".
+      String? ran;
+      tester.pumpWidget(
+        Menu(
+          trigger: const Text('Menu'),
+          autofocus: true,
+          items: [
+            SubMenu(
+              label: 'File',
+              items: [MenuItem(label: 'New', onSelect: () => ran = 'new')],
+            ),
+            SubMenu(
+              label: 'Edit',
+              items: [MenuItem(label: 'Undo', onSelect: () => ran = 'undo')],
+            ),
+          ],
+        ),
+      );
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // open, File selected
+      tester.render(size: const CellSize(30, 10));
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // File → Edit
+      tester.render(size: const CellSize(30, 10));
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight)); // open Edit's submenu
+
+      final out = _screen(tester, cols: 30, rows: 10);
+      expect(out.contains('Undo'), isTrue, reason: "Edit's submenu opened");
+      expect(out.contains('New'), isFalse, reason: "not File's submenu");
+      // Anchored to the Edit ROW (row 2 of the panel), not the panel corner.
+      final lines = out.split('\n');
+      expect(
+        lines.indexWhere((l) => l.contains('Undo')),
+        lines.indexWhere((l) => l.contains('Edit')),
+        reason: 'the submenu is aligned with the row that opened it',
+      );
+
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // run Undo
+      expect(ran, 'undo');
+    });
+
+    testWidgets('closing the whole menu from outside the chain restores '
+        'focus to the trigger', (tester) async {
+      // Any close driven from OUTSIDE the panel chain — the semantic close
+      // action here, the pointer barrier, a tap on the trigger — removes the
+      // root overlay entry in one go, while the submenu's entry is only
+      // unmounted on the next build flush. Its focus trap therefore had to be
+      // released explicitly; without that the restore was refused and the
+      // keyboard was left on no node at all.
+      tester.pumpWidget(fileMenu((_) {}));
+      tester.sendKey(const KeyEvent(KeyCode.enter)); // open root
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // → Open
+      tester.sendKey(const KeyEvent(KeyCode.arrowRight)); // open submenu
+      tester.render(size: const CellSize(30, 10));
+
+      await tester.invokeSemanticAction(
+        SemanticAction.close,
+        role: SemanticRole.button,
+        label: 'File menu',
+      );
+      tester.pump();
+
+      final out = _screen(tester, cols: 30, rows: 10);
+      expect(out.contains('Recent'), isFalse, reason: 'submenu gone');
+      expect(out.contains('New'), isFalse, reason: 'root panel gone');
+      expect(
+        tester.focusManager.focusedNode?.debugLabel,
+        'menu-trigger',
+        reason: 'the whole chain retired its traps before the restore',
       );
     });
 

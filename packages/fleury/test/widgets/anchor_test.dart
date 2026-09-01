@@ -142,4 +142,117 @@ void main() {
       expect(_find(tester, 'x', cols: 8, rows: 3)?.col, 3);
     });
   });
+
+  // AnchoredFloat = BoundsAnchor + the pointer barrier that every float owes
+  // the app beneath it. Forgetting the barrier is invisible until someone
+  // clicks: the float paints over the app, but the app's pointer regions are
+  // still registered underneath.
+  group('AnchoredFloat', () {
+    ({int col, int row})? locate(FleuryTester tester, String g) =>
+        _find(tester, g, cols: 12, rows: 6);
+
+    Widget app({
+      required BoundsNotifier chip,
+      required void Function() onBehind,
+      required void Function() onInside,
+      void Function()? onOutside,
+    }) => Stack(
+      children: [
+        Column(
+          children: [
+            BoundsObserver(notifier: chip, child: const Text('A')),
+            const SizedBox(height: 2),
+            GestureDetector(
+              onTap: onBehind,
+              child: const SizedBox(width: 6, height: 1, child: Text('behind')),
+            ),
+          ],
+        ),
+        // Default bottomLeft: the float lands at (0, 1), two rows above
+        // 'behind' — so a tap on 'behind' lands on the barrier, not the float.
+        AnchoredFloat(
+          notifier: chip,
+          onTapOutside: onOutside,
+          child: GestureDetector(
+            onTap: onInside,
+            child: const SizedBox(width: 2, height: 1, child: Text('ok')),
+          ),
+        ),
+      ],
+    );
+
+    testWidgets('absorbs a tap that would otherwise hit the app beneath', (
+      tester,
+    ) {
+      var behind = 0;
+      var outside = 0;
+      final chip = BoundsNotifier();
+      tester.pumpWidget(
+        app(
+          chip: chip,
+          onBehind: () => behind++,
+          onInside: () {},
+          onOutside: () => outside++,
+        ),
+      );
+      tester.render(size: const CellSize(12, 6));
+      // 'behind' is on row 3, columns 0..5; the float only covers row 1.
+      _tap(tester, 0, 3);
+      expect(behind, 0, reason: 'the barrier owns every cell of the slot');
+      expect(outside, 1, reason: 'the tap reached onTapOutside instead');
+    });
+
+    testWidgets('a tap on the float itself still reaches its own controls', (
+      tester,
+    ) {
+      var inside = 0;
+      var outside = 0;
+      final chip = BoundsNotifier();
+      tester.pumpWidget(
+        app(
+          chip: chip,
+          onBehind: () {},
+          onInside: () => inside++,
+          onOutside: () => outside++,
+        ),
+      );
+      final at = locate(tester, 'o')!;
+      tester.render(size: const CellSize(12, 6));
+      _tap(tester, at.col, at.row);
+      expect(inside, 1, reason: 'descendants paint later and keep winning');
+      expect(outside, 0);
+    });
+
+    testWidgets('a null onTapOutside still absorbs (the float stays put)', (
+      tester,
+    ) {
+      var behind = 0;
+      final chip = BoundsNotifier();
+      tester.pumpWidget(
+        app(chip: chip, onBehind: () => behind++, onInside: () {}),
+      );
+      tester.render(size: const CellSize(12, 6));
+      _tap(tester, 0, 3);
+      expect(behind, 0, reason: 'absorbed, just inert');
+    });
+  });
+}
+
+void _tap(FleuryTester tester, int col, int row) {
+  tester.sendMouse(
+    MouseEvent(
+      kind: MouseEventKind.down,
+      button: MouseButton.left,
+      col: col,
+      row: row,
+    ),
+  );
+  tester.sendMouse(
+    MouseEvent(
+      kind: MouseEventKind.up,
+      button: MouseButton.left,
+      col: col,
+      row: row,
+    ),
+  );
 }

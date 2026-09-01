@@ -446,7 +446,7 @@ export 'src/widgets/theme.dart'
 export 'src/widgets/tui_binding.dart'
     show SingleTickerProviderStateMixin, TuiBinding, TuiBindingScope;
 export 'src/widgets/align.dart' show Align, Alignment, Center, RenderAlign;
-export 'src/widgets/anchored.dart' show Anchored;
+export 'src/widgets/anchored.dart' show Anchored, AnchoredFloat;
 export 'src/widgets/bounds.dart'
     show
         BoundsAnchor,

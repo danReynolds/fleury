@@ -299,7 +299,6 @@ class _ColorPickerState extends State<ColorPicker>
         notifier: _bounds,
         child: _HexEntry(
           initial: widget.value.toRgb(),
-          background: theme.colorScheme.background,
           borderStyle: theme.borderStyle,
           onSubmit: (color) {
             _closeHex();
@@ -571,14 +570,12 @@ Map<String, Object?> _colorComponents(Color color) {
 class _HexEntry extends StatefulWidget {
   const _HexEntry({
     required this.initial,
-    required this.background,
     required this.borderStyle,
     required this.onSubmit,
     required this.onDismiss,
   });
 
   final RgbColor initial;
-  final Color? background;
   final BorderStyle borderStyle;
   final void Function(Color color) onSubmit;
   final void Function() onDismiss;
@@ -615,14 +612,19 @@ class _HexEntryState extends State<_HexEntry> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
-      color: widget.background,
+    // A float: `framed` carries both halves of the contract — the opaque fill
+    // (so the app underneath can't bleed through) and the frame. The Column
+    // hugs its rows; `max` would stretch the popover down the whole terminal,
+    // because `RenderBoundsAnchor` lays a float out with loosened (screen-tall)
+    // constraints.
+    return Container.framed(
       border: BoxBorder(style: widget.borderStyle),
       padding: const EdgeInsets.symmetric(horizontal: 1),
       child: SizedBox(
         width: 12,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               _invalid ? 'Use RRGGBB' : 'Hex code',

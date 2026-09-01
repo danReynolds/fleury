@@ -468,64 +468,68 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
           'visibleRangeStart': visibleRangeStart,
           'visibleRangeEnd': visibleRangeEnd,
         }),
-        // Popup makes the floating palette opaque the same way every other
-        // stock overlay does, so interior lines don't have to be hand-padded
-        // to full width to keep the content beneath from bleeding through.
-        // (Rows still pad via `_fitWidth` — that spans the selection
+        // Container.framed makes the floating palette opaque the same way
+        // every other stock overlay does, so interior lines don't have to be
+        // hand-padded to full width to keep the content beneath from bleeding
+        // through. (Rows still pad via `_fitWidth` — that spans the selection
         // highlight, which is a look, not an opacity trick.) Height is bound
         // to the content so the box doesn't stretch to fill the viewport the
-        // centering Align hands it.
-        child: Container.framed(
-          border: BoxBorder(style: theme.borderStyle),
-          child: SizedBox(
-            width: widget.width,
-            height: visible + 2 + (hasDescriptions ? 2 : 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                TextInput(
-                  controller: _query,
-                  focusNode: _queryFocus,
-                  placeholder: widget.placeholder,
-                  autofocus: true,
-                  onSubmit: (_) => _invoke(),
-                ),
-                const SizedBox(height: 1),
-                SizedBox(
-                  height: visible,
-                  child: _filtered.isEmpty
-                      ? Text(
-                          _query.text.isEmpty
-                              ? widget.placeholder
-                              : 'No matching commands',
-                          style: theme.mutedStyle,
-                        )
-                      : ListView.builder(
-                          controller: _list,
-                          selectionActive: true,
-                          itemCount: _filtered.length,
-                          itemBuilder: (context, index, selected) =>
-                              _CommandRow(
-                                command: _filtered[index].command,
-                                index: index,
-                                selected: selected,
-                                width: widget.width,
-                                onActivate: _invokeCommand,
-                              ),
-                        ),
-                ),
-                if (hasDescriptions) ...[
+        // centering Align hands it. SelectionArea.disabled says the command
+        // list is chrome: the palette is often presented inline (a Stack over
+        // the app), where it DOES inherit the root selection scope.
+        child: SelectionArea.disabled(
+          child: Container.framed(
+            border: BoxBorder(style: theme.borderStyle),
+            child: SizedBox(
+              width: widget.width,
+              height: visible + 2 + (hasDescriptions ? 2 : 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextInput(
+                    controller: _query,
+                    focusNode: _queryFocus,
+                    placeholder: widget.placeholder,
+                    autofocus: true,
+                    onSubmit: (_) => _invoke(),
+                  ),
                   const SizedBox(height: 1),
                   SizedBox(
-                    height: 1,
-                    child: Text(
-                      _fitWidth(selectedDescription ?? '', widget.width),
-                      style: theme.mutedStyle,
-                      maxLines: 1,
-                    ),
+                    height: visible,
+                    child: _filtered.isEmpty
+                        ? Text(
+                            _query.text.isEmpty
+                                ? widget.placeholder
+                                : 'No matching commands',
+                            style: theme.mutedStyle,
+                          )
+                        : ListView.builder(
+                            controller: _list,
+                            selectionActive: true,
+                            itemCount: _filtered.length,
+                            itemBuilder: (context, index, selected) =>
+                                _CommandRow(
+                                  command: _filtered[index].command,
+                                  index: index,
+                                  selected: selected,
+                                  width: widget.width,
+                                  onActivate: _invokeCommand,
+                                ),
+                          ),
                   ),
+                  if (hasDescriptions) ...[
+                    const SizedBox(height: 1),
+                    SizedBox(
+                      height: 1,
+                      child: Text(
+                        _fitWidth(selectedDescription ?? '', widget.width),
+                        style: theme.mutedStyle,
+                        maxLines: 1,
+                      ),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),
