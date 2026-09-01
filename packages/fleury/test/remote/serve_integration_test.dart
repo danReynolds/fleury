@@ -136,40 +136,50 @@ void main() {
         await _expectServeAlive(port);
       });
 
-      test('a duplicate Origin on /ws is refused, and the server stays up', () async {
-        final status = await _rawStatusLine(
-          port,
-          'GET /ws HTTP/1.1\r\n'
-          'Host: 127.0.0.1:$port\r\n'
-          'Origin: http://127.0.0.1:$port\r\n'
-          'Origin: http://127.0.0.1:$port\r\n'
-          'Upgrade: websocket\r\n'
-          'Connection: Upgrade\r\n'
-          'Sec-WebSocket-Version: 13\r\n'
-          'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n',
-        );
-        expect(status, contains(' 403 '), reason: 'ambiguity fails closed');
-        await _expectServeAlive(port);
-      });
+      test(
+        'a duplicate Origin on /ws is refused, and the server stays up',
+        () async {
+          final status = await _rawStatusLine(
+            port,
+            'GET /ws HTTP/1.1\r\n'
+            'Host: 127.0.0.1:$port\r\n'
+            'Origin: http://127.0.0.1:$port\r\n'
+            'Origin: http://127.0.0.1:$port\r\n'
+            'Upgrade: websocket\r\n'
+            'Connection: Upgrade\r\n'
+            'Sec-WebSocket-Version: 13\r\n'
+            'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n',
+          );
+          expect(status, contains(' 403 '), reason: 'ambiguity fails closed');
+          await _expectServeAlive(port);
+        },
+      );
 
-      test('a proxy that adds X-Forwarded-Proto per hop still gets same-origin', () async {
-        // The client-facing scheme is the first line; the browser's Origin is
-        // https, matching it. The per-hop shape used to kill the server.
-        final status = await _rawStatusLine(
-          port,
-          'GET /ws HTTP/1.1\r\n'
-          'Host: 127.0.0.1:$port\r\n'
-          'Origin: https://127.0.0.1:$port\r\n'
-          'X-Forwarded-Proto: https\r\n'
-          'X-Forwarded-Proto: http\r\n'
-          'Upgrade: websocket\r\n'
-          'Connection: Upgrade\r\n'
-          'Sec-WebSocket-Version: 13\r\n'
-          'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n',
-        );
-        expect(status, contains(' 101 '), reason: 'same-origin upgrade accepted');
-        await _expectServeAlive(port);
-      });
+      test(
+        'a proxy that adds X-Forwarded-Proto per hop still gets same-origin',
+        () async {
+          // The client-facing scheme is the first line; the browser's Origin is
+          // https, matching it. The per-hop shape used to kill the server.
+          final status = await _rawStatusLine(
+            port,
+            'GET /ws HTTP/1.1\r\n'
+            'Host: 127.0.0.1:$port\r\n'
+            'Origin: https://127.0.0.1:$port\r\n'
+            'X-Forwarded-Proto: https\r\n'
+            'X-Forwarded-Proto: http\r\n'
+            'Upgrade: websocket\r\n'
+            'Connection: Upgrade\r\n'
+            'Sec-WebSocket-Version: 13\r\n'
+            'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n',
+          );
+          expect(
+            status,
+            contains(' 101 '),
+            reason: 'same-origin upgrade accepted',
+          );
+          await _expectServeAlive(port);
+        },
+      );
 
       test('rejects cross-origin WebSocket upgrades', () async {
         await expectLater(
@@ -461,21 +471,27 @@ Future<String> _rawStatusLine(int port, String request) async {
   final received = StringBuffer();
   final statusLine = Completer<String>();
   String firstLine() => received.toString().split('\r\n').first;
-  final sub = utf8.decoder.bind(socket).listen(
-    (chunk) {
-      received.write(chunk);
-      if (received.toString().contains('\r\n\r\n') &&
-          !statusLine.isCompleted) {
-        statusLine.complete(firstLine());
-      }
-    },
-    onDone: () {
-      if (!statusLine.isCompleted) statusLine.complete(firstLine());
-    },
-    onError: (Object error) {
-      if (!statusLine.isCompleted) statusLine.completeError(error);
-    },
-  );
+  // Latin-1, not UTF-8: only the status line and headers are read, and they
+  // are ASCII, while the body may be binary (the font asset). A strict UTF-8
+  // decode threw "Missing extension byte" whenever the first chunk carried
+  // body bytes, which depended on socket timing — a flake, not a finding.
+  final sub = latin1.decoder
+      .bind(socket)
+      .listen(
+        (chunk) {
+          received.write(chunk);
+          if (received.toString().contains('\r\n\r\n') &&
+              !statusLine.isCompleted) {
+            statusLine.complete(firstLine());
+          }
+        },
+        onDone: () {
+          if (!statusLine.isCompleted) statusLine.complete(firstLine());
+        },
+        onError: (Object error) {
+          if (!statusLine.isCompleted) statusLine.completeError(error);
+        },
+      );
   try {
     return await statusLine.future.timeout(const Duration(seconds: 5));
   } finally {
