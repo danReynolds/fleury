@@ -344,6 +344,21 @@ void main() {
       expect(combined, isNot(contains('dart pub global activate hotreloader')));
     });
 
+    // `runApp(args: args)` (aad8a33) made a restarted app able to re-see its
+    // own argv. The guide kept teaching the workaround it replaced — turn
+    // the dev loop off and restart by hand.
+    test('hot-reload guide teaches runApp(args:) for argv-driven apps', () {
+      final guide = File(
+        p.join(repo.path, 'website/src/content/docs/guides/hot-reload.md'),
+      ).readAsStringSync();
+
+      expect(guide, contains('runApp(const MyApp(), args: args)'));
+      expect(
+        guide,
+        isNot(contains('`FLEURY_HOT_RELOAD=0` and restart manually')),
+      );
+    });
+
     test('shipped Fleury examples do not link the unowned domain', () {
       final surfaces = <File>[
         File(p.join(repo.path, 'packages/storybook/lib/src/catalog.dart')),
