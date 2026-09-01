@@ -66,7 +66,9 @@ final class RemoteTerminalDriver
     this._transport, {
     InlineImageCachePolicy imageCachePolicy = defaultInlineImageCachePolicy,
     bool? superviseHandshakeWait,
+    SemanticsWireEncoder? semanticsEncoder,
   }) : _shippedImages = InlineImageCacheLedger(imageCachePolicy),
+       _semanticsEncoder = semanticsEncoder ?? SemanticsWireEncoder(),
        _superviseHandshakeWait =
            superviseHandshakeWait ?? _handshakeWaitSupervisedByDefault;
 
@@ -99,7 +101,11 @@ final class RemoteTerminalDriver
   final StreamController<TuiEvent> _events =
       StreamController<TuiEvent>.broadcast();
   final _RemoteParserSink _sink = _RemoteParserSink();
-  final SemanticsWireEncoder _semanticsEncoder = SemanticsWireEncoder();
+  /// Diffs the semantic tree against what THIS peer is believed to hold.
+  /// Injectable so the reused-encoder contract [enter] enforces is testable —
+  /// a driver that builds its own encoder starts fresh by construction, which
+  /// is exactly the case that cannot exercise it.
+  final SemanticsWireEncoder _semanticsEncoder;
   RemoteSemanticActionHandler? _onSemanticAction;
   RemoteDebugRequestHandler? _onDebugRequest;
   void Function(int seq, RemoteClipboardStatus status)? _onClipboardResult;
@@ -172,6 +178,13 @@ final class RemoteTerminalDriver
       );
     }
     _sink.target = _events;
+    // A connect is a NEW peer, and the semantics encoder's mirror is a belief
+    // about what THIS peer holds. On a fresh encoder this is free; on a
+    // reused one it is the difference between the browser's first frame being
+    // a full tree and it being a PATCH against a base it never received (or,
+    // when the tree is unchanged, no frame at all and an empty accessibility
+    // tree for the whole session).
+    _semanticsEncoder.reset();
 
     // The peer is responsible for the actual terminal-mode bookkeeping
     // on its end (raw input, alt screen, hidden cursor). We just pass

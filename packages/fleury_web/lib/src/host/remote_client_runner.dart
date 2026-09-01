@@ -38,7 +38,15 @@ Future<MountedApp?> connectRemoteClient({
 }) async {
   final doc = document ?? web.document;
   try {
-    final app = await BrowserPresentationHost(into: host).attach(source);
+    final app = await BrowserPresentationHost(
+      into: host,
+      // The served page IS the app, and its chrome (the `#status` line, the
+      // host's own padding ring) sits outside the cell grid. Without
+      // document-wide recovery a click on any of it blurs the hidden capture
+      // textarea and the session goes keyboard-dead with no cue and no way
+      // back except a click that happens to land on the grid.
+      captureKeyboardFromDocument: true,
+    ).attach(source);
     doc.body?.setAttribute('data-fleury-remote-client', _connectedStatus);
     return app;
   } catch (error) {

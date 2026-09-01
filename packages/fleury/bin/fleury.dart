@@ -1339,22 +1339,28 @@ Future<int> _runServeSpawn({
     // before any await, so concurrent connects can't all slip past the check.
     // The warm standby holds a subprocess too but isn't a browser session, so
     // it doesn't count against the browser cap.
-    if (admitted >= maxSessions) {
-      stderr.writeln(
-        '[serve] rejecting connection: session limit reached '
-        '($admitted/$maxSessions; raise with --max-sessions=<n>).',
-      );
-      req.response.statusCode = HttpStatus.serviceUnavailable;
-      req.response.write('session limit reached');
-      await req.response.close();
-      return;
+    //
+    // The DECISION is synchronous; the REJECTION is not. Turning the browser
+    // away with a pre-upgrade 503 closes the socket before it ever opens, and
+    // script cannot read an HTTP status from a failed upgrade — the serve page
+    // could only render a blank grid with no message. So decide here, upgrade
+    // below, and close the opened socket with a code and a human reason the
+    // client shows verbatim.
+    final overCapacity = admitted >= maxSessions;
+    final capacityMessage =
+        'session limit reached ($admitted/$maxSessions); '
+        'raise with --max-sessions=<n>.';
+    if (overCapacity) {
+      stderr.writeln('[serve] rejecting connection: $capacityMessage');
+    } else {
+      admitted++;
     }
-    admitted++;
     // Release the reservation exactly once — when this connection's serving
     // session ends (its subprocess exits) or the connect fails outright. The
     // slot is held for the whole teardown, which is correct: the subprocess
-    // is still alive until then.
-    var released = false;
+    // is still alive until then. A connection turned away at the cap reserved
+    // nothing, so its release is pre-spent.
+    var released = overCapacity;
     void release() {
       if (released) return;
       released = true;
@@ -1384,6 +1390,14 @@ Future<int> _runServeSpawn({
         await req.response.close();
       } catch (_) {
         // The socket may already be hijacked/closed by the failed upgrade.
+      }
+      return;
+    }
+    if (overCapacity) {
+      try {
+        await ws.close(serveSessionLimitCloseCode, capacityMessage);
+      } catch (_) {
+        // The browser may have given up on the socket already.
       }
       return;
     }

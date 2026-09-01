@@ -42,6 +42,15 @@ void main() {
       );
     });
 
+    test('the surface host is not a focus sink', () {
+      // Keyboard capture lives on the hidden textarea the client injects.
+      // Making the host itself tab-focusable only gives the browser somewhere
+      // to move focus TO — a click on the host's padding ring blurs the
+      // textarea, the source sweeps held keys and drops the coordinator, and
+      // the session goes keyboard-dead with no cue.
+      expect(serveIndexHtml, isNot(contains('tabindex')));
+    });
+
     test('carries no terminal-emulator dependency', () {
       // The whole point of the structured client: no xterm, no CDN.
       expect(serveIndexHtml, isNot(contains('xterm')));

@@ -298,9 +298,6 @@ final class _ThrowingResizeSurface implements FrameSurface {
   CellSize get size => CellSize.zero;
 
   @override
-  WebSurfaceCapabilities get capabilities => const WebSurfaceCapabilities();
-
-  @override
   FrameSurfacePresentationStats present(
     CellBuffer previous,
     CellBuffer next,
@@ -330,9 +327,6 @@ final class _ThrowingPresentSurface implements FrameSurface {
   final CellSize size;
 
   @override
-  WebSurfaceCapabilities get capabilities => const WebSurfaceCapabilities();
-
-  @override
   FrameSurfacePresentationStats present(
     CellBuffer previous,
     CellBuffer next,
@@ -358,9 +352,6 @@ final class _ThrowingDisposeSurface implements FrameSurface {
 
   @override
   final CellSize size;
-
-  @override
-  WebSurfaceCapabilities get capabilities => const WebSurfaceCapabilities();
 
   @override
   FrameSurfacePresentationStats present(

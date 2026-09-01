@@ -19,11 +19,13 @@ final class DomCellMetrics implements CellMetrics {
     web.Window? window,
     double minimumCellWidth = 1,
     double minimumCellHeight = 1,
+    web.EventTarget Function(String query)? matchMedia,
   }) : _container = container,
        _document = document ?? web.document,
        _window = window ?? web.window,
        _minimumCellWidth = minimumCellWidth,
-       _minimumCellHeight = minimumCellHeight {
+       _minimumCellHeight = minimumCellHeight,
+       _matchMedia = matchMedia {
     _probe = _document.createElement('span');
     _probe.textContent = _probeText;
     _probe.setAttribute(
@@ -42,11 +44,17 @@ final class DomCellMetrics implements CellMetrics {
   final web.Window _window;
   final double _minimumCellWidth;
   final double _minimumCellHeight;
+
+  /// `matchMedia` seam. Production uses the window's; tests hand back a fake
+  /// event target so the DPR watch can be driven without a second monitor.
+  final web.EventTarget Function(String query)? _matchMedia;
   late final web.Element _probe;
   web.ResizeObserver? _resizeObserver;
   void Function()? _onMetricsDirty;
   JSFunction? _fontLoadListener;
   JSFunction? _windowResizeListener;
+  web.EventTarget? _resolutionQuery;
+  JSFunction? _resolutionListener;
   MeasuredCellBox? _cached;
   var _dirty = true;
   var _fontObserverGeneration = 0;
@@ -163,6 +171,7 @@ final class DomCellMetrics implements CellMetrics {
     )..observe(_container);
     _observeWindowResize();
     _observeFontReadiness();
+    _observeDevicePixelRatio();
   }
 
   @override
@@ -197,6 +206,7 @@ final class DomCellMetrics implements CellMetrics {
     _onMetricsDirty = null;
     _removeFontListeners();
     _removeWindowResizeListener();
+    _removeResolutionListener();
     _resizeObserver?.disconnect();
     _resizeObserver = null;
     final parent = _probe.parentNode;
@@ -243,6 +253,49 @@ final class DomCellMetrics implements CellMetrics {
     if (listener == null) return;
     _window.removeEventListener('resize', listener);
     _windowResizeListener = null;
+  }
+
+  /// Watches for a device-pixel-ratio change, re-arming at each new ratio.
+  ///
+  /// Dragging a window between displays of different DPR at the SAME CSS size
+  /// fires no ResizeObserver entry, no `window.resize` and no font event — the
+  /// three signals above are all blind to it. But the cell box is SNAPPED with
+  /// `devicePixelRatio`, so `cssCellWidth`, the grid's letter-spacing
+  /// compensation and the pinned block-glyph widths all go stale and the
+  /// glyphs drift out of the cells the hit-test maps against.
+  ///
+  /// A `(resolution: Ndppx)` media query is the signal the platform offers,
+  /// and it is STATIC — it describes one ratio. Hearing about the ratio AFTER
+  /// this one therefore means re-arming the query on every fire; without that
+  /// a single display swap would deafen the watch for the rest of the session.
+  void _observeDevicePixelRatio() {
+    _removeResolutionListener();
+    final dpr = _window.devicePixelRatio;
+    if (!dpr.isFinite || dpr <= 0) return;
+    final web.EventTarget query;
+    try {
+      final matcher = _matchMedia;
+      final media = '(resolution: ${dpr}dppx)';
+      query = matcher != null ? matcher(media) : _window.matchMedia(media);
+    } catch (_) {
+      // An environment without matchMedia keeps the other three signals.
+      return;
+    }
+    final listener = ((web.Event _) {
+      _observeDevicePixelRatio();
+      _notifyMetricsDirty();
+    }).toJS;
+    _resolutionQuery = query;
+    _resolutionListener = listener;
+    query.addEventListener('change', listener);
+  }
+
+  void _removeResolutionListener() {
+    final listener = _resolutionListener;
+    if (listener == null) return;
+    _resolutionQuery?.removeEventListener('change', listener);
+    _resolutionListener = null;
+    _resolutionQuery = null;
   }
 
   void _notifyMetricsDirty() {

@@ -165,6 +165,20 @@ const int semanticActionTargetTokenProtocolVersion = 6;
 /// shell connected but blank.
 const int remoteAnsiProtocolVersion = 1;
 
+/// WebSocket close code `fleury serve` turns a browser away with when the
+/// admission cap (`--max-sessions`) is already full.
+///
+/// The rejection happens AFTER the upgrade, not as a pre-upgrade 503: a
+/// pre-upgrade rejection closes the socket before it ever opens, script cannot
+/// read the HTTP status, and the client can only report "connection failed" —
+/// which the serve page renders as a blank grid. Closing an opened socket
+/// delivers a code AND a human reason the page shows verbatim.
+///
+/// The private-use range (4000-4999) rather than RFC 6455's 1013 "Try Again
+/// Later": `dart:io` refuses to send 1012-1014 (`_isReservedStatusCode`), and
+/// a private code per deliberate rejection keeps them distinguishable.
+const int serveSessionLimitCloseCode = 4001;
+
 /// Default remote frame payload cap.
 ///
 /// Sixteen MiB leaves ample headroom for a large full repaint or inline image,

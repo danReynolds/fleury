@@ -6,6 +6,8 @@
 @TestOn('browser')
 library;
 
+import 'dart:async';
+
 import 'package:fleury_web/fleury_web.dart';
 import 'package:test/test.dart';
 import 'package:web/web.dart' as web;
@@ -23,8 +25,14 @@ final class _FailingFrameSource implements BrowserFrameSource {
 
 /// A frame source that starts cleanly, returning a wire-style mounted session.
 final class _SucceedingFrameSource implements BrowserFrameSource {
+  _SucceedingFrameSource({this.startInput = false});
+
+  /// Starts the DOM input listeners the way WireFrameSource._onOpen does.
+  final bool startInput;
+
   @override
   Future<MountedApp> start(BrowserHostComponents components) async {
+    if (startInput) components.inputSource.start((_) {});
     return MountedApp.forFrameSource(
       surface: components.surface,
       cellMetrics: components.metrics,
@@ -88,4 +96,54 @@ void main() {
       expect(host.querySelector('[data-fleury-connection-error]'), isNull);
     },
   );
+
+  test('a click on the served page chrome takes keyboard capture back', () {
+    // The served page IS the app: its `#status` line sits outside the host,
+    // and the host has chrome (a padding ring) the grid does not cover.
+    // Clicking either blurs the hidden capture textarea — which sweeps held
+    // keys and clears the focus coordinator — and every keystroke is dead for
+    // the rest of the session with no cue. The serve entrypoint therefore
+    // assembles the host with document-wide capture recovery.
+    final status = web.document.createElement('div')..id = 'status';
+    final elsewhere =
+        web.document.createElement('input') as web.HTMLInputElement;
+    web.document.body!.appendChild(status);
+    web.document.body!.appendChild(elsewhere);
+    addTearDown(() {
+      status.remove();
+      elsewhere.remove();
+    });
+
+    MountedApp? app;
+    unawaited(
+      connectRemoteClient(
+        host: host,
+        source: _SucceedingFrameSource(startInput: true),
+      ).then((mounted) => app = mounted),
+    );
+    addTearDown(() async => app?.dispose());
+
+    final textArea = host.querySelector('textarea');
+    expect(textArea, isNotNull, reason: 'the client injects a capture area');
+    expect(web.document.activeElement, same(textArea));
+
+    elsewhere.focus();
+    expect(web.document.activeElement, same(elsewhere));
+
+    status.dispatchEvent(
+      web.PointerEvent(
+        'pointerdown',
+        web.PointerEventInit(
+          pointerId: 9,
+          clientX: 1,
+          clientY: 1,
+          button: 0,
+          buttons: 1,
+          bubbles: true,
+          cancelable: true,
+        ),
+      ),
+    );
+    expect(web.document.activeElement, same(textArea));
+  });
 }

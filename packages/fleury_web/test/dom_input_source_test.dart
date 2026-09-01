@@ -2,6 +2,10 @@
 library;
 
 import 'package:fleury/fleury_host.dart';
+// KeyboardSession is the runtime's regularizer, not public API — imported
+// directly so this suite can prove the browser source's stream is well-formed
+// against the real thing rather than a hand-rolled model of it.
+import 'package:fleury/src/input/keyboard_state.dart';
 import 'package:fleury_web/fleury_web.dart';
 import 'package:fleury_web/src/input/dom_input_source.dart';
 import 'package:fleury_web/src/metrics/cell_metrics.dart';
@@ -1590,6 +1594,455 @@ void main() {
       reason: 'app captures the click',
     );
     expect(events, isNotEmpty, reason: 'normal cell click routes as input');
+  });
+
+  test('a Meta auto-repeat still synthesizes its release (no wedged press)', () {
+    // RFC 0020 §10: keys pressed under Cmd get press-only semantics — the
+    // down, then an immediate synthesized release — because macOS browsers
+    // swallow the real keyup. An auto-repeat under Cmd is the SAME regime and
+    // must close the same way: the session's repeat-without-down repair opens
+    // a held record for it, and only a release can close that record. Without
+    // one the key wedges held for the rest of the session, and the next
+    // genuine press regularizes to `repeat` (filtered out of the command lane
+    // by default), so that key's bindings go dead.
+    final events = <TuiEvent>[];
+    final host = web.document.createElement('div');
+    final textArea =
+        web.document.createElement('textarea') as web.HTMLTextAreaElement;
+    web.document.body!.appendChild(host);
+    final source = DomInputSource(
+      hostElement: host,
+      textArea: textArea,
+      cellMetrics: _FakeMetrics(
+        const MeasuredCellBox(
+          cssCellWidth: 10,
+          cssCellHeight: 20,
+          cssCanvasWidth: 80,
+          cssCanvasHeight: 60,
+          devicePixelRatio: 1,
+          cols: 8,
+          rows: 3,
+        ),
+      ),
+    );
+    addTearDown(() {
+      source.dispose();
+      host.parentNode?.removeChild(host);
+    });
+    source.start(events.add);
+
+    void keydown(
+      String key, {
+      required String code,
+      bool metaKey = false,
+      bool repeat = false,
+    }) => textArea.dispatchEvent(
+      web.KeyboardEvent(
+        'keydown',
+        web.KeyboardEventInit(
+          key: key,
+          code: code,
+          metaKey: metaKey,
+          repeat: repeat,
+          bubbles: true,
+          cancelable: true,
+        ),
+      ),
+    );
+    void keyup(String key, {required String code, bool metaKey = false}) =>
+        textArea.dispatchEvent(
+          web.KeyboardEvent(
+            'keyup',
+            web.KeyboardEventInit(
+              key: key,
+              code: code,
+              metaKey: metaKey,
+              bubbles: true,
+              cancelable: true,
+            ),
+          ),
+        );
+
+    // Cmd down, a held under it long enough to auto-repeat, then both up.
+    // The real `a` keyup is the one macOS swallows; dispatch it anyway so the
+    // fix is verified not to double-close.
+    keydown('Meta', code: 'MetaLeft', metaKey: true);
+    keydown('a', code: 'KeyA', metaKey: true);
+    keydown('a', code: 'KeyA', metaKey: true, repeat: true);
+    keyup('a', code: 'KeyA', metaKey: true);
+    keyup('Meta', code: 'MetaLeft');
+
+    // Replay through a real session: the source's stream is only correct if
+    // the regularizer it feeds ends up with nothing held.
+    final session = KeyboardSession(capabilities: KeyboardCapabilities.full);
+    for (final event in events.whereType<KeyEvent>()) {
+      session.ingest(event);
+    }
+    expect(
+      session.publishLatch().isHeld(const KeyCode.char('a')),
+      isFalse,
+      reason: 'the Meta-regime repeat left an unclosable held record',
+    );
+
+    // ...and the next genuine press is still a `down`, not a demoted `repeat`
+    // (which the dispatcher keeps out of the command lane by default).
+    events.clear();
+    keydown('a', code: 'KeyA');
+    final next = events.whereType<KeyEvent>().single;
+    expect(
+      session.ingest(next).events.map((e) => e.type),
+      [KeyEventType.down],
+      reason: 'a wedged press demotes the next real press to repeat',
+    );
+  });
+
+  test('a zoom wheel gesture stays the browser\'s (ctrl/meta + wheel)', () {
+    // Chrome delivers a trackpad pinch as ctrl+wheel, and ctrl/Cmd+wheel is
+    // the keyboard zoom gesture. The surface root's wheel listener is
+    // non-passive and covers the whole 100vw×100vh served page, so
+    // preventDefault()ing these swallows page zoom everywhere.
+    final events = <TuiEvent>[];
+    final host = web.document.createElement('div');
+    final textArea =
+        web.document.createElement('textarea') as web.HTMLTextAreaElement;
+    web.document.body!.appendChild(host);
+    final source = DomInputSource(
+      hostElement: host,
+      textArea: textArea,
+      cellMetrics: _FakeMetrics(
+        const MeasuredCellBox(
+          cssCellWidth: 10,
+          cssCellHeight: 20,
+          cssCanvasWidth: 80,
+          cssCanvasHeight: 60,
+          cssCanvasLeft: 10,
+          cssCanvasTop: 20,
+          devicePixelRatio: 1,
+          cols: 8,
+          rows: 3,
+        ),
+      ),
+    );
+    addTearDown(() {
+      source.dispose();
+      host.parentNode?.removeChild(host);
+    });
+    source.start(events.add);
+
+    web.WheelEvent wheel({bool ctrlKey = false, bool metaKey = false}) =>
+        web.WheelEvent(
+          'wheel',
+          web.WheelEventInit(
+            clientX: 15,
+            clientY: 25,
+            // A full cell height of travel — enough to step if it were routed.
+            deltaY: -20,
+            ctrlKey: ctrlKey,
+            metaKey: metaKey,
+            bubbles: true,
+            cancelable: true,
+          ),
+        );
+
+    final zoom = wheel(ctrlKey: true);
+    host.dispatchEvent(zoom);
+    expect(
+      zoom.defaultPrevented,
+      isFalse,
+      reason: 'ctrl+wheel is the browser zoom / trackpad pinch gesture',
+    );
+    expect(events, isEmpty, reason: 'a zoom gesture is not app scroll');
+
+    final cmdZoom = wheel(metaKey: true);
+    host.dispatchEvent(cmdZoom);
+    expect(cmdZoom.defaultPrevented, isFalse);
+    expect(events, isEmpty);
+
+    // A plain wheel is still the app's: cancelled, and routed as a step.
+    final scroll = wheel();
+    host.dispatchEvent(scroll);
+    expect(scroll.defaultPrevented, isTrue);
+    expect(events, [
+      const MouseEvent(
+        kind: MouseEventKind.scrollUp,
+        button: MouseButton.none,
+        col: 0,
+        row: 0,
+      ),
+    ]);
+  });
+
+  test('pointer moves inside one cell emit a single event', () {
+    // Browsers fire pointermove at 60-120 Hz. The grid's resolution is a
+    // CELL, so every sample that lands in the same cell with the same buttons
+    // and modifiers is a duplicate the app cannot tell apart — but on the
+    // served path each one costs an InputEventFrame on the wire, a full
+    // host-side dispatch, and a scheduled frame.
+    final events = <TuiEvent>[];
+    final host = web.document.createElement('div');
+    final textArea =
+        web.document.createElement('textarea') as web.HTMLTextAreaElement;
+    web.document.body!.appendChild(host);
+    final source = DomInputSource(
+      hostElement: host,
+      textArea: textArea,
+      cellMetrics: _FakeMetrics(
+        const MeasuredCellBox(
+          cssCellWidth: 10,
+          cssCellHeight: 20,
+          cssCanvasWidth: 80,
+          cssCanvasHeight: 60,
+          cssCanvasLeft: 10,
+          cssCanvasTop: 20,
+          devicePixelRatio: 1,
+          cols: 8,
+          rows: 3,
+        ),
+      ),
+    );
+    addTearDown(() {
+      source.dispose();
+      host.parentNode?.removeChild(host);
+    });
+    source.start(events.add);
+
+    void move(int clientX, int clientY, {bool shiftKey = false}) =>
+        host.dispatchEvent(
+          web.PointerEvent(
+            'pointermove',
+            web.PointerEventInit(
+              pointerId: 1,
+              clientX: clientX,
+              clientY: clientY,
+              shiftKey: shiftKey,
+              bubbles: true,
+              cancelable: true,
+            ),
+          ),
+        );
+    void pointer(String type, {required int button, required int buttons}) =>
+        host.dispatchEvent(
+          web.PointerEvent(
+            type,
+            web.PointerEventInit(
+              pointerId: 1,
+              clientX: 35,
+              clientY: 45,
+              button: button,
+              buttons: buttons,
+              bubbles: true,
+              cancelable: true,
+            ),
+          ),
+        );
+
+    // Ten sub-cell samples across cell (1, 1).
+    for (var i = 0; i < 10; i++) {
+      move(20 + i, 40 + i);
+    }
+    expect(events, [
+      const MouseEvent(
+        kind: MouseEventKind.moved,
+        button: MouseButton.none,
+        col: 1,
+        row: 1,
+      ),
+    ]);
+
+    // Crossing into the next cell is a real change.
+    move(35, 45);
+    expect(events, hasLength(2));
+    expect((events.last as MouseEvent).col, 2);
+
+    // A modifier change at the same cell is a real change too: shift+move
+    // drives selection extension, so it must not be filtered.
+    move(35, 45, shiftKey: true);
+    expect(events, hasLength(3));
+    expect((events.last as MouseEvent).modifiers, {KeyModifier.shift});
+
+    // ...and dropping the modifier again re-emits.
+    move(35, 45);
+    expect(events, hasLength(4));
+
+    // A press/release is a gesture boundary: the identical move that follows
+    // one must reach the app rather than being filtered as a repeat of the
+    // hover move before it.
+    pointer('pointerdown', button: 0, buttons: 1);
+    pointer('pointerup', button: 0, buttons: 0);
+    expect(events, hasLength(6));
+    move(35, 45);
+    expect(
+      events,
+      hasLength(7),
+      reason: 'a completed gesture must reset the duplicate-move filter',
+    );
+    expect((events.last as MouseEvent).kind, MouseEventKind.moved);
+  });
+
+  test('a pointerdown on host chrome outside the grid keeps keyboard capture', () {
+    // The keyboard listeners live on the hidden capture textarea, and the
+    // pointerdown that re-acquires it sits on the SURFACE ROOT. On the served
+    // page the host is bigger than the grid (a padding ring, and the host
+    // element itself is focusable chrome), so a click that lands on the host
+    // but not the grid blurs the textarea — which sweeps held keys and clears
+    // the coordinator — and every keystroke is dead until a click happens to
+    // land back inside the grid. No cue, no recovery.
+    final events = <TuiEvent>[];
+    final host = web.document.createElement('div') as web.HTMLElement;
+    final surfaceRoot = web.document.createElement('div');
+    final otherInput =
+        web.document.createElement('input') as web.HTMLInputElement;
+    final textArea =
+        web.document.createElement('textarea') as web.HTMLTextAreaElement;
+    final focusCoordinator = WebFocusCoordinator();
+    host.style.setProperty('padding', '6px');
+    host.appendChild(surfaceRoot);
+    web.document.body!.appendChild(host);
+    web.document.body!.appendChild(otherInput);
+    final source = DomInputSource(
+      hostElement: host,
+      pointerTarget: surfaceRoot,
+      textArea: textArea,
+      focusCoordinator: focusCoordinator,
+      cellMetrics: _FakeMetrics(
+        const MeasuredCellBox(
+          cssCellWidth: 10,
+          cssCellHeight: 20,
+          cssCanvasWidth: 80,
+          cssCanvasHeight: 60,
+          devicePixelRatio: 1,
+          cols: 8,
+          rows: 3,
+        ),
+      ),
+    );
+    addTearDown(() {
+      source.dispose();
+      host.remove();
+      otherInput.remove();
+    });
+
+    source.start(events.add);
+    expect(web.document.activeElement, same(textArea));
+
+    // Focus goes elsewhere (the host's own chrome, a browser control): the
+    // source sweeps and drops capture.
+    otherInput.focus();
+    textArea.dispatchEvent(web.FocusEvent('focusout'));
+    expect(focusCoordinator.browserFocusTarget, isNull);
+
+    // A click on the host, outside the grid, must take capture back.
+    host.dispatchEvent(
+      web.PointerEvent(
+        'pointerdown',
+        web.PointerEventInit(
+          pointerId: 3,
+          clientX: 2,
+          clientY: 2,
+          button: 0,
+          buttons: 1,
+          bubbles: true,
+          cancelable: true,
+        ),
+      ),
+    );
+    expect(web.document.activeElement, same(textArea));
+    expect(focusCoordinator.browserFocusTarget, WebFocusTarget.keyboardCapture);
+
+    // ...and keys reach the app again.
+    textArea.dispatchEvent(
+      web.KeyboardEvent(
+        'keydown',
+        web.KeyboardEventInit(key: 'Enter', bubbles: true, cancelable: true),
+      ),
+    );
+    expect(events.whereType<KeyEvent>().last.code, KeyCode.enter);
+  });
+  test('the served page takes keyboard capture back from document chrome', () {
+    // `fleury serve`'s page has chrome OUTSIDE the host element (the #status
+    // line). The served page IS the app, so a pointerdown anywhere in it must
+    // restore capture; an embedded surface is a guest on someone else's page
+    // and must not steal focus from the rest of it.
+    final host = web.document.createElement('div') as web.HTMLElement;
+    final surfaceRoot = web.document.createElement('div');
+    final status = web.document.createElement('div');
+    final otherInput =
+        web.document.createElement('input') as web.HTMLInputElement;
+    host.appendChild(surfaceRoot);
+    web.document.body!.appendChild(host);
+    web.document.body!.appendChild(status);
+    web.document.body!.appendChild(otherInput);
+    addTearDown(() {
+      status.remove();
+      otherInput.remove();
+      host.remove();
+    });
+
+    const metrics = _FakeMetrics(
+      MeasuredCellBox(
+        cssCellWidth: 10,
+        cssCellHeight: 20,
+        cssCanvasWidth: 80,
+        cssCanvasHeight: 60,
+        devicePixelRatio: 1,
+        cols: 8,
+        rows: 3,
+      ),
+    );
+
+    void blur(web.HTMLTextAreaElement textArea) {
+      otherInput.focus();
+      textArea.dispatchEvent(web.FocusEvent('focusout'));
+    }
+
+    void clickStatus() => status.dispatchEvent(
+      web.PointerEvent(
+        'pointerdown',
+        web.PointerEventInit(
+          pointerId: 4,
+          clientX: 1,
+          clientY: 1,
+          button: 0,
+          buttons: 1,
+          bubbles: true,
+          cancelable: true,
+        ),
+      ),
+    );
+
+    final embedTextArea =
+        web.document.createElement('textarea') as web.HTMLTextAreaElement;
+    final embedded = DomInputSource(
+      hostElement: host,
+      pointerTarget: surfaceRoot,
+      textArea: embedTextArea,
+      cellMetrics: metrics,
+    );
+    addTearDown(embedded.dispose);
+    embedded.start((_) {});
+    blur(embedTextArea);
+    clickStatus();
+    expect(
+      web.document.activeElement,
+      same(otherInput),
+      reason: 'an embedded surface must not grab focus off its own host',
+    );
+    embedded.dispose();
+
+    final serveTextArea =
+        web.document.createElement('textarea') as web.HTMLTextAreaElement;
+    final served = DomInputSource(
+      hostElement: host,
+      pointerTarget: surfaceRoot,
+      textArea: serveTextArea,
+      cellMetrics: metrics,
+      captureKeyboardFromDocument: true,
+    );
+    addTearDown(served.dispose);
+    served.start((_) {});
+    blur(serveTextArea);
+    clickStatus();
+    expect(web.document.activeElement, same(serveTextArea));
   });
 }
 

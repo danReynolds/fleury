@@ -482,7 +482,13 @@ final class SemanticsWireEncoder {
   }
 
   /// Forgets the peer's state so the next encode re-sends a full frame.
-  /// Call when a new peer connects on a reused encoder.
+  ///
+  /// The retained mirror is a belief about what ONE peer holds, so every
+  /// connect must start from nothing: `RemoteTerminalDriver.enter` calls this
+  /// (free on a fresh encoder), and the oversize / send-failure paths call it
+  /// because the encoder advanced past a frame that never reached the peer.
+  /// Skipping it leaves the next send a PATCH against a base the receiver
+  /// does not have — or, when the tree is unchanged, no send at all.
   void reset() {
     _sent = const {};
     _sentNodeByteLengths = const {};
