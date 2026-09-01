@@ -883,16 +883,21 @@ class RenderLineChart extends RenderObject {
     var (xmin, xmax) = _effectiveRange(_xRange, _xExtents, _padding);
     var (ymin, ymax) = _effectiveRange(_yRange, _yExtents, _padding);
     // Degenerate single-value ranges: pad so the line has something to draw.
+    // Padded on the *resolved* range, once, so every consumer below (the
+    // transforms, the gradient fill, references, the tooltip) divides by a
+    // real span instead of each guarding a zero of its own.
     if (xmax == xmin) {
-      xmax = xmin + 1;
+      // Forward only — a lone point anchors the left edge of its window.
+      xmax = xmin + _degeneratePad(xmin);
     }
     if (ymax == ymin) {
       // Pad symmetrically so a constant series sits mid-plot. Padding only
       // upward pins it to the baseline, where an area fill has zero height and
       // renders completely blank — the chart's own autoscale would be what
       // made the data invisible.
-      ymin -= 0.5;
-      ymax += 0.5;
+      final half = _degeneratePad(ymin) / 2;
+      ymin -= half;
+      ymax += half;
     }
 
     // Grid first, so braille paints over it where they overlap.
@@ -927,12 +932,15 @@ class RenderLineChart extends RenderObject {
     final pxW = plot.pixelWidth;
     final pxH = plot.pixelHeight;
 
-    // Convert logical coordinates to pixel space. Non-finite inputs are
-    // clipped to a sentinel the buffer ignores (out-of-bounds).
+    // Convert logical coordinates to pixel space. Non-finite inputs — and a
+    // non-finite ratio, which an explicitly-supplied infinite range can still
+    // produce — are clipped to a sentinel the buffer ignores (out-of-bounds).
+    // `.round()` throws on NaN or infinity, so nothing non-finite may reach it.
     int toPx(num x) {
       final d = x.toDouble();
       if (!d.isFinite) return -1;
       final t = (d - xmin) / (xmax - xmin);
+      if (!t.isFinite) return -1;
       return (t * (pxW - 1)).round();
     }
 
@@ -940,6 +948,7 @@ class RenderLineChart extends RenderObject {
       final d = y.toDouble();
       if (!d.isFinite) return -1;
       final t = (d - ymin) / (ymax - ymin);
+      if (!t.isFinite) return -1;
       return ((1 - t) * (pxH - 1)).round();
     }
 
@@ -1801,6 +1810,21 @@ class RenderLineChart extends RenderObject {
       }
     }
     return (lo ?? 0, hi ?? 1);
+  }
+
+  /// Width to widen a zero-span range by, scaled to the value it surrounds.
+  ///
+  /// A constant (`+ 1`, `± 0.5`) is the obvious choice and is wrong: at
+  /// |v| >= 2^53 a double has no room for it, so the widening is silently
+  /// dropped, the span stays 0, and every `(v - min) / span` in paint becomes
+  /// `0 / 0` — NaN, which `.round()` cannot convert and throws on. A real
+  /// nanosecond epoch (~1.7e18) is well past that line. Scaling by 1e-9 clears
+  /// the ulp (~2.2e-16 of the value) by six orders of magnitude at any scale,
+  /// while the floor of 1 keeps ordinary magnitudes on exactly the unit-wide
+  /// window they have always had.
+  static double _degeneratePad(double v) {
+    final scaled = v.abs() * 1e-9;
+    return scaled > 1.0 ? scaled : 1.0;
   }
 
   static (double, double) _effectiveRange(
