@@ -683,23 +683,26 @@ class InputDispatcher {
     // should keep a pure prefix alive longer is a separate decision, and the
     // pure-prefix path already re-arms nothing.
     if (event.type == KeyEventType.repeat) return KeyEventResult.ignored;
-    final activeCandidates = pending.candidates
-        .where(_isBindingCurrentlyActive)
-        .toList(growable: false);
-    if (activeCandidates.length != pending.candidates.length) {
-      if (activeCandidates.isEmpty) {
-        // Input topology changed while the leader was held (for example an
-        // ErrorBoundary contained the focused subtree). Never invoke a
-        // captured handler directly after its source left the active chain.
-        _cancelPendingAndRedispatchHeld();
-        return null;
-      }
-      pending = _PendingSequence(
-        events: pending.events,
-        candidates: activeCandidates,
-        texts: pending.texts,
-        lanes: pending.lanes,
-      );
+    // Candidates are re-resolved against the LIVE tree on every step, by the
+    // SCOPE they came from rather than by instance. A scope rebuilds whenever
+    // anything above it calls setState — a clock, a stream, a hover state —
+    // and every rebuild hands the dispatcher fresh KeyBinding objects for the
+    // same bindings. Re-validating by identity read each such rebuild as "the
+    // bindings went away" and cancelled the sequence, so `g g` could never
+    // complete under a live-updating UI. Re-resolving also means the CURRENT
+    // handler fires, never a closure captured at step 0 over state the
+    // rebuild has since replaced.
+    final live = _liveCandidates(pending);
+    if (live.isEmpty) {
+      // Input topology changed while the prefix was held: the scope left the
+      // active chain (an ErrorBoundary contained the focused subtree, focus
+      // moved out), or its rebuild removed or disabled every binding that
+      // opened the sequence. Never fire a captured handler after that.
+      _cancelPendingAndRedispatchHeld();
+      return null;
+    }
+    if (!_sameBindings(live, pending.candidates)) {
+      pending = pending.withCandidates(live);
       _pending = pending;
     }
     final completed = pending.tryComplete(event, lane, textOrigin);
@@ -737,16 +740,45 @@ class InputDispatcher {
     return null;
   }
 
-  bool _isBindingCurrentlyActive(KeyBinding binding) {
-    if (!binding.enabled) return false;
+  /// [pending]'s candidates as the live tree has them NOW: every enabled,
+  /// non-hold binding on a scope the sequence was collected from — still in
+  /// the active chain, deepest first — whose multi-step sequence has the held
+  /// events as a strict prefix. Instances are read fresh from the scope, so a
+  /// scope that rebuilt since the last step contributes its current bindings
+  /// (and its current handlers). In a stable tree this is exactly the set the
+  /// step-by-step narrowing in [_PendingSequence.surviveOneMoreStep] leaves.
+  List<KeyBinding> _liveCandidates(_PendingSequence pending) {
+    final out = <KeyBinding>[];
     for (final node in focusManager.activeChain()) {
       final source = node.bindingSource;
-      if (source != null &&
-          source.activeBindings.any((entry) => identical(entry, binding))) {
-        return true;
+      if (source == null) continue;
+      if (!pending.sources.any((s) => identical(s, source))) continue;
+      for (final binding in source.activeBindings) {
+        if (!binding.enabled || binding.isHold) continue;
+        for (final sequence in binding.sequences) {
+          if (!sequence.isSequence) continue;
+          if (sequence.stepCount <= pending.events.length) continue;
+          if (_prefixMatches(
+            sequence,
+            pending.events,
+            pending.lanes,
+            pending.texts,
+          )) {
+            out.add(binding);
+            break;
+          }
+        }
       }
     }
-    return false;
+    return out;
+  }
+
+  static bool _sameBindings(List<KeyBinding> a, List<KeyBinding> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (!identical(a[i], b[i])) return false;
+    }
+    return true;
   }
 
   /// Runs [binding]'s handler for a match of [sequence] that consumed
@@ -990,6 +1022,9 @@ class InputDispatcher {
     //     "direct wins immediately" semantics — that's why the
     //     replay path correctly finds the deferred direct.
     final sequenceCandidates = <KeyBinding>[];
+    // The scopes those candidates came from, chain order. Pending re-resolves
+    // its candidates from these on every step (see [_liveCandidates]).
+    final sequenceSources = <KeyBindingSource>[];
 
     for (final node in focusManager.activeChain()) {
       final source = node.bindingSource;
@@ -1006,7 +1041,10 @@ class InputDispatcher {
             lane,
             textOrigin,
           );
-          sequenceCandidates.addAll(seqsHere);
+          if (seqsHere.isNotEmpty) {
+            sequenceCandidates.addAll(seqsHere);
+            sequenceSources.add(source);
+          }
           // Defer direct firing while any sequence is still on the
           // table (here or accumulated from a deeper node).
           if (sequenceCandidates.isEmpty) {
@@ -1064,7 +1102,13 @@ class InputDispatcher {
 
     // Sequence start, if any candidates emerged from the chain.
     if (allowSequenceStart && sequenceCandidates.isNotEmpty) {
-      _startPending(event, sequenceCandidates, textOrigin, lane);
+      _startPending(
+        event,
+        sequenceCandidates,
+        sequenceSources,
+        textOrigin,
+        lane,
+      );
       return KeyEventResult.handled;
     }
 
@@ -1133,6 +1177,7 @@ class InputDispatcher {
   void _startPending(
     KeyEvent firstEvent,
     List<KeyBinding> candidates,
+    List<KeyBindingSource> sources,
     String? textOrigin,
     _BindingLane lane,
   ) {
@@ -1140,6 +1185,7 @@ class InputDispatcher {
     _pending = _PendingSequence(
       events: [firstEvent],
       candidates: candidates,
+      sources: sources,
       texts: [textOrigin],
       lanes: [lane],
     );
@@ -1321,6 +1367,7 @@ class _PendingSequence {
   _PendingSequence({
     required this.events,
     required this.candidates,
+    required this.sources,
     required this.texts,
     required this.lanes,
   });
@@ -1331,8 +1378,16 @@ class _PendingSequence {
   /// held events equals the number of steps matched so far.
   final List<KeyEvent> events;
 
-  /// Bindings whose sequence still has events held matched as a prefix.
+  /// Bindings whose sequence still has events held matched as a prefix, as
+  /// last re-resolved from [sources]. A cache of the live tree's answer, not
+  /// the authority: instances here may be stale after a rebuild, which is why
+  /// the dispatcher re-resolves before every step.
   final List<KeyBinding> candidates;
+
+  /// The scopes [candidates] were collected from, chain order (deepest
+  /// first). Scopes are stable across rebuilds where binding instances are
+  /// not, so the sequence is anchored to them.
+  final List<KeyBindingSource> sources;
 
   /// Per-held-event text origin: `texts[i]` is the original typed text
   /// when `events[i]` was synthesized from a [TextInputEvent], null for a
@@ -1415,10 +1470,21 @@ class _PendingSequence {
     return _PendingSequence(
       events: [...events, event],
       candidates: survivors,
+      sources: sources,
       texts: [...texts, textOrigin],
       lanes: [...lanes, lane],
     );
   }
+
+  /// The same held prefix with [candidates] re-read from the live tree.
+  _PendingSequence withCandidates(List<KeyBinding> candidates) =>
+      _PendingSequence(
+        events: events,
+        candidates: candidates,
+        sources: sources,
+        texts: texts,
+        lanes: lanes,
+      );
 }
 
 bool _prefixMatches(
