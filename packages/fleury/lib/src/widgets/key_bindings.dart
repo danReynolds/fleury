@@ -253,7 +253,15 @@ final class KeyBinding {
     this.label,
     this.enabled = true,
     this.hideFromHintBar = false,
-  }) : sequences = [sequence, ...aliases],
+  }) : assert(
+         !includeRepeats ||
+             (sequence.stepCount == 1 &&
+                 !aliases.any((alias) => alias.stepCount > 1)),
+         'includeRepeats cannot apply to a multi-step sequence: a repeat '
+         'never advances or completes a sequence (RFC 0020 §14.4), so the '
+         'flag would silently do nothing. Bind the repeating key on its own.',
+       ),
+       sequences = [sequence, ...aliases],
        onHoldStart = null,
        onHoldEnd = null;
 

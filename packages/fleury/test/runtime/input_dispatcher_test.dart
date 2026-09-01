@@ -1823,6 +1823,156 @@ void main() {
       expect(h.dispatcher.hasPendingSequence, isFalse);
     });
   });
+
+  group('repeats never advance or reset a pending sequence (RFC 0020 §14.4)', () {
+    KeyEvent repeat(String c) =>
+        KeyEvent(KeyCode.char(c), type: KeyEventType.repeat);
+
+    _TestHarness harness(
+      List<KeyBinding> bindings, {
+      KeyboardCapabilities? capabilities,
+    }) {
+      final h = _TestHarness();
+      if (capabilities != null) {
+        h.dispatcher.keyboardSession.updateCapabilities(capabilities);
+      }
+      h.mountRoot(
+        KeyBindings(
+          bindings: bindings,
+          child: const Focus(autofocus: true, child: EmptyBox()),
+        ),
+      );
+      return h;
+    }
+
+    test('(a) holding the leader does not complete the sequence', () {
+      final calls = <String>[];
+      final h = harness([
+        KeyBinding(
+          KeySequence.space.space,
+          onTrigger: (_) => calls.add('space space'),
+        ),
+      ]);
+
+      h.dispatch(_code(KeyCode.space));
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+
+      // Auto-repeat of the held leader: neither advances nor completes.
+      h.dispatch(KeyEvent(KeyCode.space, type: KeyEventType.repeat));
+      expect(calls, isEmpty);
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+
+      h.dispatch(KeyEvent(KeyCode.space, type: KeyEventType.repeat));
+      expect(calls, isEmpty);
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+    });
+
+    test('(a2) same, on the correlated key+text path (kitty flag 8)', () {
+      // The realistic surface for a TAGGED printable repeat: the key half
+      // cannot advance the prefix in the key lane, so the text half is
+      // offered the same physical step — and that call site must honour
+      // §14.4 too.
+      final calls = <String>[];
+      final h = harness([
+        KeyBinding(
+          KeySequence.space.space,
+          onTrigger: (_) => calls.add('space space'),
+        ),
+      ], capabilities: KeyboardCapabilities.full);
+
+      h.dispatcher.dispatch(
+        const InputBatch(key: KeyEvent(KeyCode.space), committedText: ' '),
+      );
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+
+      h.dispatcher.dispatch(
+        const InputBatch(
+          key: KeyEvent(KeyCode.space, type: KeyEventType.repeat),
+          committedText: ' ',
+        ),
+      );
+      expect(calls, isEmpty);
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+    });
+
+    test('(b) a 3-step sequence cannot be driven by repeats', () {
+      final calls = <String>[];
+      final h = harness([
+        KeyBinding(
+          KeySequence.g.g.g,
+          onTrigger: (_) => calls.add('ggg'),
+        ),
+      ]);
+
+      h.dispatch(_char('g'));
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+      h.dispatch(repeat('g'));
+      h.dispatch(repeat('g'));
+      expect(calls, isEmpty);
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+    });
+
+    test('(c) a repeat then a real second press fires exactly once', () {
+      final calls = <String>[];
+      final h = harness([
+        KeyBinding(KeySequence.g.g, onTrigger: (_) => calls.add('gg')),
+      ]);
+
+      h.dispatch(_char('g'));
+      h.dispatch(repeat('g'));
+      expect(calls, isEmpty);
+      h.dispatch(KeyEvent(KeyCode.char('g'), type: KeyEventType.up));
+      h.dispatch(_char('g'));
+      expect(calls, ['gg']);
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+
+    test('(e) a repeat of a non-advancing key leaves pending (and which-key) '
+        'standing', () {
+      final calls = <String>[];
+      final h = harness([
+        KeyBinding(
+          KeySequence.space.q,
+          onTrigger: (_) => calls.add('space q'),
+        ),
+      ]);
+
+      h.dispatch(_code(KeyCode.space));
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+
+      // `z` can never extend `.space.q`. As a REPEAT it must still be a
+      // no-op: tearing pending down here kills the which-key popup while
+      // the user is still holding a key.
+      h.dispatch(repeat('z'));
+      expect(calls, isEmpty);
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+
+      // A real press of the completing key still works afterwards.
+      h.dispatch(_char('q'));
+      expect(calls, ['space q']);
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+
+    test('includeRepeats is rejected on a multi-step binding', () {
+      expect(
+        () => KeyBinding(
+          KeySequence.g.g,
+          includeRepeats: true,
+          onTrigger: (_) {},
+        ),
+        throwsA(isA<AssertionError>()),
+      );
+      // Single-step bindings are of course unaffected.
+      expect(
+        KeyBinding(
+          KeySequence.g,
+          includeRepeats: true,
+          onTrigger: (_) {},
+        ).includeRepeats,
+        isTrue,
+      );
+    });
+  });
 }
 
 /// Test-only builder widget (not exported by the package; needed for
