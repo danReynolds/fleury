@@ -115,6 +115,24 @@ fleury serve --port=8080 --host=0.0.0.0 \
 `--spawn` selects the isolated, managed-process model. Without it, `serve`
 waits for the single bridge-mode app session instead.
 
+### Hot reload in the browser
+
+`serve` does not add a VM service to the command it spawns, and the dev
+supervisor deliberately yields to a serve handle — so the plain `--spawn dart
+run bin/run_app.dart` above gives you **no** hot reload. Enable the service in
+the spawn command itself and saving a source file reloads the app behind the
+browser preview:
+
+```sh
+fleury serve --spawn dart --enable-vm-service=0 run bin/run_app.dart
+```
+
+`=0` lets the VM pick a free port. Reload only; hot **restart** stays
+unavailable under a serve handle, because a respawned child would re-dial the
+handle's single-accept socket and wedge the session. `serve` will not inject
+the flag for you: a VM service is a debug port, and opening one is the
+operator's decision, not a side effect of asking for a browser preview.
+
 Two additional spawn-only controls must appear before `--spawn`:
 
 - `--max-sessions=<n>` caps concurrent browser sessions (default `8`).

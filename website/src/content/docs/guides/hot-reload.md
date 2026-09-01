@@ -128,6 +128,27 @@ owns the run — an editor debug session (a live VM service), a `fleury serve`
 handle, an AOT product build, Windows, a non-TTY, or an injected test driver —
 and the app runs exactly as before, no supervisor involved.
 
+### Reloading a browser preview
+
+Because the supervisor steps aside for a serve handle, the usual browser
+command hot reloads nothing:
+
+```sh
+fleury serve --spawn dart run bin/run_app.dart   # no VM service, no reload
+```
+
+Enable the service in the spawned command itself and the app reloads on save,
+with the browser preview updating live:
+
+```sh
+fleury serve --spawn dart --enable-vm-service=0 run bin/run_app.dart
+```
+
+`=0` lets the VM pick a free port. Reload only — hot restart is intentionally
+unavailable here, because a respawned child would re-dial the handle's
+single-accept socket and wedge the session. `serve` never adds the flag on
+your behalf: opening a debug port is your call.
+
 Opting out entirely:
 
 ```sh

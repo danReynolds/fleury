@@ -359,6 +359,27 @@ void main() {
       );
     });
 
+    // The documented browser command — `--spawn dart run …` — starts no VM
+    // service, and the dev supervisor yields to a serve handle, so it hot
+    // reloads nothing. `InAppDevReload` needs the spawn command itself to
+    // enable the service. Every surface that teaches the browser command
+    // must say so.
+    test('serve surfaces document the reloadable spawn command', () {
+      const recipe = 'dart --enable-vm-service=0 run';
+      for (final path in const <String>[
+        'docs/serving-and-embedding.md',
+        'website/src/content/docs/guides/hot-reload.md',
+        'packages/fleury/lib/src/cli/create_command.dart',
+      ]) {
+        expect(
+          File(p.join(repo.path, path)).readAsStringSync(),
+          contains(recipe),
+          reason: '$path teaches `fleury serve --spawn` without the VM '
+              'service flag that makes reload possible',
+        );
+      }
+    });
+
     test('shipped Fleury examples do not link the unowned domain', () {
       final surfaces = <File>[
         File(p.join(repo.path, 'packages/storybook/lib/src/catalog.dart')),
