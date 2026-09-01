@@ -1695,6 +1695,82 @@ void main() {
       reason: 'a wedged press demotes the next real press to repeat',
     );
   });
+
+  test('a zoom wheel gesture stays the browser\'s (ctrl/meta + wheel)', () {
+    // Chrome delivers a trackpad pinch as ctrl+wheel, and ctrl/Cmd+wheel is
+    // the keyboard zoom gesture. The surface root's wheel listener is
+    // non-passive and covers the whole 100vw×100vh served page, so
+    // preventDefault()ing these swallows page zoom everywhere.
+    final events = <TuiEvent>[];
+    final host = web.document.createElement('div');
+    final textArea =
+        web.document.createElement('textarea') as web.HTMLTextAreaElement;
+    web.document.body!.appendChild(host);
+    final source = DomInputSource(
+      hostElement: host,
+      textArea: textArea,
+      cellMetrics: _FakeMetrics(
+        const MeasuredCellBox(
+          cssCellWidth: 10,
+          cssCellHeight: 20,
+          cssCanvasWidth: 80,
+          cssCanvasHeight: 60,
+          cssCanvasLeft: 10,
+          cssCanvasTop: 20,
+          devicePixelRatio: 1,
+          cols: 8,
+          rows: 3,
+        ),
+      ),
+    );
+    addTearDown(() {
+      source.dispose();
+      host.parentNode?.removeChild(host);
+    });
+    source.start(events.add);
+
+    web.WheelEvent wheel({bool ctrlKey = false, bool metaKey = false}) =>
+        web.WheelEvent(
+          'wheel',
+          web.WheelEventInit(
+            clientX: 15,
+            clientY: 25,
+            // A full cell height of travel — enough to step if it were routed.
+            deltaY: -20,
+            ctrlKey: ctrlKey,
+            metaKey: metaKey,
+            bubbles: true,
+            cancelable: true,
+          ),
+        );
+
+    final zoom = wheel(ctrlKey: true);
+    host.dispatchEvent(zoom);
+    expect(
+      zoom.defaultPrevented,
+      isFalse,
+      reason: 'ctrl+wheel is the browser zoom / trackpad pinch gesture',
+    );
+    expect(events, isEmpty, reason: 'a zoom gesture is not app scroll');
+
+    final cmdZoom = wheel(metaKey: true);
+    host.dispatchEvent(cmdZoom);
+    expect(cmdZoom.defaultPrevented, isFalse);
+    expect(events, isEmpty);
+
+    // A plain wheel is still the app's: cancelled, and routed as a step.
+    final scroll = wheel();
+    host.dispatchEvent(scroll);
+    expect(scroll.defaultPrevented, isTrue);
+    expect(events, [
+      const MouseEvent(
+        kind: MouseEventKind.scrollUp,
+        button: MouseButton.none,
+        col: 0,
+        row: 0,
+      ),
+    ]);
+  });
 }
 
 final class _FakeClipboard extends Clipboard {

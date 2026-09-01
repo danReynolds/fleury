@@ -709,6 +709,12 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
 
   void _handleWheel(web.Event raw) {
     final event = raw as web.WheelEvent;
+    // ctrl/Cmd + wheel is the browser's zoom gesture — and Chrome delivers a
+    // trackpad PINCH as ctrl+wheel. This listener is non-passive and (on the
+    // served page) covers the whole viewport, so consuming these would make
+    // zoom impossible anywhere on the page. Leave the gesture to the browser
+    // and don't feed it into the scroll accumulator either.
+    if (event.ctrlKey || event.metaKey) return;
     if (event.deltaY == 0) return;
     final cell = _cellForPointer(event);
     if (cell == null) return;
