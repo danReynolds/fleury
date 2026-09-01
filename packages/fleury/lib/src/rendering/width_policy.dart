@@ -158,6 +158,21 @@ final class ResolvedTextPresentationPolicy {
   bool isEvidenced(WidthAxis axis) =>
       sourceOf(axis) != WidthDecisionSource.spec;
 
+  /// Whether the ANSI renderer must keep its defensive per-cell reposition
+  /// engaged for ambiguous-width glyphs (RFC 0019 decision 9).
+  ///
+  /// The pin comes off only for an ambiguous axis that is BOTH resolved narrow
+  /// and evidenced. A spec default is not evidence: `unknown` keeps the safety
+  /// net on, because a terminal nobody measured may still draw box drawing two
+  /// cells wide, and then every cell after it on the row is displaced.
+  ///
+  /// This is the whole of the renderer's ambiguous-width decision, in one
+  /// place, derived from the same policy layout measures with — so the two
+  /// cannot answer differently for one session.
+  bool get pinsAmbiguousWidth =>
+      !(isEvidenced(WidthAxis.ambiguous) &&
+          policy.widths.ambiguous == CellWidth.one);
+
   Map<String, Object?> toJson() => <String, Object?>{
     'policy': <String, Object?>{
       'ambiguous': policy.widths.ambiguous.name,

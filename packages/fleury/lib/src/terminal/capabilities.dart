@@ -491,6 +491,29 @@ ResolvedTextPresentationPolicy deriveTextPresentationPolicy({
   );
 }
 
+/// [resolved]'s ambiguous axis as the two-state [AmbiguousCharWidth], or null
+/// when nothing settled it.
+///
+/// The ONE place a resolved policy becomes the legacy capability answer.
+/// [deriveTextPresentationPolicy] owns the agreement rule — all measured 1, or
+/// all measured ≥ 2, else unknown — and everything that used to re-derive
+/// "narrow or wide?" from raw [WidthMeasurements] now reads it back out
+/// through here instead, so the renderer's pin gate, layout, and
+/// `fleury diagnose` cannot drift apart.
+///
+/// Null means the axis rests on the spec default (RFC 0019 §6.3's `unknown`):
+/// callers keep whatever conservative value they already had rather than
+/// treating "not measured" as "measured narrow".
+AmbiguousCharWidth? evidencedAmbiguousCharWidth(
+  ResolvedTextPresentationPolicy resolved,
+) {
+  if (!resolved.isEvidenced(WidthAxis.ambiguous)) return null;
+  return switch (resolved.policy.widths.ambiguous) {
+    CellWidth.one => AmbiguousCharWidth.narrow,
+    CellWidth.two => AmbiguousCharWidth.wide,
+  };
+}
+
 /// The measured lowering observation → action, or null when unknown.
 ClusterLowering? _deriveLowering(
   WidthMeasurements measurements,

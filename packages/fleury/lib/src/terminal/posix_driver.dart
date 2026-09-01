@@ -148,13 +148,12 @@ class PosixTerminalDriver
   static const _perProbeTimeout = Duration(milliseconds: 150);
   ImageProtocol? _imageProtocolOverride;
   bool _synchronizedOutput = false;
-  // Set once the ambiguous-width probe measures how the terminal sizes
-  // ambiguous glyphs; a confirmed `narrow` lets the renderer drop the
-  // defensive per-cell repositioning [capabilities] otherwise assumes.
-  AmbiguousCharWidth? _ambiguousCharWidthOverride;
-
-  /// What the startup probe measured the terminal actually drawing. Reported
-  /// through [capabilities] for diagnostics; null fields mean "unmeasured".
+  /// What the startup probe measured the terminal actually drawing.
+  ///
+  /// The ONE probe output the driver keeps: [capabilities] folds it into the
+  /// derived width policy, and every downstream answer — layout's cell widths,
+  /// the renderer's pin gate, the reported `ambiguousCharWidth` — is read back
+  /// out of that policy. Null fields mean "unmeasured".
   WidthMeasurements _measuredGlyphWidths = const WidthMeasurements.empty();
   bool _nativeRawMode = false;
   bool? _originalLineMode;
@@ -292,20 +291,23 @@ class PosixTerminalDriver
               environment,
             ),
           );
-    final width = _ambiguousCharWidthOverride;
+    // Fold measurements + FLEURY_* overrides into the one derived policy every
+    // geometry consumer shares (RFC 0019 §6.2), then read the reported
+    // ambiguous width back OUT of it. One agreement rule, applied once: the
+    // renderer's pin gate, layout, and `fleury diagnose` cannot disagree about
+    // the evidence because there is only one derivation of it. An unevidenced
+    // axis leaves the env-derived (conservative `wide`) default standing.
+    final textPolicy = deriveTextPresentationPolicy(
+      measurements: _measuredGlyphWidths,
+      environment: environment,
+    );
+    final width = evidencedAmbiguousCharWidth(textPolicy);
     final withWidth = width == null
         ? merged
         : merged.copyWith(ambiguousCharWidth: width);
     return withWidth.copyWith(
       measuredWidths: _measuredGlyphWidths,
-      // Fold measurements + FLEURY_* overrides into the one derived policy
-      // every geometry consumer shares (RFC 0019 §6.2). Same inputs as the
-      // ambiguousCharWidth resolution above, so the renderer's pin gate and
-      // the layout policy can never disagree about the evidence.
-      textPolicy: deriveTextPresentationPolicy(
-        measurements: _measuredGlyphWidths,
-        environment: environment,
-      ),
+      textPolicy: textPolicy,
     );
   }
 
@@ -631,13 +633,13 @@ class PosixTerminalDriver
     if (timeout == null) return;
     try {
       // One round trip measures every width class the field disagrees on, not
-      // just ambiguous — same cost as the old single-glyph probe.
-      final measured = await probeGlyphWidths(_queryRunner, timeout: timeout);
-      _measuredGlyphWidths = measured;
-      // Agreement across the ambiguous representatives, or keep the default:
-      // one glyph is a signal, not proof (RFC 0019 §6.1).
-      final ambiguous = ambiguousWidthFromMeasurements(measured);
-      if (ambiguous != null) _ambiguousCharWidthOverride = ambiguous;
+      // just ambiguous — same cost as the old single-glyph probe. Storing the
+      // raw measurements is the whole job: [capabilities] applies the
+      // agreement rule once, when it derives the policy.
+      _measuredGlyphWidths = await probeGlyphWidths(
+        _queryRunner,
+        timeout: timeout,
+      );
     } on Object {
       // Probe failed (no terminal reply, write error, …): keep the `wide`
       // default so ambiguous-wide terminals never garble.
