@@ -4,11 +4,16 @@
 /// a subtree in a `Theme`:
 ///
 /// ```dart
-/// import 'package:fleury/fleury.dart';
+/// import 'package:fleury/fleury_core.dart';
 /// import 'package:fleury_themes/fleury_themes.dart';
 ///
-/// void main() => runApp(
-///   const FleuryApp(title: 'My app', theme: tokyoNight, home: MyApp()),
+/// // Hand this root to `runApp` on a terminal or `mountApp` in a browser —
+/// // the theme is the same object either way. (The web-safe `fleury_core`
+/// // barrel is deliberate: this package must stay dart2js-compilable.)
+/// const app = FleuryApp(
+///   title: 'My app',
+///   theme: tokyoNight,
+///   home: MyApp(),
 /// );
 /// ```
 ///
