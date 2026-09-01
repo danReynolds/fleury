@@ -2249,9 +2249,11 @@ form.clearErrors();''',
     cols: 62,
     rows: 18,
     interactive: true,
-    code: '''import 'package:fleury_themes/fleury_themes.dart';
+    code: '''import 'package:fleury/fleury.dart';
+import 'package:fleury_themes/fleury_themes.dart';
 
-runApp(const MyApp(), theme: tokyoNight);''',
+void main() =>
+    runApp(const FleuryApp(title: 'My app', theme: tokyoNight, home: MyApp()));''',
     builder: () => const _ThemePickerExample(),
   ),
   ExampleInfo(
@@ -3588,7 +3590,7 @@ final amber = base.copyWith(
   borderStyle: BorderStyle.double,
 );
 
-FleuryApp(theme: amber, home: const Dashboard());''';
+FleuryApp(title: 'Dashboard', theme: amber, home: const Dashboard());''';
 
 /// Exposed for the drift test in test/theme_source_parity_test.dart.
 ThemeData get customThemeForTest => _customTheme;

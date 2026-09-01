@@ -53,6 +53,19 @@ void main() {
         r'KeyBinding(\.event)?\([^)]*onTrigger:\s*\(\s*\)',
         dotAll: true,
       );
+      // `runApp` takes no theme. A theme reaches an app through
+      // `FleuryApp(theme: …)` or a `Theme` around a subtree, so a `theme:`
+      // sitting at runApp's OWN argument depth is always wrong.
+      //
+      // `(?:[^()]|\([^()]*\))*` walks one level of nesting, which is what
+      // separates the broken `runApp(const MyApp(), theme: x)` from the
+      // correct `runApp(const FleuryApp(…, theme: x, …))`: in the latter the
+      // walk cannot cross the still-open `FleuryApp(`, so it never reaches
+      // `theme:`.
+      final runAppTheme = RegExp(
+        r'runApp\((?:[^()]|\([^()]*\))*,\s*theme:',
+        dotAll: true,
+      );
       final rawStringSemanticId = RegExp(
         r'''Semantics\s*\(\s*id:\s*(?:const\s+)?['"]''',
       );
@@ -73,6 +86,11 @@ void main() {
             'zero-arity onTrigger: — a KeyBindingHandler always takes the '
                 'event (use onTrigger: (_) =>)',
             zeroArityBindingHandler,
+          ),
+          (
+            'runApp(…, theme:) — runApp takes no theme; pass it to '
+                'FleuryApp(theme:) or a Theme around a subtree',
+            runAppTheme,
           ),
           (
             'raw String passed as Semantics.id (use SemanticNodeId)',
@@ -398,12 +416,22 @@ List<File> _publicDocs(Directory repo) {
       File(p.join(repo.path, 'docs', name)),
     // Public dartdoc is documentation too: the removed-API guards above
     // caught every README and guide while `key_bindings.dart`'s own class
-    // docs went on teaching two deleted constructors. Scan the public lib
-    // of the core package so pub.dev-rendered docs meet the same bar.
-    ...Directory(p.join(repo.path, 'packages/fleury/lib'))
-        .listSync(recursive: true, followLinks: false)
-        .whereType<File>()
-        .where((file) => file.path.endsWith('.dart')),
+    // docs went on teaching two deleted constructors. Scan the public lib of
+    // every publishable package so pub.dev-rendered docs meet the same bar —
+    // sweeping only `fleury` left `fleury_themes`' library dartdoc (which
+    // taught `runApp(const MyApp(), theme: …)`) unscanned entirely.
+    for (final package in const <String>[
+      'fleury',
+      'fleury_widgets',
+      'fleury_themes',
+      'fleury_test',
+      'fleury_web',
+      'fleury_mcp',
+    ])
+      ...Directory(p.join(repo.path, 'packages', package, 'lib'))
+          .listSync(recursive: true, followLinks: false)
+          .whereType<File>()
+          .where((file) => file.path.endsWith('.dart')),
     ...Directory(p.join(repo.path, 'website/src/content/docs'))
         .listSync(recursive: true, followLinks: false)
         .whereType<File>()
