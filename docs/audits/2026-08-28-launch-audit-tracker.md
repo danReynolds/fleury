@@ -26,133 +26,133 @@ Severity is the **verified** severity. `↓`/`↑` marks a grade the verificatio
 
 ### A1 · Docs that do not compile *(one PR; all fixes compile-verified)*
 
-- [ ] **1.c** `P0` README quick start passes a zero-arity closure to `onTrigger` — `packages/fleury/README.md:48`, `coming-from-flutter.md:56`
+- [x] **1.c** `P0` README quick start passes a zero-arity closure to `onTrigger` — `packages/fleury/README.md:48`, `coming-from-flutter.md:56`
   **Fix:** `onTrigger: (_) => setState(...)`. Consider generating this block from the compiled `example/counter_quickstart.dart` so it cannot drift again.
-  **Notes:**
+  **Notes:** LANDED (A1, merged c1832be0). README fence now byte-mirrors example/counter_quickstart.dart, pinned by a parity test.
 
-- [ ] **1.d** `P0` `fleury_themes` teaches a `runApp` parameter that does not exist — README:9, `lib/fleury_themes.dart:9`, `registry.dart:2144`, `registry.dart:3470`
+- [x] **1.d** `P0` `fleury_themes` teaches a `runApp` parameter that does not exist — README:9, `lib/fleury_themes.dart:9`, `registry.dart:2144`, `registry.dart:3470`
   **Fix:** `FleuryApp(title:, theme:, home:)` with both imports. Four sites move together. Strike `runApp` from the adjacent prose list.
-  **Notes:**
+  **Notes:** LANDED (A1). All four sites → FleuryApp form. fleury_themes dartdoc built from fleury_core (the package web-safety guard greps lib/ for the umbrella import).
 
-- [ ] **16.d** `P0` ↑ Both testing quick starts construct `KeyEvent` with named params it lacks — `README.md:124`, `testing.md:107`
+- [x] **16.d** `P0` ↑ Both testing quick starts construct `KeyEvent` with named params it lacks — `README.md:124`, `testing.md:107`
   **Fix:** `const KeyEvent(KeyCode.char(' '))` / `const KeyEvent(KeyCode.enter)` — matches the mirror test verbatim.
-  **Notes:**
+  **Notes:** LANDED (A1).
 
-- [ ] **16.c** `P1` ✎ Theming guide's three `FleuryApp` snippets omit required `title:` — `theming.mdx:38,168,221`
+- [x] **16.c** `P1` ✎ Theming guide's three `FleuryApp` snippets omit required `title:` — `theming.mdx:38,168,221`
   **Fix:** add `title:`. **Must update `theme_source_parity_test.dart` in the same commit** — it compares strings and currently pins the broken line, so fixing the guide alone turns it red. (Refuted side-claims: the `file=` attribute naming a nonexistent file is by design; a parity test does exist.)
-  **Notes:**
+  **Notes:** LANDED (A1), parity test moved in the same commit.
 
-- [ ] **11.f** `P2` Loading-data guide's error pattern raises a spurious error banner — `loading-data.mdx:44`, `registry.dart:3603`
+- [x] **11.f** `P2` Loading-data guide's error pattern raises a spurious error banner — `loading-data.mdx:44`, `registry.dart:3603`
   **Fix:** don't assign an already-failed future; defer the throw or attach a no-op handler. Terminal-only — the web demo has no guarded zone, so the banner never showed there.
-  **Notes:**
+  **Notes:** LANDED (A1). CORRECTION: Future.sync does NOT fix this (measured); Future.delayed does. The compiled doc_snippets mirror had the same bug.
 
-- [ ] **15.new** `P3` Hot-reload guide still teaches the superseded argv workaround — `hot-reload.md:53`
+- [x] **15.new** `P3` Hot-reload guide still teaches the superseded argv workaround — `hot-reload.md:53`
   **Fix:** replace with `runApp(args: args)`.
-  **Notes:**
+  **Notes:** LANDED (A1).
 
 ### A2 · Packaging
 
-- [ ] **16.f** `P2` Publish validation fails on an undeclared `collection` import — `packages/fleury/pubspec.yaml`
+- [x] **16.f** `P2` Publish validation fails on an undeclared `collection` import — `packages/fleury/pubspec.yaml`
   **Fix:** add to `dev_dependencies`. Separately decide whether `test/`/`tool/`/`benchmarks` should ship at all (1 MB tarball).
-  **Notes:**
+  **Notes:** LANDED (A1): publish dry-run now 0 warnings.
 
-- [ ] **16.h** `P3` Three changelogs will publish every breaking rename under "Unreleased"
+- [x] **16.h** `P3` Three changelogs will publish every breaking rename under "Unreleased"
   **Fix:** rename headings to `## 0.1.0`, fold the stubs in. Also decide export-or-delete on 6 zero-reference exported symbols.
-  **Notes:**
+  **Notes:** LANDED (A1) + a changelog-leads-with-pubspec-version guard.
 
 ### A3 · Floats and overlays *(6.a/6.f share one barrier change)*
 
-- [ ] **6.d** `P1` ColorPicker hex popover is transparent and spans the full terminal height — `color_picker.dart:618`
+- [x] **6.d** `P1` ColorPicker hex popover is transparent and spans the full terminal height — `color_picker.dart:618`
   **Fix:** `Container.framed` + `mainAxisSize: MainAxisSize.min`. Pair validated on an equivalent tree (12-row transparent → 4-row opaque). Assert row count and interior opacity, not just that "Hex" appears.
-  **Notes:**
+  **Notes:** LANDED (A3).
 
-- [ ] **6.e** `P1` Autocomplete dropdown is transparent — `autocomplete.dart:314`
+- [x] **6.e** `P1` Autocomplete dropdown is transparent — `autocomplete.dart:314`
   **Fix:** `Container.framed`; pad short rows to panel width if leakage persists. **Extend `overlay_opacity_test.dart` to all 7 floats** — it covers 5, and the 2 it misses are exactly the 2 that leak.
-  **Notes:**
+  **Notes:** LANDED (A3); overlay_opacity_test now covers all 7 floats.
 
-- [ ] **6.a** `P1` `present()` has no pointer barrier — clicks fall through, even with `barrierColor` — `navigator.dart:829`
+- [x] **6.a** `P1` `present()` has no pointer barrier — clicks fall through, even with `barrierColor` — `navigator.dart:829`
   **Fix:** `AbsorbPointer` over the whole route slot, mirroring `select.dart:212`. Reaches the flagship flow — a click behind an open CommandPalette fired a `DELETE ALL` button. ⚠ One decision inside an otherwise-clear fix: should the barrier carry `onTap: maybePop` when `barrierDismissible`? That changes a documented flag's meaning — flag it in the PR rather than deciding silently.
-  **Notes:**
+  **Notes:** LANDED (A3, merged f5d60c84): AbsorbPointer over the whole modal slot, every modal route. Barrier has NO onTap — Esc stays the only dismissal; click-outside is Q9.
 
-- [ ] **6.f** `P2` Menu has no pointer barrier and no click-outside dismiss — `menu.dart:121,376`
+- [x] **6.f** `P2` Menu has no pointer barrier and no click-outside dismiss — `menu.dart:121,376`
   **Fix:** same barrier. Land with 6.a; better, factor one shared float wrapper — only 2 places in the repo use `AbsorbPointer` at all.
-  **Notes:**
+  **Notes:** LANDED (A3) via a shared AnchoredFloat (exported) used by Select and Menu; submenus stay bare on purpose. Also fixed a PRE-EXISTING bug the barrier made routine: closing a menu from outside the chain stranded the submenu focus trap (keyboard on no node).
 
-- [ ] **6.b** `P2` ↓ Two adjacent `SubMenu` rows throw on selection move — `menu.dart:589`, `bounds.dart:68`
+- [x] **6.b** `P2` ↓ Two adjacent `SubMenu` rows throw on selection move — `menu.dart:589`, `bounds.dart:68`
   **Fix:** per-row notifier wrapped unconditionally (also kills per-keystroke widget-type churn), or move `claimWriter` to first paint. **Assert-gated** — `dart run` is correct, only `dart test` breaks, so this is DX severity. Also null-guard `_BoundsObserverElement.unmount`, which turns one failure into two.
-  **Notes:**
+  **Notes:** LANDED (A3): option (a) per-row notifiers (also kills per-keystroke widget-type churn) + RenderObjectElement.maybeRenderObject null-guard in unmount. Genuine double-writer still throws, once.
 
-- [ ] **6.h** `P3` Dead `_selfBounds` observer on every menu panel — `menu.dart:274`
+- [x] **6.h** `P3` Dead `_selfBounds` observer on every menu panel — `menu.dart:274`
   **Fix:** delete — unless 6.f wants it for the click-outside barrier, in which case wire it there.
-  **Notes:**
+  **Notes:** LANDED (A3).
 
-- [ ] **12.d** `P2` The Popup removal dropped chrome selection semantics — `which_key.dart:128`
+- [x] **12.d** `P2` The Popup removal dropped chrome selection semantics — `which_key.dart:128`
   **Fix:** `SelectionArea.disabled` on the which-key popup, **and on the other six floats** — they are currently saved only by accident of mounting through an overlay. Add a drag-and-copy test per float.
-  **Notes:**
+  **Notes:** LANDED (A3): all 7 floats state SelectionArea.disabled. CommandPalette leaked too when composed inline (not presented).
 
 ### A4 · Widgets
 
-- [ ] **9.b** `P1` DatePicker arrows stuck / off-by-one across DST — `date_picker.dart:236` (+7 sites)
+- [x] **9.b** `P1` DatePicker arrows stuck / off-by-one across DST — `date_picker.dart:236` (+7 sites)
   **Fix:** `DateTime(y, m, d + n)` — normalizes rollover for free and always returns local midnight. Simpler than porting the heatmap's UTC helper. Normalize `_emit` unconditionally. Regression test under a DST zone (harness exists). Up/−7 misfires too, not just Down.
-  **Notes:**
+  **Notes:** LANDED (A4, merged 1f0fde18): calendar-lattice stepping, 8 sites, emit normalized to midnight.
 
-- [ ] **9.d** `P2` LineChart throws on a degenerate range ≥ 2^53 — `line_chart.dart:886`
+- [x] **9.d** `P2` LineChart throws on a degenerate range ≥ 2^53 — `line_chart.dart:886`
   **Fix:** widen degenerate ranges multiplicatively; add a non-finite guard before `.round()` to close the class. Guard belongs on the resolved range — three consumers share the division. Contained by the error boundary today, so not a crash.
-  **Notes:**
+  **Notes:** LANDED (A4): multiplicative pad + non-finite guard. Kept the x-axis asymmetry (a lone point sits at the left edge); centring x is a visible change → decide.
 
-- [ ] **10.b** `P2` ✎ Completion popups sized by code-unit length; options vanish — `completion_text_input.dart:330`, `autocomplete.dart:276`
+- [x] **10.b** `P2` ✎ Completion popups sized by code-unit length; options vanish — `completion_text_input.dart:330`, `autocomplete.dart:276`
   **Fix:** measure with `widthOfText` under the ambient policy (3 in-tree precedents). Trigger is **BMP wide chars only** — astral emoji size correctly, so this is CJK/Kana/Hangul/fullwidth, not "emoji in branch names".
-  **Notes:**
+  **Notes:** LANDED (A4): widthOfText + clamp to surface width + one-row ellipsis.
 
-- [ ] **8.f** `P2` `CodeView`/`JsonView` throw under unbounded height — `code_view.dart:514`, `json_view.dart:640`
+- [x] **8.f** `P2` `CodeView`/`JsonView` throw under unbounded height — `code_view.dart:514`, `json_view.dart:640`
   **Fix:** `maxVisible` + `SizedBox` wrap, matching `TreeTable`/`FileBrowser`. Document the bound. Separately, make the diagnostic name the enclosing widget rather than the internal `ListView`.
-  **Notes:**
+  **Notes:** LANDED (A4): maxVisible default 12 (matches TreeTable/FileBrowser).
 
-- [ ] **8.d** `P2` ✎ Scrollbar records buffer-local geometry; drag mapping wrong in a repaint boundary — `scrollbar.dart:282`
+- [x] **8.d** `P2` ✎ Scrollbar records buffer-local geometry; drag mapping wrong in a repaint boundary — `scrollbar.dart:282`
   **Fix:** one line — `(screenOffset ?? offset).row`. Lone outlier among 3 correct siblings; its own doc comment cites the idiom it doesn't follow. ScrollView case is conditional (only breaks off-origin). Test all 3 composition shapes.
-  **Notes:**
+  **Notes:** LANDED (A4).
 
-- [ ] **8.e** `P3` ↓ Activating the newest message re-arms follow-tail — `message_list.dart:403`
+- [x] **8.e** `P3` ↓ Activating the newest message re-arms follow-tail — `message_list.dart:403`
   **Fix:** delete the unreachable `followTail = false`. Behaviour matches the documented coupling contract — the dead line is the defect, not the outcome.
-  **Notes:**
+  **Notes:** LANDED (A4): dead lines deleted; pinned via the notification flap. NOTE: MessageListController.jumpToIndex has the same dead pattern (message_list.dart:155-166).
 
 ### A5 · Input, runtime, rendering
 
-- [ ] **2.b** `P1` Auto-repeat both advances and cancels sequences — `input_dispatcher.dart:1339,1368`
+- [x] **2.b** `P1` Auto-repeat both advances and cancels sequences — `input_dispatcher.dart:1339,1368`
   **Fix:** treat a repeat on the pending path as a no-op that neither advances, completes, nor cancels. **Both** halves of the RFC rule fail; the cancel half is the one users hit (which-key's "press and pause"). Open: should a repeat extend the timeout? Leaving it is the literal reading and the smaller change.
-  **Notes:**
+  **Notes:** LANDED (A5, merged 3fa7dbb9). includeRepeats on a multi-step binding now asserts at construction (it was a silent no-op). Also covered the InputBatch call site.
 
-- [ ] **11.c** `P1` `Animation.dispose` never unregisters its reassemble callback — `animation.dart:261,394`
+- [x] **11.c** `P1` `Animation.dispose` never unregisters its reassemble callback — `animation.dart:261,394`
   **Fix:** cache the tear-off in a field (the pattern `frame_ticker.dart:54` already uses). Measured 200/200 retained vs 0/200 for FrameTicker. Slow leak — a few hundred bytes each, no per-frame cost. Add a structural count so this class can't recur a third time.
-  **Notes:**
+  **Notes:** LANDED (A5) + TickerScheduler.reassembleCallbackCount + Animation.debugDependentCount.
 
-- [ ] **12.b** `P2` `ConstrainedBox` bound changes after mount are ignored — `basic.dart:1046`
+- [x] **12.b** `P2` `ConstrainedBox` bound changes after mount are ignored — `basic.dart:1046`
   **Fix:** private fields + `markNeedsLayout()` setters. **Land before 12.c** — the central fix cannot work without these setters existing. Only render object in the package with bare mutable layout config.
-  **Notes:**
+  **Notes:** LANDED (A5).
 
-- [ ] **12.e** `P3` Debug-invalidation labels allocated eagerly on every invalidation — `framework.dart:854`, `render_object.dart:932,957,970`
+- [x] **12.e** `P3` Debug-invalidation labels allocated eagerly on every invalidation — `framework.dart:854`, `render_object.dart:932,957,970`
   **Fix:** pass a thunk / check `hasListeners` at the call site, as the doc already promises. Measured 20–50×. Should *improve* `alloc-gate` — and see D3 for why the gate didn't catch it.
-  **Notes:**
+  **Notes:** LANDED (A5): call-site guard (DebugInvalidations.isRecording). alloc-gate did NOT move — it only sums package:fleury classes, so dart:core Strings are invisible to it (see D3). Measured 520 ns → 1.6 ns.
 
-- [ ] **7.c** `P3` Dead `styleResetRequired` gates three unreachable branches — `ansi_renderer.dart:263`
+- [x] **7.c** `P3` Dead `styleResetRequired` gates three unreachable branches — `ansi_renderer.dart:263`
   **Fix:** delete, or set it where intended and add the test that would have caught it dead.
-  **Notes:**
+  **Notes:** LANDED (A5): variable, 3 branches, resetFirst param and the leading-0 param all deleted; 400-pair diff corpus byte-identical.
 
-- [ ] **5.g** `P3` ✎ Default selection wrap rebuilds the full string per mouse event — `selection_area.dart:244`
+- [x] **5.g** `P3` ✎ Default selection wrap rebuilds the full string per mouse event — `selection_area.dart:244`
   **Fix:** early-return when no callback. Note: `selection-gate` never constructs a `SelectionArea`, so this **cannot** move the gate (see D3).
-  **Notes:**
+  **Notes:** LANDED (A5).
 
 - [ ] **4.e** `P2` `FLEURY_AMBIGUOUS_WIDTH` disables the entire probe battery — `posix_driver.dart:624`
   **Fix:** narrow the guard to its own axis. ⚠ **Sequence with 4.a** — this env var is the accidental workaround for 4.a, so fixing it alone exposes 4.a to operators who had escaped it.
   **Notes:** HELD — do not land before 4.a (this env var is 4.a's accidental workaround; alone it exposes the P1).
 
-- [ ] **4.g** `P3` ✎ `OutputCaptureView` pads/truncates by UTF-16 code unit — `output_capture_view.dart:231`
+- [x] **4.g** `P3` ✎ `OutputCaptureView` pads/truncates by UTF-16 code unit — `output_capture_view.dart:231`
   **Fix:** measure in cells — or drop string padding and get opacity from a real background fill, which removes the problem rather than fixing it. (Surrogate-split concern refuted: the resolver drops lone surrogates.)
-  **Notes:**
+  **Notes:** LANDED (A5): cell-measured helpers through the display projection (a background fill was not viable — the header is a CellStyle, the fill takes a Color).
 
-- [ ] **3.d** `P3` ↓ ✎ "Restored while negotiating" guard is dead — a null-check throws first — `posix_driver.dart:417`
+- [x] **3.d** `P3` ↓ ✎ "Restored while negotiating" guard is dead — a null-check throws first — `posix_driver.dart:417`
   **Fix:** hoist the guard above the probe block; add the scripted test RFC 0021 §12 already names. (Secondary stray-byte claim did **not** reproduce.)
-  **Notes:**
+  **Notes:** LANDED (A5): _checkStillEntering between every probe await; _negotiateKeyboard/_restoreLegacyKeyboard made null-safe.
 
 ### A6 · Serve and web
 
@@ -194,21 +194,21 @@ Severity is the **verified** severity. `↓`/`↑` marks a grade the verificatio
 
 ### A7 · Dead API removal *(one sweep, pre-freeze)*
 
-- [ ] **2.g** `P3` `FocusManager.dispatchKey` — public, tested, no caller, diverges from real routing — `focus.dart:993`
+- [x] **2.g** `P3` `FocusManager.dispatchKey` — public, tested, no caller, diverges from real routing — `focus.dart:993`
   **Fix:** delete + re-point 9 tests at `InputDispatcher.dispatch`.
-  **Notes:**
+  **Notes:** LANDED (A7, merged 338909b7): all 9 re-pointed assertions pass under the real dispatcher — no hidden finding.
 
-- [ ] **10.h** `P3` `TextHistoryController.canNavigatePrevious/Next` — no caller, no test — `text_history.dart:42`
+- [x] **10.h** `P3` `TextHistoryController.canNavigatePrevious/Next` — no caller, no test — `text_history.dart:42`
   **Fix:** delete, or wire into the input's semantic state. Semantics already mismatch at index 0.
-  **Notes:**
+  **Notes:** LANDED (A7): deleted.
 
-- [ ] **10.g** `P3` `FormField.builder` without a focus node silently drops first-invalid focus — `form.dart:388`
+- [x] **10.g** `P3` `FormField.builder` without a focus node silently drops first-invalid focus — `form.dart:388`
   **Fix:** debug assert (mirroring the existing claim check), or make the parameter required on that constructor.
-  **Notes:**
+  **Notes:** LANDED (A7): debug StateError from a microtask (mirrors _scheduleClaimCheck; throwing synchronously would hang validate()). Required focusNode rejected — an unattached node is exactly this bug.
 
-- [ ] **4.f** `P3` Three RFC-mandated APIs have tests but no production caller — `width_policy.dart:158`, `text_projection.dart:81,101`
+- [x] **4.f** `P3` Three RFC-mandated APIs have tests but no production caller — `width_policy.dart:158`, `text_projection.dart:81,101`
   **Fix:** route the pin through the resolved policy and delete the duplicated agreement rule, or delete the unused pair. Behaviour-neutral — re-run `wire-gate` to prove byte-identical output.
-  **Notes:**
+  **Notes:** LANDED (A7) — REWIRED, not just deleted: ResolvedTextPresentationPolicy.pinsAmbiguousWidth is now the one authority; ambiguousWidthFromMeasurements and the driver override deleted; projection pair deleted. ONE intentional behaviour change: fleury diagnose now honours FLEURY_AMBIGUOUS_WIDTH (RFC 0019 §6.2). Profiling harnesses declare the width via env. wire-gate sb1/sb9 byte-identical.
 
 ---
 
@@ -290,7 +290,7 @@ Each carries the reason it was parked. Anything here can be pulled up if you dis
 
 - [ ] **2.e** `P2` ↓ Alt dropped from ESC-prefixed non-printable chords — `input_parser.dart:485`
   **Parked because:** ↓ the P1 framing assumed the chat keymap was reachable by default; **nothing shipped uses it**. The parser bug is real byte-for-byte, but the fix reopens a genuine ambiguity (Esc-then-key on a slow link) that needs a timing window or a restricted byte set. **Do now regardless:** correct the dartdoc's false "reliably-detectable" claim.
-  **Notes:**
+  **Notes:** Dartdoc LANDED (A1): the chat preset states the legacy-terminal limitation, pinned by a parser test. Parser unchanged.
 
 - [ ] **2.f** `P2` ✎ Demotion doesn't stop the next press re-latching a hold — `key_bindings.dart:553`
   **Parked because:** needs Warp-class terminal *and* `KeyBinding.hold`; escape depends on incidental tree shape. ✎ Framing corrected — it was never inert beforehand; the demotion correctly closes the in-flight hold, it just doesn't stop the next one. Fix must add a listener without making bindings a *build* dependent of the notifier.
@@ -311,7 +311,7 @@ Each carries the reason it was parked. Anything here can be pulled up if you dis
 - [ ] **15.g** `P2` ✎ In-app reload has no docs and no reachable recipe — `dev_bootstrap.dart:764`
   **Do now (docs half):** the **documented** browser command — in the serving guide *and* the generated project's README — produces no service and therefore no reload. Correct it.
   **Parked (code half):** having `serve --spawn` inject the flag needs a call on whether injecting into a user-supplied command is acceptable, plus the cost of a service per concurrent session.
-  **Notes:**
+  **Notes:** Docs half LANDED (A1): serve guide, hot-reload guide, scaffold README teach the --enable-vm-service=0 recipe. Code half (serve injects the flag) still open. NOTE: getting-started.mdx:273, deployment.md:89, coming-from-flutter.md:90 also teach the reload-less command — not yet swept.
 
 - [ ] **15.h** `P2` ✎ Watch roots resolve from CWD, not the entrypoint — `source_watcher.dart:38`
   **Parked because:** running from the project root is the documented flow, so most users are fine. ✎ Worse than reported though: the supervisor starts **either way**, so an unsupervisable session pays every cost (double `main()`, banner, signal window, second VM) for zero benefit. The "fall through when there's nothing to watch" half is cheap and worth doing alone.
@@ -485,7 +485,7 @@ Not bugs. These are the structural reasons nearly every P0/P1 above was invisibl
 - [ ] **D3** Two gates don't cover what their names imply — `profiling/bin/selection_gate.dart:82`; `alloc-gate` vs `framework.dart:854`
   `selection-gate` never constructs a `SelectionArea` — it drives a bare scope and delegate — so it catches registration regressions and **none** of the behavioural defects in §05, and 5.g's fix cannot move it. Separately `alloc-gate` did not flag a 20–50× per-invalidation allocation on every `setState`.
   **Fix:** extend the selection gate through a real `SelectionArea`; work out why the invalidation allocation is invisible before trusting the gate on §12 fixes. **Do not read a green `selection-gate` as verification for §05.**
-  **Notes:**
+  **Notes:** CONFIRMED WORSE while fixing 12.e: alloc-gate sums only classes whose library uri starts with package:fleury, so dart:core String/List churn is structurally invisible — anyone reading it as a general allocation gate is misled. Also: wire-gate's sb6 scenario is nondeterministic (~4% spread on identical code; sb1/sb9 are byte-stable).
 
 - [ ] **D4** Fuzzers and regression tests that stop one argument short — `cell_buffer_diff_fuzz_test.dart`, `storybook/test/terminal_scroll_diff_test.dart`
   The diff fuzzer never applies its bytes to a terminal model, so nothing property-tests the diff→present contract where the historical garble class lives; it also never fuzzes severed wide pairs, resize, scroll, emoji or non-spec policies. The scroll regression test calls the renderer **without** `scrollUpRows`, so the scroll path could regress green.
@@ -522,3 +522,32 @@ These block or shape work above and are not mine to answer:
 8. **10.e / 10.d / 10.c** — forms and editing policy: hook vs document; undo granularity; draft retention.
 9. **6.a** — should `barrierDismissible` also mean click-outside?
  10. **1.a (chunker)** — coalesce paste chunks per frame by a time budget? It cuts the residual quadratic cost but changes the one-chunk-per-pump contract that `text_area_test` pins.
+
+---
+
+## Surfaced while fixing — not in the original index
+
+Found by the batch agents in passing. Verified only to the extent stated; triage as new entries.
+
+- [ ] **N1** `P1` `WhichKey` remounts its entire subtree on every popup reveal — `which_key.dart:91` vs `:126` (returns `child` hidden, a `Stack` revealed → different runtimeType in the same slot → every `State` below is destroyed on every leader press that outlives `showDelay`). Measured `initState` ×2. Also the mechanism that makes 2.a deterministic in the shape the keyboard guide recommends. **Fix:** stable `Stack` with a conditionally-empty layer, or route the popup through the overlay.
+  **Notes:**
+- [ ] **N2** `P2` The paste chunker is quadratic independent of 1.a — controller-only edits (no render) measure 4/12/62 ms at 128/256/512 KiB, because every 2 KiB chunk re-copies the whole string (`replaceRange`) and `FrameDriver` forces a full frame per post-frame registration. Q10 covers the per-frame coalescing; the string copy is a separate (smaller) fix.
+  **Notes:**
+- [ ] **N3** `P2` `MessageListController.jumpToIndex` has 8.e's dead `followTail = false` pattern — `message_list.dart:155-166`; a tail index re-engages follow through the coupling.
+  **Notes:**
+- [ ] **N4** `P2` Three more surfaces teach the reload-less browser command — `getting-started.mdx:273`, `guides/deployment.md:89`, `coming-from-flutter.md:90`. Same fix as 15.g's docs half.
+  **Notes:**
+- [ ] **N5** `P2` Spawn mode's `--max-sessions` rejection is a 503 before the upgrade, so the client shows a blank page with no message (13.new in the register; same family as 13.d).
+  **Notes:**
+- [ ] **N6** `P3` `probeAmbiguousWidth` (`terminal_probe.dart:251`) — public, tested, no production caller (the driver calls `probeGlyphWidths`). `AmbiguousCharWidth`'s doc still attributes detection to it.
+  **Notes:**
+- [ ] **N7** `P3` `TextProjection.logicalText` — zero production readers after 4.f; its doc ("what copy and semantics answer with") is false.
+  **Notes:**
+- [ ] **N8** `P3` Seven zero-arity `onTrigger: () =>` in `docs/rfcs/0008` and `0018` — as-proposed design records, not swept by the docs guard. Decide whether RFCs are pinned to current API.
+  **Notes:**
+- [ ] **N9** `P3` `RenderObjectElement.renderObject` throws during teardown; any `deactivate`/`unmount` override reaching it compounds one error into two. `maybeRenderObject` now exists (A3); the other overrides were not audited.
+  **Notes:**
+- [ ] **N10** `P3` `LineChart`'s degenerate x padding is asymmetric (lone point at the left edge) while y is symmetric — centring x is a two-character change now, but a visible one.
+  **Notes:**
+- [ ] **N11** `P3` `test/runtime/dead_control_warning_test.dart` is unformatted on main (`dart format` violation).
+  **Notes:**
