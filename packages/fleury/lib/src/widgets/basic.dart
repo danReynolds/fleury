@@ -1037,16 +1037,51 @@ final class ConstrainedBox extends SingleChildRenderObjectWidget {
 class _RenderConstrainedBox extends RenderObject
     implements RenderObjectWithSingleChild {
   _RenderConstrainedBox({
-    this.minWidth,
-    this.maxWidth,
-    this.minHeight,
-    this.maxHeight,
-  });
+    int? minWidth,
+    int? maxWidth,
+    int? minHeight,
+    int? maxHeight,
+  }) : _minWidth = minWidth,
+       _maxWidth = maxWidth,
+       _minHeight = minHeight,
+       _maxHeight = maxHeight;
 
-  int? minWidth;
-  int? maxWidth;
-  int? minHeight;
-  int? maxHeight;
+  // Layout config, so every setter must dirty this render object:
+  // `RenderObject.layout` short-circuits when the incoming constraints are
+  // unchanged and `needsLayout` is false, and a rebuild that only changes
+  // these bounds delivers exactly that — the cached size would be returned
+  // and the new bound would never take effect.
+  int? _minWidth;
+  int? get minWidth => _minWidth;
+  set minWidth(int? value) {
+    if (_minWidth == value) return;
+    _minWidth = value;
+    markNeedsLayout();
+  }
+
+  int? _maxWidth;
+  int? get maxWidth => _maxWidth;
+  set maxWidth(int? value) {
+    if (_maxWidth == value) return;
+    _maxWidth = value;
+    markNeedsLayout();
+  }
+
+  int? _minHeight;
+  int? get minHeight => _minHeight;
+  set minHeight(int? value) {
+    if (_minHeight == value) return;
+    _minHeight = value;
+    markNeedsLayout();
+  }
+
+  int? _maxHeight;
+  int? get maxHeight => _maxHeight;
+  set maxHeight(int? value) {
+    if (_maxHeight == value) return;
+    _maxHeight = value;
+    markNeedsLayout();
+  }
 
   RenderObject? _child;
   @override

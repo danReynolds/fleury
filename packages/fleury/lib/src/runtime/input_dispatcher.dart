@@ -671,6 +671,18 @@ class InputDispatcher {
   }) {
     var pending = _pending;
     if (pending == null) return null;
+    // RFC 0020 §14.4: "repeats never advance or reset". `_collectSequenceStarts`
+    // already refuses to ARM a sequence from a repeat; the pending path owes
+    // the same rule, because `KeySequence.matchesStepAt` is phase-blind. Held
+    // Space would otherwise complete `.space.space` from its own auto-repeat,
+    // and a held key that cannot extend the prefix would cancel — tearing down
+    // the which-key popup while the user is still reading it.
+    //
+    // A true no-op: `_pending` and its timer are both left exactly as they
+    // are. Deliberately NOT extending the timeout — whether holding a key
+    // should keep a pure prefix alive longer is a separate decision, and the
+    // pure-prefix path already re-arms nothing.
+    if (event.type == KeyEventType.repeat) return KeyEventResult.ignored;
     final activeCandidates = pending.candidates
         .where(_isBindingCurrentlyActive)
         .toList(growable: false);

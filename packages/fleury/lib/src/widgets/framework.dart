@@ -851,7 +851,9 @@ abstract class Element implements BuildContext {
     if (_lifecycle != _ElementLifecycle.active) return;
     if (_dirty) return;
     _dirty = true;
-    DebugInvalidations.recordBuild(_debugInvalidationLabel);
+    if (DebugInvalidations.isRecording) {
+      DebugInvalidations.recordBuild(_debugInvalidationLabel);
+    }
     _owner?.scheduleBuildFor(this);
   }
 
@@ -890,6 +892,7 @@ abstract class Element implements BuildContext {
   }
 
   String get _debugInvalidationLabel {
+    DebugInvalidations.debugCountLabel();
     if (this is StatefulElement) {
       final state = (this as StatefulElement).state;
       return '${_widget.runtimeType}/${state.runtimeType}';

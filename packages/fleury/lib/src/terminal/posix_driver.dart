@@ -410,19 +410,26 @@ class PosixTerminalDriver
     // sequences pushed our flags, and on the SAME screen buffer they were
     // pushed to (§8.1). It never blocks the app: an unanswered query
     // simply leaves capabilities conservative.
+    //
+    // A concurrent force-restore can complete while a bounded startup probe is
+    // awaiting its reply (runApp's zone handler calls cleanup() on any uncaught
+    // async error, and these probes hold the driver for up to ~500 ms). Never
+    // reactivate a driver whose lifecycle moved on — and check BETWEEN the
+    // probes, not only after them: `restore()` nulls `_terminalState`, so a
+    // teardown that lands mid-negotiation must be reported as this StateError
+    // rather than crashing on the next read of the state it tore down.
     final negotiationClock = Stopwatch()..start();
     await _negotiateKeyboard(negotiationClock);
+    _checkStillEntering(enterGeneration);
     await _negotiateSynchronizedOutput(negotiationClock);
+    _checkStillEntering(enterGeneration);
     await _maybeProbeImageProtocol(negotiationClock);
-    await _maybeProbeAmbiguousWidth(_mode!.alternateScreen, negotiationClock);
-
-    // A concurrent force-restore can complete while a bounded startup probe is
-    // awaiting its reply. Never reactivate a driver whose lifecycle moved on.
-    if (_restoring || enterGeneration != _lifecycleGeneration) {
-      throw StateError(
-        'PosixTerminalDriver was restored while enter was negotiating.',
-      );
-    }
+    final negotiated = _checkStillEntering(enterGeneration);
+    await _maybeProbeAmbiguousWidth(
+      negotiated.alternateScreen,
+      negotiationClock,
+    );
+    _checkStillEntering(enterGeneration);
 
     _resizeSubscription = _watchSignal(ProcessSignal.sigwinch, (_) {
       if (!_events.isClosed) _events.add(ResizeEvent(size));
@@ -437,6 +444,26 @@ class PosixTerminalDriver
       keyboard: keyboardCapabilities,
       synchronizedOutput: _synchronizedOutput,
     );
+  }
+
+  /// Asserts that the `enter` identified by [enterGeneration] still owns the
+  /// terminal, and returns the mode it owns it in.
+  ///
+  /// Called around every startup probe await. The generation check and the
+  /// state read belong together: a completed `restore()` leaves `_restoring`
+  /// false again but has bumped the generation AND nulled `_terminalState`, so
+  /// reading the mode without checking first is exactly the null-check crash
+  /// this replaces.
+  TerminalMode _checkStillEntering(int enterGeneration) {
+    final state = _terminalState;
+    if (_restoring ||
+        enterGeneration != _lifecycleGeneration ||
+        state == null) {
+      throw StateError(
+        'PosixTerminalDriver was restored while enter was negotiating.',
+      );
+    }
+    return state.effectiveMode;
   }
 
   Future<void> _negotiateSynchronizedOutput(Stopwatch negotiationClock) async {
@@ -487,7 +514,12 @@ class PosixTerminalDriver
   /// leaving the mode can (§8.3).
   Future<void> _negotiateKeyboard(Stopwatch negotiationClock) async {
     if (!_stdoutIsTerminal || !_changedStdin) return;
-    final effective = _mode!;
+    // Every `_terminalState` read in this method and its helpers is null-safe:
+    // `restore()` can complete while a probe below is awaiting its reply, and
+    // the caller's `_checkStillEntering` is what turns that into a legible
+    // StateError. Bailing out quietly here lets it get there.
+    final effective = _terminalState?.effectiveMode;
+    if (effective == null) return;
     if (effective.keyboardProtocol == KeyboardProtocolMode.legacy) return;
     // Escape hatch for a terminal where the query itself misbehaves.
     final flag = Platform.environment['FLEURY_KEYBOARD_PROBE'];
@@ -522,7 +554,9 @@ class PosixTerminalDriver
         '\x1B[<1u'
         '\x1B[>${KeyboardProtocolMode.disambiguated.requestedFlags}u',
       );
-      _terminalState!.effectiveMode = terminalModeWithKeyboardProtocol(
+      final state = _terminalState;
+      if (state == null) return; // restored mid-probe
+      state.effectiveMode = terminalModeWithKeyboardProtocol(
         effective,
         KeyboardProtocolMode.disambiguated,
       );
@@ -565,7 +599,9 @@ class PosixTerminalDriver
       return;
     }
     _confirmedKeyboardFlags = null;
-    _terminalState!.effectiveMode = terminalModeWithKeyboardProtocol(
+    final state = _terminalState;
+    if (state == null) return; // restored while the pop was flushing
+    state.effectiveMode = terminalModeWithKeyboardProtocol(
       effective,
       KeyboardProtocolMode.legacy,
     );

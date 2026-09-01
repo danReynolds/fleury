@@ -35,6 +35,46 @@ class _FakeStdin implements Stdin {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+/// A terminal-reporting stdin that never answers a probe: every startup query
+/// stays in flight for its full timeout, which is the window a concurrent
+/// `restore()` has to land in.
+class _SilentTerminalStdin implements Stdin {
+  final _controller = StreamController<List<int>>();
+  bool _lineMode = true;
+  bool _echoMode = true;
+
+  @override
+  bool get hasTerminal => true;
+
+  @override
+  bool get lineMode => _lineMode;
+  @override
+  set lineMode(bool value) => _lineMode = value;
+
+  @override
+  bool get echoMode => _echoMode;
+  @override
+  set echoMode(bool value) => _echoMode = value;
+
+  @override
+  StreamSubscription<List<int>> listen(
+    void Function(List<int>)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) => _controller.stream.listen(
+    onData,
+    onError: onError,
+    onDone: onDone,
+    cancelOnError: cancelOnError,
+  );
+
+  Future<void> close() => _controller.close();
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 class _RecordingStdout implements Stdout {
   _RecordingStdout({this.terminal = false, this.onWrite, List<String>? trace})
     : trace = trace ?? <String>[];
@@ -631,4 +671,51 @@ void main() {
       }
     },
   );
+
+  test('restore() during startup negotiation reports the lifecycle StateError '
+      '(RFC 0021 §12)', () async {
+    // runApp's zone handler calls cleanup() on any uncaught async error and
+    // the startup probes hold the driver for up to ~500 ms, so a restore
+    // landing mid-negotiation is reachable in production. `enter` must
+    // surface it as its own StateError. It used to read `_mode!` (i.e.
+    // `_terminalState!.effectiveMode`) three lines BEFORE the lifecycle
+    // guard, so a restore that had already nulled `_terminalState` produced
+    // a bare null-check `_TypeError` instead.
+    final input = _SilentTerminalStdin();
+    PosixTerminalDriver? driver;
+    var fired = false;
+    final restored = Completer<void>();
+    final out = _RecordingStdout(
+      terminal: true,
+      onWrite: (bytes) {
+        // The first startup query. Tear the driver down while it waits for
+        // a reply that never comes.
+        if (fired || !bytes.contains('\x1B[?u')) return;
+        fired = true;
+        scheduleMicrotask(() async {
+          await driver!.restore();
+          restored.complete();
+        });
+      },
+    );
+    driver = PosixTerminalDriver(
+      stdinOverride: input,
+      stdoutOverride: out,
+      terminalModeController: _FakeModeController(out.trace),
+    );
+
+    await expectLater(
+      driver.enter(TerminalMode.interactive),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'PosixTerminalDriver was restored while enter was negotiating.',
+        ),
+      ),
+    );
+    expect(fired, isTrue, reason: 'the probe write hook must have run');
+    await restored.future;
+    await input.close();
+  }, timeout: const Timeout(Duration(seconds: 15)));
 }

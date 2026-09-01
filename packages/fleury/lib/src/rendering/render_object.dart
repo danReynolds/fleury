@@ -924,12 +924,24 @@ abstract class RenderObject {
     }
   }
 
+  /// This render object's invalidation source, for the debug collector.
+  ///
+  /// Only ever evaluated behind a [DebugInvalidations.isRecording] check:
+  /// `runtimeType.toString()` is not free, and this runs on every layout and
+  /// paint invalidation of every render object.
+  String get _debugInvalidationLabel {
+    DebugInvalidations.debugCountLabel();
+    return runtimeType.toString();
+  }
+
   /// Marks this render object and its ancestors as needing layout, and marks
   /// the nearest enclosing repaint boundary as dirty. Use this for changes
   /// that can affect size, child constraints, child offsets, or layout-derived
   /// paint state.
   void markNeedsLayout() {
-    DebugInvalidations.recordLayout(runtimeType.toString());
+    if (DebugInvalidations.isRecording) {
+      DebugInvalidations.recordLayout(_debugInvalidationLabel);
+    }
     _markNeedsLayoutUp();
     _markEnclosingRepaintBoundariesDirty();
   }
@@ -954,7 +966,9 @@ abstract class RenderObject {
   /// offsets, or layout-derived paint state. Use [markNeedsPaintOnly] only
   /// after verifying that the value cannot affect layout.
   void markNeedsPaint() {
-    DebugInvalidations.recordPaint(runtimeType.toString());
+    if (DebugInvalidations.isRecording) {
+      DebugInvalidations.recordPaint(_debugInvalidationLabel);
+    }
     _markNeedsLayoutUp();
     _markEnclosingRepaintBoundariesDirty();
   }
@@ -967,7 +981,9 @@ abstract class RenderObject {
   /// dirty, so the next same-constraint layout call can reuse cached sizes.
   @protected
   void markNeedsPaintOnly() {
-    DebugInvalidations.recordPaint(runtimeType.toString());
+    if (DebugInvalidations.isRecording) {
+      DebugInvalidations.recordPaint(_debugInvalidationLabel);
+    }
     _rootFrameDamage?.recordVisualChange();
     _markEnclosingRepaintBoundariesDirty();
   }
