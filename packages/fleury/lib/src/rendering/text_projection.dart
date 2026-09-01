@@ -21,9 +21,9 @@ import 'width_policy.dart';
 /// One logical grapheme cluster whose display image differs from its source:
 /// a lowered emoji ZWJ sequence, projected into per-component display atoms.
 ///
-/// Ranges are half-open UTF-16 code-unit ranges — [sourceRange] into
-/// [TextProjection.logicalText], [displayRange] and every [displayAtomRanges]
-/// entry into [TextProjection.displayText]. The atoms tile [displayRange]
+/// Ranges are half-open UTF-16 code-unit ranges — [sourceRange] into the
+/// source string the projection was built from, [displayRange] and every
+/// [displayAtomRanges] entry into [TextProjection.displayText]. The atoms tile [displayRange]
 /// exactly, in order; each atom is one ≤2-cell cluster by construction
 /// (the parser only emits base+attachment components).
 final class PreparedCluster {
@@ -55,19 +55,12 @@ final class PreparedCluster {
 /// ranges into that space once (`RenderText.loweredGroups`) instead of
 /// converting offsets one at a time.
 final class TextProjection {
-  const TextProjection._(
-    this.logicalText,
-    this.displayText,
-    this.changedClusters,
-  );
+  const TextProjection._(this.displayText, this.changedClusters);
 
   /// The unchanged projection: display IS the logical string (same object —
   /// gate 15, identity allocation).
   const TextProjection.identity(String text)
-    : this._(text, text, const <PreparedCluster>[]);
-
-  /// Canonical (post-sanitization) text — what copy and semantics answer with.
-  final String logicalText;
+    : this._(text, const <PreparedCluster>[]);
 
   /// What layout measures and paint draws.
   final String displayText;
@@ -153,9 +146,5 @@ TextProjection projectText(
     // Indic, malformed) — identity, same object, no mappings.
     return TextProjection.identity(logicalText);
   }
-  return TextProjection._(
-    logicalText,
-    display.toString(),
-    List.unmodifiable(changed),
-  );
+  return TextProjection._(display.toString(), List.unmodifiable(changed));
 }

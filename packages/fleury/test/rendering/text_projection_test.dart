@@ -49,7 +49,6 @@ void main() {
         'a \u{1F468}\u{1F469}\u{1F466} b',
         reason: 'joiners dropped, components verbatim',
       );
-      expect(projection.logicalText, text, reason: 'source is canonical');
       final cluster = projection.changedClusters.single;
       expect(cluster.displayAtomRanges, hasLength(3));
     });
