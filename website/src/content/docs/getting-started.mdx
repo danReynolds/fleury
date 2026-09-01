@@ -270,10 +270,11 @@ required. The **serve** bridge previews the unchanged native app in a browser
 tab:
 
 ```sh
-fleury serve --spawn dart run bin/run_app.dart
+fleury serve --spawn dart --enable-vm-service=0 run bin/run_app.dart
 ```
 
-Open the printed URL. That's your app — the same widget tree ticking in a
+(`--enable-vm-service=0` is what lets the served app hot-reload on save —
+without it the session runs, but never reloads.) Open the printed URL. That's your app — the same widget tree ticking in a
 browser, streamed from the native process.
 
 For a shipped, backend-free embed, compile the browser entrypoint you just

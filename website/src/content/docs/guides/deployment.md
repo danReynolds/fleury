@@ -85,8 +85,9 @@ primarily a local preview and debugging bridge. The app keeps full `dart:io`
 access, so every widget works, including the native-only ones:
 
 ```sh
-# Spawn a fresh app process for each browser session:
-fleury serve --spawn dart run bin/run_app.dart
+# Spawn a fresh app process for each browser session
+# (the VM-service flag is what makes save-to-reload work in the browser):
+fleury serve --spawn dart --enable-vm-service=0 run bin/run_app.dart
 ```
 
 Flags (put them *before* `--spawn`, which greedily consumes everything after it
