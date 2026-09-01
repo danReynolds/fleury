@@ -1763,17 +1763,28 @@ class RenderDataTable extends RenderObject {
   }) {
     if (_columns.isEmpty || size.cols <= 0 || size.rows <= 0) return;
     final colX = List<int>.filled(_columns.length, 0);
+    // Each column's PAINTED width: its resolved width, cut at the table's own
+    // right edge. Fixed and title-sized columns are never shrunk by layout, so
+    // `_tableWidth` can exceed `size.cols`; every write below must stay inside
+    // `size` — the invariant damage tracking, repaint caches and the serve
+    // wire's damage bounds rely on. `_writeRule`/`_fillRow` clamp the same way.
+    final colW = List<int>.filled(_columns.length, 0);
     var x = 0;
     for (var col = 0; col < _columns.length; col++) {
       colX[col] = x;
+      final room = size.cols - x;
+      colW[col] = room < _columnWidths[col]
+          ? (room < 0 ? 0 : room)
+          : _columnWidths[col];
       x += _columnWidths[col] + _columnSpacing;
     }
     for (var col = 0; col < _columns.length; col++) {
+      if (colW[col] <= 0) continue;
       _writeHeaderCell(
         buffer,
         offset + CellOffset(colX[col], 0),
         _columns[col],
-        _columnWidths[col],
+        colW[col],
       );
     }
     var bodyTop = 1;
@@ -1791,6 +1802,7 @@ class RenderDataTable extends RenderObject {
           rowIndex == _selectedRow;
       if (selectedRow) _fillRow(buffer, offset + CellOffset(0, y));
       for (var col = 0; col < _columns.length; col++) {
+        if (colW[col] <= 0) continue;
         final text = _cellBuilder(rowIndex, _columns[col].id);
         final selectedCell =
             selectedRow ||
@@ -1803,7 +1815,7 @@ class RenderDataTable extends RenderObject {
           buffer,
           offset + CellOffset(colX[col], y),
           text,
-          _columnWidths[col],
+          colW[col],
           style,
         );
       }
