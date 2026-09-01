@@ -294,6 +294,11 @@ String exportCodeSelection(
 /// keyboard-movable line selection. Ctrl+C copies the selected line or the
 /// whole document, and source text is sanitized so stray escape sequences
 /// can't corrupt the frame.
+///
+/// The viewer bounds its own height: it renders at most [maxVisible] rows
+/// (fewer for a shorter document) and scrolls the rest, so it composes
+/// directly inside a [Column] or any other unbounded slot. Wrap it in an
+/// [Expanded] or a [SizedBox] to give it a different height.
 class CodeView extends StatefulWidget {
   CodeView({
     super.key,
@@ -309,6 +314,7 @@ class CodeView extends StatefulWidget {
     this.maxLineLength = 1000,
     this.tabSize = 2,
     this.showLineNumbers = true,
+    this.maxVisible = 12,
     this.copySelection = true,
     this.copyOptions = const CodeViewCopyOptions(),
     this.onCopy,
@@ -321,7 +327,8 @@ class CodeView extends StatefulWidget {
          showLineNumbers: showLineNumbers,
        ),
        assert(maxLineLength == null || maxLineLength >= 0),
-       assert(tabSize > 0);
+       assert(tabSize > 0),
+       assert(maxVisible > 0);
 
   /// Creates a viewer from an already parsed [CodeDocument].
   ///
@@ -339,11 +346,13 @@ class CodeView extends StatefulWidget {
     this.maxLineLength = 1000,
     this.tabSize = 2,
     this.showLineNumbers = true,
+    this.maxVisible = 12,
     this.copySelection = true,
     this.copyOptions = const CodeViewCopyOptions(),
     this.onCopy,
   }) : assert(maxLineLength == null || maxLineLength >= 0),
-       assert(tabSize > 0);
+       assert(tabSize > 0),
+       assert(maxVisible > 0);
 
   /// Parsed source document to render.
   final CodeDocument document;
@@ -374,6 +383,12 @@ class CodeView extends StatefulWidget {
 
   /// Whether rendered rows include line-number prefixes.
   final bool showLineNumbers;
+
+  /// Maximum visible source rows before the viewer scrolls.
+  ///
+  /// This is what bounds the viewer's height in an unbounded slot (a [Column]
+  /// child, say); the internal list cannot window its rows without one.
+  final int maxVisible;
 
   /// Whether Ctrl+C and semantic copy export the selected text.
   final bool copySelection;
@@ -511,6 +526,9 @@ class _CodeViewState extends State<CodeView> {
     final selected = _selectedLine();
     final visibleRange = _controller.visibleRange;
     final copyEnabled = widget.copySelection && lines.isNotEmpty;
+    final visible = lines.isEmpty
+        ? 1
+        : (lines.length > widget.maxVisible ? widget.maxVisible : lines.length);
     Widget list = lines.isEmpty
         ? const Text('  (empty source)', style: CellStyle(dim: true))
         : ListView.builder(
@@ -531,6 +549,11 @@ class _CodeViewState extends State<CodeView> {
             },
           );
 
+    // The line list is lazy and must be windowed, so it needs a bounded
+    // height. Bound it here rather than making every caller do it: a CodeView
+    // dropped into a Column would otherwise throw about an internal ListView
+    // the caller never wrote.
+    list = SizedBox(height: visible, child: list);
     if (copyEnabled) {
       list = KeyBindings(
         bindings: [

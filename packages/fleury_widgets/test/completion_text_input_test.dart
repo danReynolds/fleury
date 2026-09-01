@@ -17,6 +17,34 @@ Iterable<TextCompletionOption> _commandProvider(TextCompletionRequest request) {
 String _screen(FleuryTester tester, {int cols = 32, int rows = 8}) =>
     tester.renderToString(size: CellSize(cols, rows), emptyMark: ' ');
 
+/// Column span of the popup's rounded frame on the row it opens, in real
+/// terminal cells (`right - left + 1` is its display width).
+({int top, int left, int right}) _frame(CellBuffer buf) {
+  for (var r = 0; r < buf.size.rows; r++) {
+    for (var c = 0; c < buf.size.cols; c++) {
+      if (buf.atColRow(c, r).grapheme != '\u256d') continue;
+      for (var c2 = c + 1; c2 < buf.size.cols; c2++) {
+        if (buf.atColRow(c2, r).grapheme == '\u256e') {
+          return (top: r, left: c, right: c2);
+        }
+      }
+    }
+  }
+  fail('no popup frame in the rendered buffer');
+}
+
+/// The text painted inside the frame on [row], as written (continuation cells
+/// of a wide grapheme contribute nothing — their leading cell already did).
+String _inside(CellBuffer buf, ({int top, int left, int right}) frame, int row) {
+  final sb = StringBuffer();
+  for (var c = frame.left + 1; c < frame.right; c++) {
+    final cell = buf.atColRow(c, frame.top + row);
+    if (cell.role == CellRole.leading) sb.write(cell.grapheme);
+    if (cell.role == CellRole.empty) sb.write(' ');
+  }
+  return sb.toString().trim();
+}
+
 void main() {
   testWidgets('typing opens a provider-backed completion menu', (tester) {
     TextCompletionRequest? lastRequest;
@@ -282,5 +310,59 @@ void main() {
     final row = tester.semantics().single(role: SemanticRole.menuItem);
     expect(row.label, contains(replacementCharacter));
     expect(row.label, isNot(contains('secret')));
+  });
+
+  // Popup geometry is display width, not code units: a BMP wide character
+  // (CJK, Kana, Hangul, fullwidth) is one code unit but two cells. Sizing the
+  // box by `String.length` under-measured it, so the first option wrapped into
+  // the second option's row and the second was never rendered at all.
+  group('option labels are measured by display width', () {
+    const wide = [
+      // 9 code units / 18 cells, and 6 units / 12 cells.
+      TextCompletionOption(label: '日本語のファイル名'),
+      TextCompletionOption(label: '設定ファイル'),
+    ];
+
+    testWidgets('the box fits the widest label and each option owns a row', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        CompletionTextInput(provider: (_) => wide, autofocus: true),
+      );
+      tester.type('a');
+
+      final buf = tester.render(size: const CellSize(40, 8));
+      final frame = _frame(buf);
+      expect(
+        frame.right - frame.left + 1,
+        22,
+        reason: '18 cells for the widest label + 2 for the marker + 2 border',
+      );
+      expect(_inside(buf, frame, 1), '› 日本語のファイル名');
+      expect(_inside(buf, frame, 2), '設定ファイル');
+    });
+
+    testWidgets('a label wider than the surface elides instead of wrapping', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        CompletionTextInput(provider: (_) => wide, autofocus: true),
+      );
+      tester.type('a');
+
+      // Far too narrow for an 18-cell label: the box clamps to the surface and
+      // the label is cut with an ellipsis — it must not reflow into the row
+      // that belongs to the next option.
+      final buf = tester.render(size: const CellSize(14, 8));
+      final frame = _frame(buf);
+      expect(frame.right, lessThan(14));
+      expect(_inside(buf, frame, 1), startsWith('› 日本'));
+      expect(_inside(buf, frame, 1), endsWith('…'));
+      expect(
+        _inside(buf, frame, 2),
+        startsWith('設定'),
+        reason: 'the second option still gets its own row',
+      );
+    });
   });
 }

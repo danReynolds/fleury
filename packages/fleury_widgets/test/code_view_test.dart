@@ -332,4 +332,65 @@ void main() {
       expect(tester.clipboard.readInProcess(), isNot(contains('\x1b]52')));
     });
   });
+
+  // CodeView's internal ListView needs a bounded height. In a Column the cross
+  // child gets an unbounded one, and the list threw a StateError naming a
+  // widget the caller never wrote. `maxVisible` bounds it the same way
+  // TreeTable and FileBrowser do.
+  group('vertical bound', () {
+    testWidgets('renders inside a Column without throwing', (tester) {
+      tester.pumpWidget(
+        Column(
+          children: [
+            const Text('Source'),
+            CodeView(source: _sampleCode, semanticLabel: 'Demo'),
+          ],
+        ),
+      );
+      final out = tester.renderToString(
+        size: const CellSize(60, 24),
+        emptyMark: ' ',
+      );
+      expect(out, contains('Source'));
+      expect(out, contains('import'));
+    });
+
+    testWidgets('maxVisible caps the rendered body rows', (tester) {
+      tester.pumpWidget(
+        Column(
+          children: [
+            const Text('Source'),
+            CodeView(source: _sampleCode, maxVisible: 3),
+          ],
+        ),
+      );
+      final out = tester
+          .renderToString(size: const CellSize(60, 24), emptyMark: ' ')
+          .split('\n')
+          .where((line) => line.trim().isNotEmpty)
+          .toList();
+      // The header row plus exactly three source rows.
+      expect(out.length, 4);
+      expect(out.first, contains('Source'));
+    });
+
+    testWidgets('a shorter document only takes the rows it needs', (tester) {
+      tester.pumpWidget(
+        Column(
+          children: [
+            CodeView(source: 'a\nb', maxVisible: 12),
+            const Text('after'),
+          ],
+        ),
+      );
+      final out = tester
+          .renderToString(size: const CellSize(60, 24), emptyMark: ' ')
+          .split('\n');
+      expect(
+        out[2],
+        contains('after'),
+        reason: '2 source rows, then the sibling — not 12 rows of padding',
+      );
+    });
+  });
 }

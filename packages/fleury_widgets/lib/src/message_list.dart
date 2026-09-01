@@ -400,17 +400,22 @@ class _MessageListState extends State<MessageList> {
     );
   }
 
+  /// Moves the cursor onto [index]. Follow-mode is not touched here: it is
+  /// coupled to the cursor by `ListController.selectedIndex` (see
+  /// `ListController.pinToBottom`) — landing on an older row disengages
+  /// following, landing back on the newest row resumes it, which is the
+  /// documented contract. A pre-emptive `followTail = false` would be undone
+  /// by that coupling for the tail row and duplicated for every other one,
+  /// leaving only a spurious "not following" notification behind.
   void _activateAt(int index) {
     if (index < 0 || index >= widget.messages.length) return;
     _focusList();
-    _controller.followTail = false;
     _controller.selectedIndex = index;
   }
 
   Future<void> _copyAt(int index) async {
     if (index < 0 || index >= widget.messages.length) return;
     _focusList();
-    _controller.followTail = false;
     _controller.selectedIndex = index;
     await _copySelection();
   }

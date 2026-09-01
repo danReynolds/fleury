@@ -1783,4 +1783,101 @@ void main() {
       expect(_hasBraille(tester, 24, 8), isTrue);
     });
   });
+
+  // Degenerate ranges were widened by adding a constant (`xmax = xmin + 1`,
+  // `ymin/ymax -= / += 0.5`). Above 2^53 a double has no room for those
+  // constants, so the widening was a silent no-op: the span stayed 0, `t`
+  // became 0/0 = NaN, and `(NaN * (pxW - 1)).round()` threw
+  // "Unsupported operation: Infinity or NaN toInt" out of paint. Widening in
+  // proportion to the magnitude keeps the range real at every scale.
+  group('degenerate ranges at large magnitude', () {
+    // 2^53 — the first integer whose successor is not representable.
+    const twoPow53 = 9007199254740992;
+
+    testWidgets('a lone point at 2^53 renders instead of throwing', (tester) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 30,
+          height: 8,
+          child: LineChart(
+            series: [
+              LineSeries([(twoPow53, 1)]),
+            ],
+          ),
+        ),
+      );
+      expect(_hasBraille(tester, 30, 8), isTrue);
+    });
+
+    testWidgets('a lone point at a nanosecond epoch renders', (tester) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 30,
+          height: 8,
+          child: LineChart(
+            series: [
+              LineSeries([(1700000000000000000, 5)]),
+            ],
+          ),
+        ),
+      );
+      expect(_hasBraille(tester, 30, 8), isTrue);
+    });
+
+    testWidgets('a constant series at 2^53 draws its line', (tester) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 30,
+          height: 8,
+          child: LineChart(
+            series: [
+              LineSeries([(0, twoPow53), (1, twoPow53), (2, twoPow53)]),
+            ],
+          ),
+        ),
+      );
+      expect(_hasBraille(tester, 30, 8), isTrue);
+    });
+
+    testWidgets('an explicit degenerate range at 2^53 renders', (tester) {
+      tester.pumpWidget(
+        const SizedBox(
+          width: 30,
+          height: 8,
+          child: LineChart(
+            xRange: (twoPow53, twoPow53),
+            yRange: (twoPow53, twoPow53),
+            series: [
+              LineSeries([(twoPow53, twoPow53)]),
+            ],
+          ),
+        ),
+      );
+      expect(_hasBraille(tester, 30, 8), isTrue);
+    });
+
+    testWidgets('ordinary magnitudes keep their existing window', (tester) {
+      // The widening is `max(1, |v| * 1e-9)`, so small values still get the
+      // same unit-wide window they always had: a lone point at (3, 7) spans
+      // x 3..4 and y 6.5..7.5.
+      tester.pumpWidget(
+        const SizedBox(
+          width: 30,
+          height: 10,
+          child: LineChart(
+            series: [
+              LineSeries([(3, 7)]),
+            ],
+          ),
+        ),
+      );
+      final out = tester.renderToString(
+        size: const CellSize(30, 10),
+        emptyMark: ' ',
+      );
+      expect(out, contains('7.5'));
+      expect(out, contains('6.5'));
+      expect(out, contains('3.5'));
+    });
+  });
 }

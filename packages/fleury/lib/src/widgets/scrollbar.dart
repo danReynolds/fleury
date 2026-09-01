@@ -81,6 +81,13 @@ class Scrollbar extends StatefulWidget {
 /// Holder for a [Scrollbar]'s painted geometry: the render object writes
 /// it each paint, the drag handler reads it to map a pointer row → scroll
 /// fraction (the same write-at-paint / read-elsewhere idiom as BoundsNotifier).
+///
+/// [top] is a *screen* row, like BoundsNotifier's rect and the pointer
+/// region this pairs with. Mouse events arrive in absolute terminal
+/// coordinates, so recording the local paint offset instead would misread
+/// every click inside a subtree painted into a scratch buffer — a caching
+/// RepaintBoundary, a ListView item, a ScrollView viewport — where the local
+/// offset is scratch-relative and the screen offset is not.
 class _ScrollbarGeometry {
   int top = 0;
   int height = 0;
@@ -279,8 +286,10 @@ class _RenderScrollbar extends RenderObject {
   }) {
     if (size.isEmpty) return;
     final h = size.rows;
+    // Screen coordinates, matching the pointer region registered for this bar
+    // (see PointerRegion.paint) — see [_ScrollbarGeometry].
     _geometry
-      ..top = offset.row
+      ..top = (screenOffset ?? offset).row
       ..height = h;
 
     final (content, viewport, scrollOffset) = _metrics();
