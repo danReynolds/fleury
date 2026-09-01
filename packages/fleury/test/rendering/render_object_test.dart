@@ -4,6 +4,23 @@ import 'package:fleury/src/debug/debug_invalidation.dart';
 import 'package:fleury/src/rendering/render_navigator.dart';
 import 'package:test/test.dart';
 
+/// Minimal stateful host for the invalidation-label tests: `bump()` is a
+/// plain `setState`, the single hottest caller of `markNeedsBuild`.
+class _Ticker extends StatefulWidget {
+  const _Ticker({super.key});
+
+  @override
+  State<_Ticker> createState() => _TickerState();
+}
+
+class _TickerState extends State<_Ticker> {
+  int count = 0;
+  void bump() => setState(() => count++);
+
+  @override
+  Widget build(BuildContext context) => Text('$count');
+}
+
 class _CountingRenderObject extends RenderObject {
   _CountingRenderObject(this.nextSize);
 
@@ -178,6 +195,72 @@ void main() {
         DebugInvalidations.drain(),
         contains('paint:_CountingRenderObject'),
       );
+    });
+
+    test('no listener: a render-object invalidation builds no label', () {
+      // The collector's contract (debug_invalidation.dart) is that the HOT
+      // PATH checks `DebugEvents.hasListeners` before allocating a label.
+      // `_record` checking after the fact is too late: the caller has already
+      // paid for `runtimeType.toString()`, on every invalidation of every
+      // render object in every frame.
+      expect(DebugInvalidations.isRecording, isFalse, reason: 'precondition');
+      final render = _CountingRenderObject(const CellSize(3, 2))
+        ..layout(const CellConstraints(maxCols: 10, maxRows: 10));
+
+      final before = DebugInvalidations.debugLabelsBuilt;
+      for (var i = 0; i < 100; i++) {
+        render.markNeedsLayout();
+        render.markNeedsPaint();
+        render.markPaintOnly();
+      }
+      expect(DebugInvalidations.debugLabelsBuilt, before);
+    });
+
+    test('with a listener: render-object labels are still built', () {
+      final subscription = DebugEvents.stream.listen((_) {});
+      addTearDown(subscription.cancel);
+
+      DebugInvalidations.reset();
+      final render = _CountingRenderObject(const CellSize(3, 2))
+        ..layout(const CellConstraints(maxCols: 10, maxRows: 10));
+
+      DebugInvalidations.reset();
+      final before = DebugInvalidations.debugLabelsBuilt;
+      render.markNeedsPaint();
+      expect(DebugInvalidations.debugLabelsBuilt, before + 1);
+      expect(
+        DebugInvalidations.drain(),
+        contains('paint:_CountingRenderObject'),
+      );
+    });
+
+    testWidgets('no listener: setState builds no label', (tester) {
+      expect(DebugInvalidations.isRecording, isFalse, reason: 'precondition');
+      final key = GlobalKey<_TickerState>();
+      tester.pumpWidget(_Ticker(key: key));
+
+      final before = DebugInvalidations.debugLabelsBuilt;
+      for (var i = 0; i < 100; i++) {
+        key.currentState!.bump();
+        tester.render(size: const CellSize(20, 1));
+      }
+      expect(DebugInvalidations.debugLabelsBuilt, before);
+    });
+
+    testWidgets('with a listener: the setState label names widget and state', (
+      tester,
+    ) {
+      final subscription = DebugEvents.stream.listen((_) {});
+      addTearDown(subscription.cancel);
+
+      final key = GlobalKey<_TickerState>();
+      tester.pumpWidget(_Ticker(key: key));
+
+      DebugInvalidations.reset();
+      final before = DebugInvalidations.debugLabelsBuilt;
+      key.currentState!.bump();
+      expect(DebugInvalidations.debugLabelsBuilt, greaterThan(before));
+      expect(DebugInvalidations.drain(), contains('build:_Ticker/_TickerState'));
     });
   });
 
