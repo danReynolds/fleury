@@ -216,7 +216,10 @@ final class CellBuffer {
     final dstCol0 = destOffset.col;
     final dstRow0 = destOffset.row;
     final srcStride = source._size.cols;
-    _recordDamageRect(dstCol0, dstRow0, cols, rows);
+    // ±1 edge columns: the general path below empties a leading at col-1 or a
+    // continuation at col+cols — outside the region proper — for the same
+    // reason grapheme writes and image placements damage their neighbours.
+    _recordDamageRect(dstCol0 - 1, dstRow0, cols + 2, rows);
 
     // Placements live off-grid, so carry them explicitly. The region-aware
     // compositor preserves the original fit box while accumulating source
@@ -267,7 +270,36 @@ final class CellBuffer {
       final srcStart = (srcRow + r) * srcStride + srcCol + colStart;
       final dstStart = dstRow * _size.cols + dstCol0 + colStart;
       final len = colEnd - colStart;
+      // Sever any wide pair the destination range's edges bisect BEFORE
+      // overwriting — a leading just left of the range, or a continuation
+      // just right of it, would otherwise be orphaned (the interior is fully
+      // overwritten). This is the invariant every grapheme write and image
+      // placement maintains; the blit skipped it because "the frame buffer
+      // is cleared at the start of every frame" — true, and irrelevant once
+      // a SIBLING has painted into that cleared buffer this frame. A cached
+      // repaint boundary (every ListView item, every overlay entry) blitting
+      // over CJK text left an orphaned leading the renderer then modelled as
+      // one column and the terminal drew as two: everything after it on the
+      // row landed one cell to the right, and stayed there, because the
+      // shown buffer believed the frame was correct.
+      _evictWideNeighbors(dstCol0 + colStart, dstRow);
+      _evictWideNeighbors(dstCol0 + colEnd - 1, dstRow);
       _cells.setRange(dstStart, dstStart + len, source._cells, srcStart);
+      // The copied slice itself can be cut mid-pair when the destination
+      // clip trimmed it (a blit partly off-screen) or the caller's rect did.
+      // A continuation as the first copied cell has its leading outside the
+      // slice; a wide leading as the last copied cell has its continuation
+      // outside it. Narrow graphemes are leading cells too, so the last-cell
+      // case is decided by the SOURCE's next cell, not by the role alone.
+      if (source._cells[srcStart].role == CellRole.continuation) {
+        _cells[dstStart] = const Cell.empty();
+      }
+      final srcLast = srcStart + len - 1;
+      if (srcCol + colEnd < srcStride &&
+          source._cells[srcLast].role == CellRole.leading &&
+          source._cells[srcLast + 1].role == CellRole.continuation) {
+        _cells[dstStart + len - 1] = const Cell.empty();
+      }
     }
   }
 
