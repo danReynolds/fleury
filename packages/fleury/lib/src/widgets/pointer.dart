@@ -666,7 +666,9 @@ final class _PointerListenerElement extends SingleChildRenderObjectElement {
 
   @override
   void deactivate() {
-    (renderObject as RenderPointerListener).router = null;
+    // `maybeRenderObject`: an element whose inflate threw never got a render
+    // object, and the throwing getter would compound the original error.
+    (maybeRenderObject as RenderPointerListener?)?.router = null;
     super.deactivate();
   }
 

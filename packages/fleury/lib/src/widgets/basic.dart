@@ -230,7 +230,9 @@ class _RawTextElement extends LeafRenderObjectElement {
 
   @override
   void unmount() {
-    (renderObject as RenderText).detachFromSelection();
+    // `maybeRenderObject`: an element whose inflate threw never got a render
+    // object, and the throwing getter would compound the original error.
+    (maybeRenderObject as RenderText?)?.detachFromSelection();
     super.unmount();
   }
 }

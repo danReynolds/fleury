@@ -430,7 +430,9 @@ class _BoundsAnchorElement extends SingleChildRenderObjectElement {
 
   @override
   void unmount() {
-    (renderObject as RenderBoundsAnchor).stopTracking();
+    // `maybeRenderObject`: an element whose inflate threw never got a render
+    // object, and the throwing getter would compound the original error.
+    (maybeRenderObject as RenderBoundsAnchor?)?.stopTracking();
     super.unmount();
   }
 }
