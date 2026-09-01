@@ -9,7 +9,6 @@ library;
 
 import 'dart:io';
 
-import 'package:fleury/fleury_wire.dart';
 import 'package:fleury/fleury_wire_io.dart';
 import 'package:test/test.dart';
 
