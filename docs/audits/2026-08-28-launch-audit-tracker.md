@@ -395,10 +395,10 @@ Ordered by what I'd take first. Each names **what makes it hard**, so we can dec
   **Honest scope:** opt-in, zero non-test callers — a documented primitive that doesn't work, not a default-path failure. But the blank set includes the two wrappers the framework inserts *unasked* (list items, route content), and Flutter **asserts** where this returns 0.
   **Notes:** LANDED (general fix, not the assert): base default delegates intrinsics for every single-child wrapper; RenderBorder adds its frame; Stack/IndexedStack report the largest child. 5 tests red at 0 before. Fast gates pass (intrinsics are not per-frame).
 
-- [ ] **12.c** `P2` ✎ Render config never refreshed on a dependency-only rebuild — `framework.dart:1736`
+- [x] **12.c** `P2` ✎ Render config never refreshed on a dependency-only rebuild — `framework.dart:1736`
   **Hard because:** the central fix (call `updateRenderObject` from `performRebuild`) is the one change here with **real gate exposure** — an extra call per dirty render-object element per frame. Setters no-op on unchanged values, so the cost is getters plus inherited lookups; if those show up, the fallback is a narrower opt-in mixin, which leaves the trap open for third-party widgets. **Land 12.b first** — the setters this needs don't exist yet.
   **✎ Framing corrected:** "no user-facing trigger today" is **false** for the contract, even though it's true of the four in-repo instances. A live trigger was reproduced: a user-written render-object widget reading `Theme.of(context)` in `createRenderObject`, hoisted `const`, theme swapped — keeps painting the old colour.
-  **Notes:**
+  **Notes:** LANDED (d91335af): inherited notify flags RenderObjectElements too; rebuild re-runs updateRenderObject once when flagged (setters no-op on unchanged values). Theme-swap-under-const test red before. alloc/paint gates unchanged.
 
 ### C4 · Input authority and terminal policy
 
@@ -427,10 +427,10 @@ Ordered by what I'd take first. Each names **what makes it hard**, so we can dec
   **Honest scope:** sampled lane only, and Asteroids is accidentally immune (its fire is also a regular binding) — so nothing shipped visibly breaks. What breaks is a frozen documented API for anyone following the RFC.
   **Notes:**
 
-- [ ] **6.c** `P1` ✎ A float outlives its anchor when the anchor stops painting — `bounds.dart:169`
+- [x] **6.c** `P1` ✎ A float outlives its anchor when the anchor stops painting — `bounds.dart:169`
   **Hard because:** the frame-epoch fix needs two things measured first — the epoch must be correct under **retained-paint replay** (a cached boundary republishes for a subtree that didn't run), and the staleness threshold must be **one frame, not zero**, since an anchor painting before its observer legitimately reads last frame's bounds. Get either wrong and every float flickers.
   **✎ Far broader than route-push:** `IndexedStack`/`Tabs` means "open a dropdown, switch tabs" strands the panel over the new tab. Affects every anchor consumer. Cheap complement worth doing regardless: close stock floats on route change.
-  **Notes:**
+  **Notes:** LANDED: numbered PaintPass with end-of-pass hook (rendering layer); observers stamp paint/replay; unrefreshed live observers publish null at pass end → anchored float hides next frame (hasFrameWork schedules it). IndexedStack-switch test red before; cached-boundary stability test. No route-change close needed for the stock floats now.
 
 ### C5 · Serve
 
@@ -535,8 +535,8 @@ Found by the batch agents in passing. Verified only to the extent stated; triage
   **Notes:**
 - [ ] **N3** `P2` `MessageListController.jumpToIndex` has 8.e's dead `followTail = false` pattern — `message_list.dart:155-166`; a tail index re-engages follow through the coupling.
   **Notes:**
-- [ ] **N4** `P2` Three more surfaces teach the reload-less browser command — `getting-started.mdx:273`, `guides/deployment.md:89`, `coming-from-flutter.md:90`. Same fix as 15.g's docs half.
-  **Notes:**
+- [x] **N4** `P2` Three more surfaces teach the reload-less browser command — `getting-started.mdx:273`, `guides/deployment.md:89`, `coming-from-flutter.md:90`. Same fix as 15.g's docs half.
+  **Notes:** LANDED: getting-started, deployment, coming-from-flutter now teach `dart --enable-vm-service=0 run …` with a one-line reason.
 - [x] **N5** `P2` Spawn mode's `--max-sessions` rejection is a 503 before the upgrade, so the client shows a blank page with no message (13.new in the register; same family as 13.d).
   **Notes:** Same bug as 13.new — LANDED via A6 merge (7d53ed57), see 13.new.
 - [ ] **N6** `P3` `probeAmbiguousWidth` (`terminal_probe.dart:251`) — public, tested, no production caller (the driver calls `probeGlyphWidths`). `AmbiguousCharWidth`'s doc still attributes detection to it.
@@ -549,5 +549,5 @@ Found by the batch agents in passing. Verified only to the extent stated; triage
   **Notes:**
 - [ ] **N10** `P3` `LineChart`'s degenerate x padding is asymmetric (lone point at the left edge) while y is symmetric — centring x is a two-character change now, but a visible one.
   **Notes:**
-- [ ] **N11** `P3` `test/runtime/dead_control_warning_test.dart` is unformatted on main (`dart format` violation).
-  **Notes:**
+- [x] **N11** `P3` `test/runtime/dead_control_warning_test.dart` is unformatted on main (`dart format` violation).
+  **Notes:** LANDED: formatted.
