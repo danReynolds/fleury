@@ -264,6 +264,30 @@ class PointerRouter {
             ? _topmost(event.col, event.row, _hasDrag)
             : null;
         _dragging = false;
+        // The region that will receive the drag sees the press too. Tap-down
+        // went only to the topmost TAP region; when that is a tap-only widget
+        // (a GestureDetector — every ListView item is one) sitting over a
+        // drag region (a SelectionArea), the drag region never learned where
+        // the press landed: a selection had no anchor, so list content, logs
+        // and transcripts could not be selected at all, and a drag extended
+        // from whatever stale anchor was left.
+        final dragTarget = _dragTarget;
+        if (dragTarget != null && !identical(dragTarget, _downTarget)) {
+          dragTarget.onTapDown?.call(event.col, event.row);
+          dragTarget.onTapDownWithModifiers?.call(
+            event.col,
+            event.row,
+            event.modifiers,
+          );
+          dragTarget.onPointerDown?.call(
+            PointerDownDetails(
+              col: event.col,
+              row: event.row,
+              button: event.button,
+              modifiers: event.modifiers,
+            ),
+          );
+        }
         return _downTarget != null || _dragTarget != null;
       case MouseEventKind.up:
         // A completed drag consumes the release — no tap fires.
