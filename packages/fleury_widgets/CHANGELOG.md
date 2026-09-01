@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.1.0
+
+Initial public release.
 
 - **Unified control styling.** Buttons, toggles, choices, selectors, steppers,
   sliders, date/color pickers, and input wrappers now use their ordinary
@@ -17,7 +19,3 @@
   core — per-cell color resolves last-drawn-wins), showcased by the
   rebuilt Neon Asteroids sample: glowing outlines, tracer bullets,
   shockwave rings, impact screen-shake, and a cabinet bezel.
-
-## 0.1.0
-
-Initial public release.

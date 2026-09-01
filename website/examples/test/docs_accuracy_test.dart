@@ -380,6 +380,44 @@ void main() {
       }
     });
 
+    // Three changelogs headed their real content `## Unreleased` while the
+    // pubspec already said 0.1.0, stranding the Surface/CellStyle/FocusScope
+    // renames above a `## 0.1.0 — Initial release` stub. pub.dev shows the
+    // changelog verbatim, so a reader would have seen the release notes for
+    // 0.1.0 with none of 0.1.0's actual breaking changes in them.
+    test('every publishable changelog leads with its pubspec version', () {
+      for (final package in const <String>[
+        'fleury',
+        'fleury_widgets',
+        'fleury_themes',
+        'fleury_test',
+        'fleury_web',
+        'fleury_mcp',
+      ]) {
+        final dir = p.join(repo.path, 'packages', package);
+        final version = RegExp(r'^version:\s*(\S+)\s*$', multiLine: true)
+            .firstMatch(File(p.join(dir, 'pubspec.yaml')).readAsStringSync())!
+            .group(1)!;
+        final headings = RegExp(r'^## +(.+?)\s*$', multiLine: true)
+            .allMatches(File(p.join(dir, 'CHANGELOG.md')).readAsStringSync())
+            .map((match) => match.group(1)!)
+            .toList(growable: false);
+
+        expect(
+          headings.first,
+          version,
+          reason:
+              '$package CHANGELOG.md leads with "${headings.first}" but its '
+              'pubspec says $version',
+        );
+        expect(
+          headings.toSet(),
+          hasLength(headings.length),
+          reason: '$package CHANGELOG.md repeats a version heading: $headings',
+        );
+      }
+    });
+
     test('shipped Fleury examples do not link the unowned domain', () {
       final surfaces = <File>[
         File(p.join(repo.path, 'packages/storybook/lib/src/catalog.dart')),
