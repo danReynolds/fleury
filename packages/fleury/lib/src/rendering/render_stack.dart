@@ -169,6 +169,34 @@ class RenderStack extends RenderObject implements RenderObjectWithChildren {
     markNeedsLayout();
   }
 
+  // The natural size is the largest non-positioned child's; positioned
+  // children float and never contribute (they don't in layout either).
+  int _maxOverChildren(int Function(RenderObject child) query) {
+    var best = 0;
+    for (final c in _children) {
+      if (c is RenderPositioned) continue;
+      final v = query(c);
+      if (v > best) best = v;
+    }
+    return best;
+  }
+
+  @override
+  int computeMaxIntrinsicWidth(int? height) =>
+      _maxOverChildren((c) => c.computeMaxIntrinsicWidth(height));
+
+  @override
+  int computeMinIntrinsicWidth(int? height) =>
+      _maxOverChildren((c) => c.computeMinIntrinsicWidth(height));
+
+  @override
+  int computeMaxIntrinsicHeight(int? width) =>
+      _maxOverChildren((c) => c.computeMaxIntrinsicHeight(width));
+
+  @override
+  int computeMinIntrinsicHeight(int? width) =>
+      _maxOverChildren((c) => c.computeMinIntrinsicHeight(width));
+
   @override
   CellSize performLayout(CellConstraints constraints) {
     if (_children.isEmpty) {
@@ -285,6 +313,33 @@ class RenderIndexedStack extends RenderObject
       ..addAll(newChildren);
     markNeedsLayout();
   }
+
+  // Sized to the largest child (all of them stay laid out), so that is the
+  // natural size too.
+  int _maxOverChildren(int Function(RenderObject child) query) {
+    var best = 0;
+    for (final c in _children) {
+      final v = query(c);
+      if (v > best) best = v;
+    }
+    return best;
+  }
+
+  @override
+  int computeMaxIntrinsicWidth(int? height) =>
+      _maxOverChildren((c) => c.computeMaxIntrinsicWidth(height));
+
+  @override
+  int computeMinIntrinsicWidth(int? height) =>
+      _maxOverChildren((c) => c.computeMinIntrinsicWidth(height));
+
+  @override
+  int computeMaxIntrinsicHeight(int? width) =>
+      _maxOverChildren((c) => c.computeMaxIntrinsicHeight(width));
+
+  @override
+  int computeMinIntrinsicHeight(int? width) =>
+      _maxOverChildren((c) => c.computeMinIntrinsicHeight(width));
 
   @override
   CellSize performLayout(CellConstraints constraints) {

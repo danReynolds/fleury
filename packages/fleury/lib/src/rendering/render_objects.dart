@@ -1006,6 +1006,27 @@ class RenderBorder extends RenderObject implements RenderObjectWithSingleChild {
     }
   }
 
+  // A framed box is its child plus one cell of frame on every side; the
+  // cross-axis budget handed to the child loses the same two cells.
+  int? _lessFrame(int? extent) =>
+      extent == null ? null : (extent > 2 ? extent - 2 : 0);
+
+  @override
+  int computeMaxIntrinsicWidth(int? height) =>
+      (child?.computeMaxIntrinsicWidth(_lessFrame(height)) ?? 0) + 2;
+
+  @override
+  int computeMinIntrinsicWidth(int? height) =>
+      (child?.computeMinIntrinsicWidth(_lessFrame(height)) ?? 0) + 2;
+
+  @override
+  int computeMaxIntrinsicHeight(int? width) =>
+      (child?.computeMaxIntrinsicHeight(_lessFrame(width)) ?? 0) + 2;
+
+  @override
+  int computeMinIntrinsicHeight(int? width) =>
+      (child?.computeMinIntrinsicHeight(_lessFrame(width)) ?? 0) + 2;
+
   @override
   CellSize performLayout(CellConstraints constraints) {
     int max0(int v) => v < 0 ? 0 : v;

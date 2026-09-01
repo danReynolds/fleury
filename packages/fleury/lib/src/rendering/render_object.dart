@@ -1194,22 +1194,47 @@ abstract class RenderObject {
   // instead of expanding it to the available space.
   //
   // Pass `null` for `height` / `width` to mean "no cross-axis constraint."
-  // Defaults return 0 — a render object that doesn't care declares no
-  // intrinsic preference.
+  //
+  // Defaults: a single-child wrapper ([RenderObjectWithSingleChild]) answers
+  // with its child's preference — a proxy that adds no geometry of its own
+  // (focus, pointer, semantics, repaint boundary, error containment) wants
+  // exactly that. Wrappers that DO add geometry (padding, a frame, a fixed
+  // box) override and adjust. Everything else returns 0: a leaf or a
+  // multi-child layout that doesn't override declares no preference.
+  //
+  // Before this, every non-overriding wrapper reported 0, which
+  // [IntrinsicWidth]/[IntrinsicHeight] read as "wants to be empty" and laid
+  // the whole subtree out at zero — blank — for almost any real child.
 
   /// The widest this render object would want to be at the given [height].
   /// Most relevant override: text returns its unwrapped width.
-  int computeMaxIntrinsicWidth(int? height) => 0;
+  int computeMaxIntrinsicWidth(int? height) {
+    final self = this;
+    if (self is! RenderObjectWithSingleChild) return 0;
+    return self.child?.computeMaxIntrinsicWidth(height) ?? 0;
+  }
 
-  /// The narrowest width below which content would clip. Defaults to 0;
-  /// text-like leaves can return a longest-token width if they word-wrap.
-  int computeMinIntrinsicWidth(int? height) => 0;
+  /// The narrowest width below which content would clip. Text-like leaves
+  /// can return a longest-token width if they word-wrap.
+  int computeMinIntrinsicWidth(int? height) {
+    final self = this;
+    if (self is! RenderObjectWithSingleChild) return 0;
+    return self.child?.computeMinIntrinsicWidth(height) ?? 0;
+  }
 
   /// The tallest this render object would want to be at the given [width].
-  int computeMaxIntrinsicHeight(int? width) => 0;
+  int computeMaxIntrinsicHeight(int? width) {
+    final self = this;
+    if (self is! RenderObjectWithSingleChild) return 0;
+    return self.child?.computeMaxIntrinsicHeight(width) ?? 0;
+  }
 
   /// The shortest this render object can be at the given [width].
-  int computeMinIntrinsicHeight(int? width) => 0;
+  int computeMinIntrinsicHeight(int? width) {
+    final self = this;
+    if (self is! RenderObjectWithSingleChild) return 0;
+    return self.child?.computeMinIntrinsicHeight(width) ?? 0;
+  }
 }
 
 /// Marker interface for render objects that hold exactly one child. The
