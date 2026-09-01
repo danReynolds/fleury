@@ -117,7 +117,10 @@ waits for the single bridge-mode app session instead.
 
 Two additional spawn-only controls must appear before `--spawn`:
 
-- `--max-sessions=<n>` caps concurrent browser sessions (default `8`).
+- `--max-sessions=<n>` caps concurrent browser sessions (default `8`). A
+  browser that arrives at the cap is turned away after the WebSocket upgrade
+  with close code `4001` and a reason the page shows in its banner, so the cap
+  is visible to the user rather than a blank grid.
 - `--debug` exposes frame timings, captured logs, and full error details over
   the debug wire. It is off for spawned sessions unless explicitly requested.
 

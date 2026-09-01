@@ -460,6 +460,37 @@ void main() {
     expect(components.surface.size, resizeFrames.single.size);
   });
 
+  test('a deliberate server close shows the reason the server gave', () {
+    // `fleury serve` turns an over-cap browser away AFTER the WebSocket
+    // upgrade precisely so the close can carry a code and a reason the page
+    // can show. Overwriting it with the generic drop line throws that away —
+    // the user hits the session cap and sees an unexplained disconnect.
+    source.handleSocketCloseForTest(
+      web.CloseEvent(
+        'close',
+        web.CloseEventInit(
+          code: serveSessionLimitCloseCode,
+          reason: 'session limit reached (1/1); raise with --max-sessions=<n>.',
+        ),
+      ),
+    );
+
+    expect(source.bannerShownForTest, isTrue);
+    expect(into.textContent, contains('session limit reached'));
+    expect(
+      into.textContent,
+      contains('reload to reconnect'),
+      reason: 'the retry affordance stays',
+    );
+  });
+
+  test('an ordinary drop keeps the generic disconnect message', () {
+    source.handleSocketCloseForTest(web.CloseEvent('close'));
+
+    expect(source.bannerShownForTest, isTrue);
+    expect(into.textContent, contains('Disconnected from the fleury session'));
+  });
+
   test(
     'disposing a disconnected session removes its reconnect banner',
     () async {

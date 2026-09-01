@@ -68,7 +68,7 @@ final class WireFrameSource implements BrowserFrameSource {
     socket.onmessage = ((web.MessageEvent event) {
       _onMessage(event);
     }).toJS;
-    socket.onclose = ((web.CloseEvent _) {
+    socket.onclose = ((web.CloseEvent event) {
       // A close BEFORE the socket ever opened is a failed connection
       // (serve down, wrong URL, rejected upgrade). Fail start() so the
       // caller's Future resolves and attach()'s cleanup runs — don't show
@@ -81,7 +81,7 @@ final class WireFrameSource implements BrowserFrameSource {
         );
         return;
       }
-      _teardown('Disconnected from the fleury session.');
+      _handleSocketClose(event);
     }).toJS;
     socket.onerror = ((web.Event _) {
       // Errors before open (connection refused, TLS failure) fire error
@@ -98,6 +98,17 @@ final class WireFrameSource implements BrowserFrameSource {
     await opened.future;
 
     return _mountedAppFor(components);
+  }
+
+  /// A post-open close. A server that closed DELIBERATELY says why — `fleury
+  /// serve` turns an over-cap browser away with a close code and a reason
+  /// after the upgrade for exactly this purpose — so show that reason instead
+  /// of the generic drop line; an ordinary disconnect carries none.
+  void _handleSocketClose(web.CloseEvent event) {
+    final reason = event.reason.trim();
+    _teardown(
+      reason.isEmpty ? 'Disconnected from the fleury session.' : reason,
+    );
   }
 
   void _completeOpen(Completer<void> opened) {
@@ -709,6 +720,11 @@ final class WireFrameSource implements BrowserFrameSource {
   /// Drives the frame handler directly — test-only (production frames
   /// arrive through the socket's onmessage).
   void handleFrameForTest(RemoteFrame frame) => _handleFrame(frame);
+
+  /// Drives the production post-open close handler — test-only (production
+  /// close events arrive through the socket's onclose).
+  void handleSocketCloseForTest(web.CloseEvent event) =>
+      _handleSocketClose(event);
 
   /// Sends browser input through the production wire-encoding path —
   /// test-only.
