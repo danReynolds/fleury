@@ -44,10 +44,17 @@ class PosixTerminalDriver
     @visibleForTesting void Function(int exitCode)? forceExitOverride,
     @visibleForTesting bool Function()? selfStopOverride,
     @visibleForTesting PosixTerminalModeController? terminalModeController,
+    @visibleForTesting
+    StreamSubscription<ProcessSignal>? Function(
+      ProcessSignal signal,
+      void Function(ProcessSignal signal) onSignal,
+    )?
+    signalWatcherOverride,
   }) : _stdin = stdinOverride ?? stdin,
        _stdout = stdoutOverride ?? stdout,
        _forceExitOverride = forceExitOverride,
        _selfStopOverride = selfStopOverride,
+       _signalWatcherOverride = signalWatcherOverride,
        _terminalModeController =
            terminalModeController ?? NativePosixTerminalModeController() {
     _events = StreamController<TuiEvent>.broadcast(
@@ -148,6 +155,7 @@ class PosixTerminalDriver
   static const _perProbeTimeout = Duration(milliseconds: 150);
   ImageProtocol? _imageProtocolOverride;
   bool _synchronizedOutput = false;
+
   /// What the startup probe measured the terminal actually drawing.
   ///
   /// The ONE probe output the driver keeps: [capabilities] folds it into the
@@ -184,10 +192,18 @@ class PosixTerminalDriver
     return int.tryParse(raw);
   }
 
+  final StreamSubscription<ProcessSignal>? Function(
+    ProcessSignal signal,
+    void Function(ProcessSignal signal) onSignal,
+  )?
+  _signalWatcherOverride;
+
   StreamSubscription<ProcessSignal>? _watchSignal(
     ProcessSignal signal,
     void Function(ProcessSignal signal) onSignal,
   ) {
+    final override = _signalWatcherOverride;
+    if (override != null) return override(signal, onSignal);
     try {
       return signal.watch().listen(onSignal);
     } on SignalException {
@@ -1001,6 +1017,19 @@ class PosixTerminalDriver
     _pasteIdleTimer?.cancel();
     _pasteIdleTimer = null;
 
+    // Shield the rest of restore from SIGINT/SIGTERM. Cancelling the LAST
+    // subscription to a signal restores the OS default disposition, so a
+    // signal arriving while the remaining cleanup yields — the hot-reload
+    // supervisor forwards one 300 ms after delivery — killed the process raw,
+    // mid-restore: capture teardown skipped, nothing after `await runApp`
+    // ran, and the emergency tty restore made it look like a clean quit. The
+    // shield swallows it (we are already on the way out) and is dropped last.
+    final shields = <StreamSubscription<ProcessSignal>>[];
+    for (final signal in const [ProcessSignal.sigint, ProcessSignal.sigterm]) {
+      final shield = _watchSignal(signal, (_) {});
+      if (shield != null) shields.add(shield);
+    }
+
     // Termination watchers go first. This closes the only path that can re-arm
     // signal grace while the remaining asynchronous cleanup yields.
     try {
@@ -1060,6 +1089,13 @@ class PosixTerminalDriver
     _graceTimer = null;
     _pendingSignal = null;
     _pendingSignalDelivered = false;
+    // Last: the terminal is back in the user's hands; a signal now has its
+    // normal meaning again.
+    for (final shield in shields) {
+      try {
+        await shield.cancel();
+      } catch (_) {}
+    }
     _restoring = false;
   }
 

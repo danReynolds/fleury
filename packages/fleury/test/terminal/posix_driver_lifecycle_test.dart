@@ -162,6 +162,20 @@ class _FakeModeController implements PosixTerminalModeController {
   }
 }
 
+/// A signal subscription that only records its own cancellation.
+class _TraceSignalSubscription implements StreamSubscription<ProcessSignal> {
+  _TraceSignalSubscription(this.signal, this.trace);
+
+  final ProcessSignal signal;
+  final List<String> trace;
+
+  @override
+  Future<void> cancel() async => trace.add('unwatch:${signal.name}');
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 Future<void> _pump() => Future<void>.delayed(const Duration(milliseconds: 10));
 
 void main() {
@@ -718,4 +732,81 @@ void main() {
     await restored.future;
     await input.close();
   }, timeout: const Timeout(Duration(seconds: 15)));
+
+  test(
+    'restore() keeps SIGINT/SIGTERM shielded until the terminal is back',
+    () async {
+      // Cancelling the last subscription to a signal restores the OS default
+      // disposition. restore() cancels the real watchers first (so nothing can
+      // re-arm signal grace) and then yields through the remaining cleanup —
+      // during which the hot-reload supervisor's 300 ms forward used to kill
+      // the process raw, mid-restore. A no-op shield now covers that window
+      // and is dropped last.
+      final trace = <String>[];
+      final input = _FakeStdin(terminal: true);
+      late final _RecordingStdout out;
+      out = _RecordingStdout(
+        terminal: true,
+        trace: trace,
+        onWrite: (bytes) {
+          if (bytes.contains('\x1B[6n')) {
+            scheduleMicrotask(
+              () => input.push('\x1B[1;2R\x1B[?1;2c'.codeUnits),
+            );
+          } else if (bytes.contains('\x1B[c')) {
+            scheduleMicrotask(() => input.push('\x1B[?1;2c'.codeUnits));
+          }
+        },
+      );
+      final driver = PosixTerminalDriver(
+        stdinOverride: input,
+        stdoutOverride: out,
+        terminalModeController: _FakeModeController(trace),
+        selfStopOverride: () => true,
+        signalWatcherOverride: (signal, onSignal) {
+          trace.add('watch:${signal.name}');
+          return _TraceSignalSubscription(signal, trace);
+        },
+      );
+      try {
+        await driver.enter(TerminalMode.interactive);
+        trace.clear();
+        await driver.restore();
+
+        final unwatches = [
+          for (var i = 0; i < trace.length; i++)
+            if (trace[i] == 'unwatch:${ProcessSignal.sigint.name}') i,
+        ];
+        expect(
+          unwatches,
+          hasLength(2),
+          reason: 'real watcher + shield: $trace',
+        );
+        final shieldWatch = trace.indexOf('watch:${ProcessSignal.sigint.name}');
+        expect(
+          shieldWatch,
+          lessThan(unwatches.first),
+          reason:
+              'the shield is listening before the real watcher is cancelled',
+        );
+        expect(
+          unwatches.last,
+          greaterThan(trace.indexOf('mode:restore')),
+          reason: 'the shield outlives the cooked-mode restore',
+        );
+        expect(
+          unwatches.last,
+          greaterThan(trace.lastIndexOf('flush')),
+          reason: 'the shield outlives the final flush',
+        );
+        expect(
+          trace.where((e) => e == 'unwatch:${ProcessSignal.sigterm.name}'),
+          hasLength(2),
+        );
+      } finally {
+        await driver.restore();
+        await input.close();
+      }
+    },
+  );
 }
