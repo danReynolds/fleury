@@ -703,7 +703,17 @@ Future<AppExit> _runAppImpl(
           event is PasteEvent ||
           event is MouseEvent ||
           event is InputBatch) {
-        dispatchResult = dispatcher.dispatch(event);
+        try {
+          dispatchResult = dispatcher.dispatch(event);
+        } catch (error, stack) {
+          // A throwing handler is reported (the error overlay paints it) but
+          // must not take the framework's own quit guard below down with it:
+          // the result stays `ignored`, so an unhandled Ctrl+C still exits.
+          // Before this, a handler that threw on every press — a stale
+          // selection's copy, any app binding — left the app unquittable
+          // from the keyboard.
+          errorReporter.report(error, stack);
+        }
         semanticsPipeline?.markSemanticsDirty();
       }
 
