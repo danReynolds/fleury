@@ -2,6 +2,10 @@
 library;
 
 import 'package:fleury/fleury_host.dart';
+// KeyboardSession is the runtime's regularizer, not public API — imported
+// directly so this suite can prove the browser source's stream is well-formed
+// against the real thing rather than a hand-rolled model of it.
+import 'package:fleury/src/input/keyboard_state.dart';
 import 'package:fleury_web/fleury_web.dart';
 import 'package:fleury_web/src/input/dom_input_source.dart';
 import 'package:fleury_web/src/metrics/cell_metrics.dart';
@@ -1590,6 +1594,106 @@ void main() {
       reason: 'app captures the click',
     );
     expect(events, isNotEmpty, reason: 'normal cell click routes as input');
+  });
+
+  test('a Meta auto-repeat still synthesizes its release (no wedged press)', () {
+    // RFC 0020 §10: keys pressed under Cmd get press-only semantics — the
+    // down, then an immediate synthesized release — because macOS browsers
+    // swallow the real keyup. An auto-repeat under Cmd is the SAME regime and
+    // must close the same way: the session's repeat-without-down repair opens
+    // a held record for it, and only a release can close that record. Without
+    // one the key wedges held for the rest of the session, and the next
+    // genuine press regularizes to `repeat` (filtered out of the command lane
+    // by default), so that key's bindings go dead.
+    final events = <TuiEvent>[];
+    final host = web.document.createElement('div');
+    final textArea =
+        web.document.createElement('textarea') as web.HTMLTextAreaElement;
+    web.document.body!.appendChild(host);
+    final source = DomInputSource(
+      hostElement: host,
+      textArea: textArea,
+      cellMetrics: _FakeMetrics(
+        const MeasuredCellBox(
+          cssCellWidth: 10,
+          cssCellHeight: 20,
+          cssCanvasWidth: 80,
+          cssCanvasHeight: 60,
+          devicePixelRatio: 1,
+          cols: 8,
+          rows: 3,
+        ),
+      ),
+    );
+    addTearDown(() {
+      source.dispose();
+      host.parentNode?.removeChild(host);
+    });
+    source.start(events.add);
+
+    void keydown(
+      String key, {
+      required String code,
+      bool metaKey = false,
+      bool repeat = false,
+    }) => textArea.dispatchEvent(
+      web.KeyboardEvent(
+        'keydown',
+        web.KeyboardEventInit(
+          key: key,
+          code: code,
+          metaKey: metaKey,
+          repeat: repeat,
+          bubbles: true,
+          cancelable: true,
+        ),
+      ),
+    );
+    void keyup(String key, {required String code, bool metaKey = false}) =>
+        textArea.dispatchEvent(
+          web.KeyboardEvent(
+            'keyup',
+            web.KeyboardEventInit(
+              key: key,
+              code: code,
+              metaKey: metaKey,
+              bubbles: true,
+              cancelable: true,
+            ),
+          ),
+        );
+
+    // Cmd down, a held under it long enough to auto-repeat, then both up.
+    // The real `a` keyup is the one macOS swallows; dispatch it anyway so the
+    // fix is verified not to double-close.
+    keydown('Meta', code: 'MetaLeft', metaKey: true);
+    keydown('a', code: 'KeyA', metaKey: true);
+    keydown('a', code: 'KeyA', metaKey: true, repeat: true);
+    keyup('a', code: 'KeyA', metaKey: true);
+    keyup('Meta', code: 'MetaLeft');
+
+    // Replay through a real session: the source's stream is only correct if
+    // the regularizer it feeds ends up with nothing held.
+    final session = KeyboardSession(capabilities: KeyboardCapabilities.full);
+    for (final event in events.whereType<KeyEvent>()) {
+      session.ingest(event);
+    }
+    expect(
+      session.publishLatch().isHeld(const KeyCode.char('a')),
+      isFalse,
+      reason: 'the Meta-regime repeat left an unclosable held record',
+    );
+
+    // ...and the next genuine press is still a `down`, not a demoted `repeat`
+    // (which the dispatcher keeps out of the command lane by default).
+    events.clear();
+    keydown('a', code: 'KeyA');
+    final next = events.whereType<KeyEvent>().single;
+    expect(
+      session.ingest(next).events.map((e) => e.type),
+      [KeyEventType.down],
+      reason: 'a wedged press demotes the next real press to repeat',
+    );
   });
 }
 

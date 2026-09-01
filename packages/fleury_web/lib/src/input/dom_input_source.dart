@@ -303,7 +303,13 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
       // rather than an unclosable press. Hold durations under Meta are
       // undefined by contract.
       _emit(tuiEvent);
-      if (tuiEvent.type == KeyEventType.down) {
+      if (tuiEvent.type != KeyEventType.up) {
+        // Repeats close too. The session's repeat-without-down repair OPENS a
+        // held record for an auto-repeat it never saw a down for (§22); under
+        // this regime nothing else will ever close it, so the key would wedge
+        // held for the session — and the next genuine press would regularize
+        // to `repeat`, which the command lane filters out by default, killing
+        // that key's bindings.
         _emit(
           KeyEvent(
             tuiEvent.code,
