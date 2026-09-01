@@ -115,6 +115,27 @@ void main() {
     );
   });
 
+  test('the visual surface contract carries no unread capability set', () {
+    // `FrameSurface.capabilities` (WebSurfaceCapabilities) was a REQUIRED
+    // interface member with zero readers anywhere in fleury_web or fleury: it
+    // forced every test double to supply a value, was asserted only by its
+    // own defaults test, and had already drifted into a lie
+    // (`supportsSemanticLinks: false` while dom_row_factory renders real
+    // `<a href>` cells). A required member nothing consumes cannot be kept
+    // honest — reintroduce the capability set only with a reader.
+    final offenders = <String>[];
+    for (final file
+        in Directory('lib')
+            .listSync(recursive: true)
+            .whereType<File>()
+            .where((file) => file.path.endsWith('.dart'))) {
+      if (file.readAsStringSync().contains('WebSurfaceCapabilities')) {
+        offenders.add(file.path.replaceAll(r'\', '/'));
+      }
+    }
+    expect(offenders, isEmpty);
+  });
+
   test('browser layout reads stay isolated to DOM metrics', () {
     final libDir = Directory('lib/src');
     final offenders = <String>[];
