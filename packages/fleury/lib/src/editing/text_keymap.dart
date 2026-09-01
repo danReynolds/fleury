@@ -87,9 +87,19 @@ final class TextEditingKeymap {
   static const defaultMultiline = TextEditingKeymap(_defaultMultiline);
 
   /// Submit-oriented multiline preset for chat composers / REPL prompts:
-  /// Enter submits, Alt+Enter (and Shift+Enter where the terminal reports the
-  /// modifier) inserts a newline. Editing is otherwise identical to
-  /// [defaultMultiline]. Pair with `TextArea.onSubmit` to receive the submit.
+  /// Enter submits, and Alt+Enter or Shift+Enter inserts a newline. Editing is
+  /// otherwise identical to [defaultMultiline]. Pair with `TextArea.onSubmit`
+  /// to receive the submit.
+  ///
+  /// **Both newline chords depend on the terminal.** They resolve only when
+  /// the terminal reports a modifier on Enter, which means a modern
+  /// CSI-u/Kitty keyboard protocol. On a legacy terminal — Terminal.app,
+  /// xterm, gnome-terminal — Alt+Enter arrives as bare `ESC` `CR`, and the
+  /// parser has no way to tell that from Escape followed by Enter, so it
+  /// reports plain [KeyCode.enter] with no modifiers: the composer
+  /// **submits** instead of inserting a newline. Shift+Enter is simply not
+  /// reported at all there. If an app must offer a newline on every terminal,
+  /// bind an unmodified key for it (Ctrl+J, say) rather than relying on these.
   static const chat = TextEditingKeymap(<TextEditingKeyBinding>[
     ..._chatEnter,
     ..._defaultMultiline,
@@ -323,9 +333,12 @@ const _defaultMultiline = <TextEditingKeyBinding>[
 
 // The chat preset's Enter chords, spread before _defaultMultiline so they win
 // over that map's plain Enter=insertNewline: Enter submits, and the explicit
-// Alt/Shift+Enter chords insert a newline. (Shift+Enter fires only where the
-// terminal actually reports the shift modifier on Enter; Alt+Enter is the
-// reliably-detectable newline chord.)
+// Alt/Shift+Enter chords insert a newline. BOTH need the terminal to report a
+// modifier on Enter, i.e. a CSI-u/Kitty keyboard protocol. On a legacy
+// terminal Alt+Enter is bare ESC CR, indistinguishable from Escape-then-Enter,
+// so _consumeAfterEsc drops the alt and the composer submits. See the
+// [TextEditingKeymap.chat] doc; pinned by
+// test/editing/text_keymap_test.dart.
 const _chatEnter = <TextEditingKeyBinding>[
   TextEditingKeyBinding(
     action: TextEditingKeyAction.insertNewline,

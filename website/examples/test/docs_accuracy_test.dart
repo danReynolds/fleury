@@ -44,6 +44,33 @@ void main() {
         r'KeyBinding(\.event)?\([^)]*onEvent:',
         dotAll: true,
       );
+      // The same rename left the opposite hole: `onTrigger:` with a
+      // *zero-arity* closure. It reads correct, it is the Flutter muscle
+      // memory, and it does not compile — `KeyBindingHandler` always takes
+      // the event. A separate pattern from `removedBindingHandler` above,
+      // which stays anchored on the deleted `onEvent:` spelling.
+      final zeroArityBindingHandler = RegExp(
+        r'KeyBinding(\.event)?\([^)]*onTrigger:\s*\(\s*\)',
+        dotAll: true,
+      );
+      // `runApp` takes no theme. A theme reaches an app through
+      // `FleuryApp(theme: …)` or a `Theme` around a subtree, so a `theme:`
+      // sitting at runApp's OWN argument depth is always wrong.
+      //
+      // `(?:[^()]|\([^()]*\))*` walks one level of nesting, which is what
+      // separates the broken `runApp(const MyApp(), theme: x)` from the
+      // correct `runApp(const FleuryApp(…, theme: x, …))`: in the latter the
+      // walk cannot cross the still-open `FleuryApp(`, so it never reaches
+      // `theme:`.
+      final runAppTheme = RegExp(
+        r'runApp\((?:[^()]|\([^()]*\))*,\s*theme:',
+        dotAll: true,
+      );
+      // `KeyEvent` takes its `KeyCode` positionally — `const
+      // KeyEvent(KeyCode.enter)`. Docs kept writing the two named forms it
+      // has never had, which fail twice over (unknown name AND a missing
+      // positional argument).
+      final namedKeyEventCode = RegExp(r'KeyEvent\(\s*(?:char|keyCode):');
       final rawStringSemanticId = RegExp(
         r'''Semantics\s*\(\s*id:\s*(?:const\s+)?['"]''',
       );
@@ -59,6 +86,21 @@ void main() {
             'onEvent:/KeyBinding.event — removed in RFC 0020; a handler '
                 'always takes the event (use onTrigger:)',
             removedBindingHandler,
+          ),
+          (
+            'zero-arity onTrigger: — a KeyBindingHandler always takes the '
+                'event (use onTrigger: (_) =>)',
+            zeroArityBindingHandler,
+          ),
+          (
+            'runApp(…, theme:) — runApp takes no theme; pass it to '
+                'FleuryApp(theme:) or a Theme around a subtree',
+            runAppTheme,
+          ),
+          (
+            'KeyEvent(char:/keyCode:) — the KeyCode is positional '
+                '(KeyEvent(KeyCode.enter))',
+            namedKeyEventCode,
           ),
           (
             'raw String passed as Semantics.id (use SemanticNodeId)',
@@ -148,6 +190,29 @@ void main() {
       expect(
         '$snippet\n$sharedTree',
         isNot(contains("package:fleury_widgets/fleury_widgets.dart")),
+      );
+    });
+
+    // The README's quickstart already had a compiled twin at
+    // `example/counter_quickstart.dart`, and the two still drifted: the
+    // example took the event (`onTrigger: (_) =>`, the only signature there
+    // is), the README fence did not, and nothing compared them. Pin them
+    // byte-for-byte so the fence is the program the test suite runs.
+    test('fleury README embeds the compile-checked counter example', () {
+      final readme = File(
+        p.join(repo.path, 'packages/fleury/README.md'),
+      ).readAsStringSync();
+      final compiledExample = File(
+        p.join(repo.path, 'packages/fleury/example/counter_quickstart.dart'),
+      ).readAsStringSync();
+      final firstImport = compiledExample.indexOf(
+        "import 'package:fleury/fleury.dart';",
+      );
+
+      expect(firstImport, isNonNegative);
+      expect(
+        _firstDartFence(readme).trim(),
+        compiledExample.substring(firstImport).trim(),
       );
     });
 
@@ -279,6 +344,80 @@ void main() {
       expect(combined, isNot(contains('dart pub global activate hotreloader')));
     });
 
+    // `runApp(args: args)` (aad8a33) made a restarted app able to re-see its
+    // own argv. The guide kept teaching the workaround it replaced — turn
+    // the dev loop off and restart by hand.
+    test('hot-reload guide teaches runApp(args:) for argv-driven apps', () {
+      final guide = File(
+        p.join(repo.path, 'website/src/content/docs/guides/hot-reload.md'),
+      ).readAsStringSync();
+
+      expect(guide, contains('runApp(const MyApp(), args: args)'));
+      expect(
+        guide,
+        isNot(contains('`FLEURY_HOT_RELOAD=0` and restart manually')),
+      );
+    });
+
+    // The documented browser command — `--spawn dart run …` — starts no VM
+    // service, and the dev supervisor yields to a serve handle, so it hot
+    // reloads nothing. `InAppDevReload` needs the spawn command itself to
+    // enable the service. Every surface that teaches the browser command
+    // must say so.
+    test('serve surfaces document the reloadable spawn command', () {
+      const recipe = 'dart --enable-vm-service=0 run';
+      for (final path in const <String>[
+        'docs/serving-and-embedding.md',
+        'website/src/content/docs/guides/hot-reload.md',
+        'packages/fleury/lib/src/cli/create_command.dart',
+      ]) {
+        expect(
+          File(p.join(repo.path, path)).readAsStringSync(),
+          contains(recipe),
+          reason: '$path teaches `fleury serve --spawn` without the VM '
+              'service flag that makes reload possible',
+        );
+      }
+    });
+
+    // Three changelogs headed their real content `## Unreleased` while the
+    // pubspec already said 0.1.0, stranding the Surface/CellStyle/FocusScope
+    // renames above a `## 0.1.0 — Initial release` stub. pub.dev shows the
+    // changelog verbatim, so a reader would have seen the release notes for
+    // 0.1.0 with none of 0.1.0's actual breaking changes in them.
+    test('every publishable changelog leads with its pubspec version', () {
+      for (final package in const <String>[
+        'fleury',
+        'fleury_widgets',
+        'fleury_themes',
+        'fleury_test',
+        'fleury_web',
+        'fleury_mcp',
+      ]) {
+        final dir = p.join(repo.path, 'packages', package);
+        final version = RegExp(r'^version:\s*(\S+)\s*$', multiLine: true)
+            .firstMatch(File(p.join(dir, 'pubspec.yaml')).readAsStringSync())!
+            .group(1)!;
+        final headings = RegExp(r'^## +(.+?)\s*$', multiLine: true)
+            .allMatches(File(p.join(dir, 'CHANGELOG.md')).readAsStringSync())
+            .map((match) => match.group(1)!)
+            .toList(growable: false);
+
+        expect(
+          headings.first,
+          version,
+          reason:
+              '$package CHANGELOG.md leads with "${headings.first}" but its '
+              'pubspec says $version',
+        );
+        expect(
+          headings.toSet(),
+          hasLength(headings.length),
+          reason: '$package CHANGELOG.md repeats a version heading: $headings',
+        );
+      }
+    });
+
     test('shipped Fleury examples do not link the unowned domain', () {
       final surfaces = <File>[
         File(p.join(repo.path, 'packages/storybook/lib/src/catalog.dart')),
@@ -361,12 +500,22 @@ List<File> _publicDocs(Directory repo) {
       File(p.join(repo.path, 'docs', name)),
     // Public dartdoc is documentation too: the removed-API guards above
     // caught every README and guide while `key_bindings.dart`'s own class
-    // docs went on teaching two deleted constructors. Scan the public lib
-    // of the core package so pub.dev-rendered docs meet the same bar.
-    ...Directory(p.join(repo.path, 'packages/fleury/lib'))
-        .listSync(recursive: true, followLinks: false)
-        .whereType<File>()
-        .where((file) => file.path.endsWith('.dart')),
+    // docs went on teaching two deleted constructors. Scan the public lib of
+    // every publishable package so pub.dev-rendered docs meet the same bar —
+    // sweeping only `fleury` left `fleury_themes`' library dartdoc (which
+    // taught `runApp(const MyApp(), theme: …)`) unscanned entirely.
+    for (final package in const <String>[
+      'fleury',
+      'fleury_widgets',
+      'fleury_themes',
+      'fleury_test',
+      'fleury_web',
+      'fleury_mcp',
+    ])
+      ...Directory(p.join(repo.path, 'packages', package, 'lib'))
+          .listSync(recursive: true, followLinks: false)
+          .whereType<File>()
+          .where((file) => file.path.endsWith('.dart')),
     ...Directory(p.join(repo.path, 'website/src/content/docs'))
         .listSync(recursive: true, followLinks: false)
         .whereType<File>()

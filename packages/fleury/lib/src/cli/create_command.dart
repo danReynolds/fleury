@@ -407,7 +407,11 @@ dart test
 ## The same app, elsewhere
 
 - **In a browser** — `fleury serve --spawn dart run bin/run_app.dart` streams
-  this app, unchanged, to a browser tab.
+  this app, unchanged, to a browser tab. That command starts no VM service, so
+  it does not hot reload; for the save-to-reload loop behind the preview,
+  enable the service in the spawned command itself:
+  `fleury serve --spawn dart --enable-vm-service=0 run bin/run_app.dart`
+  (reload only — hot restart is unavailable under a serve handle).
 - **Driven by an AI agent** — `fleury_mcp -- dart run bin/run_app.dart` exposes
   the running UI over the Model Context Protocol, so an agent reads and
   operates it by meaning instead of screen-scraping.

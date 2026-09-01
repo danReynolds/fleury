@@ -68,11 +68,15 @@ void main() {
       expect(customThemeForTest.interactiveStyle, isNull);
       expect(
         _guide,
-        contains('FleuryApp(theme: amber, home: const Dashboard());'),
+        contains(
+          "FleuryApp(title: 'Dashboard', theme: amber, home: const Dashboard());",
+        ),
       );
       expect(
         customThemeSourceForTest,
-        contains('FleuryApp(theme: amber, home: const Dashboard());'),
+        contains(
+          "FleuryApp(title: 'Dashboard', theme: amber, home: const Dashboard());",
+        ),
       );
     });
   });

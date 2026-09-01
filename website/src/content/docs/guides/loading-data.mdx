@@ -42,8 +42,9 @@ enum Preview { disconnected, waiting, error, empty, success }
 Future<List<String>>? futureFor(Preview preview) => switch (preview) {
   Preview.disconnected => null,
   Preview.waiting => Completer<List<String>>().future,
-  Preview.error => Future<List<String>>.error(
-    StateError('Connection lost'),
+  Preview.error => Future<List<String>>.delayed(
+    Duration.zero,
+    () => throw StateError('Connection lost'),
   ),
   Preview.empty => Future<List<String>>.value(const []),
   Preview.success => Future<List<String>>.value(
@@ -157,6 +158,15 @@ class _SnapshotExplorerState extends State<SnapshotExplorer> {
 Most future-backed views need loading, error, empty, and success UI. Check
 `hasError` before reading data, and keep side effects out of the builder because
 it may run more than once.
+
+Note how the error case throws *inside* a `Future.delayed` rather than being
+built with `Future.error(...)`. `setState` schedules a rebuild, so
+`FutureBuilder` subscribes at least one microtask after the assignment — and a
+future that is already failed by then reports an unhandled error to the zone
+before any listener exists. The card still renders the error state correctly,
+but the runtime paints its unhandled-error banner right over it. `Future.sync`
+does not help: a callback that throws synchronously produces the same
+already-failed future. Give the future something to fail *later*.
 
 ## Loading with futures
 

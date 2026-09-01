@@ -49,9 +49,17 @@ in the same terminal session.
 Reload keeps state and is the default loop; restart is for the changes reload
 can't apply.
 
-One caveat: a dev restart re-runs `main()` without the original CLI arguments
-(a process cannot recover its own argv for a sibling spawn). An app that must
-re-see argv can set `FLEURY_HOT_RELOAD=0` and restart manually.
+One thing to wire up if your app reads argv: a restart re-runs `main()` in a
+fresh child process, and a process cannot portably recover its own script
+arguments — so hand them over. Pass them to `runApp` and the restarted app sees
+the same command line it was started with:
+
+```dart
+Future<void> main(List<String> args) => runApp(const MyApp(), args: args);
+```
+
+Without `args:`, a restarted argv-driven app comes back with an empty argument
+list and may show something other than what was asked for.
 
 ## In an editor debug session
 
@@ -119,6 +127,27 @@ The supervisor runs only when it can own the session safely: a plain JIT
 owns the run — an editor debug session (a live VM service), a `fleury serve`
 handle, an AOT product build, Windows, a non-TTY, or an injected test driver —
 and the app runs exactly as before, no supervisor involved.
+
+### Reloading a browser preview
+
+Because the supervisor steps aside for a serve handle, the usual browser
+command hot reloads nothing:
+
+```sh
+fleury serve --spawn dart run bin/run_app.dart   # no VM service, no reload
+```
+
+Enable the service in the spawned command itself and the app reloads on save,
+with the browser preview updating live:
+
+```sh
+fleury serve --spawn dart --enable-vm-service=0 run bin/run_app.dart
+```
+
+`=0` lets the VM pick a free port. Reload only — hot restart is intentionally
+unavailable here, because a respawned child would re-dial the handle's
+single-accept socket and wedge the session. `serve` never adds the flag on
+your behalf: opening a debug port is your call.
 
 Opting out entirely:
 

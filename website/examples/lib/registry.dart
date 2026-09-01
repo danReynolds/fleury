@@ -2249,9 +2249,11 @@ form.clearErrors();''',
     cols: 62,
     rows: 18,
     interactive: true,
-    code: '''import 'package:fleury_themes/fleury_themes.dart';
+    code: '''import 'package:fleury/fleury.dart';
+import 'package:fleury_themes/fleury_themes.dart';
 
-runApp(const MyApp(), theme: tokyoNight);''',
+void main() =>
+    runApp(const FleuryApp(title: 'My app', theme: tokyoNight, home: MyApp()));''',
     builder: () => const _ThemePickerExample(),
   ),
   ExampleInfo(
@@ -3588,7 +3590,7 @@ final amber = base.copyWith(
   borderStyle: BorderStyle.double,
 );
 
-FleuryApp(theme: amber, home: const Dashboard());''';
+FleuryApp(title: 'Dashboard', theme: amber, home: const Dashboard());''';
 
 /// Exposed for the drift test in test/theme_source_parity_test.dart.
 ThemeData get customThemeForTest => _customTheme;
@@ -3710,8 +3712,12 @@ enum _SnapshotPreview { disconnected, waiting, error, empty, success }
 Future<List<String>>? _futureFor(_SnapshotPreview preview) => switch (preview) {
   _SnapshotPreview.disconnected => null,
   _SnapshotPreview.waiting => Completer<List<String>>().future,
-  _SnapshotPreview.error => Future<List<String>>.error(
-    StateError('Connection lost'),
+  // Fails asynchronously, not at construction: a `Future.error(...)` is
+  // already failed when `setState` assigns it, and FutureBuilder subscribes a
+  // microtask later — too late to keep the error handled.
+  _SnapshotPreview.error => Future<List<String>>.delayed(
+    Duration.zero,
+    () => throw StateError('Connection lost'),
   ),
   _SnapshotPreview.empty => Future<List<String>>.value(const <String>[]),
   _SnapshotPreview.success => Future<List<String>>.value(const <String>[
