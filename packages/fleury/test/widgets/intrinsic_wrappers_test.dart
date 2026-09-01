@@ -68,6 +68,15 @@ void main() {
       expect(_findCol(tester, '|END'), 2);
     });
 
+    testWidgets('Container.framed: the child plus its frame', (tester) {
+      tester.pumpWidget(_rowWith(const Container.framed(child: Text('ab'))));
+      expect(
+        _findCol(tester, '|END'),
+        4,
+        reason: '2 cells of text + 2 of frame',
+      );
+    });
+
     testWidgets('Stack: the widest non-positioned child', (tester) {
       tester.pumpWidget(
         _rowWith(const Stack(children: [Text('abcde'), Text('a')])),
