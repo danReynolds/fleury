@@ -154,13 +154,15 @@ class MessageListController extends ChangeNotifier {
 
   void jumpToIndex(int index) {
     _checkNotDisposed();
-    followTail = false;
     // Move the selection onto the target too, not just the scroll anchor. The
     // pending jump is consumed by a single layout; on the next relayout (every
     // streamed append re-lays the list) the selection-visibility pass would
     // otherwise re-anchor the viewport back onto the old selection, silently
     // reverting the jump. Anchoring the selection here keeps the target in
-    // view across relayouts. Writing a non-tail index keeps follow disengaged.
+    // view across relayouts. Follow is owned by the coupling — a non-tail
+    // index disengages it, the tail index engages it — so nothing sets it
+    // here: an explicit `followTail = false` first was dead for a non-tail
+    // index and, for the tail, a flap (listeners saw false, then true).
     _list.selectedIndex = index;
     _list.jumpToIndex(index);
   }
