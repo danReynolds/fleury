@@ -385,10 +385,10 @@ Ordered by what I'd take first. Each names **what makes it hard**, so we can dec
   **Hard because:** variable-height rows — the backwards-walk helper **mounts items** in the lazy path, so calling it every layout adds hot-path work. Wants a cheap post-check ("did we under-fill?") then a re-walk, not a pre-pass. ✎ Wheel trigger refuted, but a worse one found: a **scroll-only list with `pinToBottom`** — a tailing log, a documented config — renders exactly one item per frame forever.
   **Notes:**
 
-- [ ] **8.b** `P1` Capped transcript permanently loses follow-tail — `list_view.dart:688`
+- [x] **8.b** `P1` Capped transcript permanently loses follow-tail — `list_view.dart:688`
   **Hard because:** the fix changes *classification* (old-first-key gone + old-last-key resolves ⇒ trailing growth), and must keep the existing keyed-reorder test green — that test is the contract. Mixed reorder-plus-eviction stays ambiguous, which the docs already disclaim.
   **The inversion is the sting:** the same rolling window follows correctly **without** keys and breaks **with** them — supplying identity, the documented best practice, is what triggers it. Out-of-box config; the example console does exactly this.
-  **Notes:**
+  **Notes:** LANDED on this branch (6a7c9f31): classifier recognises head-eviction (old first key gone, old last key resolves → everything after it is the append); pure reorders untouched, contract test green. Pinned: 2 ListView tests + 1 real MessageList test, all red without the fix.
 
 - [ ] **12.a** `P1` `IntrinsicWidth`/`IntrinsicHeight` blank their subtree for almost any real child — `intrinsic.dart:38,113`
   **Hard because:** the general fix is delegating intrinsics from the single-child default — broad, touching most render objects, and genuinely ambiguous for `Stack`/`Wrap` where "natural width" has no single answer. Cheap interim: **assert** when a child reports 0 but would lay out non-empty under loose constraints, turning a silent blank into a diagnostic without changing layout.
