@@ -763,9 +763,9 @@ Future<int> _runServeBridge({
     tryPair();
   });
 
-  httpServer.listen((req) async {
+  Future<void> handleRequest(HttpRequest req) async {
     if (req.uri.path == '/ws') {
-      if (!WebSocketTransformer.isUpgradeRequest(req)) {
+      if (!_isUpgradeRequest(req)) {
         req.response.statusCode = HttpStatus.badRequest;
         await req.response.close();
         return;
@@ -839,7 +839,12 @@ Future<int> _runServeBridge({
     } else {
       await _serveStaticAsset(req);
     }
-  });
+  }
+
+  httpServer.listen(
+    (req) => _guardRequest(req, handleRequest),
+    onError: _logRequestStreamError,
+  );
 
   Future<void>? cleanupFuture;
   Future<void> cleanup() {
@@ -990,7 +995,12 @@ Future<void> _serveStaticAsset(HttpRequest req) async {
     // matching tag costs a 304, and an upgraded subset is picked up at once
     // instead of being pinned until a max-age elapsed.
     req.response.headers.set(HttpHeaders.cacheControlHeader, 'no-cache');
-    if (req.headers.value(HttpHeaders.ifNoneMatchHeader) == etag) {
+    // A client may legitimately send several tags (one per line or comma
+    // joined); any match is a hit. `HttpHeaders.value` threw on the
+    // multi-line form.
+    if (_headerLines(req, HttpHeaders.ifNoneMatchHeader).any(
+      (line) => line.split(',').any((tag) => tag.trim() == etag),
+    )) {
       req.response.statusCode = HttpStatus.notModified;
       await req.response.close();
       return;
@@ -1011,13 +1021,85 @@ Future<void> _serveStaticAsset(HttpRequest req) async {
   await req.response.close();
 }
 
+/// Every line a request carried for [name], in order; empty when absent.
+///
+/// Prefer this over `HttpHeaders.value` for any peer-controlled header:
+/// `value` throws `HttpException` when the header arrives more than once,
+/// and an unguarded throw in a root-zone request listener took the whole
+/// server down (see [_guardRequest]). Callers decide per header what a
+/// repeat means — a match on any tag, the first (client-facing) forwarded
+/// scheme, or, for a security-relevant header like `Origin`, ambiguity that
+/// fails closed. (`Host` is not read through here: dart:io folds it to a
+/// single value itself.)
+List<String> _headerLines(HttpRequest req, String name) =>
+    req.headers[name] ?? const <String>[];
+
+/// [WebSocketTransformer.isUpgradeRequest] reads `Upgrade` and `Connection`
+/// with `HttpHeaders.value`, so it throws inside dart:io on a duplicate —
+/// before any check of ours could run. A request whose upgrade headers are
+/// ambiguous is simply not an upgrade: it gets the same 400 as any other
+/// non-upgrade on `/ws`.
+bool _isUpgradeRequest(HttpRequest req) {
+  try {
+    return WebSocketTransformer.isUpgradeRequest(req);
+  } on HttpException {
+    return false;
+  }
+}
+
+/// Runs one request through [handler] with the containment a root-zone
+/// `HttpServer.listen` callback otherwise lacks.
+///
+/// Anything that escapes the handler became an unhandled root-zone error,
+/// and the VM terminated `fleury serve` with exit 255 — every live session
+/// gone at once, and in `--spawn` mode the handle directory and socket files
+/// leaked because the signal handlers never ran. The reachable triggers were
+/// all pre-auth: a duplicated header on the font asset's conditional GET,
+/// on `/ws`'s `Origin`, `X-Forwarded-Proto` or `Upgrade`. Not a drive-by
+/// (browsers merge duplicate headers), but any peer that can reach the port
+/// under a `--host` deployment could send one — and a reverse proxy that
+/// ADDS rather than SETS `X-Forwarded-Proto`, the exact deployment the scheme
+/// check exists to support, sent one on its first browser connection.
+///
+/// A fault now costs exactly that connection: log it, answer 400 if the
+/// response is still ours, drop it. The per-header reads above no longer
+/// throw at all; this is the belt for whatever dart:io throws next.
+Future<void> _guardRequest(
+  HttpRequest req,
+  Future<void> Function(HttpRequest req) handler,
+) async {
+  try {
+    await handler(req);
+  } catch (error) {
+    stderr.writeln('[serve] rejecting connection: malformed request ($error).');
+    try {
+      req.response.statusCode = HttpStatus.badRequest;
+      await req.response.close();
+    } catch (_) {
+      // Already hijacked by an upgrade, or closed underneath us.
+    }
+  }
+}
+
+/// A request the server could not even parse into an [HttpRequest] surfaces
+/// as an error on the server stream; without a handler it is unhandled and
+/// fatal. It concerns one connection, which dart:io has already dropped.
+void _logRequestStreamError(Object error, StackTrace _) {
+  stderr.writeln('[serve] dropped an unparseable connection: $error');
+}
+
 bool _isAllowedWebSocketOrigin(
   HttpRequest req,
   _ServeOriginPolicy originPolicy, {
   required String boundHost,
 }) {
-  final origin = req.headers.value('origin');
-  if (origin == null || origin.isEmpty) return true;
+  final origins = _headerLines(req, 'origin');
+  if (origins.isEmpty) return true;
+  // Two Origin headers is never a real browser. Ambiguity about who is
+  // asking fails closed, never open.
+  if (origins.length > 1) return false;
+  final origin = origins.single;
+  if (origin.isEmpty) return true;
 
   final originUri = Uri.tryParse(origin);
   if (originUri == null || originUri.host.isEmpty) return false;
@@ -1073,10 +1155,17 @@ bool _isAllowedSameOriginHost(String requestHost, String boundHost) {
 /// `X-Forwarded-Proto` here is safe: browsers can't set it on a WebSocket
 /// handshake, and it can only ever change the scheme compared against the SAME
 /// host — never widen the check to a different origin.)
+///
+/// A proxy chain may comma-join the schemes on one line OR add a line per hop
+/// (HAProxy's `add-header`, any passthrough hop in front of a client that sends
+/// its own); either way the client-facing scheme comes first. The per-hop shape
+/// used to throw out of `HttpHeaders.value` and kill the server on the first
+/// browser connection through such a proxy.
 String _sameOriginScheme(HttpRequest req) {
-  final forwarded = req.headers.value('x-forwarded-proto');
-  if (forwarded != null && forwarded.trim().isNotEmpty) {
-    return forwarded.split(',').first.trim().toLowerCase();
+  final forwarded = _headerLines(req, 'x-forwarded-proto');
+  if (forwarded.isNotEmpty) {
+    final first = forwarded.first.split(',').first.trim();
+    if (first.isNotEmpty) return first.toLowerCase();
   }
   try {
     return req.requestedUri.scheme;
@@ -1220,12 +1309,12 @@ Future<int> _runServeSpawn({
     );
   }
 
-  httpServer.listen((req) async {
+  Future<void> handleRequest(HttpRequest req) async {
     if (req.uri.path != '/ws') {
       await _serveStaticAsset(req);
       return;
     }
-    if (!WebSocketTransformer.isUpgradeRequest(req)) {
+    if (!_isUpgradeRequest(req)) {
       req.response.statusCode = HttpStatus.badRequest;
       await req.response.close();
       return;
@@ -1371,7 +1460,15 @@ Future<int> _runServeSpawn({
         );
       }),
     );
-  });
+  }
+
+  // Everything that can throw on a hostile or misconfigured request — the
+  // upgrade check, the origin check, the static-asset conditional GET — runs
+  // BEFORE the admission slot is reserved, so a contained fault holds no slot.
+  httpServer.listen(
+    (req) => _guardRequest(req, handleRequest),
+    onError: _logRequestStreamError,
+  );
 
   Future<void>? cleanupFuture;
   Future<void> cleanup() {

@@ -104,6 +104,73 @@ void main() {
         client.close();
       });
 
+      // One request with a duplicated header used to throw out of dart:io's
+      // HttpHeaders.value inside an unguarded root-zone listener, and the VM
+      // terminated serve with exit 255 — pre-auth, every session gone. Each
+      // case below asserts the response AND that the server is still up.
+      test('survives a duplicate If-None-Match on the font asset', () async {
+        final status = await _rawStatusLine(
+          port,
+          'GET /fleury-mono.woff2 HTTP/1.1\r\n'
+          'Host: 127.0.0.1:$port\r\n'
+          'If-None-Match: "a"\r\n'
+          'If-None-Match: "b"\r\n'
+          'Connection: close\r\n\r\n',
+        );
+        expect(status, anyOf(contains(' 200 '), contains(' 304 ')));
+        await _expectServeAlive(port);
+      });
+
+      test('survives a duplicate Upgrade header on /ws', () async {
+        final status = await _rawStatusLine(
+          port,
+          'GET /ws HTTP/1.1\r\n'
+          'Host: 127.0.0.1:$port\r\n'
+          'Upgrade: websocket\r\n'
+          'Upgrade: websocket\r\n'
+          'Connection: Upgrade\r\n'
+          'Sec-WebSocket-Version: 13\r\n'
+          'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n',
+        );
+        expect(status, contains(' 400 '));
+        await _expectServeAlive(port);
+      });
+
+      test('a duplicate Origin on /ws is refused, and the server stays up', () async {
+        final status = await _rawStatusLine(
+          port,
+          'GET /ws HTTP/1.1\r\n'
+          'Host: 127.0.0.1:$port\r\n'
+          'Origin: http://127.0.0.1:$port\r\n'
+          'Origin: http://127.0.0.1:$port\r\n'
+          'Upgrade: websocket\r\n'
+          'Connection: Upgrade\r\n'
+          'Sec-WebSocket-Version: 13\r\n'
+          'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n',
+        );
+        expect(status, contains(' 403 '), reason: 'ambiguity fails closed');
+        await _expectServeAlive(port);
+      });
+
+      test('a proxy that adds X-Forwarded-Proto per hop still gets same-origin', () async {
+        // The client-facing scheme is the first line; the browser's Origin is
+        // https, matching it. The per-hop shape used to kill the server.
+        final status = await _rawStatusLine(
+          port,
+          'GET /ws HTTP/1.1\r\n'
+          'Host: 127.0.0.1:$port\r\n'
+          'Origin: https://127.0.0.1:$port\r\n'
+          'X-Forwarded-Proto: https\r\n'
+          'X-Forwarded-Proto: http\r\n'
+          'Upgrade: websocket\r\n'
+          'Connection: Upgrade\r\n'
+          'Sec-WebSocket-Version: 13\r\n'
+          'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n',
+        );
+        expect(status, contains(' 101 '), reason: 'same-origin upgrade accepted');
+        await _expectServeAlive(port);
+      });
+
       test('rejects cross-origin WebSocket upgrades', () async {
         await expectLater(
           WebSocket.connect(
@@ -381,6 +448,53 @@ Future<Process> _startServeProcess({
         throw StateError('serve did not start within 10s. stderr:\n$stderrBuf'),
   );
   return process;
+}
+
+/// Sends [request] verbatim over a fresh TCP connection — the only way to put
+/// a header on the wire twice, since HttpClient and browsers merge them — and
+/// returns the response status line once the headers have arrived. Works for
+/// a completed exchange and for an accepted upgrade alike.
+Future<String> _rawStatusLine(int port, String request) async {
+  final socket = await Socket.connect('127.0.0.1', port);
+  socket.write(request);
+  await socket.flush();
+  final received = StringBuffer();
+  final statusLine = Completer<String>();
+  String firstLine() => received.toString().split('\r\n').first;
+  final sub = utf8.decoder.bind(socket).listen(
+    (chunk) {
+      received.write(chunk);
+      if (received.toString().contains('\r\n\r\n') &&
+          !statusLine.isCompleted) {
+        statusLine.complete(firstLine());
+      }
+    },
+    onDone: () {
+      if (!statusLine.isCompleted) statusLine.complete(firstLine());
+    },
+    onError: (Object error) {
+      if (!statusLine.isCompleted) statusLine.completeError(error);
+    },
+  );
+  try {
+    return await statusLine.future.timeout(const Duration(seconds: 5));
+  } finally {
+    await sub.cancel();
+    socket.destroy();
+  }
+}
+
+/// The server answered the malformed request AND is still serving.
+Future<void> _expectServeAlive(int port) async {
+  final client = HttpClient();
+  try {
+    final req = await client.getUrl(Uri.parse('http://127.0.0.1:$port/'));
+    final resp = await req.close();
+    expect(resp.statusCode, 200, reason: 'serve must survive a bad request');
+    await resp.drain<void>();
+  } finally {
+    client.close();
+  }
 }
 
 Future<void> _stopProcess(Process process) async {
