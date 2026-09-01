@@ -121,6 +121,19 @@ final class UnixSocketFrameTransport implements RemoteFrameTransport {
   Completer<void>? _drained;
   Future<void>? _abortTeardown;
 
+  /// The one teardown [close] ever runs, cached on the first call.
+  ///
+  /// [RemoteFrameTransport.close] is documented idempotent and callers take
+  /// that literally — `RemoteTerminalDriver.enter`'s INIT fuse fires
+  /// `unawaited(close())` and then throws, and `restore()` awaits `close()`
+  /// again. Idempotent has to mean "the second caller waits for the SAME
+  /// teardown": the graceful path flips `_closed` before its first await and
+  /// leaves [_abortTeardown] null, so without this a concurrent second call
+  /// would await nothing and return while the socket was still being flushed
+  /// and closed. The `??=` assigns before [_close] can reach an await, so
+  /// every concurrent caller gets this exact future.
+  Future<void>? _closeFuture;
+
   /// A graceful [close] waits at most this long for the send pump to flush
   /// already-queued frames (the final ByeFrame / plan) before giving up and
   /// resetting the connection — so shutdown can't hang on a socket that is
@@ -267,8 +280,11 @@ final class UnixSocketFrameTransport implements RemoteFrameTransport {
   }
 
   @override
-  Future<void> close() async {
+  Future<void> close() => _closeFuture ??= _close();
+
+  Future<void> _close() async {
     if (_closed) {
+      // Already torn down by the send-overflow path; wait out ITS teardown.
       await _abortTeardown;
       return;
     }
