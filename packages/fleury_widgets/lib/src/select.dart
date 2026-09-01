@@ -207,29 +207,25 @@ class _SelectState<T> extends State<Select<T>> {
     ); // resolved in-tree, threaded into the overlay
     _priorFocus = manager.focusedNode;
     final entry = OverlayEntry(
-      builder: (_) => Stack(
-        children: <Widget>[
-          AbsorbPointer(onTap: _dismiss, child: const SizedBox.expand()),
-          BoundsAnchor(
-            notifier: _bounds,
-            child: _SelectList<T>(
-              trapContentKey: _trapContentKey,
-              options: widget.options,
-              semanticLabel: widget.semanticLabel,
-              initialIndex: _initialIndex(),
-              appliedIndex: _appliedIndex(),
-              selectionStyle: theme.selectionStyle,
-              mutedStyle: theme.mutedStyle,
-              borderStyle: theme.borderStyle,
-              onHighlighted: widget.onHighlightChanged,
-              onPicked: (value) {
-                _close();
-                _commit(value);
-              },
-              onDismiss: _dismiss,
-            ),
-          ),
-        ],
+      builder: (_) => AnchoredFloat(
+        notifier: _bounds,
+        onTapOutside: _dismiss,
+        child: _SelectList<T>(
+          trapContentKey: _trapContentKey,
+          options: widget.options,
+          semanticLabel: widget.semanticLabel,
+          initialIndex: _initialIndex(),
+          appliedIndex: _appliedIndex(),
+          selectionStyle: theme.selectionStyle,
+          mutedStyle: theme.mutedStyle,
+          borderStyle: theme.borderStyle,
+          onHighlighted: widget.onHighlightChanged,
+          onPicked: (value) {
+            _close();
+            _commit(value);
+          },
+          onDismiss: _dismiss,
+        ),
       ),
     );
     _entry = entry;
