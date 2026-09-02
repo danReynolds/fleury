@@ -57,6 +57,64 @@ final class RenderDamageTracker {
     _requiresFullDiff = false;
     _visualChange = false;
   }
+
+  // ---- Paint passes ------------------------------------------------------
+  //
+  // The root paint pass is numbered. A participant that publishes a
+  // paint-time fact about its subtree (painted bounds) stamps the pass it
+  // published in; when the pass ends, one that neither painted nor replayed
+  // belongs to a subtree that stopped painting while staying mounted — a
+  // hidden IndexedStack child, a route beneath an opaque one — and is told to
+  // retract. Cached repaint boundaries replay their retained geometry every
+  // pass, so a clean subtree counts as painted. Per owner, like the damage
+  // signal: two runtimes in one isolate never sweep each other's
+  // participants.
+
+  int _paintPass = 0;
+
+  /// The pass currently painting (or the last one, between passes).
+  int get paintPass => _paintPass;
+
+  final Set<PaintPassParticipant> _participants =
+      Set<PaintPassParticipant>.identity();
+
+  /// Registers [participant] for the end-of-pass sweep. Idempotent.
+  void registerPaintPassParticipant(PaintPassParticipant participant) {
+    _participants.add(participant);
+  }
+
+  /// Removes [participant] from the sweep (it left the tree, or moved to
+  /// another owner).
+  void unregisterPaintPassParticipant(PaintPassParticipant participant) {
+    _participants.remove(participant);
+  }
+
+  /// Starts a root paint pass; returns its number.
+  int beginPaintPass() => ++_paintPass;
+
+  /// Ends the current pass: every participant that did not publish in it
+  /// retracts. Retraction only invalidates paint (a listener marking its
+  /// boundary dirty), never restructures the tree, so iterating the live set
+  /// is safe.
+  void endPaintPass() {
+    for (final participant in _participants) {
+      if (participant.publishedPaintPass != _paintPass) {
+        participant.retractPaintFacts();
+      }
+    }
+  }
+}
+
+/// A render object that publishes a paint-time fact about its subtree — its
+/// painted bounds — and must retract it when a root paint pass ends without
+/// the subtree having painted or replayed. It registers with the tree's
+/// [RenderDamageTracker] when it first publishes and unregisters on detach.
+abstract interface class PaintPassParticipant {
+  /// The [RenderDamageTracker.paintPass] this participant last published in.
+  int get publishedPaintPass;
+
+  /// Withdraw the published fact: the subtree no longer paints.
+  void retractPaintFacts();
 }
 
 typedef SemanticPaintBoundsCallback = void Function(CellRect? bounds);
@@ -289,42 +347,6 @@ final class _RetainedPaintGeometryCollector {
 }
 
 /// Stack-scoped collector for general paint-owned screen geometry.
-/// The root paint pass: numbered, with an end-of-pass hook.
-///
-/// Anything that publishes a paint-time fact about a subtree — painted
-/// bounds, for a float anchored to them — stamps the pass it published in.
-/// When the pass ends, a fact not refreshed this pass belongs to a subtree
-/// that no longer paints (a hidden IndexedStack child, a route beneath an
-/// opaque one) and is retracted by its closer. Cached repaint boundaries
-/// replay their retained geometry every pass, so a clean subtree counts as
-/// painted; only a subtree that is neither painted nor replayed goes stale.
-final class PaintPass {
-  PaintPass._();
-
-  static int _current = 0;
-
-  /// The pass currently painting (or the last one, between passes).
-  static int get current => _current;
-
-  static final List<void Function(int pass)> _closers =
-      <void Function(int pass)>[];
-
-  /// Registers [closer] to run when every pass ends, with the pass number.
-  static void addCloser(void Function(int pass) closer) {
-    _closers.add(closer);
-  }
-
-  /// Starts a pass; returns its number.
-  static int begin() => ++_current;
-
-  /// Ends the current pass: runs the closers.
-  static void end() {
-    for (var i = 0; i < _closers.length; i++) {
-      _closers[i](_current);
-    }
-  }
-}
-
 final class RetainedPaintGeometryCapture {
   RetainedPaintGeometryCapture._();
 
@@ -951,6 +973,12 @@ abstract class RenderObject {
   }
 
   /// The damage tracker attached at this tree's root, if any.
+  /// The frame damage tracker attached at this tree's root — the per-owner
+  /// object a render object publishes frame-scoped facts into — or null while
+  /// detached or before the first frame.
+  @protected
+  RenderDamageTracker? get rootFrameDamage => _rootFrameDamage;
+
   RenderDamageTracker? get _rootFrameDamage {
     RenderObject node = this;
     while (true) {

@@ -1638,9 +1638,10 @@ class BuildOwner {
     sw?.reset();
     // Root paint: buffer IS the screen, so screenOffset == offset.
     // clipRect == the full screen rect — anything outside is off-screen.
-    // Bracketed as a numbered PaintPass so paint-time facts (painted bounds)
-    // that no subtree refreshed this pass can be retracted when it ends.
-    PaintPass.begin();
+    // A numbered paint pass on this owner's tracker, so paint-time facts
+    // (painted bounds) that no subtree refreshed this pass are retracted when
+    // it ends — see [RenderDamageTracker.endPaintPass].
+    renderDamageTracker.beginPaintPass();
     try {
       rootRender.paint(
         buffer,
@@ -1649,7 +1650,7 @@ class BuildOwner {
         clipRect: CellRect(offset: CellOffset.zero, size: buffer.size),
       );
     } finally {
-      PaintPass.end();
+      renderDamageTracker.endPaintPass();
     }
     final paintElapsed = sw?.elapsed ?? Duration.zero;
 
