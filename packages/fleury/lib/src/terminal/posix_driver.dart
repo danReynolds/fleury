@@ -903,6 +903,15 @@ class PosixTerminalDriver
       return;
     }
     _suspended = true;
+    // Input authority leaves with the terminal: whatever the user is holding
+    // will be released into the shell, and this driver will never see the
+    // release. Say so — the runtime recovers held keys on a focus-out (RFC
+    // 0020 §10) — or every held key stays held across the suspend, a hold
+    // never ends, and the first re-press of two stuck keys trips the
+    // phase-violation counter and demotes an honest terminal to press-only.
+    if (!_events.isClosed) {
+      _events.add(const TerminalFocusEvent(focused: false));
+    }
     // Restore the terminal for the shell. Guarded so a failing write/flush
     // still reaches the stop below: a half-suspend that never stops (and so
     // is never resumed) would otherwise wedge the gate forever.
@@ -999,6 +1008,11 @@ class PosixTerminalDriver
         handoffMode = mode;
         didHandoff = true;
         _handoffActive = true;
+        // Same contract as suspend: the child owns the terminal now, so held
+        // keys are released into it, never reported here.
+        if (!_events.isClosed) {
+          _events.add(const TerminalFocusEvent(focused: false));
+        }
 
         // Stop the parent subscription before terminal modes change so it
         // never races an inherited-stdio editor/pager for tty input.
@@ -1051,6 +1065,7 @@ class PosixTerminalDriver
             } finally {
               _handoffActive = false;
               if (shouldReenter && !_events.isClosed) {
+                _events.add(const TerminalFocusEvent(focused: true));
                 _events.add(ResizeEvent(size));
               }
             }
@@ -1074,7 +1089,12 @@ class PosixTerminalDriver
     if (_handoffActive) return;
     if (_changedStdin) _setRawMode();
     if (_wroteEnterSequences) _stdout.write(_enterSequences(mode));
-    if (!_events.isClosed) _events.add(ResizeEvent(size));
+    if (!_events.isClosed) {
+      // Authority is back (nothing is held: the shell saw the releases), then
+      // the same-size resize that forces the full repaint.
+      _events.add(const TerminalFocusEvent(focused: true));
+      _events.add(ResizeEvent(size));
+    }
   }
 
   @override

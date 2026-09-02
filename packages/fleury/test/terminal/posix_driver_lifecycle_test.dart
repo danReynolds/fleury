@@ -990,4 +990,73 @@ void main() {
       );
     });
   });
+
+  test(
+    'suspend and handoff surrender input authority, and announce it',
+    () async {
+      // The runtime recovers held keys on a focus-out (RFC 0020 §10). Suspend
+      // (Ctrl+Z) and a terminal handoff ($EDITOR) are the other two ways this
+      // terminal stops reporting releases, and neither said so: held keys
+      // stayed held across them. Both now emit a focus-out, and a focus-in
+      // on return — ahead of the resume repaint.
+      final trace = <String>[];
+      final input = _FakeStdin(terminal: true);
+      late final _RecordingStdout out;
+      out = _RecordingStdout(
+        terminal: true,
+        trace: trace,
+        onWrite: (bytes) {
+          if (bytes.contains('\x1B[6n')) {
+            scheduleMicrotask(
+              () => input.push('\x1B[1;2R\x1B[?1;2c'.codeUnits),
+            );
+          } else if (bytes.contains('\x1B[c')) {
+            scheduleMicrotask(() => input.push('\x1B[?1;2c'.codeUnits));
+          }
+        },
+      );
+      final driver = PosixTerminalDriver(
+        stdinOverride: input,
+        stdoutOverride: out,
+        terminalModeController: _FakeModeController(trace),
+        selfStopOverride: () => true,
+      );
+      final events = <TuiEvent>[];
+      StreamSubscription<TuiEvent>? sub;
+      Iterable<bool> focus() =>
+          events.whereType<TerminalFocusEvent>().map((e) => e.focused);
+      try {
+        await driver.enter(TerminalMode.interactive);
+        sub = driver.events.listen(events.add);
+
+        await driver.debugSuspend();
+        await _pump();
+        expect(focus(), [false], reason: 'suspend surrenders authority');
+
+        driver.debugResume();
+        await _pump();
+        expect(focus(), [false, true]);
+        final regained = events.indexWhere(
+          (e) => e is TerminalFocusEvent && e.focused,
+        );
+        expect(
+          events.skip(regained + 1).whereType<ResizeEvent>(),
+          isNotEmpty,
+          reason: 'focus-in lands before the resume repaint',
+        );
+
+        events.clear();
+        await driver.runWithTerminalHandoff(() async {
+          await _pump();
+          expect(focus(), [false], reason: 'the child owns the terminal');
+        });
+        await _pump();
+        expect(focus(), [false, true]);
+      } finally {
+        await sub?.cancel();
+        await driver.restore();
+        await input.close();
+      }
+    },
+  );
 }
