@@ -44,7 +44,9 @@ void main() {
   }
 
   KeyboardSnapshot sample(KeySelector selector) {
-    final snapshot = dispatcher.keyboardSession.publishLatch();
+    final snapshot = dispatcher.keyboardSession.publishLatch(
+      KeyboardLatchClock.frame,
+    );
     snapshot.isHeld(selector); // what a game's ticker does every frame
     return snapshot;
   }
@@ -184,7 +186,9 @@ void main() {
     // two-sighting cadence needs a transition-absorbing check plus two
     // uncovered sightings before it will speak.
     for (var i = 0; i < 3; i++) {
-      final snapshot = dispatcher.keyboardSession.publishLatch();
+      final snapshot = dispatcher.keyboardSession.publishLatch(
+        KeyboardLatchClock.frame,
+      );
       for (final key in [
         KeyPosition.w,
         KeyPosition.a,

@@ -109,7 +109,7 @@ List<int> _heldKeyBytes({required int repeats}) {
 }
 
 Future<({int totalBytes, List<({String name, int bytes, int instances})> top})>
-_measure(
+    _measure(
   VmService service,
   String isolateId, {
   required void Function() work,
@@ -174,12 +174,10 @@ Future<void> main(List<String> args) async {
     exitCode = 64;
     return;
   }
-  final wsUri = server
-      .replace(
-        scheme: 'ws',
-        pathSegments: [...server.pathSegments.where((s) => s.isNotEmpty), 'ws'],
-      )
-      .toString();
+  final wsUri = server.replace(
+    scheme: 'ws',
+    pathSegments: [...server.pathSegments.where((s) => s.isNotEmpty), 'ws'],
+  ).toString();
 
   final service = await vmServiceConnectUri(wsUri);
   try {
@@ -215,7 +213,7 @@ Future<void> main(List<String> args) async {
       parser.feed(cycle, sink);
       // The frame latch is part of the per-key cost: a sampling consumer
       // latches once per frame, and the latch walks the accumulated edges.
-      dispatcher.keyboardSession.publishLatch();
+      dispatcher.keyboardSession.publishLatch(KeyboardLatchClock.frame);
     }
 
     final warmupCycles = (warmup / keysPerCycle).ceil();
@@ -272,8 +270,7 @@ Future<void> main(List<String> args) async {
     final basePerKey = (base['bytesPerKey'] as num).toDouble();
     final limit = basePerKey * (1 + _failFraction);
     final delta = (perKey - basePerKey) / basePerKey * 100;
-    final line =
-        'input alloc gate: ${perKey.toStringAsFixed(1)} B/key vs '
+    final line = 'input alloc gate: ${perKey.toStringAsFixed(1)} B/key vs '
         'baseline ${basePerKey.toStringAsFixed(1)} '
         '(${delta >= 0 ? '+' : ''}${delta.toStringAsFixed(1)}%, '
         'limit +${(_failFraction * 100).toStringAsFixed(0)}%)';

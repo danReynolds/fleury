@@ -62,6 +62,11 @@ export 'src/runtime/frame_scheduler.dart'
 // unexported type.
 export 'src/runtime/input_dispatcher.dart'
     show InputDispatcher, KeyPhaseObserverRegistration;
+// The one supported way to publish the sampled keyboard latch (RFC 0020
+// §5.6). Hosts wire this instead of calling `publishLatch` themselves; the
+// clock enum rides along so a host can read what it wired.
+export 'src/input/keyboard_latch.dart' show installKeyboardLatch;
+export 'src/input/keyboard_state.dart' show KeyboardLatchClock;
 export 'src/runtime/tui_frame_loop.dart'
     show
         TuiDirtyRowRange,

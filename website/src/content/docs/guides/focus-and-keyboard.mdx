@@ -226,8 +226,13 @@ void tick(Duration elapsed) {
 ```
 
 `isHeld` reports a level. `wasPressed` and `wasReleased` report edges, so a quick
-press and release between two frames is not lost. Read `snapshot` in the loop
+press and release between two ticks is not lost. Read `snapshot` in the loop
 that consumes it, not in `build()`; snapshots are intentionally non-reactive.
+
+An edge lives for exactly one tick of the loop that reads it, whatever else the
+app renders in between — a clock in the status bar or an arriving stream value
+does not expire it. In an app with no ticker at all there is no such loop, and
+the snapshot advances once per rendered frame instead.
 
 Held state depends on key-release events, which are not available on every
 terminal. Read the reactive capability in `build` and provide a press-driven

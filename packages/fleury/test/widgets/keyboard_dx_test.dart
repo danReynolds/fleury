@@ -451,54 +451,54 @@ void main() {
     });
   });
 
-  group(
-    'the frame latch is published by the FRAME, not by the test (§5.6)',
-    () {
-      testWidgets('a ticker sees a held key without any explicit latch', (t) {
-        // THE regression this file exists for. `publishLatch` used to be called
-        // only by the test harness, so every sampled-input test passed while a
-        // real app never latched at all and `isHeld` was false forever — A/D
-        // did not steer the asteroids showcase. Nothing here may call
-        // `latchFrame()`: the point is that pumping a frame is enough.
-        t.keyboardCapabilities = KeyboardCapabilities.full;
-        final seen = <bool>[];
-        late Keyboard keyboard;
-        t.pumpWidget(
-          _TickerProbe(
-            onReady: (k) => keyboard = k,
-            onTick: () => seen.add(keyboard.snapshot.isHeld(KeyPosition.a)),
-          ),
-        );
-        t.holdKey(KeyPosition.a);
-        t.pump(const Duration(milliseconds: 100));
-        expect(
-          seen.any((held) => held),
-          isTrue,
-          reason:
-              'a ticker sampling during a pumped frame must observe the '
-              'held key — if this fails the runtime is not latching per frame',
-        );
-      });
+  group('the latch is published by the runtime, not by the test (§5.6)', () {
+    testWidgets('a ticker sees a held key without any explicit latch', (t) {
+      // THE regression this file exists for. `publishLatch` used to be called
+      // only by the test harness, so every sampled-input test passed while a
+      // real app never latched at all and `isHeld` was false forever — A/D
+      // did not steer the asteroids showcase. Nothing here may call
+      // `latchFrame()`: the point is that pumping a frame is enough. (Which
+      // of the runtime's two clocks publishes — here the ticker's, since a
+      // ticker is running — is pinned in
+      // test/input/sampled_edge_clock_test.dart.)
+      t.keyboardCapabilities = KeyboardCapabilities.full;
+      final seen = <bool>[];
+      late Keyboard keyboard;
+      t.pumpWidget(
+        _TickerProbe(
+          onReady: (k) => keyboard = k,
+          onTick: () => seen.add(keyboard.snapshot.isHeld(KeyPosition.a)),
+        ),
+      );
+      t.holdKey(KeyPosition.a);
+      t.pump(const Duration(milliseconds: 100));
+      expect(
+        seen.any((held) => held),
+        isTrue,
+        reason:
+            'a ticker sampling during a pumped frame must observe the '
+            'held key — if this fails the runtime is not latching per frame',
+      );
+    });
 
-      testWidgets('releasing it clears the sampled state', (t) {
-        t.keyboardCapabilities = KeyboardCapabilities.full;
-        final seen = <bool>[];
-        late Keyboard keyboard;
-        t.pumpWidget(
-          _TickerProbe(
-            onReady: (k) => keyboard = k,
-            onTick: () => seen.add(keyboard.snapshot.isHeld(KeyPosition.a)),
-          ),
-        );
-        t.holdKey(KeyPosition.a);
-        t.pump(const Duration(milliseconds: 50));
-        t.releaseKey(KeyPosition.a);
-        seen.clear();
-        t.pump(const Duration(milliseconds: 50));
-        expect(seen, isNot(contains(true)));
-      });
-    },
-  );
+    testWidgets('releasing it clears the sampled state', (t) {
+      t.keyboardCapabilities = KeyboardCapabilities.full;
+      final seen = <bool>[];
+      late Keyboard keyboard;
+      t.pumpWidget(
+        _TickerProbe(
+          onReady: (k) => keyboard = k,
+          onTick: () => seen.add(keyboard.snapshot.isHeld(KeyPosition.a)),
+        ),
+      );
+      t.holdKey(KeyPosition.a);
+      t.pump(const Duration(milliseconds: 50));
+      t.releaseKey(KeyPosition.a);
+      seen.clear();
+      t.pump(const Duration(milliseconds: 50));
+      expect(seen, isNot(contains(true)));
+    });
+  });
 
   group('a surface that claims phases and does not send them (§5.7)', () {
     test('Warp\'s exact byte stream demotes the session to press-only', () {
@@ -518,7 +518,7 @@ void main() {
       const warpPress = KeyEvent(KeyCode.a, position: KeyPosition.a);
       session.ingest(warpPress);
       expect(
-        session.publishLatch().isHeld(KeyPosition.a),
+        session.publishLatch(KeyboardLatchClock.frame).isHeld(KeyPosition.a),
         isTrue,
         reason: 'the first press is indistinguishable from an honest one',
       );
@@ -540,7 +540,7 @@ void main() {
       );
       expect(demotedTo.supportsHeldState, isFalse);
       expect(
-        session.publishLatch().isHeld(KeyPosition.a),
+        session.publishLatch(KeyboardLatchClock.frame).isHeld(KeyPosition.a),
         isFalse,
         reason: 'the phantom hold must not survive the demotion',
       );
@@ -584,7 +584,10 @@ void main() {
         ),
       );
       expect(session.capabilities.supportsHeldState, isTrue);
-      expect(session.publishLatch().isHeld(KeyPosition.a), isFalse);
+      expect(
+        session.publishLatch(KeyboardLatchClock.frame).isHeld(KeyPosition.a),
+        isFalse,
+      );
     });
   });
 }

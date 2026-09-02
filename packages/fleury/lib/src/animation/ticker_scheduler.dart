@@ -154,12 +154,15 @@ class TickerScheduler {
     _reassembleCallbacks.remove(callback);
   }
 
-  /// Runs at the top of every frame, before any ticker callback.
+  /// Runs at the top of every tick, before any ticker callback.
   ///
-  /// The runtime wires this to the keyboard session's frame latch. It is a
-  /// dedicated hook rather than an ordinary tick callback because ordering
-  /// matters and the callback set has none: a ticker that sampled input
-  /// before the latch was published would read the previous frame's state.
+  /// Every host wires this (via `installKeyboardLatch`) to the keyboard
+  /// session's TICKER latch clock, which is the live one whenever this
+  /// scheduler has a registered callback — i.e. whenever this hook can fire
+  /// at all. It is a dedicated hook rather than an ordinary tick callback
+  /// because ordering matters and the callback set has none: a ticker that
+  /// sampled input before the latch was published would read the previous
+  /// tick's state (RFC 0020 §5.6).
   void Function()? _onFrameStart;
 
   set onFrameStart(void Function()? callback) => _onFrameStart = callback;
@@ -254,11 +257,12 @@ class TickerScheduler {
   /// iteration.
   void _fire() {
     if (_disposed) return;
-    // Frame start, BEFORE any ticker runs: whatever samples input this frame
-    // must all see the same state. Running it here rather than inside a
-    // registered callback is what guarantees the ordering — the callback set
-    // has no order, so a ticker could otherwise sample a latch published
-    // after it ran (RFC 0020 §5.6).
+    // Tick start, BEFORE any ticker runs: whatever samples input this tick
+    // must all see the same state, and this is the latch that expires the
+    // previous tick's edges. Running it here rather than inside a registered
+    // callback is what guarantees the ordering — the callback set has no
+    // order, so a ticker could otherwise sample a latch published after it
+    // ran (RFC 0020 §5.6).
     _onFrameStart?.call();
     if (_callbacks.isEmpty) return;
     final snapshot = List<SchedulerTickCallback>.from(_callbacks);

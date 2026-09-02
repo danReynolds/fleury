@@ -75,8 +75,10 @@ elements, state, layout) and terminal-native internals.
   terminal that only partly honours the protocol is rolled back to the safe
   tier before the app sees a keystroke (inside tmux/screen the automatic ask
   stops at the safe tier; `FLEURY_KEYBOARD` overrides). New DX surface:
-  `Keyboard.of(context)` (frame-latched `snapshot` with `isHeld` /
-  `wasPressed` / `wasReleased`, reactive `capabilities`, `nextKey`),
+  `Keyboard.of(context)` (latched `snapshot` with `isHeld` / `wasPressed` /
+  `wasReleased`, reactive `capabilities`, `nextKey`) — sampled edges expire on
+  the clock that reads them, so a tap survives whatever else the app renders
+  between the press and the tick that samples it,
   `KeyDetector`, `KeyBinding.hold`, `KeyPosition` spatial selectors,
   `aliases:`, `modal:`, and `includeRepeats:` — bindings now fire once per
   physical press, not once per auto-repeat. A surface caught claiming phase

@@ -2,17 +2,23 @@
 //
 // The rule this file encodes: sampled input is verified through `runApp`'s
 // own frame loop, with only the terminal substituted. Nothing here may stand
-// in for a runtime responsibility — FleuryTester publishes the frame latch
-// itself, so a whole test corpus can agree a sampled feature works while the
-// runtime wiring is broken.
+// in for a runtime responsibility.
 //
-// (An earlier version of this header claimed the runtime never latched at
-// all. False — the FrameDriver always did, via `onLatchInput`; the grep that
-// "proved" otherwise searched for `publishLatch()` with parentheses and
-// missed the tear-off. The real runtime defect was the OPPOSITE: a second
-// latch site briefly added at `tickerScheduler.onFrameStart` expired
-// `wasPressed` edges before tickers could read them — see
-// ticker_edge_visibility_test.dart.)
+// Two corrections to earlier versions of this header, both worth keeping:
+//
+//  1. It claimed the runtime never latched at all. False — the FrameDriver
+//     always did, via `onLatchInput`; the grep that "proved" otherwise
+//     searched for `publishLatch()` with parentheses and missed the tear-off.
+//     The real defect was the OPPOSITE: a second latch site briefly added at
+//     `tickerScheduler.onFrameStart` expired `wasPressed` edges before
+//     tickers could read them — see ticker_edge_visibility_test.dart.
+//  2. It claimed FleuryTester publishes the frame latch itself, so no widget
+//     test could see the runtime wiring break. That was true, and was the
+//     harness divergence fixed with the edge clock: the harness now installs
+//     the latch through the same `installKeyboardLatch` every host uses and
+//     publishes the frame clock from `render`. A widget test can now observe
+//     an unrelated render expiring an edge — see
+//     test/input/sampled_edge_clock_test.dart.
 import 'dart:async';
 
 import 'package:fleury/fleury.dart';

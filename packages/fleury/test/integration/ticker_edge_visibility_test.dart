@@ -4,7 +4,9 @@
 // keyboard from tickerScheduler.onFrameStart IN ADDITION to the FrameDriver's
 // render latch. `publishLatch` expires edges on a quiet call, so the second
 // site expired every `wasPressed` edge immediately before the tickers ran —
-// 0 of 5 presses observed. The latch must have exactly one publisher.
+// 0 of 5 presses observed. Both clocks are wired today, but the session keeps
+// exactly one of them LIVE (RFC 0020 §5.6); the app here runs a ticker, so
+// the edges this asserts are published and expired on the ticker's clock.
 import 'dart:async';
 
 import 'package:fleury/fleury.dart';

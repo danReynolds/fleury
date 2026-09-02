@@ -40,6 +40,7 @@ import '../semantics/accessibility.dart';
 import '../semantics/inspection.dart';
 import '../semantics/semantics.dart';
 import '../input/events.dart';
+import '../input/keyboard_latch.dart';
 import '../input/keyboard_state.dart';
 import '../widgets/basic.dart';
 import '../runtime/clipboard.dart';
@@ -100,11 +101,6 @@ class FleuryTester {
        _clock = FakeClock(),
        _focusManager = FocusManager() {
     _scheduler = FakeTickerScheduler(clock: _clock);
-    // The same hook `runApp` installs. Tests must exercise the production
-    // seam, not substitute for it: this gap existed because the harness
-    // published the frame latch ITSELF, so every sampled-input test passed
-    // while the runtime never latched at all (RFC 0020 §5.6).
-    _scheduler.onFrameStart = () => _dispatcher.keyboardSession.publishLatch();
     _binding = TuiBinding(
       tickerScheduler: _scheduler,
       animationPolicy: animationPolicy,
@@ -112,6 +108,18 @@ class FleuryTester {
     _dispatcher = InputDispatcher(
       focusManager: _focusManager,
       pointerRouter: _pointerRouter,
+    );
+    // The latch is wired by the one function every host uses, and published
+    // from the same two places production publishes it: the ticker clock at
+    // frame start (inside `installKeyboardLatch`), the frame clock from
+    // [render] — the harness analog of `FrameDriver.onLatchInput` (RFC 0020
+    // §5.6). The harness must never publish it through a seam of its own:
+    // it did for a while, from `TickerScheduler.onFrameStart` alone, which
+    // meant no widget test could see a render expiring a sampled edge —
+    // renders in here did not latch at all.
+    _publishFrameLatch = installKeyboardLatch(
+      session: _dispatcher.keyboardSession,
+      scheduler: _scheduler,
     );
     _keyboardNotifier = KeyboardStateNotifier(_dispatcher);
     // Match the runtime: render an error panel for a thrown build()
@@ -199,6 +207,10 @@ class FleuryTester {
   final FocusManager _focusManager;
   final PointerRouter _pointerRouter = PointerRouter();
   late final InputDispatcher _dispatcher;
+
+  /// The frame-clock latch publisher, exactly as a host hands it to
+  /// `FrameDriver.onLatchInput`. Called from [render].
+  late final void Function() _publishFrameLatch;
   late final KeyboardStateNotifier _keyboardNotifier;
   late final BuildOwner _owner;
   Element? _root;
@@ -631,16 +643,18 @@ class FleuryTester {
     _owner.flushBuild();
   }
 
-  /// Publishes the frame latch out of band, for a test with no ticker
-  /// running.
+  /// Publishes the frame-clock latch out of band, for a test that samples
+  /// the keyboard without rendering.
   ///
-  /// [pump] already latches through the same frame-start hook the runtime
-  /// installs, so a test that pumps does NOT need this — and should not use
-  /// it to stand in for a frame, because that is precisely how a missing
-  /// runtime latch stayed invisible.
+  /// The same publisher [render] calls, so it is subject to the same
+  /// arbitration: with a ticker registered the ticker clock is live and this
+  /// is a no-op — [pump] latches instead. It is not a stand-in for a frame,
+  /// and using it as one is how a divergence between harness and runtime
+  /// stays invisible (RFC 0020 §5.6).
   KeyboardSnapshot latchFrame() {
     _assertNotDisposed('latchFrame');
-    return _dispatcher.keyboardSession.publishLatch();
+    _publishFrameLatch();
+    return _dispatcher.keyboardSession.snapshot;
   }
 
   static KeyEvent _lifecycleEvent(
@@ -681,6 +695,11 @@ class FleuryTester {
         'FleuryTester.render called before pumpWidget; the tree is empty.',
       );
     }
+    // Ahead of frame production, exactly where `FrameDriver` calls its
+    // `onLatchInput` — so a render in a test does to the sampled keyboard
+    // what a render in a real app does (RFC 0020 §5.6). With a ticker
+    // registered this is a no-op and the tick publishes instead.
+    _publishFrameLatch();
     final buffer = CellBuffer(size ?? viewportSize);
     _pointerRouter.beginFrame();
     _owner.renderFrame(root, buffer);

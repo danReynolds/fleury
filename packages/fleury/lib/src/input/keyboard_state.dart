@@ -143,6 +143,31 @@ final class _PressRecord {
   Object get identity => position ?? code;
 }
 
+/// Which clock is publishing a latch (RFC 0020 §5.6).
+///
+/// Edges live for exactly one latch, so whichever clock publishes is the
+/// clock edges expire on. That makes the choice of clock a correctness
+/// question, not a scheduling detail: expire on the wrong one and a press
+/// is destroyed before its consumer runs.
+///
+/// The sampled API's consumer is the ticker (§7.2's fixed-step simulation),
+/// so the [ticker] clock owns expiry whenever any ticker is registered. The
+/// [frame] clock is the fallback for an app with no tickers at all — without
+/// it nothing would ever advance the latch and `wasPressed` would report a
+/// stale tap forever.
+///
+/// Exactly one of the two is live at any instant; see
+/// [KeyboardSession.hasActiveTickers], which decides between them.
+enum KeyboardLatchClock {
+  /// Published at render, before frame production (`FrameDriver`'s
+  /// `onLatchInput`). Live only while no ticker is registered.
+  frame,
+
+  /// Published at ticker frame start, before any tick callback runs
+  /// (`TickerScheduler.onFrameStart`). Live whenever a ticker is registered.
+  ticker,
+}
+
 /// An immutable, frame-latched view of the session keyboard (RFC 0020
 /// §5.6/§7): what is held, and which identities transitioned since the
 /// previous latch. Edges are non-consuming and expire at the next latch
@@ -264,6 +289,16 @@ final class KeyboardSession {
   /// Called when what this keyboard IS has changed — new capabilities, or a
   /// newly learned cap. Wired by the runtime to the tree-facing notifier.
   void Function()? onDescriptionChanged;
+
+  /// Reports whether any ticker is registered with the app's scheduler —
+  /// i.e. which of the two [KeyboardLatchClock]s is live right now.
+  ///
+  /// Wired by `installKeyboardLatch` to `TickerScheduler.isActive`, so the
+  /// answer is read live rather than mirrored into a flag that can drift out
+  /// of step with ticker registration. Null (the default, for a bare session
+  /// with no scheduler behind it) means "no tickers", so the frame clock
+  /// publishes — which is what a headless model test wants.
+  bool Function()? hasActiveTickers;
 
   /// What this keyboard's keys are actually capped with (RFC 0020 §9).
   ///
@@ -525,17 +560,36 @@ final class KeyboardSession {
     return releases;
   }
 
-  /// Publishes the frame latch (§5.6 step 2). Exactly ONE runtime call site:
-  /// the FrameDriver, at render, before frame production (FleuryTester
-  /// stands in for it in tests). A second publisher is not "fresher" — it
-  /// expires the previous publisher's edges before their consumers read
-  /// them; see ticker_edge_visibility_test.dart for the measured failure.
-  /// Drains the edge accumulators into an immutable
-  /// snapshot; allocation-free when nothing changed since the last publish
-  /// AND the cached snapshot carries no edges (edges live for exactly one
-  /// latch — a quiet frame after an edgeful one must expire them, or
-  /// `wasPressed` would report a stale tap forever).
-  KeyboardSnapshot publishLatch() {
+  /// Publishes the latch (§5.6 step 2) on [clock], draining the edge
+  /// accumulators into an immutable snapshot.
+  ///
+  /// Two clocks are wired (`installKeyboardLatch`), but only ONE is live at
+  /// any instant, chosen by [hasActiveTickers]: a call from the clock that is
+  /// not live returns the standing snapshot untouched. Concurrent publishers
+  /// are the defect this arbitration exists to prevent — a second publisher
+  /// is not "fresher", it expires the first one's edges before their
+  /// consumers read them (measured: `ticker_edge_visibility_test.dart`).
+  ///
+  /// Which one is live is a correctness choice, not a scheduling one. Edges
+  /// are read from ticks (§7.2's fixed-step simulation), so while a ticker is
+  /// registered the ticker clock owns expiry and renders leave the latch
+  /// alone; expiring on the render clock instead destroys a tap whenever an
+  /// unrelated frame (a clock in the status bar) lands between the press and
+  /// the tick. With no ticker registered nothing would ever advance the latch,
+  /// so the frame clock takes over — otherwise `wasPressed` would report a
+  /// stale tap forever.
+  ///
+  /// Allocation-free when nothing changed since the last publish AND the
+  /// cached snapshot carries no edges (edges live for exactly one latch — a
+  /// quiet latch after an edgeful one must expire them).
+  KeyboardSnapshot publishLatch(KeyboardLatchClock clock) {
+    // The live clock. `hasActiveTickers` is read live off the scheduler, so
+    // the handover happens on the tick/render after a ticker registers or the
+    // last one unregisters — no flag to leave stale.
+    final live = (hasActiveTickers?.call() ?? false)
+        ? KeyboardLatchClock.ticker
+        : KeyboardLatchClock.frame;
+    if (clock != live) return _latched;
     if (!_dirtySinceLatch) {
       if (_latched._downEdges.isEmpty && _latched._upEdges.isEmpty) {
         return _latched;

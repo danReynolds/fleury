@@ -268,6 +268,18 @@ observation starved hold pairing. Rules:
 
 ## 7. Frame-latched sampling
 
+**AMENDED 2026-09-02 — the latch clock.** Edges live for exactly one latch, so
+the clock that publishes is the clock that expires. Publishing at render made
+any unrelated frame (a clock in the status bar, an arriving stream value)
+destroy a tap before the ticker that samples it ran. Edges now expire on the
+CONSUMER's clock: the latch is published at ticker frame start whenever a
+ticker is registered, and only in a ticker-free app — where nothing else would
+ever advance it — does the render clock publish. Exactly one is live at a
+time; the two are wired together by `installKeyboardLatch`, and adding a
+publisher outside it re-creates the double-latch defect this section's
+one-publisher rule was written against. "Frame" below therefore reads "latch":
+the readable window is one tick in a ticking app.
+
 At frame start, after input drains, the runtime atomically publishes an
 immutable `KeyboardSnapshot`: pressed sets plus every identity that went down
 and every one that went up since the previous latch. Edges are non-consuming;
