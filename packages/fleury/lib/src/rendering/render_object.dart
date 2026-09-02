@@ -20,13 +20,56 @@ import 'render_layout_stats.dart';
 /// one isolate never observe each other's damage. The signal accumulates
 /// across frames until [takeRequiresFullDiff] consumes it, so deferred
 /// consumers can coalesce several invalidations into one read.
+/// Where the owner is in its frame; see [RenderDamageTracker.onInvalidate].
+enum RenderFramePhase { idle, build, layout, paint }
+
 final class RenderDamageTracker {
+  // ---- Frame phase and the invalidation hook ------------------------------
+  //
+  // An invalidation is a request for a frame. Which frame depends on WHEN it
+  // lands: during build or layout, this frame's paint covers it (absorbed);
+  // during paint or between frames, the NEXT frame must render it. Before
+  // this, a paint-only or layout invalidation raised outside a build — a
+  // render-object setter driven by a timer, an anchor retracted at the end
+  // of a paint pass — only set a flag that frames consult; nothing asked for
+  // the frame, and the flag was consumed with the frame that was finishing.
+  // [onInvalidate] is installed by the frame driver and is the one
+  // scheduling primitive layout, paint and build invalidation share.
+
+  /// Called when an invalidation lands that this frame cannot cover: outside
+  /// a frame, or during its paint phase. Coalescing is the callee's job.
+  void Function()? onInvalidate;
+
+  /// The phase the owner is in; set by `BuildOwner.renderFrame`.
+  RenderFramePhase phase = RenderFramePhase.idle;
+
+  bool _carryVisualChange = false;
+  bool _carryFullDiff = false;
+
+  void _invalidated({required bool fullDiff}) {
+    switch (phase) {
+      case RenderFramePhase.build:
+      case RenderFramePhase.layout:
+        // This frame's paint renders it; the flags already say so.
+        return;
+      case RenderFramePhase.paint:
+        // The frame loop consumes the flags right after paint; carry them
+        // into the next frame, and ask for it.
+        _carryVisualChange = true;
+        if (fullDiff) _carryFullDiff = true;
+      case RenderFramePhase.idle:
+        break;
+    }
+    onInvalidate?.call();
+  }
+
   bool _requiresFullDiff = false;
   bool _visualChange = false;
 
   void recordLayoutOrConservativePaint() {
     _requiresFullDiff = true;
     _visualChange = true;
+    _invalidated(fullDiff: true);
   }
 
   /// Records that some render object's visual output may differ next frame
@@ -34,6 +77,7 @@ final class RenderDamageTracker {
   /// consumes it via [takeVisualChange].
   void recordVisualChange() {
     _visualChange = true;
+    _invalidated(fullDiff: false);
   }
 
   /// Whether any invalidation has been recorded since the last rendered
@@ -43,19 +87,24 @@ final class RenderDamageTracker {
 
   bool takeVisualChange() {
     final result = _visualChange;
-    _visualChange = false;
+    // What landed during paint belongs to the next frame, not to nothing.
+    _visualChange = _carryVisualChange;
+    _carryVisualChange = false;
     return result;
   }
 
   bool takeRequiresFullDiff() {
     final result = _requiresFullDiff;
-    _requiresFullDiff = false;
+    _requiresFullDiff = _carryFullDiff;
+    _carryFullDiff = false;
     return result;
   }
 
   void reset() {
     _requiresFullDiff = false;
     _visualChange = false;
+    _carryVisualChange = false;
+    _carryFullDiff = false;
   }
 
   // ---- Paint passes ------------------------------------------------------
@@ -95,31 +144,14 @@ final class RenderDamageTracker {
   /// Ends the current pass: every participant that did not publish in it
   /// retracts. Retraction only invalidates paint (a listener marking its
   /// boundary dirty), never restructures the tree, so iterating the live set
-  /// is safe.
+  /// is safe. It lands in the paint phase, so [onInvalidate] asks for the
+  /// frame that repaints without the stale fact.
   void endPaintPass() {
-    var retracted = 0;
     for (final participant in _participants) {
       if (participant.publishedPaintPass != _paintPass) {
         participant.retractPaintFacts();
-        retracted++;
       }
     }
-    _paintPassRetractions += retracted;
-  }
-
-  int _paintPassRetractions = 0;
-
-  /// How many participants retracted since the last take. A retraction
-  /// happens INSIDE the pass, after the frame painted with the stale fact,
-  /// and its paint invalidation is consumed with that frame's damage — so
-  /// the frame driver reads this after commit, re-records the visual change
-  /// and requests the frame that repaints without the fact. Nothing else
-  /// would: the visual-change flag is a predicate frames consult, not a
-  /// scheduler.
-  int takePaintPassRetractions() {
-    final result = _paintPassRetractions;
-    _paintPassRetractions = 0;
-    return result;
   }
 }
 

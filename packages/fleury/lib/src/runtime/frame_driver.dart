@@ -189,6 +189,11 @@ final class FrameDriver {
       onRender: renderNow,
     );
     runtime.owner.onScheduleBuild = () => requestFrame('build');
+    // Layout and paint invalidation schedule through the same primitive as a
+    // build. The tracker decides WHETHER a frame is owed (an invalidation
+    // during build or layout is covered by this frame's paint); this only
+    // decides WHEN, and the scheduler coalesces.
+    runtime.renderDamageTracker.onInvalidate = () => requestFrame('invalidate');
     // Pump the next frame whenever a post-frame callback is enqueued — a
     // Timer.run that adds one while the app is idle would otherwise queue
     // indefinitely (no setState, no event).
@@ -460,16 +465,6 @@ final class FrameDriver {
     _frameLoop.commit(frame);
     _emitFrameTelemetry(frame, info);
     _presenter.onFrameCommitted(frame, info);
-    // A paint-pass participant retracted during this frame (an anchor
-    // stopped painting): its consumer marked paint, but the loop consumed
-    // that damage when it took this frame's. Re-arm it and ask for the frame
-    // that repaints without the stale fact — with no other work pending the
-    // next request would otherwise take the no-change skip, and the float
-    // would sit over the new content until an unrelated rebuild.
-    if (runtime.renderDamageTracker.takePaintPassRetractions() > 0) {
-      runtime.renderDamageTracker.recordVisualChange();
-      requestFrame('paint-pass-retraction');
-    }
 
     // Drain post-frame callbacks AFTER output is out: callers can now
     // safely read render-object geometry (sizes/offsets reflect the frame
