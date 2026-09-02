@@ -442,12 +442,26 @@ final class CellBuffer {
     WidthResolver widthResolver = const DefaultWidthResolver(),
     CellWidthPolicy policy = CellWidthPolicy.spec,
   }) {
+    final width = widthResolver.widthOfGrapheme(grapheme, policy);
+    if (width == 0) return 0;
+    return _placeGrapheme(col, row, grapheme, width, style);
+  }
+
+  /// The structural half of a grapheme write: lay [grapheme] down over
+  /// [width] cells, maintaining the wide-pair invariants. Measurement is the
+  /// caller's — [_writeGraphemeAt] resolves it from a policy, while
+  /// [replayCellFrom] reads it off the cells it is copying.
+  int _placeGrapheme(
+    int col,
+    int row,
+    String grapheme,
+    int width,
+    CellStyle style,
+  ) {
     assert(
       !hasCellStyleStates(style),
       'interaction-aware styles must resolve first',
     );
-    final width = widthResolver.widthOfGrapheme(grapheme, policy);
-    if (width == 0) return 0;
     // Include adjacent cells because writing can evict wide-cell neighbors.
     _recordDamageRect(col - 1, row, width + 2, 1);
 
@@ -469,6 +483,82 @@ final class CellBuffer {
     _evictWideNeighbors(col, row);
     _cells[base] = Cell.leading(grapheme: grapheme, style: style);
     return 1;
+  }
+
+  /// Replays the already-measured cell at (`srcCol`, `srcRow`) of [source]
+  /// into (`dstCol`, `dstRow`) of this buffer — the per-cell counterpart of
+  /// [copyRectFrom], for the widgets that paint a child into a scratch buffer
+  /// and composite the result back (ScrollView's viewport, Flex's overflow
+  /// clip, the effect layers).
+  ///
+  /// A replay COPIES; it never re-measures. The width role travels with the
+  /// cell: whatever [source] recorded as a wide pair lands as a wide pair
+  /// here, so the destination can never disagree with the buffer the cells
+  /// were painted into. That disagreement is not hypothetical — a scratch
+  /// buffer is painted under the surface's own [CellWidthPolicy] and every
+  /// replay used to re-derive the width under the *spec* policy, which
+  /// severed every ambiguous-width pair on the ~19-of-30 terminals whose
+  /// probe measured ambiguous glyphs wide.
+  ///
+  /// Only leading cells replay: continuation cells arrive with their leading,
+  /// and empty cells are transparent (a replay composites, it does not
+  /// clear). Pass [style] to restyle the cell in flight — an effect layer's
+  /// recolor — leaving grapheme and role untouched.
+  ///
+  /// Returns the columns written: 2 for a wide pair, 1 for a narrow cell or
+  /// a wide pair the destination's right edge could not fit (invariant 4:
+  /// `'?'` rather than a spill), 0 for a non-leading source cell or a
+  /// destination outside the grid.
+  int replayCellFrom(
+    CellBuffer source,
+    int srcCol,
+    int srcRow,
+    int dstCol,
+    int dstRow, {
+    CellStyle? style,
+  }) {
+    final srcBase = srcRow * source._size.cols + srcCol;
+    final cell = source._cells[srcBase];
+    if (cell.role != CellRole.leading) return 0;
+    if (!_containsColRow(dstCol, dstRow)) return 0;
+    final wide =
+        srcCol + 1 < source._size.cols &&
+        source._cells[srcBase + 1].role == CellRole.continuation;
+    return _placeGrapheme(
+      dstCol,
+      dstRow,
+      cell.grapheme!,
+      wide ? 2 : 1,
+      _paintStyle(style ?? cell.style),
+    );
+  }
+
+  /// Re-styles the already-measured cell at (`col`, `row`) — a leading cell
+  /// and, when it is wide, its continuation — without touching the grapheme
+  /// or the width roles.
+  ///
+  /// For compositing passes that change only paint (a `Container` merging its
+  /// background under a child's glyphs). Rewriting the grapheme instead would
+  /// re-measure it, and a measurement that disagrees with the cells already
+  /// in the buffer orphans the continuation with its old style.
+  ///
+  /// A no-op on empty, continuation and overlay cells.
+  void restyleCell(int col, int row, CellStyle style) {
+    if (!_containsColRow(col, row)) return;
+    final base = row * _size.cols + col;
+    final cell = _cells[base];
+    if (cell.role != CellRole.leading) return;
+    final paint = _paintStyle(style);
+    assert(
+      !hasCellStyleStates(paint),
+      'interaction-aware styles must resolve first',
+    );
+    _cells[base] = Cell.leading(grapheme: cell.grapheme!, style: paint);
+    final wide =
+        col + 1 < _size.cols && _cells[base + 1].role == CellRole.continuation;
+    if (wide) _cells[base + 1] = Cell.continuation(style: paint);
+    // A restyle never evicts a neighbour, so the damage is exactly the run.
+    _recordDamageRect(col, row, wide ? 2 : 1, 1);
   }
 
   /// Writes the grapheme clusters of [text] horizontally starting at

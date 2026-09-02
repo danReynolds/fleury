@@ -730,17 +730,8 @@ class PosixTerminalDriver
   ) async {
     if (!_stdoutIsTerminal || !_changedStdin) return;
     if (!onAlternateScreen) return;
-    final env = Platform.environment;
-    // An explicit FLEURY_AMBIGUOUS_WIDTH=narrow|wide is already reflected in the
-    // env-derived base capabilities (detectAmbiguousCharWidthFromEnvironment),
-    // so there is nothing to measure. FLEURY_AMBIGUOUS_WIDTH=0|off|false
-    // disables the probe and keeps the conservative `wide` default.
-    if (detectAmbiguousCharWidthFromEnvironment(env) != null) return;
-    final flag = env['FLEURY_AMBIGUOUS_WIDTH']?.toLowerCase().trim();
-    if (flag == '0' || flag == 'off' || flag == 'false') return;
-    // ASCII-only output emits no ambiguous glyphs, so nothing needs sizing —
-    // skip the round trip and the stray probe glyph.
-    if (detectGlyphTierFromEnvironment(env) == GlyphTier.ascii) return;
+    // Environment gate — see [widthProbeIsPermittedByEnvironment].
+    if (!widthProbeIsPermittedByEnvironment(Platform.environment)) return;
     final timeout = _nextProbeTimeout(negotiationClock);
     if (timeout == null) return;
     try {

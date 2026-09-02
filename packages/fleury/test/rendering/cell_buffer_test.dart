@@ -171,11 +171,7 @@ void main() {
 
       // Only three columns fit: 漢 whole, then 字's leading with its
       // continuation clipped — a wide leading the buffer cannot hold.
-      dest.copyRectFrom(
-        source,
-        CellRect.fromLTWH(0, 0, 4, 1),
-        CellOffset.zero,
-      );
+      dest.copyRectFrom(source, CellRect.fromLTWH(0, 0, 4, 1), CellOffset.zero);
 
       expect(dest.atColRow(0, 0).grapheme, '漢');
       expect(dest.atColRow(1, 0).role, CellRole.continuation);
@@ -470,6 +466,102 @@ void main() {
       expect(buf.atColRow(0, 0), const Cell.empty());
       expect(buf.atColRow(1, 0), const Cell.overlay());
       expect(buf.atColRow(2, 0), const Cell.overlay());
+    });
+  });
+
+  group('replayCellFrom / restyleCell (audit 4.a)', () {
+    // A scratch buffer painted on an ambiguous-wide surface: `─` occupies a
+    // leading + continuation pair that the SPEC policy would measure as one
+    // cell. A replay that re-measured would sever it.
+    CellBuffer wideScratch() {
+      final src = CellBuffer(const CellSize(4, 1));
+      src.writeGrapheme(
+        const CellOffset(0, 0),
+        '\u2500',
+        policy: CellWidthPolicy.cjk,
+      );
+      src.writeGrapheme(const CellOffset(2, 0), 'X');
+      return src;
+    }
+
+    test('carries the source cell width, not a re-measurement', () {
+      final src = wideScratch();
+      final dst = CellBuffer(const CellSize(4, 1));
+
+      expect(dst.replayCellFrom(src, 0, 0, 0, 0), 2);
+      expect(dst.atColRow(0, 0).grapheme, '\u2500');
+      expect(dst.atColRow(1, 0).role, CellRole.continuation);
+      expect(dst.replayCellFrom(src, 2, 0, 2, 0), 1);
+      expect(dst.atColRow(2, 0).grapheme, 'X');
+    });
+
+    test('skips non-leading cells so empty stays transparent', () {
+      final src = wideScratch();
+      final dst = CellBuffer(const CellSize(4, 1));
+      dst.writeGrapheme(const CellOffset(3, 0), 'k');
+
+      expect(dst.replayCellFrom(src, 1, 0, 3, 0), 0, reason: 'continuation');
+      expect(dst.replayCellFrom(src, 3, 0, 3, 0), 0, reason: 'empty');
+      expect(dst.atColRow(3, 0).grapheme, 'k');
+    });
+
+    test('an out-of-grid destination is clipped, not written', () {
+      final src = wideScratch();
+      final dst = CellBuffer(const CellSize(4, 1));
+      expect(dst.replayCellFrom(src, 0, 0, 4, 0), 0);
+      expect(dst.replayCellFrom(src, 0, 0, -1, 0), 0);
+    });
+
+    test('a wide pair with no room degrades like any wide write', () {
+      final src = wideScratch();
+      final dst = CellBuffer(const CellSize(4, 1));
+      expect(dst.replayCellFrom(src, 0, 0, 3, 0), 1);
+      expect(dst.atColRow(3, 0).grapheme, '?');
+    });
+
+    test('a style override restyles without re-measuring', () {
+      final src = wideScratch();
+      final dst = CellBuffer(const CellSize(4, 1));
+      dst.replayCellFrom(
+        src,
+        0,
+        0,
+        0,
+        0,
+        style: const CellStyle(foreground: AnsiColor(3)),
+      );
+      expect(dst.atColRow(0, 0).style.foreground, const AnsiColor(3));
+      expect(dst.atColRow(1, 0).role, CellRole.continuation);
+      expect(dst.atColRow(1, 0).style.foreground, const AnsiColor(3));
+    });
+
+    test('restyleCell repaints both halves of a wide pair', () {
+      final buf = CellBuffer(const CellSize(4, 1));
+      buf.writeGrapheme(
+        const CellOffset(0, 0),
+        '\u2500',
+        policy: CellWidthPolicy.cjk,
+      );
+      buf.restyleCell(0, 0, const CellStyle(background: AnsiColor(4)));
+
+      expect(buf.atColRow(0, 0).grapheme, '\u2500');
+      expect(buf.atColRow(0, 0).style.background, const AnsiColor(4));
+      expect(buf.atColRow(1, 0).role, CellRole.continuation);
+      expect(buf.atColRow(1, 0).style.background, const AnsiColor(4));
+    });
+
+    test('restyleCell is a no-op on empty, continuation and overlay cells', () {
+      final buf = CellBuffer(const CellSize(4, 1));
+      buf.writeGrapheme(
+        const CellOffset(0, 0),
+        '\u2500',
+        policy: CellWidthPolicy.cjk,
+      );
+      buf.restyleCell(1, 0, const CellStyle(background: AnsiColor(4)));
+      buf.restyleCell(3, 0, const CellStyle(background: AnsiColor(4)));
+
+      expect(buf.atColRow(1, 0), const Cell.continuation());
+      expect(buf.atColRow(3, 0), const Cell.empty());
     });
   });
 }

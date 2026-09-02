@@ -142,9 +142,9 @@ Severity is the **verified** severity. `↓`/`↑` marks a grade the verificatio
   **Fix:** early-return when no callback. Note: `selection-gate` never constructs a `SelectionArea`, so this **cannot** move the gate (see D3).
   **Notes:** LANDED (A5).
 
-- [ ] **4.e** `P2` `FLEURY_AMBIGUOUS_WIDTH` disables the entire probe battery — `posix_driver.dart:624`
+- [x] **4.e** `P2` `FLEURY_AMBIGUOUS_WIDTH` disables the entire probe battery — `posix_driver.dart:624`
   **Fix:** narrow the guard to its own axis. ⚠ **Sequence with 4.a** — this env var is the accidental workaround for 4.a, so fixing it alone exposes 4.a to operators who had escaped it.
-  **Notes:** HELD — do not land before 4.a (this env var is 4.a's accidental workaround; alone it exposes the P1).
+  **Notes:** LANDED after 4.a, same branch (af796617). The gate moved beside the overrides it reads as `widthProbeIsPermittedByEnvironment` and narrowed to the two reasons the whole round trip is pointless: an ASCII glyph tier, and a kill switch. The kill switch got its own name — `FLEURY_WIDTH_PROBE=0`, mirroring `FLEURY_IMAGE_PROBE=0` — because a variable named for one axis should not be the off switch for a four-axis battery; its old spelling (`FLEURY_AMBIGUOUS_WIDTH=0|off|false`) was documented only in the driver comment that was replaced. RFC 0019 §6.6 updated. The alt-screen probe test now calls the shared gate instead of restating it.
 
 - [x] **4.g** `P3` ✎ `OutputCaptureView` pads/truncates by UTF-16 code unit — `output_capture_view.dart:231`
   **Fix:** measure in cells — or drop string padding and get opacity from a real background fill, which removes the problem rather than fixing it. (Surrogate-split concern refuted: the resolver drops lone surrogates.)
@@ -228,7 +228,7 @@ Each carries the reason it was parked. Anything here can be pulled up if you dis
 
 - [ ] **4.c** `P2` ✎ Ellipsis written without being measured — `render_objects.dart:444`, `rich_text.dart:656`
   **Parked because:** needs an ambiguous-wide policy, so not the default cohort — and the fix needs a **decision** on what a one-column box should degrade to. ✎ Stated symptom is backwards: in normal L-to-R order the *ellipsis itself* vanishes, so truncated text stops looking truncated.
-  **Notes:**
+  **Notes:** HALF LANDED with 4.a (be73a434): `RenderText` now reserves what `…` measures under the active policy and only writes it when it fits inside the box (`col + ellipsisWidth <= maxCol`), so the marker no longer lands a column past the box or degrades to `?` at the buffer edge. The decision the parking note asks for is now explicit and narrow: in a box too small for a measured ellipsis, nothing is drawn. **Still open:** the `rich_text.dart:656` half was not touched.
 
 - [ ] **4.b** `P2` RichText tears a lowered emoji cluster across lines — `rich_text.dart:565`
   **Parked because:** the two wrap implementations differ enough that a shared helper is awkward; likely wants a property test asserting both agree, which is a bigger piece than the bug. Broader than "emoji" though — the wrapper splits only on spaces, so all CJK is one token.
@@ -359,10 +359,10 @@ Ordered by what I'd take first. Each names **what makes it hard**, so we can dec
   **✎ Worse than reported:** Fleury's own core `ListView` wraps every item in a `GestureDetector`, so list content — logs, transcripts, file lists — is entirely unselectable. And the phantom-extension half hands users content they never dragged over.
   **Notes:** LANDED (targeted fix, not the hit-test path): the armed drag target also receives the press when it is not the tap target, so a SelectionArea under a tap-only widget gets its anchor. Tap semantics unchanged. 3 tests (GestureDetector text copies; plain click still taps; ListView rows select). Interposed sliders/scrollbars correctly keep the drag — a hit-test path is not needed for launch.
 
-- [ ] **4.a** `P1` Scratch-buffer replay loops re-measure under the spec policy — `cell_buffer.dart:390` + 5 call sites
+- [x] **4.a** `P1` Scratch-buffer replay loops re-measure under the spec policy — `cell_buffer.dart:390` + 5 call sites
   **Hard because:** making `policy` required is the right move but it **surfaces decisions**, not just call sites — border glyphs and scrollbar glyphs are ambiguous-width and currently write at spec, which matches reserved geometry but not what an ambiguous-wide terminal draws. That needs an answer, not a mechanical `spec`. The structural blit also has transparency semantics to preserve (these loops deliberately skip empty cells) → likely a per-cell structural write, not a rect copy. Hot path: `alloc-gate` + `paint-gate`.
   **Why it's high:** the probe runs **unconditionally**, so non-spec policy is the *default* state on ~19 of ~30 terminals including macOS/GNOME/VS Code defaults. ⚠ Sequence with **4.e**.
-  **Notes:**
+  **Notes:** LANDED (be73a434). Two halves. (1) Replays stopped measuring rather than measuring better: `CellBuffer.replayCellFrom` copies a cell verbatim (grapheme, width role, continuation run, optional style override) and `restyleCell` repaints an existing run in place; all five loops — ScrollView viewport, Flex overflow clip, both effect composites, Container's background merge — use them, so no replay can consult a policy at all. Both share `_placeGrapheme` with the measuring write, so eviction/damage/right-edge `'?'` are unchanged. (2) Framework glyphs measure with the ACTIVE policy and their reserved geometry follows: RenderBorder reserves `2·edgeWidth` and tiles its edges by that width, the Scrollbar gutter is `thickness × glyphWidth`, RenderText reserves what `…` measures (it was landing one column past the box — most of **4.c**), the Flex overflow marker starts a glyph width in from the edge. All byte-identical under spec, where every width is 1. Pinned by 8 widget tests running the same widget under both policies + 7 buffer tests. wire/alloc/paint/selection gates pass. **Not done:** `policy` was NOT made required on `writeGrapheme`/`writeText` — ~550 call sites across 4 packages, and ~60 of them in `fleury_widgets` would have to pass an explicitly wrong `spec` (see the new adjacent note below).
 
 - [x] **10.a** `P1` ✎ Caret, selection and scroll paint in the wrong cells after pasting ANSI text — `text_input.dart:1792`, `text_area.dart:1027`
   **Your call — three fix directions, none obviously right:** (a) sanitize at the **model** boundary so index spaces match by construction — cleanest, but changes what the app reads back and silently drops pasted bytes; (b) keep render-boundary sanitizing and carry a raw→display offset map — needs an identity fast path for the common equal-length case or it hits `alloc-gate`/`paint-gate`; (c) a length-preserving sanitizer emitting one replacement per code unit — indices align free, at the cost of ~40 cells of `U+FFFD` for one pasted hyperlink.
@@ -551,6 +551,10 @@ Found by the batch agents in passing. Verified only to the extent stated; triage
   **Notes:**
 - [x] **N11** `P3` `test/runtime/dead_control_warning_test.dart` is unformatted on main (`dart format` violation).
   **Notes:** LANDED: formatted.
+- [ ] **N12** `P2` `fleury_widgets` is 4.a's remaining half: ~50 `writeGrapheme` sites across 17 chart/table files (block elements, braille, sextants, box-drawing rules) take the spec default with no way to reach the ambient policy — none of those render objects carries a `TextPresentationPolicy`. Every one of those glyph blocks is East Asian Ambiguous, so on an ambiguous-wide terminal each chart is drawn at half its modelled resolution with the same severed-pair corruption 4.a fixed in core. Fixing it means threading `MediaQuery.textPolicyOf` into the chart render objects and making the sub-cell buffers (`HalfBlockBuffer`, `BrailleBuffer`, `OctantBuffer`, `QuadrantBuffer`, `SextantBuffer`) policy-aware — a package-sized piece, not a call-site sweep. **This is why 4.a did not make `policy` required on `writeGrapheme`/`writeText`:** ~550 call sites across four packages, and until N12 lands ~60 of them would have to pass an explicitly wrong `CellWidthPolicy.spec`.
+  **Notes:**
+- [ ] **N13** `P3` `dart format` reports 12 unformatted files under `packages/fleury` that nothing in the branch touched (`test/terminal/width_policy_derivation_test.dart`, `test/widgets/present_test.dart`, `test/widgets/selection/selection_content_change_test.dart`, `test/widgets/text_editing_controller_test.dart`, …). Same class as N11; likely SDK formatter drift. Worth one sweep before launch so a real violation is not lost in the noise.
+  **Notes:**
 
 ## Recommended remaining work (2026-09-01, after the C pass)
 

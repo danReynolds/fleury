@@ -4,9 +4,11 @@ import '../rendering/cell_buffer.dart';
 import '../rendering/layout.dart';
 import '../rendering/render_flex.dart' show CrossAxisAlignment;
 import '../rendering/render_object.dart';
+import '../rendering/width_resolver.dart';
 import 'basic.dart';
 import 'framework.dart';
 import 'list_view.dart' show ListController;
+import 'media_query.dart';
 import 'pointer.dart';
 import 'scroll_view.dart' show ScrollController;
 
@@ -104,6 +106,7 @@ class _ScrollbarState extends State<Scrollbar> {
 
   @override
   Widget build(BuildContext context) {
+    final policy = MediaQuery.textPolicyOf(context);
     // The gutter lives at the right edge of a bounded region, and the
     // Expanded below fills the rest. Under an unbounded width the Row would
     // give Expanded zero columns and the content would silently vanish — the
@@ -118,12 +121,18 @@ class _ScrollbarState extends State<Scrollbar> {
             onDragStart: (col, row) => _jumpToRow(row),
             onDragUpdate: (col, row) => _jumpToRow(row),
             child: SizedBox(
-              width: widget.thickness,
+              // The gutter reserves what the bar's glyphs actually draw:
+              // `█` and `│` are East Asian Ambiguous, so a surface whose
+              // probe measured ambiguous glyphs wide gets a two-column
+              // gutter per unit of thickness (RFC 0019). Reserving one
+              // there would put the thumb's second cell over the content.
+              width: widget.thickness * _barGlyphWidth(policy),
               child: _BarView(
                 metrics: widget._metrics,
                 geometry: _geom,
                 trackStyle: widget.trackStyle,
                 thumbStyle: widget.thumbStyle,
+                textPolicy: policy,
               ),
             ),
           ),
@@ -193,18 +202,37 @@ class _RenderRequireBoundedWidth extends RenderObject
   }
 }
 
+/// The bar's two glyphs. Both are East Asian Ambiguous (UAX #11): one cell
+/// under the spec policy, two on a surface whose probe measured ambiguous
+/// glyphs wide (RFC 0019).
+const String _thumbGlyph = '\u2588';
+const String _trackGlyph = '\u2502';
+
+const WidthResolver _barWidthResolver = DefaultWidthResolver();
+
+/// Columns one bar glyph occupies under [policy] — the gutter's reserved
+/// width per unit of thickness, and the step the paint advances by. Both
+/// sides of that agreement read this one function.
+int _barGlyphWidth(TextPresentationPolicy policy) {
+  final thumb = _barWidthResolver.widthOfGrapheme(_thumbGlyph, policy.widths);
+  final track = _barWidthResolver.widthOfGrapheme(_trackGlyph, policy.widths);
+  return thumb > track ? thumb : track;
+}
+
 class _BarView extends LeafRenderObjectWidget {
   const _BarView({
     required this.metrics,
     required this.geometry,
     required this.trackStyle,
     required this.thumbStyle,
+    required this.textPolicy,
   });
 
   final _ScrollbarMetrics Function() metrics;
   final _ScrollbarGeometry geometry;
   final CellStyle trackStyle;
   final CellStyle thumbStyle;
+  final TextPresentationPolicy textPolicy;
 
   @override
   RenderObject createRenderObject(BuildContext context) => _RenderScrollbar(
@@ -212,6 +240,7 @@ class _BarView extends LeafRenderObjectWidget {
     geometry: geometry,
     trackStyle: trackStyle,
     thumbStyle: thumbStyle,
+    textPolicy: textPolicy,
   );
 
   @override
@@ -223,7 +252,8 @@ class _BarView extends LeafRenderObjectWidget {
       ..metrics = metrics
       ..geometry = geometry
       ..trackStyle = trackStyle
-      ..thumbStyle = thumbStyle;
+      ..thumbStyle = thumbStyle
+      ..textPolicy = textPolicy;
   }
 }
 
@@ -236,10 +266,19 @@ class _RenderScrollbar extends RenderObject {
     required _ScrollbarGeometry geometry,
     required CellStyle trackStyle,
     required CellStyle thumbStyle,
+    required TextPresentationPolicy textPolicy,
   }) : _metrics = metrics,
        _geometry = geometry,
        _trackStyle = trackStyle,
-       _thumbStyle = thumbStyle;
+       _thumbStyle = thumbStyle,
+       _textPolicy = textPolicy;
+
+  TextPresentationPolicy _textPolicy;
+  set textPolicy(TextPresentationPolicy v) {
+    if (_textPolicy == v) return;
+    _textPolicy = v;
+    markNeedsPaintOnly();
+  }
 
   _ScrollbarMetrics Function() _metrics;
   set metrics(_ScrollbarMetrics Function() v) {
@@ -307,15 +346,32 @@ class _RenderScrollbar extends RenderObject {
       );
     }
 
+    // The gutter reserved `thickness × glyphWidth` columns (see
+    // [_ScrollbarState.build]); tile it with whole glyphs measured the same
+    // way. A glyph that no longer fits is skipped rather than written
+    // half-in — on an ambiguous-wide surface a one-column write would put
+    // the thumb's second cell over the content beside it.
+    final glyphWidth = _barGlyphWidth(_textPolicy);
+    final widths = _textPolicy.widths;
+    final lastCol = offset.col + size.cols;
     for (var r = 0; r < h; r++) {
       final row = offset.row + r;
       if (row < 0 || row >= buffer.size.rows) continue;
       final isThumb = r >= thumbTop && r < thumbTop + thumbSize;
-      final glyph = isThumb ? '█' : '│';
+      final glyph = isThumb ? _thumbGlyph : _trackGlyph;
       final style = isThumb ? _thumbStyle : _trackStyle;
-      for (var col = offset.col; col < offset.col + size.cols; col++) {
+      for (
+        var col = offset.col;
+        col + glyphWidth <= lastCol;
+        col += glyphWidth
+      ) {
         if (col < 0 || col >= buffer.size.cols) continue;
-        buffer.writeGrapheme(CellOffset(col, row), glyph, style: style);
+        buffer.writeGrapheme(
+          CellOffset(col, row),
+          glyph,
+          style: style,
+          policy: widths,
+        );
       }
     }
   }

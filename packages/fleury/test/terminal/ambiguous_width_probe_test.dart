@@ -1,3 +1,4 @@
+import 'package:fleury/src/rendering/width_policy.dart';
 import 'package:fleury/src/terminal/capabilities.dart';
 import 'package:fleury/src/terminal/terminal_probe.dart';
 import 'package:test/test.dart';
@@ -89,6 +90,82 @@ void main() {
         AmbiguousCharWidth.wide,
         reason: 'safe default when unset',
       );
+    });
+  });
+
+  group('the probe battery gate (audit 4.e)', () {
+    test('an ambiguous-width override does not silence the other axes', () {
+      // FLEURY_AMBIGUOUS_WIDTH pins ONE axis of the policy (RFC 0019 6.6).
+      // The battery measures four classes in a single round trip; emoji
+      // presentation, variation sequences and ZWJ clustering are knowable
+      // only by measuring, and no environment variable answered them.
+      expect(
+        widthProbeIsPermittedByEnvironment(const {
+          'FLEURY_AMBIGUOUS_WIDTH': 'narrow',
+        }),
+        isTrue,
+      );
+      expect(
+        widthProbeIsPermittedByEnvironment(const {
+          'FLEURY_AMBIGUOUS_WIDTH': 'wide',
+        }),
+        isTrue,
+      );
+    });
+
+    test('the pinned axis still comes from the environment, not the probe', () {
+      // The probe runs and measures ambiguous as WIDE; the override says
+      // narrow and wins, while the emoji axis takes the measured value.
+      final resolved = deriveTextPresentationPolicy(
+        measurements: WidthMeasurements.of(const {
+          'boxDrawing': 2,
+          'greekAlpha': 2,
+          'degreeSign': 2,
+          'slightSmile': 1,
+          'grinningFace': 1,
+          'man': 1,
+          'woman': 1,
+          'boy': 1,
+        }),
+        environment: const {'FLEURY_AMBIGUOUS_WIDTH': 'narrow'},
+      );
+      expect(resolved.policy.widths.ambiguous, CellWidth.one);
+      expect(
+        resolved.sourceOf(WidthAxis.ambiguous),
+        WidthDecisionSource.environment,
+      );
+      expect(resolved.policy.widths.emojiPresentation, CellWidth.one);
+      expect(
+        resolved.sourceOf(WidthAxis.emojiPresentation),
+        WidthDecisionSource.probe,
+      );
+    });
+
+    test('the kill switch is its own variable, not an axis value', () {
+      for (final off in const ['0', 'off', 'false', 'no', 'OFF']) {
+        expect(
+          widthProbeIsPermittedByEnvironment({'FLEURY_WIDTH_PROBE': off}),
+          isFalse,
+          reason: 'FLEURY_WIDTH_PROBE=$off stops the whole round trip',
+        );
+      }
+      expect(
+        widthProbeIsPermittedByEnvironment(const {'FLEURY_WIDTH_PROBE': '1'}),
+        isTrue,
+      );
+    });
+
+    test('an ASCII glyph tier emits no ambiguous glyphs, so it skips', () {
+      expect(
+        widthProbeIsPermittedByEnvironment(const {
+          'FLEURY_GLYPH_TIER': 'ascii',
+        }),
+        isFalse,
+      );
+    });
+
+    test('an unconstrained environment probes', () {
+      expect(widthProbeIsPermittedByEnvironment(const {}), isTrue);
     });
   });
 }
