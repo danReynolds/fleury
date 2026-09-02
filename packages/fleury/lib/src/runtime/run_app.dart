@@ -1185,8 +1185,17 @@ Future<AppExit> _runAppImpl(
           // operator passed --debug, so a shared URL can't pull captured
           // logs / frame stats / error stacks out of a JIT demo by default.
           // The in-app debug shell (Ctrl+G) is unaffected.
+          // A supervisor that spoke first — `fleury serve` in bridge mode,
+          // with a provisional INIT — owns this default: its `--debug`
+          // decision travels in that frame, since it cannot set this
+          // process's environment. Peers that handshake themselves (`fleury
+          // shell`, MCP) leave it null and keep the environment rule.
+          final supervisorDebugWire = negotiatedSink is RemoteTerminalDriver
+              ? negotiatedSink.supervisorDebugWire
+              : null;
           if (debugController.config.enabled &&
-              Platform.environment['FLEURY_DEBUG_WIRE'] != '0') {
+              Platform.environment['FLEURY_DEBUG_WIRE'] != '0' &&
+              (supervisorDebugWire ?? true)) {
             debugFrameLog = DebugFrameLog();
             negotiatedSink.onDebugRequest = (seq, kind, limit) {
               negotiatedSink.presentDebugResponse(

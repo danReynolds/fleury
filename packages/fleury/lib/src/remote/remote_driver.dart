@@ -101,6 +101,7 @@ final class RemoteTerminalDriver
   final StreamController<TuiEvent> _events =
       StreamController<TuiEvent>.broadcast();
   final _RemoteParserSink _sink = _RemoteParserSink();
+
   /// Diffs the semantic tree against what THIS peer is believed to hold.
   /// Injectable so the reused-encoder contract [enter] enforces is testable —
   /// a driver that builds its own encoder starts fresh by construction, which
@@ -134,6 +135,15 @@ final class RemoteTerminalDriver
   final InlineImageCacheLedger _shippedImages;
   bool _active = false;
   bool _handshakeReceived = false;
+  // A supervisor greeted us with a provisional INIT (see
+  // [InitFrame.provisional]): it reaps, so the handshake wait is unbounded.
+  bool _supervisorSpoke = false;
+  bool? _supervisorDebugWire;
+
+  /// The supervisor's decision on the debug wire, when one spoke first (a
+  /// provisional INIT from `fleury serve`); null when the peer handshook
+  /// directly, in which case the runtime keeps its environment rule.
+  bool? get supervisorDebugWire => _supervisorDebugWire;
   int _protocolVersion = 1;
   Completer<void>? _handshake;
 
@@ -175,6 +185,15 @@ final class RemoteTerminalDriver
     if (_active) {
       throw StateError(
         'RemoteTerminalDriver.enter called on an active driver.',
+      );
+    }
+    if (_events.isClosed) {
+      // restore() closed the event stream and the transport; there is no
+      // second session on this driver. Fail loudly rather than hang on a
+      // handshake nothing can deliver.
+      throw StateError(
+        'RemoteTerminalDriver cannot be re-entered after restore(): '
+        'create a new driver for a new session.',
       );
     }
     _sink.target = _events;
@@ -224,13 +243,21 @@ final class RemoteTerminalDriver
       try {
         await _handshake!.future.timeout(initTimeout);
       } on TimeoutException {
-        await _frameSub?.cancel();
-        _frameSub = null;
-        unawaited(_transport.close());
-        throw StateError(
-          'RemoteTerminalDriver.enter: the peer connected but sent no INIT '
-          'within ${initTimeout.inSeconds}s — closing the session.',
-        );
+        if (_supervisorSpoke) {
+          // Not a silent peer: a supervisor (`fleury serve`, bridge mode)
+          // greeted us at accept. It owns the socket and reaps — the same
+          // contract as a spawn-mode standby — so wait for the browser it
+          // will pair us with, however long the operator takes.
+          await _handshake!.future;
+        } else {
+          await _frameSub?.cancel();
+          _frameSub = null;
+          unawaited(_transport.close());
+          throw StateError(
+            'RemoteTerminalDriver.enter: the peer connected but sent no INIT '
+            'within ${initTimeout.inSeconds}s — closing the session.',
+          );
+        }
       }
     }
     _active = true;
@@ -497,6 +524,18 @@ final class RemoteTerminalDriver
   void _onFrame(RemoteFrame frame) {
     switch (frame) {
       case InitFrame f:
+        if (f.provisional) {
+          // Not a handshake: a supervisor (`fleury serve`, bridge mode)
+          // saying "I am here and I reap" at accept, so the INIT fuse does
+          // not kill an app whose operator is still opening a browser. The
+          // real peer's INIT — whatever protocol version it speaks — still
+          // negotiates the session from scratch. Only the first word counts.
+          if (!_handshakeReceived && !_supervisorSpoke) {
+            _supervisorSpoke = true;
+            _supervisorDebugWire = f.debugWire;
+          }
+          break;
+        }
         // The handshake is ONE-SHOT: the negotiated protocol version and
         // capabilities are frozen for the session. A later INIT (a buggy or
         // hostile peer) must not flip wantsPresentationPlans, retarget
@@ -504,41 +543,7 @@ final class RemoteTerminalDriver
         // size channel after the handshake is ResizeFrame. Ignore repeats.
         if (_handshakeReceived) break;
         _handshakeReceived = true;
-        _size = _clampSize(f.size);
-        _protocolVersion = f.protocolVersion;
-        _peerKeyboard = f.keyboard;
-        _capabilities = TerminalCapabilities(
-          colorMode: f.colorMode,
-          glyphTier: f.glyphTier,
-          // Legacy terminal peers used `tmux=1` as a session marker while
-          // still advertising host-native images. Normalize that combination
-          // at the trust boundary so old clients fail safe to cell art without
-          // changing TerminalCapabilities value/round-trip semantics.
-          imageProtocol: f.tmuxPassthrough
-              ? ImageProtocol.halfBlock
-              : f.imageProtocol,
-          tmuxPassthrough: false,
-          // Thread the peer's link capability into BOTH capability objects so
-          // surfaceCapabilities.hyperlinks reflects the peer whether or not it
-          // sent `images=` (the projection fallback below reads this field).
-          hyperlinks: f.hyperlinks,
-        );
-        final peerImages = f.images;
-        _peerSurfaceCapabilities = peerImages == null
-            ? null
-            : SurfaceCapabilities(
-                colorMode: f.colorMode,
-                glyphTier: f.glyphTier,
-                images: peerImages,
-                // A browser peer that renders <a> anchors declares this in
-                // INIT; without it the server-side MarkdownText gate reads
-                // MediaQuery.capabilitiesOf(context).hyperlinks == false and
-                // never produces a linkUri (underlined-but-not-clickable).
-                hyperlinks: f.hyperlinks,
-                pointer: f.protocolVersion >= 2
-                    ? PointerPrecision.subCell
-                    : PointerPrecision.cell,
-              );
+        _adoptInit(f);
         // v3: echo INIT back with the app's protocol version so the peer
         // can detect version skew (e.g. a cached client bundle). The
         // echoed size/capabilities restate what the peer sent; only `v`
@@ -637,6 +642,46 @@ final class RemoteTerminalDriver
       }
     }
     return CellSize(cols, rows);
+  }
+
+  /// Takes a peer's negotiated size, protocol version, keyboard and
+  /// capabilities on record.
+  void _adoptInit(InitFrame f) {
+    _size = _clampSize(f.size);
+    _protocolVersion = f.protocolVersion;
+    _peerKeyboard = f.keyboard;
+    _capabilities = TerminalCapabilities(
+      colorMode: f.colorMode,
+      glyphTier: f.glyphTier,
+      // Legacy terminal peers used `tmux=1` as a session marker while
+      // still advertising host-native images. Normalize that combination
+      // at the trust boundary so old clients fail safe to cell art without
+      // changing TerminalCapabilities value/round-trip semantics.
+      imageProtocol: f.tmuxPassthrough
+          ? ImageProtocol.halfBlock
+          : f.imageProtocol,
+      tmuxPassthrough: false,
+      // Thread the peer's link capability into BOTH capability objects so
+      // surfaceCapabilities.hyperlinks reflects the peer whether or not it
+      // sent `images=` (the projection fallback below reads this field).
+      hyperlinks: f.hyperlinks,
+    );
+    final peerImages = f.images;
+    _peerSurfaceCapabilities = peerImages == null
+        ? null
+        : SurfaceCapabilities(
+            colorMode: f.colorMode,
+            glyphTier: f.glyphTier,
+            images: peerImages,
+            // A browser peer that renders <a> anchors declares this in
+            // INIT; without it the server-side MarkdownText gate reads
+            // MediaQuery.capabilitiesOf(context).hyperlinks == false and
+            // never produces a linkUri (underlined-but-not-clickable).
+            hyperlinks: f.hyperlinks,
+            pointer: f.protocolVersion >= 2
+                ? PointerPrecision.subCell
+                : PointerPrecision.cell,
+          );
   }
 
   void _onTransportError(Object error, StackTrace stackTrace) {

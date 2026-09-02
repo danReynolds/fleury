@@ -35,11 +35,13 @@ import 'dart:typed_data' show Uint8List;
 import 'package:fleury/src/cli/create_command.dart';
 import 'package:fleury/src/cli/dart_sdk.dart';
 import 'package:fleury/src/foundation/geometry.dart';
+import 'package:fleury/src/remote/bridge_app_link.dart';
 import 'package:fleury/src/remote/buffered_browser_input.dart';
 import 'package:fleury/src/rendering/width_policy.dart';
 import 'package:fleury/src/remote/remote_client_asset.dart';
 import 'package:fleury/src/remote/remote_protocol.dart';
 import 'package:fleury/src/remote/serve_index_html.dart';
+import 'package:fleury/src/remote/serve_init.dart';
 import 'package:fleury/src/remote/serve_mono_font_asset.dart';
 import 'package:fleury/src/remote/shell_init.dart';
 import 'package:fleury/src/remote/spawn.dart';
@@ -562,8 +564,9 @@ Future<int> _runServe(List<String> args) async {
         return 2;
       }
     } else if (arg == '--debug') {
+      // Meaningful in both modes: spawn sets the child's environment, bridge
+      // carries the decision in its provisional INIT.
       debugWire = true;
-      spawnOnlyFlagSeen = '--debug';
     } else if (arg.startsWith('--max-sessions=')) {
       final raw = arg.substring('--max-sessions='.length);
       final parsed = int.tryParse(raw);
@@ -637,6 +640,7 @@ Future<int> _runServe(List<String> args) async {
           port: port,
           originPolicy: originPolicy,
           token: token,
+          debugWire: debugWire,
         );
 }
 
@@ -669,6 +673,7 @@ Future<int> _runServeBridge({
   required int port,
   required _ServeOriginPolicy originPolicy,
   String? token,
+  required bool debugWire,
 }) async {
   final handleDir = Directory('.fleury');
   if (!handleDir.existsSync()) handleDir.createSync(recursive: true);
@@ -725,7 +730,7 @@ Future<int> _runServeBridge({
 
   // Pairing state. Order of arrival doesn't matter — first one
   // through the door waits for its partner.
-  Socket? pendingApp;
+  BridgeAppLink? pendingApp;
   BufferedBrowserInput? pendingBrowser;
   var sessionInFlight = false;
 
@@ -758,7 +763,37 @@ Future<int> _runServeBridge({
       );
       return;
     }
-    pendingApp = appSocket;
+    // Read from accept: an app that dies while pending is noticed (and the
+    // slot freed), and an app that paints while waiting is drained instead
+    // of backing up its socket. See BridgeAppLink.
+    final link = BridgeAppLink(appSocket);
+    pendingApp = link;
+    // Speak first. The app's handshake fuse (RemoteTerminalDriver.initTimeout)
+    // exists so a peer that connects and never speaks cannot hang it; with
+    // nobody at the browser end yet, serve IS that silent peer. A
+    // provisional INIT tells the app a supervisor owns the socket, so it
+    // waits for the browser's own INIT however long the operator takes.
+    try {
+      link.sink.add(
+        encodeFrame(buildServeProvisionalInitFrame(debugWire: debugWire)),
+      );
+    } catch (error) {
+      stderr.writeln('[serve] could not greet the app: $error');
+      link.destroy();
+      pendingApp = null;
+      return;
+    }
+    unawaited(
+      link.closed.then((_) {
+        if (!identical(pendingApp, link)) return;
+        pendingApp = null;
+        stderr.writeln(
+          '[serve] app disconnected before a browser attached '
+          '(${link.discardedBytes} bytes of output discarded); '
+          'waiting for an app',
+        );
+      }),
+    );
     stderr.writeln('[serve] app connected, waiting for a browser');
     tryPair();
   });
@@ -799,19 +834,20 @@ Future<int> _runServeBridge({
         return;
       }
       if (sessionInFlight || pendingBrowser != null) {
-        ws.add(
-          Uint8List.fromList(
-            encodeFrame(
-              OutputFrame(
-                Uint8List.fromList(
-                  '\x1B[31mAnother browser session is already live.\x1B[0m\r\n'
-                      .codeUnits,
-                ),
-              ),
-            ),
-          ),
-        );
-        await ws.close();
+        // A structured client cannot render a raw OUTPUT frame, and a close
+        // with no code reads as a dropped connection — the page showed a
+        // wrong error and invited a reload loop. Close with a code and a
+        // reason the client shows verbatim (the 4001 path).
+        try {
+          // A close reason is capped at 123 bytes by the protocol.
+          await ws.close(
+            serveSessionBusyCloseCode,
+            'Another browser is already live on this serve (bridge mode is '
+            'one browser). Close it, or use --spawn.',
+          );
+        } catch (_) {
+          // The browser may have given up on the socket already.
+        }
         return;
       }
       final browser = BufferedBrowserInput(ws);
@@ -907,7 +943,7 @@ Future<int> _runServeBridge({
 /// WebSocket end. Both sides speak our framed binary protocol, so the
 /// pump doesn't decode — bytes in, bytes out, in order.
 void _pumpBytes({
-  required Socket app,
+  required BridgeAppLink app,
   required WebSocket browser,
   Stream<List<int>>? browserInput,
   required void Function() onDone,
@@ -937,7 +973,9 @@ void _pumpBytes({
   // slow-consumer memory-DoS the per-chunk `add` was exposed to. (Frame
   // boundaries are still recovered by the browser-side decoder.)
   unawaited(
-    browser.addStream(app).then((_) => stop(), onError: (Object _) => stop()),
+    browser
+        .addStream(app.attach())
+        .then((_) => stop(), onError: (Object _) => stop()),
   );
 
   // Browser → app. WebSocket text messages are rejected; the protocol is
@@ -948,7 +986,7 @@ void _pumpBytes({
       browserInput ??
       browser.where((data) => data is List<int>).cast<List<int>>();
   unawaited(
-    app
+    app.sink
         .addStream(browserBytes)
         .then((_) => stop(), onError: (Object _) => stop()),
   );
@@ -998,9 +1036,10 @@ Future<void> _serveStaticAsset(HttpRequest req) async {
     // A client may legitimately send several tags (one per line or comma
     // joined); any match is a hit. `HttpHeaders.value` threw on the
     // multi-line form.
-    if (_headerLines(req, HttpHeaders.ifNoneMatchHeader).any(
-      (line) => line.split(',').any((tag) => tag.trim() == etag),
-    )) {
+    if (_headerLines(
+      req,
+      HttpHeaders.ifNoneMatchHeader,
+    ).any((line) => line.split(',').any((tag) => tag.trim() == etag))) {
       req.response.statusCode = HttpStatus.notModified;
       await req.response.close();
       return;
@@ -1659,7 +1698,9 @@ class _SpawnSession {
     Socket app,
   ) {
     _pumpBytes(
-      app: app,
+      // Spawn mode pairs on attach, so the link forwards from its first byte;
+      // the drain-while-pending half is bridge mode's concern.
+      app: BridgeAppLink(app),
       browser: browser,
       browserInput: browserInput.stream,
       onDone: () {

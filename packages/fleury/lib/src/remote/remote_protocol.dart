@@ -179,6 +179,13 @@ const int remoteAnsiProtocolVersion = 1;
 /// a private code per deliberate rejection keeps them distinguishable.
 const int serveSessionLimitCloseCode = 4001;
 
+/// WebSocket close code `fleury serve` (bridge mode) turns a second browser
+/// away with while a session is live: bridge mode pairs one browser with the
+/// one app it does not own. Private-use range, same reasoning as
+/// [serveSessionLimitCloseCode]; the reason names `--spawn` as the way to
+/// get a session per tab.
+const int serveSessionBusyCloseCode = 4002;
+
 /// Default remote frame payload cap.
 ///
 /// Sixteen MiB leaves ample headroom for a large full repaint or inline image,
@@ -309,6 +316,8 @@ final class InitFrame extends RemoteFrame {
     this.hyperlinks = false,
     this.keyboard,
     this.protocolVersion = remoteProtocolVersion,
+    this.provisional = false,
+    this.debugWire,
   });
 
   final CellSize size;
@@ -349,6 +358,27 @@ final class InitFrame extends RemoteFrame {
   /// Negotiated protocol version. A peer omitting `v` in INIT is read as
   /// v1 (the legacy ANSI host).
   final int protocolVersion;
+
+  /// A supervisor's greeting, not a handshake.
+  ///
+  /// `fleury serve` (bridge mode) sends one the moment an app connects. It
+  /// completes nothing: it tells the app that the socket is owned by a
+  /// supervisor that reaps, so the app waits for the browser's own INIT
+  /// however long the operator takes instead of dying at the silent-peer
+  /// fuse — the contract a spawn-mode standby already has. The real peer's
+  /// INIT then negotiates the session from scratch, at whatever protocol
+  /// version it speaks. The size and capabilities carried here are
+  /// placeholders and are never adopted.
+  ///
+  /// Trust: the fuse guards against a peer that connects and never speaks.
+  /// A provisional INIT can only come from whatever the app's handle points
+  /// at, which is the same trust domain as the handle file itself.
+  final bool provisional;
+
+  /// The supervisor's decision on the debug wire (`fleury serve --debug`),
+  /// carried on a provisional INIT. Null on a peer's INIT: the app then keeps
+  /// its environment rule (`FLEURY_DEBUG_WIRE`).
+  final bool? debugWire;
 }
 
 /// Raw input bytes from the remote display — keystrokes, escape
@@ -574,6 +604,10 @@ String _encodeInit(InitFrame f) =>
     // understand its promises. Omitted when undeclared, so an INIT from a
     // peer that never learned the field stays byte-identical.
     '${f.keyboard == null ? '' : 'keyboard=${f.keyboard!.wireBits},'}'
+    // Supervisor-only fields, additive like the others: absent on every
+    // peer INIT, so a peer's frame stays byte-identical.
+    '${f.provisional ? 'provisional=1,' : ''}'
+    '${f.debugWire == null ? '' : 'debug=${f.debugWire! ? 1 : 0},'}'
     'v=${f.protocolVersion}';
 
 /// Wire layout: [u16 id length][id utf-8][image bytes...].
@@ -999,6 +1033,12 @@ InitFrame _decodeInit(String body) {
       null => null,
     },
     protocolVersion: int.tryParse(params['v'] ?? '') ?? 1,
+    provisional: params['provisional'] == '1',
+    debugWire: switch (params['debug']) {
+      '1' => true,
+      '0' => false,
+      _ => null,
+    },
   );
 }
 

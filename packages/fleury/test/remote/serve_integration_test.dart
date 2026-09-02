@@ -16,6 +16,7 @@ import 'dart:typed_data';
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_wire.dart';
+import 'package:fleury/src/remote/serve_init.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -295,7 +296,14 @@ void main() {
           // loop a few times.
           await Future<void>.delayed(const Duration(milliseconds: 200));
 
-          expect(receivedByApp.toBytes(), fromBrowser);
+          // The app is greeted with serve's provisional INIT at accept; the
+          // browser's early bytes follow it, intact and in order.
+          final toApp = receivedByApp.toBytes();
+          final greeting = encodeFrame(
+            buildServeProvisionalInitFrame(debugWire: false),
+          );
+          expect(toApp.sublist(0, greeting.length), greeting);
+          expect(toApp.sublist(greeting.length), fromBrowser);
           expect(receivedByBrowser.toBytes(), fromApp);
 
           await appSub.cancel();
@@ -304,6 +312,177 @@ void main() {
           await ws.close();
         },
       );
+
+      Future<Socket> connectApp() => Socket.connect(
+        InternetAddress(socketPath, type: InternetAddressType.unix),
+        0,
+      );
+
+      /// The first INIT frame the app side receives, or a timeout.
+      Future<InitFrame> firstInit(Socket app, {String what = 'INIT'}) {
+        final decoder = FrameDecoder();
+        final init = Completer<InitFrame>();
+        late final StreamSubscription<List<int>> sub;
+        sub = app.listen(
+          (bytes) {
+            decoder.feed(bytes);
+            for (final frame in decoder.drain()) {
+              if (frame is InitFrame && !init.isCompleted) init.complete(frame);
+            }
+          },
+          onDone: () {
+            if (!init.isCompleted) {
+              init.completeError(StateError('app socket closed before $what'));
+            }
+          },
+        );
+        return init.future
+            .timeout(
+              const Duration(seconds: 5),
+              onTimeout: () => throw StateError('no $what within 5s'),
+            )
+            .whenComplete(sub.cancel);
+      }
+
+      test(
+        'an app that connects first is greeted with a provisional INIT',
+        () async {
+          // The app's handshake fuse (10 s) used to fire while the operator was
+          // still opening a browser: serve accepted and said nothing.
+          final app = await connectApp();
+          try {
+            final init = await firstInit(app);
+            expect(init.provisional, isTrue);
+            expect(init.size, const CellSize(80, 24));
+            expect(init.debugWire, isFalse, reason: 'no --debug on this serve');
+            expect(init.protocolVersion, remoteProtocolVersion);
+          } finally {
+            app.destroy();
+          }
+        },
+      );
+
+      test('a pending app that disconnects is forgotten; the next app is '
+          'accepted', () async {
+        // The wedge: serve never read a pending app's socket, so an app that
+        // died while waiting stayed "pending" and every later app was dropped.
+        final first = await connectApp();
+        await firstInit(first);
+        first.destroy();
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        final second = await connectApp();
+        try {
+          final init = await firstInit(second, what: 'INIT for the second app');
+          expect(init.provisional, isTrue);
+        } finally {
+          second.destroy();
+        }
+      });
+
+      test('an app painting before any browser attaches is drained, not '
+          'backed up', () async {
+        final app = await connectApp();
+        try {
+          await firstInit(app);
+          // Far more than a socket buffer holds; nobody is reading unless
+          // serve drains the pending app.
+          app.add(Uint8List(4 << 20));
+          await app.flush().timeout(
+            const Duration(seconds: 5),
+            onTimeout: () => throw StateError('app output backed up'),
+          );
+        } finally {
+          app.destroy();
+        }
+      });
+
+      test('a second browser during a live session is refused with a close '
+          'code and a reason', () async {
+        final app = await connectApp();
+        final first = await WebSocket.connect(
+          'ws://127.0.0.1:$port/ws',
+          headers: {'origin': 'http://127.0.0.1:$port'},
+        );
+        final firstSub = first.listen((_) {});
+        try {
+          await Future<void>.delayed(const Duration(milliseconds: 300));
+          final second = await WebSocket.connect(
+            'ws://127.0.0.1:$port/ws',
+            headers: {'origin': 'http://127.0.0.1:$port'},
+          );
+          await second.drain<void>().timeout(const Duration(seconds: 5));
+          expect(second.closeCode, serveSessionBusyCloseCode);
+          expect(second.closeReason, contains('already live'));
+          expect(second.closeReason, contains('--spawn'));
+        } finally {
+          await firstSub.cancel();
+          await first.close();
+          app.destroy();
+        }
+      });
+
+      test('an app that connects long before any browser survives the INIT '
+          'fuse and paints on attach', () async {
+        // app-first: the natural order (start serve, start the app, then
+        // open a tab) used to kill the app at RemoteTerminalDriver's 10 s
+        // fuse. Wait past it, then attach.
+        final appStderr = StringBuffer();
+        final appProcess = await Process.start(
+          Platform.resolvedExecutable,
+          ['run', '$pkgRoot/example/counter_quickstart.dart'],
+          workingDirectory: tempDir.path,
+          environment: {'FLEURY_HANDLE': socketPath},
+        );
+        var exited = false;
+        unawaited(appProcess.exitCode.then((_) => exited = true));
+        final stderrSub = appProcess.stderr
+            .transform(utf8.decoder)
+            .listen(appStderr.write);
+        final stdoutSub = appProcess.stdout.drain<void>();
+        WebSocket? ws;
+        StreamSubscription<dynamic>? wsSub;
+        try {
+          await Future<void>.delayed(const Duration(seconds: 12));
+          expect(exited, isFalse, reason: 'died waiting: $appStderr');
+          ws = await WebSocket.connect(
+            'ws://127.0.0.1:$port/ws',
+            headers: {'origin': 'http://127.0.0.1:$port'},
+          );
+          final inbound = BytesBuilder();
+          wsSub = ws.listen((data) {
+            if (data is List<int>) inbound.add(data);
+          });
+          ws.add(
+            encodeFrame(
+              const InitFrame(
+                size: CellSize(80, 24),
+                colorMode: ColorMode.truecolor,
+                imageProtocol: ImageProtocol.halfBlock,
+                tmuxPassthrough: false,
+                protocolVersion: 1,
+              ),
+            ),
+          );
+          await _waitFor(
+            () => _hasOutputFrameText(inbound.toBytes(), 'count: 0'),
+            timeout: const Duration(seconds: 20),
+            what: 'first paint after a late attach; stderr:\n$appStderr',
+          );
+        } finally {
+          await wsSub?.cancel();
+          await ws?.close();
+          appProcess.kill(ProcessSignal.sigint);
+          await appProcess.exitCode.timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {
+              appProcess.kill(ProcessSignal.sigkill);
+              return -9;
+            },
+          );
+          await stderrSub.cancel();
+          await stdoutSub;
+        }
+      }, timeout: const Timeout(Duration(minutes: 2)));
 
       test(
         'browser-first bridge preserves INIT for a real runApp app',
@@ -377,6 +556,42 @@ void main() {
 
     setUpAll(() {
       pkgRoot = Directory.current.path;
+    });
+
+    test('serve --debug carries the decision to a bridge-mode app', () async {
+      // Bridge mode cannot set the app's environment; the provisional INIT
+      // is how --debug reaches it (and --debug is no longer "ignored").
+      final tempDir = Directory.systemTemp.createTempSync('fleury_serve_dbg_');
+      addTearDown(() => tempDir.deleteSync(recursive: true));
+      final port = 6300 + Random.secure().nextInt(100);
+      final serveProcess = await _startServeProcess(
+        pkgRoot: pkgRoot,
+        tempDir: tempDir,
+        port: port,
+        args: const ['--debug'],
+      );
+      addTearDown(() => _stopProcess(serveProcess));
+      final socketPath = _readHandle(tempDir);
+      final app = await Socket.connect(
+        InternetAddress(socketPath, type: InternetAddressType.unix),
+        0,
+      );
+      try {
+        final decoder = FrameDecoder();
+        final init = Completer<InitFrame>();
+        final sub = app.listen((bytes) {
+          decoder.feed(bytes);
+          for (final frame in decoder.drain()) {
+            if (frame is InitFrame && !init.isCompleted) init.complete(frame);
+          }
+        });
+        final frame = await init.future.timeout(const Duration(seconds: 5));
+        expect(frame.provisional, isTrue);
+        expect(frame.debugWire, isTrue);
+        await sub.cancel();
+      } finally {
+        app.destroy();
+      }
     });
 
     test('allows an explicit cross-origin WebSocket origin', () async {
