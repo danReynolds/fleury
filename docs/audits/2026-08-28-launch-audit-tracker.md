@@ -272,13 +272,13 @@ Each carries the reason it was parked. Anything here can be pulled up if you dis
   **Parked because:** malformed input, and the fix needs care not to regress the `--`/`++` misparse the counts were added for. ✎ Numbers overstated (counts undercount, not zero) — but the blank-line trigger is **broader**: it orphans the entire rest of the hunk.
   **Notes:**
 
-- [ ] **13.d** `P2` ✎ A second browser tab shows a wrong error and reload-loops — `bin/fleury.dart:801`
+- [x] **13.d** `P2` ✎ A second browser tab shows a wrong error and reload-loops — `bin/fleury.dart:801`
   **Parked because:** small, but bundle it with 13.new and the 13.b/13.c work — all three are "a rejection path the structured client can't surface". ✎ Loop is user-driven, not automatic.
-  **Notes:**
+  **Notes:** LANDED with 13.b: a second tab is closed with 4002 + a reason the client shows (was a raw OUTPUT frame + codeless close). Reason kept under the 123-byte cap.
 
-- [ ] **13.e** `P2` Debug wire on by default in bridge mode, no way off — `run_app.dart:1176`
+- [x] **13.e** `P2` Debug wire on by default in bridge mode, no way off — `run_app.dart:1176`
   **Parked because:** needs a decision on **which side owns the default** — flipping the app side is more honest but changes behaviour for `fleury shell` and MCP, so check those first. Meanwhile `--debug` is warned-as-ignored while the surface it controls is live, which is the actively misleading part and is cheap to fix alone.
-  **Notes:**
+  **Notes:** LANDED with 13.b: the supervisor owns the default — the greeting carries --debug; runtime honours it when a supervisor spoke first, keeps FLEURY_DEBUG_WIRE for self-handshaking peers (shell, MCP). --debug is no longer "ignored in bridge mode".
 
 - [ ] **11.d** `P3` ↓ `AnimationPolicy` unreachable in production; snap path forgets to notify — `run_app.dart:482`, `animation.dart:522`
   **Parked because:** ↓ neither half is reachable by a shipped app. **Decision:** ship the policy (plumb it + add the missing notify, which becomes a live P2 the moment you do) or cut it (stop exporting, delete the two guide lines promising accessibility behaviour that doesn't exist). Today's only real defect is those two guide lines.
@@ -434,11 +434,11 @@ Ordered by what I'd take first. Each names **what makes it hard**, so we can dec
 
 ### C5 · Serve
 
-- [ ] **13.b + 13.c** `P1` Bridge mode wedges, and the app-first flow self-destructs at the 10 s fuse — `bin/fleury.dart:752`, `remote_driver.dart:208`
+- [x] **13.b + 13.c** `P1` Bridge mode wedges, and the app-first flow self-destructs at the 10 s fuse — `bin/fleury.dart:752`, `remote_driver.dart:208`
   **One bug in practice — must land together.** 13.c fires 13.b automatically: fix only 13.c and a Ctrl+C'd app still wedges serve; fix only 13.b and app-first still dies at ten seconds, just recoverably.
   **Your call on 13.c:** the fuse was added against a real silent-peer process-leak attack, so reverting is not an option. Either treat bridge mode as the supervised peer it genuinely is (protocol addition, the proper fix) or have serve send its handshake at accept like `fleury shell` does (cheap, no protocol change, but needs care that a placeholder first paint isn't visible).
   **Zero test coverage on the whole app-first axis** — no app-first case, no second-browser case, no duplicate-header case.
-  **Notes:**
+  **Notes:** LANDED: serve greets the app at accept with a provisional INIT (a supervisor statement, not a handshake — nothing adopted, the fuse becomes an unbounded wait like a spawn standby); BridgeAppLink reads the pending socket from accept (dead app noticed, output drained). Real app attached 12 s after connecting paints; red before. The "supervised peer" route, no version flip.
 
 - [x] **13.a** `P1` ✎ One duplicate-header request kills serve, pre-auth — `bin/fleury.dart:993`
   **Hard because:** ✎ **two layers are required** — reading headers as a list fixes three vectors, but the fifth (missed by the original) throws *inside* the platform library's upgrade check, which is the first statement in the socket branch. So you also need handler try/catch + a zone guard, and in spawn mode the catch must release the admission slot.
