@@ -35,16 +35,18 @@
 //   - The child owns the terminal: raw mode, alt screen, stdin, stdio
 //     capture, and SIGINT/SIGTERM/SIGWINCH handling.
 //   - The supervisor swallows its own tty signal deliveries while the child
-//     runs (both live in the foreground process group), writes nothing to
-//     the terminal, and propagates the child's exit code as its own.
+//     runs (both live in the foreground process group, and the child says so
+//     by acking the delivery over the VM service), writes nothing to the
+//     terminal, and propagates the child's exit code as its own.
 //   - After a hard kill (a wedged child), the child's dup2 capture and raw
 //     mode die with its process, so the supervisor can safely restore the
 //     terminal from outside and respawn.
 //
 // When the supervisor cannot run (Windows, AOT, no TTY, a serve/remote
 // handle, an injected test driver, a pre-existing VM service — an editor or
-// tool that owns reload), runApp falls through to the classic single-isolate
-// path. Under a serve/remote handle specifically, `InAppDevReload` provides
+// tool that owns reload) or would have nothing to watch (no package config
+// above the entrypoint or the working directory), runApp falls through to
+// the classic single-isolate path. Under a serve/remote handle specifically, `InAppDevReload` provides
 // save-to-reload from inside the app when the spawn command itself enabled
 // the VM service — flag-origin only, for the same reason a child process
 // exists at all (no restart there either: a respawned child would re-dial
@@ -59,6 +61,7 @@ import 'package:vm_service/vm_service.dart' hide Isolate;
 
 import '../terminal/terminal_driver.dart' show TerminalMode;
 import '../terminal/terminal_sequences.dart';
+import 'dev_signal_ack.dart';
 import 'handle_discovery.dart';
 import 'hot_reload.dart';
 import 'source_watcher.dart';
@@ -159,6 +162,23 @@ bool _isSupervisorOwnedVmOption(String option) {
 final class DevBootstrap {
   DevBootstrap._();
 
+  /// How long a signal delivered to the supervisor waits for the child's ack
+  /// before being forwarded anyway.
+  ///
+  /// Reached only by a child that cannot answer — one still booting (no VM
+  /// service yet), one wedged, or one that was never signalled because the
+  /// kill was aimed at the supervisor alone. It is a wait, not a grace
+  /// period: the app's own shutdown deadline is the driver's `signalGrace`,
+  /// which starts when the signal actually reaches it. Long enough that a
+  /// booting child reaches its driver, short enough that `kill` on a wedged
+  /// session still feels like `kill`.
+  static const Duration devSignalForwardBackstop = Duration(seconds: 2);
+
+  /// How fresh an ack must be to answer a signal arriving now — a tty signal
+  /// hits both processes at once, so the ack can land first, but an ack from
+  /// an earlier Ctrl+C must never cancel a later one.
+  static const Duration _ackLookback = Duration(milliseconds: 250);
+
   /// Whether this process carries the supervised-child environment marker.
   ///
   /// An env var is a proxy, not proof of a live supervisor: it is inherited
@@ -192,6 +212,15 @@ final class DevBootstrap {
   String? _mainIsolateId;
   SourceWatcher? _watcher;
   final List<StreamSubscription<ProcessSignal>> _signalSubs = [];
+
+  /// Forwards armed by [_onSupervisorSignal] and disarmed by the child's ack,
+  /// keyed by `ProcessSignal.name` (the ack travels as a name, and SIGINT and
+  /// SIGTERM must not disarm each other).
+  final Map<String, ({Process child, Timer timer})> _pendingForwards = {};
+
+  /// The last ack seen per signal, for the case where it arrives before the
+  /// supervisor's own copy of the same tty signal.
+  final Map<String, ({Process? child, DateTime at})> _acks = {};
   bool _restartInFlight = false;
   bool _reloadInFlight = false;
   bool _reloadQueued = false;
@@ -324,6 +353,19 @@ final class DevBootstrap {
   // ── Child lifecycle ──────────────────────────────────────────────────────
 
   Future<bool> _superviseFirstChild() async {
+    // Nothing to watch means nothing to supervise. Resolved BEFORE the spawn:
+    // a supervisor that starts anyway pays every cost of supervision — the
+    // user's `main()` runs a second time, the VM service banner lands on the
+    // terminal, a second VM boots, and signal ownership moves into a process
+    // that can only forward — in exchange for no reload and no restart.
+    // Falling through here leaves the classic single-isolate path, which is
+    // exactly what such a session would have gotten anyway.
+    final roots = DevSourceRoots.resolve();
+    _debugLog('watch roots: ${roots?.directories}');
+    if (roots == null || roots.directories.isEmpty) {
+      _debugLog('nothing to watch: falling through to the classic path');
+      return false;
+    }
     final spawned = await _spawnChild();
     if (!spawned) return false;
     // Signal ownership. Two delivery shapes reach the supervisor:
@@ -335,49 +377,90 @@ final class DevBootstrap {
     //   - a direct `kill <supervisor-pid>` (scripts, service managers, the
     //     PTY test harness): the child got nothing — the supervisor MUST
     //     forward or the session outlives the kill.
-    // The source isn't observable in-process, so infer by outcome: give the
-    // child a short grace to exit on its own tty copy; forward only if it's
-    // still the same live child afterwards. Cost: a direct kill takes
-    // ~300ms longer; a tty Ctrl+C on an app slower than the grace gets the
-    // driver's force path (restore + exit 130) instead of app-level
-    // teardown — still restored, still the conventional code.
+    // POSIX does not report which one happened, so the child says so: its
+    // driver posts [kDevSignalAckEvent] over the VM service the supervisor
+    // already holds, and the ack cancels the pending forward positively.
+    // See [_onSupervisorSignal].
     for (final signal in [ProcessSignal.sigint, ProcessSignal.sigterm]) {
       try {
         _signalSubs.add(
-          signal.watch().listen((_) => _forwardSignalAfterGrace(signal)),
+          signal.watch().listen((_) => _onSupervisorSignal(signal)),
         );
       } catch (_) {}
     }
-    final roots = DevSourceRoots.resolve();
-    _debugLog('watch roots: ${roots?.directories}');
-    if (roots != null && roots.directories.isNotEmpty) {
-      _watcher = SourceWatcher(
-        roots: roots,
-        onChanged: (paths) {
-          _debugLog('watcher fired: $paths');
-          _reload();
-        },
-      )..start();
-    }
+    _watcher = SourceWatcher(
+      roots: roots,
+      onChanged: (paths) {
+        _debugLog('watcher fired: $paths');
+        _reload();
+      },
+    )..start();
     return true;
   }
 
-  void _forwardSignalAfterGrace(ProcessSignal signal) {
+  /// A SIGINT/SIGTERM delivered to the supervisor: arm a forward to the
+  /// child, to be cancelled if the child reports it got its own copy.
+  ///
+  /// The ack is the only positive evidence of provenance. Everything else
+  /// here is the wedged-child backstop: an app that never answers (still
+  /// booting, hung, or never signalled at all because the kill was aimed at
+  /// the supervisor) gets the signal after [devSignalForwardBackstop] and
+  /// then owns its own shutdown deadline. That is a plain timeout now, not a
+  /// race against teardown: it used to be 300 ms, which is shorter than a lot
+  /// of real teardowns, so a tty Ctrl+C on a slower app took the driver's
+  /// force path — or, once the app was past `restore()`, killed the process
+  /// outright with everything after `await runApp` unrun.
+  void _onSupervisorSignal(ProcessSignal signal) {
     final childAtDelivery = _child;
     if (childAtDelivery == null) return;
-    _debugLog('signal ${signal.name}: delivered, grace started');
-    Timer(const Duration(milliseconds: 300), () {
-      // Whichever child is current now owns the response. Same child: it
-      // either handled its own tty copy (exited — kill is a no-op) or never
-      // got one (direct kill — forward). Replaced child: the replacement
-      // was spawned after the delivery, so it saw nothing — forward, or a
-      // kill that raced a restart would be swallowed and the session would
-      // outlive it.
-      final target = _child;
-      if (target == null) return;
-      _debugLog('signal ${signal.name}: forwarding to child');
-      target.kill(signal);
-    });
+    // A tty signal reaches both processes at once, so the child's ack can
+    // beat the supervisor's own delivery. Honour a just-arrived ack from the
+    // same child instead of arming a forward it already answered.
+    final acked = _acks[signal.name];
+    if (acked != null &&
+        identical(acked.child, childAtDelivery) &&
+        DateTime.now().difference(acked.at) < _ackLookback) {
+      _debugLog('signal ${signal.name}: child acked first, not forwarding');
+      return;
+    }
+    _debugLog('signal ${signal.name}: delivered, awaiting child ack');
+    _pendingForwards.remove(signal.name)?.timer.cancel();
+    _pendingForwards[signal.name] = (
+      child: childAtDelivery,
+      timer: Timer(devSignalForwardBackstop, () {
+        _pendingForwards.remove(signal.name);
+        // Whichever child is current now owns the response. Same child: it
+        // never acked — it either got no copy (direct kill) or is wedged.
+        // Replaced child: the replacement was spawned after the delivery, so
+        // it saw nothing — forward, or a kill that raced a restart would be
+        // swallowed and the session would outlive it.
+        final target = _child;
+        if (target == null) return;
+        _debugLog('signal ${signal.name}: no ack, forwarding to child');
+        target.kill(signal);
+      }),
+    );
+  }
+
+  /// The child's driver confirming [name] was delivered to it. Cancels the
+  /// pending forward so the app keeps its own shutdown path.
+  void _onChildSignalAck(String name) {
+    final pending = _pendingForwards[name];
+    _acks[name] = (child: _child, at: DateTime.now());
+    if (pending == null) {
+      _debugLog('signal $name: ack with no pending forward');
+      return;
+    }
+    if (!identical(pending.child, _child)) {
+      // A respawn happened between the delivery and this ack: the ack is the
+      // OLD child's and says nothing about the replacement, which saw no
+      // signal at all. Leave the forward armed for it.
+      _debugLog('signal $name: stale ack across a respawn, forward stands');
+      return;
+    }
+    _pendingForwards.remove(name);
+    pending.timer.cancel();
+    _debugLog('signal $name: acked by the child, forward cancelled');
   }
 
   Future<void> _superviseForever() async {
@@ -759,6 +842,11 @@ final class DevBootstrap {
     if (!identical(vm, _vm)) return;
     if (event.extensionKind == kRestartRequestedEvent) {
       unawaited(_restart());
+      return;
+    }
+    if (event.extensionKind == kDevSignalAckEvent) {
+      final name = event.extensionData?.data['signal'];
+      if (name is String) _onChildSignalAck(name);
     }
   }
 
@@ -784,6 +872,10 @@ final class DevBootstrap {
       await sub.cancel();
     }
     _signalSubs.clear();
+    for (final pending in _pendingForwards.values) {
+      pending.timer.cancel();
+    }
+    _pendingForwards.clear();
     await _disconnectVm();
     // Normally already exited (loop paths) or never spawned (fall-through);
     // a non-null live child here means a throw interrupted startup — reap

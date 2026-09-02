@@ -17,6 +17,16 @@ library;
 //      dropped on purpose, same terminal session.
 //   4. `ext.fleury.shutdown` ends the session; the supervisor mirrors the
 //      child's exit code (0) with the terminal restored.
+//
+// Then the three properties that only a real session can show:
+//
+//   5. A tty Ctrl+C (the whole foreground group, supervisor AND app) leaves a
+//      slow teardown alone — the app exits with ITS code, not the driver's
+//      force code and not death by a forwarded signal.
+//   6. A direct `kill` of the supervisor alone still ends the session: with
+//      no ack coming, the forward backstop delivers the signal to the app.
+//   7. Watch roots follow the entrypoint, and a session with nothing to
+//      watch is never supervised at all.
 import 'dart:convert';
 import 'dart:io';
 
@@ -310,6 +320,472 @@ Future<void> main() async {
       expect(output, contains('\x1b[?1049l'));
     },
   );
+
+  group('signal ownership', () {
+    test(
+      'a tty Ctrl+C leaves a slow teardown alone',
+      timeout: const Timeout(Duration(minutes: 3)),
+      () async {
+        // The tty case: the line discipline signals the whole foreground
+        // group, so the supervisor AND the app each get their own SIGINT.
+        // The supervisor used to forward a second copy 300 ms later, which
+        // landed on an app already past `restore()` — with its signal
+        // watchers cancelled, so the process died raw and everything after
+        // `await runApp` (this app's 3 s teardown) never ran. The supervisor
+        // then reported the conventional 130 and the emergency tty restore
+        // made it look like a clean quit.
+        final app = await _generateApp(tempDir);
+        final session = await _startSession(app: app, timeoutSeconds: 90);
+        try {
+          await session.waitUntilChildReady();
+          final appPid = await session.appPid();
+          final supervisorPid = await _parentPidOf(appPid);
+          expect(
+            supervisorPid,
+            isNotNull,
+            reason: 'the app must be running under a supervisor process',
+          );
+
+          // Both processes, as the kernel would deliver them.
+          Process.killPid(appPid, ProcessSignal.sigint);
+          Process.killPid(supervisorPid!, ProcessSignal.sigint);
+
+          final metadata = await session.finish();
+          expect(
+            metadata['exitCode'],
+            77,
+            reason:
+                'the app must exit through its own teardown (77), not the '
+                'driver force path or a forwarded signal (130):\n'
+                '${session.diagnostics()}',
+          );
+          expect(
+            session.bootstrapLog(),
+            anyOf(
+              contains('acked by the child, forward cancelled'),
+              contains('child acked first, not forwarding'),
+            ),
+            reason: 'the forward must be cancelled by the ack, positively',
+          );
+        } finally {
+          session.dispose();
+        }
+      },
+    );
+
+    test(
+      'a direct kill of the supervisor still ends the session',
+      timeout: const Timeout(Duration(minutes: 3)),
+      () async {
+        // The other provenance: a script / service manager / this harness
+        // kills the supervisor alone, so the app got nothing. No ack can
+        // arrive, and the forward backstop has to deliver the signal or the
+        // session outlives the kill.
+        final app = await _generateApp(tempDir);
+        final session = await _startSession(app: app, timeoutSeconds: 90);
+        try {
+          await session.waitUntilChildReady();
+          final appPid = await session.appPid();
+          final supervisorPid = await _parentPidOf(appPid);
+          expect(supervisorPid, isNotNull);
+
+          Process.killPid(supervisorPid!, ProcessSignal.sigterm);
+
+          final metadata = await session.finish();
+          expect(metadata['timedOut'], isFalse, reason: session.diagnostics());
+          expect(
+            metadata['exitCode'],
+            78,
+            reason:
+                'the app must receive the forwarded SIGTERM and run its own '
+                'teardown:\n${session.diagnostics()}',
+          );
+          expect(
+            session.bootstrapLog(),
+            contains('no ack, forwarding to child'),
+            reason: 'the backstop is what ends a session nobody acked',
+          );
+        } finally {
+          session.dispose();
+        }
+      },
+    );
+  });
+
+  group('watch roots', () {
+    test(
+      'hot reload works when the app is launched from another directory',
+      timeout: const Timeout(Duration(minutes: 4)),
+      () async {
+        // `dart ~/code/app/bin/main.dart` from anywhere else. Watch roots
+        // resolved from the WORKING directory found no package config here,
+        // so the supervisor watched nothing and saves did nothing — silently,
+        // with the session otherwise looking supervised.
+        final app = await _generateApp(tempDir);
+        final session = await _startSession(
+          app: app,
+          timeoutSeconds: 120,
+          workingDirectory: tempDir.path,
+        );
+        try {
+          await session.waitUntilChildReady();
+          app.marker.writeAsStringSync(_marker('BETA'));
+          final reloaded = await _waitFor(
+            () async {
+              final text = session.bootstrapLog();
+              return text.contains('reload: done') ? text : null;
+            },
+            timeout: const Duration(seconds: 60),
+            what: 'reload completion',
+          );
+          expect(
+            reloaded,
+            isNotNull,
+            reason:
+                'a save never reached the supervisor:\n'
+                '${session.diagnostics()}',
+          );
+          expect(reloaded, contains('success=true'));
+
+          Process.killPid(await session.appPid(), ProcessSignal.sigint);
+          final metadata = await session.finish();
+          expect(metadata['exitCode'], 77, reason: session.diagnostics());
+          // The repaint reached the terminal. It arrives as a cursor-addressed
+          // patch of the changed cells, not a rewritten line, so match the new
+          // text alone.
+          expect(
+            session.output(),
+            contains('BETA'),
+            reason:
+                'the reloaded value never repainted:\n'
+                '${session.diagnostics()}',
+          );
+        } finally {
+          session.dispose();
+        }
+      },
+    );
+
+    test(
+      'a session with nothing to watch is never supervised',
+      timeout: const Timeout(Duration(minutes: 3)),
+      () async {
+        // An entrypoint outside any package config (resolved by an explicit
+        // --packages) has no watchable roots from either the entrypoint or
+        // the working directory. Supervising it anyway bought nothing and
+        // cost everything: the user's main() ran twice, the VM service
+        // banner landed on their terminal, a second VM booted, and signal
+        // ownership moved into a process that could only forward.
+        final app = await _generateApp(tempDir);
+        final outside = Directory('${tempDir.path}/outside')..createSync();
+        final entrypoint = File('${outside.path}/main.dart')
+          ..writeAsStringSync(app.entrypoint.readAsStringSync());
+        final session = await _startSession(
+          app: app,
+          timeoutSeconds: 90,
+          workingDirectory: tempDir.path,
+          scriptArguments: [
+            '--packages=${app.dir.path}/.dart_tool/package_config.json',
+            entrypoint.path,
+          ],
+        );
+        try {
+          await session.waitUntilAppStarted();
+          Process.killPid(await session.appPid(), ProcessSignal.sigint);
+          final metadata = await session.finish();
+          expect(metadata['exitCode'], 77, reason: session.diagnostics());
+
+          final output = session.output();
+          expect(
+            'BOOT-MARKER'.allMatches(output),
+            hasLength(1),
+            reason:
+                'main() ran in a supervisor as well as the app:\n'
+                '${session.diagnostics()}',
+          );
+          expect(
+            output,
+            isNot(contains('Dart VM service')),
+            reason: 'a supervised respawn puts the VM banner on the terminal',
+          );
+        } finally {
+          session.dispose();
+        }
+      },
+    );
+  });
+}
+
+/// A generated throwaway app: a `tempapp` package whose entrypoint reports its
+/// pid and service URI, renders a reloadable marker, and takes a deliberately
+/// slow teardown after `runApp` returns.
+class _GeneratedApp {
+  _GeneratedApp(this.dir);
+
+  final Directory dir;
+
+  File get entrypoint => File('${dir.path}/bin/main.dart');
+  File get marker => File('${dir.path}/lib/marker.dart');
+}
+
+Future<_GeneratedApp> _generateApp(Directory parent) async {
+  final appDir = Directory('${parent.path}/tempapp')
+    ..createSync(recursive: true);
+  final packageRoot = Directory.current;
+  File('${appDir.path}/pubspec.yaml').writeAsStringSync('''
+name: tempapp
+environment:
+  sdk: ^3.9.0
+dependencies:
+  fleury:
+    path: ${packageRoot.path}
+''');
+  Directory('${appDir.path}/lib').createSync();
+  Directory('${appDir.path}/bin').createSync();
+  final app = _GeneratedApp(appDir);
+  app.marker.writeAsStringSync(_marker('ALPHA'));
+  app.entrypoint.writeAsStringSync('''
+import 'dart:async';
+import 'dart:developer' as developer;
+import 'dart:io';
+
+import 'package:fleury/fleury.dart';
+import 'package:tempapp/marker.dart' as m;
+
+class App extends StatefulWidget {
+  const App({super.key});
+  @override
+  State<App> createState() => _AppState();
+}
+
+class _AppState extends State<App> {
+  late final String _boot;
+
+  @override
+  void initState() {
+    super.initState();
+    _boot = m.greeting();
+    final pidOut = Platform.environment['FLEURY_TEST_PID_OUT'];
+    // Written from the widget, never from main(): under the supervisor main()
+    // runs in both processes, and the test needs the pid of the one that owns
+    // the terminal.
+    if (pidOut != null) File(pidOut).writeAsStringSync('\$pid');
+    Timer.periodic(const Duration(milliseconds: 200), (timer) async {
+      final out = Platform.environment['FLEURY_TEST_SVC_OUT'];
+      if (out == null) return timer.cancel();
+      final info = await developer.Service.getInfo();
+      if (info.serverUri != null) {
+        File(out).writeAsStringSync(info.serverUri.toString());
+        timer.cancel();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [Text('live:\${m.greeting()}'), Text('boot:\$_boot')],
+  );
+}
+
+Future<void> main() async {
+  stdout.writeln('BOOT-MARKER');
+  final appExit = await runApp(const App());
+  // Teardown the app owns: flushing state, closing a database, a final
+  // report. It runs after runApp has restored the terminal, so a signal
+  // forwarded to us here has the OS default disposition and kills the
+  // process outright.
+  await Future<void>.delayed(const Duration(seconds: 3));
+  exit(switch (appExit.signal) {
+    AppSignal.interrupt => 77,
+    AppSignal.terminate => 78,
+    null => 0,
+  });
+}
+''');
+
+  final pubGet = await Process.run(Platform.resolvedExecutable, const [
+    'pub',
+    'get',
+    '--no-example',
+  ], workingDirectory: appDir.path);
+  expect(pubGet.exitCode, 0, reason: '${pubGet.stdout}\n${pubGet.stderr}');
+  return app;
+}
+
+/// One `capture_pty` run of a generated app, with the side channels the tests
+/// steer it by: the app's pid, its service URI, and the supervisor's log.
+class _Session {
+  _Session({
+    required this.process,
+    required this.outBase,
+    required this.logFile,
+    required this.pidFile,
+    required this.svcFile,
+    required this.stderrBuf,
+    required this.stdoutBuf,
+  });
+
+  final Process process;
+  final String outBase;
+  final File logFile;
+  final File pidFile;
+  final File svcFile;
+  final StringBuffer stderrBuf;
+  final StringBuffer stdoutBuf;
+  bool _exited = false;
+
+  String bootstrapLog() =>
+      logFile.existsSync() ? logFile.readAsStringSync() : '';
+
+  String output() {
+    final bin = File('$outBase.bin');
+    return bin.existsSync() ? latin1.decode(bin.readAsBytesSync()) : '';
+  }
+
+  /// Waits for the app process itself (supervised or not) to be running.
+  Future<void> waitUntilAppStarted() async {
+    final started = await _waitFor(
+      () async => pidFile.existsSync() && pidFile.readAsStringSync().isNotEmpty
+          ? true
+          : null,
+      timeout: const Duration(seconds: 60),
+      what: 'app startup',
+    );
+    if (started == null) {
+      if (stderrBuf.toString().contains('openpty failed')) {
+        markTestSkipped('PTY unavailable: ${stderrBuf.toString().trim()}');
+        return;
+      }
+      fail('the app never started:\n${diagnostics()}');
+    }
+    // The first frame is painted a moment after initState.
+    await Future<void>.delayed(const Duration(seconds: 1));
+  }
+
+  /// Waits until the supervisor has connected to the child AND the child has
+  /// registered its hot-reload extension — i.e. a fully wired session.
+  Future<void> waitUntilChildReady() async {
+    final ready = await _waitFor(
+      () async {
+        final log = bootstrapLog();
+        return log.contains('child ready (hot-reload extension registered)')
+            ? log
+            : null;
+      },
+      timeout: const Duration(seconds: 60),
+      what: 'a wired supervisor session',
+    );
+    if (ready == null) {
+      if (stderrBuf.toString().contains('openpty failed')) {
+        markTestSkipped('PTY unavailable: ${stderrBuf.toString().trim()}');
+        return;
+      }
+      fail('the supervisor never got a ready child:\n${diagnostics()}');
+    }
+  }
+
+  Future<int> appPid() async {
+    final raw = await _waitFor(
+      () async {
+        if (!pidFile.existsSync()) return null;
+        final text = pidFile.readAsStringSync().trim();
+        return text.isEmpty ? null : text;
+      },
+      timeout: const Duration(seconds: 30),
+      what: 'the app pid',
+    );
+    if (raw == null) fail('the app never reported a pid:\n${diagnostics()}');
+    return int.parse(raw);
+  }
+
+  /// Awaits the capture and returns its metadata.
+  Future<Map<String, Object?>> finish() async {
+    await process.exitCode.timeout(
+      const Duration(seconds: 60),
+      onTimeout: () {
+        process.kill(ProcessSignal.sigkill);
+        fail('the session never ended:\n${diagnostics()}');
+      },
+    );
+    _exited = true;
+    return jsonDecode(File('$outBase.json').readAsStringSync())
+        as Map<String, Object?>;
+  }
+
+  String diagnostics() {
+    final out = output();
+    return [
+      'capture_pty stderr: $stderrBuf',
+      'capture_pty stdout: $stdoutBuf',
+      'bootstrap log:\n${bootstrapLog()}',
+      'pty tail:\n${out.substring(out.length < 4000 ? 0 : out.length - 4000)}',
+    ].join('\n');
+  }
+
+  void dispose() {
+    if (!_exited) process.kill(ProcessSignal.sigkill);
+  }
+}
+
+Future<_Session> _startSession({
+  required _GeneratedApp app,
+  required int timeoutSeconds,
+  String? workingDirectory,
+  List<String>? scriptArguments,
+}) async {
+  final scratch = app.dir.parent;
+  final repoRoot = _findRepoRoot(Directory.current);
+  final outBase =
+      '${scratch.path}/cap-${DateTime.now().microsecondsSinceEpoch}';
+  final logFile = File('$outBase.log');
+  final pidFile = File('$outBase.pid');
+  final svcFile = File('$outBase.svc');
+  final process = await Process.start(
+    Platform.resolvedExecutable,
+    [
+      '${repoRoot.path}/profiling/capture_pty.dart',
+      '--out',
+      outBase,
+      '--timeout',
+      '$timeoutSeconds',
+      // The app exits 77/78 by design (its own teardown); 130/143 is the
+      // failure this suite is about — let both through so the assertions,
+      // not capture_pty's own guard, report it.
+      '--allow-exit-codes',
+      '77,78,130,143',
+      '--',
+      Platform.resolvedExecutable,
+      ...?scriptArguments,
+      if (scriptArguments == null) app.entrypoint.path,
+    ],
+    workingDirectory: workingDirectory ?? app.dir.path,
+    environment: {
+      'FLEURY_TEST_SVC_OUT': svcFile.path,
+      'FLEURY_TEST_PID_OUT': pidFile.path,
+      'FLEURY_DEV_BOOTSTRAP_LOG': logFile.path,
+    },
+  );
+  final stderrBuf = StringBuffer();
+  final stdoutBuf = StringBuffer();
+  process.stderr.transform(utf8.decoder).listen(stderrBuf.write);
+  process.stdout.transform(utf8.decoder).listen(stdoutBuf.write);
+  return _Session(
+    process: process,
+    outBase: outBase,
+    logFile: logFile,
+    pidFile: pidFile,
+    svcFile: svcFile,
+    stderrBuf: stderrBuf,
+    stdoutBuf: stdoutBuf,
+  );
+}
+
+/// The parent of [childPid] — the supervisor of a supervised app.
+Future<int?> _parentPidOf(int childPid) async {
+  final result = await Process.run('ps', ['-o', 'ppid=', '-p', '$childPid']);
+  if (result.exitCode != 0) return null;
+  return int.tryParse((result.stdout as String).trim());
 }
 
 String _marker(String value) => "String greeting() => 'MARK-$value';\n";
