@@ -26,11 +26,10 @@ void main() {
       expect(offset, 524288, reason: 'the insert lands ~512 KiB in');
 
       final stats = measure(
-        () =>
-            TextEditingModel.snapOffsetToGraphemeBoundary(
-              largeDocument,
-              offset,
-            ),
+        () => TextEditingModel.snapOffsetToGraphemeBoundary(
+          largeDocument,
+          offset,
+        ),
       );
 
       expect(stats.scanCount, 1);
@@ -152,9 +151,14 @@ void main() {
         expect(TextEditingModel.nextGraphemeBoundary(text, offset), end);
       }
       // Nearest edge wins; a tie rounds forward.
-      expect(TextEditingModel.snapOffsetToGraphemeBoundary(text, start + 1),
-          start);
-      expect(TextEditingModel.snapOffsetToGraphemeBoundary(text, start + 4), end);
+      expect(
+        TextEditingModel.snapOffsetToGraphemeBoundary(text, start + 1),
+        start,
+      );
+      expect(
+        TextEditingModel.snapOffsetToGraphemeBoundary(text, start + 4),
+        end,
+      );
       expect(TextEditingModel.snapOffsetToGraphemeBoundary(text, end - 1), end);
     });
 
@@ -171,17 +175,16 @@ void main() {
         TextEditingModel.snapOffsetToGraphemeBoundary(text, start + 2),
         start + 3,
       );
-      expect(
-        TextEditingModel.previousGraphemeBoundary(text, start + 2),
-        start,
-      );
+      expect(TextEditingModel.previousGraphemeBoundary(text, start + 2), start);
       expect(TextEditingModel.nextGraphemeBoundary(text, start + 1), start + 3);
     });
 
     test('offsets at and past the document end clamp to the end', () {
       const text = 'tail\u{1F642}';
-      expect(TextEditingModel.snapOffsetToGraphemeBoundary(text, text.length),
-          text.length);
+      expect(
+        TextEditingModel.snapOffsetToGraphemeBoundary(text, text.length),
+        text.length,
+      );
       expect(
         TextEditingModel.snapOffsetToGraphemeBoundary(text, text.length + 9),
         text.length,
