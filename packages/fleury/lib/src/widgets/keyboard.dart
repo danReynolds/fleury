@@ -30,11 +30,17 @@ import 'inherited_notifier.dart';
 /// late final _keyboard = Keyboard.of(context);   // safe to cache
 ///
 /// void _tick(Duration elapsed) {
-///   final keys = _keyboard.snapshot;             // stable for this frame
+///   final keys = _keyboard.snapshot;             // stable for this tick
 ///   if (keys.isHeld(KeyPosition.w)) ship.thrust(dt);
 ///   if (keys.wasPressed(KeyCode.space)) ship.fire();
 /// }
 /// ```
+///
+/// Edges (`wasPressed`/`wasReleased`) live for exactly one latch, and while a
+/// ticker is running the tick IS the latch — so a tap survives whatever else
+/// the app renders between the press and this callback. With no ticker
+/// registered the snapshot advances once per rendered frame instead, so a
+/// ticker-free app never reports a stale tap forever (RFC 0020 §5.6).
 ///
 /// **Reactivity is asymmetric, by design.** Obtaining the handle registers a
 /// dependency on changes to what the keyboard IS — capabilities, session

@@ -28,6 +28,7 @@ import '../semantics/semantics.dart';
 import '../terminal/capabilities.dart';
 import '../terminal/diagnostics.dart';
 import '../input/events.dart';
+import '../input/keyboard_latch.dart';
 import 'dev_bootstrap.dart';
 import 'package:stdio/stdio.dart' as fd;
 
@@ -498,19 +499,24 @@ Future<AppExit> _runAppImpl(
   // Publishes the session keyboard to `Keyboard.of` (capabilities reactive,
   // sampled state not — RFC 0020 §15).
   final keyboardNotifier = KeyboardStateNotifier(dispatcher);
-  // The keyboard latch has exactly ONE publisher: the FrameDriver, at render
-  // (its `onLatchInput`, below). Do NOT add a second — this line used to also
-  // latch from `tickerScheduler.onFrameStart`, and because `publishLatch`
-  // expires edges on a quiet call, that second site destroyed every
-  // `wasPressed` edge at the worst possible instant. Every driver event
-  // schedules a render, so the render latch published the edges first; the
-  // ticker timer's frame-start latch then found them quiet-but-present and
-  // expired them immediately BEFORE the tickers ran — the only consumers §7.2
-  // designed edges for. Measured through the real runtime: 0 of 5 presses
-  // observed with the second site, 5 of 5 without
-  // (test/integration/ticker_edge_visibility_test.dart). Tickers read the
-  // render-published latch from the frame AFTER the input lands; that one
-  // frame of settle is the design, not a defect (§5.6).
+  // The keyboard latch is wired to both its clocks here, and exactly ONE of
+  // them publishes at a time — the session arbitrates on ticker registration
+  // (RFC 0020 §5.6). Never call `publishLatch` anywhere else: two live
+  // publishers is the measured defect, because a latch expires edges, so the
+  // second site destroys the first's `wasPressed` edges before their
+  // consumers read them (0 of 5 presses observed;
+  // test/integration/ticker_edge_visibility_test.dart).
+  //
+  // Which clock is live is the correctness question. Edges are read from
+  // ticks, so while a ticker runs the TICKER clock owns expiry: any render in
+  // between — a clock in the status bar, an async update — leaves the latch
+  // alone, and a tap survives to the tick that samples it. With no ticker
+  // registered nothing would advance the latch at all, so the FRAME clock
+  // takes over and `wasPressed` cannot report a stale tap forever.
+  final publishFrameLatch = installKeyboardLatch(
+    session: dispatcher.keyboardSession,
+    scheduler: binding.tickerScheduler,
+  );
   // A surface can answer the capability query truthfully and then not honour
   // it. When the session catches that mid-session it demotes itself to
   // press-only, and `Keyboard.capabilities` is reactive — so republishing here
@@ -1304,10 +1310,11 @@ Future<AppExit> _runAppImpl(
             frameLoop: frameLoop,
             readViewport: () => FrameViewportSnapshot(usedDriver.size),
             // Frame start, after input drained (events are pumped before
-            // frames are produced): publish the keyboard latch so every
-            // read within this frame — tickers included — agrees, and
-            // edges expire on schedule (RFC 0020 §5.6).
-            onLatchInput: dispatcher.keyboardSession.publishLatch,
+            // frames are produced): publish the keyboard latch so every read
+            // within this frame agrees. Live only while the app has no
+            // ticker; with one running the ticker clock publishes instead
+            // and this is a no-op (RFC 0020 §5.6, wired above).
+            onLatchInput: publishFrameLatch,
             // Remote drivers surface their transport's send backlog;
             // the frame program defers production while the peer stalls
             // (structured AND v1-byte modes — dropped bytes are never

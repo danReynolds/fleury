@@ -29,7 +29,7 @@ void main() {
     test('sampled state stays empty without held-state support', () {
       final session = KeyboardSession();
       session.ingest(_down('a'));
-      final snap = session.publishLatch();
+      final snap = session.publishLatch(KeyboardLatchClock.frame);
       expect(snap.pressed, isEmpty);
       expect(snap.isHeld(KeyCode.a), isFalse);
       expect(snap.wasPressed(KeyCode.a), isFalse);
@@ -43,13 +43,13 @@ void main() {
     test('down / up maintain records and edges', () {
       final session = full();
       session.ingest(_down('w', position: KeyPosition.w));
-      var snap = session.publishLatch();
+      var snap = session.publishLatch(KeyboardLatchClock.frame);
       expect(snap.isHeld(KeyPosition.w), isTrue);
       expect(snap.wasPressed(KeyPosition.w), isTrue);
       expect(snap.wasReleased(KeyPosition.w), isFalse);
 
       session.ingest(_up('w', position: KeyPosition.w));
-      snap = session.publishLatch();
+      snap = session.publishLatch(KeyboardLatchClock.frame);
       expect(snap.isHeld(KeyPosition.w), isFalse);
       expect(snap.wasReleased(KeyPosition.w), isTrue);
     });
@@ -60,7 +60,9 @@ void main() {
       final regularized = session.ingest(_down('a'));
       expect(regularized.events.single.type, KeyEventType.repeat);
       // Still exactly one held record.
-      expect(session.publishLatch().pressed, {KeyCode.a});
+      expect(session.publishLatch(KeyboardLatchClock.frame).pressed, {
+        KeyCode.a,
+      });
     });
 
     test('repeat without down synthesizes a command-eligible down', () {
@@ -70,14 +72,17 @@ void main() {
       expect(regularized.events[0].type, KeyEventType.down);
       expect(regularized.events[0].synthesized, isTrue);
       expect(regularized.events[1], _repeat('a'));
-      expect(session.publishLatch().isHeld(KeyCode.a), isTrue);
+      expect(
+        session.publishLatch(KeyboardLatchClock.frame).isHeld(KeyCode.a),
+        isTrue,
+      );
     });
 
     test('an unheld up is observable but corrupts nothing', () {
       final session = full();
       final regularized = session.ingest(_up('q'));
       expect(regularized.events.single.type, KeyEventType.up);
-      final snap = session.publishLatch();
+      final snap = session.publishLatch(KeyboardLatchClock.frame);
       expect(snap.pressed, isEmpty);
       expect(snap.wasReleased(KeyCode.q), isFalse);
     });
@@ -85,9 +90,9 @@ void main() {
     test('repeats touch neither edge set', () {
       final session = full();
       session.ingest(_down('a'));
-      session.publishLatch();
+      session.publishLatch(KeyboardLatchClock.frame);
       session.ingest(_repeat('a'));
-      final snap = session.publishLatch();
+      final snap = session.publishLatch(KeyboardLatchClock.frame);
       // The repeat dirtied nothing: held unchanged, no edges. The latch is
       // the edge-free view.
       expect(snap.isHeld(KeyCode.a), isTrue);
@@ -104,12 +109,12 @@ void main() {
       final session = full();
       session.ingest(_down(' '));
       session.ingest(_up(' '));
-      final snap = session.publishLatch();
+      final snap = session.publishLatch(KeyboardLatchClock.frame);
       expect(snap.isHeld(KeyCode.space), isFalse);
       expect(snap.wasPressed(KeyCode.space), isTrue);
       expect(snap.wasReleased(KeyCode.space), isTrue);
       // Next latch: the edges have expired.
-      final next = session.publishLatch();
+      final next = session.publishLatch(KeyboardLatchClock.frame);
       expect(next.wasPressed(KeyCode.space), isFalse);
       expect(next.wasReleased(KeyCode.space), isFalse);
     });
@@ -119,7 +124,7 @@ void main() {
       session.ingest(_down('a'));
       session.ingest(_up('a'));
       session.ingest(_down('a'));
-      final snap = session.publishLatch();
+      final snap = session.publishLatch(KeyboardLatchClock.frame);
       expect(snap.isHeld(KeyCode.a), isTrue);
       expect(snap.wasPressed(KeyCode.a), isTrue);
       expect(snap.wasReleased(KeyCode.a), isTrue);
@@ -128,9 +133,13 @@ void main() {
     test('the latch is stable and allocation-free when quiet', () {
       final session = full();
       session.ingest(_down('a'));
-      final edgeful = session.publishLatch();
-      final quiet1 = session.publishLatch(); // expires edges (new instance)
-      final quiet2 = session.publishLatch(); // fully quiet: cached
+      final edgeful = session.publishLatch(KeyboardLatchClock.frame);
+      final quiet1 = session.publishLatch(
+        KeyboardLatchClock.frame,
+      ); // expires edges (new instance)
+      final quiet2 = session.publishLatch(
+        KeyboardLatchClock.frame,
+      ); // fully quiet: cached
       expect(identical(quiet1, quiet2), isTrue);
       expect(quiet1.isHeld(KeyCode.a), isTrue);
       // Different content ⇒ different ordinal: a consumer memoizing
@@ -143,11 +152,13 @@ void main() {
       final session = full();
       session.ingest(_down('a'));
       session.ingest(_up('a'));
-      session.publishLatch(); // frame the consumer missed
+      session.publishLatch(
+        KeyboardLatchClock.frame,
+      ); // frame the consumer missed
       session.ingest(_down('b'));
       session.ingest(_up('b'));
-      session.publishLatch(); // another missed frame
-      final resumed = session.publishLatch();
+      session.publishLatch(KeyboardLatchClock.frame); // another missed frame
+      final resumed = session.publishLatch(KeyboardLatchClock.frame);
       expect(resumed.wasPressed(KeyCode.a), isFalse);
       expect(resumed.wasPressed(KeyCode.b), isFalse);
     });
@@ -158,7 +169,7 @@ void main() {
       final session = KeyboardSession(capabilities: KeyboardCapabilities.full);
       // AZERTY: the QWERTY-W spot types 'z'.
       session.ingest(_down('z', position: KeyPosition.w));
-      final snap = session.publishLatch();
+      final snap = session.publishLatch(KeyboardLatchClock.frame);
       expect(snap.isHeld(KeyPosition.w), isTrue);
       expect(snap.isHeld(const KeyCode.char('z')), isTrue);
       expect(snap.isHeld(KeyPosition.z), isFalse);
@@ -173,13 +184,13 @@ void main() {
       final session = KeyboardSession(capabilities: KeyboardCapabilities.full);
       session.ingest(_down('w', position: KeyPosition.w));
       session.ingest(_up('w')); // same key, position omitted
-      var snap = session.publishLatch();
+      var snap = session.publishLatch(KeyboardLatchClock.frame);
       expect(snap.pressed, isEmpty, reason: 'positionless up closed it');
       expect(snap.isHeld(KeyPosition.w), isFalse);
 
       session.ingest(_down('a'));
       session.ingest(_up('a', position: KeyPosition.a)); // reverse mismatch
-      snap = session.publishLatch();
+      snap = session.publishLatch(KeyboardLatchClock.frame);
       expect(snap.pressed, isEmpty);
     });
 
@@ -189,13 +200,13 @@ void main() {
       final regularized = session.ingest(_down('w')); // no position
       expect(regularized.events.single.type, KeyEventType.repeat);
       session.ingest(_up('w', position: KeyPosition.w));
-      expect(session.publishLatch().pressed, isEmpty);
+      expect(session.publishLatch(KeyboardLatchClock.frame).pressed, isEmpty);
     });
 
     test('a positionless press degrades one-way to the US twin', () {
       final session = KeyboardSession(capabilities: KeyboardCapabilities.full);
       session.ingest(_down('w'));
-      final snap = session.publishLatch();
+      final snap = session.publishLatch(KeyboardLatchClock.frame);
       expect(snap.isHeld(KeyPosition.w), isTrue); // twin degradation
       expect(snap.isHeld(KeyCode.w), isTrue);
       expect(snap.positionsPressed, isEmpty);
@@ -214,7 +225,7 @@ void main() {
       expect(releases, hasLength(2));
       expect(releases.every((e) => e.type == KeyEventType.up), isTrue);
       expect(releases.every((e) => e.synthesized), isTrue);
-      final snap = session.publishLatch();
+      final snap = session.publishLatch(KeyboardLatchClock.frame);
       expect(snap.pressed, isEmpty);
       expect(snap.wasReleased(KeyPosition.w), isTrue);
     });
@@ -225,7 +236,7 @@ void main() {
       final before = session.sessionGeneration;
       session.replaceSession();
       expect(session.sessionGeneration, before + 1);
-      final snap = session.publishLatch();
+      final snap = session.publishLatch(KeyboardLatchClock.frame);
       expect(snap.sessionGeneration, before + 1);
       expect(snap.pressed, isEmpty);
       expect(snap.wasPressed(KeyCode.a), isFalse); // dropped, not replayed
@@ -236,7 +247,7 @@ void main() {
       session.ingest(_down('a'));
       final releases = session.updateCapabilities(KeyboardCapabilities.legacy);
       expect(releases, hasLength(1));
-      expect(session.publishLatch().pressed, isEmpty);
+      expect(session.publishLatch(KeyboardLatchClock.frame).pressed, isEmpty);
     });
   });
 
