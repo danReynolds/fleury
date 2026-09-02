@@ -22,6 +22,7 @@ import '../foundation/geometry.dart';
 import 'capabilities.dart';
 import '../input/events.dart';
 import '../input/keyboard_state.dart';
+import '../runtime/dev_signal_ack.dart';
 import 'input_parser.dart';
 import 'terminal_driver.dart';
 import 'terminal_probe.dart';
@@ -419,14 +420,19 @@ class PosixTerminalDriver
     // but before any cleanup handler existed. A signal that lands before
     // runApp subscribes is retained and replayed by
     // [_deliverPendingSignalToNewListener].
-    _intSubscription = _watchSignal(
-      ProcessSignal.sigint,
-      (_) => deliverSignal(AppSignal.interrupt),
-    );
-    _termSubscription = _watchSignal(
-      ProcessSignal.sigterm,
-      (_) => deliverSignal(AppSignal.terminate),
-    );
+    // The ack tells a dev supervisor that the OS delivered this signal HERE
+    // (a tty Ctrl+C reaches the whole foreground group), so it must not
+    // forward its own copy on top of an in-progress teardown. Posted from the
+    // watcher rather than from [deliverSignal], which is also driven
+    // synthetically by tests: only a real delivery is evidence.
+    _intSubscription = _watchSignal(ProcessSignal.sigint, (_) {
+      postDevSignalAck(ProcessSignal.sigint);
+      deliverSignal(AppSignal.interrupt);
+    });
+    _termSubscription = _watchSignal(ProcessSignal.sigterm, (_) {
+      postDevSignalAck(ProcessSignal.sigterm);
+      deliverSignal(AppSignal.terminate);
+    });
 
     // Raw mode only makes sense on a terminal stdin; reading lineMode/
     // echoMode throws on a pipe, so guard rather than catch. Piped input
