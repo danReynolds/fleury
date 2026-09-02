@@ -666,45 +666,142 @@ final class TextEditingModel {
     return offset;
   }
 
+  /// A range over the grapheme cluster [offset] falls in — empty at [offset]
+  /// when [offset] is already on a boundary.
+  ///
+  /// This is the one place boundaries are resolved, and the reason editing a
+  /// large document stays cheap. [CharacterRange.at] walks OUT from [offset]
+  /// (back to the cluster start, forward to its end) and stops at the first
+  /// break it can prove, so the work is the width of the cluster under the
+  /// caret. Walking IN from 0 — one `text.characters` pass per call, which is
+  /// what these three functions used to do — is O(offset): correct, but it
+  /// re-reads the whole document above the caret on every keystroke, and
+  /// materializes a string per cluster on the way. Appends hid that, because
+  /// `offset == text.length` short-circuits before the walk.
+  ///
+  /// Line structure is what makes the outward walk terminate promptly on real
+  /// text: `\n` breaks on both sides (UAX #29 GB4/GB5 — canonical model text
+  /// holds no CR for GB3 to pair with it), so a scan can never cross a line.
+  /// No line index or per-line cache is needed to get that bound.
+  static CharacterRange _clusterAt(String text, int offset) {
+    final range = CharacterRange.at(text, offset);
+    GraphemeScanDebugStats.record(
+      (text.length - range.stringAfterLength) - range.stringBeforeLength,
+    );
+    return range;
+  }
+
   static int previousGraphemeBoundary(String text, int offset) {
     final clamped = _clampInt(offset, 0, text.length);
     if (clamped == 0) return 0;
-    var index = 0;
-    for (final grapheme in text.characters) {
-      final next = index + grapheme.length;
-      if (next >= clamped) return index;
-      index = next;
-    }
-    return 0;
+    final range = _clusterAt(text, clamped);
+    final start = range.stringBeforeLength;
+    // Mid-cluster, the cluster start IS the boundary to the left. Already on a
+    // boundary, step back over the cluster that ends here.
+    if (start < clamped) return start;
+    if (!range.moveBack()) return 0;
+    return range.stringBeforeLength;
   }
 
   static int nextGraphemeBoundary(String text, int offset) {
     final clamped = _clampInt(offset, 0, text.length);
     if (clamped == text.length) return text.length;
-    var index = 0;
-    for (final grapheme in text.characters) {
-      final next = index + grapheme.length;
-      if (next > clamped) return next;
-      index = next;
+    final range = _clusterAt(text, clamped);
+    // Mid-cluster, the range already ends at the boundary to the right. Already
+    // on a boundary (so the range is empty), advance over the cluster that
+    // starts here.
+    if (range.stringBeforeLength == clamped && !range.moveNext()) {
+      return text.length;
     }
-    return text.length;
+    return text.length - range.stringAfterLength;
   }
 
   static int snapOffsetToGraphemeBoundary(String text, int offset) {
     final clamped = _clampInt(offset, 0, text.length);
     if (clamped == 0 || clamped == text.length) return clamped;
-    var index = 0;
-    for (final grapheme in text.characters) {
-      final next = index + grapheme.length;
-      if (clamped == index || clamped == next) return clamped;
-      if (clamped > index && clamped < next) {
-        final before = clamped - index;
-        final after = next - clamped;
-        return before < after ? index : next;
-      }
-      index = next;
-    }
-    return text.length;
+    final range = _clusterAt(text, clamped);
+    final start = range.stringBeforeLength;
+    if (start == clamped) return clamped;
+    // The nearest edge of the cluster the offset landed inside; a tie rounds
+    // forward, as the from-zero walk did.
+    final end = text.length - range.stringAfterLength;
+    return (clamped - start) < (end - clamped) ? start : end;
+  }
+}
+
+/// What one [GraphemeScanDebugStats] window observed.
+final class GraphemeScanStats {
+  const GraphemeScanStats({
+    required this.scanCount,
+    required this.codeUnitsScanned,
+    required this.widestScan,
+  });
+
+  static const empty = GraphemeScanStats(
+    scanCount: 0,
+    codeUnitsScanned: 0,
+    widestScan: 0,
+  );
+
+  /// Boundary resolutions performed in the window.
+  final int scanCount;
+
+  /// Code units of text those resolutions had to look at, summed.
+  final int codeUnitsScanned;
+
+  /// The widest single resolution, in code units.
+  final int widestScan;
+}
+
+/// Debug-only collector for how much text a grapheme-boundary resolution reads.
+///
+/// Boundary resolution sits on the per-keystroke path, so collection is opt-in:
+/// with no window open a resolution pays one predictable branch. What a window
+/// pins is the property that decides whether editing scales — a resolution must
+/// read the text AROUND the offset, never the document prefix before it. A scan
+/// that starts at 0 is O(offset), which makes every mid-document keystroke in a
+/// large [TextEditingValue] re-read everything above the caret: a latent
+/// quadratic that appends hide, because an append short-circuits on
+/// `offset == text.length`.
+final class GraphemeScanDebugStats {
+  GraphemeScanDebugStats._();
+
+  static bool _enabled = false;
+  static int _scanCount = 0;
+  static int _codeUnitsScanned = 0;
+  static int _widestScan = 0;
+
+  /// Opens a collection window, discarding anything recorded before it.
+  static void begin() {
+    _enabled = true;
+    _reset();
+  }
+
+  /// Closes the window and returns what it saw.
+  static GraphemeScanStats take() {
+    if (!_enabled) return GraphemeScanStats.empty;
+    final stats = GraphemeScanStats(
+      scanCount: _scanCount,
+      codeUnitsScanned: _codeUnitsScanned,
+      widestScan: _widestScan,
+    );
+    _enabled = false;
+    _reset();
+    return stats;
+  }
+
+  /// Records one boundary resolution that read [codeUnits] code units.
+  static void record(int codeUnits) {
+    if (!_enabled) return;
+    _scanCount += 1;
+    _codeUnitsScanned += codeUnits;
+    if (codeUnits > _widestScan) _widestScan = codeUnits;
+  }
+
+  static void _reset() {
+    _scanCount = 0;
+    _codeUnitsScanned = 0;
+    _widestScan = 0;
   }
 }
 
