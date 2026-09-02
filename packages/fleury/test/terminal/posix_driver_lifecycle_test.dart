@@ -830,12 +830,13 @@ void main() {
     // Device Attributes sentinel (`ESC [ c`) that terminates it.
     void Function(String bytes) slowTerminal(
       _FakeStdin input,
-      Duration delay, {
-      String keyboardReply = '\x1B[?31u\x1B[?1;2c',
-    }) => (bytes) {
+      Duration delay,
+    ) => (bytes) {
       String? reply;
       if (bytes.contains('\x1B[?u')) {
-        reply = keyboardReply;
+        // Flags 1|2|4|8|16: a terminal that honours the whole lifecycle tier,
+        // so the negotiated result is unmistakably not the collapsed one.
+        reply = '\x1B[?31u\x1B[?1;2c';
       } else if (bytes.contains('?2026\$p')) {
         reply = '\x1B[?2026;2\$y\x1B[?1;2c';
       } else if (bytes.contains('\x1B[6n')) {
