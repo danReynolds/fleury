@@ -754,7 +754,7 @@ Future<int> _runServeBridge({
     );
   }
 
-  appServer.listen((appSocket) {
+  appServer.listen((appSocket) async {
     if (sessionInFlight || pendingApp != null) {
       // One session at a time. Drop the new connection cleanly.
       appSocket.destroy();
@@ -773,16 +773,25 @@ Future<int> _runServeBridge({
     // nobody at the browser end yet, serve IS that silent peer. A
     // provisional INIT tells the app a supervisor owns the socket, so it
     // waits for the browser's own INIT however long the operator takes.
+    // `addStream`, not `add`: an app that closed between accept and this
+    // write (a crash during startup, a probe, a second `dart run` racing the
+    // first) makes the socket's own consumer throw a Broken pipe
+    // ASYNCHRONOUSLY, in the root zone, where no try/catch around `add` can
+    // reach it — and an unhandled error there ends `fleury serve` with every
+    // live session. The stream form reports the failure on its future.
     try {
-      link.sink.add(
-        encodeFrame(buildServeProvisionalInitFrame(debugWire: debugWire)),
+      await link.sink.addStream(
+        Stream<List<int>>.value(
+          encodeFrame(buildServeProvisionalInitFrame(debugWire: debugWire)),
+        ),
       );
     } catch (error) {
       stderr.writeln('[serve] could not greet the app: $error');
       link.destroy();
-      pendingApp = null;
+      if (identical(pendingApp, link)) pendingApp = null;
       return;
     }
+    if (!identical(pendingApp, link)) return; // closed while greeting
     unawaited(
       link.closed.then((_) {
         if (!identical(pendingApp, link)) return;

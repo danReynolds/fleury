@@ -189,6 +189,26 @@ class _TraceSignalSubscription implements StreamSubscription<ProcessSignal> {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+/// A stdout whose final flush hangs until released — a pty write blocked
+/// behind a dropped SSH session or an XOFF.
+class _HangingFlushStdout extends _RecordingStdout {
+  _HangingFlushStdout({required super.trace}) : super(terminal: true);
+
+  final Completer<void> release = Completer<void>();
+  var flushes = 0;
+
+  @override
+  Future<void> flush() {
+    flushes++;
+    trace.add('flush');
+    // The first flushes are startup probes; only a flush during restore is
+    // held, and the test decides when it lets go.
+    return holding ? release.future : Future<void>.value();
+  }
+
+  bool holding = false;
+}
+
 Future<void> _pump() => Future<void>.delayed(const Duration(milliseconds: 10));
 
 void main() {
@@ -1059,4 +1079,42 @@ void main() {
       }
     },
   );
+
+  test("restore()'s signal shield is bounded: a second signal ends the "
+      'process instead of being swallowed', () async {
+    // The shield keeps SIGINT/SIGTERM subscribed for the whole restore so a
+    // forwarded signal cannot kill the process raw mid-teardown. Unbounded,
+    // that made a HUNG teardown (a pty write blocked behind a dropped SSH
+    // session) unkillable by anything but SIGKILL, which restores nothing.
+    final trace = <String>[];
+    final input = _FakeStdin(terminal: true);
+    late final _HangingFlushStdout out;
+    final handlers = <ProcessSignal, List<void Function(ProcessSignal)>>{};
+    final exits = <int>[];
+    out = _HangingFlushStdout(trace: trace);
+    final driver = PosixTerminalDriver(
+      stdinOverride: input,
+      stdoutOverride: out,
+      terminalModeController: _FakeModeController(trace),
+      selfStopOverride: () => true,
+      forceExitOverride: exits.add,
+      signalWatcherOverride: (signal, onSignal) {
+        handlers.putIfAbsent(signal, () => []).add(onSignal);
+        return _TraceSignalSubscription(signal, trace);
+      },
+    );
+    await driver.enter(TerminalMode.interactive);
+    out.holding = true;
+    final restoring = driver.restore();
+    await _pump();
+    // The shield is the newest SIGINT watcher; the real one is cancelled.
+    final shield = handlers[ProcessSignal.sigint]!.last;
+    shield(ProcessSignal.sigint);
+    expect(exits, isEmpty, reason: 'one signal is swallowed, as designed');
+    shield(ProcessSignal.sigint);
+    expect(exits, [130], reason: 'the second is the user overruling a hang');
+    out.release.complete();
+    await restoring;
+    await input.close();
+  });
 }

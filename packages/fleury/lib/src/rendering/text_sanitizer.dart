@@ -68,10 +68,16 @@ String sanitizeForDisplay(String input) {
       index += 1;
       continue;
     }
-    if (_isHighSurrogate(unit) && index + 1 < input.length) {
+    if (_isHighSurrogate(unit) &&
+        index + 1 < input.length &&
+        _isLowSurrogate(input.codeUnitAt(index + 1))) {
       buffer.write(input.substring(index, index + 2));
       index += 2;
     } else {
+      // A lone surrogate half is written as-is (it is not a control byte),
+      // but it must not carry the NEXT unit with it: that unit could be an
+      // ESC, and the text model now rests on this function's output being
+      // canonical.
       buffer.writeCharCode(unit);
       index += 1;
     }
@@ -215,3 +221,4 @@ bool _isC1StringControl(int unit) {
 }
 
 bool _isHighSurrogate(int unit) => unit >= 0xD800 && unit <= 0xDBFF;
+bool _isLowSurrogate(int unit) => unit >= 0xDC00 && unit <= 0xDFFF;

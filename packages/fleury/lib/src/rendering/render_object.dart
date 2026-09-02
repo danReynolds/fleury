@@ -97,11 +97,29 @@ final class RenderDamageTracker {
   /// boundary dirty), never restructures the tree, so iterating the live set
   /// is safe.
   void endPaintPass() {
+    var retracted = 0;
     for (final participant in _participants) {
       if (participant.publishedPaintPass != _paintPass) {
         participant.retractPaintFacts();
+        retracted++;
       }
     }
+    _paintPassRetractions += retracted;
+  }
+
+  int _paintPassRetractions = 0;
+
+  /// How many participants retracted since the last take. A retraction
+  /// happens INSIDE the pass, after the frame painted with the stale fact,
+  /// and its paint invalidation is consumed with that frame's damage — so
+  /// the frame driver reads this after commit, re-records the visual change
+  /// and requests the frame that repaints without the fact. Nothing else
+  /// would: the visual-change flag is a predicate frames consult, not a
+  /// scheduler.
+  int takePaintPassRetractions() {
+    final result = _paintPassRetractions;
+    _paintPassRetractions = 0;
+    return result;
   }
 }
 

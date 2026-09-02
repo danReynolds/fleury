@@ -85,4 +85,61 @@ void main() {
     expect(thrown, isA<StateError>());
     expect('$thrown', contains('runApp'));
   });
+
+  test('a floating overlay entry resolves the session too', () async {
+    // Menus, tooltips, toasts and pickers are Overlay entries — siblings of
+    // the app root, not its descendants. The scope used to sit inside the
+    // root entry, so a context-menu action that hands the terminal to
+    // $EDITOR threw with advice ("run under runApp") the caller already
+    // followed.
+    final driver = FakeTerminalDriver(size: const CellSize(20, 4));
+    TerminalSession? fromEntry;
+    final future = runApp(
+      _EntryInserter(
+        builder: (context) {
+          fromEntry = TerminalSession.maybeOf(context);
+          return const Text('float');
+        },
+      ),
+      driver: driver,
+      enableHotReload: false,
+    );
+    try {
+      await _settle();
+      await _settle();
+      expect(fromEntry, isNotNull, reason: 'the scope is above the Overlay');
+      expect(identical(fromEntry!.driver, driver), isTrue);
+    } finally {
+      driver.enqueue(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
+      await future.timeout(const Duration(seconds: 2));
+      await driver.dispose();
+    }
+  });
+}
+
+/// Inserts one overlay entry built by [builder] once it has a context.
+class _EntryInserter extends StatefulWidget {
+  const _EntryInserter({required this.builder});
+
+  final Widget Function(BuildContext context) builder;
+
+  @override
+  State<_EntryInserter> createState() => _EntryInserterState();
+}
+
+class _EntryInserterState extends State<_EntryInserter> {
+  var _inserted = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_inserted) return;
+    _inserted = true;
+    Overlay.of(context).insert(OverlayEntry(builder: widget.builder));
+  }
+
+  @override
+  Widget build(BuildContext context) => const Text('base');
 }

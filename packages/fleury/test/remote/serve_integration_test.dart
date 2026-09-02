@@ -344,6 +344,31 @@ void main() {
             .whenComplete(sub.cancel);
       }
 
+      test('an app that closes before it is greeted does not take serve '
+          'down', () async {
+        // Greeting a socket whose peer already closed raised a Broken pipe
+        // from the socket's own consumer, asynchronously, in the root zone —
+        // out of reach of any try/catch around the write — and an unhandled
+        // error there ended fleury serve with every live session. A crash
+        // during app startup, a probe, or a second `dart run` racing the
+        // first is enough to hit it.
+        for (var i = 0; i < 6; i++) {
+          // Graceful close right after connect: the FIN lands before serve's
+          // greeting write, so the write fails on the kernel's side.
+          final app = await connectApp();
+          await app.close();
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        }
+        await _expectServeAlive(port);
+        final app = await connectApp();
+        try {
+          final init = await firstInit(app);
+          expect(init.provisional, isTrue, reason: 'serve still greets');
+        } finally {
+          app.destroy();
+        }
+      });
+
       test(
         'an app that connects first is greeted with a provisional INIT',
         () async {

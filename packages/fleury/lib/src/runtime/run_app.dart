@@ -1243,14 +1243,7 @@ Future<AppExit> _runAppImpl(
           // the ambient MediaQuery data when the terminal resizes, preserving
           // the app subtree (and all its state).
           final rootEntry = OverlayEntry(
-            // The session scope is what lets an app hand the terminal to a
-            // child ($EDITOR, a pager) from a default runApp — see
-            // TerminalSession. It wraps the app root, above the default
-            // selection, so floating entries share it too.
-            builder: (_) => TerminalSessionScope(
-              session: TerminalSession(usedDriver),
-              child: DefaultRootSelection(child: root),
-            ),
+            builder: (_) => DefaultRootSelection(child: root),
           );
           // A full-screen layer above the app that shows the uncaught-error
           // banner. As its own entry it never touches the app's layout — the
@@ -1287,6 +1280,10 @@ Future<AppExit> _runAppImpl(
             clipboard: effectiveClipboard,
             overlayKey: overlayKey,
             overlayEntries: [rootEntry],
+            // What lets an app hand the terminal to a child ($EDITOR, a
+            // pager) from a default runApp — see TerminalSession. Installed
+            // above the Overlay so floating entries share it.
+            session: TerminalSession(usedDriver),
             logBuffer: logBuffer,
             debugController: debugController,
             pendingSequenceNotifier: dispatcher.pendingSequenceNotifier,

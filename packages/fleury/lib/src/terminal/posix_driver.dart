@@ -178,8 +178,10 @@ class PosixTerminalDriver
   /// transpacific ~150-250 ms, congested mobile/VPN to ~350 ms) — and costs
   /// nothing to raise, because what bounds a silent terminal's startup is
   /// [startupNegotiationBudget], not this: the probes after the first are
-  /// clamped to the budget that is left, so an unanswered handshake still ends
-  /// at 500 ms exactly as it did when this was 150 ms.
+  /// clamped to the budget that is left. An unanswered handshake spends this
+  /// on the first probe plus [lateProbeGrace] on the quarantine — about
+  /// 650 ms, against 500 ms when this was 150 ms — and, with nothing
+  /// measured, never grows toward [maxStartupNegotiationBudget].
   @visibleForTesting
   static Duration firstProbeTimeout = const Duration(milliseconds: 400);
 
@@ -1140,9 +1142,29 @@ class PosixTerminalDriver
     // mid-restore: capture teardown skipped, nothing after `await runApp`
     // ran, and the emergency tty restore made it look like a clean quit. The
     // shield swallows it (we are already on the way out) and is dropped last.
+    // Bounded: a second signal during the restore, or any signal once it
+    // has already run for two seconds (a pty write blocked behind a dropped
+    // SSH session or an XOFF), is the user overruling a hung teardown. It
+    // ends the process with the conventional code — the alternative is a
+    // process only SIGKILL can end, with nothing to restore the terminal.
+    final restoreClock = Stopwatch()..start();
+    var shieldedSignals = 0;
     final shields = <StreamSubscription<ProcessSignal>>[];
     for (final signal in const [ProcessSignal.sigint, ProcessSignal.sigterm]) {
-      final shield = _watchSignal(signal, (_) {});
+      final shield = _watchSignal(signal, (received) {
+        shieldedSignals++;
+        if (shieldedSignals < 2 &&
+            restoreClock.elapsed < const Duration(seconds: 2)) {
+          return;
+        }
+        final code = received == ProcessSignal.sigterm ? 143 : 130;
+        final force = _forceExitOverride;
+        if (force != null) {
+          force(code);
+        } else {
+          exit(code);
+        }
+      });
       if (shield != null) shields.add(shield);
     }
 

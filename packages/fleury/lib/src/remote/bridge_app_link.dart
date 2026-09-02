@@ -24,6 +24,9 @@ final class BridgeAppLink {
     required this.sink,
     required void Function() destroySource,
   }) : _destroySource = destroySource {
+    // A socket error surfaces on the sink's `done` future too; nobody awaits
+    // it, and an unobserved async error would take the whole server down.
+    unawaited(sink.done.catchError((Object _) {}));
     _subscription = source.listen(
       _onData,
       onError: (Object _, StackTrace _) => _finish(),
