@@ -26,7 +26,7 @@
 //   framesByReason      rendered frames bucketed by `FrameEvent.reason` —
 //                       the runtime's own name for what asked for the frame
 //                       ('key:a', 'paste', 'resize', 'post-frame',
-//                       'paint-pass-retraction', ...). This is "frames
+//                       'invalidate', ...). This is "frames
 //                       rendered per event kind": it fails both when a frame
 //                       goes missing and when one appears that nothing
 //                       needed.
@@ -331,7 +331,7 @@ Future<_Scenario> _anchorRetraction() async {
         return;
       }
       if (!s.framesByReason.keys.any(
-        (reason) => reason.contains('paint-pass-retraction'),
+        (reason) => reason.contains('invalidate'),
       )) {
         s.broken = 'no frame was scheduled for the paint-pass retraction: '
             '${s.framesByReason}.';

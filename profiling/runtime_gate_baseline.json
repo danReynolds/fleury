@@ -12,7 +12,7 @@
   "anchor-retraction": {
     "framesByReason": {
       "build": 1,
-      "paint-pass-retraction": 1
+      "invalidate": 1
     },
     "eventsDispatched": 0,
     "framesRendered": 2,
