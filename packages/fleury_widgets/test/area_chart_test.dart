@@ -153,6 +153,28 @@ void main() {
         reason: 'a lone point should still fill its own column',
       );
     });
+
+    // A constant series is a degenerate y range. Widening it by a constant
+    // (+/- 0.5) is a no-op above 2^53, so `span <= 0` short-circuited
+    // _paintGradientArea and the chart rendered completely blank — the
+    // autoscale itself made the data invisible.
+    testWidgets('a constant series at 2^53 still fills', (tester) {
+      const twoPow53 = 9007199254740992;
+      tester.pumpWidget(
+        const AreaChart(
+          series: [
+            AreaSeries([(0, twoPow53), (1, twoPow53), (2, twoPow53)]),
+          ],
+          showAxes: false,
+        ),
+      );
+      final buf = tester.render(size: const CellSize(24, 8));
+      expect(
+        _glyphCount(buf, 24, 8, 0x2581, 0x2588),
+        greaterThan(8),
+        reason: 'the constant series must still read as a filled region',
+      );
+    });
   });
 }
 

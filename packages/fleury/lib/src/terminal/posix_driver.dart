@@ -22,6 +22,7 @@ import '../foundation/geometry.dart';
 import 'capabilities.dart';
 import '../input/events.dart';
 import '../input/keyboard_state.dart';
+import '../runtime/dev_signal_ack.dart';
 import 'input_parser.dart';
 import 'terminal_driver.dart';
 import 'terminal_probe.dart';
@@ -44,10 +45,17 @@ class PosixTerminalDriver
     @visibleForTesting void Function(int exitCode)? forceExitOverride,
     @visibleForTesting bool Function()? selfStopOverride,
     @visibleForTesting PosixTerminalModeController? terminalModeController,
+    @visibleForTesting
+    StreamSubscription<ProcessSignal>? Function(
+      ProcessSignal signal,
+      void Function(ProcessSignal signal) onSignal,
+    )?
+    signalWatcherOverride,
   }) : _stdin = stdinOverride ?? stdin,
        _stdout = stdoutOverride ?? stdout,
        _forceExitOverride = forceExitOverride,
        _selfStopOverride = selfStopOverride,
+       _signalWatcherOverride = signalWatcherOverride,
        _terminalModeController =
            terminalModeController ?? NativePosixTerminalModeController() {
     _events = StreamController<TuiEvent>.broadcast(
@@ -143,18 +151,71 @@ class PosixTerminalDriver
   // throughout; only complete response frames are consumed.
   @visibleForTesting
   static Duration lateProbeGrace = const Duration(milliseconds: 250);
+
+  /// Ceiling on the whole startup handshake BEFORE a round trip is known — so
+  /// also the total a terminal that answers nothing at all can ever spend.
+  /// Unchanged by the adaptive path: no answer means no measurement, and no
+  /// measurement means no growth.
   @visibleForTesting
   static Duration startupNegotiationBudget = const Duration(milliseconds: 500);
-  static const _perProbeTimeout = Duration(milliseconds: 150);
+
+  /// Ceiling on the handshake once an answer HAS measured the link. Startup
+  /// stops being free at some point even when the terminal is co-operating;
+  /// this is where. It binds from a measured 250 ms round trip upward
+  /// (8 x 250 ms), and at the far end of the measurable range — a link near
+  /// [firstProbeTimeout] — it can clip the last probe off the sequence, which
+  /// is the intended trade: a capability is worth waiting for, but not
+  /// unboundedly, and the axis that loses simply keeps its safe default.
+  @visibleForTesting
+  static Duration maxStartupNegotiationBudget = const Duration(seconds: 2);
+
+  /// Deadline for the ONE probe that has nothing to scale from.
+  ///
+  /// This number decides which links can negotiate at all: a terminal whose
+  /// reply lands after it is indistinguishable from a terminal that will never
+  /// reply, and the session degrades. 400 ms admits the whole terrestrial SSH
+  /// population an agent TUI actually runs over (transatlantic ~90-150 ms,
+  /// transpacific ~150-250 ms, congested mobile/VPN to ~350 ms) — and costs
+  /// nothing to raise, because what bounds a silent terminal's startup is
+  /// [startupNegotiationBudget], not this: the probes after the first are
+  /// clamped to the budget that is left. An unanswered handshake spends this
+  /// on the first probe plus [lateProbeGrace] on the quarantine — about
+  /// 650 ms, against 500 ms when this was 150 ms — and, with nothing
+  /// measured, never grows toward [maxStartupNegotiationBudget].
+  @visibleForTesting
+  static Duration firstProbeTimeout = const Duration(milliseconds: 400);
+
+  /// Floor on a measured-RTT probe deadline: the value every probe used before
+  /// the deadline became adaptive, so a local terminal (RTT well under 50 ms)
+  /// negotiates on exactly the timings it always did.
+  static const _minProbeTimeout = Duration(milliseconds: 150);
+
+  /// Ceiling on a measured-RTT probe deadline. A safety net rather than a
+  /// working limit — 3 x [firstProbeTimeout] is 1200 ms, so only a probe that
+  /// is pathologically slower than the one that measured the link reaches it.
+  static const _maxProbeTimeout = Duration(milliseconds: 1500);
+
+  /// A probe gets three measured round trips. One is the reply itself; the
+  /// other two are headroom for the jitter a congested link routinely shows
+  /// and for probes that ask the terminal to do real work before answering
+  /// (the width battery draws eight glyphs and reports eight cursor positions,
+  /// against DA1's nothing).
+  static const _probeTimeoutRoundTrips = 3;
+
+  /// The handshake gets eight. Five are the sequence itself — keyboard, the
+  /// keyboard re-query after a lifecycle rollback, synchronized output, image
+  /// protocol, width battery — and the rest is slack for write/flush and for
+  /// one probe timing out and handing the next a quarantine to wait through.
+  static const _budgetRoundTrips = 8;
   ImageProtocol? _imageProtocolOverride;
   bool _synchronizedOutput = false;
-  // Set once the ambiguous-width probe measures how the terminal sizes
-  // ambiguous glyphs; a confirmed `narrow` lets the renderer drop the
-  // defensive per-cell repositioning [capabilities] otherwise assumes.
-  AmbiguousCharWidth? _ambiguousCharWidthOverride;
 
-  /// What the startup probe measured the terminal actually drawing. Reported
-  /// through [capabilities] for diagnostics; null fields mean "unmeasured".
+  /// What the startup probe measured the terminal actually drawing.
+  ///
+  /// The ONE probe output the driver keeps: [capabilities] folds it into the
+  /// derived width policy, and every downstream answer — layout's cell widths,
+  /// the renderer's pin gate, the reported `ambiguousCharWidth` — is read back
+  /// out of that policy. Null fields mean "unmeasured".
   WidthMeasurements _measuredGlyphWidths = const WidthMeasurements.empty();
   bool _nativeRawMode = false;
   bool? _originalLineMode;
@@ -185,10 +246,18 @@ class PosixTerminalDriver
     return int.tryParse(raw);
   }
 
+  final StreamSubscription<ProcessSignal>? Function(
+    ProcessSignal signal,
+    void Function(ProcessSignal signal) onSignal,
+  )?
+  _signalWatcherOverride;
+
   StreamSubscription<ProcessSignal>? _watchSignal(
     ProcessSignal signal,
     void Function(ProcessSignal signal) onSignal,
   ) {
+    final override = _signalWatcherOverride;
+    if (override != null) return override(signal, onSignal);
     try {
       return signal.watch().listen(onSignal);
     } on SignalException {
@@ -292,20 +361,23 @@ class PosixTerminalDriver
               environment,
             ),
           );
-    final width = _ambiguousCharWidthOverride;
+    // Fold measurements + FLEURY_* overrides into the one derived policy every
+    // geometry consumer shares (RFC 0019 §6.2), then read the reported
+    // ambiguous width back OUT of it. One agreement rule, applied once: the
+    // renderer's pin gate, layout, and `fleury diagnose` cannot disagree about
+    // the evidence because there is only one derivation of it. An unevidenced
+    // axis leaves the env-derived (conservative `wide`) default standing.
+    final textPolicy = deriveTextPresentationPolicy(
+      measurements: _measuredGlyphWidths,
+      environment: environment,
+    );
+    final width = evidencedAmbiguousCharWidth(textPolicy);
     final withWidth = width == null
         ? merged
         : merged.copyWith(ambiguousCharWidth: width);
     return withWidth.copyWith(
       measuredWidths: _measuredGlyphWidths,
-      // Fold measurements + FLEURY_* overrides into the one derived policy
-      // every geometry consumer shares (RFC 0019 §6.2). Same inputs as the
-      // ambiguousCharWidth resolution above, so the renderer's pin gate and
-      // the layout policy can never disagree about the evidence.
-      textPolicy: deriveTextPresentationPolicy(
-        measurements: _measuredGlyphWidths,
-        environment: environment,
-      ),
+      textPolicy: textPolicy,
     );
   }
 
@@ -343,19 +415,26 @@ class PosixTerminalDriver
     _sink.target = _events;
 
     // Arm process-termination signals BEFORE the first terminal mutation. The
-    // startup probes below can take up to ~300ms; installing these afterward
-    // left a reproducible window where SIGTERM killed the process after the alt
-    // screen was entered but before any cleanup handler existed. A signal that
-    // lands before runApp subscribes is retained and replayed by
+    // startup probes below hold the driver for the negotiation budget (500 ms
+    // on a silent terminal, up to 2 s on a measured slow link — see
+    // [_nextProbeTimeout]); installing these afterward left a reproducible
+    // window where SIGTERM killed the process after the alt screen was entered
+    // but before any cleanup handler existed. A signal that lands before
+    // runApp subscribes is retained and replayed by
     // [_deliverPendingSignalToNewListener].
-    _intSubscription = _watchSignal(
-      ProcessSignal.sigint,
-      (_) => deliverSignal(AppSignal.interrupt),
-    );
-    _termSubscription = _watchSignal(
-      ProcessSignal.sigterm,
-      (_) => deliverSignal(AppSignal.terminate),
-    );
+    // The ack tells a dev supervisor that the OS delivered this signal HERE
+    // (a tty Ctrl+C reaches the whole foreground group), so it must not
+    // forward its own copy on top of an in-progress teardown. Posted from the
+    // watcher rather than from [deliverSignal], which is also driven
+    // synthetically by tests: only a real delivery is evidence.
+    _intSubscription = _watchSignal(ProcessSignal.sigint, (_) {
+      postDevSignalAck(ProcessSignal.sigint);
+      deliverSignal(AppSignal.interrupt);
+    });
+    _termSubscription = _watchSignal(ProcessSignal.sigterm, (_) {
+      postDevSignalAck(ProcessSignal.sigterm);
+      deliverSignal(AppSignal.terminate);
+    });
 
     // Raw mode only makes sense on a terminal stdin; reading lineMode/
     // echoMode throws on a pipe, so guard rather than catch. Piped input
@@ -410,19 +489,27 @@ class PosixTerminalDriver
     // sequences pushed our flags, and on the SAME screen buffer they were
     // pushed to (§8.1). It never blocks the app: an unanswered query
     // simply leaves capabilities conservative.
+    //
+    // A concurrent force-restore can complete while a bounded startup probe is
+    // awaiting its reply (runApp's zone handler calls cleanup() on any uncaught
+    // async error, and these probes hold the driver for the negotiation
+    // budget — 500 ms silent, up to 2 s on a measured slow link). Never
+    // reactivate a driver whose lifecycle moved on — and check BETWEEN the
+    // probes, not only after them: `restore()` nulls `_terminalState`, so a
+    // teardown that lands mid-negotiation must be reported as this StateError
+    // rather than crashing on the next read of the state it tore down.
     final negotiationClock = Stopwatch()..start();
     await _negotiateKeyboard(negotiationClock);
+    _checkStillEntering(enterGeneration);
     await _negotiateSynchronizedOutput(negotiationClock);
+    _checkStillEntering(enterGeneration);
     await _maybeProbeImageProtocol(negotiationClock);
-    await _maybeProbeAmbiguousWidth(_mode!.alternateScreen, negotiationClock);
-
-    // A concurrent force-restore can complete while a bounded startup probe is
-    // awaiting its reply. Never reactivate a driver whose lifecycle moved on.
-    if (_restoring || enterGeneration != _lifecycleGeneration) {
-      throw StateError(
-        'PosixTerminalDriver was restored while enter was negotiating.',
-      );
-    }
+    final negotiated = _checkStillEntering(enterGeneration);
+    await _maybeProbeAmbiguousWidth(
+      negotiated.alternateScreen,
+      negotiationClock,
+    );
+    _checkStillEntering(enterGeneration);
 
     _resizeSubscription = _watchSignal(ProcessSignal.sigwinch, (_) {
       if (!_events.isClosed) _events.add(ResizeEvent(size));
@@ -437,6 +524,26 @@ class PosixTerminalDriver
       keyboard: keyboardCapabilities,
       synchronizedOutput: _synchronizedOutput,
     );
+  }
+
+  /// Asserts that the `enter` identified by [enterGeneration] still owns the
+  /// terminal, and returns the mode it owns it in.
+  ///
+  /// Called around every startup probe await. The generation check and the
+  /// state read belong together: a completed `restore()` leaves `_restoring`
+  /// false again but has bumped the generation AND nulled `_terminalState`, so
+  /// reading the mode without checking first is exactly the null-check crash
+  /// this replaces.
+  TerminalMode _checkStillEntering(int enterGeneration) {
+    final state = _terminalState;
+    if (_restoring ||
+        enterGeneration != _lifecycleGeneration ||
+        state == null) {
+      throw StateError(
+        'PosixTerminalDriver was restored while enter was negotiating.',
+      );
+    }
+    return state.effectiveMode;
   }
 
   Future<void> _negotiateSynchronizedOutput(Stopwatch negotiationClock) async {
@@ -487,7 +594,12 @@ class PosixTerminalDriver
   /// leaving the mode can (§8.3).
   Future<void> _negotiateKeyboard(Stopwatch negotiationClock) async {
     if (!_stdoutIsTerminal || !_changedStdin) return;
-    final effective = _mode!;
+    // Every `_terminalState` read in this method and its helpers is null-safe:
+    // `restore()` can complete while a probe below is awaiting its reply, and
+    // the caller's `_checkStillEntering` is what turns that into a legible
+    // StateError. Bailing out quietly here lets it get there.
+    final effective = _terminalState?.effectiveMode;
+    if (effective == null) return;
     if (effective.keyboardProtocol == KeyboardProtocolMode.legacy) return;
     // Escape hatch for a terminal where the query itself misbehaves.
     final flag = Platform.environment['FLEURY_KEYBOARD_PROBE'];
@@ -522,7 +634,9 @@ class PosixTerminalDriver
         '\x1B[<1u'
         '\x1B[>${KeyboardProtocolMode.disambiguated.requestedFlags}u',
       );
-      _terminalState!.effectiveMode = terminalModeWithKeyboardProtocol(
+      final state = _terminalState;
+      if (state == null) return; // restored mid-probe
+      state.effectiveMode = terminalModeWithKeyboardProtocol(
         effective,
         KeyboardProtocolMode.disambiguated,
       );
@@ -565,7 +679,9 @@ class PosixTerminalDriver
       return;
     }
     _confirmedKeyboardFlags = null;
-    _terminalState!.effectiveMode = terminalModeWithKeyboardProtocol(
+    final state = _terminalState;
+    if (state == null) return; // restored while the pop was flushing
+    state.effectiveMode = terminalModeWithKeyboardProtocol(
       effective,
       KeyboardProtocolMode.legacy,
     );
@@ -616,38 +732,74 @@ class PosixTerminalDriver
   ) async {
     if (!_stdoutIsTerminal || !_changedStdin) return;
     if (!onAlternateScreen) return;
-    final env = Platform.environment;
-    // An explicit FLEURY_AMBIGUOUS_WIDTH=narrow|wide is already reflected in the
-    // env-derived base capabilities (detectAmbiguousCharWidthFromEnvironment),
-    // so there is nothing to measure. FLEURY_AMBIGUOUS_WIDTH=0|off|false
-    // disables the probe and keeps the conservative `wide` default.
-    if (detectAmbiguousCharWidthFromEnvironment(env) != null) return;
-    final flag = env['FLEURY_AMBIGUOUS_WIDTH']?.toLowerCase().trim();
-    if (flag == '0' || flag == 'off' || flag == 'false') return;
-    // ASCII-only output emits no ambiguous glyphs, so nothing needs sizing —
-    // skip the round trip and the stray probe glyph.
-    if (detectGlyphTierFromEnvironment(env) == GlyphTier.ascii) return;
+    // Environment gate — see [widthProbeIsPermittedByEnvironment].
+    if (!widthProbeIsPermittedByEnvironment(Platform.environment)) return;
     final timeout = _nextProbeTimeout(negotiationClock);
     if (timeout == null) return;
     try {
       // One round trip measures every width class the field disagrees on, not
-      // just ambiguous — same cost as the old single-glyph probe.
-      final measured = await probeGlyphWidths(_queryRunner, timeout: timeout);
-      _measuredGlyphWidths = measured;
-      // Agreement across the ambiguous representatives, or keep the default:
-      // one glyph is a signal, not proof (RFC 0019 §6.1).
-      final ambiguous = ambiguousWidthFromMeasurements(measured);
-      if (ambiguous != null) _ambiguousCharWidthOverride = ambiguous;
+      // just ambiguous — same cost as the old single-glyph probe. Storing the
+      // raw measurements is the whole job: [capabilities] applies the
+      // agreement rule once, when it derives the policy.
+      _measuredGlyphWidths = await probeGlyphWidths(
+        _queryRunner,
+        timeout: timeout,
+      );
     } on Object {
       // Probe failed (no terminal reply, write error, …): keep the `wide`
       // default so ambiguous-wide terminals never garble.
     }
   }
 
+  /// The deadline for the next startup probe, or null when the handshake has
+  /// no budget left and the remaining probes must be skipped.
+  ///
+  /// Deadlines are adaptive because a fixed one is a latency cliff: with every
+  /// probe capped at 150 ms, a link slower than about 130 ms round trip timed
+  /// ALL of them out and the session silently fell back on every axis at once
+  /// — legacy keyboard, no synchronized output, no image protocol, `wide`
+  /// ambiguous width — which is the ordinary condition of an agent TUI over
+  /// SSH, not an edge case.
+  ///
+  /// The first answered exchange measures the link
+  /// ([TerminalQueryRunner.measuredRoundTrip]); every probe after it, and the
+  /// aggregate budget, scale to that measurement within fixed bounds. Until
+  /// something answers there is nothing to scale from, so the first probe runs
+  /// on [firstProbeTimeout] and the budget stays at
+  /// [startupNegotiationBudget]: a terminal that never answers must not be
+  /// able to hang startup, and it cannot lengthen its own deadline by staying
+  /// silent.
   Duration? _nextProbeTimeout(Stopwatch negotiationClock) {
-    final remaining = startupNegotiationBudget - negotiationClock.elapsed;
+    final roundTrip = _queryRunner.measuredRoundTrip;
+    final remaining =
+        negotiationBudgetFor(roundTrip) - negotiationClock.elapsed;
     if (remaining <= Duration.zero) return null;
-    return remaining < _perProbeTimeout ? remaining : _perProbeTimeout;
+    final perProbe = probeTimeoutFor(roundTrip);
+    return remaining < perProbe ? remaining : perProbe;
+  }
+
+  /// Per-probe deadline for a link measured at [measuredRoundTrip], or
+  /// [firstProbeTimeout] when nothing has answered yet.
+  @visibleForTesting
+  static Duration probeTimeoutFor(Duration? measuredRoundTrip) {
+    if (measuredRoundTrip == null) return firstProbeTimeout;
+    final scaled = measuredRoundTrip * _probeTimeoutRoundTrips;
+    if (scaled < _minProbeTimeout) return _minProbeTimeout;
+    if (scaled > _maxProbeTimeout) return _maxProbeTimeout;
+    return scaled;
+  }
+
+  /// Aggregate handshake budget for a link measured at [measuredRoundTrip], or
+  /// [startupNegotiationBudget] when nothing has answered yet.
+  @visibleForTesting
+  static Duration negotiationBudgetFor(Duration? measuredRoundTrip) {
+    if (measuredRoundTrip == null) return startupNegotiationBudget;
+    final scaled = measuredRoundTrip * _budgetRoundTrips;
+    if (scaled < startupNegotiationBudget) return startupNegotiationBudget;
+    if (scaled > maxStartupNegotiationBudget) {
+      return maxStartupNegotiationBudget;
+    }
+    return scaled;
   }
 
   /// Builds the mode-entry escape sequence (alt screen, hide cursor,
@@ -753,6 +905,15 @@ class PosixTerminalDriver
       return;
     }
     _suspended = true;
+    // Input authority leaves with the terminal: whatever the user is holding
+    // will be released into the shell, and this driver will never see the
+    // release. Say so — the runtime recovers held keys on a focus-out (RFC
+    // 0020 §10) — or every held key stays held across the suspend, a hold
+    // never ends, and the first re-press of two stuck keys trips the
+    // phase-violation counter and demotes an honest terminal to press-only.
+    if (!_events.isClosed) {
+      _events.add(const TerminalFocusEvent(focused: false));
+    }
     // Restore the terminal for the shell. Guarded so a failing write/flush
     // still reaches the stop below: a half-suspend that never stops (and so
     // is never resumed) would otherwise wedge the gate forever.
@@ -849,6 +1010,11 @@ class PosixTerminalDriver
         handoffMode = mode;
         didHandoff = true;
         _handoffActive = true;
+        // Same contract as suspend: the child owns the terminal now, so held
+        // keys are released into it, never reported here.
+        if (!_events.isClosed) {
+          _events.add(const TerminalFocusEvent(focused: false));
+        }
 
         // Stop the parent subscription before terminal modes change so it
         // never races an inherited-stdio editor/pager for tty input.
@@ -901,6 +1067,7 @@ class PosixTerminalDriver
             } finally {
               _handoffActive = false;
               if (shouldReenter && !_events.isClosed) {
+                _events.add(const TerminalFocusEvent(focused: true));
                 _events.add(ResizeEvent(size));
               }
             }
@@ -924,7 +1091,12 @@ class PosixTerminalDriver
     if (_handoffActive) return;
     if (_changedStdin) _setRawMode();
     if (_wroteEnterSequences) _stdout.write(_enterSequences(mode));
-    if (!_events.isClosed) _events.add(ResizeEvent(size));
+    if (!_events.isClosed) {
+      // Authority is back (nothing is held: the shell saw the releases), then
+      // the same-size resize that forces the full repaint.
+      _events.add(const TerminalFocusEvent(focused: true));
+      _events.add(ResizeEvent(size));
+    }
   }
 
   @override
@@ -962,6 +1134,39 @@ class PosixTerminalDriver
     _flushTimer = null;
     _pasteIdleTimer?.cancel();
     _pasteIdleTimer = null;
+
+    // Shield the rest of restore from SIGINT/SIGTERM. Cancelling the LAST
+    // subscription to a signal restores the OS default disposition, so a
+    // signal arriving while the remaining cleanup yields — the hot-reload
+    // supervisor forwards one 300 ms after delivery — killed the process raw,
+    // mid-restore: capture teardown skipped, nothing after `await runApp`
+    // ran, and the emergency tty restore made it look like a clean quit. The
+    // shield swallows it (we are already on the way out) and is dropped last.
+    // Bounded: a second signal during the restore, or any signal once it
+    // has already run for two seconds (a pty write blocked behind a dropped
+    // SSH session or an XOFF), is the user overruling a hung teardown. It
+    // ends the process with the conventional code — the alternative is a
+    // process only SIGKILL can end, with nothing to restore the terminal.
+    final restoreClock = Stopwatch()..start();
+    var shieldedSignals = 0;
+    final shields = <StreamSubscription<ProcessSignal>>[];
+    for (final signal in const [ProcessSignal.sigint, ProcessSignal.sigterm]) {
+      final shield = _watchSignal(signal, (received) {
+        shieldedSignals++;
+        if (shieldedSignals < 2 &&
+            restoreClock.elapsed < const Duration(seconds: 2)) {
+          return;
+        }
+        final code = received == ProcessSignal.sigterm ? 143 : 130;
+        final force = _forceExitOverride;
+        if (force != null) {
+          force(code);
+        } else {
+          exit(code);
+        }
+      });
+      if (shield != null) shields.add(shield);
+    }
 
     // Termination watchers go first. This closes the only path that can re-arm
     // signal grace while the remaining asynchronous cleanup yields.
@@ -1022,6 +1227,13 @@ class PosixTerminalDriver
     _graceTimer = null;
     _pendingSignal = null;
     _pendingSignalDelivered = false;
+    // Last: the terminal is back in the user's hands; a signal now has its
+    // normal meaning again.
+    for (final shield in shields) {
+      try {
+        await shield.cancel();
+      } catch (_) {}
+    }
     _restoring = false;
   }
 

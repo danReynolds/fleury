@@ -180,10 +180,14 @@ Future<ImageProtocol?> probeImageProtocol(
 ///
 /// Returns the confirmed bitset, or null when the terminal does not support
 /// the protocol (or answered nothing in time). The query is bracketed by a
-/// primary device-attributes request, which every real emulator answers —
-/// so "unsupported" is detected by DA1 arriving WITHOUT a flags reply
-/// rather than by a wall-clock timeout, keeping the verdict independent of
-/// link latency (RFC 0020 §8.2).
+/// primary device-attributes request, which every real emulator answers — so
+/// "unsupported" is *decided* by DA1 arriving WITHOUT a flags reply rather
+/// than by a wall-clock timeout (RFC 0020 §8.2). The verdict is only as
+/// latency-independent as the [timeout] the caller allows, though: a reply
+/// that lands after it is indistinguishable from no reply. Startup
+/// negotiation therefore sizes [timeout] to the link — a fixed budget for the
+/// first probe, then a multiple of the round trip that first answer measured
+/// (`PosixTerminalDriver._nextProbeTimeout`).
 ///
 /// Shares [_parseKittyKeyboardStatus] with the diagnostic probe, so runtime
 /// negotiation and `diagnose --probe` can never disagree about what a reply
@@ -234,39 +238,6 @@ Future<bool> probeSynchronizedOutput(
     response,
     elapsed: stopwatch.elapsed,
   ).isConfirmed;
-}
-
-/// Actively measures whether the terminal renders East-Asian *Ambiguous*-width
-/// glyphs as one column or two.
-///
-/// Delegates to the batched [probeGlyphWidths] and answers from the
-/// ambiguous-class representatives under RFC 0019's agreement rule: narrow
-/// only when every representative measured 1, wide only when every one
-/// measured ≥ 2, and null on any disagreement, anomaly, or missing reply — a
-/// single glyph is a signal, not proof, and box drawing in particular is the
-/// character a terminal is most likely to special-case narrow (grids must
-/// work) while rendering the rest of the Ambiguous class wide. Null keeps the
-/// caller's safe (defensive) default. This is the same cursor-measurement
-/// trick vim's `t_u7` uses to auto-set `ambiwidth`.
-Future<AmbiguousCharWidth?> probeAmbiguousWidth(
-  TerminalProbeTransport transport, {
-  Duration timeout = const Duration(milliseconds: 150),
-}) async {
-  final measured = await probeGlyphWidths(transport, timeout: timeout);
-  return ambiguousWidthFromMeasurements(measured);
-}
-
-/// The agreement-rule derivation shared by [probeAmbiguousWidth], the POSIX
-/// driver, and `fleury diagnose`: one answer for the ambiguous axis, or null
-/// when the evidence doesn't agree.
-AmbiguousCharWidth? ambiguousWidthFromMeasurements(
-  WidthMeasurements measurements,
-) {
-  final widths = measurements.widthsIn(WidthProbeClass.ambiguous);
-  if (widths.isEmpty || widths.any((w) => w == null)) return null;
-  if (widths.every((w) => w == 1)) return AmbiguousCharWidth.narrow;
-  if (widths.every((w) => w! >= 2)) return AmbiguousCharWidth.wide;
-  return null; // Disagreement — conservative, keep the default.
 }
 
 /// The width-disagreement class a probe glyph represents. Classes are

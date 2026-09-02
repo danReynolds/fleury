@@ -1,7 +1,11 @@
+import 'package:characters/characters.dart';
+
 import '../rendering/border.dart';
 import '../rendering/cell.dart';
 import '../rendering/render_flex.dart' show CrossAxisAlignment, MainAxisSize;
 import '../rendering/render_objects.dart' show TextOverflow;
+import '../rendering/text_projection.dart';
+import '../rendering/width_resolver.dart';
 import '../runtime/output_capture.dart';
 import 'align.dart';
 import 'basic.dart';
@@ -9,6 +13,7 @@ import 'framework.dart';
 import 'inherited_notifier.dart';
 import 'layout_builder.dart';
 import 'listenable_builder.dart';
+import 'media_query.dart';
 import 'theme.dart';
 
 /// Shares a [LogBuffer] with descendants. `runApp` installs one above the
@@ -131,6 +136,9 @@ class OutputCaptureConsole extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final logs = LogBufferScope.of(context); // dependency → rebuilds on output
+    // The row helpers below pad and truncate in CELLS, so they need the same
+    // presentation policy the Text render objects will measure with.
+    final policy = MediaQuery.textPolicyOf(context);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -151,16 +159,19 @@ class OutputCaptureConsole extends StatelessWidget {
               '▌ $title',
               '${logs.length} ${logs.length == 1 ? 'line' : 'lines'}',
               innerW,
+              policy,
             ),
             const CellStyle(inverse: true, bold: true),
             innerW,
+            policy,
           ),
-          ..._body(theme, logs.lines, logRows, innerW),
+          ..._body(theme, logs.lines, logRows, innerW, policy),
           if (hasFooter)
             _bar(
-              _rightAlign('$toggleHint to hide ', innerW),
+              _rightAlign('$toggleHint to hide ', innerW, policy),
               theme.mutedStyle,
               innerW,
+              policy,
             ),
         ];
 
@@ -190,15 +201,17 @@ class OutputCaptureConsole extends StatelessWidget {
     List<LogLine> lines,
     int logRows,
     int innerW,
+    TextPresentationPolicy policy,
   ) {
     if (logRows <= 0) return const [];
     if (lines.isEmpty) {
       return [
         for (var i = 0; i < logRows; i++)
           _bar(
-            i == logRows ~/ 2 ? _center('no output yet', innerW) : '',
+            i == logRows ~/ 2 ? _center('no output yet', innerW, policy) : '',
             theme.mutedStyle,
             innerW,
+            policy,
           ),
       ];
     }
@@ -208,7 +221,7 @@ class OutputCaptureConsole extends StatelessWidget {
     return [
       // Pad above so the newest line sits at the bottom, like a terminal.
       for (var i = 0; i < logRows - shown.length; i++)
-        _bar('', theme.textStyle, innerW),
+        _bar('', theme.textStyle, innerW, policy),
       for (final line in shown)
         _bar(
           '${line.source == LogSource.stderr ? '●' : '·'} ${line.text}',
@@ -216,31 +229,79 @@ class OutputCaptureConsole extends StatelessWidget {
               ? CellStyle(foreground: theme.colorScheme.error)
               : theme.textStyle,
           innerW,
+          policy,
         ),
     ];
   }
 
   // One opaque, full-width row (padded/truncated so every cell is painted).
-  static Widget _bar(String text, CellStyle style, int width) => Text(
-    _fit(text, width),
+  static Widget _bar(
+    String text,
+    CellStyle style,
+    int width,
+    TextPresentationPolicy policy,
+  ) => Text(
+    _fit(text, width, policy),
     style: style,
     maxLines: 1,
     overflow: TextOverflow.clip,
   );
 
-  static String _fit(String s, int w) =>
-      s.length >= w ? s.substring(0, w) : s.padRight(w);
+  /// Cells [s] occupies once painted.
+  ///
+  /// Measured through the display PROJECTION, because that is what the Text
+  /// render object lays out: under `ClusterLowering.split` a ZWJ sequence is
+  /// drawn as its components and is wider than the cluster itself.
+  static int _cells(String s, TextPresentationPolicy policy) =>
+      const DefaultWidthResolver().widthOfText(
+        projectText(s, policy: policy).displayText,
+        policy.widths,
+      );
 
-  static String _between(String left, String right, int w) {
-    final gap = w - left.length - right.length;
-    return gap < 1 ? _fit(left, w) : '$left${' ' * gap}$right';
+  /// [s] padded or truncated to exactly [w] CELLS.
+  ///
+  /// The panel's opacity contract is "every cell it covers is painted", and a
+  /// Text only paints the cells its glyphs occupy — so the padding has to be
+  /// counted in cells, not UTF-16 code units. A ZWJ family is 8 code units and
+  /// 2 cells; measuring by `String.length` left 6 cells of whatever was
+  /// underneath showing through. Truncation walks grapheme clusters so a
+  /// cluster is never cut in half, and pads any remainder (dropping a
+  /// double-width cluster at the boundary can leave one cell over).
+  static String _fit(String s, int w, TextPresentationPolicy policy) {
+    if (w <= 0) return '';
+    final width = _cells(s, policy);
+    if (width == w) return s;
+    if (width < w) return s + ' ' * (w - width);
+    final out = StringBuffer();
+    var used = 0;
+    for (final cluster in s.characters) {
+      final clusterWidth = _cells(cluster, policy);
+      if (used + clusterWidth > w) break;
+      out.write(cluster);
+      used += clusterWidth;
+    }
+    if (used < w) out.write(' ' * (w - used));
+    return out.toString();
   }
 
-  static String _rightAlign(String s, int w) =>
-      s.length >= w ? _fit(s, w) : '${' ' * (w - s.length)}$s';
+  static String _between(
+    String left,
+    String right,
+    int w,
+    TextPresentationPolicy policy,
+  ) {
+    final gap = w - _cells(left, policy) - _cells(right, policy);
+    return gap < 1 ? _fit(left, w, policy) : '$left${' ' * gap}$right';
+  }
 
-  static String _center(String s, int w) {
-    if (s.length >= w) return _fit(s, w);
-    return _fit('${' ' * ((w - s.length) ~/ 2)}$s', w);
+  static String _rightAlign(String s, int w, TextPresentationPolicy policy) {
+    final width = _cells(s, policy);
+    return width >= w ? _fit(s, w, policy) : '${' ' * (w - width)}$s';
+  }
+
+  static String _center(String s, int w, TextPresentationPolicy policy) {
+    final width = _cells(s, policy);
+    if (width >= w) return _fit(s, w, policy);
+    return _fit('${' ' * ((w - width) ~/ 2)}$s', w, policy);
   }
 }

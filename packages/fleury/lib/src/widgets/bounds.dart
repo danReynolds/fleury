@@ -122,16 +122,50 @@ class _BoundsObserverElement extends SingleChildRenderObjectElement {
 
   @override
   void unmount() {
-    (renderObject as RenderBoundsObserver).detachFromBounds();
+    // `maybeRenderObject`, not `renderObject`: an element whose inflate threw
+    // in `createRenderObject` never got one, and the throwing getter would
+    // raise a second, misleading error on top of the first while the tree is
+    // already unwinding.
+    (maybeRenderObject as RenderBoundsObserver?)?.detachFromBounds();
     super.unmount();
   }
 }
 
 /// Publishes its child's painted bounds; see [BoundsObserver].
 class RenderBoundsObserver extends RenderObject
-    implements RenderObjectWithSingleChild {
+    implements RenderObjectWithSingleChild, PaintPassParticipant {
   RenderBoundsObserver(this._notifier) {
     _notifier.claimWriter(this);
+  }
+
+  // A participant of its owner's paint pass (see
+  // [RenderDamageTracker.endPaintPass]): when a pass ends without this
+  // observer having painted or replayed, its subtree stopped painting while
+  // staying mounted — the other IndexedStack tab, a route beneath an opaque
+  // one — and the observation is retracted, so a float anchored to it hides
+  // instead of hovering over whatever now paints there. Registration happens
+  // on the first publish (that is when the tree's tracker is reachable);
+  // unmount unregisters through [detachFromBounds].
+  RenderDamageTracker? _registeredWith;
+  int _publishedPass = -1;
+
+  @override
+  int get publishedPaintPass => _publishedPass;
+
+  @override
+  void retractPaintFacts() => _notifier.publish(null);
+
+  void _publish(CellRect? bounds, CellRect? clip) {
+    final tracker = rootFrameDamage;
+    if (tracker != null) {
+      if (!identical(tracker, _registeredWith)) {
+        _registeredWith?.unregisterPaintPassParticipant(this);
+        tracker.registerPaintPassParticipant(this);
+        _registeredWith = tracker;
+      }
+      _publishedPass = tracker.paintPass;
+    }
+    _notifier.publish(bounds, clip: clip);
   }
 
   BoundsNotifier _notifier;
@@ -146,6 +180,8 @@ class RenderBoundsObserver extends RenderObject
 
   /// Called on unmount: the widget is gone, so the observation is too.
   void detachFromBounds() {
+    _registeredWith?.unregisterPaintPassParticipant(this);
+    _registeredWith = null;
     _notifier.publish(null);
     _notifier.releaseWriter(this);
   }
@@ -176,7 +212,7 @@ class RenderBoundsObserver extends RenderObject
     // in root/absolute space, so a scratch-local offset would misplace floats
     // anchored inside composited subtrees.
     final bounds = CellRect(offset: screenOffset ?? offset, size: size);
-    _notifier.publish(bounds, clip: clipRect);
+    _publish(bounds, clipRect);
     if (RetainedPaintGeometryCapture.isActive) {
       RetainedPaintGeometryCapture.record(
         _replayBounds,
@@ -198,7 +234,7 @@ class RenderBoundsObserver extends RenderObject
   // visibleBounds stays truthful under cached paints.
   // ignore: prefer_function_declarations_over_variables
   late final RetainedPaintGeometryCallback _replayBounds = (bounds, clip) {
-    _notifier.publish(bounds, clip: clip);
+    _publish(bounds, clip);
   };
 }
 
@@ -399,7 +435,9 @@ class _BoundsAnchorElement extends SingleChildRenderObjectElement {
 
   @override
   void unmount() {
-    (renderObject as RenderBoundsAnchor).stopTracking();
+    // `maybeRenderObject`: an element whose inflate threw never got a render
+    // object, and the throwing getter would compound the original error.
+    (maybeRenderObject as RenderBoundsAnchor?)?.stopTracking();
     super.unmount();
   }
 }

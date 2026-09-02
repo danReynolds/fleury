@@ -1274,6 +1274,219 @@ void main() {
     });
   });
 
+  group('Sequences survive a rebuild of their scope between steps', () {
+    // A KeyBindings scope rebuilds whenever anything above it calls setState —
+    // a clock, a stream, a hover state — and every rebuild hands the
+    // dispatcher fresh KeyBinding instances for the same bindings. The
+    // pending sequence used to re-validate its candidates by INSTANCE
+    // identity, so a rebuild between `g` and `g` cancelled `gg`: under any
+    // live-updating UI a multi-step sequence could never complete.
+    test('a rebuilt scope keeps the sequence alive and fires the CURRENT '
+        'handler', () {
+      final calls = <String>[];
+      var generation = 0;
+      final key = GlobalKey<_RebuildingScopeState>();
+      final h = _TestHarness();
+      h.mountRoot(
+        _RebuildingScope(
+          key: key,
+          bindings: () {
+            final gen = ++generation;
+            return [
+              KeyBinding(
+                KeySequence.g.g,
+                onTrigger: (_) => calls.add('gg@$gen'),
+              ),
+            ];
+          },
+        ),
+      );
+
+      h.dispatch(_char('g'));
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+
+      key.currentState!.rebuild();
+      h.owner.flushBuild();
+      expect(generation, 2, reason: 'the rebuild minted fresh instances');
+
+      h.dispatch(_char('g'));
+      expect(
+        calls,
+        ['gg@2'],
+        reason: 'the live instance fires, not the closure captured at step 0',
+      );
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+
+    test('a rebuild that removes the binding cancels the sequence', () {
+      final calls = <String>[];
+      var generation = 0;
+      final key = GlobalKey<_RebuildingScopeState>();
+      final h = _TestHarness();
+      h.mountRoot(
+        _RebuildingScope(
+          key: key,
+          bindings: () => ++generation == 1
+              ? [KeyBinding(KeySequence.g.g, onTrigger: (_) => calls.add('gg'))]
+              : const <KeyBinding>[],
+        ),
+      );
+
+      h.dispatch(_char('g'));
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+      key.currentState!.rebuild();
+      h.owner.flushBuild();
+
+      // Nothing on the live tree can complete the prefix any more: it is
+      // cancelled, and a stale handler is never fired from the old instance.
+      h.dispatch(_char('g'));
+      expect(calls, isEmpty);
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+
+    test('a rebuild that disables the binding cancels the sequence', () {
+      final calls = <String>[];
+      var generation = 0;
+      final key = GlobalKey<_RebuildingScopeState>();
+      final h = _TestHarness();
+      h.mountRoot(
+        _RebuildingScope(
+          key: key,
+          bindings: () => [
+            KeyBinding(
+              KeySequence.g.g,
+              enabled: ++generation == 1,
+              onTrigger: (_) => calls.add('gg'),
+            ),
+          ],
+        ),
+      );
+
+      h.dispatch(_char('g'));
+      key.currentState!.rebuild();
+      h.owner.flushBuild();
+      h.dispatch(_char('g'));
+      expect(calls, isEmpty);
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+
+    test(
+      'a rebuild while a pure prefix waits (which-key open) keeps it open',
+      () async {
+        // A Space leader with nothing shorter to commit stays pending past the
+        // timeout so a which-key popup can be read. A rebuild during that wait
+        // — a clock tick in the status bar — must not tear the prefix down.
+        final calls = <String>[];
+        var generation = 0;
+        final key = GlobalKey<_RebuildingScopeState>();
+        final h = _TestHarness();
+        h.mountRoot(
+          _RebuildingScope(
+            key: key,
+            bindings: () {
+              final gen = ++generation;
+              return [
+                KeyBinding(
+                  KeySequence.space.q,
+                  onTrigger: (_) => calls.add('Space q@$gen'),
+                ),
+              ];
+            },
+          ),
+        );
+
+        h.dispatch(_char(' '));
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+        expect(
+          h.dispatcher.hasPendingSequence,
+          isTrue,
+          reason: 'a pure prefix survives its timeout',
+        );
+        key.currentState!.rebuild();
+        h.owner.flushBuild();
+
+        h.dispatch(_char('q'));
+        expect(calls, ['Space q@2']);
+        expect(h.dispatcher.hasPendingSequence, isFalse);
+      },
+    );
+
+    test('a rebuild that changes the completions refreshes which-key on the '
+        'next step', () {
+      // The pending snapshot is what a which-key popup renders. After the
+      // scope rebuilt with a different set of continuations, the next held
+      // step reports the LIVE completions, not the ones captured at step 0.
+      var generation = 0;
+      final key = GlobalKey<_RebuildingScopeState>();
+      final h = _TestHarness();
+      h.mountRoot(
+        _RebuildingScope(
+          key: key,
+          bindings: () => ++generation == 1
+              ? [
+                  KeyBinding(
+                    KeySequence.space.a.b,
+                    label: 'old',
+                    onTrigger: (_) {},
+                  ),
+                ]
+              : [
+                  KeyBinding(
+                    KeySequence.space.a.b,
+                    label: 'new b',
+                    onTrigger: (_) {},
+                  ),
+                  KeyBinding(
+                    KeySequence.space.a.c,
+                    label: 'new c',
+                    onTrigger: (_) {},
+                  ),
+                ],
+        ),
+      );
+
+      h.dispatch(_char(' '));
+      key.currentState!.rebuild();
+      h.owner.flushBuild();
+      h.dispatch(_char('a'));
+
+      final snapshot = h.dispatcher.pendingSequenceNotifier.value!;
+      expect(snapshot.completions.map((c) => c.binding.label), [
+        'new b',
+        'new c',
+      ]);
+    });
+  });
+
+  group('repeat text on a split key/text surface (§14.4)', () {
+    test('a repeat-tagged text half cannot advance or complete a sequence', () {
+      // The browser reports keys and text separately. The key half of an
+      // auto-repeat was refused, but the text half arrived untagged and was
+      // synthesized as a fresh press: a held `g` completed `g g` by itself
+      // and a held leader tore down which-key. The text now carries the
+      // phase.
+      final calls = <String>[];
+      final h = _TestHarness();
+      h.mountRoot(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeySequence.g.g, onTrigger: (_) => calls.add('gg')),
+          ],
+          child: const Focus(autofocus: true, child: EmptyBox()),
+        ),
+      );
+      h.dispatcher.dispatch(const TextInputEvent('g'));
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+
+      h.dispatcher.dispatch(const TextInputEvent('g', repeat: true));
+      expect(calls, isEmpty, reason: 'a repeat never completes a sequence');
+      expect(h.dispatcher.hasPendingSequence, isTrue, reason: 'nor cancels');
+
+      h.dispatcher.dispatch(const TextInputEvent('g'));
+      expect(calls, ['gg'], reason: 'a real second press does');
+    });
+  });
+
   group('Extended sequence semantics', () {
     test('a 3-step chord (.ctrl.x.ctrl.c) fires after all three events', () {
       final calls = <String>[];
@@ -1823,6 +2036,150 @@ void main() {
       expect(h.dispatcher.hasPendingSequence, isFalse);
     });
   });
+
+  group('repeats never advance a pending sequence (§14.4)', () {
+    KeyEvent repeat(String c) =>
+        KeyEvent(KeyCode.char(c), type: KeyEventType.repeat);
+
+    _TestHarness harness(
+      List<KeyBinding> bindings, {
+      KeyboardCapabilities? capabilities,
+    }) {
+      final h = _TestHarness();
+      if (capabilities != null) {
+        h.dispatcher.keyboardSession.updateCapabilities(capabilities);
+      }
+      h.mountRoot(
+        KeyBindings(
+          bindings: bindings,
+          child: const Focus(autofocus: true, child: EmptyBox()),
+        ),
+      );
+      return h;
+    }
+
+    test('(a) holding the leader does not complete the sequence', () {
+      final calls = <String>[];
+      final h = harness([
+        KeyBinding(
+          KeySequence.space.space,
+          onTrigger: (_) => calls.add('space space'),
+        ),
+      ]);
+
+      h.dispatch(_code(KeyCode.space));
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+
+      // Auto-repeat of the held leader: neither advances nor completes.
+      h.dispatch(KeyEvent(KeyCode.space, type: KeyEventType.repeat));
+      expect(calls, isEmpty);
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+
+      h.dispatch(KeyEvent(KeyCode.space, type: KeyEventType.repeat));
+      expect(calls, isEmpty);
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+    });
+
+    test('(a2) same, on the correlated key+text path (kitty flag 8)', () {
+      // The realistic surface for a TAGGED printable repeat: the key half
+      // cannot advance the prefix in the key lane, so the text half is
+      // offered the same physical step — and that call site must honour
+      // §14.4 too.
+      final calls = <String>[];
+      final h = harness([
+        KeyBinding(
+          KeySequence.space.space,
+          onTrigger: (_) => calls.add('space space'),
+        ),
+      ], capabilities: KeyboardCapabilities.full);
+
+      h.dispatcher.dispatch(
+        const InputBatch(key: KeyEvent(KeyCode.space), committedText: ' '),
+      );
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+
+      h.dispatcher.dispatch(
+        const InputBatch(
+          key: KeyEvent(KeyCode.space, type: KeyEventType.repeat),
+          committedText: ' ',
+        ),
+      );
+      expect(calls, isEmpty);
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+    });
+
+    test('(b) a 3-step sequence cannot be driven by repeats', () {
+      final calls = <String>[];
+      final h = harness([
+        KeyBinding(KeySequence.g.g.g, onTrigger: (_) => calls.add('ggg')),
+      ]);
+
+      h.dispatch(_char('g'));
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+      h.dispatch(repeat('g'));
+      h.dispatch(repeat('g'));
+      expect(calls, isEmpty);
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+    });
+
+    test('(c) a repeat then a real second press fires exactly once', () {
+      final calls = <String>[];
+      final h = harness([
+        KeyBinding(KeySequence.g.g, onTrigger: (_) => calls.add('gg')),
+      ]);
+
+      h.dispatch(_char('g'));
+      h.dispatch(repeat('g'));
+      expect(calls, isEmpty);
+      h.dispatch(KeyEvent(KeyCode.char('g'), type: KeyEventType.up));
+      h.dispatch(_char('g'));
+      expect(calls, ['gg']);
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+
+    test('(e) a repeat of a non-advancing key leaves pending (and which-key) '
+        'standing', () {
+      final calls = <String>[];
+      final h = harness([
+        KeyBinding(KeySequence.space.q, onTrigger: (_) => calls.add('space q')),
+      ]);
+
+      h.dispatch(_code(KeyCode.space));
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+
+      // `z` can never extend `.space.q`. As a REPEAT it must still be a
+      // no-op: tearing pending down here kills the which-key popup while
+      // the user is still holding a key.
+      h.dispatch(repeat('z'));
+      expect(calls, isEmpty);
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+
+      // A real press of the completing key still works afterwards.
+      h.dispatch(_char('q'));
+      expect(calls, ['space q']);
+      expect(h.dispatcher.hasPendingSequence, isFalse);
+    });
+
+    test('includeRepeats is rejected on a multi-step binding', () {
+      expect(
+        () => KeyBinding(
+          KeySequence.g.g,
+          includeRepeats: true,
+          onTrigger: (_) {},
+        ),
+        throwsA(isA<AssertionError>()),
+      );
+      // Single-step bindings are of course unaffected.
+      expect(
+        KeyBinding(
+          KeySequence.g,
+          includeRepeats: true,
+          onTrigger: (_) {},
+        ).includeRepeats,
+        isTrue,
+      );
+    });
+  });
 }
 
 /// Test-only builder widget (not exported by the package; needed for
@@ -1833,4 +2190,25 @@ class Builder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => builder(context);
+}
+
+/// A KeyBindings scope whose bindings are built FRESH on every build — the
+/// shape of any real app whose scope sits under a setState.
+class _RebuildingScope extends StatefulWidget {
+  const _RebuildingScope({super.key, required this.bindings});
+
+  final List<KeyBinding> Function() bindings;
+
+  @override
+  State<_RebuildingScope> createState() => _RebuildingScopeState();
+}
+
+class _RebuildingScopeState extends State<_RebuildingScope> {
+  void rebuild() => setState(() {});
+
+  @override
+  Widget build(BuildContext context) => KeyBindings(
+    bindings: widget.bindings(),
+    child: const Focus(autofocus: true, child: EmptyBox()),
+  );
 }

@@ -199,6 +199,38 @@ void main() {
       final buf = tester.render(size: const CellSize(80, 24));
       expect(buf.atColRow(0, 0).grapheme, 'x');
     });
+
+    testWidgets('changing maxWidth relayouts the child', (tester) {
+      // `updateRenderObject` assigns the bounds; without a setter that marks
+      // the render object dirty, `RenderObject.layout` short-circuits on the
+      // unchanged incoming constraints and returns the CACHED size, so the
+      // new bound never takes effect.
+      final key = GlobalKey<_ConstraintHostState>();
+      tester.pumpWidget(_ConstraintHost(key: key, useSizedBox: false));
+      var buf = tester.render(size: const CellSize(40, 1));
+      expect(buf.atColRow(30, 0).grapheme, '|', reason: 'box is 30 wide');
+
+      key.currentState!.shrink();
+      buf = tester.render(size: const CellSize(40, 1));
+      expect(
+        buf.atColRow(10, 0).grapheme,
+        '|',
+        reason: 'the box must shrink to the new maxWidth of 10',
+      );
+    });
+
+    testWidgets('control: changing SizedBox.width relayouts the child', (
+      tester,
+    ) {
+      final key = GlobalKey<_ConstraintHostState>();
+      tester.pumpWidget(_ConstraintHost(key: key, useSizedBox: true));
+      var buf = tester.render(size: const CellSize(40, 1));
+      expect(buf.atColRow(30, 0).grapheme, '|');
+
+      key.currentState!.shrink();
+      buf = tester.render(size: const CellSize(40, 1));
+      expect(buf.atColRow(10, 0).grapheme, '|');
+    });
   });
 
   group('AspectRatio', () {
@@ -280,4 +312,39 @@ class _ColoredBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       SizedBox.expand(child: Container(color: color));
+}
+
+/// Host for the "changing a constraint relayouts" tests: flips a single
+/// bound between two values on [shrink].
+class _ConstraintHost extends StatefulWidget {
+  const _ConstraintHost({super.key, required this.useSizedBox});
+
+  /// Control arm: `SizedBox(width:)` has the correct setter shape already.
+  final bool useSizedBox;
+
+  @override
+  State<_ConstraintHost> createState() => _ConstraintHostState();
+}
+
+class _ConstraintHostState extends State<_ConstraintHost> {
+  int bound = 30;
+  void shrink() => setState(() => bound = 10);
+
+  @override
+  Widget build(BuildContext context) {
+    // 40 cells of content: wider than either bound, so the box is always
+    // exactly the bound and never its child's natural size.
+    const child = Text(
+      'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+      softWrap: false,
+    );
+    return Row(
+      children: [
+        widget.useSizedBox
+            ? SizedBox(width: bound, child: child)
+            : ConstrainedBox(maxWidth: bound, child: child),
+        const Text('|'),
+      ],
+    );
+  }
 }

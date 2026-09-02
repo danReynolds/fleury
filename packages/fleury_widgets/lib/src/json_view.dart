@@ -355,6 +355,11 @@ String exportJsonViewRow(
 /// in place, values are colored by type, and Ctrl+C copies the selected
 /// node's subtree as JSON (or just its visible line). Invalid source is
 /// rendered as a parse-error state instead of throwing.
+///
+/// The viewer bounds its own height: it renders at most [maxVisible] rows
+/// (fewer for a shorter document) and scrolls the rest, so it composes
+/// directly inside a [Column] or any other unbounded slot. Wrap it in an
+/// [Expanded] or a [SizedBox] to give it a different height.
 class JsonView extends StatefulWidget {
   JsonView({
     super.key,
@@ -367,12 +372,14 @@ class JsonView extends StatefulWidget {
     this.semanticLabel = 'JSON',
     this.initialExpandedDepth = 1,
     this.maxLineLength = 1000,
+    this.maxVisible = 12,
     this.copySelection = true,
     this.copyOptions = const JsonViewCopyOptions(),
     this.onCopy,
   }) : document = JsonViewDocument.value(value),
        assert(initialExpandedDepth >= 0),
-       assert(maxLineLength == null || maxLineLength >= 0);
+       assert(maxLineLength == null || maxLineLength >= 0),
+       assert(maxVisible > 0);
 
   /// Creates a viewer from a parsed or already-materialized [JsonViewDocument].
   ///
@@ -386,11 +393,13 @@ class JsonView extends StatefulWidget {
     this.semanticLabel = 'JSON',
     this.initialExpandedDepth = 1,
     this.maxLineLength = 1000,
+    this.maxVisible = 12,
     this.copySelection = true,
     this.copyOptions = const JsonViewCopyOptions(),
     this.onCopy,
   }) : assert(initialExpandedDepth >= 0),
-       assert(maxLineLength == null || maxLineLength >= 0);
+       assert(maxLineLength == null || maxLineLength >= 0),
+       assert(maxVisible > 0);
 
   /// Creates a viewer by parsing JSON [source].
   ///
@@ -406,6 +415,7 @@ class JsonView extends StatefulWidget {
     String semanticLabel = 'JSON',
     int initialExpandedDepth = 1,
     int? maxLineLength = 1000,
+    int maxVisible = 12,
     bool copySelection = true,
     JsonViewCopyOptions copyOptions = const JsonViewCopyOptions(),
     void Function(JsonViewCopyResult result)? onCopy,
@@ -419,6 +429,7 @@ class JsonView extends StatefulWidget {
       semanticLabel: semanticLabel,
       initialExpandedDepth: initialExpandedDepth,
       maxLineLength: maxLineLength,
+      maxVisible: maxVisible,
       copySelection: copySelection,
       copyOptions: copyOptions,
       onCopy: onCopy,
@@ -442,6 +453,12 @@ class JsonView extends StatefulWidget {
 
   /// Depth expanded by default before user-controlled collapse state applies.
   final int initialExpandedDepth;
+
+  /// Maximum visible JSON rows before the viewer scrolls.
+  ///
+  /// This is what bounds the viewer's height in an unbounded slot (a [Column]
+  /// child, say); the internal list cannot window its rows without one.
+  final int maxVisible;
 
   /// Maximum displayed row length.
   final int? maxLineLength;
@@ -637,6 +654,9 @@ class _JsonViewState extends State<JsonView> {
     final selected = _selectedRow(rows);
     final visibleRange = _controller.visibleRange;
     final copyEnabled = widget.copySelection && rows.isNotEmpty;
+    final visible = rows.isEmpty
+        ? 1
+        : (rows.length > widget.maxVisible ? widget.maxVisible : rows.length);
     Widget list = KeyDetector(
       onKey: (event) {
         final handled = switch (event.code) {
@@ -671,6 +691,20 @@ class _JsonViewState extends State<JsonView> {
       ),
     );
 
+    // The row list is lazy and must be windowed, so it needs a bounded height.
+    // Bound it here rather than making every caller do it: a JsonView dropped
+    // into a Column would otherwise throw about an internal ListView the
+    // caller never wrote.
+    // Bound the height only where the parent gives none (a Column, an
+    // unbounded scroll): under a bounded parent — Expanded, Center, Align, a
+    // Stack layer — the viewer fills what it is given, as it did before the
+    // cap existed. maxVisible is the cap for the unbounded case.
+    final windowed = list;
+    list = LayoutBuilder(
+      builder: (context, constraints) => constraints.maxRows == null
+          ? SizedBox(height: visible, child: windowed)
+          : windowed,
+    );
     if (copyEnabled) {
       list = KeyBindings(
         bindings: [

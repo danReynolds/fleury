@@ -460,6 +460,16 @@ final class FrameDriver {
     _frameLoop.commit(frame);
     _emitFrameTelemetry(frame, info);
     _presenter.onFrameCommitted(frame, info);
+    // A paint-pass participant retracted during this frame (an anchor
+    // stopped painting): its consumer marked paint, but the loop consumed
+    // that damage when it took this frame's. Re-arm it and ask for the frame
+    // that repaints without the stale fact — with no other work pending the
+    // next request would otherwise take the no-change skip, and the float
+    // would sit over the new content until an unrelated rebuild.
+    if (runtime.renderDamageTracker.takePaintPassRetractions() > 0) {
+      runtime.renderDamageTracker.recordVisualChange();
+      requestFrame('paint-pass-retraction');
+    }
 
     // Drain post-frame callbacks AFTER output is out: callers can now
     // safely read render-object geometry (sizes/offsets reflect the frame

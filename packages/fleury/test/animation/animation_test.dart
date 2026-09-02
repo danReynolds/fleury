@@ -354,6 +354,48 @@ void main() {
   });
 
   group('scheduler integration', () {
+    testWidgets('dispose unregisters the reassemble callback', (tester) {
+      // The scheduler's reassemble registry is identity-based, so an
+      // uncached `_onReassemble` tear-off is registered under one closure
+      // and unregistered with a DIFFERENT one that only compares `==`.
+      // Every Animation ever attached would then be retained for the life
+      // of the scheduler, invisible to `activeTickerCount` because a
+      // settled animation holds no tick callback.
+      tester.pumpWidget(const Text('host'));
+      final baseline = tester.scheduler.reassembleCallbackCount;
+
+      const n = 200;
+      final animations = [for (var i = 0; i < n; i++) Animation(0.0)];
+      for (final animation in animations) {
+        animation.attach(tester.binding);
+      }
+      expect(
+        tester.scheduler.reassembleCallbackCount,
+        baseline + n,
+        reason: 'each attached animation registers exactly once',
+      );
+
+      for (final animation in animations) {
+        animation.dispose();
+      }
+      expect(
+        tester.scheduler.reassembleCallbackCount,
+        baseline,
+        reason: 'dispose must release every registration',
+      );
+      expect(tester.scheduler.activeTickerCount, 0);
+    });
+
+    testWidgets('dispose drops implicit dependents', (tester) {
+      // A disposed animation must not keep the elements that read it alive
+      // either; nothing can legitimately notify through it afterwards.
+      final m = Animation(0.0);
+      _host(tester, m);
+      expect(m.debugDependentCount, greaterThan(0));
+      m.dispose();
+      expect(m.debugDependentCount, 0);
+    });
+
     testWidgets('a settled animation holds no active ticker', (tester) {
       final m = Animation(0.0);
       _host(tester, m);

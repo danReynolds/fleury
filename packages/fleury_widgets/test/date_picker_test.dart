@@ -5,6 +5,21 @@ import 'package:test/test.dart';
 
 DateTime _d(int y, int m, int d) => DateTime(y, m, d);
 
+// A DST regression only manifests in a zone that observes the transition, so
+// the guards below turn into a skip reason under a fixed-offset zone (where
+// the buggy and fixed date math agree and the checks would be vacuous).
+const _dstSkipReason = 'requires a DST timezone (run with TZ=America/New_York)';
+
+// America/New_York: Nov 3 2024 is a 25h civil day, Mar 9 2025 a 23h one.
+final Object _fallBackSkip =
+    DateTime(2024, 11, 4).difference(DateTime(2024, 11, 3)).inHours == 25
+    ? false
+    : _dstSkipReason;
+final Object _springForwardSkip =
+    DateTime(2025, 3, 10).difference(DateTime(2025, 3, 9)).inHours == 23
+    ? false
+    : _dstSkipReason;
+
 /// A full left-click (press + release) at one cell. Render first so the
 /// pointer router has the current paint-time rects.
 void _clickAt(FleuryTester tester, {required int col, required int row}) {
@@ -510,6 +525,109 @@ void main() {
         payload: 'someday',
       );
       expect(selected, isNull);
+    });
+
+    // Cursor movement steps on the calendar lattice, not on absolute elapsed
+    // time: a DST-transition civil day is 23h or 25h, so `+ Duration(days: 1)`
+    // lands inside the same day (or on the right day at the wrong hour). Only
+    // reproducible in a DST-observing zone; the dev tool pins
+    // `TZ=America/New_York` for the fleury_widgets run (see
+    // tool/fleury_dev.dart), so these execute locally and in CI. Under a
+    // fixed-offset zone the buggy and fixed math agree, so skip rather than
+    // assert nothing.
+    group('DST civil-day stepping', () {
+      /// Drives [times] presses of [code], feeding each emitted value back in
+      /// as the controlled `value` — the real cursor-walk a user performs.
+      DateTime walk(
+        FleuryTester tester,
+        DateTime start,
+        KeyCode code, {
+        int times = 1,
+      }) {
+        var value = start;
+        for (var i = 0; i < times; i++) {
+          DateTime? emitted;
+          tester.pumpWidget(
+            DatePicker(
+              value: value,
+              autofocus: true,
+              onChanged: (d) => emitted = d,
+            ),
+          );
+          tester.sendKey(KeyEvent(code));
+          expect(emitted, isNotNull, reason: 'press ${i + 1} emitted nothing');
+          value = emitted!;
+        }
+        return value;
+      }
+
+      testWidgets('Right walks off a 25h fall-back day', (tester) {
+        // Nov 3 2024 is America/New_York's fall-back day (25h). Three Rights
+        // must advance three civil days, each at local midnight.
+        expect(
+          walk(tester, _d(2024, 11, 3), KeyCode.arrowRight),
+          _d(2024, 11, 4),
+        );
+        expect(
+          walk(tester, _d(2024, 11, 3), KeyCode.arrowRight, times: 3),
+          _d(2024, 11, 6),
+        );
+      }, skip: _fallBackSkip);
+
+      testWidgets('Down crosses a 25h fall-back day by a full week', (tester) {
+        expect(
+          walk(tester, _d(2024, 11, 3), KeyCode.arrowDown),
+          _d(2024, 11, 10),
+        );
+      }, skip: _fallBackSkip);
+
+      testWidgets(
+        'Up crosses a 23h spring-forward day by a full week',
+        (tester) {
+          // Mar 9 2025 is the spring-forward day (23h); -7 from Mar 16.
+          expect(
+            walk(tester, _d(2025, 3, 16), KeyCode.arrowUp),
+            _d(2025, 3, 9),
+          );
+        },
+        skip: _springForwardSkip,
+      );
+
+      testWidgets(
+        'Right off a 23h spring-forward day lands at midnight',
+        (tester) {
+          // The right civil day but the wrong hour is still wrong: every emitted
+          // value is contractually a local midnight.
+          final next = walk(tester, _d(2025, 3, 9), KeyCode.arrowRight);
+          expect(next, _d(2025, 3, 10));
+          expect(next.hour, 0);
+        },
+        skip: _springForwardSkip,
+      );
+
+      testWidgets('semantic increment/decrement step civil days', (
+        tester,
+      ) async {
+        DateTime? selected;
+        tester.pumpWidget(
+          DatePicker(value: _d(2024, 11, 3), onChanged: (d) => selected = d),
+        );
+        await tester.invokeSemanticAction(
+          SemanticAction.increment,
+          role: SemanticRole.datePicker,
+        );
+        expect(selected, _d(2024, 11, 4));
+
+        selected = null;
+        tester.pumpWidget(
+          DatePicker(value: _d(2025, 3, 10), onChanged: (d) => selected = d),
+        );
+        await tester.invokeSemanticAction(
+          SemanticAction.decrement,
+          role: SemanticRole.datePicker,
+        );
+        expect(selected, _d(2025, 3, 9));
+      }, skip: _fallBackSkip);
     });
   });
 }

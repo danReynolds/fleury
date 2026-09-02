@@ -24,6 +24,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     web.Document? document,
     WebFocusCoordinator? focusCoordinator,
     Clipboard? clipboard,
+    bool captureKeyboardFromDocument = false,
   }) : _hostElement = hostElement,
        _pointerTarget = pointerTarget ?? hostElement,
        _cellMetrics = cellMetrics,
@@ -31,6 +32,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
        _textArea = textArea,
        _focusCoordinator = focusCoordinator,
        _clipboard = clipboard,
+       _captureKeyboardFromDocument = captureKeyboardFromDocument,
        _ownsTextArea = textArea == null;
 
   final web.Element _hostElement;
@@ -41,7 +43,19 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
   final web.HTMLTextAreaElement? _textArea;
   final WebFocusCoordinator? _focusCoordinator;
   final Clipboard? _clipboard;
+
+  /// Whether a pointerdown ANYWHERE in the document should re-acquire
+  /// keyboard capture. True only for `fleury serve`'s page, where the page IS
+  /// the app and its chrome (the `#status` line) lives outside the host. An
+  /// embedded surface is a guest on someone else's page: it recovers capture
+  /// from its own host, never from the rest of the document.
+  final bool _captureKeyboardFromDocument;
   final bool _ownsTextArea;
+
+  // Whether the most recent keydown was an auto-repeat. The text half of a
+  // printable key arrives on the `input` event, separately, and must carry
+  // the same phase (RFC 0020 §14.4: a repeat never advances a sequence).
+  var _lastKeyDownRepeat = false;
   final List<_DomListener> _listeners = [];
 
   TuiInputSink? _onEvent;
@@ -57,6 +71,23 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
   MouseButton _captureLostButton = MouseButton.none;
   var _suppressNextPointerClick = false;
   String? _cursorBeforeStart;
+
+  // The last move this source emitted, so an identical re-emit can be
+  // dropped. Browsers fire pointermove at 60-120 Hz while the grid's
+  // resolution is a CELL: every sample landing in the same cell with the same
+  // buttons and modifiers is indistinguishable to the app, but on the served
+  // path each one costs an InputEventFrame on the wire, a full host-side
+  // dispatch, and a scheduled frame. Null kind means "no previous move" —
+  // the state every gesture boundary resets to.
+  MouseEventKind? _lastMoveKind;
+  var _lastMoveCol = -1;
+  var _lastMoveRow = -1;
+  var _lastMoveButtons = -1;
+  Set<KeyModifier> _lastMoveModifiers = const {};
+  // Identity of the measurement the last move was mapped through: a
+  // re-measure (resize, font swap, DPR change) hands out a NEW box, so this
+  // also drops the filter whenever the cell grid itself changed underneath.
+  MeasuredCellBox? _lastMoveMetrics;
 
   @override
   void start(TuiInputSink onEvent) {
@@ -90,6 +121,20 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     _add(_pointerTarget, 'pointerleave', _handlePointerLeave);
     _add(_pointerTarget, 'click', _handleClick);
     _add(_pointerTarget, 'wheel', _handleWheel);
+    // Capture recovery, one layer out from the grid. The keyboard listeners
+    // are on the hidden textarea above, and only a pointerdown on the GRID
+    // re-focuses it — so a click on the host's own chrome (its padding ring,
+    // or any host area the grid does not cover) blurs the textarea, which
+    // sweeps held keys and drops the coordinator, and the session goes
+    // keyboard-dead with no cue until a click happens to land back on the
+    // grid. Skipped when the grid IS the host: the grid listener above
+    // already covers every pointerdown that could reach this one.
+    if (!identical(_pointerTarget, _hostElement)) {
+      _add(_hostElement, 'pointerdown', _handleCapturePointerDown);
+    }
+    if (_captureKeyboardFromDocument) {
+      _add(_document, 'pointerdown', _handleCapturePointerDown);
+    }
 
     _clearTextArea();
     textArea.focus();
@@ -121,6 +166,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     _pressedButton = MouseButton.none;
     _captureLostButton = MouseButton.none;
     _suppressNextPointerClick = false;
+    _forgetLastMove();
     _cursorBeforeStart = null;
     _focusCoordinator?.handleBrowserFocusOut(WebFocusTarget.keyboardCapture);
     _clearTextArea();
@@ -291,6 +337,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     final event = raw as web.KeyboardEvent;
     final tuiEvent = keyEventFromBrowser(event);
     if (tuiEvent == null) return;
+    _lastKeyDownRepeat = event.repeat;
 
     // Special keys and shortcut chords are ours; text-producing printables
     // keep their default action (see above).
@@ -303,7 +350,13 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
       // rather than an unclosable press. Hold durations under Meta are
       // undefined by contract.
       _emit(tuiEvent);
-      if (tuiEvent.type == KeyEventType.down) {
+      if (tuiEvent.type != KeyEventType.up) {
+        // Repeats close too. The session's repeat-without-down repair OPENS a
+        // held record for an auto-repeat it never saw a down for (§22); under
+        // this regime nothing else will ever close it, so the key would wedge
+        // held for the session — and the next genuine press would regularize
+        // to `repeat`, which the command lane filters out by default, killing
+        // that key's bindings.
         _emit(
           KeyEvent(
             tuiEvent.code,
@@ -329,6 +382,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
   }
 
   void _handleKeyUp(web.Event raw) {
+    _lastKeyDownRepeat = false;
     final event = raw as web.KeyboardEvent;
     if (event.key == 'Meta') {
       // Meta's OWN release is physical and must be reported as such — a
@@ -416,7 +470,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     _clearTextArea();
     if (data == null || data.isEmpty) return;
     raw.preventDefault();
-    _emit(TextInputEvent(data));
+    _emit(TextInputEvent(data, repeat: _lastKeyDownRepeat));
   }
 
   void _handleCompositionStart(web.Event raw) {
@@ -490,12 +544,24 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     _focusCoordinator?.handleBrowserFocusOut(WebFocusTarget.keyboardCapture);
   }
 
+  /// Re-acquires keyboard capture for a pointerdown that landed outside the
+  /// cell grid (see the listener registration in [start]). Deliberately does
+  /// nothing else: this event is chrome, not app input.
+  void _handleCapturePointerDown(web.Event raw) {
+    // A cell-grid link owns its whole gesture — same exemption as
+    // [_handlePointerDown]; focusing the textarea mid-gesture could retarget
+    // the anchor's click away from the browser's native navigation.
+    if (_cellGridLinkAnchor(raw) != null) return;
+    ensureKeyboardCapture();
+  }
+
   void _handlePointerDown(web.Event raw) {
     // A new physical gesture supersedes any orphaned compatibility-click
     // marker left by a prior gesture (for example, if the browser omitted its
     // click because the original target detached).
     _suppressNextPointerClick = false;
     _captureLostButton = MouseButton.none;
+    _forgetLastMove();
     // A cell-grid link owns its whole gesture: let the browser navigate the
     // href natively. Capturing the pointer here would retarget the click away
     // from the anchor, and routing it as an app pointer event would consume it.
@@ -529,6 +595,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     // Counterpart to the pointerdown exemption: a cell-grid link is the
     // browser's to navigate, so don't preventDefault or route it.
     if (_cellGridLinkAnchor(raw) != null) return;
+    _forgetLastMove();
     final event = raw as web.PointerEvent;
     var button = _buttonFor(event.button);
     if (button == MouseButton.none && _pressedButton != MouseButton.none) {
@@ -573,6 +640,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     _pressedButton = MouseButton.none;
     _captureLostButton = MouseButton.none;
     _suppressNextPointerClick = false;
+    _forgetLastMove();
   }
 
   void _handleLostPointerCapture(web.Event _) {
@@ -581,6 +649,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     // its up event. `pointercancel` owns true cancellation; a later pointerup or
     // compatibility click can close this interrupted press without emitting a
     // second down.
+    _forgetLastMove();
     if (_pressedButton != MouseButton.none) {
       _captureLostButton = _pressedButton;
       _pressedButton = MouseButton.none;
@@ -597,16 +666,57 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     _syncPointerCursor(cell);
     final dragging = event.buttons != 0 && _pressedButton != MouseButton.none;
     raw.preventDefault();
+    final kind = dragging ? MouseEventKind.drag : MouseEventKind.moved;
+    final modifiers = _modifiersFromMouse(event);
+    if (_isRepeatedMove(kind, cell, event.buttons, modifiers)) return;
     _emit(
       MouseEvent(
-        kind: dragging ? MouseEventKind.drag : MouseEventKind.moved,
+        kind: kind,
         button: dragging ? _pressedButton : MouseButton.none,
         col: cell.col,
         row: cell.row,
-        modifiers: _modifiersFromMouse(event),
+        modifiers: modifiers,
       ),
     );
   }
+
+  /// Whether this move is indistinguishable from the last one emitted — and,
+  /// when it is not, records it as the new baseline.
+  bool _isRepeatedMove(
+    MouseEventKind kind,
+    CellOffset cell,
+    int buttons,
+    Set<KeyModifier> modifiers,
+  ) {
+    final metrics = _cellMetrics.cachedMeasurement;
+    if (_lastMoveKind == kind &&
+        _lastMoveCol == cell.col &&
+        _lastMoveRow == cell.row &&
+        _lastMoveButtons == buttons &&
+        identical(_lastMoveMetrics, metrics) &&
+        _sameModifiers(_lastMoveModifiers, modifiers)) {
+      return true;
+    }
+    _lastMoveKind = kind;
+    _lastMoveCol = cell.col;
+    _lastMoveRow = cell.row;
+    _lastMoveButtons = buttons;
+    _lastMoveModifiers = modifiers;
+    _lastMoveMetrics = metrics;
+    return false;
+  }
+
+  /// Forgets the last emitted move. Every gesture boundary calls this so a
+  /// press, release, or cancellation can never leave the next move looking
+  /// like a duplicate of the one before it.
+  void _forgetLastMove() {
+    _lastMoveKind = null;
+    _lastMoveModifiers = const {};
+    _lastMoveMetrics = null;
+  }
+
+  static bool _sameModifiers(Set<KeyModifier> a, Set<KeyModifier> b) =>
+      a.length == b.length && a.containsAll(b);
 
   void _handlePointerLeave(web.Event _) => _restorePointerCursor();
 
@@ -703,6 +813,12 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
 
   void _handleWheel(web.Event raw) {
     final event = raw as web.WheelEvent;
+    // ctrl/Cmd + wheel is the browser's zoom gesture — and Chrome delivers a
+    // trackpad PINCH as ctrl+wheel. This listener is non-passive and (on the
+    // served page) covers the whole viewport, so consuming these would make
+    // zoom impossible anywhere on the page. Leave the gesture to the browser
+    // and don't feed it into the scroll accumulator either.
+    if (event.ctrlKey || event.metaKey) return;
     if (event.deltaY == 0) return;
     final cell = _cellForPointer(event);
     if (cell == null) return;

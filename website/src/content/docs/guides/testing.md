@@ -104,7 +104,7 @@ testWidgets('enter submits', (tester) {
     controller: controller,
     onSubmit: (text) => submitted = true,
   ));
-  tester.sendKey(const KeyEvent(keyCode: KeyCode.enter));
+  tester.sendKey(const KeyEvent(KeyCode.enter));
   expect(submitted, isTrue);
 });
 ```

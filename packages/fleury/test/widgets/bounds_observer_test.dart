@@ -240,6 +240,39 @@ void main() {
       tester.render(size: _size);
       expect(chip.bounds, isNotNull);
     });
+    testWidgets('a genuine double-writer reports ONE error, not a second at '
+        'teardown', (tester) {
+      // The single-writer assert fires inside `createRenderObject`, so the
+      // half-inflated element never got a render object. `unmount` used to
+      // reach the throwing `renderObject` getter and pile a second, misleading
+      // "has no render object" error on top of the real one.
+      final chip = BoundsNotifier();
+      Object? thrown;
+      try {
+        tester.pumpWidget(
+          Stack(
+            children: <Widget>[
+              BoundsObserver(notifier: chip, child: const Text('a')),
+              BoundsObserver(notifier: chip, child: const Text('b')),
+            ],
+          ),
+        );
+      } catch (e) {
+        thrown = e;
+      }
+      expect(thrown, isNotNull, reason: 'the double writer still throws');
+      expect(
+        '$thrown',
+        contains('already has a BoundsObserver'),
+        reason: 'the reported failure is the real one, undiluted',
+      );
+      expect(
+        '$thrown',
+        isNot(contains('has no render object')),
+        reason: 'teardown must not raise a second error on top of the first',
+      );
+    });
+
     testWidgets('swapping the notifier moves the subscription with it', (
       tester,
     ) {

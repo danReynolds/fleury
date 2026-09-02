@@ -57,6 +57,82 @@ final class RenderDamageTracker {
     _requiresFullDiff = false;
     _visualChange = false;
   }
+
+  // ---- Paint passes ------------------------------------------------------
+  //
+  // The root paint pass is numbered. A participant that publishes a
+  // paint-time fact about its subtree (painted bounds) stamps the pass it
+  // published in; when the pass ends, one that neither painted nor replayed
+  // belongs to a subtree that stopped painting while staying mounted — a
+  // hidden IndexedStack child, a route beneath an opaque one — and is told to
+  // retract. Cached repaint boundaries replay their retained geometry every
+  // pass, so a clean subtree counts as painted. Per owner, like the damage
+  // signal: two runtimes in one isolate never sweep each other's
+  // participants.
+
+  int _paintPass = 0;
+
+  /// The pass currently painting (or the last one, between passes).
+  int get paintPass => _paintPass;
+
+  final Set<PaintPassParticipant> _participants =
+      Set<PaintPassParticipant>.identity();
+
+  /// Registers [participant] for the end-of-pass sweep. Idempotent.
+  void registerPaintPassParticipant(PaintPassParticipant participant) {
+    _participants.add(participant);
+  }
+
+  /// Removes [participant] from the sweep (it left the tree, or moved to
+  /// another owner).
+  void unregisterPaintPassParticipant(PaintPassParticipant participant) {
+    _participants.remove(participant);
+  }
+
+  /// Starts a root paint pass; returns its number.
+  int beginPaintPass() => ++_paintPass;
+
+  /// Ends the current pass: every participant that did not publish in it
+  /// retracts. Retraction only invalidates paint (a listener marking its
+  /// boundary dirty), never restructures the tree, so iterating the live set
+  /// is safe.
+  void endPaintPass() {
+    var retracted = 0;
+    for (final participant in _participants) {
+      if (participant.publishedPaintPass != _paintPass) {
+        participant.retractPaintFacts();
+        retracted++;
+      }
+    }
+    _paintPassRetractions += retracted;
+  }
+
+  int _paintPassRetractions = 0;
+
+  /// How many participants retracted since the last take. A retraction
+  /// happens INSIDE the pass, after the frame painted with the stale fact,
+  /// and its paint invalidation is consumed with that frame's damage — so
+  /// the frame driver reads this after commit, re-records the visual change
+  /// and requests the frame that repaints without the fact. Nothing else
+  /// would: the visual-change flag is a predicate frames consult, not a
+  /// scheduler.
+  int takePaintPassRetractions() {
+    final result = _paintPassRetractions;
+    _paintPassRetractions = 0;
+    return result;
+  }
+}
+
+/// A render object that publishes a paint-time fact about its subtree — its
+/// painted bounds — and must retract it when a root paint pass ends without
+/// the subtree having painted or replayed. It registers with the tree's
+/// [RenderDamageTracker] when it first publishes and unregisters on detach.
+abstract interface class PaintPassParticipant {
+  /// The [RenderDamageTracker.paintPass] this participant last published in.
+  int get publishedPaintPass;
+
+  /// Withdraw the published fact: the subtree no longer paints.
+  void retractPaintFacts();
 }
 
 typedef SemanticPaintBoundsCallback = void Function(CellRect? bounds);
@@ -915,6 +991,12 @@ abstract class RenderObject {
   }
 
   /// The damage tracker attached at this tree's root, if any.
+  /// The frame damage tracker attached at this tree's root — the per-owner
+  /// object a render object publishes frame-scoped facts into — or null while
+  /// detached or before the first frame.
+  @protected
+  RenderDamageTracker? get rootFrameDamage => _rootFrameDamage;
+
   RenderDamageTracker? get _rootFrameDamage {
     RenderObject node = this;
     while (true) {
@@ -924,12 +1006,24 @@ abstract class RenderObject {
     }
   }
 
+  /// This render object's invalidation source, for the debug collector.
+  ///
+  /// Only ever evaluated behind a [DebugInvalidations.isRecording] check:
+  /// `runtimeType.toString()` is not free, and this runs on every layout and
+  /// paint invalidation of every render object.
+  String get _debugInvalidationLabel {
+    DebugInvalidations.debugCountLabel();
+    return runtimeType.toString();
+  }
+
   /// Marks this render object and its ancestors as needing layout, and marks
   /// the nearest enclosing repaint boundary as dirty. Use this for changes
   /// that can affect size, child constraints, child offsets, or layout-derived
   /// paint state.
   void markNeedsLayout() {
-    DebugInvalidations.recordLayout(runtimeType.toString());
+    if (DebugInvalidations.isRecording) {
+      DebugInvalidations.recordLayout(_debugInvalidationLabel);
+    }
     _markNeedsLayoutUp();
     _markEnclosingRepaintBoundariesDirty();
   }
@@ -954,7 +1048,9 @@ abstract class RenderObject {
   /// offsets, or layout-derived paint state. Use [markNeedsPaintOnly] only
   /// after verifying that the value cannot affect layout.
   void markNeedsPaint() {
-    DebugInvalidations.recordPaint(runtimeType.toString());
+    if (DebugInvalidations.isRecording) {
+      DebugInvalidations.recordPaint(_debugInvalidationLabel);
+    }
     _markNeedsLayoutUp();
     _markEnclosingRepaintBoundariesDirty();
   }
@@ -967,7 +1063,9 @@ abstract class RenderObject {
   /// dirty, so the next same-constraint layout call can reuse cached sizes.
   @protected
   void markNeedsPaintOnly() {
-    DebugInvalidations.recordPaint(runtimeType.toString());
+    if (DebugInvalidations.isRecording) {
+      DebugInvalidations.recordPaint(_debugInvalidationLabel);
+    }
     _rootFrameDamage?.recordVisualChange();
     _markEnclosingRepaintBoundariesDirty();
   }
@@ -1178,22 +1276,47 @@ abstract class RenderObject {
   // instead of expanding it to the available space.
   //
   // Pass `null` for `height` / `width` to mean "no cross-axis constraint."
-  // Defaults return 0 — a render object that doesn't care declares no
-  // intrinsic preference.
+  //
+  // Defaults: a single-child wrapper ([RenderObjectWithSingleChild]) answers
+  // with its child's preference — a proxy that adds no geometry of its own
+  // (focus, pointer, semantics, repaint boundary, error containment) wants
+  // exactly that. Wrappers that DO add geometry (padding, a frame, a fixed
+  // box) override and adjust. Everything else returns 0: a leaf or a
+  // multi-child layout that doesn't override declares no preference.
+  //
+  // Before this, every non-overriding wrapper reported 0, which
+  // [IntrinsicWidth]/[IntrinsicHeight] read as "wants to be empty" and laid
+  // the whole subtree out at zero — blank — for almost any real child.
 
   /// The widest this render object would want to be at the given [height].
   /// Most relevant override: text returns its unwrapped width.
-  int computeMaxIntrinsicWidth(int? height) => 0;
+  int computeMaxIntrinsicWidth(int? height) {
+    final self = this;
+    if (self is! RenderObjectWithSingleChild) return 0;
+    return self.child?.computeMaxIntrinsicWidth(height) ?? 0;
+  }
 
-  /// The narrowest width below which content would clip. Defaults to 0;
-  /// text-like leaves can return a longest-token width if they word-wrap.
-  int computeMinIntrinsicWidth(int? height) => 0;
+  /// The narrowest width below which content would clip. Text-like leaves
+  /// can return a longest-token width if they word-wrap.
+  int computeMinIntrinsicWidth(int? height) {
+    final self = this;
+    if (self is! RenderObjectWithSingleChild) return 0;
+    return self.child?.computeMinIntrinsicWidth(height) ?? 0;
+  }
 
   /// The tallest this render object would want to be at the given [width].
-  int computeMaxIntrinsicHeight(int? width) => 0;
+  int computeMaxIntrinsicHeight(int? width) {
+    final self = this;
+    if (self is! RenderObjectWithSingleChild) return 0;
+    return self.child?.computeMaxIntrinsicHeight(width) ?? 0;
+  }
 
   /// The shortest this render object can be at the given [width].
-  int computeMinIntrinsicHeight(int? width) => 0;
+  int computeMinIntrinsicHeight(int? width) {
+    final self = this;
+    if (self is! RenderObjectWithSingleChild) return 0;
+    return self.child?.computeMinIntrinsicHeight(width) ?? 0;
+  }
 }
 
 /// Marker interface for render objects that hold exactly one child. The

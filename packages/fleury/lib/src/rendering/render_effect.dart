@@ -131,17 +131,36 @@ class RenderCellEffect extends RenderObject
       for (var col = 0; col < size.cols; col++) {
         final cell = scratch.atColRow(col, row);
         // Only leading cells carry a grapheme; empty cells are
-        // transparent and continuation cells are emitted by their
-        // leading cell's wide write.
+        // transparent and continuation cells travel with their leading
+        // cell's replay.
         if (cell.role != CellRole.leading) continue;
         final placement = _composite(col, row, cell, size);
         if (placement == null) continue;
+        // A user composite that translates cells stays inside the effect's
+        // own box — a wide pair's continuation one column past it would be
+        // written outside the rect damage tracking and repaint caches
+        // account for (the guard RenderFlex carries for the same reason).
+        final wide =
+            col + 1 < size.cols &&
+            scratch.atColRow(col + 1, row).role == CellRole.continuation;
+        if (placement.col < 0 ||
+            placement.row < 0 ||
+            placement.row >= size.rows ||
+            placement.col + (wide ? 2 : 1) > size.cols) {
+          continue;
+        }
         final tc = offset.col + placement.col;
         final tr = offset.row + placement.row;
         if (tc < 0 || tr < 0 || tc >= cols || tr >= rows) continue;
-        buffer.writeGrapheme(
-          CellOffset(tc, tr),
-          cell.grapheme!,
+        // Replay with the composite's style: an effect recolors cells, it
+        // never re-measures them. The width role comes from the scratch the
+        // child painted under this surface's policy.
+        buffer.replayCellFrom(
+          scratch,
+          col,
+          row,
+          tc,
+          tr,
           style: placement.style,
         );
       }
@@ -479,10 +498,14 @@ void _compositePaintedRect({
           targetRow >= rows) {
         continue;
       }
-      destination.writeGrapheme(
-        CellOffset(targetCol, targetRow),
-        cell.grapheme!,
-        style: cell.style,
+      // Replay, not re-measure — see [CellBuffer.replayCellFrom]. The clip
+      // above already dropped any pair the source rectangle cut.
+      destination.replayCellFrom(
+        source,
+        sourceCol,
+        sourceRow,
+        targetCol,
+        targetRow,
       );
     }
   }

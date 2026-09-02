@@ -52,13 +52,14 @@ import '../rendering/render_navigator.dart';
 import '../rendering/render_object.dart';
 import '../semantics/semantics.dart';
 import 'align.dart' show Align, Alignment;
-import 'basic.dart' show Container;
+import 'basic.dart' show Container, SizedBox, Stack;
 import 'effects.dart';
 import 'focus.dart';
 import 'focus_traversal.dart';
 import 'error_boundary.dart';
 import 'framework.dart';
 import 'key_bindings.dart';
+import 'pointer.dart' show AbsorbPointer;
 import 'selection/selection_area.dart';
 import 'tui_binding.dart';
 
@@ -844,11 +845,27 @@ class _RouteHost extends StatelessWidget {
       // impossible to copy.
       // Nested SelectionAreas are fine: the innermost one wins, so a route
       // that brings its own still behaves.
-      Widget content = Align(
-        alignment: align,
-        child: Container.filled(
-          child: DefaultRootSelection(child: route.screen),
-        ),
+      //
+      // A modal also owns its slot for INPUT, not just for paint. Keys are
+      // blocked by the route-local KeyBindings(modal:) below and focus by its
+      // FocusScope(trapFocus:), but a modal route never flips `opaque`, so the
+      // covered route keeps its pointer regions registered — without this
+      // barrier a click on the surround fires an invisible button on the
+      // screen behind (a painted `barrierColor` made that worse: it looked
+      // solid and still let clicks through). Same shape as `Select._open`'s
+      // barrier. The barrier deliberately has NO onTap: `barrierDismissible`
+      // is documented as Esc-only, so a click outside is a no-op rather than a
+      // dismissal. Regions inside the modal paint later and still win.
+      Widget content = Stack(
+        children: <Widget>[
+          const AbsorbPointer(child: SizedBox.expand()),
+          Align(
+            alignment: align,
+            child: Container.filled(
+              child: DefaultRootSelection(child: route.screen),
+            ),
+          ),
+        ],
       );
       final barrier = route.barrierColor;
       if (barrier != null) {

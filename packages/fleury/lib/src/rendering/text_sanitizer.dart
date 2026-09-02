@@ -37,16 +37,7 @@ bool isUnsafeRune(int rune) {
 String sanitizeForDisplay(String input) {
   // Fast path: scan once for any unsafe rune; if none, return the input
   // unchanged. Common case for app strings is "no controls at all."
-  var unsafeAt = -1;
-  var i = 0;
-  for (final rune in input.runes) {
-    if (isUnsafeRune(rune)) {
-      unsafeAt = i;
-      break;
-    }
-    i++;
-  }
-  if (unsafeAt == -1) return input;
+  if (isSanitizedForDisplay(input)) return input;
 
   final buffer = StringBuffer();
   var index = 0;
@@ -77,15 +68,68 @@ String sanitizeForDisplay(String input) {
       index += 1;
       continue;
     }
-    if (_isHighSurrogate(unit) && index + 1 < input.length) {
+    if (_isHighSurrogate(unit) &&
+        index + 1 < input.length &&
+        _isLowSurrogate(input.codeUnitAt(index + 1))) {
       buffer.write(input.substring(index, index + 2));
       index += 2;
     } else {
+      // A lone surrogate half is written as-is (it is not a control byte),
+      // but it must not carry the NEXT unit with it: that unit could be an
+      // ESC, and the text model now rests on this function's output being
+      // canonical.
       buffer.writeCharCode(unit);
       index += 1;
     }
   }
   return buffer.toString();
+}
+
+/// Whether [input] is already free of unsafe runes, i.e. whether
+/// [sanitizeForDisplay] would return it unchanged.
+///
+/// Scans code units rather than runes: every unsafe rune is below U+00A0, and
+/// no surrogate half falls in that range, so a code-unit scan is exactly
+/// equivalent to a rune scan — and allocates neither an iterable nor an
+/// iterator, which matters because this runs on every keystroke.
+bool isSanitizedForDisplay(String input) =>
+    !_hasUnsafeCodeUnit(input, allowLineFeed: false);
+
+/// Whether [input] is already in the canonical multiline form, i.e. whether
+/// [sanitizeMultiline] would return it unchanged.
+bool isSanitizedMultiline(String input) =>
+    !_hasUnsafeCodeUnit(input, allowLineFeed: true);
+
+/// [sanitizeForDisplay] applied per LINE: every unsafe rune is replaced as
+/// usual, but `\n` survives as a line separator.
+///
+/// This is the canonical form for text held by a multiline editing model. The
+/// widget-level split into rows happens on `\n`, so the separator must not be
+/// rewritten; everything else — including `\r` and `\t` — is still collapsed to
+/// [replacementCharacter], and escape-led sequences are still collapsed as a
+/// unit.
+///
+/// Returns [input] itself when it is already canonical, so the common
+/// no-controls case allocates nothing.
+String sanitizeMultiline(String input) {
+  if (isSanitizedMultiline(input)) return input;
+  return input.split('\n').map(sanitizeForDisplay).join('\n');
+}
+
+/// True when [input] holds a code unit that [sanitizeForDisplay] would rewrite.
+///
+/// With [allowLineFeed], `\n` is treated as safe — the multiline variant.
+bool _hasUnsafeCodeUnit(String input, {required bool allowLineFeed}) {
+  for (var index = 0; index < input.length; index++) {
+    final unit = input.codeUnitAt(index);
+    // Printable ASCII, and everything from U+00A0 up (surrogate halves
+    // included, so astral runes never trip this).
+    if (unit >= 0x20 && unit < 0x7F) continue;
+    if (unit > 0x9F) continue;
+    if (allowLineFeed && unit == 0x0A) continue;
+    return true;
+  }
+  return false;
 }
 
 final _singleLineBreaks = RegExp(r'[\r\n\t]');
@@ -177,3 +221,4 @@ bool _isC1StringControl(int unit) {
 }
 
 bool _isHighSurrogate(int unit) => unit >= 0xD800 && unit <= 0xDBFF;
+bool _isLowSurrogate(int unit) => unit >= 0xDC00 && unit <= 0xDFFF;

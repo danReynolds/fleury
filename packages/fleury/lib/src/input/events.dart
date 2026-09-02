@@ -2146,14 +2146,21 @@ final class TerminalFocusEvent extends TuiEvent {
 /// valid string.
 @immutable
 final class TextInputEvent extends TuiEvent {
-  const TextInputEvent(this.text);
+  const TextInputEvent(this.text, {this.repeat = false});
   final String text;
+
+  /// Whether this text is the committed half of a key auto-REPEAT rather
+  /// than a press. A surface that reports keys and text separately (the
+  /// browser) tags it so the dispatcher can hold RFC 0020 §14.4 — a repeat
+  /// never advances or completes a sequence — on the text lane too;
+  /// otherwise a held leader key completed its own sequence.
+  final bool repeat;
 
   @override
   bool operator ==(Object other) =>
-      other is TextInputEvent && other.text == text;
+      other is TextInputEvent && other.text == text && other.repeat == repeat;
   @override
-  int get hashCode => Object.hash(TextInputEvent, text);
+  int get hashCode => Object.hash(TextInputEvent, text, repeat);
   @override
   String toString() => 'TextInputEvent(${_quote(text)})';
 }

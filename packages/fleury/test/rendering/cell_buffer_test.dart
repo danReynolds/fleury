@@ -86,7 +86,11 @@ void main() {
         const CellOffset(3, 0),
       );
 
-      expect(dest.damageBounds, CellRect.fromLTWH(3, 0, 2, 2));
+      // The landed rect is cols 3..4; the copy also evicts a wide neighbour
+      // at col 2 or col 5, so damage is widened by one column each side
+      // (clipped to the buffer) — the same rule image placements use, and
+      // what lets a parent boundary's cache see the evicted edge cell.
+      expect(dest.damageBounds, CellRect.fromLTWH(2, 0, 3, 2));
     });
 
     test('suppresses damage inside withoutDamageTracking', () {
@@ -102,6 +106,93 @@ void main() {
       expect(dest.damageBounds, isNull);
       expect(dest.atColRow(0, 0).grapheme, 'a');
       expect(dest.atColRow(1, 0).grapheme, 'b');
+    });
+  });
+
+  group('Rect copies keep the wide-cell invariant', () {
+    // A cached RepaintBoundary blits its cache over whatever a sibling painted
+    // into the frame buffer this frame. The copy used to be a raw setRange
+    // that could leave half a CJK/emoji pair on either side of the landed
+    // rect — an orphaned leading the renderer then modelled as one column and
+    // the terminal drew as two, shifting the rest of the row.
+    test('a blit landing on a wide pair severs the orphaned halves', () {
+      final dest = CellBuffer(const CellSize(8, 1))
+        ..writeText(const CellOffset(0, 0), '漢字漢'); // pairs 0-1, 2-3, 4-5
+      final source = CellBuffer(const CellSize(4, 1))
+        ..writeText(const CellOffset(0, 0), 'ab');
+      dest.resetDamageTracking();
+
+      // Lands on cols 1..4: bisects the pair at 0-1 and the pair at 4-5.
+      dest.copyRectFrom(
+        source,
+        CellRect.fromLTWH(0, 0, 4, 1),
+        const CellOffset(1, 0),
+      );
+
+      expect(dest.atColRow(0, 0), const Cell.empty(), reason: 'orphaned 漢');
+      expect(dest.atColRow(1, 0).grapheme, 'a');
+      expect(dest.atColRow(2, 0).grapheme, 'b');
+      expect(dest.atColRow(3, 0), const Cell.empty());
+      expect(dest.atColRow(4, 0), const Cell.empty());
+      expect(
+        dest.atColRow(5, 0),
+        const Cell.empty(),
+        reason: 'orphaned continuation',
+      );
+      expect(
+        dest.damageBounds,
+        CellRect.fromLTWH(0, 0, 6, 1),
+        reason: 'the evicted edge cells are damaged too',
+      );
+    });
+
+    test('a blit clipped at the left edge drops the orphaned continuation', () {
+      final source = CellBuffer(const CellSize(4, 1))
+        ..writeText(const CellOffset(0, 0), '漢字'); // pairs 0-1, 2-3
+      final dest = CellBuffer(const CellSize(6, 1));
+
+      // Column -1 is off-buffer: the slice that lands starts with 漢's
+      // continuation, whose leading was clipped away.
+      dest.copyRectFrom(
+        source,
+        CellRect.fromLTWH(0, 0, 4, 1),
+        const CellOffset(-1, 0),
+      );
+
+      expect(dest.atColRow(0, 0), const Cell.empty());
+      expect(dest.atColRow(1, 0).grapheme, '字');
+      expect(dest.atColRow(2, 0).role, CellRole.continuation);
+    });
+
+    test('a blit clipped at the right edge drops the orphaned leading', () {
+      final source = CellBuffer(const CellSize(4, 1))
+        ..writeText(const CellOffset(0, 0), '漢字');
+      final dest = CellBuffer(const CellSize(3, 1));
+
+      // Only three columns fit: 漢 whole, then 字's leading with its
+      // continuation clipped — a wide leading the buffer cannot hold.
+      dest.copyRectFrom(source, CellRect.fromLTWH(0, 0, 4, 1), CellOffset.zero);
+
+      expect(dest.atColRow(0, 0).grapheme, '漢');
+      expect(dest.atColRow(1, 0).role, CellRole.continuation);
+      expect(dest.atColRow(2, 0), const Cell.empty());
+    });
+
+    test('a narrow grapheme at the copied edge is kept', () {
+      // Narrow graphemes are leading cells too: the last-cell rule must not
+      // mistake them for a severed wide pair.
+      final source = CellBuffer(const CellSize(4, 1))
+        ..writeText(const CellOffset(0, 0), 'ab漢');
+      final dest = CellBuffer(const CellSize(6, 1));
+
+      dest.copyRectFrom(
+        source,
+        CellRect.fromLTWH(0, 0, 2, 1),
+        const CellOffset(1, 0),
+      );
+
+      expect(dest.atColRow(1, 0).grapheme, 'a');
+      expect(dest.atColRow(2, 0).grapheme, 'b');
     });
   });
 
@@ -375,6 +466,102 @@ void main() {
       expect(buf.atColRow(0, 0), const Cell.empty());
       expect(buf.atColRow(1, 0), const Cell.overlay());
       expect(buf.atColRow(2, 0), const Cell.overlay());
+    });
+  });
+
+  group('replayCellFrom / restyleCell (audit 4.a)', () {
+    // A scratch buffer painted on an ambiguous-wide surface: `─` occupies a
+    // leading + continuation pair that the SPEC policy would measure as one
+    // cell. A replay that re-measured would sever it.
+    CellBuffer wideScratch() {
+      final src = CellBuffer(const CellSize(4, 1));
+      src.writeGrapheme(
+        const CellOffset(0, 0),
+        '\u2500',
+        policy: CellWidthPolicy.cjk,
+      );
+      src.writeGrapheme(const CellOffset(2, 0), 'X');
+      return src;
+    }
+
+    test('carries the source cell width, not a re-measurement', () {
+      final src = wideScratch();
+      final dst = CellBuffer(const CellSize(4, 1));
+
+      expect(dst.replayCellFrom(src, 0, 0, 0, 0), 2);
+      expect(dst.atColRow(0, 0).grapheme, '\u2500');
+      expect(dst.atColRow(1, 0).role, CellRole.continuation);
+      expect(dst.replayCellFrom(src, 2, 0, 2, 0), 1);
+      expect(dst.atColRow(2, 0).grapheme, 'X');
+    });
+
+    test('skips non-leading cells so empty stays transparent', () {
+      final src = wideScratch();
+      final dst = CellBuffer(const CellSize(4, 1));
+      dst.writeGrapheme(const CellOffset(3, 0), 'k');
+
+      expect(dst.replayCellFrom(src, 1, 0, 3, 0), 0, reason: 'continuation');
+      expect(dst.replayCellFrom(src, 3, 0, 3, 0), 0, reason: 'empty');
+      expect(dst.atColRow(3, 0).grapheme, 'k');
+    });
+
+    test('an out-of-grid destination is clipped, not written', () {
+      final src = wideScratch();
+      final dst = CellBuffer(const CellSize(4, 1));
+      expect(dst.replayCellFrom(src, 0, 0, 4, 0), 0);
+      expect(dst.replayCellFrom(src, 0, 0, -1, 0), 0);
+    });
+
+    test('a wide pair with no room degrades like any wide write', () {
+      final src = wideScratch();
+      final dst = CellBuffer(const CellSize(4, 1));
+      expect(dst.replayCellFrom(src, 0, 0, 3, 0), 1);
+      expect(dst.atColRow(3, 0).grapheme, '?');
+    });
+
+    test('a style override restyles without re-measuring', () {
+      final src = wideScratch();
+      final dst = CellBuffer(const CellSize(4, 1));
+      dst.replayCellFrom(
+        src,
+        0,
+        0,
+        0,
+        0,
+        style: const CellStyle(foreground: AnsiColor(3)),
+      );
+      expect(dst.atColRow(0, 0).style.foreground, const AnsiColor(3));
+      expect(dst.atColRow(1, 0).role, CellRole.continuation);
+      expect(dst.atColRow(1, 0).style.foreground, const AnsiColor(3));
+    });
+
+    test('restyleCell repaints both halves of a wide pair', () {
+      final buf = CellBuffer(const CellSize(4, 1));
+      buf.writeGrapheme(
+        const CellOffset(0, 0),
+        '\u2500',
+        policy: CellWidthPolicy.cjk,
+      );
+      buf.restyleCell(0, 0, const CellStyle(background: AnsiColor(4)));
+
+      expect(buf.atColRow(0, 0).grapheme, '\u2500');
+      expect(buf.atColRow(0, 0).style.background, const AnsiColor(4));
+      expect(buf.atColRow(1, 0).role, CellRole.continuation);
+      expect(buf.atColRow(1, 0).style.background, const AnsiColor(4));
+    });
+
+    test('restyleCell is a no-op on empty, continuation and overlay cells', () {
+      final buf = CellBuffer(const CellSize(4, 1));
+      buf.writeGrapheme(
+        const CellOffset(0, 0),
+        '\u2500',
+        policy: CellWidthPolicy.cjk,
+      );
+      buf.restyleCell(1, 0, const CellStyle(background: AnsiColor(4)));
+      buf.restyleCell(3, 0, const CellStyle(background: AnsiColor(4)));
+
+      expect(buf.atColRow(1, 0), const Cell.continuation());
+      expect(buf.atColRow(3, 0), const Cell.empty());
     });
   });
 }

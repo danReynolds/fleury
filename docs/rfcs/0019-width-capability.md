@@ -512,6 +512,14 @@ Per-axis, matching the existing convention (`FLEURY_AMBIGUOUS_WIDTH`,
 Overrides win over probe results; probe results win over defaults; the
 decisions map records which applied.
 
+An override is *per axis* and nothing more: pinning one axis never
+suppresses the probe, because the battery measures four classes in a single
+round trip and the three nobody answered are still only knowable by
+measuring. The battery's kill switch is its own variable,
+`FLEURY_WIDTH_PROBE=0|off|false` (mirroring `FLEURY_IMAGE_PROBE`), for a
+terminal where the round trip misbehaves; with it set, every unanswered axis
+keeps its conservative default.
+
 ## 7. What it fixes
 
 A transcript pane renders `❤️ deploy approved 👨‍👩‍👦` on each family:

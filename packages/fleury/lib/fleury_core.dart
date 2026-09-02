@@ -152,13 +152,16 @@ export 'src/rendering/render_objects.dart'
         TextAlign,
         TextOverflow;
 export 'src/rendering/render_stack.dart'
-    show RenderPositioned, RenderStack, RenderIndexedStack;
+    show RenderPositioned, RenderStack, RenderIndexedStack, StackFit;
 export 'src/rendering/render_wrap.dart' show RenderWrap;
 export 'src/rendering/text_sanitizer.dart'
     show
+        isSanitizedForDisplay,
+        isSanitizedMultiline,
         isUnsafeRune,
         replacementCharacter,
         sanitizeForDisplay,
+        sanitizeMultiline,
         sanitizeSingleLine;
 export 'src/rendering/width_resolver.dart'
     show DefaultWidthResolver, WidthResolver, hasUncertainWidth;
@@ -218,6 +221,7 @@ export 'src/terminal/capabilities.dart'
         detectEmojiWidthFromEnvironment,
         detectVs16WidthFromEnvironment,
         deriveTextPresentationPolicy,
+        evidencedAmbiguousCharWidth,
         parseEnvFlag;
 export 'src/terminal/capability_requirements.dart'
     show
@@ -255,7 +259,6 @@ export 'src/terminal/terminal_probe.dart'
         WidthProbeClass,
         WidthProbeGlyph,
         widthProbeBattery,
-        ambiguousWidthFromMeasurements,
         TerminalProbeReport,
         TerminalProbeResult,
         TerminalProbeStatus,
@@ -446,7 +449,7 @@ export 'src/widgets/theme.dart'
 export 'src/widgets/tui_binding.dart'
     show SingleTickerProviderStateMixin, TuiBinding, TuiBindingScope;
 export 'src/widgets/align.dart' show Align, Alignment, Center, RenderAlign;
-export 'src/widgets/anchored.dart' show Anchored;
+export 'src/widgets/anchored.dart' show Anchored, AnchoredFloat;
 export 'src/widgets/bounds.dart'
     show
         BoundsAnchor,
@@ -461,6 +464,7 @@ export 'src/widgets/async.dart'
         ConnectionState,
         FutureBuilder,
         StreamBuilder;
+export 'src/widgets/terminal_session.dart';
 export 'src/widgets/basic.dart'
     show
         AspectRatio,

@@ -87,8 +87,35 @@ class _WhichKeyState extends State<WhichKey> {
 
   @override
   Widget build(BuildContext context) {
+    // ALWAYS the same shape, shown or hidden: a passthrough Stack whose app
+    // child sits in the same slot either way, with the popup as a Positioned
+    // layer that comes and goes. Returning the bare child while hidden and a
+    // Stack while shown flipped the slot's runtimeType, which remounted the
+    // entire app subtree — every State below, destroyed and recreated — on
+    // every reveal, and again on hide.
+    //
+    // Sizing: the expanding filler makes the stack — and so the popup's box —
+    // the whole bounded surface this widget wraps (under the runtime's loose
+    // root, the screen), even when the app itself is content-sized. The app
+    // gets the constraints it would get bare (passthrough), and a Positioned
+    // child never contributes to the stack's size, so revealing the popup
+    // moves nothing.
+    final popup = _visible ? _buildPopup(context) : null;
+    return Stack(
+      fit: StackFit.passthrough,
+      children: [
+        const SizedBox.expand(),
+        widget.child,
+        if (popup != null) Positioned(child: popup),
+      ],
+    );
+  }
+
+  /// The popup for the pending sequence, or null when there is nothing
+  /// labeled to advertise.
+  Widget? _buildPopup(BuildContext context) {
     final pending = _pending;
-    if (!_visible || pending == null) return widget.child;
+    if (pending == null) return null;
 
     final theme = Theme.of(context);
     final keyStyle = CellStyle(
@@ -103,7 +130,7 @@ class _WhichKeyState extends State<WhichKey> {
       for (final completion in pending.completions)
         if (completion.binding.label != null) completion,
     ];
-    if (labeled.isEmpty) return widget.child;
+    if (labeled.isEmpty) return null;
 
     // Bound the height: show the first [maxCompletions], collapse the rest
     // into a trailing "+N more" so the popup can't overrun the viewport.
@@ -123,42 +150,42 @@ class _WhichKeyState extends State<WhichKey> {
       if (hidden > 0) Text('+$hidden more', style: const CellStyle(dim: true)),
     ];
 
-    return Stack(
-      children: [
-        widget.child,
-        Align(
-          alignment: Alignment.bottomLeft,
-          // Container.filled supplies the opaque fill — the titled Panel
-          // draws its own frame, so this layer needs no border of its own.
-          child: Container.filled(
-            child: Panel(
-              title: pending.prefix.hintLabel,
-              // Dismiss affordances: the keyboard hint (Esc, or any
-              // non-continuing key) plus a clickable close for pointer users.
-              // Both abandon the in-flight sequence, which drops the popup.
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('esc ', style: CellStyle(dim: true)),
-                  GestureDetector(
-                    onTap: () => KeyBindings.cancelPending(context),
-                    child: Text(
-                      closeGlyph,
-                      style: CellStyle(foreground: theme.colorScheme.primary),
-                    ),
+    return Align(
+      alignment: Alignment.bottomLeft,
+      // Container.filled supplies the opaque fill — the titled Panel
+      // draws its own frame, so this layer needs no border of its own.
+      // The popup renders INLINE (this Stack is in the app subtree, not an
+      // OverlayEntry), so without SelectionArea.disabled a real drag +
+      // Ctrl+C over it copied the key hints themselves.
+      child: SelectionArea.disabled(
+        child: Container.filled(
+          child: Panel(
+            title: pending.prefix.hintLabel,
+            // Dismiss affordances: the keyboard hint (Esc, or any
+            // non-continuing key) plus a clickable close for pointer users.
+            // Both abandon the in-flight sequence, which drops the popup.
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('esc ', style: CellStyle(dim: true)),
+                GestureDetector(
+                  onTap: () => KeyBindings.cancelPending(context),
+                  child: Text(
+                    closeGlyph,
+                    style: CellStyle(foreground: theme.colorScheme.primary),
                   ),
-                ],
-              ),
-              expandChild: false,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: rows,
-              ),
+                ),
+              ],
+            ),
+            expandChild: false,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: rows,
             ),
           ),
         ),
-      ],
+      ),
     );
   }
 }

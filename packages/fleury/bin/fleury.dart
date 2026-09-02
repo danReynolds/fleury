@@ -35,11 +35,13 @@ import 'dart:typed_data' show Uint8List;
 import 'package:fleury/src/cli/create_command.dart';
 import 'package:fleury/src/cli/dart_sdk.dart';
 import 'package:fleury/src/foundation/geometry.dart';
+import 'package:fleury/src/remote/bridge_app_link.dart';
 import 'package:fleury/src/remote/buffered_browser_input.dart';
 import 'package:fleury/src/rendering/width_policy.dart';
 import 'package:fleury/src/remote/remote_client_asset.dart';
 import 'package:fleury/src/remote/remote_protocol.dart';
 import 'package:fleury/src/remote/serve_index_html.dart';
+import 'package:fleury/src/remote/serve_init.dart';
 import 'package:fleury/src/remote/serve_mono_font_asset.dart';
 import 'package:fleury/src/remote/shell_init.dart';
 import 'package:fleury/src/remote/spawn.dart';
@@ -562,8 +564,9 @@ Future<int> _runServe(List<String> args) async {
         return 2;
       }
     } else if (arg == '--debug') {
+      // Meaningful in both modes: spawn sets the child's environment, bridge
+      // carries the decision in its provisional INIT.
       debugWire = true;
-      spawnOnlyFlagSeen = '--debug';
     } else if (arg.startsWith('--max-sessions=')) {
       final raw = arg.substring('--max-sessions='.length);
       final parsed = int.tryParse(raw);
@@ -637,6 +640,7 @@ Future<int> _runServe(List<String> args) async {
           port: port,
           originPolicy: originPolicy,
           token: token,
+          debugWire: debugWire,
         );
 }
 
@@ -669,6 +673,7 @@ Future<int> _runServeBridge({
   required int port,
   required _ServeOriginPolicy originPolicy,
   String? token,
+  required bool debugWire,
 }) async {
   final handleDir = Directory('.fleury');
   if (!handleDir.existsSync()) handleDir.createSync(recursive: true);
@@ -725,7 +730,7 @@ Future<int> _runServeBridge({
 
   // Pairing state. Order of arrival doesn't matter — first one
   // through the door waits for its partner.
-  Socket? pendingApp;
+  BridgeAppLink? pendingApp;
   BufferedBrowserInput? pendingBrowser;
   var sessionInFlight = false;
 
@@ -749,7 +754,7 @@ Future<int> _runServeBridge({
     );
   }
 
-  appServer.listen((appSocket) {
+  appServer.listen((appSocket) async {
     if (sessionInFlight || pendingApp != null) {
       // One session at a time. Drop the new connection cleanly.
       appSocket.destroy();
@@ -758,14 +763,53 @@ Future<int> _runServeBridge({
       );
       return;
     }
-    pendingApp = appSocket;
+    // Read from accept: an app that dies while pending is noticed (and the
+    // slot freed), and an app that paints while waiting is drained instead
+    // of backing up its socket. See BridgeAppLink.
+    final link = BridgeAppLink(appSocket);
+    pendingApp = link;
+    // Speak first. The app's handshake fuse (RemoteTerminalDriver.initTimeout)
+    // exists so a peer that connects and never speaks cannot hang it; with
+    // nobody at the browser end yet, serve IS that silent peer. A
+    // provisional INIT tells the app a supervisor owns the socket, so it
+    // waits for the browser's own INIT however long the operator takes.
+    // `addStream`, not `add`: an app that closed between accept and this
+    // write (a crash during startup, a probe, a second `dart run` racing the
+    // first) makes the socket's own consumer throw a Broken pipe
+    // ASYNCHRONOUSLY, in the root zone, where no try/catch around `add` can
+    // reach it — and an unhandled error there ends `fleury serve` with every
+    // live session. The stream form reports the failure on its future.
+    try {
+      await link.sink.addStream(
+        Stream<List<int>>.value(
+          encodeFrame(buildServeProvisionalInitFrame(debugWire: debugWire)),
+        ),
+      );
+    } catch (error) {
+      stderr.writeln('[serve] could not greet the app: $error');
+      link.destroy();
+      if (identical(pendingApp, link)) pendingApp = null;
+      return;
+    }
+    if (!identical(pendingApp, link)) return; // closed while greeting
+    unawaited(
+      link.closed.then((_) {
+        if (!identical(pendingApp, link)) return;
+        pendingApp = null;
+        stderr.writeln(
+          '[serve] app disconnected before a browser attached '
+          '(${link.discardedBytes} bytes of output discarded); '
+          'waiting for an app',
+        );
+      }),
+    );
     stderr.writeln('[serve] app connected, waiting for a browser');
     tryPair();
   });
 
-  httpServer.listen((req) async {
+  Future<void> handleRequest(HttpRequest req) async {
     if (req.uri.path == '/ws') {
-      if (!WebSocketTransformer.isUpgradeRequest(req)) {
+      if (!_isUpgradeRequest(req)) {
         req.response.statusCode = HttpStatus.badRequest;
         await req.response.close();
         return;
@@ -799,19 +843,20 @@ Future<int> _runServeBridge({
         return;
       }
       if (sessionInFlight || pendingBrowser != null) {
-        ws.add(
-          Uint8List.fromList(
-            encodeFrame(
-              OutputFrame(
-                Uint8List.fromList(
-                  '\x1B[31mAnother browser session is already live.\x1B[0m\r\n'
-                      .codeUnits,
-                ),
-              ),
-            ),
-          ),
-        );
-        await ws.close();
+        // A structured client cannot render a raw OUTPUT frame, and a close
+        // with no code reads as a dropped connection — the page showed a
+        // wrong error and invited a reload loop. Close with a code and a
+        // reason the client shows verbatim (the 4001 path).
+        try {
+          // A close reason is capped at 123 bytes by the protocol.
+          await ws.close(
+            serveSessionBusyCloseCode,
+            'Another browser is already live on this serve (bridge mode is '
+            'one browser). Close it, or use --spawn.',
+          );
+        } catch (_) {
+          // The browser may have given up on the socket already.
+        }
         return;
       }
       final browser = BufferedBrowserInput(ws);
@@ -839,7 +884,12 @@ Future<int> _runServeBridge({
     } else {
       await _serveStaticAsset(req);
     }
-  });
+  }
+
+  httpServer.listen(
+    (req) => _guardRequest(req, handleRequest),
+    onError: _logRequestStreamError,
+  );
 
   Future<void>? cleanupFuture;
   Future<void> cleanup() {
@@ -902,7 +952,7 @@ Future<int> _runServeBridge({
 /// WebSocket end. Both sides speak our framed binary protocol, so the
 /// pump doesn't decode — bytes in, bytes out, in order.
 void _pumpBytes({
-  required Socket app,
+  required BridgeAppLink app,
   required WebSocket browser,
   Stream<List<int>>? browserInput,
   required void Function() onDone,
@@ -932,7 +982,9 @@ void _pumpBytes({
   // slow-consumer memory-DoS the per-chunk `add` was exposed to. (Frame
   // boundaries are still recovered by the browser-side decoder.)
   unawaited(
-    browser.addStream(app).then((_) => stop(), onError: (Object _) => stop()),
+    browser
+        .addStream(app.attach())
+        .then((_) => stop(), onError: (Object _) => stop()),
   );
 
   // Browser → app. WebSocket text messages are rejected; the protocol is
@@ -943,7 +995,7 @@ void _pumpBytes({
       browserInput ??
       browser.where((data) => data is List<int>).cast<List<int>>();
   unawaited(
-    app
+    app.sink
         .addStream(browserBytes)
         .then((_) => stop(), onError: (Object _) => stop()),
   );
@@ -990,7 +1042,13 @@ Future<void> _serveStaticAsset(HttpRequest req) async {
     // matching tag costs a 304, and an upgraded subset is picked up at once
     // instead of being pinned until a max-age elapsed.
     req.response.headers.set(HttpHeaders.cacheControlHeader, 'no-cache');
-    if (req.headers.value(HttpHeaders.ifNoneMatchHeader) == etag) {
+    // A client may legitimately send several tags (one per line or comma
+    // joined); any match is a hit. `HttpHeaders.value` threw on the
+    // multi-line form.
+    if (_headerLines(
+      req,
+      HttpHeaders.ifNoneMatchHeader,
+    ).any((line) => line.split(',').any((tag) => tag.trim() == etag))) {
       req.response.statusCode = HttpStatus.notModified;
       await req.response.close();
       return;
@@ -1011,13 +1069,85 @@ Future<void> _serveStaticAsset(HttpRequest req) async {
   await req.response.close();
 }
 
+/// Every line a request carried for [name], in order; empty when absent.
+///
+/// Prefer this over `HttpHeaders.value` for any peer-controlled header:
+/// `value` throws `HttpException` when the header arrives more than once,
+/// and an unguarded throw in a root-zone request listener took the whole
+/// server down (see [_guardRequest]). Callers decide per header what a
+/// repeat means — a match on any tag, the first (client-facing) forwarded
+/// scheme, or, for a security-relevant header like `Origin`, ambiguity that
+/// fails closed. (`Host` is not read through here: dart:io folds it to a
+/// single value itself.)
+List<String> _headerLines(HttpRequest req, String name) =>
+    req.headers[name] ?? const <String>[];
+
+/// [WebSocketTransformer.isUpgradeRequest] reads `Upgrade` and `Connection`
+/// with `HttpHeaders.value`, so it throws inside dart:io on a duplicate —
+/// before any check of ours could run. A request whose upgrade headers are
+/// ambiguous is simply not an upgrade: it gets the same 400 as any other
+/// non-upgrade on `/ws`.
+bool _isUpgradeRequest(HttpRequest req) {
+  try {
+    return WebSocketTransformer.isUpgradeRequest(req);
+  } on HttpException {
+    return false;
+  }
+}
+
+/// Runs one request through [handler] with the containment a root-zone
+/// `HttpServer.listen` callback otherwise lacks.
+///
+/// Anything that escapes the handler became an unhandled root-zone error,
+/// and the VM terminated `fleury serve` with exit 255 — every live session
+/// gone at once, and in `--spawn` mode the handle directory and socket files
+/// leaked because the signal handlers never ran. The reachable triggers were
+/// all pre-auth: a duplicated header on the font asset's conditional GET,
+/// on `/ws`'s `Origin`, `X-Forwarded-Proto` or `Upgrade`. Not a drive-by
+/// (browsers merge duplicate headers), but any peer that can reach the port
+/// under a `--host` deployment could send one — and a reverse proxy that
+/// ADDS rather than SETS `X-Forwarded-Proto`, the exact deployment the scheme
+/// check exists to support, sent one on its first browser connection.
+///
+/// A fault now costs exactly that connection: log it, answer 400 if the
+/// response is still ours, drop it. The per-header reads above no longer
+/// throw at all; this is the belt for whatever dart:io throws next.
+Future<void> _guardRequest(
+  HttpRequest req,
+  Future<void> Function(HttpRequest req) handler,
+) async {
+  try {
+    await handler(req);
+  } catch (error) {
+    stderr.writeln('[serve] rejecting connection: malformed request ($error).');
+    try {
+      req.response.statusCode = HttpStatus.badRequest;
+      await req.response.close();
+    } catch (_) {
+      // Already hijacked by an upgrade, or closed underneath us.
+    }
+  }
+}
+
+/// A request the server could not even parse into an [HttpRequest] surfaces
+/// as an error on the server stream; without a handler it is unhandled and
+/// fatal. It concerns one connection, which dart:io has already dropped.
+void _logRequestStreamError(Object error, StackTrace _) {
+  stderr.writeln('[serve] dropped an unparseable connection: $error');
+}
+
 bool _isAllowedWebSocketOrigin(
   HttpRequest req,
   _ServeOriginPolicy originPolicy, {
   required String boundHost,
 }) {
-  final origin = req.headers.value('origin');
-  if (origin == null || origin.isEmpty) return true;
+  final origins = _headerLines(req, 'origin');
+  if (origins.isEmpty) return true;
+  // Two Origin headers is never a real browser. Ambiguity about who is
+  // asking fails closed, never open.
+  if (origins.length > 1) return false;
+  final origin = origins.single;
+  if (origin.isEmpty) return true;
 
   final originUri = Uri.tryParse(origin);
   if (originUri == null || originUri.host.isEmpty) return false;
@@ -1073,10 +1203,17 @@ bool _isAllowedSameOriginHost(String requestHost, String boundHost) {
 /// `X-Forwarded-Proto` here is safe: browsers can't set it on a WebSocket
 /// handshake, and it can only ever change the scheme compared against the SAME
 /// host — never widen the check to a different origin.)
+///
+/// A proxy chain may comma-join the schemes on one line OR add a line per hop
+/// (HAProxy's `add-header`, any passthrough hop in front of a client that sends
+/// its own); either way the client-facing scheme comes first. The per-hop shape
+/// used to throw out of `HttpHeaders.value` and kill the server on the first
+/// browser connection through such a proxy.
 String _sameOriginScheme(HttpRequest req) {
-  final forwarded = req.headers.value('x-forwarded-proto');
-  if (forwarded != null && forwarded.trim().isNotEmpty) {
-    return forwarded.split(',').first.trim().toLowerCase();
+  final forwarded = _headerLines(req, 'x-forwarded-proto');
+  if (forwarded.isNotEmpty) {
+    final first = forwarded.first.split(',').first.trim();
+    if (first.isNotEmpty) return first.toLowerCase();
   }
   try {
     return req.requestedUri.scheme;
@@ -1220,12 +1357,12 @@ Future<int> _runServeSpawn({
     );
   }
 
-  httpServer.listen((req) async {
+  Future<void> handleRequest(HttpRequest req) async {
     if (req.uri.path != '/ws') {
       await _serveStaticAsset(req);
       return;
     }
-    if (!WebSocketTransformer.isUpgradeRequest(req)) {
+    if (!_isUpgradeRequest(req)) {
       req.response.statusCode = HttpStatus.badRequest;
       await req.response.close();
       return;
@@ -1250,22 +1387,28 @@ Future<int> _runServeSpawn({
     // before any await, so concurrent connects can't all slip past the check.
     // The warm standby holds a subprocess too but isn't a browser session, so
     // it doesn't count against the browser cap.
-    if (admitted >= maxSessions) {
-      stderr.writeln(
-        '[serve] rejecting connection: session limit reached '
-        '($admitted/$maxSessions; raise with --max-sessions=<n>).',
-      );
-      req.response.statusCode = HttpStatus.serviceUnavailable;
-      req.response.write('session limit reached');
-      await req.response.close();
-      return;
+    //
+    // The DECISION is synchronous; the REJECTION is not. Turning the browser
+    // away with a pre-upgrade 503 closes the socket before it ever opens, and
+    // script cannot read an HTTP status from a failed upgrade — the serve page
+    // could only render a blank grid with no message. So decide here, upgrade
+    // below, and close the opened socket with a code and a human reason the
+    // client shows verbatim.
+    final overCapacity = admitted >= maxSessions;
+    final capacityMessage =
+        'session limit reached ($admitted/$maxSessions); '
+        'raise with --max-sessions=<n>.';
+    if (overCapacity) {
+      stderr.writeln('[serve] rejecting connection: $capacityMessage');
+    } else {
+      admitted++;
     }
-    admitted++;
     // Release the reservation exactly once — when this connection's serving
     // session ends (its subprocess exits) or the connect fails outright. The
     // slot is held for the whole teardown, which is correct: the subprocess
-    // is still alive until then.
-    var released = false;
+    // is still alive until then. A connection turned away at the cap reserved
+    // nothing, so its release is pre-spent.
+    var released = overCapacity;
     void release() {
       if (released) return;
       released = true;
@@ -1295,6 +1438,14 @@ Future<int> _runServeSpawn({
         await req.response.close();
       } catch (_) {
         // The socket may already be hijacked/closed by the failed upgrade.
+      }
+      return;
+    }
+    if (overCapacity) {
+      try {
+        await ws.close(serveSessionLimitCloseCode, capacityMessage);
+      } catch (_) {
+        // The browser may have given up on the socket already.
       }
       return;
     }
@@ -1371,7 +1522,15 @@ Future<int> _runServeSpawn({
         );
       }),
     );
-  });
+  }
+
+  // Everything that can throw on a hostile or misconfigured request — the
+  // upgrade check, the origin check, the static-asset conditional GET — runs
+  // BEFORE the admission slot is reserved, so a contained fault holds no slot.
+  httpServer.listen(
+    (req) => _guardRequest(req, handleRequest),
+    onError: _logRequestStreamError,
+  );
 
   Future<void>? cleanupFuture;
   Future<void> cleanup() {
@@ -1548,7 +1707,9 @@ class _SpawnSession {
     Socket app,
   ) {
     _pumpBytes(
-      app: app,
+      // Spawn mode pairs on attach, so the link forwards from its first byte;
+      // the drain-while-pending half is bridge mode's concern.
+      app: BridgeAppLink(app),
       browser: browser,
       browserInput: browserInput.stream,
       onDone: () {

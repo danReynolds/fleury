@@ -97,6 +97,10 @@ class _MenuState extends State<Menu> {
   final BoundsNotifier _bounds = BoundsNotifier();
   final FocusNode _triggerFocus = FocusNode(debugLabel: 'menu-trigger');
   final GlobalKey _trapContentKey = GlobalKey();
+
+  /// Reaches the root panel's state so [_close] can retire the whole panel
+  /// chain's focus traps before restoring focus to the trigger.
+  final GlobalKey<_MenuBodyState> _bodyKey = GlobalKey<_MenuBodyState>();
   OverlayEntry? _entry;
   FocusNode? _priorFocus;
 
@@ -119,9 +123,15 @@ class _MenuState extends State<Menu> {
       context,
     ); // resolved in-tree, threaded into the overlay
     final entry = OverlayEntry(
-      builder: (_) => BoundsAnchor(
+      // The root panel owns the whole slot for input: without the barrier a
+      // click on the menu's backdrop fires whatever the app painted there.
+      // Submenu entries deliberately do NOT add one — they paint above this
+      // barrier, and a second barrier would shadow the root panel's own rows.
+      builder: (_) => AnchoredFloat(
         notifier: _bounds,
+        onTapOutside: _close,
         child: _MenuBody(
+          key: _bodyKey,
           trapContentKey: _trapContentKey,
           entries: widget.items,
           semanticLabel: widget.semanticLabel,
@@ -145,6 +155,13 @@ class _MenuState extends State<Menu> {
   }
 
   void _close() {
+    // Retire every open panel's focus trap, deepest first. `OverlayEntry.remove`
+    // only takes effect on the next build flush, so a submenu's trap is still
+    // registered when focus is restored below — and would refuse it, leaving
+    // the keyboard on no node at all. The Esc/leaf paths release each panel as
+    // the close bubbles up; a close driven from OUT here (the barrier, a tap on
+    // the trigger, the semantic close action) has to walk down instead.
+    _bodyKey.currentState?.releaseChainFocusTraps();
     Focus.of(context).releaseFocusTrapIn(_trapContentKey.currentContext);
     _entry?.remove();
     _entry = null;
@@ -232,6 +249,7 @@ class _MenuState extends State<Menu> {
 /// inserts a child `_MenuBody` in an overlay to the right.
 class _MenuBody extends StatefulWidget {
   const _MenuBody({
+    super.key,
     required this.entries,
     required this.semanticLabel,
     required this.depth,
@@ -271,11 +289,26 @@ class _MenuBodyState extends State<_MenuBody> {
   );
   final FocusNode _focus = FocusNode(debugLabel: 'menu');
   late final GlobalKey _trapContentKey = widget.trapContentKey ?? GlobalKey();
-  final BoundsNotifier _selfBounds = BoundsNotifier();
   // Anchors the currently-selected submenu row so its child panel opens beside
   // *that row*, not the panel's top corner.
-  final BoundsNotifier _submenuAnchor = BoundsNotifier();
+  /// One notifier per row, so EVERY row is observed unconditionally.
+  ///
+  /// Wrapping only the selected row meant an arrow key changed two rows'
+  /// widget type in the same build pass; the newly-selected row's observer
+  /// claimed the shared notifier while the old row's element was still parked
+  /// in `_inactiveElements`, tripping the single-writer assert. One notifier
+  /// per observed widget is what the primitive actually asks for — and it
+  /// keeps the row structure stable across selection changes, so moving the
+  /// highlight no longer remounts two rows.
+  final Map<int, BoundsNotifier> _rowBounds = <int, BoundsNotifier>{};
+
+  BoundsNotifier _boundsForRow(int index) =>
+      _rowBounds.putIfAbsent(index, BoundsNotifier.new);
   OverlayEntry? _childEntry;
+
+  /// Reaches the open child panel's state, so a close driven from above can
+  /// retire the chain's focus traps deepest-first (see [releaseChainFocusTraps]).
+  GlobalKey<_MenuBodyState>? _childKey;
 
   bool _selectable(int i) {
     final e = widget.entries[i];
@@ -353,7 +386,7 @@ class _MenuBodyState extends State<_MenuBody> {
   void _activate(int i) {
     final entry = widget.entries[i];
     if (entry is SubMenu && entry.enabled) {
-      _openSubmenu(entry);
+      _openSubmenu(entry, i);
     } else if (entry is MenuItem && entry.enabled) {
       _releaseFocusTrap();
       widget.onLeafSelected(entry.onSelect);
@@ -364,22 +397,43 @@ class _MenuBodyState extends State<_MenuBody> {
     Focus.of(context).releaseFocusTrapIn(_trapContentKey.currentContext);
   }
 
+  /// Retires this panel's trap and every panel it opened, deepest first.
+  ///
+  /// The Esc / leaf-selection paths release each panel as the close bubbles
+  /// UP through them. A close driven from outside the chain (the float's
+  /// pointer barrier, a tap on the trigger, the semantic close action) removes
+  /// the root overlay entry in one go, and the child entries are only unmounted
+  /// on the next build flush — so their traps have to be released explicitly,
+  /// before focus is restored outside the menu.
+  void releaseChainFocusTraps() {
+    _childKey?.currentState?.releaseChainFocusTraps();
+    _releaseFocusTrap();
+  }
+
   void _dismiss() {
     _releaseFocusTrap();
     widget.onDismiss();
   }
 
-  void _openSubmenu(SubMenu sub) {
+  /// Opens [sub]'s panel beside row [index] — the row that owns it, not the
+  /// panel's top corner.
+  void _openSubmenu(SubMenu sub, int index) {
     if (sub.items.isEmpty || _childEntry != null) return;
     final overlay = Overlay.of(context);
     final manager = Focus.of(context);
+    final childKey = GlobalKey<_MenuBodyState>();
+    final anchor = _boundsForRow(index);
     final entry = OverlayEntry(
+      // A bare BoundsAnchor, deliberately: this panel paints ABOVE the root
+      // panel's barrier, so its own rows already win, and a second barrier
+      // would shadow the root panel's rows instead.
       builder: (_) => BoundsAnchor(
-        notifier: _submenuAnchor,
+        notifier: anchor,
         alignment: Alignment.topRight,
         anchorAlignment: Alignment.topLeft,
         gap: 1,
         child: _MenuBody(
+          key: childKey,
           entries: sub.items,
           semanticLabel: sub.label,
           depth: widget.depth + 1,
@@ -399,6 +453,7 @@ class _MenuBodyState extends State<_MenuBody> {
       ),
     );
     _childEntry = entry;
+    _childKey = childKey;
     manager.requestFocus(null); // hand focus to the nested panel
     overlay.insert(entry);
     setState(() {});
@@ -407,6 +462,7 @@ class _MenuBodyState extends State<_MenuBody> {
   void _closeSubmenu() {
     _childEntry?.remove();
     _childEntry = null;
+    _childKey = null;
     if (mounted) _focus.requestFocus();
     if (mounted) setState(() {});
   }
@@ -469,6 +525,8 @@ class _MenuBodyState extends State<_MenuBody> {
     // Row layout: a 2-cell leading marker (`› ` selected / blank), the label,
     // the cascade `▸` indicator right-aligned in its own column, and a trailing
     // pad cell so labels never hug the border.
+    // Cells, not code units: a CJK or emoji label is wider than its length.
+    final widths = MediaQuery.textPolicyOf(context).widths;
     var labelWidth = 0;
     for (final e in widget.entries) {
       final label = sanitizeOptionLabel(switch (e) {
@@ -476,7 +534,8 @@ class _MenuBodyState extends State<_MenuBody> {
         SubMenu(:final label) => label,
         MenuSeparator() => '',
       });
-      if (label.length > labelWidth) labelWidth = label.length;
+      final cells = const DefaultWidthResolver().widthOfText(label, widths);
+      if (cells > labelWidth) labelWidth = cells;
     }
     // 2 (marker) + label + a trailing region: 2 cells when any row is a
     // submenu (the ▸ column + a pad), else 1 (just the pad).
@@ -522,10 +581,10 @@ class _MenuBodyState extends State<_MenuBody> {
             child: Focus(
               focusNode: _focus,
               autofocus: true,
-              child: BoundsObserver(
-                notifier: _selfBounds,
-                // Popup supplies the float contract: opaque fill, frame, and chrome
-                // semantics, so the app underneath can't bleed through.
+              // `framed` supplies the opaque fill and the frame, so the app
+              // underneath can't bleed through; SelectionArea.disabled says
+              // the menu rows are chrome, not copyable content.
+              child: SelectionArea.disabled(
                 child: Container.framed(
                   border: BoxBorder(style: widget.borderStyle),
                   child: SizedBox(
@@ -540,6 +599,9 @@ class _MenuBodyState extends State<_MenuBody> {
                         switch (entry) {
                           case MenuSeparator():
                             return Text('─' * width, style: widget.mutedStyle);
+                          // Every row is wrapped in its own observer — see
+                          // [_rowBounds]. A submenu reads the notifier of the row
+                          // that opened it.
                           case MenuItem(:final label, :final enabled):
                             final sel = enabled && selected;
                             final child = Text(
@@ -556,11 +618,14 @@ class _MenuBodyState extends State<_MenuBody> {
                                   ? widget.selectionStyle
                                   : CellStyle.none,
                             );
-                            return _semanticMenuItem(
-                              entry: entry,
-                              index: i,
-                              selected: selected,
-                              child: child,
+                            return BoundsObserver(
+                              notifier: _boundsForRow(i),
+                              child: _semanticMenuItem(
+                                entry: entry,
+                                index: i,
+                                selected: selected,
+                                child: child,
+                              ),
                             );
                           case SubMenu(:final label, :final enabled):
                             final sel = enabled && selected;
@@ -578,20 +643,15 @@ class _MenuBodyState extends State<_MenuBody> {
                                   ? widget.selectionStyle
                                   : CellStyle.none,
                             );
-                            final item = _semanticMenuItem(
-                              entry: entry,
-                              index: i,
-                              selected: selected,
-                              child: child,
+                            return BoundsObserver(
+                              notifier: _boundsForRow(i),
+                              child: _semanticMenuItem(
+                                entry: entry,
+                                index: i,
+                                selected: selected,
+                                child: child,
+                              ),
                             );
-                            // Anchor the selected submenu row so its child panel
-                            // opens aligned to it (not the panel corner).
-                            return sel
-                                ? BoundsObserver(
-                                    notifier: _submenuAnchor,
-                                    child: item,
-                                  )
-                                : item;
                         }
                       },
                     ),
@@ -650,7 +710,7 @@ class _MenuBodyState extends State<_MenuBody> {
           case SemanticAction.open:
             if (submenu) {
               _list.selectedIndex = index;
-              _openSubmenu(entry);
+              _openSubmenu(entry, index);
             }
             return;
           case SemanticAction.activate:

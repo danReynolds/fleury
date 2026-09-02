@@ -2,6 +2,28 @@ import 'package:fleury/fleury.dart';
 import '../support/harness.dart';
 import 'package:test/test.dart';
 
+/// A 100-row scroller behind a 1-col gutter. With a 10-row viewport the
+/// controller reports content 100 / viewport 10 → maxOffset 90.
+Widget _subject(ScrollController sc) => Scrollbar(
+  controller: sc,
+  child: ScrollView(
+    controller: sc,
+    child: Column(children: [for (var i = 0; i < 100; i++) Text('r$i')]),
+  ),
+);
+
+/// A single click on the gutter column at [row].
+void _clickGutter(FleuryTester tester, int row, {int col = 7}) {
+  tester.sendMouse(
+    MouseEvent(
+      kind: MouseEventKind.down,
+      button: MouseButton.left,
+      col: col,
+      row: row,
+    ),
+  );
+}
+
 String _col(CellBuffer buf, int col) {
   final sb = StringBuffer();
   for (var r = 0; r < buf.size.rows; r++) {
@@ -238,6 +260,88 @@ void main() {
         ),
         reason: 'a right-edge scrollbar needs a bounded width to anchor to',
       );
+    });
+  });
+
+  // The scrollbar records its painted geometry so the drag/click handler can
+  // map a pointer row → scroll fraction. Mouse events arrive in absolute
+  // terminal coordinates and the gesture region is registered in screen space,
+  // so the recorded top must be the *screen* row. Inside anything that paints
+  // its child into a scratch buffer (a caching RepaintBoundary, a ListView
+  // item, a ScrollView viewport) the local paint offset is scratch-relative
+  // and the two diverge — the click then maps to the wrong fraction.
+  group('geometry is recorded in screen space', () {
+    // Every shape puts the 10-row bar at screen rows 4..13 (except the bare
+    // control at 0..9) and clicks its midpoint, so they all expect the same
+    // scroll offset: f = 5/9 of maxOffset 90 → 50.
+    const expected = 50;
+
+    testWidgets('bare (control)', (tester) {
+      final sc = ScrollController();
+      tester.pumpWidget(_subject(sc));
+      tester.render(size: const CellSize(8, 10));
+      expect(sc.maxOffset, 90);
+      _clickGutter(tester, 5);
+      tester.render(size: const CellSize(8, 10));
+      expect(sc.offset, expected);
+    });
+
+    testWidgets('inside an explicit RepaintBoundary', (tester) {
+      final sc = ScrollController();
+      tester.pumpWidget(
+        Column(
+          children: [
+            const SizedBox(height: 4, child: Text('header')),
+            RepaintBoundary(child: SizedBox(height: 10, child: _subject(sc))),
+          ],
+        ),
+      );
+      tester.render(size: const CellSize(8, 14));
+      expect(sc.maxOffset, 90);
+      _clickGutter(tester, 9);
+      tester.render(size: const CellSize(8, 14));
+      expect(sc.offset, expected);
+    });
+
+    testWidgets('as a ListView item (auto-wrapped in a boundary)', (tester) {
+      final sc = ScrollController();
+      tester.pumpWidget(
+        ListView(
+          children: [
+            for (var i = 0; i < 4; i++) Text('head$i'),
+            SizedBox(height: 10, child: _subject(sc)),
+          ],
+        ),
+      );
+      tester.render(size: const CellSize(8, 14));
+      expect(sc.maxOffset, 90);
+      _clickGutter(tester, 9);
+      tester.render(size: const CellSize(8, 14));
+      expect(sc.offset, expected);
+    });
+
+    testWidgets('inside a ScrollView under an app bar', (tester) {
+      final sc = ScrollController();
+      final outer = ScrollController();
+      tester.pumpWidget(
+        Column(
+          children: [
+            const SizedBox(height: 4, child: Text('app bar')),
+            SizedBox(
+              height: 10,
+              child: ScrollView(
+                controller: outer,
+                child: SizedBox(height: 10, child: _subject(sc)),
+              ),
+            ),
+          ],
+        ),
+      );
+      tester.render(size: const CellSize(8, 14));
+      expect(sc.maxOffset, 90);
+      _clickGutter(tester, 9);
+      tester.render(size: const CellSize(8, 14));
+      expect(sc.offset, expected);
     });
   });
 }

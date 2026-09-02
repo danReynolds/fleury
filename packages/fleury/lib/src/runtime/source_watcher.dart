@@ -18,6 +18,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:meta/meta.dart';
 import 'package:watcher/watcher.dart';
 
 /// The source directories a dev session should watch for hot reload.
@@ -28,15 +29,56 @@ class DevSourceRoots {
   final List<String> directories;
 
   /// Resolves watch roots for the package containing [projectRoot] (defaults
-  /// to the current working directory): the nearest directory — itself or an
+  /// to [entrypointDirectory]): the nearest directory — itself or an
   /// ancestor — holding `.dart_tool/package_config.json`, matching how
   /// `dart run` locates the config when launched from a subdirectory.
   ///
   /// Returns null when no ancestor has one — the app is not running from a
   /// pub workspace (e.g. a compiled snapshot in a bare directory) and there
   /// is nothing meaningful to watch.
+  ///
+  /// The default start is the ENTRYPOINT's directory, not the process's
+  /// working directory: `dart ~/code/app/bin/main.dart` from anywhere else
+  /// resolved from wherever the shell happened to be, found no package config
+  /// there, and watched nothing — a supervised session with hot reload
+  /// silently off. The working directory stays as a second attempt, so a
+  /// layout where only it can see the config (`--packages` pointing back at
+  /// the current project) keeps resolving as before.
   static DevSourceRoots? resolve({String? projectRoot, String? pubCachePath}) {
-    var dir = Directory(projectRoot ?? Directory.current.path).absolute;
+    if (projectRoot != null) {
+      return _resolveFrom(projectRoot, pubCachePath: pubCachePath);
+    }
+    final fromEntrypoint = _resolveFrom(
+      entrypointDirectory(script: Platform.script) ?? Directory.current.path,
+      pubCachePath: pubCachePath,
+    );
+    if (fromEntrypoint != null && fromEntrypoint.directories.isNotEmpty) {
+      return fromEntrypoint;
+    }
+    return _resolveFrom(Directory.current.path, pubCachePath: pubCachePath) ??
+        fromEntrypoint;
+  }
+
+  /// The directory holding the running entrypoint, or null when [script] is
+  /// not a file the developer edits (a `data:` URI, a kernel snapshot).
+  @visibleForTesting
+  static String? entrypointDirectory({required Uri script}) {
+    if (script.scheme != 'file') return null;
+    final String path;
+    try {
+      path = script.toFilePath();
+    } on UnsupportedError {
+      return null;
+    }
+    if (!path.endsWith('.dart')) return null;
+    return File(path).absolute.parent.path;
+  }
+
+  static DevSourceRoots? _resolveFrom(
+    String projectRoot, {
+    String? pubCachePath,
+  }) {
+    var dir = Directory(projectRoot).absolute;
     while (true) {
       final configFile = File(
         '${dir.path}${Platform.pathSeparator}.dart_tool'

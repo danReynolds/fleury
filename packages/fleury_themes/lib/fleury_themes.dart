@@ -1,12 +1,20 @@
 /// Ready-made themes for Fleury.
 ///
-/// Each theme is a plain `const ThemeData` — hand one to `runApp` or wrap a
-/// subtree in a `Theme`:
+/// Each theme is a plain `const ThemeData` — hand one to `FleuryApp` or wrap
+/// a subtree in a `Theme`:
 ///
 /// ```dart
+/// import 'package:fleury/fleury_core.dart';
 /// import 'package:fleury_themes/fleury_themes.dart';
 ///
-/// runApp(const MyApp(), theme: tokyoNight);
+/// // Hand this root to `runApp` on a terminal or `mountApp` in a browser —
+/// // the theme is the same object either way. (The web-safe `fleury_core`
+/// // barrel is deliberate: this package must stay dart2js-compilable.)
+/// const app = FleuryApp(
+///   title: 'My app',
+///   theme: tokyoNight,
+///   home: MyApp(),
+/// );
 /// ```
 ///
 /// Nothing here is special: a theme is data, and yours can sit alongside

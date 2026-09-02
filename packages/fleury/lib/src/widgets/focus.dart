@@ -29,7 +29,6 @@ import '../rendering/cell_buffer.dart';
 import '../rendering/layout.dart';
 import '../rendering/render_object.dart';
 import '../input/events.dart';
-import '../input/key_dispatch.dart';
 import 'framework.dart';
 import 'inherited_notifier.dart';
 import 'key_bindings.dart' show KeyBinding;
@@ -612,7 +611,7 @@ class FocusManager extends ChangeNotifier {
   /// intervening manager change — a widget that holds a long-lived node and
   /// is unmounted then remounted (a view swap, a reparent) reuses the node
   /// but builds a fresh element. The node's `_element` MUST be updated to the
-  /// live one: [dispatchKey]/[activeChain] walk up from `node._element`, so a
+  /// live one: [activeChain] walks up from `node._element`, so a
   /// stale pointer traverses the defunct element tree and the remounted
   /// widget's bindings never fire (focus reports acquired, but its keys are
   /// dead). So always refresh `_element`; only the attachment-list insert is
@@ -982,24 +981,6 @@ class FocusManager extends ChangeNotifier {
       element = element.elementParent;
     }
     return false;
-  }
-
-  /// Delivers [event] to the active focus chain's `KeyDetector` handlers in
-  /// deepest-first order, stopping at the first that consumes it.
-  ///
-  /// Detectors consume by calling [KeyEvent.consume] (RFC 0020 §17): the
-  /// default is to propagate, which inverts the old `Focus.onKey` failure
-  /// mode where a blanket `return handled` silently starved an ancestor.
-  KeyEventResult dispatchKey(KeyEvent event) {
-    _checkNotDisposed();
-    for (final node in activeChain()) {
-      final handler = node.keyDetector;
-      if (handler == null) continue;
-      if (KeyDispatchContext.run(() => handler(event), entitled: true)) {
-        return KeyEventResult.handled;
-      }
-    }
-    return KeyEventResult.ignored;
   }
 
   @override

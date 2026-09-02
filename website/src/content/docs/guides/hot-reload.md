@@ -49,9 +49,17 @@ in the same terminal session.
 Reload keeps state and is the default loop; restart is for the changes reload
 can't apply.
 
-One caveat: a dev restart re-runs `main()` without the original CLI arguments
-(a process cannot recover its own argv for a sibling spawn). An app that must
-re-see argv can set `FLEURY_HOT_RELOAD=0` and restart manually.
+One thing to wire up if your app reads argv: a restart re-runs `main()` in a
+fresh child process, and a process cannot portably recover its own script
+arguments — so hand them over. Pass them to `runApp` and the restarted app sees
+the same command line it was started with:
+
+```dart
+Future<void> main(List<String> args) => runApp(const MyApp(), args: args);
+```
+
+Without `args:`, a restarted argv-driven app comes back with an empty argument
+list and may show something other than what was asked for.
 
 ## In an editor debug session
 
@@ -120,6 +128,27 @@ owns the run — an editor debug session (a live VM service), a `fleury serve`
 handle, an AOT product build, Windows, a non-TTY, or an injected test driver —
 and the app runs exactly as before, no supervisor involved.
 
+### Reloading a browser preview
+
+Because the supervisor steps aside for a serve handle, the usual browser
+command hot reloads nothing:
+
+```sh
+fleury serve --spawn dart run bin/run_app.dart   # no VM service, no reload
+```
+
+Enable the service in the spawned command itself and the app reloads on save,
+with the browser preview updating live:
+
+```sh
+fleury serve --spawn dart --enable-vm-service=0 run bin/run_app.dart
+```
+
+`=0` lets the VM pick a free port. Reload only — hot restart is intentionally
+unavailable here, because a respawned child would re-dial the handle's
+single-accept socket and wedge the session. `serve` never adds the flag on
+your behalf: opening a debug port is your call.
+
 Opting out entirely:
 
 ```sh
@@ -147,16 +176,37 @@ When the child exits for real — quit, `Ctrl+C`, a crash — the supervisor
 mirrors its exit code, so scripts and CI see exactly what they'd see without
 it.
 
+**Your `main()` runs twice.** The supervisor *is* your entrypoint, parked
+inside `runApp`; the app is a second process running the same entrypoint. So
+everything in `main()` before `runApp` executes in both — once in the
+supervisor, once in the app. Code that must happen exactly once (binding a
+port, taking a lock, subscribing to stdin, writing a pid file) fails or
+double-runs in the second process. Keep it after `runApp`, guard it with an
+environment check, or run without the supervisor (`FLEURY_HOT_RELOAD=0`, or
+`enableHotReload: false`). The generated scaffold's `main()` is just the
+`runApp` call, so this only matters once you add startup work — and the
+supervisor prints a hint when the first app process exits non-zero within two
+seconds of starting.
+
 ## Troubleshooting
 
 **Nothing happens when I save** — In a plain `dart run`: check you're on a
-real terminal (not a pipe) and that `FLEURY_HOT_RELOAD` isn't `0`. In an
+real terminal (not a pipe) and that `FLEURY_HOT_RELOAD` isn't `0`. Your
+entrypoint also has to sit in a package with a resolved
+`.dart_tool/package_config.json` (`dart pub get`) — that file is what says
+which sources to watch, and with nothing to watch the supervisor steps aside
+and the run is an ordinary one. In an
 editor debug session: reload-on-save is the editor's job — run **Dart: Hot
 Reload** from the command palette, or set `dart.hotReloadOnSave:
 "allIfDirty"` (generated projects have it already).
 
 **Reload succeeds but the UI doesn't update** — Check `enableHotReload: true`
 (the default) in your `runApp` call.
+
+**The app exits right away under `dart run`, but not with `FLEURY_HOT_RELOAD=0`**
+— Startup work before `runApp` ran twice (see *How it works*): the supervisor
+already bound the port / took the lock / consumed stdin, and the app process
+found it taken. Move that work after `runApp` or guard it.
 
 **"isolate reload failed: missing fields"** — You added a non-nullable field
 to a `State` class without a default; the live instance can't be migrated.

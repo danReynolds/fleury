@@ -42,7 +42,9 @@ export 'src/remote/remote_protocol.dart'
         encodeFrame,
         remoteFramePayloadLimit,
         remoteProtocolVersion,
-        semanticActionTargetTokenProtocolVersion;
+        semanticActionTargetTokenProtocolVersion,
+        serveSessionBusyCloseCode,
+        serveSessionLimitCloseCode;
 export 'src/remote/inline_image_cache.dart'
     show
         InlineImageCacheLedger,

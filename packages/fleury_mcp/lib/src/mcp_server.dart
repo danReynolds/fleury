@@ -1817,9 +1817,9 @@ final class McpServer {
       bridge.pressKey(KeyCode.char(key), modifiers: modifiers);
     } else if (key.characters.length == 1) {
       // A bare printable character (one grapheme cluster — counts an emoji or
-      // accented letter as one): a plain KeyEvent(char:) does NOT insert text
-      // (only a TextInputEvent does), so type it — that's what "press the 'a'
-      // key" into a focused field means.
+      // accented letter as one): a plain KeyEvent(KeyCode.char(…)) does NOT
+      // insert text (only a TextInputEvent does), so type it — that's what
+      // "press the 'a' key" into a focused field means.
       bridge.typeText(key);
     } else {
       // A multi-character value that is neither a known key name nor a chord is

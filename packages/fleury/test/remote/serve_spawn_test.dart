@@ -413,10 +413,20 @@ void main() {
 
         // Second browser must be turned away — each session is a whole Dart VM,
         // and the cap is what keeps an open reconnect loop from fork-bombing.
-        await expectLater(
-          WebSocket.connect('ws://127.0.0.1:$port/ws'),
-          throwsA(isA<WebSocketException>()),
-          reason: 'the upgrade is refused with 503 at the cap',
+        //
+        // The upgrade is ACCEPTED and the socket then closed with a code and a
+        // reason. A pre-upgrade 503 closes the socket before it ever opens,
+        // and script cannot read an HTTP status off a failed upgrade, so the
+        // serve page could only show a blank grid — the user hits the cap and
+        // sees nothing at all.
+        final refused = await WebSocket.connect('ws://127.0.0.1:$port/ws');
+        await refused.drain<void>().timeout(const Duration(seconds: 8));
+        expect(refused.closeCode, serveSessionLimitCloseCode);
+        expect(refused.closeReason, contains('session limit reached'));
+        expect(
+          refused.closeReason,
+          contains('--max-sessions'),
+          reason: 'the reason must tell the user how to raise the cap',
         );
         await _waitFor(
           () => stderrLines.any((l) => l.contains('session limit reached')),
@@ -434,7 +444,8 @@ void main() {
           // The cap must reserve its slot SYNCHRONOUSLY: a burst of connects
           // fired together (before any of them attaches) must not all be
           // admitted. Fire six at once against a cap of 1 — exactly one may
-          // survive; the rest get 503 → WebSocketException.
+          // survive; every other socket is opened and then closed with the
+          // session-limit code.
           final pkgRoot = Directory.current.path;
           final childCwd = Directory.systemTemp.createTempSync('fleury_burst_');
           addTearDown(() => childCwd.deleteSync(recursive: true));
@@ -458,14 +469,32 @@ void main() {
               (f) => f.then<WebSocket?>((ws) => ws).catchError((_) => null),
             ),
           );
-          final admittedSockets = results.whereType<WebSocket>().toList();
+          final sockets = results.whereType<WebSocket>().toList();
           addTearDown(() async {
-            for (final ws in admittedSockets) {
+            for (final ws in sockets) {
               try {
                 await ws.close();
               } catch (_) {}
             }
           });
+
+          // Every connection completes its upgrade now; the cap is expressed
+          // as a close code, so admitted == "still open a moment later".
+          final refusedCodes = <int?>[];
+          final admittedSockets = <WebSocket>[];
+          await Future.wait(
+            sockets.map((ws) async {
+              final closed = await ws
+                  .drain<void>()
+                  .then((_) => true)
+                  .timeout(const Duration(seconds: 8), onTimeout: () => false);
+              if (closed) {
+                refusedCodes.add(ws.closeCode);
+              } else {
+                admittedSockets.add(ws);
+              }
+            }),
+          );
 
           expect(
             admittedSockets,
@@ -473,6 +502,11 @@ void main() {
             reason:
                 'the synchronous reservation admits exactly one of a '
                 'concurrent burst — a TOCTOU check would admit all six',
+          );
+          expect(
+            refusedCodes,
+            everyElement(serveSessionLimitCloseCode),
+            reason: 'every rejection names the cap it hit',
           );
         },
       );

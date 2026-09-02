@@ -8,6 +8,7 @@ import 'cell.dart';
 import 'cell_buffer.dart';
 import 'layout.dart';
 import 'render_object.dart';
+import 'width_resolver.dart';
 
 /// True only when asserts run (i.e. `dart run`, not an AOT release build),
 /// matching how Flutter scopes its debug-only overflow banner.
@@ -160,10 +161,24 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
     MainAxisSize mainAxisSize = MainAxisSize.max,
     MainAxisAlignment mainAxisAlignment = MainAxisAlignment.start,
     CrossAxisAlignment crossAxisAlignment = CrossAxisAlignment.start,
+    TextPresentationPolicy textPolicy = TextPresentationPolicy.spec,
   }) : _direction = direction,
        _mainAxisSize = mainAxisSize,
        _mainAxisAlignment = mainAxisAlignment,
-       _crossAxisAlignment = crossAxisAlignment;
+       _crossAxisAlignment = crossAxisAlignment,
+       _textPolicy = textPolicy;
+
+  /// The surface's text-presentation policy — used to measure the overflow
+  /// marker, which is a block element and therefore East Asian Ambiguous
+  /// (RFC 0019). Paint-only: the marker sits inside the box's own edge and
+  /// never changes layout.
+  TextPresentationPolicy _textPolicy;
+  TextPresentationPolicy get textPolicy => _textPolicy;
+  set textPolicy(TextPresentationPolicy value) {
+    if (_textPolicy == value) return;
+    _textPolicy = value;
+    markNeedsPaintOnly();
+  }
 
   /// Whether to paint a marker along the edge where children overflowed
   /// the box (Flutter's overflow banner, for a cell grid). Defaults to on
@@ -516,10 +531,9 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
       for (var col = 0; col < size.cols; col++) {
         final cell = scratch.atColRow(col, r);
         if (cell.role != CellRole.leading) continue;
-        // A wide glyph whose continuation falls outside the box would spill one
-        // column past `size.cols` (writeGrapheme re-derives width 2), evicting
-        // the sibling there. Drop it rather than split it — wide graphemes are
-        // dropped, never split.
+        // A wide glyph whose continuation falls outside the box would spill
+        // one column past `size.cols`, evicting the sibling there. Drop it
+        // rather than split it — wide graphemes are dropped, never split.
         if (col + 1 >= size.cols &&
             col + 1 < scratch.size.cols &&
             scratch.atColRow(col + 1, r).role == CellRole.continuation) {
@@ -527,11 +541,8 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
         }
         final tc = offset.col + col;
         if (tc < 0 || tc >= buffer.size.cols) continue;
-        buffer.writeGrapheme(
-          CellOffset(tc, tr),
-          cell.grapheme!,
-          style: cell.style,
-        );
+        // Replay, not re-measure — see [CellBuffer.replayCellFrom].
+        buffer.replayCellFrom(scratch, col, r, tc, tr);
       }
     }
     // Carry only the Flex box's visible image windows. The scratch may be
@@ -551,23 +562,42 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
   /// Flutter's overflow stripes.
   void _paintOverflow(CellBuffer buffer, CellOffset offset) {
     if (size.isEmpty) return;
-    const marker = '▓';
+    const marker = '\u2593';
     const style = CellStyle(foreground: AnsiColor(1));
+    final widths = _textPolicy.widths;
+    // The marker is ambiguous-width: on a surface that draws it two cells
+    // wide it starts a column earlier, so the bar stays inside the box
+    // instead of overhanging the sibling to its right.
+    final markerWidth = const DefaultWidthResolver().widthOfGrapheme(
+      marker,
+      widths,
+    );
     if (_direction == Axis.horizontal) {
-      final col = offset.col + size.cols - 1;
+      if (size.cols < markerWidth) return;
+      final col = offset.col + size.cols - markerWidth;
       if (col < 0 || col >= buffer.size.cols) return;
       for (var r = 0; r < size.rows; r++) {
         final row = offset.row + r;
         if (row < 0 || row >= buffer.size.rows) continue;
-        buffer.writeGrapheme(CellOffset(col, row), marker, style: style);
+        buffer.writeGrapheme(
+          CellOffset(col, row),
+          marker,
+          style: style,
+          policy: widths,
+        );
       }
     } else {
       final row = offset.row + size.rows - 1;
       if (row < 0 || row >= buffer.size.rows) return;
-      for (var c = 0; c < size.cols; c++) {
+      for (var c = 0; c + markerWidth <= size.cols; c += markerWidth) {
         final col = offset.col + c;
         if (col < 0 || col >= buffer.size.cols) continue;
-        buffer.writeGrapheme(CellOffset(col, row), marker, style: style);
+        buffer.writeGrapheme(
+          CellOffset(col, row),
+          marker,
+          style: style,
+          policy: widths,
+        );
       }
     }
   }

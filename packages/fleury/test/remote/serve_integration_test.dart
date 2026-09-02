@@ -16,6 +16,7 @@ import 'dart:typed_data';
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_wire.dart';
+import 'package:fleury/src/remote/serve_init.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -103,6 +104,83 @@ void main() {
         expect(bytes, greaterThan(10000));
         client.close();
       });
+
+      // One request with a duplicated header used to throw out of dart:io's
+      // HttpHeaders.value inside an unguarded root-zone listener, and the VM
+      // terminated serve with exit 255 — pre-auth, every session gone. Each
+      // case below asserts the response AND that the server is still up.
+      test('survives a duplicate If-None-Match on the font asset', () async {
+        final status = await _rawStatusLine(
+          port,
+          'GET /fleury-mono.woff2 HTTP/1.1\r\n'
+          'Host: 127.0.0.1:$port\r\n'
+          'If-None-Match: "a"\r\n'
+          'If-None-Match: "b"\r\n'
+          'Connection: close\r\n\r\n',
+        );
+        expect(status, anyOf(contains(' 200 '), contains(' 304 ')));
+        await _expectServeAlive(port);
+      });
+
+      test('survives a duplicate Upgrade header on /ws', () async {
+        final status = await _rawStatusLine(
+          port,
+          'GET /ws HTTP/1.1\r\n'
+          'Host: 127.0.0.1:$port\r\n'
+          'Upgrade: websocket\r\n'
+          'Upgrade: websocket\r\n'
+          'Connection: Upgrade\r\n'
+          'Sec-WebSocket-Version: 13\r\n'
+          'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n',
+        );
+        expect(status, contains(' 400 '));
+        await _expectServeAlive(port);
+      });
+
+      test(
+        'a duplicate Origin on /ws is refused, and the server stays up',
+        () async {
+          final status = await _rawStatusLine(
+            port,
+            'GET /ws HTTP/1.1\r\n'
+            'Host: 127.0.0.1:$port\r\n'
+            'Origin: http://127.0.0.1:$port\r\n'
+            'Origin: http://127.0.0.1:$port\r\n'
+            'Upgrade: websocket\r\n'
+            'Connection: Upgrade\r\n'
+            'Sec-WebSocket-Version: 13\r\n'
+            'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n',
+          );
+          expect(status, contains(' 403 '), reason: 'ambiguity fails closed');
+          await _expectServeAlive(port);
+        },
+      );
+
+      test(
+        'a proxy that adds X-Forwarded-Proto per hop still gets same-origin',
+        () async {
+          // The client-facing scheme is the first line; the browser's Origin is
+          // https, matching it. The per-hop shape used to kill the server.
+          final status = await _rawStatusLine(
+            port,
+            'GET /ws HTTP/1.1\r\n'
+            'Host: 127.0.0.1:$port\r\n'
+            'Origin: https://127.0.0.1:$port\r\n'
+            'X-Forwarded-Proto: https\r\n'
+            'X-Forwarded-Proto: http\r\n'
+            'Upgrade: websocket\r\n'
+            'Connection: Upgrade\r\n'
+            'Sec-WebSocket-Version: 13\r\n'
+            'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n',
+          );
+          expect(
+            status,
+            contains(' 101 '),
+            reason: 'same-origin upgrade accepted',
+          );
+          await _expectServeAlive(port);
+        },
+      );
 
       test('rejects cross-origin WebSocket upgrades', () async {
         await expectLater(
@@ -218,7 +296,14 @@ void main() {
           // loop a few times.
           await Future<void>.delayed(const Duration(milliseconds: 200));
 
-          expect(receivedByApp.toBytes(), fromBrowser);
+          // The app is greeted with serve's provisional INIT at accept; the
+          // browser's early bytes follow it, intact and in order.
+          final toApp = receivedByApp.toBytes();
+          final greeting = encodeFrame(
+            buildServeProvisionalInitFrame(debugWire: false),
+          );
+          expect(toApp.sublist(0, greeting.length), greeting);
+          expect(toApp.sublist(greeting.length), fromBrowser);
           expect(receivedByBrowser.toBytes(), fromApp);
 
           await appSub.cancel();
@@ -227,6 +312,202 @@ void main() {
           await ws.close();
         },
       );
+
+      Future<Socket> connectApp() => Socket.connect(
+        InternetAddress(socketPath, type: InternetAddressType.unix),
+        0,
+      );
+
+      /// The first INIT frame the app side receives, or a timeout.
+      Future<InitFrame> firstInit(Socket app, {String what = 'INIT'}) {
+        final decoder = FrameDecoder();
+        final init = Completer<InitFrame>();
+        late final StreamSubscription<List<int>> sub;
+        sub = app.listen(
+          (bytes) {
+            decoder.feed(bytes);
+            for (final frame in decoder.drain()) {
+              if (frame is InitFrame && !init.isCompleted) init.complete(frame);
+            }
+          },
+          onDone: () {
+            if (!init.isCompleted) {
+              init.completeError(StateError('app socket closed before $what'));
+            }
+          },
+        );
+        return init.future
+            .timeout(
+              const Duration(seconds: 5),
+              onTimeout: () => throw StateError('no $what within 5s'),
+            )
+            .whenComplete(sub.cancel);
+      }
+
+      test('an app that closes before it is greeted does not take serve '
+          'down', () async {
+        // Greeting a socket whose peer already closed raised a Broken pipe
+        // from the socket's own consumer, asynchronously, in the root zone —
+        // out of reach of any try/catch around the write — and an unhandled
+        // error there ended fleury serve with every live session. A crash
+        // during app startup, a probe, or a second `dart run` racing the
+        // first is enough to hit it.
+        for (var i = 0; i < 6; i++) {
+          // Graceful close right after connect: the FIN lands before serve's
+          // greeting write, so the write fails on the kernel's side.
+          final app = await connectApp();
+          await app.close();
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        }
+        await _expectServeAlive(port);
+        final app = await connectApp();
+        try {
+          final init = await firstInit(app);
+          expect(init.provisional, isTrue, reason: 'serve still greets');
+        } finally {
+          app.destroy();
+        }
+      });
+
+      test(
+        'an app that connects first is greeted with a provisional INIT',
+        () async {
+          // The app's handshake fuse (10 s) used to fire while the operator was
+          // still opening a browser: serve accepted and said nothing.
+          final app = await connectApp();
+          try {
+            final init = await firstInit(app);
+            expect(init.provisional, isTrue);
+            expect(init.size, const CellSize(80, 24));
+            expect(init.debugWire, isFalse, reason: 'no --debug on this serve');
+            expect(init.protocolVersion, remoteProtocolVersion);
+          } finally {
+            app.destroy();
+          }
+        },
+      );
+
+      test('a pending app that disconnects is forgotten; the next app is '
+          'accepted', () async {
+        // The wedge: serve never read a pending app's socket, so an app that
+        // died while waiting stayed "pending" and every later app was dropped.
+        final first = await connectApp();
+        await firstInit(first);
+        first.destroy();
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        final second = await connectApp();
+        try {
+          final init = await firstInit(second, what: 'INIT for the second app');
+          expect(init.provisional, isTrue);
+        } finally {
+          second.destroy();
+        }
+      });
+
+      test('an app painting before any browser attaches is drained, not '
+          'backed up', () async {
+        final app = await connectApp();
+        try {
+          await firstInit(app);
+          // Far more than a socket buffer holds; nobody is reading unless
+          // serve drains the pending app.
+          app.add(Uint8List(4 << 20));
+          await app.flush().timeout(
+            const Duration(seconds: 5),
+            onTimeout: () => throw StateError('app output backed up'),
+          );
+        } finally {
+          app.destroy();
+        }
+      });
+
+      test('a second browser during a live session is refused with a close '
+          'code and a reason', () async {
+        final app = await connectApp();
+        final first = await WebSocket.connect(
+          'ws://127.0.0.1:$port/ws',
+          headers: {'origin': 'http://127.0.0.1:$port'},
+        );
+        final firstSub = first.listen((_) {});
+        try {
+          await Future<void>.delayed(const Duration(milliseconds: 300));
+          final second = await WebSocket.connect(
+            'ws://127.0.0.1:$port/ws',
+            headers: {'origin': 'http://127.0.0.1:$port'},
+          );
+          await second.drain<void>().timeout(const Duration(seconds: 5));
+          expect(second.closeCode, serveSessionBusyCloseCode);
+          expect(second.closeReason, contains('already live'));
+          expect(second.closeReason, contains('--spawn'));
+        } finally {
+          await firstSub.cancel();
+          await first.close();
+          app.destroy();
+        }
+      });
+
+      test('an app that connects long before any browser survives the INIT '
+          'fuse and paints on attach', () async {
+        // app-first: the natural order (start serve, start the app, then
+        // open a tab) used to kill the app at RemoteTerminalDriver's 10 s
+        // fuse. Wait past it, then attach.
+        final appStderr = StringBuffer();
+        final appProcess = await Process.start(
+          Platform.resolvedExecutable,
+          ['run', '$pkgRoot/example/counter_quickstart.dart'],
+          workingDirectory: tempDir.path,
+          environment: {'FLEURY_HANDLE': socketPath},
+        );
+        var exited = false;
+        unawaited(appProcess.exitCode.then((_) => exited = true));
+        final stderrSub = appProcess.stderr
+            .transform(utf8.decoder)
+            .listen(appStderr.write);
+        final stdoutSub = appProcess.stdout.drain<void>();
+        WebSocket? ws;
+        StreamSubscription<dynamic>? wsSub;
+        try {
+          await Future<void>.delayed(const Duration(seconds: 12));
+          expect(exited, isFalse, reason: 'died waiting: $appStderr');
+          ws = await WebSocket.connect(
+            'ws://127.0.0.1:$port/ws',
+            headers: {'origin': 'http://127.0.0.1:$port'},
+          );
+          final inbound = BytesBuilder();
+          wsSub = ws.listen((data) {
+            if (data is List<int>) inbound.add(data);
+          });
+          ws.add(
+            encodeFrame(
+              const InitFrame(
+                size: CellSize(80, 24),
+                colorMode: ColorMode.truecolor,
+                imageProtocol: ImageProtocol.halfBlock,
+                tmuxPassthrough: false,
+                protocolVersion: 1,
+              ),
+            ),
+          );
+          await _waitFor(
+            () => _hasOutputFrameText(inbound.toBytes(), 'count: 0'),
+            timeout: const Duration(seconds: 20),
+            what: 'first paint after a late attach; stderr:\n$appStderr',
+          );
+        } finally {
+          await wsSub?.cancel();
+          await ws?.close();
+          appProcess.kill(ProcessSignal.sigint);
+          await appProcess.exitCode.timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {
+              appProcess.kill(ProcessSignal.sigkill);
+              return -9;
+            },
+          );
+          await stderrSub.cancel();
+          await stdoutSub;
+        }
+      }, timeout: const Timeout(Duration(minutes: 2)));
 
       test(
         'browser-first bridge preserves INIT for a real runApp app',
@@ -300,6 +581,42 @@ void main() {
 
     setUpAll(() {
       pkgRoot = Directory.current.path;
+    });
+
+    test('serve --debug carries the decision to a bridge-mode app', () async {
+      // Bridge mode cannot set the app's environment; the provisional INIT
+      // is how --debug reaches it (and --debug is no longer "ignored").
+      final tempDir = Directory.systemTemp.createTempSync('fleury_serve_dbg_');
+      addTearDown(() => tempDir.deleteSync(recursive: true));
+      final port = 6300 + Random.secure().nextInt(100);
+      final serveProcess = await _startServeProcess(
+        pkgRoot: pkgRoot,
+        tempDir: tempDir,
+        port: port,
+        args: const ['--debug'],
+      );
+      addTearDown(() => _stopProcess(serveProcess));
+      final socketPath = _readHandle(tempDir);
+      final app = await Socket.connect(
+        InternetAddress(socketPath, type: InternetAddressType.unix),
+        0,
+      );
+      try {
+        final decoder = FrameDecoder();
+        final init = Completer<InitFrame>();
+        final sub = app.listen((bytes) {
+          decoder.feed(bytes);
+          for (final frame in decoder.drain()) {
+            if (frame is InitFrame && !init.isCompleted) init.complete(frame);
+          }
+        });
+        final frame = await init.future.timeout(const Duration(seconds: 5));
+        expect(frame.provisional, isTrue);
+        expect(frame.debugWire, isTrue);
+        await sub.cancel();
+      } finally {
+        app.destroy();
+      }
     });
 
     test('allows an explicit cross-origin WebSocket origin', () async {
@@ -381,6 +698,59 @@ Future<Process> _startServeProcess({
         throw StateError('serve did not start within 10s. stderr:\n$stderrBuf'),
   );
   return process;
+}
+
+/// Sends [request] verbatim over a fresh TCP connection — the only way to put
+/// a header on the wire twice, since HttpClient and browsers merge them — and
+/// returns the response status line once the headers have arrived. Works for
+/// a completed exchange and for an accepted upgrade alike.
+Future<String> _rawStatusLine(int port, String request) async {
+  final socket = await Socket.connect('127.0.0.1', port);
+  socket.write(request);
+  await socket.flush();
+  final received = StringBuffer();
+  final statusLine = Completer<String>();
+  String firstLine() => received.toString().split('\r\n').first;
+  // Latin-1, not UTF-8: only the status line and headers are read, and they
+  // are ASCII, while the body may be binary (the font asset). A strict UTF-8
+  // decode threw "Missing extension byte" whenever the first chunk carried
+  // body bytes, which depended on socket timing — a flake, not a finding.
+  final sub = latin1.decoder
+      .bind(socket)
+      .listen(
+        (chunk) {
+          received.write(chunk);
+          if (received.toString().contains('\r\n\r\n') &&
+              !statusLine.isCompleted) {
+            statusLine.complete(firstLine());
+          }
+        },
+        onDone: () {
+          if (!statusLine.isCompleted) statusLine.complete(firstLine());
+        },
+        onError: (Object error) {
+          if (!statusLine.isCompleted) statusLine.completeError(error);
+        },
+      );
+  try {
+    return await statusLine.future.timeout(const Duration(seconds: 5));
+  } finally {
+    await sub.cancel();
+    socket.destroy();
+  }
+}
+
+/// The server answered the malformed request AND is still serving.
+Future<void> _expectServeAlive(int port) async {
+  final client = HttpClient();
+  try {
+    final req = await client.getUrl(Uri.parse('http://127.0.0.1:$port/'));
+    final resp = await req.close();
+    expect(resp.statusCode, 200, reason: 'serve must survive a bad request');
+    await resp.drain<void>();
+  } finally {
+    client.close();
+  }
 }
 
 Future<void> _stopProcess(Process process) async {

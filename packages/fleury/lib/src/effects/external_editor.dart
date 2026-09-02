@@ -154,6 +154,9 @@ ExternalEditorResolvedCommand resolveExternalEditorCommand({
 ///
 /// When [terminalDriver] supports [TerminalHandoffDriver], the TUI terminal is
 /// restored for the duration of the editor process and resumed afterward.
+/// Under `runApp` the driver is `TerminalSession.of(context).driver`; without
+/// it the editor inherits `runApp`'s capture pipes instead of the terminal and
+/// the app looks frozen while the editor eats keystrokes.
 Future<ExternalEditorResult> editTextInExternalEditor({
   String initialText = '',
   TerminalDriver? terminalDriver,

@@ -851,7 +851,9 @@ abstract class Element implements BuildContext {
     if (_lifecycle != _ElementLifecycle.active) return;
     if (_dirty) return;
     _dirty = true;
-    DebugInvalidations.recordBuild(_debugInvalidationLabel);
+    if (DebugInvalidations.isRecording) {
+      DebugInvalidations.recordBuild(_debugInvalidationLabel);
+    }
     _owner?.scheduleBuildFor(this);
   }
 
@@ -890,6 +892,7 @@ abstract class Element implements BuildContext {
   }
 
   String get _debugInvalidationLabel {
+    DebugInvalidations.debugCountLabel();
     if (this is StatefulElement) {
       final state = (this as StatefulElement).state;
       return '${_widget.runtimeType}/${state.runtimeType}';
@@ -1635,12 +1638,20 @@ class BuildOwner {
     sw?.reset();
     // Root paint: buffer IS the screen, so screenOffset == offset.
     // clipRect == the full screen rect — anything outside is off-screen.
-    rootRender.paint(
-      buffer,
-      CellOffset.zero,
-      screenOffset: CellOffset.zero,
-      clipRect: CellRect(offset: CellOffset.zero, size: buffer.size),
-    );
+    // A numbered paint pass on this owner's tracker, so paint-time facts
+    // (painted bounds) that no subtree refreshed this pass are retracted when
+    // it ends — see [RenderDamageTracker.endPaintPass].
+    renderDamageTracker.beginPaintPass();
+    try {
+      rootRender.paint(
+        buffer,
+        CellOffset.zero,
+        screenOffset: CellOffset.zero,
+        clipRect: CellRect(offset: CellOffset.zero, size: buffer.size),
+      );
+    } finally {
+      renderDamageTracker.endPaintPass();
+    }
     final paintElapsed = sw?.elapsed ?? Duration.zero;
 
     onPhaseTiming?.call(buildElapsed, layoutElapsed, paintElapsed);
@@ -1719,6 +1730,15 @@ abstract class RenderObjectElement extends Element {
     return r;
   }
 
+  /// The render object, or null when this element never mounted one — an
+  /// inflate whose `createRenderObject` threw, say.
+  ///
+  /// Teardown overrides (`deactivate`/`unmount`) read this rather than
+  /// [renderObject]: reaching for the throwing getter while unwinding turns
+  /// one failure into two and buries the original.
+  @protected
+  RenderObject? get maybeRenderObject => _renderObject;
+
   @override
   RenderObjectWidget get widget => super.widget as RenderObjectWidget;
 
@@ -1736,12 +1756,34 @@ abstract class RenderObjectElement extends Element {
   @override
   void update(covariant RenderObjectWidget newWidget) {
     super.update(newWidget);
+    _dependenciesChanged = false;
     newWidget.updateRenderObject(this, _renderObject!);
     // Render-object setters own their invalidation. Keeping that decision at
     // the setter is what lets audited paint-only updates avoid relayout while
     // layout-affecting setters still call markNeedsLayout or the conservative
     // markNeedsPaint compatibility path.
     rebuild(force: true);
+  }
+
+  /// Set by an inherited ancestor that notified this element (see
+  /// `InheritedElement._markDependencyChanged`); consumed by [rebuild].
+  bool _dependenciesChanged = false;
+
+  @override
+  void rebuild({bool force = false}) {
+    // A dependency-only rebuild: an inherited widget this element depends on
+    // changed (Theme swapped above a hoisted `const` render-object widget),
+    // but the widget instance did not, so [update] — the only place
+    // `updateRenderObject` ran — never fires. The render object kept the
+    // configuration it read at creation. Re-run `updateRenderObject` here so
+    // it re-reads through its context; the setters own invalidation and no-op
+    // on unchanged values. Only on the flag, so a plain rebuild pays nothing.
+    if (_dependenciesChanged && _lifecycle == _ElementLifecycle.active) {
+      _dependenciesChanged = false;
+      final r = _renderObject;
+      if (r != null) widget.updateRenderObject(this, r);
+    }
+    super.rebuild(force: force);
   }
 
   @override
@@ -2287,12 +2329,15 @@ class InheritedElement extends ComponentElement {
     }
   }
 
-  /// Sets `_dependenciesChanged` on the dependent's State (if any)
-  /// so `didChangeDependencies` fires before its next build. No-op
-  /// for non-stateful dependents — they don't have the hook.
+  /// Sets `_dependenciesChanged` on the dependent's State (if any) so
+  /// `didChangeDependencies` fires before its next build, and on a
+  /// render-object element so its next rebuild re-runs `updateRenderObject`
+  /// (see [RenderObjectElement.rebuild]). No-op for other dependents.
   static void _markDependencyChanged(Element dependent) {
     if (dependent is StatefulElement) {
       dependent._state._dependenciesChanged = true;
+    } else if (dependent is RenderObjectElement) {
+      dependent._dependenciesChanged = true;
     }
   }
 }

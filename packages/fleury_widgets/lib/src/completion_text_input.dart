@@ -178,6 +178,14 @@ class CompletionTextInput extends StatefulWidget {
 }
 
 class _CompletionTextInputState extends State<CompletionTextInput> {
+  /// Cells the `› ` / `  ` selection marker takes at the head of every row.
+  static const _markerCols = 2;
+
+  /// Cells the popup's own frame takes (one border column per side).
+  static const _frameCols = 2;
+
+  static const _widthResolver = DefaultWidthResolver();
+
   late TextEditingController _controller;
   late TextCompletionController _completion;
   late FocusNode _focusNode;
@@ -297,7 +305,8 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
     }
     if (_entry == null) {
       final entry = OverlayEntry(
-        builder: (_) => BoundsAnchor(notifier: _bounds, child: _suggestions()),
+        builder: (context) =>
+            BoundsAnchor(notifier: _bounds, child: _suggestions(context)),
       );
       _entry = entry;
       Overlay.of(context).insert(entry);
@@ -321,20 +330,32 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
     widget.onCompletionAccepted?.call(option);
   }
 
-  Widget _suggestions() {
+  Widget _suggestions(BuildContext context) {
     final state = _completion.state;
     final options = state.options;
     final visible = options.length > widget.maxVisible
         ? widget.maxVisible
         : options.length;
+    // Display width, not code units: a BMP wide character (CJK, Kana, Hangul,
+    // fullwidth) is one code unit but two cells, so `length` under-sizes the
+    // box and the rows reflow into each other. Measure with the same ambient
+    // policy layout will use (RFC 0019 — one policy per geometry consumer).
+    final policy = MediaQuery.textPolicyOf(context).widths;
     var width = 0;
     for (final option in options) {
       final detail = option.detail;
       final label = sanitizeOptionLabel(
         detail == null ? option.label : '${option.label}  $detail',
       );
-      if (label.length > width) width = label.length;
+      final w = _widthResolver.widthOfText(label, policy);
+      if (w > width) width = w;
     }
+    // A popup can never be wider than the surface it floats on; past that the
+    // rows elide (see the option [Text] below) instead of wrapping.
+    final maxBoxWidth = MediaQuery.sizeOf(context).cols - _frameCols;
+    var boxWidth = width + _markerCols;
+    if (boxWidth > maxBoxWidth) boxWidth = maxBoxWidth;
+    if (boxWidth < 1) boxWidth = 1;
     _list.selectedIndex = state.selectedIndex;
     return Semantics(
       role: SemanticRole.menu,
@@ -366,70 +387,79 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
             return;
         }
       },
-      // Popup supplies the float contract: opaque fill, frame, and chrome
-      // semantics, so the app underneath can't bleed through.
-      child: Container.framed(
-        border: BoxBorder(style: _borderStyle),
-        child: SizedBox(
-          width: width + 2,
-          height: visible,
-          child: ListView.builder(
-            controller: _list,
-            selectionActive: true,
-            itemCount: options.length,
-            itemBuilder: (_, i, selected) {
-              final option = options[i];
-              final rawDetail = option.detail;
-              final detail = rawDetail == null
-                  ? null
-                  : sanitizeOptionLabel(rawDetail);
-              final optionLabel = sanitizeOptionLabel(option.label);
-              final label = detail == null
-                  ? optionLabel
-                  : '$optionLabel  $detail';
-              return Semantics(
-                role: SemanticRole.menuItem,
-                label: optionLabel,
-                value: option.replacement,
-                hint: detail,
-                focused: _focusNode.hasFocus && selected,
-                selected: selected,
-                actions: const <SemanticAction>{
-                  SemanticAction.select,
-                  SemanticAction.activate,
-                },
-                state: SemanticState({
-                  'rowIndex': i,
-                  'menuItemPosition': i + 1,
-                  'menuItemCount': options.length,
-                  'entryKind': 'completion',
-                  'completionQuery': state.query,
-                  if (option.id != null) 'completionId': option.id,
-                }),
-                onAction: (action) {
-                  switch (action) {
-                    case SemanticAction.select:
-                    case SemanticAction.activate:
+      // Container.framed supplies the opaque fill and the frame, so the app
+      // underneath can't bleed through; SelectionArea.disabled says the
+      // completion rows are chrome, not copyable content.
+      child: SelectionArea.disabled(
+        child: Container.framed(
+          border: BoxBorder(style: _borderStyle),
+          child: SizedBox(
+            width: boxWidth,
+            height: visible,
+            child: ListView.builder(
+              controller: _list,
+              selectionActive: true,
+              itemCount: options.length,
+              itemBuilder: (_, i, selected) {
+                final option = options[i];
+                final rawDetail = option.detail;
+                final detail = rawDetail == null
+                    ? null
+                    : sanitizeOptionLabel(rawDetail);
+                final optionLabel = sanitizeOptionLabel(option.label);
+                final label = detail == null
+                    ? optionLabel
+                    : '$optionLabel  $detail';
+                return Semantics(
+                  role: SemanticRole.menuItem,
+                  label: optionLabel,
+                  value: option.replacement,
+                  hint: detail,
+                  focused: _focusNode.hasFocus && selected,
+                  selected: selected,
+                  actions: const <SemanticAction>{
+                    SemanticAction.select,
+                    SemanticAction.activate,
+                  },
+                  state: SemanticState({
+                    'rowIndex': i,
+                    'menuItemPosition': i + 1,
+                    'menuItemCount': options.length,
+                    'entryKind': 'completion',
+                    'completionQuery': state.query,
+                    if (option.id != null) 'completionId': option.id,
+                  }),
+                  onAction: (action) {
+                    switch (action) {
+                      case SemanticAction.select:
+                      case SemanticAction.activate:
+                        _list.selectedIndex = i;
+                        _acceptCompletionAt(i);
+                        return;
+                      case _:
+                        return;
+                    }
+                  },
+                  // Click a completion to accept it (same as Tab/Enter).
+                  child: GestureDetector(
+                    onTap: () {
                       _list.selectedIndex = i;
                       _acceptCompletionAt(i);
-                      return;
-                    case _:
-                      return;
-                  }
-                },
-                // Click a completion to accept it (same as Tab/Enter).
-                child: GestureDetector(
-                  onTap: () {
-                    _list.selectedIndex = i;
-                    _acceptCompletionAt(i);
-                  },
-                  child: Text(
-                    '${selected ? '› ' : '  '}$label',
-                    style: selected ? _selectionStyle : CellStyle.none,
+                    },
+                    child: Text(
+                      '${selected ? '› ' : '  '}$label',
+                      style: selected ? _selectionStyle : CellStyle.none,
+                      // One row per option, always: a label too wide for the box
+                      // is cut with an ellipsis rather than wrapped into the row
+                      // that belongs to the next option.
+                      softWrap: false,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
         ),
       ),

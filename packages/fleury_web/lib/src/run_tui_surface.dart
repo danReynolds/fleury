@@ -457,10 +457,15 @@ Future<MountedApp> runTuiSurface(
       ),
       planner: planner,
       onBeforeFrame: dispatchPendingWork,
-      // Input bookkeeping runs ahead of every production gate so
-      // per-frame edges expire even on frames that render nothing
-      // (RFC 0020 §5.6/§7).
-      onLatchInput: inputDispatcher.keyboardSession.publishLatch,
+      // Input bookkeeping runs ahead of every production gate so per-frame
+      // edges expire even on frames that render nothing (RFC 0020 §5.6/§7).
+      // The frame clock is live only while the app has no ticker; with one
+      // running, the ticker clock `installKeyboardLatch` also wires publishes
+      // instead, so a tap survives an unrelated render.
+      onLatchInput: installKeyboardLatch(
+        session: inputDispatcher.keyboardSession,
+        scheduler: binding.tickerScheduler,
+      ),
       onFramePresented: (frame, plan) =>
           semanticsPipeline?.onFramePresented(frame, plan),
       onFrameSkipped: (reason, size) {

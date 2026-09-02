@@ -21,9 +21,9 @@ import 'width_policy.dart';
 /// One logical grapheme cluster whose display image differs from its source:
 /// a lowered emoji ZWJ sequence, projected into per-component display atoms.
 ///
-/// Ranges are half-open UTF-16 code-unit ranges — [sourceRange] into
-/// [TextProjection.logicalText], [displayRange] and every [displayAtomRanges]
-/// entry into [TextProjection.displayText]. The atoms tile [displayRange]
+/// Ranges are half-open UTF-16 code-unit ranges — [sourceRange] into the
+/// source string the projection was built from, [displayRange] and every
+/// [displayAtomRanges] entry into [TextProjection.displayText]. The atoms tile [displayRange]
 /// exactly, in order; each atom is one ≤2-cell cluster by construction
 /// (the parser only emits base+attachment components).
 final class PreparedCluster {
@@ -46,24 +46,21 @@ final class PreparedCluster {
 /// A logical string and its display projection under one
 /// [TextPresentationPolicy].
 ///
-/// Outside [changedClusters] the mapping is the identity shifted by the
-/// cumulative length delta of preceding changes; inside one, offsets snap to
-/// the cluster's boundaries — no offset can rest inside a source cluster
-/// (RFC 0019 decision 14).
+/// [changedClusters] is the whole of the source↔display correspondence:
+/// outside those ranges display IS source, and inside one the cluster is
+/// atomic — no position may rest between its atoms (RFC 0019 decision 14).
+/// Consumers derive what they need from the ranges. Selection, the only
+/// consumer that needs source coordinates, works in the FLAT space of the
+/// wrapped lines rather than this unwrapped display space, so it projects the
+/// ranges into that space once (`RenderText.loweredGroups`) instead of
+/// converting offsets one at a time.
 final class TextProjection {
-  const TextProjection._(
-    this.logicalText,
-    this.displayText,
-    this.changedClusters,
-  );
+  const TextProjection._(this.displayText, this.changedClusters);
 
   /// The unchanged projection: display IS the logical string (same object —
   /// gate 15, identity allocation).
   const TextProjection.identity(String text)
-    : this._(text, text, const <PreparedCluster>[]);
-
-  /// Canonical (post-sanitization) text — what copy and semantics answer with.
-  final String logicalText;
+    : this._(text, const <PreparedCluster>[]);
 
   /// What layout measures and paint draws.
   final String displayText;
@@ -72,45 +69,6 @@ final class TextProjection {
   final List<PreparedCluster> changedClusters;
 
   bool get isIdentity => changedClusters.isEmpty;
-
-  /// Maps a source boundary offset into the display string.
-  ///
-  /// Valid at source grapheme boundaries; an offset strictly inside a lowered
-  /// cluster snaps to the cluster's display start (offsets inside a source
-  /// cluster are not representable positions — decision 14).
-  int sourceToDisplay(int sourceOffset) {
-    var delta = 0;
-    for (final cluster in changedClusters) {
-      if (sourceOffset <= cluster.sourceRange.start) break;
-      if (sourceOffset < cluster.sourceRange.end) {
-        return cluster.displayRange.start;
-      }
-      delta +=
-          (cluster.displayRange.end - cluster.displayRange.start) -
-          (cluster.sourceRange.end - cluster.sourceRange.start);
-    }
-    return sourceOffset + delta;
-  }
-
-  /// Maps a display offset back to a source boundary.
-  ///
-  /// Inside a lowered cluster's display image the answer snaps to the source
-  /// cluster's start ([downstream] false) or end ([downstream] true) — the
-  /// affinity rule selection uses: upstream → before the logical cluster,
-  /// downstream → after it.
-  int displayToSource(int displayOffset, {bool downstream = false}) {
-    var delta = 0;
-    for (final cluster in changedClusters) {
-      if (displayOffset <= cluster.displayRange.start) break;
-      if (displayOffset < cluster.displayRange.end) {
-        return downstream ? cluster.sourceRange.end : cluster.sourceRange.start;
-      }
-      delta +=
-          (cluster.displayRange.end - cluster.displayRange.start) -
-          (cluster.sourceRange.end - cluster.sourceRange.start);
-    }
-    return displayOffset - delta;
-  }
 
   /// The lowered cluster whose display image contains [displayOffset], if any.
   PreparedCluster? clusterAtDisplay(int displayOffset) {
@@ -188,9 +146,5 @@ TextProjection projectText(
     // Indic, malformed) — identity, same object, no mappings.
     return TextProjection.identity(logicalText);
   }
-  return TextProjection._(
-    logicalText,
-    display.toString(),
-    List.unmodifiable(changed),
-  );
+  return TextProjection._(display.toString(), List.unmodifiable(changed));
 }

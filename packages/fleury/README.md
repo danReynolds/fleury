@@ -34,6 +34,7 @@ void main() => runApp(const CounterApp());
 
 class CounterApp extends StatefulWidget {
   const CounterApp({super.key});
+
   @override
   State<CounterApp> createState() => _CounterAppState();
 }
@@ -45,7 +46,7 @@ class _CounterAppState extends State<CounterApp> {
   Widget build(BuildContext context) {
     return KeyBindings(
       bindings: [
-        KeyBinding(.space, onTrigger: () => setState(() => _count++)),
+        KeyBinding(.space, onTrigger: (_) => setState(() => _count++)),
       ],
       child: Center(
         child: Text('count: $_count   (space to increment, Ctrl+C to quit)'),
@@ -121,7 +122,7 @@ import 'package:test/test.dart';
 
 testWidgets('space increments the counter', (tester) {
   tester.pumpWidget(const CounterApp());
-  tester.sendKey(const KeyEvent(char: ' '));
+  tester.sendKey(const KeyEvent(KeyCode.char(' ')));
   tester.pump();
   expect(tester.renderToString(), contains('count: 1'));
 });

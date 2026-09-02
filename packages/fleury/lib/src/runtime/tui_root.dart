@@ -23,6 +23,7 @@ import '../widgets/focus.dart';
 import '../widgets/key_bindings.dart';
 import '../widgets/keyboard.dart';
 import '../widgets/framework.dart';
+import '../widgets/terminal_session.dart';
 import '../widgets/media_query.dart';
 import '../widgets/output_capture_view.dart';
 import '../widgets/overlay.dart';
@@ -62,6 +63,7 @@ Widget buildTuiRoot({
   // snapshot) to `Keyboard.of`. Null in hosts that route input without an
   // `InputDispatcher`.
   required KeyboardStateNotifier? keyboardNotifier,
+  TerminalSession? session,
 }) {
   // The Overlay is the innermost shared layer; the app root and any floating
   // host entries live inside it. Entry repaint boundaries stay on
@@ -70,6 +72,13 @@ Widget buildTuiRoot({
   // pruning pays. Engagement is adaptive (see Overlay.addRepaintBoundaries):
   // frames where only one entry is visible pay no cache-write/blit tax.
   Widget tree = Overlay(key: overlayKey, initialEntries: overlayEntries);
+  if (session != null) {
+    // Above the Overlay, not inside the root entry: floating entries (menus,
+    // tooltips, toasts, pickers) are the Overlay's children, not the app
+    // root's, and a context-menu action that hands the terminal to $EDITOR
+    // must find the session from there too.
+    tree = TerminalSessionScope(session: session, child: tree);
+  }
   // DebugShell wraps the Overlay so docking the panel shares cells with the
   // app (off-mode is a pure pass-through, no layout cost).
   if (debugController != null) {

@@ -239,6 +239,11 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
   @override
   void removeDependent(Element element) => _dependents.remove(element);
 
+  /// How many elements are implicitly subscribed. Leak-invariant target for
+  /// tests: a disposed animation holds none.
+  @visibleForTesting
+  int get debugDependentCount => _dependents.length;
+
   /// Notifies explicit listeners (AnimationBuilder) AND marks every
   /// implicitly-subscribed element dirty.
   void _notify() {
@@ -264,7 +269,7 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
     _scheduler = binding.tickerScheduler;
     _policy = binding.animationPolicy;
     _ticker = Ticker(_tick, scheduler: _scheduler!);
-    _scheduler!.registerReassembleCallback(_onReassemble);
+    _scheduler!.registerReassembleCallback(_reassembleCallback);
     // Run any animation requested before this animation was on screen
     // (the "animate on appear" idiom: `Animation(0)..to(1)`).
     final pending = _pendingOnAttach;
@@ -381,9 +386,12 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _scheduler?.unregisterReassembleCallback(_onReassemble);
+    _scheduler?.unregisterReassembleCallback(_reassembleCallback);
     _stop(canceled: true);
     _ticker?.dispose();
+    // Nothing can notify through a disposed animation, so holding the
+    // elements that read it only keeps their subtrees alive.
+    _dependents.clear();
     super.dispose();
   }
 
@@ -662,6 +670,14 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
     if (f == null) return;
     canceled ? f.cancel() : f.completeNaturally();
   }
+
+  /// Cached tear-off of [_onReassemble]. Cached because the scheduler's
+  /// reassemble registry is identity-based: a fresh tear-off taken at
+  /// `dispose()` compares `==` to the one taken at `attach()` but is not
+  /// `identical` to it, so the removal silently missed and every attached
+  /// animation stayed registered for the life of the scheduler. Same hazard
+  /// [Ticker._schedulerCallback] and [FrameTicker] already document.
+  late final VoidCallback _reassembleCallback = _onReassemble;
 
   void _onReassemble() {
     if (_disposed) return;

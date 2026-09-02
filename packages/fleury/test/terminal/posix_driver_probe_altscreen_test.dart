@@ -138,17 +138,10 @@ void main() {
 
     test('the interactive (alternate-screen) path still probes', () async {
       // Meaningful only when the environment does not independently suppress
-      // the probe (an ASCII glyph tier or an explicit FLEURY_AMBIGUOUS_WIDTH
-      // would skip it regardless of the screen). Mirror the driver's env gate.
-      final env = Platform.environment;
-      final flag = env['FLEURY_AMBIGUOUS_WIDTH']?.toLowerCase().trim();
-      final envPermitsProbe =
-          detectAmbiguousCharWidthFromEnvironment(env) == null &&
-          flag != '0' &&
-          flag != 'off' &&
-          flag != 'false' &&
-          detectGlyphTierFromEnvironment(env) != GlyphTier.ascii;
-      if (!envPermitsProbe) {
+      // the probe (an ASCII glyph tier or the FLEURY_AMBIGUOUS_WIDTH kill
+      // switch would skip it regardless of the screen). Ask the driver's own
+      // gate rather than restating it — a restatement can drift.
+      if (!widthProbeIsPermittedByEnvironment(Platform.environment)) {
         markTestSkipped('ambient env suppresses the ambiguous-width probe');
         return;
       }

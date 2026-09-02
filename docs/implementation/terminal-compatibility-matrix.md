@@ -362,8 +362,14 @@ Both unsupported terminals answered the bracketing DA1 **without** a keyboard
 reply — `\x1B[?1;2c` from Terminal.app, `\x1B[?65;4;6;18;22c` from WezTerm —
 rather than timing out. That is RFC 0020 §8.2's whole design working on real
 hardware: "unsupported" is detected by a positive DA1 arriving without a flags
-reply, so the verdict is independent of link latency and never costs a
-wall-clock timeout. Every confirmed terminal replied `\x1B[?31u` ahead of its
+reply, so the verdict is read off the answer and never costs a wall-clock
+timeout. The deadline behind it is not latency-independent, though — a reply
+has to arrive within the probe's budget to be read at all. Both captures here
+were local. Over a slow link, runtime negotiation adapts its own budget to the
+measured round trip (RFC 0021 §7); this capture tool does not, so a remote
+matrix entry needs `fleury diagnose --probe --probe-timeout=<ms>` raised above
+the link's round trip or it will record "unsupported" for terminals that
+support the protocol. Every confirmed terminal replied `\x1B[?31u` ahead of its
 DA1, in the expected order.
 
 ### Not covered by this capture

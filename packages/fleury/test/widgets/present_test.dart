@@ -8,6 +8,25 @@ import 'package:test/test.dart';
 String _screen(FleuryTester tester, {required int cols, required int rows}) =>
     tester.renderToString(size: CellSize(cols, rows), emptyMark: ' ');
 
+void _clickAt(FleuryTester tester, int col, int row) {
+  tester.sendMouse(
+    MouseEvent(
+      kind: MouseEventKind.down,
+      button: MouseButton.left,
+      col: col,
+      row: row,
+    ),
+  );
+  tester.sendMouse(
+    MouseEvent(
+      kind: MouseEventKind.up,
+      button: MouseButton.left,
+      col: col,
+      row: row,
+    ),
+  );
+}
+
 void main() {
   testWidgets('a dialog shows over the page; the page stays visible', (
     tester,
@@ -158,6 +177,160 @@ void main() {
 
     tester.type('b');
     expect(pageInput.text, 'ab', reason: 'focus restored to the page');
+  });
+
+  // ---------------------------------------------------------------------
+  // The modal barrier: a presented route owns EVERY cell of its slot for
+  // input, not just the cells it paints.
+  //
+  // `present()` already blocked keys (KeyBindings(modal: true)) and focus
+  // (FocusScope(trapFocus:)) — but nothing blocked the pointer. A modal route
+  // never flips `opaque`, so the covered route keeps its pointer regions
+  // registered, and `barrierColor` painted a surround without absorbing over
+  // it: the user saw a solid barrier, clicked it, and fired an invisible
+  // button on the screen behind.
+  // ---------------------------------------------------------------------
+
+  testWidgets('a click on the surround does not reach the screen behind', (
+    tester,
+  ) {
+    var fired = 0;
+    tester.pumpWidget(
+      Navigator(
+        home: GestureDetector(
+          onTap: () => fired++,
+          child: const Text('DANGER'),
+        ),
+      ),
+    );
+    final nav = tester.binding.rootNavigator!;
+    tester.render(size: const CellSize(20, 7));
+    _clickAt(tester, 2, 0);
+    expect(fired, 1, reason: 'the button works with no modal up');
+
+    nav.present<void>(
+      const SizedBox(width: 6, height: 3, child: Text('modal')),
+    );
+    tester.pump(const Duration(milliseconds: 300));
+    tester.render(size: const CellSize(20, 7)); // register pointer regions
+
+    _clickAt(tester, 2, 0); // over 'DANGER', outside the modal box
+    expect(
+      fired,
+      1,
+      reason: 'the modal barrier swallowed the click on the covered screen',
+    );
+  });
+
+  testWidgets('a barrierColor modal absorbs clicks over its painted '
+      'surround', (tester) {
+    var fired = 0;
+    tester.pumpWidget(
+      Navigator(
+        home: GestureDetector(
+          onTap: () => fired++,
+          child: const Text('DANGER'),
+        ),
+      ),
+    );
+    final nav = tester.binding.rootNavigator!;
+    nav.present<void>(
+      const SizedBox(width: 6, height: 3, child: Text('modal')),
+      barrierColor: Colors.black,
+    );
+    tester.pump(const Duration(milliseconds: 300));
+    tester.render(size: const CellSize(20, 7));
+
+    _clickAt(tester, 2, 0);
+    expect(fired, 0, reason: 'a painted barrier must absorb, not just paint');
+  });
+
+  testWidgets('clicks inside the modal still reach its own controls', (tester) {
+    var inner = 0;
+    var outer = 0;
+    tester.pumpWidget(
+      Navigator(
+        home: GestureDetector(
+          onTap: () => outer++,
+          child: const Text('DANGER'),
+        ),
+      ),
+    );
+    final nav = tester.binding.rootNavigator!;
+    nav.present<void>(
+      GestureDetector(
+        onTap: () => inner++,
+        child: const SizedBox(width: 6, height: 1, child: Text('press')),
+      ),
+    );
+    tester.pump(const Duration(milliseconds: 300));
+    final out = _screen(tester, cols: 20, rows: 7);
+    final row = out.split('\n').indexWhere((r) => r.contains('press'));
+    final col = out.split('\n')[row].indexOf('press');
+    tester.render(size: const CellSize(20, 7));
+
+    _clickAt(tester, col + 1, row);
+    expect(inner, 1, reason: 'the modal owns clicks on its own content');
+    expect(outer, 0, reason: 'nothing leaked to the covered screen');
+  });
+
+  testWidgets('a click on the surround does not move focus behind the '
+      'modal', (tester) {
+    // Click-to-focus is a separate dispatcher pass from tap routing, so the
+    // barrier has to block that too (`PointerRouter.focusAbsorbedAt`).
+    final page = FocusNode(debugLabel: 'page');
+    final modal = FocusNode(debugLabel: 'modal');
+    tester.pumpWidget(
+      Navigator(
+        home: Focus(
+          focusNode: page,
+          child: const SizedBox(width: 10, height: 1, child: Text('page')),
+        ),
+      ),
+    );
+    final nav = tester.binding.rootNavigator!;
+    nav.present<void>(
+      Focus(
+        focusNode: modal,
+        autofocus: true,
+        child: const SizedBox(width: 6, height: 1, child: Text('modal')),
+      ),
+    );
+    tester.pump(const Duration(milliseconds: 300));
+    tester.render(size: const CellSize(20, 7));
+    expect(modal.hasFocus, isTrue, reason: 'the modal autofocused');
+
+    _clickAt(tester, 1, 0); // over the page's focusable, outside the modal
+    tester.render(size: const CellSize(20, 7));
+    expect(
+      page.hasFocus,
+      isFalse,
+      reason: 'click-to-focus must not reach behind the barrier',
+    );
+    expect(modal.hasFocus, isTrue, reason: 'focus stayed in the modal');
+  });
+
+  testWidgets('the barrier does not dismiss on click (Esc still does)', (
+    tester,
+  ) {
+    // Click-outside-to-dismiss is deliberately NOT wired: `barrierDismissible`
+    // is documented as Esc-only. The barrier is an input floor, not a
+    // dismiss affordance — pinned so adding the barrier didn't quietly
+    // change the contract.
+    tester.pumpWidget(Navigator(home: const Text('page')));
+    final nav = tester.binding.rootNavigator!;
+    nav.present<void>(const Focus(autofocus: true, child: Text('dialog')));
+    tester.pump(const Duration(milliseconds: 300));
+    tester.render(size: const CellSize(20, 7));
+    expect(nav.depth, 2);
+
+    _clickAt(tester, 0, 0);
+    tester.pump(const Duration(milliseconds: 300));
+    expect(nav.depth, 2, reason: 'a click on the surround is a no-op');
+
+    tester.sendKey(const KeyEvent(KeyCode.escape));
+    tester.pump(const Duration(milliseconds: 300));
+    expect(nav.depth, 1, reason: 'Esc still dismisses');
   });
 
   testWidgets('stacked dialogs: Esc dismisses only the top', (tester) {

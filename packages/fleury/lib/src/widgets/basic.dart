@@ -230,7 +230,9 @@ class _RawTextElement extends LeafRenderObjectElement {
 
   @override
   void unmount() {
-    (renderObject as RenderText).detachFromSelection();
+    // `maybeRenderObject`: an element whose inflate threw never got a render
+    // object, and the throwing getter would compound the original error.
+    (maybeRenderObject as RenderText?)?.detachFromSelection();
     super.unmount();
   }
 }
@@ -424,6 +426,7 @@ class Flex extends MultiChildRenderObjectWidget {
       mainAxisSize: mainAxisSize,
       mainAxisAlignment: mainAxisAlignment,
       crossAxisAlignment: crossAxisAlignment,
+      textPolicy: MediaQuery.textPolicyOf(context),
     );
   }
 
@@ -436,7 +439,8 @@ class Flex extends MultiChildRenderObjectWidget {
       ..direction = direction
       ..mainAxisSize = mainAxisSize
       ..mainAxisAlignment = mainAxisAlignment
-      ..crossAxisAlignment = crossAxisAlignment;
+      ..crossAxisAlignment = crossAxisAlignment
+      ..textPolicy = MediaQuery.textPolicyOf(context);
   }
 }
 
@@ -530,22 +534,28 @@ class Flexible extends SingleChildRenderObjectWidget {
 /// overwrite earlier ones.
 ///
 /// Non-positioned children determine the stack's size (intrinsic of the
-/// largest non-positioned child). Positioned children float on top with
-/// explicit offsets and (optional) sizes. Children paint in declaration
-/// order; the cell buffer's eviction rules handle wide-grapheme
-/// overlap correctly.
+/// largest non-positioned child) and are constrained per [fit]. Positioned
+/// children float on top with explicit offsets and (optional) sizes.
+/// Children paint in declaration order; the cell buffer's eviction rules
+/// handle wide-grapheme overlap correctly.
 final class Stack extends MultiChildRenderObjectWidget {
-  const Stack({super.key, super.children});
+  const Stack({super.key, this.fit = StackFit.loose, super.children});
+
+  /// How non-positioned children are constrained. [StackFit.passthrough]
+  /// makes a Stack layout-transparent for its first child — the shape of a
+  /// popup layered over an app that must not move the app.
+  final StackFit fit;
 
   @override
-  RenderObject createRenderObject(BuildContext context) => RenderStack();
+  RenderObject createRenderObject(BuildContext context) =>
+      RenderStack(fit: fit);
 
   @override
   void updateRenderObject(
     BuildContext context,
     covariant RenderStack renderObject,
   ) {
-    // RenderStack has no per-frame configuration today.
+    renderObject.fit = fit;
   }
 }
 
@@ -911,7 +921,7 @@ class _RenderFilledBox extends RenderObject
         buffer.writeGrapheme(CellOffset(c, ro), ' ', style: fillStyle);
       }
     }
-    // Now paint the child. writeGrapheme replaces the cell wholesale,
+    // Now paint the child. A grapheme write replaces the cell wholesale,
     // so cells the child touches lose our bg. Walk back through and
     // merge our bg into any cell the child painted that didn't set
     // its own background.
@@ -934,11 +944,11 @@ class _RenderFilledBox extends RenderObject
             cell.role == CellRole.overlay) {
           continue;
         }
-        buffer.writeGrapheme(
-          CellOffset(c, ro),
-          cell.grapheme!,
-          style: cell.style.merge(fillStyle),
-        );
+        // Paint only: restyle the cell in place rather than rewriting the
+        // grapheme, which would re-measure it. A width the child disagreed
+        // with would orphan the continuation half of a wide pair, still
+        // carrying the child's un-merged style.
+        buffer.restyleCell(c, ro, cell.style.merge(fillStyle));
       }
     }
   }
@@ -951,7 +961,10 @@ class _Border extends SingleChildRenderObjectWidget {
 
   @override
   RenderObject createRenderObject(BuildContext context) {
-    return RenderBorder(border: _effectiveBorder(context));
+    return RenderBorder(
+      border: _effectiveBorder(context),
+      textPolicy: MediaQuery.textPolicyOf(context),
+    );
   }
 
   @override
@@ -959,7 +972,12 @@ class _Border extends SingleChildRenderObjectWidget {
     BuildContext context,
     covariant RenderBorder renderObject,
   ) {
-    renderObject.border = _effectiveBorder(context);
+    renderObject
+      ..border = _effectiveBorder(context)
+      // Box drawing is East Asian Ambiguous: the surface's policy decides
+      // whether an edge glyph costs one column or two, and the frame's
+      // reserved geometry follows the same measurement (RFC 0019).
+      ..textPolicy = MediaQuery.textPolicyOf(context);
   }
 
   /// On an ASCII glyph tier, box-drawing borders degrade to the ASCII style
@@ -1037,16 +1055,51 @@ final class ConstrainedBox extends SingleChildRenderObjectWidget {
 class _RenderConstrainedBox extends RenderObject
     implements RenderObjectWithSingleChild {
   _RenderConstrainedBox({
-    this.minWidth,
-    this.maxWidth,
-    this.minHeight,
-    this.maxHeight,
-  });
+    int? minWidth,
+    int? maxWidth,
+    int? minHeight,
+    int? maxHeight,
+  }) : _minWidth = minWidth,
+       _maxWidth = maxWidth,
+       _minHeight = minHeight,
+       _maxHeight = maxHeight;
 
-  int? minWidth;
-  int? maxWidth;
-  int? minHeight;
-  int? maxHeight;
+  // Layout config, so every setter must dirty this render object:
+  // `RenderObject.layout` short-circuits when the incoming constraints are
+  // unchanged and `needsLayout` is false, and a rebuild that only changes
+  // these bounds delivers exactly that — the cached size would be returned
+  // and the new bound would never take effect.
+  int? _minWidth;
+  int? get minWidth => _minWidth;
+  set minWidth(int? value) {
+    if (_minWidth == value) return;
+    _minWidth = value;
+    markNeedsLayout();
+  }
+
+  int? _maxWidth;
+  int? get maxWidth => _maxWidth;
+  set maxWidth(int? value) {
+    if (_maxWidth == value) return;
+    _maxWidth = value;
+    markNeedsLayout();
+  }
+
+  int? _minHeight;
+  int? get minHeight => _minHeight;
+  set minHeight(int? value) {
+    if (_minHeight == value) return;
+    _minHeight = value;
+    markNeedsLayout();
+  }
+
+  int? _maxHeight;
+  int? get maxHeight => _maxHeight;
+  set maxHeight(int? value) {
+    if (_maxHeight == value) return;
+    _maxHeight = value;
+    markNeedsLayout();
+  }
 
   RenderObject? _child;
   @override
@@ -1058,6 +1111,44 @@ class _RenderConstrainedBox extends RenderObject
     _child = value;
     if (value != null) adoptChild(value);
   }
+
+  // A bound the box imposes is part of its natural size: the child's answer
+  // clamped to [min, max] on that axis. Without this the delegating default
+  // reported the child's full width, IntrinsicWidth laid out tight at it, and
+  // the maxWidth was discarded by the parent-min re-clamp in performLayout.
+  int _clampCols(int cols) {
+    var result = cols;
+    final max = _maxWidth;
+    if (max != null && result > max) result = max;
+    final min = _minWidth;
+    if (min != null && result < min) result = min;
+    return result;
+  }
+
+  int _clampRows(int rows) {
+    var result = rows;
+    final max = _maxHeight;
+    if (max != null && result > max) result = max;
+    final min = _minHeight;
+    if (min != null && result < min) result = min;
+    return result;
+  }
+
+  @override
+  int computeMaxIntrinsicWidth(int? height) =>
+      _clampCols(_child?.computeMaxIntrinsicWidth(height) ?? 0);
+
+  @override
+  int computeMinIntrinsicWidth(int? height) =>
+      _clampCols(_child?.computeMinIntrinsicWidth(height) ?? 0);
+
+  @override
+  int computeMaxIntrinsicHeight(int? width) =>
+      _clampRows(_child?.computeMaxIntrinsicHeight(width) ?? 0);
+
+  @override
+  int computeMinIntrinsicHeight(int? width) =>
+      _clampRows(_child?.computeMinIntrinsicHeight(width) ?? 0);
 
   @override
   CellSize performLayout(CellConstraints constraints) {

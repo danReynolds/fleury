@@ -44,7 +44,9 @@ void main() {
   }
 
   KeyboardSnapshot sample(KeySelector selector) {
-    final snapshot = dispatcher.keyboardSession.publishLatch();
+    final snapshot = dispatcher.keyboardSession.publishLatch(
+      KeyboardLatchClock.frame,
+    );
     snapshot.isHeld(selector); // what a game's ticker does every frame
     return snapshot;
   }
@@ -179,14 +181,14 @@ void main() {
     // The shape that actually shipped: four movement controls sampled, one
     // fallback binding. Kept as a regression case because no test, review, or
     // real-terminal run caught it — the user found it by playing the game.
-    mountBindings([
-      KeyBinding(KeyCode.w, label: 'Thrust', onTrigger: (_) {}),
-    ]);
+    mountBindings([KeyBinding(KeyCode.w, label: 'Thrust', onTrigger: (_) {})]);
     // Three frames of play, all four controls sampled each frame — the
     // two-sighting cadence needs a transition-absorbing check plus two
     // uncovered sightings before it will speak.
     for (var i = 0; i < 3; i++) {
-      final snapshot = dispatcher.keyboardSession.publishLatch();
+      final snapshot = dispatcher.keyboardSession.publishLatch(
+        KeyboardLatchClock.frame,
+      );
       for (final key in [
         KeyPosition.w,
         KeyPosition.a,

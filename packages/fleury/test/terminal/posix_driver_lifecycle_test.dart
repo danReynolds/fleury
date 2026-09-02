@@ -12,8 +12,21 @@ class _FakeStdin implements Stdin {
   final bool terminal;
   final _controller = StreamController<List<int>>();
 
-  void push(List<int> bytes) => _controller.add(bytes);
-  Future<void> close() => _controller.close();
+  /// A latency-simulating fake answers on a timer, which can outlive the test
+  /// that armed it. Pushing into a closed controller throws asynchronously and
+  /// the failure lands on whatever test is running next, so the fake tracks
+  /// its own closure rather than leaving that to each caller.
+  bool closed = false;
+
+  void push(List<int> bytes) {
+    if (closed) return;
+    _controller.add(bytes);
+  }
+
+  Future<void> close() {
+    closed = true;
+    return _controller.close();
+  }
 
   @override
   bool get hasTerminal => terminal;
@@ -30,6 +43,46 @@ class _FakeStdin implements Stdin {
     onDone: onDone,
     cancelOnError: cancelOnError,
   );
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// A terminal-reporting stdin that never answers a probe: every startup query
+/// stays in flight for its full timeout, which is the window a concurrent
+/// `restore()` has to land in.
+class _SilentTerminalStdin implements Stdin {
+  final _controller = StreamController<List<int>>();
+  bool _lineMode = true;
+  bool _echoMode = true;
+
+  @override
+  bool get hasTerminal => true;
+
+  @override
+  bool get lineMode => _lineMode;
+  @override
+  set lineMode(bool value) => _lineMode = value;
+
+  @override
+  bool get echoMode => _echoMode;
+  @override
+  set echoMode(bool value) => _echoMode = value;
+
+  @override
+  StreamSubscription<List<int>> listen(
+    void Function(List<int>)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) => _controller.stream.listen(
+    onData,
+    onError: onError,
+    onDone: onDone,
+    cancelOnError: cancelOnError,
+  );
+
+  Future<void> close() => _controller.close();
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -120,6 +173,40 @@ class _FakeModeController implements PosixTerminalModeController {
     trace.add('mode:restore');
     return true;
   }
+}
+
+/// A signal subscription that only records its own cancellation.
+class _TraceSignalSubscription implements StreamSubscription<ProcessSignal> {
+  _TraceSignalSubscription(this.signal, this.trace);
+
+  final ProcessSignal signal;
+  final List<String> trace;
+
+  @override
+  Future<void> cancel() async => trace.add('unwatch:${signal.name}');
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// A stdout whose final flush hangs until released — a pty write blocked
+/// behind a dropped SSH session or an XOFF.
+class _HangingFlushStdout extends _RecordingStdout {
+  _HangingFlushStdout({required super.trace}) : super(terminal: true);
+
+  final Completer<void> release = Completer<void>();
+  var flushes = 0;
+
+  @override
+  Future<void> flush() {
+    flushes++;
+    trace.add('flush');
+    // The first flushes are startup probes; only a flush during restore is
+    // held, and the test decides when it lets go.
+    return holding ? release.future : Future<void>.value();
+  }
+
+  bool holding = false;
 }
 
 Future<void> _pump() => Future<void>.delayed(const Duration(milliseconds: 10));
@@ -631,4 +718,403 @@ void main() {
       }
     },
   );
+
+  test('restore() during startup negotiation reports the lifecycle StateError '
+      '(RFC 0021 §12)', () async {
+    // runApp's zone handler calls cleanup() on any uncaught async error and
+    // the startup probes hold the driver for up to ~500 ms, so a restore
+    // landing mid-negotiation is reachable in production. `enter` must
+    // surface it as its own StateError. It used to read `_mode!` (i.e.
+    // `_terminalState!.effectiveMode`) three lines BEFORE the lifecycle
+    // guard, so a restore that had already nulled `_terminalState` produced
+    // a bare null-check `_TypeError` instead.
+    final input = _SilentTerminalStdin();
+    PosixTerminalDriver? driver;
+    var fired = false;
+    final restored = Completer<void>();
+    final out = _RecordingStdout(
+      terminal: true,
+      onWrite: (bytes) {
+        // The first startup query. Tear the driver down while it waits for
+        // a reply that never comes.
+        if (fired || !bytes.contains('\x1B[?u')) return;
+        fired = true;
+        scheduleMicrotask(() async {
+          await driver!.restore();
+          restored.complete();
+        });
+      },
+    );
+    driver = PosixTerminalDriver(
+      stdinOverride: input,
+      stdoutOverride: out,
+      terminalModeController: _FakeModeController(out.trace),
+    );
+
+    await expectLater(
+      driver.enter(TerminalMode.interactive),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'PosixTerminalDriver was restored while enter was negotiating.',
+        ),
+      ),
+    );
+    expect(fired, isTrue, reason: 'the probe write hook must have run');
+    await restored.future;
+    await input.close();
+  }, timeout: const Timeout(Duration(seconds: 15)));
+
+  test(
+    'restore() keeps SIGINT/SIGTERM shielded until the terminal is back',
+    () async {
+      // Cancelling the last subscription to a signal restores the OS default
+      // disposition. restore() cancels the real watchers first (so nothing can
+      // re-arm signal grace) and then yields through the remaining cleanup —
+      // during which the hot-reload supervisor's 300 ms forward used to kill
+      // the process raw, mid-restore. A no-op shield now covers that window
+      // and is dropped last.
+      final trace = <String>[];
+      final input = _FakeStdin(terminal: true);
+      late final _RecordingStdout out;
+      out = _RecordingStdout(
+        terminal: true,
+        trace: trace,
+        onWrite: (bytes) {
+          if (bytes.contains('\x1B[6n')) {
+            scheduleMicrotask(
+              () => input.push('\x1B[1;2R\x1B[?1;2c'.codeUnits),
+            );
+          } else if (bytes.contains('\x1B[c')) {
+            scheduleMicrotask(() => input.push('\x1B[?1;2c'.codeUnits));
+          }
+        },
+      );
+      final driver = PosixTerminalDriver(
+        stdinOverride: input,
+        stdoutOverride: out,
+        terminalModeController: _FakeModeController(trace),
+        selfStopOverride: () => true,
+        signalWatcherOverride: (signal, onSignal) {
+          trace.add('watch:${signal.name}');
+          return _TraceSignalSubscription(signal, trace);
+        },
+      );
+      try {
+        await driver.enter(TerminalMode.interactive);
+        trace.clear();
+        await driver.restore();
+
+        final unwatches = [
+          for (var i = 0; i < trace.length; i++)
+            if (trace[i] == 'unwatch:${ProcessSignal.sigint.name}') i,
+        ];
+        expect(
+          unwatches,
+          hasLength(2),
+          reason: 'real watcher + shield: $trace',
+        );
+        final shieldWatch = trace.indexOf('watch:${ProcessSignal.sigint.name}');
+        expect(
+          shieldWatch,
+          lessThan(unwatches.first),
+          reason:
+              'the shield is listening before the real watcher is cancelled',
+        );
+        expect(
+          unwatches.last,
+          greaterThan(trace.indexOf('mode:restore')),
+          reason: 'the shield outlives the cooked-mode restore',
+        );
+        expect(
+          unwatches.last,
+          greaterThan(trace.lastIndexOf('flush')),
+          reason: 'the shield outlives the final flush',
+        );
+        expect(
+          trace.where((e) => e == 'unwatch:${ProcessSignal.sigterm.name}'),
+          hasLength(2),
+        );
+      } finally {
+        await driver.restore();
+        await input.close();
+      }
+    },
+  );
+
+  group('startup negotiation adapts to link latency', () {
+    // Answers every startup query the driver can emit, [delay] after the
+    // request is written — a fake link with a measurable round trip. The
+    // patterns are ordered specific-first because each query carries the
+    // Device Attributes sentinel (`ESC [ c`) that terminates it.
+    void Function(String bytes) slowTerminal(
+      _FakeStdin input,
+      Duration delay,
+    ) => (bytes) {
+      String? reply;
+      if (bytes.contains('\x1B[?u')) {
+        // Flags 1|2|4|8|16: a terminal that honours the whole lifecycle tier,
+        // so the negotiated result is unmistakably not the collapsed one.
+        reply = '\x1B[?31u\x1B[?1;2c';
+      } else if (bytes.contains('?2026\$p')) {
+        reply = '\x1B[?2026;2\$y\x1B[?1;2c';
+      } else if (bytes.contains('\x1B[6n')) {
+        reply = '\x1B[1;2R\x1B[?1;2c';
+      } else if (bytes.contains('\x1B[c')) {
+        reply = '\x1B[?1;2c';
+      }
+      if (reply == null) return;
+      final bytesToPush = reply.codeUnits;
+      Timer(delay, () => input.push(bytesToPush));
+    };
+
+    test('a 200 ms link negotiates the same capabilities a local one does '
+        '(3.b)', () async {
+      // The defect: every probe carried a fixed 150 ms deadline, so a link
+      // slower than ~130 ms round trip timed ALL of them out and the session
+      // silently degraded on every axis at once — the ordinary condition of an
+      // agent TUI over SSH. 200 ms is a plain transpacific hop.
+      final trace = <String>[];
+      final input = _FakeStdin(terminal: true);
+      final out = _RecordingStdout(
+        terminal: true,
+        trace: trace,
+        onWrite: slowTerminal(input, const Duration(milliseconds: 200)),
+      );
+      final driver = PosixTerminalDriver(
+        stdinOverride: input,
+        stdoutOverride: out,
+        terminalModeController: _FakeModeController(trace),
+      );
+
+      try {
+        final profile = await driver.enter(TerminalMode.interactive);
+        expect(
+          profile.keyboard,
+          isNot(KeyboardCapabilities.legacy),
+          reason: 'the keyboard reply arrived; latency must not veto it',
+        );
+        expect(profile.keyboard.distinguishesRepeats, isTrue);
+        expect(
+          (profile.presentation as AnsiTerminalPresentation).synchronizedOutput,
+          isTrue,
+          reason:
+              'the second probe scales to the round trip the first measured',
+        );
+      } finally {
+        await driver.restore();
+        await input.close();
+      }
+    }, timeout: const Timeout(Duration(seconds: 20)));
+
+    test(
+      'a terminal that answers NOTHING still starts on the base budget',
+      () async {
+        // The adaptive deadline may never be reachable by staying silent: no
+        // answer means no measurement, so the budget stays at 500 ms and the
+        // cost of an unanswered handshake is exactly what it was before.
+        final input = _SilentTerminalStdin();
+        final out = _RecordingStdout(terminal: true);
+        final driver = PosixTerminalDriver(
+          stdinOverride: input,
+          stdoutOverride: out,
+          terminalModeController: _FakeModeController(out.trace),
+        );
+        final clock = Stopwatch()..start();
+        try {
+          final profile = await driver.enter(TerminalMode.interactive);
+          clock.stop();
+          expect(profile.keyboard, KeyboardCapabilities.legacy);
+          expect(
+            clock.elapsed,
+            lessThan(const Duration(milliseconds: 1500)),
+            reason:
+                'a silent terminal must not reach the 2 s adaptive ceiling; '
+                'the base budget is 500 ms',
+          );
+        } finally {
+          await driver.restore();
+          await input.close();
+        }
+      },
+      timeout: const Timeout(Duration(seconds: 20)),
+    );
+
+    test(
+      'a local terminal still negotiates inside the original budget',
+      () async {
+        final trace = <String>[];
+        final input = _FakeStdin(terminal: true);
+        final out = _RecordingStdout(
+          terminal: true,
+          trace: trace,
+          onWrite: slowTerminal(input, Duration.zero),
+        );
+        final driver = PosixTerminalDriver(
+          stdinOverride: input,
+          stdoutOverride: out,
+          terminalModeController: _FakeModeController(trace),
+        );
+        final clock = Stopwatch()..start();
+        try {
+          final profile = await driver.enter(TerminalMode.interactive);
+          clock.stop();
+          expect(profile.keyboard.distinguishesRepeats, isTrue);
+          expect(
+            (profile.presentation as AnsiTerminalPresentation)
+                .synchronizedOutput,
+            isTrue,
+          );
+          expect(
+            clock.elapsed,
+            lessThan(PosixTerminalDriver.startupNegotiationBudget),
+            reason: 'adaptivity must not slow the fast path down',
+          );
+        } finally {
+          await driver.restore();
+          await input.close();
+        }
+      },
+      timeout: const Timeout(Duration(seconds: 20)),
+    );
+
+    // The arithmetic behind the two behaviours above, pinned without a clock:
+    // these are the shipped numbers, and changing one is a decision, not a
+    // refactor.
+    test('the deadline ladder is the documented one', () {
+      const ms = Duration(milliseconds: 1);
+
+      // Nothing answered yet: the one fixed deadline in the sequence.
+      expect(PosixTerminalDriver.probeTimeoutFor(null), ms * 400);
+      expect(
+        PosixTerminalDriver.negotiationBudgetFor(null),
+        PosixTerminalDriver.startupNegotiationBudget,
+      );
+
+      // A local terminal keeps the pre-adaptive timings exactly.
+      expect(PosixTerminalDriver.probeTimeoutFor(ms * 1), ms * 150);
+      expect(PosixTerminalDriver.probeTimeoutFor(ms * 50), ms * 150);
+      expect(PosixTerminalDriver.negotiationBudgetFor(ms * 50), ms * 500);
+
+      // A measured link buys 3 round trips per probe, 8 for the sequence.
+      expect(PosixTerminalDriver.probeTimeoutFor(ms * 200), ms * 600);
+      expect(PosixTerminalDriver.negotiationBudgetFor(ms * 200), ms * 1600);
+
+      // Both are bounded: startup stops being free somewhere.
+      expect(PosixTerminalDriver.probeTimeoutFor(ms * 400), ms * 1200);
+      expect(PosixTerminalDriver.probeTimeoutFor(ms * 900), ms * 1500);
+      expect(
+        PosixTerminalDriver.negotiationBudgetFor(ms * 400),
+        PosixTerminalDriver.maxStartupNegotiationBudget,
+      );
+    });
+  });
+
+  test(
+    'suspend and handoff surrender input authority, and announce it',
+    () async {
+      // The runtime recovers held keys on a focus-out (RFC 0020 §10). Suspend
+      // (Ctrl+Z) and a terminal handoff ($EDITOR) are the other two ways this
+      // terminal stops reporting releases, and neither said so: held keys
+      // stayed held across them. Both now emit a focus-out, and a focus-in
+      // on return — ahead of the resume repaint.
+      final trace = <String>[];
+      final input = _FakeStdin(terminal: true);
+      late final _RecordingStdout out;
+      out = _RecordingStdout(
+        terminal: true,
+        trace: trace,
+        onWrite: (bytes) {
+          if (bytes.contains('\x1B[6n')) {
+            scheduleMicrotask(
+              () => input.push('\x1B[1;2R\x1B[?1;2c'.codeUnits),
+            );
+          } else if (bytes.contains('\x1B[c')) {
+            scheduleMicrotask(() => input.push('\x1B[?1;2c'.codeUnits));
+          }
+        },
+      );
+      final driver = PosixTerminalDriver(
+        stdinOverride: input,
+        stdoutOverride: out,
+        terminalModeController: _FakeModeController(trace),
+        selfStopOverride: () => true,
+      );
+      final events = <TuiEvent>[];
+      StreamSubscription<TuiEvent>? sub;
+      Iterable<bool> focus() =>
+          events.whereType<TerminalFocusEvent>().map((e) => e.focused);
+      try {
+        await driver.enter(TerminalMode.interactive);
+        sub = driver.events.listen(events.add);
+
+        await driver.debugSuspend();
+        await _pump();
+        expect(focus(), [false], reason: 'suspend surrenders authority');
+
+        driver.debugResume();
+        await _pump();
+        expect(focus(), [false, true]);
+        final regained = events.indexWhere(
+          (e) => e is TerminalFocusEvent && e.focused,
+        );
+        expect(
+          events.skip(regained + 1).whereType<ResizeEvent>(),
+          isNotEmpty,
+          reason: 'focus-in lands before the resume repaint',
+        );
+
+        events.clear();
+        await driver.runWithTerminalHandoff(() async {
+          await _pump();
+          expect(focus(), [false], reason: 'the child owns the terminal');
+        });
+        await _pump();
+        expect(focus(), [false, true]);
+      } finally {
+        await sub?.cancel();
+        await driver.restore();
+        await input.close();
+      }
+    },
+  );
+
+  test("restore()'s signal shield is bounded: a second signal ends the "
+      'process instead of being swallowed', () async {
+    // The shield keeps SIGINT/SIGTERM subscribed for the whole restore so a
+    // forwarded signal cannot kill the process raw mid-teardown. Unbounded,
+    // that made a HUNG teardown (a pty write blocked behind a dropped SSH
+    // session) unkillable by anything but SIGKILL, which restores nothing.
+    final trace = <String>[];
+    final input = _FakeStdin(terminal: true);
+    late final _HangingFlushStdout out;
+    final handlers = <ProcessSignal, List<void Function(ProcessSignal)>>{};
+    final exits = <int>[];
+    out = _HangingFlushStdout(trace: trace);
+    final driver = PosixTerminalDriver(
+      stdinOverride: input,
+      stdoutOverride: out,
+      terminalModeController: _FakeModeController(trace),
+      selfStopOverride: () => true,
+      forceExitOverride: exits.add,
+      signalWatcherOverride: (signal, onSignal) {
+        handlers.putIfAbsent(signal, () => []).add(onSignal);
+        return _TraceSignalSubscription(signal, trace);
+      },
+    );
+    await driver.enter(TerminalMode.interactive);
+    out.holding = true;
+    final restoring = driver.restore();
+    await _pump();
+    // The shield is the newest SIGINT watcher; the real one is cancelled.
+    final shield = handlers[ProcessSignal.sigint]!.last;
+    shield(ProcessSignal.sigint);
+    expect(exits, isEmpty, reason: 'one signal is swallowed, as designed');
+    shield(ProcessSignal.sigint);
+    expect(exits, [130], reason: 'the second is the user overruling a hang');
+    out.release.complete();
+    await restoring;
+    await input.close();
+  });
 }

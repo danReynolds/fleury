@@ -165,4 +165,30 @@ void main() {
       expect(sanitizeSingleLine('already clean'), 'already clean');
     });
   });
+
+  group('surrogates', () {
+    test(
+      'a lone high surrogate does not carry the next unit past the scan',
+      () {
+        // The high-surrogate branch used to consume the following code unit
+        // unconditionally, so an ESC right after a split pair leaked through —
+        // and the text model now asserts that this function's output is
+        // canonical.
+        final out = sanitizeForDisplay('\uD800\x1B[31mHACK');
+        expect(out, isNot(contains('\x1B')));
+        expect(out, startsWith('\uD800�'));
+        expect(isSanitizedForDisplay(out), isTrue);
+        expect(
+          isSanitizedMultiline(sanitizeMultiline('\uD800\x1B[2Jx')),
+          isTrue,
+        );
+      },
+    );
+
+    test('a valid pair is kept intact', () {
+      const pair = '😀'; // 😀
+      expect(sanitizeForDisplay('a${pair}b'), 'a${pair}b');
+      expect(sanitizeForDisplay('😀\x1B[0m'), '$pair�');
+    });
+  });
 }

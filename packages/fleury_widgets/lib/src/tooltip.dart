@@ -52,15 +52,20 @@ class _TooltipState extends State<Tooltip> {
       builder: (_) => BoundsAnchor(
         notifier: _bounds,
         // Container.framed supplies the float's skin: an opaque fill so the
-        // app beneath doesn't bleed through, plus the frame.
-        child: Container.framed(
-          border: const BoxBorder(style: BorderStyle.rounded),
-          child: Semantics(
-            role: SemanticRole.text,
-            label: widget.semanticLabel,
-            value: _safeMessage,
-            state: const SemanticState({'tooltipVisible': true}),
-            child: Text(widget.message, allowSelect: false),
+        // app beneath doesn't bleed through, plus the frame. The tooltip's
+        // text is chrome, not content, so it opts out of the app's ambient
+        // selection — stated here rather than inherited from the fact that an
+        // overlay entry happens to mount outside DefaultRootSelection.
+        child: SelectionArea.disabled(
+          child: Container.framed(
+            border: const BoxBorder(style: BorderStyle.rounded),
+            child: Semantics(
+              role: SemanticRole.text,
+              label: widget.semanticLabel,
+              value: _safeMessage,
+              state: const SemanticState({'tooltipVisible': true}),
+              child: Text(widget.message, allowSelect: false),
+            ),
           ),
         ),
       ),

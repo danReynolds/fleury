@@ -268,6 +268,18 @@ observation starved hold pairing. Rules:
 
 ## 7. Frame-latched sampling
 
+**AMENDED 2026-09-02 — the latch clock.** Edges live for exactly one latch, so
+the clock that publishes is the clock that expires. Publishing at render made
+any unrelated frame (a clock in the status bar, an arriving stream value)
+destroy a tap before the ticker that samples it ran. Edges now expire on the
+CONSUMER's clock: the latch is published at ticker frame start whenever a
+ticker is registered, and only in a ticker-free app — where nothing else would
+ever advance it — does the render clock publish. Exactly one is live at a
+time; the two are wired together by `installKeyboardLatch`, and adding a
+publisher outside it re-creates the double-latch defect this section's
+one-publisher rule was written against. "Frame" below therefore reads "latch":
+the readable window is one tick in a ticking app.
+
 At frame start, after input drains, the runtime atomically publishes an
 immutable `KeyboardSnapshot`: pressed sets plus every identity that went down
 and every one that went up since the previous latch. Edges are non-consuming;
@@ -303,8 +315,13 @@ only with evidence of general-app benefit.~~ **AMENDED 2026-08-05 (§26.1): life
 ### 8.2 Negotiation is answer-driven and never blocks
 
 Query = `CSI ? u` bracketed by primary DA (`CSI c`) — the spec's own
-recommended detection; every real emulator answers DA1, so detection is
-RTT-independent. Fully async: the app runs at the conservative tier from frame
+recommended detection; every real emulator answers DA1, so the *verdict* is
+read off the reply rather than inferred from a wall-clock timeout. The
+*deadline* is not RTT-independent — a reply that lands after it is
+indistinguishable from silence — so negotiation sizes the deadline to the
+link: a fixed 400 ms for the first probe, then 3× the round trip that first
+answer measured, with the aggregate startup budget scaling the same way
+(RFC 0021 §7). Fully async: the app runs at the conservative tier from frame
 one; a confirmation is a capability *upgrade* that may never arrive (pipes, CI,
 VT-disabled consoles); nothing awaits it. Platform is never special-cased —
 Windows Terminal 1.25+ confirms like any terminal; conhost answers DA1 and

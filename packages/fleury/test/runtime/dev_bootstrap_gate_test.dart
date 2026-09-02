@@ -93,5 +93,124 @@ void main() {
       expect(build(), contains('--enable-vm-service=0'));
       expect(build(), contains('--write-service-info=file:///tmp/info.json'));
     });
+
+    test("the user's VM options are replayed, ahead of the supervisor's", () {
+      // The child is the process the user interacts with. Every VM flag on
+      // their command line used to be dropped on the respawn: `--define=`
+      // read back as unset and `--enable-asserts` ran with assertions OFF,
+      // silently, with nothing pointing at hot reload.
+      final built = devRespawnArguments(
+        scriptPath: '/app/bin/main.dart',
+        serviceInfo: Uri.parse('file:///tmp/info.json'),
+        vmOptions: const ['--enable-asserts', '--define=API_URL=https://x'],
+      );
+      expect(
+        built.take(2),
+        ['--enable-asserts', '--define=API_URL=https://x'],
+        reason:
+            'user options first, so a later supervisor flag cannot be '
+            'shadowed by them',
+      );
+      expect(built, contains('--enable-vm-service=0'));
+      final firstNonFlag = built.firstWhere((a) => !a.startsWith('-'));
+      expect(firstNonFlag, '/app/bin/main.dart');
+    });
+  });
+
+  group('replayableVmOptions — what a respawn inherits from its parent', () {
+    test("dart run's injected bookkeeping is not replayed", () {
+      // `dart run` adds these for itself; a direct `dart <script>` spawn has
+      // no use for them.
+      expect(
+        replayableVmOptions(const [
+          '--enable-asserts',
+          '--resolved_executable_name=/sdk/bin/dart',
+          '--executable_name=dart',
+        ]),
+        ['--enable-asserts'],
+      );
+    });
+
+    test(
+      'anything that collides with the supervisor-owned service is dropped',
+      () {
+        // The service comes from the supervisor's own flags; a second server or
+        // a pause-on-start on the child would defeat the respawn.
+        expect(
+          replayableVmOptions(const [
+            '--observe=8181',
+            '--observe',
+            '--enable-vm-service=0',
+            '--write-service-info=file:///x',
+            '--serve-devtools',
+            '--pause-isolates-on-start',
+            '--define=A=1',
+          ]),
+          ['--define=A=1'],
+        );
+      },
+    );
+
+    test("everything else is the user's and passes through verbatim", () {
+      const mine = [
+        '--enable-asserts',
+        '-DFLAG=1',
+        '--define=API_URL=https://x',
+        '--enable-experiment=records',
+        '--packages=.dart_tool/package_config.json',
+      ];
+      expect(replayableVmOptions(mine), mine);
+    });
+  });
+
+  group('devEarlyExitHint — a first child that dies at once', () {
+    test('a non-zero exit within the window on the first child hints', () {
+      final hint = devEarlyExitHint(
+        code: 1,
+        uptime: const Duration(milliseconds: 400),
+        firstChild: true,
+      );
+      expect(hint, isNotNull);
+      expect(hint, contains('runs in BOTH'));
+      expect(hint, contains('FLEURY_HOT_RELOAD=0'));
+      expect(hint, contains('code 1'));
+    });
+
+    test('a clean exit, a later child, or a long-lived child does not', () {
+      expect(
+        devEarlyExitHint(
+          code: 0,
+          uptime: const Duration(milliseconds: 400),
+          firstChild: true,
+        ),
+        isNull,
+      );
+      expect(
+        devEarlyExitHint(
+          code: 1,
+          uptime: const Duration(milliseconds: 400),
+          firstChild: false,
+        ),
+        isNull,
+        reason: 'a restart that fails is not the double-main signature',
+      );
+      expect(
+        devEarlyExitHint(
+          code: 1,
+          uptime: const Duration(seconds: 30),
+          firstChild: true,
+        ),
+        isNull,
+      );
+      expect(
+        devEarlyExitHint(
+          code: -2,
+          uptime: const Duration(milliseconds: 400),
+          firstChild: true,
+        ),
+        isNull,
+        reason: 'death by signal is not an app exit code',
+      );
+    });
   });
 }

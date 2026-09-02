@@ -44,7 +44,12 @@ const String serveIndexHtml = r'''
   </style>
 </head>
 <body>
-  <div id="fleury-remote" tabindex="0"></div>
+  <!-- Deliberately NOT focusable: keyboard capture belongs to the hidden
+       textarea the client injects. Making the host itself focusable only
+       gives the browser somewhere to move focus TO — a click on its padding
+       ring blurs the capture area, the client sweeps held keys, and every
+       keystroke is dead for the rest of the session with no cue. -->
+  <div id="fleury-remote"></div>
   <div id="status">connecting…</div>
   <script>
     const status = document.getElementById('status');

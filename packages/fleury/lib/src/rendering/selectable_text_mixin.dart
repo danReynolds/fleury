@@ -108,6 +108,26 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
   TextEdgeRelation _selStart = const TextEdgeRelation.none();
   TextEdgeRelation _selEnd = const TextEdgeRelation.none();
 
+  /// The screen points the live edges were last resolved from — null for an
+  /// edge that came from a granular event (select-all, word) or is unset.
+  ///
+  /// Kept so a content or wrap change re-resolves the SAME screen points
+  /// against the new lines, instead of trusting a flat offset computed
+  /// against text that no longer exists. That stale offset threw a
+  /// `RangeError` out of copy and Escape when the text shrank (a status line
+  /// replaced, a log row recycled, a resize re-wrap) — and the throw took the
+  /// runtime's Ctrl+C quit guard down with it — and silently selected the
+  /// wrong characters when the text grew or its line breaks moved.
+  CellOffset? _selStartPoint;
+  CellOffset? _selEndPoint;
+
+  /// The [selectionLines] identity the current relations were resolved
+  /// against. Hosts reassign their lines list whenever the text or the wrap
+  /// changes (a new value, a resize re-wrap, a policy change), so identity is
+  /// the staleness signal — no host hook, and no per-frame cost while the
+  /// lines are unchanged.
+  List<String>? _relatedLines;
+
   /// The full painted rect of this Selectable in SCREEN coordinates,
   /// including any portion currently scrolled off-screen. Returned to
   /// the delegate as `cellBounds` for reading-order purposes — a
@@ -185,17 +205,28 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
         final rel = _relateScreenPoint(globalPosition);
         if (isStart) {
           _selStart = rel;
+          _selStartPoint = globalPosition;
         } else {
           _selEnd = rel;
+          _selEndPoint = globalPosition;
         }
+        _relatedLines = selectionLines;
         _recomputeGeometry();
         return rel.asSelectionResult();
       case SelectionClearEvent():
         _selStart = const TextEdgeRelation.none();
         _selEnd = const TextEdgeRelation.none();
+        _selStartPoint = null;
+        _selEndPoint = null;
+        _relatedLines = null;
         _recomputeGeometry();
         return SelectionResult.none;
       case SelectionGranularEvent(:final granularity, :final globalPosition):
+        // Granular edges are offset-based: on a later content change they
+        // clamp (see [getSelectionRange]) rather than re-resolve.
+        _selStartPoint = null;
+        _selEndPoint = null;
+        _relatedLines = selectionLines;
         switch (granularity) {
           case SelectionGranularity.all:
             _selStart = const TextEdgeRelation.inside(0);
@@ -484,6 +515,7 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
 
   @override
   ({int end, int start})? getSelectionRange() {
+    _refreshEdgesIfLinesChanged();
     final s = _selStart;
     final e = _selEnd;
     if (s.kind == TextEdgeKind.none && e.kind == TextEdgeKind.none) {
@@ -493,7 +525,10 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
     int resolve(TextEdgeRelation here, TextEdgeRelation other) {
       switch (here.kind) {
         case TextEdgeKind.inside:
-          return here.offset;
+          // Belt and braces for the offset-based edges (select-all, word),
+          // which can outlive the text they were computed against: never
+          // hand a consumer an offset past the current content.
+          return here.offset.clamp(0, length);
         case TextEdgeKind.before:
           return 0;
         case TextEdgeKind.after:
@@ -514,6 +549,24 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
     // (single choke point — isOffsetSelected and getSelectedContent both
     // route through here).
     return _snapToLoweredGroups(ordered.start, ordered.end);
+  }
+
+  /// Re-resolves the point-based edges when the host's lines were replaced
+  /// since they were last related — new text, a re-wrap on resize, a policy
+  /// change. Runs lazily from [getSelectionRange], the single choke point
+  /// paint, copy, and geometry all route through, so the first paint after a
+  /// relayout already highlights the characters now under the same screen
+  /// cells, and copy answers from what is on screen. Deferred until the host
+  /// has painted at least once: relating needs [selectionPaintRect].
+  void _refreshEdgesIfLinesChanged() {
+    final lines = selectionLines;
+    if (identical(lines, _relatedLines)) return;
+    if (selectionPaintRect == null) return;
+    _relatedLines = lines;
+    final start = _selStartPoint;
+    if (start != null) _selStart = _relateScreenPoint(start);
+    final end = _selEndPoint;
+    if (end != null) _selEnd = _relateScreenPoint(end);
   }
 
   TextEdgeRelation _relateScreenPoint(CellOffset point) {

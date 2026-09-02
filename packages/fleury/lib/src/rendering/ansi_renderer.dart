@@ -260,7 +260,6 @@ final class AnsiRenderer {
     // but kept SEPARATE because a link is non-visual state that `ESC[0m` does
     // not close. Only ever non-null when [hyperlinks] is true.
     String? emittedLink;
-    var styleResetRequired = false;
     var styleBytesEmitted = false;
     var anyDirty = false;
 
@@ -299,10 +298,7 @@ final class AnsiRenderer {
       // more than CPU here, and cursor moves are the dominant frame
       // overhead on scroll/dashboard/sparse updates.
       final fromCol = cursorCol;
-      if (cursorRow == row &&
-          fromCol != null &&
-          fromCol < col &&
-          !styleResetRequired) {
+      if (cursorRow == row && fromCol != null && fromCol < col) {
         final gap = _gapRewrite(
           previous,
           next,
@@ -343,23 +339,16 @@ final class AnsiRenderer {
       if (emittedStyle == null ||
           !emittedStyle!.sameVisualStyleAs(newCell.style)) {
         if (newCell.style.isVisuallyEmpty) {
-          if (styleResetRequired ||
-              (emittedStyle != null && !emittedStyle!.isVisuallyEmpty)) {
+          if (emittedStyle != null && !emittedStyle!.isVisuallyEmpty) {
             buf.write('\x1B[0m');
             styleBytesEmitted = true;
-            styleResetRequired = false;
           }
         } else {
-          final encoded = _encodeStyleTransition(
-            emittedStyle,
-            newCell.style,
-            resetFirst: styleResetRequired,
-          );
+          final encoded = _encodeStyleTransition(emittedStyle, newCell.style);
           if (encoded.isNotEmpty) {
             buf.write(encoded);
             styleBytesEmitted = true;
           }
-          styleResetRequired = false;
         }
         emittedStyle = newCell.style;
       }
@@ -641,8 +630,7 @@ final class AnsiRenderer {
       // Transitioning to empty needs a reset; keep gap rewrites reset-free.
       return null;
     }
-    final encoded = _encodeStyleTransition(from, to, resetFirst: false);
-    return encoded;
+    return _encodeStyleTransition(from, to);
   }
 
   static bool _isAscii(String text) {
@@ -654,14 +642,8 @@ final class AnsiRenderer {
 
   // ---- Style encoding ----------------------------------------------------
 
-  String _encodeStyleTransition(
-    CellStyle? from,
-    CellStyle to, {
-    required bool resetFirst,
-  }) {
-    if (resetFirst || from == null || from == CellStyle.none) {
-      return _encodeStyle(to, resetFirst: resetFirst);
-    }
+  String _encodeStyleTransition(CellStyle? from, CellStyle to) {
+    if (from == null || from == CellStyle.none) return _encodeStyle(to);
 
     final params = <String>[];
     _appendColorDelta(
@@ -708,9 +690,8 @@ final class AnsiRenderer {
     return _sgr(params);
   }
 
-  String _encodeStyle(CellStyle style, {required bool resetFirst}) {
+  String _encodeStyle(CellStyle style) {
     final params = <String>[];
-    if (resetFirst) params.add('0');
     _appendStyleSetParams(params, style);
     return _sgr(params);
   }

@@ -9,6 +9,13 @@ KeyEvent _char(String char, [Set<KeyModifier> modifiers = const {}]) {
   return KeyEvent(KeyCode.char(char), modifiers: modifiers);
 }
 
+class _CollectingSink implements TuiEventSink {
+  final events = <TuiEvent>[];
+
+  @override
+  void add(TuiEvent event) => events.add(event);
+}
+
 void main() {
   group('TextEditingKeymap', () {
     test('default single-line map resolves common editing chords', () {
@@ -88,6 +95,33 @@ void main() {
       expect(
         keymap.resolve(_code(KeyCode.home)),
         TextEditingKeyAction.moveLineStart,
+      );
+    });
+
+    // Pins the limitation the `chat` doc now states outright. Alt+Enter on a
+    // legacy (non-CSI-u) terminal — Terminal.app, xterm, gnome-terminal — is
+    // bare ESC CR, which the parser cannot tell from Escape-then-Enter, so it
+    // reports a bare Enter and the composer SUBMITS. If a parser change ever
+    // makes Alt survive that byte pair, this test fails and the doc must be
+    // revisited rather than quietly becoming true again.
+    test('chat map submits on a legacy terminal Alt+Enter (ESC CR)', () {
+      final sink = _CollectingSink();
+      InputParser()
+        ..feed(const <int>[0x1B, 0x0D], sink)
+        ..flush(sink);
+
+      expect(sink.events, hasLength(1));
+      final event = sink.events.single as KeyEvent;
+      expect(event.code, KeyCode.enter);
+      expect(
+        event.modifiers,
+        isEmpty,
+        reason: 'ESC CR is ambiguous with Escape-then-Enter; alt is dropped',
+      );
+      expect(
+        TextEditingKeymap.chat.resolve(event),
+        TextEditingKeyAction.submit,
+        reason: 'so the chat preset submits, it does not insert a newline',
       );
     });
 

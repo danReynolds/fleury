@@ -373,4 +373,49 @@ void main() {
     expect(json.state['valid'], isFalse);
     expect(json.state['sourceLength'], 4);
   });
+
+  // JsonView's internal ListView needs a bounded height. In a Column the cross
+  // child gets an unbounded one, and the list threw a StateError naming a
+  // widget the caller never wrote. `maxVisible` bounds it the same way
+  // TreeTable and FileBrowser do.
+  group('vertical bound', () {
+    testWidgets('renders inside a Column without throwing', (tester) {
+      tester.pumpWidget(
+        Column(
+          children: [
+            const Text('Payload'),
+            JsonView(value: const {'name': 'fleury', 'stars': 3}),
+          ],
+        ),
+      );
+      final out = tester.renderToString(
+        size: const CellSize(60, 24),
+        emptyMark: ' ',
+      );
+      expect(out, contains('Payload'));
+      expect(out, contains('name'));
+    });
+
+    testWidgets('maxVisible caps the rendered body rows', (tester) {
+      tester.pumpWidget(
+        Column(
+          children: [
+            const Text('Payload'),
+            JsonView(
+              value: const {'a': 1, 'b': 2, 'c': 3, 'd': 4, 'e': 5},
+              maxVisible: 3,
+            ),
+          ],
+        ),
+      );
+      final out = tester
+          .renderToString(size: const CellSize(60, 24), emptyMark: ' ')
+          .split('\n')
+          .where((line) => line.trim().isNotEmpty)
+          .toList();
+      // The header row plus exactly three JSON rows.
+      expect(out.length, 4);
+      expect(out.first, contains('Payload'));
+    });
+  });
 }

@@ -207,29 +207,25 @@ class _SelectState<T> extends State<Select<T>> {
     ); // resolved in-tree, threaded into the overlay
     _priorFocus = manager.focusedNode;
     final entry = OverlayEntry(
-      builder: (_) => Stack(
-        children: <Widget>[
-          AbsorbPointer(onTap: _dismiss, child: const SizedBox.expand()),
-          BoundsAnchor(
-            notifier: _bounds,
-            child: _SelectList<T>(
-              trapContentKey: _trapContentKey,
-              options: widget.options,
-              semanticLabel: widget.semanticLabel,
-              initialIndex: _initialIndex(),
-              appliedIndex: _appliedIndex(),
-              selectionStyle: theme.selectionStyle,
-              mutedStyle: theme.mutedStyle,
-              borderStyle: theme.borderStyle,
-              onHighlighted: widget.onHighlightChanged,
-              onPicked: (value) {
-                _close();
-                _commit(value);
-              },
-              onDismiss: _dismiss,
-            ),
-          ),
-        ],
+      builder: (_) => AnchoredFloat(
+        notifier: _bounds,
+        onTapOutside: _dismiss,
+        child: _SelectList<T>(
+          trapContentKey: _trapContentKey,
+          options: widget.options,
+          semanticLabel: widget.semanticLabel,
+          initialIndex: _initialIndex(),
+          appliedIndex: _appliedIndex(),
+          selectionStyle: theme.selectionStyle,
+          mutedStyle: theme.mutedStyle,
+          borderStyle: theme.borderStyle,
+          onHighlighted: widget.onHighlightChanged,
+          onPicked: (value) {
+            _close();
+            _commit(value);
+          },
+          onDismiss: _dismiss,
+        ),
       ),
     );
     _entry = entry;
@@ -983,10 +979,15 @@ class _SelectListState<T> extends State<_SelectList<T>> {
   @override
   Widget build(BuildContext context) {
     Focus.maybeOf(context); // Rebuild list/item semantics when focus moves.
+    // Cells, not code units: a CJK or emoji label is wider than its length.
+    final widths = MediaQuery.textPolicyOf(context).widths;
     var labelWidth = 0;
     for (final o in widget.options) {
-      final labelLength = sanitizeOptionLabel(o.label).length;
-      if (labelLength > labelWidth) labelWidth = labelLength;
+      final cells = const DefaultWidthResolver().widthOfText(
+        sanitizeOptionLabel(o.label),
+        widths,
+      );
+      if (cells > labelWidth) labelWidth = cells;
     }
     // Leading marker (2 cells: check + space) plus the label.
     final width = labelWidth + 2;
@@ -1031,79 +1032,83 @@ class _SelectListState<T> extends State<_SelectList<T>> {
             child: Focus(
               focusNode: _focus,
               autofocus: true,
-              // Popup supplies the float contract: opaque fill, frame, and chrome
-              // semantics, so the app underneath can't bleed through.
-              child: Container.framed(
-                border: BoxBorder(style: widget.borderStyle),
-                child: SizedBox(
-                  width: width,
-                  height: widget.options.length,
-                  child: ListView.builder(
-                    controller: _list,
-                    selectionActive: true,
-                    itemCount: widget.options.length,
-                    itemBuilder: (_, i, selected) {
-                      final option = widget.options[i];
-                      // A width-1 marker keeps every row aligned and within the
-                      // computed panel width (a width-2 glyph would wrap).
-                      final marker = i == widget.appliedIndex ? '• ' : '  ';
-                      final safeLabel = sanitizeOptionLabel(option.label);
-                      final text = '$marker$safeLabel';
-                      final row = option.enabled
-                          ? MouseRegion(
-                              onEnter: () {
-                                if (_list.selectedIndex != i) {
-                                  _list.selectedIndex = i;
-                                }
-                              },
-                              child: GestureDetector(
-                                onTap: () => _pick(i),
-                                child: Text(
-                                  text,
-                                  style: selected
-                                      ? widget.selectionStyle
-                                      : CellStyle.none,
+              // Container.framed supplies the opaque fill and the frame, so
+              // the app underneath can't bleed through;
+              // SelectionArea.disabled says the option labels are chrome, not
+              // copyable content.
+              child: SelectionArea.disabled(
+                child: Container.framed(
+                  border: BoxBorder(style: widget.borderStyle),
+                  child: SizedBox(
+                    width: width,
+                    height: widget.options.length,
+                    child: ListView.builder(
+                      controller: _list,
+                      selectionActive: true,
+                      itemCount: widget.options.length,
+                      itemBuilder: (_, i, selected) {
+                        final option = widget.options[i];
+                        // A width-1 marker keeps every row aligned and within the
+                        // computed panel width (a width-2 glyph would wrap).
+                        final marker = i == widget.appliedIndex ? '• ' : '  ';
+                        final safeLabel = sanitizeOptionLabel(option.label);
+                        final text = '$marker$safeLabel';
+                        final row = option.enabled
+                            ? MouseRegion(
+                                onEnter: () {
+                                  if (_list.selectedIndex != i) {
+                                    _list.selectedIndex = i;
+                                  }
+                                },
+                                child: GestureDetector(
+                                  onTap: () => _pick(i),
+                                  child: Text(
+                                    text,
+                                    style: selected
+                                        ? widget.selectionStyle
+                                        : CellStyle.none,
+                                  ),
                                 ),
-                              ),
-                            )
-                          : Text(text, style: widget.mutedStyle);
-                      return Semantics(
-                        role: SemanticRole.menuItem,
-                        label: safeLabel,
-                        value: option.value,
-                        enabled: option.enabled,
-                        focused: _focus.hasFocus && selected,
-                        selected: selected,
-                        checked: i == widget.appliedIndex,
-                        actions: option.enabled
-                            ? const <SemanticAction>{
-                                SemanticAction.select,
-                                SemanticAction.activate,
-                              }
-                            : const <SemanticAction>{},
-                        state: SemanticState({
-                          'menuDepth': 0,
-                          'menuItemIndex': i,
-                          'menuItemPosition': i + 1,
-                          'menuItemCount': widget.options.length,
-                          'entryKind': 'option',
-                          'applied': i == widget.appliedIndex,
-                        }),
-                        onAction: (action) {
-                          if (!option.enabled) return;
-                          switch (action) {
-                            case SemanticAction.select:
-                            case SemanticAction.activate:
-                              _list.selectedIndex = i;
-                              _pick(i);
-                              return;
-                            case _:
-                              return;
-                          }
-                        },
-                        child: row,
-                      );
-                    },
+                              )
+                            : Text(text, style: widget.mutedStyle);
+                        return Semantics(
+                          role: SemanticRole.menuItem,
+                          label: safeLabel,
+                          value: option.value,
+                          enabled: option.enabled,
+                          focused: _focus.hasFocus && selected,
+                          selected: selected,
+                          checked: i == widget.appliedIndex,
+                          actions: option.enabled
+                              ? const <SemanticAction>{
+                                  SemanticAction.select,
+                                  SemanticAction.activate,
+                                }
+                              : const <SemanticAction>{},
+                          state: SemanticState({
+                            'menuDepth': 0,
+                            'menuItemIndex': i,
+                            'menuItemPosition': i + 1,
+                            'menuItemCount': widget.options.length,
+                            'entryKind': 'option',
+                            'applied': i == widget.appliedIndex,
+                          }),
+                          onAction: (action) {
+                            if (!option.enabled) return;
+                            switch (action) {
+                              case SemanticAction.select:
+                              case SemanticAction.activate:
+                                _list.selectedIndex = i;
+                                _pick(i);
+                                return;
+                              case _:
+                                return;
+                            }
+                          },
+                          child: row,
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),

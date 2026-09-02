@@ -1,165 +1,64 @@
+import 'package:fleury/src/rendering/width_policy.dart';
 import 'package:fleury/src/terminal/capabilities.dart';
 import 'package:fleury/src/terminal/terminal_probe.dart';
 import 'package:test/test.dart';
 
-class _FakeTransport implements TerminalProbeTransport {
-  _FakeTransport(this.reply);
-  final List<int> reply;
-  String? sent;
-
-  @override
-  Future<List<int>> request(String bytes, {required Duration timeout}) async {
-    sent = bytes;
-    return reply;
-  }
-}
-
-class _ThrowingTransport implements TerminalProbeTransport {
-  @override
-  Future<List<int>> request(String bytes, {required Duration timeout}) async {
-    throw StateError('write failed');
-  }
-}
-
-/// A full-battery reply: [ambiguous] columns for the three ambiguous-class
-/// glyphs (in battery order), width 1 for everything else, then the DA1 stop
-/// sentinel.
-List<int> _batteryReply(List<int> ambiguous) {
-  var ambiguousIndex = 0;
-  final columns = <int>[
-    for (final glyph in widthProbeBattery)
-      glyph.probeClass == WidthProbeClass.ambiguous
-          ? ambiguous[ambiguousIndex++]
-          : 2,
-  ];
-  return '${columns.map((c) => '\x1B[1;${c}R').join()}\x1B[?62;4c'.codeUnits;
-}
-
 void main() {
-  group('probeAmbiguousWidth', () {
-    test(
-      'reports narrow when every representative advanced one column',
-      () async {
-        final transport = _FakeTransport(_batteryReply(<int>[2, 2, 2]));
-        expect(await probeAmbiguousWidth(transport), AmbiguousCharWidth.narrow);
-        expect(
-          transport.sent,
-          allOf(
-            contains('─'),
-            contains('α'),
-            contains('°'),
-            contains('\x1B[6n'),
+  group('evidencedAmbiguousCharWidth', () {
+    // The agreement rule has exactly one implementation
+    // (deriveTextPresentationPolicy); this reads its verdict back out as the
+    // legacy two-state capability. `ambiguousWidthFromMeasurements` used to
+    // re-derive the same rule beside it, which is how the renderer's pin gate
+    // and the reported width could have drifted apart.
+    AmbiguousCharWidth? forWidths(Map<String, int> widths) =>
+        evidencedAmbiguousCharWidth(
+          deriveTextPresentationPolicy(
+            measurements: WidthMeasurements.of(widths),
           ),
-          reason:
-              'ambiguous agreement spans three blocks — box drawing alone '
-              'is the glyph most likely to be special-cased narrow',
         );
-      },
-    );
 
-    test(
-      'reports wide when every representative advanced two columns',
-      () async {
-        expect(
-          await probeAmbiguousWidth(
-            _FakeTransport(_batteryReply(<int>[3, 3, 3])),
-          ),
-          AmbiguousCharWidth.wide,
-        );
-      },
-    );
-
-    test(
-      'disagreement across representatives yields null, not a guess',
-      () async {
-        // The RFC 0019 §6.1 fixture: ─ narrow while α and ° measure wide — a
-        // terminal that special-cases box drawing. Agreement fails; the caller
-        // keeps the conservative default (wide → the renderer pin stays on).
-        expect(
-          await probeAmbiguousWidth(
-            _FakeTransport(_batteryReply(<int>[2, 3, 3])),
-          ),
-          isNull,
-        );
-      },
-    );
-
-    test('an anomalous zero advance fails agreement', () async {
-      expect(
-        await probeAmbiguousWidth(
-          _FakeTransport(_batteryReply(<int>[1, 2, 2])),
-        ),
-        isNull,
-        reason: 'a zero-advance measurement is recorded raw and rejected here',
-      );
-    });
-
-    test('returns null when only a DA reply lands (no CPR)', () async {
-      final reply = '\x1B[?62;4c'.codeUnits;
-      expect(await probeAmbiguousWidth(_FakeTransport(reply)), isNull);
-    });
-
-    test('a truncated batch yields null (atomicity)', () async {
-      // One CPR for a battery of many: unattributable, discarded whole.
-      final reply = '\x1B[1;2R\x1B[?62;4c'.codeUnits;
-      expect(await probeAmbiguousWidth(_FakeTransport(reply)), isNull);
-    });
-
-    test('finds valid CPRs even when an aborted CSI abuts them', () async {
-      // A malformed CSI whose parameter run is terminated by the NEXT escape:
-      // the parser must not step over that second ESC. Guards the
-      // `_cursorReportColumns` `i = j - 1` resume fix.
-      final reply = <int>[
-        ...'\x1B[9'.codeUnits,
-        ..._batteryReply(<int>[2, 2, 2]),
-      ];
-      expect(
-        await probeAmbiguousWidth(_FakeTransport(reply)),
-        AmbiguousCharWidth.narrow,
-      );
-    });
-
-    test('returns null on no reply (timeout)', () async {
-      expect(await probeAmbiguousWidth(_FakeTransport(const <int>[])), isNull);
-    });
-
-    test('swallows a transport failure and reports null', () async {
-      expect(await probeAmbiguousWidth(_ThrowingTransport()), isNull);
-    });
-  });
-
-  group('ambiguousWidthFromMeasurements', () {
     test('derives from measurements without a transport', () {
       expect(
-        ambiguousWidthFromMeasurements(
-          WidthMeasurements.of(const {
-            'boxDrawing': 1,
-            'greekAlpha': 1,
-            'degreeSign': 1,
-          }),
-        ),
+        forWidths(const {'boxDrawing': 1, 'greekAlpha': 1, 'degreeSign': 1}),
         AmbiguousCharWidth.narrow,
       );
       expect(
-        ambiguousWidthFromMeasurements(
-          WidthMeasurements.of(const {
-            'boxDrawing': 2,
-            'greekAlpha': 2,
-            'degreeSign': 2,
-          }),
-        ),
+        forWidths(const {'boxDrawing': 2, 'greekAlpha': 2, 'degreeSign': 2}),
         AmbiguousCharWidth.wide,
       );
       expect(
-        ambiguousWidthFromMeasurements(const WidthMeasurements.empty()),
+        evidencedAmbiguousCharWidth(deriveTextPresentationPolicy()),
         isNull,
+        reason: 'the spec default is not evidence',
       );
       expect(
-        ambiguousWidthFromMeasurements(
-          WidthMeasurements.of(const {'boxDrawing': 1}),
-        ),
+        forWidths(const {'boxDrawing': 1}),
         isNull,
         reason: 'missing representatives block agreement',
+      );
+      expect(
+        forWidths(const {'boxDrawing': 1, 'greekAlpha': 2, 'degreeSign': 1}),
+        isNull,
+        reason: 'disagreement is unknown, never a guess',
+      );
+    });
+
+    test('an environment override is evidence too', () {
+      expect(
+        evidencedAmbiguousCharWidth(
+          deriveTextPresentationPolicy(
+            environment: const {'FLEURY_AMBIGUOUS_WIDTH': 'narrow'},
+          ),
+        ),
+        AmbiguousCharWidth.narrow,
+      );
+      expect(
+        evidencedAmbiguousCharWidth(
+          deriveTextPresentationPolicy(
+            environment: const {'FLEURY_AMBIGUOUS_WIDTH': 'wide'},
+          ),
+        ),
+        AmbiguousCharWidth.wide,
       );
     });
   });
@@ -191,6 +90,82 @@ void main() {
         AmbiguousCharWidth.wide,
         reason: 'safe default when unset',
       );
+    });
+  });
+
+  group('the probe battery gate (audit 4.e)', () {
+    test('an ambiguous-width override does not silence the other axes', () {
+      // FLEURY_AMBIGUOUS_WIDTH pins ONE axis of the policy (RFC 0019 6.6).
+      // The battery measures four classes in a single round trip; emoji
+      // presentation, variation sequences and ZWJ clustering are knowable
+      // only by measuring, and no environment variable answered them.
+      expect(
+        widthProbeIsPermittedByEnvironment(const {
+          'FLEURY_AMBIGUOUS_WIDTH': 'narrow',
+        }),
+        isTrue,
+      );
+      expect(
+        widthProbeIsPermittedByEnvironment(const {
+          'FLEURY_AMBIGUOUS_WIDTH': 'wide',
+        }),
+        isTrue,
+      );
+    });
+
+    test('the pinned axis still comes from the environment, not the probe', () {
+      // The probe runs and measures ambiguous as WIDE; the override says
+      // narrow and wins, while the emoji axis takes the measured value.
+      final resolved = deriveTextPresentationPolicy(
+        measurements: WidthMeasurements.of(const {
+          'boxDrawing': 2,
+          'greekAlpha': 2,
+          'degreeSign': 2,
+          'slightSmile': 1,
+          'grinningFace': 1,
+          'man': 1,
+          'woman': 1,
+          'boy': 1,
+        }),
+        environment: const {'FLEURY_AMBIGUOUS_WIDTH': 'narrow'},
+      );
+      expect(resolved.policy.widths.ambiguous, CellWidth.one);
+      expect(
+        resolved.sourceOf(WidthAxis.ambiguous),
+        WidthDecisionSource.environment,
+      );
+      expect(resolved.policy.widths.emojiPresentation, CellWidth.one);
+      expect(
+        resolved.sourceOf(WidthAxis.emojiPresentation),
+        WidthDecisionSource.probe,
+      );
+    });
+
+    test('the kill switch is its own variable, not an axis value', () {
+      for (final off in const ['0', 'off', 'false', 'no', 'OFF']) {
+        expect(
+          widthProbeIsPermittedByEnvironment({'FLEURY_WIDTH_PROBE': off}),
+          isFalse,
+          reason: 'FLEURY_WIDTH_PROBE=$off stops the whole round trip',
+        );
+      }
+      expect(
+        widthProbeIsPermittedByEnvironment(const {'FLEURY_WIDTH_PROBE': '1'}),
+        isTrue,
+      );
+    });
+
+    test('an ASCII glyph tier emits no ambiguous glyphs, so it skips', () {
+      expect(
+        widthProbeIsPermittedByEnvironment(const {
+          'FLEURY_GLYPH_TIER': 'ascii',
+        }),
+        isFalse,
+      );
+    });
+
+    test('an unconstrained environment probes', () {
+      expect(widthProbeIsPermittedByEnvironment(const {}), isTrue);
     });
   });
 }

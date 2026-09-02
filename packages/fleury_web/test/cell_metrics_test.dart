@@ -260,6 +260,66 @@ void main() {
     },
   );
 
+  test('DomCellMetrics invalidates when the device pixel ratio changes', () {
+    // Dragging a window between displays of different DPR at the SAME CSS
+    // size fires no ResizeObserver entry, no window resize and no font event.
+    // But the cell box is snapped with devicePixelRatio, so cssCellWidth, the
+    // grid's letter-spacing compensation and the pinned block-glyph widths all
+    // go stale — the glyphs drift out of the cells the hit-test maps against.
+    // A `(resolution: Ndppx)` media query is the only signal the platform
+    // offers, and it is static: it must be re-armed at each new ratio.
+    final container = web.document.createElement('div');
+    container.setAttribute(
+      'style',
+      'position:absolute;left:0;top:0;width:120px;height:40px;'
+          'font-family:monospace;font-size:16px;line-height:16px;',
+    );
+    web.document.body!.appendChild(container);
+
+    final queries = <String>[];
+    final targets = <web.EventTarget>[];
+    final metrics = DomCellMetrics(
+      container: container,
+      matchMedia: (query) {
+        queries.add(query);
+        final target = web.document.createElement('div');
+        targets.add(target);
+        return target;
+      },
+    );
+    addTearDown(() {
+      metrics.dispose();
+      container.parentNode?.removeChild(container);
+    });
+
+    metrics.measure();
+    var dirtyCount = 0;
+    metrics.startObserving(() => dirtyCount += 1);
+
+    expect(queries, hasLength(1));
+    expect(queries.single, contains('dppx'));
+    expect(queries.single, contains('resolution'));
+    expect(metrics.isDirty, isFalse);
+
+    targets.single.dispatchEvent(web.Event('change'));
+    expect(dirtyCount, 1);
+    expect(metrics.isDirty, isTrue);
+
+    // Re-armed at the ratio just moved to: the NEXT change is heard too.
+    // Without this a single display swap would deafen the watch for good.
+    expect(queries, hasLength(2));
+    metrics.measure();
+    targets.last.dispatchEvent(web.Event('change'));
+    expect(dirtyCount, 2);
+    expect(metrics.isDirty, isTrue);
+
+    metrics.dispose();
+    for (final target in targets) {
+      target.dispatchEvent(web.Event('change'));
+    }
+    expect(dirtyCount, 2, reason: 'a disposed watcher must go quiet');
+  });
+
   test('DomCellMetrics invalidates on browser metrics signals', () {
     final container = web.document.createElement('div');
     container.setAttribute(

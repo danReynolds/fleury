@@ -302,6 +302,43 @@ void main() {
     expect(selected.state.messageId, 'm3');
   });
 
+  testWidgets('a capped transcript keeps following across evictions', (tester) {
+    // The out-of-box shape: followTail defaults to true and MessageList keys
+    // every row by identity. Trimming the transcript to a cap on each arrival
+    // is a head-drop plus a tail-append — the count never changes. Following
+    // died on the first eviction and the view silently froze while new
+    // messages kept arriving.
+    final controller = MessageListController();
+    List<MessageEntry> window(int from) => [
+      for (var i = from; i < from + 3; i++)
+        MessageEntry(id: 'm$i', role: MessageRole.user, text: 'msg $i'),
+    ];
+    Widget app(int from) => MessageList(
+      semanticLabel: 'Conversation',
+      controller: controller,
+      messages: window(from),
+    );
+
+    tester.pumpWidget(app(0));
+    tester.render(size: const CellSize(40, 3));
+    expect(controller.followTail, isTrue);
+    expect(controller.selectedIndex, 2);
+
+    tester.pumpWidget(app(1)); // m0 evicted, m3 appended
+    tester.render(size: const CellSize(40, 3));
+    expect(controller.followTail, isTrue, reason: 'first eviction');
+    expect(controller.selectedIndex, 2, reason: 'following moved to m3');
+
+    tester.pumpWidget(app(2)); // m1 evicted, m4 appended
+    tester.render(size: const CellSize(40, 3));
+    expect(controller.followTail, isTrue, reason: 'still following');
+    final list = tester.semantics().single(
+      role: SemanticRole.messageList,
+      label: 'Conversation',
+    );
+    expect(list.state.selectedMessageId, 'm4');
+  });
+
   testWidgets('reorder preserves selection and refreshed message state', (
     tester,
   ) {
@@ -708,5 +745,105 @@ void main() {
       row.states,
       contains('message role assistant, status streaming, author Agent, id m1'),
     );
+  });
+
+  // Follow-mode is coupled to the cursor by `ListController.selectedIndex`
+  // (documented on `pinToBottom`): moving off the last item stops following,
+  // returning to it resumes. Activation is just a selection move, so it must
+  // ride that coupling rather than fight it — a pre-emptive `followTail = false`
+  // is undone for the tail row and redundant for every other row, and only
+  // leaks a spurious "not following" notification in between.
+  group('activation rides the tail-follow coupling', () {
+    const messages = [
+      MessageEntry(id: 'm1', role: MessageRole.user, text: 'first'),
+      MessageEntry(id: 'm2', role: MessageRole.assistant, text: 'second'),
+      MessageEntry(id: 'm3', role: MessageRole.assistant, text: 'third'),
+    ];
+
+    testWidgets('activating the newest row keeps following, with no flap', (
+      tester,
+    ) async {
+      final controller = MessageListController(followTail: true);
+      tester.pumpWidget(
+        MessageList(
+          semanticLabel: 'Conversation',
+          controller: controller,
+          messages: messages,
+        ),
+      );
+      tester.render(size: const CellSize(60, 6));
+      expect(controller.followTail, isTrue);
+      expect(controller.selectedIndex, 2);
+
+      final seen = <bool>[];
+      controller.addListener(() => seen.add(controller.followTail));
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.activate,
+        role: SemanticRole.message,
+        label: 'third',
+      );
+      expect(result.completed, isTrue);
+      expect(controller.selectedIndex, 2);
+      expect(
+        controller.followTail,
+        isTrue,
+        reason: 'the newest row is the tail — following stays engaged',
+      );
+      expect(
+        seen,
+        isNot(contains(false)),
+        reason:
+            'no observer may ever see following transiently disengaged when '
+            'the cursor never left the tail',
+      );
+    });
+
+    testWidgets('activating an older row disengages following', (tester) async {
+      final controller = MessageListController(followTail: true);
+      tester.pumpWidget(
+        MessageList(
+          semanticLabel: 'Conversation',
+          controller: controller,
+          messages: messages,
+        ),
+      );
+      tester.render(size: const CellSize(60, 6));
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.activate,
+        role: SemanticRole.message,
+        label: 'first',
+      );
+      expect(result.completed, isTrue);
+      expect(controller.selectedIndex, 0);
+      expect(controller.followTail, isFalse);
+    });
+
+    testWidgets('copying the newest row keeps following, with no flap', (
+      tester,
+    ) async {
+      final controller = MessageListController(followTail: true);
+      tester.pumpWidget(
+        MessageList(
+          semanticLabel: 'Conversation',
+          controller: controller,
+          messages: messages,
+        ),
+      );
+      tester.render(size: const CellSize(60, 6));
+
+      final seen = <bool>[];
+      controller.addListener(() => seen.add(controller.followTail));
+
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.copy,
+        role: SemanticRole.message,
+        label: 'third',
+      );
+      expect(result.completed, isTrue);
+      expect(controller.followTail, isTrue);
+      expect(seen, isNot(contains(false)));
+    });
   });
 }

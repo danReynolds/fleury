@@ -1119,6 +1119,7 @@ Uint8List encodeInputEvent(TuiEvent event) {
     case TextInputEvent e:
       w.u8(_evText);
       w.str(e.text);
+      w.boolean(e.repeat);
     case TextCompositionEvent e:
       w.u8(_evComposition);
       w.u8(e.kind.index);
@@ -1212,7 +1213,7 @@ TuiEvent decodeInputEvent(Uint8List bytes) {
         sequence: sequence,
       );
     case _evText:
-      event = TextInputEvent(r.str());
+      event = TextInputEvent(r.str(), repeat: r.boolean());
     case _evComposition:
       final kind = r.enumValue(TextCompositionEventKind.values);
       final text = r.boolean() ? r.str() : null;

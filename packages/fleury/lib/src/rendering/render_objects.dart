@@ -440,8 +440,15 @@ class RenderText extends RenderObject
     int maxCol,
     int lineStartOffset,
   ) {
-    // Reserve one cell for the ellipsis when truncating.
-    final contentMaxCol = ellipsize ? maxCol - 1 : maxCol;
+    // Reserve what the ellipsis actually measures on this surface. `…` is
+    // East Asian Ambiguous, so an ambiguous-wide terminal draws it two cells
+    // wide; reserving one there put the ellipsis one column past the box —
+    // where it was degraded to `?` at the buffer edge, or overwrote the
+    // neighbour otherwise (RFC 0019).
+    final ellipsisWidth = ellipsize
+        ? _widthResolver.widthOfGrapheme(_ellipsis, _policy)
+        : 0;
+    final contentMaxCol = maxCol - ellipsisWidth;
     var col = startCol;
     var off = lineStartOffset;
     for (final grapheme in line.characters) {
@@ -463,16 +470,23 @@ class RenderText extends RenderObject
       col += w;
       off += grapheme.length;
     }
-    if (ellipsize && col < maxCol) {
+    // `col + ellipsisWidth <= maxCol`, not `col < maxCol`: the ellipsis must
+    // fit INSIDE the box, never half-in with its continuation cell over the
+    // neighbour.
+    if (ellipsize && col + ellipsisWidth <= maxCol) {
       buffer.writeGrapheme(
         CellOffset(col, row),
-        '…',
+        _ellipsis,
         style: _style,
         widthResolver: _widthResolver,
         policy: _policy,
       );
     }
   }
+
+  /// The overflow marker. `…` is East Asian Ambiguous — one cell under the
+  /// spec policy, two on a surface that measured ambiguous glyphs wide.
+  static const String _ellipsis = '…';
 
   /// Greedy word-wrap. Splits on explicit `\n` first, then within each
   /// paragraph splits on single spaces and greedily packs tokens onto
@@ -972,23 +986,79 @@ class RenderPadding extends RenderObject
 /// Draws a four-sided box around its child using box-drawing
 /// graphemes.
 ///
-/// Reserves exactly one cell on each side of the child for the border
-/// itself, so a child of size `(w, h)` becomes `(w+2, h+2)` overall.
+/// Reserves one glyph-width of frame on each side of the child, so a child
+/// of size `(w, h)` becomes `(w + 2·edge, h + 2)` overall. [edgeWidth] is
+/// what the frame's own glyphs measure on this surface (RFC 0019): box
+/// drawing is East Asian Ambiguous, so a terminal whose probe measured
+/// ambiguous glyphs wide draws `│` two columns wide and the frame really
+/// does cost two columns a side. Reserving one there would leave the right
+/// half of every edge glyph overlapping the child.
+///
 /// When the assigned size is too small for a meaningful border
-/// (`w < 2` or `h < 2`), the border is skipped and the child paints
+/// (`w < 2·edge` or `h < 2`), the border is skipped and the child paints
 /// in place — this avoids garbled glyphs when a layout collapses.
 class RenderBorder extends RenderObject implements RenderObjectWithSingleChild {
-  RenderBorder({required BoxBorder border, RenderObject? child})
-    : _border = border {
+  RenderBorder({
+    required BoxBorder border,
+    TextPresentationPolicy textPolicy = TextPresentationPolicy.spec,
+    RenderObject? child,
+  }) : _border = border,
+       _textPolicy = textPolicy {
+    _edgeWidth = _measureEdge();
     if (child != null) this.child = child;
   }
+
+  static const WidthResolver _widthResolver = DefaultWidthResolver();
 
   BoxBorder _border;
   BoxBorder get border => _border;
   set border(BoxBorder value) {
     if (_border == value) return;
     _border = value;
+    _updateEdgeWidth();
     markNeedsPaintOnly();
+  }
+
+  TextPresentationPolicy _textPolicy;
+  TextPresentationPolicy get textPolicy => _textPolicy;
+  set textPolicy(TextPresentationPolicy value) {
+    if (_textPolicy == value) return;
+    _textPolicy = value;
+    _updateEdgeWidth();
+    markNeedsPaintOnly();
+  }
+
+  /// Columns one vertical/corner glyph occupies on this surface: the frame's
+  /// thickness, in both the reserved geometry and the paint.
+  late int _edgeWidth;
+  int get edgeWidth => _edgeWidth;
+
+  /// The widest glyph in the set decides the frame thickness. Every built-in
+  /// set is uniform (all six glyphs share a width class), but taking the max
+  /// keeps a mixed set from writing past the columns reserved for it.
+  int _measureEdge() {
+    final g = BorderGlyphs.forStyle(_border.style);
+    final widths = _textPolicy.widths;
+    var edge = 1;
+    for (final glyph in <String>[
+      g.topLeft,
+      g.topRight,
+      g.bottomLeft,
+      g.bottomRight,
+      g.horizontal,
+      g.vertical,
+    ]) {
+      final w = _widthResolver.widthOfGrapheme(glyph, widths);
+      if (w > edge) edge = w;
+    }
+    return edge;
+  }
+
+  void _updateEdgeWidth() {
+    final next = _measureEdge();
+    if (next == _edgeWidth) return;
+    _edgeWidth = next;
+    markNeedsLayout();
   }
 
   RenderObject? _child;
@@ -1006,34 +1076,64 @@ class RenderBorder extends RenderObject implements RenderObjectWithSingleChild {
     }
   }
 
+  // A framed box is its child plus one frame glyph on every side. The
+  // horizontal budget loses two glyph WIDTHS; rows are unaffected by width,
+  // so the vertical budget always loses two.
+  static int? _less(int? extent, int n) =>
+      extent == null ? null : (extent > n ? extent - n : 0);
+
+  int get _frameCols => 2 * _edgeWidth;
+
+  @override
+  int computeMaxIntrinsicWidth(int? height) =>
+      (child?.computeMaxIntrinsicWidth(_less(height, 2)) ?? 0) + _frameCols;
+
+  @override
+  int computeMinIntrinsicWidth(int? height) =>
+      (child?.computeMinIntrinsicWidth(_less(height, 2)) ?? 0) + _frameCols;
+
+  @override
+  int computeMaxIntrinsicHeight(int? width) =>
+      (child?.computeMaxIntrinsicHeight(_less(width, _frameCols)) ?? 0) + 2;
+
+  @override
+  int computeMinIntrinsicHeight(int? width) =>
+      (child?.computeMinIntrinsicHeight(_less(width, _frameCols)) ?? 0) + 2;
+
+  /// Whether the last layout reserved room for the frame; paint follows it.
+  var _framed = false;
+
   @override
   CellSize performLayout(CellConstraints constraints) {
     int max0(int v) => v < 0 ? 0 : v;
     final c = _child;
+    final frameCols = _frameCols;
     if (c == null) {
       // Border-only box collapses to its minimum useful size.
-      return constraints.constrain(const CellSize(2, 2));
+      return constraints.constrain(CellSize(frameCols, 2));
     }
     final maxC = constraints.maxCols;
     final maxR = constraints.maxRows;
-    // A meaningful border needs at least 3 cells per axis (one for
-    // each edge plus one for content). When the parent gives us less,
-    // hand the child the full constraints and skip the frame at paint
-    // time — better to show the content than to swallow it.
-    final canFrame = (maxC == null || maxC >= 3) && (maxR == null || maxR >= 3);
+    // A meaningful border needs room for both edges plus one cell of
+    // content. When the parent gives us less, hand the child the full
+    // constraints and skip the frame at paint time — better to show the
+    // content than to swallow it.
+    final canFrame =
+        (maxC == null || maxC >= frameCols + 1) && (maxR == null || maxR >= 3);
+    _framed = canFrame;
     if (!canFrame) {
       final childSize = c.layout(constraints);
       return constraints.constrain(childSize);
     }
     final childConstraints = CellConstraints(
-      minCols: max0(constraints.minCols - 2),
-      maxCols: maxC == null ? null : max0(maxC - 2),
+      minCols: max0(constraints.minCols - frameCols),
+      maxCols: maxC == null ? null : max0(maxC - frameCols),
       minRows: max0(constraints.minRows - 2),
       maxRows: maxR == null ? null : max0(maxR - 2),
     );
     final childSize = c.layout(childConstraints);
     return constraints.constrain(
-      CellSize(childSize.cols + 2, childSize.rows + 2),
+      CellSize(childSize.cols + frameCols, childSize.rows + 2),
     );
   }
 
@@ -1047,7 +1147,12 @@ class RenderBorder extends RenderObject implements RenderObjectWithSingleChild {
     final w = size.cols;
     final h = size.rows;
     final c = _child;
-    if (w < 2 || h < 2) {
+    final edge = _edgeWidth;
+    // The layout decision, not a re-derivation from the painted size: the two
+    // thresholds disagreed by one cell (two on an ambiguous-wide surface), so
+    // a box laid out unframed at full width could still get a frame painted
+    // over its content.
+    if (!_framed) {
       // Too small for a real border — paint the child in place if
       // any, skip the frame entirely.
       c?.paint(
@@ -1060,30 +1165,50 @@ class RenderBorder extends RenderObject implements RenderObjectWithSingleChild {
     }
     final g = BorderGlyphs.forStyle(_border.style);
     final cs = _border.cellStyle;
+    final widths = _textPolicy.widths;
     final left = offset.col;
     final top = offset.row;
-    final right = offset.col + w - 1;
+    // Leading column of the RIGHT edge: its glyph runs to the box's last
+    // column, so it starts one glyph width in from there.
+    final right = offset.col + w - edge;
     final bottom = offset.row + h - 1;
 
-    buffer.writeGrapheme(CellOffset(left, top), g.topLeft, style: cs);
-    buffer.writeGrapheme(CellOffset(right, top), g.topRight, style: cs);
-    buffer.writeGrapheme(CellOffset(left, bottom), g.bottomLeft, style: cs);
-    buffer.writeGrapheme(CellOffset(right, bottom), g.bottomRight, style: cs);
+    void write(int col, int row, String glyph) => buffer.writeGrapheme(
+      CellOffset(col, row),
+      glyph,
+      style: cs,
+      policy: widths,
+    );
 
-    for (var col = left + 1; col < right; col++) {
-      buffer.writeGrapheme(CellOffset(col, top), g.horizontal, style: cs);
-      buffer.writeGrapheme(CellOffset(col, bottom), g.horizontal, style: cs);
+    write(left, top, g.topLeft);
+    write(right, top, g.topRight);
+    write(left, bottom, g.bottomLeft);
+    write(right, bottom, g.bottomRight);
+
+    // The horizontal runs tile the span between the corners. A span that is
+    // not a whole number of glyphs (possible only when a glyph is wider than
+    // one cell) keeps its remainder blank in the border's own style rather
+    // than letting a glyph overhang a corner — an overhang would evict the
+    // corner's leading cell and punch a hole in the frame.
+    var col = left + edge;
+    for (; col + edge <= right; col += edge) {
+      write(col, top, g.horizontal);
+      write(col, bottom, g.horizontal);
+    }
+    for (; col < right; col++) {
+      write(col, top, ' ');
+      write(col, bottom, ' ');
     }
     for (var row = top + 1; row < bottom; row++) {
-      buffer.writeGrapheme(CellOffset(left, row), g.vertical, style: cs);
-      buffer.writeGrapheme(CellOffset(right, row), g.vertical, style: cs);
+      write(left, row, g.vertical);
+      write(right, row, g.vertical);
     }
 
-    final innerOffset = CellOffset(offset.col + 1, offset.row + 1);
+    final innerOffset = CellOffset(offset.col + edge, offset.row + 1);
     c?.paint(
       buffer,
       innerOffset,
-      screenOffset: (screenOffset ?? offset) + const CellOffset(1, 1),
+      screenOffset: (screenOffset ?? offset) + CellOffset(edge, 1),
       clipRect: clipRect,
     );
   }
