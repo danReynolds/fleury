@@ -325,9 +325,9 @@ Each carries the reason it was parked. Anything here can be pulled up if you dis
   **Parked because:** the removal is easy; the **identity work** isn't — matching `KeySequence.alt.char('1')` needs the physical code's base-layout twin, the same fallback the RFC defines for kitty. ✎ Two corrections: the "pinned by a test" claim is wrong (a code-conditioned fix leaves it green), and a **concrete victim exists** — `tabs.dart:296` ships alt+1..9 as a documented first-party shortcut, dead on browser, and on macOS it types junk into whatever has focus. Pull up if the tabs shortcut matters for launch.
   **Notes:**
 
-- [ ] **11.e** `P2` Harness latches the frame from a seam `runApp` removed — `fleury_tester.dart:107`
+- [x] **11.e** `P2` Harness latches the frame from a seam `runApp` removed — `fleury_tester.dart:107`
   **Parked because:** tied to 11.b — fix them together or the harness still can't see it. See D2.
-  **Notes:**
+  **Notes:** LANDED with 11.b. The harness no longer owns a latch seam at all: it calls the one `installKeyboardLatch` every host calls, and publishes the frame clock from `render()` — the analog of `FrameDriver.onLatchInput`, at the same point in the frame. Red before: "with no ticker running, renders expire edges" and "the live clock follows ticker registration" both failed, because renders under the tester never latched. The comment asserting the opposite is gone.
 
 ---
 
@@ -422,10 +422,10 @@ Ordered by what I'd take first. Each names **what makes it hard**, so we can dec
   **✎ Worse than reported:** `runApp` has `dup2`'d fds into capture pipes, and pause/resume is wired *only* into the handoff path — so an `inheritStdio` child inherits the **pipe, not the terminal**. `$EDITOR` draws into the log buffer while eating raw keystrokes: the app just looks frozen. The only workaround costs stray-output capture, remote-handle resolution, and the supervisor.
   **Notes:**
 
-- [ ] **11.b** `P1` Sampled input edges destroyed by any unrelated render — `keyboard_state.dart:538`
+- [x] **11.b** `P1` Sampled input edges destroyed by any unrelated render — `keyboard_state.dart:538`
   **Hard because:** the fix (expire on the ticker clock, not the render clock) needs a **fallback for apps with no tickers** — that hook never runs, so the sampled API would report stale taps forever. And do **not** re-add a second publisher; that was the earlier regression. Pairs with **11.e** or no test can see it.
   **Honest scope:** sampled lane only, and Asteroids is accidentally immune (its fire is also a regular binding) — so nothing shipped visibly breaks. What breaks is a frozen documented API for anyone following the RFC.
-  **Notes:**
+  **Notes:** LANDED. `publishLatch` now takes a `KeyboardLatchClock` and the session arbitrates: whichever clock is not live returns the standing snapshot untouched, so there is never a second publisher — only a different one. The live clock is read off `TickerScheduler.isActive` (a live query, not a mirrored flag), so the ticker owns expiry while any ticker is registered and the frame clock takes back over the instant the last one unregisters — that IS the ticker-free fallback, and it is tested in both directions. Both clocks are wired in one place (`installKeyboardLatch`), used by `runApp`, `runTuiSurface` and the harness alike. Red before: "a tap survives an unrelated render before the tick" — Expected true, Actual false. RFC 0020 §7 carries an amendment note; guide + `Keyboard` dartdoc say "tick", not "frame".
 
 - [x] **6.c** `P1` ✎ A float outlives its anchor when the anchor stops painting — `bounds.dart:169`
   **Hard because:** the frame-epoch fix needs two things measured first — the epoch must be correct under **retained-paint replay** (a cached boundary republishes for a subtree that didn't run), and the staleness threshold must be **one frame, not zero**, since an anchor painting before its observer legitimately reads last frame's bounds. Get either wrong and every float flickers.
@@ -480,7 +480,7 @@ Not bugs. These are the structural reasons nearly every P0/P1 above was invisibl
 - [ ] **D2** The harness diverges from production in three ways, each hiding a specific P1 — `fleury_tester.dart:107, 960, 985`
   Latches the frame on a seam production removed (hides **11.b**); builds surface capabilities with no text-policy knob, so every widget test runs on spec (hides **4.a**); opts its overlay out of entry repaint boundaries, so the production blit path is unreachable (hides **7.a**). In two cases the harness carries a comment asserting the opposite. ✎ Narrowing: tests *can* reach a non-spec surface by wrapping their own scope — the gap is coverage, not capability.
   **Fix:** match the latch cadence (or document the divergence honestly), expose a `textPolicy` knob, and force entry boundaries on in any 7.a test.
-  **Notes:**
+  **Notes:** PARTIAL — the latch divergence is closed (see **11.e**); the `textPolicy` knob (4.a) and the entry-boundary opt-out (7.a) are untouched. The general lesson the fix encodes: the harness now shares the host wiring function rather than reimplementing it, so this class of divergence cannot be introduced by editing only one side.
 
 - [ ] **D3** Two gates don't cover what their names imply — `profiling/bin/selection_gate.dart:82`; `alloc-gate` vs `framework.dart:854`
   `selection-gate` never constructs a `SelectionArea` — it drives a bare scope and delegate — so it catches registration regressions and **none** of the behavioural defects in §05, and 5.g's fix cannot move it. Separately `alloc-gate` did not flag a 20–50× per-invalidation allocation on every `setState`.
@@ -563,7 +563,7 @@ order I would take them in.
 1. **13.b + 13.c + 13.d** — serve is a pillar and the app-first axis has zero coverage. Send the handshake at accept (no protocol change); 13.d reuses the 4001 close + reason the client now shows.
 2. **3.c** — an app that opens `$EDITOR` looks frozen under the default `runApp` (the child inherits the capture pipe). Agent TUIs open editors. Needs the session-driver API decision.
 3. **3.a** (then **2.d**) — dispatch Ctrl+Z first, suspend only if unhandled, like Ctrl+C. Both keymaps and the samples advertise `^Z undo`.
-4. **11.b + 11.e** — a frozen, documented API that fails for anyone following the RFC; the harness cannot see it until 11.e.
+4. ~~**11.b + 11.e**~~ **LANDED** — edges now expire on the consumer's clock (the ticker), with the frame clock as the ticker-free fallback; one live publisher, arbitrated by the session. The harness shares the host wiring and latches at `render()`, so a widget test sees it.
 5. **10.a** — serve and programmatic writes are unshielded; shift-select + Delete removes the wrong span. Direction (a): sanitize at the model boundary, document dropped bytes.
 6. **15.a** (ack) — under the default dev supervisor a Ctrl+C on an app with a >300 ms teardown takes the force path. The raw-death half is fixed.
 7. **16.g** — irreversible after publish. Ratify lockstep and add "republish both satellites" to the launch checklist.
