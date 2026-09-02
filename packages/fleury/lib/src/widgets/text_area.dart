@@ -12,7 +12,6 @@
 // Not yet here: soft-wrap and a blinking cursor (solid while focused for now).
 
 import 'dart:async' show scheduleMicrotask, unawaited;
-import 'dart:collection' show Queue;
 
 import 'package:characters/characters.dart';
 
@@ -156,9 +155,6 @@ class TextArea extends StatefulWidget {
 
 class _TextAreaState extends State<TextArea>
     implements TextInputClaimant, PasteEventClaimant, TextCompositionClaimant {
-  static const int _maxQueuedPasteCodeUnits = 64 * 1024;
-  static const int _maxQueuedPasteSegments = 256;
-
   late TextEditingController _controller;
   late FocusNode _focusNode;
   late String _lastNotifiedText;
@@ -166,20 +162,27 @@ class _TextAreaState extends State<TextArea>
   bool _ownsFocusNode = false;
   bool _hovered = false;
   FormControlRegistration? _formRegistration;
-  TextPasteSession? _pasteSession;
-  final Queue<({String text, bool isFinal})> _queuedPasteSegments =
-      Queue<({String text, bool isFinal})>();
-  int _queuedPasteCodeUnits = 0;
-  bool _pasteActive = false;
-  bool _pasteFinalReceived = false;
-  bool _pasteTransactionStarted = false;
-  bool _currentPasteSegmentIsFinal = false;
-  bool _pasteChunkScheduled = false;
-  int? _activePasteId;
-  int _pasteInsertedLength = 0;
-  int _pasteTotalLength = 0;
-  TextPasteProgress _pasteProgress = TextPasteProgress.inactive;
-  int _pasteGeneration = 0;
+  late final TextPasteDriver _paste = TextPasteDriver(
+    policy: () => widget.pastePolicy,
+    documentLength: () => _controller.text.length,
+    applyEdit: (text, {required coalesce}) =>
+        _controller.paste(text, coalesce: coalesce),
+    isAttached: () => mounted,
+    onProgressChanged: () => setState(() {}),
+    schedulePostFrame: _schedulePasteStep,
+  );
+
+  /// Runs the driver's next step after the frame this one was requested from.
+  /// Falls back to a microtask outside a runtime (a bare unit-test tree has no
+  /// binding, so nothing would ever drain the post-frame queue).
+  void _schedulePasteStep(void Function() step) {
+    final binding = TuiBinding.maybeOf(context);
+    if (binding == null) {
+      scheduleMicrotask(step);
+      return;
+    }
+    binding.addPostFrameCallback((_) => step());
+  }
 
   @override
   void initState() {
@@ -208,7 +211,7 @@ class _TextAreaState extends State<TextArea>
   void didUpdateWidget(TextArea oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.controller != oldWidget.controller) {
-      _discardScheduledPaste();
+      _paste.discard();
       _controller.removeListener(_onChange);
       if (_ownsController) _controller.dispose();
       _controller = widget.controller ?? TextEditingController();
@@ -238,7 +241,7 @@ class _TextAreaState extends State<TextArea>
     if ((!widget.enabled || widget.readOnly) &&
         (oldWidget.enabled != widget.enabled ||
             oldWidget.readOnly != widget.readOnly)) {
-      _discardScheduledPaste();
+      _paste.discard();
     }
     _formRegistration?.updateClaim(
       this,
@@ -284,210 +287,6 @@ class _TextAreaState extends State<TextArea>
 
   bool get _canEdit => widget.enabled && !widget.readOnly;
 
-  void _discardScheduledPaste() {
-    _pasteGeneration++;
-    _pasteSession = null;
-    _queuedPasteSegments.clear();
-    _queuedPasteCodeUnits = 0;
-    _pasteActive = false;
-    _pasteFinalReceived = false;
-    _pasteTransactionStarted = false;
-    _currentPasteSegmentIsFinal = false;
-    _pasteChunkScheduled = false;
-    _activePasteId = null;
-    _pasteInsertedLength = 0;
-    _pasteTotalLength = 0;
-    _pasteProgress = TextPasteProgress.inactive;
-  }
-
-  /// Finishes an accepted paste before the next editing transaction.
-  ///
-  /// Frame chunking is a responsiveness policy, not permission to discard the
-  /// unapplied tail when a second paste or key action arrives.
-  void _cancelScheduledPaste() {
-    if (!_pasteActive) {
-      _discardScheduledPaste();
-      return;
-    }
-    final pending = StringBuffer();
-    final session = _pasteSession;
-    if (session != null) {
-      final remaining = session.takeRemaining();
-      if (remaining != null) pending.write(remaining);
-    }
-    while (_queuedPasteSegments.isNotEmpty) {
-      pending.write(_queuedPasteSegments.removeFirst().text);
-    }
-    final text = pending.toString();
-    if (text.isNotEmpty) _applyBulkPaste(text);
-    _completePaste();
-  }
-
-  void _startPaste(PasteEvent event, String text) {
-    final continuesActivePaste =
-        _pasteActive &&
-        !event.isFirst &&
-        !_pasteFinalReceived &&
-        event.pasteId == _activePasteId;
-    if (!continuesActivePaste) {
-      _cancelScheduledPaste();
-      _pasteActive = true;
-      _activePasteId = event.pasteId;
-    }
-
-    _queuedPasteSegments.addLast((text: text, isFinal: event.isFinal));
-    _queuedPasteCodeUnits += text.length;
-    _pasteTotalLength += text.length;
-    if (event.isFinal) _pasteFinalReceived = true;
-
-    final generation = _pasteGeneration;
-    if (_pasteSession == null) _applyNextPasteChunk(generation);
-    _drainQueuedPasteToBound(generation);
-    _updatePasteProgress();
-    if (mounted) setState(() {});
-    _scheduleNextPasteChunk(generation);
-  }
-
-  bool get _hasPendingPasteWork =>
-      _pasteSession != null || _queuedPasteSegments.isNotEmpty;
-
-  bool get _pasteQueueIsOverBound =>
-      _queuedPasteCodeUnits > _maxQueuedPasteCodeUnits ||
-      _queuedPasteSegments.length > _maxQueuedPasteSegments;
-
-  void _drainQueuedPasteToBound(int generation) {
-    // TuiEventSink is synchronous, so it cannot signal parser backpressure.
-    // Collapse only the active tail under pressure, in one controller edit,
-    // then promote a queued parser segment to the separately bounded active
-    // slot. This avoids hundreds of synchronous 2 KiB edits per segment.
-    while (_pasteQueueIsOverBound &&
-        generation == _pasteGeneration &&
-        _pasteActive) {
-      if (_pasteSession == null && !_activateNextPasteSegment(generation)) {
-        break;
-      }
-      if (!_pasteQueueIsOverBound || generation != _pasteGeneration) break;
-      final session = _pasteSession!;
-      final remaining = session.takeRemaining();
-      if (remaining != null) _applyBulkPaste(remaining);
-      _pasteSession = null;
-      if (_currentPasteSegmentIsFinal) _completePaste();
-    }
-  }
-
-  bool _activateNextPasteSegment(int generation) {
-    while (_pasteSession == null &&
-        _pasteActive &&
-        generation == _pasteGeneration) {
-      if (_queuedPasteSegments.isEmpty) return false;
-      final segment = _queuedPasteSegments.removeFirst();
-      _queuedPasteCodeUnits -= segment.text.length;
-      _currentPasteSegmentIsFinal = segment.isFinal;
-      if (segment.text.isEmpty) {
-        if (segment.isFinal) _completePaste();
-        continue;
-      }
-      _pasteSession = TextPasteSession(
-        text: segment.text,
-        policy: widget.pastePolicy,
-      );
-    }
-    return _pasteSession != null;
-  }
-
-  void _applyBulkPaste(String text) {
-    _controller.paste(text, coalesce: _pasteTransactionStarted);
-    _pasteTransactionStarted = true;
-    _pasteInsertedLength += text.length;
-    _updatePasteProgress();
-  }
-
-  bool _applyNextPasteChunk(int generation) {
-    if (!mounted || generation != _pasteGeneration || !_pasteActive) {
-      return false;
-    }
-
-    // Skip empty phase markers iteratively. A paste whose last data segment
-    // lands exactly on the parser byte cap ends with an empty `end` event that
-    // must close (not add to) the undo transaction.
-    while (_pasteActive && generation == _pasteGeneration) {
-      if (_pasteSession == null && !_activateNextPasteSegment(generation)) {
-        return false;
-      }
-      if (!_pasteActive || generation != _pasteGeneration) return false;
-
-      final session = _pasteSession!;
-      final chunk = session.nextChunk();
-      if (chunk == null) {
-        _pasteSession = null;
-        if (_currentPasteSegmentIsFinal) _completePaste();
-        continue;
-      }
-
-      _controller.paste(chunk, coalesce: _pasteTransactionStarted);
-      _pasteTransactionStarted = true;
-      _pasteInsertedLength += chunk.length;
-      if (session.isComplete) {
-        _pasteSession = null;
-        if (_currentPasteSegmentIsFinal) _completePaste();
-      }
-      _updatePasteProgress();
-      return true;
-    }
-    return false;
-  }
-
-  void _completePaste() {
-    _pasteGeneration++;
-    _pasteSession = null;
-    _queuedPasteSegments.clear();
-    _queuedPasteCodeUnits = 0;
-    _pasteActive = false;
-    _pasteFinalReceived = false;
-    _pasteTransactionStarted = false;
-    _currentPasteSegmentIsFinal = false;
-    _pasteChunkScheduled = false;
-    _activePasteId = null;
-    _pasteInsertedLength = 0;
-    _pasteTotalLength = 0;
-    _pasteProgress = TextPasteProgress.inactive;
-  }
-
-  void _updatePasteProgress() {
-    _pasteProgress = _pasteActive
-        ? TextPasteProgress(
-            active: true,
-            insertedLength: _pasteInsertedLength,
-            totalLength: _pasteTotalLength,
-          )
-        : TextPasteProgress.inactive;
-  }
-
-  void _scheduleNextPasteChunk(int generation) {
-    if (generation != _pasteGeneration ||
-        !_pasteActive ||
-        !_hasPendingPasteWork ||
-        _pasteChunkScheduled) {
-      return;
-    }
-    _pasteChunkScheduled = true;
-    final binding = TuiBinding.maybeOf(context);
-    if (binding == null) {
-      scheduleMicrotask(() => _runScheduledPasteChunk(generation));
-      return;
-    }
-    binding.addPostFrameCallback((_) => _runScheduledPasteChunk(generation));
-  }
-
-  void _runScheduledPasteChunk(int generation) {
-    if (!mounted || generation != _pasteGeneration) return;
-    _pasteChunkScheduled = false;
-    _applyNextPasteChunk(generation);
-    _updatePasteProgress();
-    if (mounted) setState(() {});
-    _scheduleNextPasteChunk(generation);
-  }
-
   String _redactClipboardText(String text) {
     return text.characters
         .map((grapheme) => grapheme == '\n' ? '\n' : '•')
@@ -506,7 +305,7 @@ class _TextAreaState extends State<TextArea>
     if (!widget.enabled) return KeyEventResult.ignored;
     // Clipboard actions read selection/text synchronously. They must observe
     // all paste content the area has already accepted, not a rendered prefix.
-    _cancelScheduledPaste();
+    _paste.finish();
     final selected = _controller.selectedText;
     if (selected.isEmpty) return KeyEventResult.ignored;
     if (cut && !_canEdit) return KeyEventResult.handled;
@@ -536,7 +335,7 @@ class _TextAreaState extends State<TextArea>
         return;
       case SemanticAction.clear:
         if (_canEdit) {
-          _cancelScheduledPaste();
+          _paste.finish();
           _controller.clear();
         }
         return;
@@ -545,7 +344,7 @@ class _TextAreaState extends State<TextArea>
         return;
       case SemanticAction.submit:
         if (widget.enabled && widget.onSubmit != null) {
-          _cancelScheduledPaste();
+          _paste.finish();
           widget.onSubmit!(_controller.text);
         }
         return;
@@ -559,7 +358,7 @@ class _TextAreaState extends State<TextArea>
   /// the text character by character.
   void _handleSemanticSetValue(Object? value) {
     if (!_canEdit) return;
-    _cancelScheduledPaste();
+    _paste.finish();
     _controller.text = value?.toString() ?? '';
   }
 
@@ -567,7 +366,7 @@ class _TextAreaState extends State<TextArea>
   KeyEventResult onTextInput(String text) {
     if (!widget.enabled) return KeyEventResult.ignored;
     if (widget.readOnly) return KeyEventResult.handled;
-    _cancelScheduledPaste();
+    _paste.finish();
     _controller.insert(text, coalesce: true);
     return KeyEventResult.handled;
   }
@@ -576,7 +375,7 @@ class _TextAreaState extends State<TextArea>
   KeyEventResult onPaste(String text) {
     if (!widget.enabled) return KeyEventResult.ignored;
     if (widget.readOnly) return KeyEventResult.handled;
-    _startPaste(
+    _paste.start(
       PasteEvent(text),
       TextEditingModel.normalizeMultilineInput(text),
     );
@@ -587,7 +386,7 @@ class _TextAreaState extends State<TextArea>
   KeyEventResult onPasteEvent(PasteEvent event) {
     if (!widget.enabled) return KeyEventResult.ignored;
     if (widget.readOnly) return KeyEventResult.handled;
-    _startPaste(event, TextEditingModel.normalizeMultilineInput(event.text));
+    _paste.start(event, TextEditingModel.normalizeMultilineInput(event.text));
     return KeyEventResult.handled;
   }
 
@@ -595,7 +394,7 @@ class _TextAreaState extends State<TextArea>
   KeyEventResult onTextCompositionUpdate(String text) {
     if (!widget.enabled) return KeyEventResult.ignored;
     if (widget.readOnly) return KeyEventResult.handled;
-    _cancelScheduledPaste();
+    _paste.finish();
     _controller.updateComposingText(text);
     return KeyEventResult.handled;
   }
@@ -604,7 +403,7 @@ class _TextAreaState extends State<TextArea>
   KeyEventResult onTextCompositionCommit(String? text) {
     if (!widget.enabled) return KeyEventResult.ignored;
     if (widget.readOnly) return KeyEventResult.handled;
-    _cancelScheduledPaste();
+    _paste.finish();
     _controller.commitComposing(text: text);
     return KeyEventResult.handled;
   }
@@ -613,7 +412,7 @@ class _TextAreaState extends State<TextArea>
   KeyEventResult onTextCompositionCancel() {
     if (!widget.enabled) return KeyEventResult.ignored;
     if (widget.readOnly) return KeyEventResult.handled;
-    _cancelScheduledPaste();
+    _paste.finish();
     _controller.cancelComposing();
     return KeyEventResult.handled;
   }
@@ -630,7 +429,7 @@ class _TextAreaState extends State<TextArea>
     if (action == null) {
       // An ancestor binding may synchronously inspect the controller or unmount
       // this area. Preserve input ordering before bubbling any later key.
-      _cancelScheduledPaste();
+      _paste.finish();
       return KeyEventResult.ignored;
     }
     switch (action) {
@@ -640,93 +439,93 @@ class _TextAreaState extends State<TextArea>
         return _copyOrCutSelection(cut: true);
       case TextEditingKeyAction.undo:
         if (widget.readOnly) return KeyEventResult.handled;
-        _cancelScheduledPaste();
+        _paste.finish();
         _controller.undo();
         return KeyEventResult.handled;
       case TextEditingKeyAction.redo:
         if (widget.readOnly) return KeyEventResult.handled;
-        _cancelScheduledPaste();
+        _paste.finish();
         _controller.redo();
         return KeyEventResult.handled;
       case TextEditingKeyAction.backspace:
         if (!_canEdit) return KeyEventResult.handled;
-        _cancelScheduledPaste();
+        _paste.finish();
         _controller.backspace();
         return KeyEventResult.handled;
       case TextEditingKeyAction.deleteForward:
         if (!_canEdit) return KeyEventResult.handled;
-        _cancelScheduledPaste();
+        _paste.finish();
         _controller.delete();
         return KeyEventResult.handled;
       case TextEditingKeyAction.killToLineEnd:
         if (!_canEdit) return KeyEventResult.handled;
-        _cancelScheduledPaste();
+        _paste.finish();
         _controller.killToLineEnd(captureToKillRing: _captureKillRingText);
         return KeyEventResult.handled;
       case TextEditingKeyAction.killToLineStart:
         if (!_canEdit) return KeyEventResult.handled;
-        _cancelScheduledPaste();
+        _paste.finish();
         _controller.killToLineStart(captureToKillRing: _captureKillRingText);
         return KeyEventResult.handled;
       case TextEditingKeyAction.killWordLeft:
         if (!_canEdit) return KeyEventResult.handled;
-        _cancelScheduledPaste();
+        _paste.finish();
         _controller.killWordLeft(captureToKillRing: _captureKillRingText);
         return KeyEventResult.handled;
       case TextEditingKeyAction.yank:
         if (!_canEdit) return KeyEventResult.handled;
-        _cancelScheduledPaste();
+        _paste.finish();
         _controller.yank();
         return KeyEventResult.handled;
       case TextEditingKeyAction.moveLeft:
-        _cancelScheduledPaste();
+        _paste.finish();
         _controller.moveCursorLeft(extend: event.hasShift);
         return KeyEventResult.handled;
       case TextEditingKeyAction.moveRight:
-        _cancelScheduledPaste();
+        _paste.finish();
         _controller.moveCursorRight(extend: event.hasShift);
         return KeyEventResult.handled;
       case TextEditingKeyAction.moveWordLeft:
-        _cancelScheduledPaste();
+        _paste.finish();
         _controller.moveCursorWordLeft(extend: event.hasShift);
         return KeyEventResult.handled;
       case TextEditingKeyAction.moveWordRight:
-        _cancelScheduledPaste();
+        _paste.finish();
         _controller.moveCursorWordRight(extend: event.hasShift);
         return KeyEventResult.handled;
       case TextEditingKeyAction.moveUp:
-        _cancelScheduledPaste();
+        _paste.finish();
         _controller.moveCursorLineUp(extend: event.hasShift);
         return KeyEventResult.handled;
       case TextEditingKeyAction.moveDown:
-        _cancelScheduledPaste();
+        _paste.finish();
         _controller.moveCursorLineDown(extend: event.hasShift);
         return KeyEventResult.handled;
       case TextEditingKeyAction.moveLineStart:
-        _cancelScheduledPaste();
+        _paste.finish();
         _controller.moveCursorToLineStart(extend: event.hasShift);
         return KeyEventResult.handled;
       case TextEditingKeyAction.moveLineEnd:
-        _cancelScheduledPaste();
+        _paste.finish();
         _controller.moveCursorToLineEnd(extend: event.hasShift);
         return KeyEventResult.handled;
       case TextEditingKeyAction.moveDocumentStart:
-        _cancelScheduledPaste();
+        _paste.finish();
         _controller.moveCursorToStart(extend: event.hasShift);
         return KeyEventResult.handled;
       case TextEditingKeyAction.moveDocumentEnd:
-        _cancelScheduledPaste();
+        _paste.finish();
         _controller.moveCursorToEnd(extend: event.hasShift);
         return KeyEventResult.handled;
       case TextEditingKeyAction.insertNewline:
         if (!_canEdit) return KeyEventResult.handled;
-        _cancelScheduledPaste();
+        _paste.finish();
         _controller.insert('\n');
         return KeyEventResult.handled;
       case TextEditingKeyAction.escape:
         // Escape still bubbles when no callback is installed, but an ancestor
         // may inspect the value or unmount this area synchronously.
-        _cancelScheduledPaste();
+        _paste.finish();
         if (widget.onEscape != null) {
           widget.onEscape!();
           return KeyEventResult.handled;
@@ -735,7 +534,7 @@ class _TextAreaState extends State<TextArea>
       case TextEditingKeyAction.submit:
         // Submission may bubble to an app-level binding. It must observe the
         // complete accepted transaction whether or not this area has a callback.
-        _cancelScheduledPaste();
+        _paste.finish();
         if (widget.onSubmit != null) {
           widget.onSubmit!(_controller.text);
           return KeyEventResult.handled;
@@ -744,14 +543,14 @@ class _TextAreaState extends State<TextArea>
       case TextEditingKeyAction.previousVertical:
       case TextEditingKeyAction.nextVertical:
       case TextEditingKeyAction.acceptCompletion:
-        _cancelScheduledPaste();
+        _paste.finish();
         return KeyEventResult.ignored;
     }
   }
 
   @override
   void dispose() {
-    _discardScheduledPaste();
+    _paste.discard();
     _controller.removeListener(_onChange);
     if (_ownsController) _controller.dispose();
     _focusNode.textInputClaimant = null;
@@ -817,9 +616,9 @@ class _TextAreaState extends State<TextArea>
         'readOnly': widget.readOnly,
         'redactedValue': widget.clipboardPolicy == TextClipboardPolicy.redacted,
         ...textClipboardSemanticState(widget.clipboardPolicy),
-        'pasteInProgress': _pasteProgress.active,
-        'pasteInsertedLength': _pasteProgress.insertedLength,
-        'pasteTotalLength': _pasteProgress.totalLength,
+        'pasteInProgress': _paste.progress.active,
+        'pasteInsertedLength': _paste.progress.insertedLength,
+        'pasteTotalLength': _paste.progress.totalLength,
       }),
       onAction: _handleSemanticAction,
       onSetValue: _handleSemanticSetValue,

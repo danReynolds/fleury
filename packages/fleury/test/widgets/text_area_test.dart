@@ -348,6 +348,142 @@ void main() {
       expect(ctl.text, '');
     });
 
+    // The requirement chunking exists to satisfy is NOT "one chunk per frame"
+    // — that mechanism is what made a paste quadratic. It is: the paste lands
+    // incrementally so a key arriving mid-paste is still observed, and the
+    // total work stays linear in the paste size. The next three tests pin
+    // that, and the one above keeps pinning the progress semantics.
+    testWidgets('a key arriving mid-paste is observed and keeps the tail', (
+      tester,
+    ) {
+      final ctl = TextEditingController();
+      final submitted = <String>[];
+      tester.pumpWidget(
+        TextArea(
+          controller: ctl,
+          autofocus: true,
+          keymap: TextEditingKeymap.chat,
+          onSubmit: submitted.add,
+        ),
+      );
+
+      // Large enough that many steps are still pending after the first one —
+      // the case the old one-chunk-per-frame contract was standing in for.
+      final payload = 'x' * (64 * 1024);
+      tester.paste(payload);
+      expect(
+        ctl.text.length,
+        lessThan(payload.length),
+        reason: 'the paste must still be in flight for this to mean anything',
+      );
+
+      // A key dispatched between two paste steps runs its handler, and the
+      // accepted-but-unapplied tail is finished first, never dropped.
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+
+      expect(submitted, [payload]);
+      expect(ctl.text, payload);
+      tester.pump();
+      tester.pump();
+      expect(ctl.text, payload, reason: 'no paste tail may land after submit');
+    });
+
+    testWidgets('a large paste costs a bounded number of edits and frames', (
+      tester,
+    ) {
+      final ctl = TextEditingController();
+      tester.pumpWidget(TextArea(controller: ctl, autofocus: true));
+
+      var edits = 0;
+      // What each edit hands to String.replaceRange: the whole document is
+      // rebuilt every time, so this sums the real copying cost of the paste.
+      var copiedCodeUnits = 0;
+      ctl.addListener(() {
+        edits++;
+        copiedCodeUnits += ctl.text.length;
+      });
+      // Exactly the hook FrameDriver installs (`() => requestFrame(...)`), so
+      // this counts the full frames a real runtime is forced to produce.
+      var frames = 0;
+      tester.binding.onPostFrameCallback = () => frames++;
+
+      final payload = ('${'x' * 63}\n' * 8192); // 512 KiB
+      final elapsed = Stopwatch()..start();
+      tester.paste(payload);
+      var pumps = 0;
+      while (ctl.text.length < payload.length && pumps < 4096) {
+        tester.pump();
+        pumps++;
+      }
+      elapsed.stop();
+
+      expect(ctl.text.length, payload.length, reason: 'the paste is lossless');
+      expect(
+        edits,
+        lessThan(24),
+        reason:
+            'a 512 KiB paste in 2 KiB chunks used to cost 256 model edits; '
+            'steps grow with the document, so it is now logarithmic',
+      );
+      expect(
+        frames,
+        lessThan(24),
+        reason: 'one full frame per 2 KiB chunk was the other half of 1.a',
+      );
+      expect(
+        copiedCodeUnits,
+        lessThan(4 * payload.length),
+        reason:
+            'total copying must be linear in the paste size — 256 chunks '
+            'against a growing document copied ~64 MiB for 512 KiB of text',
+      );
+      // Deliberately generous: this is a "is it still quadratic" tripwire,
+      // not a benchmark. The unfixed path needs several seconds here.
+      expect(elapsed.elapsed, lessThan(const Duration(seconds: 1)));
+    });
+
+    testWidgets('paste work per frame grows with the document', (tester) {
+      final ctl = TextEditingController();
+      tester.pumpWidget(
+        TextArea(
+          controller: ctl,
+          autofocus: true,
+          pastePolicy: const TextPastePolicy(
+            largePasteThreshold: 0,
+            chunkSize: 4,
+          ),
+        ),
+      );
+
+      final applied = <int>[];
+      var previous = 0;
+      ctl.addListener(() {
+        applied.add(ctl.text.length - previous);
+        previous = ctl.text.length;
+      });
+
+      tester.paste('a' * 256);
+      var pumps = 0;
+      while (ctl.text.length < 256 && pumps < 256) {
+        tester.pump();
+        pumps++;
+      }
+
+      expect(ctl.text.length, 256);
+      expect(
+        applied.first,
+        4,
+        reason: 'the first step stays one chunk, so text appears immediately',
+      );
+      expect(
+        applied,
+        [4, 4, 8, 16, 32, 64, 128],
+        reason:
+            'each step carries at least as much as the document it has to '
+            'copy — the amortization that makes the paste linear',
+      );
+    });
+
     testWidgets(
       'a rapid second paste preserves the first tail as a separate undo',
       (tester) {

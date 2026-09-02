@@ -337,10 +337,10 @@ Ordered by what I'd take first. Each names **what makes it hard**, so we can dec
 
 ### C1 · The two freezes *(take first — both are "app is dead" on a default path)*
 
-- [ ] **1.a** `P0` Frame-from-inside-frame is a microtask → uninterruptible isolate freeze — `frame_scheduler.dart:23`
+- [x] **1.a** `P0` Frame-from-inside-frame is a microtask → uninterruptible isolate freeze — `frame_scheduler.dart:23`
   **Hard because:** the ~6-line fix (`_inFrame` flag → `Timer.run`) is easy; deciding it's *safe* is not. It changes frame-ordering semantics — anything relying on "post-frame lands before the next I/O event" now interleaves with input — and it sits on the hot path under `alloc-gate`/`paint-gate` plus the serve timing gates. **And it is only half the problem:** the paste chunker is quadratic independently (controller-only edits, no rendering: 4/12/62 ms for 128/256/512 KiB), so the scheduler fix converts a freeze into a long janky paste. Second decision: cap chunk work by time, bulk-apply above a threshold, or lower the max paste size.
   **Measured:** 64 KiB → 254 ms, 128 KiB → 814 ms, 256 KiB → 3.1 s, 512 KiB → 12.4 s (~4× per doubling); 1 MiB segment ≈ 50 s. Starved isolate ignores **SIGINT, SIGTERM and SIGQUIT** — only SIGKILL, and nothing restores the terminal after it. Browser immune (rAF); **serve is affected**.
-  **Notes:** Scheduler half LANDED on this branch (30dc8b00): re-entrant zero-delay flush → Timer (macrotask); idle path unchanged. Pinned in frame_scheduler_test (+2) and integration/frame_chain_yields_test (+2), all red without the fix. Fast gates + wire-gate pass. serve-wire-live fails identically WITHOUT the fix at load avg 117 (parallel batch runs) — re-run quiet before PR. Chunker half NOT done: one-chunk-per-pump is pinned by text_area_test:316-349, so a per-frame budget is a contract change → open question 10.
+  **Notes:** Scheduler half LANDED on this branch (30dc8b00): re-entrant zero-delay flush → Timer (macrotask); idle path unchanged. Pinned in frame_scheduler_test (+2) and integration/frame_chain_yields_test (+2), all red without the fix. Fast gates + wire-gate pass. serve-wire-live fails identically WITHOUT the fix at load avg 117 (parallel batch runs) — re-run quiet before PR. Chunker half LANDED (fb25c811, with **N2** and **Q10**): each step applies at least the current document length as ONE coalesced edit, so the document grows geometrically — O(log n) edits and frames, linear total work. 512 KiB rendered: 8221 ms / 256 edits / 255 frames / 64.3 MiB copied → 53 ms / 9 / 8 / 1.0 MiB (~6.6 ms of work per frame). The duplicated state machine moved to `TextPasteDriver` in `editing/text_paste.dart`. text_area_test:316-349 did NOT have to change — its 8-char payload still takes 3 steps — but one-chunk-per-pump is no longer the contract; the real requirement (key observed mid-paste + bounded edits/frames/copying) is pinned by 3 new tests. Fast gates pass.
 
 - [x] **1.b** `P0` ✎ Stale selection offsets throw on Ctrl+C and disable the exit chord — `selectable_text_mixin.dart:465`
   **Hard because:** the one-line clamp stops the throw but leaves the *silent* sibling — when text **grows**, the wrong characters are copied with no error at all, which is quieter and arguably worse. The real fix is to stop caching flat offsets and re-resolve from the delegate's screen coordinates on content/geometry change — which must happen **once at invalidation, never inside the per-grapheme query**, or it lands on `paint-gate`. Shares its machinery with **5.f**; design once.
@@ -521,7 +521,7 @@ These block or shape work above and are not mine to answer:
 7. **11.d** — `AnimationPolicy`: ship it or cut it?
 8. **10.e / 10.d / 10.c** — forms and editing policy: hook vs document; undo granularity; draft retention.
 9. **6.a** — should `barrierDismissible` also mean click-outside?
- 10. **1.a (chunker)** — coalesce paste chunks per frame by a time budget? It cuts the residual quadratic cost but changes the one-chunk-per-pump contract that `text_area_test` pins.
+ 10. ~~**1.a (chunker)** — coalesce paste chunks per frame by a time budget?~~ ANSWERED and landed (fb25c811): coalesced by a *growing size* budget rather than a wall clock — the step is the current document length, which is deterministic, keeps total work linear (a wall-clock budget does not), and needs no machine calibration. `text_area_test:316-349` still passes unchanged.
 
 ---
 
@@ -531,8 +531,8 @@ Found by the batch agents in passing. Verified only to the extent stated; triage
 
 - [x] **N1** `P1` `WhichKey` remounts its entire subtree on every popup reveal — `which_key.dart:91` vs `:126` (returns `child` hidden, a `Stack` revealed → different runtimeType in the same slot → every `State` below is destroyed on every leader press that outlives `showDelay`). Measured `initState` ×2. Also the mechanism that makes 2.a deterministic in the shape the keyboard guide recommends. **Fix:** stable `Stack` with a conditionally-empty layer, or route the popup through the overlay.
   **Notes:** LANDED (WhichKey fix on this branch, on top of a new Stack.fit — loose/expand/passthrough): constant shape = passthrough Stack [expanding filler, app, Positioned popup]; app keeps its slot and its bare constraints, popup box = whole wrapped surface. Probe logged init,init,dispose on reveal before; init only after.
-- [ ] **N2** `P2` The paste chunker is quadratic independent of 1.a — controller-only edits (no render) measure 4/12/62 ms at 128/256/512 KiB, because every 2 KiB chunk re-copies the whole string (`replaceRange`) and `FrameDriver` forces a full frame per post-frame registration. Q10 covers the per-frame coalescing; the string copy is a separate (smaller) fix.
-  **Notes:**
+- [x] **N2** `P2` The paste chunker is quadratic independent of 1.a — controller-only edits (no render) measure 4/12/62 ms at 128/256/512 KiB, because every 2 KiB chunk re-copies the whole string (`replaceRange`) and `FrameDriver` forces a full frame per post-frame registration. Q10 covers the per-frame coalescing; the string copy is a separate (smaller) fix.
+  **Notes:** LANDED with 1.a's chunker half (fb25c811) — one fix covers both: batching chunks into one growing edit per frame removes the per-chunk string copy AND the per-chunk frame. Controller-only 512 KiB: 256 edits / 64.3 MiB copied → 9 edits / 1.0 MiB.
 - [x] **N3** `P2` `MessageListController.jumpToIndex` has 8.e's dead `followTail = false` pattern — `message_list.dart:155-166`; a tail index re-engages follow through the coupling.
   **Notes:** LANDED (4a11c50a): dead `followTail = false` deleted; pinned by the false→true flap seen through the controller notifications.
 - [x] **N4** `P2` Three more surfaces teach the reload-less browser command — `getting-started.mdx:273`, `guides/deployment.md:89`, `coming-from-flutter.md:90`. Same fix as 15.g's docs half.
@@ -567,7 +567,7 @@ order I would take them in.
 5. **10.a** — serve and programmatic writes are unshielded; shift-select + Delete removes the wrong span. Direction (a): sanitize at the model boundary, document dropped bytes.
 6. **15.a** (ack) — under the default dev supervisor a Ctrl+C on an app with a >300 ms teardown takes the force path. The raw-death half is fixed.
 7. **16.g** — irreversible after publish. Ratify lockstep and add "republish both satellites" to the launch checklist.
-8. **1.a chunker (Q10) + N2** — 512 KiB paste is still 12 s of work; N2's string copy is the small separable half.
+8. ~~**1.a chunker (Q10) + N2**~~ — DONE (fb25c811): 512 KiB paste is 53 ms, 9 edits, 8 frames.
 9. **4.a + 4.e** — the default state on ~19 of ~30 terminals; 4.e (an env var disabling the whole probe battery) is a plain bug.
 10. **2.e** — the note already says "do now regardless"; needs the timing window.
 11. **15.f, 15.h** — dev-loop correctness with well-shaped fixes (stale handle silently disables reload; supervisor starts even when it cannot supervise, paying double `main()` for nothing).
