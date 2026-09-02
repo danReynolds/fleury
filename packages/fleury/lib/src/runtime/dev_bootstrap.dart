@@ -980,5 +980,6 @@ String? devEarlyExitHint({
       '(bind a port, take a lock, read stdin) fails in the second.\n'
       '  Move it after runApp(), guard it, or run without the supervisor: '
       'FLEURY_HOT_RELOAD=0, or enableHotReload: false. '
-      '(hot-reload guide → "How it works")';
+      '(hot-reload guide → "How it works") '
+      'If the app is meant to exit right away, ignore this.';
 }
