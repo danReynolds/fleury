@@ -672,9 +672,13 @@ final class TextEditingModel {
     var index = 0;
     for (final grapheme in text.characters) {
       final next = index + grapheme.length;
-      if (next >= clamped) return index;
+      if (next >= clamped) {
+        GraphemeScanDebugStats.record(next);
+        return index;
+      }
       index = next;
     }
+    GraphemeScanDebugStats.record(text.length);
     return 0;
   }
 
@@ -684,9 +688,13 @@ final class TextEditingModel {
     var index = 0;
     for (final grapheme in text.characters) {
       final next = index + grapheme.length;
-      if (next > clamped) return next;
+      if (next > clamped) {
+        GraphemeScanDebugStats.record(next);
+        return next;
+      }
       index = next;
     }
+    GraphemeScanDebugStats.record(text.length);
     return text.length;
   }
 
@@ -696,15 +704,96 @@ final class TextEditingModel {
     var index = 0;
     for (final grapheme in text.characters) {
       final next = index + grapheme.length;
-      if (clamped == index || clamped == next) return clamped;
+      if (clamped == index || clamped == next) {
+        GraphemeScanDebugStats.record(next);
+        return clamped;
+      }
       if (clamped > index && clamped < next) {
+        GraphemeScanDebugStats.record(next);
         final before = clamped - index;
         final after = next - clamped;
         return before < after ? index : next;
       }
       index = next;
     }
+    GraphemeScanDebugStats.record(text.length);
     return text.length;
+  }
+}
+
+/// What one [GraphemeScanDebugStats] window observed.
+final class GraphemeScanStats {
+  const GraphemeScanStats({
+    required this.scanCount,
+    required this.codeUnitsScanned,
+    required this.widestScan,
+  });
+
+  static const empty = GraphemeScanStats(
+    scanCount: 0,
+    codeUnitsScanned: 0,
+    widestScan: 0,
+  );
+
+  /// Boundary resolutions performed in the window.
+  final int scanCount;
+
+  /// Code units of text those resolutions had to look at, summed.
+  final int codeUnitsScanned;
+
+  /// The widest single resolution, in code units.
+  final int widestScan;
+}
+
+/// Debug-only collector for how much text a grapheme-boundary resolution reads.
+///
+/// Boundary resolution sits on the per-keystroke path, so collection is opt-in:
+/// with no window open a resolution pays one predictable branch. What a window
+/// pins is the property that decides whether editing scales — a resolution must
+/// read the text AROUND the offset, never the document prefix before it. A scan
+/// that starts at 0 is O(offset), which makes every mid-document keystroke in a
+/// large [TextEditingValue] re-read everything above the caret: a latent
+/// quadratic that appends hide, because an append short-circuits on
+/// `offset == text.length`.
+final class GraphemeScanDebugStats {
+  GraphemeScanDebugStats._();
+
+  static bool _enabled = false;
+  static int _scanCount = 0;
+  static int _codeUnitsScanned = 0;
+  static int _widestScan = 0;
+
+  /// Opens a collection window, discarding anything recorded before it.
+  static void begin() {
+    _enabled = true;
+    _reset();
+  }
+
+  /// Closes the window and returns what it saw.
+  static GraphemeScanStats take() {
+    if (!_enabled) return GraphemeScanStats.empty;
+    final stats = GraphemeScanStats(
+      scanCount: _scanCount,
+      codeUnitsScanned: _codeUnitsScanned,
+      widestScan: _widestScan,
+    );
+    _enabled = false;
+    _reset();
+    return stats;
+  }
+
+  /// Records one boundary resolution that read [codeUnits] code units.
+  static void record(int codeUnits) {
+    if (!_enabled) return;
+    _scanCount += 1;
+    _codeUnitsScanned += codeUnits;
+    if (codeUnits > _widestScan) _widestScan = codeUnits;
+  }
+
+  static void _reset() {
+    _scanCount = 0;
+    _codeUnitsScanned = 0;
+    _widestScan = 0;
   }
 }
 
