@@ -19,7 +19,7 @@ import 'dart:io';
 /// is short enough to cut a real teardown short. One constant — the match is
 /// a silent string compare, so a drifted literal turns the ack into a no-op
 /// with no error anywhere.
-const String kDevSignalAckEvent = 'fleury.devSignalAck';
+const String kDevSignalAckEvent = 'fleury.signalAck';
 
 /// Tells a listening dev supervisor that [signal] was delivered to THIS
 /// process, so it does not have to forward its own copy.
