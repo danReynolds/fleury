@@ -41,6 +41,12 @@ import 'tui_binding.dart';
 
 /// A multi-line editable text widget. Pair with a [TextEditingController]
 /// to read/drive the text; newlines live in the text like any character.
+///
+/// Newlines are the only control rune a [TextArea] keeps. Everything else —
+/// `\r`, `\t`, ESC and the whole escape sequence behind it — is replaced when
+/// the text enters the model, so a row's characters and its painted cells stay
+/// the same index space. See [TextEditingController] for the rules and what an
+/// app reads back.
 class TextArea extends StatefulWidget {
   const TextArea({
     super.key,
@@ -779,9 +785,9 @@ class RenderTextArea extends RenderObject {
     WidthResolver widthResolver = const DefaultWidthResolver(),
     CellWidthPolicy policy = CellWidthPolicy.spec,
   }) : _focusNode = focusNode,
-       _text = _sanitize(text),
-       _selection = selection.normalizeForText(_sanitize(text)),
-       _placeholder = _sanitize(placeholder),
+       _text = _displayText(text),
+       _selection = selection.normalizeForText(_displayText(text)),
+       _placeholder = sanitizeMultiline(placeholder),
        _placeholderStyle = placeholderStyle,
        _style = style,
        _cursorStyle = cursorStyle,
@@ -791,8 +797,22 @@ class RenderTextArea extends RenderObject {
        _widthResolver = widthResolver,
        _policy = policy;
 
-  static String _sanitize(String value) =>
-      value.split('\n').map(sanitizeForDisplay).join('\n');
+  /// Identity fast path for model text.
+  ///
+  /// [value] arrives from a [TextEditingValue], which canonicalized it with
+  /// [sanitizeMultiline] on construction — the same rule this boundary used to
+  /// apply, now applied where it keeps the model's offsets and the painted
+  /// rows/columns in one index space. Sanitizing here as well would be dead
+  /// work; the assert holds the invariant instead.
+  static String _displayText(String value) {
+    assert(
+      isSanitizedMultiline(value),
+      'RenderTextArea was handed text that is not in canonical form. Model '
+      'text must be canonicalized at the model boundary (TextEditingValue), '
+      'not here, or offsets and painted cells disagree.',
+    );
+    return value;
+  }
 
   FocusNode _focusNode;
   String _text;
@@ -824,7 +844,7 @@ class RenderTextArea extends RenderObject {
   }
 
   set text(String value) {
-    final s = _sanitize(value);
+    final s = _displayText(value);
     if (s == _text) return;
     _text = s;
     _selection = _selection.normalizeForText(_text);
@@ -832,7 +852,9 @@ class RenderTextArea extends RenderObject {
   }
 
   set placeholder(String value) {
-    final sanitized = _sanitize(value);
+    // Placeholders come straight from the widget, not from the model, so they
+    // are still sanitized here — nothing indexes into them.
+    final sanitized = sanitizeMultiline(value);
     if (_placeholder == sanitized) return;
     _placeholder = sanitized;
     markNeedsLayout();
@@ -884,14 +906,16 @@ class RenderTextArea extends RenderObject {
   bool get _showPlaceholder => _text.isEmpty && _placeholder.isNotEmpty;
 
   // Memoized line split. [_text] and [_placeholder] are immutable strings
-  // that are only ever reassigned (the setters produce a fresh instance via
-  // [_sanitize] whenever the value changes), so identity of the source
-  // string is a sound O(1) cache key. Layout, paint, and caret derivation
-  // each need the same split every frame; without the memo each pass
-  // re-split the whole document — O(doc) work per frame at editor scale for
-  // cursor moves that change no text. Only one source is consulted per
-  // frame (placeholder when the document is empty, the text otherwise), so
-  // a single entry suffices.
+  // that are only ever reassigned, so identity of the source string is a
+  // sound O(1) cache key: a given instance can never change content under
+  // the memo. (Since the model canonicalizes, [_text] is usually the model's
+  // own instance, which makes the memo hit across rebuilds that changed no
+  // text; an equal-but-distinct instance only costs one extra split.)
+  // Layout, paint, and caret derivation each need the same split every
+  // frame; without the memo each pass re-split the whole document — O(doc)
+  // work per frame at editor scale for cursor moves that change no text.
+  // Only one source is consulted per frame (placeholder when the document is
+  // empty, the text otherwise), so a single entry suffices.
   String? _cachedLinesSource;
   List<String> _cachedLines = const [];
 

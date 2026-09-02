@@ -156,9 +156,12 @@ export 'src/rendering/render_stack.dart'
 export 'src/rendering/render_wrap.dart' show RenderWrap;
 export 'src/rendering/text_sanitizer.dart'
     show
+        isSanitizedForDisplay,
+        isSanitizedMultiline,
         isUnsafeRune,
         replacementCharacter,
         sanitizeForDisplay,
+        sanitizeMultiline,
         sanitizeSingleLine;
 export 'src/rendering/width_resolver.dart'
     show DefaultWidthResolver, WidthResolver, hasUncertainWidth;

@@ -115,6 +115,32 @@ enum _EditTransaction { edit, typing, paste }
 /// Writes and editing operations snap to extended-grapheme boundaries. This
 /// prevents cursor movement and deletion from splitting emoji, combining marks,
 /// or other multi-code-unit user-perceived characters.
+///
+/// ## Control bytes are replaced at the boundary
+///
+/// Every write into the model — typed input, paste, an IME commit, the
+/// constructor's initial value, `text =`, `value =` — is canonicalized with
+/// [sanitizeMultiline] before it is stored:
+///
+///   * C0 controls (including ESC), DEL and C1 controls are replaced with
+///     [replacementCharacter] (`U+FFFD`), one per control;
+///   * an escape-led sequence — a CSI/SGR run, an OSC 8 hyperlink or OSC 52
+///     clipboard write, DCS/Sixel or APC/Kitty image data — collapses to a
+///     SINGLE [replacementCharacter], payload and all;
+///   * `\n` survives, because multiline fields split rows on it. (A [TextInput]
+///     folds newlines to spaces on typed and pasted input, and paints any that
+///     a programmatic write leaves behind as [replacementCharacter].)
+///
+/// So an app reads back the sanitized string, not the bytes it wrote: after
+/// `controller.text = 'a\x1B[31mb'`, [text] is `'a�b'` and `text.length`
+/// is 3. That is deliberate. A terminal field cannot display raw control bytes,
+/// and holding them anyway would leave the model's offsets counting characters
+/// the screen never draws — putting the caret in the wrong cell, highlighting
+/// different characters than are selected, and deleting the wrong span. Keeping
+/// the model canonical means an offset means the same thing everywhere.
+///
+/// Keep the original elsewhere if you need it; do not expect to recover it from
+/// the controller.
 class TextEditingController extends ChangeNotifier {
   TextEditingController({String text = ''})
     : _value = TextEditingValue(text: text);
@@ -131,6 +157,8 @@ class TextEditingController extends ChangeNotifier {
   TextEditingValue get value => _value;
   set value(TextEditingValue next) => _setValue(next, resetHistory: true);
 
+  /// The current text, always canonical — control bytes have been replaced.
+  /// See the class doc for exactly what is rewritten and what you read back.
   String get text => _value.text;
   set text(String text) {
     _setValue(_value.copyWith(text: text), resetHistory: true);
@@ -531,6 +559,11 @@ class TextEditingController extends ChangeNotifier {
 ///     caller to clear the controller or keep the typed value.
 ///   - Escape — fires [onEscape], or bubbles if [onEscape] is null.
 ///   - Tab and other unhandled special chords — bubble.
+///
+/// Typed, pasted and programmatically written text is canonicalized before it
+/// reaches the model: control bytes are replaced and escape sequences are
+/// collapsed, so the field's content is exactly what it draws. See
+/// [TextEditingController] for the rules and what an app reads back.
 class TextInput extends StatefulWidget {
   const TextInput({
     super.key,
@@ -1546,8 +1579,8 @@ class RenderTextInput extends RenderObject {
     WidthResolver widthResolver = const DefaultWidthResolver(),
     CellWidthPolicy policy = CellWidthPolicy.spec,
   }) : _focusNode = focusNode,
-       _text = sanitizeForDisplay(text),
-       _selection = selection.normalizeForText(sanitizeForDisplay(text)),
+       _text = _displayText(text),
+       _selection = selection.normalizeForText(_displayText(text)),
        _placeholder = sanitizeForDisplay(placeholder),
        _placeholderStyle = placeholderStyle,
        _style = style,
@@ -1557,6 +1590,25 @@ class RenderTextInput extends RenderObject {
        _obscuringCharacter = obscuringCharacter,
        _widthResolver = widthResolver,
        _policy = policy;
+
+  /// Identity fast path for model text.
+  ///
+  /// [text] arrives from a [TextEditingValue], which canonicalized it with
+  /// [sanitizeMultiline] on construction — so there is nothing left to strip
+  /// and, crucially, nothing that would shift an offset. The one rune the
+  /// multiline canonical form keeps is `\n`, which a single-line field cannot
+  /// paint; it maps 1:1 to [replacementCharacter], so the index space still
+  /// matches cell for cell.
+  static String _displayText(String text) {
+    assert(
+      isSanitizedMultiline(text),
+      'RenderTextInput was handed text that is not in canonical form. Model '
+      'text must be canonicalized at the model boundary (TextEditingValue), '
+      'not here, or offsets and painted columns disagree.',
+    );
+    if (!text.contains('\n')) return text;
+    return text.replaceAll('\n', replacementCharacter);
+  }
 
   FocusNode _focusNode;
   String _text;
@@ -1587,14 +1639,16 @@ class RenderTextInput extends RenderObject {
   }
 
   set text(String value) {
-    final sanitized = sanitizeForDisplay(value);
-    if (sanitized == _text) return;
-    _text = sanitized;
+    final display = _displayText(value);
+    if (display == _text) return;
+    _text = display;
     _selection = _selection.normalizeForText(_text);
     markNeedsLayout();
   }
 
   set placeholder(String value) {
+    // Placeholders come straight from the widget, not from the model, so they
+    // are still sanitized here — nothing indexes into them.
     final sanitized = sanitizeForDisplay(value);
     if (sanitized == _placeholder) return;
     _placeholder = sanitized;
