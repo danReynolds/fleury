@@ -144,13 +144,22 @@ final class RenderDamageTracker {
   /// Ends the current pass: every participant that did not publish in it
   /// retracts. Retraction only invalidates paint (a listener marking its
   /// boundary dirty), never restructures the tree, so iterating the live set
-  /// is safe. It lands in the paint phase, so [onInvalidate] asks for the
-  /// frame that repaints without the stale fact.
+  /// is safe. A retraction that withdrew a live fact notifies its observers,
+  /// whose invalidation lands in the paint phase, so [onInvalidate] asks for
+  /// the frame that repaints without the stale fact.
+  ///
+  /// Only a retraction that actually WITHDREW a live fact may do that. A
+  /// participant that stays mounted without painting — the other IndexedStack
+  /// tab, a route under an opaque one — is unpublished in every later pass
+  /// too, so a retraction that re-notified every pass made each frame request
+  /// the next: the app spun frames at full speed forever after a single tab
+  /// switch, and every assertion that only checked "a retraction frame
+  /// followed" was satisfied by the spin. [PaintPassParticipant.retractPaintFacts]
+  /// is therefore a no-op (returns false) once the fact is already withdrawn.
   void endPaintPass() {
     for (final participant in _participants) {
-      if (participant.publishedPaintPass != _paintPass) {
-        participant.retractPaintFacts();
-      }
+      if (participant.publishedPaintPass == _paintPass) continue;
+      participant.retractPaintFacts();
     }
   }
 }
@@ -164,7 +173,12 @@ abstract interface class PaintPassParticipant {
   int get publishedPaintPass;
 
   /// Withdraw the published fact: the subtree no longer paints.
-  void retractPaintFacts();
+  ///
+  /// Returns true only when this call actually withdrew something. A
+  /// participant that is already retracted must return false — the pass end
+  /// re-visits it every frame, and a `true` there would ask the frame driver
+  /// for a frame that has nothing to repaint, forever.
+  bool retractPaintFacts();
 }
 
 typedef SemanticPaintBoundsCallback = void Function(CellRect? bounds);

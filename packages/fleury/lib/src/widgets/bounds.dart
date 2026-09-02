@@ -53,14 +53,19 @@ class BoundsNotifier with ChangeNotifier {
 
   /// Publishes a new observation. Called by the owning [BoundsObserver];
   /// not intended for app code.
-  void publish(CellRect? bounds, {CellRect? clip}) {
+  ///
+  /// Returns true when the observation actually changed (and listeners were
+  /// notified). The paint-pass sweep reads this to tell a real retraction
+  /// from a re-visit of an already-retracted observer.
+  bool publish(CellRect? bounds, {CellRect? clip}) {
     final visible = bounds == null
         ? null
         : (clip == null ? bounds : clip.intersect(bounds));
-    if (bounds == _bounds && visible == _visible) return;
+    if (bounds == _bounds && visible == _visible) return false;
     _bounds = bounds;
     _visible = visible;
     notifyListeners();
+    return true;
   }
 
   /// Debug-enforces the single-writer contract: a notifier observed by two
@@ -153,7 +158,7 @@ class RenderBoundsObserver extends RenderObject
   int get publishedPaintPass => _publishedPass;
 
   @override
-  void retractPaintFacts() => _notifier.publish(null);
+  bool retractPaintFacts() => _notifier.publish(null);
 
   void _publish(CellRect? bounds, CellRect? clip) {
     final tracker = rootFrameDamage;

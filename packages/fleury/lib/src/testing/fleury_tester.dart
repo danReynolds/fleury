@@ -34,6 +34,7 @@ import '../foundation/key.dart' show UniqueKey;
 import '../rendering/cell.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/surface_capabilities.dart';
+import '../rendering/width_policy.dart' show TextPresentationPolicy;
 import '../rendering/render_flex.dart' show RenderFlex;
 import '../runtime/input_dispatcher.dart';
 import '../semantics/accessibility.dart';
@@ -90,6 +91,8 @@ class FleuryTester {
     ColorMode colorMode = ColorMode.truecolor,
     GlyphTier glyphTier = GlyphTier.unicode,
     InlineImageSupport images = InlineImageSupport.none,
+    TextPresentationPolicy textPolicy = TextPresentationPolicy.spec,
+    this.overlayRepaintBoundaries = true,
     Clipboard? clipboard,
     FleuryTestFailureHandler failureHandler = _throwFleuryTestFailure,
   }) : clipboard = clipboard ?? InProcessClipboard(),
@@ -97,6 +100,7 @@ class FleuryTester {
        _colorMode = colorMode,
        _glyphTier = glyphTier,
        _images = images,
+       _textPolicy = textPolicy,
        _failureHandler = failureHandler,
        _clock = FakeClock(),
        _focusManager = FocusManager() {
@@ -200,6 +204,40 @@ class FleuryTester {
   }
 
   InlineImageSupport _images;
+
+  /// The surface's text width/lowering policy (RFC 0019), as the width probe
+  /// resolved it on a real terminal.
+  ///
+  /// Defaults to [TextPresentationPolicy.spec] — every ambiguous-width glyph
+  /// is one cell — which is what serve reports and what an unprobed surface
+  /// falls back to. It is NOT what most real terminals resolve to: the probe
+  /// runs unconditionally at startup and measures ambiguous glyphs two cells
+  /// wide on roughly 19 of 30 surveyed terminals, including the macOS, GNOME
+  /// and VS Code defaults. A suite that only ever runs on spec cannot see a
+  /// width bug that only exists off it (the launch audit's 4.a shipped that
+  /// way), so tests whose subject draws box-drawing glyphs, an ellipsis, a
+  /// scrollbar thumb or CJK should run under both — see
+  /// `testWidgetsOnBothTextPolicies`.
+  ///
+  /// Like [viewportSize], a change after the first [pumpWidget] flows into
+  /// the ambient [MediaQuery] and rebuilds dependents.
+  TextPresentationPolicy get textPolicy => _textPolicy;
+  set textPolicy(TextPresentationPolicy value) {
+    if (value == _textPolicy) return;
+    _textPolicy = value;
+    _refreshSurface();
+  }
+
+  TextPresentationPolicy _textPolicy;
+
+  /// Whether the harness Overlay wraps each entry in a repaint boundary, as
+  /// every production host does (`buildTuiRoot` takes the [Overlay] default).
+  ///
+  /// True by default so the cached-blit path a real app takes is the path
+  /// under test. Pass false only for a test that must observe the bare paint
+  /// walk — a boundary-counting assertion, or a fixture that mounts its own
+  /// Overlay and would otherwise measure the harness's boundaries too.
+  final bool overlayRepaintBoundaries;
 
   final FakeClock _clock;
   late final FakeTickerScheduler _scheduler;
@@ -980,6 +1018,7 @@ class FleuryTester {
             colorMode: colorMode,
             glyphTier: glyphTier,
             images: images,
+            textPolicy: textPolicy,
           ),
         ),
         child: FocusManagerScope(
@@ -994,14 +1033,19 @@ class FleuryTester {
                 notifier: _keyboardNotifier,
                 child: PendingSequenceScope(
                   notifier: _dispatcher.pendingSequenceNotifier,
-                  // Opt out of entry repaint boundaries. The harness overlay is
-                  // usually single-entry (pass-through anyway under adaptive
-                  // engagement), but a test that floats extra entries — a menu,
-                  // a toast — would otherwise engage harness-owned boundaries
-                  // and skew the boundary stats and paint counts under test.
+                  // Entry repaint boundaries follow production
+                  // ([overlayRepaintBoundaries], default on — `buildTuiRoot`
+                  // takes the Overlay default in every host). The harness used
+                  // to opt out so a test that floats extra entries could not
+                  // see harness-owned boundaries in its stats; the cost was
+                  // that the cached-blit path a real app takes on every
+                  // multi-entry frame was unreachable from a widget test, and
+                  // a blit bug that severed wide glyphs shipped through it
+                  // (the launch audit's 7.a). Boundary-counting tests opt out
+                  // per tester instead.
                   child: Overlay(
                     initialEntries: [_userEntry],
-                    addRepaintBoundaries: false,
+                    addRepaintBoundaries: overlayRepaintBoundaries,
                   ),
                 ),
               ),

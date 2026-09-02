@@ -7,4 +7,5 @@ library;
 
 export 'package:fleury/fleury_test_support.dart';
 export 'goldens.dart' show matchesGolden;
-export 'test_widgets.dart' show testWidgets;
+export 'test_widgets.dart'
+    show ambiguousWidePolicy, testWidgets, testWidgetsOnBothTextPolicies;

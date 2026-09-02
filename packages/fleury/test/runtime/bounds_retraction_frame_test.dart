@@ -68,6 +68,25 @@ void main() {
             '${after.map((f) => f.reason).toList()}',
       );
       expect(after.last.reason, 'invalidate');
+
+      // ...and then it STOPS. A participant that stays mounted without
+      // painting is unpublished on every later pass too, so counting a
+      // retraction per pass (rather than per withdrawal of a live fact) makes
+      // every frame request the next one: a retracted anchor pinned the app
+      // at 100% CPU forever, and every existing assertion here — "at least
+      // two frames", "the last one is a retraction" — is satisfied by a spin.
+      final settled = frames.length;
+      await _settle();
+      await _settle();
+      expect(
+        frames.length,
+        settled,
+        reason:
+            'the retraction is a one-shot: once the fact is withdrawn there '
+            'is nothing left to retract, so no further frame may be '
+            'scheduled. Got ${frames.length - settled} more frames after the '
+            'tree went quiet.',
+      );
     } finally {
       await sub.cancel();
       driver.enqueue(
