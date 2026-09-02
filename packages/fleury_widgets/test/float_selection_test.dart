@@ -21,12 +21,8 @@ import 'package:test/test.dart';
 
 const _size = CellSize(44, 16);
 
-MouseEvent _mouse(MouseEventKind kind, int col, int row) => MouseEvent(
-  kind: kind,
-  button: MouseButton.left,
-  col: col,
-  row: row,
-);
+MouseEvent _mouse(MouseEventKind kind, int col, int row) =>
+    MouseEvent(kind: kind, button: MouseButton.left, col: col, row: row);
 
 /// Drags across the whole rendered screen (top-left to bottom-right) and
 /// copies. A selection that swallows the float's chrome shows up in the

@@ -35,7 +35,11 @@ String _screen(FleuryTester tester, {int cols = 32, int rows = 8}) =>
 
 /// The text painted inside the frame on [row], as written (continuation cells
 /// of a wide grapheme contribute nothing — their leading cell already did).
-String _inside(CellBuffer buf, ({int top, int left, int right}) frame, int row) {
+String _inside(
+  CellBuffer buf,
+  ({int top, int left, int right}) frame,
+  int row,
+) {
   final sb = StringBuffer();
   for (var c = frame.left + 1; c < frame.right; c++) {
     final cell = buf.atColRow(c, frame.top + row);

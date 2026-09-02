@@ -175,20 +175,23 @@ void main() {
         'TERM': 'xterm-256color',
         'FLEURY_AMBIGUOUS_WIDTH': 'wide',
       };
-      final measured = diagnoseTerminal(
-        FakeTerminalDriver(
-          size: const CellSize(80, 24),
-          capabilities: detectTerminalCapabilitiesFromEnvironment(environment),
-        ),
-        environment: environment,
-      ).withMeasuredWidths(
-        WidthMeasurements.of(const {
-          'boxDrawing': 1,
-          'greekAlpha': 1,
-          'degreeSign': 1,
-        }),
-        environment: environment,
-      );
+      final measured =
+          diagnoseTerminal(
+            FakeTerminalDriver(
+              size: const CellSize(80, 24),
+              capabilities: detectTerminalCapabilitiesFromEnvironment(
+                environment,
+              ),
+            ),
+            environment: environment,
+          ).withMeasuredWidths(
+            WidthMeasurements.of(const {
+              'boxDrawing': 1,
+              'greekAlpha': 1,
+              'degreeSign': 1,
+            }),
+            environment: environment,
+          );
 
       final policy = measured.widthPolicy!;
       expect(measured.capabilities.ambiguousCharWidth, AmbiguousCharWidth.wide);

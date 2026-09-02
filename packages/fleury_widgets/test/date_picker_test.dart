@@ -581,22 +581,29 @@ void main() {
         );
       }, skip: _fallBackSkip);
 
-      testWidgets('Up crosses a 23h spring-forward day by a full week', (
-        tester,
-      ) {
-        // Mar 9 2025 is the spring-forward day (23h); -7 from Mar 16.
-        expect(walk(tester, _d(2025, 3, 16), KeyCode.arrowUp), _d(2025, 3, 9));
-      }, skip: _springForwardSkip);
+      testWidgets(
+        'Up crosses a 23h spring-forward day by a full week',
+        (tester) {
+          // Mar 9 2025 is the spring-forward day (23h); -7 from Mar 16.
+          expect(
+            walk(tester, _d(2025, 3, 16), KeyCode.arrowUp),
+            _d(2025, 3, 9),
+          );
+        },
+        skip: _springForwardSkip,
+      );
 
-      testWidgets('Right off a 23h spring-forward day lands at midnight', (
-        tester,
-      ) {
-        // The right civil day but the wrong hour is still wrong: every emitted
-        // value is contractually a local midnight.
-        final next = walk(tester, _d(2025, 3, 9), KeyCode.arrowRight);
-        expect(next, _d(2025, 3, 10));
-        expect(next.hour, 0);
-      }, skip: _springForwardSkip);
+      testWidgets(
+        'Right off a 23h spring-forward day lands at midnight',
+        (tester) {
+          // The right civil day but the wrong hour is still wrong: every emitted
+          // value is contractually a local midnight.
+          final next = walk(tester, _d(2025, 3, 9), KeyCode.arrowRight);
+          expect(next, _d(2025, 3, 10));
+          expect(next.hour, 0);
+        },
+        skip: _springForwardSkip,
+      );
 
       testWidgets('semantic increment/decrement step civil days', (
         tester,

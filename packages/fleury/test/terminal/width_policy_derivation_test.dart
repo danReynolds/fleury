@@ -143,9 +143,7 @@ void main() {
 
     test('an evidenced narrow ambiguous axis disengages the pin', () {
       expect(
-        deriveTextPresentationPolicy(
-          measurements: _joining,
-        ).pinsAmbiguousWidth,
+        deriveTextPresentationPolicy(measurements: _joining).pinsAmbiguousWidth,
         isFalse,
         reason: 'probe agreement on 1 cell is evidence',
       );

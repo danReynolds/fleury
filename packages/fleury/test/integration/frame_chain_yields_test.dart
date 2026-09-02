@@ -94,48 +94,52 @@ void main() {
     timeout: const Timeout(Duration(seconds: 40)),
   );
 
-  test('a chunked paste is observable mid-flight from a timer', () async {
-    final driver = FakeTerminalDriver();
-    final controller = TextEditingController();
-    // 24 chunks at the default 2 KiB chunk size — ~150 ms of rendering
-    // before the fix, during which nothing else ran.
-    final text = 'a' * (48 * 1024);
-    final samples = <int>[];
-    final done = Completer<void>();
+  test(
+    'a chunked paste is observable mid-flight from a timer',
+    () async {
+      final driver = FakeTerminalDriver();
+      final controller = TextEditingController();
+      // 24 chunks at the default 2 KiB chunk size — ~150 ms of rendering
+      // before the fix, during which nothing else ran.
+      final text = 'a' * (48 * 1024);
+      final samples = <int>[];
+      final done = Completer<void>();
 
-    final app = runApp(
-      FleuryApp(
-        title: 'paste',
-        home: TextInput(controller: controller, autofocus: true),
-      ),
-      driver: driver,
-      requireInteractiveTerminal: false,
-    );
-    await Future<void>.delayed(const Duration(milliseconds: 120));
+      final app = runApp(
+        FleuryApp(
+          title: 'paste',
+          home: TextInput(controller: controller, autofocus: true),
+        ),
+        driver: driver,
+        requireInteractiveTerminal: false,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 120));
 
-    final beacon = Timer.periodic(const Duration(milliseconds: 1), (t) {
-      final n = controller.text.length;
-      samples.add(n);
-      if (n == text.length && !done.isCompleted) {
-        t.cancel();
-        done.complete();
-      }
-    });
-    driver.enqueue(PasteEvent(text));
+      final beacon = Timer.periodic(const Duration(milliseconds: 1), (t) {
+        final n = controller.text.length;
+        samples.add(n);
+        if (n == text.length && !done.isCompleted) {
+          t.cancel();
+          done.complete();
+        }
+      });
+      driver.enqueue(PasteEvent(text));
 
-    await done.future.timeout(const Duration(seconds: 20));
-    beacon.cancel();
-    requestExit();
-    await app.timeout(const Duration(seconds: 8));
+      await done.future.timeout(const Duration(seconds: 20));
+      beacon.cancel();
+      requestExit();
+      await app.timeout(const Duration(seconds: 8));
 
-    expect(controller.text, text, reason: 'the paste still lands intact');
-    expect(
-      samples.any((n) => n > 0 && n < text.length),
-      isTrue,
-      reason:
-          'the beacon only ever saw 0 then ${text.length}: no event-loop turn '
-          'happened between the first chunk and the last (samples: '
-          '${samples.toSet().toList()..sort()})',
-    );
-  }, timeout: const Timeout(Duration(seconds: 40)));
+      expect(controller.text, text, reason: 'the paste still lands intact');
+      expect(
+        samples.any((n) => n > 0 && n < text.length),
+        isTrue,
+        reason:
+            'the beacon only ever saw 0 then ${text.length}: no event-loop turn '
+            'happened between the first chunk and the last (samples: '
+            '${samples.toSet().toList()..sort()})',
+      );
+    },
+    timeout: const Timeout(Duration(seconds: 40)),
+  );
 }

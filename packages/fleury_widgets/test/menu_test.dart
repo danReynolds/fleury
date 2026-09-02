@@ -139,12 +139,13 @@ void main() {
     var fired = 0;
     Widget app() => Column(
       children: [
-        Menu(trigger: const Text('Edit'), autofocus: true, items: items((_) {})),
-        const SizedBox(height: 5),
-        GestureDetector(
-          onTap: () => fired++,
-          child: const Text('DANGER'),
+        Menu(
+          trigger: const Text('Edit'),
+          autofocus: true,
+          items: items((_) {}),
         ),
+        const SizedBox(height: 5),
+        GestureDetector(onTap: () => fired++, child: const Text('DANGER')),
       ],
     );
 

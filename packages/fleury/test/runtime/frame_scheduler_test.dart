@@ -134,52 +134,62 @@ void main() {
     // event loop. A zero-duration Timer queued right after the request is
     // the probe: it records how many frames had rendered when the event
     // loop next turned.
-    test('an idle request flushes on a microtask, ahead of pending timers', () async {
-      final renders = <int>[];
-      var beaconAt = -1;
-      final s = FrameScheduler(
-        clock: FakeClock(),
-        onRender: (_) => renders.add(renders.length + 1),
-      );
+    test(
+      'an idle request flushes on a microtask, ahead of pending timers',
+      () async {
+        final renders = <int>[];
+        var beaconAt = -1;
+        final s = FrameScheduler(
+          clock: FakeClock(),
+          onRender: (_) => renders.add(renders.length + 1),
+        );
 
-      s.requestFrame('build');
-      Timer.run(() => beaconAt = renders.length);
-      await Future<void>.delayed(const Duration(milliseconds: 20));
+        s.requestFrame('build');
+        Timer.run(() => beaconAt = renders.length);
+        await Future<void>.delayed(const Duration(milliseconds: 20));
 
-      expect(renders, [1]);
-      expect(beaconAt, 1, reason: 'the idle flush is a microtask: it beats the timer');
-    });
+        expect(renders, [1]);
+        expect(
+          beaconAt,
+          1,
+          reason: 'the idle flush is a microtask: it beats the timer',
+        );
+      },
+    );
 
-    test('a request from inside a render yields to the event loop first', () async {
-      // Regression: a frame→frame chain (a post-frame callback that
-      // schedules the next frame, i.e. every chunked paste) was one
-      // unbroken microtask sequence. Dart drains microtasks to empty before
-      // any timer, I/O, or signal, so the whole chain ran with no input, no
-      // Ctrl+C, and no signal delivery — for seconds on a large paste.
-      final renders = <int>[];
-      var beaconAt = -1;
-      late final FrameScheduler s;
-      s = FrameScheduler(
-        clock: FakeClock(),
-        onRender: (_) {
-          renders.add(renders.length + 1);
-          if (renders.length < 5) s.requestFrame('post-frame');
-        },
-      );
+    test(
+      'a request from inside a render yields to the event loop first',
+      () async {
+        // Regression: a frame→frame chain (a post-frame callback that
+        // schedules the next frame, i.e. every chunked paste) was one
+        // unbroken microtask sequence. Dart drains microtasks to empty before
+        // any timer, I/O, or signal, so the whole chain ran with no input, no
+        // Ctrl+C, and no signal delivery — for seconds on a large paste.
+        final renders = <int>[];
+        var beaconAt = -1;
+        late final FrameScheduler s;
+        s = FrameScheduler(
+          clock: FakeClock(),
+          onRender: (_) {
+            renders.add(renders.length + 1);
+            if (renders.length < 5) s.requestFrame('post-frame');
+          },
+        );
 
-      s.requestFrame('build');
-      Timer.run(() => beaconAt = renders.length);
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+        s.requestFrame('build');
+        Timer.run(() => beaconAt = renders.length);
+        await Future<void>.delayed(const Duration(milliseconds: 50));
 
-      expect(renders, hasLength(5), reason: 'the chain still completes');
-      expect(
-        beaconAt,
-        1,
-        reason:
-            'the timer must run between frame 1 and frame 2, not after the '
-            'whole chain (it saw $beaconAt frames)',
-      );
-    });
+        expect(renders, hasLength(5), reason: 'the chain still completes');
+        expect(
+          beaconAt,
+          1,
+          reason:
+              'the timer must run between frame 1 and frame 2, not after the '
+              'whole chain (it saw $beaconAt frames)',
+        );
+      },
+    );
   });
 
   test('dispose makes further requests no-ops', () {

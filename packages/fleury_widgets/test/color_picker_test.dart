@@ -78,9 +78,7 @@ void main() {
         Navigator(
           home: Stack(
             children: [
-              Column(
-                children: [for (var i = 0; i < 24; i++) Text('X' * 40)],
-              ),
+              Column(children: [for (var i = 0; i < 24; i++) Text('X' * 40)]),
               ColorPicker(
                 value: const AnsiColor(1),
                 autofocus: true,
@@ -123,8 +121,7 @@ void main() {
         expect(
           line.substring(left + 1, right),
           isNot(contains('X')),
-          reason:
-              'the wall behind bled through the popover.\nScreen:\n$out',
+          reason: 'the wall behind bled through the popover.\nScreen:\n$out',
         );
       }
     });

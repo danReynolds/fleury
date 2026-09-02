@@ -242,16 +242,10 @@ void main() {
     tester.render(size: const CellSize(20, 7));
 
     _clickAt(tester, 2, 0);
-    expect(
-      fired,
-      0,
-      reason: 'a painted barrier must absorb, not just paint',
-    );
+    expect(fired, 0, reason: 'a painted barrier must absorb, not just paint');
   });
 
-  testWidgets('clicks inside the modal still reach its own controls', (
-    tester,
-  ) {
+  testWidgets('clicks inside the modal still reach its own controls', (tester) {
     var inner = 0;
     var outer = 0;
     tester.pumpWidget(

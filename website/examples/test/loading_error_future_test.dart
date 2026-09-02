@@ -47,7 +47,9 @@ Future<List<Object>> _unhandledErrorsFrom(void Function() body) {
 void main() {
   test('the guide snippet error preview is not already-failed', () async {
     final errors = await _unhandledErrorsFrom(() {
-      final future = loading_data.futureFor(loading_data.SnapshotPreview.error)!;
+      final future = loading_data.futureFor(
+        loading_data.SnapshotPreview.error,
+      )!;
       // Subscribe a microtask later — what a setState-scheduled rebuild does.
       scheduleMicrotask(() {
         future.then((_) {}, onError: (Object _) {});

@@ -292,6 +292,6 @@ int _markdownChunkCountFor(int rowCount) {
 /// One input, so [detectTerminalCapabilitiesFromEnvironment] settles the
 /// reported `ambiguousCharWidth` and the derived text policy together.
 Map<String, String> get _narrowAmbiguousEnvironment => <String, String>{
-  ...Platform.environment,
-  'FLEURY_AMBIGUOUS_WIDTH': 'narrow',
-};
+      ...Platform.environment,
+      'FLEURY_AMBIGUOUS_WIDTH': 'narrow',
+    };

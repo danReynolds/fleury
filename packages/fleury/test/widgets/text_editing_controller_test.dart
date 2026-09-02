@@ -564,35 +564,38 @@ void main() {
       expect(history.navigateNext(), isNull);
     });
 
-    test('the navigators themselves answer whether navigation is available', () {
-      // Replaces the removed `canNavigatePrevious`/`canNavigateNext` getters,
-      // which had no caller and disagreed with the methods they described: at
-      // `selectedIndex == 0`, `canNavigatePrevious` was false while
-      // `navigatePrevious` still returned the oldest entry. A null return (or
-      // an unchanged `selectedIndex`) IS the predicate.
-      final empty = TextHistoryController();
-      expect(empty.navigatePrevious(TextEditingValue(text: 'draft')), isNull);
-      expect(empty.navigateNext(), isNull);
-      expect(empty.isBrowsing, isFalse);
+    test(
+      'the navigators themselves answer whether navigation is available',
+      () {
+        // Replaces the removed `canNavigatePrevious`/`canNavigateNext` getters,
+        // which had no caller and disagreed with the methods they described: at
+        // `selectedIndex == 0`, `canNavigatePrevious` was false while
+        // `navigatePrevious` still returned the oldest entry. A null return (or
+        // an unchanged `selectedIndex`) IS the predicate.
+        final empty = TextHistoryController();
+        expect(empty.navigatePrevious(TextEditingValue(text: 'draft')), isNull);
+        expect(empty.navigateNext(), isNull);
+        expect(empty.isBrowsing, isFalse);
 
-      final history = TextHistoryController(entries: ['one']);
-      expect(history.navigateNext(), isNull, reason: 'not browsing yet');
-      expect(
-        history.navigatePrevious(TextEditingValue(text: 'draft'))?.text,
-        'one',
-      );
-      expect(history.selectedIndex, 0);
+        final history = TextHistoryController(entries: ['one']);
+        expect(history.navigateNext(), isNull, reason: 'not browsing yet');
+        expect(
+          history.navigatePrevious(TextEditingValue(text: 'draft'))?.text,
+          'one',
+        );
+        expect(history.selectedIndex, 0);
 
-      // At the oldest entry `navigatePrevious` CLAMPS — it keeps returning
-      // that entry rather than refusing. This is the behaviour the deleted
-      // getter contradicted.
-      expect(
-        history.navigatePrevious(TextEditingValue(text: 'one'))?.text,
-        'one',
-      );
-      expect(history.selectedIndex, 0);
-      expect(history.isBrowsing, isTrue);
-    });
+        // At the oldest entry `navigatePrevious` CLAMPS — it keeps returning
+        // that entry rather than refusing. This is the behaviour the deleted
+        // getter contradicted.
+        expect(
+          history.navigatePrevious(TextEditingValue(text: 'one'))?.text,
+          'one',
+        );
+        expect(history.selectedIndex, 0);
+        expect(history.isBrowsing, isTrue);
+      },
+    );
 
     test('resetBrowsing keeps entries but drops draft state', () {
       final history = TextHistoryController(entries: ['one']);

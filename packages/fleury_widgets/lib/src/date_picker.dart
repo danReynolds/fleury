@@ -305,10 +305,7 @@ class _DatePickerState extends State<DatePicker> implements TextInputClaimant {
           move: () => _move(1),
         );
       case KeyCode.arrowUp:
-        return moveOrEscape(
-          atEdge: value.day - 7 < 1,
-          move: () => _move(-7),
-        );
+        return moveOrEscape(atEdge: value.day - 7 < 1, move: () => _move(-7));
       case KeyCode.arrowDown:
         return moveOrEscape(
           atEdge: value.day + 7 > lastDay,

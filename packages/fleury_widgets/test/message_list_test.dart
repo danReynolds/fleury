@@ -302,9 +302,7 @@ void main() {
     expect(selected.state.messageId, 'm3');
   });
 
-  testWidgets('a capped transcript keeps following across evictions', (
-    tester,
-  ) {
+  testWidgets('a capped transcript keeps following across evictions', (tester) {
     // The out-of-box shape: followTail defaults to true and MessageList keys
     // every row by identity. Trimming the transcript to a cap on each arrival
     // is a head-drop plus a tail-append — the count never changes. Following

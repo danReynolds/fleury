@@ -145,53 +145,56 @@ void main() {
     expect(_envelope(frames.last)['mode'], 'full');
   });
 
-  test('enter() resets a reused encoder so a new peer gets a FULL tree', () async {
-    // `reset()`'s own doc says "call when a new peer connects on a reused
-    // encoder" — but nothing called it on connect, only the oversize and
-    // send-failure paths. Every session being a fresh process is what made
-    // that safe, not the code: the moment an encoder outlives one peer, the
-    // next browser's first semantics frame is a PATCH against a base it never
-    // received, and its accessibility tree is wrong for the whole session.
-    final encoder = SemanticsWireEncoder();
+  test(
+    'enter() resets a reused encoder so a new peer gets a FULL tree',
+    () async {
+      // `reset()`'s own doc says "call when a new peer connects on a reused
+      // encoder" — but nothing called it on connect, only the oversize and
+      // send-failure paths. Every session being a fresh process is what made
+      // that safe, not the code: the moment an encoder outlives one peer, the
+      // next browser's first semantics frame is a PATCH against a base it never
+      // received, and its accessibility tree is wrong for the whole session.
+      final encoder = SemanticsWireEncoder();
 
-    final firstPeer = _SemanticsTransport();
-    final firstDriver = await _enteredDriver(
-      firstPeer,
-      semanticsEncoder: encoder,
-    );
-    firstDriver.presentSemantics(_tree('first'));
-    firstDriver.presentSemantics(_tree('second'));
-    final firstFrames = firstPeer.sent.whereType<SemanticsFrame>().toList();
-    expect(firstFrames, hasLength(2));
-    expect(_envelope(firstFrames.first)['mode'], 'full');
-    expect(
-      _envelope(firstFrames.last)['mode'],
-      'patch',
-      reason: 'the encoder must be carrying peer state into the next connect',
-    );
-    await firstDriver.restore();
+      final firstPeer = _SemanticsTransport();
+      final firstDriver = await _enteredDriver(
+        firstPeer,
+        semanticsEncoder: encoder,
+      );
+      firstDriver.presentSemantics(_tree('first'));
+      firstDriver.presentSemantics(_tree('second'));
+      final firstFrames = firstPeer.sent.whereType<SemanticsFrame>().toList();
+      expect(firstFrames, hasLength(2));
+      expect(_envelope(firstFrames.first)['mode'], 'full');
+      expect(
+        _envelope(firstFrames.last)['mode'],
+        'patch',
+        reason: 'the encoder must be carrying peer state into the next connect',
+      );
+      await firstDriver.restore();
 
-    final secondPeer = _SemanticsTransport();
-    final secondDriver = await _enteredDriver(
-      secondPeer,
-      semanticsEncoder: encoder,
-    );
-    addTearDown(secondDriver.restore);
-    // The same tree the OLD peer last held. A stale encoder diffs it to
-    // nothing and sends no frame at all; the new peer must get a full tree.
-    secondDriver.presentSemantics(_tree('second'));
-    final frames = secondPeer.sent.whereType<SemanticsFrame>().toList();
-    expect(
-      frames,
-      hasLength(1),
-      reason: 'a new peer holds nothing — its first frame cannot be a no-op',
-    );
-    expect(
-      _envelope(frames.single)['mode'],
-      'full',
-      reason: 'a new peer holds nothing to patch against',
-    );
-  });
+      final secondPeer = _SemanticsTransport();
+      final secondDriver = await _enteredDriver(
+        secondPeer,
+        semanticsEncoder: encoder,
+      );
+      addTearDown(secondDriver.restore);
+      // The same tree the OLD peer last held. A stale encoder diffs it to
+      // nothing and sends no frame at all; the new peer must get a full tree.
+      secondDriver.presentSemantics(_tree('second'));
+      final frames = secondPeer.sent.whereType<SemanticsFrame>().toList();
+      expect(
+        frames,
+        hasLength(1),
+        reason: 'a new peer holds nothing — its first frame cannot be a no-op',
+      );
+      expect(
+        _envelope(frames.single)['mode'],
+        'full',
+        reason: 'a new peer holds nothing to patch against',
+      );
+    },
+  );
 
   test('a structurally unrepresentable tree is skipped before send', () async {
     final transport = _SemanticsTransport();

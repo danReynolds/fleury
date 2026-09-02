@@ -61,10 +61,12 @@ void main() {
     await first;
   });
 
-  test('close() stays idempotent when called again after it completed',
-      () async {
-    await transport.close();
-    await transport.close();
-    await transport.close();
-  });
+  test(
+    'close() stays idempotent when called again after it completed',
+    () async {
+      await transport.close();
+      await transport.close();
+      await transport.close();
+    },
+  );
 }

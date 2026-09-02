@@ -119,9 +119,7 @@ void main() {
       expect(tester.clipboard.readInProcess(), 'cd');
     });
 
-    testWidgets('a resize re-wrap re-resolves; copy does not throw', (
-      tester,
-    ) {
+    testWidgets('a resize re-wrap re-resolves; copy does not throw', (tester) {
       // One line at 30 columns; the whole thing is selected (offsets 0..22).
       tester.pumpWidget(const Text('alpha beta gamma delta', maxLines: 2));
       tester.render(size: _wide);

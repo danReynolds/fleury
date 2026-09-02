@@ -374,7 +374,8 @@ void main() {
         expect(
           File(p.join(repo.path, path)).readAsStringSync(),
           contains(recipe),
-          reason: '$path teaches `fleury serve --spawn` without the VM '
+          reason:
+              '$path teaches `fleury serve --spawn` without the VM '
               'service flag that makes reload possible',
         );
       }

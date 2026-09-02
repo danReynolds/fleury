@@ -10,34 +10,42 @@ import 'package:fleury/fleury.dart';
 import 'package:test/test.dart';
 
 void main() {
-  test('Ctrl+C still quits when the app handler for it throws', () async {
-    final driver = FakeTerminalDriver();
-    final app = runApp(
-      FleuryApp(
-        title: 'boom',
-        home: KeyBindings(
-          bindings: [
-            KeyBinding(
-              KeySequence.ctrl.c,
-              onTrigger: (_) => throw StateError('handler boom'),
-            ),
-          ],
-          child: const Focus(autofocus: true, child: Text('x')),
+  test(
+    'Ctrl+C still quits when the app handler for it throws',
+    () async {
+      final driver = FakeTerminalDriver();
+      final app = runApp(
+        FleuryApp(
+          title: 'boom',
+          home: KeyBindings(
+            bindings: [
+              KeyBinding(
+                KeySequence.ctrl.c,
+                onTrigger: (_) => throw StateError('handler boom'),
+              ),
+            ],
+            child: const Focus(autofocus: true, child: Text('x')),
+          ),
         ),
-      ),
-      driver: driver,
-      requireInteractiveTerminal: false,
-    );
-    await Future<void>.delayed(const Duration(milliseconds: 120));
+        driver: driver,
+        requireInteractiveTerminal: false,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 120));
 
-    driver.enqueue(
-      const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
-    );
+      driver.enqueue(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
 
-    final exit = await app.timeout(
-      const Duration(seconds: 5),
-      onTimeout: () => fail('the app did not exit on Ctrl+C'),
-    );
-    expect(exit.signal, isNull, reason: "exit was the quit guard, not a signal");
-  }, timeout: const Timeout(Duration(seconds: 20)));
+      final exit = await app.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => fail('the app did not exit on Ctrl+C'),
+      );
+      expect(
+        exit.signal,
+        isNull,
+        reason: "exit was the quit guard, not a signal",
+      );
+    },
+    timeout: const Timeout(Duration(seconds: 20)),
+  );
 }

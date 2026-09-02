@@ -420,9 +420,7 @@ void main() {
         // serve page could only show a blank grid — the user hits the cap and
         // sees nothing at all.
         final refused = await WebSocket.connect('ws://127.0.0.1:$port/ws');
-        await refused
-            .drain<void>()
-            .timeout(const Duration(seconds: 8));
+        await refused.drain<void>().timeout(const Duration(seconds: 8));
         expect(refused.closeCode, serveSessionLimitCloseCode);
         expect(refused.closeReason, contains('session limit reached'));
         expect(
@@ -489,10 +487,7 @@ void main() {
               final closed = await ws
                   .drain<void>()
                   .then((_) => true)
-                  .timeout(
-                    const Duration(seconds: 8),
-                    onTimeout: () => false,
-                  );
+                  .timeout(const Duration(seconds: 8), onTimeout: () => false);
               if (closed) {
                 refusedCodes.add(ws.closeCode);
               } else {
