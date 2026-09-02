@@ -1100,6 +1100,9 @@ class RenderBorder extends RenderObject implements RenderObjectWithSingleChild {
   int computeMinIntrinsicHeight(int? width) =>
       (child?.computeMinIntrinsicHeight(_less(width, _frameCols)) ?? 0) + 2;
 
+  /// Whether the last layout reserved room for the frame; paint follows it.
+  var _framed = false;
+
   @override
   CellSize performLayout(CellConstraints constraints) {
     int max0(int v) => v < 0 ? 0 : v;
@@ -1117,6 +1120,7 @@ class RenderBorder extends RenderObject implements RenderObjectWithSingleChild {
     // content than to swallow it.
     final canFrame =
         (maxC == null || maxC >= frameCols + 1) && (maxR == null || maxR >= 3);
+    _framed = canFrame;
     if (!canFrame) {
       final childSize = c.layout(constraints);
       return constraints.constrain(childSize);
@@ -1144,7 +1148,11 @@ class RenderBorder extends RenderObject implements RenderObjectWithSingleChild {
     final h = size.rows;
     final c = _child;
     final edge = _edgeWidth;
-    if (w < 2 * edge || h < 2) {
+    // The layout decision, not a re-derivation from the painted size: the two
+    // thresholds disagreed by one cell (two on an ambiguous-wide surface), so
+    // a box laid out unframed at full width could still get a frame painted
+    // over its content.
+    if (!_framed) {
       // Too small for a real border — paint the child in place if
       // any, skip the frame entirely.
       c?.paint(

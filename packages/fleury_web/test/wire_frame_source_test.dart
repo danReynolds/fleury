@@ -479,7 +479,10 @@ void main() {
     expect(into.textContent, contains('session limit reached'));
     expect(
       into.textContent,
-      contains('reload to reconnect'),
+      isNot(contains('reload to reconnect')),
+      reason:
+          'a deliberate rejection is final for this tab; reloading only '
+          'repeats it',
       reason: 'the retry affordance stays',
     );
   });

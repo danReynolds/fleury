@@ -381,9 +381,12 @@ class _TextAreaState extends State<TextArea>
   KeyEventResult onPaste(String text) {
     if (!widget.enabled) return KeyEventResult.ignored;
     if (widget.readOnly) return KeyEventResult.handled;
+    // Canonicalized ONCE, before batching: a batch boundary that fell inside
+    // an escape sequence otherwise sanitized each half on its own — one
+    // replacement glyph plus the tail of the sequence as literal text.
     _paste.start(
       PasteEvent(text),
-      TextEditingModel.normalizeMultilineInput(text),
+      TextEditingModel.prepareInput(text, singleLine: false),
     );
     return KeyEventResult.handled;
   }
@@ -392,7 +395,10 @@ class _TextAreaState extends State<TextArea>
   KeyEventResult onPasteEvent(PasteEvent event) {
     if (!widget.enabled) return KeyEventResult.ignored;
     if (widget.readOnly) return KeyEventResult.handled;
-    _paste.start(event, TextEditingModel.normalizeMultilineInput(event.text));
+    _paste.start(
+      event,
+      TextEditingModel.prepareInput(event.text, singleLine: false),
+    );
     return KeyEventResult.handled;
   }
 

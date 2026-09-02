@@ -979,10 +979,15 @@ class _SelectListState<T> extends State<_SelectList<T>> {
   @override
   Widget build(BuildContext context) {
     Focus.maybeOf(context); // Rebuild list/item semantics when focus moves.
+    // Cells, not code units: a CJK or emoji label is wider than its length.
+    final widths = MediaQuery.textPolicyOf(context).widths;
     var labelWidth = 0;
     for (final o in widget.options) {
-      final labelLength = sanitizeOptionLabel(o.label).length;
-      if (labelLength > labelWidth) labelWidth = labelLength;
+      final cells = const DefaultWidthResolver().widthOfText(
+        sanitizeOptionLabel(o.label),
+        widths,
+      );
+      if (cells > labelWidth) labelWidth = cells;
     }
     // Leading marker (2 cells: check + space) plus the label.
     final width = labelWidth + 2;

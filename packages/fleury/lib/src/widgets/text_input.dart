@@ -1312,9 +1312,10 @@ class _TextInputState extends State<TextInput>
     if (!widget.enabled) return KeyEventResult.ignored;
     if (widget.readOnly) return KeyEventResult.handled;
     _resetHistoryBrowsing();
+    // Canonicalized ONCE, before batching (see TextArea.onPaste).
     _paste.start(
       PasteEvent(text),
-      TextEditingModel.normalizeSingleLineInput(text),
+      TextEditingModel.prepareInput(text, singleLine: true),
     );
     return KeyEventResult.handled;
   }
@@ -1324,7 +1325,10 @@ class _TextInputState extends State<TextInput>
     if (!widget.enabled) return KeyEventResult.ignored;
     if (widget.readOnly) return KeyEventResult.handled;
     _resetHistoryBrowsing();
-    _paste.start(event, TextEditingModel.normalizeSingleLineInput(event.text));
+    _paste.start(
+      event,
+      TextEditingModel.prepareInput(event.text, singleLine: true),
+    );
     return KeyEventResult.handled;
   }
 

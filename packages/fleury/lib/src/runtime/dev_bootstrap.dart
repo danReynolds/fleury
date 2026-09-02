@@ -446,16 +446,18 @@ final class DevBootstrap {
   /// pending forward so the app keeps its own shutdown path.
   void _onChildSignalAck(String name) {
     final pending = _pendingForwards[name];
+    if (pending != null && !identical(pending.child, _child)) {
+      // A respawn happened between the delivery and this ack: the ack is the
+      // OLD child's and says nothing about the replacement, which saw no
+      // signal at all. Leave the forward armed for it — and do not record
+      // the ack against the new child, or the lookback would suppress the
+      // next forward for a signal that child never received.
+      _debugLog('signal $name: stale ack across a respawn, forward stands');
+      return;
+    }
     _acks[name] = (child: _child, at: DateTime.now());
     if (pending == null) {
       _debugLog('signal $name: ack with no pending forward');
-      return;
-    }
-    if (!identical(pending.child, _child)) {
-      // A respawn happened between the delivery and this ack: the ack is the
-      // OLD child's and says nothing about the replacement, which saw no
-      // signal at all. Leave the forward armed for it.
-      _debugLog('signal $name: stale ack across a respawn, forward stands');
       return;
     }
     _pendingForwards.remove(name);
@@ -876,6 +878,7 @@ final class DevBootstrap {
       pending.timer.cancel();
     }
     _pendingForwards.clear();
+    _acks.clear();
     await _disconnectVm();
     // Normally already exited (loop paths) or never spawned (fall-through);
     // a non-null live child here means a throw interrupted startup — reap

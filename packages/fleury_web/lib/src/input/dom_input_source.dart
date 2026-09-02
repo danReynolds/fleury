@@ -51,6 +51,11 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
   /// from its own host, never from the rest of the document.
   final bool _captureKeyboardFromDocument;
   final bool _ownsTextArea;
+
+  // Whether the most recent keydown was an auto-repeat. The text half of a
+  // printable key arrives on the `input` event, separately, and must carry
+  // the same phase (RFC 0020 §14.4: a repeat never advances a sequence).
+  var _lastKeyDownRepeat = false;
   final List<_DomListener> _listeners = [];
 
   TuiInputSink? _onEvent;
@@ -332,6 +337,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     final event = raw as web.KeyboardEvent;
     final tuiEvent = keyEventFromBrowser(event);
     if (tuiEvent == null) return;
+    _lastKeyDownRepeat = event.repeat;
 
     // Special keys and shortcut chords are ours; text-producing printables
     // keep their default action (see above).
@@ -376,6 +382,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
   }
 
   void _handleKeyUp(web.Event raw) {
+    _lastKeyDownRepeat = false;
     final event = raw as web.KeyboardEvent;
     if (event.key == 'Meta') {
       // Meta's OWN release is physical and must be reported as such — a
@@ -463,7 +470,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     _clearTextArea();
     if (data == null || data.isEmpty) return;
     raw.preventDefault();
-    _emit(TextInputEvent(data));
+    _emit(TextInputEvent(data, repeat: _lastKeyDownRepeat));
   }
 
   void _handleCompositionStart(web.Event raw) {

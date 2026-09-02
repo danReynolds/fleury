@@ -553,7 +553,16 @@ class _CodeViewState extends State<CodeView> {
     // height. Bound it here rather than making every caller do it: a CodeView
     // dropped into a Column would otherwise throw about an internal ListView
     // the caller never wrote.
-    list = SizedBox(height: visible, child: list);
+    // Bound the height only where the parent gives none (a Column, an
+    // unbounded scroll): under a bounded parent — Expanded, Center, Align, a
+    // Stack layer — the viewer fills what it is given, as it did before the
+    // cap existed. maxVisible is the cap for the unbounded case.
+    final windowed = list;
+    list = LayoutBuilder(
+      builder: (context, constraints) => constraints.maxRows == null
+          ? SizedBox(height: visible, child: windowed)
+          : windowed,
+    );
     if (copyEnabled) {
       list = KeyBindings(
         bindings: [

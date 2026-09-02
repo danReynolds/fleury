@@ -136,6 +136,19 @@ class RenderCellEffect extends RenderObject
         if (cell.role != CellRole.leading) continue;
         final placement = _composite(col, row, cell, size);
         if (placement == null) continue;
+        // A user composite that translates cells stays inside the effect's
+        // own box — a wide pair's continuation one column past it would be
+        // written outside the rect damage tracking and repaint caches
+        // account for (the guard RenderFlex carries for the same reason).
+        final wide =
+            col + 1 < size.cols &&
+            scratch.atColRow(col + 1, row).role == CellRole.continuation;
+        if (placement.col < 0 ||
+            placement.row < 0 ||
+            placement.row >= size.rows ||
+            placement.col + (wide ? 2 : 1) > size.cols) {
+          continue;
+        }
         final tc = offset.col + placement.col;
         final tr = offset.row + placement.row;
         if (tc < 0 || tr < 0 || tc >= cols || tr >= rows) continue;

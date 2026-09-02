@@ -833,6 +833,7 @@ void main() {
         const TextCompositionEvent.commit('korean'),
         const TextCompositionEvent.cancel(),
         const TextInputEvent('日本語'),
+        const TextInputEvent('g', repeat: true),
         const MouseEvent(
           kind: MouseEventKind.scrollUp,
           button: MouseButton.none,

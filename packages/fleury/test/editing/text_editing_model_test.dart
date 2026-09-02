@@ -92,6 +92,16 @@ void main() {
       expect(value.selection, const TextSelection.collapsed(offset: 1));
     });
 
+    test('a multiline insert normalizes CR and CRLF to LF', () {
+      // Only the paste entry points normalized line endings; a programmatic
+      // write with Windows endings kept a replacement glyph in the model.
+      final value = TextEditingModel.insert(
+        TextEditingValue(text: ''),
+        'a\r\nb\rc',
+      );
+      expect(value.text, 'a\nb\nc');
+    });
+
     test('insert replaces the selected range', () {
       final value = TextEditingModel.insert(
         TextEditingValue(

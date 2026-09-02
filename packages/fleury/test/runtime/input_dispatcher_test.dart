@@ -1458,6 +1458,35 @@ void main() {
     });
   });
 
+  group('repeat text on a split key/text surface (§14.4)', () {
+    test('a repeat-tagged text half cannot advance or complete a sequence', () {
+      // The browser reports keys and text separately. The key half of an
+      // auto-repeat was refused, but the text half arrived untagged and was
+      // synthesized as a fresh press: a held `g` completed `g g` by itself
+      // and a held leader tore down which-key. The text now carries the
+      // phase.
+      final calls = <String>[];
+      final h = _TestHarness();
+      h.mountRoot(
+        KeyBindings(
+          bindings: [
+            KeyBinding(KeySequence.g.g, onTrigger: (_) => calls.add('gg')),
+          ],
+          child: const Focus(autofocus: true, child: EmptyBox()),
+        ),
+      );
+      h.dispatcher.dispatch(const TextInputEvent('g'));
+      expect(h.dispatcher.hasPendingSequence, isTrue);
+
+      h.dispatcher.dispatch(const TextInputEvent('g', repeat: true));
+      expect(calls, isEmpty, reason: 'a repeat never completes a sequence');
+      expect(h.dispatcher.hasPendingSequence, isTrue, reason: 'nor cancels');
+
+      h.dispatcher.dispatch(const TextInputEvent('g'));
+      expect(calls, ['gg'], reason: 'a real second press does');
+    });
+  });
+
   group('Extended sequence semantics', () {
     test('a 3-step chord (.ctrl.x.ctrl.c) fires after all three events', () {
       final calls = <String>[];

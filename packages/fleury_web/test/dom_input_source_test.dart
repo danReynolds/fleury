@@ -317,6 +317,77 @@ void main() {
     ]);
   });
 
+  test('the text half of an auto-repeat is tagged as a repeat', () {
+    // Keys and text arrive separately here; the key half of a repeat was
+    // refused by the dispatcher's §14.4 guard but the text half re-entered
+    // as a fresh press, so a held leader key completed its own sequence.
+    final events = <TuiEvent>[];
+    final host = web.document.createElement('div');
+    final textArea =
+        web.document.createElement('textarea') as web.HTMLTextAreaElement;
+    web.document.body!.appendChild(host);
+    final source = DomInputSource(
+      hostElement: host,
+      textArea: textArea,
+      cellMetrics: _FakeMetrics(
+        const MeasuredCellBox(
+          cssCellWidth: 10,
+          cssCellHeight: 20,
+          cssCanvasWidth: 80,
+          cssCanvasHeight: 60,
+          cssCanvasLeft: 10,
+          cssCanvasTop: 20,
+          devicePixelRatio: 1,
+          cols: 8,
+          rows: 3,
+        ),
+      ),
+    );
+    addTearDown(() {
+      source.dispose();
+      host.parentNode?.removeChild(host);
+    });
+    source.start(events.add);
+    void keydown({required bool repeat}) => textArea.dispatchEvent(
+      web.KeyboardEvent(
+        'keydown',
+        web.KeyboardEventInit(
+          key: 'g',
+          code: 'KeyG',
+          repeat: repeat,
+          bubbles: true,
+          cancelable: true,
+        ),
+      ),
+    );
+    void input() => textArea.dispatchEvent(
+      web.InputEvent(
+        'input',
+        web.InputEventInit(
+          data: 'g',
+          inputType: 'insertText',
+          bubbles: true,
+          cancelable: true,
+        ),
+      ),
+    );
+    keydown(repeat: false);
+    input();
+    keydown(repeat: true);
+    input();
+    textArea.dispatchEvent(
+      web.KeyboardEvent(
+        'keyup',
+        web.KeyboardEventInit(key: 'g', code: 'KeyG', bubbles: true),
+      ),
+    );
+    keydown(repeat: false);
+    input();
+
+    final texts = events.whereType<TextInputEvent>().toList();
+    expect(texts.map((e) => e.repeat), [false, true, false]);
+  });
+
   test('DomInputSource emits keyboard, composition, text, paste, pointer, and '
       'wheel events', () {
     final events = <TuiEvent>[];

@@ -77,6 +77,17 @@ void main() {
       );
     });
 
+    testWidgets('ConstrainedBox: the child clamped to its own bounds', (
+      tester,
+    ) {
+      // The delegating default reported the child's full width; IntrinsicWidth
+      // laid out tight at it and the maxWidth was lost in the re-clamp.
+      tester.pumpWidget(
+        _rowWith(const ConstrainedBox(maxWidth: 5, child: Text('hello world'))),
+      );
+      expect(_findCol(tester, '|END'), 5);
+    });
+
     testWidgets('Stack: the widest non-positioned child', (tester) {
       tester.pumpWidget(
         _rowWith(const Stack(children: [Text('abcde'), Text('a')])),

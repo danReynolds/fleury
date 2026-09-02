@@ -204,7 +204,12 @@ final class TextEditingModel {
   /// text that will actually be painted.
   static String prepareInput(String text, {required bool singleLine}) {
     return sanitizeMultiline(
-      singleLine ? normalizeSingleLineInput(text) : text,
+      singleLine
+          ? normalizeSingleLineInput(text)
+          // CR and CRLF become LF here too, not only on the paste entry
+          // points: a programmatic write with Windows line endings used to
+          // keep a replacement glyph in the model.
+          : normalizeMultilineInput(text),
     );
   }
 

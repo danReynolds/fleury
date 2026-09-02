@@ -274,6 +274,23 @@ void main() {
       priorFocus.dispose();
     });
 
+    testWidgets('the list is sized in cells, so a CJK label is not clipped', (
+      tester,
+    ) {
+      // The panel width came from `label.length` — code units — so a label
+      // of wide glyphs got a box half its painted width.
+      tester.pumpWidget(
+        const _Host(
+          options: [
+            SelectOption(value: 'ja', label: '日本語'),
+            SelectOption(value: 'en', label: 'en'),
+          ],
+        ),
+      );
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      expect(_screen(tester).contains('日本語'), isTrue);
+    });
+
     testWidgets('Enter opens the list anchored below the trigger', (tester) {
       tester.pumpWidget(const _Host());
       tester.sendKey(const KeyEvent(KeyCode.enter));

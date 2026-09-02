@@ -820,7 +820,8 @@ class InputDispatcher {
     // A correlated batch already owns a truthful physical event. Reuse it for
     // the binding receipt while matching the authoritative committed text;
     // legacy and split DOM text still synthesize the compatibility event.
-    final keyEvent = keyView ?? _keyEventForText(event.text);
+    final keyEvent =
+        keyView ?? _keyEventForText(event.text, repeat: event.repeat);
     // An armed capture outranks every routed lane — including this one
     // (§17.2, "text-derived on legacy").
     //
@@ -993,12 +994,18 @@ class InputDispatcher {
     return KeyEventResult.ignored;
   }
 
-  static KeyEvent? _keyEventForText(String text) {
+  static KeyEvent? _keyEventForText(String text, {bool repeat = false}) {
     final iterator = text.characters.iterator;
     if (!iterator.moveNext()) return null;
     final grapheme = iterator.current;
     if (iterator.moveNext()) return null;
-    return KeyEvent(KeyCode.forCharacter(grapheme));
+    // The synthesized key carries the text's phase: a tagged repeat must
+    // reach the pending-sequence guard as a repeat, or a held key completes
+    // its own sequence through the text lane.
+    return KeyEvent(
+      KeyCode.forCharacter(grapheme),
+      type: repeat ? KeyEventType.repeat : KeyEventType.down,
+    );
   }
 
   KeyEventResult _dispatchPlain(
@@ -1024,7 +1031,8 @@ class InputDispatcher {
     final sequenceCandidates = <KeyBinding>[];
     // The scopes those candidates came from, chain order. Pending re-resolves
     // its candidates from these on every step (see [_liveCandidates]).
-    final sequenceSources = <KeyBindingSource>[];
+    // Allocated only when a sequence actually starts: this runs per key.
+    List<KeyBindingSource>? sequenceSources;
 
     for (final node in focusManager.activeChain()) {
       final source = node.bindingSource;
@@ -1043,7 +1051,7 @@ class InputDispatcher {
           );
           if (seqsHere.isNotEmpty) {
             sequenceCandidates.addAll(seqsHere);
-            sequenceSources.add(source);
+            (sequenceSources ??= <KeyBindingSource>[]).add(source);
           }
           // Defer direct firing while any sequence is still on the
           // table (here or accumulated from a deeper node).
@@ -1105,7 +1113,7 @@ class InputDispatcher {
       _startPending(
         event,
         sequenceCandidates,
-        sequenceSources,
+        sequenceSources ?? const <KeyBindingSource>[],
         textOrigin,
         lane,
       );

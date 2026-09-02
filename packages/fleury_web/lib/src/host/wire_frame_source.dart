@@ -106,8 +106,14 @@ final class WireFrameSource implements BrowserFrameSource {
   /// of the generic drop line; an ordinary disconnect carries none.
   void _handleSocketClose(web.CloseEvent event) {
     final reason = event.reason.trim();
+    // Serve's deliberate rejections (session cap, a second tab in bridge
+    // mode) are final for this tab: reloading only repeats them.
+    final deliberate =
+        event.code == serveSessionLimitCloseCode ||
+        event.code == serveSessionBusyCloseCode;
     _teardown(
       reason.isEmpty ? 'Disconnected from the fleury session.' : reason,
+      reconnect: !deliberate,
     );
   }
 
@@ -781,7 +787,7 @@ final class WireFrameSource implements BrowserFrameSource {
   /// The session has ended — a dropped socket or a BYE from the host.
   /// Stop interacting, keep the last rendered frame on screen, and overlay
   /// a clear message instead of emptying the DOM.
-  void _teardown(String message, {bool banner = true}) {
+  void _teardown(String message, {bool banner = true, bool reconnect = true}) {
     if (_closed) return;
     _closed = true;
     _components?.inputSource.dispose();
@@ -797,15 +803,17 @@ final class WireFrameSource implements BrowserFrameSource {
     // Drop the pixel layer so ghost images don't sit over the banner; the
     // overlay tolerates the host's later dispose call.
     _imageOverlay?.dispose();
-    if (banner) _showDisconnected(message);
+    if (banner) _showDisconnected(message, reconnect: reconnect);
   }
 
-  void _showDisconnected(String message) {
+  void _showDisconnected(String message, {bool reconnect = true}) {
     if (_disconnectBanner != null) return;
     final host = _components?.hostElement;
     if (host == null) return;
     final banner = web.document.createElement('div') as web.HTMLElement;
-    banner.textContent = '⚠ $message  Click or reload to reconnect.';
+    banner.textContent = reconnect
+        ? '⚠ $message  Click or reload to reconnect.'
+        : '⚠ $message';
     final style = banner.style;
     style.setProperty('position', 'fixed');
     style.setProperty('left', '0');
@@ -816,12 +824,14 @@ final class WireFrameSource implements BrowserFrameSource {
     style.setProperty('color', '#fff');
     style.setProperty('font', '13px ui-monospace, monospace');
     style.setProperty('text-align', 'center');
-    style.setProperty('cursor', 'pointer');
+    style.setProperty('cursor', reconnect ? 'pointer' : 'default');
     style.setProperty('z-index', '2147483647');
-    banner.addEventListener(
-      'click',
-      ((web.Event _) => web.window.location.reload()).toJS,
-    );
+    if (reconnect) {
+      banner.addEventListener(
+        'click',
+        ((web.Event _) => web.window.location.reload()).toJS,
+      );
+    }
     host.appendChild(banner);
     _disconnectBanner = banner;
   }

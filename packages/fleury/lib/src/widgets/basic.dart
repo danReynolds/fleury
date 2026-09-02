@@ -1112,6 +1112,44 @@ class _RenderConstrainedBox extends RenderObject
     if (value != null) adoptChild(value);
   }
 
+  // A bound the box imposes is part of its natural size: the child's answer
+  // clamped to [min, max] on that axis. Without this the delegating default
+  // reported the child's full width, IntrinsicWidth laid out tight at it, and
+  // the maxWidth was discarded by the parent-min re-clamp in performLayout.
+  int _clampCols(int cols) {
+    var result = cols;
+    final max = _maxWidth;
+    if (max != null && result > max) result = max;
+    final min = _minWidth;
+    if (min != null && result < min) result = min;
+    return result;
+  }
+
+  int _clampRows(int rows) {
+    var result = rows;
+    final max = _maxHeight;
+    if (max != null && result > max) result = max;
+    final min = _minHeight;
+    if (min != null && result < min) result = min;
+    return result;
+  }
+
+  @override
+  int computeMaxIntrinsicWidth(int? height) =>
+      _clampCols(_child?.computeMaxIntrinsicWidth(height) ?? 0);
+
+  @override
+  int computeMinIntrinsicWidth(int? height) =>
+      _clampCols(_child?.computeMinIntrinsicWidth(height) ?? 0);
+
+  @override
+  int computeMaxIntrinsicHeight(int? width) =>
+      _clampRows(_child?.computeMaxIntrinsicHeight(width) ?? 0);
+
+  @override
+  int computeMinIntrinsicHeight(int? width) =>
+      _clampRows(_child?.computeMinIntrinsicHeight(width) ?? 0);
+
   @override
   CellSize performLayout(CellConstraints constraints) {
     // Intersect this widget's requested bounds with the parent's.

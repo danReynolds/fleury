@@ -525,6 +525,8 @@ class _MenuBodyState extends State<_MenuBody> {
     // Row layout: a 2-cell leading marker (`› ` selected / blank), the label,
     // the cascade `▸` indicator right-aligned in its own column, and a trailing
     // pad cell so labels never hug the border.
+    // Cells, not code units: a CJK or emoji label is wider than its length.
+    final widths = MediaQuery.textPolicyOf(context).widths;
     var labelWidth = 0;
     for (final e in widget.entries) {
       final label = sanitizeOptionLabel(switch (e) {
@@ -532,7 +534,8 @@ class _MenuBodyState extends State<_MenuBody> {
         SubMenu(:final label) => label,
         MenuSeparator() => '',
       });
-      if (label.length > labelWidth) labelWidth = label.length;
+      final cells = const DefaultWidthResolver().widthOfText(label, widths);
+      if (cells > labelWidth) labelWidth = cells;
     }
     // 2 (marker) + label + a trailing region: 2 cells when any row is a
     // submenu (the ▸ column + a pad), else 1 (just the pad).
