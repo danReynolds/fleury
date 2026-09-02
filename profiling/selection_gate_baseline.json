@@ -1,8 +1,11 @@
 {
-  "selectedCells": 2528,
-  "baseUsPerFrame": 170.695,
-  "activeUsPerFrame": 250.815,
-  "addedUsPerFrame": 80.12,
+  "dragSelectedChars": 136,
+  "dragHighlightCells": 136,
+  "selectAllChars": 2528,
+  "highlightCells": 2528,
+  "baseUsPerFrame": 164.545,
+  "activeUsPerFrame": 263.03,
+  "addedUsPerFrame": 98.48499999999999,
   "frames": 200,
   "rounds": 10
 }

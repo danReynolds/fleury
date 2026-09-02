@@ -287,22 +287,31 @@ void main() {
     // into a later test in the same run.
     tearDown(() => RepaintBoundaryDebugStats.beginFrame(enabled: false));
 
-    testWidgets('each entry is auto-wrapped in a repaint boundary', (tester) {
-      tester.pumpWidget(
-        Overlay(
-          initialEntries: [
-            for (var i = 0; i < 3; i++)
-              OverlayEntry(builder: (_) => Text('entry $i')),
-          ],
-        ),
-      );
-      RepaintBoundaryDebugStats.beginFrame(enabled: true);
-      tester.render(size: const CellSize(12, 3));
-      final stats = RepaintBoundaryDebugStats.takeFrameStats();
-      expect(stats.boundaryCount, 3, reason: 'one boundary per entry');
-      expect(_boundaryRenderObjectCount(tester), 3);
-    });
+    // Opt out of the harness's own (production-default) entry boundary: this
+    // test counts RENDER OBJECTS across the whole tree, so the harness
+    // overlay's boundary would be counted alongside the subject's.
+    testWidgets(
+      'each entry is auto-wrapped in a repaint boundary',
+      (tester) {
+        tester.pumpWidget(
+          Overlay(
+            initialEntries: [
+              for (var i = 0; i < 3; i++)
+                OverlayEntry(builder: (_) => Text('entry $i')),
+            ],
+          ),
+        );
+        RepaintBoundaryDebugStats.beginFrame(enabled: true);
+        tester.render(size: const CellSize(12, 3));
+        final stats = RepaintBoundaryDebugStats.takeFrameStats();
+        expect(stats.boundaryCount, 3, reason: 'one boundary per entry');
+        expect(_boundaryRenderObjectCount(tester), 3);
+      },
+      overlayRepaintBoundaries: false,
+    );
 
+    // Opt out of the harness's own boundary: "wraps nothing" is a census of
+    // the whole tree, and the harness overlay is not the subject.
     testWidgets('addRepaintBoundaries: false wraps nothing', (tester) {
       tester.pumpWidget(
         Overlay(
@@ -322,8 +331,10 @@ void main() {
         reason: 'the escape hatch inserts no boundaries',
       );
       expect(_boundaryRenderObjectCount(tester), 0);
-    });
+    }, overlayRepaintBoundaries: false);
 
+    // Opt out of the harness's own boundary: the "stays in the tree,
+    // disengaged" assertion counts render objects tree-wide.
     testWidgets('a single visible entry stays pass-through', (tester) {
       tester.pumpWidget(
         Overlay(
@@ -346,7 +357,7 @@ void main() {
         reason: 'the boundary stays in the tree, just disengaged',
       );
       expect(out, contains('solo'));
-    });
+    }, overlayRepaintBoundaries: false);
 
     testWidgets('a second entry engages caching; churn then blits the base', (
       tester,
