@@ -150,9 +150,60 @@ class PosixTerminalDriver
   // throughout; only complete response frames are consumed.
   @visibleForTesting
   static Duration lateProbeGrace = const Duration(milliseconds: 250);
+
+  /// Ceiling on the whole startup handshake BEFORE a round trip is known — so
+  /// also the total a terminal that answers nothing at all can ever spend.
+  /// Unchanged by the adaptive path: no answer means no measurement, and no
+  /// measurement means no growth.
   @visibleForTesting
   static Duration startupNegotiationBudget = const Duration(milliseconds: 500);
-  static const _perProbeTimeout = Duration(milliseconds: 150);
+
+  /// Ceiling on the handshake once an answer HAS measured the link. Startup
+  /// stops being free at some point even when the terminal is co-operating;
+  /// this is where. It binds from a measured 250 ms round trip upward
+  /// (8 x 250 ms), and at the far end of the measurable range — a link near
+  /// [firstProbeTimeout] — it can clip the last probe off the sequence, which
+  /// is the intended trade: a capability is worth waiting for, but not
+  /// unboundedly, and the axis that loses simply keeps its safe default.
+  @visibleForTesting
+  static Duration maxStartupNegotiationBudget = const Duration(seconds: 2);
+
+  /// Deadline for the ONE probe that has nothing to scale from.
+  ///
+  /// This number decides which links can negotiate at all: a terminal whose
+  /// reply lands after it is indistinguishable from a terminal that will never
+  /// reply, and the session degrades. 400 ms admits the whole terrestrial SSH
+  /// population an agent TUI actually runs over (transatlantic ~90-150 ms,
+  /// transpacific ~150-250 ms, congested mobile/VPN to ~350 ms) — and costs
+  /// nothing to raise, because what bounds a silent terminal's startup is
+  /// [startupNegotiationBudget], not this: the probes after the first are
+  /// clamped to the budget that is left, so an unanswered handshake still ends
+  /// at 500 ms exactly as it did when this was 150 ms.
+  @visibleForTesting
+  static Duration firstProbeTimeout = const Duration(milliseconds: 400);
+
+  /// Floor on a measured-RTT probe deadline: the value every probe used before
+  /// the deadline became adaptive, so a local terminal (RTT well under 50 ms)
+  /// negotiates on exactly the timings it always did.
+  static const _minProbeTimeout = Duration(milliseconds: 150);
+
+  /// Ceiling on a measured-RTT probe deadline. A safety net rather than a
+  /// working limit — 3 x [firstProbeTimeout] is 1200 ms, so only a probe that
+  /// is pathologically slower than the one that measured the link reaches it.
+  static const _maxProbeTimeout = Duration(milliseconds: 1500);
+
+  /// A probe gets three measured round trips. One is the reply itself; the
+  /// other two are headroom for the jitter a congested link routinely shows
+  /// and for probes that ask the terminal to do real work before answering
+  /// (the width battery draws eight glyphs and reports eight cursor positions,
+  /// against DA1's nothing).
+  static const _probeTimeoutRoundTrips = 3;
+
+  /// The handshake gets eight. Five are the sequence itself — keyboard, the
+  /// keyboard re-query after a lifecycle rollback, synchronized output, image
+  /// protocol, width battery — and the rest is slack for write/flush and for
+  /// one probe timing out and handing the next a quarantine to wait through.
+  static const _budgetRoundTrips = 8;
   ImageProtocol? _imageProtocolOverride;
   bool _synchronizedOutput = false;
 
@@ -361,10 +412,12 @@ class PosixTerminalDriver
     _sink.target = _events;
 
     // Arm process-termination signals BEFORE the first terminal mutation. The
-    // startup probes below can take up to ~300ms; installing these afterward
-    // left a reproducible window where SIGTERM killed the process after the alt
-    // screen was entered but before any cleanup handler existed. A signal that
-    // lands before runApp subscribes is retained and replayed by
+    // startup probes below hold the driver for the negotiation budget (500 ms
+    // on a silent terminal, up to 2 s on a measured slow link — see
+    // [_nextProbeTimeout]); installing these afterward left a reproducible
+    // window where SIGTERM killed the process after the alt screen was entered
+    // but before any cleanup handler existed. A signal that lands before
+    // runApp subscribes is retained and replayed by
     // [_deliverPendingSignalToNewListener].
     _intSubscription = _watchSignal(
       ProcessSignal.sigint,
@@ -431,7 +484,8 @@ class PosixTerminalDriver
     //
     // A concurrent force-restore can complete while a bounded startup probe is
     // awaiting its reply (runApp's zone handler calls cleanup() on any uncaught
-    // async error, and these probes hold the driver for up to ~500 ms). Never
+    // async error, and these probes hold the driver for the negotiation
+    // budget — 500 ms silent, up to 2 s on a measured slow link). Never
     // reactivate a driver whose lifecycle moved on — and check BETWEEN the
     // probes, not only after them: `restore()` nulls `_terminalState`, so a
     // teardown that lands mid-negotiation must be reported as this StateError
@@ -698,10 +752,55 @@ class PosixTerminalDriver
     }
   }
 
+  /// The deadline for the next startup probe, or null when the handshake has
+  /// no budget left and the remaining probes must be skipped.
+  ///
+  /// Deadlines are adaptive because a fixed one is a latency cliff: with every
+  /// probe capped at 150 ms, a link slower than about 130 ms round trip timed
+  /// ALL of them out and the session silently fell back on every axis at once
+  /// — legacy keyboard, no synchronized output, no image protocol, `wide`
+  /// ambiguous width — which is the ordinary condition of an agent TUI over
+  /// SSH, not an edge case.
+  ///
+  /// The first answered exchange measures the link
+  /// ([TerminalQueryRunner.measuredRoundTrip]); every probe after it, and the
+  /// aggregate budget, scale to that measurement within fixed bounds. Until
+  /// something answers there is nothing to scale from, so the first probe runs
+  /// on [firstProbeTimeout] and the budget stays at
+  /// [startupNegotiationBudget]: a terminal that never answers must not be
+  /// able to hang startup, and it cannot lengthen its own deadline by staying
+  /// silent.
   Duration? _nextProbeTimeout(Stopwatch negotiationClock) {
-    final remaining = startupNegotiationBudget - negotiationClock.elapsed;
+    final roundTrip = _queryRunner.measuredRoundTrip;
+    final remaining =
+        negotiationBudgetFor(roundTrip) - negotiationClock.elapsed;
     if (remaining <= Duration.zero) return null;
-    return remaining < _perProbeTimeout ? remaining : _perProbeTimeout;
+    final perProbe = probeTimeoutFor(roundTrip);
+    return remaining < perProbe ? remaining : perProbe;
+  }
+
+  /// Per-probe deadline for a link measured at [measuredRoundTrip], or
+  /// [firstProbeTimeout] when nothing has answered yet.
+  @visibleForTesting
+  static Duration probeTimeoutFor(Duration? measuredRoundTrip) {
+    if (measuredRoundTrip == null) return firstProbeTimeout;
+    final scaled = measuredRoundTrip * _probeTimeoutRoundTrips;
+    if (scaled < _minProbeTimeout) return _minProbeTimeout;
+    if (scaled > _maxProbeTimeout) return _maxProbeTimeout;
+    return scaled;
+  }
+
+  /// Aggregate handshake budget for a link measured at [measuredRoundTrip], or
+  /// [startupNegotiationBudget] when nothing has answered yet.
+  @visibleForTesting
+  static Duration negotiationBudgetFor(Duration? measuredRoundTrip) {
+    if (measuredRoundTrip == null) return startupNegotiationBudget;
+    final scaled = measuredRoundTrip * _budgetRoundTrips;
+    if (scaled < startupNegotiationBudget) return startupNegotiationBudget;
+    if (scaled > maxStartupNegotiationBudget) {
+      return maxStartupNegotiationBudget;
+    }
+    return scaled;
   }
 
   /// Builds the mode-entry escape sequence (alt screen, hide cursor,

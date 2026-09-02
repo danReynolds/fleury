@@ -218,9 +218,9 @@ Each carries the reason it was parked. Anything here can be pulled up if you dis
 
 ### B1 · Narrow trigger, conservative failure
 
-- [ ] **3.b** `P2` ↓ Negotiation collapses at RTT ≥ 150 ms — `posix_driver.dart:144`
+- [x] **3.b** `P2` ↓ Negotiation collapses at RTT ≥ 150 ms — `posix_driver.dart:144`
   **Parked because:** degrades conservatively — no corruption, no lockout — and two of four axes are recoverable via existing env vars. Population is SSH beyond ~130 ms. The real defect is a **broken written contract** (the probe doc and RFC both claim RTT-independence), so the honest cheap move pre-launch is to correct the doc and add the missing knobs; the adaptive-deadline redesign is post-launch.
-  **Notes:**
+  **Notes:** LANDED: the adaptive-deadline redesign was taken instead of the doc-only patch. `TerminalQueryRunner` now reports the round trip the first ANSWERED exchange measured; the first probe keeps a fixed deadline (150 → 400 ms, free because the 500 ms aggregate budget — not the per-probe timeout — is what bounds a silent terminal), and every later probe gets max(150 ms, 3× RTT) capped at 1.5 s with the aggregate budget growing to 8× RTT capped at 2 s. A terminal that answers nothing measures nothing, so its startup cost is unchanged at 500 ms. Written contract corrected in the same change (RFC 0020 §8.2, RFC 0021 §7, compatibility matrix, `probeKeyboardFlags` dartdoc): the *verdict* is read off the reply, the *deadline* is not RTT-independent. Links past ~400 ms RTT still degrade — that is now the documented limit rather than an unstated one.
 
 - [ ] **3.e** `P3` ✎ Force-exit skips capture teardown, discarding session output — `posix_driver.dart:211`
   **Parked because:** diagnostic-only on an already-hung process. ✎ The stated "Ctrl+C twice" trigger does **not** reach this path (`cfmakeraw` clears ISIG); real trigger is an external SIGTERM past the grace.

@@ -180,6 +180,14 @@ Rules:
 - If the terminal cannot complete the sentinel contract, remaining optional
   probes may be skipped rather than multiplying timeouts.
 - A total startup budget bounds the sequence in addition to per-query budgets.
+- Both budgets adapt to the link. A fixed per-query deadline is a latency
+  cliff: every probe in the sequence times out together past it, so one slow
+  link silently degrades every capability at once. The first query — which has
+  nothing to scale from — carries a fixed deadline; the first ANSWER measures
+  the round trip, and every later query's deadline and the total budget scale
+  to that measurement within fixed bounds. A terminal that answers nothing
+  never measures anything, so it can never lengthen its own deadline: an
+  unanswered handshake costs exactly the base budget.
 
 ## 8. Active terminal state
 
