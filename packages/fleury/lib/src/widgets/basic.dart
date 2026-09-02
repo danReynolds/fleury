@@ -426,6 +426,7 @@ class Flex extends MultiChildRenderObjectWidget {
       mainAxisSize: mainAxisSize,
       mainAxisAlignment: mainAxisAlignment,
       crossAxisAlignment: crossAxisAlignment,
+      textPolicy: MediaQuery.textPolicyOf(context),
     );
   }
 
@@ -438,7 +439,8 @@ class Flex extends MultiChildRenderObjectWidget {
       ..direction = direction
       ..mainAxisSize = mainAxisSize
       ..mainAxisAlignment = mainAxisAlignment
-      ..crossAxisAlignment = crossAxisAlignment;
+      ..crossAxisAlignment = crossAxisAlignment
+      ..textPolicy = MediaQuery.textPolicyOf(context);
   }
 }
 
@@ -919,7 +921,7 @@ class _RenderFilledBox extends RenderObject
         buffer.writeGrapheme(CellOffset(c, ro), ' ', style: fillStyle);
       }
     }
-    // Now paint the child. writeGrapheme replaces the cell wholesale,
+    // Now paint the child. A grapheme write replaces the cell wholesale,
     // so cells the child touches lose our bg. Walk back through and
     // merge our bg into any cell the child painted that didn't set
     // its own background.
@@ -942,11 +944,11 @@ class _RenderFilledBox extends RenderObject
             cell.role == CellRole.overlay) {
           continue;
         }
-        buffer.writeGrapheme(
-          CellOffset(c, ro),
-          cell.grapheme!,
-          style: cell.style.merge(fillStyle),
-        );
+        // Paint only: restyle the cell in place rather than rewriting the
+        // grapheme, which would re-measure it. A width the child disagreed
+        // with would orphan the continuation half of a wide pair, still
+        // carrying the child's un-merged style.
+        buffer.restyleCell(c, ro, cell.style.merge(fillStyle));
       }
     }
   }
@@ -959,7 +961,10 @@ class _Border extends SingleChildRenderObjectWidget {
 
   @override
   RenderObject createRenderObject(BuildContext context) {
-    return RenderBorder(border: _effectiveBorder(context));
+    return RenderBorder(
+      border: _effectiveBorder(context),
+      textPolicy: MediaQuery.textPolicyOf(context),
+    );
   }
 
   @override
@@ -967,7 +972,12 @@ class _Border extends SingleChildRenderObjectWidget {
     BuildContext context,
     covariant RenderBorder renderObject,
   ) {
-    renderObject.border = _effectiveBorder(context);
+    renderObject
+      ..border = _effectiveBorder(context)
+      // Box drawing is East Asian Ambiguous: the surface's policy decides
+      // whether an edge glyph costs one column or two, and the frame's
+      // reserved geometry follows the same measurement (RFC 0019).
+      ..textPolicy = MediaQuery.textPolicyOf(context);
   }
 
   /// On an ASCII glyph tier, box-drawing borders degrade to the ASCII style

@@ -25,7 +25,6 @@
 
 import '../foundation/change_notifier.dart';
 import '../foundation/geometry.dart';
-import '../rendering/cell.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/layout.dart';
 import '../rendering/render_object.dart';
@@ -451,17 +450,17 @@ class _RenderScrollView extends RenderObject
     final bufRows = buffer.size.rows;
     final visibleCols = size.cols < childSize.cols ? size.cols : childSize.cols;
     for (var r = 0; r < size.rows; r++) {
+      final tr = offset.row + r;
+      if (tr < 0 || tr >= bufRows) continue;
       for (var col = 0; col < visibleCols; col++) {
-        final cell = scratch.atColRow(col, r);
-        if (cell.role != CellRole.leading) continue;
         final tc = offset.col + col;
-        final tr = offset.row + r;
-        if (tc < 0 || tr < 0 || tc >= bufCols || tr >= bufRows) continue;
-        buffer.writeGrapheme(
-          CellOffset(tc, tr),
-          cell.grapheme!,
-          style: cell.style,
-        );
+        if (tc < 0 || tc >= bufCols) continue;
+        // Replay, not re-measure: the viewport carries the cells the child
+        // painted, wide-pair roles included. Re-deriving the width here would
+        // let the frame buffer disagree with the scratch the child measured
+        // into, severing every ambiguous-width pair on a surface whose probe
+        // measured ambiguous glyphs wide.
+        buffer.replayCellFrom(scratch, col, r, tc, tr);
       }
     }
     // Inline images live on the buffer as placements, not in cells, so carry
