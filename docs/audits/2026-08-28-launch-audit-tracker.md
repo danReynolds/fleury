@@ -430,7 +430,7 @@ Ordered by what I'd take first. Each names **what makes it hard**, so we can dec
 - [x] **6.c** `P1` ✎ A float outlives its anchor when the anchor stops painting — `bounds.dart:169`
   **Hard because:** the frame-epoch fix needs two things measured first — the epoch must be correct under **retained-paint replay** (a cached boundary republishes for a subtree that didn't run), and the staleness threshold must be **one frame, not zero**, since an anchor painting before its observer legitimately reads last frame's bounds. Get either wrong and every float flickers.
   **✎ Far broader than route-push:** `IndexedStack`/`Tabs` means "open a dropdown, switch tabs" strands the panel over the new tab. Affects every anchor consumer. Cheap complement worth doing regardless: close stock floats on route change.
-  **Notes:** LANDED: numbered PaintPass with end-of-pass hook (rendering layer); observers stamp paint/replay; unrefreshed live observers publish null at pass end → anchored float hides next frame (hasFrameWork schedules it). IndexedStack-switch test red before; cached-boundary stability test. No route-change close needed for the stock floats now.
+  **Notes:** LANDED (a59f9ad6, registry made per-owner in 521b9124): the damage tracker numbers each root paint pass and sweeps its PaintPassParticipants; observers stamp paint/replay and register on first publish; unrefreshed ones publish null at pass end → anchored float hides next frame (hasFrameWork schedules it). IndexedStack-switch test red before; cached-boundary stability test. No route-change close needed for the stock floats now.
 
 ### C5 · Serve
 
@@ -551,3 +551,37 @@ Found by the batch agents in passing. Verified only to the extent stated; triage
   **Notes:**
 - [x] **N11** `P3` `test/runtime/dead_control_warning_test.dart` is unformatted on main (`dart format` violation).
   **Notes:** LANDED: formatted.
+
+## Recommended remaining work (2026-09-01, after the C pass)
+
+Everything above the line is either landed or parked by design. What is
+left splits by launch impact. Each item keeps its own entry; this is the
+order I would take them in.
+
+### Before launch
+
+1. **13.b + 13.c + 13.d** — serve is a pillar and the app-first axis has zero coverage. Send the handshake at accept (no protocol change); 13.d reuses the 4001 close + reason the client now shows.
+2. **3.c** — an app that opens `$EDITOR` looks frozen under the default `runApp` (the child inherits the capture pipe). Agent TUIs open editors. Needs the session-driver API decision.
+3. **3.a** (then **2.d**) — dispatch Ctrl+Z first, suspend only if unhandled, like Ctrl+C. Both keymaps and the samples advertise `^Z undo`.
+4. **11.b + 11.e** — a frozen, documented API that fails for anyone following the RFC; the harness cannot see it until 11.e.
+5. **10.a** — serve and programmatic writes are unshielded; shift-select + Delete removes the wrong span. Direction (a): sanitize at the model boundary, document dropped bytes.
+6. **15.a** (ack) — under the default dev supervisor a Ctrl+C on an app with a >300 ms teardown takes the force path. The raw-death half is fixed.
+7. **16.g** — irreversible after publish. Ratify lockstep and add "republish both satellites" to the launch checklist.
+8. **1.a chunker (Q10) + N2** — 512 KiB paste is still 12 s of work; N2's string copy is the small separable half.
+9. **4.a + 4.e** — the default state on ~19 of ~30 terminals; 4.e (an env var disabling the whole probe battery) is a plain bug.
+10. **2.e** — the note already says "do now regardless"; needs the timing window.
+11. **15.f, 15.h** — dev-loop correctness with well-shaped fixes (stale handle silently disables reload; supervisor starts even when it cannot supervise, paying double `main()` for nothing).
+12. **13.e** — `--debug` is warned-as-ignored while the surface it controls is live. Decide which side owns the default.
+13. **11.d** — cut or plumb `AnimationPolicy` before the surface freezes; it is exported API promising behaviour that does not exist.
+14. **D1 + D3** — four tests that cannot fail, and a selection gate that never builds a SelectionArea. Cheap, and they restore trust in green.
+15. **10.e, 6.g** — pick hook-vs-docs for form submit errors; fix the three docs claiming "built on Anchored" and add its test.
+
+### After launch
+
+8.g (scope-level focus fallback), 15.d (banner race), 5.e (row-wise join + separator decision), 10.d / 10.c (undo policy), 8.h, 4.b / 4.c (wrap and ellipsis under ambiguous-wide), 9.c, 3.b (contract doc), 14.c (Alt identity work), 2.c, 2.f, 9.e, D2 / D4 / D5, N8, N10, 3.e, 10.f, 13.f (doc), 15.c structural (RFC).
+
+### Not tracker items
+
+- A manual pass on a real terminal: editor sample `gg` / `dd`, Space leader with which-key, a dropdown then a tab switch, drag-select across a list. Every real catch in this project came from that kind of look.
+- Push, PR, and let CI run the full `check` (this branch was verified per package because of disk pressure; the project-scaffold integration test did not run here).
+- The alloc gate reads +1.3% over baseline on `main` itself (merge-base 847306f5), not on this branch. Find what moved between the 07-12 baseline and 08-28, or re-baseline deliberately with a note.
