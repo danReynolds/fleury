@@ -28,8 +28,9 @@ jobs:
         run: dart run tool/hot_reload_probe/driver.dart
       # The fast perf-gate suite: deterministic counters + structural
       # invariants (serve-semantics, image-bench, bundle-size, alloc-gate,
-      # paint-gate; ~11s). paint-gate's gated axes are exact counters
-      # (machine-independent); alloc-gate is SDK-sensitive but the SDK above
+      # input-alloc-gate, paint-gate, selection-gate, runtime-gate; ~24s).
+      # paint-gate's, selection-gate's and runtime-gate's gated axes are exact
+      # counters (machine-independent); alloc-gate is SDK-sensitive but the SDK above
       # is pinned — on a deliberate SDK bump, re-baseline in the bump commit
       # (never loosen a tolerance). Heavier PTY gates (wire-gate,
       # serve-wire-live) stay on-demand; see

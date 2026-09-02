@@ -1261,6 +1261,9 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       case 'selection-gate':
         await benchmarkSelectionGate(rest);
         return;
+      case 'runtime-gate':
+        await benchmarkRuntimeGate(rest);
+        return;
       case 'gates':
         await benchmarkGates(rest);
         return;
@@ -1708,6 +1711,26 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
     ], workingDirectory: profiling);
   }
 
+  /// End-to-end runtime gate. Boots real `runApp` sessions on a
+  /// [FakeTerminalDriver] and drives a fixed event script through the real
+  /// `FrameDriver`, gating on deterministic integers: frames rendered per
+  /// event kind (the runtime's own frame reasons), frames the no-change gate
+  /// skipped, and bytes presented. It is the only gate that can see the frame
+  /// PROGRAM — a frame that is owed and never scheduled, or one nothing
+  /// needed. Fixtures include the two P1s that were invisible to every other
+  /// gate: a retracted anchor's float must be hidden within N frames (and the
+  /// retraction must be a one-shot, not a spin), and a 512 KiB paste must cost
+  /// a logarithmic number of frames. Pass `--gate` to fail on drift,
+  /// `--update-baseline` to rebaseline (structural invariants are enforced
+  /// even then).
+  Future<void> benchmarkRuntimeGate(List<String> args) async {
+    await _run('dart', [
+      'run',
+      'bin/runtime_gate.dart',
+      ...args,
+    ], workingDirectory: profiling);
+  }
+
   /// Runs the fast, self-contained regression gates in sequence and prints a
   /// pass/fail summary (does not stop on the first failure, so one command
   /// reports the whole board). Exits non-zero if any gate failed. The heavier
@@ -1742,6 +1765,7 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
         'bin/selection_gate.dart',
         '--gate',
       ]),
+      (name: 'runtime-gate', cmd: ['run', 'bin/runtime_gate.dart', '--gate']),
     ];
     final results = <({String name, bool ok, int ms})>[];
     for (final gate in fast) {
@@ -6744,7 +6768,10 @@ void _printBenchmarkUsage() {
     '  paint-gate [--gate]     Repaint-boundary counters (paint-walk pruning)',
   );
   stdout.writeln(
-    '  selection-gate [--gate] Active select-all coverage (cost warn-only)',
+    '  selection-gate [--gate] Real SelectionArea drag / select-all / copy',
+  );
+  stdout.writeln(
+    '  runtime-gate [--gate]   runApp -> FrameDriver -> present, end to end',
   );
   stdout.writeln('');
   stdout.writeln(
