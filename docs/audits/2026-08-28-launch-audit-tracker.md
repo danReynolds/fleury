@@ -313,13 +313,13 @@ Each carries the reason it was parked. Anything here can be pulled up if you dis
   **Parked (code half):** having `serve --spawn` inject the flag needs a call on whether injecting into a user-supplied command is acceptable, plus the cost of a service per concurrent session.
   **Notes:** Docs half LANDED (A1): serve guide, hot-reload guide, scaffold README teach the --enable-vm-service=0 recipe. Code half (serve injects the flag) still open. NOTE: getting-started.mdx:273, deployment.md:89, coming-from-flutter.md:90 also teach the reload-less command — not yet swept.
 
-- [ ] **15.h** `P2` ✎ Watch roots resolve from CWD, not the entrypoint — `source_watcher.dart:38`
+- [x] **15.h** `P2` ✎ Watch roots resolve from CWD, not the entrypoint — `source_watcher.dart:38`
   **Parked because:** running from the project root is the documented flow, so most users are fine. ✎ Worse than reported though: the supervisor starts **either way**, so an unsupervisable session pays every cost (double `main()`, banner, signal window, second VM) for zero benefit. The "fall through when there's nothing to watch" half is cheap and worth doing alone.
-  **Notes:**
+  **Notes:** LANDED (P3 merge): watch roots resolve from the entrypoint directory; a session with nothing to watch never starts the supervisor.
 
-- [ ] **15.f** `P2` Stale `.fleury/handle` silently disables hot reload project-wide — `handle_discovery.dart:14`
+- [x] **15.f** `P2` Stale `.fleury/handle` silently disables hot reload project-wide — `handle_discovery.dart:14`
   **Parked because:** needs SIGKILL to occur; app keeps working. Fix is well-shaped though — the liveness proof already exists CLI-side and is **synchronous** (non-blocking `lockSync`), which is exactly what the pre-gate requires. Pull up if you've hit it.
-  **Notes:**
+  **Notes:** LANDED (P3 merge): handle discovery pre-gates each candidate on the CLI's synchronous lock; a dead handle is deleted and the walk continues.
 
 - [ ] **14.c** `P2` ✎ Alt-modified printables dropped entirely — `dom_input_source.dart:835`
   **Parked because:** the removal is easy; the **identity work** isn't — matching `KeySequence.alt.char('1')` needs the physical code's base-layout twin, the same fallback the RFC defines for kitty. ✎ Two corrections: the "pinned by a test" claim is wrong (a code-conditioned fix leaves it green), and a **concrete victim exists** — `tabs.dart:296` ships alt+1..9 as a documented first-party shortcut, dead on browser, and on macOS it types junk into whatever has focus. Pull up if the tabs shortcut matters for launch.
@@ -407,20 +407,20 @@ Ordered by what I'd take first. Each names **what makes it hard**, so we can dec
   ✎ Trigger narrower than reported (a sibling rebuild is harmless — it's a rebuild of the widget that *constructs* the bindings), but that's still the common case under streaming output.
   **Notes:**
 
-- [ ] **2.d** `P1` Held keys never recovered across Ctrl+Z or handoff — `run_app.dart:672` vs `posix_driver.dart:739,829`
+- [x] **2.d** `P1` Held keys never recovered across Ctrl+Z or handoff — `run_app.dart:672` vs `posix_driver.dart:739,829`
   **Hard because:** needs a new authority-loss signal from driver → dispatcher (new event type, or reuse the focus event), fired from suspend and handoff, with the re-acquisition side considered. Double-firing is safe; the reverse ordering (handoff returns while re-entering) needs checking.
   **Perverse second arm:** two stuck keys re-pressed trip the phase-violation counter and **permanently demote an honest kitty/ghostty to press-only** — on evidence Fleury manufactured itself.
-  **Notes:**
+  **Notes:** LANDED: the driver emits a focus-out on suspend and on handoff start, and a focus-in (before the resume resize) on return; the existing focus-out recovery releases held keys, which also removes the manufactured phase violations. Lifecycle test red before. The suspend half applies to whatever 3.a decides.
 
 - [ ] **3.a** `P1` Ctrl+Z swallowed as job control; `TextInput` undo unreachable — `posix_driver.dart:679`
   **Your call:** it's a **policy collision**, not a code bug — suspend was deliberate, undo-on-Ctrl+Z is in both shipped default keymaps, and nothing reconciles them. The Ctrl+C path already models the answer (dispatch first, self-stop only if unhandled). Deciding to move suspend behind an unhandled-chord fallback is yours; the wiring after that is small.
   **Sharpens it:** the Sprite Studio sample renders a hint bar advertising `^Z undo`, and the showcase page tells the reader to press it. Works on serve, not terminal — the two surfaces disagree.
   **Notes:**
 
-- [ ] **3.c** `P1` ✎ Terminal handoff unreachable from a default `runApp` — `external_editor.dart:200`
+- [x] **3.c** `P1` ✎ Terminal handoff unreachable from a default `runApp` — `external_editor.dart:200`
   **Hard because:** needs an **API decision** — publish the session driver via an inherited scope, or a runtime-owned reference plus a top-level helper? A global is friendlier but is a second source of truth about who owns the terminal.
   **✎ Worse than reported:** `runApp` has `dup2`'d fds into capture pipes, and pause/resume is wired *only* into the handoff path — so an `inheritStdio` child inherits the **pipe, not the terminal**. `$EDITOR` draws into the log buffer while eating raw keystrokes: the app just looks frozen. The only workaround costs stray-output capture, remote-handle resolution, and the supervisor.
-  **Notes:**
+  **Notes:** LANDED: runApp installs TerminalSessionScope; TerminalSession.of(context) → driver (read-only), supportsHandoff, runWithHandoff (restores terminal, pauses capture). maybeOf on the browser. editTextInExternalEditor doc points at it. New API — no red possible.
 
 - [x] **11.b** `P1` Sampled input edges destroyed by any unrelated render — `keyboard_state.dart:538`
   **Hard because:** the fix (expire on the ticker clock, not the render clock) needs a **fallback for apps with no tickers** — that hook never runs, so the sampled API would report stale taps forever. And do **not** re-add a second publisher; that was the earlier regression. Pairs with **11.e** or no test can see it.
@@ -452,10 +452,10 @@ Ordered by what I'd take first. Each names **what makes it hard**, so we can dec
 
 ### C6 · Dev loop
 
-- [ ] **15.a** `P1` ✎ Supervisor's 300 ms signal forward collapses the documented 5 s grace — `dev_bootstrap.dart:313`
+- [x] **15.a** `P1` ✎ Supervisor's 300 ms signal forward collapses the documented 5 s grace — `dev_bootstrap.dart:313`
   **Hard because:** the supervisor is guessing signal provenance from a timer because POSIX provenance isn't reachable from Dart. Proper fix: the child posts a signal **ack** over the VM service connection the supervisor already holds, and the forward is cancelled positively — timer stays only as a backstop for a wedged child. Open: can the ack be posted early enough for a signal during startup, and is it safe mid-respawn?
   **✎ Both directions:** narrower than claimed (sub-300 ms teardowns are fine) but the mechanism is worse — restore cancels the signal subscriptions, and **cancelling the last one restores the OS default disposition**, so a forwarded signal kills the process outright mid-restore, skipping capture teardown and any code after `await runApp`. The emergency tty restore then makes it **look like a clean quit**.
-  **Notes:** PARTIAL (1fe211ce): the worse mechanism is fixed — restore() now holds a no-op SIGINT/SIGTERM shield until cooked mode + final flush are done, so a forwarded signal can no longer kill the process raw mid-restore (test via a signal-watcher seam, red without the shield). The 300 ms provenance guess itself (positive ack over the VM service) is a design call — open.
+  **Notes:** PARTIAL (1fe211ce): the worse mechanism is fixed — restore() now holds a no-op SIGINT/SIGTERM shield until cooked mode + final flush are done, so a forwarded signal can no longer kill the process raw mid-restore (test via a signal-watcher seam, red without the shield). The 300 ms provenance guess itself (positive ack over the VM service) is a design call — open. LANDED (P3 merge): the child posts fleury.devSignalAck over the VM service; the supervisor cancels the forward on ack; the timer is a 2 s wedged-child backstop. PTY-pinned: a 3 s teardown under tty Ctrl+C exits with its own code (was 130 / death by forwarded signal). Residual race documented (ack microseconds before a respawn).
 
 - [x] **15.c** `P1` `main()` executes twice — once in the parked supervisor, once in the child — `dev_bootstrap.dart:219`
   **Your call — there is no clean fix.** You cannot un-run code that already ran. Pre-launch this is (a) documenting prominently that everything before `runApp` runs in both processes, and (b) a diagnostic when a first child exits non-zero within a second or two of spawn. The structural fix — a `fleuryMain` wrapper or `dart run fleury:dev` — **trades away the "plain `dart run`, no wrapper" property that is the feature's entire pitch**, so it's an RFC, not a patch.
