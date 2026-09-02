@@ -483,7 +483,6 @@ void main() {
       reason:
           'a deliberate rejection is final for this tab; reloading only '
           'repeats it',
-      reason: 'the retry affordance stays',
     );
   });
 
