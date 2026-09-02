@@ -112,6 +112,69 @@ void main() {
       );
     });
 
+    test('watch roots start at the entrypoint, not the working directory', () {
+      // `dart ~/code/app/bin/main.dart` launched from somewhere else: the
+      // roots must come from the script's own package. Resolving from the
+      // shell's directory instead found no package config, watched nothing,
+      // and left a supervised session with hot reload silently off.
+      dir('app/lib');
+      dir('app/bin');
+      dir('app/.dart_tool');
+      dir('elsewhere');
+      File('${temp.path}/app/.dart_tool/package_config.json').writeAsStringSync(
+        '{"configVersion":2,"packages":[{"name":"app","rootUri":"../"}]}',
+      );
+
+      final entrypoint = File('${temp.path}/app/bin/main.dart')
+        ..writeAsStringSync('void main() {}');
+      expect(
+        DevSourceRoots.entrypointDirectory(script: entrypoint.uri),
+        Directory('${temp.path}/app/bin').path,
+      );
+      final roots = DevSourceRoots.resolve(
+        projectRoot: DevSourceRoots.entrypointDirectory(script: entrypoint.uri),
+        pubCachePath: '${temp.path}/cache',
+      );
+      expect(
+        roots?.directories,
+        contains(Directory('${temp.path}/app/lib').path),
+      );
+      // The same run resolved from the working directory sees nothing.
+      expect(
+        DevSourceRoots.resolve(
+          projectRoot: '${temp.path}/elsewhere',
+          pubCachePath: '${temp.path}/cache',
+        ),
+        isNull,
+      );
+    });
+
+    test('a non-source entrypoint has no directory to resolve from', () {
+      // Kernel/AOT snapshots and `data:` bootstraps (what `dart test` runs
+      // under) are not directories a developer edits — the caller falls back
+      // to the working directory rather than watching a temp dill's folder.
+      expect(
+        DevSourceRoots.entrypointDirectory(
+          script: Uri.parse('file:///tmp/x/test.dart_1.dill'),
+        ),
+        isNull,
+      );
+      expect(
+        DevSourceRoots.entrypointDirectory(
+          script: Uri.parse(
+            'data:application/dart;charset=utf-8,void%20main()',
+          ),
+        ),
+        isNull,
+      );
+      expect(
+        DevSourceRoots.entrypointDirectory(
+          script: Uri.parse('http://example.com/main.dart'),
+        ),
+        isNull,
+      );
+    });
+
     test('resolve walks up to the nearest ancestor package_config '
         '(dart run from a subdirectory)', () {
       dir('app/lib');

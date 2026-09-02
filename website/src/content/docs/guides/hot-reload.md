@@ -191,7 +191,11 @@ seconds of starting.
 ## Troubleshooting
 
 **Nothing happens when I save** — In a plain `dart run`: check you're on a
-real terminal (not a pipe) and that `FLEURY_HOT_RELOAD` isn't `0`. In an
+real terminal (not a pipe) and that `FLEURY_HOT_RELOAD` isn't `0`. Your
+entrypoint also has to sit in a package with a resolved
+`.dart_tool/package_config.json` (`dart pub get`) — that file is what says
+which sources to watch, and with nothing to watch the supervisor steps aside
+and the run is an ordinary one. In an
 editor debug session: reload-on-save is the editor's job — run **Dart: Hot
 Reload** from the command palette, or set `dart.hotReloadOnSave:
 "allIfDirty"` (generated projects have it already).
