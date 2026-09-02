@@ -344,9 +344,12 @@ bool? parseEnvFlag(String? raw) {
 /// keeps the safe `wide` default until a startup probe measures the terminal.
 ///
 /// Centralized here (like [detectGlyphTierFromEnvironment]) so every driver —
-/// not just the POSIX one that runs the probe — honors the override. The
-/// `0`/`off`/`false` value is deliberately NOT handled here: that disables the
-/// probe (a driver concern), and leaving it null keeps the `wide` default.
+/// not just the POSIX one that runs the probe — honors the override.
+///
+/// This is a per-axis override and nothing more: it pins the ambiguous axis
+/// of the derived policy and leaves the probe battery to measure the three
+/// axes it does not answer. The probe kill switch is its own variable,
+/// `FLEURY_WIDTH_PROBE=0` (see [widthProbeIsPermittedByEnvironment]).
 AmbiguousCharWidth? detectAmbiguousCharWidthFromEnvironment(
   Map<String, String> environment,
 ) {
@@ -356,6 +359,38 @@ AmbiguousCharWidth? detectAmbiguousCharWidthFromEnvironment(
     'wide' => AmbiguousCharWidth.wide,
     _ => null,
   };
+}
+
+/// Whether the startup glyph-width probe battery may run in [environment].
+///
+/// The gate the POSIX driver applies before emitting the probe, kept here
+/// beside the overrides it reads so the driver and anything that reasons
+/// about the driver's behaviour cannot drift apart.
+///
+/// One round trip measures FOUR classes — ambiguous width, bare emoji
+/// presentation, simple variation sequences and ZWJ clustering — and each
+/// feeds its own axis of the derived policy. A per-axis override
+/// (`FLEURY_AMBIGUOUS_WIDTH`, `FLEURY_EMOJI_WIDTH`, `FLEURY_VS16_WIDTH`,
+/// `FLEURY_CLUSTER_MODE`) therefore does NOT suppress the battery: it wins
+/// on its own axis inside [deriveTextPresentationPolicy], and the classes
+/// nobody answered are still only knowable by measuring. Suppressing the
+/// whole battery for one answered axis dropped the other three to their
+/// spec defaults — which is not what an operator pinning ambiguous width
+/// asked for.
+///
+/// Suppressed by:
+///   * `FLEURY_WIDTH_PROBE=0|off|false` — the kill switch, for a terminal
+///     where the round trip misbehaves (mirrors `FLEURY_IMAGE_PROBE`). The
+///     conservative defaults stand on every axis.
+///   * `FLEURY_GLYPH_TIER=ascii` — ASCII output emits no ambiguous glyphs
+///     and no emoji, so nothing needs sizing; skips the round trip and the
+///     stray probe glyph.
+bool widthProbeIsPermittedByEnvironment(Map<String, String> environment) {
+  if (parseEnvFlag(environment['FLEURY_WIDTH_PROBE']) == false) return false;
+  if (detectGlyphTierFromEnvironment(environment) == GlyphTier.ascii) {
+    return false;
+  }
+  return true;
 }
 
 /// `FLEURY_EMOJI_WIDTH=narrow|wide` — explicit override for the bare
