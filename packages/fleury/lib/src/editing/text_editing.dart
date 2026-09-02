@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:characters/characters.dart';
 
+import '../rendering/text_sanitizer.dart';
+
 /// A half-open text range: [start] is included, [end] is excluded.
 final class TextRange {
   const TextRange({required this.start, required this.end});
@@ -89,17 +91,27 @@ final class TextSelection {
 }
 
 /// Immutable editing value shared by single-line and multiline fields.
+///
+/// [text] is canonicalized on construction with [sanitizeMultiline]: control
+/// bytes cannot survive in an editing model. That is what makes the model's
+/// index space and the rendered cell grid the same space — a caret offset, a
+/// selection range and a painted column all count the same characters. See
+/// [TextEditingController] for what an app reads back.
 final class TextEditingValue {
   TextEditingValue({
-    required this.text,
+    required String text,
     TextSelection? selection,
     TextRange composing = TextRange.empty,
-  }) : selection = (selection ?? TextSelection.collapsed(offset: text.length))
-           .normalizeForText(text),
-       composing = composing.clamp(text.length);
+  }) : this._(sanitizeMultiline(text), selection, composing);
+
+  TextEditingValue._(this.text, TextSelection? selection, TextRange composing)
+    : selection = (selection ?? TextSelection.collapsed(offset: text.length))
+          .normalizeForText(text),
+      composing = composing.clamp(text.length);
 
   factory TextEditingValue.empty() => TextEditingValue(text: '');
 
+  /// The editing text, always in canonical form (see [sanitizeMultiline]).
   final String text;
   final TextSelection selection;
   final TextRange composing;
@@ -182,12 +194,26 @@ final class TextEditingModel {
     return normalized.toString();
   }
 
+  /// Canonicalizes text arriving from outside the model — typed input, paste,
+  /// an IME commit, a programmatic write.
+  ///
+  /// Line handling first (the two modes disagree about `\n`), then the shared
+  /// control-byte rule. Canonicalizing HERE rather than at the render boundary
+  /// is what keeps offsets honest: every length the caller goes on to compute
+  /// (`start + input.length`, a composing range, the caret) is measured on the
+  /// text that will actually be painted.
+  static String prepareInput(String text, {required bool singleLine}) {
+    return sanitizeMultiline(
+      singleLine ? normalizeSingleLineInput(text) : text,
+    );
+  }
+
   static TextEditingValue insert(
     TextEditingValue value,
     String text, {
     bool singleLine = false,
   }) {
-    final input = singleLine ? normalizeSingleLineInput(text) : text;
+    final input = prepareInput(text, singleLine: singleLine);
     if (input.isEmpty && value.selection.isCollapsed) return value;
     return replaceSelection(value, input);
   }
@@ -205,9 +231,7 @@ final class TextEditingModel {
     String replacement, {
     bool singleLine = false,
   }) {
-    final input = singleLine
-        ? normalizeSingleLineInput(replacement)
-        : replacement;
+    final input = prepareInput(replacement, singleLine: singleLine);
     final snappedRange = TextRange(
       start: snapOffsetToGraphemeBoundary(value.text, range.start),
       end: snapOffsetToGraphemeBoundary(value.text, range.end),
@@ -250,7 +274,7 @@ final class TextEditingModel {
     String text, {
     bool singleLine = false,
   }) {
-    final input = singleLine ? normalizeSingleLineInput(text) : text;
+    final input = prepareInput(text, singleLine: singleLine);
     final range = value.composing.isCollapsed
         ? value.selection.range
         : value.composing;
@@ -403,9 +427,11 @@ final class TextEditingModel {
     bool singleLine = false,
   }) {
     if (killRing.isEmpty) return value;
+    // The ring only ever holds text cut out of a canonical model, so this is
+    // the line-mode conversion; the control-byte pass is already a no-op.
     return replaceSelection(
       value,
-      singleLine ? normalizeSingleLineInput(killRing) : killRing,
+      prepareInput(killRing, singleLine: singleLine),
     );
   }
 

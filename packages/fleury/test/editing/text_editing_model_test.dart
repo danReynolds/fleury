@@ -326,4 +326,68 @@ void main() {
       );
     });
   });
+
+  // Control bytes are canonicalized where text ENTERS the model, so a model
+  // offset and a display cell always count the same characters. Sanitizing at
+  // the render boundary instead left the two index spaces disagreeing by the
+  // length of every collapsed escape sequence.
+  group('control-byte canonicalization', () {
+    test('the constructor canonicalizes, keeping newlines', () {
+      final value = TextEditingValue(text: 'a\x1B[31mb\tc\nd');
+      expect(value.text, 'a\u{FFFD}b\u{FFFD}c\nd');
+      expect(value.selection, const TextSelection.collapsed(offset: 7));
+    });
+
+    test('an already-canonical string is returned unchanged, not copied', () {
+      const clean = 'plain text\nwith a newline 🙂';
+      expect(identical(sanitizeMultiline(clean), clean), isTrue);
+      expect(identical(TextEditingValue(text: clean).text, clean), isTrue);
+    });
+
+    test('insert measures the caret on the canonicalized input', () {
+      final value = TextEditingModel.insert(
+        TextEditingValue(
+          text: 'XY',
+          selection: const TextSelection.collapsed(offset: 0),
+        ),
+        'a\x1B[31mb',
+      );
+
+      expect(value.text, 'a\u{FFFD}bXY');
+      // 3, not the 7 code units the raw insert would have measured.
+      expect(value.selection, const TextSelection.collapsed(offset: 3));
+    });
+
+    test('replaceRange measures the caret on the canonicalized input', () {
+      final value = TextEditingModel.replaceRange(
+        TextEditingValue(text: 'abcd'),
+        const TextRange(start: 1, end: 3),
+        '\x1B]8;;http://x\x07',
+      );
+
+      expect(value.text, 'a\u{FFFD}d');
+      expect(value.selection, const TextSelection.collapsed(offset: 2));
+    });
+
+    test('a composing update marks the canonicalized span', () {
+      final value = TextEditingModel.updateComposing(
+        TextEditingValue(text: ''),
+        'x\x1B[0my',
+      );
+
+      expect(value.text, 'x\u{FFFD}y');
+      expect(value.composing, const TextRange(start: 0, end: 3));
+      expect(value.selection, const TextSelection.collapsed(offset: 3));
+    });
+
+    test('single-line mode still folds newlines to spaces first', () {
+      final value = TextEditingModel.insert(
+        TextEditingValue(text: ''),
+        'a\nb\x1B[31mc',
+        singleLine: true,
+      );
+
+      expect(value.text, 'a b\u{FFFD}c');
+    });
+  });
 }

@@ -1469,4 +1469,126 @@ void main() {
       expect(buf.atColRow(1, 0).style.inverse, isFalse);
     });
   });
+
+  // The model used to keep raw text while the render boundary sanitized it, so
+  // model offsets and display cells stopped agreeing the moment anything with
+  // a control byte in it reached the field. Canonicalizing at the model
+  // boundary makes the model string the display string, so every offset the
+  // controller reports is the offset the renderer paints.
+  group('control bytes are canonicalized at the model boundary', () {
+    testWidgets('caret lands on the pasted text after an ESC sequence', (
+      tester,
+    ) {
+      final focusNode = FocusNode(debugLabel: 'ansi-caret');
+      addTearDown(focusNode.dispose);
+      final controller = TextEditingController(text: 'XY')..caretOffset = 0;
+      tester.pumpWidget(
+        TextInput(
+          controller: controller,
+          focusNode: focusNode,
+          autofocus: true,
+          enableBlink: false,
+        ),
+      );
+
+      // 'a' + SGR red + 'b' — seven code units raw, three cells displayed.
+      tester.paste('a\x1B[31mb');
+      final buf = tester.render(size: const CellSize(10, 1));
+
+      expect(controller.text, 'a\u{FFFD}bXY');
+      expect(controller.caretOffset, 3);
+      expect(_row(buf, 10), 'a\u{FFFD}bXY');
+      // Caret sits between the pasted 'b' and the pre-existing 'X'.
+      expect(focusNode.caretRect, CellRect.fromLTWH(3, 0, 1, 1));
+      expect(buf.atColRow(3, 0).grapheme, 'X');
+      expect(buf.atColRow(3, 0).style.inverse, isTrue);
+    });
+
+    testWidgets('the selection highlight covers the selected text', (tester) {
+      final controller = TextEditingController(text: 'XY')..caretOffset = 0;
+      tester.pumpWidget(
+        TextInput(controller: controller, autofocus: true, enableBlink: false),
+      );
+
+      tester.paste('a\x1B[31mb');
+      tester.sendKey(_code(KeyCode.end));
+      tester.sendKey(_shiftCode(KeyCode.arrowLeft));
+      tester.sendKey(_shiftCode(KeyCode.arrowLeft));
+
+      expect(controller.selectedText, 'XY');
+      final buf = tester.render(size: const CellSize(10, 1));
+      expect(_highlighted(buf, 10), 'XY');
+    });
+
+    testWidgets('shift-select then Delete removes exactly the highlight', (
+      tester,
+    ) {
+      final controller = TextEditingController();
+      tester.pumpWidget(
+        TextInput(controller: controller, autofocus: true, enableBlink: false),
+      );
+
+      tester.paste('\x1B[31mabcdef');
+      tester.sendKey(_code(KeyCode.home));
+      for (var i = 0; i < 5; i++) {
+        tester.sendKey(_shiftCode(KeyCode.arrowRight));
+      }
+
+      final before = tester.render(size: const CellSize(12, 1));
+      final shown = _row(before, 12);
+      final highlight = _highlighted(before, 12);
+      expect(highlight, isNotEmpty);
+
+      tester.sendKey(_code(KeyCode.delete));
+      final after = tester.render(size: const CellSize(12, 1));
+
+      // What vanished is exactly what was highlighted — no more, no less.
+      expect(_row(after, 12), shown.replaceFirst(highlight, ''));
+      expect(controller.text, _row(after, 12));
+    });
+
+    testWidgets('a programmatic write is canonicalized too', (tester) {
+      final focusNode = FocusNode(debugLabel: 'ansi-programmatic');
+      addTearDown(focusNode.dispose);
+      final controller = TextEditingController();
+      tester.pumpWidget(
+        TextInput(
+          controller: controller,
+          focusNode: focusNode,
+          autofocus: true,
+          enableBlink: false,
+        ),
+      );
+
+      // The serve/semantics path and any app-side `controller.text = ...`
+      // land here with whatever bytes the peer sent.
+      controller.text = 'ab\x1B]8;;http://x\x07cd';
+      controller.caretOffset = 3;
+      tester.pump();
+      final buf = tester.render(size: const CellSize(10, 1));
+
+      expect(controller.text, 'ab\u{FFFD}cd');
+      expect(_row(buf, 10), 'ab\u{FFFD}cd');
+      expect(focusNode.caretRect, CellRect.fromLTWH(3, 0, 1, 1));
+    });
+  });
+}
+
+/// The painted graphemes of row 0, trailing blanks trimmed.
+String _row(CellBuffer buffer, int cols) {
+  final out = StringBuffer();
+  for (var col = 0; col < cols; col++) {
+    out.write(buffer.atColRow(col, 0).grapheme ?? ' ');
+  }
+  return out.toString().trimRight();
+}
+
+/// The painted graphemes of row 0 that carry the selection/cursor highlight.
+String _highlighted(CellBuffer buffer, int cols) {
+  final out = StringBuffer();
+  for (var col = 0; col < cols; col++) {
+    final cell = buffer.atColRow(col, 0);
+    if (cell.style.inverse) out.write(cell.grapheme ?? ' ');
+  }
+  return out.toString();
 }

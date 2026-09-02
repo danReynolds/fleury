@@ -1138,4 +1138,40 @@ void main() {
       );
     });
   });
+
+  // The model used to keep raw text while the render boundary sanitized it,
+  // so a control byte anywhere above the caret shortened the displayed lines
+  // and the caret drifted onto the wrong ROW. Canonicalizing at the model
+  // boundary keeps the two index spaces identical.
+  group('control bytes are canonicalized at the model boundary', () {
+    testWidgets('the caret keeps its row after a multi-line paste', (tester) {
+      final focusNode = FocusNode(debugLabel: 'ansi-area-caret');
+      addTearDown(focusNode.dispose);
+      final ctl = TextEditingController(text: 'AAA\nBBB')..caretOffset = 0;
+      tester.pumpWidget(
+        TextArea(controller: ctl, focusNode: focusNode, autofocus: true),
+      );
+
+      tester.paste('x\x1B[31m\ny');
+      final lines = _lines(tester, rows: 3);
+
+      // Row 1, immediately after the pasted 'y' — not row 2.
+      expect(focusNode.caretRect, CellRect.fromLTWH(1, 1, 1, 1));
+      expect(ctl.text, 'x\u{FFFD}\nyAAA\nBBB');
+      expect(ctl.caretOffset, 4);
+      expect(lines, ['x\u{FFFD}', 'yAAA', 'BBB']);
+    });
+
+    testWidgets('a programmatic write is canonicalized too', (tester) {
+      final ctl = TextEditingController();
+      tester.pumpWidget(TextArea(controller: ctl, autofocus: true));
+
+      // The serve/semantics path and any app-side `controller.text = ...`.
+      ctl.text = 'one\ntw\x1B[2Jo';
+      tester.pump();
+
+      expect(ctl.text, 'one\ntw\u{FFFD}o');
+      expect(_lines(tester, rows: 2), ['one', 'tw\u{FFFD}o']);
+    });
+  });
 }
