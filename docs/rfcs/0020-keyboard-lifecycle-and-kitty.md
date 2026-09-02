@@ -303,8 +303,13 @@ only with evidence of general-app benefit.~~ **AMENDED 2026-08-05 (§26.1): life
 ### 8.2 Negotiation is answer-driven and never blocks
 
 Query = `CSI ? u` bracketed by primary DA (`CSI c`) — the spec's own
-recommended detection; every real emulator answers DA1, so detection is
-RTT-independent. Fully async: the app runs at the conservative tier from frame
+recommended detection; every real emulator answers DA1, so the *verdict* is
+read off the reply rather than inferred from a wall-clock timeout. The
+*deadline* is not RTT-independent — a reply that lands after it is
+indistinguishable from silence — so negotiation sizes the deadline to the
+link: a fixed 400 ms for the first probe, then 3× the round trip that first
+answer measured, with the aggregate startup budget scaling the same way
+(RFC 0021 §7). Fully async: the app runs at the conservative tier from frame
 one; a confirmation is a capability *upgrade* that may never arrive (pipes, CI,
 VT-disabled consoles); nothing awaits it. Platform is never special-cased —
 Windows Terminal 1.25+ confirms like any terminal; conhost answers DA1 and

@@ -180,10 +180,14 @@ Future<ImageProtocol?> probeImageProtocol(
 ///
 /// Returns the confirmed bitset, or null when the terminal does not support
 /// the protocol (or answered nothing in time). The query is bracketed by a
-/// primary device-attributes request, which every real emulator answers —
-/// so "unsupported" is detected by DA1 arriving WITHOUT a flags reply
-/// rather than by a wall-clock timeout, keeping the verdict independent of
-/// link latency (RFC 0020 §8.2).
+/// primary device-attributes request, which every real emulator answers — so
+/// "unsupported" is *decided* by DA1 arriving WITHOUT a flags reply rather
+/// than by a wall-clock timeout (RFC 0020 §8.2). The verdict is only as
+/// latency-independent as the [timeout] the caller allows, though: a reply
+/// that lands after it is indistinguishable from no reply. Startup
+/// negotiation therefore sizes [timeout] to the link — a fixed budget for the
+/// first probe, then a multiple of the round trip that first answer measured
+/// (`PosixTerminalDriver._nextProbeTimeout`).
 ///
 /// Shares [_parseKittyKeyboardStatus] with the diagnostic probe, so runtime
 /// negotiation and `diagnose --probe` can never disagree about what a reply

@@ -30,6 +30,20 @@ final class TerminalQueryRunner
   /// Maximum time a timed-out exchange continues recognizing its replies.
   final Duration lateResponseGrace;
 
+  /// Round trip measured by the FIRST exchange the terminal actually answered:
+  /// the interval between the request leaving for the terminal and its Device
+  /// Attributes sentinel arriving back. Null until something answers, and
+  /// never overwritten afterwards — one sample is enough to tell a local
+  /// terminal from a link with a continent in it.
+  ///
+  /// Queue and quarantine waits are deliberately outside it: those are time
+  /// this runner spent on itself, not time the link took. Startup negotiation
+  /// scales its remaining probe deadlines off this value, which is what keeps
+  /// a high-latency session (SSH, mosh, a container over a VPN) from timing
+  /// every capability out into its conservative default.
+  Duration? get measuredRoundTrip => _measuredRoundTrip;
+  Duration? _measuredRoundTrip;
+
   /// Aggregate response bound for one exchange.
   final int maxResponseBytes;
 
@@ -146,6 +160,7 @@ final class TerminalQueryRunner
   void _complete(_QueryExchange exchange) {
     if (!identical(_active, exchange)) return;
     exchange.timer?.cancel();
+    _measuredRoundTrip ??= exchange.clock.elapsed;
     _active = null;
     _releaseParser();
     exchange.done.complete(List<int>.unmodifiable(exchange.bytes));
@@ -262,6 +277,11 @@ final class _QueryExchange {
 
   final TerminalResponseExpectation expectation;
   final Duration timeout;
+
+  /// Started at construction — which [TerminalQueryRunner._run] does
+  /// immediately before arming the deadline and handing the bytes to the
+  /// transport, so this measures the terminal's round trip and nothing else.
+  final Stopwatch clock = Stopwatch()..start();
   final List<int> bytes = <int>[];
   final Completer<List<int>> done = Completer<List<int>>();
   Timer? timer;

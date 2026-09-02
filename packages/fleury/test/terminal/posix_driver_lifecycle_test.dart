@@ -12,8 +12,21 @@ class _FakeStdin implements Stdin {
   final bool terminal;
   final _controller = StreamController<List<int>>();
 
-  void push(List<int> bytes) => _controller.add(bytes);
-  Future<void> close() => _controller.close();
+  /// A latency-simulating fake answers on a timer, which can outlive the test
+  /// that armed it. Pushing into a closed controller throws asynchronously and
+  /// the failure lands on whatever test is running next, so the fake tracks
+  /// its own closure rather than leaving that to each caller.
+  bool closed = false;
+
+  void push(List<int> bytes) {
+    if (closed) return;
+    _controller.add(bytes);
+  }
+
+  Future<void> close() {
+    closed = true;
+    return _controller.close();
+  }
 
   @override
   bool get hasTerminal => terminal;
@@ -809,4 +822,171 @@ void main() {
       }
     },
   );
+
+  group('startup negotiation adapts to link latency', () {
+    // Answers every startup query the driver can emit, [delay] after the
+    // request is written — a fake link with a measurable round trip. The
+    // patterns are ordered specific-first because each query carries the
+    // Device Attributes sentinel (`ESC [ c`) that terminates it.
+    void Function(String bytes) slowTerminal(
+      _FakeStdin input,
+      Duration delay, {
+      String keyboardReply = '\x1B[?31u\x1B[?1;2c',
+    }) => (bytes) {
+      String? reply;
+      if (bytes.contains('\x1B[?u')) {
+        reply = keyboardReply;
+      } else if (bytes.contains('?2026\$p')) {
+        reply = '\x1B[?2026;2\$y\x1B[?1;2c';
+      } else if (bytes.contains('\x1B[6n')) {
+        reply = '\x1B[1;2R\x1B[?1;2c';
+      } else if (bytes.contains('\x1B[c')) {
+        reply = '\x1B[?1;2c';
+      }
+      if (reply == null) return;
+      final bytesToPush = reply.codeUnits;
+      Timer(delay, () => input.push(bytesToPush));
+    };
+
+    test('a 200 ms link negotiates the same capabilities a local one does '
+        '(3.b)', () async {
+      // The defect: every probe carried a fixed 150 ms deadline, so a link
+      // slower than ~130 ms round trip timed ALL of them out and the session
+      // silently degraded on every axis at once — the ordinary condition of an
+      // agent TUI over SSH. 200 ms is a plain transpacific hop.
+      final trace = <String>[];
+      final input = _FakeStdin(terminal: true);
+      final out = _RecordingStdout(
+        terminal: true,
+        trace: trace,
+        onWrite: slowTerminal(input, const Duration(milliseconds: 200)),
+      );
+      final driver = PosixTerminalDriver(
+        stdinOverride: input,
+        stdoutOverride: out,
+        terminalModeController: _FakeModeController(trace),
+      );
+
+      try {
+        final profile = await driver.enter(TerminalMode.interactive);
+        expect(
+          profile.keyboard,
+          isNot(KeyboardCapabilities.legacy),
+          reason: 'the keyboard reply arrived; latency must not veto it',
+        );
+        expect(profile.keyboard.distinguishesRepeats, isTrue);
+        expect(
+          (profile.presentation as AnsiTerminalPresentation).synchronizedOutput,
+          isTrue,
+          reason:
+              'the second probe scales to the round trip the first measured',
+        );
+      } finally {
+        await driver.restore();
+        await input.close();
+      }
+    }, timeout: const Timeout(Duration(seconds: 20)));
+
+    test(
+      'a terminal that answers NOTHING still starts on the base budget',
+      () async {
+        // The adaptive deadline may never be reachable by staying silent: no
+        // answer means no measurement, so the budget stays at 500 ms and the
+        // cost of an unanswered handshake is exactly what it was before.
+        final input = _SilentTerminalStdin();
+        final out = _RecordingStdout(terminal: true);
+        final driver = PosixTerminalDriver(
+          stdinOverride: input,
+          stdoutOverride: out,
+          terminalModeController: _FakeModeController(out.trace),
+        );
+        final clock = Stopwatch()..start();
+        try {
+          final profile = await driver.enter(TerminalMode.interactive);
+          clock.stop();
+          expect(profile.keyboard, KeyboardCapabilities.legacy);
+          expect(
+            clock.elapsed,
+            lessThan(const Duration(milliseconds: 1500)),
+            reason:
+                'a silent terminal must not reach the 2 s adaptive ceiling; '
+                'the base budget is 500 ms',
+          );
+        } finally {
+          await driver.restore();
+          await input.close();
+        }
+      },
+      timeout: const Timeout(Duration(seconds: 20)),
+    );
+
+    test(
+      'a local terminal still negotiates inside the original budget',
+      () async {
+        final trace = <String>[];
+        final input = _FakeStdin(terminal: true);
+        final out = _RecordingStdout(
+          terminal: true,
+          trace: trace,
+          onWrite: slowTerminal(input, Duration.zero),
+        );
+        final driver = PosixTerminalDriver(
+          stdinOverride: input,
+          stdoutOverride: out,
+          terminalModeController: _FakeModeController(trace),
+        );
+        final clock = Stopwatch()..start();
+        try {
+          final profile = await driver.enter(TerminalMode.interactive);
+          clock.stop();
+          expect(profile.keyboard.distinguishesRepeats, isTrue);
+          expect(
+            (profile.presentation as AnsiTerminalPresentation)
+                .synchronizedOutput,
+            isTrue,
+          );
+          expect(
+            clock.elapsed,
+            lessThan(PosixTerminalDriver.startupNegotiationBudget),
+            reason: 'adaptivity must not slow the fast path down',
+          );
+        } finally {
+          await driver.restore();
+          await input.close();
+        }
+      },
+      timeout: const Timeout(Duration(seconds: 20)),
+    );
+
+    // The arithmetic behind the two behaviours above, pinned without a clock:
+    // these are the shipped numbers, and changing one is a decision, not a
+    // refactor.
+    test('the deadline ladder is the documented one', () {
+      const ms = Duration(milliseconds: 1);
+
+      // Nothing answered yet: the one fixed deadline in the sequence.
+      expect(PosixTerminalDriver.probeTimeoutFor(null), ms * 400);
+      expect(
+        PosixTerminalDriver.negotiationBudgetFor(null),
+        PosixTerminalDriver.startupNegotiationBudget,
+      );
+
+      // A local terminal keeps the pre-adaptive timings exactly.
+      expect(PosixTerminalDriver.probeTimeoutFor(ms * 1), ms * 150);
+      expect(PosixTerminalDriver.probeTimeoutFor(ms * 50), ms * 150);
+      expect(PosixTerminalDriver.negotiationBudgetFor(ms * 50), ms * 500);
+
+      // A measured link buys 3 round trips per probe, 8 for the sequence.
+      expect(PosixTerminalDriver.probeTimeoutFor(ms * 200), ms * 600);
+      expect(PosixTerminalDriver.negotiationBudgetFor(ms * 200), ms * 1600);
+
+      // Both are bounded: startup stops being free somewhere.
+      expect(PosixTerminalDriver.probeTimeoutFor(ms * 400), ms * 1200);
+      expect(PosixTerminalDriver.probeTimeoutFor(ms * 900), ms * 1500);
+      expect(
+        PosixTerminalDriver.negotiationBudgetFor(ms * 400),
+        PosixTerminalDriver.maxStartupNegotiationBudget,
+      );
+    });
+  });
 }
