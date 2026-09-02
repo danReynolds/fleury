@@ -464,6 +464,7 @@ export 'src/widgets/async.dart'
         ConnectionState,
         FutureBuilder,
         StreamBuilder;
+export 'src/widgets/terminal_session.dart';
 export 'src/widgets/basic.dart'
     show
         AspectRatio,

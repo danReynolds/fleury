@@ -37,6 +37,7 @@ import '../terminal/posix_driver.dart';
 import '../terminal/terminal_driver.dart';
 import '../widgets/focus.dart';
 import '../widgets/framework.dart';
+import '../widgets/terminal_session.dart';
 import '../widgets/keyboard.dart';
 import '../widgets/overlay.dart';
 import '../widgets/selection/selection_area.dart';
@@ -1242,7 +1243,14 @@ Future<AppExit> _runAppImpl(
           // the ambient MediaQuery data when the terminal resizes, preserving
           // the app subtree (and all its state).
           final rootEntry = OverlayEntry(
-            builder: (_) => DefaultRootSelection(child: root),
+            // The session scope is what lets an app hand the terminal to a
+            // child ($EDITOR, a pager) from a default runApp — see
+            // TerminalSession. It wraps the app root, above the default
+            // selection, so floating entries share it too.
+            builder: (_) => TerminalSessionScope(
+              session: TerminalSession(usedDriver),
+              child: DefaultRootSelection(child: root),
+            ),
           );
           // A full-screen layer above the app that shows the uncaught-error
           // banner. As its own entry it never touches the app's layout — the
