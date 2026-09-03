@@ -34,6 +34,7 @@ import 'dart:typed_data' show Uint8List;
 
 import 'package:fleury/src/cli/create_command.dart';
 import 'package:fleury/src/cli/dart_sdk.dart';
+import 'package:fleury/src/cli/run_command.dart';
 import 'package:fleury/src/foundation/geometry.dart';
 import 'package:fleury/src/remote/bridge_app_link.dart';
 import 'package:fleury/src/remote/buffered_browser_input.dart';
@@ -46,6 +47,7 @@ import 'package:fleury/src/remote/serve_mono_font_asset.dart';
 import 'package:fleury/src/remote/shell_init.dart';
 import 'package:fleury/src/remote/spawn.dart';
 import 'package:fleury/src/remote/unix_socket_transport.dart';
+import 'package:fleury/src/runtime/dev_bootstrap.dart';
 import 'package:fleury/src/terminal/capabilities.dart';
 import 'package:fleury/src/terminal/diagnostics.dart';
 import 'package:fleury/src/terminal/native_driver.dart';
@@ -63,6 +65,8 @@ Future<void> main(List<String> args) async {
       exit(await runCreateCommand(args.sublist(1)));
     case 'shell':
       exit(await _runShell(args.sublist(1)));
+    case 'run':
+      await _runRun(args.sublist(1));
     case 'serve':
       exit(await _runServe(args.sublist(1)));
     case 'diagnose':
@@ -98,6 +102,10 @@ void _printUsage() {
     'so the app can be',
   );
   stderr.writeln('           launched under an IDE debugger.');
+  stderr.writeln(
+    '  run      Run an app with hot reload, compiled once (see fleury run '
+    '--help).',
+  );
   stderr.writeln(
     '  serve    Proxy fleury-app rendering to a browser via '
     'WebSocket into a DOM cell grid.',
@@ -2433,4 +2441,19 @@ String _basename(String path) {
     path,
   ).pathSegments.where((segment) => segment.isNotEmpty);
   return segments.isEmpty ? '' : segments.last;
+}
+
+/// `fleury run`: supervise an app from this process instead of letting the app
+/// respawn itself, which compiles it once rather than twice.
+Future<Never> _runRun(List<String> args) async {
+  final run = parseRunCommand(args);
+  if (run == null) {
+    stderr.write(runCommandUsage);
+    exit(64);
+  }
+  return DevBootstrap.launch(
+    scriptPath: run.scriptPath,
+    args: run.args,
+    vmOptions: run.vmOptions,
+  );
 }

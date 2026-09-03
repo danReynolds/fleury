@@ -105,6 +105,28 @@ What this says:
   fd-capture start is ~12 ms of it. Nothing in the framework moves that
   needle; `dart compile exe` does.
 
+### Follow-up: `fleury run`, measured
+
+The double compile above is structural: the transparent `dart run` start can
+only decide to supervise from inside `runApp`, after compiling the whole app,
+and then compiles it again in the child that gets the VM service. `fleury run
+<script>` is a launcher that supervises the same child without ever compiling
+the app. `dart run bin/dev_startup_profile.dart` (cooperative PTY, medians of
+3, counter example):
+
+| start | spawn → VM banner | spawn → runApp entry | spawn → first frame |
+| --- | ---: | ---: | ---: |
+| `dart run app.dart` (transparent supervisor) | 2131 ms | 3518 ms | 3620 ms |
+| `dart run --enable-vm-service=0 app.dart` (one compile, no supervisor) | 569 ms | 1949 ms | 2037 ms |
+| `dart run fleury:fleury run app.dart` (launcher from pub's cached snapshot) | 796 ms | 2125 ms | 2219 ms |
+| `dart run bin/fleury.dart run app.dart` (launcher compiled from source) | 2050 ms | 3365 ms | 3463 ms |
+
+The launcher lands within ~180 ms of the one-compile floor; that remainder is
+`dart run` resolving the package plus the launcher's own start. The last row
+is the design constraint made visible: a launcher that has to compile itself
+saves nothing, so it must start from a snapshot — which `dart run
+<package>:<executable>` and `dart pub global activate` both provide.
+
 Reproduce:
 
 ```sh
@@ -115,4 +137,6 @@ dart run bin/serve_wire_profile.dart
 dart compile exe ../packages/fleury/example/counter_quickstart.dart -o /tmp/counter
 dart run capture_pty.dart --answer-probes --out /tmp/cap --timeout 3 -- \
   /bin/sh -c 'FLEURY_RUNTIME_MARKERS=/tmp/marks.json exec /tmp/counter'
+dart run bin/dev_startup_profile.dart --cwd ../packages/fleury -- \
+  dart run fleury:fleury run example/counter_quickstart.dart
 ```

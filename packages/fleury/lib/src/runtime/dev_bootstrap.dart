@@ -202,6 +202,17 @@ final class DevBootstrap {
   /// [_spawnChildInto]). Empty when the app did not hand it over.
   List<String> _args = const [];
 
+  /// The entrypoint the child runs. `runOrFallThrough` supervises the running
+  /// script itself; [launch] supervises an app the launcher never compiled.
+  String _scriptPath = Platform.script.toFilePath();
+
+  /// VM options the child replays ahead of the supervisor's own.
+  List<String> _vmOptions = Platform.executableArguments;
+
+  /// Where the source watcher roots resolve from; null means "from this
+  /// process's entrypoint", which is right when the supervisor IS the app.
+  String? _projectRoot;
+
   VmService? _vm;
   Process? _child;
 
@@ -297,6 +308,61 @@ final class DevBootstrap {
   /// started (callers then proceed with the classic path); once supervision
   /// begins, this future never completes — the session ends via `exit()`
   /// with the child's exit code.
+  /// `fleury run <script>`: supervise [scriptPath] from a process that never
+  /// compiled it.
+  ///
+  /// `runOrFallThrough` can only decide to supervise from inside `runApp`, at
+  /// the bottom of a fully compiled program, so a transparent `dart run`
+  /// start compiles the app twice: once to reach that decision and once in
+  /// the child that gets the VM service. A launcher skips the first compile.
+  /// The child is the same child as ever — it sees a flag-enabled service and
+  /// the supervised-child environment, so nothing inside the app changes.
+  ///
+  /// Never returns: the process ends with the child's exit code (or 70 when
+  /// the supervisor itself failed). When there is nothing to watch, the app
+  /// still runs, once, without hot reload.
+  static Future<Never> launch({
+    required String scriptPath,
+    List<String> args = const [],
+    List<String> vmOptions = const [],
+  }) async {
+    final script = File(scriptPath).absolute;
+    if (!script.existsSync()) {
+      stderr.writeln('fleury run: no such file: $scriptPath');
+      exit(64);
+    }
+    final supervisor = DevBootstrap._()
+      .._args = args
+      .._scriptPath = script.path
+      .._vmOptions = vmOptions
+      .._projectRoot =
+          DevSourceRoots.entrypointDirectory(script: script.uri) ??
+          script.parent.path;
+    final started = await supervisor._superviseFirstChild();
+    if (!started) {
+      _debugLog('launch: no supervision, running the app once');
+      final child = await Process.start(Platform.resolvedExecutable, [
+        ...replayableVmOptions(vmOptions),
+        script.path,
+        ...args,
+      ], mode: ProcessStartMode.inheritStdio);
+      exit(await child.exitCode);
+    }
+    try {
+      await supervisor._superviseForever();
+    } catch (error, stack) {
+      _debugLog('supervisor loop died: $error\n$stack');
+      final child = supervisor._child;
+      if (child != null) {
+        child.kill(ProcessSignal.sigkill);
+        await child.exitCode;
+      }
+      await supervisor._emergencyTtyRestore();
+      exit(70);
+    }
+    throw StateError('unreachable: the supervisor loop only exits');
+  }
+
   static Future<void> runOrFallThrough({List<String> args = const []}) async {
     // A pre-existing VM service means an editor/debugger owns this run (F5,
     // `--enable-vm-service`): its reload/restart tooling is better placed
@@ -360,7 +426,7 @@ final class DevBootstrap {
     // that can only forward — in exchange for no reload and no restart.
     // Falling through here leaves the classic single-isolate path, which is
     // exactly what such a session would have gotten anyway.
-    final roots = DevSourceRoots.resolve();
+    final roots = DevSourceRoots.resolve(projectRoot: _projectRoot);
     _debugLog('watch roots: ${roots?.directories}');
     if (roots == null || roots.directories.isEmpty) {
       _debugLog('nothing to watch: falling through to the classic path');
@@ -554,13 +620,13 @@ final class DevBootstrap {
       child = await Process.start(
         Platform.resolvedExecutable,
         devRespawnArguments(
-          scriptPath: Platform.script.toFilePath(),
+          scriptPath: _scriptPath,
           serviceInfo: infoFile.uri,
           args: _args,
           // The parent is the user's own `dart run …` invocation; the child
           // must run with the same VM options or `--define`/`--enable-asserts`
           // silently vanish from the process they interact with.
-          vmOptions: Platform.executableArguments,
+          vmOptions: _vmOptions,
         ),
         mode: ProcessStartMode.inheritStdio,
         environment: {

@@ -514,6 +514,78 @@ Future<void> main() async {
       },
     );
   });
+
+  group('fleury run', () {
+    test(
+      'a launcher that never ran the app supervises it: main runs once, '
+      'save-to-reload works, the exit code comes back',
+      timeout: const Timeout(Duration(minutes: 4)),
+      () async {
+        final repoRoot = _findRepoRoot(Directory.current);
+        final app = await _generateApp(tempDir);
+        final session = await _startSession(
+          app: app,
+          timeoutSeconds: 150,
+          scriptArguments: [
+            '${repoRoot.path}/packages/fleury/bin/fleury.dart',
+            'run',
+            app.entrypoint.path,
+          ],
+        );
+        try {
+          await session.waitUntilChildReady();
+          app.marker.writeAsStringSync(_marker('BETA'));
+          final reloaded = await _waitFor(
+            () async {
+              final text = session.bootstrapLog();
+              return text.contains('reload: done') ? text : null;
+            },
+            timeout: const Duration(seconds: 60),
+            what: 'reload completion',
+          );
+          expect(
+            reloaded,
+            isNotNull,
+            reason:
+                'a save never reached the launcher:\n${session.diagnostics()}',
+          );
+          expect(reloaded, contains('success=true'));
+
+          Process.killPid(await session.appPid(), ProcessSignal.sigint);
+          final metadata = await session.finish();
+          expect(
+            metadata['exitCode'],
+            77,
+            reason:
+                "the app's exit code must come back through the launcher:\n"
+                '${session.diagnostics()}',
+          );
+          final output = session.output();
+          expect(
+            'BOOT-MARKER'.allMatches(output),
+            hasLength(1),
+            reason:
+                'main() must run only in the child: the launcher never '
+                'compiles or runs the app (a transparent dart run start runs '
+                'it twice):\n${session.diagnostics()}',
+          );
+          expect(
+            'Dart VM service'.allMatches(output),
+            hasLength(1),
+            reason: 'exactly one flag-enabled VM, the child',
+          );
+          expect(
+            output,
+            contains('BETA'),
+            reason:
+                'the reloaded value never repainted:\n${session.diagnostics()}',
+          );
+        } finally {
+          session.dispose();
+        }
+      },
+    );
+  });
 }
 
 /// A generated throwaway app: a `tempapp` package whose entrypoint reports its
