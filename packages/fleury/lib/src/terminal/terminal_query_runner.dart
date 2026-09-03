@@ -53,11 +53,50 @@ final class TerminalQueryRunner
   bool _disposed = false;
 
   @override
-  Future<List<int>> request(String bytes, {required Duration timeout}) {
+  Future<List<int>> request(String bytes, {required Duration timeout}) async {
+    final replies = await _enqueue(bytes, timeout: timeout, sentinels: 1);
+    final reply = replies.single;
+    if (reply == null) {
+      throw TimeoutException('Terminal query timed out.', timeout);
+    }
+    return reply;
+  }
+
+  /// Sends [queries] in ONE write and resolves each reply in order.
+  ///
+  /// A terminal answers queries in the order it reads them, so independent
+  /// probes need not wait for each other: one round trip instead of one per
+  /// query, which is what startup over a slow link is made of. Every query
+  /// must end with the DA1 sentinel (`ESC [ c`); its reply delimits the
+  /// segments. A query the terminal never answers within [timeout] resolves
+  /// to null, along with everything after it (a later reply cannot be told
+  /// apart from the missing one), and the late sentinels are quarantined so
+  /// they never surface as input.
+  Future<List<List<int>?>> requestBatch(
+    List<String> queries, {
+    required Duration timeout,
+  }) {
+    assert(queries.isNotEmpty, 'a batch needs at least one query');
+    assert(
+      queries.every((q) => q.endsWith(_deviceAttributesSentinel)),
+      'every batched query must end with the DA1 sentinel',
+    );
+    return _enqueue(
+      queries.join(),
+      timeout: timeout,
+      sentinels: queries.length,
+    );
+  }
+
+  Future<List<List<int>?>> _enqueue(
+    String bytes, {
+    required Duration timeout,
+    required int sentinels,
+  }) {
     final elapsed = Stopwatch()..start();
     final previous = _tail;
     final released = Completer<void>();
-    final result = Completer<List<int>>();
+    final result = Completer<List<List<int>?>>();
     final queueTimer = Timer(timeout, () {
       if (!result.isCompleted) {
         result.completeError(
@@ -71,9 +110,6 @@ final class TerminalQueryRunner
     _tail = released.future;
     unawaited(() async {
       try {
-        // Wait for the actual preceding exchange even if this caller's own
-        // deadline expires. Releasing the queue early would let a later query
-        // overwrite the still-active parser expectation.
         await previous;
         if (result.isCompleted) return;
         queueTimer.cancel();
@@ -98,7 +134,7 @@ final class TerminalQueryRunner
         if (remaining <= Duration.zero) {
           throw TimeoutException('Terminal query deadline elapsed.', timeout);
         }
-        final response = await _run(bytes, remaining);
+        final response = await _run(bytes, remaining, sentinels);
         if (!result.isCompleted) result.complete(response);
       } on Object catch (error, stack) {
         if (!result.isCompleted) result.completeError(error, stack);
@@ -110,10 +146,11 @@ final class TerminalQueryRunner
     return result.future;
   }
 
-  Future<List<int>> _run(String bytes, Duration timeout) {
+  Future<List<List<int>?>> _run(String bytes, Duration timeout, int sentinels) {
     final exchange = _QueryExchange(
       expectation: _expectationFor(bytes),
       timeout: timeout,
+      sentinels: sentinels,
     );
     _active = exchange;
     _parser.responseExpectation = exchange.expectation;
@@ -138,7 +175,8 @@ final class TerminalQueryRunner
   void addTerminalResponse(TerminalResponse response) {
     final active = _active;
     if (active != null) {
-      if (!_append(active.bytes, response.raw)) {
+      active.total += response.raw.length;
+      if (active.total > maxResponseBytes) {
         _fail(
           active,
           StateError(
@@ -147,31 +185,46 @@ final class TerminalQueryRunner
         );
         return;
       }
-      if (response.isDeviceAttributes) _complete(active);
+      active.current.addAll(response.raw);
+      if (response.isDeviceAttributes) {
+        // The first sentinel back is one honest round trip.
+        _measuredRoundTrip ??= active.clock.elapsed;
+        active.segments.add(List<int>.unmodifiable(active.current));
+        active.current = <int>[];
+        if (active.segments.length == active.sentinels) _complete(active);
+      }
       return;
     }
 
     final quarantine = _quarantine;
     if (quarantine != null && response.isDeviceAttributes) {
-      _finishQuarantine(quarantine);
+      quarantine.pendingSentinels -= 1;
+      if (quarantine.pendingSentinels <= 0) _finishQuarantine(quarantine);
     }
   }
 
   void _complete(_QueryExchange exchange) {
     if (!identical(_active, exchange)) return;
     exchange.timer?.cancel();
-    _measuredRoundTrip ??= exchange.clock.elapsed;
     _active = null;
     _releaseParser();
-    exchange.done.complete(List<int>.unmodifiable(exchange.bytes));
+    exchange.done.complete(List<List<int>?>.unmodifiable(exchange.segments));
   }
 
+  /// The deadline passed with sentinels outstanding: what was answered is
+  /// returned, the rest is null, and the late sentinels are quarantined.
   void _timeout(_QueryExchange exchange) {
     if (!identical(_active, exchange)) return;
-    _fail(
-      exchange,
-      TimeoutException('Terminal query timed out.', exchange.timeout),
+    exchange.timer?.cancel();
+    _active = null;
+    exchange.done.complete(
+      List<List<int>?>.unmodifiable([
+        ...exchange.segments,
+        for (var i = exchange.segments.length; i < exchange.sentinels; i++)
+          null,
+      ]),
     );
+    _quarantineAfter(exchange);
   }
 
   void _fail(_QueryExchange exchange, Object error, [StackTrace? stack]) {
@@ -179,8 +232,15 @@ final class TerminalQueryRunner
     exchange.timer?.cancel();
     _active = null;
     exchange.done.completeError(error, stack);
+    _quarantineAfter(exchange);
+  }
 
-    final quarantine = _QueryQuarantine(exchange.expectation);
+  void _quarantineAfter(_QueryExchange exchange) {
+    final outstanding = exchange.sentinels - exchange.segments.length;
+    final quarantine = _QueryQuarantine(
+      exchange.expectation,
+      pendingSentinels: outstanding < 1 ? 1 : outstanding,
+    );
     _quarantine = quarantine;
     // Keep the ambiguous response forms owned until the late-reply boundary.
     _parser.responseExpectation = quarantine.expectation;
@@ -199,13 +259,6 @@ final class TerminalQueryRunner
     _quarantine = null;
     _releaseParser(discardIncompleteResponses: discardIncompleteResponses);
     quarantine.done.complete();
-  }
-
-  bool _append(List<int> target, List<int> bytes) {
-    final remaining = maxResponseBytes - target.length;
-    if (remaining < bytes.length) return false;
-    target.addAll(bytes);
-    return true;
   }
 
   void _releaseParser({bool discardIncompleteResponses = false}) {
@@ -252,6 +305,8 @@ final class TerminalQueryRunner
   }
 }
 
+const _deviceAttributesSentinel = '\x1b[c';
+
 TerminalResponseExpectation _expectationFor(String request) {
   return TerminalResponseExpectation(
     privateCsiPrefix: true,
@@ -273,22 +328,31 @@ bool _containsWindowQuery(String request) {
 }
 
 final class _QueryExchange {
-  _QueryExchange({required this.expectation, required this.timeout});
+  _QueryExchange({
+    required this.expectation,
+    required this.timeout,
+    required this.sentinels,
+  });
 
   final TerminalResponseExpectation expectation;
   final Duration timeout;
 
-  /// Started at construction — which [TerminalQueryRunner._run] does
-  /// immediately before arming the deadline and handing the bytes to the
-  /// transport, so this measures the terminal's round trip and nothing else.
+  /// How many DA1 replies end this exchange: one per batched query.
+  final int sentinels;
+
   final Stopwatch clock = Stopwatch()..start();
-  final List<int> bytes = <int>[];
-  final Completer<List<int>> done = Completer<List<int>>();
+  final List<List<int>> segments = <List<int>>[];
+  List<int> current = <int>[];
+  int total = 0;
+  final Completer<List<List<int>?>> done = Completer<List<List<int>?>>();
   Timer? timer;
 }
 
 final class _QueryQuarantine {
-  _QueryQuarantine(this.expectation);
+  _QueryQuarantine(this.expectation, {this.pendingSentinels = 1});
+
+  /// Late sentinels still expected before ordinary input is safe again.
+  int pendingSentinels;
 
   final TerminalResponseExpectation expectation;
   final Completer<void> done = Completer<void>();

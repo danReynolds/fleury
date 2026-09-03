@@ -172,7 +172,15 @@ Future<ImageProtocol?> probeImageProtocol(
     return null;
   }
   stopwatch.stop();
-  final result = _parseKittyGraphicsQuery(response, elapsed: stopwatch.elapsed);
+  return parseImageProtocolReply(response, elapsed: stopwatch.elapsed);
+}
+
+/// The reply to [kittyGraphicsQuery]: the protocol it confirms, or null.
+ImageProtocol? parseImageProtocolReply(
+  List<int> response, {
+  required Duration elapsed,
+}) {
+  final result = _parseKittyGraphicsQuery(response, elapsed: elapsed);
   return result.isConfirmed ? ImageProtocol.kitty : null;
 }
 
@@ -234,11 +242,14 @@ Future<bool> probeSynchronizedOutput(
     return false;
   }
   stopwatch.stop();
-  return _parseSynchronizedOutput(
-    response,
-    elapsed: stopwatch.elapsed,
-  ).isConfirmed;
+  return parseSynchronizedOutputReply(response, elapsed: stopwatch.elapsed);
 }
+
+/// The reply to [synchronizedOutputQuery]: whether mode 2026 is supported.
+bool parseSynchronizedOutputReply(
+  List<int> response, {
+  required Duration elapsed,
+}) => _parseSynchronizedOutput(response, elapsed: elapsed).isConfirmed;
 
 /// The width-disagreement class a probe glyph represents. Classes are
 /// independent: a representative votes only within its own class (RFC 0019
@@ -453,14 +464,16 @@ Future<WidthMeasurements> probeGlyphWidths(
   } on Object {
     return const WidthMeasurements.empty();
   }
+  return parseGlyphWidthReply(response);
+}
+
+/// The reply to [glyphWidthQuery]: one measured width per battery glyph, or
+/// empty when the terminal did not report every position.
+WidthMeasurements parseGlyphWidthReply(List<int> response) {
   final columns = _cursorReportColumns(response);
-  // Atomicity: an unexpected reply count means attribution is unsafe.
   if (columns.length != widthProbeBattery.length) {
     return const WidthMeasurements.empty();
   }
-  // Each glyph started at column 1, so the reported column is advance + 1.
-  // Recorded raw — a zero or negative-looking advance is kept as measured and
-  // rejected by derivation's agreement rules, not silently repaired here.
   return WidthMeasurements(List<int?>.unmodifiable(columns.map((c) => c - 1)));
 }
 
@@ -545,8 +558,17 @@ const _deviceAttributesQuery = '\x1B[c';
 
 /// DECRQM query for synchronized-output mode 2026, bracketed by DA1 so an
 /// unsupported terminal resolves promptly instead of consuming the timeout.
-@visibleForTesting
+/// DECRQM for synchronized output (mode 2026), DA1-terminated.
 const synchronizedOutputQuery = '\x1B[?2026\$p$_deviceAttributesQuery';
+
+/// The kitty graphics capability query, DA1-terminated.
+const kittyGraphicsQuery = _kittyGraphicsQuery;
+
+/// [kittyGraphicsQuery] followed by an erase-to-end-of-line before its
+/// sentinel: for a batch where it is the last query, so a terminal that
+/// prints the unrecognized APC payload as text is cleaned up after it.
+const kittyGraphicsQueryWithCleanup =
+    '$_kittyGraphicsApc\r\x1B[K$_deviceAttributesQuery';
 
 /// Runtime negotiation's query: the app's enter sequences ALREADY pushed a
 /// tier, so a bare status read reports what the terminal honoured of it.
@@ -573,8 +595,8 @@ const _kittyKeyboardSupportQuery =
     '\x1B[?u' // query: what stuck
     '\x1B[<1u' // pop: restore the prior stack entry
     '$_deviceAttributesQuery';
-const _kittyGraphicsQuery =
-    '\x1B_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1B\\$_deviceAttributesQuery';
+const _kittyGraphicsApc = '\x1B_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1B\\';
+const _kittyGraphicsQuery = '$_kittyGraphicsApc$_deviceAttributesQuery';
 
 const List<_ProbeDefinition> _probeDefinitions = <_ProbeDefinition>[
   _ProbeDefinition(

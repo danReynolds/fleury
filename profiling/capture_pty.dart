@@ -223,11 +223,42 @@ void _setPtyWindowSize(
 
 /// Canned answers for `--answer-probes`, in the shape a modern terminal gives.
 const _probeReplies = <(String, String)>[
-  ('\x1b[?u', '\x1b[?0u'), // kitty keyboard flags
+  ('\x1b[?u', '\x1b[?31u'), // kitty keyboard: every requested flag stuck
   ('\x1b[?2026\$p', '\x1b[?2026;2\$y'), // synchronized output DECRQM
   ('\x1b[6n', '\x1b[1;2R'), // cursor position report (width probe)
   ('\x1b[c', '\x1b[?1;2c'), // DA1 — the sentinel that ends the probe wait
 ];
+
+/// The longest suffix of [text] that is a proper prefix of some query, so the
+/// next read can complete it.
+String _queryPrefixSuffix(String text) {
+  final longest =
+      _probeReplies.map((r) => r.$1.length).reduce((a, b) => a > b ? a : b);
+  for (var k = longest - 1; k >= 1; k--) {
+    if (k > text.length) continue;
+    final suffix = text.substring(text.length - k);
+    if (_probeReplies.any((r) => r.$1.startsWith(suffix))) return suffix;
+  }
+  return '';
+}
+
+/// Writes every byte to the non-blocking master: a short write or EAGAIN is
+/// retried, so a whole reply burst never vanishes silently.
+void _writeAll(int fd, List<int> bytes, Arena arena) {
+  final p = arena<Uint8>(bytes.length)
+    ..asTypedList(bytes.length).setAll(0, bytes);
+  var offset = 0;
+  var spins = 0;
+  while (offset < bytes.length) {
+    final n = _write(fd, p + offset, bytes.length - offset);
+    if (n > 0) {
+      offset += n;
+      continue;
+    }
+    if (++spins > 500) _fail('failed to write a probe reply to the PTY');
+    sleep(const Duration(milliseconds: 1));
+  }
+}
 
 void main(List<String> args) {
   var out = 'capture';
@@ -250,6 +281,7 @@ void main(List<String> args) {
   int? continueAfterInputMs;
   final allowedExitCodes = <int>{0};
   var answerProbes = false;
+  var answerDelayMs = 0;
   final cmd = <String>[];
   for (var i = 0; i < args.length; i++) {
     final a = args[i];
@@ -257,6 +289,10 @@ void main(List<String> args) {
       out = args[++i];
     } else if (a == '--answer-probes') {
       answerProbes = true;
+    } else if (a == '--answer-delay-ms') {
+      // Simulates link latency: each reply is written this long after the
+      // query that asked for it was read.
+      answerDelayMs = int.parse(args[++i]);
     } else if (a == '--timeout') {
       timeout = double.parse(args[++i]);
     } else if (a == '--cols') {
@@ -440,9 +476,16 @@ void main(List<String> args) {
         ..asTypedList(inputBytes.length).setAll(0, inputBytes);
     }
     final signals = <Map<String, Object?>>[];
+    // Auto-responder replies waiting for their simulated link delay.
+    final pendingReplies = <(double dueMs, String reply)>[];
+    var queryCarry = '';
 
     while (true) {
       final elapsedMs = sw.elapsedMicroseconds / 1000.0;
+      while (
+          pendingReplies.isNotEmpty && pendingReplies.first.$1 <= elapsedMs) {
+        _writeAll(masterFd, pendingReplies.removeAt(0).$2.codeUnits, arena);
+      }
       final outputAgeMs = ttfb == null ? null : elapsedMs - ttfb;
       // --input-after-output-ms keys the input on the app's FIRST OUTPUT
       // (i.e. after startup/JIT), where a fixed --input-delay-ms can land
@@ -555,19 +598,29 @@ void main(List<String> args) {
         raw.add(buf.asTypedList(n));
         reads.add([double.parse(now.toStringAsFixed(3)), n]);
         if (answerProbes) {
-          // A fast, cooperative terminal: answer every capability query the
-          // moment it lands so startup measures the floor, not probe budgets.
-          final chunk = String.fromCharCodes(buf.asTypedList(n));
+          // A cooperative terminal: answer every capability query in the
+          // order it was read (a real terminal processes its input
+          // sequentially), so startup measures round trips, not probe
+          // budgets. With --answer-delay-ms the replies are held back to
+          // simulate a slow link.
+          // A query can straddle two reads: keep whatever trailing bytes
+          // could still be the start of one, and never a complete query, so
+          // nothing is answered twice.
+          final chunk = queryCarry + String.fromCharCodes(buf.asTypedList(n));
+          final found = <(int, String)>[];
           for (final (query, reply) in _probeReplies) {
             var at = chunk.indexOf(query);
             while (at >= 0) {
-              final bytes = reply.codeUnits;
-              final p = arena<Uint8>(bytes.length)
-                ..asTypedList(bytes.length).setAll(0, bytes);
-              _write(masterFd, p, bytes.length);
+              found.add((at, reply));
               at = chunk.indexOf(query, at + query.length);
             }
           }
+          found.sort((a, b) => a.$1.compareTo(b.$1));
+          final reply = found.map((f) => f.$2).join();
+          if (reply.isNotEmpty) {
+            pendingReplies.add((now + answerDelayMs, reply));
+          }
+          queryCarry = _queryPrefixSuffix(chunk);
         }
         continue; // drain fast
       }

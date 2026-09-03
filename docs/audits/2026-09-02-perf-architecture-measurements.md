@@ -127,6 +127,61 @@ is the design constraint made visible: a launcher that has to compile itself
 saves nothing, so it must start from a snapshot — which `dart run
 <package>:<executable>` and `dart pub global activate` both provide.
 
+## 4. Follow-ups measured: probe pipelining, the launcher's start, memory
+
+### Probe pipelining (`danreynolds/startup-followups`)
+
+After keyboard negotiation the synchronized-output, image-protocol and
+glyph-width queries go out in one write and the terminal answers them in
+order (`TerminalQueryRunner.requestBatch`). Counter example, AOT, under
+`capture_pty --answer-probes` with `--answer-delay-ms` simulating the link
+(a terminal that keeps every keyboard flag, so no second keyboard stage):
+
+| link | before: round trips / enter | after: round trips / enter |
+| --- | ---: | ---: |
+| local (0 ms) | 4 / 12 ms | 2 / 8 ms |
+| 50 ms | 4 / 216 ms | 2 / 109 ms |
+
+A terminal that rejects some keyboard flags adds one keyboard round trip on
+both sides (5 → 3). The environment gates are unchanged; a silent terminal
+is sent nothing it was not sent before.
+
+### Where the launcher's 0.8 s goes
+
+`FLEURY_DEV_BOOTSTRAP_LOG` timestamps against the spawn epoch, `dart run
+fleury run` in a fresh project (medians of 3):
+
+| from spawn | ms | what |
+| --- | ---: | --- |
+| launcher entry | ~1000 | `dart run` package check (~350) + pub snapshot VM boot (~100) + pub deciding to re-snapshot under a PTY (~150, not reproduced outside one) |
+| gates + watch roots + spawn | +15 | the launcher's own work |
+| child VM up (service listening) | +380 | JIT VM boot with the kernel service |
+| child `runApp` | +1300 | the one compile |
+| first frame | +95 | runtime |
+
+Invoking pub's cached snapshot directly — what the `dart pub global activate`
+binstub does — skips the package check: spawn → first frame 1795 ms against
+2182 ms for `dart run fleury run`. Nothing in the launcher itself is worth
+optimizing; the remaining time is pub, the VM, and the compile.
+
+### Memory footprint (AOT)
+
+`capture_pty` max RSS (getrusage of the child), 120x40, 8 s, probes
+answered:
+
+| build | app | max RSS | CPU over 8 s |
+| --- | --- | ---: | ---: |
+| bare Dart AOT `hello` (sleeping) | — | 14.1 MiB | 19 ms |
+| AOT | counter (static) | 19.0 MiB | 30 ms |
+| AOT | files (static) | 24.7 MiB | 29 ms |
+| AOT | dashboard (animated) | 31.3 MiB | 372 ms (≈ 4.6 % of a core) |
+| JIT `dart run` | counter | 55.6 MiB | — |
+| JIT `dart run` | dashboard | 642.5 MiB | 6127 ms |
+
+The framework adds 5–17 MiB over the Dart VM's own 14 MiB floor. That is
+the number to quote against Go (comparable) and Rust (lighter); the JIT
+column is the dev loop, not the product.
+
 Reproduce:
 
 ```sh
@@ -139,4 +194,6 @@ dart run capture_pty.dart --answer-probes --out /tmp/cap --timeout 3 -- \
   /bin/sh -c 'FLEURY_RUNTIME_MARKERS=/tmp/marks.json exec /tmp/counter'
 dart run bin/dev_startup_profile.dart --cwd ../packages/fleury -- \
   dart run fleury run example/counter_quickstart.dart
+dart run capture_pty.dart --answer-probes --answer-delay-ms 50 --out /tmp/cap \
+  --timeout 4 -- /bin/sh -c 'FLEURY_RUNTIME_MARKERS=/tmp/marks.json exec /tmp/counter'
 ```
