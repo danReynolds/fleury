@@ -922,12 +922,26 @@ void main() {
               'keyboard negotiation, then every remaining capability query '
               'in one exchange; got ${exchanges.length} exchanges',
         );
-        expect(exchanges.last, contains('?2026\$p'));
+        final batch = exchanges.last;
+        expect(batch, contains('?2026\$p'));
         expect(
-          exchanges.last,
+          batch,
           contains('\x1B[6n'),
           reason: 'the width battery rides the same exchange',
         );
+        // Positional segmentation: the query a terminal is most likely to
+        // choke on (the image APC) must be last so it can only cost
+        // itself, and every query that paints must end with an erase.
+        expect(batch.indexOf('?2026\$p'), lessThan(batch.indexOf('\x1B[6n')));
+        final apc = batch.indexOf('\x1B_G');
+        if (apc >= 0) {
+          expect(apc, greaterThan(batch.lastIndexOf('\x1B[6n')));
+          expect(
+            batch.substring(apc),
+            contains('\r\x1B[K\x1B[c'),
+            reason: 'the APC cleans up after itself before its sentinel',
+          );
+        }
       } finally {
         await driver.restore();
         await input.close();
@@ -972,6 +986,42 @@ void main() {
         await input.close();
       }
     }, timeout: const Timeout(Duration(seconds: 20)));
+
+    test('a terminal that answers NOTHING is asked nothing more', () async {
+      // With the base budget this held by arithmetic alone: the remaining
+      // budget after the first probe was shorter than the quarantine
+      // grace, so the batch timed out before it was written. A longer
+      // budget used to send ~200 bytes of queries — 14 painted glyphs and
+      // an APC — to a terminal that had answered nothing.
+      final saved = PosixTerminalDriver.startupNegotiationBudget;
+      PosixTerminalDriver.startupNegotiationBudget = const Duration(
+        milliseconds: 900,
+      );
+      addTearDown(() => PosixTerminalDriver.startupNegotiationBudget = saved);
+      final input = _SilentTerminalStdin();
+      final writes = <String>[];
+      final out = _RecordingStdout(terminal: true, onWrite: writes.add);
+      final driver = PosixTerminalDriver(
+        stdinOverride: input,
+        stdoutOverride: out,
+        terminalModeController: _FakeModeController(out.trace),
+      );
+      try {
+        await driver.enter(TerminalMode.interactive);
+        final sent = writes.join();
+        expect(sent, contains('\x1B[?u'), reason: 'the keyboard probe');
+        for (final query in ['?2026\$p', '\x1B[6n', '\x1B_G']) {
+          expect(
+            sent,
+            isNot(contains(query)),
+            reason: 'a silent terminal must not be sent $query',
+          );
+        }
+      } finally {
+        await driver.restore();
+        await input.close();
+      }
+    });
 
     test(
       'a terminal that answers NOTHING still starts on the base budget',

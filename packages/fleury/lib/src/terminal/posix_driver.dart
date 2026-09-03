@@ -548,9 +548,12 @@ class PosixTerminalDriver
   /// cost a round trip each, which over a slow link is most of startup;
   /// batched, the terminal answers them in order in one round trip and
   /// [TerminalQueryRunner.requestBatch] hands back one segment per query.
-  /// The width probe paints glyphs, so it must be last and needs the
-  /// alternate screen; a query the terminal does not answer leaves its
-  /// capability conservative, exactly as a timed-out probe did.
+  /// The width probe paints glyphs and needs the alternate screen; a query
+  /// the terminal does not answer leaves its capability conservative,
+  /// exactly as a timed-out probe did. A terminal that answered nothing at
+  /// all during keyboard negotiation is sent none of this ([_terminalSilent]):
+  /// the sequential path relied on the remaining budget being shorter than
+  /// the quarantine grace for that, which held by arithmetic, not by design.
   Future<void> _probeCapabilities(
     bool onAlternateScreen,
     Stopwatch negotiationClock,
@@ -560,13 +563,21 @@ class PosixTerminalDriver
     );
     _synchronizedOutput = syncOverride ?? false;
     if (!_stdoutIsTerminal || !_changedStdin) return;
+    if (_terminalSilent) return;
+    // Order matters twice over. Segmentation is positional, so a query the
+    // terminal chokes on takes every later reply with it: the APC is the one
+    // an unidentified terminal is most likely to mishandle, so it goes last,
+    // where it can only cost itself. And each query that can leave marks on
+    // screen ends with an erase — the width battery's own, and a cleanup
+    // variant of the image query for a terminal that prints the APC as text.
     final queries = <(_CapabilityProbe, String)>[
       if (syncOverride == null)
         (_CapabilityProbe.synchronizedOutput, synchronizedOutputQuery),
-      if (_imageProbePermitted()) (_CapabilityProbe.image, kittyGraphicsQuery),
       if (onAlternateScreen &&
           widthProbeIsPermittedByEnvironment(Platform.environment))
         (_CapabilityProbe.glyphWidths, glyphWidthQuery),
+      if (_imageProbePermitted())
+        (_CapabilityProbe.image, kittyGraphicsQueryWithCleanup),
     ];
     if (queries.isEmpty) return;
     final timeout = _nextProbeTimeout(negotiationClock);
@@ -616,6 +627,11 @@ class PosixTerminalDriver
 
   int? _confirmedKeyboardFlags;
 
+  /// True once a keyboard probe was sent and the terminal never answered it:
+  /// nothing else is worth asking, and an unrecognizing terminal would only
+  /// print the later queries.
+  bool _terminalSilent = false;
+
   KeyboardCapabilities get keyboardCapabilities {
     final flags = _confirmedKeyboardFlags;
     if (flags == null) return KeyboardCapabilities.legacy;
@@ -631,6 +647,7 @@ class PosixTerminalDriver
   /// at all. Reporting conservative capabilities cannot fix that; only
   /// leaving the mode can (§8.3).
   Future<void> _negotiateKeyboard(Stopwatch negotiationClock) async {
+    _terminalSilent = false;
     if (!_stdoutIsTerminal || !_changedStdin) return;
     // Every `_terminalState` read in this method and its helpers is null-safe:
     // `restore()` can complete while a probe below is awaiting its reply, and
@@ -655,6 +672,9 @@ class PosixTerminalDriver
       flags = await probeKeyboardFlags(_queryRunner, timeout: timeout);
     } on Object {
       flags = null;
+    }
+    if (flags == null && _queryRunner.measuredRoundTrip == null) {
+      _terminalSilent = true;
     }
     if (flags == null) {
       // No answer confirms no enhanced keyboard tier. Pop the attempted frame

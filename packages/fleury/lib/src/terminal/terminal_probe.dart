@@ -564,6 +564,12 @@ const synchronizedOutputQuery = '\x1B[?2026\$p$_deviceAttributesQuery';
 /// The kitty graphics capability query, DA1-terminated.
 const kittyGraphicsQuery = _kittyGraphicsQuery;
 
+/// [kittyGraphicsQuery] followed by an erase-to-end-of-line before its
+/// sentinel: for a batch where it is the last query, so a terminal that
+/// prints the unrecognized APC payload as text is cleaned up after it.
+const kittyGraphicsQueryWithCleanup =
+    '$_kittyGraphicsApc\r\x1B[K$_deviceAttributesQuery';
+
 /// Runtime negotiation's query: the app's enter sequences ALREADY pushed a
 /// tier, so a bare status read reports what the terminal honoured of it.
 @visibleForTesting
@@ -589,8 +595,8 @@ const _kittyKeyboardSupportQuery =
     '\x1B[?u' // query: what stuck
     '\x1B[<1u' // pop: restore the prior stack entry
     '$_deviceAttributesQuery';
-const _kittyGraphicsQuery =
-    '\x1B_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1B\\$_deviceAttributesQuery';
+const _kittyGraphicsApc = '\x1B_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1B\\';
+const _kittyGraphicsQuery = '$_kittyGraphicsApc$_deviceAttributesQuery';
 
 const List<_ProbeDefinition> _probeDefinitions = <_ProbeDefinition>[
   _ProbeDefinition(

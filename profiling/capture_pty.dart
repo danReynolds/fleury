@@ -229,6 +229,37 @@ const _probeReplies = <(String, String)>[
   ('\x1b[c', '\x1b[?1;2c'), // DA1 — the sentinel that ends the probe wait
 ];
 
+/// The longest suffix of [text] that is a proper prefix of some query, so the
+/// next read can complete it.
+String _queryPrefixSuffix(String text) {
+  final longest =
+      _probeReplies.map((r) => r.$1.length).reduce((a, b) => a > b ? a : b);
+  for (var k = longest - 1; k >= 1; k--) {
+    if (k > text.length) continue;
+    final suffix = text.substring(text.length - k);
+    if (_probeReplies.any((r) => r.$1.startsWith(suffix))) return suffix;
+  }
+  return '';
+}
+
+/// Writes every byte to the non-blocking master: a short write or EAGAIN is
+/// retried, so a whole reply burst never vanishes silently.
+void _writeAll(int fd, List<int> bytes, Arena arena) {
+  final p = arena<Uint8>(bytes.length)
+    ..asTypedList(bytes.length).setAll(0, bytes);
+  var offset = 0;
+  var spins = 0;
+  while (offset < bytes.length) {
+    final n = _write(fd, p + offset, bytes.length - offset);
+    if (n > 0) {
+      offset += n;
+      continue;
+    }
+    if (++spins > 500) _fail('failed to write a probe reply to the PTY');
+    sleep(const Duration(milliseconds: 1));
+  }
+}
+
 void main(List<String> args) {
   var out = 'capture';
   var timeout = 10.0;
@@ -447,15 +478,13 @@ void main(List<String> args) {
     final signals = <Map<String, Object?>>[];
     // Auto-responder replies waiting for their simulated link delay.
     final pendingReplies = <(double dueMs, String reply)>[];
+    var queryCarry = '';
 
     while (true) {
       final elapsedMs = sw.elapsedMicroseconds / 1000.0;
       while (
           pendingReplies.isNotEmpty && pendingReplies.first.$1 <= elapsedMs) {
-        final bytes = pendingReplies.removeAt(0).$2.codeUnits;
-        final p = arena<Uint8>(bytes.length)
-          ..asTypedList(bytes.length).setAll(0, bytes);
-        _write(masterFd, p, bytes.length);
+        _writeAll(masterFd, pendingReplies.removeAt(0).$2.codeUnits, arena);
       }
       final outputAgeMs = ttfb == null ? null : elapsedMs - ttfb;
       // --input-after-output-ms keys the input on the app's FIRST OUTPUT
@@ -574,7 +603,10 @@ void main(List<String> args) {
           // sequentially), so startup measures round trips, not probe
           // budgets. With --answer-delay-ms the replies are held back to
           // simulate a slow link.
-          final chunk = String.fromCharCodes(buf.asTypedList(n));
+          // A query can straddle two reads: keep whatever trailing bytes
+          // could still be the start of one, and never a complete query, so
+          // nothing is answered twice.
+          final chunk = queryCarry + String.fromCharCodes(buf.asTypedList(n));
           final found = <(int, String)>[];
           for (final (query, reply) in _probeReplies) {
             var at = chunk.indexOf(query);
@@ -588,6 +620,7 @@ void main(List<String> args) {
           if (reply.isNotEmpty) {
             pendingReplies.add((now + answerDelayMs, reply));
           }
+          queryCarry = _queryPrefixSuffix(chunk);
         }
         continue; // drain fast
       }
