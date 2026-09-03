@@ -848,26 +848,91 @@ void main() {
     // request is written — a fake link with a measurable round trip. The
     // patterns are ordered specific-first because each query carries the
     // Device Attributes sentinel (`ESC [ c`) that terminates it.
+    // A terminal processes its input in order and answers every query it
+    // finds, so one write holding several queries gets several replies, in
+    // the order the queries were read.
+    String answerEveryQuery(String bytes) {
+      const answers = <(String, String)>[
+        ('\x1B[?u', '\x1B[?31u'),
+        ('?2026\$p', '\x1B[?2026;2\$y'),
+        ('\x1B_G', '\x1B_Gi=31;OK\x1B\\'),
+        ('\x1B[6n', '\x1B[1;2R'),
+        ('\x1B[c', '\x1B[?1;2c'),
+      ];
+      final found = <(int, String)>[];
+      for (final (query, answer) in answers) {
+        var at = bytes.indexOf(query);
+        while (at >= 0) {
+          found.add((at, answer));
+          at = bytes.indexOf(query, at + query.length);
+        }
+      }
+      found.sort((a, b) => a.$1.compareTo(b.$1));
+      return found.map((f) => f.$2).join();
+    }
+
     void Function(String bytes) slowTerminal(
       _FakeStdin input,
       Duration delay,
     ) => (bytes) {
-      String? reply;
-      if (bytes.contains('\x1B[?u')) {
-        // Flags 1|2|4|8|16: a terminal that honours the whole lifecycle tier,
-        // so the negotiated result is unmistakably not the collapsed one.
-        reply = '\x1B[?31u\x1B[?1;2c';
-      } else if (bytes.contains('?2026\$p')) {
-        reply = '\x1B[?2026;2\$y\x1B[?1;2c';
-      } else if (bytes.contains('\x1B[6n')) {
-        reply = '\x1B[1;2R\x1B[?1;2c';
-      } else if (bytes.contains('\x1B[c')) {
-        reply = '\x1B[?1;2c';
-      }
-      if (reply == null) return;
+      final reply = answerEveryQuery(bytes);
+      if (reply.isEmpty) return;
       final bytesToPush = reply.codeUnits;
       Timer(delay, () => input.push(bytesToPush));
     };
+
+    test('the capability probes after keyboard negotiation go out in ONE '
+        'exchange', () async {
+      // Sent one after another, synchronized output, the image protocol
+      // and the width battery cost a round trip each — over a 50 ms SSH
+      // link that is most of startup. They are independent, so they go
+      // out in one write and the terminal answers them in order.
+      final trace = <String>[];
+      final input = _FakeStdin(terminal: true);
+      final writes = <String>[];
+      final out = _RecordingStdout(
+        terminal: true,
+        trace: trace,
+        onWrite: (bytes) {
+          writes.add(bytes);
+          final reply = answerEveryQuery(bytes);
+          if (reply.isNotEmpty) {
+            Timer(const Duration(milliseconds: 5), () {
+              input.push(reply.codeUnits);
+            });
+          }
+        },
+      );
+      final driver = PosixTerminalDriver(
+        stdinOverride: input,
+        stdoutOverride: out,
+        terminalModeController: _FakeModeController(trace),
+      );
+      try {
+        final profile = await driver.enter(TerminalMode.interactive);
+        expect(
+          (profile.presentation as AnsiTerminalPresentation).synchronizedOutput,
+          isTrue,
+        );
+        final exchanges = writes.where((w) => w.contains('\x1B[c')).toList();
+        expect(
+          exchanges,
+          hasLength(2),
+          reason:
+              'keyboard negotiation, then every remaining capability query '
+              'in one exchange; got ${exchanges.length} exchanges',
+        );
+        expect(exchanges.last, contains('?2026\$p'));
+        expect(
+          exchanges.last,
+          contains('\x1B[6n'),
+          reason: 'the width battery rides the same exchange',
+        );
+      } finally {
+        await driver.restore();
+        await input.close();
+      }
+    });
 
     test('a 200 ms link negotiates the same capabilities a local one does '
         '(3.b)', () async {

@@ -223,7 +223,7 @@ void _setPtyWindowSize(
 
 /// Canned answers for `--answer-probes`, in the shape a modern terminal gives.
 const _probeReplies = <(String, String)>[
-  ('\x1b[?u', '\x1b[?0u'), // kitty keyboard flags
+  ('\x1b[?u', '\x1b[?31u'), // kitty keyboard: every requested flag stuck
   ('\x1b[?2026\$p', '\x1b[?2026;2\$y'), // synchronized output DECRQM
   ('\x1b[6n', '\x1b[1;2R'), // cursor position report (width probe)
   ('\x1b[c', '\x1b[?1;2c'), // DA1 — the sentinel that ends the probe wait
@@ -250,6 +250,7 @@ void main(List<String> args) {
   int? continueAfterInputMs;
   final allowedExitCodes = <int>{0};
   var answerProbes = false;
+  var answerDelayMs = 0;
   final cmd = <String>[];
   for (var i = 0; i < args.length; i++) {
     final a = args[i];
@@ -257,6 +258,10 @@ void main(List<String> args) {
       out = args[++i];
     } else if (a == '--answer-probes') {
       answerProbes = true;
+    } else if (a == '--answer-delay-ms') {
+      // Simulates link latency: each reply is written this long after the
+      // query that asked for it was read.
+      answerDelayMs = int.parse(args[++i]);
     } else if (a == '--timeout') {
       timeout = double.parse(args[++i]);
     } else if (a == '--cols') {
@@ -440,9 +445,18 @@ void main(List<String> args) {
         ..asTypedList(inputBytes.length).setAll(0, inputBytes);
     }
     final signals = <Map<String, Object?>>[];
+    // Auto-responder replies waiting for their simulated link delay.
+    final pendingReplies = <(double dueMs, String reply)>[];
 
     while (true) {
       final elapsedMs = sw.elapsedMicroseconds / 1000.0;
+      while (
+          pendingReplies.isNotEmpty && pendingReplies.first.$1 <= elapsedMs) {
+        final bytes = pendingReplies.removeAt(0).$2.codeUnits;
+        final p = arena<Uint8>(bytes.length)
+          ..asTypedList(bytes.length).setAll(0, bytes);
+        _write(masterFd, p, bytes.length);
+      }
       final outputAgeMs = ttfb == null ? null : elapsedMs - ttfb;
       // --input-after-output-ms keys the input on the app's FIRST OUTPUT
       // (i.e. after startup/JIT), where a fixed --input-delay-ms can land
@@ -555,18 +569,24 @@ void main(List<String> args) {
         raw.add(buf.asTypedList(n));
         reads.add([double.parse(now.toStringAsFixed(3)), n]);
         if (answerProbes) {
-          // A fast, cooperative terminal: answer every capability query the
-          // moment it lands so startup measures the floor, not probe budgets.
+          // A cooperative terminal: answer every capability query in the
+          // order it was read (a real terminal processes its input
+          // sequentially), so startup measures round trips, not probe
+          // budgets. With --answer-delay-ms the replies are held back to
+          // simulate a slow link.
           final chunk = String.fromCharCodes(buf.asTypedList(n));
+          final found = <(int, String)>[];
           for (final (query, reply) in _probeReplies) {
             var at = chunk.indexOf(query);
             while (at >= 0) {
-              final bytes = reply.codeUnits;
-              final p = arena<Uint8>(bytes.length)
-                ..asTypedList(bytes.length).setAll(0, bytes);
-              _write(masterFd, p, bytes.length);
+              found.add((at, reply));
               at = chunk.indexOf(query, at + query.length);
             }
+          }
+          found.sort((a, b) => a.$1.compareTo(b.$1));
+          final reply = found.map((f) => f.$2).join();
+          if (reply.isNotEmpty) {
+            pendingReplies.add((now + answerDelayMs, reply));
           }
         }
         continue; // drain fast

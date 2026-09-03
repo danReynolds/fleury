@@ -500,15 +500,8 @@ class PosixTerminalDriver
     // rather than crashing on the next read of the state it tore down.
     final negotiationClock = Stopwatch()..start();
     await _negotiateKeyboard(negotiationClock);
-    _checkStillEntering(enterGeneration);
-    await _negotiateSynchronizedOutput(negotiationClock);
-    _checkStillEntering(enterGeneration);
-    await _maybeProbeImageProtocol(negotiationClock);
     final negotiated = _checkStillEntering(enterGeneration);
-    await _maybeProbeAmbiguousWidth(
-      negotiated.alternateScreen,
-      negotiationClock,
-    );
+    await _probeCapabilities(negotiated.alternateScreen, negotiationClock);
     _checkStillEntering(enterGeneration);
 
     _resizeSubscription = _watchSignal(ProcessSignal.sigwinch, (_) {
@@ -546,36 +539,81 @@ class PosixTerminalDriver
     return state.effectiveMode;
   }
 
-  Future<void> _negotiateSynchronizedOutput(Stopwatch negotiationClock) async {
-    final override = synchronizedOutputOverrideFromEnvironment(
+  /// Every capability query that does not feed the keyboard negotiation —
+  /// synchronized output, the image protocol, glyph widths — in ONE exchange.
+  ///
+  /// They are independent of each other and gated only by the environment
+  /// and by the terminal having answered at all (a silent terminal has no
+  /// budget left here, so nothing is sent to it). Sent one after another they
+  /// cost a round trip each, which over a slow link is most of startup;
+  /// batched, the terminal answers them in order in one round trip and
+  /// [TerminalQueryRunner.requestBatch] hands back one segment per query.
+  /// The width probe paints glyphs, so it must be last and needs the
+  /// alternate screen; a query the terminal does not answer leaves its
+  /// capability conservative, exactly as a timed-out probe did.
+  Future<void> _probeCapabilities(
+    bool onAlternateScreen,
+    Stopwatch negotiationClock,
+  ) async {
+    final syncOverride = synchronizedOutputOverrideFromEnvironment(
       Platform.environment,
     );
-    if (override != null) {
-      _synchronizedOutput = override;
-      return;
-    }
-    _synchronizedOutput = false;
+    _synchronizedOutput = syncOverride ?? false;
     if (!_stdoutIsTerminal || !_changedStdin) return;
+    final queries = <(_CapabilityProbe, String)>[
+      if (syncOverride == null)
+        (_CapabilityProbe.synchronizedOutput, synchronizedOutputQuery),
+      if (_imageProbePermitted()) (_CapabilityProbe.image, kittyGraphicsQuery),
+      if (onAlternateScreen &&
+          widthProbeIsPermittedByEnvironment(Platform.environment))
+        (_CapabilityProbe.glyphWidths, glyphWidthQuery),
+    ];
+    if (queries.isEmpty) return;
     final timeout = _nextProbeTimeout(negotiationClock);
     if (timeout == null) return;
+    final clock = Stopwatch()..start();
+    final List<List<int>?> replies;
     try {
-      _synchronizedOutput = await probeSynchronizedOutput(
-        _queryRunner,
-        timeout: timeout,
-      );
+      replies = await _queryRunner.requestBatch([
+        for (final (_, query) in queries) query,
+      ], timeout: timeout);
     } on Object {
-      _synchronizedOutput = false;
+      return;
+    }
+    for (var i = 0; i < queries.length; i++) {
+      final reply = replies[i];
+      if (reply == null) continue;
+      switch (queries[i].$1) {
+        case _CapabilityProbe.synchronizedOutput:
+          _synchronizedOutput = parseSynchronizedOutputReply(
+            reply,
+            elapsed: clock.elapsed,
+          );
+        case _CapabilityProbe.image:
+          final detected = parseImageProtocolReply(
+            reply,
+            elapsed: clock.elapsed,
+          );
+          if (detected != null) _imageProtocolOverride = detected;
+        case _CapabilityProbe.glyphWidths:
+          _measuredGlyphWidths = parseGlyphWidthReply(reply);
+      }
     }
   }
 
-  /// When the environment doesn't already name a native image protocol, ask
-  /// the terminal directly (a short, bounded query/response). A confirmed reply
-  /// upgrades [capabilities] so [Image] widgets emit real pixels instead of
-  /// cell art. Skipped unless we own a real terminal in raw mode (so the reply
-  /// arrives byte-for-byte, not line-buffered) and the environment is
-  /// inconclusive; any failure leaves the conservative fallback in place.
-  /// The Kitty flags this terminal CONFIRMED, or null before/without a
-  /// successful negotiation.
+  /// The image query is only sent where the environment gives no answer and
+  /// no multiplexer sits in between (a multiplexer would swallow or garble
+  /// the APC), and unless `FLEURY_IMAGE_PROBE=0`.
+  bool _imageProbePermitted() {
+    final flag = Platform.environment['FLEURY_IMAGE_PROBE'];
+    if (flag == '0' || flag == 'false') return false;
+    if (detectTerminalMultiplexerFromEnvironment(Platform.environment)) {
+      return false;
+    }
+    return detectImageProtocolFromEnvironment(Platform.environment) ==
+        ImageProtocol.halfBlock;
+  }
+
   int? _confirmedKeyboardFlags;
 
   KeyboardCapabilities get keyboardCapabilities {
@@ -692,64 +730,6 @@ class PosixTerminalDriver
   /// Flag 4 is an optional positional enhancement.
   static bool _lifecycleIsSafe(int flags) =>
       flags & 0x02 != 0 && flags & 0x08 != 0 && flags & 0x10 != 0;
-
-  Future<void> _maybeProbeImageProtocol(Stopwatch negotiationClock) async {
-    if (!_stdoutIsTerminal || !_changedStdin) return;
-    // Escape hatch: `FLEURY_IMAGE_PROBE=0` disables the startup query for users
-    // on a terminal where it misbehaves (the conservative env fallback stands).
-    final flag = Platform.environment['FLEURY_IMAGE_PROBE'];
-    if (flag == '0' || flag == 'false') return;
-    // A raw query is not a reliable statement about the host terminal through
-    // a multiplexer, and an accepted reply must not upgrade the conservative
-    // multiplexer fallback.
-    if (detectTerminalMultiplexerFromEnvironment(Platform.environment)) return;
-    if (detectImageProtocolFromEnvironment(Platform.environment) !=
-        ImageProtocol.halfBlock) {
-      return;
-    }
-    final timeout = _nextProbeTimeout(negotiationClock);
-    if (timeout == null) return;
-    try {
-      final detected = await probeImageProtocol(_queryRunner, timeout: timeout);
-      if (detected != null) _imageProtocolOverride = detected;
-    } on Object {
-      // Probe failed (no terminal reply, write error, …): keep the fallback.
-    }
-  }
-
-  /// Measures how the terminal sizes ambiguous-width glyphs so the renderer can
-  /// drop its defensive per-cell repositioning on terminals that draw them one
-  /// column wide (the common case). Same terminal guards as the image probe,
-  /// plus an alternate-screen gate: the probe paints a scratch glyph at the home
-  /// cell (then erases it) — invisible on the alt buffer, but under an
-  /// `alternateScreen: false` mode it would land on the user's real screen and
-  /// scrollback. So it runs only when [onAlternateScreen] is true; the safety is
-  /// now enforced by this gate rather than being a consequence of call ordering.
-  /// Any failure leaves the safe `wide` default in place.
-  Future<void> _maybeProbeAmbiguousWidth(
-    bool onAlternateScreen,
-    Stopwatch negotiationClock,
-  ) async {
-    if (!_stdoutIsTerminal || !_changedStdin) return;
-    if (!onAlternateScreen) return;
-    // Environment gate — see [widthProbeIsPermittedByEnvironment].
-    if (!widthProbeIsPermittedByEnvironment(Platform.environment)) return;
-    final timeout = _nextProbeTimeout(negotiationClock);
-    if (timeout == null) return;
-    try {
-      // One round trip measures every width class the field disagrees on, not
-      // just ambiguous — same cost as the old single-glyph probe. Storing the
-      // raw measurements is the whole job: [capabilities] applies the
-      // agreement rule once, when it derives the policy.
-      _measuredGlyphWidths = await probeGlyphWidths(
-        _queryRunner,
-        timeout: timeout,
-      );
-    } on Object {
-      // Probe failed (no terminal reply, write error, …): keep the `wide`
-      // default so ambiguous-wide terminals never garble.
-    }
-  }
 
   /// The deadline for the next startup probe, or null when the handshake has
   /// no budget left and the remaining probes must be skipped.
@@ -1435,3 +1415,6 @@ KeyboardProtocolMode resolveKeyboardTier({
   }
   return requested;
 }
+
+/// What each segment of the batched capability exchange answers.
+enum _CapabilityProbe { synchronizedOutput, image, glyphWidths }

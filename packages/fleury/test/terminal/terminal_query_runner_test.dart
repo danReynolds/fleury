@@ -343,6 +343,72 @@ void main() {
     await third;
     runner.dispose();
   });
+
+  group('requestBatch — independent probes share one round trip', () {
+    test(
+      'a batch goes out in ONE write and its replies resolve in order',
+      () async {
+        final parser = InputParser();
+        final input = _InputSink();
+        final writes = <String>[];
+        late TerminalQueryRunner runner;
+        runner = TerminalQueryRunner(
+          parser: parser,
+          inputSink: input,
+          write: (bytes) async {
+            writes.add(bytes);
+            // A terminal answers every query in the write, in order, in one
+            // burst; the byte after the last sentinel is ordinary input again.
+            parser.feed(
+              '\x1b[?2026;2\$y\x1b[?1;2c\x1b[1;3R\x1b[?1;2cx'.codeUnits,
+              input,
+              responseSink: runner,
+            );
+          },
+        );
+        final replies = await runner.requestBatch([
+          '\x1b[?2026\$p\x1b[c',
+          '\x1b[6n\x1b[c',
+        ], timeout: const Duration(milliseconds: 50));
+        expect(writes, ['\x1b[?2026\$p\x1b[c\x1b[6n\x1b[c']);
+        expect(String.fromCharCodes(replies[0]!), '\x1b[?2026;2\$y\x1b[?1;2c');
+        expect(String.fromCharCodes(replies[1]!), '\x1b[1;3R\x1b[?1;2c');
+        await Future<void>.delayed(Duration.zero);
+        expect(input.events, const <TuiEvent>[TextInputEvent('x')]);
+        runner.dispose();
+      },
+    );
+
+    test('an unanswered tail is null and its late sentinels never become '
+        'input', () async {
+      final parser = InputParser();
+      final input = _InputSink();
+      late TerminalQueryRunner runner;
+      runner = TerminalQueryRunner(
+        parser: parser,
+        inputSink: input,
+        write: (_) async {
+          // Only the first query is answered before the deadline.
+          parser.feed(
+            '\x1b[?2026;2\$y\x1b[?1;2c'.codeUnits,
+            input,
+            responseSink: runner,
+          );
+        },
+      );
+      final replies = await runner.requestBatch([
+        '\x1b[?2026\$p\x1b[c',
+        '\x1b[6n\x1b[c',
+      ], timeout: const Duration(milliseconds: 30));
+      expect(replies[0], isNotNull, reason: 'what was answered is kept');
+      expect(replies[1], isNull, reason: 'the unanswered query');
+      // The late reply lands during the quarantine: swallowed, not a key.
+      parser.feed('\x1b[1;3R\x1b[?1;2c'.codeUnits, input, responseSink: runner);
+      await Future<void>.delayed(Duration.zero);
+      expect(input.events, isEmpty);
+      runner.dispose();
+    });
+  });
 }
 
 final class _InputSink implements TuiEventSink {
