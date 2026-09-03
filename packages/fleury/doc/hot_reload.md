@@ -68,7 +68,9 @@ example that is 3.6 s to the first frame down to 2.2 s. With no script named,
 options before the script go to the app's VM, `fleury run --enable-asserts`,
 and `--` ends option parsing. The launcher only pays off because it starts
 from a snapshot: pub caches one for global executables and for
-`dart run <package>`, so the launcher's own start is about 0.4 s. Running it
+`dart run <package>`, so the launcher's own start is about 0.4 s, most of
+it `dart run` checking the package resolution; the global binstub skips that
+check and starts about 0.35 s sooner. Running it
 from source, `dart run bin/fleury.dart run …` inside a framework checkout,
 compiles the CLI instead and saves nothing.
 
