@@ -30,10 +30,12 @@
 //                       rendered per event kind": it fails both when a frame
 //                       goes missing and when one appears that nothing
 //                       needed.
-//   framesSkipped       scripted events that requested a frame the driver
-//                       then took the no-change skip on (`requested -
-//                       rendered`). An event that stops being free, or a
-//                       skip that starts swallowing real work, moves it.
+//   framesSkipped       scripted events minus the frames credited to
+//                       scripted events (a rendered frame is credited to
+//                       every event kind its reason names). An event that
+//                       stops being free, or a skip that starts swallowing
+//                       real work, moves it; so does a second event of the
+//                       same kind losing its frame.
 //   bytesPresented      total bytes the presenter wrote to the terminal for
 //                       the script, and `bytesPerFrame` derived from it —
 //                       the same SDK-independent axis wire-gate uses, here
@@ -102,6 +104,21 @@ final class _Recorder {
 
   int get frameCount => frames.length;
   int get bytes => driver.output.length;
+
+  /// Waits until a frame beyond [mark] has rendered, then one settle turn for
+  /// its post-frame work. Keying the next scripted event on the frame itself
+  /// (rather than a wall-clock window) means two keys can never merge into
+  /// one frame on a loaded CI machine.
+  Future<void> frameBeyond(int mark) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    while (frameCount <= mark) {
+      if (DateTime.now().isAfter(deadline)) {
+        throw StateError('no frame rendered within 5 s (mark $mark)');
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    await _settle(1);
+  }
 
   /// Frames rendered since [mark], as a reason -> count histogram.
   Map<String, int> reasonsSince(int mark) {
@@ -173,14 +190,12 @@ final class _Scenario {
   /// A frame's reason may be a merge of several requests (`a+b`), so a
   /// rendered frame is credited to every event reason it names.
   int get framesSkipped {
-    var answered = 0;
-    for (final reason in eventReasons) {
-      final rendered = framesByReason.entries
-          .where((e) => e.key.split('+').contains(reason))
-          .fold<int>(0, (sum, e) => sum + e.value);
-      if (rendered > 0) answered++;
+    final kinds = eventReasons.toSet();
+    var credited = 0;
+    for (final entry in framesByReason.entries) {
+      if (entry.key.split('+').any(kinds.contains)) credited += entry.value;
     }
-    return eventReasons.length - answered;
+    return eventReasons.length - credited;
   }
 
   int get bytesPerFrame =>
@@ -243,8 +258,9 @@ Future<_Scenario> _eventScript() async {
   await _session(const _Counter(), (r) async {
     final mark = r.frameCount;
     for (var i = 0; i < stateChanging; i++) {
+      final before = r.frameCount;
       r.driver.enqueue(up);
-      await _settle();
+      await r.frameBeyond(before);
     }
     for (var i = 0; i < inertEvents; i++) {
       r.driver.enqueue(inert);
@@ -253,8 +269,9 @@ Future<_Scenario> _eventScript() async {
     r.driver.clearOutput();
     // Re-measure bytes over one more state-changing key, so bytesPresented
     // is one keystroke's diff and not the startup sequence.
+    final beforeLast = r.frameCount;
     r.driver.enqueue(up);
-    await _settle();
+    await r.frameBeyond(beforeLast);
 
     s.eventReasons.addAll([
       for (var i = 0; i < stateChanging; i++) 'key:arrowUp',
@@ -457,7 +474,7 @@ Future<void> main(List<String> args) async {
     for (final s in broken) {
       stderr.writeln('runtime gate: ${s.name}: ${s.broken}');
     }
-    exitCode = 1;
+    exitCode = 64;
     return;
   }
 

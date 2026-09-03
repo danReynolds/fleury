@@ -47,8 +47,11 @@ void main() {
 
       tracker.recordLayoutOrConservativePaint();
       expect(tracker.takeRequiresFullDiff(), isTrue);
-      expect(tracker.takeRequiresFullDiff(), isTrue, reason: 'carried too');
-      expect(tracker.takeRequiresFullDiff(), isFalse);
+      expect(
+        tracker.takeRequiresFullDiff(),
+        isFalse,
+        reason: 'only the visual-change flag carries; damage is a buffer diff',
+      );
     });
 
     test('reset drops the carry', () {
@@ -60,4 +63,58 @@ void main() {
       expect(tracker.takeVisualChange(), isFalse);
     });
   });
+
+  group('paint-pass retraction is a one-shot owned by the sweep', () {
+    test('an unpublished participant is retracted once, not every pass', () {
+      final tracker = RenderDamageTracker();
+      final participant = _CountingParticipant();
+      tracker.registerPaintPassParticipant(participant);
+      for (var pass = 0; pass < 3; pass++) {
+        tracker.beginPaintPass();
+        tracker.endPaintPass();
+      }
+      expect(
+        participant.retractions,
+        1,
+        reason:
+            'a participant that stays mounted without painting is '
+            'unpublished on every later pass; asking it to retract each '
+            'time is what made every frame request the next one',
+      );
+    });
+
+    test('a fresh publish re-arms the retraction', () {
+      final tracker = RenderDamageTracker();
+      final participant = _CountingParticipant();
+      tracker.registerPaintPassParticipant(participant);
+      tracker.beginPaintPass();
+      tracker.endPaintPass();
+      expect(participant.retractions, 1);
+      participant.published = tracker.beginPaintPass(); // painted this pass
+      tracker.endPaintPass();
+      expect(participant.retractions, 1);
+      tracker.beginPaintPass(); // and not this one
+      tracker.endPaintPass();
+      expect(participant.retractions, 2);
+    });
+
+    test('reset also returns the phase to idle', () {
+      final tracker = RenderDamageTracker()..phase = RenderFramePhase.layout;
+      tracker.reset();
+      expect(tracker.phase, RenderFramePhase.idle);
+    });
+  });
+}
+
+final class _CountingParticipant implements PaintPassParticipant {
+  int published = -1;
+  int retractions = 0;
+
+  @override
+  int get publishedPaintPass => published;
+
+  @override
+  void retractPaintFacts() {
+    retractions++;
+  }
 }

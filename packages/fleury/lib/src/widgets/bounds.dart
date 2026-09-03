@@ -158,7 +158,9 @@ class RenderBoundsObserver extends RenderObject
   int get publishedPaintPass => _publishedPass;
 
   @override
-  bool retractPaintFacts() => _notifier.publish(null);
+  void retractPaintFacts() {
+    _notifier.publish(null);
+  }
 
   void _publish(CellRect? bounds, CellRect? clip) {
     final tracker = rootFrameDamage;

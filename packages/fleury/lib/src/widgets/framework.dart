@@ -1603,8 +1603,30 @@ class BuildOwner {
     onPhaseTiming,
     void Function(BuildFlushStats stats)? onBuildStats,
   }) {
-    final sw = onPhaseTiming != null ? (Stopwatch()..start()) : null;
+    // Whatever build, layout or paint throws, the tracker must not be left
+    // mid-frame: a stuck phase would absorb every later invalidation and the
+    // render tier could never ask for a frame again.
     renderDamageTracker.phase = RenderFramePhase.build;
+    try {
+      return _renderFramePhases(
+        root,
+        buffer,
+        onPhaseTiming: onPhaseTiming,
+        onBuildStats: onBuildStats,
+      );
+    } finally {
+      renderDamageTracker.phase = RenderFramePhase.idle;
+    }
+  }
+
+  RenderObject _renderFramePhases(
+    Element root,
+    CellBuffer buffer, {
+    void Function(Duration build, Duration layout, Duration paint)?
+    onPhaseTiming,
+    void Function(BuildFlushStats stats)? onBuildStats,
+  }) {
+    final sw = onPhaseTiming != null ? (Stopwatch()..start()) : null;
     final buildStats = flushBuild();
     final buildElapsed = sw?.elapsed ?? Duration.zero;
     onBuildStats?.call(buildStats);

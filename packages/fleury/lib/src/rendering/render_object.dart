@@ -44,19 +44,14 @@ final class RenderDamageTracker {
   RenderFramePhase phase = RenderFramePhase.idle;
 
   bool _carryVisualChange = false;
-  bool _carryFullDiff = false;
 
-  void _invalidated({required bool fullDiff}) {
+  void _invalidated() {
     switch (phase) {
       case RenderFramePhase.build:
       case RenderFramePhase.layout:
-        // This frame's paint renders it; the flags already say so.
         return;
       case RenderFramePhase.paint:
-        // The frame loop consumes the flags right after paint; carry them
-        // into the next frame, and ask for it.
         _carryVisualChange = true;
-        if (fullDiff) _carryFullDiff = true;
       case RenderFramePhase.idle:
         break;
     }
@@ -69,7 +64,7 @@ final class RenderDamageTracker {
   void recordLayoutOrConservativePaint() {
     _requiresFullDiff = true;
     _visualChange = true;
-    _invalidated(fullDiff: true);
+    _invalidated();
   }
 
   /// Records that some render object's visual output may differ next frame
@@ -77,7 +72,7 @@ final class RenderDamageTracker {
   /// consumes it via [takeVisualChange].
   void recordVisualChange() {
     _visualChange = true;
-    _invalidated(fullDiff: false);
+    _invalidated();
   }
 
   /// Whether any invalidation has been recorded since the last rendered
@@ -95,8 +90,7 @@ final class RenderDamageTracker {
 
   bool takeRequiresFullDiff() {
     final result = _requiresFullDiff;
-    _requiresFullDiff = _carryFullDiff;
-    _carryFullDiff = false;
+    _requiresFullDiff = false;
     return result;
   }
 
@@ -104,7 +98,8 @@ final class RenderDamageTracker {
     _requiresFullDiff = false;
     _visualChange = false;
     _carryVisualChange = false;
-    _carryFullDiff = false;
+    _retracted.clear();
+    phase = RenderFramePhase.idle;
   }
 
   // ---- Paint passes ------------------------------------------------------
@@ -136,7 +131,14 @@ final class RenderDamageTracker {
   /// another owner).
   void unregisterPaintPassParticipant(PaintPassParticipant participant) {
     _participants.remove(participant);
+    _retracted.remove(participant);
   }
+
+  /// Participants whose facts this tracker has withdrawn and that have not
+  /// published since. The one-shot lives HERE, in the sweep, so no
+  /// participant can reinstate the spin by notifying on every retraction.
+  final Set<PaintPassParticipant> _retracted =
+      Set<PaintPassParticipant>.identity();
 
   /// Starts a root paint pass; returns its number.
   int beginPaintPass() => ++_paintPass;
@@ -154,11 +156,15 @@ final class RenderDamageTracker {
   /// too, so a retraction that re-notified every pass made each frame request
   /// the next: the app spun frames at full speed forever after a single tab
   /// switch, and every assertion that only checked "a retraction frame
-  /// followed" was satisfied by the spin. [PaintPassParticipant.retractPaintFacts]
-  /// is therefore a no-op (returns false) once the fact is already withdrawn.
+  /// followed" was satisfied by the spin. The sweep therefore remembers whom
+  /// it has retracted and asks again only after a fresh publish.
   void endPaintPass() {
     for (final participant in _participants) {
-      if (participant.publishedPaintPass == _paintPass) continue;
+      if (participant.publishedPaintPass == _paintPass) {
+        _retracted.remove(participant);
+        continue;
+      }
+      if (!_retracted.add(participant)) continue; // withdrawn already
       participant.retractPaintFacts();
     }
   }
@@ -172,13 +178,11 @@ abstract interface class PaintPassParticipant {
   /// The [RenderDamageTracker.paintPass] this participant last published in.
   int get publishedPaintPass;
 
-  /// Withdraw the published fact: the subtree no longer paints.
-  ///
-  /// Returns true only when this call actually withdrew something. A
-  /// participant that is already retracted must return false — the pass end
-  /// re-visits it every frame, and a `true` there would ask the frame driver
-  /// for a frame that has nothing to repaint, forever.
-  bool retractPaintFacts();
+  /// Withdraw the published fact: the subtree no longer paints. The tracker
+  /// calls this at most once per withdrawal — a participant that stays
+  /// unpublished is not asked again until it publishes — so an
+  /// implementation may notify unconditionally.
+  void retractPaintFacts();
 }
 
 typedef SemanticPaintBoundsCallback = void Function(CellRect? bounds);
