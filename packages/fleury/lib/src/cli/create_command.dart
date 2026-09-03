@@ -138,7 +138,7 @@ Future<int> runCreateCommand(List<String> args) async {
       ..writeln('  code .')
       ..writeln('  Press F5 to run in an interactive terminal.');
   } else {
-    stdout.writeln('  dart run bin/run_app.dart');
+    stdout.writeln('  dart run fleury:fleury run bin/run_app.dart');
   }
   stdout.writeln(
     '  Edit and save while it runs — hot reload keeps your state.',
@@ -388,8 +388,12 @@ A terminal application built with [Fleury](https://github.com/danReynolds/fleury
 $runLead
 
 ```sh
-dart run bin/run_app.dart
+dart run fleury:fleury run bin/run_app.dart
 ```
+
+(`fleury run bin/run_app.dart` after `dart pub global activate fleury`.) The
+launcher compiles the app once; a plain `dart run bin/run_app.dart` gets the
+same hot-reload session but compiles it twice on a cold start.
 
 Press Enter or click **Increment**. Press Ctrl+C to quit.
 
