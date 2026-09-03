@@ -346,6 +346,7 @@ final class DevBootstrap {
     List<String> vmOptions = const [],
     String? dartExecutable,
   }) async {
+    _debugLog('launch: entry');
     final script = File(scriptPath).absolute;
     final dart = dartExecutable ?? Platform.resolvedExecutable;
     if (!script.existsSync()) {
@@ -353,6 +354,7 @@ final class DevBootstrap {
       exit(64);
     }
     final blocker = _supervisionBlockerHere(script.uri);
+    _debugLog('launch: gates checked');
     String? projectRoot;
     if (blocker == null) {
       final entryDir =
@@ -381,6 +383,7 @@ final class DevBootstrap {
       );
     }
 
+    _debugLog('launch: roots resolved');
     final supervisor = DevBootstrap._()
       .._launcher = true
       .._args = args
