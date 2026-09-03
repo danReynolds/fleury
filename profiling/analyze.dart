@@ -188,8 +188,7 @@ void main(List<String> args) {
       (v) => '${v.toStringAsFixed(1)} fps',
       higherIsBetter: true);
 
-  stdout.writeln(
-      '\n  per-capture byte split '
+  stdout.writeln('\n  per-capture byte split '
       '(content/sgr/cursor/sync/session/other):');
   for (final a in all) {
     final b = a.bytes;
