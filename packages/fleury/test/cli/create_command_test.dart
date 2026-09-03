@@ -126,7 +126,7 @@ void main() {
     expect(result.exitCode, 0, reason: result.stderr.toString());
     expect(Directory('${target.path}/.vscode').existsSync(), isFalse);
     expect(_relativeFiles(target), isNot(contains(startsWith('.vscode/'))));
-    expect(result.stdout, contains('dart run bin/run_app.dart'));
+    expect(result.stdout, contains('dart run fleury run'));
     final readme = File('${target.path}/README.md').readAsStringSync();
     expect(readme, contains('interactive terminal'));
     expect(readme, isNot(contains('F5')));

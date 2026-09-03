@@ -18,7 +18,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:meta/meta.dart';
 import 'package:watcher/watcher.dart';
 
 /// The source directories a dev session should watch for hot reload.
@@ -61,7 +60,6 @@ class DevSourceRoots {
 
   /// The directory holding the running entrypoint, or null when [script] is
   /// not a file the developer edits (a `data:` URI, a kernel snapshot).
-  @visibleForTesting
   static String? entrypointDirectory({required Uri script}) {
     if (script.scheme != 'file') return null;
     final String path;

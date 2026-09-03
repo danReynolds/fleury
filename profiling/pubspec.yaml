@@ -8,6 +8,8 @@ dependencies:
     path: ../packages/fleury
   fleury_widgets:
     path: ../packages/fleury_widgets
+  fleury_samples:
+    path: ../packages/samples
   ffi: ^2.1.0
   vm_service: ^15.0.0
 dev_dependencies:

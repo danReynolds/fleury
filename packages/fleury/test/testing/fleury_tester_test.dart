@@ -442,6 +442,113 @@ void main() {
             'MediaQuery.glyphTierOf',
       );
     });
+
+    testWidgets('a textPolicy change propagates and re-measures the tree', (
+      tester,
+    ) {
+      final seen = <TextPresentationPolicy>[];
+      tester.pumpWidget(
+        _MediaProbe((data) => seen.add(data.capabilities.textPolicy)),
+      );
+      expect(
+        seen.last,
+        TextPresentationPolicy.spec,
+        reason: 'the harness default is the unprobed/serve policy',
+      );
+
+      tester.textPolicy = ambiguousWidePolicy;
+      expect(
+        seen.last,
+        ambiguousWidePolicy,
+        reason:
+            'assigning textPolicy mid-test must reach widgets that measure '
+            'through MediaQuery — the surface knob the width probe resolves',
+      );
+    });
+
+    testWidgets(
+      'the harness surface carries the constructed textPolicy',
+      (tester) {
+        // `─` (U+2500) is East Asian Ambiguous: one cell on spec, two here. If
+        // the knob did not reach the ambient MediaQuery this row would read
+        // `─X` and the pair would never form.
+        tester.pumpWidget(const Text('─X'));
+        final buffer = tester.render(size: const CellSize(4, 1));
+        expect(buffer.atColRow(0, 0).grapheme, '─');
+        expect(
+          buffer.atColRow(1, 0).role,
+          CellRole.continuation,
+          reason: 'the ambiguous glyph occupies two columns on this surface',
+        );
+        expect(buffer.atColRow(2, 0).grapheme, 'X');
+      },
+      textPolicy: ambiguousWidePolicy,
+    );
+  });
+
+  group('production parity', () {
+    tearDown(() => RepaintBoundaryDebugStats.beginFrame(enabled: false));
+
+    testWidgets('the harness overlay engages entry repaint boundaries', (
+      tester,
+    ) {
+      // Production hosts mount their Overlay with the default
+      // `addRepaintBoundaries: true` (see buildTuiRoot), so a frame with a
+      // second visible entry blits the app entry from cache instead of
+      // re-walking its paint. The harness opted out for a long time, which
+      // made that cached-blit path — where 7.a's severed wide-glyph pairs
+      // lived — unreachable from any widget test.
+      tester.pumpWidget(const Text('app'));
+      final float = OverlayEntry(builder: (_) => const Text('float'));
+      tester.overlay.insert(float);
+      tester.pump();
+
+      RepaintBoundaryDebugStats.beginFrame(enabled: true);
+      tester.render(size: const CellSize(12, 3));
+      final engaged = RepaintBoundaryDebugStats.takeFrameStats();
+      expect(
+        engaged.boundaryCount,
+        2,
+        reason:
+            'two visible entries engage the adaptive boundaries, exactly as '
+            'a real app floating a toast or a menu does',
+      );
+
+      // A second frame with only the float dirty must blit the app entry from
+      // its cache — the production path under test.
+      RepaintBoundaryDebugStats.beginFrame(enabled: true);
+      float.markNeedsBuild();
+      tester.pump();
+      tester.render(size: const CellSize(12, 3));
+      final cached = RepaintBoundaryDebugStats.takeFrameStats();
+      expect(
+        cached.cachedCount,
+        greaterThan(0),
+        reason: 'the untouched entry serves its cells from the blit cache',
+      );
+    });
+
+    testWidgets(
+      'overlayRepaintBoundaries: false restores the bare walk',
+      (tester) {
+        tester.pumpWidget(const Text('app'));
+        tester.overlay.insert(
+          OverlayEntry(builder: (_) => const Text('float')),
+        );
+        tester.pump();
+
+        RepaintBoundaryDebugStats.beginFrame(enabled: true);
+        tester.render(size: const CellSize(12, 3));
+        expect(
+          RepaintBoundaryDebugStats.takeFrameStats().boundaryCount,
+          0,
+          reason:
+              'the opt-out exists for boundary-counting tests, which must not '
+              'see the harness\'s own entry boundaries',
+        );
+      },
+      overlayRepaintBoundaries: false,
+    );
   });
 
   group('Input', () {

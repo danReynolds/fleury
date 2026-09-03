@@ -1603,6 +1603,29 @@ class BuildOwner {
     onPhaseTiming,
     void Function(BuildFlushStats stats)? onBuildStats,
   }) {
+    // Whatever build, layout or paint throws, the tracker must not be left
+    // mid-frame: a stuck phase would absorb every later invalidation and the
+    // render tier could never ask for a frame again.
+    renderDamageTracker.phase = RenderFramePhase.build;
+    try {
+      return _renderFramePhases(
+        root,
+        buffer,
+        onPhaseTiming: onPhaseTiming,
+        onBuildStats: onBuildStats,
+      );
+    } finally {
+      renderDamageTracker.phase = RenderFramePhase.idle;
+    }
+  }
+
+  RenderObject _renderFramePhases(
+    Element root,
+    CellBuffer buffer, {
+    void Function(Duration build, Duration layout, Duration paint)?
+    onPhaseTiming,
+    void Function(BuildFlushStats stats)? onBuildStats,
+  }) {
     final sw = onPhaseTiming != null ? (Stopwatch()..start()) : null;
     final buildStats = flushBuild();
     final buildElapsed = sw?.elapsed ?? Duration.zero;
@@ -1627,6 +1650,7 @@ class BuildOwner {
     // MaterialApp expands to fill; we don't have that wrapper yet and
     // forcing it would break the "small widget at root" common case.)
     sw?.reset();
+    renderDamageTracker.phase = RenderFramePhase.layout;
     rootRender.layout(CellConstraints.loose(buffer.size));
     final layoutElapsed = sw?.elapsed ?? Duration.zero;
     // Layout can rebuild (LayoutBuilder) and deactivate subtrees AFTER this
@@ -1641,6 +1665,7 @@ class BuildOwner {
     // A numbered paint pass on this owner's tracker, so paint-time facts
     // (painted bounds) that no subtree refreshed this pass are retracted when
     // it ends — see [RenderDamageTracker.endPaintPass].
+    renderDamageTracker.phase = RenderFramePhase.paint;
     renderDamageTracker.beginPaintPass();
     try {
       rootRender.paint(
@@ -1650,7 +1675,11 @@ class BuildOwner {
         clipRect: CellRect(offset: CellOffset.zero, size: buffer.size),
       );
     } finally {
-      renderDamageTracker.endPaintPass();
+      try {
+        renderDamageTracker.endPaintPass();
+      } finally {
+        renderDamageTracker.phase = RenderFramePhase.idle;
+      }
     }
     final paintElapsed = sw?.elapsed ?? Duration.zero;
 

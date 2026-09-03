@@ -231,8 +231,8 @@ void main() {
     testWidgets('mounts the layer entry only while toasts exist', (tester) {
       // App-shaped fixture: an explicit Overlay hosts the Toaster'd app as
       // its base entry, so the Toaster's layer lands in an overlay whose
-      // adaptive per-entry boundaries are observable (the tester's own
-      // harness overlay opts out of boundaries).
+      // adaptive per-entry boundaries are observable (the tester's harness
+      // overlay holds one pass-through entry, so its boundary never engages).
       final overlayKey = GlobalKey<OverlayState>();
       late BuildContext ctx;
       tester.pumpWidget(

@@ -221,6 +221,14 @@ void _setPtyWindowSize(
   }
 }
 
+/// Canned answers for `--answer-probes`, in the shape a modern terminal gives.
+const _probeReplies = <(String, String)>[
+  ('\x1b[?u', '\x1b[?0u'), // kitty keyboard flags
+  ('\x1b[?2026\$p', '\x1b[?2026;2\$y'), // synchronized output DECRQM
+  ('\x1b[6n', '\x1b[1;2R'), // cursor position report (width probe)
+  ('\x1b[c', '\x1b[?1;2c'), // DA1 — the sentinel that ends the probe wait
+];
+
 void main(List<String> args) {
   var out = 'capture';
   var timeout = 10.0;
@@ -241,11 +249,14 @@ void main(List<String> args) {
   int? continueAfterSuspendMs;
   int? continueAfterInputMs;
   final allowedExitCodes = <int>{0};
+  var answerProbes = false;
   final cmd = <String>[];
   for (var i = 0; i < args.length; i++) {
     final a = args[i];
     if (a == '--out') {
       out = args[++i];
+    } else if (a == '--answer-probes') {
+      answerProbes = true;
     } else if (a == '--timeout') {
       timeout = double.parse(args[++i]);
     } else if (a == '--cols') {
@@ -543,6 +554,21 @@ void main(List<String> args) {
         ttfb ??= now;
         raw.add(buf.asTypedList(n));
         reads.add([double.parse(now.toStringAsFixed(3)), n]);
+        if (answerProbes) {
+          // A fast, cooperative terminal: answer every capability query the
+          // moment it lands so startup measures the floor, not probe budgets.
+          final chunk = String.fromCharCodes(buf.asTypedList(n));
+          for (final (query, reply) in _probeReplies) {
+            var at = chunk.indexOf(query);
+            while (at >= 0) {
+              final bytes = reply.codeUnits;
+              final p = arena<Uint8>(bytes.length)
+                ..asTypedList(bytes.length).setAll(0, bytes);
+              _write(masterFd, p, bytes.length);
+              at = chunk.indexOf(query, at + query.length);
+            }
+          }
+        }
         continue; // drain fast
       }
       if (n == 0) break; // EOF — all slave fds closed

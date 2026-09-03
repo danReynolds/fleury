@@ -55,6 +55,7 @@ void main() {
   for (final s in scenarios) {
     var prev = CellBuffer(CellSize(s.cols, s.rows));
     final ansiStream = <int>[], planStream = <int>[];
+    final encodeMicros = <int>[];
     for (var i = 0; i < s.frames.length; i++) {
       final next = CellBuffer(CellSize(s.cols, s.rows));
       _copy(prev, next);
@@ -62,7 +63,9 @@ void main() {
       final full = i == 0;
       ansiStream.addAll(
           _ansiFrame(full ? CellBuffer(CellSize(s.cols, s.rows)) : prev, next));
+      final encodeSw = Stopwatch()..start();
       planStream.addAll(_planFrame(prev, next, full: full));
+      encodeMicros.add(encodeSw.elapsedMicroseconds);
       prev = next;
     }
     final az = z.encode(ansiStream).length;
@@ -75,6 +78,14 @@ void main() {
         '${(planStream.length / ansiStream.length).toStringAsFixed(0).padLeft(3)}x | '
         '${az.toString().padLeft(6)} ${pz.toString().padLeft(6)} '
         '${(pz / az).toStringAsFixed(2).padLeft(5)}x');
+    encodeMicros.sort();
+    final p50 = encodeMicros[encodeMicros.length ~/ 2] / 1000;
+    final p95 = encodeMicros[(encodeMicros.length * 95) ~/ 100] / 1000;
+    final pMax = encodeMicros.last / 1000;
+    print(
+      '${''.padRight(20)} plan build+encode p50 ${p50.toStringAsFixed(2)} ms · '
+      'p95 ${p95.toStringAsFixed(2)} ms · max ${pMax.toStringAsFixed(2)} ms',
+    );
   }
   print('-' * 70);
   print('${'TOTAL (deflated)'.padRight(20)} ${''.padLeft(15)} | '

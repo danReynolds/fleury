@@ -48,6 +48,36 @@ reloads on save. Edit in vim, Zed, IntelliJ, anything — saving is the trigger.
   arguments (a process cannot recover its own argv for a sibling spawn). An
   app that must re-see argv can set `FLEURY_HOT_RELOAD=0`.
 
+## Faster start: `fleury run`
+
+A cold `dart run bin/main.dart` compiles your app twice: once to reach the
+supervision decision inside `runApp`, and once more in the child that gets the
+VM service. The launcher makes the same decision without ever loading the app:
+
+```sh
+dart run fleury run        # finds bin/main.dart or bin/run_app.dart
+```
+
+With `fleury` activated globally (`dart pub global activate fleury` once the
+packages are on pub.dev, or `--source git` before then) it is just
+`fleury run`. It is the same session — save to reload, F5 to restart, Ctrl+C
+and the exit code pass through — with the app compiled once. On the counter
+example that is 3.6 s to the first frame down to 2.2 s. With no script named,
+`fleury run` uses the only Dart file in `bin/`, else `bin/main.dart`, else
+`bin/run_app.dart`; name one to override, `fleury run bin/other.dart`. VM
+options before the script go to the app's VM, `fleury run --enable-asserts`,
+and `--` ends option parsing. The launcher only pays off because it starts
+from a snapshot: pub caches one for global executables and for
+`dart run <package>`, so the launcher's own start is about 0.4 s. Running it
+from source, `dart run bin/fleury.dart run …` inside a framework checkout,
+compiles the CLI instead and saves nothing.
+
+The launcher honours the same opt-outs as the transparent path: under
+`FLEURY_HOT_RELOAD=0`, without a terminal, or when the app is driven through
+a serve/mcp handle it runs the app once with no supervisor, forwarding Ctrl+C
+and the exit code. An app that fails to compile is reported once, with its
+exit code.
+
 ## Quick start (VS Code)
 
 **Prerequisite**: the official [Dart VS Code extension][dart-ext]
@@ -209,6 +239,11 @@ Why a child *process* rather than a child isolate: `reloadSources` against an
 (reproducible with a plain-Dart child on SDK 3.12 — no fleury involved), so
 the supervisor uses the process boundary, which is also what keeps stdin,
 signal, and stdio-capture ownership trivially correct across restarts.
+
+`fleury run` runs this same supervisor from the CLI process instead of from a
+first copy of the app, which is what saves the second compile. The child
+cannot tell the difference: it sees a flag-enabled VM service and the
+supervised-child environment either way.
 
 ## How it works under the hood
 

@@ -16,23 +16,17 @@
 // the spec policy, two on a terminal whose probe measured ambiguous glyphs
 // wide — roughly 19 of 30 surveyed terminals, including the macOS, GNOME and
 // VS Code defaults.
+//
+// Every case runs on BOTH surfaces through `testWidgetsOnBothTextPolicies`,
+// which sets the tester's own `textPolicy` — the surface knob production
+// resolves from the width probe. It used to be reached by hand-wrapping each
+// subject in a MediaQuery, which is why this file was the only one in the
+// suite that ever left spec (the launch audit's D2).
 
 import 'package:fleury/fleury.dart';
 import 'package:test/test.dart';
 
 import '../support/harness.dart';
-
-/// A surface whose probe measured ambiguous glyphs two cells wide.
-const _ambiguousWide = TextPresentationPolicy(widths: CellWidthPolicy.cjk);
-
-Widget _onSurface(TextPresentationPolicy policy, CellSize size, Widget child) =>
-    MediaQuery(
-      data: MediaQueryData(
-        size: size,
-        capabilities: SurfaceCapabilities(textPolicy: policy),
-      ),
-      child: child,
-    );
 
 /// Row [row] as a compact string: a leading cell shows its grapheme, a
 /// continuation `>`, an empty cell `.`, an image overlay `#`.
@@ -50,195 +44,186 @@ String _row(CellBuffer buffer, {int row = 0, int? cols}) {
   return sb.toString();
 }
 
+/// Picks the expectation for the surface under test.
+String _perPolicy(
+  TextPresentationPolicy policy, {
+  required String spec,
+  required String wide,
+}) => policy == TextPresentationPolicy.spec ? spec : wide;
+
 void main() {
   group('scratch-buffer replay never re-measures', () {
-    testWidgets('ScrollView viewport', (tester) {
+    testWidgetsOnBothTextPolicies('ScrollView viewport', (tester, policy) {
       const size = CellSize(8, 3);
       tester.pumpWidget(
-        _onSurface(
-          _ambiguousWide,
-          size,
-          const SizedBox(
-            width: 8,
-            height: 3,
-            child: ScrollView(child: Text('─X')),
-          ),
+        const SizedBox(
+          width: 8,
+          height: 3,
+          child: ScrollView(child: Text('─X')),
         ),
       );
       expect(
         _row(tester.render(size: size)),
-        '─>X.....',
+        _perPolicy(policy, spec: '─X......', wide: '─>X.....'),
         reason:
             'the viewport replay must carry the continuation cell the child '
             'painted, not re-derive the width at the destination',
       );
-    });
+    }, viewportSize: const CellSize(8, 3));
 
-    testWidgets('Flex clipping an overflowing child', (tester) {
+    testWidgetsOnBothTextPolicies('Flex clipping an overflowing child', (
+      tester,
+      policy,
+    ) {
       const size = CellSize(8, 3);
       tester.pumpWidget(
-        _onSurface(
-          _ambiguousWide,
-          size,
-          const SizedBox(
-            width: 4,
-            height: 1,
-            child: Row(children: <Widget>[Text('─X'), Text('YZ')]),
-          ),
+        const SizedBox(
+          width: 4,
+          height: 1,
+          child: Row(children: <Widget>[Text('─X'), Text('YZ')]),
         ),
       );
       expect(
         _row(tester.render(size: size), cols: 3),
-        '─>X',
+        _perPolicy(policy, spec: '─XY', wide: '─>X'),
         reason: 'the overflow clip path replays cells, it does not re-measure',
       );
-    });
+    }, viewportSize: const CellSize(8, 3));
 
-    testWidgets('a cell effect layer', (tester) {
+    testWidgetsOnBothTextPolicies('a cell effect layer', (tester, policy) {
       const size = CellSize(8, 3);
       tester.pumpWidget(
-        _onSurface(
-          _ambiguousWide,
-          size,
-          Animate(
-            trigger: 0,
-            effects: <Effect>[Effects.fadeIn()],
-            child: const Text('─X'),
-          ),
+        Animate(
+          trigger: 0,
+          effects: <Effect>[Effects.fadeIn()],
+          child: const Text('─X'),
         ),
       );
       expect(
         _row(tester.render(size: size)),
-        '─>X.....',
+        _perPolicy(policy, spec: '─X......', wide: '─>X.....'),
         reason: 'the composite loop replays painted cells verbatim',
       );
-    });
+    }, viewportSize: const CellSize(8, 3));
 
-    testWidgets('a clipped effect layer', (tester) {
+    testWidgetsOnBothTextPolicies('a clipped effect layer', (tester, policy) {
       const size = CellSize(8, 3);
       tester.pumpWidget(
-        _onSurface(
-          _ambiguousWide,
-          size,
-          Animate(
-            trigger: 0,
-            effects: <Effect>[Effects.expand()],
-            child: const Text('─X'),
-          ),
+        Animate(
+          trigger: 0,
+          effects: <Effect>[Effects.expand()],
+          child: const Text('─X'),
         ),
       );
       expect(
         _row(tester.render(size: size)),
-        '─>X.....',
+        _perPolicy(policy, spec: '─X......', wide: '─>X.....'),
         reason: 'the clip composite replays painted cells verbatim',
       );
-    });
+    }, viewportSize: const CellSize(8, 3));
 
-    testWidgets('a Container merging its background back in', (tester) {
-      const size = CellSize(8, 3);
-      tester.pumpWidget(
-        _onSurface(
-          _ambiguousWide,
-          size,
+    testWidgetsOnBothTextPolicies(
+      'a Container merging its background back in',
+      (tester, policy) {
+        const size = CellSize(8, 3);
+        tester.pumpWidget(
           const SizedBox(
             width: 4,
             height: 1,
             child: Container(color: AnsiColor(4), child: Text('─X')),
           ),
-        ),
-      );
-      final buffer = tester.render(size: size);
-      expect(_row(buffer, cols: 4), '─>X ', reason: 'the box fills col 3');
-      expect(
-        buffer.atColRow(1, 0).style.background,
-        const AnsiColor(4),
-        reason:
-            'the continuation half of the pair takes the same background as '
-            'its leading cell',
-      );
-    });
+        );
+        final buffer = tester.render(size: size);
+        expect(
+          _row(buffer, cols: 4),
+          _perPolicy(policy, spec: '─X  ', wide: '─>X '),
+          reason: 'the box fills the columns the text does not',
+        );
+        expect(
+          buffer.atColRow(1, 0).style.background,
+          const AnsiColor(4),
+          reason:
+              'the second column of the pair takes the same background as the '
+              'leading cell (on spec it is the second glyph; on an '
+              'ambiguous-wide surface it is the continuation half)',
+        );
+      },
+      viewportSize: const CellSize(8, 3),
+    );
   });
 
   group('framework glyphs measure with the surface policy', () {
-    testWidgets('a border reserves what its glyphs actually draw', (tester) {
-      const size = CellSize(12, 3);
-      Widget boxed() => const SizedBox(
-        width: 12,
-        height: 3,
-        child: Container(border: BoxBorder(), child: Text('ab')),
-      );
+    testWidgetsOnBothTextPolicies(
+      'a border reserves what its glyphs actually draw',
+      (tester, policy) {
+        const size = CellSize(12, 3);
+        tester.pumpWidget(
+          const SizedBox(
+            width: 12,
+            height: 3,
+            child: Container(border: BoxBorder(), child: Text('ab')),
+          ),
+        );
+        final buffer = tester.render(size: size);
+        expect(
+          _row(buffer),
+          _perPolicy(policy, spec: '┌──────────┐', wide: '┌>─>─>─>─>┐>'),
+          reason:
+              'an ambiguous-wide terminal draws every box-drawing glyph two '
+              'cells wide, so the frame occupies two columns per edge',
+        );
+        expect(
+          _row(buffer, row: 1).substring(0, 2),
+          _perPolicy(policy, spec: '│a', wide: '│>'),
+          reason: 'the left edge holds both halves of its own glyph',
+        );
+      },
+      viewportSize: const CellSize(12, 3),
+    );
 
-      tester.pumpWidget(_onSurface(TextPresentationPolicy.spec, size, boxed()));
-      expect(
-        _row(tester.render(size: size)),
-        '┌──────────┐',
-        reason: 'spec: one column per edge, unchanged',
-      );
+    testWidgetsOnBothTextPolicies(
+      'the scrollbar gutter widens with its glyphs',
+      (tester, policy) {
+        const size = CellSize(10, 3);
+        tester.pumpWidget(
+          const SizedBox(
+            width: 10,
+            height: 3,
+            child: ScrollView(scrollbar: true, child: Text('abcdefghi')),
+          ),
+        );
+        expect(
+          _row(tester.render(size: size)),
+          _perPolicy(policy, spec: 'abcdefghi█', wide: 'abcdefgh█>'),
+          reason: 'a two-cell thumb needs a two-column gutter',
+        );
+      },
+      viewportSize: const CellSize(10, 3),
+    );
 
-      tester.pumpWidget(_onSurface(_ambiguousWide, size, boxed()));
-      final buffer = tester.render(size: size);
-      expect(
-        _row(buffer),
-        '┌>─>─>─>─>┐>',
-        reason:
-            'an ambiguous-wide terminal draws every box-drawing glyph two '
-            'cells wide, so the frame occupies two columns per edge',
-      );
-      expect(
-        _row(buffer, row: 1).substring(0, 2),
-        '│>',
-        reason: 'the left edge holds both halves of its own glyph',
-      );
-    });
-
-    testWidgets('the scrollbar gutter widens with its glyphs', (tester) {
-      const size = CellSize(10, 3);
-      Widget bar() => const SizedBox(
-        width: 10,
-        height: 3,
-        child: ScrollView(scrollbar: true, child: Text('abcdefghi')),
-      );
-
-      tester.pumpWidget(_onSurface(TextPresentationPolicy.spec, size, bar()));
-      expect(
-        _row(tester.render(size: size)),
-        'abcdefghi█',
-        reason: 'spec: a one-column gutter, unchanged',
-      );
-
-      tester.pumpWidget(_onSurface(_ambiguousWide, size, bar()));
-      expect(
-        _row(tester.render(size: size)),
-        'abcdefgh█>',
-        reason: 'a two-cell thumb needs a two-column gutter',
-      );
-    });
-
-    testWidgets('an ellipsis reserves what it measures', (tester) {
+    testWidgetsOnBothTextPolicies('an ellipsis reserves what it measures', (
+      tester,
+      policy,
+    ) {
       const size = CellSize(6, 1);
-      Widget clipped() => const SizedBox(
-        width: 6,
-        height: 1,
-        child: Text(
-          'abcdefgh',
-          softWrap: false,
-          overflow: TextOverflow.ellipsis,
+      tester.pumpWidget(
+        const SizedBox(
+          width: 6,
+          height: 1,
+          child: Text(
+            'abcdefgh',
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       );
-
-      tester.pumpWidget(
-        _onSurface(TextPresentationPolicy.spec, size, clipped()),
-      );
-      expect(_row(tester.render(size: size)), 'abcde…');
-
-      tester.pumpWidget(_onSurface(_ambiguousWide, size, clipped()));
       expect(
         _row(tester.render(size: size)),
-        'abcd…>',
+        _perPolicy(policy, spec: 'abcde…', wide: 'abcd…>'),
         reason:
-            'the ellipsis draws two cells on this surface, so the content '
-            'must give up two columns for it — not one',
+            'the ellipsis draws two cells on an ambiguous-wide surface, so '
+            'the content must give up two columns for it — not one',
       );
-    });
+    }, viewportSize: const CellSize(6, 1));
   });
 }

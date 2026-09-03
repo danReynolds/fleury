@@ -20,7 +20,11 @@ cd my_app
 ```
 
 Open the directory in VS Code and press F5, or run
-`dart run bin/run_app.dart` from an interactive terminal. The generated VS Code
+`dart run bin/run_app.dart` from an interactive terminal. For the fastest start
+use `dart run fleury run` (`fleury run` once activated globally): the same
+save-to-reload session, but the app is compiled once instead of twice (see
+[the hot-reload guide](https://github.com/danReynolds/fleury/blob/main/packages/fleury/doc/hot_reload.md)).
+The generated VS Code
 configuration uses the integrated terminal so input, rendering, breakpoints,
 and Dart hot reload share one normal debug session. The Git-source flag is only
 needed until the packages are published together.

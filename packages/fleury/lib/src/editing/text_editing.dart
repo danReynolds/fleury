@@ -666,45 +666,86 @@ final class TextEditingModel {
     return offset;
   }
 
+  /// A range over the grapheme cluster [offset] falls in — empty at [offset]
+  /// when [offset] is already on a boundary.
+  ///
+  /// This is the one place boundaries are resolved, and the reason editing a
+  /// large document stays cheap. [CharacterRange.at] walks OUT from [offset]
+  /// (back to the cluster start, forward to its end) and stops at the first
+  /// break it can prove, so the work is the width of the cluster under the
+  /// caret. Walking IN from 0 — one `text.characters` pass per call, which is
+  /// what these three functions used to do — is O(offset): correct, but it
+  /// re-reads the whole document above the caret on every keystroke, and
+  /// materializes a string per cluster on the way. Appends hid that, because
+  /// `offset == text.length` short-circuits before the walk.
+  ///
+  /// On real text the outward walk stops within a few code units: `\n`
+  /// breaks on both sides (UAX #29 GB4/GB5), letters break from each other,
+  /// and a cluster is rarely wider than an emoji sequence. The bound is the
+  /// cluster, not the line: a single unbroken run of combining marks or
+  /// regional indicators is still O(run), as it always was.
+  ///
+  /// One input goes the old way. `package:characters` 1.4 reads
+  /// `codeUnitAt(-1)` when its backward scan reaches an unpaired low
+  /// surrogate at index 0 — an emoji cut in half by fixed-width truncation,
+  /// which the model's sanitizer deliberately keeps — so such a text is
+  /// resolved by the from-zero walk instead: rare, and correct over fast.
+  static CharacterRange _clusterAt(String text, int offset) {
+    if (text.isNotEmpty && (text.codeUnitAt(0) & 0xFC00) == 0xDC00) {
+      return _clusterAtFromStart(text, offset);
+    }
+    return CharacterRange.at(text, offset);
+  }
+
+  /// [CharacterRange.at] semantics by walking in from the start: empty at
+  /// [offset] on a boundary, the containing cluster otherwise.
+  static CharacterRange _clusterAtFromStart(String text, int offset) {
+    final range = text.characters.iterator;
+    while (range.moveNext()) {
+      final start = range.stringBeforeLength;
+      if (start == offset) return range..collapseToStart();
+      if (text.length - range.stringAfterLength > offset) return range;
+    }
+    return range; // past the last cluster: empty at the end
+  }
+
   static int previousGraphemeBoundary(String text, int offset) {
     final clamped = _clampInt(offset, 0, text.length);
     if (clamped == 0) return 0;
-    var index = 0;
-    for (final grapheme in text.characters) {
-      final next = index + grapheme.length;
-      if (next >= clamped) return index;
-      index = next;
-    }
-    return 0;
+    final range = _clusterAt(text, clamped);
+    final start = range.stringBeforeLength;
+    // Mid-cluster, the cluster start IS the boundary to the left. Already on a
+    // boundary, the cluster holding the previous code unit ends here; its
+    // start is the boundary before. (Resolved as a fresh lookup rather than
+    // `moveBack()`, which scans backward and trips over an unpaired low
+    // surrogate at index 0 — see [_clusterAt].)
+    if (start < clamped) return start;
+    return _clusterAt(text, clamped - 1).stringBeforeLength;
   }
 
   static int nextGraphemeBoundary(String text, int offset) {
     final clamped = _clampInt(offset, 0, text.length);
     if (clamped == text.length) return text.length;
-    var index = 0;
-    for (final grapheme in text.characters) {
-      final next = index + grapheme.length;
-      if (next > clamped) return next;
-      index = next;
+    final range = _clusterAt(text, clamped);
+    // Mid-cluster, the range already ends at the boundary to the right. Already
+    // on a boundary (so the range is empty), the cluster holding the next code
+    // unit starts here; its end is the boundary after.
+    if (range.stringBeforeLength < clamped) {
+      return text.length - range.stringAfterLength;
     }
-    return text.length;
+    return text.length - _clusterAt(text, clamped + 1).stringAfterLength;
   }
 
   static int snapOffsetToGraphemeBoundary(String text, int offset) {
     final clamped = _clampInt(offset, 0, text.length);
     if (clamped == 0 || clamped == text.length) return clamped;
-    var index = 0;
-    for (final grapheme in text.characters) {
-      final next = index + grapheme.length;
-      if (clamped == index || clamped == next) return clamped;
-      if (clamped > index && clamped < next) {
-        final before = clamped - index;
-        final after = next - clamped;
-        return before < after ? index : next;
-      }
-      index = next;
-    }
-    return text.length;
+    final range = _clusterAt(text, clamped);
+    final start = range.stringBeforeLength;
+    if (start == clamped) return clamped;
+    // The nearest edge of the cluster the offset landed inside; a tie rounds
+    // forward, as the from-zero walk did.
+    final end = text.length - range.stringAfterLength;
+    return (clamped - start) < (end - clamped) ? start : end;
   }
 }
 

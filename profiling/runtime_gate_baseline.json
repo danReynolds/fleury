@@ -1,0 +1,35 @@
+{
+  "event-script": {
+    "framesByReason": {
+      "build+key:arrowUp": 9
+    },
+    "eventsDispatched": 17,
+    "framesRendered": 9,
+    "framesSkipped": 8,
+    "bytesPresented": 7,
+    "bytesPerFrame": 0
+  },
+  "anchor-retraction": {
+    "framesByReason": {
+      "build": 1,
+      "invalidate": 1
+    },
+    "eventsDispatched": 0,
+    "framesRendered": 2,
+    "framesSkipped": 0,
+    "bytesPresented": 12,
+    "bytesPerFrame": 6
+  },
+  "large-paste": {
+    "framesByReason": {
+      "build+post-frame+paste": 1,
+      "build+post-frame": 7,
+      "build": 1
+    },
+    "eventsDispatched": 1,
+    "framesRendered": 9,
+    "framesSkipped": 0,
+    "bytesPresented": 805,
+    "bytesPerFrame": 89
+  }
+}
