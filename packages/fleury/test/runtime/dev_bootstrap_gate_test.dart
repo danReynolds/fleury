@@ -213,4 +213,63 @@ void main() {
       );
     });
   });
+
+  group('supervisionBlocker — the gates fleury run and runApp share', () {
+    final script = Uri.file('/app/bin/main.dart');
+    String? blocker({
+      Map<String, String> env = const {},
+      bool tty = true,
+      bool windows = false,
+      bool product = false,
+      bool handle = false,
+      String? path,
+    }) => supervisionBlocker(
+      script: path == null ? script : Uri.file(path),
+      environment: env,
+      stdoutIsTerminal: tty,
+      stdinIsTerminal: tty,
+      isWindows: windows,
+      productMode: product,
+      implicitHandle: () => handle,
+      scriptExists: (_) => true,
+    );
+
+    test('a plain terminal session may be supervised', () {
+      expect(blocker(), isNull);
+    });
+
+    test('FLEURY_HOT_RELOAD=0 is honoured by the launcher too', () {
+      // The generated README documents this opt-out right under `fleury run`;
+      // it used to be silently ignored on that path.
+      expect(
+        blocker(env: {'FLEURY_HOT_RELOAD': '0'}),
+        contains('FLEURY_HOT_RELOAD'),
+      );
+    });
+
+    test(
+      'no terminal, a handle, Windows, a compiled VM, a non-.dart entry',
+      () {
+        expect(blocker(tty: false), contains('terminal'));
+        expect(blocker(env: {'FLEURY_HANDLE': '/tmp/h'}), contains('handle'));
+        expect(blocker(handle: true), contains('handle'));
+        expect(blocker(windows: true), contains('Windows'));
+        expect(blocker(product: true), contains('compiled'));
+        expect(blocker(path: '/app/app.dill'), contains('.dart'));
+      },
+    );
+
+    test('a missing entrypoint', () {
+      expect(
+        supervisionBlocker(
+          script: script,
+          environment: const {},
+          stdoutIsTerminal: true,
+          stdinIsTerminal: true,
+          scriptExists: (_) => false,
+        ),
+        contains('exist'),
+      );
+    });
+  });
 }

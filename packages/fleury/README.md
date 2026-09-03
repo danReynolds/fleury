@@ -21,7 +21,7 @@ cd my_app
 
 Open the directory in VS Code and press F5, or run
 `dart run bin/run_app.dart` from an interactive terminal. For the fastest start
-use `fleury run` (after `dart pub global activate fleury`, once): the same
+use `dart run fleury run` (`fleury run` once activated globally): the same
 save-to-reload session, but the app is compiled once instead of twice (see
 [the hot-reload guide](https://github.com/danReynolds/fleury/blob/main/packages/fleury/doc/hot_reload.md)).
 The generated VS Code

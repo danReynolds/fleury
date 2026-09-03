@@ -71,9 +71,10 @@ RunCommandInvocation? parseRunCommand(List<String> args) {
           'name the script to run: fleury run path/to/main.dart',
     );
   }
+  // Links are followed so a symlinked entrypoint counts as the file it is.
   final candidates =
       bin
-          .listSync(followLinks: false)
+          .listSync()
           .whereType<File>()
           .where((f) => f.path.endsWith('.dart'))
           .map((f) => f.path)
@@ -113,7 +114,9 @@ String? _packageName(Directory projectDir) {
   final pubspec = File('${projectDir.path}/pubspec.yaml');
   if (!pubspec.existsSync()) return null;
   for (final line in pubspec.readAsLinesSync()) {
-    final match = RegExp(r'^name:\s*([A-Za-z0-9_]+)\s*$').firstMatch(line);
+    final match = RegExp(
+      r'''^name:\s*["']?([A-Za-z0-9_]+)["']?\s*(#.*)?$''',
+    ).firstMatch(line);
     if (match != null) return match.group(1);
   }
   return null;
@@ -125,7 +128,8 @@ usage: fleury run [vm options] [script.dart] [app args...]
 Runs a Fleury app with hot reload from a launcher that never compiles it, so
 the app is compiled once instead of twice. Save a source file to reload; press
 F5 in the app to restart. With no script, runs the project's entrypoint from
-bin/ (its only Dart file, else main.dart, else run_app.dart). VM options
+bin/ (its only Dart file, else main.dart, else run_app.dart, else the file
+named after the package). VM options
 before the script go to the app's VM (for example --enable-asserts or
 --define=KEY=value).
 ''';

@@ -213,6 +213,19 @@ final class DevBootstrap {
   /// process's entrypoint", which is right when the supervisor IS the app.
   String? _projectRoot;
 
+  /// The Dart VM the child runs under. The transparent path IS a Dart VM, so
+  /// `Platform.resolvedExecutable` is right there; a compiled `fleury` binary
+  /// must name the SDK's `dart` instead.
+  String _dartExecutable = Platform.resolvedExecutable;
+
+  /// True under `fleury run`: main() never ran in this process, so the
+  /// double-main early-exit hint does not apply.
+  bool _launcher = false;
+
+  /// The exit code of a child that ended before the supervisor was wired,
+  /// so [launch] can mirror it instead of running the app again.
+  int? _lastChildExit;
+
   VmService? _vm;
   Process? _child;
 
@@ -255,25 +268,20 @@ final class DevBootstrap {
     required bool enableHotReload,
   }) {
     if (driverInjected || !enableHotReload) return false;
-    if (const bool.fromEnvironment('dart.vm.product')) return false;
-    if (Platform.isWindows) return false;
-    if (Platform.environment['FLEURY_HOT_RELOAD'] == '0') return false;
     if (isSupervisedChild) return false;
-    if (!stdout.hasTerminal || !stdin.hasTerminal) return false;
-    // A serve/remote handle means a supervisor of a different kind owns this
-    // process's lifecycle and its socket accepts exactly one connection.
-    // (In-app reload still runs there; see InAppDevReload.)
-    if (Platform.environment['FLEURY_HANDLE'] != null) return false;
-    if (findImplicitFleuryHandle() != null) return false;
-    // Respawning needs a re-runnable entrypoint script. Kernel/AOT
-    // snapshots (`dart run app.dill`) are excluded: sources and compiled
-    // code can disagree there, and it isn't the dev loop this serves.
-    final script = Platform.script;
-    if (script.scheme != 'file') return false;
-    if (!script.path.endsWith('.dart')) return false;
-    if (!File.fromUri(script).existsSync()) return false;
-    return true;
+    return _supervisionBlockerHere(Platform.script) == null;
   }
+
+  /// [supervisionBlocker] evaluated against this process.
+  static String? _supervisionBlockerHere(Uri script) => supervisionBlocker(
+    script: script,
+    environment: Platform.environment,
+    stdoutIsTerminal: stdout.hasTerminal,
+    stdinIsTerminal: stdin.hasTerminal,
+    isWindows: Platform.isWindows,
+    productMode: const bool.fromEnvironment('dart.vm.product'),
+    implicitHandle: () => findImplicitFleuryHandle() != null,
+  );
 
   /// Supervised-child side of the service handshake: report this process's
   /// flag-origin VM-service URI to the supervisor's info file.
@@ -318,49 +326,146 @@ final class DevBootstrap {
   /// The child is the same child as ever — it sees a flag-enabled service and
   /// the supervised-child environment, so nothing inside the app changes.
   ///
-  /// Never returns: the process ends with the child's exit code (or 70 when
-  /// the supervisor itself failed). When there is nothing to watch, the app
-  /// still runs, once, without hot reload.
+  /// The same gates apply as on the transparent path ([supervisionBlocker]:
+  /// `FLEURY_HOT_RELOAD=0`, no terminal, a serve/mcp handle, Windows, a
+  /// compiled VM), plus "nothing to watch". When one blocks, the app runs
+  /// ONCE, without hot reload and with `FLEURY_HOT_RELOAD=0` in its
+  /// environment so it does not spawn a supervisor of its own; the launcher
+  /// forwards SIGTERM at once and SIGINT after [devSignalForwardBackstop]
+  /// (a terminal's Ctrl+C already reached the child directly).
+  ///
+  /// The app is never run a second time. If the child ends before the
+  /// supervisor is wired (a compile error, an early exit), its exit code is
+  /// mirrored; if the supervisor itself fails, the process ends with 70.
+  ///
+  /// [dartExecutable] is the VM to run the app under; a compiled `fleury`
+  /// binary passes the SDK's `dart`. Never returns.
   static Future<Never> launch({
     required String scriptPath,
     List<String> args = const [],
     List<String> vmOptions = const [],
+    String? dartExecutable,
   }) async {
     final script = File(scriptPath).absolute;
+    final dart = dartExecutable ?? Platform.resolvedExecutable;
     if (!script.existsSync()) {
       stderr.writeln('fleury run: no such file: $scriptPath');
       exit(64);
     }
+    final blocker = _supervisionBlockerHere(script.uri);
+    String? projectRoot;
+    if (blocker == null) {
+      final entryDir =
+          DevSourceRoots.entrypointDirectory(script: script.uri) ??
+          script.parent.path;
+      for (final candidate in [entryDir, Directory.current.path]) {
+        final roots = DevSourceRoots.resolve(projectRoot: candidate);
+        if (roots != null && roots.directories.isNotEmpty) {
+          projectRoot = candidate;
+          break;
+        }
+      }
+    }
+    if (blocker != null || projectRoot == null) {
+      _debugLog(
+        'launch: running once without hot reload '
+        '(${blocker ?? 'nothing to watch'})',
+      );
+      exit(
+        await _runOnce(
+          dart: dart,
+          script: script.path,
+          args: args,
+          vmOptions: vmOptions,
+        ),
+      );
+    }
+
     final supervisor = DevBootstrap._()
+      .._launcher = true
       .._args = args
       .._scriptPath = script.path
       .._vmOptions = vmOptions
-      .._projectRoot =
-          DevSourceRoots.entrypointDirectory(script: script.uri) ??
-          script.parent.path;
-    final started = await supervisor._superviseFirstChild();
-    if (!started) {
-      _debugLog('launch: no supervision, running the app once');
-      final child = await Process.start(Platform.resolvedExecutable, [
-        ...replayableVmOptions(vmOptions),
-        script.path,
-        ...args,
-      ], mode: ProcessStartMode.inheritStdio);
-      exit(await child.exitCode);
+      .._projectRoot = projectRoot
+      .._dartExecutable = dart;
+    final ended = Completer<int>();
+    void endWith(int code) {
+      if (!ended.isCompleted) ended.complete(code);
     }
+
+    unawaited(
+      runZonedGuarded(() async {
+        final started = await supervisor._superviseFirstChild();
+        if (!started) {
+          // `_spawnChild` has already reaped whatever it started. A child
+          // that ended on its own (compile error, early exit) already told
+          // the terminal why: mirror its code, never run the app again.
+          final code = supervisor._lastChildExit;
+          if (code != null && code >= 0) return endWith(code);
+          stderr.writeln(
+            'fleury run: could not attach to the app; '
+            'run it directly with: dart run $scriptPath',
+          );
+          return endWith(70);
+        }
+        try {
+          await supervisor._superviseForever();
+        } catch (error, stack) {
+          _debugLog('supervisor loop died: $error\n$stack');
+          final child = supervisor._child;
+          if (child != null) {
+            child.kill(ProcessSignal.sigkill);
+            await child.exitCode;
+          }
+          await supervisor._emergencyTtyRestore();
+          endWith(70);
+        }
+      }, (error, stack) => _debugLog('uncaught: $error\n$stack')),
+    );
+    exit(await ended.future);
+  }
+
+  /// Runs the app once, without a supervisor, mirroring its exit code.
+  static Future<int> _runOnce({
+    required String dart,
+    required String script,
+    required List<String> args,
+    required List<String> vmOptions,
+  }) async {
+    final Process child;
     try {
-      await supervisor._superviseForever();
-    } catch (error, stack) {
-      _debugLog('supervisor loop died: $error\n$stack');
-      final child = supervisor._child;
-      if (child != null) {
-        child.kill(ProcessSignal.sigkill);
-        await child.exitCode;
-      }
-      await supervisor._emergencyTtyRestore();
-      exit(70);
+      child = await Process.start(
+        dart,
+        [...vmOptions, script, ...args],
+        mode: ProcessStartMode.inheritStdio,
+        environment: {...Platform.environment, 'FLEURY_HOT_RELOAD': '0'},
+      );
+    } catch (error) {
+      stderr.writeln('fleury run: could not start $dart: $error');
+      return 70;
     }
-    throw StateError('unreachable: the supervisor loop only exits');
+    var exited = false;
+    final subs = <StreamSubscription<ProcessSignal>>[];
+    void forward(ProcessSignal signal, Duration after) {
+      try {
+        subs.add(
+          signal.watch().listen((_) {
+            Timer(after, () {
+              if (!exited) child.kill(signal);
+            });
+          }),
+        );
+      } catch (_) {}
+    }
+
+    forward(ProcessSignal.sigterm, Duration.zero);
+    forward(ProcessSignal.sigint, devSignalForwardBackstop);
+    final code = await child.exitCode;
+    exited = true;
+    for (final sub in subs) {
+      await sub.cancel();
+    }
+    return code < 0 ? 128 - code : code;
   }
 
   static Future<void> runOrFallThrough({List<String> args = const []}) async {
@@ -544,11 +649,13 @@ final class DevBootstrap {
         // translate to the conventional 128+n so callers see e.g. 130, and a
         // signal-killed child may have died raw — restore before leaving.
         await _dispose();
-        final hint = devEarlyExitHint(
-          code: code,
-          uptime: DateTime.now().difference(_childSpawnedAt),
-          firstChild: _childCount == 1,
-        );
+        final hint = _launcher
+            ? null
+            : devEarlyExitHint(
+                code: code,
+                uptime: DateTime.now().difference(_childSpawnedAt),
+                firstChild: _childCount == 1,
+              );
         if (hint != null) stderr.writeln(hint);
         if (code < 0) {
           await _emergencyTtyRestore();
@@ -595,7 +702,7 @@ final class DevBootstrap {
         _child = null;
         if (child != null) {
           child.kill(ProcessSignal.sigkill);
-          await child.exitCode;
+          _lastChildExit = await child.exitCode;
           // It may have died owning raw mode / the alt screen; restore from
           // out here before whoever runs next (the classic fallback or a
           // respawn) touches the terminal.
@@ -618,7 +725,7 @@ final class DevBootstrap {
     final Process child;
     try {
       child = await Process.start(
-        Platform.resolvedExecutable,
+        _dartExecutable,
         devRespawnArguments(
           scriptPath: _scriptPath,
           serviceInfo: infoFile.uri,
@@ -1143,4 +1250,37 @@ String? devEarlyExitHint({
       'FLEURY_HOT_RELOAD=0, or enableHotReload: false. '
       '(hot-reload guide → "How it works") '
       'If the app is meant to exit right away, ignore this.';
+}
+
+/// Why a process must not supervise an app under a VM service, or null when
+/// it may. Shared by `runApp`'s transparent path and `fleury run`, so the two
+/// can never disagree about `FLEURY_HOT_RELOAD=0`, a missing terminal, or an
+/// app driven through a serve/mcp handle.
+String? supervisionBlocker({
+  required Uri script,
+  required Map<String, String> environment,
+  required bool stdoutIsTerminal,
+  required bool stdinIsTerminal,
+  bool isWindows = false,
+  bool productMode = false,
+  bool Function()? implicitHandle,
+  bool Function(Uri script)? scriptExists,
+}) {
+  if (productMode) return 'a compiled VM has no hot reload';
+  if (isWindows) return 'hot reload supervision is not supported on Windows';
+  if (environment['FLEURY_HOT_RELOAD'] == '0') return 'FLEURY_HOT_RELOAD=0';
+  if (!stdoutIsTerminal || !stdinIsTerminal) {
+    return 'stdin or stdout is not a terminal';
+  }
+  if (environment['FLEURY_HANDLE'] != null ||
+      (implicitHandle?.call() ?? false)) {
+    return 'the app is driven through a fleury handle (serve, mcp)';
+  }
+  if (script.scheme != 'file') return 'the entrypoint is not a file';
+  if (!script.path.endsWith('.dart')) {
+    return 'the entrypoint is not a .dart source file';
+  }
+  final exists = scriptExists ?? (Uri uri) => File.fromUri(uri).existsSync();
+  if (!exists(script)) return 'the entrypoint does not exist';
+  return null;
 }

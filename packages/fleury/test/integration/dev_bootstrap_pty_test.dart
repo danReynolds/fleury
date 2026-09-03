@@ -517,6 +517,90 @@ Future<void> main() async {
 
   group('fleury run', () {
     test(
+      'an app that fails to compile is reported once and its exit code '
+      'comes back',
+      timeout: const Timeout(Duration(minutes: 3)),
+      () async {
+        // The launcher's fallback used to re-run the app whenever the
+        // supervisor could not attach — so the most common dev-loop failure
+        // compiled and printed its errors twice, and a real Fleury app was
+        // run a third time under its own supervisor.
+        final repoRoot = _findRepoRoot(Directory.current);
+        final app = await _generateApp(tempDir);
+        app.entrypoint.writeAsStringSync(
+          'void main() {\n  UNDEFINED_NAME_FOR_THIS_TEST;\n}\n',
+        );
+        final session = await _startSession(
+          app: app,
+          timeoutSeconds: 90,
+          scriptArguments: [
+            '${repoRoot.path}/packages/fleury/bin/fleury.dart',
+            'run',
+            app.entrypoint.path,
+          ],
+        );
+        try {
+          final metadata = await session.finish();
+          expect(metadata['exitCode'], 254, reason: session.diagnostics());
+          expect(
+            "Undefined name 'UNDEFINED_NAME_FOR_THIS_TEST'"
+                .allMatches(session.output())
+                .length,
+            1,
+            reason:
+                'the app must be compiled exactly once:\n'
+                '${session.diagnostics()}',
+          );
+        } finally {
+          session.dispose();
+        }
+      },
+    );
+
+    test(
+      'FLEURY_HOT_RELOAD=0 runs the app once, unsupervised, and a Ctrl+C '
+      'aimed at the launcher still ends the session with the app\'s code',
+      timeout: const Timeout(Duration(minutes: 3)),
+      () async {
+        final repoRoot = _findRepoRoot(Directory.current);
+        final app = await _generateApp(tempDir);
+        final session = await _startSession(
+          app: app,
+          timeoutSeconds: 90,
+          scriptArguments: [
+            '${repoRoot.path}/packages/fleury/bin/fleury.dart',
+            'run',
+            app.entrypoint.path,
+          ],
+          environment: {'FLEURY_HOT_RELOAD': '0'},
+          // SIGINT to the launcher process only, 3 s after the app's first
+          // output: the run-once path must forward it (after its backstop)
+          // rather than die and orphan the app.
+          captureArguments: ['--interrupt-after-output-ms', '3000'],
+        );
+        try {
+          final metadata = await session.finish();
+          final output = session.output();
+          expect(
+            output,
+            isNot(contains('Dart VM service')),
+            reason: 'opted out: no supervised child, no flag-enabled VM',
+          );
+          expect('BOOT-MARKER'.allMatches(output), hasLength(1));
+          expect(
+            metadata['exitCode'],
+            77,
+            reason:
+                "the app's SIGINT exit code must come back through the "
+                'launcher:\n${session.diagnostics()}',
+          );
+        } finally {
+          session.dispose();
+        }
+      },
+    );
+
+    test(
       'a launcher that never ran the app supervises it: main runs once, '
       'save-to-reload works, the exit code comes back',
       timeout: const Timeout(Duration(minutes: 4)),
@@ -805,6 +889,8 @@ Future<_Session> _startSession({
   required int timeoutSeconds,
   String? workingDirectory,
   List<String>? scriptArguments,
+  Map<String, String> environment = const {},
+  List<String> captureArguments = const [],
 }) async {
   final scratch = app.dir.parent;
   final repoRoot = _findRepoRoot(Directory.current);
@@ -825,7 +911,8 @@ Future<_Session> _startSession({
       // failure this suite is about — let both through so the assertions,
       // not capture_pty's own guard, report it.
       '--allow-exit-codes',
-      '77,78,130,143',
+      '77,78,130,143,254',
+      ...captureArguments,
       '--',
       Platform.resolvedExecutable,
       ...?scriptArguments,
@@ -836,6 +923,7 @@ Future<_Session> _startSession({
       'FLEURY_TEST_SVC_OUT': svcFile.path,
       'FLEURY_TEST_PID_OUT': pidFile.path,
       'FLEURY_DEV_BOOTSTRAP_LOG': logFile.path,
+      ...environment,
     },
   );
   final stderrBuf = StringBuffer();

@@ -55,15 +55,15 @@ supervision decision inside `runApp`, and once more in the child that gets the
 VM service. The launcher makes the same decision without ever loading the app:
 
 ```sh
-dart pub global activate fleury   # once
-fleury run                        # finds bin/main.dart or bin/run_app.dart
+dart run fleury run        # finds bin/main.dart or bin/run_app.dart
 ```
 
-Without the global install, `dart run fleury run` is the same launcher. It is
-the same session — save to reload, F5 to restart, Ctrl+C and the exit code
-pass through — with the app compiled once. On the counter example that is
-3.6 s to the first frame down to 2.2 s. With no script named, `fleury run`
-uses the only Dart file in `bin/`, else `bin/main.dart`, else
+With `fleury` activated globally (`dart pub global activate fleury` once the
+packages are on pub.dev, or `--source git` before then) it is just
+`fleury run`. It is the same session — save to reload, F5 to restart, Ctrl+C
+and the exit code pass through — with the app compiled once. On the counter
+example that is 3.6 s to the first frame down to 2.2 s. With no script named,
+`fleury run` uses the only Dart file in `bin/`, else `bin/main.dart`, else
 `bin/run_app.dart`; name one to override, `fleury run bin/other.dart`. VM
 options before the script go to the app's VM, `fleury run --enable-asserts`,
 and `--` ends option parsing. The launcher only pays off because it starts
@@ -71,6 +71,12 @@ from a snapshot: pub caches one for global executables and for
 `dart run <package>`, so the launcher's own start is about 0.4 s. Running it
 from source, `dart run bin/fleury.dart run …` inside a framework checkout,
 compiles the CLI instead and saves nothing.
+
+The launcher honours the same opt-outs as the transparent path: under
+`FLEURY_HOT_RELOAD=0`, without a terminal, or when the app is driven through
+a serve/mcp handle it runs the app once with no supervisor, forwarding Ctrl+C
+and the exit code. An app that fails to compile is reported once, with its
+exit code.
 
 ## Quick start (VS Code)
 

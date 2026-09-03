@@ -138,9 +138,7 @@ Future<int> runCreateCommand(List<String> args) async {
       ..writeln('  code .')
       ..writeln('  Press F5 to run in an interactive terminal.');
   } else {
-    stdout
-      ..writeln('  dart pub global activate fleury   # once')
-      ..writeln('  fleury run');
+    stdout.writeln('  dart run fleury run');
   }
   stdout.writeln(
     '  Edit and save while it runs — hot reload keeps your state.',
@@ -390,14 +388,14 @@ A terminal application built with [Fleury](https://github.com/danReynolds/fleury
 $runLead
 
 ```sh
-dart pub global activate fleury   # once
-fleury run
+dart run fleury run
 ```
 
-`fleury run` finds `bin/run_app.dart` on its own and compiles the app once.
-Without the global install, `dart run fleury run` is the same launcher; a
-plain `dart run bin/run_app.dart` also works, with the same hot-reload
-session, but compiles the app twice on a cold start.
+The launcher finds `bin/run_app.dart` on its own and compiles the app once.
+With `fleury` activated globally (`dart pub global activate fleury` once the
+packages are on pub.dev, or `--source git` before then) it is just
+`fleury run`. A plain `dart run bin/run_app.dart` also works, with the same
+hot-reload session, but compiles the app twice on a cold start.
 
 Press Enter or click **Increment**. Press Ctrl+C to quit.
 

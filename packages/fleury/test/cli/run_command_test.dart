@@ -91,6 +91,22 @@ void main() {
       expect(r.error, contains('fleury run bin/<file>.dart'));
     });
 
+    test('a symlinked entrypoint counts as the file it points at', () {
+      write('src/real.dart');
+      Directory('${project.path}/bin').createSync();
+      Link('${project.path}/bin/app.dart').createSync('../src/real.dart');
+      final r = resolveRunEntrypoint(project);
+      expect(r.error, isNull);
+      expect(r.path, endsWith('/bin/app.dart'));
+    });
+
+    test('a quoted or commented package name still matches its file', () {
+      write('pubspec.yaml', 'name: "myapp" # the app\n');
+      write('bin/myapp.dart');
+      write('bin/helper.dart');
+      expect(resolveRunEntrypoint(project).path, endsWith('/bin/myapp.dart'));
+    });
+
     test('no bin/ or no Dart files says how to name a script', () {
       expect(resolveRunEntrypoint(project).error, contains('no bin/'));
       write('bin/readme.md', 'x');
