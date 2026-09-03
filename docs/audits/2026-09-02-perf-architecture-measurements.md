@@ -118,7 +118,7 @@ the app. `dart run bin/dev_startup_profile.dart` (cooperative PTY, medians of
 | --- | ---: | ---: | ---: |
 | `dart run app.dart` (transparent supervisor) | 2131 ms | 3518 ms | 3620 ms |
 | `dart run --enable-vm-service=0 app.dart` (one compile, no supervisor) | 569 ms | 1949 ms | 2037 ms |
-| `dart run fleury:fleury run app.dart` (launcher from pub's cached snapshot) | 796 ms | 2125 ms | 2219 ms |
+| `dart run fleury run app.dart` (launcher from pub's cached snapshot; `fleury run` after a global activate is the same path) | 796 ms | 2125 ms | 2219 ms |
 | `dart run bin/fleury.dart run app.dart` (launcher compiled from source) | 2050 ms | 3365 ms | 3463 ms |
 
 The launcher lands within ~180 ms of the one-compile floor; that remainder is
@@ -138,5 +138,5 @@ dart compile exe ../packages/fleury/example/counter_quickstart.dart -o /tmp/coun
 dart run capture_pty.dart --answer-probes --out /tmp/cap --timeout 3 -- \
   /bin/sh -c 'FLEURY_RUNTIME_MARKERS=/tmp/marks.json exec /tmp/counter'
 dart run bin/dev_startup_profile.dart --cwd ../packages/fleury -- \
-  dart run fleury:fleury run example/counter_quickstart.dart
+  dart run fleury run example/counter_quickstart.dart
 ```

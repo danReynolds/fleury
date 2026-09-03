@@ -55,18 +55,22 @@ supervision decision inside `runApp`, and once more in the child that gets the
 VM service. The launcher makes the same decision without ever loading the app:
 
 ```sh
-dart run fleury:fleury run bin/main.dart
+dart pub global activate fleury   # once
+fleury run                        # finds bin/main.dart or bin/run_app.dart
 ```
 
-(or `fleury run bin/main.dart` after `dart pub global activate fleury`). It is
+Without the global install, `dart run fleury run` is the same launcher. It is
 the same session — save to reload, F5 to restart, Ctrl+C and the exit code
 pass through — with the app compiled once. On the counter example that is
-3.6 s to the first frame down to 2.2 s. VM options before the script go to the
-app's VM, `fleury run --enable-asserts bin/main.dart`, and `--` ends option
-parsing. The launcher only pays off because it starts from a snapshot: `dart
-run <package>:<executable>` caches one, so the launcher's own start is about
-0.4 s. Running it from source, `dart run bin/fleury.dart run …` inside a
-framework checkout, compiles the CLI instead and saves nothing.
+3.6 s to the first frame down to 2.2 s. With no script named, `fleury run`
+uses the only Dart file in `bin/`, else `bin/main.dart`, else
+`bin/run_app.dart`; name one to override, `fleury run bin/other.dart`. VM
+options before the script go to the app's VM, `fleury run --enable-asserts`,
+and `--` ends option parsing. The launcher only pays off because it starts
+from a snapshot: pub caches one for global executables and for
+`dart run <package>`, so the launcher's own start is about 0.4 s. Running it
+from source, `dart run bin/fleury.dart run …` inside a framework checkout,
+compiles the CLI instead and saves nothing.
 
 ## Quick start (VS Code)
 

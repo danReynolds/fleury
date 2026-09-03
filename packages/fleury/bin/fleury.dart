@@ -2451,8 +2451,17 @@ Future<Never> _runRun(List<String> args) async {
     stderr.write(runCommandUsage);
     exit(64);
   }
+  var script = run.scriptPath;
+  if (script == null) {
+    final resolved = resolveRunEntrypoint(Directory.current);
+    if (resolved.error case final message?) {
+      stderr.writeln(message);
+      exit(64);
+    }
+    script = resolved.path!;
+  }
   return DevBootstrap.launch(
-    scriptPath: run.scriptPath,
+    scriptPath: script,
     args: run.args,
     vmOptions: run.vmOptions,
   );
