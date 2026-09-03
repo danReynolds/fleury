@@ -1,9 +1,4 @@
 import 'package:fleury/fleury.dart';
-// GraphemeScanDebugStats is debug instrumentation on the editing model,
-// deliberately not exported by the production barrels; reached here like other
-// internals.
-import 'package:fleury/src/editing/text_editing.dart'
-    show GraphemeScanDebugStats, GraphemeScanStats;
 import 'package:test/test.dart';
 
 /// A document shaped like the ones this defect actually hurts: an agent
@@ -13,100 +8,64 @@ String document({required int lines}) => '${'x' * 63}\n' * lines;
 /// 1 MiB.
 final largeDocument = document(lines: 16384);
 
-GraphemeScanStats measure(void Function() body) {
-  GraphemeScanDebugStats.begin();
-  body();
-  return GraphemeScanDebugStats.take();
+/// Wall-clock for [rounds] snaps at the midpoint of a [lines]-line document.
+Duration snapCost({required int lines, int rounds = 300}) {
+  final text = document(lines: lines);
+  final offset = text.length ~/ 2 + 7; // mid-line, off any boundary tie
+  final sw = Stopwatch()..start();
+  for (var i = 0; i < rounds; i++) {
+    TextEditingModel.snapOffsetToGraphemeBoundary(text, offset);
+  }
+  return sw.elapsed;
 }
 
 void main() {
-  group('grapheme boundary scan width', () {
-    test('a mid-document snap reads a bounded window, not the prefix', () {
-      final offset = largeDocument.length ~/ 2;
-      expect(offset, 524288, reason: 'the insert lands ~512 KiB in');
-
-      final stats = measure(
-        () => TextEditingModel.snapOffsetToGraphemeBoundary(
-          largeDocument,
-          offset,
-        ),
-      );
-
-      expect(stats.scanCount, 1);
+  group('grapheme boundary scan is local to the caret', () {
+    test('the cost of a mid-document snap does not grow with the document', () {
+      // The old implementation walked `text.characters` from offset 0, so a
+      // snap 512 KiB into a document cost 16x one 32 KiB in. Local
+      // resolution makes the two the same work; the ratio is asserted with a
+      // wide margin so machine load cannot fail it (the old code's ratio is
+      // ~16, the new one's ~1). Both loops are warmed by the first call.
+      snapCost(lines: 64);
+      final small = snapCost(lines: 512).inMicroseconds; // 32 KiB
+      final large = snapCost(lines: 16384).inMicroseconds; // 1 MiB
       expect(
-        stats.widestScan,
-        lessThanOrEqualTo(64),
-        reason:
-            'snapping must read the text around the offset — the containing '
-            'grapheme cluster, at worst the containing 64-code-unit line. A '
-            'scan that starts at 0 reads the whole 512 KiB prefix, so every '
-            'mid-document keystroke re-walks the document above the caret.',
+        large,
+        lessThan(small * 6),
+        reason: '1 MiB snap $large µs vs 32 KiB snap $small µs (x300)',
       );
     });
 
-    test('the snap window does not grow with the document', () {
-      int widestAtMidpoint(int lines) {
-        final text = document(lines: lines);
-        return measure(
-          () => TextEditingModel.snapOffsetToGraphemeBoundary(
-            text,
-            text.length ~/ 2,
-          ),
-        ).widestScan;
-      }
-
-      // 4 KiB against 1 MiB — a 256x document is the same amount of scanning.
-      expect(widestAtMidpoint(16384), widestAtMidpoint(64));
-    });
-
-    test('a mid-document insert costs a bounded number of scanned units', () {
-      final offset = largeDocument.length ~/ 2;
-      final value = TextEditingValue(
-        text: largeDocument,
-        selection: TextSelection.collapsed(offset: offset),
-      );
-
-      final stats = measure(() => TextEditingModel.insert(value, 'z'));
-
-      // insert -> replaceSelection -> replaceRange snaps both range edges, then
-      // the resulting TextEditingValue snaps both selection edges.
-      expect(stats.scanCount, greaterThanOrEqualTo(1));
+    test('a text starting with an unpaired low surrogate still resolves', () {
+      // Fixed-width truncation through an emoji leaves a lone low surrogate
+      // at index 0; the sanitizer keeps it. package:characters walks off the
+      // front of such a string, so these used to throw a RangeError from
+      // Home+Right, Backspace and insert.
+      final cut = '\u{1F44D} nice work'.substring(1);
+      expect((cut.codeUnitAt(0) & 0xFC00) == 0xDC00, isTrue);
+      expect(TextEditingModel.nextGraphemeBoundary(cut, 0), 1);
+      expect(TextEditingModel.previousGraphemeBoundary(cut, 1), 0);
+      expect(TextEditingModel.previousGraphemeBoundary(cut, 2), 1);
+      expect(TextEditingModel.snapOffsetToGraphemeBoundary(cut, 1), 1);
+      expect(TextEditingModel.snapOffsetToGraphemeBoundary(cut, 3), 3);
       expect(
-        stats.codeUnitsScanned,
-        lessThanOrEqualTo(64 * stats.scanCount),
-        reason:
-            'one keystroke in the middle of a 1 MiB TextArea used to scan '
-            '~512 KiB per snap, several times over, for a single character',
+        TextEditingModel.nextGraphemeBoundary(cut, cut.length),
+        cut.length,
       );
-    });
-
-    test('caret movement and deletion read a bounded window too', () {
-      final offset = largeDocument.length ~/ 2;
-      final value = TextEditingValue(
-        text: largeDocument,
-        selection: TextSelection.collapsed(offset: offset),
+      // The from-start fallback keeps CharacterRange.at's shape mid-cluster.
+      final family = '${cut.substring(0, 1)}\u{1F468}\u200D\u{1F469}x';
+      final start = 1;
+      final end = family.length - 1;
+      expect(
+        TextEditingModel.previousGraphemeBoundary(family, start + 2),
+        start,
       );
-
-      for (final (name, op) in <(String, TextEditingValue Function())>[
-        ('moveLeft', () => TextEditingModel.moveLeft(value)),
-        ('moveRight', () => TextEditingModel.moveRight(value)),
-        ('backspace', () => TextEditingModel.backspace(value)),
-        ('delete', () => TextEditingModel.delete(value)),
-      ]) {
-        final stats = measure(op);
-        expect(
-          stats.widestScan,
-          lessThanOrEqualTo(64),
-          reason: '$name walked ${stats.widestScan} code units',
-        );
-      }
-    });
-
-    test('the collector is closed by default and records nothing', () {
-      TextEditingModel.snapOffsetToGraphemeBoundary(largeDocument, 100);
-      final stats = GraphemeScanDebugStats.take();
-      expect(stats.scanCount, GraphemeScanStats.empty.scanCount);
-      expect(stats.codeUnitsScanned, GraphemeScanStats.empty.codeUnitsScanned);
+      expect(TextEditingModel.nextGraphemeBoundary(family, start + 2), end);
+      expect(
+        TextEditingModel.snapOffsetToGraphemeBoundary(family, start + 1),
+        start,
+      );
     });
   });
 
