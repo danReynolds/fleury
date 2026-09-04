@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/src/terminal/capabilities.dart'
+    show widthProbeIsPermittedByEnvironment;
 import 'package:fleury/src/terminal/posix_driver.dart'
     show PosixTerminalModeController;
 import 'package:test/test.dart';
@@ -924,15 +926,20 @@ void main() {
         );
         final batch = exchanges.last;
         expect(batch, contains('?2026\$p'));
+        final probesWidths = widthProbeIsPermittedByEnvironment(
+          Platform.environment,
+        );
         expect(
-          batch,
-          contains('\x1B[6n'),
-          reason: 'the width battery rides the same exchange',
+          batch.contains('\x1B[6n'),
+          probesWidths,
+          reason: 'the width battery rides the same exchange when permitted',
         );
         // Positional segmentation: the query a terminal is most likely to
         // choke on (the image APC) must be last so it can only cost
         // itself, and every query that paints must end with an erase.
-        expect(batch.indexOf('?2026\$p'), lessThan(batch.indexOf('\x1B[6n')));
+        if (probesWidths) {
+          expect(batch.indexOf('?2026\$p'), lessThan(batch.indexOf('\x1B[6n')));
+        }
         final apc = batch.indexOf('\x1B_G');
         if (apc >= 0) {
           expect(apc, greaterThan(batch.lastIndexOf('\x1B[6n')));
