@@ -1,6 +1,7 @@
 // FakeClock-driven tests for TickerScheduler. Discipline per RFC
 // 0010 §21.1: no real time, no Future.delayed, no Timer.
 
+import 'dart:async';
 import 'dart:math';
 
 import '../support/harness.dart';
@@ -74,6 +75,22 @@ void main() {
   });
 
   group('TickerScheduler ticking', () {
+    test('a throwing ticker does not starve later tickers or later frames', () {
+      final scheduler = FakeTickerScheduler(clock: FakeClock());
+      addTearDown(scheduler.dispose);
+      final error = StateError('ticker failed');
+      final errors = <Object>[];
+      var frames = 0;
+      scheduler.register((_) => throw error);
+      scheduler.register((_) => frames++);
+      runZonedGuarded(() {
+        scheduler.advance(const Duration(milliseconds: 16));
+        scheduler.advance(const Duration(milliseconds: 16));
+      }, (error, _) => errors.add(error));
+      expect(frames, 2);
+      expect(errors, [same(error), same(error)]);
+    });
+
     test('advanceFrame invokes registered callback with current clock', () {
       final clock = FakeClock();
       final scheduler = FakeTickerScheduler(clock: clock);

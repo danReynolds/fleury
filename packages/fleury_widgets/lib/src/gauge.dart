@@ -1,5 +1,6 @@
 import 'package:fleury/fleury_core.dart';
 
+import 'chart_label.dart';
 import 'glyphs.dart';
 
 /// A single-value status indicator: a horizontal bar with an optional
@@ -94,7 +95,7 @@ class Gauge extends StatelessWidget {
         showPercentage: showPercentage,
         filledStyle: filled,
         trackStyle: track,
-        glyphTier: MediaQuery.glyphTierOf(context),
+        glyphTier: drawingGlyphTierOf(context),
       ),
     );
   }
@@ -119,6 +120,7 @@ class _RawGauge extends LeafRenderObjectWidget {
 
   @override
   RenderObject createRenderObject(BuildContext context) => RenderGauge(
+    textPolicy: MediaQuery.textPolicyOf(context),
     value: value,
     label: label,
     showPercentage: showPercentage,
@@ -138,25 +140,37 @@ class _RawGauge extends LeafRenderObjectWidget {
       ..showPercentage = showPercentage
       ..filledStyle = filledStyle
       ..trackStyle = trackStyle
-      ..glyphTier = glyphTier;
+      ..glyphTier = glyphTier
+      ..textPolicy = MediaQuery.textPolicyOf(context);
   }
 }
 
 /// Render object behind [Gauge]. See its docs.
 class RenderGauge extends RenderObject {
   RenderGauge({
+    TextPresentationPolicy textPolicy = TextPresentationPolicy.spec,
     required double value,
     required String? label,
     required bool showPercentage,
     required CellStyle filledStyle,
     required CellStyle trackStyle,
     required GlyphTier glyphTier,
-  }) : _value = value,
+  }) : _textPolicy = textPolicy,
+       _value = value,
        _label = label,
        _showPercentage = showPercentage,
        _filledStyle = filledStyle,
        _trackStyle = trackStyle,
        _glyphTier = glyphTier;
+
+  TextPresentationPolicy _textPolicy;
+  set textPolicy(TextPresentationPolicy value) {
+    if (_textPolicy == value) return;
+    _textPolicy = value;
+    markNeedsLayout();
+  }
+
+  ChartLabel _chartLabel(String text) => ChartLabel(text, _textPolicy);
 
   double _value;
   set value(double v) {
@@ -193,6 +207,9 @@ class RenderGauge extends RenderObject {
     markNeedsPaintOnly();
   }
 
+  GlyphTier get _drawingGlyphTier =>
+      drawingGlyphTier(_glyphTier, _textPolicy.widths);
+
   GlyphTier _glyphTier;
   set glyphTier(GlyphTier v) {
     if (_glyphTier == v) return;
@@ -215,7 +232,7 @@ class RenderGauge extends RenderObject {
   int computeMaxIntrinsicWidth(int? height) {
     // Want at least enough room for the label/percentage chrome plus a
     // visible track. A 10-cell track is a sensible default.
-    return _prefix.length + _maxSuffix.length + 10;
+    return _chartLabel(_prefix).width + _chartLabel(_maxSuffix).width + 10;
   }
 
   @override
@@ -231,27 +248,18 @@ class RenderGauge extends RenderObject {
     final w = size.cols;
     if (w == 0 || size.rows == 0) return;
 
-    final prefix = _prefix;
-    final suffix = _suffix;
-    final trackWidth = w - prefix.length - suffix.length;
+    final prefix = _chartLabel(_prefix);
+    final suffix = _chartLabel(_suffix);
+    final trackWidth = w - prefix.width - suffix.width;
     if (trackWidth < 1) {
       // Degraded: too narrow for chrome + bar. Render just the prefix,
       // truncated to fit.
-      var col = offset.col;
-      for (final ch in prefix.split('')) {
-        if (col >= offset.col + w) break;
-        buffer.writeGrapheme(CellOffset(col, offset.row), ch);
-        col++;
-      }
+      prefix.clip(w).paint(buffer, offset, CellStyle.none);
       return;
     }
 
-    var col = offset.col;
-    // Prefix (plain).
-    for (final ch in prefix.split('')) {
-      buffer.writeGrapheme(CellOffset(col, offset.row), ch);
-      col++;
-    }
+    prefix.paint(buffer, offset, CellStyle.none);
+    var col = offset.col + prefix.width;
 
     // Track + fill.
     final fillCells = _value.clamp(0.0, 1.0) * trackWidth;
@@ -261,23 +269,19 @@ class RenderGauge extends RenderObject {
       final String glyph;
       final CellStyle style;
       if (t < full) {
-        glyph = horizontalFillGlyph(_glyphTier, 8);
+        glyph = horizontalFillGlyph(_drawingGlyphTier, 8);
         style = _filledStyle;
       } else if (t == full && partialIndex > 0 && partialIndex < 8) {
-        glyph = horizontalFillGlyph(_glyphTier, partialIndex);
+        glyph = horizontalFillGlyph(_drawingGlyphTier, partialIndex);
         style = _filledStyle;
       } else {
-        glyph = horizontalTrackGlyph(_glyphTier);
+        glyph = horizontalTrackGlyph(_drawingGlyphTier);
         style = _trackStyle;
       }
       buffer.writeGrapheme(CellOffset(col, offset.row), glyph, style: style);
       col++;
     }
 
-    // Suffix (plain).
-    for (final ch in suffix.split('')) {
-      buffer.writeGrapheme(CellOffset(col, offset.row), ch);
-      col++;
-    }
+    suffix.paint(buffer, CellOffset(col, offset.row), CellStyle.none);
   }
 }

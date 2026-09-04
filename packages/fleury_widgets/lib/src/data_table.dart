@@ -1874,8 +1874,10 @@ class RenderDataTable extends RenderObject {
   String? _sortIndicatorFor(DataTableColumn column) {
     if (_sortColumnId != column.id || _sortDirection == null) return null;
     return switch (_sortDirection!) {
-      DataTableSortDirection.ascending => '▲',
-      DataTableSortDirection.descending => '▼',
+      DataTableSortDirection.ascending =>
+        _policy.ambiguous == CellWidth.two ? '^' : '▲',
+      DataTableSortDirection.descending =>
+        _policy.ambiguous == CellWidth.two ? 'v' : '▼',
     };
   }
 
@@ -1944,6 +1946,20 @@ class RenderDataTable extends RenderObject {
         offset.col >= buffer.size.cols) {
       return;
     }
-    buffer.writeGrapheme(offset, grapheme, style: style);
+    // These are one-cell decorations, not column text. Keep their reserved
+    // geometry when the terminal measures box rules / triangles as wide.
+    final narrow = _widthResolver.widthOfGrapheme(grapheme, _policy) == 1;
+    buffer.writeGrapheme(
+      offset,
+      narrow
+          ? grapheme
+          : switch (grapheme) {
+              '▲' => '^',
+              '▼' => 'v',
+              _ => '-',
+            },
+      style: style,
+      policy: _policy,
+    );
   }
 }

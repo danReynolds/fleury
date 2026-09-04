@@ -1,6 +1,7 @@
 import 'package:fleury/fleury_core.dart';
 
 import 'braille.dart';
+import 'glyphs.dart';
 import 'half_block_buffer.dart';
 import 'octant_buffer.dart';
 import 'quadrant_buffer.dart';
@@ -174,7 +175,7 @@ class Canvas extends StatelessWidget {
       bounds: resolvedBounds,
       marker: marker,
       defaultStyle: CellStyle(foreground: theme.colorScheme.primary),
-      glyphTier: MediaQuery.glyphTierOf(context),
+      glyphTier: drawingGlyphTierOf(context),
     );
     if (!_hasSemantics) return raw;
     return Semantics(

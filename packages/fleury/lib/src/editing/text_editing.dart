@@ -694,7 +694,17 @@ final class TextEditingModel {
     if (text.isNotEmpty && (text.codeUnitAt(0) & 0xFC00) == 0xDC00) {
       return _clusterAtFromStart(text, offset);
     }
-    return CharacterRange.at(text, offset);
+    final range = CharacterRange.at(text, offset);
+    if (range.stringBeforeLength < offset) {
+      // characters 1.4's outward end lookup can merge a regional-indicator
+      // pair with a following Indic consonant (e.g. "🇨🇦ष"). Keep its local
+      // start lookup, then resolve the end by forward segmentation from that
+      // known boundary. This visits one cluster, not the document prefix.
+      range
+        ..collapseToStart()
+        ..moveNext();
+    }
+    return range;
   }
 
   /// [CharacterRange.at] semantics by walking in from the start: empty at

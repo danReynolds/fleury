@@ -219,11 +219,16 @@ final class _FormWidgetState extends State<Form> implements _FormHost {
     final validation = Completer<bool>();
     _pendingValidation = validation;
     TuiBinding.of(context).addPostFrameCallback((_) {
-      if (!validation.isCompleted) {
-        validation.complete(mounted && _validateNow());
-      }
-      if (identical(_pendingValidation, validation)) {
-        _pendingValidation = null;
+      try {
+        if (!validation.isCompleted) {
+          validation.complete(mounted && _validateNow());
+        }
+      } catch (error, stack) {
+        if (!validation.isCompleted) validation.completeError(error, stack);
+      } finally {
+        if (identical(_pendingValidation, validation)) {
+          _pendingValidation = null;
+        }
       }
     });
     return validation.future;

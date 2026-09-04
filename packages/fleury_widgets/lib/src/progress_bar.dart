@@ -60,7 +60,7 @@ class ProgressBar extends StatelessWidget {
             indeterminatePhase: (frame % _sweepPeriod) / _sweepPeriod,
             filledStyle: resolvedFilledStyle,
             trackStyle: resolvedTrackStyle,
-            glyphTier: MediaQuery.glyphTierOf(ctx),
+            glyphTier: drawingGlyphTierOf(ctx),
           ),
         ),
       );
@@ -81,7 +81,7 @@ class ProgressBar extends StatelessWidget {
         value: value,
         filledStyle: resolvedFilledStyle,
         trackStyle: resolvedTrackStyle,
-        glyphTier: MediaQuery.glyphTierOf(context),
+        glyphTier: drawingGlyphTierOf(context),
       ),
     );
   }

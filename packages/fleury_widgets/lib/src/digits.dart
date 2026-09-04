@@ -1,5 +1,7 @@
 import 'package:fleury/fleury_core.dart';
 
+import 'glyphs.dart';
+
 /// Large-numeral display for clocks, timers, counters — the "calculator
 /// face" look popularized by Textual's Digits widget. Each digit is drawn
 /// as a 5-row glyph from block characters; `:` and ` ` are supported for
@@ -63,8 +65,12 @@ class _RawDigits extends LeafRenderObjectWidget {
   final String? offGlyph;
 
   @override
-  RenderObject createRenderObject(BuildContext context) =>
-      RenderDigits(text: text, style: style, offGlyph: offGlyph);
+  RenderObject createRenderObject(BuildContext context) => RenderDigits(
+    glyphTier: drawingGlyphTierOf(context),
+    text: text,
+    style: style,
+    offGlyph: offGlyph,
+  );
 
   @override
   void updateRenderObject(
@@ -74,13 +80,16 @@ class _RawDigits extends LeafRenderObjectWidget {
     renderObject
       ..text = text
       ..style = style
-      ..offGlyph = offGlyph;
+      ..offGlyph = offGlyph
+      ..glyphTier = drawingGlyphTierOf(context);
   }
 }
 
 /// Render object behind [Digits]. See its docs.
 class RenderDigits extends RenderObject {
   RenderDigits({
+    GlyphTier glyphTier = GlyphTier.unicode,
+
     /// Characters to lay out using the built-in large-glyph alphabet.
     required String text,
 
@@ -89,9 +98,17 @@ class RenderDigits extends RenderObject {
 
     /// Optional glyph used to paint unlit digit segments.
     required String? offGlyph,
-  }) : _text = text,
+  }) : _glyphTier = glyphTier,
+       _text = text,
        _style = style,
        _offGlyph = offGlyph;
+
+  GlyphTier _glyphTier;
+  set glyphTier(GlyphTier value) {
+    if (_glyphTier == value) return;
+    _glyphTier = value;
+    markNeedsPaintOnly();
+  }
 
   String? _offGlyph;
   set offGlyph(String? v) {
@@ -205,6 +222,17 @@ class RenderDigits extends RenderObject {
     final glyphs = _cachedGlyphs!;
     final maxCol = offset.col + size.cols;
     final maxRow = offset.row + size.rows;
+    final off = _offGlyph;
+    final offGlyph = off == null
+        ? null
+        : _glyphTier == GlyphTier.ascii ||
+              const DefaultWidthResolver().widthOfText(
+                    off,
+                    CellWidthPolicy.spec,
+                  ) !=
+                  1
+        ? '.'
+        : off;
 
     var col = offset.col;
     for (var gi = 0; gi < glyphs.length; gi++) {
@@ -220,13 +248,13 @@ class RenderDigits extends RenderObject {
           if (glyph[r][c] != ' ') {
             buffer.writeGrapheme(
               CellOffset(destCol, destRow),
-              '█',
+              _glyphTier == GlyphTier.ascii ? '#' : '█',
               style: _style,
             );
-          } else if (_offGlyph != null) {
+          } else if (offGlyph != null) {
             buffer.writeGrapheme(
               CellOffset(destCol, destRow),
-              _offGlyph!,
+              offGlyph,
               style: const CellStyle(dim: true),
             );
           }

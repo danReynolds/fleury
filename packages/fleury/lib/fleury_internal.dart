@@ -4,5 +4,6 @@
 library;
 
 export 'src/rendering/cell.dart' show CellStyleState, resolveCellStyle;
+export 'src/rendering/text_projection.dart' show projectText;
 export 'src/widgets/form_control.dart'
     show FormControlRegistration, FormControlScope;

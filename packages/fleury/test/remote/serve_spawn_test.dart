@@ -42,6 +42,7 @@ void main() {
         'spawn-app',
         childCwd.path,
         '--hostile-log',
+        '--malformed-log',
       ], workingDirectory: tempDir.path);
 
       final ready = Completer<void>();
@@ -114,6 +115,22 @@ void main() {
         isTrue,
         reason: 'serve should log subprocess spawn',
       );
+
+      await _waitFor(
+        () =>
+            stderrLines.where((line) => line.contains('MALFORMED')).length >= 2,
+        timeout: const Duration(seconds: 8),
+        what: 'malformed stdout and stderr forwarded without killing serve',
+      );
+      for (final tag in ['out', 'err']) {
+        expect(
+          stderrLines.any(
+            (line) =>
+                line.contains(' $tag]') && line.contains('MALFORMED ��(� 🙂'),
+          ),
+          isTrue,
+        );
+      }
 
       await wsSub.cancel();
       await ws.close();
