@@ -268,7 +268,11 @@ class TickerScheduler {
     final snapshot = List<SchedulerTickCallback>.from(_callbacks);
     final now = _clock.now;
     for (final cb in snapshot) {
-      cb(now);
+      try {
+        cb(now);
+      } catch (error, stack) {
+        Zone.current.handleUncaughtError(error, stack);
+      }
     }
   }
 

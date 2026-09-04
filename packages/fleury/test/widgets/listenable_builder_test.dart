@@ -1,6 +1,8 @@
 // ListenableBuilder tests. Verifies the listener contract, child-
 // subtree reuse, and animation swap on didUpdateWidget.
 
+import 'dart:async';
+
 import 'package:fleury/fleury.dart';
 import 'package:test/test.dart';
 
@@ -41,6 +43,38 @@ class CaptureState extends State<_Capture> {
 
 void main() {
   group('ListenableBuilder lifecycle', () {
+    test(
+      'an observer error is reported without stranding widget listeners',
+      () {
+        final notifier = ValueNotifier(0);
+        addTearDown(notifier.dispose);
+        final error = StateError('observer failed');
+        final stack = StackTrace.current;
+        final errors = <Object>[];
+        var rendered = -1;
+        notifier.addListener(() => Error.throwWithStackTrace(error, stack));
+        final owner = BuildOwner();
+        owner.mountRoot(
+          ValueListenableBuilder<int>(
+            valueListenable: notifier,
+            builder: (_, value, _) {
+              rendered = value;
+              return Text('value=$value');
+            },
+          ),
+        );
+        for (var value = 1; value <= 2; value++) {
+          runZonedGuarded(() => notifier.value = value, (e, s) {
+            errors.add(e);
+            expect(s.toString(), stack.toString());
+          });
+          owner.flushBuild();
+          expect(rendered, value);
+        }
+        expect(errors, [same(error), same(error)]);
+      },
+    );
+
     test('rebuilds on listener notify', () {
       final notifier = _CountingNotifier();
       var builds = 0;

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:meta/meta.dart';
 
 import '../widgets/framework.dart' show VoidCallback;
@@ -103,6 +105,8 @@ mixin class ChangeNotifier implements Listenable {
   /// Invokes every listener registered when the pass began. A listener added
   /// during notification runs on the next pass, not this one; one removed
   /// during notification (or lost to [dispose]) is skipped.
+  /// Listener errors are reported to the current zone without skipping the
+  /// remaining listeners: the state change has already been committed.
   @protected
   void notifyListeners() {
     _checkNotDisposed('notifyListeners');
@@ -113,7 +117,11 @@ mixin class ChangeNotifier implements Listenable {
     final end = _count;
     try {
       for (var i = 0; i < end; i++) {
-        _listeners[i]?.call();
+        try {
+          _listeners[i]?.call();
+        } catch (error, stack) {
+          Zone.current.handleUncaughtError(error, stack);
+        }
       }
     } finally {
       _notificationDepth -= 1;
