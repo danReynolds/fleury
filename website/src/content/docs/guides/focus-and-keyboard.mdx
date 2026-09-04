@@ -8,15 +8,19 @@ import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
 
 Keyboard support is built into Fleury's widgets. A `ListView` already responds
 to the arrow keys, a `TextInput` already edits text, and buttons already react
-to their activation keys. You add keyboard handling when your application has
-its own commands: save, quit, open a palette, move a cursor, or control a game.
+to their activation keys.
 
-For most applications, the answer is `KeyBindings`. You declare a gesture, its
-label, and what it does. Fleury routes the gesture through the focused part of
-the widget tree, chooses the nearest matching binding, and exposes the same
-declaration to shortcut hints.
+Use an `AppCommand` when an application action such as save, refresh, or deploy
+should also be reachable from a button, command palette, semantic agent, or
+test. Its shortcut is part of the same declaration; see
+[Commands](/fleury/guides/commands/).
 
-There are two lower-level tools for specialized work:
+Use `KeyBindings` here when the behavior is specifically keyboard-shaped: a
+multi-key editor gesture, a repeatable movement control, or a reusable widget's
+internal keys. Fleury routes each gesture through the focused part of the tree,
+chooses the nearest matching binding, and exposes its label to shortcut hints.
+
+The keyboard-specific tools are:
 
 | You need to… | Use |
 |---|---|
@@ -24,15 +28,15 @@ There are two lower-level tools for specialized work:
 | Handle keys internally while building a reusable widget | `KeyDetector` |
 | Read what is currently held during a game or simulation tick | `Keyboard.snapshot` |
 
-This guide starts with the common command path, then covers those lower-level
-cases. To control *where* keys go—focusable widgets, Tab order, and traversal—see
+This guide starts with scoped bindings, then covers lower-level key handling.
+To control *where* keys go—focusable widgets, Tab order, and traversal—see
 [Focus management](/fleury/guides/focus/).
 
-## Core commands
+## Scoped keyboard bindings
 
-### Declare a shortcut
+### Declare a binding
 
-Wrap the part of the application that owns the command in `KeyBindings`, then
+Wrap the part of the application that owns the keyboard behavior in `KeyBindings`, then
 add a `KeyBinding`:
 
 ```dart
@@ -55,9 +59,9 @@ Bindings fire once per physical press by default, so holding `Ctrl+S` still
 saves once. The label is part of the declaration because Fleury uses it for
 discoverability surfaces such as `KeyHintBar`.
 
-### Scope shortcuts
+### Scope bindings
 
-Put application-wide shortcuts near the root:
+Put global keyboard behavior near the root:
 
 ```dart
 runApp(
@@ -378,14 +382,17 @@ framework authors can find the wire-level format in the
 
 ## Next steps
 
-The default is deliberately small: use `KeyBindings` for commands, place them
-at the scope that owns them, and render the same declarations with
-`KeyHintBar` or `WhichKey`. Reach for `KeyDetector` only inside a custom
-keyboard-aware widget, and for `Keyboard.snapshot` only when a real-time loop
-needs held state.
+The default is deliberately small: use an `AppCommand` when an application
+action needs a shortcut, and use `KeyBindings` for behavior that exists only
+as keyboard interaction. Place either at the scope that owns it and surface
+active shortcuts with `KeyHintBar` or `WhichKey`. Reach for `KeyDetector` only
+inside a custom keyboard-aware widget, and for `Keyboard.snapshot` only when a
+real-time loop needs held state.
 
 - [Focus management](/fleury/guides/focus/) explains focus targets, Tab order,
   directional traversal, dialog focus traps, and focus restoration.
+- [Commands](/fleury/guides/commands/) shows
+  one action shared by buttons, shortcuts, palettes, and semantics.
 - [Terminal capabilities](/fleury/guides/terminal-capabilities/) explains
   Fleury's general detection, fallback, and diagnostics model.
 - [Testing](/fleury/guides/testing/) shows how to drive key events through a

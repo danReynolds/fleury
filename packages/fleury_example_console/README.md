@@ -17,6 +17,6 @@ dart run bin/fleury_example_console.dart
 ```
 
 This app is the current-cycle pressure harness for app shell, commands,
-screens, DataTable, indexed logs, diagnostics, text input, task state,
+screens, DataTable, indexed logs, diagnostics, text input, worker state,
 semantic snapshots, debug capture, and sanitized output. Dune/`dune_cli`
 remains the later flagship after the core has been proven here.

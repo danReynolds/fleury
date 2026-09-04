@@ -5,12 +5,21 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:fleury/fleury_core.dart'
-    show AsyncSnapshot, ConnectionState, SemanticAction, SemanticRole, Widget;
+    show
+        AsyncSnapshot,
+        ConnectionState,
+        KeyCode,
+        KeyEvent,
+        KeyModifier,
+        SemanticAction,
+        SemanticRole,
+        Widget;
 import 'package:fleury_test/fleury_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:test/test.dart';
 
 import '../doc_snippets/animation.dart' as animation;
+import '../doc_snippets/commands.dart' as commands;
 import '../doc_snippets/filterable_list.dart' as tutorial;
 import '../doc_snippets/forms.dart' as forms;
 import '../doc_snippets/getting_started_app.dart' as getting_started;
@@ -502,6 +511,123 @@ void main() {
       tester.renderToString(emptyMark: ' '),
       contains('COMPLETE · 5/5 packets'),
     );
+  });
+
+  testWidgets('commands guide exposes one action through every surface', (
+    tester,
+  ) {
+    tester.pumpWidget(const commands.CommandGuideDemo());
+
+    final active = tester.commandRegistry().activeCommands();
+    expect(
+      active.map((command) => command.id),
+      containsAll(<Object>[commands.saveFile, commands.openCommands]),
+    );
+    final save = active.singleWhere(
+      (command) => command.id == commands.saveFile,
+    );
+    expect(save.title, 'Save current file');
+    expect(save.semanticAction, SemanticAction.submit);
+    expect(save.shortcuts, hasLength(1));
+    expect(
+      tester.semantics().single(
+        role: SemanticRole.button,
+        label: 'Save',
+        enabled: false,
+      ),
+      isNotNull,
+    );
+    expect(
+      tester.semantics().single(role: SemanticRole.button, label: 'Commands'),
+      isNotNull,
+    );
+  });
+
+  testWidgets('commands guide shares availability and direct invocation', (
+    tester,
+  ) async {
+    tester.pumpWidget(const commands.CommandGuideDemo());
+
+    await tester.invokeSemanticAction(
+      SemanticAction.setValue,
+      role: SemanticRole.textField,
+      label: 'Draft',
+      payload: 'One definition keeps every surface aligned',
+    );
+    tester.pump();
+
+    expect(
+      tester.semantics().single(
+        role: SemanticRole.button,
+        label: 'Save',
+        enabled: true,
+      ),
+      isNotNull,
+    );
+
+    final result = await tester.invokeCommand(commands.saveFile);
+    tester.pump();
+
+    expect(result.completed, isTrue);
+    expect(
+      tester.renderToString(emptyMark: ' '),
+      contains('SAVED · 1 saves · Save is disabled everywhere'),
+    );
+    expect((await tester.invokeCommand(commands.saveFile)).completed, isFalse);
+  });
+
+  testWidgets('commands guide shortcut invokes the same save command', (
+    tester,
+  ) async {
+    tester.pumpWidget(const commands.CommandGuideDemo());
+    await tester.invokeSemanticAction(
+      SemanticAction.setValue,
+      role: SemanticRole.textField,
+      label: 'Draft',
+      payload: 'Save me with Ctrl+S',
+    );
+    tester.pump();
+
+    tester.sendKey(
+      const KeyEvent(
+        KeyCode.char('s'),
+        modifiers: <KeyModifier>{KeyModifier.ctrl},
+      ),
+    );
+    await Future<void>.delayed(Duration.zero);
+    tester.pump();
+
+    expect(tester.lastCommandResult?.command?.id, commands.saveFile);
+    expect(tester.lastCommandResult?.completed, isTrue);
+    expect(tester.renderToString(emptyMark: ' '), contains('1 saves'));
+  });
+
+  testWidgets('commands guide palette discovers the registered save action', (
+    tester,
+  ) async {
+    tester.pumpWidget(const commands.CommandGuideDemo());
+
+    await tester.invokeSemanticAction(
+      SemanticAction.open,
+      role: SemanticRole.command,
+      label: 'Open commands',
+    );
+    tester.pump(const Duration(milliseconds: 300));
+    tester.render();
+
+    expect(
+      tester.semantics().single(role: SemanticRole.commandPalette),
+      isNotNull,
+    );
+    final paletteSave = tester
+        .semantics()
+        .byRole(SemanticRole.command)
+        .singleWhere(
+          (node) =>
+              node.state.commandId == commands.saveFile.value &&
+              node.state['rowIndex'] != null,
+        );
+    expect(paletteSave.label, 'Save current file');
   });
 
   testWidgets('lists guide app renders against the real API', (tester) {

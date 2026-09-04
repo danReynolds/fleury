@@ -480,8 +480,6 @@ const DOC_ONLY = [
     code: "Image.file('assets/logo.png', fit: ImageFit.contain)" },
   { slug: 'logregion', widget: 'LogRegion', category: 'Agent surfaces', reason: 'native',
     code: "LogRegion(\n  entries: const [\n    LogEntry(message: 'Starting build', source: 'build'),\n    LogEntry(message: 'Tests failed', severity: LogSeverity.error),\n  ],\n  filter: const LogRegionFilterDescriptor(query: 'build'),\n)" },
-  { slug: 'processpanel', widget: 'ProcessPanel', category: 'Agent surfaces', reason: 'native',
-    code: "final controller = ProcessTaskController(id: 'doctor', label: 'Doctor');\n\nProcessPanel(\n  controller: controller,\n  command: const ProcessTaskCommand('dart', ['--version']),\n)" },
   { slug: 'terminaloutputregion', widget: 'TerminalOutputRegion', category: 'Agent surfaces', reason: 'native',
     code: "TerminalOutputRegion(\n  buffer: LogBuffer(),\n  label: 'Build output',\n  filter: const LogRegionFilterDescriptor(severities: {LogSeverity.error}),\n)" },
   { slug: 'workflowsnapshot', widget: 'WorkflowSnapshot', category: 'Supporting models', reason: 'native-model',
@@ -679,6 +677,7 @@ mkdirSync(showDir, { recursive: true });
 const SAMPLE_FILES = {
   dashboard: 'dashboard.dart',
   files: 'file_manager.dart',
+  commands: 'commands_showcase.dart',
   agent: 'agent_tui.dart',
   editor: 'editor.dart',
   finance: 'finance.dart',
@@ -709,6 +708,14 @@ const SHOWCASE_GOALS = {
     'Each viewer is a drop-in widget with selection, scrolling, and copy already ' +
     'handled, so "the preview matches the file" comes down to a `switch` in ' +
     '`build()`.',
+  commands:
+    'A compact workspace built to make command architecture visible. Edit a ' +
+    'draft and one `AppCommand` enables its dedicated button, Ctrl+S shortcut, ' +
+    'palette row, semantic action, and programmatic identity together.\n\n' +
+    'Switch between Editor and Files and the active-command panel changes with ' +
+    'the current `CommandScope`, while app-wide commands remain available. The ' +
+    'demo is deterministic and local: every moving part exists to show how a ' +
+    'discoverable action catalog prevents invocation surfaces from drifting.',
   agent:
     'A Claude-Code-style streaming session — prose, tool cards, a live todo list, ' +
     'a colored diff, a prompt box.\n\n' +
@@ -781,6 +788,11 @@ const SHOWCASE_TRY = {
   files:
     '*Try it: arrow through the tree — the preview swaps viewers as the ' +
     'selection changes.*',
+  commands:
+    '*Try it: edit the draft and watch **Save draft** become available everywhere. ' +
+    'Save with Ctrl+S, or press Ctrl+K and choose it from the palette. Then switch ' +
+    'to Files and watch the local command ' +
+    'catalog change while the workspace commands remain.*',
   agent:
     '*Try it: type a message in the prompt (or just press Enter) and the ' +
     'next turn streams in.*',

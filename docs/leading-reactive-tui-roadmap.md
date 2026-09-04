@@ -46,7 +46,7 @@ Fleury should make this feel normal:
 - Ship dense, keyboard-first, data-heavy workflows without building all
   focus, command, modal, input, and rendering infrastructure manually.
 - Trust text input, tables, lists, logs, markdown, selection, clipboard,
-  images, keybindings, async tasks, terminal resize, SSH/tmux, and cleanup.
+  images, keybindings, async state, terminal resize, SSH/tmux, and cleanup.
 - Test the app deterministically without a real terminal.
 - Profile and debug the app from inside the terminal.
 - Degrade gracefully when capabilities are missing.
@@ -139,8 +139,8 @@ The important gaps are also clear:
 - Commands, actions, shortcuts, status bars, menu bars, and global command
   discovery are not yet unified.
 - Data widgets exist, but not yet as a production data framework.
-- Async workers, subprocesses, progress, cancellation, and stream binding are
-  not first-class.
+- Clear patterns for presenting app-owned async work, subprocess output,
+  progress, cancellation, and streams are incomplete.
 - Terminal capability probing and compatibility policy are incomplete.
 - Dirty layout/paint propagation now has a conservative foundation, benchmark
   proof, and a first audited paint-only split; the remaining performance work
@@ -429,8 +429,8 @@ Fleury's strongest path is to become a system of coordinated engines:
 - A text/editing engine deep enough for real developer tools.
 - A data/virtualization engine for tables, logs, trees, code, markdown, and
   diffs.
-- A workflow/effects engine for subprocesses, workers, permissions, progress,
-  cancellation, and replay.
+- Workflow and effect surfaces that can present app-owned subprocesses,
+  permissions, progress, cancellation, and replay data.
 - A terminal capability engine that makes features and fallbacks explicit.
 - A devtools/testing/replay engine that makes complex TUIs inspectable.
 
@@ -534,23 +534,22 @@ Launch gate:
   benchmarks.
 - Data widgets expose semantic rows, cells, regions, selections, and actions.
 
-### Engine 5: Effects, Workflow, And Process
+### Engine 5: Effects And App-Owned Async Work
 
 Purpose:
 
-- Model async work, subprocesses, streams, timers, network calls, permission
-  requests, cancellation, progress, background workers, output capture, and
-  lifecycle cleanup.
+- Make ordinary Dart futures, streams, subprocesses, timers, network calls,
+  permission requests, cancellation, progress, and output straightforward to
+  present without adding a framework-owned task lifecycle.
 
 Developer-visible win:
 
-- Developer tools can orchestrate real work without ad hoc isolate/process
-  plumbing in every app.
+- Developer tools can keep work app-owned while reusing commands, output
+  regions, semantics, and testing primitives.
 
 Launch gate:
 
-- Workers and subprocesses report typed progress, output, errors, and
-  cancellation.
+- Examples show typed app state for progress, output, errors, and cancellation.
 - Effects can be recorded in a replay log for tests.
 - Terminal suspension, external editor handoff, process output, and raw-mode
   restoration are covered by tests and examples.
@@ -633,7 +632,7 @@ Launch gate:
    support the continuum from a single prompt to a full app.
 
 10. **Agent workflows are a native use case.** Streaming markdown, tool calls,
-    approvals, diffs, traces, and task state should be easy.
+    approvals, diffs, traces, and workflow state should be easy.
 
 ## 6. Workstream A: Text, Editing, and Input
 
@@ -798,8 +797,7 @@ Own dense developer-tool workflows.
 - `FileBrowser`
 - `SearchPanel`
 - `TraceTimeline`
-- `TaskList`
-- `ProcessPanel`
+- `TerminalOutputRegion`
 - `MetricsPanel`
 - `InspectorPane`
 
@@ -845,48 +843,28 @@ Own dense developer-tool workflows.
 - Widgets compose with selection, clipboard, focus, theme, tests, and
   command palette.
 
-## 10. Workstream E: Async Work, Processes, and Effects
+## 10. Workstream E: App-Owned Async Work, Processes, and Effects
 
 ### Goal
 
-Make background work a first-class framework concept.
+Make app-owned background work easy to start, present, cancel, and test without
+introducing a parallel framework task model.
 
 ### Target Capabilities
 
-- `Worker<T>`
-- `WorkerController`
-- `WorkerBuilder`
-- Cancellable tasks.
-- Restartable tasks.
-- Debounced tasks.
-- Stream binding.
-- Progress binding.
-- Retry policy.
-- Error surfaces.
-- Subprocess execution.
-- Stdout/stderr capture.
-- Exit status handling.
-- Long-running process panels.
-- Safe UI updates from async callbacks.
-
-### API Sketch
-
-```dart
-final deploy = Worker<void>(
-  label: 'Deploy',
-  run: (context, signal) async {
-    await for (final line in runProcess(['deploy'], signal: signal)) {
-      context.logs.append(line);
-    }
-  },
-);
-```
+- Commands can start or cancel app-owned work.
+- Futures, streams, and progress values bind through ordinary widget state and
+  listenables.
+- Restart, debounce, retry, and cancellation policy stay with the application.
+- Error and progress surfaces accept app-owned values.
+- Subprocess stdout/stderr and exit status can be shown safely.
+- Async callbacks can update UI safely across lifecycle changes.
 
 ### Acceptance Criteria
 
-- Cancelling a task is safe and visible.
+- Cancelling app-owned work is safe and visible.
 - Process output cannot corrupt the terminal.
-- Worker state is easy to bind into widgets.
+- Async state is easy to bind into widgets.
 - Errors show useful stack/context and do not strand raw mode.
 - Async tests can advance time and stream events deterministically.
 
@@ -1271,8 +1249,8 @@ Deliverables:
 4. Example subpackage demo app v0 running on Fleury.
 5. Agent-adapter readiness boundary for fast-follow packages such as
    `fleury_acp`; no ACP transport or ACP-specific widgets in launch scope.
-6. Worker/task model with structured status, cancellation, output, and future
-   replay hook points.
+6. App-owned async work demonstrated with ordinary Dart futures, streams, and
+   explicit state; no framework task lifecycle is required for launch.
 7. Terminal diagnose and capability model.
 8. Scenario benchmark harness with peer baseline snapshots.
 9. DataTable v1 with virtualization, sorting, selection, search, fixed
@@ -1302,7 +1280,7 @@ Deliverables:
 1. Forms framework with shared full-screen, inline, and prompt-mode rendering.
 2. LogView, JsonView, DiffView, CodeView, MarkdownView.
 3. TreeTable, FileBrowser, and SearchPanel.
-4. ProcessPanel, CommandRunner, and terminal output regions.
+4. Command-driven app workflows and terminal output regions.
 5. Theme/component theme expansion.
 6. Dune/`dune_cli` first integration slice after the core framework is proven.
 7. Optional `fleury_acp` fast-follow package if Dune/`dune_cli` later needs
@@ -1409,9 +1387,9 @@ Exit criteria:
    - Virtualized rows, stable keys, selection, sort, filter/search, fixed
      header, copy, semantic rows/cells, and benchmark coverage.
 
-14. Add `Worker`, process, and effect-log primitives.
-   - Include cancellation, progress, captured output, permissions, subprocess
-     handoff, and future replay hook points.
+14. Document app-owned async patterns and add narrowly scoped effect-log hooks.
+   - Cover cancellation, progress, captured output, permissions, subprocess
+     handoff, and future replay hook points without a generic task controller.
 
 15. Build `fleury diagnose`.
    - Make terminal capabilities visible, machine-readable, and testable.
@@ -1434,7 +1412,7 @@ Fleury should be considered leading when the following are true:
   comfortable with reactive UI.
 - Text input and forms are trusted enough for production tools.
 - Data-heavy widgets handle real datasets without bespoke app code.
-- Async tasks and subprocesses are natural to bind into UI.
+- App-owned async state and subprocess output are natural to bind into UI.
 - Terminal behavior is predictable across common terminals.
 - Tests can cover most UI behavior without a real terminal.
 - Debugging a Fleury app is easier than debugging equivalent apps in peer

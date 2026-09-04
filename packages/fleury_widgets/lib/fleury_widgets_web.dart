@@ -1,6 +1,6 @@
 /// Web-safe subset of `fleury_widgets.dart`. Re-exports every widget EXCEPT the
-/// 5 that depend on `dart:io` — directly (file I/O, log capture,
-/// process running) or transitively (widgets built on the log/process widgets)
+/// 4 that depend on `dart:io` — directly (file I/O or log capture)
+/// or transitively (widgets built on native log buffers)
 /// — and so cannot compile to JavaScript with dart2js. It also omits the
 /// supporting `WorkflowSnapshot` model: its current `LogEntry` dependency lives
 /// in the native-only log library. Import THIS, not `fleury_widgets.dart`, from
@@ -8,7 +8,7 @@
 /// docs/serving-and-embedding.md). The excluded APIs still run over the
 /// `fleury serve` path.
 ///
-/// Excluded widgets: file_browser, file_picker, log_region, process_panel,
+/// Excluded widgets: file_browser, file_picker, log_region,
 /// terminal_output_region.
 /// Excluded supporting model: workflow_snapshot.
 library;
@@ -21,7 +21,9 @@ export 'src/calendar_heatmap.dart' show CalendarHeatmap, CalendarWeekStart;
 export 'src/canvas.dart'
     show Canvas, CanvasBounds, CanvasContext, CanvasMarker, CanvasPainter;
 export 'src/color_picker.dart' show ColorPicker;
-export 'src/command_palette.dart' show Command, CommandPalette;
+export 'src/command_button.dart' show CommandButton;
+export 'src/command_palette.dart'
+    show Command, CommandPalette, CommandPaletteItem;
 export 'src/component_theme.dart' show FleuryWidgetTheme;
 export 'src/completion_text_input.dart'
     show
@@ -242,9 +244,7 @@ export 'src/trace_timeline.dart'
         TraceTimelineKind,
         TraceTimelineSelectResult,
         TraceTimelineStatus,
-        exportTraceTimelineEntry,
-        traceTimelineEntriesForTaskEvents,
-        traceTimelineEntryForTaskEvent;
+        exportTraceTimelineEntry;
 export 'src/tool_call_card.dart'
     show
         ToolCallCard,

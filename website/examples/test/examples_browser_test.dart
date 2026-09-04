@@ -452,6 +452,63 @@ void main() {
     expect(host.textContent, contains('CPU'));
   });
 
+  test(
+    'commands.overview fits its guide frame with every command entry point',
+    () async {
+      final fixture = await _mountExample(
+        'commands.overview',
+        useManifestSize: true,
+      );
+      final painted =
+          fixture.host.querySelector('.fleury-screen')?.textContent ?? '';
+      final save = fixture.host.querySelector(
+        '.fleury-semantics [role="button"][aria-label="Save"]',
+      );
+      final commands = fixture.host.querySelector(
+        '.fleury-semantics [role="button"][aria-label="Commands"]',
+      );
+
+      expect(painted, contains('ONE COMMAND · EVERY ENTRY POINT'));
+      expect(painted, contains('Ctrl+S'));
+      expect(painted, contains('Ctrl+K'));
+      expect(painted, contains('SAVED · 0'));
+      expect(save, isNotNull);
+      expect(commands, isNotNull);
+    },
+  );
+
+  test(
+    'showcase.commands fits its editor frame with command controls',
+    () async {
+      final fixture = await _mountExample(
+        'showcase.commands',
+        useManifestSize: true,
+      );
+      // The showcase opens its palette from a post-frame callback. Let that
+      // callback schedule the overlay, then flush the resulting frame before
+      // asserting against the complete semantic surface.
+      await Future<void>.delayed(Duration.zero);
+      for (var i = 0; i < 4 && fixture.flush.pending; i++) {
+        fixture.flush.fire();
+      }
+      await fixture.app.awaitSemanticIdle();
+      final painted =
+          fixture.host.querySelector('.fleury-screen')?.textContent ?? '';
+      final newFile = fixture.host.querySelector(
+        '.fleury-semantics [role="button"][aria-label="New file"]',
+      );
+      final save = fixture.host.querySelector(
+        '.fleury-semantics [role="button"][aria-label="Save current file"]',
+      );
+      expect(painted, contains('COMMAND EDITOR'));
+      expect(painted, contains('FILES'));
+      expect(painted, contains('README.md'));
+      expect(painted, contains('Ctrl+S · Save current file'));
+      expect(newFile, isNotNull);
+      expect(save, isNotNull);
+    },
+  );
+
   // Guard for the whole catalog: every example must paint *visible* content at
   // the exact frame size the docs page gives it. sparkline.basic and
   // progressbar.basic shipped blank because their host (rows: 2) was too short
@@ -539,6 +596,12 @@ void main() {
       'tracetimeline.basic': <String>['Publish report'], // third event fits
       // The preview's text can fit while its final border row is clipped.
       'animation.presence': <String>['✓ Publish'],
+      'commands.overview': <String>[
+        'ONE COMMAND · EVERY ENTRY POINT',
+        'Ctrl+S',
+        'Commands',
+      ],
+      'showcase.commands': <String>['COMMAND EDITOR', 'New file', 'README.md'],
       // The tutorial-page embed: the full language list fits its frame.
       'tutorial.filter': <String>['10 of 10', 'Dart', 'Haskell'],
     };

@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import '../animation/clock.dart';
-import '../effects/task.dart';
 import '../foundation/geometry.dart';
 import '../rendering/render_layout_stats.dart';
 import '../rendering/render_repaint_boundary.dart';
@@ -78,115 +77,22 @@ final class DebugTimeMarker {
   };
 }
 
-/// Safe, metadata-only summary of a task event for debug-capture artifacts.
-///
-/// Raw task output, result values, error messages, and stack traces are
-/// intentionally omitted. Those fields can contain application secrets; capture
-/// artifacts should preserve workflow shape without becoming a second output
-/// log.
-final class DebugTaskEventSummary {
-  const DebugTaskEventSummary({
-    required this.source,
-    required this.sequence,
-    required this.runId,
-    required this.kind,
-    required this.status,
-    this.progressCurrent,
-    this.progressTotal,
-    this.progressLabel,
-    this.outputSource,
-    this.outputSeverity,
-    this.outputSanitized = false,
-    this.outputTruncated = false,
-    this.outputOriginalLength,
-    this.valueType,
-    this.errorType,
-  });
-
-  static DebugTaskEventSummary fromTaskEvent<T>(
-    TaskEvent<T> event, {
-    required String source,
-  }) {
-    final progress = event.progress;
-    final output = event.output;
-    final value = event.value;
-    final error = event.error;
-    return DebugTaskEventSummary(
-      source: source,
-      sequence: event.sequence,
-      runId: event.runId,
-      kind: event.kind.name,
-      status: event.status.name,
-      progressCurrent: progress?.current,
-      progressTotal: progress?.total,
-      progressLabel: progress?.label == null
-          ? null
-          : sanitizeForDisplay(progress!.label!),
-      outputSource: output?.source,
-      outputSeverity: output?.severity.name,
-      outputSanitized: output?.sanitized ?? false,
-      outputTruncated: output?.truncated ?? false,
-      outputOriginalLength: output?.originalLength,
-      valueType: value?.runtimeType.toString(),
-      errorType: error?.runtimeType.toString(),
-    );
-  }
-
-  final String source;
-  final int sequence;
-  final int runId;
-  final String kind;
-  final String status;
-  final num? progressCurrent;
-  final num? progressTotal;
-  final String? progressLabel;
-  final String? outputSource;
-  final String? outputSeverity;
-  final bool outputSanitized;
-  final bool outputTruncated;
-  final int? outputOriginalLength;
-  final String? valueType;
-  final String? errorType;
-
-  Map<String, Object?> toJson() => <String, Object?>{
-    'source': source,
-    'sequence': sequence,
-    'runId': runId,
-    'kind': kind,
-    'status': status,
-    if (progressCurrent != null) 'progressCurrent': progressCurrent,
-    if (progressTotal != null) 'progressTotal': progressTotal,
-    if (progressLabel != null) 'progressLabel': progressLabel,
-    if (outputSource != null) 'outputSource': outputSource,
-    if (outputSeverity != null) 'outputSeverity': outputSeverity,
-    if (outputSanitized) 'outputSanitized': true,
-    if (outputTruncated) 'outputTruncated': true,
-    if (outputOriginalLength != null)
-      'outputOriginalLength': outputOriginalLength,
-    if (valueType != null) 'valueType': valueType,
-    if (errorType != null) 'errorType': errorType,
-  };
-}
-
 final class DebugCaptureRecorder {
   DebugCaptureRecorder({
     this.maxFrames = 30,
     this.maxInputs = 80,
     this.maxOutputSummaries = 20,
-    this.maxTaskEvents = 80,
     this.maxTimeMarkers = 80,
   });
 
   final int maxFrames;
   final int maxInputs;
   final int maxOutputSummaries;
-  final int maxTaskEvents;
   final int maxTimeMarkers;
 
   final List<FrameEvent> _frames = <FrameEvent>[];
   final List<InputDebugEvent> _inputs = <InputDebugEvent>[];
   final List<DebugOutputSummary> _outputSummaries = <DebugOutputSummary>[];
-  final List<DebugTaskEventSummary> _taskEvents = <DebugTaskEventSummary>[];
   final List<DebugTimeMarker> _timeMarkers = <DebugTimeMarker>[];
   TerminalDiagnosis? _terminalDiagnosis;
   StreamSubscription<DebugEvent>? _subscription;
@@ -197,8 +103,6 @@ final class DebugCaptureRecorder {
       List<InputDebugEvent>.unmodifiable(_inputs);
   List<DebugOutputSummary> get outputSummaries =>
       List<DebugOutputSummary>.unmodifiable(_outputSummaries);
-  List<DebugTaskEventSummary> get taskEvents =>
-      List<DebugTaskEventSummary>.unmodifiable(_taskEvents);
   List<DebugTimeMarker> get timeMarkers =>
       List<DebugTimeMarker>.unmodifiable(_timeMarkers);
   TerminalDiagnosis? get terminalDiagnosis => _terminalDiagnosis;
@@ -233,22 +137,6 @@ final class DebugCaptureRecorder {
     _appendBounded(_outputSummaries, summary, maxOutputSummaries);
   }
 
-  void recordTaskEvent<T>(String source, TaskEvent<T> event) {
-    _checkNotDisposed();
-    _appendBounded(
-      _taskEvents,
-      DebugTaskEventSummary.fromTaskEvent(event, source: source),
-      maxTaskEvents,
-    );
-  }
-
-  void recordTaskEvents<T>(String source, Iterable<TaskEvent<T>> events) {
-    _checkNotDisposed();
-    for (final event in events) {
-      recordTaskEvent(source, event);
-    }
-  }
-
   void recordTimeMarker(DebugTimeMarker marker) {
     _checkNotDisposed();
     _appendBounded(_timeMarkers, marker, maxTimeMarkers);
@@ -266,7 +154,6 @@ final class DebugCaptureRecorder {
       frames: List<FrameEvent>.unmodifiable(_frames),
       inputs: List<InputDebugEvent>.unmodifiable(_inputs),
       outputSummaries: List<DebugOutputSummary>.unmodifiable(_outputSummaries),
-      taskEvents: List<DebugTaskEventSummary>.unmodifiable(_taskEvents),
       timeMarkers: List<DebugTimeMarker>.unmodifiable(_timeMarkers),
     );
   }
@@ -295,7 +182,6 @@ final class DebugCaptureSnapshot {
     this.frames = const <FrameEvent>[],
     this.inputs = const <InputDebugEvent>[],
     this.outputSummaries = const <DebugOutputSummary>[],
-    this.taskEvents = const <DebugTaskEventSummary>[],
     this.timeMarkers = const <DebugTimeMarker>[],
   });
 
@@ -306,7 +192,6 @@ final class DebugCaptureSnapshot {
   final List<FrameEvent> frames;
   final List<InputDebugEvent> inputs;
   final List<DebugOutputSummary> outputSummaries;
-  final List<DebugTaskEventSummary> taskEvents;
   final List<DebugTimeMarker> timeMarkers;
 
   Map<String, Object?> toJson() {
@@ -320,7 +205,6 @@ final class DebugCaptureSnapshot {
       'outputSummaries': <Object?>[
         for (final output in outputSummaries) output.toJson(),
       ],
-      'taskEvents': <Object?>[for (final event in taskEvents) event.toJson()],
       'timeMarkers': <Object?>[
         for (final marker in timeMarkers) marker.toJson(),
       ],
@@ -361,9 +245,6 @@ final class DebugCaptureArtifact {
 
   List<Map<String, Object?>> get outputSummaries =>
       _jsonMapList(_json['outputSummaries']);
-
-  List<Map<String, Object?>> get taskEvents =>
-      _jsonMapList(_json['taskEvents']);
 
   List<Map<String, Object?>> get timeMarkers =>
       _jsonMapList(_json['timeMarkers']);
@@ -452,24 +333,6 @@ final class DebugCaptureArtifact {
       for (final summary in outputSummaries)
         if (source == null || summary['source'] == source) summary,
     ];
-  }
-
-  List<Map<String, Object?>> taskEventsFor({String? source, String? kind}) {
-    return [
-      for (final event in taskEvents)
-        if ((source == null || event['source'] == source) &&
-            (kind == null || event['kind'] == kind))
-          event,
-    ];
-  }
-
-  bool hasTaskEvent({String? source, String? kind, String? status}) {
-    return taskEvents.any(
-      (event) =>
-          (source == null || event['source'] == source) &&
-          (kind == null || event['kind'] == kind) &&
-          (status == null || event['status'] == status),
-    );
   }
 
   List<Map<String, Object?>> timeMarkersFor({String? source, String? label}) {

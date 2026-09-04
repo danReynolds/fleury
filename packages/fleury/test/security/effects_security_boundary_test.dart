@@ -31,11 +31,14 @@ void main() {
       }
     });
 
-    test('ProcessTaskCommand does not request a shell unless explicit', () {
-      const defaultCommand = ProcessTaskCommand('tool', ['arg']);
+    test('external editor process requests avoid a shell by default', () {
+      const defaultCommand = ExternalEditorProcessRequest(
+        executable: 'tool',
+        arguments: ['arg'],
+      );
       expect(defaultCommand.runInShell, isFalse);
 
-      const shellCommand = ProcessTaskCommand.configured(
+      const shellCommand = ExternalEditorProcessRequest(
         executable: 'tool',
         arguments: ['arg'],
         runInShell: true,
@@ -47,7 +50,7 @@ void main() {
       'external editor executable command receives hostile path as an argument',
       () async {
         final file = await _hostileTempFile(tempDir);
-        ProcessTaskCommand? seen;
+        ExternalEditorProcessRequest? seen;
 
         final result = await editTextInExternalEditor(
           initialText: 'draft',
@@ -71,7 +74,7 @@ void main() {
 
     test('environment shell editor quotes the appended file path', () async {
       final file = await _hostileTempFile(tempDir);
-      ProcessTaskCommand? seen;
+      ExternalEditorProcessRequest? seen;
 
       final result = await editTextInExternalEditor(
         initialText: 'draft',

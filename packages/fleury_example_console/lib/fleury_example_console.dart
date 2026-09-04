@@ -1,7 +1,6 @@
 library;
 
-import 'dart:async' show Completer, unawaited;
-import 'dart:io' show Platform;
+import 'dart:async' show Timer, unawaited;
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury_widgets/fleury_widgets.dart';
@@ -17,7 +16,6 @@ const demoScreenChanges = 'changes';
 const demoScreenSource = 'source';
 const demoScreenDocs = 'docs';
 const demoScreenTranscript = 'transcript';
-const demoScreenProcess = 'process';
 const demoScreenDiagnostics = 'diagnostics';
 
 const demoCommandOpenPalette = CommandId('app.openPalette');
@@ -32,12 +30,9 @@ const demoCommandGoChanges = CommandId('screen.changes');
 const demoCommandGoSource = CommandId('screen.source');
 const demoCommandGoDocs = CommandId('screen.docs');
 const demoCommandGoTranscript = CommandId('screen.transcript');
-const demoCommandGoProcess = CommandId('screen.process');
 const demoCommandGoDiagnostics = CommandId('screen.diagnostics');
-const demoCommandStartTask = CommandId('task.startFake');
-const demoCommandCancelTask = CommandId('task.cancelFake');
-const demoCommandRunProcess = CommandId('process.dartVersion.start');
-const demoCommandCancelProcess = CommandId('process.dartVersion.cancel');
+const demoCommandStartWorker = CommandId('worker.startFake');
+const demoCommandCancelWorker = CommandId('worker.cancelFake');
 const demoCommandRequestApproval = CommandId('approval.deploy.request');
 const demoCommandToggleStream = CommandId('logs.toggleStream');
 const demoCommandDiagnose = CommandId('terminal.diagnose');
@@ -59,11 +54,6 @@ const demoCommandAppendLogBurst = CommandId('transcript.appendLogBurst');
 
 const demoIndexedLogInitialCount = 192;
 const demoIndexedLogAppendCount = 3;
-
-const _demoIndexYieldPolicy = TaskYieldPolicy(
-  itemBudget: 16,
-  elapsedBudget: Duration(days: 1),
-);
 
 const _demoWidgetTheme = FleuryWidgetTheme(
   progressFilledStyle: CellStyle(foreground: AnsiColor(10)),
@@ -132,6 +122,10 @@ final class TranscriptEvent {
   final String kind;
   final String text;
 }
+
+enum _DemoWorkerStatus { idle, running, canceled }
+
+enum _DemoSearchStatus { idle, pending, ready }
 
 /// Package-owned global-search read model contributed by
 /// [DemoConsoleExtension].
@@ -294,24 +288,13 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
   final _sourceCode = CodeViewController(selectedIndex: 7);
   final _docsMarkdown = MarkdownViewController(selectedIndex: 5);
   final _connectionForm = FormController();
-  final _task = TaskController<void>(id: 'fake-task', label: 'Fake task');
-  final _logIndexTask = TaskController<LogRegionSearchIndex>(
-    id: 'demo-log-index',
-    label: 'Demo log index',
-  );
-  final _globalSearchTask = DebouncedTaskController<List<SearchResult>>(
-    delay: const Duration(milliseconds: 60),
-    id: 'global-search',
-    label: 'Global search',
-  );
-  final _process = ProcessTaskController(
-    id: 'dart-version',
-    label: 'Dart version',
-  );
-  late final ProcessCommandRunner _processRunner;
 
   final _navigation = _DemoNavigationController(demoScreenOverview);
-  Completer<void>? _fakeTaskCompleter;
+  Timer? _globalSearchTimer;
+  _DemoWorkerStatus _workerStatus = _DemoWorkerStatus.idle;
+  _DemoSearchStatus _globalSearchStatus = _DemoSearchStatus.idle;
+  int _workerProgress = 0;
+  int _workerEvents = 0;
   bool _streaming = true;
   int _debugCaptures = 0;
   int _logBurst = 0;
@@ -373,39 +356,24 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
       id: 1,
       source: 'worker',
       kind: 'log',
-      text: 'Waiting for a fake task.',
+      text: 'Waiting for the fake worker.',
     ),
   ];
 
   @override
   void initState() {
     super.initState();
-    _processRunner = ProcessCommandRunner(
-      controller: _process,
-      command: ProcessTaskCommand(Platform.resolvedExecutable, ['--version']),
-      startCommandId: demoCommandRunProcess,
-      cancelCommandId: demoCommandCancelProcess,
-      title: 'Run Dart Version',
-      cancelTitle: 'Cancel Dart Version',
-      category: 'Process',
-      shortcuts: [KeySequence.ctrl.enter],
-      cancelShortcuts: [KeySequence.ctrl.x],
-    );
     _runsFilter.addListener(_rebuild);
     _globalSearchQuery.addListener(_scheduleGlobalSearch);
     _indexedLogFilter.addListener(_rebuild);
     _runsTable.addListener(_rebuild);
-    _globalSearchTask.addListener(_rebuild);
     _indexedLogController.addListener(_rebuild);
-    _logIndexTask.addListener(_rebuild);
     _payloadJson.addListener(_rebuild);
     _changesReview.addListener(_rebuild);
     _changesDiff.addListener(_rebuild);
     _sourceCode.addListener(_rebuild);
     _docsMarkdown.addListener(_rebuild);
     _connectionForm.addListener(_rebuild);
-    _task.addListener(_rebuild);
-    _process.addListener(_rebuild);
   }
 
   @override
@@ -414,22 +382,14 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
     _globalSearchQuery.removeListener(_scheduleGlobalSearch);
     _indexedLogFilter.removeListener(_rebuild);
     _runsTable.removeListener(_rebuild);
-    _globalSearchTask.removeListener(_rebuild);
     _indexedLogController.removeListener(_rebuild);
-    _logIndexTask.removeListener(_rebuild);
     _payloadJson.removeListener(_rebuild);
     _changesReview.removeListener(_rebuild);
     _changesDiff.removeListener(_rebuild);
     _sourceCode.removeListener(_rebuild);
     _docsMarkdown.removeListener(_rebuild);
     _connectionForm.removeListener(_rebuild);
-    _task.removeListener(_rebuild);
-    _process.removeListener(_rebuild);
-    if (_task.isRunning) _task.cancel();
-    if (_logIndexTask.isRunning) _logIndexTask.cancel();
-    _globalSearchTask.cancel();
-    if (_process.isRunning) _process.cancel();
-    _completeFakeTask();
+    _globalSearchTimer?.cancel();
     _runsFilter.dispose();
     _globalSearchQuery.dispose();
     _indexedLogFilter.dispose();
@@ -459,10 +419,6 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
     _sourceCode.dispose();
     _docsMarkdown.dispose();
     _connectionForm.dispose();
-    _task.dispose();
-    _logIndexTask.dispose();
-    _globalSearchTask.dispose();
-    _process.dispose();
     _navigation.dispose();
     super.dispose();
   }
@@ -476,9 +432,7 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
     _navigation.refresh();
   }
 
-  bool get _taskRunning => _task.isRunning;
-
-  int get _taskProgress => (_task.progress?.current ?? 0).round();
+  bool get _workerRunning => _workerStatus == _DemoWorkerStatus.running;
 
   DemoSearchDataSource get _searchDataSource {
     return DemoSearchDataSource(runs: _runs, transcript: _transcript);
@@ -515,30 +469,19 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
       id: demoScreenOverview,
       title: 'Overview',
       shortTitle: 'Home',
-      description: 'Summary, task progress, and recent activity',
-      commands: [
-        AppCommand(
-          id: demoCommandStartTask,
-          title: 'Start Fake Task',
-          category: 'Task',
-          enabled: (_) => !_taskRunning,
-          semanticAction: SemanticAction.start,
-          run: (_) {
-            _startTask();
-          },
-        ),
-      ],
+      description: 'Summary, worker progress, and recent activity',
       builder: (context) {
         final extension = FleuryApp.extension<DemoConsoleExtension>(context);
         return _OverviewScreen(
-          task: _task,
-          process: _process,
-          processCommand: _processRunner.command,
+          workerStatus: _workerStatus,
+          workerProgress: _workerProgress,
+          workerEvents: _workerEvents,
           transcript: _transcript,
           debugCaptures: extension.debugCaptures,
           streaming: extension.streaming,
           contextItems: _demoContextItems(
-            task: _task,
+            workerStatus: _workerStatus,
+            workerEvents: _workerEvents,
             transcript: _transcript,
             debugCaptures: extension.debugCaptures,
           ),
@@ -567,7 +510,7 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
         queryFocus: _globalSearchFocus,
         resultsFocus: _globalSearchResultsFocus,
         list: _globalSearchList,
-        task: _globalSearchTask,
+        status: _globalSearchStatus,
         resolvedQuery: _globalSearchResolvedQuery,
         results: _globalSearchResults,
         onActivateScreen: _activateScreen,
@@ -585,7 +528,6 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
           title: 'Build Demo Log Index',
           category: 'Index',
           semanticAction: SemanticAction.start,
-          enabled: (_) => !_logIndexTask.isRunning,
           run: (_) {
             _buildDemoLogIndex();
           },
@@ -593,10 +535,9 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
         AppCommand(
           id: demoCommandAppendIndexedLogBurst,
           title: 'Append Indexed Log Burst',
-          description: 'Append logs and refresh the search index cooperatively',
+          description: 'Append logs and refresh the search index',
           category: 'Index',
           semanticAction: SemanticAction.start,
-          enabled: (_) => !_logIndexTask.isRunning,
           run: (_) {
             _appendIndexedLogBurst();
           },
@@ -628,7 +569,6 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
         filterFocus: _indexedLogFilterFocus,
         logFocus: _indexedLogFocus,
         controller: _indexedLogController,
-        task: _logIndexTask,
       ),
     ),
     _DemoScreenSpec(
@@ -823,8 +763,8 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
       builder: (_) => _TranscriptScreen(
         transcript: _transcript,
         conversations: _demoConversations(
-          task: _task,
-          process: _process,
+          workerStatus: _workerStatus,
+          workerEvents: _workerEvents,
           transcript: _transcript,
           streaming: _streaming,
         ),
@@ -841,37 +781,17 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
       ),
     ),
     _DemoScreenSpec(
-      id: demoScreenProcess,
-      title: 'Process',
-      description: 'Native process command, output, and cancellation surface',
-      builder: (_) => ProcessCommandScope(
-        runner: _processRunner,
-        child: _ProcessScreen(controller: _process, runner: _processRunner),
-      ),
-    ),
-    _DemoScreenSpec(
       id: demoScreenDiagnostics,
       title: 'Diagnostics',
       description: 'Terminal capabilities and debug snapshot actions',
-      commands: [
-        AppCommand(
-          id: demoCommandCaptureDebug,
-          title: 'Capture Debug Snapshot',
-          category: 'Diagnostics',
-          semanticAction: SemanticAction.captureDebug,
-          run: (_) {
-            _captureDebug();
-          },
-        ),
-      ],
       builder: (context) {
         final extension = FleuryApp.extension<DemoConsoleExtension>(context);
         return _DiagnosticsScreen(
           debugCaptures: extension.debugCaptures,
           streaming: extension.streaming,
           traceEvents: _demoTraceEvents(
-            task: _task,
-            process: _process,
+            workerStatus: _workerStatus,
+            workerEvents: _workerEvents,
             transcript: _transcript,
             debugCaptures: extension.debugCaptures,
             streaming: extension.streaming,
@@ -960,37 +880,31 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
       shortcut: KeySequence.ctrl.t,
     ),
     _goCommand(
-      id: demoCommandGoProcess,
-      title: 'Go to Process',
-      screen: demoScreenProcess,
-      shortcut: KeySequence.ctrl.p,
-    ),
-    _goCommand(
       id: demoCommandGoDiagnostics,
       title: 'Go to Diagnostics',
       screen: demoScreenDiagnostics,
       shortcut: KeySequence.ctrl.d,
     ),
     AppCommand(
-      id: demoCommandStartTask,
-      title: 'Start Fake Task',
+      id: demoCommandStartWorker,
+      title: 'Start Fake Worker',
       description: 'Start deterministic worker progress',
-      category: 'Task',
-      enabled: (_) => !_taskRunning,
+      category: 'Worker',
+      enabled: (_) => !_workerRunning,
       semanticAction: SemanticAction.start,
       run: (_) {
-        _startTask();
+        _startWorker();
       },
     ),
     AppCommand(
-      id: demoCommandCancelTask,
-      title: 'Cancel Active Task',
+      id: demoCommandCancelWorker,
+      title: 'Cancel Active Worker',
       description: 'Stop the fake worker if it is active',
-      category: 'Task',
-      enabled: (_) => _taskRunning,
+      category: 'Worker',
+      enabled: (_) => _workerRunning,
       semanticAction: SemanticAction.cancel,
       run: (_) {
-        _cancelTask();
+        _cancelWorker();
       },
     ),
     AppCommand(
@@ -1077,70 +991,25 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
 
   List<StatusItem> _status(FleuryAppController _) {
     final screen = _activeScreen.title;
-    final taskStatus = _task.status;
     return [
       StatusItem.text('Screen', id: 'screen', value: screen),
-      switch (taskStatus) {
-        TaskStatus.running => StatusItem.warning(
-          'Task',
-          id: 'task',
-          value: 'running $_taskProgress%',
-          action: demoCommandCancelTask,
+      switch (_workerStatus) {
+        _DemoWorkerStatus.running => StatusItem.warning(
+          'Worker',
+          id: 'worker',
+          value: 'running $_workerProgress%',
+          action: demoCommandCancelWorker,
         ),
-        TaskStatus.failed => StatusItem.warning(
-          'Task',
-          id: 'task',
-          value: 'failed',
-          action: demoCommandStartTask,
-        ),
-        TaskStatus.canceled => StatusItem.text(
-          'Task',
-          id: 'task',
+        _DemoWorkerStatus.canceled => StatusItem.text(
+          'Worker',
+          id: 'worker',
           value: 'canceled',
-          action: demoCommandStartTask,
+          action: demoCommandStartWorker,
         ),
-        TaskStatus.succeeded => StatusItem.success(
-          'Task',
-          id: 'task',
-          value: 'done',
-          action: demoCommandStartTask,
-        ),
-        TaskStatus.idle => StatusItem.success(
-          'Task',
-          id: 'task',
+        _DemoWorkerStatus.idle => StatusItem.success(
+          'Worker',
+          id: 'worker',
           value: 'idle',
-        ),
-      },
-      switch (_process.status) {
-        TaskStatus.running => StatusItem.warning(
-          'Process',
-          id: 'process',
-          value: 'running',
-          action: demoCommandGoProcess,
-        ),
-        TaskStatus.failed => StatusItem.warning(
-          'Process',
-          id: 'process',
-          value: 'failed',
-          action: demoCommandGoProcess,
-        ),
-        TaskStatus.canceled => StatusItem.text(
-          'Process',
-          id: 'process',
-          value: 'canceled',
-          action: demoCommandGoProcess,
-        ),
-        TaskStatus.succeeded => StatusItem.success(
-          'Process',
-          id: 'process',
-          value: 'done',
-          action: demoCommandGoProcess,
-        ),
-        TaskStatus.idle => StatusItem.text(
-          'Process',
-          id: 'process',
-          value: 'idle',
-          action: demoCommandGoProcess,
         ),
       },
     ];
@@ -1152,50 +1021,30 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
     unawaited(CommandPalette.open(buildContext));
   }
 
-  void _startTask() {
-    if (_task.isRunning) return;
-    final progress = (_taskProgress == 0 ? 15 : _taskProgress + 20).clamp(
+  void _startWorker() {
+    if (_workerRunning) return;
+    final progress = (_workerProgress == 0 ? 15 : _workerProgress + 20).clamp(
       0,
       95,
     );
-    final message = 'fake task advanced to $progress%';
-    final completer = Completer<void>();
-    _fakeTaskCompleter = completer;
+    final message = 'fake worker advanced to $progress%';
 
     _mutate(() {
+      _workerStatus = _DemoWorkerStatus.running;
+      _workerProgress = progress;
+      _workerEvents += 1;
       _append('worker', message);
     });
-
-    unawaited(
-      _task.start((context) async {
-        context.reportProgress(
-          current: progress,
-          total: 100,
-          label: '$progress%',
-        );
-        context.write(message, source: 'worker');
-        await completer.future;
-        context.checkCancellation();
-      }),
-    );
   }
 
-  void _cancelTask() {
-    if (!_task.isRunning) return;
-    final progress = _taskProgress;
-    _task.cancel();
-    _completeFakeTask();
+  void _cancelWorker() {
+    if (!_workerRunning) return;
+    final progress = _workerProgress;
     _mutate(() {
-      _append('worker', 'fake task canceled at $progress%');
+      _workerStatus = _DemoWorkerStatus.canceled;
+      _workerEvents += 1;
+      _append('worker', 'fake worker canceled at $progress%');
     });
-  }
-
-  void _completeFakeTask() {
-    final completer = _fakeTaskCompleter;
-    if (completer != null && !completer.isCompleted) {
-      completer.complete();
-    }
-    _fakeTaskCompleter = null;
   }
 
   void _captureDebug() {
@@ -1213,47 +1062,31 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
 
   void _scheduleGlobalSearch() {
     final query = _globalSearchQuery.text;
+    _globalSearchTimer?.cancel();
     if (query.trim().isEmpty) {
-      _globalSearchTask.reset();
       _mutate(() {
+        _globalSearchStatus = _DemoSearchStatus.idle;
         _globalSearchResolvedQuery = '';
         _globalSearchResults = const <SearchResult>[];
       });
       return;
     }
 
-    unawaited(
-      _globalSearchTask
-          .schedule((context) {
-            final corpus = _searchDataSource.buildCorpus();
-            final searchIndex = SearchResultIndex(corpus);
-            final order = searchIndex.order(query: query);
-            final results = <SearchResult>[
-              for (final index in order) corpus[index],
-            ];
-            context.reportProgress(
-              current: results.length,
-              total: corpus.length,
-              label: '${results.length} matches',
-            );
-            context.write(
-              'query "$query" matched ${results.length} of ${corpus.length}',
-              source: 'search',
-            );
-            return List<SearchResult>.unmodifiable(results);
-          })
-          .then((result) {
-            if (!mounted ||
-                !result.succeeded ||
-                _globalSearchQuery.text != query) {
-              return;
-            }
-            _mutate(() {
-              _globalSearchResolvedQuery = query;
-              _globalSearchResults = result.value ?? const <SearchResult>[];
-            });
-          }),
-    );
+    _mutate(() {
+      _globalSearchStatus = _DemoSearchStatus.pending;
+    });
+    _globalSearchTimer = Timer(const Duration(milliseconds: 60), () {
+      if (!mounted || _globalSearchQuery.text != query) return;
+      final corpus = _searchDataSource.buildCorpus();
+      final searchIndex = SearchResultIndex(corpus);
+      final order = searchIndex.order(query: query);
+      final results = <SearchResult>[for (final index in order) corpus[index]];
+      _mutate(() {
+        _globalSearchStatus = _DemoSearchStatus.ready;
+        _globalSearchResolvedQuery = query;
+        _globalSearchResults = List<SearchResult>.unmodifiable(results);
+      });
+    });
   }
 
   void _activateSearchResult(SearchResult result) {
@@ -1264,37 +1097,13 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
   }
 
   void _buildDemoLogIndex() {
-    if (_logIndexTask.isRunning) return;
     _mutate(() {
-      _indexedLogSearchIndex = null;
+      _indexedLogSearchIndex = LogRegionSearchIndex(_indexedLogs);
+      _append('index', 'built ${_indexedLogs.length} demo log rows');
     });
-    unawaited(
-      _logIndexTask
-          .start((context) async {
-            final index = await LogRegionSearchIndex.buildCooperatively(
-              _indexedLogs,
-              context: context,
-              yieldPolicy: _demoIndexYieldPolicy,
-              progressLabel: 'index demo logs',
-            );
-            context.write(
-              'indexed ${index.length} demo log rows',
-              source: 'index',
-            );
-            return index;
-          })
-          .then((result) {
-            if (!mounted || !result.succeeded || result.value == null) return;
-            _mutate(() {
-              _indexedLogSearchIndex = result.value;
-              _append('index', 'built ${result.value!.length} demo log rows');
-            });
-          }),
-    );
   }
 
   void _appendIndexedLogBurst() {
-    if (_logIndexTask.isRunning) return;
     final start = _indexedLogs.length;
     final index =
         _indexedLogSearchIndex ?? LogRegionSearchIndex.empty(_indexedLogs);
@@ -1302,33 +1111,10 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
       for (var i = 0; i < demoIndexedLogAppendCount; i++) {
         _indexedLogs.add(_demoIndexedLogEntry(start + i));
       }
-      _indexedLogSearchIndex = null;
+      index.refresh();
+      _indexedLogSearchIndex = index;
+      _append('index', 'refreshed ${index.length} demo log rows');
     });
-    unawaited(
-      _logIndexTask
-          .start((context) async {
-            await index.refreshCooperatively(
-              context: context,
-              yieldPolicy: _demoIndexYieldPolicy,
-              progressLabel: 'refresh demo logs',
-            );
-            context.write(
-              'refreshed ${index.length} demo log rows',
-              source: 'index',
-            );
-            return index;
-          })
-          .then((result) {
-            if (!mounted || !result.succeeded || result.value == null) return;
-            _mutate(() {
-              _indexedLogSearchIndex = result.value;
-              _append(
-                'index',
-                'refreshed ${result.value!.length} demo log rows',
-              );
-            });
-          }),
-    );
   }
 
   void _selectRun(RunRecord run) {
@@ -1649,9 +1435,9 @@ class _DemoScreenBuilderWidget extends StatelessWidget {
 
 class _OverviewScreen extends StatelessWidget {
   const _OverviewScreen({
-    required this.task,
-    required this.process,
-    required this.processCommand,
+    required this.workerStatus,
+    required this.workerProgress,
+    required this.workerEvents,
     required this.transcript,
     required this.debugCaptures,
     required this.streaming,
@@ -1659,9 +1445,9 @@ class _OverviewScreen extends StatelessWidget {
     required this.onContextSelected,
   });
 
-  final TaskController<void> task;
-  final ProcessTaskController process;
-  final ProcessTaskCommand processCommand;
+  final _DemoWorkerStatus workerStatus;
+  final int workerProgress;
+  final int workerEvents;
   final List<TranscriptEvent> transcript;
   final int debugCaptures;
   final bool streaming;
@@ -1671,12 +1457,16 @@ class _OverviewScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final latest = transcript.reversed.take(3).toList(growable: false);
-    final progress = task.progress?.fraction ?? 0;
-    final modelStatus = _demoModelStatus(task, transcript);
+    final progress = workerProgress / 100;
+    final modelStatus = _demoModelStatus(
+      workerStatus,
+      workerProgress,
+      transcript,
+    );
     final workflow = _demoWorkflowSnapshot(
-      task: task,
-      process: process,
-      processCommand: processCommand,
+      workerStatus: workerStatus,
+      workerProgress: workerProgress,
+      workerEvents: workerEvents,
       transcript: transcript,
       debugCaptures: debugCaptures,
       streaming: streaming,
@@ -1707,15 +1497,22 @@ class _OverviewScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 1),
-          TaskStatusView<void>(
-            controller: task,
+          Semantics(
+            role: SemanticRole.status,
+            label: 'Fake worker',
+            value: workerStatus.name,
+            state: SemanticState({
+              'workerStatus': workerStatus.name,
+              'progressCurrent': workerProgress,
+              'progressTotal': 100,
+            }),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  task.isRunning
-                      ? 'Fake task is running'
-                      : 'Fake task is ${task.status.name}',
+                  workerStatus == _DemoWorkerStatus.running
+                      ? 'Fake worker is running'
+                      : 'Fake worker is ${workerStatus.name}',
                 ),
                 SizedBox(width: 36, child: ProgressBar(value: progress)),
               ],
@@ -1735,7 +1532,11 @@ class _OverviewScreen extends StatelessWidget {
             height: 4,
             child: TaskGraph(
               semanticLabel: 'Demo workflow plan',
-              nodes: _demoWorkflowPlan(task, debugCaptures),
+              nodes: _demoWorkflowPlan(
+                workerStatus,
+                workerProgress,
+                debugCaptures,
+              ),
             ),
           ),
           const SizedBox(height: 1),
@@ -1829,9 +1630,9 @@ List<Bar> _demoActivityBars({
 }
 
 WorkflowSnapshot _demoWorkflowSnapshot({
-  required TaskController<void> task,
-  required ProcessTaskController process,
-  required ProcessTaskCommand processCommand,
+  required _DemoWorkerStatus workerStatus,
+  required int workerProgress,
+  required int workerEvents,
   required List<TranscriptEvent> transcript,
   required int debugCaptures,
   required bool streaming,
@@ -1852,20 +1653,20 @@ WorkflowSnapshot _demoWorkflowSnapshot({
           metadata: {'eventKind': event.kind},
         ),
     ],
-    toolCalls: [_toolCallForProcess(process, processCommand)],
-    tasks: _demoWorkflowPlan(task, debugCaptures),
+    toolCalls: const <ToolCallRecord>[],
+    tasks: _demoWorkflowPlan(workerStatus, workerProgress, debugCaptures),
     modelStatus: modelStatus,
     contextItems: contextItems,
     fileMentions: _demoFileMentions,
     conversations: _demoConversations(
-      task: task,
-      process: process,
+      workerStatus: workerStatus,
+      workerEvents: workerEvents,
       transcript: transcript,
       streaming: streaming,
     ),
     traceEvents: _demoTraceEvents(
-      task: task,
-      process: process,
+      workerStatus: workerStatus,
+      workerEvents: workerEvents,
       transcript: transcript,
       debugCaptures: debugCaptures,
       streaming: streaming,
@@ -1877,7 +1678,8 @@ WorkflowSnapshot _demoWorkflowSnapshot({
 }
 
 List<TaskGraphNode> _demoWorkflowPlan(
-  TaskController<void> task,
+  _DemoWorkerStatus workerStatus,
+  int workerProgress,
   int debugCaptures,
 ) {
   return [
@@ -1889,11 +1691,11 @@ List<TaskGraphNode> _demoWorkflowPlan(
     TaskGraphNode(
       id: 'worker',
       title: 'Run fake worker',
-      description: 'Exercise task progress and cancellation semantics',
-      status: _taskGraphStatusForTask(task.status),
+      description: 'Exercise local worker progress and cancellation state',
+      status: _taskGraphStatusForWorker(workerStatus),
       dependsOn: const ['setup'],
-      progressCurrent: task.progress?.current,
-      progressTotal: task.progress?.total,
+      progressCurrent: workerProgress,
+      progressTotal: 100,
     ),
     TaskGraphNode(
       id: 'diagnostics',
@@ -1912,44 +1714,43 @@ List<TaskGraphNode> _demoWorkflowPlan(
   ];
 }
 
-TaskGraphStatus _taskGraphStatusForTask(TaskStatus status) {
+TaskGraphStatus _taskGraphStatusForWorker(_DemoWorkerStatus status) {
   return switch (status) {
-    TaskStatus.idle => TaskGraphStatus.pending,
-    TaskStatus.running => TaskGraphStatus.running,
-    TaskStatus.succeeded => TaskGraphStatus.succeeded,
-    TaskStatus.failed => TaskGraphStatus.failed,
-    TaskStatus.canceled => TaskGraphStatus.cancelled,
+    _DemoWorkerStatus.idle => TaskGraphStatus.pending,
+    _DemoWorkerStatus.running => TaskGraphStatus.running,
+    _DemoWorkerStatus.canceled => TaskGraphStatus.cancelled,
   };
 }
 
 ModelStatusInfo _demoModelStatus(
-  TaskController<void> task,
+  _DemoWorkerStatus workerStatus,
+  int workerProgress,
   List<TranscriptEvent> transcript,
 ) {
   final transcriptTokens = transcript.fold<int>(
     0,
     (total, event) => total + event.text.length,
   );
-  final taskProgress = (task.progress?.current ?? 0).round();
   return ModelStatusInfo(
     model: 'fleury-prover',
     provider: 'local',
-    status: _modelStatusForTask(task.status),
+    status: _modelStatusForWorker(workerStatus),
     mode: 'demo',
-    detail: task.isRunning ? 'working' : 'ready',
+    detail: workerStatus == _DemoWorkerStatus.running ? 'working' : 'ready',
     latency: const Duration(milliseconds: 42),
-    queueDepth: task.isRunning ? 1 : 0,
+    queueDepth: workerStatus == _DemoWorkerStatus.running ? 1 : 0,
     tokenUsage: TokenUsage(
       input: 1800 + transcriptTokens,
-      output: 320 + taskProgress,
-      contextUsed: 2400 + transcriptTokens + taskProgress,
+      output: 320 + workerProgress,
+      contextUsed: 2400 + transcriptTokens + workerProgress,
       contextLimit: 128000,
     ),
   );
 }
 
 List<ContextItem> _demoContextItems({
-  required TaskController<void> task,
+  required _DemoWorkerStatus workerStatus,
+  required int workerEvents,
   required List<TranscriptEvent> transcript,
   required int debugCaptures,
 }) {
@@ -1996,32 +1797,30 @@ List<ContextItem> _demoContextItems({
       id: 'ctx.worker-state',
       label: 'Worker state',
       detail:
-          'Fake task ${task.status.name}, events ${task.events.length}, '
+          'Fake worker ${workerStatus.name}, events $workerEvents, '
           'debug captures $debugCaptures',
       kind: ContextItemKind.tool,
-      priority: task.isRunning
+      priority: workerStatus == _DemoWorkerStatus.running
           ? ContextItemPriority.critical
           : ContextItemPriority.normal,
-      tokenCount: 240 + task.events.length * 24,
-      source: 'task.fake-task',
-      metadata: {'taskId': 'fake-task'},
+      tokenCount: 240 + workerEvents * 24,
+      source: 'worker.fake',
+      metadata: {'workerId': 'fake-worker'},
     ),
   ];
 }
 
-ModelRuntimeStatus _modelStatusForTask(TaskStatus status) {
+ModelRuntimeStatus _modelStatusForWorker(_DemoWorkerStatus status) {
   return switch (status) {
-    TaskStatus.idle => ModelRuntimeStatus.ready,
-    TaskStatus.running => ModelRuntimeStatus.streaming,
-    TaskStatus.succeeded => ModelRuntimeStatus.ready,
-    TaskStatus.failed => ModelRuntimeStatus.error,
-    TaskStatus.canceled => ModelRuntimeStatus.degraded,
+    _DemoWorkerStatus.idle => ModelRuntimeStatus.ready,
+    _DemoWorkerStatus.running => ModelRuntimeStatus.streaming,
+    _DemoWorkerStatus.canceled => ModelRuntimeStatus.degraded,
   };
 }
 
 List<ConversationEntry> _demoConversations({
-  required TaskController<void> task,
-  required ProcessTaskController process,
+  required _DemoWorkerStatus workerStatus,
+  required int workerEvents,
   required List<TranscriptEvent> transcript,
   required bool streaming,
 }) {
@@ -2040,23 +1839,13 @@ List<ConversationEntry> _demoConversations({
     ),
     ConversationEntry(
       id: 'thread.worker',
-      title: 'Worker task',
+      title: 'Worker activity',
       subtitle: 'Fake worker progress and cancellation',
-      status: _conversationStatusForTask(task.status),
-      latestMessage: 'Fake task ${task.status.name}',
-      unreadCount: task.isRunning ? 1 : 0,
-      messageCount: task.events.length,
-      metadata: {'screenId': demoScreenOverview, 'taskId': 'fake-task'},
-    ),
-    ConversationEntry(
-      id: 'thread.process',
-      title: 'Process handoff',
-      subtitle: 'Native command output and terminal handoff',
-      status: _conversationStatusForTask(process.status),
-      latestMessage: 'Process ${process.status.name}',
-      unreadCount: process.status == TaskStatus.failed ? 1 : 0,
-      messageCount: process.events.length,
-      metadata: {'screenId': demoScreenProcess, 'taskId': 'dart-version'},
+      status: _conversationStatusForWorker(workerStatus),
+      latestMessage: 'Fake worker ${workerStatus.name}',
+      unreadCount: workerStatus == _DemoWorkerStatus.running ? 1 : 0,
+      messageCount: workerEvents,
+      metadata: {'screenId': demoScreenOverview, 'workerId': 'fake-worker'},
     ),
     const ConversationEntry(
       id: 'thread.diagnostics',
@@ -2071,19 +1860,17 @@ List<ConversationEntry> _demoConversations({
   ];
 }
 
-ConversationStatus _conversationStatusForTask(TaskStatus status) {
+ConversationStatus _conversationStatusForWorker(_DemoWorkerStatus status) {
   return switch (status) {
-    TaskStatus.idle => ConversationStatus.idle,
-    TaskStatus.running => ConversationStatus.streaming,
-    TaskStatus.succeeded => ConversationStatus.complete,
-    TaskStatus.failed => ConversationStatus.failed,
-    TaskStatus.canceled => ConversationStatus.idle,
+    _DemoWorkerStatus.idle => ConversationStatus.idle,
+    _DemoWorkerStatus.running => ConversationStatus.streaming,
+    _DemoWorkerStatus.canceled => ConversationStatus.idle,
   };
 }
 
 List<TraceTimelineEntry> _demoTraceEvents({
-  required TaskController<void> task,
-  required ProcessTaskController process,
+  required _DemoWorkerStatus workerStatus,
+  required int workerEvents,
   required List<TranscriptEvent> transcript,
   required int debugCaptures,
   required bool streaming,
@@ -2101,43 +1888,14 @@ List<TraceTimelineEntry> _demoTraceEvents({
       metadata: {'screenId': 'overview'},
     ),
     TraceTimelineEntry(
-      id: 'trace.fake-task',
-      label: 'Fake task',
-      detail:
-          'status ${task.status.name}, events ${task.events.length}, '
-          'outputs ${task.output.length}',
+      id: 'trace.fake-worker',
+      label: 'Fake worker',
+      detail: 'status ${workerStatus.name}, events $workerEvents',
       kind: TraceTimelineKind.task,
-      status: _traceStatusForTask(task.status),
-      source: 'fake-task',
-      duration: Duration(milliseconds: 40 + task.events.length * 8),
-      metadata: {'taskId': 'fake-task', 'screenId': demoScreenOverview},
-    ),
-    ...traceTimelineEntriesForTaskEvents(
-      task.events,
-      taskId: 'fake-task',
-      taskLabel: 'Fake task',
-      source: 'fake-task',
-      maxEvents: 3,
-    ),
-    TraceTimelineEntry(
-      id: 'trace.process',
-      label: 'Dart version process',
-      detail:
-          'status ${process.status.name}, events ${process.events.length}, '
-          'outputs ${process.output.length}',
-      kind: TraceTimelineKind.process,
-      status: _traceStatusForTask(process.status),
-      source: 'dart-version',
-      duration: Duration(milliseconds: 60 + process.events.length * 10),
-      metadata: {'taskId': 'dart-version', 'screenId': demoScreenProcess},
-    ),
-    ...traceTimelineEntriesForTaskEvents(
-      process.events,
-      taskId: 'dart-version',
-      taskLabel: 'Dart version process',
-      kind: TraceTimelineKind.process,
-      source: 'dart-version',
-      maxEvents: 3,
+      status: _traceStatusForWorker(workerStatus),
+      source: 'fake-worker',
+      duration: Duration(milliseconds: 40 + workerEvents * 8),
+      metadata: {'workerId': 'fake-worker', 'screenId': demoScreenOverview},
     ),
     TraceTimelineEntry(
       id: 'trace.diagnostics',
@@ -2172,13 +1930,11 @@ List<TraceTimelineEntry> _demoTraceEvents({
   ];
 }
 
-TraceTimelineStatus _traceStatusForTask(TaskStatus status) {
+TraceTimelineStatus _traceStatusForWorker(_DemoWorkerStatus status) {
   return switch (status) {
-    TaskStatus.idle => TraceTimelineStatus.queued,
-    TaskStatus.running => TraceTimelineStatus.running,
-    TaskStatus.succeeded => TraceTimelineStatus.succeeded,
-    TaskStatus.failed => TraceTimelineStatus.failed,
-    TaskStatus.canceled => TraceTimelineStatus.cancelled,
+    _DemoWorkerStatus.idle => TraceTimelineStatus.queued,
+    _DemoWorkerStatus.running => TraceTimelineStatus.running,
+    _DemoWorkerStatus.canceled => TraceTimelineStatus.cancelled,
   };
 }
 
@@ -2311,7 +2067,7 @@ class _SearchScreen extends StatelessWidget {
     required this.queryFocus,
     required this.resultsFocus,
     required this.list,
-    required this.task,
+    required this.status,
     required this.resolvedQuery,
     required this.results,
     required this.onActivateScreen,
@@ -2322,7 +2078,7 @@ class _SearchScreen extends StatelessWidget {
   final FocusNode queryFocus;
   final FocusNode resultsFocus;
   final ListController list;
-  final DebouncedTaskController<List<SearchResult>> task;
+  final _DemoSearchStatus status;
   final String resolvedQuery;
   final List<SearchResult> results;
   final bool Function(String screenId) onActivateScreen;
@@ -2330,19 +2086,14 @@ class _SearchScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pending = task.isPending;
-    final status = pending ? 'pending' : task.status.name;
     final summary = resolvedQuery.trim().isEmpty
-        ? 'Search: $status'
-        : 'Search: $status ${results.length} results for "$resolvedQuery"';
+        ? 'Search: ${status.name}'
+        : 'Search: ${status.name} ${results.length} results for "$resolvedQuery"';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Text('Global Search', style: CellStyle(bold: true)),
-        TaskStatusView<List<SearchResult>>(
-          controller: task.taskController,
-          child: Text(summary),
-        ),
+        Text(summary),
         const SizedBox(height: 1),
         Expanded(
           child: SearchPanel(
@@ -2376,7 +2127,6 @@ class _IndexedLogsScreen extends StatelessWidget {
     required this.filterFocus,
     required this.logFocus,
     required this.controller,
-    required this.task,
   });
 
   final List<LogEntry> entries;
@@ -2385,24 +2135,17 @@ class _IndexedLogsScreen extends StatelessWidget {
   final FocusNode filterFocus;
   final FocusNode logFocus;
   final LogRegionController controller;
-  final TaskController<LogRegionSearchIndex> task;
 
   @override
   Widget build(BuildContext context) {
     final query = filter.text.trim();
-    final effectiveIndex = task.isRunning ? null : searchIndex;
-    final indexedCount = effectiveIndex?.length ?? 0;
-    final summary =
-        'Rows: ${entries.length}  Indexed: $indexedCount  '
-        'Task: ${task.status.name}';
+    final indexedCount = searchIndex?.length ?? 0;
+    final summary = 'Rows: ${entries.length}  Indexed: $indexedCount';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Text('Indexed Logs', style: CellStyle(bold: true)),
-        TaskStatusView<LogRegionSearchIndex>(
-          controller: task,
-          child: Text(summary),
-        ),
+        Text(summary),
         const SizedBox(height: 1),
         TextInput(
           controller: filter,
@@ -2418,7 +2161,7 @@ class _IndexedLogsScreen extends StatelessWidget {
             controller: controller,
             focusNode: logFocus,
             showPrefix: true,
-            searchIndex: effectiveIndex,
+            searchIndex: searchIndex,
             filter: query.isEmpty
                 ? null
                 : LogRegionFilterDescriptor(query: query),
@@ -2570,20 +2313,20 @@ List<SearchResult> _globalSearchCorpus({
     _screenSearchResult(
       screen: demoScreenOverview,
       title: 'Overview',
-      subtitle: 'Task progress and recent activity',
+      subtitle: 'Worker progress and recent activity',
       detail: 'summary fake worker status transcript debug captures',
     ),
     _screenSearchResult(
       screen: demoScreenSearch,
       title: 'Global Search',
       subtitle: 'Debounced search across app surfaces',
-      detail: 'typeahead DebouncedTaskController SearchPanel results',
+      detail: 'typeahead timer SearchPanel results',
     ),
     _screenSearchResult(
       screen: demoScreenIndex,
       title: 'Indexed Logs',
-      subtitle: 'Cooperative retained-log indexing',
-      detail: 'TaskYieldPolicy LogRegionSearchIndex progress cancellation',
+      subtitle: 'Retained-log indexing',
+      detail: 'LogRegionSearchIndex filtering refresh',
     ),
     _screenSearchResult(
       screen: demoScreenConnection,
@@ -2632,12 +2375,6 @@ List<SearchResult> _globalSearchCorpus({
       title: 'Transcript',
       subtitle: 'Log stream and composer',
       detail: 'LogRegion tailing scrollback composer copy',
-    ),
-    _screenSearchResult(
-      screen: demoScreenProcess,
-      title: 'Process',
-      subtitle: 'Native process command',
-      detail: 'ProcessPanel subprocess output cancellation terminal handoff',
     ),
     _screenSearchResult(
       screen: demoScreenDiagnostics,
@@ -3176,10 +2913,10 @@ const _demoComposerSlashCompletions = [
     detail: 'Prepare a terminal diagnostic request',
   ),
   TextCompletionOption(
-    id: 'run-task',
-    label: '/run-task',
-    replacement: '/run-task ',
-    detail: 'Queue the fake demo task',
+    id: 'run-worker',
+    label: '/run-worker',
+    replacement: '/run-worker ',
+    detail: 'Start the fake demo worker',
   ),
 ];
 
@@ -3240,84 +2977,6 @@ MessageStatus _messageStatusForTranscriptEvent(TranscriptEvent event) {
   return switch (event.kind) {
     'error' => MessageStatus.failed,
     _ => MessageStatus.complete,
-  };
-}
-
-class _ProcessScreen extends StatelessWidget {
-  const _ProcessScreen({required this.controller, required this.runner});
-
-  final ProcessTaskController controller;
-  final ProcessCommandRunner runner;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: controller,
-      builder: (context, _) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text('Process', style: CellStyle(bold: true)),
-            Text('Command: ${runner.command.displayName}'),
-            const SizedBox(height: 1),
-            ToolCallCard(
-              record: _toolCallForProcess(controller, runner.command),
-              copyOptions: const ToolCallCopyOptions(
-                clipboardPolicy: ClipboardWritePolicy.inProcessOnly,
-              ),
-              onCancel: controller.canCancel ? controller.cancel : null,
-            ),
-            const SizedBox(height: 1),
-            Expanded(
-              child: ProcessPanel(
-                controller: controller,
-                command: runner.command,
-                label: 'Dart version',
-                autofocus: true,
-                copyOptions: const LogRegionCopyOptions(
-                  clipboardPolicy: ClipboardWritePolicy.inProcessOnly,
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-ToolCallRecord _toolCallForProcess(
-  ProcessTaskController controller,
-  ProcessTaskCommand command,
-) {
-  final latestOutput = controller.output.isEmpty
-      ? null
-      : controller.output.last.text;
-  return ToolCallRecord(
-    id: 'process.dart-version',
-    name: command.executable,
-    title: 'Dart version command',
-    description: 'Native subprocess managed through ProcessCommandRunner.',
-    status: _toolCallStatusForTask(controller.status),
-    arguments: {
-      'command': command.displayName,
-      if (command.workingDirectory != null) 'cwd': command.workingDirectory,
-    },
-    output: latestOutput,
-    error: controller.error?.toString(),
-    progressCurrent: controller.progress?.current,
-    progressTotal: controller.progress?.total,
-    metadata: {'processCommandId': demoCommandRunProcess.value},
-  );
-}
-
-ToolCallStatus _toolCallStatusForTask(TaskStatus status) {
-  return switch (status) {
-    TaskStatus.idle => ToolCallStatus.queued,
-    TaskStatus.running => ToolCallStatus.running,
-    TaskStatus.succeeded => ToolCallStatus.succeeded,
-    TaskStatus.failed => ToolCallStatus.failed,
-    TaskStatus.canceled => ToolCallStatus.cancelled,
   };
 }
 

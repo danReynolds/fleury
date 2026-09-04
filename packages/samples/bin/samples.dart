@@ -9,7 +9,7 @@ import 'package:fleury_samples/samples.dart';
 ///   fleury dev samples <app>            (via tool/fleury_dev.dart)
 ///
 /// Apps: dashboard | files | editor | agent | finance | forms | themes |
-/// asteroids | sprite | debug.
+/// asteroids | sprite | commands | debug.
 const Map<String, (String, Widget Function())>
 _apps = <String, (String, Widget Function())>{
   'dashboard': ('htop-style live system monitor', DashboardApp.new),
@@ -29,6 +29,10 @@ _apps = <String, (String, Widget Function())>{
   'sprite': (
     'paint and animate portable ANSI sprites',
     AnsiSpriteStudioApp.new,
+  ),
+  'commands': (
+    'tiny editor driven by commands in its toolbar, shortcuts, and palette',
+    CommandWorkbenchApp.new,
   ),
   'debug': ('debug-shell + agent-devtools playground', DebugPlaygroundApp.new),
 };

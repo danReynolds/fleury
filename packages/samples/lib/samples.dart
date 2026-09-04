@@ -7,6 +7,7 @@ library;
 
 export 'src/agent_tui.dart' show AgentApp;
 export 'src/ansi_sprite_studio.dart' show AnsiSpriteStudioApp;
+export 'src/commands_showcase.dart' show CommandIntroApp, CommandWorkbenchApp;
 export 'src/dashboard.dart' show DashboardApp;
 export 'src/debug_playground.dart' show DebugPlaygroundApp;
 export 'src/editor.dart'

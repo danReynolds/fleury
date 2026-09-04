@@ -65,50 +65,6 @@ void main() {
           sequence: 2,
         ),
       ],
-      taskEvents: [
-        DebugTaskEventSummary.fromTaskEvent(
-          const TaskEvent<String>(
-            sequence: 1,
-            runId: 7,
-            kind: TaskEventKind.progress,
-            status: TaskStatus.running,
-            progress: TaskProgress(
-              current: 1,
-              total: 4,
-              label: 'scan\x1b]52;c;secret-token\x07',
-            ),
-          ),
-          source: 'indexer',
-        ),
-        DebugTaskEventSummary.fromTaskEvent(
-          const TaskEvent<String>(
-            sequence: 2,
-            runId: 7,
-            kind: TaskEventKind.output,
-            status: TaskStatus.running,
-            output: TaskOutput(
-              sequence: 1,
-              text: 'secret-token',
-              source: 'worker',
-              severity: TaskOutputSeverity.warning,
-              sanitized: true,
-              truncated: true,
-              originalLength: 128,
-            ),
-          ),
-          source: 'indexer',
-        ),
-        DebugTaskEventSummary.fromTaskEvent(
-          TaskEvent<String>(
-            sequence: 3,
-            runId: 7,
-            kind: TaskEventKind.failed,
-            status: TaskStatus.failed,
-            error: StateError('secret-token failed'),
-          ),
-          source: 'indexer',
-        ),
-      ],
       semanticTree: const SemanticTree(
         root: SemanticNode(
           id: SemanticNodeId('root'),
@@ -158,25 +114,6 @@ void main() {
     expect(delayedMarker['elapsedMicros'], 250000);
     expect(delayedMarker['sequence'], 2);
     expect(delayedMarker['fakeTime'], isTrue);
-    final taskEvents = json['taskEvents'] as List<Object?>;
-    expect(taskEvents, hasLength(3));
-    final progress = taskEvents.first as Map<String, Object?>;
-    expect(progress['source'], 'indexer');
-    expect(progress['kind'], 'progress');
-    expect(progress['progressCurrent'], 1);
-    expect(progress['progressTotal'], 4);
-    expect(progress['progressLabel'], contains(replacementCharacter));
-    final output = taskEvents[1] as Map<String, Object?>;
-    expect(output['outputSource'], 'worker');
-    expect(output['outputSeverity'], 'warning');
-    expect(output['outputSanitized'], isTrue);
-    expect(output['outputTruncated'], isTrue);
-    expect(output['outputOriginalLength'], 128);
-    final failure = taskEvents[2] as Map<String, Object?>;
-    expect(failure['errorType'], 'StateError');
-    expect(failure, isNot(containsPair('error', anything)));
-    expect(output, isNot(containsPair('text', anything)));
-
     final semantics = json['semantics'] as Map<String, Object?>;
     expect(semantics['schemaVersion'], 1);
     expect(semantics['nodeCount'], 2);
@@ -307,26 +244,6 @@ void main() {
             sequence: 2,
           ),
         ],
-        taskEvents: [
-          DebugTaskEventSummary.fromTaskEvent(
-            const TaskEvent<void>(
-              sequence: 1,
-              runId: 1,
-              kind: TaskEventKind.started,
-              status: TaskStatus.running,
-            ),
-            source: 'global-search',
-          ),
-          DebugTaskEventSummary.fromTaskEvent(
-            const TaskEvent<void>(
-              sequence: 2,
-              runId: 1,
-              kind: TaskEventKind.succeeded,
-              status: TaskStatus.succeeded,
-            ),
-            source: 'global-search',
-          ),
-        ],
         semanticTree: const SemanticTree(
           root: SemanticNode(
             id: SemanticNodeId('root'),
@@ -369,20 +286,6 @@ void main() {
       containsPair('sanitizedCount', 1),
     );
     expect(
-      artifact.hasTaskEvent(
-        source: 'global-search',
-        kind: 'started',
-        status: 'running',
-      ),
-      isTrue,
-    );
-    expect(
-      artifact.taskEventsFor(source: 'global-search').map((event) {
-        return event['kind'];
-      }),
-      ['started', 'succeeded'],
-    );
-    expect(
       artifact.hasTimeMarker(source: 'proof-clock', label: 'after-search'),
       isTrue,
     );
@@ -417,39 +320,6 @@ void main() {
     expect(table.id, 'table:runs');
     expect(table.enabled, isTrue);
     expect(table.state['selectedKey'], 'RUN-1002');
-  });
-
-  test('capture recorder stores bounded safe task event summaries', () {
-    final recorder = DebugCaptureRecorder(maxTaskEvents: 2);
-
-    recorder.recordTaskEvents('worker', const [
-      TaskEvent<void>(
-        sequence: 1,
-        runId: 1,
-        kind: TaskEventKind.started,
-        status: TaskStatus.running,
-      ),
-      TaskEvent<void>(
-        sequence: 2,
-        runId: 1,
-        kind: TaskEventKind.output,
-        status: TaskStatus.running,
-        output: TaskOutput(sequence: 1, text: 'secret-token', sanitized: true),
-      ),
-      TaskEvent<void>(
-        sequence: 3,
-        runId: 1,
-        kind: TaskEventKind.succeeded,
-        status: TaskStatus.succeeded,
-      ),
-    ]);
-
-    final artifact = DebugCaptureArtifact.fromSnapshot(recorder.snapshot());
-
-    expect(artifact.taskEvents.map((event) => event['sequence']), [2, 3]);
-    expect(artifact.json.toString(), isNot(contains('secret-token')));
-    expect(artifact.hasTaskEvent(source: 'worker', kind: 'output'), isTrue);
-    expect(artifact.hasTaskEvent(source: 'worker', kind: 'started'), isFalse);
   });
 
   test('capture recorder stores bounded deterministic time markers', () {
@@ -542,22 +412,6 @@ void main() {
       () => recorder.recordOutputSummary(
         const DebugOutputSummary(source: 'task', lineCount: 1),
       ),
-      throwsA(_stateError(message)),
-    );
-    expect(
-      () => recorder.recordTaskEvent(
-        'worker',
-        const TaskEvent<void>(
-          sequence: 1,
-          runId: 1,
-          kind: TaskEventKind.started,
-          status: TaskStatus.running,
-        ),
-      ),
-      throwsA(_stateError(message)),
-    );
-    expect(
-      () => recorder.recordTaskEvents('worker', const <TaskEvent<void>>[]),
       throwsA(_stateError(message)),
     );
     expect(

@@ -2,7 +2,6 @@ import 'dart:convert' show Encoding, utf8;
 import 'dart:io' show Directory, File, Platform, Process, ProcessStartMode;
 
 import '../terminal/terminal_driver.dart';
-import 'process_task.dart';
 
 /// Where an external editor command was resolved from.
 enum ExternalEditorCommandSource {
@@ -34,6 +33,31 @@ final class ExternalEditorCommand {
     if (arguments.isEmpty) return executable!;
     return '$executable ${arguments.join(' ')}';
   }
+}
+
+/// Resolved native process invocation used for an external editor session.
+///
+/// This value is intentionally scoped to the external-editor feature. Fleury
+/// does not prescribe a general-purpose process or asynchronous task model.
+final class ExternalEditorProcessRequest {
+  const ExternalEditorProcessRequest({
+    required this.executable,
+    this.arguments = const <String>[],
+    this.workingDirectory,
+    this.environment,
+    this.includeParentEnvironment = true,
+    this.runInShell = false,
+  });
+
+  final String executable;
+  final List<String> arguments;
+  final String? workingDirectory;
+  final Map<String, String>? environment;
+  final bool includeParentEnvironment;
+  final bool runInShell;
+
+  String get displayName =>
+      arguments.isEmpty ? executable : '$executable ${arguments.join(' ')}';
 }
 
 /// A resolved editor command and the policy source that selected it.
@@ -83,7 +107,7 @@ final class ExternalEditorResult {
   final int exitCode;
   final String filePath;
   final ExternalEditorCommand editorCommand;
-  final ProcessTaskCommand processCommand;
+  final ExternalEditorProcessRequest processCommand;
   final ExternalEditorCommandSource commandSource;
 
   bool get succeeded => exitCode == 0;
@@ -105,7 +129,7 @@ final class ExternalEditorException implements Exception {
 }
 
 typedef ExternalEditorProcessRunner =
-    Future<int> Function(ProcessTaskCommand command);
+    Future<int> Function(ExternalEditorProcessRequest request);
 typedef ExternalEditorTempFileFactory =
     Future<ExternalEditorTempFile> Function(
       ExternalEditorTempFileRequest request,
@@ -229,7 +253,7 @@ Future<ExternalEditorResult> editTextInExternalEditor({
   }
 }
 
-ProcessTaskCommand _toProcessCommand(
+ExternalEditorProcessRequest _toProcessCommand(
   ExternalEditorCommand command,
   String filePath, {
   required Map<String, String>? environment,
@@ -239,14 +263,14 @@ ProcessTaskCommand _toProcessCommand(
   final windows = isWindows ?? Platform.isWindows;
   if (command.shellCommand case final shellCommand?) {
     if (windows) {
-      return ProcessTaskCommand.configured(
+      return ExternalEditorProcessRequest(
         executable: 'cmd',
         arguments: ['/c', '$shellCommand ${_quoteWindowsArgument(filePath)}'],
         workingDirectory: workingDirectory,
         environment: environment,
       );
     }
-    return ProcessTaskCommand.configured(
+    return ExternalEditorProcessRequest(
       executable: '/bin/sh',
       arguments: ['-c', '$shellCommand ${_quotePosixArgument(filePath)}'],
       workingDirectory: workingDirectory,
@@ -254,7 +278,7 @@ ProcessTaskCommand _toProcessCommand(
     );
   }
 
-  return ProcessTaskCommand.configured(
+  return ExternalEditorProcessRequest(
     executable: command.executable!,
     arguments: [...command.arguments, filePath],
     workingDirectory: workingDirectory,
@@ -262,7 +286,9 @@ ProcessTaskCommand _toProcessCommand(
   );
 }
 
-Future<int> _runExternalEditorProcess(ProcessTaskCommand command) async {
+Future<int> _runExternalEditorProcess(
+  ExternalEditorProcessRequest command,
+) async {
   final process = await Process.start(
     command.executable,
     command.arguments,

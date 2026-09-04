@@ -15,7 +15,9 @@ export 'src/calendar_heatmap.dart' show CalendarHeatmap, CalendarWeekStart;
 export 'src/canvas.dart'
     show Canvas, CanvasBounds, CanvasContext, CanvasMarker, CanvasPainter;
 export 'src/color_picker.dart' show ColorPicker;
-export 'src/command_palette.dart' show Command, CommandPalette;
+export 'src/command_button.dart' show CommandButton;
+export 'src/command_palette.dart'
+    show Command, CommandPalette, CommandPaletteItem;
 export 'src/component_theme.dart' show FleuryWidgetTheme;
 export 'src/completion_text_input.dart'
     show
@@ -222,7 +224,6 @@ export 'src/patch_review.dart'
 export 'src/panel.dart' show Panel;
 export 'src/password_input.dart' show PasswordInput;
 export 'src/progress_bar.dart' show ProgressBar;
-export 'src/process_panel.dart' show ProcessPanel, buildProcessOutputLogEntries;
 export 'src/range_slider.dart' show RangeSlider;
 export 'src/search_panel.dart'
     show
@@ -266,9 +267,7 @@ export 'src/trace_timeline.dart'
         TraceTimelineKind,
         TraceTimelineSelectResult,
         TraceTimelineStatus,
-        exportTraceTimelineEntry,
-        traceTimelineEntriesForTaskEvents,
-        traceTimelineEntryForTaskEvent;
+        exportTraceTimelineEntry;
 export 'src/tool_call_card.dart'
     show
         ToolCallCard,

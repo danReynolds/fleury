@@ -630,30 +630,8 @@ final class LogRegionSearchIndex {
 
   /// Creates an empty index for [entries].
   ///
-  /// Call [appendFrom], [refresh], [appendFromCooperatively], or
-  /// [refreshCooperatively] before using it for queries.
+  /// Call [appendFrom] or [refresh] before using it for queries.
   LogRegionSearchIndex.empty(this.entries);
-
-  /// Builds a [LogRegionSearchIndex] cooperatively under [context].
-  ///
-  /// Use this from a [TaskController] or [DebouncedTaskController] when a
-  /// retained log buffer is large enough that synchronous index construction
-  /// would be visible to input/render responsiveness.
-  static Future<LogRegionSearchIndex> buildCooperatively(
-    List<LogEntry> entries, {
-    required TaskContext context,
-    TaskYieldPolicy yieldPolicy = const TaskYieldPolicy(),
-    String progressLabel = 'indexing logs',
-  }) async {
-    final index = LogRegionSearchIndex.empty(entries);
-    await index.appendFromCooperatively(
-      0,
-      context: context,
-      yieldPolicy: yieldPolicy,
-      progressLabel: progressLabel,
-    );
-    return index;
-  }
 
   final List<LogEntry> entries;
   final List<_IndexedLogEntry> _items = <_IndexedLogEntry>[];
@@ -677,36 +655,6 @@ final class LogRegionSearchIndex {
     appendFrom(0);
   }
 
-  Future<void> refreshCooperatively({
-    required TaskContext context,
-    TaskYieldPolicy yieldPolicy = const TaskYieldPolicy(),
-    String progressLabel = 'indexing logs',
-  }) async {
-    if (currentPrefixMatches()) {
-      if (_items.length < entries.length) {
-        await appendFromCooperatively(
-          _items.length,
-          context: context,
-          yieldPolicy: yieldPolicy,
-          progressLabel: progressLabel,
-        );
-      } else {
-        context.reportProgress(
-          current: _items.length,
-          total: entries.length,
-          label: '$progressLabel complete',
-        );
-      }
-      return;
-    }
-    await appendFromCooperatively(
-      0,
-      context: context,
-      yieldPolicy: yieldPolicy,
-      progressLabel: progressLabel,
-    );
-  }
-
   void appendFrom(int start) {
     if (start < _items.length) {
       _items.removeRange(start, _items.length);
@@ -716,33 +664,6 @@ final class LogRegionSearchIndex {
     for (var index = start; index < entries.length; index++) {
       _appendEntry(index);
     }
-  }
-
-  Future<void> appendFromCooperatively(
-    int start, {
-    required TaskContext context,
-    TaskYieldPolicy yieldPolicy = const TaskYieldPolicy(),
-    String progressLabel = 'indexing logs',
-  }) async {
-    if (start < _items.length) {
-      _items.removeRange(start, _items.length);
-      _tokenIndex.clear();
-      start = 0;
-    }
-    final checkpoint = yieldPolicy.start(context);
-    for (var index = start; index < entries.length; index++) {
-      _appendEntry(index);
-      await checkpoint.tick(
-        current: index + 1,
-        total: entries.length,
-        label: '$progressLabel ${index + 1}/${entries.length}',
-      );
-    }
-    context.reportProgress(
-      current: _items.length,
-      total: entries.length,
-      label: '$progressLabel complete',
-    );
   }
 
   void _appendEntry(int index) {

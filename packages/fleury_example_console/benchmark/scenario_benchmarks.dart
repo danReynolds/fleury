@@ -211,8 +211,8 @@ final class _DemoAppJourneyScenario implements _ScenarioBenchmark {
     final transcript = _Stats.from(
       samples.map((sample) => sample.transcriptUs),
     );
-    final process = _Stats.from(
-      samples.map((sample) => sample.processRunToSuccessUs),
+    final workerCommand = _Stats.from(
+      samples.map((sample) => sample.workerCommandUs),
     );
     final diagnostics = _Stats.from(
       samples.map((sample) => sample.diagnosticsUs),
@@ -246,7 +246,7 @@ final class _DemoAppJourneyScenario implements _ScenarioBenchmark {
         'runsFilterUs': runsFilter.toJson(),
         'runsCopyUs': runsCopy.toJson(),
         'transcriptUs': transcript.toJson(),
-        'processRunToSuccessUs': process.toJson(),
+        'workerCommandUs': workerCommand.toJson(),
         'diagnosticsUs': diagnostics.toJson(),
         'debugCaptureUs': debugCapture.toJson(),
         'semanticQueryUs': semanticQuery.toJson(),
@@ -266,10 +266,8 @@ final class _DemoAppJourneyScenario implements _ScenarioBenchmark {
         'globalSearchSelectedKey': last.globalSearchSelectedKey,
         'indexedLogRowCount': last.indexedLogRowCount,
         'indexedLogFilterCount': last.indexedLogFilterCount,
-        'indexedLogProgressCurrent': last.indexedLogProgressCurrent,
         'indexedLogSelectedKey': last.indexedLogSelectedKey,
         'transcriptRowCount': last.transcriptRowCount,
-        'processOutputCount': last.processOutputCount,
         'diagnosticCapabilityRows': last.diagnosticCapabilityRows,
         'unsafeFrameCount': last.unsafeFrameCount,
         'rssDeltaBytes': rssAfter - rssBefore,
@@ -288,8 +286,7 @@ final class _DemoAppJourneyScenario implements _ScenarioBenchmark {
       pass: correct,
       notes: const <String>[
         'Candidate thresholds are informational until stable baselines exist.',
-        'Scenario measures the integrated demo app, including app shell, command palette, debounced global search, cooperative indexed logs, DataTable, LogRegion, process task, diagnostics, semantics, accessibility, and debug capture.',
-        'The native process step runs the current Dart executable with --version, so process timing includes OS spawn variance.',
+        'Scenario measures the integrated demo app, including app shell, command palette, debounced global search, indexed logs, DataTable, LogRegion, commands, diagnostics, semantics, accessibility, and debug capture.',
       ],
     );
   }
@@ -350,11 +347,7 @@ Future<_DemoAppJourneySample> _runDemoAppJourney(_ScenarioConfig config) async {
     await _invoke(tester, demoCommandGoSearch);
     await _invoke(tester, demoCommandFocusSearch);
     tester.type('API deploy smoke');
-    final searchTask = await _waitForTaskStatus(
-      tester,
-      label: 'Global search',
-      status: 'succeeded',
-    );
+    await Future<void>.delayed(const Duration(milliseconds: 80));
     await _flushAsyncUi(tester);
     frame = tester.render(size: config.terminalSize);
     unsafeFrameCount += _unsafeVisibleFrameCount(frame, config.terminalSize);
@@ -376,11 +369,6 @@ Future<_DemoAppJourneySample> _runDemoAppJourney(_ScenarioConfig config) async {
     final indexedLogs = Stopwatch()..start();
     await _invoke(tester, demoCommandGoIndex);
     await _invoke(tester, demoCommandBuildLogIndex);
-    var indexTask = await _waitForTaskProgress(
-      tester,
-      label: 'Demo log index',
-      current: demoIndexedLogInitialCount,
-    );
     await _invoke(tester, demoCommandFocusIndexFilter);
     tester.type('target:payment');
     await _flushAsyncUi(tester);
@@ -395,11 +383,6 @@ Future<_DemoAppJourneySample> _runDemoAppJourney(_ScenarioConfig config) async {
     final indexedLogSelectedKey =
         indexedLog.state.selectedKey?.toString() ?? '';
     await _invoke(tester, demoCommandAppendIndexedLogBurst);
-    indexTask = await _waitForTaskProgress(
-      tester,
-      label: 'Demo log index',
-      current: demoIndexedLogInitialCount + demoIndexedLogAppendCount,
-    );
     await _flushAsyncUi(tester);
     frame = tester.render(size: config.terminalSize);
     unsafeFrameCount += _unsafeVisibleFrameCount(frame, config.terminalSize);
@@ -410,11 +393,11 @@ Future<_DemoAppJourneySample> _runDemoAppJourney(_ScenarioConfig config) async {
     );
     indexedLogs.stop();
 
-    final startTask = Stopwatch()..start();
-    await _invoke(tester, demoCommandStartTask);
+    final workerCommand = Stopwatch()..start();
+    await _invoke(tester, demoCommandStartWorker);
     frame = tester.render(size: config.terminalSize);
     unsafeFrameCount += _unsafeVisibleFrameCount(frame, config.terminalSize);
-    startTask.stop();
+    workerCommand.stop();
 
     final runsFilter = Stopwatch()..start();
     await _invoke(tester, demoCommandGoRuns);
@@ -458,18 +441,6 @@ Future<_DemoAppJourneySample> _runDemoAppJourney(_ScenarioConfig config) async {
     );
     transcript.stop();
 
-    final process = Stopwatch()..start();
-    await _invoke(tester, demoCommandGoProcess);
-    await _invoke(tester, demoCommandRunProcess);
-    final processTask = await _waitForTaskStatus(
-      tester,
-      label: 'Dart version',
-      status: 'succeeded',
-    );
-    frame = tester.render(size: config.terminalSize);
-    unsafeFrameCount += _unsafeVisibleFrameCount(frame, config.terminalSize);
-    process.stop();
-
     final debugCapture = Stopwatch()..start();
     await _invoke(tester, demoCommandGoDiagnostics);
     await _invoke(tester, demoCommandCaptureDebug);
@@ -506,16 +477,11 @@ Future<_DemoAppJourneySample> _runDemoAppJourney(_ScenarioConfig config) async {
         app.state.lastCommandStatus == 'completed' &&
         app.state.commandCount != null &&
         (app.state.commandCount ?? 0) >= 15 &&
-        (app.state.statusCount ?? 0) >= 5 &&
+        (app.state.statusCount ?? 0) >= 3 &&
         diagnosticsNode.state['capabilityRowCount'] == 5 &&
         diagnosticsNode.state.clipboardPolicy == 'allowed' &&
-        searchTask.state.taskStatus == 'succeeded' &&
-        searchTask.state.progressLabel == '1 matches' &&
         searchPanel.state.collectionRowCount == 1 &&
         searchPanel.state.selectedKey == 'run.RUN-1002' &&
-        indexTask.state.taskStatus == 'succeeded' &&
-        indexTask.state.progressCurrent ==
-            demoIndexedLogInitialCount + demoIndexedLogAppendCount &&
         indexedLog.state['totalEntryCount'] ==
             demoIndexedLogInitialCount + demoIndexedLogAppendCount &&
         indexedLogFilterCount == 48 &&
@@ -529,9 +495,6 @@ Future<_DemoAppJourneySample> _runDemoAppJourney(_ScenarioConfig config) async {
         disabledBurst.status == CommandInvocationStatus.disabled &&
         transcriptLog.state.collectionRowCount != null &&
         (transcriptLog.state.collectionRowCount ?? 0) >= 6 &&
-        processTask.state.taskStatus == 'succeeded' &&
-        processTask.state.outputCount != null &&
-        (processTask.state.outputCount ?? 0) > 0 &&
         debugCaptureBytes > 0 &&
         accessibilityText.contains('Fleury Demo Console') &&
         accessibilityText.contains('Diagnostics') &&
@@ -545,11 +508,10 @@ Future<_DemoAppJourneySample> _runDemoAppJourney(_ScenarioConfig config) async {
       globalSearchUs: globalSearch.elapsedMicroseconds,
       indexedLogsUs: indexedLogs.elapsedMicroseconds,
       diagnosticsUs: diagnostics.elapsedMicroseconds,
-      startTaskUs: startTask.elapsedMicroseconds,
+      workerCommandUs: workerCommand.elapsedMicroseconds,
       runsFilterUs: runsFilter.elapsedMicroseconds,
       runsCopyUs: runsCopy.elapsedMicroseconds,
       transcriptUs: transcript.elapsedMicroseconds,
-      processRunToSuccessUs: process.elapsedMicroseconds,
       debugCaptureUs: debugCapture.elapsedMicroseconds,
       semanticQueryUs: semanticQuery.elapsedMicroseconds,
       firstFrameAnsiBytes: _ansiBytes(firstFrame, config.terminalSize),
@@ -568,11 +530,8 @@ Future<_DemoAppJourneySample> _runDemoAppJourney(_ScenarioConfig config) async {
       globalSearchSelectedKey: searchPanel.state.selectedKey?.toString() ?? '',
       indexedLogRowCount: indexedLog.state['totalEntryCount'] as int? ?? -1,
       indexedLogFilterCount: indexedLog.state.collectionRowCount ?? -1,
-      indexedLogProgressCurrent: (indexTask.state.progressCurrent ?? -1)
-          .toInt(),
       indexedLogSelectedKey: indexedLogSelectedKey,
       transcriptRowCount: transcriptLog.state.collectionRowCount ?? -1,
-      processOutputCount: processTask.state.outputCount ?? -1,
       diagnosticCapabilityRows:
           diagnosticsNode.state['capabilityRowCount'] as int? ?? -1,
       unsafeFrameCount: unsafeFrameCount,
@@ -596,52 +555,6 @@ Future<void> _flushAsyncUi(FleuryTester tester) async {
   tester.pump();
   await Future<void>.delayed(Duration.zero);
   tester.pump();
-}
-
-Future<SemanticNode> _waitForTaskStatus(
-  FleuryTester tester, {
-  required String label,
-  required String status,
-}) async {
-  for (var attempt = 0; attempt < 50; attempt++) {
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-    tester.pump();
-    final matches = tester.semantics().where(
-      role: SemanticRole.task,
-      label: label,
-    );
-    for (final node in matches) {
-      if (node.state.taskStatus == status) return node;
-    }
-  }
-  throw StateError('Timed out waiting for task `$label` to reach `$status`.');
-}
-
-Future<SemanticNode> _waitForTaskProgress(
-  FleuryTester tester, {
-  required String label,
-  required num current,
-}) async {
-  for (var attempt = 0; attempt < 50; attempt++) {
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-    tester.pump();
-    final matches = tester.semantics().where(
-      role: SemanticRole.task,
-      label: label,
-    );
-    for (final node in matches) {
-      if (node.state.progressCurrent == current) return node;
-    }
-  }
-  final states = tester
-      .semantics()
-      .where(role: SemanticRole.task, label: label)
-      .map((node) => node.state.values)
-      .toList();
-  throw StateError(
-    'Timed out waiting for task `$label` to report progress `$current`: '
-    '$states',
-  );
 }
 
 int _unsafeVisibleFrameCount(CellBuffer buffer, CellSize size) {
@@ -677,11 +590,10 @@ final class _DemoAppJourneySample {
     required this.globalSearchUs,
     required this.indexedLogsUs,
     required this.diagnosticsUs,
-    required this.startTaskUs,
+    required this.workerCommandUs,
     required this.runsFilterUs,
     required this.runsCopyUs,
     required this.transcriptUs,
-    required this.processRunToSuccessUs,
     required this.debugCaptureUs,
     required this.semanticQueryUs,
     required this.firstFrameAnsiBytes,
@@ -700,10 +612,8 @@ final class _DemoAppJourneySample {
     required this.globalSearchSelectedKey,
     required this.indexedLogRowCount,
     required this.indexedLogFilterCount,
-    required this.indexedLogProgressCurrent,
     required this.indexedLogSelectedKey,
     required this.transcriptRowCount,
-    required this.processOutputCount,
     required this.diagnosticCapabilityRows,
     required this.unsafeFrameCount,
     required this.correct,
@@ -716,11 +626,10 @@ final class _DemoAppJourneySample {
   final int globalSearchUs;
   final int indexedLogsUs;
   final int diagnosticsUs;
-  final int startTaskUs;
+  final int workerCommandUs;
   final int runsFilterUs;
   final int runsCopyUs;
   final int transcriptUs;
-  final int processRunToSuccessUs;
   final int debugCaptureUs;
   final int semanticQueryUs;
   final int firstFrameAnsiBytes;
@@ -739,10 +648,8 @@ final class _DemoAppJourneySample {
   final String globalSearchSelectedKey;
   final int indexedLogRowCount;
   final int indexedLogFilterCount;
-  final int indexedLogProgressCurrent;
   final String indexedLogSelectedKey;
   final int transcriptRowCount;
-  final int processOutputCount;
   final int diagnosticCapabilityRows;
   final int unsafeFrameCount;
   final bool correct;

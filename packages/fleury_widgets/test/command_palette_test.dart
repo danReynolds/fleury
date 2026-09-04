@@ -19,7 +19,11 @@ class _Capture extends StatelessWidget {
 
 /// Presents the palette and lets the entrance settle (its TextInput
 /// autofocuses on build — no focus hack needed under present).
-void _open(FleuryTester tester, BuildContext ctx, List<Command> cmds) {
+void _open(
+  FleuryTester tester,
+  BuildContext ctx,
+  List<CommandPaletteItem> cmds,
+) {
   Navigator.of(ctx).present<void>(CommandPalette(commands: cmds));
   tester.pump(const Duration(milliseconds: 300));
   tester.render();
@@ -63,11 +67,24 @@ Future<void> _settleClose(FleuryTester tester) async {
 
 void main() {
   late BuildContext ctx;
-  List<Command> commands(void Function(String) onRun) => [
-    Command(label: 'Open File', onInvoke: () => onRun('open')),
-    Command(label: 'Save File', onInvoke: () => onRun('save')),
-    Command(label: 'Close Window', onInvoke: () => onRun('close')),
+  List<CommandPaletteItem> commands(void Function(String) onRun) => [
+    CommandPaletteItem(label: 'Open File', onInvoke: () => onRun('open')),
+    CommandPaletteItem(label: 'Save File', onInvoke: () => onRun('save')),
+    CommandPaletteItem(label: 'Close Window', onInvoke: () => onRun('close')),
   ];
+
+  test('deprecated Command remains a type-identical list alias', () {
+    // ignore: deprecated_member_use
+    final List<Command> legacy = [
+      // ignore: deprecated_member_use
+      Command(label: 'Open File', onInvoke: () {}),
+    ];
+    final palette = CommandPalette(commands: legacy);
+    // ignore: deprecated_member_use
+    final List<Command> typedRead = palette.commands!;
+
+    expect(identical(typedRead, legacy), isTrue);
+  });
 
   testWidgets('palette is bounded to its content, not the full viewport', (
     tester,
@@ -123,7 +140,7 @@ void main() {
     var ran = false;
     tester.pumpWidget(Navigator(home: _Capture((c) => ctx = c)));
     _open(tester, ctx, [
-      Command(label: 'Dangerous', onInvoke: () => ran = true),
+      CommandPaletteItem(label: 'Dangerous', onInvoke: () => ran = true),
     ]);
 
     tester.sendKey(const KeyEvent(KeyCode.escape));
@@ -159,7 +176,7 @@ void main() {
 
     for (var i = 0; i < 4; i++) {
       _open(tester, ctx, [
-        Command(label: 'Run Cycle $i', onInvoke: () => calls += 1),
+        CommandPaletteItem(label: 'Run Cycle $i', onInvoke: () => calls += 1),
       ]);
       tester.type('Run Cycle $i');
       tester.pump();
@@ -210,7 +227,7 @@ void main() {
     tester.pumpWidget(Navigator(home: _Capture((c) => ctx = c)));
     _open(tester, ctx, [
       for (var i = 0; i < 200; i++)
-        Command(label: 'Command $i', onInvoke: () {}),
+        CommandPaletteItem(label: 'Command $i', onInvoke: () {}),
     ]);
 
     final tree = tester.semantics();
@@ -266,7 +283,7 @@ void main() {
     var ran = false;
     tester.pumpWidget(Navigator(home: _Capture((c) => ctx = c)));
     _open(tester, ctx, [
-      Command(label: 'Dangerous', onInvoke: () => ran = true),
+      CommandPaletteItem(label: 'Dangerous', onInvoke: () => ran = true),
     ]);
 
     final result = await tester.invokeSemanticAction(
@@ -716,6 +733,117 @@ void main() {
       final command = _paletteCommandRows(tester).single;
       expect(command.label, 'Delete Everything');
       expect(command.enabled, isFalse);
+    });
+
+    testWidgets('registry refresh preserves selection by command id', (
+      tester,
+    ) async {
+      const inspect = CommandId('packages.inspect');
+      final phase = ValueNotifier<int>(0);
+      addTearDown(phase.dispose);
+      tester.pumpWidget(
+        FleuryApp(
+          title: 'App',
+          child: Navigator(
+            home: ListenableBuilder(
+              listenable: phase,
+              builder: (context, _) {
+                final current = phase.value;
+                final openCommand = AppCommand(
+                  id: const CommandId('packages.open'),
+                  title: 'Open Package',
+                  run: (_) {},
+                );
+                final newCommand = AppCommand(
+                  id: const CommandId('packages.new'),
+                  title: 'New Package',
+                  run: (_) {},
+                );
+                final inspectCommand = AppCommand(
+                  id: inspect,
+                  title: current > 0
+                      ? 'Inspect Package Now'
+                      : 'Inspect Package',
+                  enabled: (_) => current > 0,
+                  visible: (_) => current < 2,
+                  run: (_) {},
+                );
+                return CommandScope(
+                  commands: [
+                    openCommand,
+                    if (current == 0) inspectCommand,
+                    newCommand,
+                    if (current > 0) inspectCommand,
+                  ],
+                  child: _Capture((c) => ctx = c),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+
+      _openRegistryPalette(tester, ctx);
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      tester.pump();
+
+      var selected = _paletteCommandRows(
+        tester,
+      ).singleWhere((node) => node.selected);
+      expect(selected.state.commandId, inspect.value);
+      expect(selected.label, 'Inspect Package');
+      expect(selected.enabled, isFalse);
+
+      // Rebuilding CommandScope replaces the registry's local command list.
+      // The same command moves to row three and changes presentation, but
+      // remains selected because its stable ID did not change.
+      phase.value = 1;
+      tester.pump();
+
+      final refreshedRows = _paletteCommandRows(tester);
+      expect(
+        refreshedRows.where((node) => node.selected),
+        hasLength(1),
+        reason: refreshedRows
+            .map(
+              (node) =>
+                  '${node.state.commandId}:${node.selected}:${node.state.values}',
+            )
+            .join(', '),
+      );
+      selected = refreshedRows.singleWhere((node) => node.selected);
+      expect(selected.state.commandId, inspect.value);
+      expect(selected.label, 'Inspect Package Now');
+      expect(selected.enabled, isTrue);
+      expect(
+        tester
+            .semantics()
+            .single(role: SemanticRole.commandPalette)
+            .state
+            .selectedKey,
+        2,
+      );
+
+      // If the selected command disappears, keep the nearest surviving row
+      // selected instead of jumping unexpectedly to the top.
+      phase.value = 2;
+      tester.pump();
+
+      selected = _paletteCommandRows(
+        tester,
+      ).singleWhere((node) => node.selected);
+      expect(selected.state.commandId, 'packages.new');
+      expect(
+        tester
+            .semantics()
+            .single(role: SemanticRole.commandPalette)
+            .state
+            .selectedKey,
+        1,
+      );
+
+      tester.sendKey(const KeyEvent(KeyCode.escape));
+      await _settleClose(tester);
     });
 
     testWidgets('uses focused source context for scoped commands', (

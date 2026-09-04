@@ -133,7 +133,7 @@ changes intentionally escalate to a full semantic rebuild.
 
 Here is the visual path for a normal state change:
 
-1. An input event, timer, animation tick, task update, or semantic action changes
+1. An input event, timer, animation tick, stream update, or semantic action changes
    state.
 2. `setState` or a render-object setter marks the relevant element or render
    object dirty.

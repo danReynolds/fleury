@@ -609,7 +609,7 @@ Tabs(
     blurb:
         'A scrollable, keyboard-navigable viewer for full Markdown documents.',
     cols: 60,
-    rows: 13,
+    rows: 12,
     interactive: true,
     builder: () => _framed(MarkdownView(markdown: _markdownSample)),
   ),
@@ -1331,6 +1331,45 @@ form.clearErrors();''',
     ),
   ),
   ExampleInfo(
+    id: 'commandbutton.basic',
+    widget: 'CommandButton',
+    category: 'Inputs & controls',
+    blurb:
+        'A button that resolves its label, availability, and action from an '
+        'application command.',
+    cols: 42,
+    rows: 5,
+    interactive: true,
+    code: '''CommandScope(
+  commands: [
+    AppCommand(
+      id: const CommandId('project.runTests'),
+      title: 'Run tests',
+      run: (_) => runTests(),
+    ),
+  ],
+  child: const CommandButton(
+    command: CommandId('project.runTests'),
+    variant: ButtonVariant.primary,
+  ),
+)''',
+    builder: () => _framed(
+      CommandScope(
+        commands: <AppCommand>[
+          AppCommand(
+            id: const CommandId('project.runTests'),
+            title: 'Run tests',
+            run: (_) {},
+          ),
+        ],
+        child: const CommandButton(
+          command: CommandId('project.runTests'),
+          variant: ButtonVariant.primary,
+        ),
+      ),
+    ),
+  ),
+  ExampleInfo(
     id: 'commandpalette.basic',
     widget: 'CommandPalette',
     category: 'Navigation & overlays',
@@ -1342,11 +1381,27 @@ form.clearErrors();''',
     interactive: true,
     builder: () => _framed(
       CommandPalette(
-        commands: <Command>[
-          Command(label: 'Open file…', shortcut: 'Ctrl-P', onInvoke: () {}),
-          Command(label: 'Toggle theme', category: 'View', onInvoke: () {}),
-          Command(label: 'Run tests', shortcut: 'Ctrl-T', onInvoke: () {}),
-          Command(label: 'Git: commit', category: 'Git', onInvoke: () {}),
+        commands: <CommandPaletteItem>[
+          CommandPaletteItem(
+            label: 'Open file…',
+            shortcut: 'Ctrl-P',
+            onInvoke: () {},
+          ),
+          CommandPaletteItem(
+            label: 'Toggle theme',
+            category: 'View',
+            onInvoke: () {},
+          ),
+          CommandPaletteItem(
+            label: 'Run tests',
+            shortcut: 'Ctrl-T',
+            onInvoke: () {},
+          ),
+          CommandPaletteItem(
+            label: 'Git: commit',
+            category: 'Git',
+            onInvoke: () {},
+          ),
         ],
       ),
     ),
@@ -1780,6 +1835,18 @@ form.clearErrors();''',
     builder: () => const EditorApp(),
   ),
   ExampleInfo(
+    id: 'showcase.commands',
+    widget: 'Command editor',
+    category: 'Showcases',
+    blurb:
+        'Open a live command palette over an editor whose actions stay in sync '
+        'with its toolbar, shortcuts, semantics, and tests.',
+    cols: 82,
+    rows: 28,
+    interactive: true,
+    builder: () => const CommandWorkbenchApp(openPaletteInitially: true),
+  ),
+  ExampleInfo(
     id: 'showcase.finance',
     widget: 'Personal finance',
     category: 'Showcases',
@@ -1874,6 +1941,18 @@ form.clearErrors();''',
     rows: 14,
     interactive: true,
     builder: () => const _StreamLoadingTour(),
+  ),
+  ExampleInfo(
+    id: 'commands.overview',
+    widget: 'AppCommand',
+    category: 'Guide examples',
+    blurb:
+        'Use one save command through a button, Ctrl+S, the command palette, '
+        'semantics, and a stable programmatic ID.',
+    cols: 60,
+    rows: 13,
+    interactive: true,
+    builder: () => const CommandIntroApp(),
   ),
   ExampleInfo(
     id: 'animation.state',

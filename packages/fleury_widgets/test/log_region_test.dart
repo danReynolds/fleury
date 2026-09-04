@@ -478,65 +478,6 @@ void main() {
         );
       },
     );
-
-    test('search index can build and refresh cooperatively', () async {
-      final entries = <LogEntry>[
-        const LogEntry(id: 'run-100', message: 'queued'),
-        const LogEntry(id: 'run-200', message: 'deploy failed'),
-        const LogEntry(id: 'run-300', message: 'deploy passed'),
-      ];
-      final controller = TaskController<LogRegionSearchIndex>(id: 'log-index');
-
-      final result = await controller.start(
-        (context) => LogRegionSearchIndex.buildCooperatively(
-          entries,
-          context: context,
-          yieldPolicy: const TaskYieldPolicy(
-            itemBudget: 1,
-            elapsedBudget: Duration(days: 1),
-          ),
-          progressLabel: 'index logs',
-        ),
-      );
-
-      expect(result.succeeded, isTrue);
-      final index = result.value!;
-      expect(index.length, 3);
-      expect(controller.progress?.label, 'index logs complete');
-      expect(
-        controller.events.where(
-          (event) => event.kind == TaskEventKind.progress,
-        ),
-        hasLength(greaterThanOrEqualTo(3)),
-      );
-      expect(
-        index.entryOrder(const LogRegionFilterDescriptor(query: 'run-2')),
-        [1],
-      );
-
-      entries.add(const LogEntry(id: 'run-201', message: 'deploy retried'));
-      final refresh = await controller.start((context) async {
-        await index.refreshCooperatively(
-          context: context,
-          yieldPolicy: const TaskYieldPolicy(
-            itemBudget: 1,
-            elapsedBudget: Duration(days: 1),
-          ),
-          progressLabel: 'refresh logs',
-        );
-        return index;
-      });
-
-      expect(refresh.succeeded, isTrue);
-      expect(index.length, 4);
-      expect(controller.progress?.label, 'refresh logs complete');
-      expect(
-        index.entryOrder(const LogRegionFilterDescriptor(query: 'run-20')),
-        [1, 3],
-      );
-
-      controller.dispose();
-    });
   });
 
   testWidgets('followTail advances selection when entries append', (tester) {

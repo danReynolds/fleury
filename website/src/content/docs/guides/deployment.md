@@ -69,7 +69,7 @@ nothing:
 The output is a static `.js` file — host it on any CDN or static site, ship it
 offline, and scale it like a normal web asset. The one constraint: a client-side
 bundle can only use **web-safe widgets**. The handful that need the platform
-(file pickers, the log and process panels, anything touching `dart:io`) won't
+(file pickers and other surfaces that touch `dart:io`) won't
 compile to JS — import `package:fleury_widgets/fleury_widgets_web.dart` rather
 than the full barrel, and the compiler will hold you to it. To preview those
 widgets in a browser during development, use `serve` instead.
