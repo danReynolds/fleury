@@ -1,5 +1,7 @@
 import 'package:fleury/fleury_core.dart';
 
+import 'glyphs.dart';
+
 /// How a [Table] column is sized.
 sealed class TableColumnWidth {
   const TableColumnWidth();
@@ -554,6 +556,7 @@ class _TableBody extends MultiChildRenderObjectWidget {
 
   @override
   RenderObject createRenderObject(BuildContext context) => RenderTable(
+    glyphTier: drawingGlyphTierOf(context),
     columnCount: columnCount,
     columnWidths: columnWidths,
     columnSpacing: columnSpacing,
@@ -576,7 +579,8 @@ class _TableBody extends MultiChildRenderObjectWidget {
       ..separatorStyle = separatorStyle
       ..selectedRow = selectedRow
       ..selectedStyle = selectedStyle
-      ..onVisibleRange = onVisibleRange;
+      ..onVisibleRange = onVisibleRange
+      ..glyphTier = drawingGlyphTierOf(context);
   }
 }
 
@@ -586,6 +590,7 @@ class _TableBody extends MultiChildRenderObjectWidget {
 /// pinned) and the selected row is highlighted.
 class RenderTable extends RenderObject implements RenderObjectWithChildren {
   RenderTable({
+    GlyphTier glyphTier = GlyphTier.unicode,
     required int columnCount,
     required List<TableColumnWidth> columnWidths,
     required int columnSpacing,
@@ -595,7 +600,8 @@ class RenderTable extends RenderObject implements RenderObjectWithChildren {
     required int? selectedRow,
     required CellStyle selectedStyle,
     required void Function(int, int) onVisibleRange,
-  }) : _columnCount = columnCount,
+  }) : _glyphTier = glyphTier,
+       _columnCount = columnCount,
        _columnWidths = columnWidths,
        _columnSpacing = columnSpacing,
        _hasHeader = hasHeader,
@@ -604,6 +610,13 @@ class RenderTable extends RenderObject implements RenderObjectWithChildren {
        _selectedRow = selectedRow,
        _selectedStyle = selectedStyle,
        _onVisibleRange = onVisibleRange;
+
+  GlyphTier _glyphTier;
+  set glyphTier(GlyphTier value) {
+    if (_glyphTier == value) return;
+    _glyphTier = value;
+    markNeedsPaintOnly();
+  }
 
   int _columnCount;
   set columnCount(int v) {
@@ -987,9 +1000,12 @@ class RenderTable extends RenderObject implements RenderObjectWithChildren {
         if (cell.role != CellRole.leading) continue;
         final tgtCol = offset.col + col;
         if (tgtCol < 0 || tgtCol >= buffer.size.cols) continue;
-        buffer.writeGrapheme(
-          CellOffset(tgtCol, tgtRow),
-          cell.grapheme!,
+        buffer.replayCellFrom(
+          scratch,
+          col,
+          ny,
+          tgtCol,
+          tgtRow,
           style: isSel ? cell.style.merge(_selectedStyle) : cell.style,
         );
       }
@@ -1032,7 +1048,11 @@ class RenderTable extends RenderObject implements RenderObjectWithChildren {
       for (var col = 0; col < _ownWidth; col++) {
         final c = offset.col + col;
         if (c < 0 || c >= buffer.size.cols) continue;
-        buffer.writeGrapheme(CellOffset(c, row), '─', style: _separatorStyle);
+        buffer.writeGrapheme(
+          CellOffset(c, row),
+          _glyphTier == GlyphTier.ascii ? '-' : '─',
+          style: _separatorStyle,
+        );
       }
     }
   }

@@ -1,6 +1,7 @@
 import 'package:fleury/fleury_core.dart';
 
 import 'canvas.dart';
+import 'chart_label.dart';
 import 'glyphs.dart';
 import 'sub_cell_buffer.dart';
 
@@ -458,7 +459,7 @@ class _LineChartState extends State<LineChart> {
       cursorX: cursorX,
       marker: widget.marker,
       strokeWidth: widget.strokeWidth,
-      glyphTier: MediaQuery.glyphTierOf(context),
+      glyphTier: drawingGlyphTierOf(context),
     );
 
     final semantic = Semantics(
@@ -633,6 +634,7 @@ class _RawLineChart extends LeafRenderObjectWidget {
 
   @override
   RenderObject createRenderObject(BuildContext context) => RenderLineChart(
+    textPolicy: MediaQuery.textPolicyOf(context),
     series: series,
     xRange: xRange,
     yRange: yRange,
@@ -676,13 +678,15 @@ class _RawLineChart extends LeafRenderObjectWidget {
       ..cursorX = cursorX
       ..marker = marker
       ..strokeWidth = strokeWidth
-      ..glyphTier = glyphTier;
+      ..glyphTier = glyphTier
+      ..textPolicy = MediaQuery.textPolicyOf(context);
   }
 }
 
 /// Render object behind [LineChart]. See its docs.
 class RenderLineChart extends RenderObject {
   RenderLineChart({
+    TextPresentationPolicy textPolicy = TextPresentationPolicy.spec,
     required List<LineSeries> series,
     required (num min, num max)? xRange,
     required (num min, num max)? yRange,
@@ -701,7 +705,8 @@ class RenderLineChart extends RenderObject {
     required CanvasMarker marker,
     required int? strokeWidth,
     required GlyphTier glyphTier,
-  }) : _series = series,
+  }) : _textPolicy = textPolicy,
+       _series = series,
        _xRange = xRange,
        _yRange = yRange,
        _padding = padding,
@@ -719,6 +724,15 @@ class RenderLineChart extends RenderObject {
        _marker = marker,
        _strokeWidth = strokeWidth,
        _glyphTier = glyphTier;
+
+  TextPresentationPolicy _textPolicy;
+  set textPolicy(TextPresentationPolicy value) {
+    if (_textPolicy == value) return;
+    _textPolicy = value;
+    markNeedsLayout();
+  }
+
+  ChartLabel _label(String text) => ChartLabel(text, _textPolicy);
 
   List<LineSeries> _series;
   set series(List<LineSeries> v) {
@@ -838,6 +852,9 @@ class RenderLineChart extends RenderObject {
     _strokeWidth = v;
     markNeedsPaintOnly();
   }
+
+  GlyphTier get _drawingGlyphTier =>
+      drawingGlyphTier(_glyphTier, _textPolicy.widths);
 
   GlyphTier _glyphTier;
   set glyphTier(GlyphTier v) {
@@ -1071,7 +1088,7 @@ class RenderLineChart extends RenderObject {
       buffer,
       CellOffset(offset.col + plotLeft, offset.row),
       CellStyle(foreground: _defaultColor),
-      glyphTier: _glyphTier,
+      glyphTier: _drawingGlyphTier,
     );
 
     // Reference labels paint on top of the data so they stay readable
@@ -1311,7 +1328,7 @@ class RenderLineChart extends RenderObject {
         final rowFromBottom = plotRows - 1 - r;
         final cellEighths = (hEighths - rowFromBottom * 8).clamp(0, 8);
         if (cellEighths <= 0) continue;
-        final glyph = verticalLevelGlyph(_glyphTier, cellEighths);
+        final glyph = verticalLevelGlyph(_drawingGlyphTier, cellEighths);
         if (glyph.isEmpty) continue;
         final vpos = plotRows == 1 ? 0.0 : rowFromBottom / (plotRows - 1);
         buffer.writeGrapheme(
@@ -1365,7 +1382,7 @@ class RenderLineChart extends RenderObject {
     int plotRows,
   ) {
     if (plotCols < 2 || plotRows < 2) return;
-    const dot = '·';
+    final dot = _drawingGlyphTier == GlyphTier.ascii ? '.' : '·';
     // Horizontal gridlines at y-min (bottom), y-mid, y-max (top).
     final rows = <int>{
       offset.row, // top → y-max
@@ -1423,9 +1440,12 @@ class RenderLineChart extends RenderObject {
       final t = (y - ymin) / (ymax - ymin);
       final row = offset.row + ((1 - t) * (plotRows - 1)).round();
       final glyph = switch (ref.style) {
-        ReferenceStyle.solid => '─',
-        ReferenceStyle.dashed => '╌',
-        ReferenceStyle.dotted => '·',
+        ReferenceStyle.solid =>
+          _drawingGlyphTier == GlyphTier.ascii ? '-' : '─',
+        ReferenceStyle.dashed =>
+          _drawingGlyphTier == GlyphTier.ascii ? '-' : '╌',
+        ReferenceStyle.dotted =>
+          _drawingGlyphTier == GlyphTier.ascii ? '.' : '·',
       };
       for (var c = 0; c < plotCols; c++) {
         buffer.writeGrapheme(
@@ -1440,9 +1460,12 @@ class RenderLineChart extends RenderObject {
       final t = (x - xmin) / (xmax - xmin);
       final col = offset.col + plotLeft + (t * (plotCols - 1)).round();
       final glyph = switch (ref.style) {
-        ReferenceStyle.solid => '│',
-        ReferenceStyle.dashed => '╎',
-        ReferenceStyle.dotted => '·',
+        ReferenceStyle.solid =>
+          _drawingGlyphTier == GlyphTier.ascii ? '|' : '│',
+        ReferenceStyle.dashed =>
+          _drawingGlyphTier == GlyphTier.ascii ? ':' : '╎',
+        ReferenceStyle.dotted =>
+          _drawingGlyphTier == GlyphTier.ascii ? '.' : '·',
       };
       for (var r = 0; r < plotRows; r++) {
         buffer.writeGrapheme(
@@ -1481,40 +1504,28 @@ class RenderLineChart extends RenderObject {
       if (ref.y != null) {
         final y = ref.y!.toDouble();
         if (!y.isFinite || y < ymin || y > ymax) continue;
-        if (label.length > plotCols) continue;
+        if (_label(label).width > plotCols) continue;
         final t = (y - ymin) / (ymax - ymin);
         final row = offset.row + ((1 - t) * (plotRows - 1)).round();
         final labelRow = row > offset.row ? row - 1 : row + 1;
         if (labelRow < offset.row || labelRow >= offset.row + plotRows) {
           continue;
         }
-        final col = offset.col + plotLeft + plotCols - label.length;
-        for (var i = 0; i < label.length; i++) {
-          buffer.writeGrapheme(
-            CellOffset(col + i, labelRow),
-            label[i],
-            style: style,
-          );
-        }
+        final col = offset.col + plotLeft + plotCols - _label(label).width;
+        _label(label).paint(buffer, CellOffset(col, labelRow), style);
       } else if (ref.x != null) {
         final x = ref.x!.toDouble();
         if (!x.isFinite || x < xmin || x > xmax) continue;
-        if (label.length >= plotCols) continue;
+        if (_label(label).width >= plotCols) continue;
         final t = (x - xmin) / (xmax - xmin);
         final col = offset.col + plotLeft + (t * (plotCols - 1)).round();
         final plotRightAbs = offset.col + plotLeft + plotCols;
         var labelLeft = col + 1;
-        if (labelLeft + label.length > plotRightAbs) {
-          labelLeft = col - label.length - 1;
+        if (labelLeft + _label(label).width > plotRightAbs) {
+          labelLeft = col - _label(label).width - 1;
         }
         if (labelLeft < offset.col + plotLeft) continue;
-        for (var i = 0; i < label.length; i++) {
-          buffer.writeGrapheme(
-            CellOffset(labelLeft + i, offset.row),
-            label[i],
-            style: style,
-          );
-        }
+        _label(label).paint(buffer, CellOffset(labelLeft, offset.row), style);
       }
     }
   }
@@ -1537,7 +1548,7 @@ class RenderLineChart extends RenderObject {
     for (var r = 0; r < plotRows; r++) {
       buffer.writeGrapheme(
         CellOffset(col, offset.row + r),
-        '╎',
+        _drawingGlyphTier == GlyphTier.ascii ? ':' : '╎',
         style: _axisStyle,
       );
     }
@@ -1567,9 +1578,15 @@ class RenderLineChart extends RenderObject {
     for (var i = 0; i < _series.length; i++) {
       final s = _series[i];
       final y = _valueAt(s, cursorX);
-      final yStr = y == null ? '—' : _yTickFormat(y);
+      final yStr = y == null
+          ? (_drawingGlyphTier == GlyphTier.ascii ? '-' : '—')
+          : _yTickFormat(y);
       final label = s.label ?? 's${i + 1}';
-      rows.add(('● $label: $yStr', resolvedColors[i], y?.toDouble()));
+      rows.add((
+        '${_drawingGlyphTier == GlyphTier.ascii ? '*' : '●'} $label: $yStr',
+        resolvedColors[i],
+        y?.toDouble(),
+      ));
     }
     rows.sort((a, b) {
       final av = a.$3;
@@ -1586,7 +1603,8 @@ class RenderLineChart extends RenderObject {
     ];
     var maxW = 0;
     for (final (text, _) in lines) {
-      if (text.length > maxW) maxW = text.length;
+      final width = _label(text).width;
+      if (width > maxW) maxW = width;
     }
     final boxW = maxW + 2; // +2 for left/right border
     final boxH = lines.length + 2;
@@ -1609,15 +1627,31 @@ class RenderLineChart extends RenderObject {
     }
     final boxRow = offset.row;
 
-    final top = '┌${'─' * (boxW - 2)}┐';
-    final bot = '└${'─' * (boxW - 2)}┘';
+    final top = _drawingGlyphTier == GlyphTier.ascii
+        ? '+${'-' * (boxW - 2)}+'
+        : '┌${'─' * (boxW - 2)}┐';
+    final bot = _drawingGlyphTier == GlyphTier.ascii
+        ? '+${'-' * (boxW - 2)}+'
+        : '└${'─' * (boxW - 2)}┘';
     _writeAt(buffer, boxCol, boxRow, top, _axisStyle);
     _writeAt(buffer, boxCol, boxRow + boxH - 1, bot, _axisStyle);
     for (var i = 0; i < lines.length; i++) {
       final r = boxRow + 1 + i;
       final (text, color) = lines[i];
-      _writeAt(buffer, boxCol, r, '│', _axisStyle);
-      _writeAt(buffer, boxCol + boxW - 1, r, '│', _axisStyle);
+      _writeAt(
+        buffer,
+        boxCol,
+        r,
+        _drawingGlyphTier == GlyphTier.ascii ? '|' : '│',
+        _axisStyle,
+      );
+      _writeAt(
+        buffer,
+        boxCol + boxW - 1,
+        r,
+        _drawingGlyphTier == GlyphTier.ascii ? '|' : '│',
+        _axisStyle,
+      );
       // Clear the interior so we don't show whatever was beneath.
       for (var k = 0; k < boxW - 2; k++) {
         buffer.writeGrapheme(
@@ -1626,11 +1660,11 @@ class RenderLineChart extends RenderObject {
           style: _axisStyle,
         );
       }
-      if (color != null && text.startsWith('● ')) {
+      if (color != null && (text.startsWith('● ') || text.startsWith('* '))) {
         // Colored bullet, rest in the muted text style.
         buffer.writeGrapheme(
           CellOffset(boxCol + 1, r),
-          '●',
+          _drawingGlyphTier == GlyphTier.ascii ? '*' : '●',
           style: CellStyle(foreground: color),
         );
         _writeAt(buffer, boxCol + 2, r, text.substring(1), _axisStyle);
@@ -1706,7 +1740,8 @@ class RenderLineChart extends RenderObject {
     var totalWidth = 0;
     for (var i = 0; i < entries.length; i++) {
       if (i > 0) totalWidth += 2; // gap between entries
-      totalWidth += 2 + entries[i].$1.label!.length; // bullet + space + label
+      totalWidth +=
+          2 + _label(entries[i].$1.label!).width; // bullet + space + label
     }
     if (totalWidth > plotCols) return; // no room — skip
     var col = offset.col + plotLeft + plotCols - totalWidth;
@@ -1716,19 +1751,13 @@ class RenderLineChart extends RenderObject {
       final (s, color) = entries[i];
       buffer.writeGrapheme(
         CellOffset(col, row),
-        '●',
+        _drawingGlyphTier == GlyphTier.ascii ? '*' : '●',
         style: CellStyle(foreground: color),
       );
       col += 2; // bullet + space
       final label = s.label!;
-      for (var j = 0; j < label.length; j++) {
-        buffer.writeGrapheme(
-          CellOffset(col + j, row),
-          label[j],
-          style: _axisStyle,
-        );
-      }
-      col += label.length;
+      _label(label).paint(buffer, CellOffset(col, row), _axisStyle);
+      col += _label(label).width;
     }
   }
 
@@ -1776,12 +1805,15 @@ class RenderLineChart extends RenderObject {
       _axisStyle,
     );
     final maxLabel = _xTickFormat(xmax);
-    final right = offset.col + _leftGutter + plotCols - maxLabel.length;
+    final right = offset.col + _leftGutter + plotCols - _label(maxLabel).width;
     _writeAt(buffer, right, xRow, maxLabel, _axisStyle);
     if (plotCols >= 16) {
       final midLabel = _xTickFormat((xmin + xmax) / 2);
       final mid =
-          offset.col + _leftGutter + plotCols ~/ 2 - midLabel.length ~/ 2;
+          offset.col +
+          _leftGutter +
+          plotCols ~/ 2 -
+          _label(midLabel).width ~/ 2;
       _writeAt(buffer, mid, xRow, midLabel, _axisStyle);
     }
   }
@@ -1843,22 +1875,17 @@ class RenderLineChart extends RenderObject {
     return (lo - pad, hi + pad);
   }
 
-  static void _writeAt(
+  void _writeAt(
     CellBuffer buffer,
     int col,
     int row,
     String text,
     CellStyle style,
   ) {
-    for (var i = 0; i < text.length; i++) {
-      final c = col + i;
-      if (c < 0 || c >= buffer.size.cols) continue;
-      if (row < 0 || row >= buffer.size.rows) continue;
-      buffer.writeGrapheme(CellOffset(c, row), text[i], style: style);
-    }
+    _label(text).paint(buffer, CellOffset(col, row), style);
   }
 
-  static void _writeRightAligned(
+  void _writeRightAligned(
     CellBuffer buffer,
     int leftCol,
     int row,
@@ -1866,8 +1893,8 @@ class RenderLineChart extends RenderObject {
     String text,
     CellStyle style,
   ) {
-    final clipped = text.length > width ? text.substring(0, width) : text;
-    _writeAt(buffer, leftCol + width - clipped.length, row, clipped, style);
+    final label = _label(text).clip(width);
+    label.paint(buffer, CellOffset(leftCol + width - label.width, row), style);
   }
 }
 

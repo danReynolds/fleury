@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'package:fleury/fleury_core.dart';
 import 'package:image/image.dart' as img;
 
+import 'glyphs.dart';
+
 import 'image_file_stub.dart'
     if (dart.library.io) 'image_file_io.dart'
     as image_file;
@@ -431,6 +433,7 @@ class _RawImage extends LeafRenderObjectWidget {
 
   @override
   RenderObject createRenderObject(BuildContext context) => RenderImage(
+    glyphTier: drawingGlyphTierOf(context),
     decoded: decoded,
     fit: fit,
     glyph: glyph,
@@ -447,13 +450,16 @@ class _RawImage extends LeafRenderObjectWidget {
       ..glyph = glyph
       ..colorMode = colorMode
       ..images = images
-      ..backgroundColor = backgroundColor;
+      ..backgroundColor = backgroundColor
+      ..glyphTier = drawingGlyphTierOf(context);
   }
 }
 
 /// Render object behind [Image].
 class RenderImage extends RenderObject {
   RenderImage({
+    GlyphTier glyphTier = GlyphTier.unicode,
+
     /// Decoded pixels for the frame currently being rendered.
     required img.Image decoded,
 
@@ -471,12 +477,20 @@ class RenderImage extends RenderObject {
 
     /// Optional color used to flatten transparent glyph-art source pixels.
     Color? backgroundColor,
-  }) : _decoded = decoded,
+  }) : _glyphTier = glyphTier,
+       _decoded = decoded,
        _fit = fit,
        _glyph = glyph,
        _colorMode = colorMode,
        _images = images,
        _backgroundColor = backgroundColor;
+
+  GlyphTier _glyphTier;
+  set glyphTier(GlyphTier value) {
+    if (_glyphTier == value) return;
+    _glyphTier = value;
+    markNeedsPaintOnly();
+  }
 
   img.Image _decoded;
   set decoded(img.Image v) {
@@ -591,6 +605,11 @@ class RenderImage extends RenderObject {
       return;
     }
 
+    if (_glyphTier == GlyphTier.ascii) {
+      _paintCellColors(buffer, offset, cols, rows);
+      return;
+    }
+
     if (_glyph == ImageGlyph.quarterBlock) {
       _paintQuarterBlock(buffer, offset, cols, rows);
       return;
@@ -688,6 +707,48 @@ class RenderImage extends RenderObject {
             ? existing.merge(CellStyle(foreground: color))
             : existing.merge(CellStyle(background: color));
         buffer.writeGrapheme(CellOffset(tgtCol, tgtRow), '▀', style: newStyle);
+      }
+    }
+  }
+
+  // Block glyphs may occupy two cells. On those surfaces (or ASCII-only
+  // terminals), retain the cell grid using a sampled background per cell.
+  void _paintCellColors(
+    CellBuffer buffer,
+    CellOffset offset,
+    int cols,
+    int rows,
+  ) {
+    final (sampleX, sampleY) = _sampleMappers(cols, rows, 1, 1);
+    for (var row = 0; row < rows; row++) {
+      for (var col = 0; col < cols; col++) {
+        final rgb = _samplePixel(
+          sampleX,
+          sampleY,
+          col,
+          row,
+          _decoded.width,
+          _decoded.height,
+        );
+        if (rgb == null) continue;
+        final (r, g, b) = rgb;
+        final (qr, qg, qb, _, _, _) = _quantize((
+          r.toDouble(),
+          g.toDouble(),
+          b.toDouble(),
+        ), _colorMode);
+        final color = _packColor(qr, qg, qb, _colorMode);
+        buffer.writeGrapheme(
+          offset + CellOffset(col, row),
+          _colorMode == ColorMode.none
+              ? densityGlyph(
+                  GlyphTier.ascii,
+                  (r * 299 + g * 587 + b * 114) ~/ 1000,
+                  255,
+                )
+              : ' ',
+          style: CellStyle(background: color),
+        );
       }
     }
   }

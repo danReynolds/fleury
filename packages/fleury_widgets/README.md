@@ -75,6 +75,12 @@ layout bones are in place.
 Shared helpers: `Palettes` (prebuilt color palettes), `TickFormat`
 (axis label formatters), `ReferenceLine` (target/limit markers).
 
+On surfaces that measure ambiguous Unicode symbols as two cells, drawing
+widgets use ASCII symbols to keep one sample per cell. Chart labels retain
+their Unicode text and use the surface's measured widths. The image fallback
+uses one sampled background color per cell (ASCII density in monochrome);
+native image placements retain their full resolution.
+
 ### Images & drawing surfaces
 
 | Widget | What it is |

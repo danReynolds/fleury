@@ -24,11 +24,14 @@ abstract interface class SubCellBuffer {
   void drawLine(int x0, int y0, int x1, int y1, [Color? color]);
 
   /// Writes populated cells into [target] at [offset]; empty cells untouched.
+  /// Pass the surface's [policy] when painting without a widget. Ambiguous-wide
+  /// surfaces use ASCII density symbols to retain the one-cell drawing grid.
   void writeTo(
     CellBuffer target,
     CellOffset offset,
     CellStyle defaultStyle, {
     GlyphTier glyphTier = GlyphTier.unicode,
+    CellWidthPolicy policy = CellWidthPolicy.spec,
   });
 }
 
