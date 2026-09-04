@@ -1,3 +1,6 @@
+import 'dart:math';
+
+import 'package:characters/characters.dart';
 import 'package:fleury/fleury.dart';
 import 'package:test/test.dart';
 
@@ -70,6 +73,64 @@ void main() {
   });
 
   group('grapheme boundary correctness around the scan anchor', () {
+    test('selecting a flag does not consume the following Indic letter', () {
+      final controller = TextEditingController(text: '🇨🇦ष');
+      addTearDown(controller.dispose);
+      controller.caretOffset = 0;
+      controller.moveCursorRight(extend: true);
+      expect(controller.selectedText, '🇨🇦');
+      controller.delete();
+      expect(controller.text, 'ष');
+    });
+
+    test('local lookups agree with forward segmentation at every offset', () {
+      final random = Random(40904);
+      const units = [
+        'a',
+        'b',
+        '\n',
+        '\r',
+        '\u0301',
+        '\u200d',
+        '\u0600',
+        '🇨',
+        '🇦',
+        '🙂',
+        'ष',
+        'क्ष',
+        '👩‍👩‍👧‍👦',
+        '\uD800',
+        '\uDC00',
+      ];
+      for (var sample = 0; sample < 2000; sample++) {
+        final text = List.generate(
+          1 + random.nextInt(12),
+          (_) => units[random.nextInt(units.length)],
+        ).join();
+        final boundaries = <int>[0];
+        for (final cluster in text.characters) {
+          boundaries.add(boundaries.last + cluster.length);
+        }
+        for (var offset = 0; offset <= text.length; offset++) {
+          final before = boundaries.where((b) => b < offset).lastOrNull ?? 0;
+          final after =
+              boundaries.where((b) => b > offset).firstOrNull ?? text.length;
+          final lo = boundaries.lastWhere((b) => b <= offset);
+          final hi = boundaries.firstWhere((b) => b >= offset);
+          expect(
+            [
+              TextEditingModel.previousGraphemeBoundary(text, offset),
+              TextEditingModel.nextGraphemeBoundary(text, offset),
+              TextEditingModel.snapOffsetToGraphemeBoundary(text, offset),
+            ],
+            [before, after, offset - lo < hi - offset ? lo : hi],
+            reason:
+                'sample $sample, code units ${text.codeUnits}, offset $offset',
+          );
+        }
+      }
+    });
+
     // A line start is the anchor a line-scoped scan would begin from, and the
     // document end is the append short-circuit that hid this defect. Both must
     // land exactly where a from-zero walk did.
