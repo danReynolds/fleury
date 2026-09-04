@@ -161,10 +161,20 @@ Future<SpawnedFleuryApp> spawnFleuryApp({
       onLine: (line) => onLog?.call(tag, line.text),
     );
     return source
-        .transform(utf8.decoder)
+        // A child's logs are arbitrary bytes, independent of the render wire.
+        // Bad encoding must not terminate the process hosting other sessions.
+        .transform(const Utf8Decoder(allowMalformed: true))
         .listen(
           (chunk) => capture.addChunk(chunk, sourceTag),
           onDone: capture.flushPartials,
+          onError: (Object error, StackTrace stack) {
+            capture.flushPartials();
+            capture.addChunk(
+              'subprocess log stream failed: $error\n',
+              sourceTag,
+            );
+          },
+          cancelOnError: true,
         );
   }
 
