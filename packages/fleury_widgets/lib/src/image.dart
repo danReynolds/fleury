@@ -4,7 +4,6 @@ import 'package:fleury/fleury_core.dart';
 import 'package:image/image.dart' as img;
 
 import 'glyphs.dart';
-
 import 'image_file_stub.dart'
     if (dart.library.io) 'image_file_io.dart'
     as image_file;
@@ -719,7 +718,10 @@ class RenderImage extends RenderObject {
     int cols,
     int rows,
   ) {
-    final (sampleX, sampleY) = _sampleMappers(cols, rows, 1, 1);
+    // Keep the terminal's 1:2 cell aspect even though each output cell now
+    // contains one color. Average both half-cell samples into that color.
+    final (sampleX, sampleHalfY) = _sampleMappers(cols, rows, 1, 2);
+    double sampleY(int row) => sampleHalfY(row * 2);
     for (var row = 0; row < rows; row++) {
       for (var col = 0; col < cols; col++) {
         final rgb = _samplePixel(

@@ -7,10 +7,7 @@ import 'package:fleury/fleury_internal.dart' show projectText;
 class ChartLabel {
   ChartLabel(String text, TextPresentationPolicy policy)
     : this._(
-        projectText(
-          sanitizeForDisplay(text.replaceAll(_lineBreaks, ' ')),
-          policy: policy,
-        ).displayText,
+        projectText(sanitizeSingleLine(text), policy: policy).displayText,
         policy.widths,
       );
 
@@ -19,9 +16,8 @@ class ChartLabel {
   final String text;
   final CellWidthPolicy policy;
   static const _resolver = DefaultWidthResolver();
-  static final _lineBreaks = RegExp(r'[\r\n]');
 
-  int get width => _resolver.widthOfText(text, policy);
+  late final int width = _resolver.widthOfText(text, policy);
 
   ChartLabel clip(int columns) {
     var used = 0;

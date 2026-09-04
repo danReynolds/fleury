@@ -1,7 +1,7 @@
 import 'package:fleury/fleury_core.dart';
+import 'package:fleury/fleury_internal.dart';
 
 import 'glyphs.dart';
-import 'package:fleury/fleury_internal.dart';
 
 /// Which of the two handles a [RangeSlider] is editing.
 enum _ActiveHandle { low, high }

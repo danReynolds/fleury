@@ -55,6 +55,14 @@ run's wall-clock diagnostics were elevated under that overlapping load; those
 are warn-only measurements, not evidence of a measured speed improvement or
 regression. Its deterministic counters and structural assertions all passed.
 
+PR review found and corrected one additional image fallback defect: reducing
+sampling to one color per cell must preserve the terminal's 1:2 cell aspect.
+Six new cases cover `contain`, `cover`, and `none` under both text policies;
+all three ambiguous-wide cases reproduced the distortion before the fix.
+Chart labels also reuse the shared single-line sanitizer. Copilot's review
+identified redundant label projection and measurement in the line-chart paint
+path; reference labels and legends now reuse a prepared label and its width.
+
 This closes the reproduced code defects, not the entire release checklist.
 Dependency remediation, the Ctrl+Z ownership decision, and fresh human terminal/accessibility
 walkthroughs remain separate release work. Local automated checks do not stand

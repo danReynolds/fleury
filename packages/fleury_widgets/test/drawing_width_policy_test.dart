@@ -243,6 +243,44 @@ void main() {
     });
   }
 
+  for (final fit in [ImageFit.contain, ImageFit.cover, ImageFit.none]) {
+    testWidgetsOnBothTextPolicies(
+      'image fallback preserves cell aspect for ${fit.name}',
+      (tester, policy) {
+        final decoded = img.Image(width: 4, height: 4);
+        const colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0)];
+        for (var y = 0; y < 4; y++) {
+          for (var x = 0; x < 4; x++) {
+            final (r, g, b) = colors[x];
+            decoded.setPixelRgb(x, y, r, g, b);
+          }
+        }
+        tester.pumpWidget(
+          Image(source: ImageSource.decoded(decoded), fit: fit),
+        );
+        final buffer = tester.render(size: const CellSize(4, 4));
+        Color? pixelColor(int col, int row) {
+          final style = buffer.atColRow(col, row).style;
+          return tester.textPolicy.widths.ambiguous == CellWidth.two
+              ? style.background
+              : style.foreground;
+        }
+
+        if (fit == ImageFit.cover) {
+          // Four columns by four rows is a tall box: crop the source's sides.
+          expect(pixelColor(0, 0), const RgbColor(0, 255, 0));
+          expect(pixelColor(3, 3), const RgbColor(0, 0, 255));
+        } else {
+          // A square image occupies four columns and two terminal rows.
+          expect(pixelColor(0, 0), isNull);
+          expect(pixelColor(0, 1), const RgbColor(255, 0, 0));
+          expect(pixelColor(3, 2), const RgbColor(255, 255, 0));
+          expect(pixelColor(3, 3), isNull);
+        }
+      },
+    );
+  }
+
   final buffers = <String, SubCellBuffer Function()>{
     'braille': () => BrailleBuffer(3, 2),
     'half block': () => HalfBlockBuffer(3, 2),

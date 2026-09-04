@@ -1495,8 +1495,9 @@ class RenderLineChart extends RenderObject {
     double ymax,
   ) {
     for (final ref in _references) {
-      final label = ref.label;
-      if (label == null || label.isEmpty) continue;
+      final text = ref.label;
+      if (text == null || text.isEmpty) continue;
+      final label = _label(text);
       final color = ref.color;
       final style = color == null
           ? _axisStyle
@@ -1504,28 +1505,28 @@ class RenderLineChart extends RenderObject {
       if (ref.y != null) {
         final y = ref.y!.toDouble();
         if (!y.isFinite || y < ymin || y > ymax) continue;
-        if (_label(label).width > plotCols) continue;
+        if (label.width > plotCols) continue;
         final t = (y - ymin) / (ymax - ymin);
         final row = offset.row + ((1 - t) * (plotRows - 1)).round();
         final labelRow = row > offset.row ? row - 1 : row + 1;
         if (labelRow < offset.row || labelRow >= offset.row + plotRows) {
           continue;
         }
-        final col = offset.col + plotLeft + plotCols - _label(label).width;
-        _label(label).paint(buffer, CellOffset(col, labelRow), style);
+        final col = offset.col + plotLeft + plotCols - label.width;
+        label.paint(buffer, CellOffset(col, labelRow), style);
       } else if (ref.x != null) {
         final x = ref.x!.toDouble();
         if (!x.isFinite || x < xmin || x > xmax) continue;
-        if (_label(label).width >= plotCols) continue;
+        if (label.width >= plotCols) continue;
         final t = (x - xmin) / (xmax - xmin);
         final col = offset.col + plotLeft + (t * (plotCols - 1)).round();
         final plotRightAbs = offset.col + plotLeft + plotCols;
         var labelLeft = col + 1;
-        if (labelLeft + _label(label).width > plotRightAbs) {
-          labelLeft = col - _label(label).width - 1;
+        if (labelLeft + label.width > plotRightAbs) {
+          labelLeft = col - label.width - 1;
         }
         if (labelLeft < offset.col + plotLeft) continue;
-        _label(label).paint(buffer, CellOffset(labelLeft, offset.row), style);
+        label.paint(buffer, CellOffset(labelLeft, offset.row), style);
       }
     }
   }
@@ -1732,32 +1733,31 @@ class RenderLineChart extends RenderObject {
     int plotCols,
     List<Color> resolvedColors,
   ) {
-    final entries = <(LineSeries, Color)>[
+    final entries = <(ChartLabel, Color)>[
       for (var i = 0; i < _series.length; i++)
-        if (_series[i].label != null) (_series[i], resolvedColors[i]),
+        if (_series[i].label != null)
+          (_label(_series[i].label!), resolvedColors[i]),
     ];
     if (entries.isEmpty) return;
     var totalWidth = 0;
     for (var i = 0; i < entries.length; i++) {
       if (i > 0) totalWidth += 2; // gap between entries
-      totalWidth +=
-          2 + _label(entries[i].$1.label!).width; // bullet + space + label
+      totalWidth += 2 + entries[i].$1.width; // bullet + space + label
     }
     if (totalWidth > plotCols) return; // no room — skip
     var col = offset.col + plotLeft + plotCols - totalWidth;
     final row = offset.row;
     for (var i = 0; i < entries.length; i++) {
       if (i > 0) col += 2;
-      final (s, color) = entries[i];
+      final (label, color) = entries[i];
       buffer.writeGrapheme(
         CellOffset(col, row),
         _drawingGlyphTier == GlyphTier.ascii ? '*' : '●',
         style: CellStyle(foreground: color),
       );
       col += 2; // bullet + space
-      final label = s.label!;
-      _label(label).paint(buffer, CellOffset(col, row), _axisStyle);
-      col += _label(label).width;
+      label.paint(buffer, CellOffset(col, row), _axisStyle);
+      col += label.width;
     }
   }
 

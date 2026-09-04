@@ -1,8 +1,7 @@
 import 'package:fleury/fleury_core.dart';
 
-import 'glyphs.dart';
-
 import 'braille.dart';
+import 'glyphs.dart';
 import 'half_block_buffer.dart';
 import 'octant_buffer.dart';
 import 'quadrant_buffer.dart';
