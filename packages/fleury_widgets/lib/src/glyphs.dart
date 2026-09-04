@@ -7,6 +7,17 @@ import 'package:fleury/fleury_core.dart';
 /// `TERM=dumb`/`linux`, non-UTF-8 locales, or an explicit override; the Unicode
 /// tier uses the block-element ramps. The glyph changes, never the value.
 
+/// Drawing grids reserve one cell per symbol. When the surface measures
+/// ambiguous symbols as wide, use the ASCII repertoire at the same resolution.
+/// This is local to drawing widgets; ordinary text keeps its measured widths.
+GlyphTier drawingGlyphTier(GlyphTier tier, CellWidthPolicy policy) =>
+    policy.ambiguous == CellWidth.two ? GlyphTier.ascii : tier;
+
+GlyphTier drawingGlyphTierOf(BuildContext context) => drawingGlyphTier(
+  MediaQuery.glyphTierOf(context),
+  MediaQuery.textPolicyOf(context).widths,
+);
+
 /// A horizontal eighth-block fill at [eighths] (0..8) — the ramp `▏▎▍▌▋▊▉█`.
 /// ASCII collapses to `#` (full), `+` (partial), or a space (empty).
 String horizontalFillGlyph(GlyphTier tier, int eighths) {

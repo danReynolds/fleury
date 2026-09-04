@@ -1,5 +1,6 @@
 import 'package:fleury/fleury_core.dart';
 
+import 'chart_label.dart';
 import 'glyphs.dart';
 
 /// One column in a [BarChart].
@@ -167,7 +168,7 @@ class BarChart extends StatelessWidget {
         palette: p,
         defaultColor: p.isNotEmpty ? p.first : cs.primary,
         labelStyle: theme.mutedStyle,
-        glyphTier: MediaQuery.glyphTierOf(context),
+        glyphTier: drawingGlyphTierOf(context),
       ),
     );
   }
@@ -227,6 +228,7 @@ class _RawBarChart extends LeafRenderObjectWidget {
 
   @override
   RenderObject createRenderObject(BuildContext context) => RenderBarChart(
+    textPolicy: MediaQuery.textPolicyOf(context),
     bars: bars,
     max: max,
     barWidth: barWidth,
@@ -260,13 +262,15 @@ class _RawBarChart extends LeafRenderObjectWidget {
       ..palette = palette
       ..defaultColor = defaultColor
       ..labelStyle = labelStyle
-      ..glyphTier = glyphTier;
+      ..glyphTier = glyphTier
+      ..textPolicy = MediaQuery.textPolicyOf(context);
   }
 }
 
 /// Render object behind [BarChart]. See its docs.
 class RenderBarChart extends RenderObject {
   RenderBarChart({
+    TextPresentationPolicy textPolicy = TextPresentationPolicy.spec,
     required List<Bar> bars,
     required num? max,
     required int barWidth,
@@ -280,7 +284,8 @@ class RenderBarChart extends RenderObject {
     required Color defaultColor,
     required CellStyle labelStyle,
     required GlyphTier glyphTier,
-  }) : _bars = bars,
+  }) : _textPolicy = textPolicy,
+       _bars = bars,
        _max = max,
        _barWidth = barWidth < 1 ? 1 : barWidth,
        _gap = gap < 0 ? 0 : gap,
@@ -293,6 +298,15 @@ class RenderBarChart extends RenderObject {
        _defaultColor = defaultColor,
        _labelStyle = labelStyle,
        _glyphTier = glyphTier;
+
+  TextPresentationPolicy _textPolicy;
+  set textPolicy(TextPresentationPolicy value) {
+    if (_textPolicy == value) return;
+    _textPolicy = value;
+    markNeedsLayout();
+  }
+
+  ChartLabel _label(String text) => ChartLabel(text, _textPolicy);
 
   List<Bar> _bars;
   set bars(List<Bar> v) {
@@ -384,6 +398,9 @@ class RenderBarChart extends RenderObject {
     _labelStyle = v;
     markNeedsPaintOnly();
   }
+
+  GlyphTier get _drawingGlyphTier =>
+      drawingGlyphTier(_glyphTier, _textPolicy.widths);
 
   GlyphTier _glyphTier;
   set glyphTier(GlyphTier v) {
@@ -536,8 +553,8 @@ class RenderBarChart extends RenderObject {
       if (r < firstFilledRow) continue;
       final isTop = r == firstFilledRow;
       final glyph = (isTop && hasPartial)
-          ? verticalLevelGlyph(_glyphTier, partial)
-          : verticalLevelGlyph(_glyphTier, 8);
+          ? verticalLevelGlyph(_drawingGlyphTier, partial)
+          : verticalLevelGlyph(_drawingGlyphTier, 8);
       for (var x = 0; x < _barWidth; x++) {
         final tgt = col + x;
         if (tgt < 0 || tgt >= buffer.size.cols) continue;
@@ -605,7 +622,7 @@ class RenderBarChart extends RenderObject {
           if (cursorRow < 0 || cursorRow >= buffer.size.rows) continue;
           buffer.writeGrapheme(
             CellOffset(tgt, cursorRow),
-            verticalLevelGlyph(_glyphTier, 8),
+            verticalLevelGlyph(_drawingGlyphTier, 8),
             style: style,
           );
         }
@@ -620,7 +637,7 @@ class RenderBarChart extends RenderObject {
           if (cursorRow < 0 || cursorRow >= buffer.size.rows) continue;
           buffer.writeGrapheme(
             CellOffset(tgt, cursorRow),
-            verticalLevelGlyph(_glyphTier, partial),
+            verticalLevelGlyph(_drawingGlyphTier, partial),
             style: style,
           );
         }
@@ -637,7 +654,7 @@ class RenderBarChart extends RenderObject {
     var totalW = 0;
     for (var i = 0; i < labels.length; i++) {
       if (i > 0) totalW += 2; // inter-entry gap
-      totalW += 2 + labels[i].length; // bullet + space + label
+      totalW += 2 + _label(labels[i]).width; // bullet + space + label
     }
     if (totalW > totalWidth) return;
     if (row < 0 || row >= buffer.size.rows) return;
@@ -650,18 +667,14 @@ class RenderBarChart extends RenderObject {
       if (col >= 0 && col < buffer.size.cols) {
         buffer.writeGrapheme(
           CellOffset(col, row),
-          _glyphTier == GlyphTier.ascii ? '*' : '●',
+          _drawingGlyphTier == GlyphTier.ascii ? '*' : '●',
           style: CellStyle(foreground: color),
         );
       }
       col += 2;
-      final label = labels[i];
-      for (var j = 0; j < label.length; j++) {
-        final c = col + j;
-        if (c < 0 || c >= buffer.size.cols) continue;
-        buffer.writeGrapheme(CellOffset(c, row), label[j], style: _labelStyle);
-      }
-      col += label.length;
+      final label = _label(labels[i]);
+      label.paint(buffer, CellOffset(col, row), _labelStyle);
+      col += label.width;
     }
   }
 
@@ -705,7 +718,7 @@ class RenderBarChart extends RenderObject {
     );
   }
 
-  static void _writeRightAligned(
+  void _writeRightAligned(
     CellBuffer buffer,
     int leftCol,
     int row,
@@ -713,17 +726,11 @@ class RenderBarChart extends RenderObject {
     String text,
     CellStyle style,
   ) {
-    if (row < 0 || row >= buffer.size.rows) return;
-    final clipped = text.length > width ? text.substring(0, width) : text;
-    final startCol = leftCol + width - clipped.length;
-    for (var i = 0; i < clipped.length; i++) {
-      final col = startCol + i;
-      if (col < 0 || col >= buffer.size.cols) continue;
-      buffer.writeGrapheme(CellOffset(col, row), clipped[i], style: style);
-    }
+    final label = _label(text).clip(width);
+    label.paint(buffer, CellOffset(leftCol + width - label.width, row), style);
   }
 
-  static void _writeCentered(
+  void _writeCentered(
     CellBuffer buffer,
     int leftCol,
     int row,
@@ -731,14 +738,12 @@ class RenderBarChart extends RenderObject {
     String text,
     CellStyle style,
   ) {
-    if (row < 0 || row >= buffer.size.rows) return;
-    final clipped = text.length > width ? text.substring(0, width) : text;
-    final padLeft = (width - clipped.length) ~/ 2;
-    for (var i = 0; i < clipped.length; i++) {
-      final col = leftCol + padLeft + i;
-      if (col < 0 || col >= buffer.size.cols) continue;
-      buffer.writeGrapheme(CellOffset(col, row), clipped[i], style: style);
-    }
+    final label = _label(text).clip(width);
+    label.paint(
+      buffer,
+      CellOffset(leftCol + (width - label.width) ~/ 2, row),
+      style,
+    );
   }
 
   static String _formatValue(num v) {

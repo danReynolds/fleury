@@ -74,7 +74,9 @@ class SextantBuffer implements SubCellBuffer {
     CellOffset offset,
     CellStyle defaultStyle, {
     GlyphTier glyphTier = GlyphTier.unicode,
+    CellWidthPolicy policy = CellWidthPolicy.spec,
   }) {
+    glyphTier = drawingGlyphTier(glyphTier, policy);
     for (var r = 0; r < rows; r++) {
       for (var c = 0; c < cols; c++) {
         final idx = r * cols + c;

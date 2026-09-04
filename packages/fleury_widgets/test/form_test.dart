@@ -102,6 +102,60 @@ Future<bool> _submit(FleuryTester tester, FormController controller) {
 
 void main() {
   group('FormController', () {
+    for (final submit in [false, true]) {
+      testWidgets(
+        'throwing validator completes ${submit ? 'submit' : 'validate'} '
+        'with its error and permits retry',
+        (tester) async {
+          final controller = FormController();
+          addTearDown(controller.dispose);
+          final text = TextEditingController();
+          addTearDown(text.dispose);
+          final error = FormatException('validator failed');
+          final stack = StackTrace.current;
+          var throws = true;
+          var submits = 0;
+          tester.pumpWidget(
+            Form(
+              controller: controller,
+              onSubmit: () => submits++,
+              child: FormField(
+                validator: () {
+                  if (throws) Error.throwWithStackTrace(error, stack);
+                  return null;
+                },
+                child: TextInput(controller: text),
+              ),
+            ),
+          );
+          Future<bool> run() =>
+              submit ? controller.submit() : controller.validate();
+          final first = run();
+          expect(identical(first, run()), isTrue);
+          // Attach the error handler before the post-frame callback runs.
+          final result = first.then<Object?>(
+            (_) => null,
+            onError: (Object e, StackTrace s) {
+              expect(e, same(error));
+              expect(s.toString(), stack.toString());
+              return e;
+            },
+          );
+          tester.pump();
+          expect(await result.timeout(const Duration(seconds: 1)), same(error));
+          expect(controller.isSubmitting, isFalse);
+          expect(submits, 0);
+
+          throws = false;
+          final retry = run();
+          expect(identical(first, retry), isFalse);
+          tester.pump();
+          expect(await retry.timeout(const Duration(seconds: 1)), isTrue);
+          expect(submits, submit ? 1 : 0);
+        },
+      );
+    }
+
     test('rejects commands while unattached', () {
       final controller = FormController();
 

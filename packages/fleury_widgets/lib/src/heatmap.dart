@@ -1,5 +1,8 @@
 import 'package:fleury/fleury_core.dart';
 
+import 'chart_label.dart';
+import 'glyphs.dart';
+
 /// A 2D grid of values, each rendered as a block character whose density
 /// represents the cell's intensity within the visible range.
 ///
@@ -100,7 +103,7 @@ class Heatmap extends StatelessWidget {
               children: <Widget>[
                 grid,
                 Text(
-                  '░▒▓█  ${_fmtHeat(stats.min)} – ${_fmtHeat(stats.max)}',
+                  '${drawingGlyphTierOf(context) == GlyphTier.ascii ? '.:*#' : '░▒▓█'}  ${_fmtHeat(stats.min)} – ${_fmtHeat(stats.max)}',
                   allowSelect: false, // chart legend, not selectable text
                   style: theme.mutedStyle,
                 ),
@@ -179,6 +182,8 @@ class _RawHeatmap extends LeafRenderObjectWidget {
 
   @override
   RenderObject createRenderObject(BuildContext context) => RenderHeatmap(
+    textPolicy: MediaQuery.textPolicyOf(context),
+    glyphTier: drawingGlyphTierOf(context),
     values: values,
     min: min,
     max: max,
@@ -199,13 +204,17 @@ class _RawHeatmap extends LeafRenderObjectWidget {
       ..color = color
       ..labelStyle = labelStyle
       ..rowLabels = rowLabels
-      ..colLabels = colLabels;
+      ..colLabels = colLabels
+      ..glyphTier = drawingGlyphTierOf(context)
+      ..textPolicy = MediaQuery.textPolicyOf(context);
   }
 }
 
 /// Render object behind [Heatmap]. See its docs.
 class RenderHeatmap extends RenderObject {
   RenderHeatmap({
+    TextPresentationPolicy textPolicy = TextPresentationPolicy.spec,
+    GlyphTier glyphTier = GlyphTier.unicode,
     required List<List<num>> values,
     required num? min,
     required num? max,
@@ -214,7 +223,9 @@ class RenderHeatmap extends RenderObject {
     required CellStyle labelStyle,
     required List<String>? rowLabels,
     required List<String>? colLabels,
-  }) : _values = values,
+  }) : _textPolicy = textPolicy,
+       _glyphTier = glyphTier,
+       _values = values,
        _min = min,
        _max = max,
        _cellWidth = cellWidth,
@@ -222,6 +233,25 @@ class RenderHeatmap extends RenderObject {
        _labelStyle = labelStyle,
        _rowLabels = rowLabels,
        _colLabels = colLabels;
+
+  TextPresentationPolicy _textPolicy;
+  set textPolicy(TextPresentationPolicy value) {
+    if (_textPolicy == value) return;
+    _textPolicy = value;
+    markNeedsLayout();
+  }
+
+  ChartLabel _label(String text) => ChartLabel(text, _textPolicy);
+
+  GlyphTier get _drawingGlyphTier =>
+      drawingGlyphTier(_glyphTier, _textPolicy.widths);
+
+  GlyphTier _glyphTier;
+  set glyphTier(GlyphTier value) {
+    if (_glyphTier == value) return;
+    _glyphTier = value;
+    markNeedsPaintOnly();
+  }
 
   List<List<num>> _values;
   set values(List<List<num>> v) {
@@ -299,7 +329,8 @@ class RenderHeatmap extends RenderObject {
     if (labels == null || labels.isEmpty) return 0;
     var w = 0;
     for (final l in labels) {
-      if (l.length > w) w = l.length;
+      final width = _label(l).width;
+      if (width > w) w = width;
     }
     return w + 1; // single space between label and grid
   }
@@ -362,20 +393,12 @@ class RenderHeatmap extends RenderObject {
     if (colLabels != null && offset.row < buffer.size.rows) {
       for (var c = 0; c < _cols && c < colLabels.length; c++) {
         final cellLeft = gridLeft + c * _cellWidth;
-        final text = colLabels[c];
-        final clipped = text.length > _cellWidth
-            ? text.substring(0, _cellWidth)
-            : text;
-        final padLeft = (_cellWidth - clipped.length) ~/ 2;
-        for (var i = 0; i < clipped.length; i++) {
-          final col = cellLeft + padLeft + i;
-          if (col < 0 || col >= buffer.size.cols) continue;
-          buffer.writeGrapheme(
-            CellOffset(col, offset.row),
-            clipped[i],
-            style: _labelStyle,
-          );
-        }
+        final label = _label(colLabels[c]).clip(_cellWidth);
+        label.paint(
+          buffer,
+          CellOffset(cellLeft + (_cellWidth - label.width) ~/ 2, offset.row),
+          _labelStyle,
+        );
       }
     }
 
@@ -386,18 +409,12 @@ class RenderHeatmap extends RenderObject {
       for (var r = 0; r < _rows && r < rowLabels.length; r++) {
         final row = gridTop + r;
         if (row < 0 || row >= buffer.size.rows) continue;
-        final text = rowLabels[r];
-        final clipped = text.length > w ? text.substring(0, w) : text;
-        final startCol = offset.col + (w - clipped.length);
-        for (var i = 0; i < clipped.length; i++) {
-          final col = startCol + i;
-          if (col < 0 || col >= buffer.size.cols) continue;
-          buffer.writeGrapheme(
-            CellOffset(col, row),
-            clipped[i],
-            style: _labelStyle,
-          );
-        }
+        final label = _label(rowLabels[r]).clip(w);
+        label.paint(
+          buffer,
+          CellOffset(offset.col + w - label.width, row),
+          _labelStyle,
+        );
       }
     }
 
@@ -413,7 +430,9 @@ class RenderHeatmap extends RenderObject {
         if (t > 1) t = 1;
         // Quartile mapping: (0, .25] → ░, (.25, .5] → ▒, (.5, .75] → ▓, (.75, 1] → █.
         final idx = ((t * 4).ceil() - 1).clamp(0, 3);
-        final glyph = _glyphs[idx];
+        final glyph = _drawingGlyphTier == GlyphTier.ascii
+            ? const ['.', ':', '*', '#'][idx]
+            : _glyphs[idx];
         final cellLeft = gridLeft + c * _cellWidth;
         for (var w = 0; w < _cellWidth; w++) {
           final col = cellLeft + w;

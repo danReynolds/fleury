@@ -26,6 +26,20 @@ Future<void> main(List<String> args) async {
   if (args.contains('--hostile-log')) {
     stderr.writeln('HOSTILE \x1b]52;c;SECRET\x07 after \x1b[2J end');
   }
+  if (args.contains('--malformed-log')) {
+    for (final sink in [stdout, stderr]) {
+      sink.add('MALFORMED '.codeUnits);
+      sink.add([0xff, 0xe2]);
+      await sink.flush();
+      // Invalid and valid multibyte sequences can straddle pipe reads.
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      sink.add([0x28, 0xa1, 0x20, 0xf0, 0x9f]);
+      await sink.flush();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      sink.add([0x99, 0x82, 0x0a]);
+      await sink.flush();
+    }
+  }
   final transport = await UnixSocketFrameTransport.connect(handle);
 
   // Signal "I'm alive and connected to the right session socket"

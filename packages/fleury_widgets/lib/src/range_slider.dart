@@ -1,6 +1,8 @@
 import 'package:fleury/fleury_core.dart';
 import 'package:fleury/fleury_internal.dart';
 
+import 'glyphs.dart';
+
 /// Which of the two handles a [RangeSlider] is editing.
 enum _ActiveHandle { low, high }
 
@@ -532,6 +534,7 @@ class _RawRangeSlider extends LeafRenderObjectWidget {
 
   @override
   RenderObject createRenderObject(BuildContext context) => _RenderRangeSlider(
+    glyphTier: drawingGlyphTierOf(context),
     values: values,
     min: min,
     max: max,
@@ -555,12 +558,14 @@ class _RawRangeSlider extends LeafRenderObjectWidget {
       ..focused = focused
       ..geometry = geometry
       ..selectedStyle = selectedStyle
-      ..trackStyle = trackStyle;
+      ..trackStyle = trackStyle
+      ..glyphTier = drawingGlyphTierOf(context);
   }
 }
 
 class _RenderRangeSlider extends RenderObject {
   _RenderRangeSlider({
+    GlyphTier glyphTier = GlyphTier.unicode,
     required (num, num) values,
     required num min,
     required num max,
@@ -569,7 +574,8 @@ class _RenderRangeSlider extends RenderObject {
     required _SliderGeometry geometry,
     required CellStyle selectedStyle,
     required CellStyle trackStyle,
-  }) : _values = values,
+  }) : _glyphTier = glyphTier,
+       _values = values,
        _min = min,
        _max = max,
        _active = active,
@@ -577,6 +583,13 @@ class _RenderRangeSlider extends RenderObject {
        _geometry = geometry,
        _selectedStyle = selectedStyle,
        _trackStyle = trackStyle;
+
+  GlyphTier _glyphTier;
+  set glyphTier(GlyphTier value) {
+    if (_glyphTier == value) return;
+    _glyphTier = value;
+    markNeedsPaintOnly();
+  }
 
   _SliderGeometry _geometry;
   set geometry(_SliderGeometry v) {
@@ -663,10 +676,14 @@ class _RenderRangeSlider extends RenderObject {
     final span = _max - _min;
     final loCol = ((lo - _min) / span * (w - 1)).round();
     final hiCol = ((hi - _min) / span * (w - 1)).round();
-    const track = '─';
-    const fill = '━';
-    const activeHandle = '●'; // solid: the handle the arrows move
-    const inactiveHandle = '○'; // hollow: the handle Up/Down switches to
+    final track = _glyphTier == GlyphTier.ascii ? '-' : '─';
+    final fill = _glyphTier == GlyphTier.ascii ? '=' : '━';
+    final activeHandle = _glyphTier == GlyphTier.ascii
+        ? '*'
+        : '●'; // solid: the handle the arrows move
+    final inactiveHandle = _glyphTier == GlyphTier.ascii
+        ? 'o'
+        : '○'; // hollow: the handle Up/Down switches to
 
     for (var c = 0; c < w; c++) {
       final tgt = offset.col + c;

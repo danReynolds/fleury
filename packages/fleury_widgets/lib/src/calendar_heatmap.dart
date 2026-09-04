@@ -1,5 +1,7 @@
 import 'package:fleury/fleury_core.dart';
 
+import 'glyphs.dart';
+
 /// Which day starts a week in a [CalendarHeatmap] row.
 ///
 /// [sunday] matches the GitHub-contribution-graph canonical layout and
@@ -141,7 +143,7 @@ class CalendarHeatmap extends StatelessWidget {
               children: <Widget>[
                 grid,
                 Text(
-                  '·░▒▓█  less – more',
+                  '${drawingGlyphTierOf(context) == GlyphTier.ascii ? '.:*+#' : '·░▒▓█'}  less – more',
                   allowSelect: false, // chart legend, not selectable text
                   style: theme.mutedStyle,
                 ),
@@ -263,6 +265,7 @@ class _RawCalendarHeatmap extends LeafRenderObjectWidget {
   @override
   RenderObject createRenderObject(BuildContext context) =>
       RenderCalendarHeatmap(
+        glyphTier: drawingGlyphTierOf(context),
         values: values,
         start: start,
         end: end,
@@ -292,13 +295,15 @@ class _RawCalendarHeatmap extends LeafRenderObjectWidget {
       ..weekStartsOn = weekStartsOn
       ..labelStyle = labelStyle
       ..showMonthLabels = showMonthLabels
-      ..showDayLabels = showDayLabels;
+      ..showDayLabels = showDayLabels
+      ..glyphTier = drawingGlyphTierOf(context);
   }
 }
 
 /// Render object behind [CalendarHeatmap]. See its docs.
 class RenderCalendarHeatmap extends RenderObject {
   RenderCalendarHeatmap({
+    GlyphTier glyphTier = GlyphTier.unicode,
     required Map<DateTime, num> values,
     required DateTime start,
     required DateTime end,
@@ -310,7 +315,8 @@ class RenderCalendarHeatmap extends RenderObject {
     required CellStyle labelStyle,
     required bool showMonthLabels,
     required bool showDayLabels,
-  }) : _values = values,
+  }) : _glyphTier = glyphTier,
+       _values = values,
        _start = start,
        _end = end,
        _min = min,
@@ -321,6 +327,13 @@ class RenderCalendarHeatmap extends RenderObject {
        _labelStyle = labelStyle,
        _showMonthLabels = showMonthLabels,
        _showDayLabels = showDayLabels;
+
+  GlyphTier _glyphTier;
+  set glyphTier(GlyphTier value) {
+    if (_glyphTier == value) return;
+    _glyphTier = value;
+    markNeedsPaintOnly();
+  }
 
   Map<DateTime, num> _values;
   set values(Map<DateTime, num> v) {
@@ -547,7 +560,9 @@ class RenderCalendarHeatmap extends RenderObject {
         // 5-step ladder: t==0 → `·` (recorded-zero dim dot),
         // (0, .25] → ░, (.25, .5] → ▒, (.5, .75] → ▓, (.75, 1] → █.
         final idx = t == 0 ? 0 : ((t * 4).ceil()).clamp(0, 4);
-        final glyph = _glyphs[idx];
+        final glyph = _glyphTier == GlyphTier.ascii
+            ? const ['.', ':', '*', '+', '#'][idx]
+            : _glyphs[idx];
         final cellLeft = gridLeft + w * _cellWidth;
         for (var x = 0; x < _cellWidth; x++) {
           final col = cellLeft + x;

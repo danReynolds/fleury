@@ -84,7 +84,7 @@ class Sparkline extends StatelessWidget {
                     max: max,
                     min: min,
                     style: resolved,
-                    glyphTier: MediaQuery.glyphTierOf(context),
+                    glyphTier: drawingGlyphTierOf(context),
                   ),
                 ),
                 Text(
@@ -99,7 +99,7 @@ class Sparkline extends StatelessWidget {
               max: max,
               min: min,
               style: resolved,
-              glyphTier: MediaQuery.glyphTierOf(context),
+              glyphTier: drawingGlyphTierOf(context),
             ),
     );
   }
