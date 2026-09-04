@@ -40,7 +40,7 @@ void main() {
       expect(output, isNot(contains('\x1b]52')));
 
       final model = tester.semantics().single(
-        role: SemanticRole.modelStatus,
+        role: WidgetRoles.modelStatus,
         label: 'Model status',
         value: 'streaming',
       );
@@ -62,7 +62,7 @@ void main() {
       expect(model.state['adapterReady'], isTrue);
 
       final token = tester.semantics().single(
-        role: SemanticRole.tokenMeter,
+        role: WidgetRoles.tokenMeter,
         label: 'Context',
         value: '1100/2000',
       );
@@ -71,7 +71,7 @@ void main() {
       expect(token.state['contextOverLimit'], isFalse);
 
       final modelFallback = tester.accessibilitySnapshot().single(
-        role: SemanticRole.modelStatus,
+        role: WidgetRoles.modelStatus,
         label: 'Model status',
       );
       expect(
@@ -83,7 +83,7 @@ void main() {
       );
 
       final tokenFallback = tester.accessibilitySnapshot().single(
-        role: SemanticRole.tokenMeter,
+        role: WidgetRoles.tokenMeter,
         label: 'Context',
       );
       expect(
@@ -100,7 +100,7 @@ void main() {
         const TokenMeter(usage: TokenUsage(contextUsed: 85, contextLimit: 100)),
       );
 
-      var token = tester.semantics().single(role: SemanticRole.tokenMeter);
+      var token = tester.semantics().single(role: WidgetRoles.tokenMeter);
       expect(token.state['contextNearLimit'], isTrue);
       expect(token.state['contextOverLimit'], isFalse);
 
@@ -108,7 +108,7 @@ void main() {
         const TokenMeter(usage: TokenUsage(contextUsed: 99, contextLimit: 100)),
       );
 
-      token = tester.semantics().single(role: SemanticRole.tokenMeter);
+      token = tester.semantics().single(role: WidgetRoles.tokenMeter);
       expect(token.state['contextNearLimit'], isFalse);
       expect(token.state['contextOverLimit'], isTrue);
     });

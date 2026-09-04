@@ -35,7 +35,7 @@ void main() {
       expect(output, isNot(contains('\x1b]52')));
 
       final node = tester.semantics().single(
-        role: SemanticRole.toolCall,
+        role: WidgetRoles.toolCall,
         label: 'Run tests',
         value: 'running',
         action: SemanticAction.copy,
@@ -51,7 +51,7 @@ void main() {
       expect(node.state.outputSanitized, isTrue);
 
       final accessibility = tester.accessibilitySnapshot().single(
-        role: SemanticRole.toolCall,
+        role: WidgetRoles.toolCall,
         label: 'Run tests',
       );
       expect(
@@ -78,7 +78,7 @@ void main() {
 
         final result = await tester.invokeSemanticAction(
           SemanticAction.copy,
-          role: SemanticRole.toolCall,
+          role: WidgetRoles.toolCall,
           label: 'Run tests',
         );
 
@@ -105,7 +105,7 @@ void main() {
 
       final result = await tester.invokeSemanticAction(
         SemanticAction.cancel,
-        role: SemanticRole.toolCall,
+        role: WidgetRoles.toolCall,
         label: 'Run tests',
       );
 

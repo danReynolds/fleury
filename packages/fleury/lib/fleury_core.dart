@@ -172,6 +172,8 @@ export 'src/semantics/semantics.dart'
         SemanticNode,
         SemanticNodeId,
         SemanticRole,
+        humanizeSemanticRoleName,
+        isValidSemanticRoleName,
         SemanticSetValueCallback,
         SemanticState,
         SemanticTree,

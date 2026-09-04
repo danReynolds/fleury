@@ -373,7 +373,8 @@ void main() {
       },
     );
 
-    test('an unknown role degrades to text; unknown actions are dropped', () {
+    test('an unknown role keeps its name, projects through text; unknown '
+        'actions are dropped', () {
       final snapshot = SemanticInspectionSnapshot.fromJson({
         'schemaVersion': 1,
         'root': {
@@ -391,7 +392,13 @@ void main() {
       });
 
       final node = snapshot.toSemanticTree().root.children.single;
-      expect(node.role, SemanticRole.text, reason: 'unknown role falls back');
+      // Roles are an open vocabulary: the name survives (an agent can still
+      // match on it), and with no known core role to project through the
+      // node degrades to plain text — the pre-open-vocabulary behavior.
+      expect(node.role.name, 'hologram');
+      expect(node.role.isCore, isFalse);
+      expect(node.role.coreRole, SemanticRole.text);
+      expect(node.role, isNot(SemanticRole.text), reason: 'name is identity');
       expect(node.label, 'Future node');
       expect(node.actions, {
         SemanticAction.activate,

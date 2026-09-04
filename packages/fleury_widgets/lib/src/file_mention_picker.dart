@@ -2,6 +2,8 @@ import 'dart:async' show scheduleMicrotask, unawaited;
 
 import 'package:fleury/fleury_core.dart';
 
+import 'semantic_roles.dart';
+
 /// Type of target exposed by [FileMentionPicker].
 enum FileMentionKind { file, directory, symbol, url, other }
 
@@ -661,7 +663,7 @@ class _FileMentionPickerState extends State<FileMentionPicker> {
         ),
       ],
       child: Semantics(
-        role: SemanticRole.fileMentionPicker,
+        role: WidgetRoles.fileMentionPicker,
         label: widget.semanticLabel,
         value: _query.text,
         focused: _queryFocusNode.hasFocus || _resultsFocusNode.hasFocus,
@@ -747,7 +749,7 @@ class _FileMentionRow extends StatelessWidget {
     );
 
     return Semantics(
-      role: SemanticRole.fileMention,
+      role: WidgetRoles.fileMention,
       label: label,
       value: mentionText,
       hint: detail,

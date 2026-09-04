@@ -2,6 +2,7 @@ import 'package:fleury/fleury_core.dart';
 
 import 'controls.dart' show Button, ButtonVariant;
 import 'dialog.dart' show Dialog;
+import 'semantic_roles.dart';
 
 /// Severity for a protocol-neutral approval request.
 enum ApprovalSeverity { info, warning, destructive }
@@ -91,7 +92,7 @@ class ApprovalPrompt extends StatelessWidget {
     final theme = Theme.of(context);
     final approveFocused = _autofocusApprove;
     return Semantics(
-      role: SemanticRole.approval,
+      role: WidgetRoles.approval,
       label: request.title,
       value: request.subject,
       actions: const {SemanticAction.submit, SemanticAction.cancel},

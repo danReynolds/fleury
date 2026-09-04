@@ -256,6 +256,8 @@ final class SemanticDomPresenter
     final attributes = <String, String>{
       'data-fleury-semantic-id': node.id.value,
       'data-fleury-semantic-role': node.role.name,
+      if (!node.role.isCore)
+        'data-fleury-semantic-core-role': node.role.coreRole.name,
       if (_actionTargetToken(node) case final token?)
         'data-fleury-action-target-token': token,
     };
@@ -401,7 +403,7 @@ final class SemanticDomPresenter
     SemanticRole role,
     String? valueText,
   ) {
-    switch (role) {
+    switch (role.coreRole) {
       case SemanticRole.textField:
         final input = element as web.HTMLInputElement;
         final value = valueText ?? '';
@@ -423,7 +425,7 @@ final class SemanticDomPresenter
     Map<String, String> attributes,
     SemanticRole role,
   ) {
-    switch (role) {
+    switch (role.coreRole) {
       case SemanticRole.textField:
         attributes['autocomplete'] = 'off';
         attributes['spellcheck'] = 'false';
@@ -442,10 +444,8 @@ final class SemanticDomPresenter
     Map<String, String> attributes,
     SemanticRole role,
   ) {
-    switch (role) {
+    switch (role.coreRole) {
       case SemanticRole.status:
-      case SemanticRole.modelStatus:
-      case SemanticRole.tokenMeter:
       case SemanticRole.progress:
         attributes['aria-live'] = 'polite';
         return;
@@ -463,15 +463,16 @@ final class SemanticDomPresenter
   }
 
   bool _isNonTabbableMirror(SemanticNode node) {
+    final role = node.role.coreRole;
     return node.focused ||
         node.actions.isNotEmpty ||
-        node.role == SemanticRole.link ||
-        node.role == SemanticRole.textField ||
-        node.role == SemanticRole.textArea;
+        role == SemanticRole.link ||
+        role == SemanticRole.textField ||
+        role == SemanticRole.textArea;
   }
 
   String? _ownText(SemanticNode node, String? valueText) {
-    return switch (node.role) {
+    return switch (node.role.coreRole) {
       SemanticRole.text ||
       SemanticRole.code ||
       SemanticRole.codeLine ||
@@ -484,15 +485,17 @@ final class SemanticDomPresenter
   }
 
   bool _allowsOwnText(SemanticRole role) {
-    return role != SemanticRole.textField && role != SemanticRole.textArea;
+    final core = role.coreRole;
+    return core != SemanticRole.textField && core != SemanticRole.textArea;
   }
 
   bool _allowsChildElements(SemanticRole role) {
-    return role != SemanticRole.textField && role != SemanticRole.textArea;
+    final core = role.coreRole;
+    return core != SemanticRole.textField && core != SemanticRole.textArea;
   }
 
   String _tagFor(SemanticRole role) {
-    return switch (role) {
+    return switch (role.coreRole) {
       SemanticRole.link => 'a',
       SemanticRole.textField => 'input',
       SemanticRole.textArea => 'textarea',
@@ -507,68 +510,46 @@ final class SemanticDomPresenter
   }
 
   String? _ariaRoleFor(SemanticRole role) {
-    return switch (role) {
+    // Project through the core role: a role declared by a widget package
+    // (`WidgetRoles.patchReview`, base region) or by an app lands on the ARIA
+    // role of its base, so the mirror never needs to know the catalog.
+    return switch (role.coreRole) {
       SemanticRole.app => 'group',
       SemanticRole.errorBoundary => 'alert',
       SemanticRole.screen ||
       SemanticRole.route ||
       SemanticRole.region ||
-      SemanticRole.contextPanel ||
-      SemanticRole.patchReview ||
       SemanticRole.formField => 'region',
-      SemanticRole.navigation ||
-      SemanticRole.conversationNavigator => 'navigation',
-      SemanticRole.list || SemanticRole.messageList => 'list',
-      SemanticRole.listItem ||
-      SemanticRole.contextItem ||
-      SemanticRole.fileMention ||
-      SemanticRole.message ||
-      SemanticRole.task ||
-      SemanticRole.traceEvent ||
-      SemanticRole.patchFile => 'listitem',
+      SemanticRole.navigation => 'navigation',
+      SemanticRole.list => 'list',
+      SemanticRole.listItem || SemanticRole.task => 'listitem',
       SemanticRole.table => 'table',
       SemanticRole.tableRow => 'row',
       SemanticRole.tableCell => 'cell',
       SemanticRole.link => 'link',
       SemanticRole.image => 'img',
       SemanticRole.textField || SemanticRole.textArea => 'textbox',
-      SemanticRole.button ||
-      SemanticRole.command ||
-      SemanticRole.approval => 'button',
+      SemanticRole.button || SemanticRole.command => 'button',
       SemanticRole.checkbox => 'checkbox',
       SemanticRole.radio => 'radio',
       SemanticRole.toggle => 'switch',
       SemanticRole.spinButton => 'spinbutton',
       SemanticRole.slider => 'slider',
       SemanticRole.datePicker => 'group',
-      SemanticRole.menu || SemanticRole.commandPalette => 'menu',
+      SemanticRole.menu => 'menu',
       SemanticRole.menuItem => 'menuitem',
       SemanticRole.dialog => 'dialog',
       SemanticRole.progress => 'progressbar',
       SemanticRole.log => 'log',
       SemanticRole.status ||
-      SemanticRole.modelStatus ||
-      SemanticRole.tokenMeter ||
       SemanticRole.notification ||
       SemanticRole.diagnostic => 'status',
       SemanticRole.tab => 'tab',
       SemanticRole.tree => 'tree',
       SemanticRole.treeItem || SemanticRole.jsonNode => 'treeitem',
       SemanticRole.form => 'form',
-      SemanticRole.taskGraph => 'tree',
-      SemanticRole.toolCall => 'status',
       SemanticRole.chart => 'img',
-      SemanticRole.text ||
-      SemanticRole.conversation ||
-      SemanticRole.traceTimeline ||
-      SemanticRole.fileMentionPicker ||
-      SemanticRole.json ||
-      SemanticRole.diff ||
-      SemanticRole.diffLine ||
-      SemanticRole.code ||
-      SemanticRole.codeLine ||
-      SemanticRole.markdown ||
-      SemanticRole.markdownBlock => null,
+      _ => null,
     };
   }
 
@@ -646,7 +627,7 @@ bool _shouldExposeValueAttribute(SemanticNode node) {
 }
 
 bool _usesOwnTextAsAccessibleContent(SemanticRole role) {
-  return switch (role) {
+  return switch (role.coreRole) {
     SemanticRole.text ||
     SemanticRole.code ||
     SemanticRole.codeLine ||
@@ -658,7 +639,7 @@ bool _usesOwnTextAsAccessibleContent(SemanticRole role) {
 }
 
 void _addLinkAttributes(Map<String, String> attributes, SemanticNode node) {
-  if (node.role != SemanticRole.link) return;
+  if (node.role.coreRole != SemanticRole.link) return;
   final url = _linkUrlFor(node);
   if (url == null || url.isEmpty) return;
   attributes['data-fleury-link-url'] = url;
@@ -714,11 +695,12 @@ SemanticAction? _semanticActionByName(String name) {
   return null;
 }
 
-bool _usesPointerCursor(SemanticRole role) => const <SemanticRole>{
+// Not const: SemanticRole defines its own equality (by name), which Dart
+// excludes from constant sets.
+final Set<SemanticRole> _pointerCursorRoles = <SemanticRole>{
   SemanticRole.link,
   SemanticRole.button,
   SemanticRole.command,
-  SemanticRole.approval,
   SemanticRole.checkbox,
   SemanticRole.radio,
   SemanticRole.toggle,
@@ -728,7 +710,10 @@ bool _usesPointerCursor(SemanticRole role) => const <SemanticRole>{
   SemanticRole.menuItem,
   SemanticRole.tab,
   SemanticRole.treeItem,
-}.contains(role);
+};
+
+bool _usesPointerCursor(SemanticRole role) =>
+    _pointerCursorRoles.contains(role.coreRole);
 
 const _rootStyle =
     'position:absolute;left:-10000px;top:auto;width:1px;height:1px;'

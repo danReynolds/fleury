@@ -126,7 +126,7 @@ void main() {
       expect(selected?.itemIndex, 0);
 
       final panel = tester.semantics().single(
-        role: SemanticRole.contextPanel,
+        role: WidgetRoles.contextPanel,
         label: 'Context pack',
       );
       expect(panel.value, '2370/8000');
@@ -137,7 +137,7 @@ void main() {
       expect(panel.state.selectedContextItemId, 'ctx.demo');
 
       final row = tester.semantics().single(
-        role: SemanticRole.contextItem,
+        role: WidgetRoles.contextItem,
         label: 'Demo console source',
       );
       expect(row.selected, isTrue);
@@ -149,7 +149,7 @@ void main() {
       expect(row.state['pinned'], isTrue);
 
       final fallback = tester.accessibilitySnapshot().single(
-        role: SemanticRole.contextItem,
+        role: WidgetRoles.contextItem,
         label: 'Demo console source',
       );
       expect(
@@ -178,7 +178,7 @@ void main() {
 
       tester.render(size: const CellSize(100, 6));
       var panel = tester.semantics().single(
-        role: SemanticRole.contextPanel,
+        role: WidgetRoles.contextPanel,
         label: 'Context pack',
         action: SemanticAction.focus,
       );
@@ -187,14 +187,14 @@ void main() {
 
       var result = await tester.invokeSemanticAction(
         SemanticAction.focus,
-        role: SemanticRole.contextPanel,
+        role: WidgetRoles.contextPanel,
         label: 'Context pack',
       );
       expect(result.completed, isTrue);
 
       tester.render(size: const CellSize(100, 6));
       panel = tester.semantics().single(
-        role: SemanticRole.contextPanel,
+        role: WidgetRoles.contextPanel,
         label: 'Context pack',
         focused: true,
       );
@@ -202,7 +202,7 @@ void main() {
 
       result = await tester.invokeSemanticAction(
         SemanticAction.activate,
-        role: SemanticRole.contextItem,
+        role: WidgetRoles.contextItem,
         label: 'Demo scenario',
       );
       expect(result.completed, isTrue);
@@ -211,7 +211,7 @@ void main() {
 
       tester.render(size: const CellSize(100, 6));
       final row = tester.semantics().single(
-        role: SemanticRole.contextItem,
+        role: WidgetRoles.contextItem,
         label: 'Demo scenario',
         selected: true,
         action: SemanticAction.copy,
@@ -219,7 +219,7 @@ void main() {
       expect(row.state.contextItemId, 'ctx.scenario');
 
       panel = tester.semantics().single(
-        role: SemanticRole.contextPanel,
+        role: WidgetRoles.contextPanel,
         label: 'Context pack',
         focused: true,
       );
@@ -270,13 +270,13 @@ void main() {
 
       expect(controller.selectedIndex, 3);
       final panel = tester.semantics().single(
-        role: SemanticRole.contextPanel,
+        role: WidgetRoles.contextPanel,
         label: 'Context pack',
       );
       expect(panel.state.selectedContextItemId, 'ctx.transcript');
 
       final selected = tester.semantics().single(
-        role: SemanticRole.contextItem,
+        role: WidgetRoles.contextItem,
         label: 'Transcript tail',
         selected: true,
       );
@@ -303,7 +303,7 @@ void main() {
         tester.render(size: const CellSize(100, 6));
         final result = await tester.invokeSemanticAction(
           SemanticAction.copy,
-          role: SemanticRole.contextItem,
+          role: WidgetRoles.contextItem,
           label: 'Demo console source',
         );
 

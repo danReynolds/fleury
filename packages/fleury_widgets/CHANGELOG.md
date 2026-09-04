@@ -4,6 +4,10 @@
 
 Initial public release.
 
+- **`WidgetRoles`.** The catalog's domain semantic roles (`patchReview`,
+  `toolCall`, `messageList`, `message`, `approval`, …) live here rather than in
+  core's `SemanticRole`, each declaring the core role it projects through. Match
+  them exactly like core roles: `find.byRole(WidgetRoles.toolCall)`.
 - **Unified control styling.** Buttons, toggles, choices, selectors, steppers,
   sliders, date/color pickers, and input wrappers now use their ordinary
   `style` property for both `CellStyle(...)` and `CellStyle.interactive(...)`.

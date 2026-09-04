@@ -155,15 +155,15 @@ void main() {
   ) async {
     tester.pumpWidget(Navigator(home: _Capture((c) => ctx = c)));
     _open(tester, ctx, commands((_) {}));
-    expect(tester.semantics().byRole(SemanticRole.commandPalette), isNotEmpty);
+    expect(tester.semantics().byRole(WidgetRoles.commandPalette), isNotEmpty);
 
     tester.sendKey(const KeyEvent(KeyCode.escape));
     await _settleClose(tester);
 
-    expect(tester.semantics().byRole(SemanticRole.commandPalette), isEmpty);
+    expect(tester.semantics().byRole(WidgetRoles.commandPalette), isEmpty);
     final result = await tester.invokeSemanticAction(
       SemanticAction.submit,
-      role: SemanticRole.commandPalette,
+      role: WidgetRoles.commandPalette,
     );
     expect(result.status, SemanticActionInvocationStatus.notFound);
   });
@@ -181,13 +181,13 @@ void main() {
       tester.type('Run Cycle $i');
       tester.pump();
       expect(
-        tester.semantics().byRole(SemanticRole.commandPalette),
+        tester.semantics().byRole(WidgetRoles.commandPalette),
         hasLength(1),
       );
       tester.sendKey(const KeyEvent(KeyCode.enter));
       await _settleClose(tester);
       expect(Navigator.of(ctx).depth, 1);
-      expect(tester.semantics().byRole(SemanticRole.commandPalette), isEmpty);
+      expect(tester.semantics().byRole(WidgetRoles.commandPalette), isEmpty);
     }
 
     expect(calls, 4);
@@ -198,7 +198,7 @@ void main() {
     _open(tester, ctx, commands((_) {}));
 
     var tree = tester.semantics();
-    var palette = tree.single(role: SemanticRole.commandPalette);
+    var palette = tree.single(role: WidgetRoles.commandPalette);
     expect(palette.label, 'Command palette');
     expect(palette.value, '');
     expect(palette.actions, contains(SemanticAction.submit));
@@ -215,7 +215,7 @@ void main() {
     tester.pump();
 
     tree = tester.semantics();
-    palette = tree.single(role: SemanticRole.commandPalette);
+    palette = tree.single(role: WidgetRoles.commandPalette);
     expect(palette.value, 'save');
     expect(palette.state.filterText, 'save');
     expect(palette.state.collectionRowCount, 1);
@@ -231,7 +231,7 @@ void main() {
     ]);
 
     final tree = tester.semantics();
-    final palette = tree.single(role: SemanticRole.commandPalette);
+    final palette = tree.single(role: WidgetRoles.commandPalette);
     final rows = _paletteCommandRows(tester);
     expect(palette.state.collectionRowCount, 200);
     expect(rows.length, lessThan(200));
@@ -251,7 +251,7 @@ void main() {
 
     final result = await tester.invokeSemanticAction(
       SemanticAction.submit,
-      role: SemanticRole.commandPalette,
+      role: WidgetRoles.commandPalette,
     );
 
     expect(result.completed, isTrue);
@@ -288,7 +288,7 @@ void main() {
 
     final result = await tester.invokeSemanticAction(
       SemanticAction.dismiss,
-      role: SemanticRole.commandPalette,
+      role: WidgetRoles.commandPalette,
     );
 
     expect(result.completed, isTrue);
@@ -517,7 +517,7 @@ void main() {
 
       expect(calls, ['screen']);
       expect(Navigator.of(ctx).depth, 1);
-      expect(tester.semantics().byRole(SemanticRole.commandPalette), isEmpty);
+      expect(tester.semantics().byRole(WidgetRoles.commandPalette), isEmpty);
     });
 
     testWidgets(
@@ -552,14 +552,14 @@ void main() {
           tester.type(title);
           tester.pump();
           expect(
-            tester.semantics().byRole(SemanticRole.commandPalette),
+            tester.semantics().byRole(WidgetRoles.commandPalette),
             hasLength(1),
           );
           tester.sendKey(const KeyEvent(KeyCode.enter));
           await _settleClose(tester);
           expect(Navigator.of(ctx).depth, 1);
           expect(
-            tester.semantics().byRole(SemanticRole.commandPalette),
+            tester.semantics().byRole(WidgetRoles.commandPalette),
             isEmpty,
           );
         }
@@ -603,7 +603,7 @@ void main() {
         tester.sendKey(const KeyEvent(KeyCode.enter));
         await _settleClose(tester);
         expect(Navigator.of(ctx).depth, 1);
-        expect(tester.semantics().byRole(SemanticRole.commandPalette), isEmpty);
+        expect(tester.semantics().byRole(WidgetRoles.commandPalette), isEmpty);
       }
 
       expect(calls, [id(1), id(38), id(75), id(112)]);
@@ -646,7 +646,7 @@ void main() {
           } else if (i == 1) {
             await tester.invokeSemanticAction(
               SemanticAction.submit,
-              role: SemanticRole.commandPalette,
+              role: WidgetRoles.commandPalette,
             );
           } else if (i == 2) {
             final row = _paletteCommandRows(
@@ -661,13 +661,13 @@ void main() {
           } else {
             await tester.invokeSemanticAction(
               SemanticAction.dismiss,
-              role: SemanticRole.commandPalette,
+              role: WidgetRoles.commandPalette,
             );
           }
           await _settleClose(tester);
           expect(Navigator.of(ctx).depth, 1, reason: 'cycle $i closed');
           expect(
-            tester.semantics().byRole(SemanticRole.commandPalette),
+            tester.semantics().byRole(WidgetRoles.commandPalette),
             isEmpty,
           );
         }
@@ -818,7 +818,7 @@ void main() {
       expect(
         tester
             .semantics()
-            .single(role: SemanticRole.commandPalette)
+            .single(role: WidgetRoles.commandPalette)
             .state
             .selectedKey,
         2,
@@ -836,7 +836,7 @@ void main() {
       expect(
         tester
             .semantics()
-            .single(role: SemanticRole.commandPalette)
+            .single(role: WidgetRoles.commandPalette)
             .state
             .selectedKey,
         1,

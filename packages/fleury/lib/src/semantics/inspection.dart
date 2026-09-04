@@ -331,6 +331,7 @@ final class SemanticInspectionNode {
   SemanticInspectionNode._({
     required this.id,
     required this.role,
+    this.coreRole,
     this.label,
     this.value,
     this.hint,
@@ -374,6 +375,7 @@ final class SemanticInspectionNode {
     return SemanticInspectionNode._(
       id: sanitizeForDisplay(node.id.value),
       role: node.role.name,
+      coreRole: node.role.isCore ? null : node.role.coreRole.name,
       label: node.label == null ? null : sanitizeForDisplay(node.label!),
       value: redacted ? '<redacted>' : _jsonValue(node.value),
       hint: node.hint == null ? null : sanitizeForDisplay(node.hint!),
@@ -435,6 +437,7 @@ final class SemanticInspectionNode {
     return SemanticInspectionNode._(
       id: sanitizeForDisplay(id),
       role: sanitizeForDisplay(role),
+      coreRole: _jsonCoreRole(json['coreRole']),
       label: _jsonSanitizedString(json['label']),
       value: redacted ? '<redacted>' : _jsonValue(json['value']),
       hint: _jsonSanitizedString(json['hint']),
@@ -457,6 +460,11 @@ final class SemanticInspectionNode {
 
   final String id;
   final String role;
+
+  /// The core role a declared (non-core) [role] projects through, or null when
+  /// [role] is itself a core role. Additive wire field: absent from every node
+  /// a v1 producer emits.
+  final String? coreRole;
   final String? label;
   final Object? value;
   final String? hint;
@@ -527,6 +535,7 @@ final class SemanticInspectionNode {
   }) => <String, Object?>{
     'id': id,
     'role': role,
+    if (coreRole != null) 'coreRole': coreRole,
     if (label != null) 'label': label,
     if (value != null && !(dedupeValue && value == label)) 'value': value,
     if (hint != null) 'hint': hint,
@@ -570,13 +579,14 @@ final class SemanticInspectionNode {
 
   /// Reconstructs a [SemanticNode] from this inspection node, recursively.
   ///
-  /// Role and action names are matched back to their enums; an unrecognized
-  /// role (e.g. one added by a newer server) falls back to [SemanticRole.text]
-  /// and unrecognized actions are dropped, so an additive schema never crashes
-  /// an older consumer. See [SemanticInspectionSnapshot.toSemanticTree].
+  /// Roles are rebuilt through [SemanticRole.fromWire]: a core name resolves to
+  /// its constant, a declared role keeps its name and projects through the
+  /// `coreRole` it was sent with, and an unrecognized core role (e.g. one added
+  /// by a newer server) falls back to [SemanticRole.text]. Unrecognized actions
+  /// are dropped, so an additive schema never crashes an older consumer. See [SemanticInspectionSnapshot.toSemanticTree].
   SemanticNode toSemanticNode() => SemanticNode(
     id: SemanticNodeId(id),
-    role: _semanticRoleByName(role),
+    role: SemanticRole.fromWire(role, coreRoleName: coreRole),
     label: label,
     value: value,
     hint: hint,
@@ -893,15 +903,14 @@ List<SemanticInspectionNode> _jsonNodeList(Object? value) {
   return nodes;
 }
 
-/// Matches a serialized role name back to its enum. An unknown name (a role
-/// added by a newer producer) degrades to [SemanticRole.text] rather than
-/// throwing, so [SemanticInspectionNode.toSemanticNode] tolerates an additive
-/// schema.
-SemanticRole _semanticRoleByName(String name) {
-  for (final role in SemanticRole.values) {
-    if (role.name == name) return role;
-  }
-  return SemanticRole.text;
+/// Reads the additive `coreRole` field: the core role a declared role projects
+/// through. Unknown or malformed values are dropped (null), which makes
+/// [SemanticRole.fromWire] fall back to [SemanticRole.text] — the same
+/// degradation an older consumer applied to any unfamiliar role name.
+String? _jsonCoreRole(Object? value) {
+  final name = _jsonString(value);
+  if (name == null || !isValidSemanticRoleName(name)) return null;
+  return name;
 }
 
 /// Matches a serialized action name back to its enum, or null if unrecognized

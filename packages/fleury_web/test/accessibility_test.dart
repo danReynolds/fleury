@@ -90,7 +90,7 @@ const _validAriaRoles = <String>{
 
 /// Roles that present an interactive control, which ARIA requires to have an
 /// accessible name.
-const _interactiveRoles = <SemanticRole>{
+final _interactiveRoles = <SemanticRole>{
   SemanticRole.button,
   SemanticRole.link,
   SemanticRole.textField,

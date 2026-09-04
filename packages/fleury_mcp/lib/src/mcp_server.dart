@@ -1012,7 +1012,9 @@ final class McpServer {
         'properties': <String, Object?>{
           'role': <String, Object?>{
             'type': 'string',
-            'description': 'Exact role name to match.',
+            'description':
+                'Exact role name to match — a core role or one the app declares '
+                '(see the roles present in get_ui).',
           },
           'label': <String, Object?>{
             'type': 'string',
@@ -1450,13 +1452,6 @@ final class McpServer {
     // Validate the enum-valued filters up front: a typo'd role/action would
     // otherwise silently match nothing, and the agent could wrongly conclude
     // "no such nodes" rather than "I mistyped the name".
-    final role = _optString(args['role']);
-    if (role != null && !_roleNames.contains(role)) {
-      throw _ToolFailure(
-        'Unknown role "$role". Role names are camelCase (e.g. button, tableRow, '
-        'textField); omit role or call get_ui to see the roles in this UI.',
-      );
-    }
     final action = _optString(args['action']);
     if (action != null && !_actionsByName.containsKey(action)) {
       throw _ToolFailure(
@@ -1464,6 +1459,21 @@ final class McpServer {
       );
     }
     final snapshot = await _requireSnapshot();
+    // Roles are an open vocabulary: widget packages and apps declare their own
+    // (`patchReview`, `toolCall`, …) beyond the core set, so a name is valid
+    // when it is a core role OR one the live tree actually uses. Anything else
+    // is a typo the agent should hear about, not a silent empty match.
+    final role = _optString(args['role']);
+    if (role != null &&
+        !_roleNames.contains(role) &&
+        !snapshot.roleCounts.containsKey(role)) {
+      final present = snapshot.roleCounts.keys.toList()..sort();
+      throw _ToolFailure(
+        'Unknown role "$role". Role names are camelCase (e.g. button, tableRow, '
+        'textField); roles in this UI: ${present.join(', ')}. Omit role or '
+        'call get_ui to see the tree.',
+      );
+    }
     final matches = snapshot
         .where(
           role: role,

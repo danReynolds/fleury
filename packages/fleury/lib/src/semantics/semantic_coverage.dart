@@ -261,27 +261,22 @@ bool _isSemanticExclusion(SemanticNode node) =>
     node.state[semanticExcludedStateKey] == true;
 
 bool _providesReadableCoverage(SemanticNode node) {
-  return switch (node.role) {
+  // Containers describe structure, not content: their painted cells count as
+  // covered only through readable descendants. A declared role projects
+  // through its core role, so a widget package's list-like or region-like role
+  // is treated as the container it says it is.
+  return switch (node.role.coreRole) {
     SemanticRole.app ||
     SemanticRole.screen ||
     SemanticRole.route ||
     SemanticRole.region ||
     SemanticRole.navigation ||
     SemanticRole.list ||
-    SemanticRole.conversationNavigator ||
-    SemanticRole.conversation ||
-    SemanticRole.contextPanel ||
-    SemanticRole.traceTimeline ||
-    SemanticRole.patchReview ||
-    SemanticRole.messageList ||
     SemanticRole.table ||
     SemanticRole.tableRow ||
-    SemanticRole.fileMentionPicker ||
     SemanticRole.menu ||
-    SemanticRole.commandPalette ||
     SemanticRole.dialog ||
     SemanticRole.form ||
-    SemanticRole.taskGraph ||
     SemanticRole.tree ||
     SemanticRole.json ||
     SemanticRole.diff => false,

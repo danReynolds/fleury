@@ -15,6 +15,7 @@ import 'package:fleury/fleury_core.dart'
         SemanticRole,
         Widget;
 import 'package:fleury_test/fleury_test.dart';
+import 'package:fleury_widgets/fleury_widgets.dart';
 import 'package:image/image.dart' as img;
 import 'package:test/test.dart';
 
@@ -616,7 +617,7 @@ void main() {
     tester.render();
 
     expect(
-      tester.semantics().single(role: SemanticRole.commandPalette),
+      tester.semantics().single(role: WidgetRoles.commandPalette),
       isNotNull,
     );
     final paletteSave = tester

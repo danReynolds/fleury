@@ -408,7 +408,7 @@ class _DebugPanelState extends State<DebugPanel> {
       counts[node.role] = (counts[node.role] ?? 0) + 1;
     }
     final roles = counts.entries.toList()
-      ..sort((a, b) => a.key.index.compareTo(b.key.index));
+      ..sort((a, b) => a.key.name.compareTo(b.key.name));
 
     return [
       ..._terminalDiagnosisRows(diagnosis),

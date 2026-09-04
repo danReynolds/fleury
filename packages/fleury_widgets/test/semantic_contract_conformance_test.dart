@@ -193,7 +193,9 @@ void main() {
 
       // Shared control shells take the semantic role as a constructor
       // argument, while ordinary widgets pass it directly to Semantics.
-      final pattern = RegExp(r'(?:role|semanticRole):\s*SemanticRole\.(\w+)');
+      final pattern = RegExp(
+        r'(?:role|semanticRole):\s*(?:SemanticRole|WidgetRoles)\.(\w+)',
+      );
       final fromSource = <String, List<String>>{};
       for (final entity in dir.listSync()) {
         if (entity is! File || !entity.path.endsWith('.dart')) continue;

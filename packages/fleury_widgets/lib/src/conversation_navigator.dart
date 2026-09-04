@@ -3,6 +3,8 @@ import 'dart:async' show scheduleMicrotask, unawaited;
 import 'package:characters/characters.dart';
 import 'package:fleury/fleury_core.dart';
 
+import 'semantic_roles.dart';
+
 /// Protocol-neutral lifecycle for a conversation/session row.
 enum ConversationStatus {
   active,
@@ -693,7 +695,7 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
         ),
       ],
       child: Semantics(
-        role: SemanticRole.conversationNavigator,
+        role: WidgetRoles.conversationNavigator,
         label: widget.semanticLabel,
         value: _query.text,
         focused: _queryFocusNode.hasFocus || _listFocusNode.hasFocus,
@@ -793,7 +795,7 @@ class _ConversationRow extends StatelessWidget {
     );
 
     return Semantics(
-      role: SemanticRole.conversation,
+      role: WidgetRoles.conversation,
       label: title,
       value: latest,
       hint: subtitle,

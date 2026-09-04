@@ -101,7 +101,7 @@ void main() {
       expect(output, isNot(contains('\x1b]52')));
 
       final graph = tester.semantics().single(
-        role: SemanticRole.taskGraph,
+        role: WidgetRoles.taskGraph,
         label: 'Release plan',
       );
       expect(graph.state.collectionRowCount, 3);
@@ -176,7 +176,7 @@ void main() {
 
       tester.render(size: const CellSize(80, 6));
       var graph = tester.semantics().single(
-        role: SemanticRole.taskGraph,
+        role: WidgetRoles.taskGraph,
         label: 'Release plan',
         action: SemanticAction.focus,
       );
@@ -185,14 +185,14 @@ void main() {
 
       var result = await tester.invokeSemanticAction(
         SemanticAction.focus,
-        role: SemanticRole.taskGraph,
+        role: WidgetRoles.taskGraph,
         label: 'Release plan',
       );
       expect(result.completed, isTrue);
 
       tester.render(size: const CellSize(80, 6));
       graph = tester.semantics().single(
-        role: SemanticRole.taskGraph,
+        role: WidgetRoles.taskGraph,
         label: 'Release plan',
         focused: true,
       );
@@ -216,7 +216,7 @@ void main() {
       expect(task.state.taskId, 'run');
 
       graph = tester.semantics().single(
-        role: SemanticRole.taskGraph,
+        role: WidgetRoles.taskGraph,
         label: 'Release plan',
         focused: true,
       );
@@ -261,7 +261,7 @@ void main() {
       expect(task.state.taskId, 'run');
 
       final graph = tester.semantics().single(
-        role: SemanticRole.taskGraph,
+        role: WidgetRoles.taskGraph,
         label: 'Release plan',
       );
       expect(graph.state.selectedTaskId, 'run');
@@ -319,7 +319,7 @@ void main() {
 
       expect(controller.selectedIndex, 3);
       final graph = tester.semantics().single(
-        role: SemanticRole.taskGraph,
+        role: WidgetRoles.taskGraph,
         label: 'Release plan',
       );
       expect(graph.state.selectedTaskId, 'ship');
@@ -353,7 +353,7 @@ void main() {
       tester.render(size: const CellSize(80, 6));
 
       final graph = tester.accessibilitySnapshot().single(
-        role: SemanticRole.taskGraph,
+        role: WidgetRoles.taskGraph,
         label: 'Release plan',
       );
       expect(

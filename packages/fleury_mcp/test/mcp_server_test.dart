@@ -2098,6 +2098,50 @@ void main() {
     expect(toolError(lastResult()), contains('Unknown role'));
   });
 
+  test(
+    'find_nodes accepts a role the app declared beyond the core set',
+    () async {
+      // Roles are an open vocabulary: a widget package's `patchReview` (core
+      // role: region) is not in SemanticRole.values, but it IS in this UI.
+      pushRoot(<String, Object?>{
+        'id': 'root',
+        'role': 'app',
+        'children': <Object?>[
+          <String, Object?>{
+            'id': 'review',
+            'role': 'patchReview',
+            'coreRole': 'region',
+            'label': 'Review 3 files',
+          },
+          <String, Object?>{'id': 'ok', 'role': 'button', 'label': 'Approve'},
+        ],
+      });
+      await bridge.ready;
+      await server.handleLine(
+        _rpc(91, 'tools/call', <String, Object?>{
+          'name': 'find_nodes',
+          'arguments': <String, Object?>{'role': 'patchReview'},
+        }),
+      );
+      final nodes = toolJson(lastResult())['nodes'] as List;
+      expect(nodes, hasLength(1));
+      final node = nodes.single as Map<String, Object?>;
+      expect(node['id'], 'review');
+      expect(node['coreRole'], 'region', reason: 'projection travels with it');
+
+      // A name in neither the core set nor this UI is still a typo.
+      await server.handleLine(
+        _rpc(92, 'tools/call', <String, Object?>{
+          'name': 'find_nodes',
+          'arguments': <String, Object?>{'role': 'patchreview'}, // wrong case
+        }),
+      );
+      final error = toolError(lastResult());
+      expect(error, contains('Unknown role'));
+      expect(error, contains('patchReview'), reason: 'lists the roles present');
+    },
+  );
+
   test('wait_for_change omits the UI on timeout (no redundant tree)', () async {
     pushCount(0);
     await bridge.ready;
