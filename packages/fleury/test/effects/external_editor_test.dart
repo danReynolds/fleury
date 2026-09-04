@@ -63,7 +63,7 @@ void main() {
         await driver.enter(TerminalMode.interactive);
         final file = File('${tempDir.path}/message.md');
         var cleaned = false;
-        ProcessTaskCommand? seenCommand;
+        ExternalEditorProcessRequest? seenCommand;
 
         final result = await editTextInExternalEditor(
           initialText: 'before',
@@ -115,7 +115,7 @@ void main() {
       'runs environment editor commands through the platform shell',
       () async {
         final file = File('${tempDir.path}/buffer.txt');
-        ProcessTaskCommand? seenCommand;
+        ExternalEditorProcessRequest? seenCommand;
 
         final result = await editTextInExternalEditor(
           initialText: 'draft',

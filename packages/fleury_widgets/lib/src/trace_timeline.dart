@@ -80,84 +80,6 @@ final class TraceTimelineEntry {
   bool get busy => status == TraceTimelineStatus.running;
 }
 
-/// Converts a [TaskEvent] into a safe [TraceTimelineEntry].
-///
-/// The adapter intentionally keeps task output and errors metadata-only. Raw
-/// output belongs in `LogRegion`/`TerminalOutputRegion`; trace timelines should
-/// explain ordering, progress, status, and safety flags without becoming a
-/// second output log.
-TraceTimelineEntry traceTimelineEntryForTaskEvent<T>(
-  TaskEvent<T> event, {
-  required Object taskId,
-  String? taskLabel,
-  TraceTimelineKind kind = TraceTimelineKind.task,
-  String? source,
-}) {
-  final safeTaskId = _sanitizeTraceText(taskId.toString());
-  final safeLabel = _sanitizeTraceText(taskLabel ?? safeTaskId);
-  final output = event.output;
-  final eventSource = output == null
-      ? source
-      : (source == null ? output.source : '$source/${output.source}');
-  return TraceTimelineEntry(
-    id: '$safeTaskId.run-${event.runId}.event-${event.sequence}',
-    label: '$safeLabel ${_taskEventVerb(event.kind)}',
-    detail: _taskEventDetail(event),
-    kind: kind,
-    status: _traceStatusForTaskEvent(event),
-    source: eventSource == null ? null : _sanitizeTraceText(eventSource),
-    metadata: <String, Object?>{
-      'taskId': safeTaskId,
-      'taskRunId': event.runId,
-      'taskEventSequence': event.sequence,
-      'taskEventKind': event.kind.name,
-      'taskStatus': event.status.name,
-      'progressCurrent': ?event.progress?.current,
-      'progressTotal': ?event.progress?.total,
-      if (event.progress?.label case final label?)
-        'progressLabel': _sanitizeTraceText(label),
-      if (output != null) ...{
-        'taskOutputSequence': output.sequence,
-        'taskOutputSource': _sanitizeTraceText(output.source),
-        'taskOutputSeverity': output.severity.name,
-        'taskOutputSanitized': output.sanitized,
-        'taskOutputTruncated': output.truncated,
-        if (output.originalLength != null)
-          'taskOutputOriginalLength': output.originalLength,
-      },
-    },
-  );
-}
-
-/// Converts recent [TaskEvent] records into timeline entries.
-///
-/// [maxEvents] keeps live task histories compact for dashboard and inspector
-/// timelines. Older events remain available on the task controller.
-List<TraceTimelineEntry> traceTimelineEntriesForTaskEvents<T>(
-  Iterable<TaskEvent<T>> events, {
-  required Object taskId,
-  String? taskLabel,
-  TraceTimelineKind kind = TraceTimelineKind.task,
-  String? source,
-  int? maxEvents,
-}) {
-  assert(maxEvents == null || maxEvents >= 0);
-  final all = events.toList(growable: false);
-  final start = maxEvents == null || all.length <= maxEvents
-      ? 0
-      : all.length - maxEvents;
-  return [
-    for (final event in all.skip(start))
-      traceTimelineEntryForTaskEvent(
-        event,
-        taskId: taskId,
-        taskLabel: taskLabel,
-        kind: kind,
-        source: source,
-      ),
-  ];
-}
-
 /// Controller for [TraceTimeline] selection and viewport state.
 class TraceTimelineController extends ChangeNotifier {
   TraceTimelineController({int selectedIndex = 0})
@@ -279,87 +201,10 @@ String exportTraceTimelineEntry(
   return parts.where((part) => part.trim().isNotEmpty).join(' | ');
 }
 
-String _taskEventVerb(TaskEventKind kind) {
-  return switch (kind) {
-    TaskEventKind.started => 'started',
-    TaskEventKind.progress => 'progress',
-    TaskEventKind.output => 'output',
-    TaskEventKind.succeeded => 'succeeded',
-    TaskEventKind.failed => 'failed',
-    TaskEventKind.canceled => 'canceled',
-    TaskEventKind.reset => 'reset',
-  };
-}
-
-String _taskEventDetail<T>(TaskEvent<T> event) {
-  final parts = <String>['run ${event.runId}'];
-  switch (event.kind) {
-    case TaskEventKind.started:
-      parts.add('started');
-    case TaskEventKind.progress:
-      final progress = event.progress;
-      if (progress == null) {
-        parts.add('progress');
-      } else if (progress.current != null && progress.total != null) {
-        parts.add('progress ${progress.current} of ${progress.total}');
-      } else if (progress.current != null) {
-        parts.add('progress ${progress.current}');
-      } else {
-        parts.add('progress');
-      }
-      if (progress?.label case final label?) {
-        parts.add(_sanitizeTraceText(label));
-      }
-    case TaskEventKind.output:
-      final output = event.output;
-      if (output == null) {
-        parts.add('output');
-      } else {
-        parts.add('output ${_sanitizeTraceText(output.source)}');
-        parts.add(output.severity.name);
-        if (output.sanitized) parts.add('sanitized');
-        if (output.truncated) parts.add('truncated');
-        if (output.originalLength != null) {
-          parts.add('original ${output.originalLength} chars');
-        }
-      }
-    case TaskEventKind.succeeded:
-      parts.add('succeeded');
-    case TaskEventKind.failed:
-      parts.add('failed');
-    case TaskEventKind.canceled:
-      parts.add('canceled');
-    case TaskEventKind.reset:
-      parts.add('reset');
-  }
-  parts.add('status ${event.status.name}');
-  parts.add('event ${event.sequence}');
-  return parts.join(', ');
-}
-
-TraceTimelineStatus _traceStatusForTaskEvent<T>(TaskEvent<T> event) {
-  return switch (event.kind) {
-    TaskEventKind.succeeded => TraceTimelineStatus.succeeded,
-    TaskEventKind.failed => TraceTimelineStatus.failed,
-    TaskEventKind.canceled => TraceTimelineStatus.cancelled,
-    TaskEventKind.reset => TraceTimelineStatus.info,
-    TaskEventKind.started ||
-    TaskEventKind.progress ||
-    TaskEventKind.output => switch (event.status) {
-      TaskStatus.idle => TraceTimelineStatus.queued,
-      TaskStatus.running => TraceTimelineStatus.running,
-      TaskStatus.succeeded => TraceTimelineStatus.succeeded,
-      TaskStatus.failed => TraceTimelineStatus.failed,
-      TaskStatus.canceled => TraceTimelineStatus.cancelled,
-    },
-  };
-}
-
-/// A vertical timeline of workflow events — tool calls, task runs, process
-/// output — drawn along a connecting rail (`╭ ├ ╰`) with a status marker,
-/// duration, and source on each row. Rows navigate with the keyboard and
-/// copy with Ctrl+C, and [traceTimelineEntriesForTaskEvents] adapts a task
-/// controller's event history straight onto the timeline.
+/// A vertical timeline of workflow events — commands, processes, tool calls,
+/// and application events — drawn along a connecting rail (`╭ ├ ╰`) with a
+/// status marker, duration, and source on each row. Rows navigate with the
+/// keyboard and copy with Ctrl+C.
 class TraceTimeline extends StatefulWidget {
   const TraceTimeline({
     super.key,

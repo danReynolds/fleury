@@ -74,6 +74,10 @@ export default defineConfig({
             { label: 'State management', slug: 'guides/state-management' },
             { label: 'Navigation', slug: 'guides/navigation' },
             { label: 'Loading data', slug: 'guides/loading-data' },
+            {
+              label: 'Commands',
+              slug: 'guides/commands',
+            },
             { label: 'Input & gestures', slug: 'guides/input-and-gestures' },
             { label: 'Theming', slug: 'guides/theming' },
             { label: 'Animation', slug: 'guides/animation' },

@@ -26,7 +26,7 @@ foundations that go beyond component rendering:
 - strong text input, forms, completion, selection, copy, and redaction;
 - data-heavy widgets for tables, logs, trees, documents, diffs, code, and
   workflow surfaces;
-- task/process orchestration with progress, cancellation, output safety, and
+- commands plus reusable surfaces for app-owned async state, output safety, and
   terminal handoff;
 - terminal capability diagnostics and compatibility evidence;
 - scenario benchmarks that measure app-shaped behavior instead of only
@@ -35,7 +35,7 @@ foundations that go beyond component rendering:
 The launch pitch should be:
 
 > Flutter-style Dart ergonomics for building production terminal apps, with
-> first-class semantics, commands, tasks, data widgets, safety, diagnostics, and
+> first-class semantics, commands, data widgets, safety, diagnostics, and
 > benchmark evidence.
 
 ## Who Should Choose Fleury
@@ -46,7 +46,7 @@ Fleury should be the clear choice when the app is:
   tool, code review surface, local database console, log explorer, or data-heavy
   terminal app;
 - large enough to need screens, global and screen-local commands, status,
-  semantic tests, async tasks, and safe subprocess output;
+  semantic tests, app-owned async work, and safe subprocess output;
 - written by a team that wants Dart's static typing, async model, pub packages,
   and `dart compile exe` distribution path;
 - expected to survive real terminals, narrow windows, untrusted output, and
@@ -88,7 +88,7 @@ Claims still needing peer evidence:
 - Equivalent Nocterm scenario runs for counter, text input, table/list, resize,
   and streaming output.
 - Side-by-side code ergonomics for a multi-screen app with command palette,
-  tasks, diagnostics, and semantic tests.
+  async state, diagnostics, and semantic tests.
 
 ## Three Concrete Wins Against Bubble Tea v2
 
@@ -105,10 +105,10 @@ Fleury's launch wins against Bubble Tea v2 should be:
 2. **Typed semantic tests over terminal meaning.** Bubble Tea apps can test model
    behavior and output, but Fleury's semantic graph gives tests a stable way to
    invoke commands, select nodes by role/action/state, and inspect app meaning
-   across widgets, dialogs, process panels, data tables, and diagnostics.
+   across widgets, dialogs, terminal output regions, data tables, and diagnostics.
 3. **Integrated app toolkit for developer workflows.** Fleury's first-party
    widgets and controllers cover forms, completion input, data tables, tree
-   tables, logs, markdown, JSON, diffs, code, process panels, approval prompts,
+   tables, logs, markdown, JSON, diffs, code, terminal output, approval prompts,
    task graphs, trace timelines, file pickers, and workflow snapshots with
    common semantics/copy/safety conventions.
 
@@ -132,7 +132,7 @@ already in Dart or wanting standalone Dart binaries.
 OpenTUI is strong on native rendering, terminal features, JavaScript/TypeScript
 bindings, screen modes, custom streams, renderer events, and terminal protocol
 surface. Fleury should not claim raw renderer superiority without peer runs.
-Fleury's wedge is app semantics, typed Dart APIs, commands/tasks/status as an app
+Fleury's wedge is app semantics, typed Dart APIs, commands/status as an app
 kernel, and a protocol-neutral widget toolkit.
 
 ### Against Ratatui
@@ -159,7 +159,7 @@ should remain internal/product-shaped rather than polished marketing:
 - prove text input, completion, history, forms, selection, copy, redaction, and
   semantic actions;
 - prove DataTable, TreeTable, LogRegion, MarkdownView, JsonView, DiffView,
-  CodeView, ProcessPanel, diagnostics, debug capture, workflow widgets, and
+  CodeView, TerminalOutputRegion, diagnostics, debug capture, workflow widgets, and
   scenario benchmarks;
 - keep Dune/`dune_cli` out of this cycle until the core toolkit is reliable.
 
@@ -177,8 +177,8 @@ green:
   palette integration, key hints, typed extensions, and tester invocation.
 - Fleury exposes semantic roles, state, and actions for testing, inspection, and
   future adapters.
-- Fleury has first-party text editing, data, document, log, process, workflow,
-  diagnostics, and debug-capture surfaces.
+- Fleury has first-party text editing, data, document, log, terminal-output,
+  workflow, diagnostics, and debug-capture surfaces.
 - Fleury measures app-shaped workloads through scenario benchmarks.
 - Fleury is protocol-neutral at launch; ACP belongs in a fast-follow
   `fleury_acp` package.

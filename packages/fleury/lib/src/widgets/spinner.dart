@@ -5,8 +5,7 @@
 // reference consumer of the discrete animation lane (FrameBuilder +
 // the shared TickerScheduler) — the primitive it demonstrates is a
 // core contract, the widget is ~40 lines on top of it, and core's
-// own async affordances (TaskStatusView-style progress surfaces)
-// need a loading glyph without reaching up into the batteries
+// own async affordances need a loading glyph without reaching up into the batteries
 // package. Higher-level progress widgets (ProgressBar, Toaster)
 // stay in fleury_widgets.
 

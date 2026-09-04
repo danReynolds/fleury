@@ -442,9 +442,15 @@ class _FleuryAppState extends State<FleuryApp> {
 
 List<AppCommand> _appCommands(FleuryApp app) {
   final commands = <AppCommand>[...app.commands];
+  final appCommandIds = app.commands.map((command) => command.id).toSet();
   for (final extension in app.extensions) {
     if (extension is FleuryAppExtension) {
-      commands.addAll(extension.commands);
+      for (final command in extension.commands) {
+        // Extension commands are defaults. A host-owned command with the same
+        // ID replaces that default before the combined list reaches the
+        // registry's same-scope duplicate validation.
+        if (!appCommandIds.contains(command.id)) commands.add(command);
+      }
     }
   }
   return commands;

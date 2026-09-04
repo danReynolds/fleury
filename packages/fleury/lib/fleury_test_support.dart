@@ -52,7 +52,6 @@ export 'src/debug/debug_capture.dart'
         DebugCaptureSemanticNode,
         DebugCaptureSnapshot,
         DebugOutputSummary,
-        DebugTaskEventSummary,
         DebugTimeMarker;
 export 'src/debug/debug_events.dart'
     show

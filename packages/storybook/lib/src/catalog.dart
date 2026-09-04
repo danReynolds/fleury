@@ -283,7 +283,9 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
     description:
         'Anchored and modal overlay patterns for command surfaces, menus, toasts, dialogs, and tooltips.',
     widgets: const <String>[
+      'CommandButton',
       'CommandPalette',
+      'CommandPaletteItem',
       'Menu',
       'MenuItem',
       'SubMenu',
@@ -693,16 +695,14 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
     ),
   ),
   Story(
-    id: 'workflow.process-trace',
-    title: 'Workflow, Process, and Trace',
+    id: 'workflow.graph-trace',
+    title: 'Workflow and Trace',
     category: 'Workflow',
     description:
-        'Task graphs, process chrome, timeline inspection, and aggregate workflow summaries.',
+        'Task graphs, timeline inspection, and aggregate workflow summaries.',
     widgets: const <String>[
       'TaskGraph',
       'TaskGraphNode',
-      'ProcessPanel',
-      'ProcessTaskController',
       'TraceTimeline',
       'TraceTimelineEntry',
       'WorkflowSnapshot',
@@ -712,7 +712,7 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
       StoryControl.option(
         id: 'view',
         label: 'View',
-        options: <String>['Task graph', 'Trace', 'Process', 'Summary'],
+        options: <String>['Task graph', 'Trace', 'Summary'],
       ),
     ],
     variants: const <StoryVariant>[
@@ -723,16 +723,10 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
         controlValues: <String, Object?>{'view': 1},
       ),
       StoryVariant(
-        id: 'process',
-        label: 'Process',
-        description: 'Process panel view.',
-        controlValues: <String, Object?>{'view': 2},
-      ),
-      StoryVariant(
         id: 'summary',
         label: 'Summary',
         description: 'Workflow summary view.',
-        controlValues: <String, Object?>{'view': 3},
+        controlValues: <String, Object?>{'view': 2},
       ),
     ],
     initialHeight: 19,
@@ -855,8 +849,12 @@ const Map<String, String> _widgetDescriptions = <String, String>{
   'Stepper': 'Incremental numeric control for bounded counts and retries.',
   'ProgressBar': 'Compact progress display for task and pipeline completion.',
   'Gauge': 'At-a-glance scalar status display for utilization and health.',
+  'CommandButton':
+      'A button that resolves its label, enabled state, and action from a scoped application command.',
   'CommandPalette':
       'Scoped command discovery and execution from the active widget tree.',
+  'CommandPaletteItem':
+      'Callback-backed row metadata for a command palette with a fixed local list.',
   'Menu': 'Anchored command menu with keyboard interaction.',
   'MenuItem': 'Single menu action row with selection behavior.',
   'SubMenu': 'Nested menu grouping for larger command sets.',
@@ -952,9 +950,6 @@ const Map<String, String> _widgetDescriptions = <String, String>{
   'ApprovalRequest': 'Approval request data model with severity and details.',
   'TaskGraph': 'Task dependency graph visualization for workflow planning.',
   'TaskGraphNode': 'Task graph node metadata with state and dependencies.',
-  'ProcessPanel': 'Live process task panel with command status and progress.',
-  'ProcessTaskController':
-      'Controller for process state and task lifecycle updates.',
   'TraceTimeline': 'Timeline view for trace events and execution steps.',
   'TraceTimelineEntry': 'Trace event data for timeline rendering.',
   'WorkflowSnapshot': 'Aggregated workflow state model for summaries.',
@@ -1006,10 +1001,8 @@ const Map<String, Map<String, Object?>> _widgetDefaultControls =
       'ApprovalRequest': <String, Object?>{'status': 0},
       'TraceTimeline': <String, Object?>{'view': 1},
       'TraceTimelineEntry': <String, Object?>{'view': 1},
-      'ProcessPanel': <String, Object?>{'view': 2},
-      'ProcessTaskController': <String, Object?>{'view': 2},
-      'WorkflowSnapshot': <String, Object?>{'view': 3},
-      'WorkflowSummary': <String, Object?>{'view': 3},
+      'WorkflowSnapshot': <String, Object?>{'view': 2},
+      'WorkflowSummary': <String, Object?>{'view': 2},
     };
 
 /// One-line keyboard tip per widget, surfaced in the preview footer so the
@@ -1095,7 +1088,6 @@ const Map<String, String> _widgetUsage = <String, String>{
   'ToolCallCard': 'Enter to expand / collapse',
   'ApprovalPrompt': 'Tab between choices · Enter decides',
   'TaskGraph': '↑/↓ to move through tasks',
-  'ProcessPanel': '↑/↓ to scroll the task list',
   'TraceTimeline': '↑/↓ or PgUp/PgDn to scroll',
 };
 
@@ -3364,35 +3356,15 @@ class _ModelToolsStory extends StatelessWidget {
   }
 }
 
-class _WorkflowStory extends StatefulWidget {
+class _WorkflowStory extends StatelessWidget {
   const _WorkflowStory({required this.view});
 
   final String view;
 
   @override
-  State<_WorkflowStory> createState() => _WorkflowStoryState();
-}
-
-class _WorkflowStoryState extends State<_WorkflowStory> {
-  late final ProcessTaskController _process = ProcessTaskController(
-    id: 'storybook.process',
-    label: 'storybook smoke',
-  );
-
-  @override
-  void dispose() {
-    _process.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return switch (widget.view) {
+    return switch (view) {
       'Trace' => TraceTimeline(events: _sampleTrace, label: 'Scenario trace'),
-      'Process' => ProcessPanel(
-        controller: _process,
-        label: 'dart test packages/storybook',
-      ),
       'Summary' => _WorkflowSummaryStory(snapshot: _sampleSnapshot),
       _ => TaskGraph(nodes: _sampleTasks, semanticLabel: 'DX plan'),
     };

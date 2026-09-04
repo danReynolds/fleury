@@ -90,9 +90,9 @@ void main() {
           width: 22,
           placeholder: 'Search…',
           commands: [
-            Command(label: 'Open File', onInvoke: () {}),
-            Command(label: 'Save File', onInvoke: () {}),
-            Command(label: 'Close Window', onInvoke: () {}),
+            CommandPaletteItem(label: 'Open File', onInvoke: () {}),
+            CommandPaletteItem(label: 'Save File', onInvoke: () {}),
+            CommandPaletteItem(label: 'Close Window', onInvoke: () {}),
           ],
         ),
         alignment: Alignment.topCenter,

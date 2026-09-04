@@ -18,7 +18,6 @@ const nativeOnly = {
   'src/file_browser.dart',
   'src/file_picker.dart',
   'src/log_region.dart',
-  'src/process_panel.dart',
   'src/terminal_output_region.dart',
   'src/workflow_snapshot.dart',
 };

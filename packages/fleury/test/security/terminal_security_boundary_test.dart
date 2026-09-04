@@ -1,6 +1,3 @@
-import 'dart:async';
-import 'dart:io';
-
 import 'package:fleury/fleury.dart';
 import '../support/harness.dart';
 import 'package:fleury/src/runtime/output_capture.dart' show OutputCapture;
@@ -8,12 +5,6 @@ import 'package:test/test.dart';
 
 const _hostileTerminalText =
     'HOSTILE \x1b]52;c;SECRET_CLIPBOARD\x07 after \x1b[2J end';
-
-Future<File> _script(Directory dir, String name, String source) async {
-  final file = File('${dir.path}/$name.dart');
-  await file.writeAsString(source);
-  return file;
-}
 
 void _expectNoHostileTerminalPayload(String text) {
   expect(text, isNot(contains('\x1B')));
@@ -61,38 +52,6 @@ void main() {
       expect(buffered, live);
       expect(buffered, contains(replacementCharacter));
       _expectNoHostileTerminalPayload(buffered);
-    });
-
-    test('ProcessTaskController stores sanitized subprocess output', () async {
-      final tempDir = await Directory.systemTemp.createTemp(
-        'fleury_security_process_',
-      );
-      try {
-        final script = await _script(tempDir, 'hostile_output', r'''
-import 'dart:io';
-
-void main() {
-  stdout.write('HOSTILE \x1B]52;c;SECRET_CLIPBOARD');
-  stdout.add([0x07]);
-  stdout.writeln(' after \x1B[2J end');
-}
-''');
-        final controller = ProcessTaskController(id: 'process');
-        final result = await controller.startProcess(
-          ProcessTaskCommand(Platform.resolvedExecutable, [script.path]),
-        );
-
-        expect(result.succeeded, isTrue);
-        final output = controller.output.single;
-        expect(output.sanitized, isTrue);
-        expect(output.text, contains(replacementCharacter));
-        _expectNoHostileTerminalPayload(output.text);
-        controller.dispose();
-      } finally {
-        if (await tempDir.exists()) {
-          await tempDir.delete(recursive: true);
-        }
-      }
     });
   });
 }

@@ -155,71 +155,6 @@ final class TreeTableSearchIndex<T> {
     return builder.finish();
   }
 
-  /// Builds a [TreeTableSearchIndex] cooperatively under [context].
-  ///
-  /// This preserves the same row order and token semantics as
-  /// [TreeTableSearchIndex.build], while allowing large hierarchy indexing to
-  /// report progress, observe cancellation, and yield between batches.
-  static Future<TreeTableSearchIndex<T>> buildCooperatively<T>({
-    required List<TreeTableNode<T>> roots,
-    required List<DataTableColumn> columns,
-    required TaskContext context,
-    String? treeColumnId,
-    TreeTableCellBuilder<T>? cellBuilder,
-    TaskYieldPolicy yieldPolicy = const TaskYieldPolicy(),
-    String progressLabel = 'indexing tree',
-  }) async {
-    final builder = _TreeTableIndexBuilder<T>(
-      columns: columns,
-      treeColumnId: treeColumnId ?? _firstColumnId(columns),
-      cellBuilder: cellBuilder,
-    );
-    final stack = <_TreeTableBuildFrame<T>>[];
-
-    for (var i = roots.length - 1; i >= 0; i--) {
-      stack.add(
-        _TreeTableBuildFrame<T>(
-          node: roots[i],
-          depth: 0,
-          ordinal: i,
-          parentIndex: null,
-        ),
-      );
-    }
-
-    final checkpoint = yieldPolicy.start(context);
-    while (stack.isNotEmpty) {
-      final frame = stack.removeLast();
-      final index = builder.addNode(
-        frame.node,
-        depth: frame.depth,
-        ordinal: frame.ordinal,
-        parentIndex: frame.parentIndex,
-      );
-      for (var i = frame.node.children.length - 1; i >= 0; i--) {
-        stack.add(
-          _TreeTableBuildFrame<T>(
-            node: frame.node.children[i],
-            depth: frame.depth + 1,
-            ordinal: i,
-            parentIndex: index,
-          ),
-        );
-      }
-      await checkpoint.tick(
-        current: builder.length,
-        label: '$progressLabel ${builder.length} rows',
-      );
-    }
-
-    context.reportProgress(
-      current: builder.length,
-      total: builder.length,
-      label: '$progressLabel complete',
-    );
-    return builder.finish();
-  }
-
   final List<_TreeTableSearchEntry<T>> _entries;
   final Map<String, List<int>> _tokenIndex;
   final List<String> _sortedTokens;
@@ -578,20 +513,6 @@ int _countTreeTableNodes<T>(List<TreeTableNode<T>> roots) {
     visit(root);
   }
   return count;
-}
-
-final class _TreeTableBuildFrame<T> {
-  const _TreeTableBuildFrame({
-    required this.node,
-    required this.depth,
-    required this.ordinal,
-    required this.parentIndex,
-  });
-
-  final TreeTableNode<T> node;
-  final int depth;
-  final int ordinal;
-  final int? parentIndex;
 }
 
 /// One indexed row: just tree structure. Searchable text lives in the

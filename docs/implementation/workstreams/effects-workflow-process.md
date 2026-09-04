@@ -1,5 +1,10 @@
 # Workstream: Effects, Workflow, And Process
 
+> **Superseded 2026-09-01.** Fleury removed the generic task model and its
+> task-backed process layer before launch. Async work now remains app-owned and
+> uses ordinary Dart futures, streams, and state; the material below is retained
+> as historical implementation evidence.
+
 ## Purpose
 
 Make async work, subprocesses, streams, permissions, progress, cancellation,

@@ -88,8 +88,10 @@ FleuryApp(
 App-wide commands can be passed through `commands:`; route-local actions belong
 in a `CommandScope` beside the screen that owns them. The
 [app-shell example](https://github.com/danReynolds/fleury/blob/main/packages/fleury_widgets/example/app_shell_demo.dart)
-shows both scopes together; [Key handling](/fleury/guides/focus-and-keyboard/)
-covers the keyboard bindings that invoke those actions.
+shows both scopes together. [Commands](/fleury/guides/commands/)
+develops that model through buttons, shortcuts, palettes, and availability;
+[Key handling](/fleury/guides/focus-and-keyboard/) covers lower-level,
+keyboard-specific interaction.
 
 Choose exactly one root mode:
 

@@ -16,7 +16,6 @@ const _fleuryWidgetsVersion = '0.0.0';
 const _defaultWarmups = 2;
 const _defaultIterations = 20;
 const _defaultRows = 100000;
-const _indexYieldPolicy = TaskYieldPolicy(itemBudget: 8192);
 
 Future<void> main(List<String> args) async {
   final options = _ScenarioOptions.parse(args);
@@ -27,7 +26,6 @@ Future<void> main(List<String> args) async {
     const _DashboardUpdateScenario(),
     const _OverlayCommandPaletteScenario(),
     const _ResizeStormScenario(),
-    const _SubprocessOutputScenario(),
     const _TreeTableHierarchyScenario(),
   ];
 
@@ -619,10 +617,6 @@ final class _LogRegionTailingScenario implements _ScenarioBenchmark {
         'appendCount': last.appendCount,
         'sanitizingFixtureRows': last.sanitizingFixtureRows,
         'copiedByteCount': last.copiedByteCount,
-        'searchIndexTaskEventCount': last.searchIndexTaskEventCount,
-        'searchIndexProgressCurrent': last.searchIndexProgressCurrent,
-        'appendIndexTaskEventCount': last.appendIndexTaskEventCount,
-        'appendIndexProgressCurrent': last.appendIndexProgressCurrent,
         'rssDeltaBytes': rssAfter - rssBefore,
       },
       thresholds: const <String, Object?>{
@@ -638,7 +632,6 @@ final class _LogRegionTailingScenario implements _ScenarioBenchmark {
         'Candidate thresholds are informational until stable baselines exist.',
         'This is a LogRegion widget scenario, not a full subprocess stream.',
         'Fixture includes ANSI/OSC/newline payloads to verify sanitized visible and copied output.',
-        'Search-index build and append refresh run cooperatively through TaskController.',
       ],
     );
   }
@@ -663,24 +656,9 @@ Future<_LogRegionJourneySample> _runLogRegionJourney(
     );
     fixtureBuild.stop();
 
-    final searchIndexTask = TaskController<LogRegionSearchIndex>(
-      id: 'sb4-log-index',
-      label: 'SB.4 log index',
-    );
     final searchIndexBuild = Stopwatch()..start();
-    final searchIndexResult = await searchIndexTask.start(
-      (context) => LogRegionSearchIndex.buildCooperatively(
-        entries,
-        context: context,
-        yieldPolicy: _indexYieldPolicy,
-        progressLabel: 'index logs',
-      ),
-    );
+    final searchIndex = LogRegionSearchIndex(entries);
     searchIndexBuild.stop();
-    final searchIndex = searchIndexResult.value;
-    if (searchIndex == null) {
-      throw StateError('SB.4 log index build did not produce an index.');
-    }
 
     final controller = LogRegionController();
     final mount = Stopwatch()..start();
@@ -705,18 +683,7 @@ Future<_LogRegionJourneySample> _runLogRegionJourney(
         fixture.entry(appendStart + i, forceUnsafe: i == appendCount - 1),
       );
     }
-    final appendIndexTask = TaskController<LogRegionSearchIndex>(
-      id: 'sb4-log-index-refresh',
-      label: 'SB.4 log index refresh',
-    );
-    final appendIndexResult = await appendIndexTask.start((context) async {
-      await searchIndex.refreshCooperatively(
-        context: context,
-        yieldPolicy: _indexYieldPolicy,
-        progressLabel: 'refresh logs',
-      );
-      return searchIndex;
-    });
+    searchIndex.refresh();
     tester.pumpWidget(
       _LogRegionHarness(
         entries: entries,
@@ -803,14 +770,6 @@ Future<_LogRegionJourneySample> _runLogRegionJourney(
         appendedText.contains(expectedLastKey) &&
         finalText.contains(expectedLastKey) &&
         filteredText.contains(expectedLastKey);
-    final indexBuildSucceeded =
-        searchIndexTask.status == TaskStatus.succeeded &&
-        searchIndexTask.progress?.current == config.rowCount;
-    final appendIndexSucceeded =
-        appendIndexTask.status == TaskStatus.succeeded &&
-        appendIndexResult.succeeded &&
-        appendIndexTask.progress?.current == entries.length;
-
     final sample = _LogRegionJourneySample(
       totalJourneyUs: total.elapsedMicroseconds,
       fixtureBuildUs: fixtureBuild.elapsedMicroseconds,
@@ -839,16 +798,8 @@ Future<_LogRegionJourneySample> _runLogRegionJourney(
       appendCount: appendCount,
       sanitizingFixtureRows: fixture.sanitizingRowCount(entries.length),
       copiedByteCount: utf8.encode(copiedText).length,
-      searchIndexTaskEventCount: searchIndexTask.events.length,
-      searchIndexProgressCurrent: (searchIndexTask.progress?.current ?? -1)
-          .toInt(),
-      appendIndexTaskEventCount: appendIndexTask.events.length,
-      appendIndexProgressCurrent: (appendIndexTask.progress?.current ?? -1)
-          .toInt(),
-      correct: correct && indexBuildSucceeded && appendIndexSucceeded,
+      correct: correct,
     );
-    searchIndexTask.dispose();
-    appendIndexTask.dispose();
     return sample;
   } finally {
     tester.dispose();
@@ -996,10 +947,6 @@ final class _LogRegionJourneySample {
     required this.appendCount,
     required this.sanitizingFixtureRows,
     required this.copiedByteCount,
-    required this.searchIndexTaskEventCount,
-    required this.searchIndexProgressCurrent,
-    required this.appendIndexTaskEventCount,
-    required this.appendIndexProgressCurrent,
     required this.correct,
   });
 
@@ -1030,10 +977,6 @@ final class _LogRegionJourneySample {
   final int appendCount;
   final int sanitizingFixtureRows;
   final int copiedByteCount;
-  final int searchIndexTaskEventCount;
-  final int searchIndexProgressCurrent;
-  final int appendIndexTaskEventCount;
-  final int appendIndexProgressCurrent;
   final bool correct;
 }
 
@@ -2972,799 +2915,6 @@ final class _ResizeStormJourneySample {
   final bool correct;
 }
 
-final class _SubprocessOutputScenario implements _ScenarioBenchmark {
-  const _SubprocessOutputScenario();
-
-  @override
-  String get id => 'SB.9';
-
-  @override
-  String get name => 'Subprocess Handoff And Untrusted Output';
-
-  @override
-  Future<_ScenarioResult> run(_ScenarioConfig config) async {
-    for (var i = 0; i < config.warmupIterations; i++) {
-      await _runSubprocessOutputJourney(config);
-    }
-
-    final startedAt = DateTime.now().toUtc();
-    final rssBefore = ProcessInfo.currentRss;
-    final total = Stopwatch()..start();
-    final samples = <_SubprocessOutputJourneySample>[];
-    for (var i = 0; i < config.measuredIterations; i++) {
-      samples.add(await _runSubprocessOutputJourney(config));
-    }
-    total.stop();
-    final rssAfter = ProcessInfo.currentRss;
-
-    final processRun = _Stats.from(
-      samples.map((sample) => sample.processRunUs),
-    );
-    final failureRun = _Stats.from(
-      samples.map((sample) => sample.failureRunUs),
-    );
-    final cancelLatency = _Stats.from(
-      samples.map((sample) => sample.cancelLatencyUs),
-    );
-    final editorHandoff = _Stats.from(
-      samples.map((sample) => sample.editorHandoffUs),
-    );
-    final streamFrame = _Stats.from(
-      samples.expand((sample) => sample.streamFrameUs),
-    );
-    final processPanelRender = _Stats.from(
-      samples.map((sample) => sample.processPanelRenderUs),
-    );
-    final terminalOutputRender = _Stats.from(
-      samples.map((sample) => sample.terminalOutputRenderUs),
-    );
-    final copy = _Stats.from(samples.map((sample) => sample.copySelectedUs));
-    final semanticQuery = _Stats.from(
-      samples.map((sample) => sample.semanticQueryUs),
-    );
-    final journey = _Stats.from(samples.map((sample) => sample.totalJourneyUs));
-    final correct = samples.every((sample) => sample.correct);
-    final last = samples.last;
-
-    return _ScenarioResult(
-      scenarioId: id,
-      scenarioName: name,
-      startedAt: startedAt,
-      duration: total.elapsed,
-      warmupIterations: config.warmupIterations,
-      measuredIterations: config.measuredIterations,
-      seed: config.seed,
-      terminalSize: config.terminalSize,
-      rowCount: config.rowCount,
-      metrics: <String, Object?>{
-        'journeyUs': journey.toJson(),
-        'processRunUs': processRun.toJson(),
-        'failureRunUs': failureRun.toJson(),
-        'cancelLatencyUs': cancelLatency.toJson(),
-        'editorHandoffUs': editorHandoff.toJson(),
-        'streamFrameUs': streamFrame.toJson(),
-        'processPanelRenderUs': processPanelRender.toJson(),
-        'terminalOutputRenderUs': terminalOutputRender.toJson(),
-        'copySelectedUs': copy.toJson(),
-        'semanticQueryUs': semanticQuery.toJson(),
-        'processLineCount': last.processLineCount,
-        'processTargetBytes': last.processTargetBytes,
-        'capturedOutputBytes': last.capturedOutputBytes,
-        'capturedOriginalBytes': last.capturedOriginalBytes,
-        'processOutputCount': last.processOutputCount,
-        'stderrOutputCount': last.stderrOutputCount,
-        'sanitizedOutputCount': last.sanitizedOutputCount,
-        'truncatedOutputCount': last.truncatedOutputCount,
-        'unsafeSequenceBlockCount': last.unsafeSequenceBlockCount,
-        'failureExitCode': last.failureExitCode,
-        'failureOutputCount': last.failureOutputCount,
-        'cancelOutputObserved': last.cancelOutputObserved,
-        'cancelProcessExitCode': last.cancelProcessExitCode,
-        'terminalModeRestored': last.terminalModeRestored,
-        'handoffCallCount': last.handoffCallCount,
-        'handoffSuspendCallCount': last.handoffSuspendCallCount,
-        'handoffResumeCallCount': last.handoffResumeCallCount,
-        'terminalOutputLineCount': last.terminalOutputLineCount,
-        'terminalStreamBatchCount': last.terminalStreamBatchCount,
-        'semanticNodeCount': last.semanticNodeCount,
-        'taskSemanticCount': last.taskSemanticCount,
-        'logSemanticCount': last.logSemanticCount,
-        'initialAnsiBytes': last.initialAnsiBytes,
-        'maxStreamAnsiBytes': last.maxStreamAnsiBytes,
-        'processPanelAnsiBytes': last.processPanelAnsiBytes,
-        'terminalOutputAnsiBytes': last.terminalOutputAnsiBytes,
-        'unsafeFrameCount': last.unsafeFrameCount,
-        'unsafeArtifactLeakCount': last.unsafeArtifactLeakCount,
-        'copiedByteCount': last.copiedByteCount,
-        'editorChanged': last.editorChanged,
-        'rssDeltaBytes': rssAfter - rssBefore,
-      },
-      thresholds: const <String, Object?>{
-        'candidateProcessRunP95Us': 1000000,
-        'candidateCancelLatencyP95Us': 200000,
-        'candidateStreamFrameP95Us': 33000,
-        'candidateSemanticQueryP95Us': 16000,
-        'terminalModeRestoredRequired': true,
-        'unsafeArtifactLeakCountRequired': 0,
-        'enforced': false,
-      },
-      pass: correct,
-      notes: const <String>[
-        'Candidate thresholds are informational until stable baselines exist.',
-        'Scenario runs real Dart subprocesses for success, non-zero exit, cancellation, and terminal handoff.',
-        'Streaming frame timing is measured through TerminalOutputRegion with unsafe stdout/stderr-like lines.',
-        'Correctness requires restored terminal handoff state and no unsafe payload leakage into visible, copied, or semantic artifacts.',
-      ],
-    );
-  }
-}
-
-Future<_SubprocessOutputJourneySample> _runSubprocessOutputJourney(
-  _ScenarioConfig config,
-) async {
-  final clipboard = InProcessClipboard();
-  final tester = FleuryTester(
-    viewportSize: config.terminalSize,
-    clipboard: clipboard,
-  );
-  final total = Stopwatch()..start();
-  final tempDir = await Directory.systemTemp.createTemp('fleury_sb9_');
-  final driver = FakeTerminalDriver(size: config.terminalSize);
-  var cancelProcessExitCode = -999;
-
-  try {
-    await driver.enter(TerminalMode.interactive);
-    final script = await _writeSubprocessScenarioScript(tempDir);
-    final processTargetBytes = _processTargetBytesFor(config.rowCount);
-    final processLineCount = _processLineCountFor(processTargetBytes);
-    final successController = ProcessTaskController(
-      id: 'sb9-success',
-      label: 'SB.9 success',
-      maxOutputEntries: processLineCount + (processLineCount ~/ 4) + 128,
-      maxEventEntries: processLineCount + (processLineCount ~/ 4) + 256,
-      maxOutputLineLength: 512,
-    );
-    final failureController = ProcessTaskController(
-      id: 'sb9-failure',
-      label: 'SB.9 failure',
-      maxOutputEntries: 64,
-      maxEventEntries: 128,
-      maxOutputLineLength: 512,
-    );
-    final cancelController = ProcessTaskController(
-      id: 'sb9-cancel',
-      label: 'SB.9 cancel',
-      maxOutputEntries: 64,
-      maxEventEntries: 128,
-      maxOutputLineLength: 512,
-    );
-    final terminalBuffer = LogBuffer(
-      capacity: _terminalOutputLineCountFor(config.rowCount) + 64,
-    );
-    final successOutputController = LogRegionController(
-      selectedIndex: processLineCount,
-      followTail: false,
-    );
-    final terminalOutputController = LogRegionController(followTail: true);
-
-    final processRun = Stopwatch()..start();
-    final successResult = await successController.startProcess(
-      _subprocessCommand(script, 'success', ['$processLineCount']),
-      terminalDriver: driver,
-      handoffTerminal: true,
-    );
-    processRun.stop();
-    successOutputController.selectedIndex = successController.output.isEmpty
-        ? 0
-        : successController.output.length - 1;
-
-    final failureRun = Stopwatch()..start();
-    final failureResult = await failureController.startProcess(
-      _subprocessCommand(script, 'failure'),
-      terminalDriver: driver,
-      handoffTerminal: true,
-    );
-    failureRun.stop();
-
-    final cancelFuture = cancelController.startProcess(
-      _subprocessCommand(script, 'slow'),
-      terminalDriver: driver,
-      handoffTerminal: true,
-    );
-    final cancelOutputObserved = await _waitForTaskOutput(
-      cancelController,
-      (entry) => entry.text == 'ready',
-    );
-    final cancelProcess = cancelController.process;
-    final expectedResumeCount = driver.handoffResumeCallCount + 1;
-    final cancelLatency = Stopwatch()..start();
-    cancelController.cancel();
-    final cancelResult = await cancelFuture;
-    if (cancelProcess != null) {
-      cancelProcessExitCode = await cancelProcess.exitCode.timeout(
-        const Duration(seconds: 5),
-        onTimeout: () {
-          cancelProcess.kill(ProcessSignal.sigkill);
-          return -1;
-        },
-      );
-    }
-    final cancelHandoffRestored = await _waitForHandoffResume(
-      driver,
-      expectedResumeCount,
-    );
-    cancelLatency.stop();
-
-    final editorHandoff = Stopwatch()..start();
-    final editorResult = await editTextInExternalEditor(
-      initialText: 'draft',
-      terminalDriver: driver,
-      command: const ExternalEditorCommand.executable('fake-editor', [
-        '--wait',
-      ]),
-      fileName: 'sb9-edit.txt',
-      tempFileFactory: (_) async {
-        final file = File('${tempDir.path}${Platform.pathSeparator}edit.txt');
-        return ExternalEditorTempFile(file: file);
-      },
-      processRunner: (command) async {
-        final file = File(command.arguments.last);
-        await file.writeAsString('${await file.readAsString()} edited');
-        return 0;
-      },
-    );
-    editorHandoff.stop();
-
-    final terminalLineCount = _terminalOutputLineCountFor(config.rowCount);
-    final terminalBatchSize = _terminalStreamBatchSizeFor(terminalLineCount);
-    final streamFrameUs = <int>[];
-    var maxStreamAnsiBytes = 0;
-    var unsafeFrameCount = 0;
-
-    tester.pumpWidget(
-      _TerminalOutputHarness(
-        buffer: terminalBuffer,
-        controller: terminalOutputController,
-      ),
-    );
-    final initialFrame = tester.render(size: config.terminalSize);
-    for (var start = 0; start < terminalLineCount; start += terminalBatchSize) {
-      final end = _min(start + terminalBatchSize, terminalLineCount);
-      for (var index = start; index < end; index++) {
-        terminalBuffer.add(_terminalOutputLine(index, config.seed));
-      }
-      final frameWatch = Stopwatch()..start();
-      tester.pump();
-      final frame = tester.render(size: config.terminalSize);
-      frameWatch.stop();
-      streamFrameUs.add(frameWatch.elapsedMicroseconds);
-      final ansiBytes = _ansiBytes(frame, config.terminalSize);
-      if (ansiBytes > maxStreamAnsiBytes) maxStreamAnsiBytes = ansiBytes;
-      if (_containsUnsafeTerminalPayload(
-        _visibleText(frame, config.terminalSize),
-      )) {
-        unsafeFrameCount += 1;
-      }
-    }
-
-    final processPanelRender = Stopwatch()..start();
-    tester.pumpWidget(
-      _SubprocessOutputHarness(
-        successController: successController,
-        failureController: failureController,
-        cancelController: cancelController,
-        terminalBuffer: terminalBuffer,
-        successOutputController: successOutputController,
-        terminalOutputController: terminalOutputController,
-      ),
-    );
-    final processPanelFrame = tester.render(size: config.terminalSize);
-    processPanelRender.stop();
-
-    final copy = Stopwatch()..start();
-    tester.sendKey(
-      const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
-    );
-    await Future<void>.delayed(Duration.zero);
-    copy.stop();
-
-    final semantics = Stopwatch()..start();
-    final tree = tester.semantics();
-    final taskNodes = tree.byRole(SemanticRole.task).toList(growable: false);
-    final logNodes = tree.byRole(SemanticRole.log).toList(growable: false);
-    semantics.stop();
-
-    final terminalOutputRender = Stopwatch()..start();
-    tester.pumpWidget(
-      _TerminalOutputHarness(
-        buffer: terminalBuffer,
-        controller: terminalOutputController,
-      ),
-    );
-    final terminalOutputFrame = tester.render(size: config.terminalSize);
-    terminalOutputRender.stop();
-    total.stop();
-
-    final visibleProcess = _visibleText(processPanelFrame, config.terminalSize);
-    final visibleTerminal = _visibleText(
-      terminalOutputFrame,
-      config.terminalSize,
-    );
-    final copiedText = clipboard.readInProcess() ?? '';
-    final unsafeArtifactLeakCount =
-        _unsafeLeakCount(visibleProcess) +
-        _unsafeLeakCount(visibleTerminal) +
-        _unsafeLeakCount(copiedText) +
-        _semanticUnsafeLeakCount(tree);
-    final sanitizedOutputCount = _sanitizedTaskOutputCount(successController);
-    final truncatedOutputCount = _truncatedTaskOutputCount(successController);
-    final terminalModeRestored =
-        driver.isActive &&
-        cancelHandoffRestored &&
-        driver.handoffCallCount == 4 &&
-        driver.handoffSuspendCallCount == 4 &&
-        driver.handoffResumeCallCount == 4;
-    final failureExitCode = _processExitCode(failureController);
-    final correct =
-        successResult.succeeded &&
-        failureResult.failed &&
-        cancelResult.canceled &&
-        editorResult.succeeded &&
-        editorResult.changed &&
-        failureExitCode == 7 &&
-        cancelOutputObserved &&
-        terminalModeRestored &&
-        processPanelFrame.size == config.terminalSize &&
-        terminalOutputFrame.size == config.terminalSize &&
-        taskNodes.length == 3 &&
-        logNodes.isNotEmpty &&
-        successController.output.isNotEmpty &&
-        failureController.output.isNotEmpty &&
-        cancelController.output.isNotEmpty &&
-        sanitizedOutputCount > 0 &&
-        _stderrTaskOutputCount(successController) > 0 &&
-        unsafeArtifactLeakCount == 0 &&
-        unsafeFrameCount == 0 &&
-        copiedText.isNotEmpty &&
-        !_containsUnsafeTerminalPayload(copiedText) &&
-        streamFrameUs.isNotEmpty;
-
-    successController.dispose();
-    failureController.dispose();
-    cancelController.dispose();
-
-    return _SubprocessOutputJourneySample(
-      totalJourneyUs: total.elapsedMicroseconds,
-      processRunUs: processRun.elapsedMicroseconds,
-      failureRunUs: failureRun.elapsedMicroseconds,
-      cancelLatencyUs: cancelLatency.elapsedMicroseconds,
-      editorHandoffUs: editorHandoff.elapsedMicroseconds,
-      streamFrameUs: List<int>.unmodifiable(streamFrameUs),
-      processPanelRenderUs: processPanelRender.elapsedMicroseconds,
-      terminalOutputRenderUs: terminalOutputRender.elapsedMicroseconds,
-      copySelectedUs: copy.elapsedMicroseconds,
-      semanticQueryUs: semantics.elapsedMicroseconds,
-      processLineCount: processLineCount,
-      processTargetBytes: processTargetBytes,
-      capturedOutputBytes: _taskOutputUtf8Bytes(successController),
-      capturedOriginalBytes: _taskOutputOriginalBytes(successController),
-      processOutputCount: successController.output.length,
-      stderrOutputCount: _stderrTaskOutputCount(successController),
-      sanitizedOutputCount: sanitizedOutputCount,
-      truncatedOutputCount: truncatedOutputCount,
-      unsafeSequenceBlockCount: sanitizedOutputCount,
-      failureExitCode: failureExitCode,
-      failureOutputCount: failureController.output.length,
-      cancelOutputObserved: cancelOutputObserved,
-      cancelProcessExitCode: cancelProcessExitCode,
-      terminalModeRestored: terminalModeRestored,
-      handoffCallCount: driver.handoffCallCount,
-      handoffSuspendCallCount: driver.handoffSuspendCallCount,
-      handoffResumeCallCount: driver.handoffResumeCallCount,
-      terminalOutputLineCount: terminalLineCount,
-      terminalStreamBatchCount: streamFrameUs.length,
-      semanticNodeCount: tree.nodes.length,
-      taskSemanticCount: taskNodes.length,
-      logSemanticCount: logNodes.length,
-      initialAnsiBytes: _ansiBytes(initialFrame, config.terminalSize),
-      maxStreamAnsiBytes: maxStreamAnsiBytes,
-      processPanelAnsiBytes: _ansiBytes(processPanelFrame, config.terminalSize),
-      terminalOutputAnsiBytes: _ansiBytes(
-        terminalOutputFrame,
-        config.terminalSize,
-      ),
-      unsafeFrameCount: unsafeFrameCount,
-      unsafeArtifactLeakCount: unsafeArtifactLeakCount,
-      copiedByteCount: utf8.encode(copiedText).length,
-      editorChanged: editorResult.changed,
-      correct: correct,
-    );
-  } finally {
-    await driver.restore();
-    await driver.dispose();
-    tester.dispose();
-    if (await tempDir.exists()) {
-      await tempDir.delete(recursive: true);
-    }
-  }
-}
-
-final class _SubprocessOutputHarness extends StatelessWidget {
-  const _SubprocessOutputHarness({
-    required this.successController,
-    required this.failureController,
-    required this.cancelController,
-    required this.terminalBuffer,
-    required this.successOutputController,
-    required this.terminalOutputController,
-  });
-
-  final ProcessTaskController successController;
-  final ProcessTaskController failureController;
-  final ProcessTaskController cancelController;
-  final LogBuffer terminalBuffer;
-  final LogRegionController successOutputController;
-  final LogRegionController terminalOutputController;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Text('SB.9 subprocess handoff and untrusted output'),
-        Expanded(
-          child: ProcessPanel(
-            controller: successController,
-            outputController: successOutputController,
-            autofocus: true,
-            showProgress: false,
-            copyOptions: const LogRegionCopyOptions(
-              clipboardPolicy: ClipboardWritePolicy.inProcessOnly,
-            ),
-          ),
-        ),
-        Expanded(
-          child: ProcessPanel(
-            controller: failureController,
-            showProgress: false,
-            copyOptions: const LogRegionCopyOptions(
-              clipboardPolicy: ClipboardWritePolicy.inProcessOnly,
-            ),
-          ),
-        ),
-        Expanded(
-          child: ProcessPanel(
-            controller: cancelController,
-            showProgress: false,
-            copyOptions: const LogRegionCopyOptions(
-              clipboardPolicy: ClipboardWritePolicy.inProcessOnly,
-            ),
-          ),
-        ),
-        Expanded(
-          child: TerminalOutputRegion(
-            buffer: terminalBuffer,
-            controller: terminalOutputController,
-            semanticLabel: 'Captured terminal output',
-            copyOptions: const LogRegionCopyOptions(
-              clipboardPolicy: ClipboardWritePolicy.inProcessOnly,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-final class _TerminalOutputHarness extends StatelessWidget {
-  const _TerminalOutputHarness({
-    required this.buffer,
-    required this.controller,
-  });
-
-  final LogBuffer buffer;
-  final LogRegionController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return TerminalOutputRegion(
-      buffer: buffer,
-      controller: controller,
-      autofocus: true,
-      semanticLabel: 'Streaming terminal output',
-      copyOptions: const LogRegionCopyOptions(
-        clipboardPolicy: ClipboardWritePolicy.inProcessOnly,
-      ),
-    );
-  }
-}
-
-Future<File> _writeSubprocessScenarioScript(Directory directory) async {
-  final file = File(
-    '${directory.path}${Platform.pathSeparator}sb9_process_fixture.dart',
-  );
-  await file.writeAsString(r'''
-import 'dart:async';
-import 'dart:io';
-
-Future<void> main(List<String> args) async {
-  final mode = args.isEmpty ? 'success' : args.first;
-  switch (mode) {
-    case 'success':
-      final lineCount = args.length > 1 ? int.parse(args[1]) : 256;
-      final fill = List<String>.filled(180, 'x').join();
-      for (var i = 0; i < lineCount; i++) {
-        stdout.writeln('\x1B[32mOUT $i\x1B[0m payload=$fill');
-        if (i % 17 == 0) {
-          stderr.writeln('\x1B]52;c;SECRET_STREAM_$i\x07 stderr payload $fill');
-        }
-        if (i % 41 == 0) {
-          stdout.writeln('\x1BPqDCS_SECRET_$i\x1B\\ dcs payload');
-        }
-        if (i % 73 == 0) {
-          stdout.writeln('\x1B_APC_SECRET_$i\x1B\\ apc payload');
-        }
-      }
-      stdout.writeln('\x1B]52;c;SECRET_FINAL\x07 final unsafe line');
-      return;
-    case 'failure':
-      stderr.writeln('\x1B]52;c;SECRET_FAILURE\x07 non-zero exit');
-      exitCode = 7;
-      return;
-    case 'slow':
-      stdout.writeln('ready');
-      await stdout.flush();
-      await Future<void>.delayed(const Duration(seconds: 30));
-      return;
-    default:
-      stderr.writeln('unknown mode $mode');
-      exitCode = 64;
-      return;
-  }
-}
-''');
-  return file;
-}
-
-ProcessTaskCommand _subprocessCommand(
-  File script,
-  String mode, [
-  List<String> arguments = const <String>[],
-]) {
-  return ProcessTaskCommand(Platform.resolvedExecutable, [
-    script.path,
-    mode,
-    ...arguments,
-  ]);
-}
-
-int _processTargetBytesFor(int rowCount) {
-  final scaled = rowCount * 10;
-  if (scaled < 64 * 1024) return 64 * 1024;
-  if (scaled > 1024 * 1024) return 1024 * 1024;
-  return scaled;
-}
-
-int _processLineCountFor(int targetBytes) {
-  final count = (targetBytes / 256).ceil();
-  if (count < 128) return 128;
-  return count;
-}
-
-int _terminalOutputLineCountFor(int rowCount) {
-  final scaled = rowCount ~/ 50;
-  if (scaled < 128) return 128;
-  if (scaled > 2048) return 2048;
-  return scaled;
-}
-
-int _terminalStreamBatchSizeFor(int lineCount) {
-  final scaled = lineCount ~/ 16;
-  if (scaled < 16) return 16;
-  if (scaled > 128) return 128;
-  return scaled;
-}
-
-LogLine _terminalOutputLine(int index, int seed) {
-  final source = index % 11 == 0 ? LogSource.stderr : LogSource.stdout;
-  final unsafe = index % 19 == 0 || index % 43 == 0;
-  final prefix = source == LogSource.stderr ? 'ERR' : 'OUT';
-  final payload = unsafe
-      ? '$prefix-$index \x1b]52;c;SECRET_TERMINAL_${index + seed}\x07 payload\ncontinued'
-      : '$prefix-$index streamed output shard ${(index + seed) % 97}';
-  return LogLine(payload, source);
-}
-
-Future<bool> _waitForTaskOutput(
-  ProcessTaskController controller,
-  bool Function(TaskOutput entry) predicate,
-) async {
-  if (controller.output.any(predicate)) return true;
-  final completer = Completer<bool>();
-  late final Timer timer;
-  void listener() {
-    if (completer.isCompleted) return;
-    if (controller.output.any(predicate)) {
-      timer.cancel();
-      controller.removeListener(listener);
-      completer.complete(true);
-    }
-  }
-
-  timer = Timer(const Duration(seconds: 5), () {
-    if (completer.isCompleted) return;
-    controller.removeListener(listener);
-    completer.complete(false);
-  });
-  controller.addListener(listener);
-  listener();
-  return completer.future;
-}
-
-Future<bool> _waitForHandoffResume(
-  FakeTerminalDriver driver,
-  int expectedResumeCount,
-) async {
-  final deadline = DateTime.now().add(const Duration(seconds: 5));
-  while (DateTime.now().isBefore(deadline)) {
-    if (driver.handoffResumeCallCount >= expectedResumeCount &&
-        driver.isActive) {
-      return true;
-    }
-    await Future<void>.delayed(const Duration(milliseconds: 1));
-  }
-  return driver.handoffResumeCallCount >= expectedResumeCount &&
-      driver.isActive;
-}
-
-int _taskOutputUtf8Bytes(ProcessTaskController controller) {
-  var total = 0;
-  for (final entry in controller.output) {
-    total += utf8.encode(entry.text).length;
-  }
-  return total;
-}
-
-int _taskOutputOriginalBytes(ProcessTaskController controller) {
-  var total = 0;
-  for (final entry in controller.output) {
-    total += entry.originalLength ?? entry.text.length;
-  }
-  return total;
-}
-
-int _sanitizedTaskOutputCount(ProcessTaskController controller) {
-  return controller.output.where((entry) => entry.sanitized).length;
-}
-
-int _truncatedTaskOutputCount(ProcessTaskController controller) {
-  return controller.output.where((entry) => entry.truncated).length;
-}
-
-int _stderrTaskOutputCount(ProcessTaskController controller) {
-  return controller.output.where((entry) => entry.source == 'stderr').length;
-}
-
-int _processExitCode(ProcessTaskController controller) {
-  final value = controller.value;
-  if (value != null) return value.exitCode;
-  final error = controller.error;
-  if (error is ProcessTaskException) return error.result.exitCode;
-  return -1;
-}
-
-int _unsafeLeakCount(String text) =>
-    _containsUnsafeTerminalPayload(text) ? 1 : 0;
-
-int _semanticUnsafeLeakCount(SemanticTree tree) {
-  var count = 0;
-  for (final node in tree.nodes) {
-    if (_semanticValueUnsafe(node.label) ||
-        _semanticValueUnsafe(node.value) ||
-        _semanticValueUnsafe(node.hint) ||
-        _semanticValueUnsafe(node.validationError)) {
-      count += 1;
-    }
-    for (final value in node.state.values.values) {
-      if (_semanticValueUnsafe(value)) count += 1;
-    }
-  }
-  return count;
-}
-
-bool _semanticValueUnsafe(Object? value) {
-  if (value == null) return false;
-  return _containsUnsafeTerminalPayload(value.toString());
-}
-
-final class _SubprocessOutputJourneySample {
-  const _SubprocessOutputJourneySample({
-    required this.totalJourneyUs,
-    required this.processRunUs,
-    required this.failureRunUs,
-    required this.cancelLatencyUs,
-    required this.editorHandoffUs,
-    required this.streamFrameUs,
-    required this.processPanelRenderUs,
-    required this.terminalOutputRenderUs,
-    required this.copySelectedUs,
-    required this.semanticQueryUs,
-    required this.processLineCount,
-    required this.processTargetBytes,
-    required this.capturedOutputBytes,
-    required this.capturedOriginalBytes,
-    required this.processOutputCount,
-    required this.stderrOutputCount,
-    required this.sanitizedOutputCount,
-    required this.truncatedOutputCount,
-    required this.unsafeSequenceBlockCount,
-    required this.failureExitCode,
-    required this.failureOutputCount,
-    required this.cancelOutputObserved,
-    required this.cancelProcessExitCode,
-    required this.terminalModeRestored,
-    required this.handoffCallCount,
-    required this.handoffSuspendCallCount,
-    required this.handoffResumeCallCount,
-    required this.terminalOutputLineCount,
-    required this.terminalStreamBatchCount,
-    required this.semanticNodeCount,
-    required this.taskSemanticCount,
-    required this.logSemanticCount,
-    required this.initialAnsiBytes,
-    required this.maxStreamAnsiBytes,
-    required this.processPanelAnsiBytes,
-    required this.terminalOutputAnsiBytes,
-    required this.unsafeFrameCount,
-    required this.unsafeArtifactLeakCount,
-    required this.copiedByteCount,
-    required this.editorChanged,
-    required this.correct,
-  });
-
-  final int totalJourneyUs;
-  final int processRunUs;
-  final int failureRunUs;
-  final int cancelLatencyUs;
-  final int editorHandoffUs;
-  final List<int> streamFrameUs;
-  final int processPanelRenderUs;
-  final int terminalOutputRenderUs;
-  final int copySelectedUs;
-  final int semanticQueryUs;
-  final int processLineCount;
-  final int processTargetBytes;
-  final int capturedOutputBytes;
-  final int capturedOriginalBytes;
-  final int processOutputCount;
-  final int stderrOutputCount;
-  final int sanitizedOutputCount;
-  final int truncatedOutputCount;
-  final int unsafeSequenceBlockCount;
-  final int failureExitCode;
-  final int failureOutputCount;
-  final bool cancelOutputObserved;
-  final int cancelProcessExitCode;
-  final bool terminalModeRestored;
-  final int handoffCallCount;
-  final int handoffSuspendCallCount;
-  final int handoffResumeCallCount;
-  final int terminalOutputLineCount;
-  final int terminalStreamBatchCount;
-  final int semanticNodeCount;
-  final int taskSemanticCount;
-  final int logSemanticCount;
-  final int initialAnsiBytes;
-  final int maxStreamAnsiBytes;
-  final int processPanelAnsiBytes;
-  final int terminalOutputAnsiBytes;
-  final int unsafeFrameCount;
-  final int unsafeArtifactLeakCount;
-  final int copiedByteCount;
-  final bool editorChanged;
-  final bool correct;
-}
-
 final class _TreeTableHierarchyScenario implements _ScenarioBenchmark {
   const _TreeTableHierarchyScenario();
 
@@ -3860,8 +3010,6 @@ final class _TreeTableHierarchyScenario implements _ScenarioBenchmark {
         'uniqueNodesRequested': last.uniqueNodesRequested,
         'sanitizingFixtureRows': last.sanitizingFixtureRows,
         'copiedByteCount': last.copiedByteCount,
-        'indexTaskEventCount': last.indexTaskEventCount,
-        'indexProgressCurrent': last.indexProgressCurrent,
         'rssDeltaBytes': rssAfter - rssBefore,
       },
       thresholds: const <String, Object?>{
@@ -3878,7 +3026,6 @@ final class _TreeTableHierarchyScenario implements _ScenarioBenchmark {
         'Candidate thresholds are informational until stable baselines exist.',
         'Scenario uses a 100k-leaf hierarchy plus branch nodes.',
         'Scenario uses TreeTableSearchIndex so filterQueryUs measures repeated query cost after index construction.',
-        'Search-index build runs cooperatively through TaskController.',
         'Fixture includes ANSI/OSC/newline payloads to verify sanitized visible, copied, and searched output.',
       ],
     );
@@ -3908,26 +3055,13 @@ Future<_TreeTableJourneySample> _runTreeTableJourney(
       return node.cells[columnId] ?? '';
     }
 
-    final indexTask = TaskController<TreeTableSearchIndex<int>>(
-      id: 'sb11-tree-index',
-      label: 'SB.11 tree index',
-    );
     final indexBuild = Stopwatch()..start();
-    final indexResult = await indexTask.start(
-      (context) => TreeTableSearchIndex.buildCooperatively<int>(
-        roots: roots,
-        columns: _treeColumns,
-        cellBuilder: cellBuilder,
-        context: context,
-        yieldPolicy: _indexYieldPolicy,
-        progressLabel: 'index tree',
-      ),
+    final searchIndex = TreeTableSearchIndex<int>.build(
+      roots: roots,
+      columns: _treeColumns,
+      cellBuilder: cellBuilder,
     );
     indexBuild.stop();
-    final searchIndex = indexResult.value;
-    if (searchIndex == null) {
-      throw StateError('SB.11 tree index build did not produce an index.');
-    }
 
     final controller = TreeTableController(expandedKeys: {fixture.groupKey(0)});
     final mount = Stopwatch()..start();
@@ -4058,9 +3192,7 @@ Future<_TreeTableJourneySample> _runTreeTableJourney(
         visibleEnd >= visibleStart &&
         filterVisibleStart >= 0 &&
         filterVisibleStart <= 1 &&
-        filterVisibleEnd == 1 &&
-        indexTask.status == TaskStatus.succeeded &&
-        indexTask.progress?.current == searchIndex.rowCount;
+        filterVisibleEnd == 1;
 
     final sample = _TreeTableJourneySample(
       totalJourneyUs: total.elapsedMicroseconds,
@@ -4094,11 +3226,8 @@ Future<_TreeTableJourneySample> _runTreeTableJourney(
       uniqueNodesRequested: requestedNodes.length,
       sanitizingFixtureRows: fixture.sanitizingLeafCount,
       copiedByteCount: utf8.encode(copiedText).length,
-      indexTaskEventCount: indexTask.events.length,
-      indexProgressCurrent: (indexTask.progress?.current ?? -1).toInt(),
       correct: correct,
     );
-    indexTask.dispose();
     return sample;
   } finally {
     tester.dispose();
@@ -4274,8 +3403,6 @@ final class _TreeTableJourneySample {
     required this.uniqueNodesRequested,
     required this.sanitizingFixtureRows,
     required this.copiedByteCount,
-    required this.indexTaskEventCount,
-    required this.indexProgressCurrent,
     required this.correct,
   });
 
@@ -4310,8 +3437,6 @@ final class _TreeTableJourneySample {
   final int uniqueNodesRequested;
   final int sanitizingFixtureRows;
   final int copiedByteCount;
-  final int indexTaskEventCount;
-  final int indexProgressCurrent;
   final bool correct;
 }
 
@@ -4353,7 +3478,6 @@ final class _ScenarioResult {
       'SB.6' => metrics['updateTotalUs'],
       'SB.8' => metrics['cycleUs'],
       'SB.7' => metrics['resizeFrameUs'],
-      'SB.9' => metrics['processRunUs'],
       'SB.11' => metrics['filterQueryUs'],
       _ => metrics['pageMoveUs'],
     };
@@ -4365,7 +3489,6 @@ final class _ScenarioResult {
       'SB.6' => 'update_total_p95_us',
       'SB.8' => 'cycle_p95_us',
       'SB.7' => 'resize_frame_p95_us',
-      'SB.9' => 'process_run_p95_us',
       'SB.11' => 'filter_query_p95_us',
       _ => 'page_move_p95_us',
     };

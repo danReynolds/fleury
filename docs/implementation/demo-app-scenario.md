@@ -21,7 +21,7 @@ direction. If it is awkward, that awkwardness should feed Phase 1 API work.
 
 Build a self-contained developer operations console backed by local fake data
 and deterministic streams. The app should feel like a real tool for inspecting
-tasks, logs, data, and command output without depending on Dune, ACP, network
+runs, logs, data, and command output without depending on Dune, ACP, network
 services, or external processes.
 
 The user can:
@@ -30,9 +30,9 @@ The user can:
 - Open a command palette and run app commands.
 - Type commands or notes into a composer.
 - Watch streamed output arrive in a transcript/log region.
-- Inspect and filter a dense table of task/run records.
+- Inspect and filter a dense table of run records.
 - Select rows and copy meaningful text.
-- Start, cancel, and observe a fake worker task with progress.
+- Start, cancel, and observe a fake worker with progress.
 - Open terminal diagnostics and see capability fallbacks.
 - Trigger a minimal debug capture that records enough state for diagnosis.
 
@@ -77,9 +77,9 @@ The first demo-app slice should have these screens:
 
 | Screen | Purpose | Core pressure |
 | --- | --- | --- |
-| Overview | Summary cards, active task progress, recent logs, key status. | Layout, focus, animation, status, theme. |
+| Overview | Summary cards, active worker progress, recent logs, key status. | Layout, focus, animation, status, theme. |
 | Connection | Shared form definition rendered as a full-screen panel. | Forms, validation, secret redaction, prompt-mode parity. |
-| Runs | Dense task/run table with selection, filter text, sort placeholders. | Table, virtualization path, selection, copy, semantic rows. |
+| Runs | Dense run table with selection, filter text, sort placeholders. | Table, virtualization path, selection, copy, semantic rows. |
 | Tree | Hierarchical subsystem table with expansion, activation, and copy. | TreeTable, hierarchy semantics, filtering/index pressure. |
 | Payload | Structured JSON fixture. | JsonView, path/pointer semantics, safe subtree copy. |
 | Changes | Unified diff fixture. | DiffView, file/hunk/line semantics, safe hunk copy. |
@@ -87,13 +87,10 @@ The first demo-app slice should have these screens:
 | Docs | Markdown fixture. | MarkdownView, visible-link fallback, component-theme styling, safe block copy. |
 | Transcript | Streamed markdown-ish messages and command output. | Streaming text, sanitization, scroll, selection. |
 | Logs | Log tail with severity and source filters. | LogView, safe output, high-volume append. |
-| Process | Native command execution with scoped process commands and output panel. | ProcessTaskController, ProcessCommandRunner, ProcessPanel, cancellation, output semantics. |
 | Diagnostics | Terminal profile, capabilities, fallbacks, debug capture action. | Capability model, inspector hooks, machine-readable state. |
 
 Only Overview, Runs, Transcript, and Diagnostics are required for Phase 1 v0.
 Logs can start as a region inside Transcript if schedule requires it.
-Process is a Phase 2 pressure screen added after fake-worker and process
-primitives exist; it is intentionally not part of the first demo slice.
 
 ## Interaction Model
 
@@ -123,12 +120,9 @@ Initial commands:
 - `Go to Overview`
 - `Go to Runs`
 - `Go to Transcript`
-- `Go to Process`
 - `Go to Diagnostics`
-- `Start Fake Task`
-- `Cancel Active Task`
-- `Run Dart Version`
-- `Cancel Dart Version`
+- `Start Fake Worker`
+- `Cancel Active Worker`
 - `Copy Selection`
 - `Toggle Log Stream`
 - `Run Terminal Diagnose`
@@ -150,9 +144,7 @@ Use deterministic in-memory fixtures:
 - `TranscriptEvent`: id, source, timestamp, kind, text, severity,
   sanitized.
 - `LogEntry`: id, source, timestamp, level, message.
-- `TaskState`: id, label, progress, status, cancellable, startedAt.
-- `ProcessState`: command display, status, exit code, output count, latest
-  output source/severity/safety metadata.
+- App-owned worker state: id, label, progress, status, cancellable, startedAt.
 - `DiagnosticReport`: terminal name/profile, color mode, width behavior,
   mouse support, clipboard support, image protocol, fallback list, warnings.
 
@@ -167,7 +159,7 @@ The first runnable version should prove this workflow:
 2. Navigate to Runs from the sidebar.
 3. Filter run records with the filter input.
 4. Move selection through the table.
-5. Open the command palette and start a fake task.
+5. Open the command palette and start a fake worker.
 6. Watch progress and transcript/log output update.
 7. Type into the composer and submit a note/command.
 8. Open Diagnostics and capture a debug snapshot.
@@ -187,8 +179,7 @@ framework seams that matter most before Dune/`dune_cli`.
 | Text editing | Composer, filters, history, paste policy placeholder, multiline path. |
 | Table/data | Selection, pinned header, filtering, large fixture path, row semantics. |
 | Log/output | High-volume append, safe text, severity/source styling, scroll behavior. |
-| Worker/task | Progress, cancellation, completion/failure, UI update ordering. |
-| Process/workflow | Native subprocess start/cancel, command binding, output panel, exit semantics. |
+| App-owned worker state | Progress, cancellation, completion/failure, UI update ordering. |
 | Capability model | Fallback display and machine-readable diagnostics. |
 | Semantics/testing | Query roles, labels, values, focus, actions, selection, and errors. |
 | Inspector/debug | Minimal snapshot with focus, screen, commands, capabilities, dirty regions if available. |
@@ -213,9 +204,8 @@ Phase 1 v0 is complete when evidence exists for:
 - No Dune/`dune_cli` integration in this cycle.
 - No ACP transport, ACP schemas, or ACP-specific widgets.
 - No real network service dependency.
-- No real subprocess execution in the first slice; use fake workers first.
-  Native subprocess pressure can be added in Phase 2 after the task/process
-  primitives exist.
+- No framework-owned task lifecycle or process orchestration layer; use
+  ordinary Dart async state and narrowly scoped native effects.
 - No full replay artifact format.
 - No public launch polish.
 

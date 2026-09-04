@@ -59,7 +59,7 @@ same tree, so they can't silently diverge.
 ## The web-safety boundary
 
 The native runtime — `runApp`, the terminal drivers, stdout/stderr **log
-capture**, **process** tasks, the external editor, and **file I/O** — lives
+capture**, the external editor, and **file I/O** — lives
 *above* the host SPI and pulls in `dart:io` (and, via the Windows driver,
 `dart:ffi`). It is exported from the `fleury.dart` umbrella, **not** from
 `fleury_host.dart`.
@@ -78,9 +78,9 @@ That gives a simple rule for any code that might run in the browser:
 - **Most widgets are web-safe** — charts, lists, inputs, layout, images loaded
   from bytes or decoded pixels, document viewers, and agent surfaces. They
   import the host SPI and compile to JS.
-- **A few are native-only**, because they genuinely touch the platform: file I/O,
-  process execution, and stdout/stderr log capture. Examples: `FileBrowser`,
-  `FilePicker`, `ProcessPanel`, `LogRegion`, and `TerminalOutputRegion`. These
+- **A few are native-only**, because they genuinely touch the platform: file I/O
+  and stdout/stderr log capture. Examples: `FileBrowser`, `FilePicker`,
+  `LogRegion`, and `TerminalOutputRegion`. These
   can render over the **served** target — the server has `dart:io` — but can't
   compile into a client-side bundle. `Image` itself is web-safe; only
   `Image.file` needs the native filesystem, so browser apps load bytes

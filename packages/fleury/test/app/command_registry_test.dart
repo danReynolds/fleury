@@ -12,6 +12,40 @@ const _missing = CommandId('missing');
 
 void main() {
   group('CommandRegistry', () {
+    test('rejects duplicate command IDs within one scope', () {
+      final duplicateCommands = [
+        AppCommand(id: _save, title: 'Save first', run: (_) {}),
+        AppCommand(id: _save, title: 'Save second', run: (_) {}),
+      ];
+
+      expect(
+        () => CommandRegistry(commands: duplicateCommands),
+        throwsA(
+          isA<ArgumentError>().having(
+            (error) => error.message,
+            'message',
+            contains('Duplicate command ID "save"'),
+          ),
+        ),
+      );
+    });
+
+    test('rejects duplicate IDs without replacing existing commands', () {
+      final registry = CommandRegistry(
+        commands: [AppCommand(id: _save, title: 'Save', run: (_) {})],
+      );
+      addTearDown(registry.dispose);
+
+      expect(
+        () => registry.localCommands = [
+          AppCommand(id: _open, title: 'Open first', run: (_) {}),
+          AppCommand(id: _open, title: 'Open second', run: (_) {}),
+        ],
+        throwsA(isA<ArgumentError>()),
+      );
+      expect(registry.localCommands.single.id, _save);
+    });
+
     test('activeCommands resolves local commands before parent commands', () {
       final parent = CommandRegistry(
         commands: [
@@ -288,6 +322,75 @@ void main() {
       expect(command.state.commandCategory, 'File');
       expect(scope.state.commandCount, 1);
     });
+
+    testWidgets(
+      'nested overrides keep distinct semantic identities and actions',
+      (tester) async {
+        var parentCalls = 0;
+        var childCalls = 0;
+        tester.pumpWidget(
+          CommandScope(
+            commands: [
+              AppCommand(
+                id: _save,
+                title: 'Parent save',
+                run: (_) {
+                  parentCalls += 1;
+                },
+              ),
+            ],
+            child: CommandScope(
+              commands: [
+                AppCommand(
+                  id: _save,
+                  title: 'Child save',
+                  run: (_) {
+                    childCalls += 1;
+                  },
+                ),
+              ],
+              child: const Text('Body'),
+            ),
+          ),
+        );
+
+        final tree = tester.semantics();
+        final parent = tree.single(
+          role: SemanticRole.command,
+          label: 'Parent save',
+        );
+        final child = tree.single(
+          role: SemanticRole.command,
+          label: 'Child save',
+        );
+
+        expect(parent.id, isNot(child.id));
+        expect(parent.state.commandId, 'save');
+        expect(child.state.commandId, 'save');
+        expect(tree.nodesById[parent.id], same(parent));
+        expect(tree.nodesById[child.id], same(child));
+        expect(tree.elementById(parent.id), isNotNull);
+        expect(tree.elementById(child.id), isNotNull);
+        expect(
+          tree.elementById(parent.id),
+          isNot(same(tree.elementById(child.id))),
+        );
+
+        final parentResult = await tester.invokeSemanticAction(
+          SemanticAction.activate,
+          id: parent.id,
+        );
+        final childResult = await tester.invokeSemanticAction(
+          SemanticAction.activate,
+          id: child.id,
+        );
+
+        expect(parentResult.completed, isTrue);
+        expect(childResult.completed, isTrue);
+        expect(parentCalls, 1);
+        expect(childCalls, 1);
+      },
+    );
 
     testWidgets('omits invisible commands from semantics', (tester) {
       tester.pumpWidget(

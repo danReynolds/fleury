@@ -12,7 +12,6 @@ dart run benchmark/scenario_benchmarks.dart --filter=SB.5 --json
 dart run benchmark/scenario_benchmarks.dart --filter=SB.6 --json
 dart run benchmark/scenario_benchmarks.dart --filter=SB.7 --json
 dart run benchmark/scenario_benchmarks.dart --filter=SB.8 --json
-dart run benchmark/scenario_benchmarks.dart --filter=SB.9 --json
 dart run benchmark/scenario_benchmarks.dart --filter=SB.11 --json
 dart run benchmark/scenario_benchmarks.dart --filter=datatable --save=benchmark/results/widgets-scenarios.json
 ```
@@ -57,14 +56,7 @@ Saved Phase 2 baselines:
   scrollback-jump p95 4988 us, copy-selected-entry p95 12068 us, filter-query
   p95 35979 us, semantic-query p95 2874 us. This moves retained-log typeahead
   below the 80 ms candidate query budget, but index construction remains a
-  worker/debounce candidate for launch polish.
-- `benchmark/results/phase2-logregion-cooperative-index-2026-06-01.json` —
-  cooperative indexed `SB.4` on Dart 3.12.1, 5 measured iterations,
-  search-index-build p95 375479 us, append-burst p95 17553 us, filter-query
-  p95 21771 us, semantic-query p95 4505 us, `searchIndexProgressCurrent`
-  100000, and `appendIndexProgressCurrent` 101000. The index build and append
-  refresh now run through `TaskController` with cooperative progress/yield
-  checkpoints.
+  candidate for app-owned background execution.
 
 ## SB.5 Streaming Markdown
 
@@ -150,30 +142,6 @@ Saved Phase 2 baselines:
   618 us, zero stale palette semantics, zero route-depth mismatches, and zero
   unexpected invocations.
 
-## SB.9 Subprocess Handoff And Untrusted Output
-
-`SB.9` runs real Dart subprocesses through `ProcessTaskController` and
-`TerminalHandoffDriver` for a 1 MB colored-output success path, a stderr
-non-zero exit, cancellation, and external editor handoff. It also streams
-unsafe stdout/stderr-like lines through `TerminalOutputRegion` to measure frame
-timing while asserting that OSC/DCS/APC/control payloads do not leak into
-visible output, copied text, or semantic artifacts. Output includes
-p50/p95/p99/max timing for process run, failure run, cancellation latency,
-editor handoff, streaming frames, panel render, copy, semantic query, captured
-output size, sanitizer counts, handoff counts, unsafe-frame count, and unsafe
-artifact leak count.
-
-Saved Phase 2 baseline:
-
-- `benchmark/results/phase2-subprocess-output-2026-06-01.json` — `SB.9
-  Subprocess Handoff And Untrusted Output` on Dart 3.12.1, 10 measured
-  iterations over the default 100k-row scaled fixture, 1,000,000 target process
-  bytes, 4288 captured output records, process-run p95 647254 us,
-  cancellation-latency p95 11823 us, stream-frame p95 6230 us,
-  process-panel-render p95 10649 us, semantic-query p95 1965 us, terminal
-  handoff restored in every path, and zero unsafe visible/copy/semantic
-  artifact leaks.
-
 ## SB.11 TreeTable Hierarchy Filter And Copy
 
 `SB.11` mounts a 100k-leaf `TreeTable` hierarchy with branch rows, renders one
@@ -183,7 +151,7 @@ row, and queries semantics. Output includes p50/p95/p99/max timing for fixture
 build, search-index build, mount, first render, branch expansion, navigation,
 filter query, selected-row copy, semantic query, ANSI bytes, visible ranges,
 tree node count, cell-builder call counts, sanitizing fixture rows, copied byte
-count, cooperative index task event/progress counts, and RSS delta.
+count, and RSS delta.
 The indexed search path covers exact-token and prefix-token lookup for durable
 IDs, paths, and symbols; fuzzy contains/subsequence filtering remains a
 separate scan-oriented mode.
@@ -201,9 +169,3 @@ Saved Phase 2 baseline:
   regex tokenization with a scanner, 5 measured iterations over the same
   100k-leaf fixture, index-build p95 1040888 us, filter-query p95 8564 us,
   selected-row copy p95 13886 us, semantic-query p95 4767 us.
-- `benchmark/results/phase2-treetable-cooperative-index-2026-06-01.json` —
-  cooperative indexed `SB.11` on Dart 3.12.1, 5 measured iterations over the
-  same 100k-leaf fixture, index-build p95 826676 us, filter-query p95 5706 us,
-  semantic-query p95 1826 us, `indexProgressCurrent` 100100, and
-  `searchIndexRowCount` 100100. The hierarchy index build now runs through
-  `TaskController` with cooperative progress/yield checkpoints.

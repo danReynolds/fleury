@@ -106,7 +106,6 @@ void main() {
       'ToolCallCard',
       'ApprovalPrompt',
       'TaskGraph',
-      'ProcessPanel',
       'TraceTimeline',
     };
 
@@ -128,10 +127,6 @@ void main() {
     expect(
       story('agent.context-messages.message-list').defaultControlValues,
       containsPair('view', 1),
-    );
-    expect(
-      story('workflow.process-trace.process-panel').defaultControlValues,
-      containsPair('view', 2),
     );
   });
 }

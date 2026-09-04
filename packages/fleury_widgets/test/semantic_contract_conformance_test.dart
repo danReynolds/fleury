@@ -63,7 +63,6 @@ const Map<String, List<String>> _semanticCatalog = {
   'model_status_bar': ['modelStatus', 'tokenMeter'],
   'panel': ['region'],
   'patch_review': ['patchFile', 'patchReview'],
-  'process_panel': ['task'],
   'progress_bar': ['progress'],
   'range_slider': ['slider'],
   'search_panel': ['listItem', 'region'],

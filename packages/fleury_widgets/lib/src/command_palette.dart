@@ -1,10 +1,15 @@
-import 'dart:async' show unawaited;
+import 'dart:async' show scheduleMicrotask, unawaited;
 
 import 'package:fleury/fleury_core.dart';
 
-/// One entry in a [CommandPalette].
-class Command {
-  const Command({
+/// One callback-backed row in a fixed-list [CommandPalette].
+///
+/// This type is only for palettes that own a static list of callbacks. For
+/// application actions shared by buttons, shortcuts, semantics, and command
+/// palettes, register [AppCommand]s and open a registry-backed palette with
+/// [CommandPalette.open].
+class CommandPaletteItem {
+  const CommandPaletteItem({
     required this.label,
     required this.onInvoke,
     this.id,
@@ -36,6 +41,10 @@ class Command {
   final void Function() onInvoke;
 }
 
+/// Deprecated source-compatible name for [CommandPaletteItem].
+@Deprecated('Use CommandPaletteItem instead.')
+typedef Command = CommandPaletteItem;
+
 bool _isSubsequence(String needle, String hay) {
   var i = 0;
   for (var j = 0; j < hay.length && i < needle.length; j++) {
@@ -44,7 +53,7 @@ bool _isSubsequence(String needle, String hay) {
   return i == needle.length;
 }
 
-List<_CommandEntry> _buildCommandEntries(List<Command> commands) {
+List<_CommandEntry> _buildCommandEntries(List<CommandPaletteItem> commands) {
   return [
     for (final command in commands)
       _CommandEntry(command: command, searchFields: _searchFields(command)),
@@ -87,7 +96,7 @@ int? _matchRank(_CommandEntry entry, String query) {
   return null;
 }
 
-List<String> _searchFields(Command command) {
+List<String> _searchFields(CommandPaletteItem command) {
   return [
     if (command.id != null) command.id!.toLowerCase(),
     command.label,
@@ -101,7 +110,7 @@ final class _CommandEntry {
   _CommandEntry({required this.command, required this.searchFields})
     : searchText = searchFields.join(' ');
 
-  final Command command;
+  final CommandPaletteItem command;
   final List<String> searchFields;
   final String searchText;
 }
@@ -113,8 +122,8 @@ final class _CommandEntry {
 ///
 /// ```dart
 /// context.present<void>(CommandPalette(commands: [
-///   Command(label: 'Open File', onInvoke: openFile),
-///   Command(label: 'Quit', onInvoke: quit),
+///   CommandPaletteItem(label: 'Open File', onInvoke: openFile),
+///   CommandPaletteItem(label: 'Quit', onInvoke: quit),
 /// ]));
 /// ```
 ///
@@ -150,7 +159,7 @@ class CommandPalette extends StatelessWidget {
   /// Fixed callback commands to show.
   ///
   /// When null, the palette uses the active [CommandRegistry] instead.
-  final List<Command>? commands;
+  final List<CommandPaletteItem>? commands;
 
   /// Registry to inspect for command rows.
   ///
@@ -287,11 +296,11 @@ CommandRegistry _resolvedCommandRegistry({
   return CommandRegistryScope.of(context);
 }
 
-List<Command> _activePaletteCommands(
+List<CommandPaletteItem> _activePaletteCommands(
   BuildContext context,
   CommandRegistry registry,
 ) {
-  final commands = <Command>[];
+  final commands = <CommandPaletteItem>[];
   final seen = <CommandId>{};
 
   void add(AppCommand command) {
@@ -300,7 +309,7 @@ List<Command> _activePaletteCommands(
     if (!command.showInPalette) return;
     seen.add(command.id);
     commands.add(
-      Command(
+      CommandPaletteItem(
         id: command.id.value,
         label: command.title,
         description: command.description,
@@ -329,7 +338,7 @@ class _CommandPaletteView extends StatefulWidget {
     required this.maxVisible,
   });
 
-  final List<Command> commands;
+  final List<CommandPaletteItem> commands;
   final String placeholder;
   final int width;
   final int maxVisible;
@@ -344,6 +353,10 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
   final _list = ListController(selectedIndex: 0);
   late List<_CommandEntry> _entries = _buildCommandEntries(widget.commands);
   late List<_CommandEntry> _filtered = _entries;
+  int? _pendingSelectedIndex;
+  int _selectionRefreshGeneration = 0;
+
+  int? get _selectedIndex => _pendingSelectedIndex ?? _list.selectedIndex;
 
   @override
   void initState() {
@@ -355,14 +368,64 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
   void didUpdateWidget(covariant _CommandPaletteView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.commands != oldWidget.commands) {
+      final previousIndex = _selectedIndex;
+      final selectedId =
+          previousIndex != null &&
+              previousIndex >= 0 &&
+              previousIndex < _filtered.length
+          ? _filtered[previousIndex].command.id
+          : null;
       _entries = _buildCommandEntries(widget.commands);
       _filtered = _match(_entries, _query.text);
-      _list.selectedIndex = _filtered.isEmpty ? null : 0;
+      _syncSelectionAfterRefresh(
+        _selectionAfterRefresh(
+          _filtered,
+          selectedId: selectedId,
+          previousIndex: previousIndex,
+        ),
+      );
+    }
+  }
+
+  void _syncSelectionAfterRefresh(int? nextIndex) {
+    final generation = ++_selectionRefreshGeneration;
+    _pendingSelectedIndex = null;
+    final knownItemCount = _list.itemCount;
+    if (nextIndex == null ||
+        knownItemCount == 0 ||
+        nextIndex < knownItemCount) {
+      _list.selectedIndex = nextIndex;
+      return;
+    }
+
+    // ListController clamps writes against the row count from the currently
+    // mounted ListView. When a refresh inserts rows before the selection, the
+    // selected command can move beyond that old count. Keep the intended
+    // index for this build, then commit it once ListView has received the new
+    // count at the end of the frame.
+    _pendingSelectedIndex = nextIndex;
+    void applyPendingSelection() {
+      if (!mounted || generation != _selectionRefreshGeneration) return;
+      final pending = _pendingSelectedIndex;
+      if (pending == null) return;
+      setState(() {
+        _pendingSelectedIndex = null;
+        _list.selectedIndex = pending;
+      });
+    }
+
+    final binding = TuiBinding.maybeOf(context);
+    if (binding == null) {
+      scheduleMicrotask(applyPendingSelection);
+    } else {
+      binding.addPostFrameCallback((_) => applyPendingSelection());
     }
   }
 
   void _onQuery() {
     setState(() {
+      _selectionRefreshGeneration++;
+      _pendingSelectedIndex = null;
       _filtered = _match(_entries, _query.text);
       _list.selectedIndex = _filtered.isEmpty ? null : 0;
     });
@@ -370,9 +433,11 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
 
   void _move(int delta) {
     if (_filtered.isEmpty) return;
-    final current = _list.selectedIndex ?? 0;
+    final current = _selectedIndex ?? 0;
     final n = _filtered.length;
     setState(() {
+      _selectionRefreshGeneration++;
+      _pendingSelectedIndex = null;
       // Wrap top↔bottom like fzf / VS Code / Textual — after filtering the
       // list is short, so cycling beats stopping dead at an end.
       _list.selectedIndex = ((current + delta) % n + n) % n;
@@ -380,12 +445,12 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
   }
 
   void _invoke() {
-    final i = _list.selectedIndex;
+    final i = _selectedIndex;
     if (i == null || i < 0 || i >= _filtered.length) return;
     _invokeCommand(_filtered[i].command);
   }
 
-  void _invokeCommand(Command command) {
+  void _invokeCommand(CommandPaletteItem command) {
     if (!command.enabled) return;
     Navigator.maybeOf(context)?.pop();
     command.onInvoke();
@@ -419,7 +484,7 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
     final hasDescriptions = _entries.any(
       (entry) => entry.command.description != null,
     );
-    final selIndex = _list.selectedIndex;
+    final selIndex = _selectedIndex;
     final selectedDescription =
         (selIndex != null && selIndex >= 0 && selIndex < _filtered.length)
         ? _filtered[selIndex].command.description
@@ -464,7 +529,7 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
         state: SemanticState({
           'filterText': _query.text,
           'collectionRowCount': _filtered.length,
-          if (_list.selectedIndex != null) 'selectedKey': _list.selectedIndex,
+          'selectedKey': ?selIndex,
           'visibleRangeStart': visibleRangeStart,
           'visibleRangeEnd': visibleRangeEnd,
         }),
@@ -507,14 +572,13 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
                             controller: _list,
                             selectionActive: true,
                             itemCount: _filtered.length,
-                            itemBuilder: (context, index, selected) =>
-                                _CommandRow(
-                                  command: _filtered[index].command,
-                                  index: index,
-                                  selected: selected,
-                                  width: widget.width,
-                                  onActivate: _invokeCommand,
-                                ),
+                            itemBuilder: (context, index, _) => _CommandRow(
+                              command: _filtered[index].command,
+                              index: index,
+                              selected: index == selIndex,
+                              width: widget.width,
+                              onActivate: _invokeCommand,
+                            ),
                           ),
                   ),
                   if (hasDescriptions) ...[
@@ -538,6 +602,25 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
   }
 }
 
+int? _selectionAfterRefresh(
+  List<_CommandEntry> entries, {
+  required String? selectedId,
+  required int? previousIndex,
+}) {
+  if (entries.isEmpty) return null;
+
+  if (selectedId != null) {
+    final matchingIndex = entries.indexWhere(
+      (entry) => entry.command.id == selectedId,
+    );
+    if (matchingIndex >= 0) return matchingIndex;
+  }
+
+  if (previousIndex == null || previousIndex < 0) return 0;
+  if (previousIndex >= entries.length) return entries.length - 1;
+  return previousIndex;
+}
+
 int _visibleCountFor(int itemCount, int maxVisible) {
   if (itemCount <= 0) return 1;
   return itemCount > maxVisible ? maxVisible : itemCount;
@@ -552,7 +635,7 @@ class _CommandRow extends StatelessWidget {
     required this.onActivate,
   });
 
-  final Command command;
+  final CommandPaletteItem command;
   final int index;
   final bool selected;
 
@@ -561,7 +644,7 @@ class _CommandRow extends StatelessWidget {
   /// palette opaque over the content beneath it (a `Text` only paints the
   /// cells it occupies, and the theme background is "terminal default").
   final int width;
-  final void Function(Command command) onActivate;
+  final void Function(CommandPaletteItem command) onActivate;
 
   @override
   Widget build(BuildContext context) {

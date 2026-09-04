@@ -12,14 +12,6 @@ library;
 export 'fleury_host.dart';
 
 // Native (dart:io) surface.
-export 'src/effects/process_task.dart'
-    show
-        ProcessTaskCommand,
-        ProcessTaskController,
-        ProcessTaskException,
-        ProcessTaskResult;
-export 'src/effects/process_command_runner.dart'
-    show ProcessCommandRunner, ProcessCommandScope;
 export 'src/effects/external_editor.dart'
     show
         editTextInExternalEditor,
@@ -32,6 +24,7 @@ export 'src/effects/external_editor.dart'
         ExternalEditorTempFileFactory,
         ExternalEditorTempFileRequest,
         ExternalEditorProcessRunner,
+        ExternalEditorProcessRequest,
         resolveExternalEditorCommand;
 export 'src/rendering/io_sink_ansi_sink.dart' show IoSinkAnsiSink;
 export 'src/runtime/hot_reload.dart' show HotReloadController;

@@ -1,0 +1,124 @@
+---
+title: Commands
+description: Define an application action once and expose it wherever users work.
+---
+
+import FleuryExample from '../../../components/FleuryExample.astro';
+import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
+
+Use a command when the same action should appear in several places, or when the
+available actions need to be discoverable. For a single control, call its
+callback directly.
+
+Define **Save**, **New file**, or **Run tests** once. Fleury can then expose the
+action through buttons, keyboard shortcuts, command palettes, semantics, tests,
+and agents.
+
+## One action, everywhere
+
+An `AppCommand` ties together the pieces every entry point needs: a stable ID,
+user-facing title, availability, shortcuts, and one callback. Define **Save
+current file** once, and every surface reads the same definition:
+
+<CodeDemoSplit file="save_file.dart" layout="demo-wide">
+<Fragment slot="code">
+```dart
+const saveFile = CommandId('editor.save');
+
+AppCommand saveFileCommand() => AppCommand(
+  id: saveFile,
+  title: 'Save current file',
+  shortcuts: [KeySequence.ctrl.s],
+  enabled: (_) => dirty,
+  run: (_) => save(),
+);
+
+CommandScope(
+  commands: [saveFileCommand()],
+  child: const CommandButton(
+    command: saveFile,
+    label: 'Save',
+  ),
+)
+```
+</Fragment>
+<FleuryExample
+  slot="demo"
+  id="commands.overview"
+  title="Use one Save command from a button, Ctrl+S, or the command palette"
+  cols={60}
+  rows={12}
+  interactive
+/>
+</CodeDemoSplit>
+
+Edit the document. **Save**, **Ctrl+S**, and the **Ctrl+K** palette all reach
+`save()`. The same `enabled` rule disables every surface after saving, while
+the command's ID remains stable for semantics, tests, and agents.
+
+`CommandButton` is an ordinary Fleury button backed by a command ID. It reads
+the current title, availability, and callback from the active registry instead
+of repeating them at the control.
+
+## Put commands in context
+
+Register commands where they are relevant:
+
+```dart
+FleuryApp(
+  commands: [openCommands],
+  home: CommandScope(
+    commands: [newFile, saveFileCommand()],
+    child: const EditorScreen(),
+  ),
+)
+```
+
+Commands passed to `FleuryApp` remain available across the app. A
+`CommandScope` adds actions for its subtree and installs their shortcuts. A
+palette opened inside the editor with `CommandPalette.open(context)` discovers
+both sets; editor commands disappear when that scope leaves the tree.
+
+This is the main value of the model: the interface can ask which actions are
+available *here* instead of every button, shortcut, palette, test, or agent
+maintaining its own catalog.
+
+## Discover commands with a palette
+
+A command palette turns the active command registry into searchable UI. This
+editor defines **New file** and **Save current file** once; **Ctrl+K** discovers
+both without maintaining a second list.
+
+<FleuryExample
+  id="showcase.commands"
+  title="Open Ctrl+K to discover and invoke the editor's active commands"
+  cols={82}
+  rows={28}
+  interactive
+/>
+
+The palette opens with the editor's active actions. Invoke **New file**, or edit
+the document and reopen **Ctrl+K** to run **Save current file**. Palette rows,
+buttons, and shortcuts always share the same command and enabled state.
+
+The complete deterministic example is
+[`packages/samples/lib/src/commands_showcase.dart`](https://github.com/danReynolds/fleury/blob/main/packages/samples/lib/src/commands_showcase.dart).
+
+## Choose the smallest tool
+
+| You need to… | Use |
+|---|---|
+| Run one callback from one control | `Button` |
+| Handle keyboard-only interaction | `KeyBinding` |
+| Share one discoverable action across several surfaces | `AppCommand` |
+| Show a fixed palette of unrelated callbacks | `CommandPaletteItem` |
+
+A command callback may be synchronous or asynchronous, but loading and progress
+remain ordinary application state. Tests and agents can invoke the stable
+`CommandId` without depending on one particular button or shortcut.
+
+## Next steps
+
+- [Key handling](/fleury/guides/focus-and-keyboard/) for keyboard-only input.
+- [Testing](/fleury/guides/testing/) for semantic and interaction tests.
+- [`CommandPalette`](/fleury/widgets/commandpalette/) for palette behavior.

@@ -166,7 +166,7 @@ class CommandRegistry extends ChangeNotifier {
   CommandRegistry({
     CommandRegistry? parent,
     List<AppCommand> commands = const <AppCommand>[],
-  }) : _commands = List<AppCommand>.of(commands) {
+  }) : _commands = _copyAndValidateCommands(commands) {
     this.parent = parent;
   }
 
@@ -190,7 +190,7 @@ class CommandRegistry extends ChangeNotifier {
 
   set localCommands(List<AppCommand> value) {
     _checkNotDisposed();
-    _commands = List<AppCommand>.of(value);
+    _commands = _copyAndValidateCommands(value);
     notifyListeners();
   }
 
@@ -319,6 +319,20 @@ class CommandRegistry extends ChangeNotifier {
     _parent = null;
     super.dispose();
   }
+}
+
+List<AppCommand> _copyAndValidateCommands(List<AppCommand> commands) {
+  final copy = List<AppCommand>.of(commands);
+  final seen = <CommandId>{};
+  for (final command in copy) {
+    if (seen.add(command.id)) continue;
+    throw ArgumentError.value(
+      commands,
+      'commands',
+      'Duplicate command ID "${command.id}" in one CommandRegistry scope.',
+    );
+  }
+  return copy;
 }
 
 /// Shares a [CommandRegistry] with descendants.
@@ -479,6 +493,7 @@ final class _CommandScopeSemanticsElement extends ComponentElement
   @override
   SemanticNode buildSemanticNode(List<SemanticNode> children) {
     final commandNodes = <SemanticNode>[];
+    final scopeId = SemanticNodeId('command-scope:$hashCode');
     final context = _CommandInvocationContext(
       commands: widget.registry,
       buildContext: widget.buildContext,
@@ -496,7 +511,10 @@ final class _CommandScopeSemanticsElement extends ComponentElement
       }
       commandNodes.add(
         SemanticNode(
-          id: SemanticNodeId('command:${command.id.value}'),
+          id: SemanticNodeId(
+            '${scopeId.value}/command:'
+            '${escapeSemanticIdSegment(command.id.value)}',
+          ),
           role: SemanticRole.command,
           label: command.title,
           value: command.description,
@@ -511,7 +529,7 @@ final class _CommandScopeSemanticsElement extends ComponentElement
       );
     }
     return SemanticNode(
-      id: SemanticNodeId('command-scope:$hashCode'),
+      id: scopeId,
       role: SemanticRole.region,
       label: widget.label,
       children: <SemanticNode>[...commandNodes, ...children],

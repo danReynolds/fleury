@@ -111,7 +111,7 @@ Around that pipeline sits the app layer: a typed command registry, focus
 and overlay management, a capability contract (terminals differ in
 everything; fleury detects what yours can do and degrades by policy, not
 by accident), sanitize-by-default handling of untrusted output, and a
-task layer for long work with progress and cancellation.
+widget/state model that keeps long-running work application-owned.
 
 And because a framework this incremental can drift subtly, fleury keeps
 itself honest mechanically: a byte-equivalence oracle proves the diffed
@@ -186,7 +186,7 @@ Edit-and-see, in a terminal.
 widgets, including the data-heavy ones — tables and trees proven at
 100k rows, log regions, markdown, code and diff views —
 and a set shaped for what terminal apps are becoming: message lists,
-approval prompts, patch review, conversation navigation, process panels,
+approval prompts, patch review, conversation navigation, terminal output regions,
 a command palette. Text editing is engine-grade: grapheme-correct,
 selection and undo, paste policy, completion seams, configurable
 keymaps.

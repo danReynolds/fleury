@@ -992,7 +992,7 @@ class PosixTerminalDriver
     // restored-terminal zone; nesting must not restore/re-enter a second time.
     if (Zone.current[this] == true) return await operation();
 
-    // Distinct concurrent handoffs (two process tasks launched together) must
+    // Distinct concurrent handoffs (two processes launched together) must
     // not overlap. With a single boolean, the first completion re-entered and
     // ungated Fleury frames while the second child still owned the terminal.
     final previous = _handoffTail;

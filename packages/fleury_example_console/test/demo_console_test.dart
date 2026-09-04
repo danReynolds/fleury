@@ -41,52 +41,6 @@ Future<CommandInvocationResult> _invoke(
   return result;
 }
 
-Future<SemanticNode> _waitForTaskStatus(
-  FleuryTester tester, {
-  required String label,
-  required String status,
-}) async {
-  for (var attempt = 0; attempt < 25; attempt++) {
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-    tester.pump();
-    final matches = tester.semantics().where(
-      role: SemanticRole.task,
-      label: label,
-    );
-    for (final node in matches) {
-      if (node.state.taskStatus == status) return node;
-    }
-  }
-  fail('Timed out waiting for task `$label` to reach `$status`.');
-}
-
-Future<SemanticNode> _waitForTaskProgress(
-  FleuryTester tester, {
-  required String label,
-  required num current,
-}) async {
-  for (var attempt = 0; attempt < 25; attempt++) {
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-    tester.pump();
-    final matches = tester.semantics().where(
-      role: SemanticRole.task,
-      label: label,
-    );
-    for (final node in matches) {
-      if (node.state.progressCurrent == current) return node;
-    }
-  }
-  final states = tester
-      .semantics()
-      .where(role: SemanticRole.task, label: label)
-      .map((node) => node.state.values)
-      .toList();
-  fail(
-    'Timed out waiting for task `$label` to report progress `$current`: '
-    '$states',
-  );
-}
-
 CellStyle? _styleForRenderedText(
   FleuryTester tester,
   String needle, {
@@ -117,16 +71,16 @@ void main() {
     expect(tester.exists(text('Overview')), isTrue);
 
     final app = _demoApp(tester);
-    expect(app.state.screenCount, 13);
+    expect(app.state.screenCount, 12);
     expect(app.state.activeScreenId, 'overview');
     expect(app.state.commandCount, greaterThanOrEqualTo(8));
-    expect(app.state.statusCount, 5);
+    expect(app.state.statusCount, 4);
 
     final navigation = tester.semantics().single(
       role: SemanticRole.navigation,
       label: 'Demo console navigation',
     );
-    expect(navigation.state.screenCount, 13);
+    expect(navigation.state.screenCount, 12);
     expect(navigation.state.activeScreenId, 'overview');
 
     final overviewItem = tester.semantics().single(
@@ -155,12 +109,12 @@ void main() {
     expect(workflow.state.workflowHealth, 'needsAttention');
     expect(workflow.state['workflowId'], 'demo-console');
     expect(workflow.state.messageCount, 2);
-    expect(workflow.state.toolCallCount, 1);
+    expect(workflow.state.toolCallCount, 0);
     expect(workflow.state.taskCount, 4);
     expect(workflow.state.contextItemCount, 4);
     expect(workflow.state.fileMentionCount, 4);
-    expect(workflow.state.conversationCount, 4);
-    expect(workflow.state.traceEventCount, 5);
+    expect(workflow.state.conversationCount, 3);
+    expect(workflow.state.traceEventCount, 4);
     expect(workflow.state.patchFileCount, 1);
 
     final snapshot = tester.accessibilitySnapshot();
@@ -175,14 +129,14 @@ void main() {
     );
     expect(workflowFallbackState, contains('health needsAttention'));
     expect(workflowFallbackState, contains('2 messages'));
-    expect(workflowFallbackState, contains('1 active tool call'));
+    expect(workflowFallbackState, contains('0 tool calls'));
     expect(workflowFallbackState, contains('4 tasks'));
     expect(workflowFallbackState, contains('3 active tasks'));
     expect(workflowFallbackState, contains('4 context items'));
     expect(workflowFallbackState, contains('4 file mentions'));
-    expect(workflowFallbackState, contains('4 conversations'));
+    expect(workflowFallbackState, contains('3 conversations'));
     expect(workflowFallbackState, contains('1 unread conversation'));
-    expect(workflowFallbackState, contains('5 trace events'));
+    expect(workflowFallbackState, contains('4 trace events'));
     expect(workflowFallbackState, contains('1 active trace event'));
     expect(workflowFallbackState, contains('1 patch file'));
     expect(workflowFallbackState, contains('1 review issue'));
@@ -196,7 +150,7 @@ void main() {
       role: SemanticRole.status,
       label: 'Debug',
     );
-    expect(status.states, contains('status 5 items'));
+    expect(status.states, contains('status 4 items'));
     expect(screenStatus.states, contains('status id screen, severity info'));
     expect(debugStatus.value, 'captures 0');
     expect(debugStatus.states, contains('status id debug, severity info'));
@@ -395,40 +349,32 @@ void main() {
     );
   });
 
-  testWidgets('commands navigate and start the fake task', (tester) async {
+  testWidgets('commands navigate and update the fake worker', (tester) async {
     tester.pumpWidget(const DemoConsoleApp());
 
     final nav = await _invoke(tester, demoCommandGoRuns);
     expect(nav.status, CommandInvocationStatus.completed);
     expect(_demoApp(tester).state.activeScreenId, 'runs');
 
-    final task = await _invoke(tester, demoCommandStartTask);
-    expect(task.status, CommandInvocationStatus.completed);
-    expect(tester.exists(text('Task: running 15%')), isTrue);
+    final started = await _invoke(tester, demoCommandStartWorker);
+    expect(started.status, CommandInvocationStatus.completed);
+    expect(tester.exists(text('Worker: running 15%')), isTrue);
 
     final app = _demoApp(tester);
-    expect(app.state.lastCommandId, 'task.startFake');
+    expect(app.state.lastCommandId, 'worker.startFake');
     expect(app.state.lastCommandStatus, 'completed');
 
     final overview = await _invoke(tester, demoCommandGoOverview);
     expect(overview.status, CommandInvocationStatus.completed);
 
     final worker = tester.semantics().single(
-      role: SemanticRole.task,
-      label: 'Fake task',
-      busy: true,
-      action: SemanticAction.cancel,
+      role: SemanticRole.status,
+      label: 'Fake worker',
+      value: 'running',
     );
-    expect(worker.state.taskId, 'fake-task');
-    expect(worker.state.taskStatus, 'running');
+    expect(worker.state['workerStatus'], 'running');
     expect(worker.state.progressCurrent, 15);
     expect(worker.state.progressTotal, 100);
-    expect(worker.state.outputCount, 1);
-    expect(worker.state.taskEventCount, 3);
-    expect(worker.state.lastTaskEventKind, 'output');
-    expect(worker.state.source, 'worker');
-    expect(worker.state.outputSanitized, isFalse);
-    expect(worker.state.outputTruncated, isFalse);
 
     final diagnostics = await _invoke(tester, demoCommandGoDiagnostics);
     expect(diagnostics.status, CommandInvocationStatus.completed);
@@ -438,45 +384,16 @@ void main() {
       role: SemanticRole.traceTimeline,
       label: 'Demo trace timeline',
     );
-    expect(taskTimeline.state.traceEventCount, greaterThan(5));
+    expect(taskTimeline.state.traceEventCount, greaterThanOrEqualTo(4));
 
-    final taskProgressEvent = tester.semantics().single(
+    final workerEvent = tester.semantics().single(
       role: SemanticRole.traceEvent,
-      label: 'Fake task progress',
+      label: 'Fake worker',
     );
-    expect(taskProgressEvent.state.traceKind, 'task');
-    expect(taskProgressEvent.state.traceStatus, 'running');
-    expect(taskProgressEvent.state.taskId, 'fake-task');
-    expect(taskProgressEvent.state.taskRunId, 1);
-    expect(taskProgressEvent.state.taskEventSequence, 2);
-    expect(taskProgressEvent.state.taskEventKind, 'progress');
-    expect(taskProgressEvent.state.taskStatus, 'running');
-    expect(taskProgressEvent.state.progressCurrent, 15);
-    expect(taskProgressEvent.state.progressTotal, 100);
-    expect(taskProgressEvent.state.source, 'fake-task');
-
-    final taskOutputEvent = tester.semantics().single(
-      role: SemanticRole.traceEvent,
-      label: 'Fake task output',
-    );
-    expect(taskOutputEvent.state.taskEventKind, 'output');
-    expect(taskOutputEvent.state.taskOutputSource, 'worker');
-    expect(taskOutputEvent.state.taskOutputSeverity, 'info');
-    expect(taskOutputEvent.state.taskOutputSanitized, isFalse);
-    expect(taskOutputEvent.state.taskOutputTruncated, isFalse);
-    expect(taskOutputEvent.state.source, 'fake-task/worker');
-
-    final taskOutputFallback = tester.accessibilitySnapshot().single(
-      role: SemanticRole.traceEvent,
-      label: 'Fake task output',
-    );
-    expect(
-      taskOutputFallback.states.join('\n'),
-      contains(
-        'task event output, run 1, sequence 3, status running, '
-        'output sequence 1, output source worker, severity info',
-      ),
-    );
+    expect(workerEvent.state.traceKind, 'task');
+    expect(workerEvent.state.traceStatus, 'running');
+    expect(workerEvent.state.source, 'fake-worker');
+    expect(workerEvent.state['workerId'], 'fake-worker');
 
     final overviewAgain = await _invoke(tester, demoCommandGoOverview);
     expect(overviewAgain.status, CommandInvocationStatus.completed);
@@ -512,18 +429,16 @@ void main() {
     expect(progress.value, closeTo(0.15, 0.0001));
     expect(progress.state.progressLabel, '15%');
 
-    final cancel = await _invoke(tester, demoCommandCancelTask);
+    final cancel = await _invoke(tester, demoCommandCancelWorker);
     expect(cancel.status, CommandInvocationStatus.completed);
 
     final canceled = tester.semantics().single(
-      role: SemanticRole.task,
-      label: 'Fake task',
+      role: SemanticRole.status,
+      label: 'Fake worker',
     );
     expect(canceled.value, 'canceled');
-    expect(canceled.busy, isFalse);
-    expect(canceled.state.taskStatus, 'canceled');
-    expect(canceled.state.lastTaskEventKind, 'canceled');
-    expect(tester.exists(text('Task: canceled')), isTrue);
+    expect(canceled.state['workerStatus'], 'canceled');
+    expect(tester.exists(text('Worker: canceled')), isTrue);
   });
 
   testWidgets('command palette can drive app navigation', (tester) async {
@@ -592,92 +507,6 @@ void main() {
     );
   });
 
-  testWidgets('process screen runs native command through scoped commands', (
-    tester,
-  ) async {
-    tester.pumpWidget(const DemoConsoleApp());
-
-    final nav = await _invoke(tester, demoCommandGoProcess);
-    expect(nav.status, CommandInvocationStatus.completed);
-    expect(_demoApp(tester).state.activeScreenId, 'process');
-    expect(tester.exists(text('Process')), isTrue);
-    var toolCall = tester.semantics().single(
-      role: SemanticRole.toolCall,
-      label: 'Dart version command',
-      action: SemanticAction.copy,
-    );
-    expect(toolCall.state['toolCallId'], 'process.dart-version');
-    expect(toolCall.state['toolName'], contains('dart'));
-    expect(toolCall.state['toolStatus'], 'queued');
-    expect(toolCall.state['argumentCount'], 1);
-    expect(toolCall.state['processCommandId'], demoCommandRunProcess.value);
-
-    var runCommand = tester.semantics().single(
-      role: SemanticRole.command,
-      label: 'Run Dart Version',
-      action: SemanticAction.start,
-    );
-    var cancelCommand = tester.semantics().single(
-      role: SemanticRole.command,
-      label: 'Cancel Dart Version',
-      action: SemanticAction.cancel,
-    );
-    expect(runCommand.enabled, isTrue);
-    expect(runCommand.state.commandId, 'process.dartVersion.start');
-    expect(runCommand.state.commandCategory, 'Process');
-    expect(cancelCommand.enabled, isFalse);
-
-    final run = await _invoke(tester, demoCommandRunProcess);
-    expect(run.status, CommandInvocationStatus.completed);
-
-    final process = await _waitForTaskStatus(
-      tester,
-      label: 'Dart version',
-      status: 'succeeded',
-    );
-    expect(process.state.taskId, 'dart-version');
-    expect(process.state['command'], contains(' --version'));
-    expect(process.state['exitCode'], 0);
-    expect(process.state['processSucceeded'], isTrue);
-    expect(process.state.outputCount, greaterThan(0));
-    expect(tester.exists(text('Process: done')), isTrue);
-
-    final processFallback = tester.accessibilitySnapshot().single(
-      role: SemanticRole.task,
-      label: 'Dart version',
-    );
-    expect(processFallback.states.join('\n'), contains('exit 0'));
-    expect(processFallback.states.join('\n'), contains('process succeeded'));
-
-    toolCall = tester.semantics().single(
-      role: SemanticRole.toolCall,
-      label: 'Dart version command',
-      value: 'succeeded',
-      action: SemanticAction.copy,
-    );
-    expect(toolCall.busy, isFalse);
-    expect(toolCall.state['toolStatus'], 'succeeded');
-    expect(toolCall.state.progressCurrent, 1);
-    expect(toolCall.state.progressTotal, 1);
-
-    final log = tester.semantics().single(
-      role: SemanticRole.log,
-      label: 'Dart version output',
-    );
-    expect(log.state.collectionRowCount, greaterThan(0));
-
-    runCommand = tester.semantics().single(
-      role: SemanticRole.command,
-      label: 'Run Dart Version',
-    );
-    cancelCommand = tester.semantics().single(
-      role: SemanticRole.command,
-      label: 'Cancel Dart Version',
-    );
-    expect(runCommand.enabled, isTrue);
-    expect(cancelCommand.enabled, isFalse);
-  });
-
   testWidgets('global search debounces query and activates result navigation', (
     tester,
   ) async {
@@ -690,14 +519,7 @@ void main() {
 
     await _invoke(tester, demoCommandFocusSearch);
     tester.type('API deploy smoke');
-
-    final task = await _waitForTaskStatus(
-      tester,
-      label: 'Global search',
-      status: 'succeeded',
-    );
-    expect(task.state.progressLabel, '1 matches');
-    expect(task.state.outputCount, 1);
+    await Future<void>.delayed(const Duration(milliseconds: 80));
     await _flushAsyncUi(tester);
     tester.render(size: const CellSize(90, 26));
 
@@ -758,22 +580,7 @@ void main() {
 
     final build = await _invoke(tester, demoCommandBuildLogIndex);
     expect(build.status, CommandInvocationStatus.completed);
-    await _waitForTaskProgress(
-      tester,
-      label: 'Demo log index',
-      current: demoIndexedLogInitialCount,
-    );
-    var task = await _waitForTaskStatus(
-      tester,
-      label: 'Demo log index',
-      status: 'succeeded',
-    );
-    expect(task.state.taskStatus, 'succeeded');
-    expect(task.state.progressCurrent, demoIndexedLogInitialCount);
-    expect(task.state.progressLabel, 'index demo logs complete');
-    expect(task.state.outputCount, 1);
-    expect(task.state.source, 'index');
-    expect(task.state.taskEventCount, greaterThan(4));
+    await _flushAsyncUi(tester);
 
     await _invoke(tester, demoCommandFocusIndexFilter);
     tester.type('target:payment');
@@ -859,22 +666,6 @@ void main() {
 
     final append = await _invoke(tester, demoCommandAppendIndexedLogBurst);
     expect(append.status, CommandInvocationStatus.completed);
-    await _waitForTaskProgress(
-      tester,
-      label: 'Demo log index',
-      current: demoIndexedLogInitialCount + demoIndexedLogAppendCount,
-    );
-    task = await _waitForTaskStatus(
-      tester,
-      label: 'Demo log index',
-      status: 'succeeded',
-    );
-    expect(task.state.taskStatus, 'succeeded');
-    expect(
-      task.state.progressCurrent,
-      demoIndexedLogInitialCount + demoIndexedLogAppendCount,
-    );
-    expect(task.state.progressLabel, 'refresh demo logs complete');
     await _flushAsyncUi(tester);
     tester.render(size: const CellSize(96, 28));
 
@@ -1592,8 +1383,8 @@ void main() {
       ),
     );
 
-    recordCommand(demoCommandStartTask);
-    await _invoke(tester, demoCommandStartTask);
+    recordCommand(demoCommandStartWorker);
+    await _invoke(tester, demoCommandStartWorker);
     recordCommand(demoCommandFocusRunsTable);
     await _invoke(tester, demoCommandFocusRunsTable);
     capture.record(const InputDebugEvent(kind: 'key', summary: 'arrowDown'));
@@ -1609,7 +1400,7 @@ void main() {
     );
 
     expect(tester.exists(text('Debug: captures 1')), isTrue);
-    expect(tester.exists(text('Task: running 15%')), isTrue);
+    expect(tester.exists(text('Worker: running 15%')), isTrue);
     final tree = tester.semantics();
     final app = _demoApp(tester);
     expect(app.state.activeScreenId, 'runs');
@@ -1632,7 +1423,7 @@ void main() {
       containsAll(<String>[
         'screen.runs',
         '100x28',
-        'task.startFake',
+        'worker.startFake',
         'runs.focusTable',
         'arrowDown',
         'enter',
@@ -1683,7 +1474,7 @@ void main() {
     expect(
       artifact.semanticNodes(
         role: 'status',
-        label: 'Task',
+        label: 'Worker',
         value: 'running 15%',
       ),
       isNotEmpty,
@@ -1981,7 +1772,7 @@ void main() {
     expect(composer.state.historyBrowsing, isFalse);
     final selectedCompletion = tester.semantics().single(
       role: SemanticRole.menuItem,
-      label: '/run-task',
+      label: '/run-worker',
       selected: true,
     );
     expect(selectedCompletion.state.completionQuery, '/');
@@ -2084,8 +1875,8 @@ void main() {
       role: SemanticRole.conversationNavigator,
       label: 'Demo conversations',
     );
-    expect(navigator.state['totalConversationCount'], 4);
-    expect(navigator.state['filteredConversationCount'], 4);
+    expect(navigator.state['totalConversationCount'], 3);
+    expect(navigator.state['filteredConversationCount'], 3);
     expect(navigator.state.selectedConversationId, 'thread.transcript');
     expect(navigator.state['unreadConversationCount'], 1);
     expect(navigator.actions, contains(SemanticAction.focus));
@@ -2107,7 +1898,7 @@ void main() {
 
     final worker = tester.semantics().single(
       role: SemanticRole.conversation,
-      label: 'Worker task',
+      label: 'Worker activity',
       action: SemanticAction.activate,
     );
     expect(worker.state.conversationId, 'thread.worker');
@@ -2117,7 +1908,7 @@ void main() {
     final result = await tester.invokeSemanticAction(
       SemanticAction.activate,
       role: SemanticRole.conversation,
-      label: 'Worker task',
+      label: 'Worker activity',
     );
     expect(result.completed, isTrue);
 
@@ -2135,7 +1926,7 @@ void main() {
 
     final fallback = tester.accessibilitySnapshot().single(
       role: SemanticRole.conversation,
-      label: 'Worker task',
+      label: 'Worker activity',
     );
     expect(
       fallback.states,
@@ -2253,7 +2044,7 @@ void main() {
       label: 'Demo trace timeline',
       action: SemanticAction.focus,
     );
-    expect(timeline.state['traceEventCount'], 5);
+    expect(timeline.state['traceEventCount'], 4);
     expect(timeline.state['runningTraceEventCount'], 1);
     expect(timeline.state.selectedTraceId, 'trace.boot');
 

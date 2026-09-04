@@ -52,25 +52,6 @@ export 'src/editing/text_keymap.dart'
 export 'src/editing/text_paste.dart'
     show TextPastePolicy, TextPasteProgress, TextPasteSession;
 
-// Effects
-export 'src/effects/task.dart'
-    show
-        DebouncedTaskController,
-        TaskCanceled,
-        TaskContext,
-        TaskController,
-        TaskEvent,
-        TaskEventKind,
-        TaskOutput,
-        TaskOutputSeverity,
-        TaskProgress,
-        TaskResult,
-        TaskRunner,
-        TaskStatus,
-        TaskStatusView,
-        TaskYieldCheckpoint,
-        TaskYieldPolicy;
-
 // Animation
 export 'src/animation/animation_policy.dart' show AnimationPolicy;
 export 'src/animation/clock.dart' show Clock, SystemClock;

@@ -498,67 +498,6 @@ void main() {
     expect(exact, isEmpty);
   });
 
-  test('TreeTableSearchIndex can build cooperatively', () async {
-    const roots = [
-      TreeTableNode<String>(
-        key: 'app',
-        label: 'App',
-        cells: {'status': 'ready', 'owner': 'platform'},
-        children: [
-          TreeTableNode<String>(
-            key: 'agent',
-            label: 'Agent Runner',
-            cells: {'status': 'running', 'owner': 'team:runtime'},
-            metadata: {'target': 'zz-target_42'},
-          ),
-          TreeTableNode<String>(
-            key: 'logs',
-            label: 'Logs',
-            cells: {'status': 'warning', 'owner': 'ops'},
-          ),
-        ],
-      ),
-    ];
-    final controller = TaskController<TreeTableSearchIndex<String>>(
-      id: 'tree-index',
-    );
-
-    final result = await controller.start(
-      (context) => TreeTableSearchIndex.buildCooperatively<String>(
-        roots: roots,
-        columns: _columns,
-        context: context,
-        yieldPolicy: const TaskYieldPolicy(
-          itemBudget: 1,
-          elapsedBudget: Duration(days: 1),
-        ),
-        progressLabel: 'index tree',
-      ),
-    );
-
-    expect(result.succeeded, isTrue);
-    final index = result.value!;
-    expect(index.rowCount, 3);
-    expect(controller.progress?.label, 'index tree complete');
-    expect(
-      controller.events.where((event) => event.kind == TaskEventKind.progress),
-      hasLength(greaterThanOrEqualTo(3)),
-    );
-
-    final filtered = buildTreeTableRows<String>(
-      roots: roots,
-      columns: _columns,
-      filter: const TreeTableFilterDescriptor(
-        query: 'zz-target_42',
-        mode: TreeTableFilterMode.exactToken,
-      ),
-      searchIndex: index,
-    );
-    expect([for (final row in filtered) row.key], ['app', 'agent']);
-
-    controller.dispose();
-  });
-
   group('copy/export', () {
     testWidgets('Ctrl+C copies the selected visible tree row', (tester) async {
       final controller = TreeTableController(

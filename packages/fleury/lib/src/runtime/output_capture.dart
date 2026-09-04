@@ -9,8 +9,8 @@
 //     caught at the descriptor and streamed here as assembled lines. The
 //     driver renders through the saved real-terminal handle, so frames are
 //     never captured.
-//   - process tasks ([ProcessTaskController]): child-process pipe chunks feed
-//     [addChunk], which assembles them into lines.
+//   - child-process capture: pipe chunks feed [addChunk], which assembles them
+//     into lines.
 //
 // Where the fd capture doesn't engage (remote/serve sessions, custom drivers,
 // Windows, FLEURY_FD_CAPTURE=0) stray output flows wherever fd 1/2 point —
