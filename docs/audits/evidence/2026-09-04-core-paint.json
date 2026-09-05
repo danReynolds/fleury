@@ -1,0 +1,795 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-05T01:44:21.965579+00:00",
+  "baselineGitSha": "8718fd332ddd47e46ac2fa4573385dc39ea22b7d",
+  "candidateBranch": "codex/core-performance-audit",
+  "candidateSourceSha256": {
+    "packages/fleury/lib/src/rendering/cell_buffer.dart": "7cd6dd282bd5113074873b79c56df3d3fcb6dabcecf2a7124cecb4a2ac94beba",
+    "packages/fleury/lib/src/widgets/basic.dart": "5fd7bb48b834baf2b9d8337d2454d09be74b104c07dca014d99f31a9c8d06e59"
+  },
+  "probeSourceSha256": "fb3f7c9f1c6391dcee4bdba3bc21a00e23dbdddf788f882cc4abb16aa89a6257",
+  "environment": {
+    "dart": "3.12.2 stable",
+    "os": "macOS arm64",
+    "logicalCpus": 10,
+    "timingBuild": "dart compile exe (AOT)",
+    "cpuProfileBuild": "JIT, diagnostic only"
+  },
+  "method": {
+    "retainedFramesPerMode": 200,
+    "retainedWarmupFrames": 30,
+    "repetitions": 2,
+    "order": [
+      "base",
+      "candidate",
+      "candidate",
+      "base"
+    ],
+    "viewports": [
+      "80x24",
+      "120x40",
+      "200x60"
+    ],
+    "timing": "Each record is the probe-reported median of 200 frames. Layout and repaint debug counters enabled. Own timed processes were sequential with compilation and tests stopped. Shared host was not isolated from other work.",
+    "limits": "Probe idle means an explicitly forced render with a clean tree. Production idle skips rendering. Phase timings exclude buffer clear, cell diff, ANSI encoding, transport, and terminal paint. No terminal latency or energy claim."
+  },
+  "allRetainedStructuralCountersMatch": true,
+  "coreScenarios": [
+    {
+      "series": "scenarios",
+      "variant": "base",
+      "run": 1,
+      "scenario": "SB.1",
+      "warmup": 3,
+      "iterations": 40,
+      "metrics": {
+        "firstFrameUs": {
+          "min": 2,
+          "median": 3,
+          "p95": 8,
+          "p99": 36,
+          "max": 53,
+          "samples": 40
+        },
+        "commandToFrameUs": {
+          "min": 26,
+          "median": 28,
+          "p95": 40,
+          "p99": 71,
+          "max": 89,
+          "samples": 40
+        },
+        "commandFrameLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 40
+        },
+        "commandFrameLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 40
+        }
+      }
+    },
+    {
+      "series": "scenarios",
+      "variant": "base",
+      "run": 1,
+      "scenario": "SB.2",
+      "warmup": 3,
+      "iterations": 40,
+      "metrics": {
+        "cursorMoveUs": {
+          "min": 43,
+          "median": 46,
+          "p95": 67,
+          "p99": 172,
+          "max": 219,
+          "samples": 160
+        }
+      }
+    },
+    {
+      "series": "scenarios",
+      "variant": "base",
+      "run": 1,
+      "scenario": "SB.12",
+      "warmup": 3,
+      "iterations": 40,
+      "metrics": {
+        "firstFrameUs": {
+          "min": 50,
+          "median": 52,
+          "p95": 58,
+          "p99": 60,
+          "max": 60,
+          "samples": 40
+        },
+        "commandToFrameUs": {
+          "min": 73,
+          "median": 78,
+          "p95": 234,
+          "p99": 370,
+          "max": 445,
+          "samples": 40
+        }
+      }
+    },
+    {
+      "series": "scenarios",
+      "variant": "base",
+      "run": 2,
+      "scenario": "SB.1",
+      "warmup": 3,
+      "iterations": 40,
+      "metrics": {
+        "firstFrameUs": {
+          "min": 2,
+          "median": 3,
+          "p95": 7,
+          "p99": 60,
+          "max": 88,
+          "samples": 40
+        },
+        "commandToFrameUs": {
+          "min": 27,
+          "median": 29,
+          "p95": 42,
+          "p99": 52,
+          "max": 56,
+          "samples": 40
+        },
+        "commandFrameLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 40
+        },
+        "commandFrameLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 40
+        }
+      }
+    },
+    {
+      "series": "scenarios",
+      "variant": "base",
+      "run": 2,
+      "scenario": "SB.2",
+      "warmup": 3,
+      "iterations": 40,
+      "metrics": {
+        "cursorMoveUs": {
+          "min": 44,
+          "median": 48,
+          "p95": 82,
+          "p99": 198,
+          "max": 334,
+          "samples": 160
+        }
+      }
+    },
+    {
+      "series": "scenarios",
+      "variant": "base",
+      "run": 2,
+      "scenario": "SB.12",
+      "warmup": 3,
+      "iterations": 40,
+      "metrics": {
+        "firstFrameUs": {
+          "min": 50,
+          "median": 54,
+          "p95": 81,
+          "p99": 106,
+          "max": 115,
+          "samples": 40
+        },
+        "commandToFrameUs": {
+          "min": 75,
+          "median": 81,
+          "p95": 254,
+          "p99": 310,
+          "max": 344,
+          "samples": 40
+        }
+      }
+    },
+    {
+      "series": "scenarios",
+      "variant": "candidate",
+      "run": 1,
+      "scenario": "SB.1",
+      "warmup": 3,
+      "iterations": 40,
+      "metrics": {
+        "firstFrameUs": {
+          "min": 2,
+          "median": 3,
+          "p95": 9,
+          "p99": 45,
+          "max": 67,
+          "samples": 40
+        },
+        "commandToFrameUs": {
+          "min": 26,
+          "median": 31,
+          "p95": 48,
+          "p99": 91,
+          "max": 115,
+          "samples": 40
+        },
+        "commandFrameLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 40
+        },
+        "commandFrameLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 40
+        }
+      }
+    },
+    {
+      "series": "scenarios",
+      "variant": "candidate",
+      "run": 1,
+      "scenario": "SB.2",
+      "warmup": 3,
+      "iterations": 40,
+      "metrics": {
+        "cursorMoveUs": {
+          "min": 43,
+          "median": 47,
+          "p95": 65,
+          "p99": 182,
+          "max": 325,
+          "samples": 160
+        }
+      }
+    },
+    {
+      "series": "scenarios",
+      "variant": "candidate",
+      "run": 1,
+      "scenario": "SB.12",
+      "warmup": 3,
+      "iterations": 40,
+      "metrics": {
+        "firstFrameUs": {
+          "min": 50,
+          "median": 52,
+          "p95": 61,
+          "p99": 65,
+          "max": 66,
+          "samples": 40
+        },
+        "commandToFrameUs": {
+          "min": 75,
+          "median": 78,
+          "p95": 254,
+          "p99": 270,
+          "max": 272,
+          "samples": 40
+        }
+      }
+    },
+    {
+      "series": "scenarios",
+      "variant": "candidate",
+      "run": 2,
+      "scenario": "SB.1",
+      "warmup": 3,
+      "iterations": 40,
+      "metrics": {
+        "firstFrameUs": {
+          "min": 3,
+          "median": 3,
+          "p95": 9,
+          "p99": 54,
+          "max": 81,
+          "samples": 40
+        },
+        "commandToFrameUs": {
+          "min": 27,
+          "median": 30,
+          "p95": 53,
+          "p99": 54,
+          "max": 54,
+          "samples": 40
+        },
+        "commandFrameLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 40
+        },
+        "commandFrameLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 40
+        }
+      }
+    },
+    {
+      "series": "scenarios",
+      "variant": "candidate",
+      "run": 2,
+      "scenario": "SB.2",
+      "warmup": 3,
+      "iterations": 40,
+      "metrics": {
+        "cursorMoveUs": {
+          "min": 43,
+          "median": 47,
+          "p95": 65,
+          "p99": 141,
+          "max": 156,
+          "samples": 160
+        }
+      }
+    },
+    {
+      "series": "scenarios",
+      "variant": "candidate",
+      "run": 2,
+      "scenario": "SB.12",
+      "warmup": 3,
+      "iterations": 40,
+      "metrics": {
+        "firstFrameUs": {
+          "min": 51,
+          "median": 54,
+          "p95": 60,
+          "p99": 124,
+          "max": 159,
+          "samples": 40
+        },
+        "commandToFrameUs": {
+          "min": 76,
+          "median": 81,
+          "p95": 227,
+          "p99": 259,
+          "max": 261,
+          "samples": 40
+        }
+      }
+    },
+    {
+      "series": "counter",
+      "variant": "base",
+      "run": 1,
+      "scenario": "SB.1",
+      "warmup": 50,
+      "iterations": 1000,
+      "metrics": {
+        "firstFrameUs": {
+          "min": 2,
+          "median": 3,
+          "p95": 54,
+          "p99": 115,
+          "max": 296,
+          "samples": 1000
+        },
+        "commandToFrameUs": {
+          "min": 25,
+          "median": 27,
+          "p95": 44,
+          "p99": 82,
+          "max": 283,
+          "samples": 1000
+        },
+        "commandFrameLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 1000
+        },
+        "commandFrameLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 1000
+        }
+      }
+    },
+    {
+      "series": "counter",
+      "variant": "base",
+      "run": 2,
+      "scenario": "SB.1",
+      "warmup": 50,
+      "iterations": 1000,
+      "metrics": {
+        "firstFrameUs": {
+          "min": 2,
+          "median": 3,
+          "p95": 56,
+          "p99": 105,
+          "max": 157,
+          "samples": 1000
+        },
+        "commandToFrameUs": {
+          "min": 26,
+          "median": 28,
+          "p95": 51,
+          "p99": 91,
+          "max": 134,
+          "samples": 1000
+        },
+        "commandFrameLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 1000
+        },
+        "commandFrameLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 1000
+        }
+      }
+    },
+    {
+      "series": "counter",
+      "variant": "candidate",
+      "run": 1,
+      "scenario": "SB.1",
+      "warmup": 50,
+      "iterations": 1000,
+      "metrics": {
+        "firstFrameUs": {
+          "min": 2,
+          "median": 3,
+          "p95": 38,
+          "p99": 89,
+          "max": 193,
+          "samples": 1000
+        },
+        "commandToFrameUs": {
+          "min": 25,
+          "median": 27,
+          "p95": 44,
+          "p99": 65,
+          "max": 603,
+          "samples": 1000
+        },
+        "commandFrameLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 1000
+        },
+        "commandFrameLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 1000
+        }
+      }
+    },
+    {
+      "series": "counter",
+      "variant": "candidate",
+      "run": 2,
+      "scenario": "SB.1",
+      "warmup": 50,
+      "iterations": 1000,
+      "metrics": {
+        "firstFrameUs": {
+          "min": 2,
+          "median": 3,
+          "p95": 59,
+          "p99": 102,
+          "max": 196,
+          "samples": 1000
+        },
+        "commandToFrameUs": {
+          "min": 26,
+          "median": 27,
+          "p95": 44,
+          "p99": 94,
+          "max": 189,
+          "samples": 1000
+        },
+        "commandFrameLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 1000
+        },
+        "commandFrameLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 1000
+        }
+      }
+    }
+  ],
+  "cpuProfileMethod": "Same retained_tax_probe target at 120x40, --frames 800. Temporary copy of packages/fleury/tool/benchmark_profile.dart substituted the target and replaced --filter with --frames 800. Raw profiler scenarioId SB.1 was a wrapper label, not the target. Exclusive samples only are summarized; inclusive FilledBox paint also includes descendants. Allocation snapshots are excluded because they are not a normalized steady-state allocation window.",
+  "cpuProfiles": {
+    "base": {
+      "generatedAt": "2026-09-05T01:32:15.762766Z",
+      "profilePeriodUs": 1000,
+      "exitCode": 0,
+      "runnerArgs": [
+        "--frames",
+        "800"
+      ],
+      "sampleCount": 4567,
+      "topProjectExclusive": [
+        {
+          "name": "_placeGrapheme",
+          "owner": "package:fleury/src/rendering/cell_buffer.dart::CellBuffer",
+          "kind": "Dart",
+          "exclusiveTicks": 550,
+          "inclusiveTicks": 988
+        },
+        {
+          "name": "_evictWideNeighbors",
+          "owner": "package:fleury/src/rendering/cell_buffer.dart::CellBuffer",
+          "kind": "Dart",
+          "exclusiveTicks": 409,
+          "inclusiveTicks": 409
+        },
+        {
+          "name": "paint",
+          "owner": "package:fleury/src/widgets/basic.dart::_RenderFilledBox",
+          "kind": "Dart",
+          "exclusiveTicks": 359,
+          "inclusiveTicks": 2345
+        },
+        {
+          "name": "widthOfGrapheme",
+          "owner": "package:fleury/src/rendering/width_resolver.dart::DefaultWidthResolver",
+          "kind": "Dart",
+          "exclusiveTicks": 253,
+          "inclusiveTicks": 647
+        },
+        {
+          "name": "_scalarWidth",
+          "owner": "package:fleury/src/rendering/width_resolver.dart::DefaultWidthResolver",
+          "kind": "Dart",
+          "exclusiveTicks": 186,
+          "inclusiveTicks": 187
+        },
+        {
+          "name": "replay",
+          "owner": "package:fleury/src/rendering/render_object.dart::PointerRegionRecord",
+          "kind": "Dart",
+          "exclusiveTicks": 131,
+          "inclusiveTicks": 1125
+        },
+        {
+          "name": "merge",
+          "owner": "package:fleury/src/rendering/cell.dart::CellStyle",
+          "kind": "Dart",
+          "exclusiveTicks": 126,
+          "inclusiveTicks": 136
+        },
+        {
+          "name": "restyleCell",
+          "owner": "package:fleury/src/rendering/cell_buffer.dart::CellBuffer",
+          "kind": "Dart",
+          "exclusiveTicks": 121,
+          "inclusiveTicks": 131
+        },
+        {
+          "name": "_checkBoundsColRow",
+          "owner": "package:fleury/src/rendering/cell_buffer.dart::CellBuffer",
+          "kind": "Dart",
+          "exclusiveTicks": 96,
+          "inclusiveTicks": 97
+        },
+        {
+          "name": "writeGrapheme",
+          "owner": "package:fleury/src/rendering/cell_buffer.dart::CellBuffer",
+          "kind": "Dart",
+          "exclusiveTicks": 90,
+          "inclusiveTicks": 1562
+        },
+        {
+          "name": "_isZeroWidth",
+          "owner": "package:fleury/src/rendering/width_resolver.dart::DefaultWidthResolver",
+          "kind": "Dart",
+          "exclusiveTicks": 86,
+          "inclusiveTicks": 87
+        },
+        {
+          "name": "_recordDamageRect",
+          "owner": "package:fleury/src/rendering/cell_buffer.dart::CellBuffer",
+          "kind": "Dart",
+          "exclusiveTicks": 78,
+          "inclusiveTicks": 78
+        }
+      ]
+    },
+    "candidate": {
+      "generatedAt": "2026-09-05T01:39:49.827957Z",
+      "profilePeriodUs": 1000,
+      "exitCode": 0,
+      "runnerArgs": [
+        "--frames",
+        "800"
+      ],
+      "sampleCount": 3007,
+      "topProjectExclusive": [
+        {
+          "name": "paint",
+          "owner": "package:fleury/src/widgets/basic.dart::_RenderFilledBox",
+          "kind": "Dart",
+          "exclusiveTicks": 207,
+          "inclusiveTicks": 1388
+        },
+        {
+          "name": "_scalarWidth",
+          "owner": "package:fleury/src/rendering/width_resolver.dart::DefaultWidthResolver",
+          "kind": "Dart",
+          "exclusiveTicks": 179,
+          "inclusiveTicks": 186
+        },
+        {
+          "name": "widthOfGrapheme",
+          "owner": "package:fleury/src/rendering/width_resolver.dart::DefaultWidthResolver",
+          "kind": "Dart",
+          "exclusiveTicks": 162,
+          "inclusiveTicks": 402
+        },
+        {
+          "name": "merge",
+          "owner": "package:fleury/src/rendering/cell.dart::CellStyle",
+          "kind": "Dart",
+          "exclusiveTicks": 133,
+          "inclusiveTicks": 141
+        },
+        {
+          "name": "_checkBoundsColRow",
+          "owner": "package:fleury/src/rendering/cell_buffer.dart::CellBuffer",
+          "kind": "Dart",
+          "exclusiveTicks": 131,
+          "inclusiveTicks": 136
+        },
+        {
+          "name": "restyleCell",
+          "owner": "package:fleury/src/rendering/cell_buffer.dart::CellBuffer",
+          "kind": "Dart",
+          "exclusiveTicks": 121,
+          "inclusiveTicks": 133
+        },
+        {
+          "name": "_evictWideNeighbors",
+          "owner": "package:fleury/src/rendering/cell_buffer.dart::CellBuffer",
+          "kind": "Dart",
+          "exclusiveTicks": 101,
+          "inclusiveTicks": 101
+        },
+        {
+          "name": "_placeGrapheme",
+          "owner": "package:fleury/src/rendering/cell_buffer.dart::CellBuffer",
+          "kind": "Dart",
+          "exclusiveTicks": 100,
+          "inclusiveTicks": 220
+        },
+        {
+          "name": "fillRect",
+          "owner": "package:fleury/src/rendering/cell_buffer.dart::CellBuffer",
+          "kind": "Dart",
+          "exclusiveTicks": 75,
+          "inclusiveTicks": 80
+        },
+        {
+          "name": "writeGrapheme",
+          "owner": "package:fleury/src/rendering/cell_buffer.dart::CellBuffer",
+          "kind": "Dart",
+          "exclusiveTicks": 72,
+          "inclusiveTicks": 573
+        },
+        {
+          "name": "clear",
+          "owner": "package:fleury/src/rendering/cell_buffer.dart::CellBuffer",
+          "kind": "Dart",
+          "exclusiveTicks": 53,
+          "inclusiveTicks": 70
+        },
+        {
+          "name": "_recordDamageRect",
+          "owner": "package:fleury/src/rendering/cell_buffer.dart::CellBuffer",
+          "kind": "Dart",
+          "exclusiveTicks": 36,
+          "inclusiveTicks": 36
+        }
+      ]
+    }
+  },
+  "retainedProbe": {
+    "file": "2026-09-04-core-paint-frames.csv",
+    "sha256": "8a038277b29559cc76ff3745b5b6fc2e5ccbad0546cd8973064cb3586b18e1ba",
+    "records": 240
+  },
+  "validation": {
+    "contributorGate": {
+      "command": "dart tool/fleury_dev.dart check",
+      "exitCode": 0,
+      "passedTests": 5305,
+      "testSuites": 12,
+      "skippedTests": 1,
+      "skipReason": "Pre-existing: Blocked on LogBuffer monotonic base offset (core, out of scope).",
+      "logSha256": "8a51d8125f85806272a466aab7a32ea319195ac789c7fefeb5a8f112543c57a2"
+    },
+    "fastGates": {
+      "command": "dart tool/fleury_dev.dart benchmark gates",
+      "exitCode": 0,
+      "passed": [
+        "serve-semantics-gate",
+        "image-bench",
+        "bundle-size",
+        "alloc-gate",
+        "input-alloc-gate",
+        "paint-gate",
+        "selection-gate",
+        "runtime-gate"
+      ],
+      "logSha256": "c5b3924678dd010f2ed1cd29df7638130cffb8b7478ce31b4f4af48fb73a55e5"
+    },
+    "wireGate": {
+      "command": "dart tool/fleury_dev.dart benchmark wire-gate",
+      "exitCode": 0,
+      "scenarios": [
+        "SB.1",
+        "SB.6",
+        "SB.9"
+      ],
+      "comparison": "Existing checked-in historical baselines; not used to claim savings from this change.",
+      "logSha256": "4cdf49869d30b6a61b1592d8c564a59c13b22b14f29c744d345085227ff68e5e"
+    },
+    "clientBuild": {
+      "command": "dart tool/fleury_dev.dart build-remote-client",
+      "exitCode": 0,
+      "compiledJavaScriptUnchanged": true,
+      "sourceFingerprint": "266e5761c7dca4fc"
+    },
+    "proofBoundary": "Local validation only. No CI, PR, merge, physical-terminal latency, or energy result."
+  }
+}

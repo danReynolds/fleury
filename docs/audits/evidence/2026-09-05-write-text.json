@@ -1,0 +1,42 @@
+{
+  "change": "Reuse measured widths in CellBuffer.writeText",
+  "baselineCommit": "05f9e759",
+  "sourceSha256": {
+    "packages/fleury/lib/src/rendering/cell_buffer.dart": "2ad9a8282bd8fe14bf21515a9e5e6fb5effdaf9507755fc0a493518d2bdea37a"
+  },
+  "environment": "Dart 3.12.2, macOS arm64, 10 logical CPUs, AOT",
+  "method": "Existing retained_tax_probe, 120x40, 30 warmup frames, 200 frames per mode, before/after/after/before. Timed processes ran sequentially without own compilation/tests. Shared host not isolated. Each value is a run median.",
+  "limits": "Forced clean-tree paint phase, not production idle. Debug counters enabled. Excludes clear/diff/encode/transport/terminal display.",
+  "structuralCountersMatch": true,
+  "summaryMeanOfRunMedians": {
+    "dashboard": {
+      "before": 157.0,
+      "after": 157.0,
+      "reductionPercent": 0.0
+    },
+    "agent": {
+      "before": 34.0,
+      "after": 34.5,
+      "reductionPercent": -1.47
+    },
+    "files": {
+      "before": 44.5,
+      "after": 44.5,
+      "reductionPercent": 0.0
+    },
+    "editor": {
+      "before": 34.0,
+      "after": 34.0,
+      "reductionPercent": 0.0
+    },
+    "finance": {
+      "before": 133.5,
+      "after": 133.0,
+      "reductionPercent": 0.37
+    }
+  },
+  "rawFrames": {
+    "file": "2026-09-05-write-text-frames.csv",
+    "sha256": "a145221ea48250af53f4b0d014da189b45b58ca909fc143fe3bf4da81b88e662"
+  }
+}

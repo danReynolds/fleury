@@ -128,6 +128,10 @@ class RenderText extends RenderObject
   /// has been called at least once.
   List<String> _lines = const <String>[];
 
+  // Widths measured by the current multi-line layout. A single unwrapped
+  // line uses _intrinsicWidth directly, so short labels allocate no list.
+  List<int> _lineWidths = const <int>[];
+
   /// Memoized layout result, keyed on the constraints that produced
   /// it. The wrap algorithm is the hottest path in the renderer
   /// (see `benchmark/widgets_benchmarks.dart`); reusing a cached
@@ -158,6 +162,7 @@ class RenderText extends RenderObject
       _text = display;
       _intrinsicWidth = nextIntrinsicWidth;
       _lines = <String>[display];
+      _lineWidths = const <int>[];
       _moreLinesTruncated = false;
       markNeedsPaintOnly();
       return;
@@ -271,6 +276,7 @@ class RenderText extends RenderObject
   CellSize performLayout(CellConstraints constraints) {
     if (_text.isEmpty) {
       _lines = const <String>[];
+      _lineWidths = const <int>[];
       _moreLinesTruncated = false;
       return constraints.constrain(CellSize.zero);
     }
@@ -285,6 +291,7 @@ class RenderText extends RenderObject
     if (!hasNewlines &&
         (!_softWrap || maxCols == null || _intrinsicWidth <= maxCols)) {
       _lines = <String>[_text];
+      _lineWidths = const <int>[];
       _moreLinesTruncated = false;
       final cols = maxCols == null
           ? _intrinsicWidth
@@ -317,10 +324,13 @@ class RenderText extends RenderObject
     }
 
     var maxLineWidth = 0;
+    final lineWidths = <int>[];
     for (final line in _lines) {
       final w = _widthResolver.widthOfText(line, _policy);
+      lineWidths.add(w);
       if (w > maxLineWidth) maxLineWidth = w;
     }
+    _lineWidths = lineWidths;
     final cols = maxCols == null
         ? maxLineWidth
         : (maxLineWidth < maxCols ? maxLineWidth : maxCols);
@@ -401,7 +411,7 @@ class RenderText extends RenderObject
     var lineStartOffset = 0;
     for (var i = 0; i < visibleRows; i++) {
       final isLastVisible = i == visibleRows - 1;
-      final lineWidth = _widthResolver.widthOfText(_lines[i], _policy);
+      final lineWidth = _lineWidths.isEmpty ? _intrinsicWidth : _lineWidths[i];
       final clipped = lineWidth > size.cols;
       final ellipsize =
           _overflow == TextOverflow.ellipsis &&
@@ -460,13 +470,7 @@ class RenderText extends RenderObject
       final cellStyle = isOffsetSelected(off)
           ? _style.merge(const CellStyle(inverse: true))
           : _style;
-      buffer.writeGrapheme(
-        CellOffset(col, row),
-        grapheme,
-        style: cellStyle,
-        widthResolver: _widthResolver,
-        policy: _policy,
-      );
+      paintMeasuredGrapheme(buffer, col, row, grapheme, w, cellStyle);
       col += w;
       off += grapheme.length;
     }
@@ -474,13 +478,7 @@ class RenderText extends RenderObject
     // fit INSIDE the box, never half-in with its continuation cell over the
     // neighbour.
     if (ellipsize && col + ellipsisWidth <= maxCol) {
-      buffer.writeGrapheme(
-        CellOffset(col, row),
-        _ellipsis,
-        style: _style,
-        widthResolver: _widthResolver,
-        policy: _policy,
-      );
+      paintMeasuredGrapheme(buffer, col, row, _ellipsis, ellipsisWidth, _style);
     }
   }
 

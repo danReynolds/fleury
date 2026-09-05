@@ -912,15 +912,10 @@ class _RenderFilledBox extends RenderObject
     // Pre-fill every covered cell with our background — gives empty
     // cells a colored square (otherwise they'd render as terminal-
     // default).
-    for (var r = 0; r < s.rows; r++) {
-      for (var col = 0; col < s.cols; col++) {
-        final c = offset.col + col;
-        final ro = offset.row + r;
-        if (c < 0 || c >= buffer.size.cols) continue;
-        if (ro < 0 || ro >= buffer.size.rows) continue;
-        buffer.writeGrapheme(CellOffset(c, ro), ' ', style: fillStyle);
-      }
-    }
+    buffer.fillRect(
+      CellRect(offset: offset, size: s),
+      style: fillStyle,
+    );
     // Now paint the child. A grapheme write replaces the cell wholesale,
     // so cells the child touches lose our bg. Walk back through and
     // merge our bg into any cell the child painted that didn't set
@@ -931,26 +926,7 @@ class _RenderFilledBox extends RenderObject
       screenOffset: screenOffset ?? offset,
       clipRect: clipRect,
     );
-    for (var r = 0; r < s.rows; r++) {
-      for (var col = 0; col < s.cols; col++) {
-        final c = offset.col + col;
-        final ro = offset.row + r;
-        if (c < 0 || c >= buffer.size.cols) continue;
-        if (ro < 0 || ro >= buffer.size.rows) continue;
-        final cell = buffer.atColRow(c, ro);
-        if (cell.style.background != null) continue; // child set its own
-        if (cell.role == CellRole.empty) continue; // already our fill
-        if (cell.role == CellRole.continuation ||
-            cell.role == CellRole.overlay) {
-          continue;
-        }
-        // Paint only: restyle the cell in place rather than rewriting the
-        // grapheme, which would re-measure it. A width the child disagreed
-        // with would orphan the continuation half of a wide pair, still
-        // carrying the child's un-merged style.
-        buffer.restyleCell(c, ro, cell.style.merge(fillStyle));
-      }
-    }
+    applyCellBackground(buffer, CellRect(offset: offset, size: s), _color);
   }
 }
 

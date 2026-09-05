@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:fleury/fleury.dart';
@@ -106,6 +107,92 @@ void main() {
       expect(dest.damageBounds, isNull);
       expect(dest.atColRow(0, 0).grapheme, 'a');
       expect(dest.atColRow(1, 0).grapheme, 'b');
+    });
+  });
+
+  group('Rectangle fills', () {
+    test('matches individual space writes across clipped and wide cells', () {
+      final random = Random(904);
+      const styles = [
+        CellStyle.none,
+        CellStyle(background: AnsiColor(4), bold: true),
+        CellStyle.interactive(
+          base: CellStyle(foreground: AnsiColor(6)),
+          focused: CellStyle(background: AnsiColor(1)),
+        ),
+      ];
+      CellBuffer populated() => CellBuffer(const CellSize(8, 3))
+        ..writeText(const CellOffset(0, 0), 'a漢bc字')
+        ..writeText(const CellOffset(0, 1), '界123漢z')
+        ..writeText(const CellOffset(0, 2), '  かなx')
+        ..writeImage(
+          const CellOffset(3, 1),
+          Uint8List.fromList([1]),
+          width: 2,
+          height: 1,
+        );
+
+      for (var sample = 0; sample < 500; sample++) {
+        final actual = populated();
+        final expected = populated();
+        final placements = actual.imagePlacements.toList();
+        final images = Map.of(actual.images);
+        final rect = CellRect.fromLTWH(
+          random.nextInt(13) - 3,
+          random.nextInt(7) - 2,
+          random.nextInt(12),
+          random.nextInt(7),
+        );
+        final style = styles[sample % styles.length];
+        actual.resetDamageTracking();
+        expected.resetDamageTracking();
+
+        actual.fillRect(rect, style: style);
+        for (var row = rect.top; row < rect.bottom; row++) {
+          for (var col = rect.left; col < rect.right; col++) {
+            if (col < 0 || col >= 8 || row < 0 || row >= 3) continue;
+            expected.writeGrapheme(CellOffset(col, row), ' ', style: style);
+          }
+        }
+
+        for (var row = 0; row < 3; row++) {
+          for (var col = 0; col < 8; col++) {
+            expect(
+              actual.atColRow(col, row),
+              expected.atColRow(col, row),
+              reason: 'sample $sample, rect $rect, cell ($col, $row)',
+            );
+          }
+        }
+        expect(actual.damageBounds, expected.damageBounds, reason: '$rect');
+        expect(actual.imagePlacements, placements);
+        expect(actual.images, images);
+      }
+    });
+
+    test('repairs wide pairs cut at both edges and includes their damage', () {
+      final buffer = CellBuffer(const CellSize(8, 1))
+        ..writeText(CellOffset.zero, '漢字漢')
+        ..resetDamageTracking();
+      const style = CellStyle(background: AnsiColor(4));
+
+      buffer.fillRect(CellRect.fromLTWH(1, 0, 4, 1), style: style);
+
+      expect(buffer.atColRow(0, 0), const Cell.empty());
+      for (var col = 1; col < 5; col++) {
+        expect(
+          buffer.atColRow(col, 0),
+          const Cell.leading(grapheme: ' ', style: style),
+        );
+      }
+      expect(buffer.atColRow(5, 0), const Cell.empty());
+      expect(buffer.damageBounds, CellRect.fromLTWH(0, 0, 6, 1));
+    });
+
+    test('an empty buffer accepts a fill without damage', () {
+      final buffer = CellBuffer(CellSize.zero)..resetDamageTracking();
+      buffer.fillRect(CellRect.fromLTWH(-1, -1, 3, 3));
+      expect(buffer.damageBounds, isNull);
     });
   });
 
