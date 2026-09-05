@@ -19,8 +19,15 @@ Future<void> main(List<String> args) async {
   final options = <String, String>{};
   for (var i = 0; i < args.length; i += 2) {
     if (i + 1 == args.length ||
-        !const ['--app', '--mode', '--cols', '--rows', '--frames', '--warmup']
-            .contains(args[i])) {
+        !const [
+          '--app',
+          '--mode',
+          '--cols',
+          '--rows',
+          '--frames',
+          '--warmup',
+          '--selected'
+        ].contains(args[i])) {
       throw ArgumentError('Unknown flag or missing value: ${args[i]}');
     }
     options[args[i]] = args[i + 1];
@@ -31,12 +38,30 @@ Future<void> main(List<String> args) async {
   final rows = int.parse(options['--rows'] ?? '40');
   final frames = int.parse(options['--frames'] ?? '400');
   final warmup = int.parse(options['--warmup'] ?? '300');
+  final selectedValue = options['--selected'] ?? 'false';
+  if (!['true', 'false'].contains(selectedValue))
+    throw ArgumentError('Invalid selection');
+  final selected = selectedValue == 'true';
+  final document = !name.endsWith('-document')
+      ? ''
+      : List.generate(
+          1000,
+          (i) =>
+              '${i.toString().padLeft(6, '0')}  INFO  worker accepted request; '
+              'elapsed=12ms status=ok 漢字 👩‍💻').join('\n');
   final Widget app = switch (name) {
     'dashboard' => const DashboardApp(),
     'agent' => const AgentApp(),
     'files' => const FileManagerApp(),
     'editor' => const EditorApp(),
     'finance' => const FinanceApp(),
+    'plain-document' => ScrollView(child: Text(document, softWrap: false)),
+    'rich-document' => ScrollView(
+        child: RichText(
+            text: TextSpan(
+                text: document,
+                style: const CellStyle(foreground: AnsiColor(6))),
+            softWrap: false)),
     _ => throw ArgumentError('Unknown app: $name'),
   };
   if (!['clean', 'leaf', 'full'].contains(mode) ||
@@ -54,6 +79,17 @@ Future<void> main(List<String> args) async {
   ).toString());
   final host = SampleFrameHost(app, CellSize(cols, rows));
   try {
+    if (selected) {
+      if (!name.endsWith('-document'))
+        throw ArgumentError('Selection requires a document app');
+      final text = host.renderObjects.whereType<Selectable>().single;
+      text.dispatchSelectionEvent(const SelectionGranularEvent(
+        granularity: SelectionGranularity.all,
+      ));
+      if (text.getSelectedContent()?.plainText != document) {
+        throw StateError('Document selection must be active');
+      }
+    }
     if (mode == 'leaf' && !host.hasLeaf) throw StateError('No visible leaf');
     final isolateId = (await service.getVM()).isolates!.first.id!;
     for (var i = 0; i < warmup; i++) {
@@ -90,6 +126,7 @@ Future<void> main(List<String> args) async {
     stdout.writeln(jsonEncode({
       'app': name,
       'mode': mode,
+      'selected': selected,
       'columns': cols,
       'rows': rows,
       'frames': frames,

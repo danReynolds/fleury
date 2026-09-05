@@ -81,12 +81,25 @@ final class SampleFrameHost {
         size: size,
         paint: (buffer) {
           _router.beginFrame();
-          tester.owner.renderFrame(tester.root!, buffer,
-              onPhaseTiming: (b, l, p) {
-            build = b;
-            layout = l;
-            paint = p;
-          });
+          // Match TuiRuntime's input transaction in this unpublished host.
+          // ignore: invalid_use_of_internal_member
+          tester.focusManager.beginFrame();
+          try {
+            tester.owner.renderFrame(tester.root!, buffer,
+                onPhaseTiming: (b, l, p) {
+              build = b;
+              layout = l;
+              paint = p;
+            });
+            _router.endFrame();
+            // ignore: invalid_use_of_internal_member
+            tester.focusManager.endFrame();
+          } catch (_) {
+            _router.abortFrame();
+            // ignore: invalid_use_of_internal_member
+            tester.focusManager.abortFrame();
+            rethrow;
+          }
           paintFinished = watch.elapsedMicroseconds;
         })!;
     // Exact diff, scroll eligibility and frame construction after paint.

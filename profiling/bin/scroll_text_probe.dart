@@ -14,18 +14,24 @@ void main(List<String> args) {
   final options = <String, String>{
     '--lines': '1000',
     '--frames': '200',
-    '--kind': 'plain'
+    '--kind': 'plain',
+    '--selected': 'false'
   };
   for (var i = 0; i < args.length; i += 2) {
     if (i + 1 == args.length || !options.containsKey(args[i])) {
       throw ArgumentError(
-          'Expected --lines N, --frames N, or --kind plain|rich');
+          'Expected --lines N, --frames N, --kind plain|rich, or --selected true|false');
     }
     options[args[i]] = args[i + 1];
   }
   final lines = int.parse(options['--lines']!);
   final frames = int.parse(options['--frames']!);
   final kind = options['--kind']!;
+  final selectedValue = options['--selected']!;
+  if (!['true', 'false'].contains(selectedValue)) {
+    throw ArgumentError('Invalid selection');
+  }
+  final selected = selectedValue == 'true';
   if (!['plain', 'rich'].contains(kind)) throw ArgumentError('Invalid kind');
   if (lines < 50 || frames < 1) throw ArgumentError('Invalid count');
   const size = CellSize(80, 24);
@@ -47,6 +53,15 @@ void main(List<String> args) {
     size,
   );
   try {
+    if (selected) {
+      final text = host.renderObjects.whereType<Selectable>().single;
+      text.dispatchSelectionEvent(const SelectionGranularEvent(
+        granularity: SelectionGranularity.all,
+      ));
+      if (text.getSelectedContent()?.plainText != document) {
+        throw StateError('The document must actually be selected');
+      }
+    }
     for (final (position, base) in [
       ('top', 0),
       ('middle', controller.maxOffset ~/ 2),
@@ -91,6 +106,7 @@ void main(List<String> args) {
       }
       stdout.writeln(jsonEncode({
         'kind': kind,
+        'selected': selected,
         'lines': lines,
         'textCodeUnits': document.length,
         'position': position,
