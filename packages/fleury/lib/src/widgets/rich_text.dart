@@ -607,6 +607,9 @@ class RenderRichText extends RenderObject
     }
 
     if (_lines.isEmpty || size.isEmpty) return;
+    // Resolve after recording current geometry, once for this paint rather
+    // than scanning the document's line lengths again for every glyph.
+    final selection = getSelectionRange();
     final visibleRows = _lines.length < size.rows ? _lines.length : size.rows;
     var lineStartOffset = 0;
     for (var i = 0; i < visibleRows; i++) {
@@ -629,7 +632,15 @@ class RenderRichText extends RenderObject
           isLastVisible &&
           (lineWidth > size.cols ||
               (_moreLinesTruncated && i == _lines.length - 1));
-      _paintLine(buffer, line, offset.col, row, ellipsize, lineStartOffset);
+      _paintLine(
+        buffer,
+        line,
+        offset.col,
+        row,
+        ellipsize,
+        lineStartOffset,
+        selection,
+      );
       // +length of the line's flat text, +1 for the implicit newline
       // separator. Matches what `selectionLines.join('\n')` produces.
       lineStartOffset += _selectionLines[i].length + 1;
@@ -652,6 +663,7 @@ class RenderRichText extends RenderObject
     int row,
     bool ellipsize,
     int lineStartOffset,
+    ({int start, int end})? selection,
   ) {
     final maxCol = startCol + size.cols;
     final contentMaxCol = ellipsize ? maxCol - 1 : maxCol;
@@ -663,7 +675,8 @@ class RenderRichText extends RenderObject
       // falls inside the live selection. Inverse cascades over the
       // span's own foreground/background so styled spans still get
       // the selection highlight.
-      final cellStyle = isOffsetSelected(off)
+      final cellStyle =
+          selection != null && off >= selection.start && off < selection.end
           ? g.style.merge(const CellStyle(inverse: true))
           : g.style;
       buffer.writeGrapheme(

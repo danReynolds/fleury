@@ -3,6 +3,36 @@ import 'package:fleury/src/widgets/rich_text.dart' show RenderRichText;
 import 'package:test/test.dart';
 
 void main() {
+  for (final rich in [false, true]) {
+    test('selection range resolves once per paint, rich=$rich', () {
+      var reads = 0;
+      final content = List.filled(1000, 'a漢b').join('\n');
+      final RenderObject render = rich
+          ? _RangeCountingRichText(content, () => reads++)
+          : _RangeCountingText(content, () => reads++);
+      render.layout(const CellConstraints(maxCols: 10));
+      final selectable = render as Selectable;
+      final buffer = CellBuffer(const CellSize(10, 3));
+      render.paint(buffer, const CellOffset(0, -400));
+      selectable.dispatchSelectionEvent(
+        const SelectionGranularEvent(granularity: SelectionGranularity.all),
+      );
+      reads = 0;
+      buffer.clear();
+      render.paint(buffer, const CellOffset(0, -400));
+      expect(reads, 1);
+      expect(buffer.atColRow(0, 0).style.inverse, isTrue);
+      expect(buffer.atColRow(2, 2).style.inverse, isTrue);
+      expect(selectable.getSelectedContent()?.plainText, content);
+
+      selectable.dispatchSelectionEvent(const SelectionClearEvent());
+      reads = 0;
+      buffer.clear();
+      render.paint(buffer, const CellOffset(0, -400));
+      expect(reads, 1);
+      expect(buffer.atColRow(0, 0).style.inverse, isFalse);
+    });
+  }
   test('paint measures only rows intersecting the buffer', () {
     final resolver = _CountingResolver();
     final render = RenderText(
@@ -158,4 +188,28 @@ final class _CountingResolver implements WidthResolver {
   @override
   int widthOfText(String text, CellWidthPolicy policy) =>
       const DefaultWidthResolver().widthOfText(text, policy);
+}
+
+class _RangeCountingText extends RenderText {
+  _RangeCountingText(String text, this.onRead) : super(text: text);
+  final void Function() onRead;
+  @override
+  ({int start, int end})? getSelectionRange() {
+    onRead();
+    return super.getSelectionRange();
+  }
+}
+
+class _RangeCountingRichText extends RenderRichText {
+  _RangeCountingRichText(String text, this.onRead)
+    : super(
+        span: TextSpan(text: text),
+        base: CellStyle.none,
+      );
+  final void Function() onRead;
+  @override
+  ({int start, int end})? getSelectionRange() {
+    onRead();
+    return super.getSelectionRange();
+  }
 }
