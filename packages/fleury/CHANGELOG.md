@@ -18,8 +18,10 @@ elements, state, layout) and terminal-native internals.
   name. Core declares the generic set (`SemanticRole.values`); any package
   declares further roles with `SemanticRole('kanbanCard', base:
   SemanticRole.listItem)`, and every surface projects an unfamiliar role
-  through its `coreRole`. Inspection JSON and the serve wire carry an additive
-  `coreRole` field for declared roles.
+  through its `coreRole`. Declared names are identifiers and must not shadow
+  a core name (asserted at collection); only the name and its core root travel
+  the wire. Inspection JSON and the serve wire carry an additive `coreRole`
+  field for declared roles.
 - **Fail-closed positional actions** — actionable positional nodes carry an
   app-issued per-element, per-slot target lease. Value/focus/ticking updates
   retain it; role/label/action changes, target removal, and contributor remount

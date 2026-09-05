@@ -375,7 +375,7 @@ final class SemanticInspectionNode {
     return SemanticInspectionNode._(
       id: sanitizeForDisplay(node.id.value),
       role: node.role.name,
-      coreRole: node.role.isCore ? null : node.role.coreRole.name,
+      coreRole: node.role.wireCoreRole,
       label: node.label == null ? null : sanitizeForDisplay(node.label!),
       value: redacted ? '<redacted>' : _jsonValue(node.value),
       hint: node.hint == null ? null : sanitizeForDisplay(node.hint!),
@@ -434,10 +434,18 @@ final class SemanticInspectionNode {
 
     final state = _jsonSafeMap(json['state']);
     final redacted = _redactsStateMap(state);
+    final roleName = sanitizeForDisplay(role);
+    // Normalize the projection to exactly what a producer emits for the
+    // rebuilt role: a core name carries none, an unknown core root degrades
+    // to text. A round trip through toSemanticNode/toJson is then a no-op.
+    final coreRole = SemanticRole.fromWire(
+      roleName,
+      coreRoleName: _jsonSanitizedString(json['coreRole']),
+    ).wireCoreRole;
     return SemanticInspectionNode._(
       id: sanitizeForDisplay(id),
-      role: sanitizeForDisplay(role),
-      coreRole: _jsonCoreRole(json['coreRole']),
+      role: roleName,
+      coreRole: coreRole,
       label: _jsonSanitizedString(json['label']),
       value: redacted ? '<redacted>' : _jsonValue(json['value']),
       hint: _jsonSanitizedString(json['hint']),
@@ -901,16 +909,6 @@ List<SemanticInspectionNode> _jsonNodeList(Object? value) {
     if (map != null) nodes.add(SemanticInspectionNode.fromJson(map));
   }
   return nodes;
-}
-
-/// Reads the additive `coreRole` field: the core role a declared role projects
-/// through. Unknown or malformed values are dropped (null), which makes
-/// [SemanticRole.fromWire] fall back to [SemanticRole.text] — the same
-/// degradation an older consumer applied to any unfamiliar role name.
-String? _jsonCoreRole(Object? value) {
-  final name = _jsonString(value);
-  if (name == null || !isValidSemanticRoleName(name)) return null;
-  return name;
 }
 
 /// Matches a serialized action name back to its enum, or null if unrecognized

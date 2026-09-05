@@ -13,7 +13,7 @@ import 'package:fleury/fleury_core.dart';
 /// Match them exactly like core roles:
 ///
 /// ```dart
-/// find.byRole(WidgetRoles.toolCall)
+/// tester.semantics().byRole(WidgetRoles.toolCall)
 /// tree.byRole(WidgetRoles.message)
 /// if (node.role == WidgetRoles.approval) ...
 /// ```
@@ -116,27 +116,4 @@ abstract final class WidgetRoles {
 
   /// `ApprovalPrompt`: a request the user must approve or reject.
   static const approval = SemanticRole('approval', base: SemanticRole.button);
-
-  /// Every role this catalog declares, for tooling that enumerates
-  /// vocabularies.
-  static const List<SemanticRole> values = <SemanticRole>[
-    conversationNavigator,
-    conversation,
-    contextPanel,
-    contextItem,
-    traceTimeline,
-    traceEvent,
-    patchReview,
-    patchFile,
-    messageList,
-    message,
-    fileMentionPicker,
-    fileMention,
-    commandPalette,
-    modelStatus,
-    tokenMeter,
-    taskGraph,
-    toolCall,
-    approval,
-  ];
 }

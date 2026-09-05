@@ -240,10 +240,16 @@ String? _semanticNodeDivergence(
   return null;
 }
 
+/// Role equality for the diff: by name, plus the projection. A role whose
+/// name is unchanged but whose base moved (a hot-reloaded declaration) must
+/// land in `updated`, or the wire never re-sends its `coreRole`.
+bool _semanticRoleEquals(SemanticRole a, SemanticRole b) =>
+    identical(a, b) || (a == b && a.coreRole == b.coreRole);
+
 bool _semanticNodeEquals(SemanticNode a, SemanticNode b) {
   if (identical(a, b)) return true;
   return a.id == b.id &&
-      a.role == b.role &&
+      _semanticRoleEquals(a.role, b.role) &&
       a.label == b.label &&
       _objectEquals(a.value, b.value) &&
       a.hint == b.hint &&

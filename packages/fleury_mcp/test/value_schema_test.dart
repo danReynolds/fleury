@@ -6,17 +6,33 @@ import 'package:test/test.dart';
 
 SemanticInspectionNode _node(
   String role, {
+  String? coreRole,
   List<String> actions = const <String>['setValue'],
   Map<String, Object?> state = const <String, Object?>{},
 }) => SemanticInspectionNode.fromJson(<String, Object?>{
   'id': 'n',
   'role': role,
+  if (coreRole != null) 'coreRole': coreRole,
   'actions': actions,
   'state': state,
 });
 
 void main() {
   group('deriveValueSchema', () {
+    test('a declared role projects through its core role', () {
+      // `volume` is an app-declared role on top of a slider: the typed domain
+      // (and therefore set_value validation) must follow the core role.
+      expect(
+        deriveValueSchema(
+          _node('volume', coreRole: 'slider', state: {'min': 0, 'max': 10}),
+        ),
+        {'type': 'number', 'minimum': 0, 'maximum': 10},
+      );
+      expect(deriveValueSchema(_node('mute', coreRole: 'toggle')), {
+        'type': 'boolean',
+      });
+    });
+
     test('numeric spinButton/slider → number with min/max/step', () {
       final s = deriveValueSchema(
         _node('spinButton', state: {'min': 0, 'max': 10, 'step': 2}),

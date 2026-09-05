@@ -304,7 +304,7 @@ final class AccessibilityNode {
   Map<String, Object?> toJson() => <String, Object?>{
     'sourceId': sourceId.value,
     'role': role.name,
-    if (!role.isCore) 'coreRole': role.coreRole.name,
+    'coreRole': ?role.wireCoreRole,
     'roleLabel': roleLabel,
     if (label != null) 'label': label,
     if (value != null) 'value': value,

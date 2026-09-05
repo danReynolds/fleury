@@ -666,9 +666,6 @@ final class McpServer {
   static final Map<String, KeyCode> _keysByName = {
     for (final k in SpecialKey.values) k.name: KeyCode.forSpecial(k),
   };
-  static final Set<String> _roleNames = {
-    for (final r in SemanticRole.values) r.name,
-  };
 
   /// Parses and dispatches a single JSON-RPC line.
   Future<void> handleLine(String line) async {
@@ -1449,29 +1446,38 @@ final class McpServer {
   }
 
   Future<Map<String, Object?>> _toolFindNodes(Map<String, Object?> args) async {
-    // Validate the enum-valued filters up front: a typo'd role/action would
-    // otherwise silently match nothing, and the agent could wrongly conclude
-    // "no such nodes" rather than "I mistyped the name".
+    // Validate the filters up front where the tree is not needed: a typo'd
+    // role/action would otherwise silently match nothing, and the agent could
+    // wrongly conclude "no such nodes" rather than "I mistyped the name".
     final action = _optString(args['action']);
     if (action != null && !_actionsByName.containsKey(action)) {
       throw _ToolFailure(
         'Unknown action "$action". Valid actions: $_actionNames.',
       );
     }
+    final role = _optString(args['role']);
+    if (role != null && !isValidSemanticRoleName(role)) {
+      throw _ToolFailure(
+        'Unknown role "$role". Role names are camelCase identifiers (e.g. '
+        'button, tableRow, textField); omit role or call get_ui to see the '
+        'roles in this UI.',
+      );
+    }
     final snapshot = await _requireSnapshot();
     // Roles are an open vocabulary: widget packages and apps declare their own
-    // (`patchReview`, `toolCall`, …) beyond the core set, so a name is valid
-    // when it is a core role OR one the live tree actually uses. Anything else
-    // is a typo the agent should hear about, not a silent empty match.
-    final role = _optString(args['role']);
+    // (`patchReview`, `toolCall`, …) beyond the core set. A name is known when
+    // it is a core role or has appeared in this app's tree at any point in the
+    // session — a declared role that is merely off-screen now yields an empty
+    // match exactly like an absent core role does — while a name this app has
+    // never used is a typo the agent should hear about.
     if (role != null &&
-        !_roleNames.contains(role) &&
-        !snapshot.roleCounts.containsKey(role)) {
+        SemanticRole.coreByName(role) == null &&
+        !_seenRoles.contains(role)) {
       final present = snapshot.roleCounts.keys.toList()..sort();
       throw _ToolFailure(
-        'Unknown role "$role". Role names are camelCase (e.g. button, tableRow, '
-        'textField); roles in this UI: ${present.join(', ')}. Omit role or '
-        'call get_ui to see the tree.',
+        'Unknown role "$role": not a core role and never seen in this UI. '
+        'Roles in this UI now: ${present.join(', ')}. Omit role or call '
+        'get_ui to see the tree.',
       );
     }
     final matches = snapshot
@@ -1937,7 +1943,18 @@ final class McpServer {
   /// The latest snapshot, waiting briefly for the app's first frame if it
   /// hasn't rendered yet. Returns null if the app never rendered (the bridge's
   /// first-frame watchdog fired) or the wait times out.
+  /// Every role name this app's tree has used so far in the session. Roles are
+  /// an open vocabulary, so this — not a fixed list — is what tells a typo'd
+  /// `find_nodes` role apart from a declared role that is merely off-screen.
+  final Set<String> _seenRoles = <String>{};
+
   Future<SemanticInspectionSnapshot?> _currentSnapshot() async {
+    final snapshot = await _fetchSnapshot();
+    if (snapshot != null) _seenRoles.addAll(snapshot.roleCounts.keys);
+    return snapshot;
+  }
+
+  Future<SemanticInspectionSnapshot?> _fetchSnapshot() async {
     if (bridge.snapshot != null) return bridge.snapshot;
     if (bridge.renderTimedOut) return null;
     try {

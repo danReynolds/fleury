@@ -7,28 +7,21 @@
 library;
 
 import 'package:fleury/fleury_host.dart';
-import 'package:fleury_web/src/semantics/semantic_dom_presenter.dart';
 import 'package:test/test.dart';
 import 'package:web/web.dart' as web;
+
+import 'fixtures/semantic_dom_harness.dart';
 
 const kanbanBoard = SemanticRole('kanbanBoard', base: SemanticRole.region);
 const kanbanCard = SemanticRole('kanbanCard', base: SemanticRole.listItem);
 const buildStatus = SemanticRole('buildStatus', base: SemanticRole.status);
+const notesEditor = SemanticRole('notesEditor', base: SemanticRole.textArea);
 // A two-level chain: projects through kanbanCard, then listItem.
 const pinnedCard = SemanticRole('pinnedCard', base: kanbanCard);
 
-web.Element _present(SemanticTree tree) {
-  final root = web.document.createElement('div');
-  SemanticDomPresenter(root: root).present(tree);
-  return root;
-}
-
-web.Element _byId(web.Element root, String id) =>
-    root.querySelector('[data-fleury-semantic-id="$id"]')!;
-
 void main() {
   test('a declared role lands on its core role\'s ARIA projection', () {
-    final root = _present(
+    final root = present(
       SemanticTree(
         root: const SemanticNode(
           id: SemanticNodeId('root'),
@@ -61,20 +54,20 @@ void main() {
       ),
     );
 
-    final board = _byId(root, 'board');
+    final board = byId(root, 'board');
     expect(board.getAttribute('role'), 'region');
     expect(board.getAttribute('data-fleury-semantic-role'), 'kanbanBoard');
     expect(board.getAttribute('data-fleury-semantic-core-role'), 'region');
 
-    final card = _byId(root, 'card');
+    final card = byId(root, 'card');
     expect(card.getAttribute('role'), 'listitem');
     expect(card.getAttribute('data-fleury-semantic-role'), 'kanbanCard');
 
-    final pinned = _byId(root, 'pinned');
+    final pinned = byId(root, 'pinned');
     expect(pinned.getAttribute('role'), 'listitem', reason: 'chain resolves');
     expect(pinned.getAttribute('data-fleury-semantic-core-role'), 'listItem');
 
-    final build = _byId(root, 'build');
+    final build = byId(root, 'build');
     expect(build.getAttribute('role'), 'status');
     expect(build.getAttribute('aria-live'), 'polite', reason: 'live region');
 
@@ -87,6 +80,31 @@ void main() {
     );
   });
 
+  test('a declared text area mirrors as a native multiline textbox', () {
+    final root = present(
+      SemanticTree(
+        root: const SemanticNode(
+          id: SemanticNodeId('root'),
+          role: SemanticRole.app,
+          children: [
+            SemanticNode(
+              id: SemanticNodeId('notes'),
+              role: notesEditor,
+              label: 'Notes',
+              value: 'draft',
+            ),
+          ],
+        ),
+      ),
+    );
+    final notes = byId(root, 'notes');
+    expect(notes.localName, 'textarea');
+    expect(notes.getAttribute('role'), 'textbox');
+    expect(notes.getAttribute('aria-multiline'), 'true');
+    expect(notes.getAttribute('readonly'), isNotNull);
+    expect((notes as web.HTMLTextAreaElement).value, 'draft');
+  });
+
   test(
     'a role decoded from the wire projects exactly like the declared one',
     () {
@@ -97,7 +115,7 @@ void main() {
         coreRoleName: 'listItem',
       );
       expect(decoded, kanbanCard, reason: 'name is identity');
-      final root = _present(
+      final root = present(
         SemanticTree(
           root: SemanticNode(
             id: const SemanticNodeId('root'),
@@ -112,7 +130,7 @@ void main() {
           ),
         ),
       );
-      expect(_byId(root, 'card').getAttribute('role'), 'listitem');
+      expect(byId(root, 'card').getAttribute('role'), 'listitem');
     },
   );
 }

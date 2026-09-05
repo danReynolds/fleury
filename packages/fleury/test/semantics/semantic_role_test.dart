@@ -14,11 +14,7 @@ import 'package:test/test.dart';
 
 const kanbanBoard = SemanticRole('kanbanBoard', base: SemanticRole.region);
 const kanbanCard = SemanticRole('kanbanCard', base: SemanticRole.listItem);
-const pinnedCard = SemanticRole(
-  'pinnedCard',
-  base: kanbanCard,
-  label: 'pinned card',
-);
+const pinnedCard = SemanticRole('pinnedCard', base: kanbanCard);
 
 SemanticTree _board() => SemanticTree(
   root: const SemanticNode(
@@ -66,7 +62,7 @@ void main() {
       expect(SemanticRole.button.coreRole, SemanticRole.button);
       expect(kanbanCard.isCore, isFalse);
       expect(kanbanCard.coreRole, SemanticRole.listItem);
-      expect(pinnedCard.base, kanbanCard);
+      expect(pinnedCard.isCore, isFalse);
       expect(pinnedCard.coreRole, SemanticRole.listItem, reason: 'two hops');
       for (final role in SemanticRole.values) {
         expect(role.isCore, isTrue, reason: '$role');
@@ -83,12 +79,20 @@ void main() {
       expect(SemanticRole.json.label, 'json document');
       expect(SemanticRole.markdown.label, 'markdown document');
       expect(kanbanBoard.label, 'kanban board');
-      expect(pinnedCard.label, 'pinned card', reason: 'explicit label wins');
+      expect(pinnedCard.label, 'pinned card', reason: 'derived from the name');
       expect(
         humanizeSemanticRoleName('fileMentionPicker'),
         'file mention picker',
       );
       expect(SemanticRole.textField.toString(), 'SemanticRole.textField');
+      expect(
+        kanbanCard.toString(),
+        "SemanticRole('kanbanCard', base: listItem)",
+      );
+      expect(
+        pinnedCard.toString(),
+        "SemanticRole('pinnedCard', base: kanbanCard)",
+      );
     });
 
     test('role names are identifiers, because they are embedded in ids', () {
@@ -99,6 +103,7 @@ void main() {
       expect(isValidSemanticRoleName('a/b'), isFalse);
       expect(isValidSemanticRoleName('auto~1'), isFalse);
       expect(isValidSemanticRoleName('1st'), isFalse);
+      expect(isValidSemanticRoleName('_card'), isFalse);
     });
 
     test('fromWire resolves core names and rebuilds declared roles', () {
@@ -115,6 +120,16 @@ void main() {
       expect(future.name, 'hologram');
       expect(future.coreRole, SemanticRole.text);
       expect(SemanticRole.fromWire('hologram').coreRole, SemanticRole.text);
+    });
+
+    test('fromWire hands back one instance per declared name', () {
+      final a = SemanticRole.fromWire('kanbanCard', coreRoleName: 'listItem');
+      final b = SemanticRole.fromWire('kanbanCard', coreRoleName: 'listItem');
+      expect(identical(a, b), isTrue, reason: 'decoders rebuild every frame');
+      final moved = SemanticRole.fromWire('kanbanCard', coreRoleName: 'region');
+      expect(identical(a, moved), isFalse);
+      expect(moved.coreRole, SemanticRole.region);
+      expect(SemanticRole.fromWire('button'), same(SemanticRole.button));
     });
   });
 

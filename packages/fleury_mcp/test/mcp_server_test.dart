@@ -2139,6 +2139,37 @@ void main() {
       final error = toolError(lastResult());
       expect(error, contains('Unknown role'));
       expect(error, contains('patchReview'), reason: 'lists the roles present');
+
+      // Once seen, a declared role that leaves the screen behaves like an
+      // absent core role: an empty match, not an error.
+      await pushAndAwait(<String, Object?>{
+        'id': 'root',
+        'role': 'app',
+        'children': <Object?>[
+          <String, Object?>{'id': 'ok', 'role': 'button', 'label': 'Approve'},
+        ],
+      });
+      await server.handleLine(
+        _rpc(93, 'tools/call', <String, Object?>{
+          'name': 'find_nodes',
+          'arguments': <String, Object?>{'role': 'patchReview'},
+        }),
+      );
+      expect(toolJson(lastResult())['nodes'], isEmpty);
+    },
+  );
+
+  test(
+    'find_nodes rejects a malformed role before any frame arrives',
+    () async {
+      // No snapshot pushed: the shape check must not wait for one.
+      await server.handleLine(
+        _rpc(94, 'tools/call', <String, Object?>{
+          'name': 'find_nodes',
+          'arguments': <String, Object?>{'role': 'table row'},
+        }),
+      );
+      expect(toolError(lastResult()), contains('Unknown role'));
     },
   );
 

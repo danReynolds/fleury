@@ -92,12 +92,14 @@ abstract final class BoardRoles {
 }
 
 Semantics(role: BoardRoles.card, label: task.title, child: ...)
-find.byRole(BoardRoles.card)   // tests match on the role, not the name
+tester.semantics().byRole(BoardRoles.card) // tests match on the role
 ```
 
 On the wire the node carries `role: "kanbanCard"` and `coreRole: "listItem"`;
 an agent filters by the specific name, and the browser mirror renders an ARIA
-`listitem`. The actions are equally concrete: `activate`, `submit`, `select`,
+`listitem`. A declared name must be an identifier and must not be a core name
+(both are asserted when the node is collected); only the name and its core
+root travel, so the human label is always derived from the name. The actions are equally concrete: `activate`, `submit`, `select`,
 `increment`, `decrement`, `open`, `close`, `navigate`, `copy`, `start`,
 `cancel`.
 

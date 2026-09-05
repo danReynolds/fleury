@@ -17,13 +17,7 @@ import 'package:fleury/src/debug/debug_shell.dart';
 import 'package:fleury/src/debug/debug_state.dart';
 import 'package:test/test.dart';
 
-// Declared (non-core) roles standing in for a widget package's vocabulary:
-// the wire and the snapshot must carry them by name and project them through
-// their core role.
-const SemanticRole _traceEvent = SemanticRole(
-  'traceEvent',
-  base: SemanticRole.listItem,
-);
+import '../support/declared_roles.dart';
 
 KeyEvent _ctrl(String c) =>
     KeyEvent(KeyCode.char(c), modifiers: const {KeyModifier.ctrl});
@@ -827,7 +821,7 @@ void main() {
               ),
               SemanticNode(
                 id: SemanticNodeId('trace:output'),
-                role: _traceEvent,
+                role: declaredTraceEvent,
                 label: 'Task output event',
                 state: SemanticState({
                   'taskOutputSanitized': true,

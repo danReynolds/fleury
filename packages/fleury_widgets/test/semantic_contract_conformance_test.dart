@@ -40,7 +40,7 @@ const Map<String, List<String>> _semanticCatalog = {
   'completion_text_input': ['menu', 'menuItem'],
   'context_panel': ['contextItem', 'contextPanel'],
   'controls': ['button', 'checkbox', 'radio', 'region', 'toggle'],
-  'conversation_navigator': ['conversation', 'conversationNavigator'],
+  'conversation_navigator': ['conversation', 'conversationNavigator', 'list'],
   'data_table': ['table', 'tableCell', 'tableRow'],
   'date_picker': ['datePicker'],
   'dialog': ['dialog'],

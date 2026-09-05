@@ -639,28 +639,34 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
                       ? widget.placeholder
                       : 'No matching conversations',
                 )
-              : ListView.builder(
-                  controller: _controller._listController,
-                  focusNode: _listFocusNode,
-                  selectionActive: panelFocused,
-                  itemCount: order.length,
-                  onActivate: (_) => _selectCurrent(),
-                  itemBuilder: (context, viewIndex, activeSelected) {
-                    final entryIndex = order[viewIndex];
-                    final selected = viewIndex == _controller.selectedIndex;
-                    return _ConversationRow(
-                      entry: widget.conversations[entryIndex],
-                      entryIndex: entryIndex,
-                      viewIndex: viewIndex,
-                      selected: selected,
-                      activeSelection: activeSelected,
-                      canSelect: canSelect,
-                      copyEnabled: copyEnabled,
-                      showTimestamp: widget.showTimestamp,
-                      onSelect: () => _selectAt(viewIndex),
-                      onCopy: () => _copyAt(viewIndex),
-                    );
-                  },
+              : Semantics(
+                  // ARIA needs list items inside a list: the rows are
+                  // `conversation` (a list item) and the navigator itself is
+                  // a navigation landmark, so this node is their container.
+                  role: SemanticRole.list,
+                  child: ListView.builder(
+                    controller: _controller._listController,
+                    focusNode: _listFocusNode,
+                    selectionActive: panelFocused,
+                    itemCount: order.length,
+                    onActivate: (_) => _selectCurrent(),
+                    itemBuilder: (context, viewIndex, activeSelected) {
+                      final entryIndex = order[viewIndex];
+                      final selected = viewIndex == _controller.selectedIndex;
+                      return _ConversationRow(
+                        entry: widget.conversations[entryIndex],
+                        entryIndex: entryIndex,
+                        viewIndex: viewIndex,
+                        selected: selected,
+                        activeSelection: activeSelected,
+                        canSelect: canSelect,
+                        copyEnabled: copyEnabled,
+                        showTimestamp: widget.showTimestamp,
+                        onSelect: () => _selectAt(viewIndex),
+                        onCopy: () => _copyAt(viewIndex),
+                      );
+                    },
+                  ),
                 ),
         ),
       ],

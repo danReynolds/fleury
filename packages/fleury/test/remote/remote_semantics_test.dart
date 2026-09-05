@@ -11,17 +11,7 @@ import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_wire.dart';
 import 'package:test/test.dart';
 
-// Declared (non-core) roles standing in for a widget package's vocabulary:
-// the wire and the snapshot must carry them by name and project them through
-// their core role.
-const SemanticRole _messageList = SemanticRole(
-  'messageList',
-  base: SemanticRole.list,
-);
-const SemanticRole _message = SemanticRole(
-  'message',
-  base: SemanticRole.listItem,
-);
+import '../support/declared_roles.dart';
 
 /// A realistic agent tree: status + a message list + an input. [tick] perturbs
 /// only the status counter and the last message — the common streaming case.
@@ -38,12 +28,12 @@ SemanticInspectionSnapshot _snap({required int messages, required int tick}) {
         ),
         SemanticNode(
           id: const SemanticNodeId('messages'),
-          role: _messageList,
+          role: declaredMessageList,
           children: [
             for (var m = 0; m < messages; m++)
               SemanticNode(
                 id: SemanticNodeId('msg:$m'),
-                role: _message,
+                role: declaredMessage,
                 label: m == messages - 1
                     ? 'assistant: step $tick'
                     : 'turn $m: a settled line',

@@ -185,8 +185,10 @@ bool _rowIsFullyCoveredByReadableSemantics(
     for (final node in nodes) {
       final bounds = node.bounds;
       if (bounds == null) continue;
-      if (!_providesReadableCoverage(node)) continue;
+      // Cheap integer test first: the role check walks a switch of role
+      // comparisons, and most nodes are on other rows.
       if (row < bounds.top || row >= bounds.bottom) continue;
+      if (!_providesReadableCoverage(node)) continue;
       final left = bounds.left.clamp(0, size.cols);
       final right = bounds.right.clamp(0, size.cols);
       if (left <= coveredUntil && right > nextCoveredUntil) {

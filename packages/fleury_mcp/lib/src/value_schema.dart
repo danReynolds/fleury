@@ -19,7 +19,10 @@ import 'package:fleury/fleury_core.dart';
 Map<String, Object?>? deriveValueSchema(SemanticInspectionNode node) {
   if (!node.actions.contains(SemanticAction.setValue.name)) return null;
   final state = node.state;
-  switch (node.role) {
+  // Project through the core role: a role an app declared on top of a
+  // settable control (`volume`, base slider) keeps the control's typed domain.
+  final role = node.coreRole ?? node.role;
+  switch (role) {
     case 'spinButton':
     case 'slider':
       return <String, Object?>{
@@ -29,7 +32,7 @@ Map<String, Object?>? deriveValueSchema(SemanticInspectionNode node) {
         if (state['step'] is num) 'step': state['step'],
         // A 2-handle range slider sets only its *active* handle — the [min,max]
         // domain alone reads like a single-value control, so spell it out.
-        if (node.role == 'slider' && state['activeHandle'] != null)
+        if (role == 'slider' && state['activeHandle'] != null)
           'description':
               'moves the active handle of a range (see state.activeHandle / '
               'lowValue / highValue); the other handle constrains it',
