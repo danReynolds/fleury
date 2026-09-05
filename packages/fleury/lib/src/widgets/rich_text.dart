@@ -669,16 +669,26 @@ class RenderRichText extends RenderObject
     final contentMaxCol = ellipsize ? maxCol - 1 : maxCol;
     var col = startCol;
     var off = lineStartOffset;
+    CellStyle? previousStyle;
+    CellStyle? previousSelectedStyle;
     for (final g in line) {
       if (col + g.width > contentMaxCol) break;
       // Per-glyph style merged with reverse-video when this cell
       // falls inside the live selection. Inverse cascades over the
       // span's own foreground/background so styled spans still get
       // the selection highlight.
-      final cellStyle =
-          selection != null && off >= selection.start && off < selection.end
-          ? g.style.merge(const CellStyle(inverse: true))
-          : g.style;
+      var cellStyle = g.style;
+      if (selection != null && off >= selection.start && off < selection.end) {
+        // Glyphs in a span share their immutable paint style. Keep the
+        // highlighted value shared too, with no cache retained after this line.
+        if (!identical(previousStyle, cellStyle)) {
+          previousStyle = cellStyle;
+          previousSelectedStyle = cellStyle.merge(
+            const CellStyle(inverse: true),
+          );
+        }
+        cellStyle = previousSelectedStyle!;
+      }
       buffer.writeGrapheme(
         CellOffset(col, row),
         g.grapheme,

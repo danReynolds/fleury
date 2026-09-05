@@ -4,6 +4,36 @@ import 'package:test/test.dart';
 
 void main() {
   for (final rich in [false, true]) {
+    test('highlight cells share immutable styles, rich=$rich', () {
+      const base = CellStyle(foreground: AnsiColor(3), inverse: false);
+      final RenderObject render = rich
+          ? RenderRichText(
+              span: const TextSpan(text: 'ab漢\ncd字'),
+              base: base,
+            )
+          : RenderText(text: 'ab漢\ncd字', style: base);
+      render.layout(const CellConstraints(maxCols: 8));
+      final buffer = CellBuffer(const CellSize(8, 2));
+      render.paint(buffer, CellOffset.zero);
+      (render as Selectable).dispatchSelectionEvent(
+        const SelectionGranularEvent(granularity: SelectionGranularity.all),
+      );
+      buffer.clear();
+      render.paint(buffer, CellOffset.zero);
+      for (var row = 0; row < 2; row++) {
+        final style = buffer.atColRow(0, row).style;
+        expect(style, const CellStyle(foreground: AnsiColor(3), inverse: true));
+        for (var col = 1; col < 4; col++) {
+          expect(identical(buffer.atColRow(col, row).style, style), isTrue);
+        }
+      }
+      expect(
+        base.inverse,
+        isFalse,
+        reason: 'highlighting must not mutate source styles',
+      );
+    });
+
     test('selection range resolves once per paint, rich=$rich', () {
       var reads = 0;
       final content = List.filled(1000, 'a漢b').join('\n');

@@ -410,6 +410,9 @@ class RenderText extends RenderObject
     // Selection is constant during this synchronous paint. Resolve once:
     // resolving per glyph repeatedly scans the document's line lengths.
     final selection = getSelectionRange();
+    final selectedStyle = selection == null
+        ? _style
+        : _style.merge(const CellStyle(inverse: true));
     final visibleRows = _lines.length < size.rows ? _lines.length : size.rows;
     var lineStartOffset = 0;
     for (var i = 0; i < visibleRows; i++) {
@@ -448,6 +451,7 @@ class RenderText extends RenderObject
         offset.col + size.cols,
         lineStartOffset,
         selection,
+        selectedStyle,
       );
       lineStartOffset += _lines[i].length + 1; // implicit newline
     }
@@ -462,6 +466,7 @@ class RenderText extends RenderObject
     int maxCol,
     int lineStartOffset,
     ({int start, int end})? selection,
+    CellStyle selectedStyle,
   ) {
     // Reserve what the ellipsis actually measures on this surface. `…` is
     // East Asian Ambiguous, so an ambiguous-wide terminal draws it two cells
@@ -482,7 +487,7 @@ class RenderText extends RenderObject
       // current selection range.
       final cellStyle =
           selection != null && off >= selection.start && off < selection.end
-          ? _style.merge(const CellStyle(inverse: true))
+          ? selectedStyle
           : _style;
       paintMeasuredGrapheme(buffer, col, row, grapheme, w, cellStyle);
       col += w;
