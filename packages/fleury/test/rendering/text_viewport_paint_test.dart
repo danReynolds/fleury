@@ -55,6 +55,15 @@ void main() {
       expect(buffer.atColRow(2, 2).style.inverse, isTrue);
       expect(selectable.getSelectedContent()?.plainText, content);
 
+      for (final row in [-1000, 3]) {
+        reads = 0;
+        buffer.clear();
+        render.paint(buffer, CellOffset(0, row));
+        expect(reads, 1, reason: 'resolve selection even when fully clipped');
+        expect(buffer.atColRow(0, 0), const Cell.empty());
+        expect(selectable.getSelectedContent()?.plainText, content);
+      }
+
       selectable.dispatchSelectionEvent(const SelectionClearEvent());
       reads = 0;
       buffer.clear();

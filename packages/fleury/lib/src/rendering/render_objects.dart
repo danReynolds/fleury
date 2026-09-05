@@ -410,10 +410,11 @@ class RenderText extends RenderObject
     // Selection is constant during this synchronous paint. Resolve once:
     // resolving per glyph repeatedly scans the document's line lengths.
     final selection = getSelectionRange();
+    final visibleRows = _lines.length < size.rows ? _lines.length : size.rows;
+    if (offset.row >= buffer.size.rows || offset.row + visibleRows <= 0) return;
     final selectedStyle = selection == null
         ? _style
         : _style.merge(const CellStyle(inverse: true));
-    final visibleRows = _lines.length < size.rows ? _lines.length : size.rows;
     var lineStartOffset = 0;
     for (var i = 0; i < visibleRows; i++) {
       final row = offset.row + i;

@@ -611,6 +611,7 @@ class RenderRichText extends RenderObject
     // than scanning the document's line lengths again for every glyph.
     final selection = getSelectionRange();
     final visibleRows = _lines.length < size.rows ? _lines.length : size.rows;
+    if (offset.row >= buffer.size.rows || offset.row + visibleRows <= 0) return;
     var lineStartOffset = 0;
     for (var i = 0; i < visibleRows; i++) {
       final row = offset.row + i;
