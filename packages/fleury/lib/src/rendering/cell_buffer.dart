@@ -1010,13 +1010,28 @@ final class CellBuffer {
     var right = 0;
     var top = rowCount;
     var bottom = 0;
+    // Bulk fills repeat immutable cells. Reuse the last proven-equal pair
+    // within this scan; Cell equality remains the authority for new pairs.
+    // No state survives the call, so subsequent writes need no invalidation.
+    Cell? equalMine;
+    Cell? equalTheirs;
 
     for (var row = 0; row < rowCount; row++) {
       final base = row * cols;
       var first = -1;
       var last = -1;
       for (var col = 0; col < cols; col++) {
-        if (mine[base + col] != theirs[base + col]) {
+        final cell = mine[base + col];
+        final previousCell = theirs[base + col];
+        if (identical(cell, previousCell) ||
+            (identical(cell, equalMine) &&
+                identical(previousCell, equalTheirs))) {
+          continue;
+        }
+        if (cell == previousCell) {
+          equalMine = cell;
+          equalTheirs = previousCell;
+        } else {
           dirtyCells++;
           if (first < 0) first = col;
           last = col;
