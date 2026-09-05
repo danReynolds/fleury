@@ -1,0 +1,61 @@
+{
+  "baseline": "aa62ef9e63a5f8011198913dd76de181ddcd839a",
+  "candidateProductionCommits": [
+    "cb11b5226b1a7dd2b9cb871e5981424ae90168e8",
+    "f51d49ce904e88e32a722abe3f927225f34628ed",
+    "203d2d4cf441863cf8e59274ac4949b768e448df",
+    "c554e620952880795cfdc6ed499bca313de78a3d",
+    "c39f2a62c9a3224248965dad3935d8e6f0ded244"
+  ],
+  "sdk": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+  "cpu": "AOT release; no application process ran concurrently with another benchmark or our build/test jobs",
+  "scroll": "200 active frames per position; 40 warmup frames; 2 alternating baseline/candidate runs; initial full layout excluded; real ScrollView, Text/RichText and TuiFrameLoop; no transport/ANSI or terminal display",
+  "samples": "600 frames per mode, 30 warmup and 30 initialization frames; two alternating runs; clean frames forced; leaf mutates one visibly changing RenderText; full dirties every render object",
+  "heap": "JIT deterministic VM; 300 warmup and 400 active visible-leaf frames; explicit GC before and after; Fleury-class shallow live bytes only; excludes SDK strings/lists and external storage; not cumulative allocation, RSS, peak or universal memory proof",
+  "files": {
+    "2026-09-05-text-viewport-samples.csv": "9a9e769cfe9e41f4d5c3314965f03ff6873e544a5901c11932e463452c12b7e9",
+    "2026-09-05-text-viewport-highlight-heap.csv": "4b695dabeeed107ac50efcbb9a0d27336c48fdc5cfe576de296d165ebfaa7a3c",
+    "2026-09-05-text-viewport-selected.csv": "3773721012ac079659f14518fcd5f951133157fa3f5b54ec68b5caa7a3b8a3d9",
+    "2026-09-05-text-viewport-heap.csv": "03b36032483701c4b689dfd55ca024edd8700d669aa43bdec02ced7c60f74a33",
+    "2026-09-05-text-viewport-scroll.csv": "e7eea30556b6817d94f5dd5951fe135a6e7dafd307c594a12b5e48699402fb97"
+  },
+  "binaries": {
+    "fleury-final-scroll-main": "e40fa67e8d757827cf25d237925305e862488ae3493bcd8efcbeb93f3f5a5e86",
+    "fleury-final-pipeline-main": "5f8a25fa769e2ad993e72fe2214778ce4188cac63985ea96420fefa9aaed15cb",
+    "fleury-final-selection-base": "83ae4ae54961ea8bafa943c583630b9b98e30bdf2444215b7f413b9809da5253",
+    "fleury-final-scroll-after": "048c99fcdbbafa46fb7812b96c64f6df9c1ace60cb72aa8e5f8a81fdc70630bb",
+    "fleury-final-pipeline-after": "2e7968de91659860179512ff72cff3622a94fb9917f9aec1437402832d3e6988"
+  },
+  "host": {
+    "os": "26.2",
+    "cpu": "Apple M1 Pro",
+    "logicalCpus": 10
+  },
+  "selectedScrollBaseline": "42143a8c8a277982164e3fc1cc0b27e588cbd360",
+  "highlightHeapBaseline": "203d2d4cf441863cf8e59274ac4949b768e448df",
+  "hostReview": "All retained measurements were refreshed using identical SampleFrameHost code with pointer/focus begin, end and abort transactions matching TuiRuntime. A failure/recovery regression passes.",
+  "selectedScroll": "Same active scrolling protocol, select-all verified before timing; baseline already includes row culling. 100 and 1000 lines; two alternating runs; 200 frames per position. Do not multiply this ratio by the merged-main ratio.",
+  "highlightHeap": "Same 1000-line document selected in an 80x24 viewport; 300 warmup and 400 forced unchanged paints, explicit GC before/after; two fresh processes each per side. Baseline already includes the selection-range optimization. Fleury-class shallow live bytes, not total RAM.",
+  "probeSources": {
+    "profiling/bin/scroll_text_probe.dart": "5af2124a5290327f697f8f37cd2b885ef4452897f95f4fb109617a464eb8cac5",
+    "profiling/bin/frame_pipeline_probe.dart": "0effbb06d1ee60448459354b6f44362527ff65cc92d7baa587c63354546814d0",
+    "profiling/bin/frame_heap_probe.dart": "cabc6ed04298ad3d34a8b477e145233c767976eb048af689320ac0bf6bfab466",
+    "profiling/bin/sample_frame_host.dart": "63e580932a52917571898819b3b5da39b95318e3bff5ace7eef92b19399748c6"
+  },
+  "cpuMeasurementRevision": "c39f2a62c9a3224248965dad3935d8e6f0ded244",
+  "localQualification": {
+    "fullContributorRevision": "518166a48da5a814b067924961a0d9c2ad9db97b",
+    "testsPassed": 5344,
+    "suites": 12,
+    "existingSkips": 1,
+    "wireGate": "pass",
+    "reviewFollowupRevision": "c39f2a62c9a3224248965dad3935d8e6f0ded244",
+    "targetedTestsPassed": 716,
+    "fastGatesPassed": 8,
+    "embeddedClientFreshness": "pass",
+    "analysis": "pass",
+    "profilingHostRecoveryTest": "pass"
+  },
+  "heapMeasurementRevision": "c39f2a62c9a3224248965dad3935d8e6f0ded244",
+  "finalHeapVerification": "Repeated all five candidate sample snapshots and two fresh candidate processes for each selected document on the final production revision; all live-byte and style-instance counts exactly match the recorded receipts."
+}
