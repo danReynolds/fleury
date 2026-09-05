@@ -51,9 +51,9 @@ void main() {
         var bottom = 0;
         for (var row = 0; row < size.rows; row++) {
           for (var col = 0; col < size.cols; col++) {
-          if (next.atColRow(col, row) == previous.atColRow(col, row)) {
-            continue;
-          }
+            if (next.atColRow(col, row) == previous.atColRow(col, row)) {
+              continue;
+            }
             count++;
             expectedRows.add(row);
             left = min(left, col);
