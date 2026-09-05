@@ -56,6 +56,11 @@ final class DefaultWidthResolver implements WidthResolver {
     if (grapheme.length == 1) {
       final c = grapheme.codeUnitAt(0);
       if (c >= 0x20 && c <= 0x7E) return 1;
+      // One UTF-16 code unit cannot contain a selector or composite sequence.
+      // The generated table also covers combining marks and lone surrogates,
+      // so the scalar path preserves their zero-width handling.
+      final scalarClass = _scalarClassOf(c);
+      return scalarClass == 1 ? 0 : _scalarWidth(scalarClass, policy);
     }
 
     // One pass over the cluster: the base code point plus the structural
