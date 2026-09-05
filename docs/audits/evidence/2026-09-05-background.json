@@ -1,0 +1,43 @@
+{
+  "change": "Bulk background style composition",
+  "baselineCommit": "165d624e",
+  "sourceSha256": {
+    "packages/fleury/lib/src/rendering/cell_buffer.dart": "398b986571e15e6b3c7787591b849a66b62f40022762751e877a5a5a8152db84",
+    "packages/fleury/lib/src/widgets/basic.dart": "5d5feadb3461018137af4f781db9d4d2fc46e26658eb64035391e9012d05c13e"
+  },
+  "environment": "Dart 3.12.2, macOS arm64, 10 logical CPUs, AOT",
+  "method": "Existing retained_tax_probe, 120x40, 30 warmup frames, 200 frames per mode, before/after/after/before. Timed processes ran sequentially without own compilation/tests. Shared host not isolated. Each value is a run median.",
+  "limits": "Forced clean-tree paint phase, not production idle. Debug counters enabled. Excludes clear/diff/encode/transport/terminal display.",
+  "structuralCountersMatch": true,
+  "summaryMeanOfRunMedians": {
+    "dashboard": {
+      "before": 245.5,
+      "after": 209.5,
+      "reductionPercent": 14.66
+    },
+    "agent": {
+      "before": 63.0,
+      "after": 45.5,
+      "reductionPercent": 27.78
+    },
+    "files": {
+      "before": 81.0,
+      "after": 64.0,
+      "reductionPercent": 20.99
+    },
+    "editor": {
+      "before": 48.5,
+      "after": 36.0,
+      "reductionPercent": 25.77
+    },
+    "finance": {
+      "before": 247.0,
+      "after": 201.5,
+      "reductionPercent": 18.42
+    }
+  },
+  "rawFrames": {
+    "file": "2026-09-05-background-frames.csv",
+    "sha256": "c097fbefd99f8a56c9c71676e30fa364af15576a81ef34fd416726c597c54146"
+  }
+}

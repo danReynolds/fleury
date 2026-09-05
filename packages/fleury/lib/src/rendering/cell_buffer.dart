@@ -32,6 +32,54 @@ int paintMeasuredGrapheme(
   return buffer._placeGrapheme(col, row, grapheme, width, _paintStyle(style));
 }
 
+/// Supplies [color] to painted glyphs in [rect] without their own background.
+///
+/// Internal composition pass, excluded from public barrels. Reuses the merged
+/// style across consecutive uses of one immutable source style without a
+/// retained cache. A leading at the right edge still restyles its continuation
+/// outside the rectangle, matching [CellBuffer.restyleCell]. Empty cells and
+/// image overlays are untouched.
+@internal
+void applyCellBackground(CellBuffer buffer, CellRect rect, Color color) {
+  final clipped = rect.intersect(
+    CellRect(offset: CellOffset.zero, size: buffer._size),
+  );
+  if (clipped == null) return;
+  final background = CellStyle(background: color);
+  CellStyle? previousStyle;
+  var merged = background;
+  final cols = buffer._size.cols;
+  for (var row = clipped.top; row < clipped.bottom; row++) {
+    final base = row * cols;
+    var firstChanged = -1;
+    var endChanged = 0;
+    for (var col = clipped.left; col < clipped.right; col++) {
+      final index = base + col;
+      final cell = buffer._cells[index];
+      if (cell.role != CellRole.leading || cell.style.background != null) {
+        continue;
+      }
+      if (!identical(previousStyle, cell.style)) {
+        previousStyle = cell.style;
+        merged = cell.style.merge(background);
+      }
+      buffer._cells[index] = Cell.leading(
+        grapheme: cell.grapheme!,
+        style: merged,
+      );
+      final wide =
+          col + 1 < cols &&
+          buffer._cells[index + 1].role == CellRole.continuation;
+      if (wide) buffer._cells[index + 1] = Cell.continuation(style: merged);
+      if (firstChanged < 0) firstChanged = col;
+      endChanged = col + (wide ? 2 : 1);
+    }
+    if (firstChanged >= 0) {
+      buffer._recordDamageRect(firstChanged, row, endChanged - firstChanged, 1);
+    }
+  }
+}
+
 /// A two-dimensional grid of [Cell]s representing one frame of the terminal
 /// rendering output.
 ///
