@@ -1,0 +1,30 @@
+{
+  "baseline": "aa62ef9e63a5f8011198913dd76de181ddcd839a",
+  "candidateProductionCommits": [
+    "cb11b5226b1a7dd2b9cb871e5981424ae90168e8",
+    "f51d49ce904e88e32a722abe3f927225f34628ed"
+  ],
+  "sdk": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+  "cpu": "AOT release; no application process ran concurrently with another benchmark or our build/test jobs",
+  "scroll": "200 active frames per position; 40 warmup frames; 2 alternating baseline/candidate runs; initial full layout excluded; real ScrollView, Text/RichText and TuiFrameLoop; no transport/ANSI or terminal display",
+  "samples": "600 frames per mode, 30 warmup and 30 initialization frames; two alternating runs; clean frames forced; leaf mutates one visibly changing RenderText; full dirties every render object",
+  "heap": "JIT deterministic VM; 300 warmup and 400 active visible-leaf frames; explicit GC before and after; Fleury-class shallow live bytes only; excludes SDK strings/lists and external storage; not cumulative allocation, RSS, peak or universal memory proof",
+  "files": {
+    "2026-09-05-text-viewport-samples.csv": "4adaf78a43ad225bb92ec9d2552e2efda713bedcc67894fc77fb22645fa34a7b",
+    "2026-09-05-text-viewport-heap.csv": "3e417e30798553ca099129ec0553ce4a2ee06d419fdc856ea3e1ff66e7f8dbde",
+    "2026-09-05-text-viewport-scroll.csv": "914725e682a05c5663408e9ee1b6c453abac731720192fd10656ff7cddbfdd15"
+  },
+  "binaries": {
+    "fleury-scroll-text-base": "7ece9e8054d9da1fe944815515161d225d1b813120745b0f1085762b84614036",
+    "fleury-scroll-text-after": "e60db2a1203b004a8f314e3f2934aede6fc78941268167dc01e6c6cad9f9277a",
+    "fleury-scroll-both-base": "827a3ecbaafb528dccf4206f026de8b95d238b2d94da3b8506c14d879456df8f",
+    "fleury-scroll-both-after": "e09b279f510f48e97cf03346e41a2ebc356599c34ff0c80e0b360d4dc8f3e942",
+    "fleury-replay-pipeline-base": "15f9bca03a9cdaaa31a81e2c487ddf8e0e79fbdbd1ee72c0af5913ddfe877b60",
+    "fleury-text-pipeline-after": "9bf502b6425460fc3f7946521a3081ab1efff6aae37fae4fdec5f6ae6c0bf7d8"
+  },
+  "host": {
+    "os": "26.2",
+    "cpu": "Apple M1 Pro",
+    "logicalCpus": 10
+  }
+}
