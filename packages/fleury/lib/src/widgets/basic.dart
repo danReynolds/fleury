@@ -912,15 +912,10 @@ class _RenderFilledBox extends RenderObject
     // Pre-fill every covered cell with our background — gives empty
     // cells a colored square (otherwise they'd render as terminal-
     // default).
-    for (var r = 0; r < s.rows; r++) {
-      for (var col = 0; col < s.cols; col++) {
-        final c = offset.col + col;
-        final ro = offset.row + r;
-        if (c < 0 || c >= buffer.size.cols) continue;
-        if (ro < 0 || ro >= buffer.size.rows) continue;
-        buffer.writeGrapheme(CellOffset(c, ro), ' ', style: fillStyle);
-      }
-    }
+    buffer.fillRect(
+      CellRect(offset: offset, size: s),
+      style: fillStyle,
+    );
     // Now paint the child. A grapheme write replaces the cell wholesale,
     // so cells the child touches lose our bg. Walk back through and
     // merge our bg into any cell the child painted that didn't set

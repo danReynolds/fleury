@@ -137,6 +137,37 @@ final class CellBuffer {
     _imagePlacements.clear();
   }
 
+  /// Fills [rect] with single-cell spaces painted with [style].
+  ///
+  /// Clips to this buffer and repairs wide pairs cut by either horizontal
+  /// edge, just like individual [writeGrapheme] calls. The immutable blank
+  /// cell is shared across the region, so a uniform fill does not allocate
+  /// or measure a glyph for every cell. Image placements are left unchanged,
+  /// as they are by individual grapheme writes.
+  void fillRect(CellRect rect, {CellStyle style = CellStyle.none}) {
+    final clipped = rect.intersect(
+      CellRect(offset: CellOffset.zero, size: _size),
+    );
+    if (clipped == null || clipped.size.isEmpty) return;
+    final left = clipped.left;
+    final right = clipped.right;
+    final fill = Cell.leading(grapheme: ' ', style: _paintStyle(style));
+    _recordDamageRect(
+      left - 1,
+      clipped.top,
+      right - left + 2,
+      clipped.size.rows,
+    );
+    for (var row = clipped.top; row < clipped.bottom; row++) {
+      // The interior is completely replaced; only the two edges can leave
+      // an orphaned half outside the fill.
+      _evictWideNeighbors(left, row);
+      _evictWideNeighbors(right - 1, row);
+      final base = row * _size.cols;
+      _cells.fillRange(base + left, base + right, fill);
+    }
+  }
+
   /// Scrolls the buffer up by [rows] rows: row `r + rows` moves to row `r`,
   /// and the bottom [rows] rows are cleared to [Cell.empty]. A non-positive
   /// or oversized shift clears the whole buffer. Used by the remote client
