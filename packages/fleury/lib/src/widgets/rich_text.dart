@@ -610,6 +610,14 @@ class RenderRichText extends RenderObject
     final visibleRows = _lines.length < size.rows ? _lines.length : size.rows;
     var lineStartOffset = 0;
     for (var i = 0; i < visibleRows; i++) {
+      final row = offset.row + i;
+      if (row >= buffer.size.rows) break;
+      if (row < 0) {
+        // Keep flat selection offsets without traversing hidden glyphs.
+        // Selection and retained geometry were recorded before culling.
+        lineStartOffset += _selectionLines[i].length + 1;
+        continue;
+      }
       final line = _lines[i];
       final isLastVisible = i == visibleRows - 1;
       var lineWidth = 0;
@@ -621,14 +629,7 @@ class RenderRichText extends RenderObject
           isLastVisible &&
           (lineWidth > size.cols ||
               (_moreLinesTruncated && i == _lines.length - 1));
-      _paintLine(
-        buffer,
-        line,
-        offset.col,
-        offset.row + i,
-        ellipsize,
-        lineStartOffset,
-      );
+      _paintLine(buffer, line, offset.col, row, ellipsize, lineStartOffset);
       // +length of the line's flat text, +1 for the implicit newline
       // separator. Matches what `selectionLines.join('\n')` produces.
       lineStartOffset += _selectionLines[i].length + 1;
