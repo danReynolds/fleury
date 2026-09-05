@@ -91,13 +91,14 @@ final class DefaultWidthResolver implements WidthResolver {
       }
     }
 
-    if (_isZeroWidth(base)) return 0; // Combining-only cluster.
+    final scalarClass = _scalarClassOf(base);
+    if (scalarClass == 1) return 0; // Combining-only cluster.
 
     // 1. Recognized emoji ZWJ sequence → composite rule: keyed off the base
     //    through the same scalar ladder (so the policy's emoji axis applies),
     //    capped at 2 by construction. P2 lowers these where authorized; until
     //    then the pin contains the disagreement on summing terminals.
-    if (hasZwj) return _scalarWidth(base, policy);
+    if (hasZwj) return _scalarWidth(scalarClass, policy);
 
     // 2. Modifier / flag / keycap / tag sequences → spec-fixed 2, pinned.
     //    These are their own cluster kinds, deliberately NOT governed by the
@@ -114,11 +115,11 @@ final class DefaultWidthResolver implements WidthResolver {
       // its own scalar width — ❤️ falls to ❤'s 1, but ⭐️ keeps ⭐'s 2 (an
       // ignoring terminal still draws the bare glyph wide).
       if (policy.emojiVariationSequence == CellWidth.two) return 2;
-      return _scalarWidth(base, policy);
+      return _scalarWidth(scalarClass, policy);
     }
 
     // 4–7. Bare scalar (or unclassified multi-rune cluster: base-keyed).
-    return _scalarWidth(base, policy);
+    return _scalarWidth(scalarClass, policy);
   }
 
   /// Branches 4–7 of the precedence ladder, for a single code point:
@@ -131,15 +132,29 @@ final class DefaultWidthResolver implements WidthResolver {
   /// first is what gives `emojiPresentation: one` real veto power on a
   /// measured-narrow terminal — while CJK ideographs, which are wide WITHOUT
   /// being emoji, stay 2 under every policy (RFC 0019 §6.3).
-  int _scalarWidth(int r, CellWidthPolicy policy) {
-    if (_isEmojiPresentation(r)) {
-      return policy.emojiPresentation == CellWidth.two ? 2 : 1;
+  int _scalarWidth(int scalarClass, CellWidthPolicy policy) =>
+      switch (scalarClass) {
+        2 => 2,
+        3 => policy.ambiguous == CellWidth.two ? 2 : 1,
+        4 => policy.emojiPresentation == CellWidth.two ? 2 : 1,
+        _ => 1,
+      };
+
+  int _scalarClassOf(int scalar) {
+    var lo = 0;
+    var hi = scalarWidthRanges.length ~/ 3 - 1;
+    while (lo <= hi) {
+      final mid = (lo + hi) >> 1;
+      final index = mid * 3;
+      if (scalar < scalarWidthRanges[index]) {
+        hi = mid - 1;
+      } else if (scalar > scalarWidthRanges[index + 1]) {
+        lo = mid + 1;
+      } else {
+        return scalarWidthRanges[index + 2];
+      }
     }
-    if (_isWide(r)) return 2;
-    if (_isAmbiguous(r)) {
-      return policy.ambiguous == CellWidth.two ? 2 : 1;
-    }
-    return 1;
+    return 0;
   }
 
   @override
@@ -200,13 +215,6 @@ final class DefaultWidthResolver implements WidthResolver {
       c == 0x200D; // ZWJ
 
   bool _isZeroWidth(int r) => widthRangesContain(zeroWidthRanges, r);
-
-  bool _isWide(int r) => widthRangesContain(wideRanges, r);
-
-  bool _isEmojiPresentation(int r) =>
-      widthRangesContain(emojiPresentationRanges, r);
-
-  bool _isAmbiguous(int r) => widthRangesContain(ambiguousRanges, r);
 }
 
 /// Binary search over a flat, sorted list of INCLUSIVE `[start, end]` pairs —

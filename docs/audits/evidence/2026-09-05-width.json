@@ -1,0 +1,44 @@
+{
+  "change": "Single generated Unicode scalar classification lookup",
+  "baselineCommit": "1ef613b5",
+  "sourceSha256": {
+    "packages/fleury/lib/src/rendering/width_resolver.dart": "03bfa4801aabe83118346b892aa45c19d715f040cda5c29ea945c25c4516e4b4",
+    "packages/fleury/lib/src/rendering/width_tables.dart": "3302b74d903cd35b20953074c3d87ac15d34d9a9685197e8820715dcbf8e5942",
+    "tool/ucd_width_tables.dart": "c8ceb45f0ca10bffed25f5a2986305ea749cf5b1fe34a08ba4686b22571b0939"
+  },
+  "environment": "Dart 3.12.2, macOS arm64, 10 logical CPUs, AOT",
+  "method": "Existing retained_tax_probe, 120x40, 30 warmup frames, 200 frames per mode, before/after/after/before. Timed processes ran sequentially without own compilation/tests. Shared host not isolated. Each value is a run median.",
+  "limits": "Forced clean-tree paint phase, not production idle. Debug counters enabled. Excludes clear/diff/encode/transport/terminal display.",
+  "structuralCountersMatch": true,
+  "summaryMeanOfRunMedians": {
+    "dashboard": {
+      "before": 206.5,
+      "after": 172.5,
+      "reductionPercent": 16.46
+    },
+    "agent": {
+      "before": 45.5,
+      "after": 37.5,
+      "reductionPercent": 17.58
+    },
+    "files": {
+      "before": 60.5,
+      "after": 49.5,
+      "reductionPercent": 18.18
+    },
+    "editor": {
+      "before": 34.0,
+      "after": 34.5,
+      "reductionPercent": -1.47
+    },
+    "finance": {
+      "before": 199.0,
+      "after": 154.0,
+      "reductionPercent": 22.61
+    }
+  },
+  "rawFrames": {
+    "file": "2026-09-05-width-frames.csv",
+    "sha256": "91b400b421580858058d0ce3a397945bcb350ad91648396cacaffed7131d0cd5"
+  }
+}

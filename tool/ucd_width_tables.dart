@@ -42,7 +42,9 @@ const String _ucdBase = 'https://www.unicode.org/Public/$unicodeVersion/ucd';
 Future<void> main(List<String> args) async {
   // <root>/tool/ucd_width_tables.dart -> <root>
   final root = File.fromUri(Platform.script).parent.parent.path;
-  final target = File('$root/packages/fleury/lib/src/rendering/width_tables.dart');
+  final target = File(
+    '$root/packages/fleury/lib/src/rendering/width_tables.dart',
+  );
   final generatorSource = File.fromUri(Platform.script).readAsStringSync();
 
   if (args.contains('--check')) {
@@ -126,6 +128,7 @@ const int _narrow = 0;
 const int _zero = 1;
 const int _wide = 2;
 const int _ambiguous = 3;
+const int _emojiPresentation = 4;
 
 const int _maxCodePoint = 0x110000;
 
@@ -144,13 +147,13 @@ Future<String> generateWidthTables({
   _applyEastAsianWidth(eaw, classes);
   _curate(classes);
 
+  final emojiPresentation = _emojiProperty(emoji, 'Emoji_Presentation');
+
   final tables = <String, List<int>>{
     'zeroWidthRanges': _rangesFor(classes, _zero),
     'wideRanges': _rangesFor(classes, _wide),
     'ambiguousRanges': _rangesFor(classes, _ambiguous),
-    'emojiPresentationRanges': _coalesce(
-      _emojiProperty(emoji, 'Emoji_Presentation'),
-    ),
+    'emojiPresentationRanges': _coalesce(emojiPresentation),
     // Sequence-parsing properties (RFC 0019 §6.4). Extended_Pictographic is
     // what UAX #29 GB11 keys ZWJ-sequence clustering on: a ZWJ-delimited
     // segment whose base carries it is an emoji sequence component; a ZWJ in
@@ -172,6 +175,14 @@ Future<String> generateWidthTables({
   tables.forEach((name, ranges) {
     body.writeln(_emitTable(name, ranges));
   });
+  // The resolver's precedence is zero -> emoji -> wide -> ambiguous ->
+  // narrow. Materialize that partition once so each scalar needs one search.
+  // The original property tables remain available to sequence consumers and
+  // serve as an independent equivalence oracle for this derived table.
+  for (final code in emojiPresentation) {
+    if (classes[code] != _zero) classes[code] = _emojiPresentation;
+  }
+  body.writeln(_emitScalarClasses(classes));
 
   final fingerprint = computeFingerprint(
     generatorSource: generatorSource,
@@ -185,8 +196,9 @@ Future<String> generateWidthTables({
 //
 //     dart run tool/fleury_dev.dart build-width-tables
 //
-// Each table is a flat list of INCLUSIVE [start, end] code-point pairs, sorted
-// and coalesced, searched by [lookupRange] in width_resolver.dart. The
+// Property tables contain INCLUSIVE [start, end] code-point pairs. The combined
+// scalar table contains [start, end, class] triples. Both are sorted and
+// coalesced for binary search in width_resolver.dart. The
 // freshness gate (width_tables_test) recomputes [widthTablesFingerprint] from
 // this file plus the generator's own source, so a hand-edited table or a
 // generator change without a rebuild fails offline — no network needed.
@@ -417,7 +429,9 @@ List<int> _coalesce(List<int> codes) {
 
 String _emitTable(String name, List<int> ranges) {
   final buf = StringBuffer()
-    ..writeln('/// ${ranges.length ~/ 2} inclusive [start, end] code-point pairs.')
+    ..writeln(
+      '/// ${ranges.length ~/ 2} inclusive [start, end] code-point pairs.',
+    )
     ..writeln('const List<int> $name = <int>[');
   for (var i = 0; i < ranges.length; i += 2) {
     final start = _hex(ranges[i]);
@@ -429,6 +443,31 @@ String _emitTable(String name, List<int> ranges) {
 }
 
 String _hex(int v) => '0x${v.toRadixString(16).toUpperCase()}';
+
+String _emitScalarClasses(Uint8Buffer classes) {
+  final buf = StringBuffer()
+    ..writeln(
+      '/// Disjoint [start, end, class] triples; omitted scalars are narrow.',
+    )
+    ..writeln(
+      '/// Classes: 1 = zero, 2 = wide, 3 = ambiguous, 4 = emoji presentation.',
+    )
+    ..writeln('const List<int> scalarWidthRanges = <int>[');
+  var start = 0;
+  while (start < _maxCodePoint) {
+    final cls = classes[start];
+    var end = start;
+    while (end + 1 < _maxCodePoint && classes[end + 1] == cls) {
+      end++;
+    }
+    if (cls != _narrow) {
+      buf.writeln('  ${_hex(start)}, ${_hex(end)}, $cls,');
+    }
+    start = end + 1;
+  }
+  buf.writeln('];');
+  return buf.toString();
+}
 
 /// Minimal growable byte buffer — avoids importing dart:typed_data into the
 /// generator's public surface for one internal array.
