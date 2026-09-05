@@ -75,12 +75,33 @@ final class SemanticNode {
 }
 ```
 
-The role vocabulary is deliberately broad, and it includes roles built for the
-apps agents actually live in — not just `button` and `textField`, but
-`conversation`, `messageList`, `traceTimeline`, `patchReview` / `patchFile`,
-`commandPalette`, and `command`. The actions are equally concrete: `activate`,
-`submit`, `select`, `increment`, `decrement`, `open`, `close`, `navigate`,
-`copy`, `start`, `cancel`.
+The role vocabulary is **open**. Core Fleury declares the generic set every
+surface understands — `button`, `textField`, `list`, `listItem`, `region`,
+`status`, `dialog`, `tree`, `command`, and the rest of `SemanticRole.values`.
+The widget catalog adds the roles built for the apps agents actually live in —
+`WidgetRoles.conversation`, `messageList`, `traceTimeline`, `patchReview` /
+`patchFile`, `commandPalette`, `toolCall`, `approval` — and your own package can
+add more. A declared role names the core role it projects through, so a surface
+that has never heard of it (the served browser's accessibility mirror, an older
+agent bridge, the text-coverage policy) still treats it as what it is:
+
+```dart
+abstract final class BoardRoles {
+  static const board = SemanticRole('kanbanBoard', base: SemanticRole.region);
+  static const card = SemanticRole('kanbanCard', base: SemanticRole.listItem);
+}
+
+Semantics(role: BoardRoles.card, label: task.title, child: ...)
+tester.semantics().byRole(BoardRoles.card) // tests match on the role
+```
+
+On the wire the node carries `role: "kanbanCard"` and `coreRole: "listItem"`;
+an agent filters by the specific name, and the browser mirror renders an ARIA
+`listitem`. A declared name must be an identifier and must not be a core name
+(both are asserted when the node is collected); only the name and its core
+root travel, so the human label is always derived from the name. The actions are equally concrete: `activate`, `submit`, `select`,
+`increment`, `decrement`, `open`, `close`, `navigate`, `copy`, `start`,
+`cancel`.
 
 ## What an agent sees
 

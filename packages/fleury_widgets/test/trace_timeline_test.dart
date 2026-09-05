@@ -165,7 +165,7 @@ void main() {
       expect(selected?.eventIndex, 0);
 
       final timeline = tester.semantics().single(
-        role: SemanticRole.traceTimeline,
+        role: WidgetRoles.traceTimeline,
         label: 'Demo trace',
       );
       expect(timeline.state['traceEventCount'], 3);
@@ -174,7 +174,7 @@ void main() {
       expect(timeline.state.selectedTraceId, 'trace.boot');
 
       final event = tester.semantics().single(
-        role: SemanticRole.traceEvent,
+        role: WidgetRoles.traceEvent,
         label: 'Run fake worker',
       );
       expect(event.busy, isTrue);
@@ -186,7 +186,7 @@ void main() {
       expect(event.state.source, 'fake-task');
 
       final fallback = tester.accessibilitySnapshot().single(
-        role: SemanticRole.traceEvent,
+        role: WidgetRoles.traceEvent,
         label: 'Run fake worker',
       );
       expect(
@@ -214,7 +214,7 @@ void main() {
 
       tester.render(size: const CellSize(90, 5));
       var timeline = tester.semantics().single(
-        role: SemanticRole.traceTimeline,
+        role: WidgetRoles.traceTimeline,
         label: 'Demo trace',
         action: SemanticAction.focus,
       );
@@ -223,14 +223,14 @@ void main() {
 
       var result = await tester.invokeSemanticAction(
         SemanticAction.focus,
-        role: SemanticRole.traceTimeline,
+        role: WidgetRoles.traceTimeline,
         label: 'Demo trace',
       );
       expect(result.completed, isTrue);
 
       tester.render(size: const CellSize(90, 5));
       timeline = tester.semantics().single(
-        role: SemanticRole.traceTimeline,
+        role: WidgetRoles.traceTimeline,
         label: 'Demo trace',
         focused: true,
       );
@@ -238,7 +238,7 @@ void main() {
 
       result = await tester.invokeSemanticAction(
         SemanticAction.activate,
-        role: SemanticRole.traceEvent,
+        role: WidgetRoles.traceEvent,
         label: 'Capture diagnostics',
       );
       expect(result.completed, isTrue);
@@ -247,7 +247,7 @@ void main() {
 
       tester.render(size: const CellSize(90, 5));
       final event = tester.semantics().single(
-        role: SemanticRole.traceEvent,
+        role: WidgetRoles.traceEvent,
         label: 'Capture diagnostics',
         selected: true,
         action: SemanticAction.copy,
@@ -255,7 +255,7 @@ void main() {
       expect(event.state.traceId, 'trace.diagnostics');
 
       timeline = tester.semantics().single(
-        role: SemanticRole.traceTimeline,
+        role: WidgetRoles.traceTimeline,
         label: 'Demo trace',
         focused: true,
       );
@@ -305,13 +305,13 @@ void main() {
 
       expect(controller.selectedIndex, 3);
       final timeline = tester.semantics().single(
-        role: SemanticRole.traceTimeline,
+        role: WidgetRoles.traceTimeline,
         label: 'Demo trace',
       );
       expect(timeline.state.selectedTraceId, 'trace.diagnostics');
 
       final selected = tester.semantics().single(
-        role: SemanticRole.traceEvent,
+        role: WidgetRoles.traceEvent,
         label: 'Capture diagnostics',
         selected: true,
       );
@@ -338,7 +338,7 @@ void main() {
         tester.render(size: const CellSize(90, 5));
         final result = await tester.invokeSemanticAction(
           SemanticAction.copy,
-          role: SemanticRole.traceEvent,
+          role: WidgetRoles.traceEvent,
           label: 'Boot demo console',
         );
 

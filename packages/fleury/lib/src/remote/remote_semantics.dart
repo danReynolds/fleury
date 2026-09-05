@@ -70,6 +70,7 @@ const int maxSemanticWireEdges = 64 * 1024;
 const Set<String> _semanticWireScalarFields = <String>{
   'id',
   'role',
+  'coreRole',
   'label',
   'value',
   'hint',

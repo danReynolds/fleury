@@ -3,6 +3,8 @@ import 'dart:async' show scheduleMicrotask, unawaited;
 import 'package:characters/characters.dart';
 import 'package:fleury/fleury_core.dart';
 
+import 'semantic_roles.dart';
+
 /// Protocol-neutral lifecycle state for a timeline event.
 enum TraceTimelineStatus {
   queued,
@@ -500,7 +502,7 @@ class _TraceTimelineState extends State<TraceTimeline> {
     return FocusDetector(
       onFocusChange: _onFocusDetectorChange,
       child: Semantics(
-        role: SemanticRole.traceTimeline,
+        role: WidgetRoles.traceTimeline,
         label: _sanitizeTraceText(widget.label),
         focused: _focusedWithin || _focusNode.hasFocus,
         actions: {
@@ -573,7 +575,7 @@ class _TraceTimelineRow extends StatelessWidget {
     final id = _sanitizeTraceText(event.displayId);
 
     return Semantics(
-      role: SemanticRole.traceEvent,
+      role: WidgetRoles.traceEvent,
       label: label,
       value: event.status.name,
       hint: detail,

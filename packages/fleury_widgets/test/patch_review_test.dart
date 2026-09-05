@@ -107,7 +107,7 @@ void main() {
     expect(output, contains('+  print("new");'));
 
     final review = tester.semantics().single(
-      role: SemanticRole.patchReview,
+      role: WidgetRoles.patchReview,
       label: 'Launch patch',
       action: SemanticAction.copy,
     );
@@ -122,7 +122,7 @@ void main() {
     expect(review.state.selectedPatchFilePath, 'lib/app.dart');
 
     final file = tester.semantics().single(
-      role: SemanticRole.patchFile,
+      role: WidgetRoles.patchFile,
       label: 'lib/app.dart',
       selected: true,
       action: SemanticAction.activate,
@@ -141,7 +141,7 @@ void main() {
     expect(diff.state['hunkCount'], 2);
 
     final fallback = tester.accessibilitySnapshot().single(
-      role: SemanticRole.patchReview,
+      role: WidgetRoles.patchReview,
       label: 'Launch patch',
       state:
           'patch id patch-42, status reviewing, 2 files, 3 additions, '
@@ -171,7 +171,7 @@ void main() {
       tester.render(size: const CellSize(100, 18));
       final result = await tester.invokeSemanticAction(
         SemanticAction.copy,
-        role: SemanticRole.patchFile,
+        role: WidgetRoles.patchFile,
         label: 'lib/app.dart',
       );
       await Future<void>.delayed(Duration.zero);
@@ -202,7 +202,7 @@ void main() {
       tester.render(size: const CellSize(100, 18));
       final result = await tester.invokeSemanticAction(
         SemanticAction.activate,
-        role: SemanticRole.patchFile,
+        role: WidgetRoles.patchFile,
         label: 'test/app_test.dart',
       );
 
@@ -210,7 +210,7 @@ void main() {
       expect(selected?.file.path, 'test/app_test.dart');
       expect(diffController.selectedIndex, 10);
       final review = tester.semantics().single(
-        role: SemanticRole.patchReview,
+        role: WidgetRoles.patchReview,
         label: 'Launch patch',
       );
       expect(review.state.selectedPatchFilePath, 'test/app_test.dart');
@@ -234,7 +234,7 @@ void main() {
 
       tester.render(size: const CellSize(100, 18));
       var review = tester.semantics().single(
-        role: SemanticRole.patchReview,
+        role: WidgetRoles.patchReview,
         label: 'Launch patch',
         action: SemanticAction.focus,
       );
@@ -243,14 +243,14 @@ void main() {
 
       var result = await tester.invokeSemanticAction(
         SemanticAction.focus,
-        role: SemanticRole.patchReview,
+        role: WidgetRoles.patchReview,
         label: 'Launch patch',
       );
       expect(result.completed, isTrue);
 
       tester.render(size: const CellSize(100, 18));
       review = tester.semantics().single(
-        role: SemanticRole.patchReview,
+        role: WidgetRoles.patchReview,
         label: 'Launch patch',
         focused: true,
       );
@@ -258,7 +258,7 @@ void main() {
 
       result = await tester.invokeSemanticAction(
         SemanticAction.activate,
-        role: SemanticRole.patchFile,
+        role: WidgetRoles.patchFile,
         label: 'test/app_test.dart',
       );
       expect(result.completed, isTrue);
@@ -268,7 +268,7 @@ void main() {
 
       tester.render(size: const CellSize(100, 18));
       final file = tester.semantics().single(
-        role: SemanticRole.patchFile,
+        role: WidgetRoles.patchFile,
         label: 'test/app_test.dart',
         selected: true,
         action: SemanticAction.copy,
@@ -276,7 +276,7 @@ void main() {
       expect(file.state.patchFilePath, 'test/app_test.dart');
 
       review = tester.semantics().single(
-        role: SemanticRole.patchReview,
+        role: WidgetRoles.patchReview,
         label: 'Launch patch',
         focused: true,
       );
@@ -332,13 +332,13 @@ void main() {
 
       expect(controller.selectedIndex, 2);
       final review = tester.semantics().single(
-        role: SemanticRole.patchReview,
+        role: WidgetRoles.patchReview,
         label: 'Launch patch',
       );
       expect(review.state.selectedPatchFilePath, 'test/app_test.dart');
 
       final selected = tester.semantics().single(
-        role: SemanticRole.patchFile,
+        role: WidgetRoles.patchFile,
         label: 'test/app_test.dart',
         selected: true,
       );

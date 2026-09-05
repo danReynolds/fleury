@@ -2046,7 +2046,7 @@ Future<_OverlayCommandPaletteJourneySample> _runOverlayCommandPaletteJourney(
 
       final semanticQuery = Stopwatch()..start();
       tree = tester.semantics();
-      final paletteNodes = tree.byRole(SemanticRole.commandPalette).toList();
+      final paletteNodes = tree.byRole(WidgetRoles.commandPalette).toList();
       commandNodes = tree
           .byRole(SemanticRole.command)
           .where((node) => node.state['rowIndex'] != null)
@@ -2083,7 +2083,7 @@ Future<_OverlayCommandPaletteJourneySample> _runOverlayCommandPaletteJourney(
       } else if (cycle % 5 == 1) {
         final result = await tester.invokeSemanticAction(
           SemanticAction.submit,
-          role: SemanticRole.commandPalette,
+          role: WidgetRoles.commandPalette,
         );
         if (!result.completed) {
           actionFailureCount += 1;
@@ -2105,7 +2105,7 @@ Future<_OverlayCommandPaletteJourneySample> _runOverlayCommandPaletteJourney(
       } else {
         final result = await tester.invokeSemanticAction(
           SemanticAction.dismiss,
-          role: SemanticRole.commandPalette,
+          role: WidgetRoles.commandPalette,
         );
         if (!result.completed) {
           actionFailureCount += 1;
@@ -2130,7 +2130,7 @@ Future<_OverlayCommandPaletteJourneySample> _runOverlayCommandPaletteJourney(
         routeDepthMismatchCount += 1;
         semanticMismatchCount += 1;
       }
-      if (tester.semantics().byRole(SemanticRole.commandPalette).isNotEmpty) {
+      if (tester.semantics().byRole(WidgetRoles.commandPalette).isNotEmpty) {
         stalePaletteAfterCloseCount += 1;
       }
 
@@ -2299,14 +2299,14 @@ Future<_DisabledOverlayProbe> _runDisabledOverlayProbe(
 
   await tester.invokeSemanticAction(
     SemanticAction.dismiss,
-    role: SemanticRole.commandPalette,
+    role: WidgetRoles.commandPalette,
   );
   await Future<void>.delayed(Duration.zero);
   tester.pump(const Duration(milliseconds: 300));
   tester.pump();
   final stalePaletteAfterClose = tester
       .semantics()
-      .byRole(SemanticRole.commandPalette)
+      .byRole(WidgetRoles.commandPalette)
       .isNotEmpty;
 
   return _DisabledOverlayProbe(

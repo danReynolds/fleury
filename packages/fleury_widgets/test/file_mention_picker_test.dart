@@ -108,7 +108,7 @@ void main() {
       expect(picked?.viewIndex, 0);
 
       final picker = tester.semantics().single(
-        role: SemanticRole.fileMentionPicker,
+        role: WidgetRoles.fileMentionPicker,
         label: 'Composer mentions',
       );
       expect(picker.state.filterText, 'docs/launch');
@@ -117,7 +117,7 @@ void main() {
       expect(picker.state.selectedFilePath, 'docs/launch.md');
 
       final row = tester.semantics().single(
-        role: SemanticRole.fileMention,
+        role: WidgetRoles.fileMention,
         label: 'Launch plan',
         value: '@docs/launch.md',
       );
@@ -129,7 +129,7 @@ void main() {
       expect(row.state.mentionText, '@docs/launch.md');
 
       final fallback = tester.accessibilitySnapshot().single(
-        role: SemanticRole.fileMention,
+        role: WidgetRoles.fileMention,
         label: 'Launch plan',
       );
       expect(
@@ -157,7 +157,7 @@ void main() {
 
       tester.render(size: const CellSize(90, 7));
       var picker = tester.semantics().single(
-        role: SemanticRole.fileMentionPicker,
+        role: WidgetRoles.fileMentionPicker,
         label: 'Composer mentions',
         action: SemanticAction.focus,
       );
@@ -166,14 +166,14 @@ void main() {
 
       var result = await tester.invokeSemanticAction(
         SemanticAction.navigate,
-        role: SemanticRole.fileMentionPicker,
+        role: WidgetRoles.fileMentionPicker,
         label: 'Composer mentions',
       );
       expect(result.completed, isTrue);
 
       tester.render(size: const CellSize(90, 7));
       picker = tester.semantics().single(
-        role: SemanticRole.fileMentionPicker,
+        role: WidgetRoles.fileMentionPicker,
         label: 'Composer mentions',
         focused: true,
       );
@@ -181,7 +181,7 @@ void main() {
 
       result = await tester.invokeSemanticAction(
         SemanticAction.activate,
-        role: SemanticRole.fileMention,
+        role: WidgetRoles.fileMention,
         label: 'Launch plan',
       );
       expect(result.completed, isTrue);
@@ -190,7 +190,7 @@ void main() {
 
       tester.render(size: const CellSize(90, 7));
       final row = tester.semantics().single(
-        role: SemanticRole.fileMention,
+        role: WidgetRoles.fileMention,
         label: 'Launch plan',
         selected: true,
         action: SemanticAction.copy,
@@ -198,7 +198,7 @@ void main() {
       expect(row.state.filePath, 'docs/launch.md');
 
       picker = tester.semantics().single(
-        role: SemanticRole.fileMentionPicker,
+        role: WidgetRoles.fileMentionPicker,
         label: 'Composer mentions',
         focused: true,
       );
@@ -248,7 +248,7 @@ void main() {
 
       expect(controller.selectedIndex, 3);
       final picker = tester.semantics().single(
-        role: SemanticRole.fileMentionPicker,
+        role: WidgetRoles.fileMentionPicker,
         label: 'Composer mentions',
       );
       expect(
@@ -258,7 +258,7 @@ void main() {
       expect(picker.state['selectedMentionText'], '@search-panel');
 
       final row = tester.semantics().single(
-        role: SemanticRole.fileMention,
+        role: WidgetRoles.fileMention,
         label: 'SearchPanel',
         selected: true,
       );
@@ -285,7 +285,7 @@ void main() {
         tester.render(size: const CellSize(90, 6));
         final result = await tester.invokeSemanticAction(
           SemanticAction.copy,
-          role: SemanticRole.fileMention,
+          role: WidgetRoles.fileMention,
           label: 'Main entrypoint',
         );
 

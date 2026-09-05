@@ -3,6 +3,7 @@ import 'dart:async' show scheduleMicrotask, unawaited;
 import 'package:fleury/fleury_core.dart';
 
 import 'diff_view.dart';
+import 'semantic_roles.dart';
 
 /// Protocol-neutral review status for a patch or one patch file.
 enum PatchReviewStatus {
@@ -663,7 +664,7 @@ class _PatchReviewState extends State<PatchReview> {
     return FocusDetector(
       onFocusChange: _onFocusDetectorChange,
       child: Semantics(
-        role: SemanticRole.patchReview,
+        role: WidgetRoles.patchReview,
         label: _sanitizePatchText(widget.label),
         value: widget.status.name,
         focused: _focusedWithin || _focusNode.hasFocus,
@@ -736,7 +737,7 @@ class _PatchFileRow extends StatelessWidget {
         ? null
         : _sanitizePatchText(file.summary!);
     return Semantics(
-      role: SemanticRole.patchFile,
+      role: WidgetRoles.patchFile,
       label: path,
       value: file.status.name,
       hint: summary,

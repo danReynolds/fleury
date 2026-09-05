@@ -9,6 +9,7 @@ import 'dart:io';
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_test_support.dart';
+import 'package:fleury_widgets/fleury_widgets.dart';
 
 import '../lib/fleury_example_console.dart';
 
@@ -320,7 +321,7 @@ Future<_DemoAppJourneySample> _runDemoAppJourney(_ScenarioConfig config) async {
     var frame = tester.render(size: config.terminalSize);
     unsafeFrameCount += _unsafeVisibleFrameCount(frame, config.terminalSize);
     final paletteTree = tester.semantics();
-    final paletteNode = paletteTree.single(role: SemanticRole.commandPalette);
+    final paletteNode = paletteTree.single(role: WidgetRoles.commandPalette);
     tester.type('go diagnostics');
     tester.pump();
     frame = tester.render(size: config.terminalSize);
@@ -436,7 +437,7 @@ Future<_DemoAppJourneySample> _runDemoAppJourney(_ScenarioConfig config) async {
     // MessageList contributes the precise messageList role (storybook/DX
     // refinement); the transcript is not a raw log region.
     final transcriptLog = transcriptTree.single(
-      role: SemanticRole.messageList,
+      role: WidgetRoles.messageList,
       label: 'Transcript events',
     );
     transcript.stop();

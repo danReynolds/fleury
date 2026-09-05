@@ -42,7 +42,7 @@ void main() {
       );
 
       final node = tester.semantics().single(
-        role: SemanticRole.approval,
+        role: WidgetRoles.approval,
         label: 'Approve deploy?',
         value: 'prod',
         action: SemanticAction.submit,
@@ -57,7 +57,7 @@ void main() {
       expect(node.state['cancelLabel'], 'Hold');
 
       final accessibility = tester.accessibilitySnapshot().single(
-        role: SemanticRole.approval,
+        role: WidgetRoles.approval,
         label: 'Approve deploy?',
       );
       expect(accessibility.states, contains('severity warning'));
@@ -81,7 +81,7 @@ void main() {
 
       final result = await tester.invokeSemanticAction(
         SemanticAction.submit,
-        role: SemanticRole.approval,
+        role: WidgetRoles.approval,
         label: 'Approve deploy?',
       );
 
@@ -100,7 +100,7 @@ void main() {
 
       final result = await tester.invokeSemanticAction(
         SemanticAction.cancel,
-        role: SemanticRole.approval,
+        role: WidgetRoles.approval,
         label: 'Approve deploy?',
       );
 

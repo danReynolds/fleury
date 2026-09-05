@@ -57,6 +57,17 @@ contribute their role, label, and actions — a `Button(label: …, onPressed: �
 agent-drivable as-is. The one thing worth adding is a stable `id:` on nodes that
 matter (see [below](#make-your-app-drive-well)).
 
+Roles are an open vocabulary. Core Fleury declares the generic set
+(`SemanticRole.button`, `.list`, `.region`, …), `fleury_widgets` adds its
+domain roles (`WidgetRoles.patchReview`, `.toolCall`, …), and your own package
+can declare more — each names the core role it projects through, so an agent
+can filter by your exact role while the browser mirror and older bridges still
+know what it is:
+
+```dart
+static const kanbanCard = SemanticRole('kanbanCard', base: SemanticRole.listItem);
+```
+
 ## Install the driver
 
 The driver is a separate executable, `fleury_mcp`.

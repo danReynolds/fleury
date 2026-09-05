@@ -2,6 +2,8 @@ import 'dart:async' show scheduleMicrotask, unawaited;
 
 import 'package:fleury/fleury_core.dart';
 
+import 'semantic_roles.dart';
+
 /// Protocol-neutral status for a node in a [TaskGraph].
 enum TaskGraphStatus { pending, running, succeeded, failed, cancelled, skipped }
 
@@ -406,7 +408,7 @@ class _TaskGraphState extends State<TaskGraph> {
     return FocusDetector(
       onFocusChange: _onFocusDetectorChange,
       child: Semantics(
-        role: SemanticRole.taskGraph,
+        role: WidgetRoles.taskGraph,
         label: widget.semanticLabel,
         focused: _focusedWithin || _focusNode.hasFocus,
         actions: {

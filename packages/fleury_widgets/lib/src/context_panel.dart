@@ -4,6 +4,7 @@ import 'package:characters/characters.dart';
 import 'package:fleury/fleury_core.dart';
 
 import 'model_status_bar.dart';
+import 'semantic_roles.dart';
 
 /// Protocol-neutral kind for one context-pack item.
 enum ContextItemKind {
@@ -498,7 +499,7 @@ class _ContextPanelState extends State<ContextPanel> {
     return FocusDetector(
       onFocusChange: _onFocusDetectorChange,
       child: Semantics(
-        role: SemanticRole.contextPanel,
+        role: WidgetRoles.contextPanel,
         label: _sanitizeContextText(widget.label),
         value: _contextValue(widget.usage),
         focused: _focusedWithin || _focusNode.hasFocus,
@@ -569,7 +570,7 @@ class _ContextItemRow extends StatelessWidget {
         : _sanitizeContextText(item.source!);
     final id = _sanitizeContextText(item.displayId);
     return Semantics(
-      role: SemanticRole.contextItem,
+      role: WidgetRoles.contextItem,
       label: label,
       value: detail,
       selected: selected,

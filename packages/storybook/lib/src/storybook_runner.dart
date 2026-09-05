@@ -493,6 +493,7 @@ bool _looksLikeWidgetExport(String symbol) {
     'Record',
     'Request',
     'Result',
+    'Roles',
     'Severity',
     'Source',
     'Status',

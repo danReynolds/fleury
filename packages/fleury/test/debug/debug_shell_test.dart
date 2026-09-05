@@ -17,6 +17,8 @@ import 'package:fleury/src/debug/debug_shell.dart';
 import 'package:fleury/src/debug/debug_state.dart';
 import 'package:test/test.dart';
 
+import '../support/declared_roles.dart';
+
 KeyEvent _ctrl(String c) =>
     KeyEvent(KeyCode.char(c), modifiers: const {KeyModifier.ctrl});
 KeyEvent _key(KeyCode k) => KeyEvent(k);
@@ -819,7 +821,7 @@ void main() {
               ),
               SemanticNode(
                 id: SemanticNodeId('trace:output'),
-                role: SemanticRole.traceEvent,
+                role: declaredTraceEvent,
                 label: 'Task output event',
                 state: SemanticState({
                   'taskOutputSanitized': true,

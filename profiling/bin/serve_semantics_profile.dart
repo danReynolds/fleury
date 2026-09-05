@@ -14,6 +14,7 @@ import 'dart:io';
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_wire.dart';
+import 'package:fleury_widgets/fleury_widgets.dart';
 
 /// Builds a realistic agent-style semantic tree: a status line, a message
 /// list of [messages] items, and an input field. [tick] perturbs only a small
@@ -32,12 +33,12 @@ SemanticTree _appTree({required int messages, required int tick}) {
         ),
         SemanticNode(
           id: const SemanticNodeId('messages'),
-          role: SemanticRole.messageList,
+          role: WidgetRoles.messageList,
           children: [
             for (var m = 0; m < messages; m++)
               SemanticNode(
                 id: SemanticNodeId('msg:$m'),
-                role: SemanticRole.message,
+                role: WidgetRoles.message,
                 label: m == messages - 1
                     // Only the last message grows as tokens stream in.
                     ? 'assistant: thinking about step $tick of the plan'

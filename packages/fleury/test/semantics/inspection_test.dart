@@ -373,7 +373,8 @@ void main() {
       },
     );
 
-    test('an unknown role degrades to text; unknown actions are dropped', () {
+    test('an unknown role keeps its name, projects through text; unknown '
+        'actions are dropped', () {
       final snapshot = SemanticInspectionSnapshot.fromJson({
         'schemaVersion': 1,
         'root': {
@@ -391,12 +392,56 @@ void main() {
       });
 
       final node = snapshot.toSemanticTree().root.children.single;
-      expect(node.role, SemanticRole.text, reason: 'unknown role falls back');
+      // Roles are an open vocabulary: the name survives (an agent can still
+      // match on it), and with no known core role to project through the
+      // node degrades to plain text — the pre-open-vocabulary behavior.
+      expect(node.role.name, 'hologram');
+      expect(node.role.isCore, isFalse);
+      expect(node.role.coreRole, SemanticRole.text);
+      expect(node.role, isNot(SemanticRole.text), reason: 'name is identity');
       expect(node.label, 'Future node');
       expect(node.actions, {
         SemanticAction.activate,
       }, reason: 'the unrecognized action is dropped, not an error');
     });
+  });
+
+  test('coreRole on the wire is normalized to what a producer would emit', () {
+    Map<String, Object?> roundTrip(Map<String, Object?> node) {
+      final snapshot = SemanticInspectionSnapshot.fromJson({
+        'schemaVersion': 1,
+        'root': {
+          'id': 'root',
+          'role': 'app',
+          'children': [node],
+        },
+      });
+      final json = snapshot.root.children.single.toJson();
+      final rebuilt = snapshot
+          .toSemanticTree()
+          .toInspectionSnapshot()
+          .root
+          .children
+          .single
+          .toJson();
+      expect(rebuilt, json, reason: 'fromJson→toJson must be a fixed point');
+      return json;
+    }
+
+    // A core role never carries a projection, whatever a peer sent.
+    expect(
+      roundTrip({'id': 'b', 'role': 'button', 'coreRole': 'region'}),
+      isNot(contains('coreRole')),
+    );
+    // An unknown core root degrades to text, and says so.
+    expect(
+      roundTrip({'id': 'c', 'role': 'kanbanCard', 'coreRole': 'pinnedCard'}),
+      containsPair('coreRole', 'text'),
+    );
+    expect(
+      roundTrip({'id': 'd', 'role': 'kanbanCard', 'coreRole': 'listItem'}),
+      containsPair('coreRole', 'listItem'),
+    );
   });
 
   testWidgets('tester exposes semantic inspection snapshot and JSON', (

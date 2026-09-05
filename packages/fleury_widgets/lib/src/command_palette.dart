@@ -2,6 +2,8 @@ import 'dart:async' show scheduleMicrotask, unawaited;
 
 import 'package:fleury/fleury_core.dart';
 
+import 'semantic_roles.dart';
+
 /// One callback-backed row in a fixed-list [CommandPalette].
 ///
 /// This type is only for palettes that own a static list of callbacks. For
@@ -508,7 +510,7 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
       ],
       // The palette owns its own frame — present() supplies no chrome.
       child: Semantics(
-        role: SemanticRole.commandPalette,
+        role: WidgetRoles.commandPalette,
         label: 'Command palette',
         value: _query.text,
         focused: _queryFocus.hasFocus,
