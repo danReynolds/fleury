@@ -14,6 +14,10 @@ import 'render_object.dart';
 
 /// Flows children into wrapping runs along the horizontal axis.
 class RenderWrap extends RenderObject implements RenderObjectWithChildren {
+  @override
+  CellOffset childOffsetOf(RenderObject child) =>
+      _offsets[child] ?? CellOffset.zero;
+
   RenderWrap({int spacing = 0, int runSpacing = 0})
     : _spacing = spacing,
       _runSpacing = runSpacing;

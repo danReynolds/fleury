@@ -301,6 +301,12 @@ class BoundsAnchor extends SingleChildRenderObjectWidget {
 /// [BoundsAnchor].
 class RenderBoundsAnchor extends RenderObject
     implements RenderObjectWithSingleChild {
+  @override
+  bool presentsChild(RenderObject child) => _notifier.visibleBounds != null;
+
+  @override
+  CellOffset childOffsetOf(RenderObject child) => _placeChild(child.size);
+
   RenderBoundsAnchor(
     this._notifier,
     this._gap,

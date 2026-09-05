@@ -72,6 +72,9 @@ abstract interface class RenderErrorContainment {
 /// The containment render object. See the library comment for the model.
 class RenderErrorBoundary extends RenderObject
     implements RenderObjectWithSingleChild, RenderErrorContainment {
+  @override
+  bool presentsChild(RenderObject child) => _containedError == null;
+
   RenderObject? _child;
 
   /// When true, contained exceptions are rethrown instead of absorbed —

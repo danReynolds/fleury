@@ -1318,6 +1318,40 @@ abstract class RenderObject {
     _PaintGeometryClipScope.paintWithClip(screenClip, paint);
   }
 
+  // ---- Geometry contract ---------------------------------------------------
+  //
+  // Where a render object put each child is layout state. Declaring it lets
+  // screen geometry be DERIVED on demand (see `screenGeometryOf`) instead of
+  // recorded during paint and replayed by repaint boundaries. Pass-through
+  // wrappers keep the defaults; every container that offsets, clips, or
+  // hides a child overrides the matching member.
+
+  /// Where this render object paints [child], relative to its own origin.
+  CellOffset childOffsetOf(RenderObject child) => CellOffset.zero;
+
+  /// Whether [child] is presented this frame: painted and interactive. False
+  /// for a child hidden by policy — an inactive `IndexedStack` child, a route
+  /// under an opaque route, an overlay entry under an opaque one, a list row
+  /// outside the mounted window, a contained-error subtree.
+  bool presentsChild(RenderObject child) => true;
+
+  /// The clip this render object imposes on its children, in its own
+  /// coordinates, or null when it does not clip.
+  CellRect? get childClip => null;
+
+  /// Visits the direct render children, single- and multi-child alike.
+  void visitRenderChildren(void Function(RenderObject child) visitor) {
+    final self = this;
+    if (self is RenderObjectWithSingleChild) {
+      final child = self.child;
+      if (child != null) visitor(child);
+    } else if (self is RenderObjectWithChildren) {
+      for (final child in self.children) {
+        visitor(child);
+      }
+    }
+  }
+
   // ---- Intrinsic sizing -------------------------------------------------
   //
   // Subclasses override these to report the size they'd naturally take

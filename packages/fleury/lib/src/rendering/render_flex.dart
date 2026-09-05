@@ -156,6 +156,14 @@ class RenderFlexible extends RenderObject
 /// division is given to the leftmost flexible children in order, so the
 /// layout is deterministic.
 class RenderFlex extends RenderObject implements RenderObjectWithChildren {
+  @override
+  CellOffset childOffsetOf(RenderObject child) =>
+      _childOffsets[child] ?? CellOffset.zero;
+
+  @override
+  CellRect? get childClip =>
+      _overflow > 0 ? CellRect(offset: CellOffset.zero, size: size) : null;
+
   RenderFlex({
     Axis direction = Axis.horizontal,
     MainAxisSize mainAxisSize = MainAxisSize.max,

@@ -30,6 +30,17 @@ import 'render_object.dart';
 /// the visible suffix of the route stack.
 class RenderNavigatorStack extends RenderObject
     implements RenderObjectWithChildren {
+  @override
+  bool presentsChild(RenderObject child) {
+    final start = _firstPainted < 0
+        ? 0
+        : (_firstPainted > _children.length ? _children.length : _firstPainted);
+    for (var i = start; i < _children.length; i++) {
+      if (identical(_children[i], child)) return true;
+    }
+    return false;
+  }
+
   RenderNavigatorStack({int firstPainted = 0}) : _firstPainted = firstPainted;
 
   /// Index of the first child to paint, root-first. Children below this

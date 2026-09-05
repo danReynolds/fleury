@@ -551,6 +551,9 @@ class _Visibility extends SingleChildRenderObjectWidget {
 
 class _RenderVisibility extends RenderObject
     implements RenderObjectWithSingleChild {
+  @override
+  bool presentsChild(RenderObject child) => _visible;
+
   _RenderVisibility({required bool visible}) : _visible = visible;
 
   bool _visible;

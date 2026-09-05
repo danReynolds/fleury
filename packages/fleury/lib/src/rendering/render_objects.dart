@@ -858,6 +858,10 @@ class RenderSizedBox extends RenderObject
 /// Insets a child by [padding] cells on each side.
 class RenderPadding extends RenderObject
     implements RenderObjectWithSingleChild {
+  @override
+  CellOffset childOffsetOf(RenderObject child) =>
+      CellOffset(_padding.left, _padding.top);
+
   RenderPadding({EdgeInsets padding = EdgeInsets.zero, RenderObject? child})
     : _padding = padding {
     if (child != null) {
@@ -998,6 +1002,10 @@ class RenderPadding extends RenderObject
 /// (`w < 2·edge` or `h < 2`), the border is skipped and the child paints
 /// in place — this avoids garbled glyphs when a layout collapses.
 class RenderBorder extends RenderObject implements RenderObjectWithSingleChild {
+  @override
+  CellOffset childOffsetOf(RenderObject child) =>
+      _framed ? CellOffset(_edgeWidth, 1) : CellOffset.zero;
+
   RenderBorder({
     required BoxBorder border,
     TextPresentationPolicy textPolicy = TextPresentationPolicy.spec,

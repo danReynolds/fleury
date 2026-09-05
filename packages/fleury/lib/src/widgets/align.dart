@@ -89,6 +89,9 @@ final class Center extends SingleChildRenderObjectWidget {
 /// loosened constraints, then places the child at the alignment-
 /// determined offset within the parent's box.
 class RenderAlign extends RenderObject implements RenderObjectWithSingleChild {
+  @override
+  CellOffset childOffsetOf(RenderObject child) => _childOffset;
+
   RenderAlign({required Alignment alignment, RenderObject? child})
     : _alignment = alignment {
     if (child != null) {

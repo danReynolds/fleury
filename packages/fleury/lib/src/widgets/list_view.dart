@@ -1086,6 +1086,13 @@ Never _throwUnboundedListHeight() {
 ///      state, not user-mutable fields, and notifying during layout
 ///      would loop.
 class _RenderListView extends RenderObject implements RenderObjectWithChildren {
+  @override
+  CellOffset childOffsetOf(RenderObject child) =>
+      _childOffsets[child] ?? CellOffset.zero;
+
+  @override
+  bool presentsChild(RenderObject child) => _visibleChildren.contains(child);
+
   _RenderListView({required ListController controller})
     : _controller = controller;
 
@@ -1646,6 +1653,18 @@ class _LazyListElement extends RenderObjectElement {
 ///      without notifying.
 class _RenderLazyListView extends RenderObject
     implements RenderObjectWithChildren {
+  @override
+  CellOffset childOffsetOf(RenderObject child) =>
+      _childOffsets[child] ?? CellOffset.zero;
+
+  @override
+  bool presentsChild(RenderObject child) {
+    for (final active in _activeByIndex.values) {
+      if (identical(active, child)) return true;
+    }
+    return false;
+  }
+
   _RenderLazyListView({required ListController controller})
     : _controller = controller;
 

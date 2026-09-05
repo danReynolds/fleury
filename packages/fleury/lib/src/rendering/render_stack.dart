@@ -129,6 +129,10 @@ enum StackFit {
 /// This is the primitive behind modals, popovers, status overlays, and
 /// any other "thing on top of thing" surface a TUI needs.
 class RenderStack extends RenderObject implements RenderObjectWithChildren {
+  @override
+  CellOffset childOffsetOf(RenderObject child) =>
+      _childOffsets[child] ?? CellOffset.zero;
+
   RenderStack({StackFit fit = StackFit.loose}) : _fit = fit;
 
   /// How non-positioned children are constrained — see [StackFit].
@@ -283,6 +287,12 @@ class RenderStack extends RenderObject implements RenderObjectWithChildren {
 /// index changes. An out-of-range [index] paints nothing.
 class RenderIndexedStack extends RenderObject
     implements RenderObjectWithChildren {
+  @override
+  bool presentsChild(RenderObject child) =>
+      _index >= 0 &&
+      _index < _children.length &&
+      identical(_children[_index], child);
+
   RenderIndexedStack({int index = 0}) : _index = index;
 
   int _index;

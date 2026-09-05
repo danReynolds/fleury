@@ -763,6 +763,12 @@ class RenderPointerListener extends RenderObject
     _child?.paint(buffer, offset, screenOffset: screen, clipRect: clipRect);
   }
 
+  /// The screen rectangle this region registered from its last paint, clipped
+  /// by its ancestors; null when it was clipped out. Test oracle for derived
+  /// geometry.
+  @visibleForTesting
+  CellRect? get debugScreenRect => _rect;
+
   // Re-registration closure for RepaintBoundary replay, allocated once per
   // render object (not per paint). A field (not a method) on purpose: a method
   // tear-off would allocate a fresh bound closure on every pass, defeating the

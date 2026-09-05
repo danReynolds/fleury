@@ -180,6 +180,15 @@ class RenderCellEffect extends RenderObject
 /// region outside the space its parent allocated.
 class RenderCellTranslation extends RenderObject
     implements RenderObjectWithSingleChild {
+  @override
+  CellOffset childOffsetOf(RenderObject child) =>
+      _resolvedOffset ?? CellOffset.zero;
+
+  // Interaction stays bounded by the layout box even when translated cells
+  // overflow it (see paint).
+  @override
+  CellRect? get childClip => CellRect(offset: CellOffset.zero, size: size);
+
   RenderCellTranslation({
     double horizontalFraction = 0,
     double verticalFraction = 0,
@@ -323,6 +332,13 @@ class RenderCellTranslation extends RenderObject
 /// Distinct from [RenderCellEffect], which is layout-transparent
 /// (reveal-in-place). Here the size itself animates.
 class RenderClip extends RenderObject implements RenderObjectWithSingleChild {
+  @override
+  CellOffset childOffsetOf(RenderObject child) =>
+      CellOffset.zero - _alignedSourceOffset(child.size, size);
+
+  @override
+  CellRect? get childClip => CellRect(offset: CellOffset.zero, size: size);
+
   RenderClip({
     double widthFactor = 1.0,
     double heightFactor = 1.0,

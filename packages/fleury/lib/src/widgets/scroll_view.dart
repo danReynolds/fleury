@@ -339,6 +339,13 @@ class _ScrollViewport extends SingleChildRenderObjectWidget {
 /// and below it.
 class _RenderScrollView extends RenderObject
     implements RenderObjectWithSingleChild {
+  @override
+  CellOffset childOffsetOf(RenderObject child) =>
+      CellOffset(0, -_controller.offset);
+
+  @override
+  CellRect? get childClip => CellRect(offset: CellOffset.zero, size: size);
+
   _RenderScrollView({
     required ScrollController controller,
     required int paintRevision,

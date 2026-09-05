@@ -120,6 +120,14 @@ final class RepaintBoundaryDebugStats {
 /// widget to wrap subtrees that are expensive to paint and change rarely.
 class RenderRepaintBoundary extends RenderObject
     implements RenderObjectWithSingleChild {
+  /// Probe-only switch: when true, boundaries neither record paint-time
+  /// geometry on a repaint nor replay it on a cache hit. Consumers that read
+  /// captured geometry (pointer regions, focus rectangles, semantic bounds)
+  /// then go stale after the first cached frame — only paint timing is
+  /// meaningful while this is set. The derived-geometry probe uses it to
+  /// measure what a boundary costs without the four capture channels.
+  static bool debugSkipGeometryCapture = false;
+
   RenderRepaintBoundary({bool cachingEnabled = true})
     : _cachingEnabled = cachingEnabled;
 
@@ -252,40 +260,49 @@ class RenderRepaintBoundary extends RenderObject
       cache.withoutDamageTracking(targetCache.clear);
       cache.resetDamageTracking();
       _resetCapturedGeometryForRepaint();
-      SemanticPaintBoundsCapture.collect(
-        _semanticBounds,
-        screenOrigin: currentScreenOffset,
-        clipRect: clipRect,
-        paint: () {
-          PointerRegionCapture.collect(
-            _pointerRegions,
-            screenOrigin: currentScreenOffset,
-            clipRect: clipRect,
-            paint: () {
-              FocusGeometryCapture.collect(
-                _focusGeometry,
-                screenOrigin: currentScreenOffset,
-                clipRect: clipRect,
-                paint: () {
-                  RetainedPaintGeometryCapture.collect(
-                    _retainedPaintGeometry,
-                    screenOrigin: currentScreenOffset,
-                    clipRect: clipRect,
-                    paint: () {
-                      c.paint(
-                        targetCache,
-                        CellOffset.zero,
-                        screenOffset: currentScreenOffset,
-                        clipRect: clipRect,
-                      );
-                    },
-                  );
-                },
-              );
-            },
-          );
-        },
-      );
+      if (debugSkipGeometryCapture) {
+        c.paint(
+          targetCache,
+          CellOffset.zero,
+          screenOffset: currentScreenOffset,
+          clipRect: clipRect,
+        );
+      } else {
+        SemanticPaintBoundsCapture.collect(
+          _semanticBounds,
+          screenOrigin: currentScreenOffset,
+          clipRect: clipRect,
+          paint: () {
+            PointerRegionCapture.collect(
+              _pointerRegions,
+              screenOrigin: currentScreenOffset,
+              clipRect: clipRect,
+              paint: () {
+                FocusGeometryCapture.collect(
+                  _focusGeometry,
+                  screenOrigin: currentScreenOffset,
+                  clipRect: clipRect,
+                  paint: () {
+                    RetainedPaintGeometryCapture.collect(
+                      _retainedPaintGeometry,
+                      screenOrigin: currentScreenOffset,
+                      clipRect: clipRect,
+                      paint: () {
+                        c.paint(
+                          targetCache,
+                          CellOffset.zero,
+                          screenOffset: currentScreenOffset,
+                          clipRect: clipRect,
+                        );
+                      },
+                    );
+                  },
+                );
+              },
+            );
+          },
+        );
+      }
       // Tighten the blit to just the non-empty cells, using the damage rect
       // as the scan window. Damage is a conservative superset (grapheme
       // writes pad the wide-cell guard columns), and tightness matters: the
@@ -298,7 +315,7 @@ class RenderRepaintBoundary extends RenderObject
           : cache.boundingBoxOfNonEmptyWithin(damage);
       needsPaint = false;
       repainted = true;
-    } else {
+    } else if (!debugSkipGeometryCapture) {
       _replaySemanticBounds(
         screenOffset: currentScreenOffset,
         clipRect: clipRect,
@@ -322,7 +339,7 @@ class RenderRepaintBoundary extends RenderObject
       repainted: repainted,
       copiedBounds: bounds,
     );
-    if (repainted) {
+    if (repainted && !debugSkipGeometryCapture) {
       _publishSemanticBounds(
         screenOffset: currentScreenOffset,
         clipRect: clipRect,
