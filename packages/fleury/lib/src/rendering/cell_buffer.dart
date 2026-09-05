@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:characters/characters.dart';
+import 'package:meta/meta.dart';
 
 import '../foundation/geometry.dart';
 import 'cell.dart';
@@ -10,6 +11,26 @@ import 'width_resolver.dart';
 export 'inline_image.dart';
 
 CellStyle _paintStyle(CellStyle style) => plainCellStyle(style);
+
+/// Paints a grapheme already measured by the layout/paint caller.
+///
+/// Internal bridge, excluded from the public barrels. Measurement and
+/// placement share one width decision; clipping and wide-pair repair remain
+/// owned by the buffer. The caller supplies a sanitized single grapheme and
+/// a width of 0, 1, or 2 under its current surface policy.
+@internal
+int paintMeasuredGrapheme(
+  CellBuffer buffer,
+  int col,
+  int row,
+  String grapheme,
+  int width,
+  CellStyle style,
+) {
+  assert(width >= 0 && width <= 2);
+  if (width == 0 || !buffer._containsColRow(col, row)) return 0;
+  return buffer._placeGrapheme(col, row, grapheme, width, _paintStyle(style));
+}
 
 /// A two-dimensional grid of [Cell]s representing one frame of the terminal
 /// rendering output.

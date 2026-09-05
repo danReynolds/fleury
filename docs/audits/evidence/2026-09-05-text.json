@@ -1,0 +1,43 @@
+{
+  "change": "Reuse text measurements during paint",
+  "baselineCommit": "fe9d45a4",
+  "sourceSha256": {
+    "packages/fleury/lib/src/rendering/render_objects.dart": "796f970005c133fbe0fc94325399d34160fa3fc2902aa3a2533fc109692a4592",
+    "packages/fleury/lib/src/rendering/cell_buffer.dart": "2fad5827a156ffe333d4c7750e0430768af0ed7930743db7c716b0cf9b44b8fe"
+  },
+  "environment": "Dart 3.12.2, macOS arm64, 10 logical CPUs, AOT",
+  "method": "Existing retained_tax_probe, 120x40, 30 warmup frames, 200 frames per mode, before/after/after/before. Timed processes ran sequentially without own compilation/tests. Shared host not isolated. Each value is a run median.",
+  "limits": "Forced clean-tree paint phase, not production idle. Debug counters enabled. Excludes clear/diff/encode/transport/terminal display.",
+  "structuralCountersMatch": true,
+  "summaryMeanOfRunMedians": {
+    "dashboard": {
+      "before": 253.5,
+      "after": 250.0,
+      "reductionPercent": 1.38
+    },
+    "agent": {
+      "before": 64.5,
+      "after": 62.0,
+      "reductionPercent": 3.88
+    },
+    "files": {
+      "before": 79.0,
+      "after": 79.0,
+      "reductionPercent": 0.0
+    },
+    "editor": {
+      "before": 48.5,
+      "after": 48.0,
+      "reductionPercent": 1.03
+    },
+    "finance": {
+      "before": 254.0,
+      "after": 249.5,
+      "reductionPercent": 1.77
+    }
+  },
+  "rawFrames": {
+    "file": "2026-09-05-text-frames.csv",
+    "sha256": "83b74dedcfe3d56c214595d4b56196780e16e3de1a57d0e6d36d38bca44d9455"
+  }
+}
