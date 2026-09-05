@@ -607,9 +607,21 @@ class RenderRichText extends RenderObject
     }
 
     if (_lines.isEmpty || size.isEmpty) return;
+    // Resolve after recording current geometry, once for this paint rather
+    // than scanning the document's line lengths again for every glyph.
+    final selection = getSelectionRange();
     final visibleRows = _lines.length < size.rows ? _lines.length : size.rows;
+    if (offset.row >= buffer.size.rows || offset.row + visibleRows <= 0) return;
     var lineStartOffset = 0;
     for (var i = 0; i < visibleRows; i++) {
+      final row = offset.row + i;
+      if (row >= buffer.size.rows) break;
+      if (row < 0) {
+        // Keep flat selection offsets without traversing hidden glyphs.
+        // Selection and retained geometry were recorded before culling.
+        lineStartOffset += _selectionLines[i].length + 1;
+        continue;
+      }
       final line = _lines[i];
       final isLastVisible = i == visibleRows - 1;
       var lineWidth = 0;
@@ -625,9 +637,10 @@ class RenderRichText extends RenderObject
         buffer,
         line,
         offset.col,
-        offset.row + i,
+        row,
         ellipsize,
         lineStartOffset,
+        selection,
       );
       // +length of the line's flat text, +1 for the implicit newline
       // separator. Matches what `selectionLines.join('\n')` produces.
@@ -651,20 +664,32 @@ class RenderRichText extends RenderObject
     int row,
     bool ellipsize,
     int lineStartOffset,
+    ({int start, int end})? selection,
   ) {
     final maxCol = startCol + size.cols;
     final contentMaxCol = ellipsize ? maxCol - 1 : maxCol;
     var col = startCol;
     var off = lineStartOffset;
+    CellStyle? previousStyle;
+    CellStyle? previousSelectedStyle;
     for (final g in line) {
       if (col + g.width > contentMaxCol) break;
       // Per-glyph style merged with reverse-video when this cell
       // falls inside the live selection. Inverse cascades over the
       // span's own foreground/background so styled spans still get
       // the selection highlight.
-      final cellStyle = isOffsetSelected(off)
-          ? g.style.merge(const CellStyle(inverse: true))
-          : g.style;
+      var cellStyle = g.style;
+      if (selection != null && off >= selection.start && off < selection.end) {
+        // Glyphs in a span share their immutable paint style. Keep the
+        // highlighted value shared too, with no cache retained after this line.
+        if (!identical(previousStyle, cellStyle)) {
+          previousStyle = cellStyle;
+          previousSelectedStyle = cellStyle.merge(
+            const CellStyle(inverse: true),
+          );
+        }
+        cellStyle = previousSelectedStyle!;
+      }
       buffer.writeGrapheme(
         CellOffset(col, row),
         g.grapheme,
