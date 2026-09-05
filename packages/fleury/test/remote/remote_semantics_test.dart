@@ -11,6 +11,8 @@ import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_wire.dart';
 import 'package:test/test.dart';
 
+import '../support/declared_roles.dart';
+
 /// A realistic agent tree: status + a message list + an input. [tick] perturbs
 /// only the status counter and the last message — the common streaming case.
 SemanticInspectionSnapshot _snap({required int messages, required int tick}) {
@@ -26,12 +28,12 @@ SemanticInspectionSnapshot _snap({required int messages, required int tick}) {
         ),
         SemanticNode(
           id: const SemanticNodeId('messages'),
-          role: SemanticRole.messageList,
+          role: declaredMessageList,
           children: [
             for (var m = 0; m < messages; m++)
               SemanticNode(
                 id: SemanticNodeId('msg:$m'),
-                role: SemanticRole.message,
+                role: declaredMessage,
                 label: m == messages - 1
                     ? 'assistant: step $tick'
                     : 'turn $m: a settled line',

@@ -407,8 +407,15 @@ class _DebugPanelState extends State<DebugPanel> {
     for (final node in nodes) {
       counts[node.role] = (counts[node.role] ?? 0) + 1;
     }
+    // Vocabulary order — containers, controls, then content kinds, the order
+    // of SemanticRole.values — with a declared role slotted next to its core
+    // role; ties by name.
+    int rank(SemanticRole role) => SemanticRole.values.indexOf(role.coreRole);
     final roles = counts.entries.toList()
-      ..sort((a, b) => a.key.index.compareTo(b.key.index));
+      ..sort((a, b) {
+        final byRank = rank(a.key).compareTo(rank(b.key));
+        return byRank != 0 ? byRank : a.key.name.compareTo(b.key.name);
+      });
 
     return [
       ..._terminalDiagnosisRows(diagnosis),

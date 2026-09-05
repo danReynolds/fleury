@@ -304,6 +304,7 @@ final class AccessibilityNode {
   Map<String, Object?> toJson() => <String, Object?>{
     'sourceId': sourceId.value,
     'role': role.name,
+    'coreRole': ?role.wireCoreRole,
     'roleLabel': roleLabel,
     if (label != null) 'label': label,
     if (value != null) 'value': value,
@@ -341,7 +342,7 @@ AccessibilityNode _buildNode(SemanticNode node) {
   return AccessibilityNode(
     sourceId: node.id,
     role: node.role,
-    roleLabel: _roleLabel(node.role),
+    roleLabel: node.role.label,
     label: node.label,
     value: value,
     hint: node.hint,
@@ -1574,139 +1575,4 @@ String? _approvalState(SemanticState state) {
 String _countLabel(int count, String singular, [String? plural]) {
   if (count == 1) return '1 $singular';
   return '$count ${plural ?? '${singular}s'}';
-}
-
-String _roleLabel(SemanticRole role) {
-  switch (role) {
-    case SemanticRole.app:
-      return 'application';
-    case SemanticRole.errorBoundary:
-      return 'rendering error';
-    case SemanticRole.screen:
-      return 'screen';
-    case SemanticRole.route:
-      return 'route';
-    case SemanticRole.region:
-      return 'region';
-    case SemanticRole.navigation:
-      return 'navigation';
-    case SemanticRole.list:
-      return 'list';
-    case SemanticRole.listItem:
-      return 'list item';
-    case SemanticRole.conversationNavigator:
-      return 'conversation navigator';
-    case SemanticRole.conversation:
-      return 'conversation';
-    case SemanticRole.contextPanel:
-      return 'context panel';
-    case SemanticRole.contextItem:
-      return 'context item';
-    case SemanticRole.traceTimeline:
-      return 'trace timeline';
-    case SemanticRole.traceEvent:
-      return 'trace event';
-    case SemanticRole.patchReview:
-      return 'patch review';
-    case SemanticRole.patchFile:
-      return 'patch file';
-    case SemanticRole.messageList:
-      return 'message list';
-    case SemanticRole.message:
-      return 'message';
-    case SemanticRole.table:
-      return 'table';
-    case SemanticRole.tableRow:
-      return 'table row';
-    case SemanticRole.tableCell:
-      return 'table cell';
-    case SemanticRole.chart:
-      return 'chart';
-    case SemanticRole.fileMentionPicker:
-      return 'file mention picker';
-    case SemanticRole.fileMention:
-      return 'file mention';
-    case SemanticRole.text:
-      return 'text';
-    case SemanticRole.link:
-      return 'link';
-    case SemanticRole.image:
-      return 'image';
-    case SemanticRole.textField:
-      return 'text field';
-    case SemanticRole.textArea:
-      return 'text area';
-    case SemanticRole.button:
-      return 'button';
-    case SemanticRole.checkbox:
-      return 'checkbox';
-    case SemanticRole.radio:
-      return 'radio';
-    case SemanticRole.toggle:
-      return 'toggle';
-    case SemanticRole.spinButton:
-      return 'spin button';
-    case SemanticRole.slider:
-      return 'slider';
-    case SemanticRole.datePicker:
-      return 'date picker';
-    case SemanticRole.menu:
-      return 'menu';
-    case SemanticRole.menuItem:
-      return 'menu item';
-    case SemanticRole.commandPalette:
-      return 'command palette';
-    case SemanticRole.command:
-      return 'command';
-    case SemanticRole.modelStatus:
-      return 'model status';
-    case SemanticRole.tokenMeter:
-      return 'token meter';
-    case SemanticRole.taskGraph:
-      return 'task graph';
-    case SemanticRole.task:
-      return 'task';
-    case SemanticRole.toolCall:
-      return 'tool call';
-    case SemanticRole.dialog:
-      return 'dialog';
-    case SemanticRole.approval:
-      return 'approval';
-    case SemanticRole.progress:
-      return 'progress';
-    case SemanticRole.log:
-      return 'log';
-    case SemanticRole.json:
-      return 'json document';
-    case SemanticRole.jsonNode:
-      return 'json node';
-    case SemanticRole.diff:
-      return 'diff';
-    case SemanticRole.diffLine:
-      return 'diff line';
-    case SemanticRole.code:
-      return 'code';
-    case SemanticRole.codeLine:
-      return 'code line';
-    case SemanticRole.markdown:
-      return 'markdown document';
-    case SemanticRole.markdownBlock:
-      return 'markdown block';
-    case SemanticRole.diagnostic:
-      return 'diagnostic';
-    case SemanticRole.status:
-      return 'status';
-    case SemanticRole.notification:
-      return 'notification';
-    case SemanticRole.tab:
-      return 'tab';
-    case SemanticRole.tree:
-      return 'tree';
-    case SemanticRole.treeItem:
-      return 'tree item';
-    case SemanticRole.form:
-      return 'form';
-    case SemanticRole.formField:
-      return 'form field';
-  }
 }

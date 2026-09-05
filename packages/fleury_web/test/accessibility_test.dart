@@ -21,16 +21,10 @@ library;
 // Runs in a real browser (`dart test -p chrome`).
 
 import 'package:fleury/fleury_host.dart';
-import 'package:fleury_web/src/semantics/semantic_dom_presenter.dart';
 import 'package:test/test.dart';
 import 'package:web/web.dart' as web;
 
-/// Presents [tree] into a fresh detached root and returns it for inspection.
-web.Element present(SemanticTree tree) {
-  final root = web.document.createElement('div');
-  SemanticDomPresenter(root: root).present(tree);
-  return root;
-}
+import 'fixtures/semantic_dom_harness.dart';
 
 SemanticTree _appOf(List<SemanticNode> children) => SemanticTree(
   root: SemanticNode(
@@ -39,9 +33,6 @@ SemanticTree _appOf(List<SemanticNode> children) => SemanticTree(
     children: children,
   ),
 );
-
-web.Element _byId(web.Element root, String id) =>
-    root.querySelector('[data-fleury-semantic-id="$id"]')!;
 
 /// The accessible name a screen reader would compute: an explicit `aria-label`,
 /// else the element's own text. (Good enough for the labelled cases here, which
@@ -90,7 +81,7 @@ const _validAriaRoles = <String>{
 
 /// Roles that present an interactive control, which ARIA requires to have an
 /// accessible name.
-const _interactiveRoles = <SemanticRole>{
+final _interactiveRoles = <SemanticRole>{
   SemanticRole.button,
   SemanticRole.link,
   SemanticRole.textField,
@@ -121,7 +112,7 @@ void main() {
         final root = present(_appOf(nodes));
 
         for (var i = 0; i < nodes.length; i++) {
-          final el = _byId(root, 'n$i');
+          final el = byId(root, 'n$i');
           expect(
             _accessibleName(el),
             isNotEmpty,
@@ -143,7 +134,7 @@ void main() {
           ),
         ]),
       );
-      expect(_accessibleName(_byId(root, 'b')), isNotEmpty);
+      expect(_accessibleName(byId(root, 'b')), isNotEmpty);
     });
   });
 
@@ -163,7 +154,7 @@ void main() {
               ),
             ]),
           );
-          final ariaRole = _byId(root, 'x').getAttribute('role');
+          final ariaRole = byId(root, 'x').getAttribute('role');
           expect(
             ariaRole == null || _validAriaRoles.contains(ariaRole),
             isTrue,
@@ -199,9 +190,9 @@ void main() {
           ),
         ]),
       );
-      expect(_byId(root, 't').getAttribute('role'), 'table');
-      expect(_byId(root, 'r0').getAttribute('role'), 'row');
-      expect(_byId(root, 'c0').getAttribute('role'), 'cell');
+      expect(byId(root, 't').getAttribute('role'), 'table');
+      expect(byId(root, 'r0').getAttribute('role'), 'row');
+      expect(byId(root, 'c0').getAttribute('role'), 'cell');
     });
 
     test('a text field is a real, named, value-bearing input', () {
@@ -216,7 +207,7 @@ void main() {
           ),
         ]),
       );
-      final f = _byId(root, 'f') as web.HTMLInputElement;
+      final f = byId(root, 'f') as web.HTMLInputElement;
       expect(f.localName, 'input');
       expect(f.getAttribute('role'), 'textbox');
       expect(f.getAttribute('aria-label'), 'Email');
@@ -234,7 +225,7 @@ void main() {
           ),
         ]),
       );
-      final l = _byId(root, 'l');
+      final l = byId(root, 'l');
       expect(l.localName, 'a');
       expect(l.getAttribute('role'), 'link');
     });
@@ -267,10 +258,10 @@ void main() {
           ),
         ]),
       );
-      expect(_byId(root, 'cb').getAttribute('aria-checked'), 'true');
-      expect(_byId(root, 'row').getAttribute('aria-expanded'), 'true');
-      expect(_byId(root, 'row').getAttribute('aria-selected'), 'true');
-      expect(_byId(root, 'btn').getAttribute('aria-disabled'), 'true');
+      expect(byId(root, 'cb').getAttribute('aria-checked'), 'true');
+      expect(byId(root, 'row').getAttribute('aria-expanded'), 'true');
+      expect(byId(root, 'row').getAttribute('aria-selected'), 'true');
+      expect(byId(root, 'btn').getAttribute('aria-disabled'), 'true');
     });
   });
 
@@ -298,7 +289,7 @@ void main() {
       );
       for (final id in ['s', 'p', 'lg']) {
         expect(
-          _byId(root, id).getAttribute('aria-live'),
+          byId(root, id).getAttribute('aria-live'),
           isNotNull,
           reason: 'live-region role for "$id" must set aria-live',
         );
@@ -319,7 +310,7 @@ void main() {
           ),
         ]),
       );
-      final el = _byId(root, 'cmd');
+      final el = byId(root, 'cmd');
       expect(
         el.hasAttribute('tabindex'),
         isTrue,
@@ -386,7 +377,7 @@ void main() {
           ),
         ]),
       );
-      final list = _byId(root, 'list');
+      final list = byId(root, 'list');
       expect(list.getAttribute('role'), 'list');
       expect(list.querySelectorAll('[role="listitem"]').length, 2);
     });

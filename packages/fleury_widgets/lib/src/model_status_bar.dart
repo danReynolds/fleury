@@ -1,5 +1,7 @@
 import 'package:fleury/fleury_core.dart';
 
+import 'semantic_roles.dart';
+
 /// Protocol-neutral lifecycle state for a model-backed workflow.
 enum ModelRuntimeStatus {
   idle,
@@ -170,7 +172,7 @@ class TokenMeter extends StatelessWidget {
         statusSuffix;
 
     final Widget meter = Semantics(
-      role: SemanticRole.tokenMeter,
+      role: WidgetRoles.tokenMeter,
       label: displayLabel,
       value: used == null
           ? null
@@ -251,7 +253,7 @@ class ModelStatusBar extends StatelessWidget {
     );
 
     final Widget bar = Semantics(
-      role: SemanticRole.modelStatus,
+      role: WidgetRoles.modelStatus,
       label: _sanitizeStatusText(label),
       value: info.status.name,
       busy: info.busy,

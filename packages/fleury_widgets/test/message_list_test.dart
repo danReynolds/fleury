@@ -74,7 +74,7 @@ void main() {
     expect(output, isNot(contains('\x1b]52')));
 
     final tree = tester.semantics();
-    final list = tree.single(role: SemanticRole.messageList);
+    final list = tree.single(role: WidgetRoles.messageList);
     expect(list.label, 'Conversation');
     expect(list.state.collectionRowCount, 2);
     expect(list.state['totalMessageCount'], 2);
@@ -83,7 +83,7 @@ void main() {
     expect(list.state['messageRole'], 'user');
 
     final row = tree
-        .byRole(SemanticRole.message)
+        .byRole(WidgetRoles.message)
         .singleWhere((node) => node.state['rowKey'] == 'm2');
     expect(row.label, contains(replacementCharacter));
     expect(row.label, contains('now'));
@@ -144,7 +144,7 @@ void main() {
 
     tester.render(size: const CellSize(60, 5));
     var row = tester.semantics().single(
-      role: SemanticRole.message,
+      role: WidgetRoles.message,
       label: 'answer',
       action: SemanticAction.activate,
     );
@@ -152,7 +152,7 @@ void main() {
 
     final result = await tester.invokeSemanticAction(
       SemanticAction.activate,
-      role: SemanticRole.message,
+      role: WidgetRoles.message,
       label: 'answer',
     );
 
@@ -161,7 +161,7 @@ void main() {
 
     tester.render(size: const CellSize(60, 5));
     row = tester.semantics().single(
-      role: SemanticRole.message,
+      role: WidgetRoles.message,
       label: 'answer',
       selected: true,
       action: SemanticAction.copy,
@@ -194,7 +194,7 @@ void main() {
 
     tester.render(size: const CellSize(60, 5));
     var list = tester.semantics().single(
-      role: SemanticRole.messageList,
+      role: WidgetRoles.messageList,
       label: 'Conversation',
       action: SemanticAction.focus,
     );
@@ -203,14 +203,14 @@ void main() {
 
     var result = await tester.invokeSemanticAction(
       SemanticAction.focus,
-      role: SemanticRole.messageList,
+      role: WidgetRoles.messageList,
       label: 'Conversation',
     );
     expect(result.completed, isTrue);
 
     tester.render(size: const CellSize(60, 5));
     list = tester.semantics().single(
-      role: SemanticRole.messageList,
+      role: WidgetRoles.messageList,
       label: 'Conversation',
       focused: true,
     );
@@ -218,7 +218,7 @@ void main() {
 
     result = await tester.invokeSemanticAction(
       SemanticAction.activate,
-      role: SemanticRole.message,
+      role: WidgetRoles.message,
       label: 'answer',
     );
     expect(result.completed, isTrue);
@@ -227,7 +227,7 @@ void main() {
 
     tester.render(size: const CellSize(60, 5));
     final row = tester.semantics().single(
-      role: SemanticRole.message,
+      role: WidgetRoles.message,
       label: 'answer',
       selected: true,
       action: SemanticAction.copy,
@@ -235,7 +235,7 @@ void main() {
     expect(row.state.messageId, 'm2');
 
     list = tester.semantics().single(
-      role: SemanticRole.messageList,
+      role: WidgetRoles.messageList,
       label: 'Conversation',
       focused: true,
     );
@@ -288,14 +288,14 @@ void main() {
     );
     tester.render(size: const CellSize(60, 5));
     final list = tester.semantics().single(
-      role: SemanticRole.messageList,
+      role: WidgetRoles.messageList,
       label: 'Conversation',
     );
     expect(list.state.selectedMessageId, 'm3');
     expect(list.state['messageStatus'], 'streaming');
 
     final selected = tester.semantics().single(
-      role: SemanticRole.message,
+      role: WidgetRoles.message,
       label: 'updated answer',
       selected: true,
     );
@@ -333,7 +333,7 @@ void main() {
     tester.render(size: const CellSize(40, 3));
     expect(controller.followTail, isTrue, reason: 'still following');
     final list = tester.semantics().single(
-      role: SemanticRole.messageList,
+      role: WidgetRoles.messageList,
       label: 'Conversation',
     );
     expect(list.state.selectedMessageId, 'm4');
@@ -384,7 +384,7 @@ void main() {
     expect(controller.followTail, isFalse);
     tester.render(size: const CellSize(60, 5));
     final selected = tester.semantics().single(
-      role: SemanticRole.message,
+      role: WidgetRoles.message,
       label: 'finished',
       selected: true,
     );
@@ -431,7 +431,7 @@ void main() {
     );
     tester.render(size: const CellSize(60, 5));
     final selected = tester.semantics().single(
-      role: SemanticRole.message,
+      role: WidgetRoles.message,
       label: 'selected',
       selected: true,
     );
@@ -463,7 +463,7 @@ void main() {
     expect(
       tester
           .semantics()
-          .single(role: SemanticRole.message, label: 'selected', selected: true)
+          .single(role: WidgetRoles.message, label: 'selected', selected: true)
           .state
           .messageId,
       'm2',
@@ -524,7 +524,7 @@ void main() {
     expect(controller.followTail, isTrue);
     expect(controller.selectedIndex, 2);
     final list = tester.semantics().single(
-      role: SemanticRole.messageList,
+      role: WidgetRoles.messageList,
       label: 'Conversation',
     );
     expect(list.state.selectedMessageId, 'm3');
@@ -686,7 +686,7 @@ void main() {
       tester.render(size: const CellSize(60, 5));
       final result = await tester.invokeSemanticAction(
         SemanticAction.copy,
-        role: SemanticRole.message,
+        role: WidgetRoles.message,
         selected: true,
       );
 
@@ -740,7 +740,7 @@ void main() {
     tester.render(size: const CellSize(60, 4));
 
     final snapshot = tester.accessibilitySnapshot();
-    final row = snapshot.single(role: SemanticRole.message);
+    final row = snapshot.single(role: WidgetRoles.message);
     expect(
       row.states,
       contains('message role assistant, status streaming, author Agent, id m1'),
@@ -780,7 +780,7 @@ void main() {
 
       final result = await tester.invokeSemanticAction(
         SemanticAction.activate,
-        role: SemanticRole.message,
+        role: WidgetRoles.message,
         label: 'third',
       );
       expect(result.completed, isTrue);
@@ -812,7 +812,7 @@ void main() {
 
       final result = await tester.invokeSemanticAction(
         SemanticAction.activate,
-        role: SemanticRole.message,
+        role: WidgetRoles.message,
         label: 'first',
       );
       expect(result.completed, isTrue);
@@ -838,7 +838,7 @@ void main() {
 
       final result = await tester.invokeSemanticAction(
         SemanticAction.copy,
-        role: SemanticRole.message,
+        role: WidgetRoles.message,
         label: 'third',
       );
       expect(result.completed, isTrue);

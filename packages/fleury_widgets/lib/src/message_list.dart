@@ -3,6 +3,8 @@ import 'dart:async' show unawaited;
 import 'package:characters/characters.dart';
 import 'package:fleury/fleury_core.dart';
 
+import 'semantic_roles.dart';
+
 /// Protocol-neutral role for one message in a [MessageList].
 enum MessageRole { user, assistant, system, tool, log, event }
 
@@ -489,7 +491,7 @@ class _MessageListState extends State<MessageList> {
     return FocusDetector(
       onFocusChange: _onFocusDetectorChange,
       child: Semantics(
-        role: SemanticRole.messageList,
+        role: WidgetRoles.messageList,
         label: widget.semanticLabel,
         focused: _focusedWithin || _focusNode.hasFocus,
         actions: {
@@ -565,7 +567,7 @@ class _MessageRow extends StatelessWidget {
           : CellStyle.none,
     );
     return Semantics(
-      role: SemanticRole.message,
+      role: WidgetRoles.message,
       label: line.message,
       value: line.text,
       selected: selected,

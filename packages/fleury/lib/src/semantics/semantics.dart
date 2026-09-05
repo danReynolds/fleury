@@ -36,72 +36,275 @@ final class SemanticNodeId {
 }
 
 /// The durable meaning of a semantic node.
-enum SemanticRole {
-  app,
-  errorBoundary,
-  screen,
-  route,
-  region,
-  navigation,
-  list,
-  listItem,
-  conversationNavigator,
-  conversation,
-  contextPanel,
-  contextItem,
-  traceTimeline,
-  traceEvent,
-  patchReview,
-  patchFile,
-  messageList,
-  message,
-  table,
-  tableRow,
-  tableCell,
-  chart,
-  fileMentionPicker,
-  fileMention,
-  text,
-  link,
-  image,
-  textField,
-  textArea,
-  button,
-  checkbox,
-  radio,
-  toggle,
-  spinButton,
-  slider,
-  datePicker,
-  menu,
-  menuItem,
-  commandPalette,
-  command,
-  modelStatus,
-  tokenMeter,
-  taskGraph,
-  task,
-  toolCall,
-  dialog,
-  approval,
-  progress,
-  log,
-  json,
-  jsonNode,
-  diff,
-  diffLine,
-  code,
-  codeLine,
-  markdown,
-  markdownBlock,
-  diagnostic,
-  status,
-  notification,
-  tab,
-  tree,
-  treeItem,
-  form,
-  formField,
+///
+/// Roles are an **open vocabulary**. The core set declared below is what every
+/// Fleury surface understands natively: the browser accessibility projection,
+/// the coverage policy, the text-first accessibility snapshot, and the debug
+/// tooling all switch on it. A widget package declares its own roles with the
+/// public constructor and names a `base`, so a surface that has never heard of
+/// the new role still projects it through the nearest core role:
+///
+/// ```dart
+/// abstract final class BoardRoles {
+///   static const board = SemanticRole('kanbanBoard', base: SemanticRole.region);
+///   static const card = SemanticRole('kanbanCard', base: SemanticRole.listItem);
+/// }
+///
+/// Semantics(role: BoardRoles.card, label: title, child: ...)
+/// tester.semantics().byRole(BoardRoles.card)
+/// ```
+///
+/// Two roles are equal when their names are equal; the base is projection
+/// metadata, not identity. A declared name must be an identifier
+/// ([isValidSemanticRoleName]) — it is embedded in positional semantic ids —
+/// and must not be a core name, or the two sides of a wire would project the
+/// same node differently. Both rules are asserted when a node is collected.
+///
+/// Names travel on the wire as-is, together with the core root of the base
+/// chain ([coreRole]), so a peer that only knows the core vocabulary — the
+/// served browser client, an older agent bridge — projects an unfamiliar role
+/// exactly as the declaring package intended. Only the name and that core root
+/// survive the wire: [label] is derived from the name, and an intermediate
+/// base is not reconstructed on the far side.
+///
+/// What stays core: the structural, control, live-region, and generic
+/// content-kind roles (`region`, `button`, `status`, `code`, `markdown`,
+/// `json`, `diff`, `log`, `chart`, …) — vocabulary any terminal app may
+/// produce, whether or not a surface projects it like another core role. What
+/// moves out: roles that name one catalog widget. The roles that describe the
+/// `fleury_widgets` catalog live in that package (`WidgetRoles`), not here.
+final class SemanticRole {
+  /// Declares a role outside the core vocabulary.
+  ///
+  /// [name] is the wire identity — an identifier (see
+  /// [isValidSemanticRoleName]), unique across the app and not a core name.
+  /// [base] is the role this one projects through; its chain must end in a
+  /// core role.
+  const SemanticRole(this.name, {required SemanticRole base})
+    : assert(name.length > 0, 'A semantic role needs a name.'),
+      _base = base,
+      _label = null;
+
+  const SemanticRole._core(this.name, {String? label})
+    : _base = null,
+      _label = label;
+
+  /// Wire identity of the role.
+  final String name;
+
+  // The role this one projects through, or null for a core role. Private:
+  // only the core root ([coreRole]) survives the wire, so a reader of the
+  // direct base would see different answers on the two sides of a connection.
+  final SemanticRole? _base;
+
+  final String? _label;
+
+  /// Whether this is one of the core roles every surface understands.
+  bool get isCore => _base == null;
+
+  /// The core role at the end of the base chain — itself for a core role.
+  SemanticRole get coreRole => _base?.coreRole ?? this;
+
+  /// The projection a peer needs on the wire: the [coreRole]'s name for a
+  /// declared role, null for a core role (the name already is one). Every
+  /// producer — inspection JSON, the accessibility snapshot, the browser
+  /// mirror's data attribute — emits exactly this; [fromWire] consumes it.
+  String? get wireCoreRole => isCore ? null : coreRole.name;
+
+  /// Human phrase for text-first surfaces (`spin button`, `patch review`).
+  ///
+  /// Derived from [name] (see [humanizeSemanticRoleName]); a few core roles
+  /// carry a hand-written phrase. Declared roles cannot override it because
+  /// only the name travels on the wire, and both sides must announce alike.
+  String get label =>
+      _label ?? (_labelByName[name] ??= humanizeSemanticRoleName(name));
+
+  static final Map<String, String> _labelByName = <String, String>{};
+
+  // ---- Core vocabulary ----------------------------------------------------
+
+  static const app = SemanticRole._core('app', label: 'application');
+  static const errorBoundary = SemanticRole._core(
+    'errorBoundary',
+    label: 'rendering error',
+  );
+  static const screen = SemanticRole._core('screen');
+  static const route = SemanticRole._core('route');
+  static const region = SemanticRole._core('region');
+  static const navigation = SemanticRole._core('navigation');
+  static const list = SemanticRole._core('list');
+  static const listItem = SemanticRole._core('listItem');
+  static const table = SemanticRole._core('table');
+  static const tableRow = SemanticRole._core('tableRow');
+  static const tableCell = SemanticRole._core('tableCell');
+  static const chart = SemanticRole._core('chart');
+  static const text = SemanticRole._core('text');
+  static const link = SemanticRole._core('link');
+  static const image = SemanticRole._core('image');
+  static const textField = SemanticRole._core('textField');
+  static const textArea = SemanticRole._core('textArea');
+  static const button = SemanticRole._core('button');
+  static const checkbox = SemanticRole._core('checkbox');
+  static const radio = SemanticRole._core('radio');
+  static const toggle = SemanticRole._core('toggle');
+  static const spinButton = SemanticRole._core('spinButton');
+  static const slider = SemanticRole._core('slider');
+  static const datePicker = SemanticRole._core('datePicker');
+  static const menu = SemanticRole._core('menu');
+  static const menuItem = SemanticRole._core('menuItem');
+  static const command = SemanticRole._core('command');
+  static const task = SemanticRole._core('task');
+  static const dialog = SemanticRole._core('dialog');
+  static const progress = SemanticRole._core('progress');
+  static const log = SemanticRole._core('log');
+  static const json = SemanticRole._core('json', label: 'json document');
+  static const jsonNode = SemanticRole._core('jsonNode');
+  static const diff = SemanticRole._core('diff');
+  static const diffLine = SemanticRole._core('diffLine');
+  static const code = SemanticRole._core('code');
+  static const codeLine = SemanticRole._core('codeLine');
+  static const markdown = SemanticRole._core(
+    'markdown',
+    label: 'markdown document',
+  );
+  static const markdownBlock = SemanticRole._core('markdownBlock');
+  static const diagnostic = SemanticRole._core('diagnostic');
+  static const status = SemanticRole._core('status');
+  static const notification = SemanticRole._core('notification');
+  static const tab = SemanticRole._core('tab');
+  static const tree = SemanticRole._core('tree');
+  static const treeItem = SemanticRole._core('treeItem');
+  static const form = SemanticRole._core('form');
+  static const formField = SemanticRole._core('formField');
+
+  /// The core vocabulary, in declaration order.
+  ///
+  /// Roles declared by widget packages are deliberately absent: to enumerate
+  /// what a running app actually uses, walk its semantic tree instead of
+  /// assuming this list is complete.
+  static const List<SemanticRole> values = <SemanticRole>[
+    app,
+    errorBoundary,
+    screen,
+    route,
+    region,
+    navigation,
+    list,
+    listItem,
+    table,
+    tableRow,
+    tableCell,
+    chart,
+    text,
+    link,
+    image,
+    textField,
+    textArea,
+    button,
+    checkbox,
+    radio,
+    toggle,
+    spinButton,
+    slider,
+    datePicker,
+    menu,
+    menuItem,
+    command,
+    task,
+    dialog,
+    progress,
+    log,
+    json,
+    jsonNode,
+    diff,
+    diffLine,
+    code,
+    codeLine,
+    markdown,
+    markdownBlock,
+    diagnostic,
+    status,
+    notification,
+    tab,
+    tree,
+    treeItem,
+    form,
+    formField,
+  ];
+
+  static final Map<String, SemanticRole> _coreByName = <String, SemanticRole>{
+    for (final role in values) role.name: role,
+  };
+
+  /// The core role called [name], or null when [name] is not a core role.
+  static SemanticRole? coreByName(String name) => _coreByName[name];
+
+  /// Reconstructs a role from its wire form.
+  ///
+  /// A core [name] resolves to its constant. Any other name becomes a declared
+  /// role projecting through the core role called [coreRoleName]; when that is
+  /// missing or unknown (a core role added by a newer producer) the role
+  /// projects through [text], so an additive schema never crashes an older
+  /// consumer.
+  static SemanticRole fromWire(String name, {String? coreRoleName}) {
+    final core = _coreByName[name];
+    if (core != null) return core;
+    final base =
+        (coreRoleName == null ? null : _coreByName[coreRoleName]) ?? text;
+    // Decoders rebuild every node of every frame; hand back the same instance
+    // for a name seen before, so a declared role costs one lookup rather than
+    // an allocation per node per frame. Bounded so a hostile peer cannot grow
+    // it without limit.
+    final cached = _declaredByWire[name];
+    if (cached != null && identical(cached._base, base)) return cached;
+    if (_declaredByWire.length >= _maxDeclaredByWire) _declaredByWire.clear();
+    return _declaredByWire[name] = SemanticRole(name, base: base);
+  }
+
+  static final Map<String, SemanticRole> _declaredByWire =
+      <String, SemanticRole>{};
+  static const int _maxDeclaredByWire = 1024;
+
+  @override
+  bool operator ==(Object other) => other is SemanticRole && other.name == name;
+
+  @override
+  int get hashCode => name.hashCode;
+
+  @override
+  String toString() => isCore
+      ? 'SemanticRole.$name'
+      : "SemanticRole('$name', base: ${_base!.name})";
+}
+
+/// Whether [name] is a legal semantic role name: an ASCII identifier
+/// (`[A-Za-z][A-Za-z0-9_]*`). Role names are embedded in positional semantic
+/// ids, so the id separators (`/`, `~`, `:`) and whitespace are excluded.
+bool isValidSemanticRoleName(String name) {
+  if (name.isEmpty) return false;
+  for (var i = 0; i < name.length; i++) {
+    final c = name.codeUnitAt(i);
+    final isLetter = (c >= 0x41 && c <= 0x5A) || (c >= 0x61 && c <= 0x7A);
+    final isDigit = c >= 0x30 && c <= 0x39;
+    if (isLetter || (c == 0x5F && i > 0)) continue;
+    if (isDigit && i > 0) continue;
+    return false;
+  }
+  return true;
+}
+
+/// Splits a camelCase role name into a lower-case phrase: `spinButton` →
+/// `spin button`. The default [SemanticRole.label]; exposed for tooling that
+/// labels roles it does not otherwise know.
+String humanizeSemanticRoleName(String name) {
+  final out = StringBuffer();
+  for (var i = 0; i < name.length; i++) {
+    final c = name.codeUnitAt(i);
+    final isUpper = c >= 0x41 && c <= 0x5A;
+    if (isUpper && i > 0) out.write(' ');
+    out.writeCharCode(isUpper ? c + 0x20 : c);
+  }
+  return out.toString();
 }
 
 /// Actions a semantic node exposes to tests, inspectors, and future adapters.
@@ -1351,7 +1554,12 @@ final class SemanticsElement extends ComponentElement
     }
     final anchor = semanticAnchorOf(this);
     if (anchor == null) return SemanticNodeId('element-$hashCode');
-    return SemanticNodeId('$anchor/${widget.role.name}');
+    // Names are identifiers by contract (asserted at collection); escape
+    // anyway so a release build can never mint a positional marker or a
+    // phantom segment out of a role name.
+    return SemanticNodeId(
+      '$anchor/${escapeSemanticIdSegment(widget.role.name)}',
+    );
   }
 
   bool get _canBuildRetainedLeaf => !widget.includeChildren;
@@ -1388,6 +1596,18 @@ final class SemanticsElement extends ComponentElement
 
   @override
   SemanticNode buildSemanticNode(List<SemanticNode> children) {
+    assert(
+      isValidSemanticRoleName(widget.role.name),
+      'SemanticRole("${widget.role.name}") is not a valid role name: names '
+      'are identifiers ([A-Za-z][A-Za-z0-9_]*) because they are embedded in '
+      'positional semantic ids.',
+    );
+    assert(
+      widget.role.isCore || SemanticRole.coreByName(widget.role.name) == null,
+      'SemanticRole("${widget.role.name}") shadows the core role of that '
+      'name; a declared role must use a name that is not a core role, or the '
+      'two sides of a wire project the same node differently.',
+    );
     final semanticChildren = widget.includeChildren
         ? children
         : const <SemanticNode>[];
@@ -1397,7 +1617,7 @@ final class SemanticsElement extends ComponentElement
         semanticChildren.isEmpty &&
         cached.children.isEmpty &&
         cached.id == id &&
-        cached.role == widget.role &&
+        identical(cached.role, widget.role) &&
         cached.label == widget.label &&
         cached.value == widget.value &&
         cached.hint == widget.hint &&
@@ -1785,7 +2005,7 @@ SemanticNode _bindOwnedActionTargetTokens(
         actionBits |= 1 << action.index;
       }
       signatures[current.id.value] = (
-        current.role.index,
+        current.role.name,
         current.label,
         actionBits,
       );

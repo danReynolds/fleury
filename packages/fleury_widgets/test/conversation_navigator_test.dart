@@ -146,7 +146,7 @@ void main() {
       expect(selected?.viewIndex, 0);
 
       final navigator = tester.semantics().single(
-        role: SemanticRole.conversationNavigator,
+        role: WidgetRoles.conversationNavigator,
         label: 'Threads',
       );
       expect(navigator.state.filterText, 'deploy-review');
@@ -156,7 +156,7 @@ void main() {
       expect(navigator.state['unreadConversationCount'], 2);
 
       final row = tester.semantics().single(
-        role: SemanticRole.conversation,
+        role: WidgetRoles.conversation,
         label: 'Deploy review',
         value: 'Needs human approval',
       );
@@ -168,7 +168,7 @@ void main() {
       expect(row.state.conversationMessageCount, 5);
 
       final fallback = tester.accessibilitySnapshot().single(
-        role: SemanticRole.conversation,
+        role: WidgetRoles.conversation,
         label: 'Deploy review',
       );
       expect(
@@ -196,7 +196,7 @@ void main() {
 
       tester.render(size: const CellSize(90, 7));
       var navigator = tester.semantics().single(
-        role: SemanticRole.conversationNavigator,
+        role: WidgetRoles.conversationNavigator,
         label: 'Threads',
         action: SemanticAction.focus,
       );
@@ -205,14 +205,14 @@ void main() {
 
       var result = await tester.invokeSemanticAction(
         SemanticAction.navigate,
-        role: SemanticRole.conversationNavigator,
+        role: WidgetRoles.conversationNavigator,
         label: 'Threads',
       );
       expect(result.completed, isTrue);
 
       tester.render(size: const CellSize(90, 7));
       navigator = tester.semantics().single(
-        role: SemanticRole.conversationNavigator,
+        role: WidgetRoles.conversationNavigator,
         label: 'Threads',
         focused: true,
       );
@@ -220,7 +220,7 @@ void main() {
 
       result = await tester.invokeSemanticAction(
         SemanticAction.activate,
-        role: SemanticRole.conversation,
+        role: WidgetRoles.conversation,
         label: 'Deploy review',
       );
       expect(result.completed, isTrue);
@@ -229,7 +229,7 @@ void main() {
 
       tester.render(size: const CellSize(90, 7));
       final row = tester.semantics().single(
-        role: SemanticRole.conversation,
+        role: WidgetRoles.conversation,
         label: 'Deploy review',
         selected: true,
         action: SemanticAction.copy,
@@ -237,7 +237,7 @@ void main() {
       expect(row.state.conversationId, 'deploy-review');
 
       navigator = tester.semantics().single(
-        role: SemanticRole.conversationNavigator,
+        role: WidgetRoles.conversationNavigator,
         label: 'Threads',
         focused: true,
       );
@@ -292,14 +292,14 @@ void main() {
 
       expect(controller.selectedIndex, 3);
       final navigator = tester.semantics().single(
-        role: SemanticRole.conversationNavigator,
+        role: WidgetRoles.conversationNavigator,
         label: 'Threads',
       );
       expect(navigator.state.selectedConversationId, 'diagnostics');
       expect(navigator.state['selectedConversationStatus'], 'streaming');
 
       final row = tester.semantics().single(
-        role: SemanticRole.conversation,
+        role: WidgetRoles.conversation,
         label: 'Diagnostics',
         selected: true,
       );
@@ -327,7 +327,7 @@ void main() {
         tester.render(size: const CellSize(90, 6));
         final result = await tester.invokeSemanticAction(
           SemanticAction.copy,
-          role: SemanticRole.conversation,
+          role: WidgetRoles.conversation,
           label: 'Ops thread',
         );
 

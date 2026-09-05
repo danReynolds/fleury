@@ -3,6 +3,8 @@ import 'dart:async' show scheduleMicrotask, unawaited;
 import 'package:characters/characters.dart';
 import 'package:fleury/fleury_core.dart';
 
+import 'semantic_roles.dart';
+
 /// Protocol-neutral lifecycle for a conversation/session row.
 enum ConversationStatus {
   active,
@@ -637,28 +639,34 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
                       ? widget.placeholder
                       : 'No matching conversations',
                 )
-              : ListView.builder(
-                  controller: _controller._listController,
-                  focusNode: _listFocusNode,
-                  selectionActive: panelFocused,
-                  itemCount: order.length,
-                  onActivate: (_) => _selectCurrent(),
-                  itemBuilder: (context, viewIndex, activeSelected) {
-                    final entryIndex = order[viewIndex];
-                    final selected = viewIndex == _controller.selectedIndex;
-                    return _ConversationRow(
-                      entry: widget.conversations[entryIndex],
-                      entryIndex: entryIndex,
-                      viewIndex: viewIndex,
-                      selected: selected,
-                      activeSelection: activeSelected,
-                      canSelect: canSelect,
-                      copyEnabled: copyEnabled,
-                      showTimestamp: widget.showTimestamp,
-                      onSelect: () => _selectAt(viewIndex),
-                      onCopy: () => _copyAt(viewIndex),
-                    );
-                  },
+              : Semantics(
+                  // ARIA needs list items inside a list: the rows are
+                  // `conversation` (a list item) and the navigator itself is
+                  // a navigation landmark, so this node is their container.
+                  role: SemanticRole.list,
+                  child: ListView.builder(
+                    controller: _controller._listController,
+                    focusNode: _listFocusNode,
+                    selectionActive: panelFocused,
+                    itemCount: order.length,
+                    onActivate: (_) => _selectCurrent(),
+                    itemBuilder: (context, viewIndex, activeSelected) {
+                      final entryIndex = order[viewIndex];
+                      final selected = viewIndex == _controller.selectedIndex;
+                      return _ConversationRow(
+                        entry: widget.conversations[entryIndex],
+                        entryIndex: entryIndex,
+                        viewIndex: viewIndex,
+                        selected: selected,
+                        activeSelection: activeSelected,
+                        canSelect: canSelect,
+                        copyEnabled: copyEnabled,
+                        showTimestamp: widget.showTimestamp,
+                        onSelect: () => _selectAt(viewIndex),
+                        onCopy: () => _copyAt(viewIndex),
+                      );
+                    },
+                  ),
                 ),
         ),
       ],
@@ -693,7 +701,7 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
         ),
       ],
       child: Semantics(
-        role: SemanticRole.conversationNavigator,
+        role: WidgetRoles.conversationNavigator,
         label: widget.semanticLabel,
         value: _query.text,
         focused: _queryFocusNode.hasFocus || _listFocusNode.hasFocus,
@@ -793,7 +801,7 @@ class _ConversationRow extends StatelessWidget {
     );
 
     return Semantics(
-      role: SemanticRole.conversation,
+      role: WidgetRoles.conversation,
       label: title,
       value: latest,
       hint: subtitle,

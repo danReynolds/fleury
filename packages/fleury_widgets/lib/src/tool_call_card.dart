@@ -4,6 +4,7 @@ import 'package:characters/characters.dart';
 import 'package:fleury/fleury_core.dart';
 
 import 'controls.dart' show Button, ButtonVariant;
+import 'semantic_roles.dart';
 
 /// Protocol-neutral status for one tool call.
 enum ToolCallStatus { queued, running, succeeded, failed, cancelled }
@@ -241,7 +242,7 @@ class _ToolCallCardState extends State<ToolCallCard> {
     }
 
     return Semantics(
-      role: SemanticRole.toolCall,
+      role: WidgetRoles.toolCall,
       label: record.displayTitle,
       value: record.status.name,
       busy: record.busy,

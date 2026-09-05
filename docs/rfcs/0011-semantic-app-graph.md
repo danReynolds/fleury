@@ -2,6 +2,11 @@
 
 **Status:** Proposal  
 **Date:** 2026-05-31  
+**Amendment (2026-09-04):** `SemanticRole` shipped as an open value type,
+not the closed enum sketched in §3 — the core set is a list of constants and
+any package declares further roles with a `base` for projection (see the
+decision log). The catalog's domain roles live in `fleury_widgets`'s
+`WidgetRoles`.  
 **Decision point for:** M1.1 semantic tree v0, semantic tester queries,
 debug inspector expansion, prompt/fallback modes, and future agent/adaptor
 operation.
