@@ -1908,5 +1908,6 @@
         "p95": 69
       }
     }
-  ]
+  ],
+  "historicalProbeNote": "This per-change probe collected render objects before adaptive-layout settling. Its clean timings still cover the complete render and exact diff, and its selected leaf mutations were verified visible; full mode invalidated only initially mounted objects. The final integrated probe now settles before enumeration and verifies object counts against the retained probe."
 }

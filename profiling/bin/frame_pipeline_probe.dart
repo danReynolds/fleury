@@ -41,6 +41,7 @@ void main(List<String> args) {
     'rows': rows,
     'framesPerMode': frames,
     'warmupFrames': 30,
+    'initializationFrames': 30,
   }));
   for (final (name, app) in <(String, Widget)>[
     ('dashboard', const DashboardApp()),
@@ -118,7 +119,13 @@ final class _Host {
     visit(tester.root!);
     _router = router!;
     _loop = TuiFrameLoop(renderDamage: tester.owner.renderDamageTracker);
-    frame('clean', 0);
+    // Adaptive builders can mount descendants after the first layout. Settle
+    // those frames before selecting a leaf or collecting the full tree.
+    for (var i = 0; i < 30; i++) {
+      frame('clean', i);
+    }
+    renderObjects.clear();
+    visit(tester.root!);
     // Choose a text mutation that actually changes visible cells. A mounted
     // label may be clipped or off screen, especially at smaller viewports.
     for (final render in renderObjects.whereType<RenderText>()) {
