@@ -4,6 +4,27 @@ import 'package:fleury/src/rendering/cell_buffer.dart'
 import 'package:test/test.dart';
 
 void main() {
+  test('buffer text placement reuses widths, including clipped clusters', () {
+    final resolver = _CountingWidthResolver();
+    final buffer = CellBuffer(const CellSize(3, 1));
+    final advanced = buffer.writeText(
+      const CellOffset(-1, 0),
+      '\u0301a界bX',
+      widthResolver: resolver,
+    );
+    expect(advanced, 4);
+    expect(
+      resolver.graphemeCalls,
+      4,
+      reason:
+          'measure the zero-width mark, clipped a, wide glyph, and b once; '
+          'stop before X beyond the right edge',
+    );
+    expect(buffer.atColRow(0, 0).grapheme, '界');
+    expect(buffer.atColRow(1, 0).role, CellRole.continuation);
+    expect(buffer.atColRow(2, 0).grapheme, 'b');
+  });
+
   test('measured placement matches policy-driven writes, cells and damage', () {
     const resolver = DefaultWidthResolver();
     const styles = [

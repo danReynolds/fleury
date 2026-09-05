@@ -685,14 +685,7 @@ final class CellBuffer {
       final width = widthResolver.widthOfGrapheme(grapheme, policy);
       if (width == 0) continue;
       if (col >= 0) {
-        _writeGraphemeAt(
-          col,
-          row,
-          grapheme,
-          style: paintStyle,
-          widthResolver: widthResolver,
-          policy: policy,
-        );
+        _placeGrapheme(col, row, grapheme, width, paintStyle);
       }
       col += width;
     }
