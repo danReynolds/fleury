@@ -35,17 +35,17 @@ positions. It describes this active scrolling workload, not all Fleury apps.
 
 | Content | Lines | Main frame time | Candidate frame time | Speedup |
 | --- | ---: | ---: | ---: | ---: |
-| Plain text | 100 | 182–194 µs | 76–92 µs | 2.1–2.4× |
-| Plain text | 1,000 | 1,399–1,434 µs | 76–78 µs | 18–19× |
-| Plain text | 10,000 | 13,657–13,945 µs | 74–102 µs | 134–188× |
-| Styled text | 100 | 241–252 µs | 97–98 µs | 2.5–2.6× |
-| Styled text | 1,000 | 1,977–1,999 µs | 94–102 µs | 20–21× |
-| Styled text | 10,000 | 18,990–19,313 µs | 91–121 µs | 158–212× |
+| Plain text | 100 | 182–184 µs | 76–88 µs | 2.1–2.4× |
+| Plain text | 1,000 | 1,388–1,435 µs | 75–77 µs | 18.0–19.1× |
+| Plain text | 10,000 | 13,535–13,903 µs | 74–104 µs | 130.8–189.2× |
+| Styled text | 100 | 240–255 µs | 94–97 µs | 2.5–2.7× |
+| Styled text | 1,000 | 2,000–2,022 µs | 99–104 µs | 19.5–20.4× |
+| Styled text | 10,000 | 18,936–19,209 µs | 92–123 µs | 154.6–209.9× |
 
 The five shipped sample apps were also compared at 80×24, 120×40 and
 200×60, with 600 frames each in forced-clean, visible-leaf mutation and
 all-render-objects-dirtied modes. Changes in mean median whole-frame time
-range from 0.7% slower to 5.3% faster. This is effectively flat; the claim
+range from 1.3% slower to 2.9% faster. This is effectively flat; the claim
 is the document-scrolling improvement. Production idle skips rendering and
 is not represented by forced-clean frames.
 
@@ -70,10 +70,10 @@ text before scrolling. These are not multiplied by the main comparison:
 
 | Selected content | Lines | After row culling only | Final candidate | Speedup |
 | --- | ---: | ---: | ---: | ---: |
-| Plain text | 100 | 2,166 µs | 81–83 µs | 26–27× |
-| Plain text | 1,000 | 20,123–20,186 µs | 92–96 µs | 210–219× |
-| Styled text | 100 | 2,204–2,225 µs | 107–108 µs | 20–21× |
-| Styled text | 1,000 | 20,018–20,153 µs | 118–128 µs | 158–170× |
+| Plain text | 100 | 2,172–2,199 µs | 80–87 µs | 25.3–27.1× |
+| Plain text | 1,000 | 20,004–20,021 µs | 93–94 µs | 214.0–216.3× |
+| Styled text | 100 | 2,187–2,196 µs | 108–109 µs | 20.1–20.2× |
+| Styled text | 1,000 | 19,994–20,064 µs | 118–128 µs | 157.4–169.5× |
 
 ## Review and regression evidence
 
@@ -119,6 +119,18 @@ full selection bounds.
 Final contributor, embedded-client freshness and terminal-wire qualification
 results are recorded in the PR. No performance-gate tolerance or baseline
 was changed.
+
+Review follow-up `c39f2a62` returns early for a text block fully outside the
+buffer, after its geometry and selection range are refreshed. The 716
+targeted tests, all eight fast gates, analysis and embedded-client freshness
+test passed. Both automated inline comments are resolved. The CPU receipts
+were refreshed again on this final production revision. All candidate heap
+measurements were also repeated and matched the recorded counts exactly.
+
+The full contributor gate passed 5,344 tests in 12 suites on `518166a4`,
+followed by the passing targeted checks on the small review follow-up above.
+The terminal-wire gate passed on the complete four-change revision. The PR
+records CI status for the latest head; one pre-existing widget test is skipped.
 
 ## Memory result and measurement correction
 
