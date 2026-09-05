@@ -410,6 +410,14 @@ class RenderText extends RenderObject
     final visibleRows = _lines.length < size.rows ? _lines.length : size.rows;
     var lineStartOffset = 0;
     for (var i = 0; i < visibleRows; i++) {
+      final row = offset.row + i;
+      if (row >= buffer.size.rows) break;
+      if (row < 0) {
+        // Preserve selection offsets without walking off-screen graphemes.
+        // Full selection geometry was recorded above, including hidden rows.
+        lineStartOffset += _lines[i].length + 1;
+        continue;
+      }
       final isLastVisible = i == visibleRows - 1;
       final lineWidth = _lineWidths.isEmpty ? _intrinsicWidth : _lineWidths[i];
       final clipped = lineWidth > size.cols;
@@ -432,7 +440,7 @@ class RenderText extends RenderObject
         buffer,
         _lines[i],
         offset.col + dx,
-        offset.row + i,
+        row,
         ellipsize,
         offset.col + size.cols,
         lineStartOffset,
