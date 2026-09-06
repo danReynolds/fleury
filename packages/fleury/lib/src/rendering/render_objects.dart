@@ -68,7 +68,7 @@ class RenderText extends RenderObject
     TextAlign textAlign = TextAlign.left,
     WidthResolver widthResolver = const DefaultWidthResolver(),
     TextPresentationPolicy textPolicy = TextPresentationPolicy.spec,
-  }) : _logicalText = _sanitizePreservingNewlines(text),
+  }) : _logicalText = sanitizeMultiline(text),
        _style = style,
        _softWrap = softWrap,
        _maxLines = maxLines,
@@ -79,15 +79,6 @@ class RenderText extends RenderObject
     _projection = projectText(_logicalText, policy: _textPolicy);
     _text = _projection.displayText;
     _recomputeIntrinsicWidth();
-  }
-
-  /// `\n` is a C0 control that [sanitizeForDisplay] would replace with
-  /// U+FFFD, but at the Text-widget layer it's meaningful — it forces
-  /// a line break. Split first, sanitize each segment, rejoin so the
-  /// downstream cell buffer still never sees a raw newline byte.
-  static String _sanitizePreservingNewlines(String value) {
-    if (!value.contains('\n')) return sanitizeForDisplay(value);
-    return value.split('\n').map(sanitizeForDisplay).join('\n');
   }
 
   /// Canonical (post-sanitization) text — what [text], copy, and semantics
@@ -156,7 +147,7 @@ class RenderText extends RenderObject
     // sanitized; equality lets those updates skip splitting/scanning/joining
     // a whole document without retaining a second copy of the source.
     if (value == _logicalText) return;
-    final sanitized = _sanitizePreservingNewlines(value);
+    final sanitized = sanitizeMultiline(value);
     if (sanitized == _logicalText) return;
     _logicalText = sanitized;
     _projection = projectText(sanitized, policy: _textPolicy);
