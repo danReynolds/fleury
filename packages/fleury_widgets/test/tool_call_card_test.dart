@@ -76,13 +76,10 @@ void main() {
           ),
         );
 
-        final result = await tester.invokeSemanticAction(
-          SemanticAction.copy,
-          role: WidgetRoles.toolCall,
-          label: 'Run tests',
-        );
+        await tester
+            .target(role: WidgetRoles.toolCall, label: 'Run tests')
+            .copy();
 
-        expect(result.completed, isTrue);
         expect(tester.clipboard.readInProcess(), contains('Tool: shell'));
         expect(tester.clipboard.readInProcess(), contains('Status: succeeded'));
         expect(
@@ -103,13 +100,10 @@ void main() {
         ToolCallCard(record: _record(), onCancel: () => canceled = true),
       );
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.cancel,
-        role: WidgetRoles.toolCall,
-        label: 'Run tests',
-      );
+      await tester
+          .target(role: WidgetRoles.toolCall, label: 'Run tests')
+          .perform(SemanticAction.cancel);
 
-      expect(result.completed, isTrue);
       expect(canceled, isTrue);
     });
 

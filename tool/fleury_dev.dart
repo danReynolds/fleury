@@ -454,6 +454,15 @@ class _Runner {
         'test/api_extract_test.dart',
         'test/docs_accuracy_test.dart',
         'test/doc_snippets_test.dart',
+        'test/testing_guide_test.dart',
+      ], workingDirectory: webExamples);
+      // The guide's Run test button executes the actual tester in the browser.
+      // Keep its shared scenario and JS handle lifecycle in the PR gate too.
+      await _run('dart', [
+        'test',
+        '-p',
+        'chrome',
+        'test/preferences_runner_browser_test.dart',
       ], workingDirectory: webExamples);
 
       // dart2js smoke: the doc-examples entrypoint pulls in fleury_core,

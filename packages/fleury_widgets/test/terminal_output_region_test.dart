@@ -172,13 +172,10 @@ void main() {
       );
       expect(row.selected, isFalse);
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.activate,
-        role: SemanticRole.listItem,
-        label: 'deploy failed',
-      );
+      await tester
+          .target(role: SemanticRole.listItem, label: 'deploy failed')
+          .press();
 
-      expect(result.completed, isTrue);
       expect(controller.followTail, isFalse);
       expect(controller.selectedIndex, 1);
 

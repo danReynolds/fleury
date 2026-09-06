@@ -625,7 +625,7 @@ void main() {
 
     testWidgets('eager ListView under a ScrollView throws instead of '
         'rendering nothing', (tester) {
-      tester.pumpWidget(
+      tester.mountWidget(
         ScrollView(
           child: ListView(
             children: [for (var i = 0; i < 5; i++) Text('item $i')],
@@ -640,7 +640,7 @@ void main() {
 
     testWidgets('lazy ListView.builder under a ScrollView throws instead of '
         'rendering nothing', (tester) {
-      tester.pumpWidget(
+      tester.mountWidget(
         ScrollView(
           child: ListView.builder(itemCount: 5, itemBuilder: _itemBuilder),
         ),
@@ -656,7 +656,7 @@ void main() {
       // ScrollView > Column(min) > [header, ListView, footer]: the ScrollView
       // measures the Column with an unbounded main axis, so the nested list
       // receives maxRows == null.
-      tester.pumpWidget(
+      tester.mountWidget(
         ScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1247,7 +1247,7 @@ void main() {
 
   group('lazy ListView.builder', () {
     testWidgets('duplicate keyed items fail on their initial mount', (tester) {
-      tester.pumpWidget(
+      tester.mountWidget(
         ListView.builder(
           itemCount: 2,
           itemKeyBuilder: (_) => 'duplicate',
@@ -1275,6 +1275,7 @@ void main() {
         return Text('Item $i');
       }
 
+      tester.viewportSize = const CellSize(10, 5);
       tester.pumpWidget(
         ListView.builder(itemCount: 1000, itemBuilder: builder),
       );
@@ -1300,6 +1301,7 @@ void main() {
       final mountCounts = <int, int>{};
       final unmountCounts = <int, int>{};
       final controller = ListController();
+      tester.viewportSize = const CellSize(10, 5);
       tester.pumpWidget(
         ListView.builder(
           controller: controller,
@@ -1337,6 +1339,7 @@ void main() {
       final mountCounts = <int, int>{};
       final unmountCounts = <int, int>{};
       final controller = ListController();
+      tester.viewportSize = const CellSize(10, 5);
       tester.pumpWidget(
         ListView.builder(
           controller: controller,
@@ -1420,6 +1423,7 @@ void main() {
       }
 
       final controller = ListController();
+      tester.viewportSize = const CellSize(10, 5);
       tester.pumpWidget(
         ListView.builder(
           controller: controller,
@@ -1472,7 +1476,7 @@ void main() {
         ),
       );
 
-      tester.pumpWidget(app());
+      tester.mountWidget(app());
       controller.jumpToIndex(1);
       expect(tester.renderToString(size: const CellSize(12, 2)), 'b:b\nc:c\n');
       expect(controller.visibleRange, (first: 1, last: 2));
@@ -2111,7 +2115,7 @@ void main() {
       tester.render(size: const CellSize(20, 6)); // warm every item's cache
 
       rows[2].bump(); // one row changes
-      tester.pump();
+      tester.owner.flushBuild();
       RepaintBoundaryDebugStats.beginFrame(enabled: true);
       tester.render(size: const CellSize(20, 6));
       final stats = RepaintBoundaryDebugStats.takeFrameStats();

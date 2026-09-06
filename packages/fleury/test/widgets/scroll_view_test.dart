@@ -297,6 +297,7 @@ void main() {
     'controller dispose keeps metrics readable and rejects mutation',
     (tester) {
       final ctl = ScrollController(offset: 2);
+      tester.viewportSize = const CellSize(6, 3);
       tester.pumpWidget(ScrollView(controller: ctl, child: _rows(10)));
       expect(_lines(tester, rows: 3), ['r2', 'r3', 'r4']);
       expect(ctl.contentExtent, 10);

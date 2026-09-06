@@ -102,12 +102,7 @@ void main() {
     tester.pumpWidget(const animation.ValidationFeedback());
     expect(tester.renderToString(emptyMark: ' '), contains('pilot name'));
 
-    await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.button,
-      label: 'Validate pilot',
-    );
-    tester.pump();
+    await tester.button('Validate pilot').press();
     expect(
       tester.renderToString(emptyMark: ' '),
       isNot(contains('Enter any non-empty name')),
@@ -129,18 +124,8 @@ void main() {
       contains('Enter any non-empty name'),
     );
 
-    await tester.invokeSemanticAction(
-      SemanticAction.setValue,
-      role: SemanticRole.textField,
-      label: 'Pilot name',
-      payload: 'River',
-    );
-    await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.button,
-      label: 'Validate pilot',
-    );
-    tester.pump();
+    await tester.field('Pilot name').fill('River');
+    await tester.button('Validate pilot').press();
     tester.pump(const Duration(milliseconds: 650));
     expect(tester.renderToString(emptyMark: ' '), contains('River is cleared'));
   });
@@ -155,29 +140,13 @@ void main() {
     expect(rendered, contains('Fade out'));
     expect(rendered, contains('DEPLOY PREVIEW'));
 
-    await tester.invokeSemanticAction(
-      SemanticAction.setValue,
-      role: SemanticRole.button,
-      label: 'Entrance effect',
-      payload: 'Wipe in',
-    );
-    await tester.invokeSemanticAction(
-      SemanticAction.setValue,
-      role: SemanticRole.button,
-      label: 'Exit effect',
-      payload: 'Shrink',
-    );
-    tester.pump();
+    await tester.button('Entrance effect').setValue('Wipe in');
+    await tester.button('Exit effect').setValue('Shrink');
     rendered = tester.renderToString(emptyMark: ' ');
     expect(rendered, contains('Wipe in'));
     expect(rendered, contains('Shrink'));
 
-    await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.button,
-      label: 'Hide sample',
-    );
-    tester.pump();
+    await tester.button('Hide sample').press();
     expect(tester.scheduler.activeTickerCount, 1);
     tester.pump(const Duration(milliseconds: 700));
     expect(
@@ -185,11 +154,7 @@ void main() {
       isNot(contains('DEPLOY PREVIEW')),
     );
 
-    await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.button,
-      label: 'Show sample',
-    );
+    await tester.button('Show sample').press();
     tester.pump(const Duration(milliseconds: 800));
     expect(tester.renderToString(emptyMark: ' '), contains('DEPLOY PREVIEW'));
   });
@@ -201,11 +166,7 @@ void main() {
       contains('progress is a double'),
     );
 
-    await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.button,
-      label: 'Send to station',
-    );
+    await tester.button('Send to station').press();
     tester.pump(const Duration(milliseconds: 550));
     expect(tester.scheduler.activeTickerCount, 1);
   });
@@ -219,11 +180,7 @@ void main() {
       contains('progress.value is a double'),
     );
 
-    await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.button,
-      label: 'Run route',
-    );
+    await tester.button('Run route').press();
     tester.pump(const Duration(milliseconds: 700));
     expect(tester.scheduler.activeTickerCount, 1);
     expect(
@@ -238,11 +195,7 @@ void main() {
       reason: 'the chained delay keeps the package at the station',
     );
 
-    await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.button,
-      label: 'Return now',
-    );
+    await tester.button('Return now').press();
     tester.pump(const Duration(milliseconds: 250));
     expect(tester.scheduler.activeTickerCount, 1);
     expect(
@@ -257,11 +210,7 @@ void main() {
     tester.pumpWidget(const animation.MissionLaunch());
     final idleHeight = tester.renderToString(emptyMark: ' ').split('\n').length;
 
-    await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.button,
-      label: 'Launch',
-    );
+    await tester.button('Launch').press();
     tester.pump(const Duration(milliseconds: 350));
     expect(tester.renderToString(emptyMark: ' '), contains('1/4 IGNITION'));
 
@@ -286,20 +235,10 @@ void main() {
       contains('authored frame 2/6'),
     );
 
-    await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.button,
-      label: 'Pause',
-    );
-    tester.pump();
+    await tester.button('Pause').press();
     expect(tester.scheduler.activeTickerCount, 0);
 
-    await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.button,
-      label: 'Resume',
-    );
-    tester.pump();
+    await tester.button('Resume').press();
     expect(
       tester.renderToString(emptyMark: ' '),
       contains('authored frame 1/6'),
@@ -315,12 +254,7 @@ void main() {
     expect(tester.renderToString(emptyMark: ' '), contains('6.0'));
     expect(tester.scheduler.activeTickerCount, 1);
 
-    await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.button,
-      label: 'Pause simulation',
-    );
-    tester.pump();
+    await tester.button('Pause simulation').press();
     expect(tester.scheduler.activeTickerCount, 0);
   });
 
@@ -328,12 +262,7 @@ void main() {
     tester.pumpWidget(state_management.localStateDemoApp());
     expect(tester.renderToString(emptyMark: ' '), contains('Count: 0'));
 
-    await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.button,
-      label: 'Increment',
-    );
-    tester.pump();
+    await tester.button('Increment').press();
     expect(tester.renderToString(emptyMark: ' '), contains('Count: 1'));
   });
 
@@ -343,12 +272,7 @@ void main() {
     tester.pumpWidget(state_management.sharedStateDemoApp());
     expect(tester.renderToString(emptyMark: ' '), contains('Count: 0'));
 
-    await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.button,
-      label: 'Increment',
-    );
-    tester.pump();
+    await tester.button('Increment').press();
     expect(tester.renderToString(emptyMark: ' '), contains('Count: 1'));
   });
 
@@ -358,12 +282,7 @@ void main() {
     tester.pumpWidget(state_management.valueNotifierDemoApp());
     expect(tester.renderToString(emptyMark: ' '), contains('Offline'));
 
-    await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.button,
-      label: 'Connect',
-    );
-    tester.pump();
+    await tester.button('Connect').press();
     expect(tester.renderToString(emptyMark: ' '), contains('Online'));
   });
 
@@ -376,20 +295,10 @@ void main() {
       allOf(contains('1 of 3 complete'), contains('Running')),
     );
 
-    await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.button,
-      label: 'Complete next',
-    );
-    tester.pump();
+    await tester.button('Complete next').press();
     expect(tester.renderToString(emptyMark: ' '), contains('2 of 3 complete'));
 
-    await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.button,
-      label: 'Pause',
-    );
-    tester.pump();
+    await tester.button('Pause').press();
     expect(
       tester.renderToString(emptyMark: ' '),
       allOf(contains('2 of 3 complete'), contains('Paused')),
@@ -402,12 +311,7 @@ void main() {
     tester.pumpWidget(state_management.inheritedWidgetDemoApp());
     expect(tester.renderToString(emptyMark: ' '), contains('Count: 0'));
 
-    await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.button,
-      label: 'Increment',
-    );
-    tester.pump();
+    await tester.button('Increment').press();
     expect(tester.renderToString(emptyMark: ' '), contains('Count: 1'));
   });
 
@@ -417,12 +321,7 @@ void main() {
     tester.pumpWidget(state_management.inheritedNotifierDemoApp());
     expect(tester.renderToString(emptyMark: ' '), contains('Count: 0'));
 
-    await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.button,
-      label: 'Increment',
-    );
-    tester.pump();
+    await tester.button('Increment').press();
     expect(tester.renderToString(emptyMark: ' '), contains('Count: 1'));
   });
 
@@ -501,11 +400,7 @@ void main() {
     );
 
     for (var packet = 1; packet <= 5; packet++) {
-      await tester.invokeSemanticAction(
-        SemanticAction.activate,
-        role: SemanticRole.button,
-        label: 'Next packet',
-      );
+      await tester.button('Next packet').press();
       await tester.settle();
     }
     expect(
@@ -530,18 +425,8 @@ void main() {
     expect(save.title, 'Save current file');
     expect(save.semanticAction, SemanticAction.submit);
     expect(save.shortcuts, hasLength(1));
-    expect(
-      tester.semantics().single(
-        role: SemanticRole.button,
-        label: 'Save',
-        enabled: false,
-      ),
-      isNotNull,
-    );
-    expect(
-      tester.semantics().single(role: SemanticRole.button, label: 'Commands'),
-      isNotNull,
-    );
+    expect(tester.button('Save'), isDisabled);
+    expect(tester.button('Commands'), hasCount(1));
   });
 
   testWidgets('commands guide shares availability and direct invocation', (
@@ -549,22 +434,11 @@ void main() {
   ) async {
     tester.pumpWidget(const commands.CommandGuideDemo());
 
-    await tester.invokeSemanticAction(
-      SemanticAction.setValue,
-      role: SemanticRole.textField,
-      label: 'Draft',
-      payload: 'One definition keeps every surface aligned',
-    );
-    tester.pump();
+    await tester
+        .field('Draft')
+        .fill('One definition keeps every surface aligned');
 
-    expect(
-      tester.semantics().single(
-        role: SemanticRole.button,
-        label: 'Save',
-        enabled: true,
-      ),
-      isNotNull,
-    );
+    expect(tester.button('Save'), isEnabled);
 
     final result = await tester.invokeCommand(commands.saveFile);
     tester.pump();
@@ -581,13 +455,7 @@ void main() {
     tester,
   ) async {
     tester.pumpWidget(const commands.CommandGuideDemo());
-    await tester.invokeSemanticAction(
-      SemanticAction.setValue,
-      role: SemanticRole.textField,
-      label: 'Draft',
-      payload: 'Save me with Ctrl+S',
-    );
-    tester.pump();
+    await tester.field('Draft').fill('Save me with Ctrl+S');
 
     tester.sendKey(
       const KeyEvent(
@@ -608,18 +476,12 @@ void main() {
   ) async {
     tester.pumpWidget(const commands.CommandGuideDemo());
 
-    await tester.invokeSemanticAction(
-      SemanticAction.open,
-      role: SemanticRole.command,
-      label: 'Open commands',
-    );
+    await tester
+        .target(role: SemanticRole.command, label: 'Open commands')
+        .open();
     tester.pump(const Duration(milliseconds: 300));
-    tester.render();
 
-    expect(
-      tester.semantics().single(role: WidgetRoles.commandPalette),
-      isNotNull,
-    );
+    expect(tester.target(role: WidgetRoles.commandPalette), hasCount(1));
     final paletteSave = tester
         .semantics()
         .byRole(SemanticRole.command)

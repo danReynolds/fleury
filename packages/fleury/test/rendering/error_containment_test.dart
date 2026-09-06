@@ -520,7 +520,7 @@ void main() {
     });
 
     testWidgets('(g) the tester default rethrows contained errors', (tester) {
-      tester.pumpWidget(const ErrorBoundary(child: Boom()));
+      tester.mountWidget(const ErrorBoundary(child: Boom()));
       expect(
         () => tester.render(size: const CellSize(30, 6)),
         throwsA(isA<StateError>()),

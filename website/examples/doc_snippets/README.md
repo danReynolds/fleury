@@ -34,6 +34,7 @@ changes underneath a doc, the build goes red instead of the docs going stale.
 | `shared_state.dart` | [State management](../../src/content/docs/guides/state-management.mdx) |
 | `loading_data.dart` | [Loading data](../../src/content/docs/guides/loading-data.mdx) |
 | `animation.dart` | [Animation](../../src/content/docs/guides/animation.mdx) |
+| `testing.dart`, `../lib/testing_guide.dart`, `../test/testing_guide_test.dart` | [Testing](../../src/content/docs/guides/testing.mdx); the live widgets and the tests shown in the guide share the same source |
 | `semantic_actions.dart` | [Built for agents](../../../docs/agents-and-semantics.md) |
 
 Keep each entrypoint a complete program with real imports and a `main`; shared

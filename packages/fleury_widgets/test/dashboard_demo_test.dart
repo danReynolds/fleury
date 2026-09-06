@@ -44,8 +44,9 @@ void main() {
     });
 
     testWidgets('app route supplies the advertised Tab traversal', (tester) {
-      tester.pumpFleuryHome(const DashboardApp());
-      tester.render(size: const CellSize(80, 24));
+      tester.pumpWidget(
+        FleuryApp(title: 'Dashboard', home: const DashboardApp()),
+      );
 
       tester.sendKey(const KeyEvent(KeyCode.tab));
 

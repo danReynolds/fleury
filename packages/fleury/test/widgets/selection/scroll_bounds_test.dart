@@ -46,6 +46,7 @@ void main() {
       // the FULL paint rect.
       SelectedContent? captured;
       final controller = ScrollController(offset: 2);
+      tester.viewportSize = const CellSize(5, 2);
       tester.pumpWidget(
         SelectionArea(
           onSelectionChanged: (sel) => captured = sel,

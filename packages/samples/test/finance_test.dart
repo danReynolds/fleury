@@ -142,6 +142,7 @@ void main() {
     testWidgets('renders the full overview and virtualized ledger when wide', (
       tester,
     ) {
+      tester.viewportSize = wide;
       tester.pumpWidget(const FinanceApp());
       final output = tester.renderToString(size: wide);
 
@@ -172,6 +173,7 @@ void main() {
     testWidgets('adapts the overview, charts, table, and detail when narrow', (
       tester,
     ) {
+      tester.viewportSize = narrow;
       tester.pumpWidget(const FinanceApp());
       final output = tester.renderToString(size: narrow);
 
@@ -206,8 +208,8 @@ void main() {
     testWidgets('search input filters rows and keeps the detail synchronized', (
       tester,
     ) {
+      tester.viewportSize = wide;
       tester.pumpWidget(const FinanceApp());
-      tester.render(size: wide);
 
       tester.type('Netflix');
       final output = tester.renderToString(size: wide);
@@ -230,19 +232,12 @@ void main() {
     testWidgets('semantic selection and keyboard navigation update detail', (
       tester,
     ) async {
+      tester.viewportSize = wide;
       tester.pumpWidget(const FinanceApp());
-      tester.render(size: wide);
 
-      final wholeFoods = tester.semantics().single(
-        role: SemanticRole.tableRow,
-        label: 'tx-jul-whole-foods',
-        action: SemanticAction.select,
-      );
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.select,
-        node: wholeFoods,
-      );
-      expect(result.completed, isTrue);
+      await tester
+          .target(role: SemanticRole.tableRow, label: 'tx-jul-whole-foods')
+          .select();
       var output = tester.renderToString(size: wide);
       expect(output, contains('Weekly groceries'));
 
@@ -254,35 +249,18 @@ void main() {
     testWidgets('shrinking filters reconcile table and detail by stable ID', (
       tester,
     ) async {
+      tester.viewportSize = wide;
       tester.pumpWidget(const FinanceApp());
-      tester.render(size: wide);
 
-      final shoppers = tester.semantics().single(
-        role: SemanticRole.tableRow,
-        label: 'tx-jul-shoppers',
-        action: SemanticAction.select,
-      );
-      expect(
-        (await tester.invokeSemanticAction(
-          SemanticAction.select,
-          node: shoppers,
-        )).completed,
-        isTrue,
-      );
+      await tester
+          .target(role: SemanticRole.tableRow, label: 'tx-jul-shoppers')
+          .select();
       tester.sendKey(const KeyEvent(KeyCode.arrowDown));
       tester.sendKey(const KeyEvent(KeyCode.arrowDown));
       expect(tester.renderToString(size: wide), contains('ID 2026-07-spotify'));
 
-      expect(
-        (await tester.invokeSemanticAction(
-          SemanticAction.focus,
-          role: SemanticRole.textField,
-          label: 'Search transactions',
-        )).completed,
-        isTrue,
-      );
+      await tester.field('Search transactions').focus();
       tester.type('Netflix');
-      tester.render(size: wide);
       tester.pump();
       final output = tester.renderToString(size: wide);
 
@@ -294,15 +272,10 @@ void main() {
     testWidgets('stress mode mounts 2,500 deterministic rows on demand', (
       tester,
     ) async {
+      tester.viewportSize = wide;
       tester.pumpWidget(const FinanceApp());
-      tester.render(size: wide);
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.activate,
-        role: SemanticRole.button,
-        label: 'Stress +2,500',
-      );
-      expect(result.completed, isTrue);
+      await tester.button('Stress +2,500').press();
       final output = tester.renderToString(size: wide);
 
       expect(output, contains('2573 rows'));

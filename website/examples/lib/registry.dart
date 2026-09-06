@@ -13,6 +13,8 @@ import 'package:fleury_widgets/fleury_widgets_web.dart';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 
+import 'testing_guide.dart' as testing;
+
 /// Builds the root widget for one live example.
 typedef ExampleBuilder = Widget Function();
 
@@ -2132,6 +2134,76 @@ form.clearErrors();''',
     rows: 9,
     interactive: true,
     builder: () => const _InheritedNotifierTour(),
+  ),
+  ExampleInfo(
+    id: 'testing.counter',
+    widget: 'Testing counter',
+    category: 'Guide examples',
+    blurb: 'The counter exercised by the first widget test.',
+    cols: 32,
+    rows: 5,
+    interactive: true,
+    builder: () =>
+        const Padding(padding: EdgeInsets.all(1), child: testing.Counter()),
+  ),
+  ExampleInfo(
+    id: 'testing.preferences',
+    widget: 'Testing preferences',
+    category: 'Guide examples',
+    blurb: 'Find one of two forms, fill a named field, and check an option.',
+    cols: 32,
+    rows: 11,
+    interactive: true,
+    builder: () => Padding(
+      padding: const EdgeInsets.all(1),
+      child: testing.preferencesPair(),
+    ),
+  ),
+  ExampleInfo(
+    id: 'testing.save',
+    widget: 'Testing an async save',
+    category: 'Guide examples',
+    blurb: 'A small save button shows pending and completed work.',
+    cols: 32,
+    rows: 5,
+    interactive: true,
+    builder: () => const Padding(
+      padding: EdgeInsets.all(1),
+      child: testing.TestingSaveDemo(),
+    ),
+  ),
+  ExampleInfo(
+    id: 'testing.animation',
+    widget: 'Testing animation time',
+    category: 'Guide examples',
+    blurb: 'An upload meter animates between zero and one hundred percent.',
+    cols: 32,
+    rows: 6,
+    interactive: true,
+    builder: () => const Padding(
+      padding: EdgeInsets.all(1),
+      child: testing.AnimatedUpload(),
+    ),
+  ),
+  ExampleInfo(
+    id: 'testing.editor',
+    widget: 'Testing editor',
+    category: 'Guide examples',
+    blurb: 'Edit, save, recover from an offline save, and confirm a discard.',
+    cols: 58,
+    rows: 16,
+    interactive: true,
+    builder: () => const Navigator(home: testing.TestingEditorDemo()),
+  ),
+  ExampleInfo(
+    id: 'testing.publish',
+    widget: 'Testing async control',
+    category: 'Guide examples',
+    blurb: 'A custom semantic handler returns its publishing future.',
+    cols: 32,
+    rows: 6,
+    interactive: true,
+    builder: () => const testing.TestingPublishDemo(),
   ),
   ExampleInfo(
     id: 'lists.tasks',

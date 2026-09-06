@@ -104,8 +104,8 @@ void main() {
   testWidgets("typed text lands in the agent prompt, not the quit binding", (
     tester,
   ) {
+    tester.viewportSize = const CellSize(120, 40);
     tester.pumpWidget(withQuitKey(const AgentApp()));
-    tester.render(size: const CellSize(120, 40));
     tester.type('qzq');
     final out = tester.renderToString(size: const CellSize(120, 40));
     expect(out, contains('qzq'), reason: 'the prompt received the characters');

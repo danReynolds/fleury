@@ -143,14 +143,12 @@ void main() {
         );
 
         tester.render(size: const CellSize(80, 6));
-        final result = await tester.invokeSemanticAction(
-          SemanticAction.copy,
+        final task = tester.target(
           role: SemanticRole.task,
           label: 'Run checks',
-          selected: true,
         );
-
-        expect(result.completed, isTrue);
+        expect(task.snapshot.selected, isTrue);
+        await task.copy();
         expect(tester.clipboard.readInProcess(), contains('[>] Run checks'));
         expect(tester.clipboard.readInProcess(), contains('Status: running'));
         expect(tester.clipboard.readInProcess(), contains('Depends on: plan'));
@@ -183,12 +181,9 @@ void main() {
       expect(graph.focused, isFalse);
       expect(graph.actions, contains(SemanticAction.navigate));
 
-      var result = await tester.invokeSemanticAction(
-        SemanticAction.focus,
-        role: WidgetRoles.taskGraph,
-        label: 'Release plan',
-      );
-      expect(result.completed, isTrue);
+      await tester
+          .target(role: WidgetRoles.taskGraph, label: 'Release plan')
+          .focus();
 
       tester.render(size: const CellSize(80, 6));
       graph = tester.semantics().single(
@@ -198,12 +193,7 @@ void main() {
       );
       expect(graph.state.selectedTaskId, 'plan');
 
-      result = await tester.invokeSemanticAction(
-        SemanticAction.activate,
-        role: SemanticRole.task,
-        label: 'Run checks',
-      );
-      expect(result.completed, isTrue);
+      await tester.target(role: SemanticRole.task, label: 'Run checks').press();
       expect(controller.selectedIndex, 1);
 
       tester.render(size: const CellSize(80, 6));
@@ -242,13 +232,8 @@ void main() {
       );
       expect(task.selected, isFalse);
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.activate,
-        role: SemanticRole.task,
-        label: 'Run checks',
-      );
+      await tester.target(role: SemanticRole.task, label: 'Run checks').press();
 
-      expect(result.completed, isTrue);
       expect(controller.selectedIndex, 1);
 
       tester.render(size: const CellSize(80, 6));

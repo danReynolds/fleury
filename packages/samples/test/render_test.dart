@@ -10,6 +10,7 @@ void main() {
     testWidgets('renders its meters, history chart, and process table', (
       tester,
     ) {
+      tester.viewportSize = _size;
       tester.pumpWidget(const DashboardApp());
       final out = tester.renderToString(size: _size);
       expect(out, contains('Fleury System Monitor'));
@@ -24,6 +25,7 @@ void main() {
 
   group('file manager', () {
     testWidgets('renders the tree and a markdown preview by default', (tester) {
+      tester.viewportSize = _size;
       tester.pumpWidget(const FileManagerApp());
       final out = tester.renderToString(size: _size);
       expect(out, contains('Explorer'));
@@ -34,8 +36,8 @@ void main() {
     });
 
     testWidgets('opening a .dart file shows the code preview', (tester) {
+      tester.viewportSize = _size;
       tester.pumpWidget(const FileManagerApp());
-      tester.render(size: _size); // mount + focus the tree
       // lib/ is the first row: expand it, step to main.dart, open it.
       tester.sendKey(const KeyEvent(KeyCode.arrowRight)); // expand lib/
       tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // → main.dart
@@ -46,8 +48,8 @@ void main() {
     });
 
     testWidgets('opening config.json shows the JSON preview', (tester) {
+      tester.viewportSize = _size;
       tester.pumpWidget(const FileManagerApp());
-      tester.render(size: _size);
       tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // → test/
       tester.sendKey(const KeyEvent(KeyCode.arrowDown)); // → assets/
       tester.sendKey(const KeyEvent(KeyCode.arrowRight)); // expand
@@ -68,6 +70,7 @@ void main() {
     testWidgets('streams a Claude-Code-style turn: todos, tools, diff', (
       tester,
     ) {
+      tester.viewportSize = tall;
       tester.pumpWidget(const AgentApp());
       tester.pump(const Duration(seconds: 6)); // drain the streamed reply
       final out = tester.renderToString(size: tall);
@@ -80,6 +83,7 @@ void main() {
     });
 
     testWidgets('Enter advances to the next scripted turn', (tester) {
+      tester.viewportSize = tall;
       tester.pumpWidget(const AgentApp());
       tester.pump(const Duration(seconds: 6));
       tester.sendKey(const KeyEvent(KeyCode.enter)); // submit → next
@@ -90,6 +94,7 @@ void main() {
 
   group('debug playground', () {
     testWidgets('renders the scenario menu and readout', (tester) {
+      tester.viewportSize = _size;
       tester.pumpWidget(const DebugPlaygroundApp());
       final out = tester.renderToString(size: _size);
       expect(out, contains('Fleury Debug Playground'));
@@ -106,23 +111,15 @@ void main() {
     ) {
       // The sample runner mounts every showcase as FleuryApp(home: ...), whose
       // Navigator gives the home route its traversal group.
-      tester.pumpFleuryHome(const DebugPlaygroundApp());
-      tester.render(size: _size); // autofocus lands on the first button
-      expect(
-        tester
-            .semantics()
-            .single(role: SemanticRole.button, focused: true)
-            .label,
-        'Spike a slow frame',
+      tester.viewportSize = _size;
+      tester.pumpWidget(
+        const FleuryApp(title: 'Debug playground', home: DebugPlaygroundApp()),
       );
+      expect(tester.button('Spike a slow frame'), isFocused);
       tester.sendKey(const KeyEvent(KeyCode.arrowDown));
-      tester.render(size: _size);
       expect(
-        tester
-            .semantics()
-            .single(role: SemanticRole.button, focused: true)
-            .label,
-        'Throw in a handler',
+        tester.button('Throw in a handler'),
+        isFocused,
         reason: '↓ moves focus to the next button inside the traversal group',
       );
     });
@@ -131,13 +128,9 @@ void main() {
         'readout — the same path an agent drives over fleury mcp', (
       tester,
     ) async {
+      tester.viewportSize = _size;
       tester.pumpWidget(const DebugPlaygroundApp());
-      tester.render(size: _size); // mount + focus
-      await tester.invokeSemanticAction(
-        SemanticAction.activate,
-        role: SemanticRole.button,
-        label: 'Emit a log burst',
-      );
+      await tester.button('Emit a log burst').press();
       final out = tester.renderToString(size: _size);
       expect(out, contains('emitted 40 log lines'));
       expect(out, contains('log bursts')); // the tally row is present

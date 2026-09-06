@@ -1,0 +1,11 @@
+{
+  "scope": "local button facade feasibility; not a public implementation",
+  "checked": [
+    "query resolves a replacement root rather than retaining a node",
+    "duplicates are ambiguous even when only one is enabled",
+    "logical press operates a custom semantic button",
+    "press completes layout without a separate render call",
+    "save stays pending, rejects a repeat press, and can retry"
+  ],
+  "count": 5
+}

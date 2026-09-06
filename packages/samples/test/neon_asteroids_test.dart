@@ -468,13 +468,10 @@ void main() {
       'semantic start action launches the same state transition as input',
       (tester) async {
         tester.pumpWidget(const NeonAsteroidsApp());
-        tester.render(size: viewport);
 
-        await tester.invokeSemanticAction(
-          SemanticAction.start,
-          role: SemanticRole.region,
-          label: 'Neon Asteroids game',
-        );
+        await tester
+            .target(role: SemanticRole.region, label: 'Neon Asteroids game')
+            .perform(SemanticAction.start);
 
         expect(tester.renderToString(size: viewport), contains('WAVE 01'));
       },

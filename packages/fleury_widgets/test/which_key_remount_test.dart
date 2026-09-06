@@ -69,6 +69,8 @@ void main() {
   testWidgets('the popup has no layout footprint: the app is constrained the '
       'same shown and hidden', (tester) {
     final seen = <CellConstraints>[];
+    // Keep the viewport fixed from the first complete frame.
+    tester.viewportSize = const CellSize(40, 14);
     tester.pumpWidget(
       _app(
         LayoutBuilder(

@@ -1,0 +1,136 @@
+{
+  "baseCommit": "a9eb740aacc60c8fd8483abaa1aa8ce49f78c3c0",
+  "checks": {
+    "core-focused": {
+      "summaries": [
+        "00:00 +155: All tests passed!"
+      ],
+      "failures": []
+    },
+    "test": {
+      "summaries": [
+        "00:00 +16: All tests passed!"
+      ],
+      "failures": []
+    },
+    "widgets": {
+      "summaries": [
+        "00:12 +1091 ~1: All tests passed!"
+      ],
+      "failures": []
+    },
+    "guide": {
+      "summaries": [
+        "00:02 +7: All tests passed!"
+      ],
+      "failures": []
+    },
+    "browser": {
+      "summaries": [
+        "00:01 +2: All tests passed!"
+      ],
+      "failures": []
+    },
+    "check": {
+      "summaries": [
+        "00:53 +2958 -4: Some tests failed."
+      ],
+      "failures": [
+        "00:12 +1731 -1: test/widgets/text_area_test.dart: bracketed paste large paste is chunked and preserves newlines [E]",
+        "00:12 +1732 -2: test/widgets/text_area_test.dart: bracketed paste parser-segmented paste is lossless and one undo transaction [E]",
+        "00:14 +2113 -3: test/widgets/text_input_test.dart: bracketed paste large paste is chunked over post-frame pumps [E]",
+        "00:14 +2115 -4: test/widgets/text_input_test.dart: bracketed paste parser-segmented paste is lossless and one undo transaction [E]"
+      ]
+    },
+    "fleury_themes": {
+      "summaries": [
+        "00:00 +6 -1: Some tests failed."
+      ],
+      "failures": [
+        "00:00 +0 -1: test/themes_test.dart: the package never imports the native umbrella [E]"
+      ]
+    },
+    "fleury_git": {
+      "summaries": [
+        "00:00 +4: All tests passed!"
+      ],
+      "failures": []
+    },
+    "fleury_example_console": {
+      "summaries": [
+        "00:01 +25: All tests passed!"
+      ],
+      "failures": []
+    },
+    "storybook": {
+      "summaries": [
+        "00:38 +43: All tests passed!"
+      ],
+      "failures": []
+    },
+    "fleury_web": {
+      "summaries": [
+        "04:08 +512 -4: Some tests failed."
+      ],
+      "failures": [
+        "00:07 +68 -1: [Chrome, Dart2Js] test/run_tui_surface_test.dart: IME composition input is queued and dispatched during a frame [E]",
+        "00:07 +82 -2: [Chrome, Dart2Js] test/run_tui_surface_test.dart: semantic action request before first semantic tree records notFound [E]",
+        "01:00 +287 -3: [Chrome, Dart2Js] test/mount_app_test.dart: mountApp assembles retained DOM rendering and browser input [E]",
+        "01:29 +386 -4: [Chrome, Dart2Js] test/dom_demo_test.dart: retained DOM demo renders and handles browser input [E]"
+      ]
+    },
+    "samples": {
+      "summaries": [
+        "00:02 +92: All tests passed!"
+      ],
+      "failures": []
+    },
+    "fleury_mcp": {
+      "summaries": [
+        "00:29 +148: All tests passed!"
+      ],
+      "failures": []
+    },
+    "integration": {
+      "summaries": [
+        "04:28 +44 -1: Some tests failed."
+      ],
+      "failures": [
+        "03:42 +31 -1: test/remote/remote_client_asset_test.dart: embedded client asset is in sync with its source [E]"
+      ]
+    },
+    "asset-check": {
+      "summaries": [
+        "00:03 +1: All tests passed!"
+      ],
+      "failures": []
+    },
+    "website-final": {
+      "summaries": [
+        "00:05 +62: All tests passed!                                                                                                                                                                           ",
+        "19:06:26 [build] 144 page(s) built in 5.61s"
+      ],
+      "failures": []
+    }
+  },
+  "baselineReproductions": {
+    "paste": [
+      "00:00 +5 -1: test/widgets/text_input_test.dart: bracketed paste large paste is chunked over post-frame pumps [E]",
+      "00:00 +6 -2: test/widgets/text_area_test.dart: bracketed paste large paste is chunked and preserves newlines [E]",
+      "00:00 +6 -3: test/widgets/text_input_test.dart: bracketed paste parser-segmented paste is lossless and one undo transaction [E]",
+      "00:00 +7 -4: test/widgets/text_area_test.dart: bracketed paste parser-segmented paste is lossless and one undo transaction [E]"
+    ],
+    "fleury_themes": [
+      "00:00 +0 -1: test/themes_test.dart: the package never imports the native umbrella [E]"
+    ],
+    "fleury_web": [
+      "00:00 +0 -1: IME composition input is queued and dispatched during a frame [E]",
+      "00:00 +0 -2: semantic action request before first semantic tree records notFound [E]"
+    ],
+    "web-additional": [
+      "00:00 +0 -2: test/dom_demo_test.dart: retained DOM demo renders and handles browser input [E]",
+      "00:00 +0 -2: test/mount_app_test.dart: mountApp assembles retained DOM rendering and browser input [E]"
+    ]
+  },
+  "integrationNote": "The broad run passed 44 tests; its sole asset-freshness failure passed after regenerating the source-derived asset."
+}

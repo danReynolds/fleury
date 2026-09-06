@@ -115,6 +115,7 @@ void main() {
     testWidgets('renders a polished editor and full-cell sprite colors', (
       tester,
     ) {
+      tester.viewportSize = size;
       tester.pumpWidget(const AnsiSpriteStudioApp());
       final buffer = tester.render(size: size);
       final output = tester.renderToString(size: size);
@@ -151,6 +152,7 @@ void main() {
     testWidgets(
       'mouse coordinates map through painted bounds to sprite cells',
       (tester) {
+        tester.viewportSize = size;
         tester.pumpWidget(const AnsiSpriteStudioApp());
         final before = tester.render(size: size);
         final canvas = tester.semantics().single(
@@ -226,8 +228,8 @@ void main() {
     testWidgets('a sparse drag event paints a gapless, captured stroke', (
       tester,
     ) {
+      tester.viewportSize = size;
       tester.pumpWidget(const AnsiSpriteStudioApp());
-      tester.render(size: size);
       final bounds = tester
           .semantics()
           .single(role: SemanticRole.image, label: 'Editable sprite canvas')
@@ -270,8 +272,8 @@ void main() {
     });
 
     testWidgets('arrow keys and Space edit the focused canvas', (tester) {
+      tester.viewportSize = size;
       tester.pumpWidget(const AnsiSpriteStudioApp());
-      tester.render(size: size);
       final bounds = tester
           .semantics()
           .single(role: SemanticRole.image, label: 'Editable sprite canvas')
@@ -293,11 +295,12 @@ void main() {
     testWidgets(
       'Play advances the live preview and Pause returns to selection',
       (tester) {
+        tester.viewportSize = size;
         tester.pumpWidget(const AnsiSpriteStudioApp());
         expect(tester.renderToString(size: size), contains('frame-1  140 ms'));
 
         tester.sendKey(const KeyEvent(KeyCode.r));
-        tester.render(size: size); // rebuild with the preview ticker enabled
+        tester.pump(); // lay out the preview and start its ticker
         tester.pump(const Duration(milliseconds: 160));
         expect(tester.renderToString(size: size), contains('frame-2  180 ms'));
 
@@ -309,8 +312,8 @@ void main() {
     testWidgets('Ctrl+C copies canonical JSON through the host clipboard', (
       tester,
     ) {
+      tester.viewportSize = size;
       tester.pumpWidget(const AnsiSpriteStudioApp());
-      tester.render(size: size);
 
       tester.press(KeySequence.ctrl.c);
       final copied = (tester.clipboard as InProcessClipboard).lastWritten;
@@ -322,21 +325,15 @@ void main() {
     });
 
     testWidgets('Import opens an explicit focused-paste workflow', (tester) {
+      tester.viewportSize = size;
       tester.pumpWidget(const AnsiSpriteStudioApp());
-      tester.render(size: size);
 
       tester.press(KeyCode.i);
       final output = tester.renderToString(size: size);
 
       expect(output, contains('Paste portable sprite JSON'));
       expect(output, contains('Ctrl+A, paste, then press Enter'));
-      expect(
-        tester
-            .semantics()
-            .single(role: SemanticRole.textField, label: 'Portable sprite JSON')
-            .focused,
-        isTrue,
-      );
+      expect(tester.field('Portable sprite JSON'), isFocused);
 
       tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(

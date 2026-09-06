@@ -237,7 +237,7 @@ void main() {
       // Rather than silently collapse the list to zero columns inside the
       // Scrollbar's Row/Expanded (the review-found regression), the guard
       // throws a clear, actionable error.
-      tester.pumpWidget(
+      tester.mountWidget(
         Row(
           children: [
             const SizedBox(width: 5, child: Text('MENU')),

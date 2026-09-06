@@ -334,13 +334,9 @@ void main() {
       expect(area.state.pasteInsertedLength, 3);
       expect(area.state.pasteTotalLength, 8);
 
-      tester.pump();
-      expect(ctl.text, 'ab\ncd\n');
-
-      tester.pump();
+      // A post-frame pass can consume multiple chunks within its time budget.
+      tester.pumpAndSettle();
       expect(ctl.text, 'ab\ncd\nef');
-
-      tester.pump();
       area = tester.semantics().single(role: SemanticRole.textArea);
       expect(area.state.pasteInProgress, isFalse);
 
@@ -1199,7 +1195,7 @@ void main() {
     ) {
       final ctl = TextEditingController(text: 'one\ntwo\nthree')
         ..caretOffset = 13; // end of the document
-      tester.pumpWidget(TextArea(controller: ctl, autofocus: true));
+      tester.mountWidget(TextArea(controller: ctl, autofocus: true));
 
       expect(
         splitsDuring(() => tester.render(size: const CellSize(10, 4))),
@@ -1244,7 +1240,7 @@ void main() {
       tester,
     ) {
       final ctl = TextEditingController();
-      tester.pumpWidget(
+      tester.mountWidget(
         TextArea(controller: ctl, autofocus: true, placeholder: 'type\nhere'),
       );
 

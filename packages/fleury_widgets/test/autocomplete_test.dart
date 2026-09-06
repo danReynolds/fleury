@@ -404,22 +404,13 @@ void main() {
       tester.type('ap');
       tester.render(size: const CellSize(30, 8));
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.activate,
-        role: SemanticRole.menuItem,
-        label: 'apricot',
-      );
+      await tester
+          .target(role: SemanticRole.menuItem, label: 'apricot')
+          .press();
 
-      expect(result.completed, isTrue);
       expect(selected, 'apricot');
-      expect(tester.semantics().where(role: SemanticRole.menu), isEmpty);
-      expect(
-        tester
-            .semantics()
-            .single(role: SemanticRole.textField, label: 'Fruit')
-            .value,
-        'apricot',
-      );
+      expect(tester.target(role: SemanticRole.menu), hasCount(0));
+      expect(tester.field('Fruit'), hasValue('apricot'));
     });
 
     testWidgets('semantic close hides suggestions without clearing query', (
@@ -436,21 +427,12 @@ void main() {
       tester.type('ba');
       tester.render(size: const CellSize(30, 8));
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.close,
-        role: SemanticRole.menu,
-        label: 'Fruit suggestions',
-      );
+      await tester
+          .target(role: SemanticRole.menu, label: 'Fruit suggestions')
+          .close();
 
-      expect(result.completed, isTrue);
-      expect(tester.semantics().where(role: SemanticRole.menu), isEmpty);
-      expect(
-        tester
-            .semantics()
-            .single(role: SemanticRole.textField, label: 'Fruit')
-            .value,
-        'ba',
-      );
+      expect(tester.target(role: SemanticRole.menu), hasCount(0));
+      expect(tester.field('Fruit'), hasValue('ba'));
       expect(
         tester
             .semantics()
@@ -468,8 +450,8 @@ void main() {
         ),
       );
       expect(
-        tester.semantics().where(role: SemanticRole.menu),
-        isEmpty,
+        tester.target(role: SemanticRole.menu),
+        hasCount(0),
         reason: 'a rebuild must not undo semantic dismissal',
       );
     });

@@ -628,12 +628,8 @@ void main() {
       controller.selectedIndex = 1;
       tester.pump();
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.activate,
-        role: SemanticRole.table,
-      );
+      await tester.target(role: SemanticRole.table).press();
 
-      expect(result.completed, isTrue);
       expect(picked, 1);
     });
 
@@ -667,12 +663,8 @@ void main() {
                 node.state.values['columnIndex'] == 0,
           );
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.select,
-        node: target,
-      );
+      await tester.target(id: target.id).select();
 
-      expect(result.completed, isTrue);
       expect(controller.selectedIndex, 1);
       final selectedCells = tester
           .semantics()
@@ -713,12 +705,8 @@ void main() {
           );
       expect(target.actions, contains(SemanticAction.activate));
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.activate,
-        node: target,
-      );
+      await tester.target(id: target.id).press();
 
-      expect(result.completed, isTrue);
       expect(controller.selectedIndex, 1);
       expect(picked, 1);
     });

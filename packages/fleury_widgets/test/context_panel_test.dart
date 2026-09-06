@@ -185,12 +185,9 @@ void main() {
       expect(panel.focused, isFalse);
       expect(panel.actions, contains(SemanticAction.navigate));
 
-      var result = await tester.invokeSemanticAction(
-        SemanticAction.focus,
-        role: WidgetRoles.contextPanel,
-        label: 'Context pack',
-      );
-      expect(result.completed, isTrue);
+      await tester
+          .target(role: WidgetRoles.contextPanel, label: 'Context pack')
+          .focus();
 
       tester.render(size: const CellSize(100, 6));
       panel = tester.semantics().single(
@@ -200,12 +197,9 @@ void main() {
       );
       expect(panel.state.selectedContextItemId, 'ctx.demo');
 
-      result = await tester.invokeSemanticAction(
-        SemanticAction.activate,
-        role: WidgetRoles.contextItem,
-        label: 'Demo scenario',
-      );
-      expect(result.completed, isTrue);
+      await tester
+          .target(role: WidgetRoles.contextItem, label: 'Demo scenario')
+          .press();
       expect(controller.selectedIndex, 1);
       expect(selected?.item.id, 'ctx.scenario');
 
@@ -301,13 +295,10 @@ void main() {
         );
 
         tester.render(size: const CellSize(100, 6));
-        final result = await tester.invokeSemanticAction(
-          SemanticAction.copy,
-          role: WidgetRoles.contextItem,
-          label: 'Demo console source',
-        );
+        await tester
+            .target(role: WidgetRoles.contextItem, label: 'Demo console source')
+            .copy();
 
-        expect(result.completed, isTrue);
         expect(
           tester.clipboard.readInProcess(),
           'Demo console source | file | high | pinned | 1200 tokens | '

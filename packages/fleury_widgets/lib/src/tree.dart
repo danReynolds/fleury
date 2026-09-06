@@ -382,6 +382,7 @@ class _TreeRowWidget<T> extends StatelessWidget {
       role: SemanticRole.treeItem,
       label: label,
       selected: selected,
+      expanded: node.isBranch ? expanded : null,
       enabled: true,
       actions: {
         // A collapsed branch offers `open`, an expanded one `close` — the

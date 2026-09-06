@@ -397,16 +397,11 @@ void main() {
       );
       tester.render(size: const CellSize(40, 10));
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.open,
-        role: SemanticRole.treeItem,
-        label: 'sub/',
-      );
+      await tester.target(role: SemanticRole.treeItem, label: 'sub/').open();
 
-      expect(result.completed, isTrue);
       expect(
-        tester.semantics().single(role: SemanticRole.tree).value,
-        '$dir${Platform.pathSeparator}sub',
+        tester.target(role: SemanticRole.tree),
+        hasValue('$dir${Platform.pathSeparator}sub'),
       );
       expect(
         tester.semantics().single(
@@ -430,13 +425,8 @@ void main() {
       );
       tester.render(size: const CellSize(40, 10));
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.open,
-        role: SemanticRole.treeItem,
-        label: 'a.txt',
-      );
+      await tester.target(role: SemanticRole.treeItem, label: 'a.txt').open();
 
-      expect(result.completed, isTrue);
       expect(picked, isNotNull);
       expect(picked!.path, '$dir${Platform.pathSeparator}a.txt');
       expect(
@@ -452,20 +442,9 @@ void main() {
       final dir = _scratchDir();
       tester.pumpWidget(FilePicker(initialDirectory: dir, onSelect: (_) {}));
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.focus,
-        role: SemanticRole.tree,
-        label: 'Files',
-      );
+      await tester.target(role: SemanticRole.tree, label: 'Files').focus();
 
-      expect(result.completed, isTrue);
-      expect(
-        tester
-            .semantics()
-            .single(role: SemanticRole.tree, label: 'Files')
-            .focused,
-        isTrue,
-      );
+      expect(tester.target(role: SemanticRole.tree, label: 'Files'), isFocused);
     });
   });
 }

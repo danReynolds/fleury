@@ -8,6 +8,8 @@
 interface Props {
   /** Registry id, e.g. "gauge.basic" (see website/examples/lib/registry.dart). */
   id: string;
+  /** An executable walkthrough alongside this live widget. */
+  test?: 'preferences';
   /** Optional caption shown above the example. */
   title?: string;
   /** Grid width in character cells. */
@@ -21,6 +23,7 @@ interface Props {
 }
 const {
   id,
+  test,
   title,
   cols = 60,
   rows = 12,
@@ -58,6 +61,8 @@ const examplesBundle = '/fleury/fleury-examples.js';
           data-cols={cols}
           data-rows={rows}
           data-theme={surfaceTheme}
+          data-test={test}
+          style={test ? "display: none" : undefined}
           aria-label="Expand this example to full screen"
         >⛶ Expand</button>
       </div>
@@ -66,6 +71,7 @@ const examplesBundle = '/fleury/fleury-examples.js';
       <div
         class="fleury-host"
         data-fleury-example={id}
+        data-fleury-test={test}
         data-fleury-theme={surfaceTheme}
         style={style}
         role="img"
@@ -143,4 +149,17 @@ const examplesBundle = '/fleury/fleury-examples.js';
       expand(btn.dataset.id, +btn.dataset.cols, +btn.dataset.rows, btn.dataset.theme);
     });
   })();
+</script>
+
+<script>
+  import { attachPreferencesTest } from '../scripts/preferences-test-runner';
+  const wireTests = () => {
+    for (const host of document.querySelectorAll<HTMLElement>('[data-fleury-test="preferences"]')) {
+      if (host.dataset.testWired) continue;
+      host.dataset.testWired = 'true';
+      attachPreferencesTest(host, host.closest('.cds') ?? host.parentElement!);
+    }
+  };
+  wireTests();
+  document.addEventListener('astro:page-load', wireTests);
 </script>

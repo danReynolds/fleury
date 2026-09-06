@@ -370,6 +370,7 @@ void main() {
       final result = await tester.invokeSemanticAction(
         SemanticAction.increment,
         node: node,
+        allowFailure: true,
       );
       expect(result.status, SemanticActionInvocationStatus.disabled);
     });
@@ -442,11 +443,8 @@ void main() {
       expect(decrement.completed, isTrue);
       expect(calls, [_d(2024, 3, 16), _d(2024, 3, 14)]);
       expect(
-        tester
-            .semantics()
-            .single(role: SemanticRole.datePicker, label: 'Due date')
-            .focused,
-        isTrue,
+        tester.target(role: SemanticRole.datePicker, label: 'Due date'),
+        isFocused,
       );
     });
 
@@ -612,20 +610,18 @@ void main() {
         tester.pumpWidget(
           DatePicker(value: _d(2024, 11, 3), onChanged: (d) => selected = d),
         );
-        await tester.invokeSemanticAction(
-          SemanticAction.increment,
-          role: SemanticRole.datePicker,
-        );
+        await tester
+            .target(role: SemanticRole.datePicker)
+            .perform(SemanticAction.increment);
         expect(selected, _d(2024, 11, 4));
 
         selected = null;
         tester.pumpWidget(
           DatePicker(value: _d(2025, 3, 10), onChanged: (d) => selected = d),
         );
-        await tester.invokeSemanticAction(
-          SemanticAction.decrement,
-          role: SemanticRole.datePicker,
-        );
+        await tester
+            .target(role: SemanticRole.datePicker)
+            .perform(SemanticAction.decrement);
         expect(selected, _d(2025, 3, 9));
       }, skip: _fallBackSkip);
     });

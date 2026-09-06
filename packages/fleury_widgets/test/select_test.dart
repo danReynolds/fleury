@@ -229,6 +229,7 @@ void main() {
       final result = await tester.invokeSemanticAction(
         SemanticAction.open,
         node: trigger,
+        allowFailure: true,
       );
       expect(result.status, SemanticActionInvocationStatus.disabled);
     });
@@ -245,11 +246,7 @@ void main() {
           onHighlight: previews.add,
         ),
       );
-      await tester.invokeSemanticAction(
-        SemanticAction.open,
-        role: SemanticRole.button,
-        label: 'Color',
-      );
+      await tester.button('Color').open();
       tester.sendKey(const KeyEvent(KeyCode.arrowDown));
       expect(previews.last, 'green');
 
@@ -267,7 +264,7 @@ void main() {
         isNull,
         reason: 'restores the committed null value',
       );
-      expect(tester.semantics().where(role: SemanticRole.menu), isEmpty);
+      expect(tester.target(role: SemanticRole.menu), hasCount(0));
       expect(tester.focusManager.focusedNode, same(priorFocus));
 
       tester.pumpWidget(const Text('gone'));
@@ -592,12 +589,8 @@ void main() {
         }
         expect(options.map((o) => (o as Map)['value']), contains('green'));
 
-        final result = await tester.invokeSemanticAction(
-          SemanticAction.open,
-          node: trigger,
-        );
+        await tester.button('Color').open();
 
-        expect(result.completed, isTrue);
         tester.render(size: const CellSize(30, 8));
         final tree = tester.semantics();
         final menu = tree.single(role: SemanticRole.menu, label: 'Color');
@@ -616,21 +609,14 @@ void main() {
         String? picked;
         tester.pumpWidget(_Host(initial: 'red', onPick: (v) => picked = v));
 
-        await tester.invokeSemanticAction(
-          SemanticAction.open,
-          role: SemanticRole.button,
-          label: 'Color',
-        );
+        await tester.button('Color').open();
         tester.render(size: const CellSize(30, 8));
-        final result = await tester.invokeSemanticAction(
-          SemanticAction.select,
-          role: SemanticRole.menuItem,
-          label: 'Blue',
-        );
+        await tester
+            .target(role: SemanticRole.menuItem, label: 'Blue')
+            .select();
 
-        expect(result.completed, isTrue);
         expect(picked, 'blue');
-        expect(tester.semantics().where(role: SemanticRole.menu), isEmpty);
+        expect(tester.target(role: SemanticRole.menu), hasCount(0));
         final trigger = tester.semantics().single(
           role: SemanticRole.button,
           label: 'Color',
@@ -645,24 +631,15 @@ void main() {
         final previews = <String?>[];
         tester.pumpWidget(_Host(initial: 'red', onHighlight: previews.add));
 
-        await tester.invokeSemanticAction(
-          SemanticAction.open,
-          role: SemanticRole.button,
-          label: 'Color',
-        );
+        await tester.button('Color').open();
         tester.render(size: const CellSize(30, 8));
         tester.sendKey(const KeyEvent(KeyCode.arrowDown));
         expect(previews.last, 'green');
 
-        final result = await tester.invokeSemanticAction(
-          SemanticAction.close,
-          role: SemanticRole.button,
-          label: 'Color',
-        );
+        await tester.button('Color').close();
 
-        expect(result.completed, isTrue);
         expect(previews.last, 'red');
-        expect(tester.semantics().where(role: SemanticRole.menu), isEmpty);
+        expect(tester.target(role: SemanticRole.menu), hasCount(0));
         expect(tester.focusManager.focusedNode?.debugLabel, 'select-trigger');
       });
 
@@ -680,11 +657,7 @@ void main() {
             ),
           );
 
-          await tester.invokeSemanticAction(
-            SemanticAction.open,
-            role: SemanticRole.button,
-            label: 'Color',
-          );
+          await tester.button('Color').open();
           tester.render(size: const CellSize(30, 8));
 
           final disabled = tester.semantics().single(
@@ -702,11 +675,7 @@ void main() {
         tester,
       ) async {
         tester.pumpWidget(const _Host(initial: 'red'));
-        await tester.invokeSemanticAction(
-          SemanticAction.open,
-          role: SemanticRole.button,
-          label: 'Color',
-        );
+        await tester.button('Color').open();
         tester.render(size: const CellSize(30, 8));
 
         final snapshot = tester.accessibilitySnapshot();
@@ -789,22 +758,24 @@ void main() {
       expect(picked, {'red', 'blue'});
     });
 
-    testWidgets('semantic activate toggles an option', (tester) async {
+    testWidgets('presses and sets option state without changing its key', (
+      tester,
+    ) async {
       tester.pumpWidget(const _MultiHost(initial: {'red'}));
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.activate,
-        role: SemanticRole.checkbox,
-        label: 'Blue',
-      );
+      final blue = tester.checkbox('Blue');
+      await blue.press();
+      expect(blue, isChecked);
+      expect(blue, hasValue('blue'));
+      expect(blue.snapshot.state['itemPosition'], 3);
 
-      expect(result.completed, isTrue);
-      final blue = tester.semantics().single(
-        role: SemanticRole.checkbox,
-        label: 'Blue',
-      );
-      expect(blue.checked, isTrue);
-      expect(blue.state['itemPosition'], 3);
+      await blue.uncheck();
+      expect(blue, isUnchecked);
+      expect(blue, hasValue('blue'));
+
+      await blue.check();
+      expect(blue, isChecked);
+      expect(blue, hasValue('blue'));
     });
 
     testWidgets('null onChanged disables the list and options', (tester) async {
@@ -841,6 +812,7 @@ void main() {
       final result = await tester.invokeSemanticAction(
         SemanticAction.activate,
         node: red,
+        allowFailure: true,
       );
       expect(result.status, SemanticActionInvocationStatus.disabled);
     });

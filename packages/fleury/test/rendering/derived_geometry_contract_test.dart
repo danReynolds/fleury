@@ -289,7 +289,7 @@ void main() {
   ) async {
     final under = Probe('under');
     final floater = Probe('floater');
-    tester.pumpFleuryHome(under.widget());
+    tester.pumpWidget(FleuryApp(title: 'Geometry test', home: under.widget()));
     expectPlaced(tester, frame(tester), under);
     expect(under.node.rect, isNotNull);
 
@@ -312,7 +312,7 @@ void main() {
     testWidgets('a child painted where childOffsetOf does not place it', (
       tester,
     ) async {
-      tester.pumpWidget(const _Misplacing(child: Text('x')));
+      tester.mountWidget(const _Misplacing(child: Text('x')));
       expect(
         () => tester.render(),
         throwsA(
@@ -328,7 +328,7 @@ void main() {
     testWidgets('a child painted that presentsChild reports hidden', (
       tester,
     ) async {
-      tester.pumpWidget(const _Hiding(child: Text('x')));
+      tester.mountWidget(const _Hiding(child: Text('x')));
       expect(
         () => tester.render(),
         throwsA(

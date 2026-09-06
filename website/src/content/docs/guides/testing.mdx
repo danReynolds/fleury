@@ -1,0 +1,374 @@
+---
+title: Testing
+description: Test buttons, forms, asynchronous work, and animations with small running examples.
+---
+
+import FleuryExample from '../../../components/FleuryExample.astro';
+import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
+import PreferencesTestCode from '../../../components/PreferencesTestCode.astro';
+
+A widget test runs your UI without opening a terminal. Each example below pairs
+a running widget with its source and a test you can try.
+
+## Write your first test
+
+`button('Add one')` finds the button by its **role** (the kind of control) and
+**label** (its name). `Button` supplies both automatically.
+
+The **Logical test** invokes its action with `press()`. The **Keyboard test**
+sends Enter through the focus system. Try the counter, then compare the two:
+
+<CodeDemoSplit
+  files={['Counter source', 'Logical test', 'Keyboard test']}
+  initialFile="Logical test"
+  codeLabel="Source and test"
+  demoLabel="Try it"
+  layout="code-wide"
+  codeMaxHeight="26rem"
+>
+<Fragment slot="code-0">
+```dart wrap
+import 'package:fleury/fleury_core.dart';
+import 'package:fleury_widgets/fleury_widgets_web.dart';
+
+class Counter extends StatefulWidget {
+  const Counter({super.key});
+
+  @override
+  State<Counter> createState() => _CounterState();
+}
+
+class _CounterState extends State<Counter> {
+  int count = 0;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text('Count: $count'),
+      Button(
+        label: 'Add one',
+        autofocus: true,
+        onPressed: () => setState(() => count++),
+      ),
+    ],
+  );
+}
+```
+</Fragment>
+<Fragment slot="code-1">
+```dart wrap
+import 'package:fleury/fleury.dart';
+import 'package:fleury_test/fleury_test.dart';
+import 'package:test/test.dart';
+
+import '../lib/testing_guide.dart';
+
+void main() {
+  testWidgets('adds one', (tester) async {
+    tester.pumpWidget(const Counter());
+    await tester.button('Add one').press();
+    expect(tester.exists(text('Count: 1')), isTrue);
+  });
+}
+```
+</Fragment>
+<Fragment slot="code-2">
+```dart wrap
+testWidgets('adds one using the keyboard', (tester) {
+  tester.pumpWidget(const Counter());
+  expect(tester.button('Add one'), isFocused);
+  tester.press(KeySequence.enter);
+  expect(tester.exists(text('Count: 1')), isTrue);
+});
+```
+</Fragment>
+<FleuryExample slot="demo" id="testing.counter" cols={32} rows={5} interactive />
+</CodeDemoSplit>
+
+`pumpWidget` mounts the widget and completes its first frame. `testWidgets`
+provides a fresh tester for each test and disposes it afterward.
+
+`expect(actual, matcher)` checks the result. Here, `exists(text(...))` returns a
+boolean; `isTrue` is Dart's standard matcher for `true`. A logical press checks
+the button's behavior; use keyboard or pointer tests to check input routing.
+
+<details>
+<summary>Set up and run the tests</summary>
+
+Add `fleury_test` and `test` to your app's development dependencies. During the
+pre-release Git installation, use:
+
+```yaml
+dev_dependencies:
+  fleury_test:
+    git:
+      url: https://github.com/danReynolds/fleury.git
+      path: packages/fleury_test
+  test: ^1.26.3
+```
+
+Keep the `fleury` dependency override from
+[Getting started](/fleury/getting-started/) so the app and tester use the same
+checkout. Run `dart test` from your application package. In a Fleury checkout,
+run every example from this guide with:
+
+```sh
+cd website/examples
+dart test test/testing_guide_test.dart
+```
+</details>
+
+Keep the imports and `main` from the first test. The remaining test tabs show
+individual cases to add inside it.
+
+## Find a component, then edit its controls
+
+Both forms have a **Name** field and an **Email updates** checkbox. Select the
+Work widget by its type and key, then change only its controls. Use **Run test**
+to watch the actions and assertions, or type into Work and use Tab to explore:
+
+<CodeDemoSplit
+  files={['Preferences source', 'Test']}
+  initialFile="Test"
+  codeLabel="Source and test"
+  demoLabel="Try it"
+  layout="code-wide"
+  codeMaxHeight="26rem"
+>
+<Fragment slot="code-0">
+```dart wrap
+import 'package:fleury/fleury_core.dart';
+import 'package:fleury_widgets/fleury_widgets_web.dart';
+
+class Preferences extends StatefulWidget {
+  const Preferences({super.key, this.autofocus = false});
+  final bool autofocus;
+
+  @override
+  State<Preferences> createState() => _PreferencesState();
+}
+
+class _PreferencesState extends State<Preferences> {
+  String name = '';
+  bool emailUpdates = false;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      SizedBox(
+        width: 26,
+        child: TextInput(
+          semanticLabel: 'Name',
+          placeholder: 'Name',
+          autofocus: widget.autofocus,
+          onChanged: (value) => setState(() => name = value),
+        ),
+      ),
+      Checkbox(
+        label: 'Email updates',
+        value: emailUpdates,
+        onChanged: (value) => setState(() => emailUpdates = value),
+      ),
+      Text(emailUpdates ? 'Updates for $name' : 'Email updates off'),
+    ],
+  );
+}
+
+Widget preferencesPair() => const Column(
+  mainAxisSize: MainAxisSize.min,
+  crossAxisAlignment: CrossAxisAlignment.start,
+  children: [
+    Text('PERSONAL', style: CellStyle(dim: true)),
+    Preferences(key: ValueKey('personal')),
+    SizedBox(height: 1),
+    Text('WORK', style: CellStyle(dim: true)),
+    Preferences(key: ValueKey('work'), autofocus: true),
+  ],
+);
+```
+</Fragment>
+<PreferencesTestCode slot="code-1" />
+<FleuryExample slot="demo" id="testing.preferences" test="preferences" cols={32} rows={11} interactive />
+</CodeDemoSplit>
+
+`fill` replaces the field's text. `check` leaves the option checked, including
+when it was already on. Your own widgets, like `Preferences`, use these same
+queries and actions.
+
+## Choose when a save finishes
+
+Try **Save** to see its pending state. The live demo completes after a short
+delay; the test uses a `Completer` from `dart:async` to finish the request itself:
+
+<CodeDemoSplit
+  files={['Save source', 'Test']}
+  initialFile="Test"
+  codeLabel="Source and test"
+  demoLabel="Try it"
+  layout="code-wide"
+  codeMaxHeight="26rem"
+>
+<Fragment slot="code-0">
+```dart wrap
+import 'package:fleury/fleury_core.dart';
+import 'package:fleury_widgets/fleury_widgets_web.dart';
+
+class SaveStatus extends StatefulWidget {
+  const SaveStatus({super.key, required this.save});
+  final Future<void> Function() save;
+
+  @override
+  State<SaveStatus> createState() => _SaveStatusState();
+}
+
+class _SaveStatusState extends State<SaveStatus> {
+  Future<void>? request;
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<void>(
+    future: request,
+    builder: (context, snapshot) {
+      final saving = snapshot.connectionState == ConnectionState.waiting;
+      final status = saving
+          ? 'Saving…'
+          : snapshot.hasError
+          ? 'Save failed'
+          : snapshot.connectionState == ConnectionState.done
+          ? 'Saved'
+          : 'Ready';
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Button(
+            label: 'Save',
+            onPressed: saving
+                ? null
+                : () => setState(() => request = widget.save()),
+          ),
+          Text(status),
+        ],
+      );
+    },
+  );
+}
+```
+</Fragment>
+<Fragment slot="code-1">
+```dart wrap
+testWidgets('chooses when the save finishes', (tester) async {
+  final request = Completer<void>();
+  tester.pumpWidget(SaveStatus(save: () => request.future));
+
+  await tester.button('Save').press();
+  expect(tester.exists(text('Saving…')), isTrue);
+  expect(tester.button('Save'), isDisabled);
+
+  request.complete();
+  await tester.settle();
+  expect(tester.exists(text('Saved')), isTrue);
+  expect(tester.button('Save'), isEnabled);
+});
+```
+</Fragment>
+<FleuryExample slot="demo" id="testing.save" cols={32} rows={5} interactive />
+</CodeDemoSplit>
+
+After `request.complete()`, `await tester.settle()` lets the future callback run
+and processes the resulting frames. This makes the pending and completed states
+easy to check separately.
+
+## Check a moment in an animation
+
+Press **Animate** to move between 0% and 100%. The test advances Fleury's
+animation clock to the halfway point, then finishes the animation:
+
+<CodeDemoSplit
+  files={['Animation source', 'Test']}
+  initialFile="Test"
+  codeLabel="Source and test"
+  demoLabel="Try it"
+  layout="code-wide"
+  codeMaxHeight="26rem"
+>
+<Fragment slot="code-0">
+```dart wrap
+import 'package:fleury/fleury_core.dart';
+import 'package:fleury_widgets/fleury_widgets_web.dart';
+
+class AnimatedUpload extends StatefulWidget {
+  const AnimatedUpload({super.key});
+
+  @override
+  State<AnimatedUpload> createState() => _AnimatedUploadState();
+}
+
+class _AnimatedUploadState extends State<AnimatedUpload> {
+  double target = 0;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      AnimationBuilder<double>(
+        target,
+        duration: const Duration(seconds: 1),
+        curve: Curves.linear,
+        builder: (_, value, _) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 26,
+              child: ProgressBar(value: value, semanticLabel: 'Upload'),
+            ),
+            Text('${(value * 100).round()}%'),
+          ],
+        ),
+      ),
+      Button(
+        label: 'Animate',
+        onPressed: () => setState(() => target = target == 0 ? 1 : 0),
+      ),
+    ],
+  );
+}
+```
+</Fragment>
+<Fragment slot="code-1">
+```dart wrap
+testWidgets('inspects the upload halfway through its animation', (
+  tester,
+) async {
+  tester.pumpWidget(const AnimatedUpload());
+  await tester.button('Animate').press();
+  final upload = tester.target(role: SemanticRole.progress, label: 'Upload');
+
+  tester.pump(const Duration(milliseconds: 500));
+  expect(upload, hasValue(0.5));
+
+  tester.pumpAndSettle();
+  expect(upload, hasValue(1.0));
+});
+```
+</Fragment>
+<FleuryExample slot="demo" id="testing.animation" cols={32} rows={6} interactive />
+</CodeDemoSplit>
+
+`pump(duration)` advances animation time immediately. `pumpAndSettle()` runs
+frames until the animation is quiet. The progress bar also shows how to select
+other control kinds with `target(role: ..., label: ...)`.
+
+## Go further
+
+For dialogs and focus restoration, follow the [navigation](/fleury/guides/navigation/)
+and [focus](/fleury/guides/focus/) examples. For custom controls, see
+[how widgets publish semantics](/fleury/architecture/agents-and-semantics/#what-the-graph-contains).
+
+The [testing API reference](https://github.com/danReynolds/fleury/blob/main/packages/fleury_test/README.md)
+covers additional actions, query rules, failure diagnostics, and golden tests.

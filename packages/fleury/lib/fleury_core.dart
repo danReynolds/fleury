@@ -179,6 +179,7 @@ export 'src/semantics/semantics.dart'
         SemanticSetValueCallback,
         SemanticState,
         SemanticTree,
+        SemanticQueryError,
         SemanticValueContributor,
         Semantics,
         ExcludeSemantics,

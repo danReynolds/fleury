@@ -567,11 +567,21 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
   }
 
   void _toggle(int index) {
+    if (widget.options.isEmpty) return;
+    _setSelected(index, !widget.values.contains(widget.options[index].value));
+  }
+
+  void _setSelected(int index, bool selected) {
     if (!_enabled || widget.options.isEmpty) return;
     final option = widget.options[index];
     if (!option.enabled) return;
+    if (widget.values.contains(option.value) == selected) return;
     final next = Set<T>.of(widget.values);
-    if (!next.add(option.value)) next.remove(option.value);
+    if (selected) {
+      next.add(option.value);
+    } else {
+      next.remove(option.value);
+    }
     widget.onChanged!(Set<T>.unmodifiable(next));
     _reportValueChanged();
   }
@@ -783,6 +793,7 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
             ? const <SemanticAction>{
                 SemanticAction.focus,
                 SemanticAction.activate,
+                SemanticAction.setValue,
               }
             : const <SemanticAction>{},
         state: SemanticState({
@@ -790,6 +801,11 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
           'itemPosition': index + 1,
           'itemCount': widget.options.length,
         }),
+        onSetValue: optionEnabled
+            ? (value) {
+                if (value is bool) _setSelected(index, value);
+              }
+            : null,
         onAction: optionEnabled
             ? (action) {
                 switch (action) {

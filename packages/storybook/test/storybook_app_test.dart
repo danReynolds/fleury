@@ -32,6 +32,7 @@ void main() {
   testWidgets(
     'cyber theme is the default and paints its dark bg + green accent',
     (tester) {
+      tester.viewportSize = const CellSize(120, 40);
       tester.pumpWidget(StorybookApp());
       final buffer = tester.render(size: const CellSize(120, 40));
       const green = RgbColor(0x2E, 0xE6, 0xA6);
@@ -62,6 +63,7 @@ void main() {
   testWidgets('storybook commands navigate stories and variants', (
     tester,
   ) async {
+    tester.viewportSize = const CellSize(120, 40);
     tester.pumpWidget(StorybookApp());
 
     var output = tester.renderToString(
@@ -123,6 +125,7 @@ void main() {
   testWidgets('storybook variant navigation includes the default target', (
     tester,
   ) async {
+    tester.viewportSize = const CellSize(120, 40);
     tester.pumpWidget(
       StorybookApp(initialStoryId: 'controls.boolean-buttons.button'),
     );
@@ -164,6 +167,7 @@ void main() {
     tester,
   ) async {
     String renderStory(String id) {
+      tester.viewportSize = const CellSize(120, 40);
       tester.pumpWidget(
         StorybookApp(key: ValueKey<String>(id), initialStoryId: id),
       );
@@ -206,6 +210,7 @@ void main() {
   testWidgets('preview surfaces the description and a per-widget usage tip', (
     tester,
   ) async {
+    tester.viewportSize = const CellSize(120, 40);
     tester.pumpWidget(StorybookApp(initialStoryId: 'input.stepper.stepper'));
     final output = tester.renderToString(
       size: const CellSize(120, 40),
@@ -222,14 +227,13 @@ void main() {
   testWidgets('completion menu opens beneath the field, clear of the footer', (
     tester,
   ) async {
+    tester.viewportSize = const CellSize(120, 28);
     tester.pumpWidget(
       StorybookApp(initialStoryId: 'controls.text-entry.completion-text-input'),
     );
-    tester.render(size: const CellSize(120, 28));
     // Move focus from the widget list into the preview, then type.
     tester.sendKey(const KeyEvent(KeyCode.arrowRight));
     tester.pump();
-    tester.render(size: const CellSize(120, 28));
     tester.type('c');
     tester.pump();
     final output = tester.renderToString(
@@ -247,12 +251,12 @@ void main() {
   testWidgets(
     'route traversal moves from the selector into the preview without a header detour',
     (tester) {
+      tester.viewportSize = const CellSize(120, 40);
       tester.pumpWidget(
         StorybookApp(
           initialStoryId: 'controls.text-entry.completion-text-input',
         ),
       );
-      tester.render(size: const CellSize(120, 40));
 
       final selectorNode = tester.focusManager.focusedNode;
       final selector = selectorNode?.rect;
@@ -261,7 +265,6 @@ void main() {
 
       tester.sendKey(const KeyEvent(KeyCode.arrowRight));
       tester.pump();
-      tester.render(size: const CellSize(120, 40));
 
       final previewNode = tester.focusManager.focusedNode;
       expect(
@@ -281,6 +284,7 @@ void main() {
   );
 
   testWidgets('initial story, variant, and control values render', (tester) {
+    tester.viewportSize = const CellSize(120, 40);
     tester.pumpWidget(
       StorybookApp(
         initialStoryId: 'visualization.charts.line-chart',
@@ -302,8 +306,8 @@ void main() {
   testWidgets('widget selector activates individual widget rows with Enter', (
     tester,
   ) {
+    tester.viewportSize = const CellSize(120, 40);
     tester.pumpWidget(StorybookApp());
-    tester.render(size: const CellSize(120, 40));
 
     tester.type('Button');
     tester.pump();
@@ -314,7 +318,6 @@ void main() {
     );
     expect(output, contains('Button'));
 
-    tester.render(size: const CellSize(120, 40));
     tester.sendKey(const KeyEvent(KeyCode.enter));
     tester.pump();
     output = tester.renderToString(
@@ -328,8 +331,8 @@ void main() {
   });
 
   testWidgets('widget selector arrow keys move the highlighted row', (tester) {
+    tester.viewportSize = const CellSize(120, 40);
     tester.pumpWidget(StorybookApp());
-    tester.render(size: const CellSize(120, 40));
 
     tester.sendKey(const KeyEvent(KeyCode.arrowDown));
     tester.pump();
@@ -349,8 +352,8 @@ void main() {
     // Regression: the details panel used to sit outside the focus-traversal
     // group, so once focus crossed into it (e.g. onto a control), Left/Right
     // had no group to handle them and focus was stranded on the right.
+    tester.viewportSize = const CellSize(120, 40);
     tester.pumpWidget(StorybookApp(initialStoryId: 'core.layout-text.text'));
-    tester.render(size: const CellSize(120, 40));
 
     int? left() => tester.focusManager.focusedNode?.rect?.left;
 
@@ -359,7 +362,6 @@ void main() {
     for (var i = 0; i < 8 && !enteredDetails; i++) {
       tester.sendKey(const KeyEvent(KeyCode.arrowRight));
       tester.pump();
-      tester.render(size: const CellSize(120, 40));
       if ((left() ?? 0) > 76) enteredDetails = true;
     }
     expect(
@@ -375,7 +377,6 @@ void main() {
     for (var i = 0; i < 14 && !reachedWidgets; i++) {
       tester.sendKey(const KeyEvent(KeyCode.arrowLeft));
       tester.pump();
-      tester.render(size: const CellSize(120, 40));
       final l = left() ?? lastLeft;
       expect(
         l,
@@ -395,18 +396,15 @@ void main() {
   testWidgets('Esc steps out of a focused widget back to the widget list', (
     tester,
   ) {
+    tester.viewportSize = const CellSize(120, 40);
     tester.pumpWidget(StorybookApp(initialStoryId: 'input.date-picker'));
-    const sz = CellSize(120, 40);
-    tester.render(size: sz);
 
     // Focus a preview widget (the calendar, which captures arrows).
     tester.type('DatePicker');
     tester.sendKey(const KeyEvent(KeyCode.enter));
     tester.pump();
-    tester.render(size: sz);
     tester.sendKey(const KeyEvent(KeyCode.arrowRight));
     tester.pump();
-    tester.render(size: sz);
     expect(tester.focusManager.focusedNode.toString(), contains('date-picker'));
 
     // Esc steps out to the widget list — the coarse escape hatch.
@@ -418,22 +416,19 @@ void main() {
   testWidgets('arrow traversal moves from selector into interactive preview', (
     tester,
   ) {
+    tester.viewportSize = const CellSize(120, 40);
     tester.pumpWidget(StorybookApp());
-    tester.render(size: const CellSize(120, 40));
 
     tester.type('ListView');
     tester.sendKey(const KeyEvent(KeyCode.enter));
     tester.pump();
-    tester.render(size: const CellSize(120, 40));
 
     tester.sendKey(const KeyEvent(KeyCode.arrowRight));
     tester.pump();
-    tester.render(size: const CellSize(120, 40));
     expect(tester.focusManager.focusedNode.toString(), contains('ListView'));
 
     tester.sendKey(const KeyEvent(KeyCode.arrowDown));
     tester.pump();
-    tester.render(size: const CellSize(120, 40));
 
     final output = tester.renderToString(
       size: const CellSize(120, 40),
@@ -446,14 +441,13 @@ void main() {
   });
 
   testWidgets('arrow traversal enters the ScrollView preview', (tester) {
+    tester.viewportSize = const CellSize(120, 24);
     tester.pumpWidget(StorybookApp(initialStoryId: 'core.selection-scroll'));
-    tester.render(size: const CellSize(120, 24));
 
     // Select the ScrollView widget by search (order-independent).
     tester.type('ScrollView');
     tester.sendKey(const KeyEvent(KeyCode.enter));
     tester.pump();
-    tester.render(size: const CellSize(120, 24));
 
     var output = tester.renderToString(
       size: const CellSize(120, 24),
@@ -463,7 +457,6 @@ void main() {
 
     tester.sendKey(const KeyEvent(KeyCode.arrowRight));
     tester.pump();
-    tester.render(size: const CellSize(120, 24));
     expect(tester.focusManager.focusedNode.toString(), contains('ScrollView'));
 
     tester.sendKey(const KeyEvent(KeyCode.arrowDown));
@@ -480,19 +473,19 @@ void main() {
   testWidgets('arrow traversal prefers preview before details controls', (
     tester,
   ) {
+    tester.viewportSize = const CellSize(120, 40);
     tester.pumpWidget(
       StorybookApp(initialStoryId: 'visualization.charts.line-chart'),
     );
-    tester.render(size: const CellSize(120, 40));
 
     tester.sendKey(const KeyEvent(KeyCode.arrowRight));
     tester.pump();
-    tester.render(size: const CellSize(120, 40));
 
     expect(tester.focusManager.focusedNode.toString(), contains('LineChart'));
   });
 
   testWidgets('chart stories render focused widget previews', (tester) {
+    tester.viewportSize = const CellSize(120, 40);
     tester.pumpWidget(
       StorybookApp(initialStoryId: 'visualization.charts.bar-chart'),
     );
@@ -510,14 +503,13 @@ void main() {
   });
 
   testWidgets('clicking the ScrollView preview focuses it', (tester) {
+    tester.viewportSize = const CellSize(120, 24);
     tester.pumpWidget(StorybookApp(initialStoryId: 'core.selection-scroll'));
-    tester.render(size: const CellSize(120, 24));
 
     // Select the ScrollView widget by search (order-independent).
     tester.type('ScrollView');
     tester.sendKey(const KeyEvent(KeyCode.enter));
     tester.pump();
-    tester.render(size: const CellSize(120, 24));
 
     var output = tester.renderToString(
       size: const CellSize(120, 24),
@@ -534,7 +526,6 @@ void main() {
       ),
     );
     tester.pump();
-    tester.render(size: const CellSize(120, 24));
     expect(tester.focusManager.focusedNode.toString(), contains('ScrollView'));
 
     tester.sendKey(const KeyEvent(KeyCode.arrowDown));
@@ -549,6 +540,7 @@ void main() {
   });
 
   testWidgets('narrow layout keeps the preview pane visible', (tester) {
+    tester.viewportSize = const CellSize(80, 24);
     tester.pumpWidget(StorybookApp());
 
     final output = tester.renderToString(
@@ -573,6 +565,7 @@ void main() {
 
     // Distinct keys force fresh State on the second pump so initialViewport is
     // re-read (otherwise the State persists and both renders use Fit).
+    tester.viewportSize = const CellSize(120, 40);
     tester.pumpWidget(
       StorybookApp(
         key: const ValueKey('fit'),
@@ -584,6 +577,7 @@ void main() {
       emptyMark: ' ',
     );
 
+    tester.viewportSize = const CellSize(120, 40);
     tester.pumpWidget(
       StorybookApp(
         key: const ValueKey('framed'),

@@ -21,16 +21,14 @@ void main() {
     );
 
     tester.pumpWidget(app(mounted: true));
-    tester.render();
     expect(node.rect, CellRect.fromLTWH(0, 1, 6, 1));
 
-    tester.pumpWidget(app(mounted: false));
+    tester.mountWidget(app(mounted: false));
     expect(node.rect, isNull, reason: 'unmounted: no host to derive from');
     tester.render();
     expect(node.rect, isNull);
 
     tester.pumpWidget(app(mounted: true));
-    tester.render();
     expect(node.rect, CellRect.fromLTWH(0, 1, 6, 1), reason: 'remounted');
   });
 
@@ -59,16 +57,14 @@ void main() {
     );
 
     tester.pumpWidget(app(mounted: true));
-    tester.render();
     expect(node.caretRect, CellRect.fromLTWH(2, 1, 1, 1));
 
-    tester.pumpWidget(app(mounted: false));
+    tester.mountWidget(app(mounted: false));
     expect(node.caretRect, isNull, reason: 'unmounted: no caret host');
     tester.render();
     expect(node.caretRect, isNull);
 
     tester.pumpWidget(app(mounted: true));
-    tester.render();
     expect(node.caretRect, CellRect.fromLTWH(2, 1, 1, 1), reason: 'remounted');
   });
 }

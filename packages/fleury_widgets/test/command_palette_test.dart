@@ -164,6 +164,7 @@ void main() {
     final result = await tester.invokeSemanticAction(
       SemanticAction.submit,
       role: WidgetRoles.commandPalette,
+      allowFailure: true,
     );
     expect(result.status, SemanticActionInvocationStatus.notFound);
   });
@@ -249,12 +250,8 @@ void main() {
     tester.type('save');
     tester.pump();
 
-    final result = await tester.invokeSemanticAction(
-      SemanticAction.submit,
-      role: WidgetRoles.commandPalette,
-    );
+    await tester.target(role: WidgetRoles.commandPalette).submit();
 
-    expect(result.completed, isTrue);
     expect(ran, 'save');
     await _settleClose(tester);
     expect(Navigator.of(ctx).depth, 1);
@@ -267,13 +264,10 @@ void main() {
     tester.pumpWidget(Navigator(home: _Capture((c) => ctx = c)));
     _open(tester, ctx, commands((v) => ran = v));
 
-    final result = await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.command,
-      label: 'Close Window',
-    );
+    await tester
+        .target(role: SemanticRole.command, label: 'Close Window')
+        .press();
 
-    expect(result.completed, isTrue);
     expect(ran, 'close');
     await _settleClose(tester);
     expect(Navigator.of(ctx).depth, 1);
@@ -286,12 +280,10 @@ void main() {
       CommandPaletteItem(label: 'Dangerous', onInvoke: () => ran = true),
     ]);
 
-    final result = await tester.invokeSemanticAction(
-      SemanticAction.dismiss,
-      role: WidgetRoles.commandPalette,
-    );
+    await tester
+        .target(role: WidgetRoles.commandPalette)
+        .perform(SemanticAction.dismiss);
 
-    expect(result.completed, isTrue);
     await _settleClose(tester);
     expect(ran, isFalse);
     expect(Navigator.of(ctx).depth, 1);
@@ -644,32 +636,22 @@ void main() {
           if (i == 0) {
             tester.sendKey(const KeyEvent(KeyCode.enter));
           } else if (i == 1) {
-            await tester.invokeSemanticAction(
-              SemanticAction.submit,
-              role: WidgetRoles.commandPalette,
-            );
+            await tester.target(role: WidgetRoles.commandPalette).submit();
           } else if (i == 2) {
-            final row = _paletteCommandRows(
-              tester,
-            ).where((node) => node.label == title).single;
-            await tester.invokeSemanticAction(
-              SemanticAction.activate,
-              node: row,
-            );
+            await tester
+                .target(role: WidgetRoles.commandPalette)
+                .target(role: SemanticRole.command, label: title)
+                .press();
           } else if (i == 3) {
             tester.sendKey(const KeyEvent(KeyCode.escape));
           } else {
-            await tester.invokeSemanticAction(
-              SemanticAction.dismiss,
-              role: WidgetRoles.commandPalette,
-            );
+            await tester
+                .target(role: WidgetRoles.commandPalette)
+                .perform(SemanticAction.dismiss);
           }
           await _settleClose(tester);
           expect(Navigator.of(ctx).depth, 1, reason: 'cycle $i closed');
-          expect(
-            tester.semantics().byRole(WidgetRoles.commandPalette),
-            isEmpty,
-          );
+          expect(tester.target(role: WidgetRoles.commandPalette), hasCount(0));
         }
 
         expect(calls, ['alpha', 'beta', 'alpha']);

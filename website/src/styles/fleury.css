@@ -1279,9 +1279,15 @@ th:nth-last-child(-n + 2) .ct::after {
   display: flex;
   justify-content: flex-start;
   align-items: flex-start;
+  container: cds-preview / inline-size;
 }
 .cds-demo .fleury-frame {
   margin: 0;
+}
+@container cds-preview (max-width: 30rem) {
+  .fleury-hint {
+    display: none;
+  }
 }
 
 /* Two columns inline when the breakout is genuinely wide enough for both. ─*/
@@ -1292,6 +1298,12 @@ th:nth-last-child(-n + 2) .ct::after {
        panes drift apart vertically. */
     align-items: start;
     gap: 0 1.75rem;
+  }
+  .cds.cds-bounded-code:not(.is-fs) .cds-body {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .cds.cds-code-wide:not(.is-fs) .cds-body {
+    grid-template-columns: minmax(0, 3fr) minmax(21rem, 2fr);
   }
   .cds.cds-demo-wide:not(.is-fs) .cds-body {
     grid-template-columns: minmax(19rem, 2fr) minmax(0, 3fr);
@@ -1394,6 +1406,7 @@ th:nth-last-child(-n + 2) .ct::after {
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   /* Top-align so "You write" and "Fleury renders" pin to the same line. */
   align-items: start;
   gap: 0 2rem;
@@ -1409,6 +1422,9 @@ th:nth-last-child(-n + 2) .ct::after {
   flex: 1;
   min-height: 0;
 }
+.cds-modal-pane:not(.cds-modal-demo) {
+  align-self: stretch;
+}
 .cds-modal-demo {
   align-items: center;
 }
@@ -1418,11 +1434,70 @@ th:nth-last-child(-n + 2) .ct::after {
 .cds-modal.cds-demo-wide .cds-modal-body {
   grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
 }
+.cds-modal.cds-code-wide .cds-modal-body {
+  grid-template-columns: minmax(0, 3fr) minmax(21rem, 2fr);
+}
 /* Stack under a narrow screen; the whole body scrolls as one column. */
 @media (max-width: 60rem) {
   .cds-modal-body,
-  .cds-modal.cds-demo-wide .cds-modal-body {
+  .cds-modal.cds-demo-wide .cds-modal-body,
+  .cds-modal.cds-code-wide .cds-modal-body {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
     overflow: auto;
   }
 }
+
+/* Executable test walkthrough: the test's own frames replace the live surface
+   while it runs; the reader can return to the interactive widget at any time. */
+.fleury-test-controls {
+  padding: 0.75rem 0.9rem;
+  border-bottom: 1px solid var(--sl-color-hairline);
+  font-size: 0.8rem;
+}
+.fleury-test-toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.fleury-test-toolbar button {
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.35rem;
+  padding: 0.35rem 0.6rem;
+  background: transparent;
+  color: var(--sl-color-text);
+  font: inherit;
+  cursor: pointer;
+}
+.fleury-test-toolbar .fleury-test-run {
+  background: var(--sl-color-accent-low);
+  color: var(--sl-color-accent-high);
+  border-color: var(--sl-color-accent);
+}
+.fleury-test-toolbar button:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 3px; }
+.fleury-test-status { margin-top: 0.5rem; color: var(--sl-color-gray-2); }
+.fleury-test-controls[data-state="passed"] .fleury-test-status { color: var(--sl-color-accent-high); }
+.fleury-test-controls[data-state="failed"] .fleury-test-status { color: #f18f8f; }
+.fleury-test-checks { list-style: none; padding: 0; margin: 0.5rem 0 0; }
+.fleury-test-checks li { margin: 0.15rem 0; color: var(--sl-color-accent-high); }
+.fleury-test-snapshot {
+  font: inherit;
+  font-family: 'FleuryMono', var(--sl-font-mono, ui-monospace, monospace);
+  font-size: 14px;
+  color: #c8d3e0;
+  line-height: 1.25;
+  white-space: pre;
+  padding: 1em;
+  box-sizing: border-box;
+}
+.fleury-test-snapshot .r { display: block; margin: 0 !important; }
+.fleury-test-snapshot .w2 { display: inline-block; width: 2ch; overflow: hidden; }
+.fleury-test-line { background: color-mix(in srgb, var(--sl-color-accent) 17%, transparent); box-shadow: inset 3px 0 var(--sl-color-accent); }
+.fleury-host[hidden], .fleury-test-snapshot[hidden], .fleury-test-checks[hidden], .fleury-test-toolbar button[hidden] { display: none !important; }
+
+.fleury-test-controls + .fleury-host-wrap { margin-top: 0; }
+
+.fleury-test-toolbar, .fleury-test-toolbar button { margin: 0 !important; }
+.fleury-test-controls + .fleury-host-wrap + .fleury-test-checks {
+  border-top: 1px solid var(--sl-color-hairline);
+  padding: 0.6rem 0.9rem;
+  margin: 0;
+  font-size: 0.8rem;
+}
+.fleury-test-snapshot { overflow: hidden; }

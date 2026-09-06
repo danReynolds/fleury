@@ -626,6 +626,7 @@ class _TextAreaState extends State<TextArea>
         'composingStart': _controller.composing.normalizedStart,
         'composingEnd': _controller.composing.normalizedEnd,
         'readOnly': widget.readOnly,
+        'textEditable': true,
         'redactedValue': widget.clipboardPolicy == TextClipboardPolicy.redacted,
         ...textClipboardSemanticState(widget.clipboardPolicy),
         'pasteInProgress': _paste.progress.active,

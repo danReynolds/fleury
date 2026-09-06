@@ -452,6 +452,84 @@ void main() {
     expect(host.textContent, contains('CPU'));
   });
 
+  test('testing.counter responds to its painted button', () async {
+    final fixture = await _mountExample(
+      'testing.counter',
+      useManifestSize: true,
+    );
+    _tapPaintedText(fixture.host, 'Add one');
+    await Future<void>.delayed(Duration.zero);
+    for (var i = 0; i < 4 && fixture.flush.pending; i++) {
+      fixture.flush.fire();
+    }
+    await fixture.app.awaitSemanticIdle();
+    expect(
+      fixture.host.querySelector('.fleury-screen')!.textContent,
+      contains('Count: 1'),
+    );
+  });
+
+  test('testing.editor preserves an offline draft and retries', () async {
+    final fixture = await _mountExample(
+      'testing.editor',
+      useManifestSize: true,
+    );
+    final host = fixture.host;
+    Future<void> flush() async {
+      await Future<void>.delayed(Duration.zero);
+      for (var i = 0; i < 4 && fixture.flush.pending; i++) {
+        fixture.flush.fire();
+      }
+      await fixture.app.awaitSemanticIdle();
+    }
+
+    String painted() => host.querySelector('.fleury-screen')!.textContent ?? '';
+    Future<void> waitForPainted(String expected) async {
+      final deadline = DateTime.now().add(const Duration(seconds: 5));
+      while (!painted().contains(expected) &&
+          DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        await flush();
+      }
+      expect(painted(), contains(expected));
+    }
+
+    final keyboard = host.querySelector('textarea[aria-hidden="true"]')!;
+    keyboard.dispatchEvent(
+      web.InputEvent(
+        'input',
+        web.InputEventInit(
+          data: ' Ready.',
+          inputType: 'insertText',
+          bubbles: true,
+          cancelable: true,
+        ),
+      ),
+    );
+    await flush();
+    expect(painted(), contains('Unsaved changes'));
+    _tapPaintedText(host, 'Offline');
+    await flush();
+    _tapPaintedText(host, '[ Save ]');
+    await flush();
+    expect(painted(), contains('Saving…'));
+    // Browser timers can be throttled. Wait for the actual outcome; the
+    // headless guide tests replace this service with a controlled future.
+    await waitForPainted('Save failed. Your draft is safe.');
+    expect(painted(), contains('Ship the testing guide. Ready.'));
+
+    _tapPaintedText(host, 'Offline');
+    await flush();
+    _tapPaintedText(host, '[ Save ]');
+    await waitForPainted('All changes saved');
+    expect(
+      host
+          .querySelector('.fleury-semantics [aria-label="Save"]')!
+          .getAttribute('aria-disabled'),
+      'true',
+    );
+  });
+
   test(
     'commands.overview fits its guide frame with every command entry point',
     () async {

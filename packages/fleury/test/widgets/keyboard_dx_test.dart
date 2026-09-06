@@ -30,13 +30,16 @@ void main() {
       tester,
     ) {
       var fired = 0;
-      tester.pumpFleuryHome(
-        KeyBindings(
-          bindings: [KeyBinding(KeyCode.p, onTrigger: (_) => fired++)],
-          child: const Focus(autofocus: true, child: Text('x')),
+      tester.pumpWidget(
+        FleuryApp(
+          key: UniqueKey(),
+          title: 'Keyboard test',
+          home: KeyBindings(
+            bindings: [KeyBinding(KeyCode.p, onTrigger: (_) => fired++)],
+            child: const Focus(autofocus: true, child: Text('x')),
+          ),
         ),
       );
-      tester.pump();
 
       tester.sendKey(_down(KeyCode.p));
       tester.sendKey(_repeat(KeyCode.p));
@@ -46,19 +49,22 @@ void main() {
 
     testWidgets('includeRepeats opts a movement binding back in', (tester) {
       var moved = 0;
-      tester.pumpFleuryHome(
-        KeyBindings(
-          bindings: [
-            KeyBinding(
-              KeyCode.j,
-              includeRepeats: true,
-              onTrigger: (_) => moved++,
-            ),
-          ],
-          child: const Focus(autofocus: true, child: Text('x')),
+      tester.pumpWidget(
+        FleuryApp(
+          key: UniqueKey(),
+          title: 'Keyboard test',
+          home: KeyBindings(
+            bindings: [
+              KeyBinding(
+                KeyCode.j,
+                includeRepeats: true,
+                onTrigger: (_) => moved++,
+              ),
+            ],
+            child: const Focus(autofocus: true, child: Text('x')),
+          ),
         ),
       );
-      tester.pump();
 
       tester.sendKey(_down(KeyCode.j));
       tester.sendKey(_repeat(KeyCode.j));
@@ -72,13 +78,16 @@ void main() {
       // A legacy terminal cannot distinguish auto-repeat, so every arrival
       // is a `down` and suppression is simply unavailable.
       var fired = 0;
-      tester.pumpFleuryHome(
-        KeyBindings(
-          bindings: [KeyBinding(KeyCode.p, onTrigger: (_) => fired++)],
-          child: const Focus(autofocus: true, child: Text('x')),
+      tester.pumpWidget(
+        FleuryApp(
+          key: UniqueKey(),
+          title: 'Keyboard test',
+          home: KeyBindings(
+            bindings: [KeyBinding(KeyCode.p, onTrigger: (_) => fired++)],
+            child: const Focus(autofocus: true, child: Text('x')),
+          ),
         ),
       );
-      tester.pump();
 
       tester.sendKey(_down(KeyCode.p));
       tester.sendKey(_down(KeyCode.p));
@@ -87,13 +96,16 @@ void main() {
 
     testWidgets('a repeat never arms a sequence', (tester) {
       var fired = 0;
-      tester.pumpFleuryHome(
-        KeyBindings(
-          bindings: [KeyBinding(KeySequence.g.g, onTrigger: (_) => fired++)],
-          child: const Focus(autofocus: true, child: Text('x')),
+      tester.pumpWidget(
+        FleuryApp(
+          key: UniqueKey(),
+          title: 'Keyboard test',
+          home: KeyBindings(
+            bindings: [KeyBinding(KeySequence.g.g, onTrigger: (_) => fired++)],
+            child: const Focus(autofocus: true, child: Text('x')),
+          ),
         ),
       );
-      tester.pump();
 
       tester.sendKey(_repeat(KeyCode.g));
       expect(fired, 0, reason: 'holding g must not arm or complete gg');
@@ -104,19 +116,22 @@ void main() {
     testWidgets('start fires on the down, end on the paired release', (tester) {
       tester.keyboardCapabilities = KeyboardCapabilities.full;
       final log = <String>[];
-      tester.pumpFleuryHome(
-        KeyBindings(
-          bindings: [
-            KeyBinding.hold(
-              KeyCode.space,
-              onHoldStart: (_) => log.add('start'),
-              onHoldEnd: (_) => log.add('end'),
-            ),
-          ],
-          child: const Focus(autofocus: true, child: Text('x')),
+      tester.pumpWidget(
+        FleuryApp(
+          key: UniqueKey(),
+          title: 'Keyboard test',
+          home: KeyBindings(
+            bindings: [
+              KeyBinding.hold(
+                KeyCode.space,
+                onHoldStart: (_) => log.add('start'),
+                onHoldEnd: (_) => log.add('end'),
+              ),
+            ],
+            child: const Focus(autofocus: true, child: Text('x')),
+          ),
         ),
       );
-      tester.pump();
 
       tester.sendKey(_down(KeyCode.space));
       expect(log, ['start'], reason: 'zero latency: no threshold to wait for');
@@ -133,22 +148,25 @@ void main() {
       // consumption cannot break it.
       tester.keyboardCapabilities = KeyboardCapabilities.full;
       final log = <String>[];
-      tester.pumpFleuryHome(
-        KeyBindings(
-          bindings: [
-            KeyBinding.hold(
-              KeyCode.space,
-              onHoldStart: (_) => log.add('start'),
-              onHoldEnd: (_) => log.add('end'),
+      tester.pumpWidget(
+        FleuryApp(
+          key: UniqueKey(),
+          title: 'Keyboard test',
+          home: KeyBindings(
+            bindings: [
+              KeyBinding.hold(
+                KeyCode.space,
+                onHoldStart: (_) => log.add('start'),
+                onHoldEnd: (_) => log.add('end'),
+              ),
+            ],
+            child: KeyBindings(
+              bindings: [KeyBinding(KeyCode.space, onTrigger: (_) {})],
+              child: const Focus(autofocus: true, child: Text('x')),
             ),
-          ],
-          child: KeyBindings(
-            bindings: [KeyBinding(KeyCode.space, onTrigger: (_) {})],
-            child: const Focus(autofocus: true, child: Text('x')),
           ),
         ),
       );
-      tester.pump();
 
       tester.sendKey(_down(KeyCode.space));
       tester.sendKey(_up(KeyCode.space));
@@ -161,19 +179,22 @@ void main() {
       // Legacy: no releases, so no end could ever pair — the contract is
       // "inert", never "silently a toggle".
       final log = <String>[];
-      tester.pumpFleuryHome(
-        KeyBindings(
-          bindings: [
-            KeyBinding.hold(
-              KeyCode.space,
-              onHoldStart: (_) => log.add('start'),
-              onHoldEnd: (_) => log.add('end'),
-            ),
-          ],
-          child: const Focus(autofocus: true, child: Text('x')),
+      tester.pumpWidget(
+        FleuryApp(
+          key: UniqueKey(),
+          title: 'Keyboard test',
+          home: KeyBindings(
+            bindings: [
+              KeyBinding.hold(
+                KeyCode.space,
+                onHoldStart: (_) => log.add('start'),
+                onHoldEnd: (_) => log.add('end'),
+              ),
+            ],
+            child: const Focus(autofocus: true, child: Text('x')),
+          ),
         ),
       );
-      tester.pump();
 
       tester.sendKey(_down(KeyCode.space));
       expect(log, isEmpty);
@@ -184,17 +205,20 @@ void main() {
     testWidgets('unmatched keys stop at a modal key boundary', (tester) {
       var appSaw = 0;
       var dialogSaw = 0;
-      tester.pumpFleuryHome(
-        KeyBindings(
-          bindings: [KeyBinding(KeyCode.j, onTrigger: (_) => appSaw++)],
-          child: KeyBindings(
-            modal: true,
-            bindings: [KeyBinding(KeyCode.y, onTrigger: (_) => dialogSaw++)],
-            child: const Focus(autofocus: true, child: Text('dialog')),
+      tester.pumpWidget(
+        FleuryApp(
+          key: UniqueKey(),
+          title: 'Keyboard test',
+          home: KeyBindings(
+            bindings: [KeyBinding(KeyCode.j, onTrigger: (_) => appSaw++)],
+            child: KeyBindings(
+              modal: true,
+              bindings: [KeyBinding(KeyCode.y, onTrigger: (_) => dialogSaw++)],
+              child: const Focus(autofocus: true, child: Text('dialog')),
+            ),
           ),
         ),
       );
-      tester.pump();
 
       tester.sendKey(_down(KeyCode.y));
       expect(dialogSaw, 1);
@@ -206,21 +230,24 @@ void main() {
       tester,
     ) {
       var appSaw = 0;
-      tester.pumpFleuryHome(
-        KeyBindings(
-          bindings: [
-            KeyBinding(KeySequence.ctrl.q, onTrigger: (_) => appSaw++),
-          ],
-          child: KeyBindings(
-            modal: true,
+      tester.pumpWidget(
+        FleuryApp(
+          key: UniqueKey(),
+          title: 'Keyboard test',
+          home: KeyBindings(
             bindings: [
-              KeyBinding(KeySequence.ctrl.q, onTrigger: (e) => e.bubble()),
+              KeyBinding(KeySequence.ctrl.q, onTrigger: (_) => appSaw++),
             ],
-            child: const Focus(autofocus: true, child: Text('dialog')),
+            child: KeyBindings(
+              modal: true,
+              bindings: [
+                KeyBinding(KeySequence.ctrl.q, onTrigger: (e) => e.bubble()),
+              ],
+              child: const Focus(autofocus: true, child: Text('dialog')),
+            ),
           ),
         ),
       );
-      tester.pump();
 
       tester.sendKey(const KeyEvent(KeyCode.q, modifiers: {KeyModifier.ctrl}));
       expect(appSaw, 1);
@@ -231,22 +258,25 @@ void main() {
     testWidgets('propagates by default, consumes on request', (tester) {
       final seen = <String>[];
       var ancestorSaw = 0;
-      tester.pumpFleuryHome(
-        KeyBindings(
-          bindings: [
-            KeyBinding(KeyCode.a, onTrigger: (_) => ancestorSaw++),
-            KeyBinding(KeyCode.b, onTrigger: (_) => ancestorSaw++),
-          ],
-          child: KeyDetector(
-            onKey: (event) {
-              seen.add(event.code.character!);
-              if (event.code == KeyCode.b) event.consume();
-            },
-            child: const Focus(autofocus: true, child: Text('x')),
+      tester.pumpWidget(
+        FleuryApp(
+          key: UniqueKey(),
+          title: 'Keyboard test',
+          home: KeyBindings(
+            bindings: [
+              KeyBinding(KeyCode.a, onTrigger: (_) => ancestorSaw++),
+              KeyBinding(KeyCode.b, onTrigger: (_) => ancestorSaw++),
+            ],
+            child: KeyDetector(
+              onKey: (event) {
+                seen.add(event.code.character!);
+                if (event.code == KeyCode.b) event.consume();
+              },
+              child: const Focus(autofocus: true, child: Text('x')),
+            ),
           ),
         ),
       );
-      tester.pump();
 
       tester.sendKey(_down(KeyCode.a));
       tester.sendKey(_down(KeyCode.b));
@@ -257,13 +287,16 @@ void main() {
     testWidgets('a detector never sees releases', (tester) {
       tester.keyboardCapabilities = KeyboardCapabilities.full;
       final phases = <KeyEventType>[];
-      tester.pumpFleuryHome(
-        KeyDetector(
-          onKey: (event) => phases.add(event.type),
-          child: const Focus(autofocus: true, child: Text('x')),
+      tester.pumpWidget(
+        FleuryApp(
+          key: UniqueKey(),
+          title: 'Keyboard test',
+          home: KeyDetector(
+            onKey: (event) => phases.add(event.type),
+            child: const Focus(autofocus: true, child: Text('x')),
+          ),
         ),
       );
-      tester.pump();
 
       // A non-printable: on a full-capability surface an unmodified
       // printable's key half is owed to the text lane, so it never reaches
@@ -278,22 +311,26 @@ void main() {
     testWidgets('adding a detector does not change Tab traversal', (tester) {
       final first = FocusNode(debugLabel: 'first');
       final second = FocusNode(debugLabel: 'second');
-      tester.pumpFleuryHome(
-        Column(
-          children: [
-            KeyDetector(
-              onKey: (_) {},
-              child: Focus(
-                focusNode: first,
-                autofocus: true,
-                child: const Text('a'),
+      tester.pumpWidget(
+        FleuryApp(
+          key: UniqueKey(),
+          title: 'Keyboard test',
+          home: Column(
+            children: [
+              KeyDetector(
+                onKey: (_) {},
+                child: Focus(
+                  focusNode: first,
+                  autofocus: true,
+                  child: const Text('a'),
+                ),
               ),
-            ),
-            Focus(focusNode: second, child: const Text('b')),
-          ],
+              Focus(focusNode: second, child: const Text('b')),
+            ],
+          ),
         ),
       );
-      tester.pump();
+
       expect(first.hasFocus, isTrue);
 
       tester.sendKey(_down(KeyCode.tab));
@@ -311,16 +348,19 @@ void main() {
       tester,
     ) {
       late Keyboard handle;
-      tester.pumpFleuryHome(
-        _Probe((context) {
-          handle = Keyboard.of(context);
-          // Legal here — this is what subscribes to negotiation.
-          expect(handle.capabilities.supportsHeldState, isFalse);
-          expect(() => handle.snapshot, throwsStateError);
-          return const Text('x');
-        }),
+      tester.pumpWidget(
+        FleuryApp(
+          key: UniqueKey(),
+          title: 'Keyboard test',
+          home: _Probe((context) {
+            handle = Keyboard.of(context);
+            // Legal here — this is what subscribes to negotiation.
+            expect(handle.capabilities.supportsHeldState, isFalse);
+            expect(() => handle.snapshot, throwsStateError);
+            return const Text('x');
+          }),
+        ),
       );
-      tester.pump();
 
       // Outside build, sampling is legal.
       expect(handle.snapshot.pressed, isEmpty);
@@ -330,13 +370,17 @@ void main() {
       tester,
     ) {
       late Keyboard handle;
-      tester.pumpFleuryHome(
-        _Probe((context) {
-          handle = Keyboard.of(context);
-          return const Focus(autofocus: true, child: Text('x'));
-        }),
+      tester.pumpWidget(
+        FleuryApp(
+          key: UniqueKey(),
+          title: 'Keyboard test',
+          home: _Probe((context) {
+            handle = Keyboard.of(context);
+            return const Focus(autofocus: true, child: Text('x'));
+          }),
+        ),
       );
-      tester.pump();
+
       tester.sendKey(_down(KeyCode.w));
       tester.pump();
 
@@ -350,13 +394,16 @@ void main() {
     testWidgets('held state samples on a capable surface', (tester) {
       tester.keyboardCapabilities = KeyboardCapabilities.full;
       late Keyboard handle;
-      tester.pumpFleuryHome(
-        _Probe((context) {
-          handle = Keyboard.of(context);
-          return const Focus(autofocus: true, child: Text('x'));
-        }),
+      tester.pumpWidget(
+        FleuryApp(
+          key: UniqueKey(),
+          title: 'Keyboard test',
+          home: _Probe((context) {
+            handle = Keyboard.of(context);
+            return const Focus(autofocus: true, child: Text('x'));
+          }),
+        ),
       );
-      tester.pump();
 
       tester.sendKey(const KeyEvent(KeyCode.w, position: KeyPosition.w));
       tester.latchFrame();
@@ -380,13 +427,16 @@ void main() {
     testWidgets('a positional binding matches by physical key', (tester) {
       tester.keyboardCapabilities = KeyboardCapabilities.full;
       var fired = 0;
-      tester.pumpFleuryHome(
-        KeyBindings(
-          bindings: [KeyBinding(KeyPosition.w, onTrigger: (_) => fired++)],
-          child: const Focus(autofocus: true, child: Text('x')),
+      tester.pumpWidget(
+        FleuryApp(
+          key: UniqueKey(),
+          title: 'Keyboard test',
+          home: KeyBindings(
+            bindings: [KeyBinding(KeyPosition.w, onTrigger: (_) => fired++)],
+            child: const Focus(autofocus: true, child: Text('x')),
+          ),
         ),
       );
-      tester.pump();
 
       // AZERTY: the QWERTY-W spot types 'z'. A LOGICAL binding on .w would
       // miss this entirely; the positional one is the point.
@@ -406,13 +456,17 @@ void main() {
       // No positional reporting: the same declaration still works, matching
       // the twin — one identity model, one comparison, shared with sampling.
       var fired = 0;
-      tester.pumpFleuryHome(
-        KeyBindings(
-          bindings: [KeyBinding(KeyPosition.w, onTrigger: (_) => fired++)],
-          child: const Focus(autofocus: true, child: Text('x')),
+      tester.pumpWidget(
+        FleuryApp(
+          key: UniqueKey(),
+          title: 'Keyboard test',
+          home: KeyBindings(
+            bindings: [KeyBinding(KeyPosition.w, onTrigger: (_) => fired++)],
+            child: const Focus(autofocus: true, child: Text('x')),
+          ),
         ),
       );
-      tester.pump();
+
       tester.sendKey(const KeyEvent(KeyCode.w));
       expect(fired, 1);
     });
@@ -422,19 +476,22 @@ void main() {
     ) {
       tester.keyboardCapabilities = KeyboardCapabilities.full;
       var fired = 0;
-      tester.pumpFleuryHome(
-        KeyBindings(
-          bindings: [
-            KeyBinding(
-              KeySequence.ctrl.code(KeyPosition.a),
-              aliases: [KeyPosition.d],
-              onTrigger: (_) => fired++,
-            ),
-          ],
-          child: const Focus(autofocus: true, child: Text('x')),
+      tester.pumpWidget(
+        FleuryApp(
+          key: UniqueKey(),
+          title: 'Keyboard test',
+          home: KeyBindings(
+            bindings: [
+              KeyBinding(
+                KeySequence.ctrl.code(KeyPosition.a),
+                aliases: [KeyPosition.d],
+                onTrigger: (_) => fired++,
+              ),
+            ],
+            child: const Focus(autofocus: true, child: Text('x')),
+          ),
         ),
       );
-      tester.pump();
 
       tester.sendKey(
         const KeyEvent(

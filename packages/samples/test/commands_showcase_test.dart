@@ -14,8 +14,8 @@ void main() {
   testWidgets('the intro shares one save command across every entry point', (
     tester,
   ) async {
+    tester.viewportSize = _introSize;
     tester.pumpWidget(const CommandIntroApp());
-    tester.render(size: _introSize);
 
     var output = tester.renderToString(size: _introSize, emptyMark: ' ');
     expect(output, contains('ONE COMMAND · EVERY ENTRY POINT'));
@@ -23,22 +23,10 @@ void main() {
     expect(output, contains('[ Save ]'));
     expect(output, contains('Ctrl+K [ Commands ]'));
     expect(output, contains('SAVED · 0'));
-    expect(
-      tester
-          .semantics()
-          .single(role: SemanticRole.button, label: 'Save')
-          .enabled,
-      isFalse,
-    );
+    expect(tester.button('Save'), isDisabled);
 
     await _setText(tester, label: 'Intro document', value: 'Edited');
-    expect(
-      tester
-          .semantics()
-          .single(role: SemanticRole.button, label: 'Save')
-          .enabled,
-      isTrue,
-    );
+    expect(tester.button('Save'), isEnabled);
 
     tester.sendKey(
       const KeyEvent(KeyCode.s, modifiers: <KeyModifier>{KeyModifier.ctrl}),
@@ -57,18 +45,12 @@ void main() {
   testWidgets('the intro palette discovers and invokes the save command', (
     tester,
   ) async {
+    tester.viewportSize = _introSize;
     tester.pumpWidget(const CommandIntroApp());
-    tester.render(size: _introSize);
     await _setText(tester, label: 'Intro document', value: 'Palette edit');
 
-    final opened = await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.button,
-      label: 'Commands',
-    );
-    expect(opened.completed, isTrue);
+    await tester.button('Commands').press();
     tester.pump(const Duration(milliseconds: 300));
-    tester.render(size: _introSize);
 
     final saveRow = tester
         .semantics()
@@ -81,11 +63,7 @@ void main() {
     expect(saveRow.label, 'Save current file');
     expect(saveRow.enabled, isTrue);
 
-    final saved = await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      node: saveRow,
-    );
-    expect(saved.completed, isTrue);
+    await tester.target(id: saveRow.id).press();
     await _settlePaletteClose(tester);
 
     final output = tester.renderToString(size: _introSize, emptyMark: ' ');
@@ -110,19 +88,10 @@ void main() {
     expect(output, contains('SAVED'));
     expect(output, contains('SAVES 0'));
 
+    expect(tester.button('Save'), isDisabled);
     expect(
-      tester
-          .semantics()
-          .single(role: SemanticRole.button, label: 'Save')
-          .enabled,
-      isFalse,
-    );
-    expect(
-      tester
-          .semantics()
-          .single(role: SemanticRole.command, label: 'Save current file')
-          .enabled,
-      isFalse,
+      tester.target(role: SemanticRole.command, label: 'Save current file'),
+      isDisabled,
     );
   });
 
@@ -134,27 +103,13 @@ void main() {
     await _editCurrentFile(tester, 'button revision');
     expect(_render(tester), contains('UNSAVED'));
     expect(_render(tester), contains('Ctrl+S available'));
+    expect(tester.button('Save'), isEnabled);
     expect(
-      tester
-          .semantics()
-          .single(role: SemanticRole.button, label: 'Save')
-          .enabled,
-      isTrue,
-    );
-    expect(
-      tester
-          .semantics()
-          .single(role: SemanticRole.command, label: 'Save current file')
-          .enabled,
-      isTrue,
+      tester.target(role: SemanticRole.command, label: 'Save current file'),
+      isEnabled,
     );
 
-    final saved = await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.button,
-      label: 'Save',
-    );
-    expect(saved.completed, isTrue);
+    await tester.button('Save').press();
     _expectSaved(tester, count: 1, file: 'main.dart');
   });
 
@@ -197,14 +152,8 @@ void main() {
     _pumpWorkbench(tester);
     await _editCurrentFile(tester, 'palette revision');
 
-    final openResult = await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.button,
-      label: 'Commands',
-    );
-    expect(openResult.completed, isTrue);
+    await tester.button('Commands').press();
     tester.pump(const Duration(milliseconds: 300));
-    tester.render(size: _size);
 
     final paletteRows = tester
         .semantics()
@@ -224,11 +173,7 @@ void main() {
       (node) => node.state.commandId == _saveCurrentFile.value,
     );
     expect(saveRow.enabled, isTrue);
-    final saveResult = await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      node: saveRow,
-    );
-    expect(saveResult.completed, isTrue);
+    await tester.target(id: saveRow.id).press();
     await _settlePaletteClose(tester);
     _expectSaved(tester, count: 1, file: 'main.dart');
   });
@@ -236,10 +181,9 @@ void main() {
   testWidgets('the palette-first workbench opens its active command catalog', (
     tester,
   ) async {
+    tester.viewportSize = _size;
     tester.pumpWidget(const CommandWorkbenchApp(openPaletteInitially: true));
-    tester.render(size: _size);
     tester.pump(const Duration(milliseconds: 300));
-    tester.render(size: _size);
 
     final paletteRows = tester
         .semantics()
@@ -258,42 +202,26 @@ void main() {
     _pumpWorkbench(tester);
     await _editCurrentFile(tester, 'unsaved main');
 
-    final openCommands = await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.button,
-      label: 'commands.dart',
-    );
-    expect(openCommands.completed, isTrue);
+    await tester.button('commands.dart').press();
     expect(_render(tester), contains('Opened commands.dart'));
     expect(
-      tester
-          .semantics()
-          .single(role: SemanticRole.command, label: 'Save current file')
-          .enabled,
-      isFalse,
+      tester.target(role: SemanticRole.command, label: 'Save current file'),
+      isDisabled,
     );
 
-    final reopenMain = await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.button,
-      label: 'main.dart',
-    );
-    expect(reopenMain.completed, isTrue);
+    await tester.button('main.dart').press();
     expect(_render(tester), contains('unsaved main'));
     expect(_render(tester), contains('UNSAVED'));
     expect(
-      tester
-          .semantics()
-          .single(role: SemanticRole.command, label: 'Save current file')
-          .enabled,
-      isTrue,
+      tester.target(role: SemanticRole.command, label: 'Save current file'),
+      isEnabled,
     );
   });
 }
 
 void _pumpWorkbench(FleuryTester tester) {
+  tester.viewportSize = _size;
   tester.pumpWidget(const CommandWorkbenchApp());
-  tester.render(size: _size);
 }
 
 String _render(FleuryTester tester) =>
@@ -304,24 +232,14 @@ Future<void> _setText(
   required String label,
   required String value,
 }) async {
-  final result = await tester.invokeSemanticAction(
-    SemanticAction.setValue,
-    role: SemanticRole.textArea,
-    label: label,
-    payload: value,
-  );
-  expect(result.completed, isTrue);
-  tester.pump();
+  await tester.field(label).fill(value);
 }
 
 Future<void> _editCurrentFile(FleuryTester tester, String value) async {
   await _setText(tester, label: 'Current file contents', value: value);
   expect(
-    tester
-        .semantics()
-        .single(role: SemanticRole.command, label: 'Save current file')
-        .enabled,
-    isTrue,
+    tester.target(role: SemanticRole.command, label: 'Save current file'),
+    isEnabled,
   );
 }
 
@@ -335,11 +253,8 @@ void _expectSaved(
   expect(output, contains('Saved $file'));
   expect(output, contains('Ctrl+S saved'));
   expect(
-    tester
-        .semantics()
-        .single(role: SemanticRole.command, label: 'Save current file')
-        .enabled,
-    isFalse,
+    tester.target(role: SemanticRole.command, label: 'Save current file'),
+    isDisabled,
   );
 }
 

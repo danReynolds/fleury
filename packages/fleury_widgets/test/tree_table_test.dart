@@ -164,22 +164,12 @@ void main() {
     );
 
     tester.render(size: const CellSize(60, 8));
-    var result = await tester.invokeSemanticAction(
-      SemanticAction.open,
-      role: SemanticRole.treeItem,
-      label: 'App',
-    );
-    expect(result.completed, isTrue);
+    await tester.target(role: SemanticRole.treeItem, label: 'App').open();
     expect(controller.expandedKeys, contains('app'));
     tester.render(size: const CellSize(60, 8));
 
-    result = await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.treeItem,
-      label: 'Search',
-    );
+    await tester.target(role: SemanticRole.treeItem, label: 'Search').press();
 
-    expect(result.completed, isTrue);
     expect(selected?.key, 'search');
   });
 
@@ -195,11 +185,7 @@ void main() {
       ),
     );
     tester.render(size: const CellSize(60, 8));
-    await tester.invokeSemanticAction(
-      SemanticAction.open,
-      role: SemanticRole.treeItem,
-      label: 'App',
-    );
+    await tester.target(role: SemanticRole.treeItem, label: 'App').open();
     expect(controller.expandedKeys, contains('app'));
     tester.render(size: const CellSize(60, 8));
 
@@ -211,12 +197,7 @@ void main() {
     expect(expanded.actions, contains(SemanticAction.close));
     expect(expanded.actions, isNot(contains(SemanticAction.open)));
 
-    final result = await tester.invokeSemanticAction(
-      SemanticAction.close,
-      role: SemanticRole.treeItem,
-      label: 'App',
-    );
-    expect(result.completed, isTrue);
+    await tester.target(role: SemanticRole.treeItem, label: 'App').close();
     expect(controller.expandedKeys, isNot(contains('app')));
   });
 
@@ -556,13 +537,8 @@ void main() {
       );
 
       tester.render(size: const CellSize(60, 8));
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.copy,
-        role: SemanticRole.treeItem,
-        label: 'Search',
-      );
+      await tester.target(role: SemanticRole.treeItem, label: 'Search').copy();
 
-      expect(result.completed, isTrue);
       expect(
         tester.clipboard.readInProcess(),
         'Name\tStatus\tOwner\n  Search\tpassed\ttooling',

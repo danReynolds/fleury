@@ -1436,6 +1436,7 @@ class _TextInputState extends State<TextInput>
         'composingStart': _controller.composing.normalizedStart,
         'composingEnd': _controller.composing.normalizedEnd,
         'readOnly': widget.readOnly,
+        'textEditable': true,
         'obscureText': widget.obscureText,
         'redactedValue': _redactSemanticValue,
         ...textClipboardSemanticState(_effectiveClipboardPolicy),

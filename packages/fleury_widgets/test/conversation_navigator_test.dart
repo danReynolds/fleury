@@ -203,12 +203,9 @@ void main() {
       expect(navigator.focused, isFalse);
       expect(navigator.actions, contains(SemanticAction.navigate));
 
-      var result = await tester.invokeSemanticAction(
-        SemanticAction.navigate,
-        role: WidgetRoles.conversationNavigator,
-        label: 'Threads',
-      );
-      expect(result.completed, isTrue);
+      await tester
+          .target(role: WidgetRoles.conversationNavigator, label: 'Threads')
+          .perform(SemanticAction.navigate);
 
       tester.render(size: const CellSize(90, 7));
       navigator = tester.semantics().single(
@@ -218,12 +215,9 @@ void main() {
       );
       expect(navigator.state.selectedConversationId, 'ops-main');
 
-      result = await tester.invokeSemanticAction(
-        SemanticAction.activate,
-        role: WidgetRoles.conversation,
-        label: 'Deploy review',
-      );
-      expect(result.completed, isTrue);
+      await tester
+          .target(role: WidgetRoles.conversation, label: 'Deploy review')
+          .press();
       expect(controller.selectedIndex, 1);
       expect(selected?.entry.id, 'deploy-review');
 
@@ -325,13 +319,10 @@ void main() {
         );
 
         tester.render(size: const CellSize(90, 6));
-        final result = await tester.invokeSemanticAction(
-          SemanticAction.copy,
-          role: WidgetRoles.conversation,
-          label: 'Ops thread',
-        );
+        await tester
+            .target(role: WidgetRoles.conversation, label: 'Ops thread')
+            .copy();
 
-        expect(result.completed, isTrue);
         expect(
           tester.clipboard.readInProcess(),
           'Ops thread | active | 1 unread | 12 messages | pinned | '

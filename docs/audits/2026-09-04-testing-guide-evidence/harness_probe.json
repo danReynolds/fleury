@@ -1,0 +1,13 @@
+{
+  "afterMount": false,
+  "afterPump": false,
+  "afterRender": true,
+  "renderSizeOverride": "layout=40; media=80",
+  "action:Missing": "notFound",
+  "action:Save": "notFound",
+  "action:Disabled": "notFound",
+  "missingQueryDiagnostic": "Bad state: Expected exactly one semantic node, found 0.",
+  "settledWithUnfinishedFuture": true,
+  "requestCompleted": false,
+  "afterControlledCompletion": true
+}

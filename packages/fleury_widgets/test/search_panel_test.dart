@@ -267,13 +267,10 @@ void main() {
       );
 
       tester.render(size: const CellSize(80, 6));
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.copy,
-        role: SemanticRole.listItem,
-        label: 'Deploy production',
-      );
+      await tester
+          .target(role: SemanticRole.listItem, label: 'Deploy production')
+          .copy();
 
-      expect(result.completed, isTrue);
       expect(
         tester.clipboard.readInProcess(),
         'Deploy production | Promote the latest release | Runbook | ops',
@@ -383,28 +380,17 @@ void main() {
     );
 
     tester.render(size: const CellSize(80, 6));
-    var result = await tester.invokeSemanticAction(
-      SemanticAction.focus,
-      role: SemanticRole.region,
-      label: 'Search',
-    );
-    expect(result.status, SemanticActionInvocationStatus.completed);
+    await tester.target(role: SemanticRole.region, label: 'Search').focus();
     expect(
-      tester
-          .semantics()
-          .single(role: SemanticRole.region, label: 'Search')
-          .focused,
-      isTrue,
+      tester.target(role: SemanticRole.region, label: 'Search'),
+      isFocused,
     );
     tester.render(size: const CellSize(80, 6));
 
-    result = await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.listItem,
-      label: 'Deploy production',
-    );
+    await tester
+        .target(role: SemanticRole.listItem, label: 'Deploy production')
+        .press();
 
-    expect(result.status, SemanticActionInvocationStatus.completed);
     expect(activated?.id, 'deploy.prod');
   });
 

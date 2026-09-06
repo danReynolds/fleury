@@ -28,23 +28,27 @@ class _Probe extends StatelessWidget {
 }) {
   final log = <String>[];
   late BuildContext captured;
-  tester.pumpFleuryHome(
-    KeyBindings(
-      bindings: [
-        KeyBinding(KeyCode.a, onTrigger: (_) => log.add('binding:a')),
-        KeyBinding(KeyCode.escape, onTrigger: (_) => log.add('binding:esc')),
-        ...extraBindings,
-      ],
-      child: KeyDetector(
-        onKey: (event) => log.add('detector:${event.code.character ?? ''}'),
-        child: _Probe((context) {
-          captured = context;
-          return const Focus(autofocus: true, child: Text('x'));
-        }),
+  tester.pumpWidget(
+    FleuryApp(
+      key: UniqueKey(),
+      title: 'Keyboard test',
+      home: KeyBindings(
+        bindings: [
+          KeyBinding(KeyCode.a, onTrigger: (_) => log.add('binding:a')),
+          KeyBinding(KeyCode.escape, onTrigger: (_) => log.add('binding:esc')),
+          ...extraBindings,
+        ],
+        child: KeyDetector(
+          onKey: (event) => log.add('detector:${event.code.character ?? ''}'),
+          child: _Probe((context) {
+            captured = context;
+            return const Focus(autofocus: true, child: Text('x'));
+          }),
+        ),
       ),
     ),
   );
-  tester.pump();
+
   return (log: log, arm: () => Keyboard.nextKey(captured));
 }
 
@@ -145,8 +149,14 @@ void main() {
       final pending = scene.arm();
       // The UI that opened the prompt goes away — a capture that outlived it
       // would quietly eat the app's input with nobody left to receive it.
-      tester.pumpFleuryHome(const Focus(autofocus: true, child: Text('gone')));
-      tester.pump();
+      tester.pumpWidget(
+        FleuryApp(
+          key: UniqueKey(),
+          title: 'Keyboard test',
+          home: const Focus(autofocus: true, child: Text('gone')),
+        ),
+      );
+
       tester.sendKey(const KeyEvent(KeyCode.a));
       expect(await pending, isNull);
     });
