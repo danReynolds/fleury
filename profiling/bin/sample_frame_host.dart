@@ -11,8 +11,10 @@ final class FrameSample {
 }
 
 final class SampleFrameHost {
-  SampleFrameHost(Widget app, this.size, {bool settle = true})
-      : tester = FleuryTester(viewportSize: size) {
+  SampleFrameHost(Widget app, this.size,
+      {bool settle = true,
+      TextPresentationPolicy textPolicy = TextPresentationPolicy.spec})
+      : tester = FleuryTester(viewportSize: size, textPolicy: textPolicy) {
     tester.pumpWidget(app);
     PointerRouter? router;
     void visit(Element element) {

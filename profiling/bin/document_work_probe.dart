@@ -14,7 +14,8 @@ void main(List<String> args) {
     '--kind': 'rich',
     '--lines': '1000',
     '--frames': '60',
-    '--operation': 'all'
+    '--operation': 'all',
+    '--policy': 'spec'
   };
   for (var i = 0; i < args.length; i += 2) {
     if (i + 1 == args.length || !options.containsKey(args[i])) {
@@ -37,6 +38,12 @@ void main(List<String> args) {
   if (operationFilter != 'all' && !operations.contains(operationFilter)) {
     throw ArgumentError('Invalid operation');
   }
+  final policyName = options['--policy']!;
+  final policy = switch (policyName) {
+    'spec' => TextPresentationPolicy.spec,
+    'split' => const TextPresentationPolicy(lowering: ClusterLowering.split),
+    _ => throw ArgumentError('Invalid text policy'),
+  };
   final kind = options['--kind']!;
   final count = int.parse(options['--lines']!);
   final frames = int.parse(options['--frames']!);
@@ -73,7 +80,7 @@ void main(List<String> args) {
             : RichText(text: text ?? spans[revision]));
     SampleFrameHost? host;
     if (operation != 'open') {
-      host = SampleFrameHost(app(0), size);
+      host = SampleFrameHost(app(0), size, textPolicy: policy);
       if (operation == 'drag' ||
           operation == 'copy' ||
           operation == 'copy-all') {
@@ -112,7 +119,7 @@ void main(List<String> args) {
     for (var i = -10; i < frames; i++) {
       final watch = Stopwatch()..start();
       if (operation == 'open')
-        host = SampleFrameHost(app(0), size, settle: false);
+        host = SampleFrameHost(app(0), size, settle: false, textPolicy: policy);
       final current = host!;
       switch (operation) {
         case 'rebuild-same':
@@ -161,6 +168,7 @@ void main(List<String> args) {
     times.sort();
     stdout.writeln(jsonEncode({
       'kind': kind,
+      'policy': policyName,
       'lines': count,
       'operation': operation,
       'frames': frames,

@@ -268,7 +268,16 @@ class RenderRichText extends RenderObject
     }
 
     for (var lineIndex = 0; lineIndex < _lines.length; lineIndex++) {
-      if (lineIndex > 0) flatOffset++; // the implicit '\n' between lines
+      if (lineIndex > 0) {
+        // A newline belongs to a lowered group only when that same group
+        // continues on the next row. Otherwise copy must preserve it.
+        if (openGroupId != null &&
+            (_lines[lineIndex].isEmpty ||
+                _lines[lineIndex].first.groupId != openGroupId)) {
+          closeGroup();
+        }
+        flatOffset++; // the implicit '\n' between lines
+      }
       final buf = StringBuffer();
       for (final g in _lines[lineIndex]) {
         if (g.groupId != openGroupId) {

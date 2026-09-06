@@ -6,7 +6,7 @@ import 'dart:math';
 import 'package:fleury/fleury.dart';
 import 'package:fleury/src/widgets/rich_text.dart' show RenderRichText;
 
-void main() {
+void main(List<String> args) {
   final random = Random(73183);
   const atoms = [
     'a',
@@ -31,9 +31,18 @@ void main() {
   ];
   var hash = 2166136261;
   var cases = 0;
-  void add(Object? value) {
+  var layoutHash = 2166136261;
+  var copyHash = 2166136261;
+  var caseHash = 2166136261;
+  void add(Object? value, {bool copy = false}) {
     for (final code in '$value;'.codeUnits) {
       hash = ((hash ^ code) * 16777619) & 0xffffffff;
+      if (copy) {
+        copyHash = ((copyHash ^ code) * 16777619) & 0xffffffff;
+      } else {
+        layoutHash = ((layoutHash ^ code) * 16777619) & 0xffffffff;
+        caseHash = ((caseHash ^ code) * 16777619) & 0xffffffff;
+      }
     }
   }
 
@@ -55,6 +64,7 @@ void main() {
         ]) {
           for (final maxLines in <int?>[null, 2]) {
             for (final overflow in TextOverflow.values) {
+              caseHash = 2166136261;
               final render = RenderRichText(
                   span: span,
                   base: CellStyle.none,
@@ -69,7 +79,8 @@ void main() {
               add(render.selectionLines);
               render.dispatchSelectionEvent(const SelectionGranularEvent(
                   granularity: SelectionGranularity.all));
-              add(render.getSelectedContent()?.plainText);
+              final copied = render.getSelectedContent()?.plainText;
+              add(copied, copy: true);
               buffer.clear();
               render.paint(buffer, const CellOffset(0, -1));
               for (var row = 0; row < 12; row++) {
@@ -78,6 +89,19 @@ void main() {
                   add('${cell.role}|${cell.grapheme}|${cell.style}');
                 }
               }
+              if (args.contains('--details')) {
+                print(jsonEncode({
+                  'case': cases,
+                  'fixture': fixture,
+                  'columns': cols,
+                  'wrap': wrap,
+                  'policy': policy.toString(),
+                  'maxLines': maxLines,
+                  'overflow': overflow.name,
+                  'layoutFingerprint': caseHash,
+                  'copy': copied
+                }));
+              }
               cases++;
             }
           }
@@ -85,5 +109,10 @@ void main() {
       }
     }
   }
-  print(jsonEncode({'cases': cases, 'fingerprint': hash}));
+  print(jsonEncode({
+    'cases': cases,
+    'fingerprint': hash,
+    'layoutFingerprint': layoutHash,
+    'copyFingerprint': copyHash
+  }));
 }
