@@ -13,6 +13,96 @@ String _row(CellBuffer buf, int row) {
 }
 
 void main() {
+  test('equal resolved runs reuse measurement and layout', () {
+    final resolver = _CountingWidthResolver();
+    TextSpan source() => TextSpan(
+      children: [
+        TextSpan(text: 'hello 漢', style: const CellStyle(bold: true)),
+        TextSpan(text: ' world'),
+      ],
+    );
+    final render = RenderRichText(
+      span: source(),
+      base: CellStyle.none,
+      widthResolver: resolver,
+    );
+    const constraints = CellConstraints(maxCols: 8);
+    render.layout(constraints);
+    final lines = render.selectionLines;
+    resolver.calls = 0;
+    render.setSpan(source(), CellStyle.none);
+    render.layout(constraints);
+    expect(resolver.calls, 0);
+    expect(identical(render.selectionLines, lines), isTrue);
+
+    render.setSpan(source(), const CellStyle(foreground: AnsiColor(2)));
+    expect(resolver.calls, greaterThan(0), reason: 'ambient style changed');
+    render.layout(constraints);
+    final buffer = CellBuffer(const CellSize(8, 2));
+    render.paint(buffer, CellOffset.zero);
+    expect(
+      buffer.atColRow(0, 0).style,
+      const CellStyle(bold: true, foreground: AnsiColor(2)),
+    );
+  });
+
+  test(
+    'reused mutable span children still update text, styles and selection',
+    () {
+      final children = [const TextSpan(text: 'before')];
+      final span = TextSpan(children: children);
+      final render = RenderRichText(span: span, base: CellStyle.none);
+      const constraints = CellConstraints(maxCols: 20);
+      render.layout(constraints);
+      final buffer = CellBuffer(const CellSize(20, 1));
+      render.paint(buffer, CellOffset.zero);
+      render.dispatchSelectionEvent(
+        const SelectionGranularEvent(granularity: SelectionGranularity.all),
+      );
+      children[0] = const TextSpan(text: 'after', style: CellStyle(bold: true));
+      render.setSpan(span, CellStyle.none);
+      render.layout(constraints);
+      buffer.clear();
+      render.paint(buffer, CellOffset.zero);
+      expect(_row(buffer, 0), 'after');
+      expect(buffer.atColRow(0, 0).style.bold, isTrue);
+      expect(render.getSelectedContent()?.plainText, 'after');
+    },
+  );
+
+  test('run comparison preserves grapheme boundaries and policy changes', () {
+    final resolver = _CountingWidthResolver();
+    const splitSpans = TextSpan(
+      children: [
+        TextSpan(text: '👩\u200d'),
+        TextSpan(text: '💻'),
+      ],
+    );
+    final render = RenderRichText(
+      span: splitSpans,
+      base: CellStyle.none,
+      widthResolver: resolver,
+    );
+    resolver.calls = 0;
+    render.setSpan(const TextSpan(text: '👩‍💻'), CellStyle.none);
+    expect(
+      resolver.calls,
+      1,
+      reason: 'equal flat text has new span boundaries',
+    );
+    resolver.calls = 0;
+    render.textPolicy = const TextPresentationPolicy(
+      lowering: ClusterLowering.split,
+    );
+    expect(resolver.calls, 2, reason: 'policy change remeasures lowered atoms');
+    render.layout(const CellConstraints(maxCols: 10));
+    render.paint(CellBuffer(const CellSize(10, 1)), CellOffset.zero);
+    render.dispatchSelectionEvent(
+      const SelectionGranularEvent(granularity: SelectionGranularity.all),
+    );
+    expect(render.getSelectedContent()?.plainText, '👩‍💻');
+  });
+
   testWidgets('renders multiple styles on one line', (tester) {
     tester.pumpWidget(
       const RichText(
@@ -233,4 +323,17 @@ void main() {
       expect(_row(lowered, 0), _row(preserved, 0));
     });
   });
+}
+
+class _CountingWidthResolver implements WidthResolver {
+  int calls = 0;
+  @override
+  int widthOfGrapheme(String grapheme, CellWidthPolicy policy) {
+    calls++;
+    return const DefaultWidthResolver().widthOfGrapheme(grapheme, policy);
+  }
+
+  @override
+  int widthOfText(String text, CellWidthPolicy policy) =>
+      const DefaultWidthResolver().widthOfText(text, policy);
 }

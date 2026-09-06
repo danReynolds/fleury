@@ -198,7 +198,8 @@ class RenderRichText extends RenderObject
        _textPolicy = textPolicy {
     _span = span;
     _base = base;
-    _glyphs = _flatten(span, base);
+    _runs = _project(span, base);
+    _glyphs = _flatten(_runs);
   }
 
   bool _softWrap;
@@ -214,6 +215,9 @@ class RenderRichText extends RenderObject
   /// Width axes of [_textPolicy] — what every measurement call uses.
   CellWidthPolicy get _policy => _textPolicy.widths;
 
+  // A value snapshot of source runs, including span boundaries. Re-projecting
+  // on update observes changes even when callers reuse a mutable children list.
+  late List<({String text, CellStyle style})> _runs;
   late List<_Glyph> _glyphs;
   List<List<_Glyph>> _lines = const [];
   bool _moreLinesTruncated = false;
@@ -291,14 +295,18 @@ class RenderRichText extends RenderObject
     // itself, so re-flatten and dirty LAYOUT (property gate 14).
     if (_textPolicy == value) return;
     _textPolicy = value;
-    _glyphs = _flatten(_span, _base);
+    _runs = _project(_span, _base);
+    _glyphs = _flatten(_runs);
     markNeedsLayout();
   }
 
   void setSpan(TextSpan span, CellStyle base) {
     _span = span;
     _base = base;
-    _glyphs = _flatten(span, base);
+    final runs = _project(span, base);
+    if (_sameRuns(runs, _runs)) return;
+    _runs = runs;
+    _glyphs = _flatten(runs);
     markNeedsLayout();
   }
 
@@ -321,33 +329,15 @@ class RenderRichText extends RenderObject
     markNeedsPaintOnly();
   }
 
-  List<_Glyph> _flatten(TextSpan span, CellStyle inherited) {
-    return _textPolicy.lowering == ClusterLowering.split
-        ? _flattenLowered(span, inherited)
-        : _flattenPreserved(span, inherited);
-  }
-
-  /// The byte-identical legacy path: per-span grapheme walk, no detection.
-  /// Every unprobed/preserve surface goes through here unchanged (property
-  /// gate 2).
-  List<_Glyph> _flattenPreserved(TextSpan span, CellStyle inherited) {
-    final out = <_Glyph>[];
+  static List<({String text, CellStyle style})> _project(
+    TextSpan span,
+    CellStyle inherited,
+  ) {
+    final runs = <({String text, CellStyle style})>[];
     void visit(TextSpan s, CellStyle parent) {
       final style = s.style == null ? parent : parent.merge(s.style!);
       final text = s.text;
-      if (text != null && text.isNotEmpty) {
-        for (final paragraph in _splitKeepingBreaks(text)) {
-          if (paragraph == '\n') {
-            out.add(_Glyph('\n', 0, style));
-            continue;
-          }
-          for (final g in sanitizeForDisplay(paragraph).characters) {
-            out.add(
-              _Glyph(g, _widthResolver.widthOfGrapheme(g, _policy), style),
-            );
-          }
-        }
-      }
+      if (text != null && text.isNotEmpty) runs.add((text: text, style: style));
       final children = s.children;
       if (children != null) {
         for (final child in children) {
@@ -357,6 +347,44 @@ class RenderRichText extends RenderObject
     }
 
     visit(span, inherited);
+    return runs;
+  }
+
+  static bool _sameRuns(
+    List<({String text, CellStyle style})> a,
+    List<({String text, CellStyle style})> b,
+  ) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  List<_Glyph> _flatten(List<({String text, CellStyle style})> runs) {
+    return _textPolicy.lowering == ClusterLowering.split
+        ? _flattenLowered(runs)
+        : _flattenPreserved(runs);
+  }
+
+  /// The byte-identical legacy path: per-span grapheme walk, no detection.
+  /// Every unprobed/preserve surface goes through here unchanged (property
+  /// gate 2).
+  List<_Glyph> _flattenPreserved(List<({String text, CellStyle style})> runs) {
+    final out = <_Glyph>[];
+    for (final run in runs) {
+      for (final paragraph in _splitKeepingBreaks(run.text)) {
+        if (paragraph == '\n') {
+          out.add(_Glyph('\n', 0, run.style));
+          continue;
+        }
+        for (final g in sanitizeForDisplay(paragraph).characters) {
+          out.add(
+            _Glyph(g, _widthResolver.widthOfGrapheme(g, _policy), run.style),
+          );
+        }
+      }
+    }
     return out;
   }
 
@@ -367,7 +395,7 @@ class RenderRichText extends RenderObject
   /// boundary. Each cluster takes the style in effect at its base; a lowered
   /// component inherits the style covering that component's own base
   /// (RFC 0019 §6.4).
-  List<_Glyph> _flattenLowered(TextSpan span, CellStyle inherited) {
+  List<_Glyph> _flattenLowered(List<({String text, CellStyle style})> runs) {
     final out = <_Glyph>[];
     final paragraphText = StringBuffer();
     // Style per code unit of paragraphText. Rebuilt at flatten time only —
@@ -413,32 +441,20 @@ class RenderRichText extends RenderObject
       unitStyles.clear();
     }
 
-    void visit(TextSpan s, CellStyle parent) {
-      final style = s.style == null ? parent : parent.merge(s.style!);
-      final text = s.text;
-      if (text != null && text.isNotEmpty) {
-        for (final paragraph in _splitKeepingBreaks(text)) {
-          if (paragraph == '\n') {
-            flushParagraph();
-            out.add(_Glyph('\n', 0, style));
-            continue;
-          }
-          final sanitized = sanitizeForDisplay(paragraph);
-          paragraphText.write(sanitized);
-          for (var i = 0; i < sanitized.length; i++) {
-            unitStyles.add(style);
-          }
+    for (final run in runs) {
+      for (final paragraph in _splitKeepingBreaks(run.text)) {
+        if (paragraph == '\n') {
+          flushParagraph();
+          out.add(_Glyph('\n', 0, run.style));
+          continue;
         }
-      }
-      final children = s.children;
-      if (children != null) {
-        for (final child in children) {
-          visit(child, style);
+        final sanitized = sanitizeForDisplay(paragraph);
+        paragraphText.write(sanitized);
+        for (var i = 0; i < sanitized.length; i++) {
+          unitStyles.add(run.style);
         }
       }
     }
-
-    visit(span, inherited);
     flushParagraph();
     return out;
   }
