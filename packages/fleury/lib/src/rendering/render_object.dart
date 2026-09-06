@@ -286,6 +286,9 @@ abstract class RenderObject implements ScreenGeometrySource {
   bool attachFrameDamageTracker(RenderDamageTracker tracker) {
     final isNew = !identical(_frameDamage, tracker);
     _frameDamage = tracker;
+    // Memoized geometry is stamped against the previous tracker's epoch;
+    // nothing below may keep answering from it.
+    if (isNew) _forgetGeometryTracker();
     return isNew;
   }
 
@@ -579,7 +582,7 @@ abstract class RenderObject implements ScreenGeometrySource {
   // ---- Geometry contract ---------------------------------------------------
   //
   // Where a render object put each child is layout state. Declaring it lets
-  // screen geometry be DERIVED on demand (see `screenGeometryOf`) instead of
+  // screen geometry be DERIVED on demand (see [screenGeometry]) instead of
   // recorded during paint and replayed by repaint boundaries. Pass-through
   // wrappers keep the defaults; every container that offsets, clips, or
   // hides a child overrides the matching member.
@@ -709,11 +712,12 @@ abstract class RenderObject implements ScreenGeometrySource {
     _geometryStamp = epoch;
   }
 
-  /// Drops the memoized tracker below a subtree that is moving to another
-  /// parent, so it resolves against its new root's epoch. A freshly built
-  /// subtree has never resolved and costs nothing here.
+  /// Drops the memoized geometry below a subtree that is moving to another
+  /// parent or root, so it resolves against its new root's epoch. Resolving
+  /// any node stamps every ancestor, so a subtree whose top was never stamped
+  /// holds no memo at all and costs nothing here — the fresh-mount case.
   void _forgetGeometryTracker() {
-    if (_geometryTracker == null) return;
+    if (_geometryStamp == -1) return;
     _geometryTracker = null;
     _geometryStamp = -1;
     _screenGeometry = null;

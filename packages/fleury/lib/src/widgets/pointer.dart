@@ -85,8 +85,9 @@ class PointerRouter {
   RenderPointerListener? _dragTarget;
   bool _dragging = false;
 
-  /// The root of the rendered tree, set by the host after each frame. Null
-  /// before the first frame: nothing is hit-testable.
+  /// Framework-internal: the root of the rendered tree, set by the host
+  /// after each frame. Null before the first frame: nothing is hit-testable.
+  @internal
   RenderObject? root;
 
   /// Starts a frame. Nothing to reset: regions are found from layout state.
@@ -184,10 +185,10 @@ class PointerRouter {
   }
 
   /// Whether [region] can still be reached by a hit-test: routed here,
-  /// presented in the rendered tree, and not input-excluded.
+  /// presented with some part on screen, and not input-excluded.
   bool _isLive(RenderPointerListener region) =>
       identical(region._router, this) &&
-      region.screenGeometry() != null &&
+      region.screenGeometry()?.visible != null &&
       !_isExcluded(region);
 
   void _remove(RenderPointerListener region) {

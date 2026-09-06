@@ -1357,6 +1357,9 @@ class _FocusBounds extends SingleChildRenderObjectWidget {
   final FocusNode node;
 
   @override
+  SingleChildRenderObjectElement createElement() => _FocusBoundsElement(this);
+
+  @override
   RenderObject createRenderObject(BuildContext context) {
     return _RenderFocusBounds(node: node);
   }
@@ -1370,11 +1373,28 @@ class _FocusBounds extends SingleChildRenderObjectWidget {
   }
 }
 
+/// Releases the node's geometry host when the widget leaves the tree, so an
+/// app-owned [FocusNode] that outlives its `Focus` reports no rect (and
+/// retains no dead render subtree) until it is mounted again.
+class _FocusBoundsElement extends SingleChildRenderObjectElement {
+  _FocusBoundsElement(_FocusBounds super.widget);
+
+  @override
+  void unmount() {
+    // `maybeRenderObject`: an element whose inflate threw never got one.
+    (maybeRenderObject as _RenderFocusBounds?)?.detachFromNode();
+    super.unmount();
+  }
+}
+
 class _RenderFocusBounds extends RenderObject
     implements RenderObjectWithSingleChild {
   _RenderFocusBounds({required FocusNode node}) : _node = node {
     node.attachBoundsHost(this);
   }
+
+  /// Called on unmount: this render object no longer stands for the node.
+  void detachFromNode() => _node.detachBoundsHost(this);
 
   FocusNode _node;
   FocusNode get node => _node;

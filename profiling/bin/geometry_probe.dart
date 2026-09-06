@@ -218,14 +218,14 @@ void main(List<String> args) {
       tester.pump();
       tester.render();
       for (final listener in listeners) {
-        screenGeometryOf(listener);
+        listener.screenGeometry();
       }
     }),
   );
   samples.add(
     _measure('derived: geometry of every render object', 50, (i) {
       for (final node in renderSubtree(root)) {
-        screenGeometryOf(node);
+        node.screenGeometry();
       }
     }, warmup: 5),
   );

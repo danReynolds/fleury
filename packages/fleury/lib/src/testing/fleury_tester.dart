@@ -724,14 +724,14 @@ class FleuryTester {
     _owner.flushBuild();
   }
 
-  /// Renders the current tree into a fresh [CellBuffer] sized to
-  /// [size] (defaulting to [viewportSize]).
   /// The root render object of the mounted tree, or null before pumpWidget.
   RenderObject? get rootRenderObject {
     final root = _root;
     return root == null ? null : _owner.findRootRenderObject(root);
   }
 
+  /// Renders the current tree into a fresh [CellBuffer] sized to
+  /// [size] (defaulting to [viewportSize]).
   CellBuffer render({CellSize? size}) {
     _assertNotDisposed('render');
     final root = _root;

@@ -77,7 +77,7 @@ void expectPlaced(
     expect(truth, isNull, reason: '${probe.name}: unmounted yet painted$why');
     return;
   }
-  final geometry = screenGeometryOf(pointer);
+  final geometry = pointer.screenGeometry();
   expect(
     geometry?.visible,
     truth,
@@ -167,7 +167,7 @@ void main() {
     }
     expect(over.node.rect, CellRect.fromLTWH(5, 3, 4, 1));
     expect(
-      screenGeometryOf(hidden.pointer!),
+      hidden.pointer!.screenGeometry(),
       isNull,
       reason: 'the inactive IndexedStack child is not presented',
     );
@@ -212,7 +212,7 @@ void main() {
     expect(rows[9].node.rect, isNull, reason: 'below the viewport');
     // Bounds are still derivable for a clipped-out row; only visibility is
     // null — what a scroll-to-reveal needs.
-    final scrolledOut = screenGeometryOf(rows[2].pointer!)!;
+    final scrolledOut = rows[2].pointer!.screenGeometry()!;
     expect(scrolledOut.visible, isNull);
     expect(scrolledOut.bounds, CellRect.fromLTWH(0, -2, 4, 1));
 
@@ -301,7 +301,7 @@ void main() {
     expectPlaced(tester, lines, floater);
     expectPlaced(tester, lines, under, reason: 'under an opaque entry');
     expect(
-      screenGeometryOf(under.pointer!),
+      under.pointer!.screenGeometry(),
       isNull,
       reason: 'the base entry is not presented under an opaque one',
     );

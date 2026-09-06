@@ -1527,6 +1527,9 @@ class _TextInputDisplay extends LeafRenderObjectWidget {
   final String obscuringCharacter;
 
   @override
+  LeafRenderObjectElement createElement() => _TextInputDisplayElement(this);
+
+  @override
   RenderObject createRenderObject(BuildContext context) {
     return RenderTextInput(
       focusNode: focusNode,
@@ -1568,6 +1571,17 @@ class _TextInputDisplay extends LeafRenderObjectWidget {
 ///
 /// Layout: width = text intrinsic width (in cells) + 1 for the
 /// trailing cursor position, clipped to constraints. Height = 1.
+/// Releases the focus node's caret host when the editable leaves the tree.
+class _TextInputDisplayElement extends LeafRenderObjectElement {
+  _TextInputDisplayElement(_TextInputDisplay super.widget);
+
+  @override
+  void unmount() {
+    (maybeRenderObject as RenderTextInput?)?.detachFromFocus();
+    super.unmount();
+  }
+}
+
 class RenderTextInput extends RenderObject implements CaretHost {
   RenderTextInput({
     required FocusNode focusNode,
@@ -1593,7 +1607,9 @@ class RenderTextInput extends RenderObject implements CaretHost {
        _obscureText = obscureText,
        _obscuringCharacter = obscuringCharacter,
        _widthResolver = widthResolver,
-       _policy = policy;
+       _policy = policy {
+    _focusNode.attachCaretHost(this);
+  }
 
   /// Identity fast path for model text.
   ///
@@ -1779,9 +1795,6 @@ class RenderTextInput extends RenderObject implements CaretHost {
 
   @override
   void performPaint(CellBuffer buffer, CellOffset offset) {
-    // The node's caret is derived from this render object's layout (see
-    // [localCaretRect]); nothing about geometry is recorded here.
-    _focusNode.attachCaretHost(this);
     if (size.isEmpty) return;
     final row = offset.row;
     var col = offset.col;
@@ -1891,6 +1904,9 @@ class RenderTextInput extends RenderObject implements CaretHost {
       size: const CellSize(1, 1),
     );
   }
+
+  /// Called on unmount: this render object no longer owns the node's caret.
+  void detachFromFocus() => _focusNode.detachCaretHost(this);
 
   @override
   CellRect? get localCaretRect => size.isEmpty ? null : _caretRect();

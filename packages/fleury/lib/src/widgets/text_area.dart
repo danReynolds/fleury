@@ -697,6 +697,9 @@ class _TextAreaDisplay extends LeafRenderObjectWidget {
   final int? maxLines;
 
   @override
+  LeafRenderObjectElement createElement() => _TextAreaDisplayElement(this);
+
+  @override
   RenderObject createRenderObject(BuildContext context) => RenderTextArea(
     focusNode: focusNode,
     policy: MediaQuery.textPolicyOf(context).widths,
@@ -776,6 +779,17 @@ final class TextAreaDebugStats {
 
 /// Lays out text as rows and scrolls vertically to keep the cursor line
 /// visible; paints a one-cell cursor at the selection.
+/// Releases the focus node's caret host when the editable leaves the tree.
+class _TextAreaDisplayElement extends LeafRenderObjectElement {
+  _TextAreaDisplayElement(_TextAreaDisplay super.widget);
+
+  @override
+  void unmount() {
+    (maybeRenderObject as RenderTextArea?)?.detachFromFocus();
+    super.unmount();
+  }
+}
+
 class RenderTextArea extends RenderObject implements CaretHost {
   RenderTextArea({
     required FocusNode focusNode,
@@ -801,7 +815,9 @@ class RenderTextArea extends RenderObject implements CaretHost {
        _minLines = minLines,
        _maxLines = maxLines,
        _widthResolver = widthResolver,
-       _policy = policy;
+       _policy = policy {
+    _focusNode.attachCaretHost(this);
+  }
 
   /// Identity fast path for model text.
   ///
@@ -1049,9 +1065,6 @@ class RenderTextArea extends RenderObject implements CaretHost {
 
   @override
   void performPaint(CellBuffer buffer, CellOffset offset) {
-    // The node's caret is derived from this render object's layout (see
-    // [localCaretRect]); nothing about geometry is recorded here.
-    _focusNode.attachCaretHost(this);
     if (size.isEmpty) return;
 
     // Empty: paint the (possibly multi-line) placeholder, with the
@@ -1170,6 +1183,9 @@ class RenderTextArea extends RenderObject implements CaretHost {
       size: const CellSize(1, 1),
     );
   }
+
+  /// Called on unmount: this render object no longer owns the node's caret.
+  void detachFromFocus() => _focusNode.detachCaretHost(this);
 
   @override
   CellRect? get localCaretRect => size.isEmpty ? null : _caretRect();
