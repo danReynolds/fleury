@@ -1302,6 +1302,9 @@ th:nth-last-child(-n + 2) .ct::after {
   .cds.cds-bounded-code:not(.is-fs) .cds-body {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
+  .cds.cds-code-wide:not(.is-fs) .cds-body {
+    grid-template-columns: minmax(0, 3fr) minmax(21rem, 2fr);
+  }
   .cds.cds-demo-wide:not(.is-fs) .cds-body {
     grid-template-columns: minmax(19rem, 2fr) minmax(0, 3fr);
   }
@@ -1431,10 +1434,14 @@ th:nth-last-child(-n + 2) .ct::after {
 .cds-modal.cds-demo-wide .cds-modal-body {
   grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
 }
+.cds-modal.cds-code-wide .cds-modal-body {
+  grid-template-columns: minmax(0, 3fr) minmax(21rem, 2fr);
+}
 /* Stack under a narrow screen; the whole body scrolls as one column. */
 @media (max-width: 60rem) {
   .cds-modal-body,
-  .cds-modal.cds-demo-wide .cds-modal-body {
+  .cds-modal.cds-demo-wide .cds-modal-body,
+  .cds-modal.cds-code-wide .cds-modal-body {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: none;
     overflow: auto;

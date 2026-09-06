@@ -31,8 +31,8 @@ interface Props {
   demoLabel?: string;
   /** Keep a complete source file scrollable beside its live example. */
   codeMaxHeight?: string;
-  /** Give the running demo more room when the code remains readable narrow. */
-  layout?: 'balanced' | 'demo-wide';
+  /** Give more room to source or to a larger running example. */
+  layout?: 'balanced' | 'demo-wide' | 'code-wide';
 }
 const {
   file,
@@ -61,6 +61,7 @@ const expandIcon =
 <figure
   class:list={['cds', {
     'cds-demo-wide': layout === 'demo-wide',
+    'cds-code-wide': layout === 'code-wide',
     'cds-bounded-code': Boolean(codeMaxHeight),
   }]}
   data-file={sourceFiles[0]}
@@ -182,8 +183,8 @@ const expandIcon =
 
       const dlg = document.createElement('dialog');
       dlg.className = 'cds-modal';
-      if (root.classList.contains('cds-demo-wide')) {
-        dlg.classList.add('cds-demo-wide');
+      for (const layout of ['cds-demo-wide', 'cds-code-wide']) {
+        if (root.classList.contains(layout)) dlg.classList.add(layout);
       }
 
       const bar = document.createElement('div');

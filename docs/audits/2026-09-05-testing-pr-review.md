@@ -59,3 +59,38 @@ create matrix have not run: automatic approval review blocked the push and PR
 creation, requiring explicit permission for publication to the public
 `danReynolds/fleury` repository. No PR has been created. The branch and review
 are complete locally. No actionable review findings remain after the fixes.
+
+
+## Guide simplification, 2026-09-06
+
+Browser feedback showed that the guide was teaching too many contracts before
+readers had a reason to use them. The main path now has four small live examples:
+a counter, two independently scoped preferences forms, a save with controlled
+completion, and an animated progress bar. Source and test tabs accompany each.
+The operation tables and long role/action explanations were removed; detailed
+contracts are linked from the end. Setup is expandable. The larger editor and
+custom async-control fixtures remain in the executable suite.
+
+Prose fell from roughly 1,790 words to 430. Code wraps and the guide's panels give
+more room to source, including in the expanded playground. The Work field starts
+focused; the keyboard regression mounts FleuryApp to exercise its Tab bindings.
+
+Validation for this follow-up: 71 Dart documentation tests (including 15 guide
+cases), 2 Node export checks, scoped Dart analysis, dart2js compilation, and the
+144-page website build passed. The final panel layout also passed an Astro
+production build. Browser checks verified independent Work edits, the completed
+save, the animated meter, source tabs, and the expanded playground. Framework
+runtime code was unchanged, so the previous full-suite receipt above remains
+separate from this documentation-focused validation.
+
+### Separate DX finding: TextInput pointer focus
+
+In the inline preferences demo, clicking an unfocused Name field and typing did
+not focus or edit it. Tab focused the field and typing then worked. Checkbox
+clicks both focused and toggled their controls. TextInput's current implementation
+contributes hover handling but no tap handler that requests its FocusNode;
+that input-handling code is unchanged from the main branch used for this PR.
+
+Follow-up: define click-to-focus/caret behavior for editable controls and add
+native and browser pointer regressions. The guide now makes its keyboard route
+clear, but semantic fill tests alone do not qualify this pointer behavior.

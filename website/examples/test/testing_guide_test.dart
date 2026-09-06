@@ -7,6 +7,79 @@ import 'package:test/test.dart';
 import '../lib/testing_guide.dart';
 
 void main() {
+  testWidgets('edits only the work preferences', (tester) async {
+    tester.pumpWidget(preferencesPair());
+    final work = tester.target(type: Preferences, key: const ValueKey('work'));
+
+    await work.field('Name').fill('Ada');
+    await work.checkbox('Email updates').check();
+
+    expect(work.field('Name'), hasValue('Ada'));
+    expect(work.checkbox('Email updates'), isChecked);
+    final personal = tester.target(key: const ValueKey('personal'));
+    expect(personal.field('Name'), hasValue(''));
+    expect(personal.checkbox('Email updates'), isUnchecked);
+  });
+
+  testWidgets('work preferences start ready for keyboard input', (tester) {
+    // The application shell supplies the standard Tab traversal bindings.
+    tester.pumpWidget(FleuryApp(title: 'Preferences', home: preferencesPair()));
+    final work = tester.target(key: const ValueKey('work'));
+    expect(work.field('Name'), isFocused);
+    tester.type('Ada');
+    expect(work.field('Name'), hasValue('Ada'));
+    tester.press(KeySequence.tab);
+    expect(work.checkbox('Email updates'), isFocused);
+    final personal = tester.target(key: const ValueKey('personal'));
+    expect(personal.field('Name'), hasValue(''));
+  });
+
+  testWidgets('chooses when the save finishes', (tester) async {
+    final request = Completer<void>();
+    tester.pumpWidget(SaveStatus(save: () => request.future));
+
+    await tester.button('Save').press();
+    expect(tester.exists(text('Saving…')), isTrue);
+    expect(tester.button('Save'), isDisabled);
+
+    request.complete();
+    await tester.settle();
+    expect(tester.exists(text('Saved')), isTrue);
+    expect(tester.button('Save'), isEnabled);
+  });
+
+  testWidgets('shows a failed save and allows retry', (tester) async {
+    var request = Completer<void>();
+    tester.pumpWidget(SaveStatus(save: () => request.future));
+    await tester.button('Save').press();
+
+    request.completeError(StateError('Offline'));
+    await tester.settle();
+    expect(tester.exists(text('Save failed')), isTrue);
+    expect(tester.button('Save'), isEnabled);
+
+    request = Completer<void>();
+    await tester.button('Save').press();
+    expect(tester.exists(text('Saving…')), isTrue);
+    request.complete();
+    await tester.settle();
+    expect(tester.exists(text('Saved')), isTrue);
+  });
+
+  testWidgets('inspects the upload halfway through its animation', (
+    tester,
+  ) async {
+    tester.pumpWidget(const AnimatedUpload());
+    await tester.button('Animate').press();
+    final upload = tester.target(role: SemanticRole.progress, label: 'Upload');
+
+    tester.pump(const Duration(milliseconds: 500));
+    expect(upload, hasValue(0.5));
+
+    tester.pumpAndSettle();
+    expect(upload, hasValue(1.0));
+  });
+
   testWidgets('observes a custom async handler before it completes', (
     tester,
   ) async {

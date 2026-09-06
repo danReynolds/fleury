@@ -29,6 +29,142 @@ class _CounterState extends State<Counter> {
   );
 }
 
+class Preferences extends StatefulWidget {
+  const Preferences({super.key, this.autofocus = false});
+  final bool autofocus;
+
+  @override
+  State<Preferences> createState() => _PreferencesState();
+}
+
+class _PreferencesState extends State<Preferences> {
+  String name = '';
+  bool emailUpdates = false;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      SizedBox(
+        width: 26,
+        child: TextInput(
+          semanticLabel: 'Name',
+          placeholder: 'Name',
+          autofocus: widget.autofocus,
+          onChanged: (value) => setState(() => name = value),
+        ),
+      ),
+      Checkbox(
+        label: 'Email updates',
+        value: emailUpdates,
+        onChanged: (value) => setState(() => emailUpdates = value),
+      ),
+      Text(emailUpdates ? 'Updates for $name' : 'Email updates off'),
+    ],
+  );
+}
+
+Widget preferencesPair() => const Column(
+  mainAxisSize: MainAxisSize.min,
+  crossAxisAlignment: CrossAxisAlignment.start,
+  children: [
+    Text('PERSONAL', style: CellStyle(dim: true)),
+    Preferences(key: ValueKey('personal')),
+    SizedBox(height: 1),
+    Text('WORK', style: CellStyle(dim: true)),
+    Preferences(key: ValueKey('work'), autofocus: true),
+  ],
+);
+
+class SaveStatus extends StatefulWidget {
+  const SaveStatus({super.key, required this.save});
+  final Future<void> Function() save;
+
+  @override
+  State<SaveStatus> createState() => _SaveStatusState();
+}
+
+class _SaveStatusState extends State<SaveStatus> {
+  Future<void>? request;
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<void>(
+    future: request,
+    builder: (context, snapshot) {
+      final saving = snapshot.connectionState == ConnectionState.waiting;
+      final status = saving
+          ? 'Saving…'
+          : snapshot.hasError
+          ? 'Save failed'
+          : snapshot.connectionState == ConnectionState.done
+          ? 'Saved'
+          : 'Ready';
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Button(
+            label: 'Save',
+            onPressed: saving
+                ? null
+                : () => setState(() => request = widget.save()),
+          ),
+          Text(status),
+        ],
+      );
+    },
+  );
+}
+
+class TestingSaveDemo extends StatelessWidget {
+  const TestingSaveDemo({super.key});
+
+  @override
+  Widget build(BuildContext context) => SaveStatus(
+    save: () => Future<void>.delayed(const Duration(milliseconds: 800)),
+  );
+}
+
+class AnimatedUpload extends StatefulWidget {
+  const AnimatedUpload({super.key});
+
+  @override
+  State<AnimatedUpload> createState() => _AnimatedUploadState();
+}
+
+class _AnimatedUploadState extends State<AnimatedUpload> {
+  double target = 0;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      AnimationBuilder<double>(
+        target,
+        duration: const Duration(seconds: 1),
+        curve: Curves.linear,
+        builder: (_, value, _) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 26,
+              child: ProgressBar(value: value, semanticLabel: 'Upload'),
+            ),
+            Text('${(value * 100).round()}%'),
+          ],
+        ),
+      ),
+      Button(
+        label: 'Animate',
+        onPressed: () => setState(() => target = target == 0 ? 1 : 0),
+      ),
+    ],
+  );
+}
+
 /// The application owns editing; its caller supplies persistence.
 class DraftEditor extends StatefulWidget {
   const DraftEditor({super.key, required this.save});
