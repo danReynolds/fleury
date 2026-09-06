@@ -20,3 +20,6 @@ examples/.dart_tool/
 src/api.json
 src/examples_code.json
 src/types.json
+
+# Lazily loaded testing-guide runner
+public/fleury-preferences-test.js*

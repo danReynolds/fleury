@@ -94,3 +94,29 @@ that input-handling code is unchanged from the main branch used for this PR.
 Follow-up: define click-to-focus/caret behavior for editable controls and add
 native and browser pointer regressions. The guide now makes its keyboard route
 clear, but semantic fill tests alone do not qualify this pointer behavior.
+
+## Executable Preferences walkthrough, 2026-09-06
+
+The Preferences demo now has Run test, Stop, Run again, and Try it yourself
+controls. A fresh FleuryTester executes the same scenario as the command-line
+test; the browser displays its rendered cell frames with short pauses and
+highlights the matching source line. Four assertions visibly confirm Work's
+changes and Personal's unchanged values. The test tab is extracted from that
+scenario, omitting only the pause markers. No recorded frames or predetermined
+pass results are used.
+
+The browser entry point evaluates the same synchronous Matcher contract outside
+package:test's test zone. Its small bundle is loaded only on demand. Inline and
+expanded runners have independent state and dispose on stop, completion, close,
+and page navigation. The ordinary interactive widget is available via Try it
+yourself. A native-terminal import in the tester facade was narrowed to the core
+API so the real tester can compile for the browser; no tester operation changed.
+
+Validation: 73 Dart documentation tests (17 guide cases), 49 tester-package
+tests, 2 Chrome runner tests, and 2 Node export checks passed. Regression cases
+cover intermediate states, a deliberately invalidated assertion, cancellation,
+and a fresh replay. Scoped analysis and the tester package analysis passed.
+Both Dart browser bundles compiled and the production site built 144 pages;
+the subsequent source-extraction component also passed the production build.
+In-app browser checks confirmed source highlighting, all four passing checks,
+stop/replay, the expanded run, and return to the interactive widget.

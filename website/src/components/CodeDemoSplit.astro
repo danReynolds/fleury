@@ -121,6 +121,7 @@ const expandIcon =
 </figure>
 
 <script>
+  import { attachPreferencesTest } from '../scripts/preferences-test-runner';
   const wireFileTabs = (scope: ParentNode) => {
     const tabs = Array.from(
       scope.querySelectorAll<HTMLButtonElement>('[data-cds-file-tab]'),
@@ -234,13 +235,23 @@ const expandIcon =
       host.style.cssText =
         `width:${cols}ch;height:${(rows * 1.25).toFixed(1)}em;` +
         'max-width:100%;max-height:100%';
-      demoCol.append(demoCap, host);
+      if (fx?.dataset.test === 'preferences') {
+        const hostWrap = document.createElement('div');
+        hostWrap.className = 'fleury-host-wrap';
+        hostWrap.append(host);
+        demoCol.append(demoCap, hostWrap);
+      } else {
+        demoCol.append(demoCap, host);
+      }
 
       body.append(codeCol, demoCol);
       dlg.append(bar, body);
       document.body.appendChild(dlg);
       wireFileTabs(dlg);
       dlg.showModal();
+      const disposeTest = fx?.dataset.test === 'preferences'
+        ? attachPreferencesTest(host, dlg)
+        : undefined;
 
       const handle =
         id && (window as any).fleuryMountInto
@@ -268,6 +279,7 @@ const expandIcon =
       const dismiss = () => {
         if (dismissed) return;
         dismissed = true;
+        disposeTest?.();
         try {
           handle?.dispose?.();
         } catch {

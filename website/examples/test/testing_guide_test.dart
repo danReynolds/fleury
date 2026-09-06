@@ -5,20 +5,45 @@ import 'package:fleury_test/fleury_test.dart';
 import 'package:test/test.dart';
 
 import '../lib/testing_guide.dart';
+import 'scenarios/preferences_test.dart';
 
 void main() {
   testWidgets('edits only the work preferences', (tester) async {
-    tester.pumpWidget(preferencesPair());
-    final work = tester.target(type: Preferences, key: const ValueKey('work'));
+    await runPreferencesTest(tester, expect: expect).drain<void>();
+  });
 
-    await work.field('Name').fill('Ada');
-    await work.checkbox('Email updates').check();
+  testWidgets('walkthrough pauses on real intermediate frames', (tester) async {
+    final steps = StreamIterator(runPreferencesTest(tester, expect: expect));
+    addTearDown(steps.cancel);
+    await steps.moveNext();
+    expect(steps.current, PreferencesTestStep.mounted);
+    final work = tester.target(key: const ValueKey('work'));
+    expect(work.field('Name'), hasValue(''));
+    expect(work.checkbox('Email updates'), isUnchecked);
 
+    await steps.moveNext();
+    expect(steps.current, PreferencesTestStep.filled);
     expect(work.field('Name'), hasValue('Ada'));
+    expect(work.checkbox('Email updates'), isUnchecked);
+
+    await steps.moveNext();
+    expect(steps.current, PreferencesTestStep.checked);
     expect(work.checkbox('Email updates'), isChecked);
-    final personal = tester.target(key: const ValueKey('personal'));
-    expect(personal.field('Name'), hasValue(''));
-    expect(personal.checkbox('Email updates'), isUnchecked);
+  });
+
+  testWidgets('walkthrough fails if an assertion no longer holds', (
+    tester,
+  ) async {
+    final steps = StreamIterator(runPreferencesTest(tester, expect: expect));
+    addTearDown(steps.cancel);
+    for (var i = 0; i < 3; i++) {
+      await steps.moveNext();
+    }
+    await tester
+        .target(key: const ValueKey('work'))
+        .field('Name')
+        .fill('Grace');
+    await expectLater(steps.moveNext(), throwsA(isA<TestFailure>()));
   });
 
   testWidgets('work preferences start ready for keyboard input', (tester) {

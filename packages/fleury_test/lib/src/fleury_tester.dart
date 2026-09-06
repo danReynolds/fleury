@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:fleury/fleury.dart';
+import 'package:fleury/fleury_core.dart';
 import 'package:fleury/fleury_test_support.dart' as support;
 import 'package:meta/meta.dart';
 import 'package:test/test.dart' as pkg_test;

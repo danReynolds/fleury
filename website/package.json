@@ -10,7 +10,7 @@
     "examples:code": "cd examples && dart run bin/examples_code.dart ../src/examples_code.json",
     "types": "cd examples && dart run bin/type_index.dart ../src/types.json",
     "gen:widgets": "node scripts/gen-widget-pages.mjs",
-    "build:examples": "cd examples && dart compile js web/main.dart -o ../public/fleury-examples.js -O2",
+    "build:examples": "cd examples && dart compile js web/main.dart -o ../public/fleury-examples.js -O2 && dart compile js web/preferences_test.dart -o ../public/fleury-preferences-test.js -O2",
     "check:docs": "node --test scripts/api-reference-exports.test.mjs && cd examples && dart test test/api_extract_test.dart test/docs_accuracy_test.dart test/doc_snippets_test.dart test/testing_guide_test.dart",
     "generate": "npm run sync:docs && npm run manifest && npm run api && npm run examples:code && npm run types && npm run gen:widgets && npm run build:examples",
     "predev": "npm run generate",

@@ -1,0 +1,13 @@
+---
+import { Code } from '@astrojs/starlight/components';
+import source from '../../examples/test/scenarios/preferences_test.dart?raw';
+
+// Show the executable scenario, omitting only the browser's pause markers.
+// The actions and assertions are shared with both test entry points.
+const body = source.split('// #docregion preferences-test\n')[1]
+  ?.split('  // #enddocregion preferences-test')[0];
+if (!body) throw new Error('Preferences test source region is missing.');
+const code = "testWidgets('edits only the work preferences', (tester) async {\n" +
+  body.replace(/^  yield PreferencesTestStep\.\w+;\n/gm, '') + '});';
+---
+<Code code={code} lang="dart" wrap />

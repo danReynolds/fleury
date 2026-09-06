@@ -5,6 +5,7 @@ description: Test buttons, forms, asynchronous work, and animations with small r
 
 import FleuryExample from '../../../components/FleuryExample.astro';
 import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
+import PreferencesTestCode from '../../../components/PreferencesTestCode.astro';
 
 A widget test runs your UI without opening a terminal. Each example below pairs
 a running widget with its source and a test you can try.
@@ -125,8 +126,8 @@ individual cases to add inside it.
 ## Find a component, then edit its controls
 
 Both forms have a **Name** field and an **Email updates** checkbox. Select the
-Work widget by its type and key, then change only its controls. In the demo,
-type into Work or use Tab to move between controls:
+Work widget by its type and key, then change only its controls. Use **Run test**
+to watch the actions and assertions, or type into Work and use Tab to explore:
 
 <CodeDemoSplit
   files={['Preferences source', 'Test']}
@@ -190,24 +191,8 @@ Widget preferencesPair() => const Column(
 );
 ```
 </Fragment>
-<Fragment slot="code-1">
-```dart wrap
-testWidgets('edits only the work preferences', (tester) async {
-  tester.pumpWidget(preferencesPair());
-  final work = tester.target(type: Preferences, key: const ValueKey('work'));
-
-  await work.field('Name').fill('Ada');
-  await work.checkbox('Email updates').check();
-
-  expect(work.field('Name'), hasValue('Ada'));
-  expect(work.checkbox('Email updates'), isChecked);
-  final personal = tester.target(key: const ValueKey('personal'));
-  expect(personal.field('Name'), hasValue(''));
-  expect(personal.checkbox('Email updates'), isUnchecked);
-});
-```
-</Fragment>
-<FleuryExample slot="demo" id="testing.preferences" cols={32} rows={11} interactive />
+<PreferencesTestCode slot="code-1" />
+<FleuryExample slot="demo" id="testing.preferences" test="preferences" cols={32} rows={11} interactive />
 </CodeDemoSplit>
 
 `fill` replaces the field's text. `check` leaves the option checked, including
