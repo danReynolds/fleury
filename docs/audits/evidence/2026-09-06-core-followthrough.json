@@ -1,0 +1,74 @@
+{
+  "baselineRevision": "bb2e10b856a7a37428537977a84ccd735af4122e",
+  "baselineWorktreeRevision": "ff307f379d086c4c0c24a6793e164dd3a16c9295",
+  "baselineTreeIdentityVerified": true,
+  "candidateProductionRevision": "57185a01cee48ab4c0f39c34387ca69da123b570",
+  "method": {
+    "dart": "3.12.2",
+    "platform": "macOS arm64",
+    "viewport": [
+      120,
+      40
+    ],
+    "measuredIterations": 160,
+    "mountWarmups": 15,
+    "updateWarmups": 30,
+    "freshProcessPairsPerSurface": 3,
+    "execution": "native outside filesystem sandbox; one timed process; no own test/compiler concurrency",
+    "host": "shared"
+  },
+  "sourceSha256": {
+    "packages/fleury/lib/src/remote/remote_semantics.dart": "f87c4dca292a1dcad29faf07e9e184c1d00add36a9e0e5636928ff255e22ba00",
+    "packages/fleury/lib/src/rendering/render_flex.dart": "5d33a66faf1d600fae8cc25b811d3cac74cfb038a82ac4170b358f553dced1e3",
+    "packages/fleury/lib/src/rendering/render_navigator.dart": "ed658a77eb58dfb8177d728a6b302e35619a727dc990348f11ec5c377b32609f",
+    "packages/fleury/lib/src/rendering/render_object.dart": "273c946e4749376be53cd8a7c4a3fb791800ae4948a3abb2cdb0bff4ba9f7617",
+    "packages/fleury/lib/src/rendering/render_stack.dart": "ad4860c5bd1d43b43a8f1bb3e52e510672d7bdb4cd341b3909c2e1389a406c0f",
+    "packages/fleury/lib/src/rendering/render_wrap.dart": "af149288d821d9dfa0204a11f6714e84667670b87bff1644728242c76f7c9599",
+    "packages/fleury/lib/src/widgets/framework.dart": "8640d3854cb26744537c9f2a641dea23cd2da0b7634a03dc153f426b5780cd9d",
+    "packages/fleury/lib/src/widgets/list_view.dart": "4a0e560897da505b668c9f62a8bb851fc7a01fdaf5bbb65ca6503d941c629a16",
+    "profiling/bin/core_lifecycle_probe.dart": "4ed7fe641a7de441a886355e76e2d4ee6abd869cf6ba90d587472f11f505b6e2",
+    "profiling/bin/sample_frame_host.dart": "fbb5936bd6e3c93062f5255e987dda84664162e8697910bd251f48303d0c0dad",
+    "profiling/bin/core_lifetime_probe.dart": "26d3887440b8a7a96d382d263a858dbf84d7abf03500db30aaf303152e930965"
+  },
+  "executables": {
+    "base": "f38bee784cdf4c1663393483fe104981c62911be7e0e9c1b83102e14ca28600b",
+    "candidate": "043c1875ec2a5602572ccb52ccde238a49af237a514ec2dc448b45a123ba747a"
+  },
+  "artifacts": {
+    "2026-09-06-core-followthrough-frames.csv": {
+      "rows": 318,
+      "sha256": "8fe390335eadf0295adf9c1771e0c74aa4c030279a784b74e5bfeb7395133715"
+    },
+    "2026-09-06-core-followthrough-encoder-trial.csv": {
+      "rows": 144,
+      "sha256": "67f6b80c504bc41a9a13dcf807429f3bfa9fd242874d179f198bab469dd95690"
+    },
+    "2026-09-06-core-followthrough-removal-trial.csv": {
+      "rows": 318,
+      "sha256": "3fd7858371e7c08256d6380d6ec83cb6b6c456ea9355803cc1cdf6e845bd18bf"
+    },
+    "2026-09-06-core-followthrough-rejected-leaf-trial.csv": {
+      "rows": 144,
+      "sha256": "7436b1f126c2df93468f8d627cf3b8b15a950d18685f249e789690476a8ad5da"
+    },
+    "2026-09-06-core-followthrough-combined-trial.csv": {
+      "rows": 318,
+      "sha256": "73f07c8d253d3f3a19f97b89084dfb24ff6a3323ec689fc4791fd5f572b327c3"
+    },
+    "2026-09-06-core-followthrough-lifetime.json": {
+      "sha256": "84e435c02f91fcd9a16d81e726a568c0eaee4651cae86c4ef03edce81f204a18"
+    },
+    "2026-09-06-core-followthrough-rejected-leaf.patch": {
+      "sha256": "45d3b572ca195cea3f2c09cbb76138dbe822a11871472e5e55fd5abdeaf5024e"
+    },
+    "2026-09-06-core-followthrough-cpu.txt": {
+      "sha256": "3825e12f7956ebbb2f3fdfef8950a70d8a0b2147e8252d17480abdeb1e97cd8f"
+    }
+  },
+  "boundaries": [
+    "Synchronous framework/semantic work, excluding input dispatch, transport and display",
+    "48 control-tree text fingerprints match; five mount cases have no fingerprint",
+    "No total-RAM reduction or allocation-rate claim",
+    "Rejected leaf and earlier trial CSVs are diagnostic comparisons, not the final candidate"
+  ]
+}
