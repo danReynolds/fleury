@@ -244,6 +244,7 @@ class RenderRichText extends RenderObject
   late List<({String text, CellStyle style})> _runs;
   late List<_Glyph> _glyphs;
   List<List<_Glyph>> _lines = const [];
+  int _laidOutWidth = 0;
   bool _moreLinesTruncated = false;
   CellRect? _selectionPaintRect;
   CellRect? _selectionClipRect;
@@ -508,8 +509,16 @@ class RenderRichText extends RenderObject
 
   @override
   CellSize performLayout(CellConstraints constraints) {
+    if (!_softWrap && !needsLayout) {
+      // A constraint-only resize cannot change unwrapped lines. Keep their
+      // glyphs and source groups, but refresh selection identity so screen
+      // points are resolved against the new paint geometry.
+      _selectionLines = List<String>.of(_selectionLines);
+      return constraints.constrain(CellSize(_laidOutWidth, _lines.length));
+    }
     if (_glyphs.isEmpty) {
       _lines = const [];
+      _laidOutWidth = 0;
       _moreLinesTruncated = false;
       _refreshSelectionLines();
       return constraints.constrain(CellSize.zero);
@@ -531,6 +540,7 @@ class RenderRichText extends RenderObject
       }
       if (w > widest) widest = w;
     }
+    _laidOutWidth = widest;
     final cols = maxCols == null
         ? widest
         : (widest < maxCols ? widest : maxCols);

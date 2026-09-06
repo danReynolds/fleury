@@ -72,6 +72,18 @@ void main(List<String> args) {
                   textPolicy: policy,
                   maxLines: maxLines,
                   overflow: overflow);
+              if (args.contains('--resize')) {
+                for (final width in <int?>[12, 0, null, 1]) {
+                  render.layout(CellConstraints(maxCols: width));
+                  render.paint(CellBuffer(const CellSize(20, 12)),
+                      const CellOffset(0, -1));
+                  render.dispatchSelectionEvent(const SelectionEdgeUpdateEvent(
+                      globalPosition: CellOffset(2, 1), isStart: true));
+                  render.dispatchSelectionEvent(const SelectionEdgeUpdateEvent(
+                      globalPosition: CellOffset(6, 3), isStart: false));
+                }
+                render.dispatchSelectionEvent(const SelectionClearEvent());
+              }
               render.layout(CellConstraints(maxCols: cols));
               final buffer = CellBuffer(const CellSize(20, 12));
               render.paint(buffer, const CellOffset(0, -1));
