@@ -640,10 +640,11 @@ class RenderRichText extends RenderObject
       );
     }
 
-    if (_lines.isEmpty || size.isEmpty) return;
     // Resolve after recording current geometry, once for this paint rather
     // than scanning the document's line lengths again for every glyph.
     final selection = getSelectionRange();
+    // Refresh even an empty paint so selection drops obsolete line snapshots.
+    if (_lines.isEmpty || size.isEmpty) return;
     final visibleRows = _lines.length < size.rows ? _lines.length : size.rows;
     if (offset.row >= buffer.size.rows || offset.row + visibleRows <= 0) return;
     var lineStartOffset = 0;

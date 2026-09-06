@@ -406,10 +406,11 @@ class RenderText extends RenderObject
         clipRect: clipRect,
       );
     }
-    if (_text.isEmpty || size.isEmpty) return;
     // Selection is constant during this synchronous paint. Resolve once:
     // resolving per glyph repeatedly scans the document's line lengths.
     final selection = getSelectionRange();
+    // Refresh even an empty paint so selection drops obsolete line snapshots.
+    if (_text.isEmpty || size.isEmpty) return;
     final visibleRows = _lines.length < size.rows ? _lines.length : size.rows;
     if (offset.row >= buffer.size.rows || offset.row + visibleRows <= 0) return;
     final selectedStyle = selection == null

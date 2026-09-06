@@ -83,6 +83,13 @@ Future<void> main(List<String> args) async {
     Future<void> mountedSnapshot() async {
       final host = mount();
       await snapshot('mounted');
+      host.tester.pumpWidget(ScrollView(
+          child: kind == 'plain'
+              ? const Text('')
+              : const RichText(text: TextSpan(text: ''))));
+      // Clear both frame buffers before inspecting an empty, still-mounted leaf.
+      for (var i = 0; i < 3; i++) host.frame('clean', i);
+      await snapshot('emptied');
       host.tester.dispose();
     }
 

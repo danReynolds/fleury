@@ -30,7 +30,8 @@ void main(List<String> args) {
     'edit',
     'resize',
     'drag',
-    'copy'
+    'copy',
+    'copy-all'
   ];
   final operationFilter = options['--operation']!;
   if (operationFilter != 'all' && !operations.contains(operationFilter)) {
@@ -73,7 +74,9 @@ void main(List<String> args) {
     SampleFrameHost? host;
     if (operation != 'open') {
       host = SampleFrameHost(app(0), size);
-      if (operation == 'drag' || operation == 'copy') {
+      if (operation == 'drag' ||
+          operation == 'copy' ||
+          operation == 'copy-all') {
         controller.jumpTo(controller.maxOffset ~/ 2);
         host.frame('clean', 0);
         host.tester.sendMouse(const MouseEvent(
@@ -86,6 +89,13 @@ void main(List<String> args) {
             button: MouseButton.left,
             col: 20,
             row: 8));
+        if (operation == 'copy-all') {
+          host.renderObjects
+              .whereType<Selectable>()
+              .single
+              .dispatchSelectionEvent(const SelectionGranularEvent(
+                  granularity: SelectionGranularity.all));
+        }
         host.frame('clean', 0);
         if (host.renderObjects
                 .whereType<Selectable>()
@@ -120,6 +130,7 @@ void main(List<String> args) {
               col: 20 + (i & 1),
               row: 8));
         case 'copy':
+        case 'copy-all':
           copiedUnits += current.renderObjects
               .whereType<Selectable>()
               .single
