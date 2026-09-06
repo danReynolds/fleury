@@ -11,7 +11,7 @@ final class FrameSample {
 }
 
 final class SampleFrameHost {
-  SampleFrameHost(Widget app, this.size,
+  SampleFrameHost(Widget app, CellSize size,
       {bool settle = true,
       TextPresentationPolicy textPolicy = TextPresentationPolicy.spec})
       : tester = FleuryTester(viewportSize: size, textPolicy: textPolicy) {
@@ -55,7 +55,8 @@ final class SampleFrameHost {
     _text = null;
   }
 
-  CellSize size;
+  CellSize get size => tester.viewportSize;
+  set size(CellSize value) => tester.viewportSize = value;
   final FleuryTester tester;
   final renderObjects = <RenderObject>[];
   late final PointerRouter _router;
