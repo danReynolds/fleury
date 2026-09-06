@@ -238,6 +238,16 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
   @override
   void replaceAllChildren(List<RenderObject> newChildren) {
     if (hasSameRenderChildrenInOrder(_children, newChildren)) return;
+    final removedIndex = singleRemovedRenderChildIndex(_children, newChildren);
+    if (removedIndex != null) {
+      final removed = _children[removedIndex];
+      dropChild(removed);
+      _childOffsets.remove(removed);
+      _children.removeAt(removedIndex);
+      markNeedsLayout();
+      return;
+    }
+
     if (_children.isEmpty) {
       for (final c in newChildren) {
         adoptChild(c);

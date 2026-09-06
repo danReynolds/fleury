@@ -2218,9 +2218,10 @@ class MultiChildRenderObjectElement extends RenderObjectElement {
     // before this (old) parent gets a chance to re-sync — the adopt would
     // otherwise assert on a still-parented render object.
     final ro = renderObject as RenderObjectWithChildren;
-    if (ro.children.any((c) => identical(c, child))) {
+    final children = ro.children;
+    if (children.any((c) => identical(c, child))) {
       ro.replaceAllChildren(
-        ro.children.where((c) => !identical(c, child)).toList(),
+        children.where((c) => !identical(c, child)).toList(),
       );
     }
   }

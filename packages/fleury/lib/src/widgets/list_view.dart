@@ -1125,6 +1125,17 @@ class _RenderListView extends RenderObject implements RenderObjectWithChildren {
     // guard is inert for layout today; it's kept for parity with the other
     // implementations and stays correct if that mark ever becomes conditional.
     if (hasSameRenderChildrenInOrder(_children, newChildren)) return;
+    final removedIndex = singleRemovedRenderChildIndex(_children, newChildren);
+    if (removedIndex != null) {
+      final removed = _children[removedIndex];
+      dropChild(removed);
+      _childOffsets.remove(removed);
+      _visibleChildren.remove(removed);
+      _children.removeAt(removedIndex);
+      markNeedsLayout();
+      return;
+    }
+
     final newSet = Set<RenderObject>.identity()..addAll(newChildren);
     for (final c in List<RenderObject>.from(_children)) {
       if (!newSet.contains(c)) {

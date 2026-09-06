@@ -857,3 +857,26 @@ bool hasSameRenderChildrenInOrder(
   }
   return true;
 }
+
+/// The removed index when [next] preserves all other child identities in order.
+/// Returns null for general reconciliation or if the removed child is retained
+/// elsewhere in [next].
+/// Container removal can then drop that child without rebuilding identity sets.
+@protected
+int? singleRemovedRenderChildIndex(
+  List<RenderObject> current,
+  List<RenderObject> next,
+) {
+  if (current.length != next.length + 1) return null;
+  var removedIndex = 0;
+  while (removedIndex < next.length &&
+      identical(current[removedIndex], next[removedIndex])) {
+    removedIndex++;
+  }
+  final removed = current[removedIndex];
+  for (var i = 0; i < next.length; i++) {
+    if (identical(next[i], removed)) return null;
+    if (i >= removedIndex && !identical(current[i + 1], next[i])) return null;
+  }
+  return removedIndex;
+}
