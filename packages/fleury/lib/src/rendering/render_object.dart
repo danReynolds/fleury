@@ -61,9 +61,37 @@ final class RenderDamageTracker {
   bool _requiresFullDiff = false;
   bool _visualChange = false;
 
+  // ---- Geometry epoch -----------------------------------------------------
+  //
+  // Derived screen geometry (`RenderObject.screenGeometry`) is memoized per
+  // render object against this counter. Any invalidation may move something,
+  // and a paint pass begins after layout has settled, so both advance it.
+  int _geometryEpoch = 0;
+
+  /// Advances whenever derived geometry may have changed.
+  int get geometryEpoch => _geometryEpoch;
+
+  /// The size of the buffer the tree renders into, set by the owner before
+  /// each frame's layout. The outermost clip of every derived geometry.
+  CellSize? screenSize;
+
+  final List<void Function()> _paintPassListeners = <void Function()>[];
+
+  /// Registers [listener] to run when a paint pass ends — the point at which
+  /// this frame's layout, and so every derived geometry, is final. The
+  /// semantics tier re-derives node bounds here.
+  void addPaintPassListener(void Function() listener) {
+    _paintPassListeners.add(listener);
+  }
+
+  void removePaintPassListener(void Function() listener) {
+    _paintPassListeners.remove(listener);
+  }
+
   void recordLayoutOrConservativePaint() {
     _requiresFullDiff = true;
     _visualChange = true;
+    _geometryEpoch++;
     _invalidated();
   }
 
@@ -72,6 +100,7 @@ final class RenderDamageTracker {
   /// consumes it via [takeVisualChange].
   void recordVisualChange() {
     _visualChange = true;
+    _geometryEpoch++;
     _invalidated();
   }
 
@@ -98,7 +127,7 @@ final class RenderDamageTracker {
     _requiresFullDiff = false;
     _visualChange = false;
     _carryVisualChange = false;
-    _retracted.clear();
+    _geometryEpoch++;
     phase = RenderFramePhase.idle;
   }
 
@@ -131,824 +160,44 @@ final class RenderDamageTracker {
   /// another owner).
   void unregisterPaintPassParticipant(PaintPassParticipant participant) {
     _participants.remove(participant);
-    _retracted.remove(participant);
   }
 
-  /// Participants whose facts this tracker has withdrawn and that have not
-  /// published since. The one-shot lives HERE, in the sweep, so no
-  /// participant can reinstate the spin by notifying on every retraction.
-  final Set<PaintPassParticipant> _retracted =
-      Set<PaintPassParticipant>.identity();
-
   /// Starts a root paint pass; returns its number.
-  int beginPaintPass() => ++_paintPass;
+  int beginPaintPass() {
+    _geometryEpoch++;
+    return ++_paintPass;
+  }
 
-  /// Ends the current pass: every participant that did not publish in it
-  /// retracts. Retraction only invalidates paint (a listener marking its
-  /// boundary dirty), never restructures the tree, so iterating the live set
-  /// is safe. A retraction that withdrew a live fact notifies its observers,
-  /// whose invalidation lands in the paint phase, so [onInvalidate] asks for
-  /// the frame that repaints without the stale fact.
-  ///
-  /// Only a retraction that actually WITHDREW a live fact may do that. A
-  /// participant that stays mounted without painting — the other IndexedStack
-  /// tab, a route under an opaque one — is unpublished in every later pass
-  /// too, so a retraction that re-notified every pass made each frame request
-  /// the next: the app spun frames at full speed forever after a single tab
-  /// switch, and every assertion that only checked "a retraction frame
-  /// followed" was satisfied by the spin. The sweep therefore remembers whom
-  /// it has retracted and asks again only after a fresh publish.
+  /// Ends the current pass: every participant that did not publish in it —
+  /// its subtree stayed mounted but did not paint (a cached repaint boundary,
+  /// the other IndexedStack tab, a route beneath an opaque one) — re-derives
+  /// its fact from layout state and publishes it. Publishing an unchanged
+  /// fact notifies nobody, so a participant that stays hidden costs one
+  /// derivation per pass and never requests a frame.
   void endPaintPass() {
     for (final participant in _participants) {
-      if (participant.publishedPaintPass == _paintPass) {
-        _retracted.remove(participant);
-        continue;
-      }
-      if (!_retracted.add(participant)) continue; // withdrawn already
-      participant.retractPaintFacts();
+      if (participant.publishedPaintPass == _paintPass) continue;
+      participant.refreshPaintFacts();
+    }
+    for (var i = 0; i < _paintPassListeners.length; i++) {
+      _paintPassListeners[i]();
     }
   }
 }
 
-/// A render object that publishes a paint-time fact about its subtree — its
-/// painted bounds — and must retract it when a root paint pass ends without
-/// the subtree having painted or replayed. It registers with the tree's
-/// [RenderDamageTracker] when it first publishes and unregisters on detach.
+/// A render object that publishes a fact about its subtree's geometry — its
+/// bounds on screen — during its own paint, and re-derives that fact when a
+/// root paint pass ends without the subtree having painted. It registers with
+/// the tree's [RenderDamageTracker] when it first publishes and unregisters on
+/// detach.
 abstract interface class PaintPassParticipant {
   /// The [RenderDamageTracker.paintPass] this participant last published in.
   int get publishedPaintPass;
 
-  /// Withdraw the published fact: the subtree no longer paints. The tracker
-  /// calls this at most once per withdrawal — a participant that stays
-  /// unpublished is not asked again until it publishes — so an
-  /// implementation may notify unconditionally.
-  void retractPaintFacts();
-}
-
-typedef SemanticPaintBoundsCallback = void Function(CellRect? bounds);
-
-CellRect _translatePaintRect(CellRect rect, CellOffset offset) {
-  return CellRect(offset: offset + rect.offset, size: rect.size);
-}
-
-CellOffset _inversePaintOffset(CellOffset offset) {
-  return CellOffset(-offset.col, -offset.row);
-}
-
-/// A clip constraint carried by retained paint geometry.
-///
-/// `clipRect == null` in the public paint API means unbounded, while the
-/// intersection of two real clips can be empty. Keeping those states distinct
-/// prevents a fully clipped cached record from being mistaken for an
-/// unbounded one during nested-boundary replay.
-final class _PaintGeometryClip {
-  const _PaintGeometryClip.unbounded() : isBounded = false, bounds = null;
-  const _PaintGeometryClip.bounded(this.bounds) : isBounded = true;
-
-  factory _PaintGeometryClip.fromPaintRect(CellRect? clipRect) {
-    return clipRect == null
-        ? const _PaintGeometryClip.unbounded()
-        : _PaintGeometryClip.bounded(clipRect);
-  }
-
-  final bool isBounded;
-
-  /// The bounded clip, or null when a bounded intersection is empty.
-  final CellRect? bounds;
-
-  bool sameAs(_PaintGeometryClip other) {
-    return isBounded == other.isBounded && bounds == other.bounds;
-  }
-
-  _PaintGeometryClip translate(CellOffset offset) {
-    if (!isBounded || bounds == null) return this;
-    return _PaintGeometryClip.bounded(_translatePaintRect(bounds!, offset));
-  }
-
-  _PaintGeometryClip intersect(_PaintGeometryClip other) {
-    if (!isBounded) return other;
-    if (!other.isBounded) return this;
-    final first = bounds;
-    final second = other.bounds;
-    if (first == null || second == null) {
-      return const _PaintGeometryClip.bounded(null);
-    }
-    return _PaintGeometryClip.bounded(first.intersect(second));
-  }
-
-  CellRect? applyTo(CellRect rect) {
-    if (!isBounded) return rect;
-    return bounds?.intersect(rect);
-  }
-}
-
-final class _PaintGeometryClipScope {
-  _PaintGeometryClipScope._();
-
-  static final List<_PaintGeometryClip> _stack = <_PaintGeometryClip>[];
-
-  static int get _depth => _stack.length;
-
-  /// Whether an enclosing repaint boundary is currently retaining paint
-  /// geometry. Clip parents use this to keep painting locally hidden content
-  /// into that boundary's cache so it can become visible on a later cache hit
-  /// when only an ancestor clip changes.
-  static bool get isCapturing =>
-      SemanticPaintBoundsCapture.isActive ||
-      PointerRegionCapture.isActive ||
-      FocusGeometryCapture.isActive ||
-      RetainedPaintGeometryCapture.isActive;
-
-  static _PaintGeometryClip _clipSince(int depth) {
-    var result = const _PaintGeometryClip.unbounded();
-    for (var index = depth; index < _stack.length; index += 1) {
-      result = result.intersect(_stack[index]);
-    }
-    return result;
-  }
-
-  static void paintWithClip(CellRect screenClip, void Function() paint) {
-    // Outside a retained-geometry capture the scope carries no observable
-    // state. This keeps the common uncached paint path allocation-free while
-    // still preserving scopes whenever an enclosing boundary is collecting.
-    if (!isCapturing) {
-      paint();
-      return;
-    }
-    _stack.add(_PaintGeometryClip.bounded(screenClip));
-    try {
-      paint();
-    } finally {
-      _stack.removeLast();
-    }
-  }
-}
-
-_PaintGeometryClip _capturedLocalClip({
-  required int scopeDepth,
-  required _PaintGeometryClip rootClip,
-  required _PaintGeometryClip effectiveClip,
-  _PaintGeometryClip explicitLocalClip = const _PaintGeometryClip.unbounded(),
-}) {
-  final scopedClip = _PaintGeometryClipScope._clipSince(scopeDepth);
-  final localClip = scopedClip.intersect(explicitLocalClip);
-  if (localClip.isBounded) return localClip;
-
-  // Compatibility fallback for a custom clip-introducing render object that
-  // has not adopted RenderObject.paintWithGeometryClip yet. It is conservative
-  // rather than provenance-perfect, but preserves the pre-scope behavior instead of
-  // silently dropping an observable tighter clip.
-  return effectiveClip.sameAs(rootClip) ? localClip : effectiveClip;
-}
-
-/// Refreshes arbitrary paint-owned screen geometry on repaint-boundary cache
-/// hits.
-///
-/// [bounds] is the full paint rectangle, while [clipRect] is the effective
-/// screen clip. A null [bounds] retires geometry that is no longer painted. A
-/// null [clipRect] means unbounded; a bounded-empty clip is represented by a
-/// zero-sized rectangle so consumers can distinguish it from unbounded paint.
-typedef RetainedPaintGeometryCallback =
-    void Function(CellRect? bounds, CellRect? clipRect);
-
-CellRect? _paintGeometryCallbackClip(
-  _PaintGeometryClip clip,
-  CellOffset emptyOrigin,
-) {
-  if (!clip.isBounded) return null;
-  return clip.bounds ?? CellRect(offset: emptyOrigin, size: CellSize.zero);
-}
-
-/// A generic paint-owned geometry callback plus its cache-local bounds and
-/// clip provenance.
-///
-/// Focus, pointer, and semantic geometry have specialized replay semantics.
-/// This record covers the remaining screen-space state populated during paint:
-/// selection bounds, anchor links, and contained-error presentation regions.
-final class RetainedPaintGeometryRecord {
-  const RetainedPaintGeometryRecord._({
-    required this.update,
-    required this.localBounds,
-    required _PaintGeometryClip localClip,
-  }) : _localClip = localClip;
-
-  final RetainedPaintGeometryCallback update;
-
-  /// Bounds relative to the owning boundary's captured screen origin.
-  final CellRect localBounds;
-  final _PaintGeometryClip _localClip;
-
-  void publishToActiveCapture({
-    required CellOffset screenOffset,
-    required CellRect? clipRect,
-  }) {
-    if (!RetainedPaintGeometryCapture.isActive) return;
-    final effectiveClip = _resolvedClip(screenOffset, clipRect);
-    RetainedPaintGeometryCapture._recordResolved(
-      update,
-      _translatePaintRect(localBounds, screenOffset),
-      effectiveClip,
-      explicitLocalClip: _localClip.translate(screenOffset),
-    );
-  }
-
-  void replay({required CellOffset screenOffset, required CellRect? clipRect}) {
-    final screenBounds = _translatePaintRect(localBounds, screenOffset);
-    final resolvedClip = _resolvedClip(screenOffset, clipRect);
-    RetainedPaintGeometryCapture._recordResolved(
-      update,
-      screenBounds,
-      resolvedClip,
-      explicitLocalClip: _localClip.translate(screenOffset),
-    );
-    update(
-      screenBounds,
-      _paintGeometryCallbackClip(resolvedClip, screenBounds.offset),
-    );
-  }
-
-  void clear() => update(null, null);
-
-  _PaintGeometryClip _resolvedClip(
-    CellOffset screenOffset,
-    CellRect? inheritedClip,
-  ) {
-    return _localClip
-        .translate(screenOffset)
-        .intersect(_PaintGeometryClip.fromPaintRect(inheritedClip));
-  }
-}
-
-final class _RetainedPaintGeometryCollector {
-  _RetainedPaintGeometryCollector({
-    required this.records,
-    required CellOffset screenOrigin,
-    required this.rootClip,
-    required this.scopeDepth,
-  }) : _inverseScreenOrigin = _inversePaintOffset(screenOrigin);
-
-  final List<RetainedPaintGeometryRecord> records;
-  final _PaintGeometryClip rootClip;
-  final int scopeDepth;
-  final CellOffset _inverseScreenOrigin;
-
-  void record(
-    RetainedPaintGeometryCallback update,
-    CellRect screenBounds,
-    _PaintGeometryClip effectiveClip, {
-    _PaintGeometryClip explicitLocalClip = const _PaintGeometryClip.unbounded(),
-  }) {
-    final localClip = _capturedLocalClip(
-      scopeDepth: scopeDepth,
-      rootClip: rootClip,
-      effectiveClip: effectiveClip,
-      explicitLocalClip: explicitLocalClip,
-    );
-    records.add(
-      RetainedPaintGeometryRecord._(
-        update: update,
-        localBounds: _translatePaintRect(screenBounds, _inverseScreenOrigin),
-        localClip: localClip.translate(_inverseScreenOrigin),
-      ),
-    );
-  }
-}
-
-/// Stack-scoped collector for general paint-owned screen geometry.
-final class RetainedPaintGeometryCapture {
-  RetainedPaintGeometryCapture._();
-
-  static final List<_RetainedPaintGeometryCollector> _stack =
-      <_RetainedPaintGeometryCollector>[];
-
-  static bool get isActive => _stack.isNotEmpty;
-
-  static void collect(
-    List<RetainedPaintGeometryRecord> records, {
-    required CellOffset screenOrigin,
-    required CellRect? clipRect,
-    required void Function() paint,
-  }) {
-    _stack.add(
-      _RetainedPaintGeometryCollector(
-        records: records,
-        screenOrigin: screenOrigin,
-        rootClip: _PaintGeometryClip.fromPaintRect(clipRect),
-        scopeDepth: _PaintGeometryClipScope._depth,
-      ),
-    );
-    try {
-      paint();
-    } finally {
-      _stack.removeLast();
-    }
-  }
-
-  static void record(
-    RetainedPaintGeometryCallback update,
-    CellRect screenBounds, {
-    required CellRect? clipRect,
-  }) {
-    if (_stack.isEmpty) return;
-    _recordResolved(
-      update,
-      screenBounds,
-      _PaintGeometryClip.fromPaintRect(clipRect),
-    );
-  }
-
-  static void _recordResolved(
-    RetainedPaintGeometryCallback update,
-    CellRect screenBounds,
-    _PaintGeometryClip effectiveClip, {
-    _PaintGeometryClip explicitLocalClip = const _PaintGeometryClip.unbounded(),
-  }) {
-    if (_stack.isEmpty) return;
-    _stack.last.record(
-      update,
-      screenBounds,
-      effectiveClip,
-      explicitLocalClip: explicitLocalClip,
-    );
-  }
-}
-
-/// A paint-captured semantic bounds callback plus its cache-local bounds.
-///
-/// Repaint boundaries paint children into scratch buffers, then copy cached
-/// cells on later frames. Semantic bounds still need to be refreshed in
-/// screen coordinates on those cached frames. Records captured while painting
-/// into a boundary cache let the boundary replay the callback without
-/// re-walking the visual paint path.
-final class SemanticPaintBoundsRecord {
-  const SemanticPaintBoundsRecord._({
-    required this.onPaintBounds,
-    required this.localBounds,
-    required _PaintGeometryClip localClip,
-  }) : _localClip = localClip;
-
-  final SemanticPaintBoundsCallback onPaintBounds;
-
-  /// Bounds relative to the owning boundary's captured screen origin.
-  final CellRect localBounds;
-  final _PaintGeometryClip _localClip;
-
-  void publishToActiveCapture({
-    required CellOffset screenOffset,
-    required CellRect? clipRect,
-  }) {
-    if (!SemanticPaintBoundsCapture.isActive) return;
-    final effectiveClip = _resolvedClip(screenOffset, clipRect);
-    SemanticPaintBoundsCapture._recordResolved(
-      onPaintBounds,
-      _translatePaintRect(localBounds, screenOffset),
-      effectiveClip,
-      explicitLocalClip: _localClip.translate(screenOffset),
-    );
-  }
-
-  void replay({required CellOffset screenOffset, required CellRect? clipRect}) {
-    final screenBounds = _translatePaintRect(localBounds, screenOffset);
-    final resolvedClip = _resolvedClip(screenOffset, clipRect);
-    SemanticPaintBoundsCapture._recordResolved(
-      onPaintBounds,
-      screenBounds,
-      resolvedClip,
-      explicitLocalClip: _localClip.translate(screenOffset),
-    );
-    onPaintBounds(resolvedClip.applyTo(screenBounds));
-  }
-
-  _PaintGeometryClip _resolvedClip(
-    CellOffset screenOffset,
-    CellRect? inheritedClip,
-  ) {
-    return _localClip
-        .translate(screenOffset)
-        .intersect(_PaintGeometryClip.fromPaintRect(inheritedClip));
-  }
-}
-
-final class _SemanticPaintBoundsCollector {
-  _SemanticPaintBoundsCollector({
-    required this.records,
-    required CellOffset screenOrigin,
-    required this.rootClip,
-    required this.scopeDepth,
-  }) : _inverseScreenOrigin = _inversePaintOffset(screenOrigin);
-
-  final List<SemanticPaintBoundsRecord> records;
-  final _PaintGeometryClip rootClip;
-  final int scopeDepth;
-  final CellOffset _inverseScreenOrigin;
-
-  void record(
-    SemanticPaintBoundsCallback onPaintBounds,
-    CellRect screenBounds,
-    _PaintGeometryClip effectiveClip, {
-    _PaintGeometryClip explicitLocalClip = const _PaintGeometryClip.unbounded(),
-  }) {
-    final localClip = _capturedLocalClip(
-      scopeDepth: scopeDepth,
-      rootClip: rootClip,
-      effectiveClip: effectiveClip,
-      explicitLocalClip: explicitLocalClip,
-    );
-    records.add(
-      SemanticPaintBoundsRecord._(
-        onPaintBounds: onPaintBounds,
-        localBounds: _translatePaintRect(screenBounds, _inverseScreenOrigin),
-        localClip: localClip.translate(_inverseScreenOrigin),
-      ),
-    );
-  }
-}
-
-/// Stack-scoped collector for semantic bounds produced during paint.
-final class SemanticPaintBoundsCapture {
-  SemanticPaintBoundsCapture._();
-
-  static final List<_SemanticPaintBoundsCollector> _stack =
-      <_SemanticPaintBoundsCollector>[];
-
-  static bool get isActive => _stack.isNotEmpty;
-
-  static void collect(
-    List<SemanticPaintBoundsRecord> records, {
-    required CellOffset screenOrigin,
-    required CellRect? clipRect,
-    required void Function() paint,
-  }) {
-    _stack.add(
-      _SemanticPaintBoundsCollector(
-        records: records,
-        screenOrigin: screenOrigin,
-        rootClip: _PaintGeometryClip.fromPaintRect(clipRect),
-        scopeDepth: _PaintGeometryClipScope._depth,
-      ),
-    );
-    try {
-      paint();
-    } finally {
-      _stack.removeLast();
-    }
-  }
-
-  static void record(
-    SemanticPaintBoundsCallback onPaintBounds,
-    CellRect screenBounds, {
-    required CellRect? clipRect,
-  }) {
-    if (_stack.isEmpty) return;
-    _recordResolved(
-      onPaintBounds,
-      screenBounds,
-      _PaintGeometryClip.fromPaintRect(clipRect),
-    );
-  }
-
-  static void _recordResolved(
-    SemanticPaintBoundsCallback onPaintBounds,
-    CellRect screenBounds,
-    _PaintGeometryClip effectiveClip, {
-    _PaintGeometryClip explicitLocalClip = const _PaintGeometryClip.unbounded(),
-  }) {
-    if (_stack.isEmpty) return;
-    _stack.last.record(
-      onPaintBounds,
-      screenBounds,
-      effectiveClip,
-      explicitLocalClip: explicitLocalClip,
-    );
-  }
-}
-
-/// Re-registers a pointer region at [screenRect] — the replay counterpart of
-/// [RenderPointerListener]'s in-paint registration.
-typedef PointerRegionRegister = void Function(CellRect? screenRect);
-
-/// A pointer region registered during a paint that a [RenderRepaintBoundary]
-/// cached. Pointer hit-testing in Fleury is fed by *paint-order registration*
-/// (regions re-register every frame as they paint), so a cached boundary that
-/// skips the subtree walk would drop every region inside it — the item, or a
-/// button within it, silently stops responding on cache-hit frames. This is
-/// the exact problem [SemanticPaintBoundsRecord] solves for semantics; pointer
-/// regions get the same capture-and-replay treatment so the boundary stays
-/// transparent to input.
-final class PointerRegionRecord {
-  const PointerRegionRecord._({
-    required this.register,
-    required this.localBounds,
-    required _PaintGeometryClip localClip,
-  }) : _localClip = localClip;
-
-  final PointerRegionRegister register;
-
-  /// Bounds relative to the owning boundary's captured screen origin.
-  final CellRect localBounds;
-  final _PaintGeometryClip _localClip;
-
-  void publishToActiveCapture({
-    required CellOffset screenOffset,
-    required CellRect? clipRect,
-  }) {
-    if (!PointerRegionCapture.isActive) return;
-    final effectiveClip = _resolvedClip(screenOffset, clipRect);
-    PointerRegionCapture._recordResolved(
-      register,
-      _translatePaintRect(localBounds, screenOffset),
-      effectiveClip,
-      explicitLocalClip: _localClip.translate(screenOffset),
-    );
-  }
-
-  void replay({required CellOffset screenOffset, required CellRect? clipRect}) {
-    // Re-record into an enclosing boundary's capture (nested boundaries), then
-    // re-register only the currently visible portion at the current screen
-    // position.
-    final screenBounds = _translatePaintRect(localBounds, screenOffset);
-    final resolvedClip = _resolvedClip(screenOffset, clipRect);
-    PointerRegionCapture._recordResolved(
-      register,
-      screenBounds,
-      resolvedClip,
-      explicitLocalClip: _localClip.translate(screenOffset),
-    );
-    register(resolvedClip.applyTo(screenBounds));
-  }
-
-  _PaintGeometryClip _resolvedClip(
-    CellOffset screenOffset,
-    CellRect? inheritedClip,
-  ) {
-    return _localClip
-        .translate(screenOffset)
-        .intersect(_PaintGeometryClip.fromPaintRect(inheritedClip));
-  }
-}
-
-final class _PointerRegionCollector {
-  _PointerRegionCollector({
-    required this.records,
-    required CellOffset screenOrigin,
-    required this.rootClip,
-    required this.scopeDepth,
-  }) : _inverseScreenOrigin = _inversePaintOffset(screenOrigin);
-
-  final List<PointerRegionRecord> records;
-  final _PaintGeometryClip rootClip;
-  final int scopeDepth;
-  final CellOffset _inverseScreenOrigin;
-
-  void record(
-    PointerRegionRegister register,
-    CellRect screenBounds,
-    _PaintGeometryClip effectiveClip, {
-    _PaintGeometryClip explicitLocalClip = const _PaintGeometryClip.unbounded(),
-  }) {
-    final localClip = _capturedLocalClip(
-      scopeDepth: scopeDepth,
-      rootClip: rootClip,
-      effectiveClip: effectiveClip,
-      explicitLocalClip: explicitLocalClip,
-    );
-    records.add(
-      PointerRegionRecord._(
-        register: register,
-        localBounds: _translatePaintRect(screenBounds, _inverseScreenOrigin),
-        localClip: localClip.translate(_inverseScreenOrigin),
-      ),
-    );
-  }
-}
-
-/// Stack-scoped collector for pointer regions registered during paint — the
-/// pointer counterpart of [SemanticPaintBoundsCapture].
-final class PointerRegionCapture {
-  PointerRegionCapture._();
-
-  static final List<_PointerRegionCollector> _stack =
-      <_PointerRegionCollector>[];
-
-  /// Whether a boundary is currently capturing. Regions check this before
-  /// building their record so an unenclosed region — the common case — does
-  /// no per-paint allocation at all.
-  static bool get isActive => _stack.isNotEmpty;
-
-  static void collect(
-    List<PointerRegionRecord> records, {
-    required CellOffset screenOrigin,
-    required CellRect? clipRect,
-    required void Function() paint,
-  }) {
-    _stack.add(
-      _PointerRegionCollector(
-        records: records,
-        screenOrigin: screenOrigin,
-        rootClip: _PaintGeometryClip.fromPaintRect(clipRect),
-        scopeDepth: _PaintGeometryClipScope._depth,
-      ),
-    );
-    try {
-      paint();
-    } finally {
-      _stack.removeLast();
-    }
-  }
-
-  static void record(
-    PointerRegionRegister register,
-    CellRect screenBounds, {
-    required CellRect? clipRect,
-  }) {
-    if (_stack.isEmpty) return;
-    _recordResolved(
-      register,
-      screenBounds,
-      _PaintGeometryClip.fromPaintRect(clipRect),
-    );
-  }
-
-  static void _recordResolved(
-    PointerRegionRegister register,
-    CellRect screenBounds,
-    _PaintGeometryClip effectiveClip, {
-    _PaintGeometryClip explicitLocalClip = const _PaintGeometryClip.unbounded(),
-  }) {
-    if (_stack.isEmpty) return;
-    _stack.last.record(
-      register,
-      screenBounds,
-      effectiveClip,
-      explicitLocalClip: explicitLocalClip,
-    );
-  }
-}
-
-/// Updates focus-owned paint geometry in current screen coordinates.
-///
-/// Focus bounds and editable carets are populated during paint, just like
-/// semantics and pointer regions. A repaint-boundary cache hit skips that paint
-/// walk, so the boundary captures their cache-local rectangles and replays the
-/// callbacks at its current screen position.
-typedef FocusGeometryCallback = void Function(CellRect? bounds);
-
-final class FocusGeometryRecord {
-  const FocusGeometryRecord._({
-    required this.update,
-    required this.localBounds,
-    required this.clipToBounds,
-    required _PaintGeometryClip localClip,
-  }) : _localClip = localClip;
-
-  final FocusGeometryCallback update;
-
-  /// Bounds relative to the owning boundary's captured screen origin.
-  final CellRect localBounds;
-  final bool clipToBounds;
-  final _PaintGeometryClip _localClip;
-
-  void publishToActiveCapture({
-    required CellOffset screenOffset,
-    required CellRect? clipRect,
-  }) {
-    if (!FocusGeometryCapture.isActive) return;
-    final effectiveClip = _resolvedClip(screenOffset, clipRect);
-    FocusGeometryCapture._recordResolved(
-      update,
-      _translatePaintRect(localBounds, screenOffset),
-      effectiveClip,
-      clipToBounds: clipToBounds,
-      explicitLocalClip: _localClip.translate(screenOffset),
-    );
-  }
-
-  void replay({required CellOffset screenOffset, required CellRect? clipRect}) {
-    // Preserve the record for an enclosing cached boundary, then update the
-    // live FocusNode in screen space for this frame.
-    final screenBounds = _translatePaintRect(localBounds, screenOffset);
-    final resolvedClip = _resolvedClip(screenOffset, clipRect);
-    FocusGeometryCapture._recordResolved(
-      update,
-      screenBounds,
-      resolvedClip,
-      clipToBounds: clipToBounds,
-      explicitLocalClip: _localClip.translate(screenOffset),
-    );
-    final visible = resolvedClip.applyTo(screenBounds);
-    update(clipToBounds ? visible : (visible == null ? null : screenBounds));
-  }
-
-  void clear() => update(null);
-
-  _PaintGeometryClip _resolvedClip(
-    CellOffset screenOffset,
-    CellRect? inheritedClip,
-  ) {
-    return _localClip
-        .translate(screenOffset)
-        .intersect(_PaintGeometryClip.fromPaintRect(inheritedClip));
-  }
-}
-
-final class _FocusGeometryCollector {
-  _FocusGeometryCollector({
-    required this.records,
-    required CellOffset screenOrigin,
-    required this.rootClip,
-    required this.scopeDepth,
-  }) : _inverseScreenOrigin = _inversePaintOffset(screenOrigin);
-
-  final List<FocusGeometryRecord> records;
-  final _PaintGeometryClip rootClip;
-  final int scopeDepth;
-  final CellOffset _inverseScreenOrigin;
-
-  void record(
-    FocusGeometryCallback update,
-    CellRect screenBounds,
-    _PaintGeometryClip effectiveClip, {
-    required bool clipToBounds,
-    _PaintGeometryClip explicitLocalClip = const _PaintGeometryClip.unbounded(),
-  }) {
-    final localClip = _capturedLocalClip(
-      scopeDepth: scopeDepth,
-      rootClip: rootClip,
-      effectiveClip: effectiveClip,
-      explicitLocalClip: explicitLocalClip,
-    );
-    records.add(
-      FocusGeometryRecord._(
-        update: update,
-        localBounds: _translatePaintRect(screenBounds, _inverseScreenOrigin),
-        clipToBounds: clipToBounds,
-        localClip: localClip.translate(_inverseScreenOrigin),
-      ),
-    );
-  }
-}
-
-/// Stack-scoped collector for focus/caret geometry produced during paint.
-final class FocusGeometryCapture {
-  FocusGeometryCapture._();
-
-  static final List<_FocusGeometryCollector> _stack =
-      <_FocusGeometryCollector>[];
-
-  static bool get isActive => _stack.isNotEmpty;
-
-  static void collect(
-    List<FocusGeometryRecord> records, {
-    required CellOffset screenOrigin,
-    required CellRect? clipRect,
-    required void Function() paint,
-  }) {
-    _stack.add(
-      _FocusGeometryCollector(
-        records: records,
-        screenOrigin: screenOrigin,
-        rootClip: _PaintGeometryClip.fromPaintRect(clipRect),
-        scopeDepth: _PaintGeometryClipScope._depth,
-      ),
-    );
-    try {
-      paint();
-    } finally {
-      _stack.removeLast();
-    }
-  }
-
-  static void record(
-    FocusGeometryCallback update,
-    CellRect screenBounds, {
-    required CellRect? clipRect,
-    bool clipToBounds = true,
-  }) {
-    if (_stack.isEmpty) return;
-    _recordResolved(
-      update,
-      screenBounds,
-      _PaintGeometryClip.fromPaintRect(clipRect),
-      clipToBounds: clipToBounds,
-    );
-  }
-
-  static void _recordResolved(
-    FocusGeometryCallback update,
-    CellRect screenBounds,
-    _PaintGeometryClip effectiveClip, {
-    bool clipToBounds = true,
-    _PaintGeometryClip explicitLocalClip = const _PaintGeometryClip.unbounded(),
-  }) {
-    if (_stack.isEmpty) return;
-    _stack.last.record(
-      update,
-      screenBounds,
-      effectiveClip,
-      clipToBounds: clipToBounds,
-      explicitLocalClip: explicitLocalClip,
-    );
-  }
+  /// Re-derive the fact from layout state and publish it. Called at the end
+  /// of every pass in which this participant did not paint; the fact may be
+  /// unchanged, in which case publishing must notify nobody.
+  void refreshPaintFacts();
 }
 
 /// Parent-attached layout metadata.
@@ -988,7 +237,7 @@ abstract class ParentData {
 /// Subclasses must call `super.layout` (or invoke the protocol on each
 /// child themselves); the framework relies on `_size` being current after
 /// every layout pass.
-abstract class RenderObject {
+abstract class RenderObject implements ScreenGeometrySource {
   RenderObject? _parent;
   ParentData? parentData;
 
@@ -1037,6 +286,9 @@ abstract class RenderObject {
   bool attachFrameDamageTracker(RenderDamageTracker tracker) {
     final isNew = !identical(_frameDamage, tracker);
     _frameDamage = tracker;
+    // Memoized geometry is stamped against the previous tracker's epoch;
+    // nothing below may keep answering from it.
+    if (isNew) _forgetGeometryTracker();
     return isNew;
   }
 
@@ -1202,6 +454,9 @@ abstract class RenderObject {
   void adoptChild(RenderObject child) {
     assert(child._parent == null, 'Render object adopted twice.');
     child._parent = this;
+    // The subtree may have been built detached or under another root: its
+    // memoized geometry must resolve against this tree's epoch.
+    child._forgetGeometryTracker();
     setupParentData(child);
     markNeedsLayout();
   }
@@ -1267,55 +522,206 @@ abstract class RenderObject {
   @protected
   CellSize performLayout(CellConstraints constraints);
 
-  /// Paints this render object into [buffer] at the absolute [offset].
+  /// Paints this render object into [buffer] at [offset]: its origin in the
+  /// buffer's coordinates. The buffer's bounds are the clip.
   ///
-  /// Subclasses that hold children compute each child's absolute offset
-  /// (their own [offset] plus the child's per-parent layout position)
-  /// and recursively call [paint] on them.
-  ///
-  /// **Screen-space context.** [screenOffset] is the cumulative screen
-  /// position that [offset] in this [buffer] corresponds to. For nearly
-  /// every paint, [buffer] IS the screen and `screenOffset == offset`.
-  /// Render objects that paint into a scratch buffer (notably
-  /// [ScrollView]) pass the visible-on-screen position so descendants
-  /// can capture screen-space bounds for hit-testing.
-  ///
-  /// **Clipping.** [clipRect] is the visible screen rectangle for this
-  /// subtree. Anything painted (or hit-tested) outside it is clipped
-  /// out. Null means "no clip" — the full screen is visible. Render
-  /// objects that introduce clipping (scrollables, future overlays)
-  /// intersect their own clip with the inherited [clipRect] and pass
-  /// the intersection down.
-  ///
-  /// Defaults preserve the legacy contract: when omitted, screenOffset
-  /// equals offset and there is no clip — so paints not involved with
-  /// selection or hit-testing don't need to thread anything through.
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  });
+  /// Not overridable. In debug mode it records the placement and checks it
+  /// against the geometry contract before delegating to [performPaint], so
+  /// every painted frame of every test verifies that a container paints each
+  /// child where [childOffsetOf] says it does, and only when [presentsChild]
+  /// says it is shown. Position and visibility are derived from that
+  /// contract ([screenGeometry]); paint never reports them.
+  @nonVirtual
+  void paint(CellBuffer buffer, CellOffset offset) {
+    assert(_debugCheckPaintPlacement(buffer, offset));
+    performPaint(buffer, offset);
+  }
 
-  /// Whether an enclosing repaint boundary is currently retaining geometry.
+  /// Paints this render object's cells into [buffer] at [offset].
   ///
-  /// A clip parent that would normally skip a fully hidden child must still
-  /// walk and paint it into the boundary-local cache while this is true. Pass
-  /// a bounded-empty effective `clipRect` to the child so semantics, pointer,
-  /// focus, and caret geometry remain hidden until a later replay reveals it.
+  /// A container paints each presented child at
+  /// `offset + childOffsetOf(child)` into the same buffer — or into a scratch
+  /// buffer of its own that it then composites (a viewport, a clip, an
+  /// effect), in which case the children paint at scratch-local offsets and
+  /// the composite places the result. Nothing about screen position is
+  /// threaded through paint: a render object that needs to know where it is
+  /// asks [screenGeometry].
   @protected
-  bool get isRetainingPaintGeometry => _PaintGeometryClipScope.isCapturing;
+  void performPaint(CellBuffer buffer, CellOffset offset);
 
-  /// Paints descendants under a clip introduced by this render object.
+  CellBuffer? _debugPaintBuffer;
+  CellOffset _debugPaintOffset = CellOffset.zero;
+
+  bool _debugCheckPaintPlacement(CellBuffer buffer, CellOffset offset) {
+    _debugPaintBuffer = buffer;
+    _debugPaintOffset = offset;
+    final parent = _parent;
+    // A composite paints its children into a buffer of its own; only a
+    // parent painting into the same buffer places a child directly.
+    if (parent == null || !identical(parent._debugPaintBuffer, buffer)) {
+      return true;
+    }
+    if (!parent.presentsChild(this)) {
+      throw StateError(
+        '${parent.runtimeType} painted a $runtimeType that its '
+        'presentsChild() reports as not presented. Derived geometry hides '
+        'that child; paint must agree.',
+      );
+    }
+    final expected = parent._debugPaintOffset + parent.childOffsetOf(this);
+    if (expected != offset) {
+      throw StateError(
+        '${parent.runtimeType} painted a $runtimeType at $offset but its '
+        'childOffsetOf() places it at $expected. Derived geometry follows '
+        'childOffsetOf; paint must agree.',
+      );
+    }
+    return true;
+  }
+
+  // ---- Geometry contract ---------------------------------------------------
+  //
+  // Where a render object put each child is layout state. Declaring it lets
+  // screen geometry be DERIVED on demand (see [screenGeometry]) instead of
+  // recorded during paint and replayed by repaint boundaries. Pass-through
+  // wrappers keep the defaults; every container that offsets, clips, or
+  // hides a child overrides the matching member.
+
+  /// Where this render object paints [child], relative to its own origin.
+  CellOffset childOffsetOf(RenderObject child) => CellOffset.zero;
+
+  /// Whether [child] is presented this frame: painted and interactive. False
+  /// for a child hidden by policy — an inactive `IndexedStack` child, a route
+  /// under an opaque route, an overlay entry under an opaque one, a list row
+  /// outside the mounted window, a contained-error subtree.
+  bool presentsChild(RenderObject child) => true;
+
+  /// The clip this render object imposes on [child], in its own coordinates,
+  /// or null when it does not clip. Usually the same rectangle for every
+  /// child (a viewport); a container with several scrolling regions — a
+  /// table with a pinned header — answers per child.
+  CellRect? childClipOf(RenderObject child) => null;
+
+  /// Whether a point outside this render object's box can hit something in
+  /// its subtree. False by default: hit-testing prunes a subtree by its box,
+  /// as Flutter does, so a pointer event walks one chain of the tree rather
+  /// than every region. A container that places children outside its box
+  /// and wants them to stay interactive there — a `Stack` with an
+  /// overflowing `Positioned` — answers true.
+  bool get hitTestsBeyondBounds => false;
+
+  /// Visits this render object's children in paint order. The default reads
+  /// the single-child / multi-child interfaces; a container whose [children]
+  /// accessor copies its list overrides this to iterate in place, since
+  /// hit-testing and geometry tooling walk the tree on every event.
+  void visitRenderChildren(void Function(RenderObject child) visitor) {
+    final self = this;
+    if (self is RenderObjectWithSingleChild) {
+      final child = self.child;
+      if (child != null) visitor(child);
+    } else if (self is RenderObjectWithChildren) {
+      for (final child in self.children) {
+        visitor(child);
+      }
+    }
+  }
+
+  // ---- Derived screen geometry ---------------------------------------------
+  //
+  // Position and visibility are derived from layout state on demand — every
+  // container reports where it put each child ([childOffsetOf]), what it
+  // clips ([childClipOf]) and whether it presents the child at all
+  // ([presentsChild]) — and memoized against the tree's geometry epoch, which
+  // advances on every invalidation and at the start of every paint pass. A
+  // memo hit allocates nothing; a miss resolves the ancestor chain once and
+  // leaves every ancestor memoized for the other queries of the same epoch.
+
+  RenderDamageTracker? _geometryTracker;
+  int _geometryStamp = -1;
+  RenderGeometry? _screenGeometry;
+  CellOffset _screenOrigin = CellOffset.zero;
+  CellRect? _screenClip; // zero-sized when fully clipped
+
+  /// Whether this render object has been laid out at least once.
+  bool get hasLayout => _size != null;
+
+  /// This render object's screen geometry, derived from layout state: where
+  /// it is, and how much of it is visible.
   ///
-  /// [screenClip] is this object's own screen-space clip before intersection
-  /// with the inherited `clipRect`. The callback remains responsible for
-  /// passing the effective intersection to descendants. Recording provenance
-  /// separately lets repaint-boundary cache hits reapply changing ancestor
-  /// clips without losing this stable descendant clip.
-  @protected
-  void paintWithGeometryClip(CellRect screenClip, void Function() paint) {
-    _PaintGeometryClipScope.paintWithClip(screenClip, paint);
+  /// Null when it is not presented — hidden by an ancestor's policy
+  /// ([presentsChild]), detached from the rendered tree, or not laid out yet.
+  /// Reflects the latest completed layout at any time between frames, and
+  /// the current frame's layout once its paint pass has begun.
+  @override
+  RenderGeometry? screenGeometry() {
+    if (_size == null) return null;
+    final tracker = _geometryTracker ??= _rootFrameDamage;
+    if (tracker == null) return null; // never attached to a rendered tree
+    final epoch = tracker.geometryEpoch;
+    if (_geometryStamp != epoch) _resolveScreenGeometry(epoch);
+    return _screenGeometry;
+  }
+
+  void _resolveScreenGeometry(int epoch) {
+    final parent = _parent;
+    var presented = false;
+    if (parent == null) {
+      // Only the rendered root carries the tracker; the top of a detached
+      // subtree has none and presents nothing.
+      final tracker = _frameDamage;
+      presented = tracker != null;
+      _screenOrigin = CellOffset.zero;
+      // The screen is the outermost clip.
+      final screen = tracker?.screenSize;
+      _screenClip = screen == null
+          ? null
+          : CellRect(offset: CellOffset.zero, size: screen);
+    } else {
+      if (parent._geometryStamp != epoch) parent._resolveScreenGeometry(epoch);
+      if (parent._screenGeometry != null && parent.presentsChild(this)) {
+        presented = true;
+        _screenOrigin = parent._screenOrigin + parent.childOffsetOf(this);
+        var clip = parent._screenClip;
+        final ownClip = parent.childClipOf(this);
+        if (ownClip != null) {
+          final screenClip = CellRect(
+            offset: parent._screenOrigin + ownClip.offset,
+            size: ownClip.size,
+          );
+          clip = clip == null
+              ? screenClip
+              : (clip.intersect(screenClip) ??
+                    CellRect(offset: screenClip.offset, size: CellSize.zero));
+        }
+        _screenClip = clip;
+      }
+    }
+    if (presented) {
+      final bounds = CellRect(offset: _screenOrigin, size: size);
+      final clip = _screenClip;
+      final previous = _screenGeometry;
+      // Keep the instance when nothing moved: consumers compare and cache it.
+      if (previous == null ||
+          previous.bounds != bounds ||
+          previous.clip != clip) {
+        _screenGeometry = RenderGeometry(bounds: bounds, clip: clip);
+      }
+    } else {
+      _screenGeometry = null;
+    }
+    _geometryStamp = epoch;
+  }
+
+  /// Drops the memoized geometry below a subtree that is moving to another
+  /// parent or root, so it resolves against its new root's epoch. Resolving
+  /// any node stamps every ancestor, so a subtree whose top was never stamped
+  /// holds no memo at all and costs nothing here — the fresh-mount case.
+  void _forgetGeometryTracker() {
+    if (_geometryStamp == -1) return;
+    _geometryTracker = null;
+    _geometryStamp = -1;
+    _screenGeometry = null;
+    visitRenderChildren((child) => child._forgetGeometryTracker());
   }
 
   // ---- Intrinsic sizing -------------------------------------------------
@@ -1367,6 +773,45 @@ abstract class RenderObject {
     if (self is! RenderObjectWithSingleChild) return 0;
     return self.child?.computeMinIntrinsicHeight(width) ?? 0;
   }
+}
+
+/// Where something sits on screen and how much of it is visible.
+final class RenderGeometry {
+  RenderGeometry({required this.bounds, this.clip})
+    : visible = bounds.size.isEmpty
+          ? null
+          : (clip == null ? bounds : bounds.intersect(clip));
+
+  /// The full rectangle in screen cells, ignoring clips.
+  final CellRect bounds;
+
+  /// The intersection of every clip an ancestor applies, in screen cells —
+  /// the screen itself is the outermost — or null when nothing clips.
+  final CellRect? clip;
+
+  /// The part of [bounds] inside [clip], or null when nothing of it is
+  /// visible (clipped out, or empty).
+  final CellRect? visible;
+
+  @override
+  bool operator ==(Object other) =>
+      other is RenderGeometry && other.bounds == bounds && other.clip == clip;
+
+  @override
+  int get hashCode => Object.hash(bounds, clip);
+
+  @override
+  String toString() =>
+      'RenderGeometry(bounds: $bounds, clip: $clip, visible: $visible)';
+}
+
+/// Something that knows where it is on screen. Every [RenderObject] is one;
+/// focus nodes, carets, and bounds notifiers read geometry through this
+/// interface rather than recording it during paint, so a test can stand in
+/// a fixed rectangle without mounting a tree.
+abstract interface class ScreenGeometrySource {
+  /// The current screen geometry, or null when not presented.
+  RenderGeometry? screenGeometry();
 }
 
 /// Marker interface for render objects that hold exactly one child. The

@@ -1528,6 +1528,9 @@ class _TextInputDisplay extends LeafRenderObjectWidget {
   final String obscuringCharacter;
 
   @override
+  LeafRenderObjectElement createElement() => _TextInputDisplayElement(this);
+
+  @override
   RenderObject createRenderObject(BuildContext context) {
     return RenderTextInput(
       focusNode: focusNode,
@@ -1569,7 +1572,18 @@ class _TextInputDisplay extends LeafRenderObjectWidget {
 ///
 /// Layout: width = text intrinsic width (in cells) + 1 for the
 /// trailing cursor position, clipped to constraints. Height = 1.
-class RenderTextInput extends RenderObject {
+/// Releases the focus node's caret host when the editable leaves the tree.
+class _TextInputDisplayElement extends LeafRenderObjectElement {
+  _TextInputDisplayElement(_TextInputDisplay super.widget);
+
+  @override
+  void unmount() {
+    (maybeRenderObject as RenderTextInput?)?.detachFromFocus();
+    super.unmount();
+  }
+}
+
+class RenderTextInput extends RenderObject implements CaretHost {
   RenderTextInput({
     required FocusNode focusNode,
     required String text,
@@ -1594,7 +1608,9 @@ class RenderTextInput extends RenderObject {
        _obscureText = obscureText,
        _obscuringCharacter = obscuringCharacter,
        _widthResolver = widthResolver,
-       _policy = policy;
+       _policy = policy {
+    _focusNode.attachCaretHost(this);
+  }
 
   /// Identity fast path for model text.
   ///
@@ -1638,8 +1654,9 @@ class RenderTextInput extends RenderObject {
 
   set focusNode(FocusNode value) {
     if (identical(_focusNode, value)) return;
-    _focusNode.caretRect = null;
+    _focusNode.detachCaretHost(this);
     _focusNode = value;
+    value.attachCaretHost(this);
     markNeedsPaintOnly();
   }
 
@@ -1778,28 +1795,8 @@ class RenderTextInput extends RenderObject {
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
-    if (size.isEmpty) {
-      _focusNode.caretRect = null;
-      return;
-    }
-    final screen = screenOffset ?? offset;
-    final screenCaret = _caretRect(screen, null);
-    if (screenCaret != null && FocusGeometryCapture.isActive) {
-      FocusGeometryCapture.record(
-        _replayCaret,
-        screenCaret,
-        clipRect: clipRect,
-      );
-    }
-    _focusNode.caretRect = clipRect == null
-        ? screenCaret
-        : screenCaret?.intersect(clipRect);
+  void performPaint(CellBuffer buffer, CellOffset offset) {
+    if (size.isEmpty) return;
     final row = offset.row;
     var col = offset.col;
     final maxCol = offset.col + size.cols;
@@ -1898,23 +1895,20 @@ class RenderTextInput extends RenderObject {
     }
   }
 
-  CellRect? _caretRect(CellOffset paintOffset, CellRect? clipRect) {
+  CellRect? _caretRect() {
     final cursorCell = _displayCellForTextOffset(_selection.extentOffset);
     final visibleStart = _scrollLeft;
     final visibleEnd = _scrollLeft + size.cols;
     if (cursorCell < visibleStart || cursorCell >= visibleEnd) return null;
-    final rect = CellRect(
-      offset: CellOffset(
-        paintOffset.col + cursorCell - visibleStart,
-        paintOffset.row,
-      ),
+    return CellRect(
+      offset: CellOffset(cursorCell - visibleStart, 0),
       size: const CellSize(1, 1),
     );
-    return clipRect == null ? rect : rect.intersect(clipRect);
   }
 
-  // ignore: prefer_function_declarations_over_variables
-  late final FocusGeometryCallback _replayCaret = (bounds) {
-    _focusNode.caretRect = _focusNode.acceptsInput ? bounds : null;
-  };
+  /// Called on unmount: this render object no longer owns the node's caret.
+  void detachFromFocus() => _focusNode.detachCaretHost(this);
+
+  @override
+  CellRect? get localCaretRect => size.isEmpty ? null : _caretRect();
 }

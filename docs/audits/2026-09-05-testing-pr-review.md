@@ -187,3 +187,30 @@ a fresh runner. Attachment now clears only the new runner's code scope. A live
 browser check confirmed the expanded demo starts with zero highlighted lines,
 keeps the inline highlight, passes all four assertions with its own highlight,
 and disposes on close while preserving the inline result.
+
+
+### Derived-geometry integration during PR review
+
+Both pre-integration PR heads passed the full GitHub check, docs build, and all
+four platform/SDK smoke jobs. Main then merged PR #219 as
+`522ab372532942dcc7c15017d11b59cf5b5b8bae`. The harness merge keeps the complete
+frame/viewport contract and calls the new `PointerRouter.endFrame()` after
+rendering. The shared remote asset was regenerated (fingerprint
+`80064d03c86bd93d`).
+
+Core analysis passed. The full core run passed 3,220 tests with one declared
+skip; two newly added intentional paint-failure fixtures needed `mountWidget`
+so their existing `render()` assertions still observe the failure. Both were
+migrated. The new lifecycle fixtures also use `mountWidget` to retain their
+pre-paint unmount assertions; redundant renders after full mounts were removed.
+All 17 focused geometry/frame/lifecycle tests then passed. Independent review
+confirmed that each original assertion and the explicit overlay app setup was
+preserved. The owned suite now contains 450 test files.
+
+The integrated widget suite passed 1,198 tests with one existing skip; all 52
+facade tests and core/widget/facade analyses passed (existing informational
+widget lints only). The 73-test docs/2-test Node/144-page website build, both
+Chrome runner tests, both browser bundle compilations, and all fast performance
+gates passed. Independent source review found no target/derived-geometry
+incompatibility. GitHub reruns the full contributor and integration gate on the
+resolved merge before publication to main.

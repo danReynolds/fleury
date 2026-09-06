@@ -657,12 +657,7 @@ class _RenderRangeSlider extends RenderObject {
   int computeMaxIntrinsicHeight(int? width) => 1;
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     final w = size.cols;
     // Record the painted track span so the State's pointer handlers can map an
     // absolute column back to a value (written even when off-screen below).

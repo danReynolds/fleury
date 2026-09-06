@@ -244,10 +244,5 @@ class _LyingRenderObject extends RenderObject {
   CellSize performLayout(CellConstraints constraints) => const CellSize(99, 99);
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {}
+  void performPaint(CellBuffer buffer, CellOffset offset) {}
 }

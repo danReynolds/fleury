@@ -1755,12 +1755,7 @@ class RenderDataTable extends RenderObject {
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     if (_columns.isEmpty || size.cols <= 0 || size.rows <= 0) return;
     final colX = List<int>.filled(_columns.length, 0);
     // Each column's PAINTED width: its resolved width, cut at the table's own

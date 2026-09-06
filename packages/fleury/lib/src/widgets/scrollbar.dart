@@ -80,27 +80,21 @@ class Scrollbar extends StatefulWidget {
   State<Scrollbar> createState() => _ScrollbarState();
 }
 
-/// Holder for a [Scrollbar]'s painted geometry: the render object writes
-/// it each paint, the drag handler reads it to map a pointer row → scroll
-/// fraction (the same write-at-paint / read-elsewhere idiom as BoundsNotifier).
-///
-/// [top] is a *screen* row, like BoundsNotifier's rect and the pointer
-/// region this pairs with. Mouse events arrive in absolute terminal
-/// coordinates, so recording the local paint offset instead would misread
-/// every click inside a subtree painted into a scratch buffer — a caching
-/// RepaintBoundary, a ListView item, a ScrollView viewport — where the local
-/// offset is scratch-relative and the screen offset is not.
+/// Where the bar is on screen: derived from its render object's layout when
+/// a drag on the track needs to map a screen row to a scroll fraction.
 class _ScrollbarGeometry {
-  int top = 0;
-  int height = 0;
+  RenderObject? host;
 }
 
 class _ScrollbarState extends State<Scrollbar> {
   final _ScrollbarGeometry _geom = _ScrollbarGeometry();
 
   void _jumpToRow(int row) {
-    if (_geom.height <= 1) return;
-    final f = ((row - _geom.top) / (_geom.height - 1)).clamp(0.0, 1.0);
+    final bounds = _geom.host?.screenGeometry()?.bounds;
+    if (bounds == null) return;
+    final height = bounds.size.rows;
+    if (height <= 1) return;
+    final f = ((row - bounds.top) / (height - 1)).clamp(0.0, 1.0);
     widget._scrollTo(f);
   }
 
@@ -189,15 +183,10 @@ class _RenderRequireBoundedWidth extends RenderObject
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     final c = _child;
     if (c != null) {
-      c.paint(buffer, offset, screenOffset: screenOffset, clipRect: clipRect);
+      c.paint(buffer, offset);
     }
   }
 }
@@ -271,7 +260,9 @@ class _RenderScrollbar extends RenderObject {
        _geometry = geometry,
        _trackStyle = trackStyle,
        _thumbStyle = thumbStyle,
-       _textPolicy = textPolicy;
+       _textPolicy = textPolicy {
+    geometry.host = this;
+  }
 
   TextPresentationPolicy _textPolicy;
   set textPolicy(TextPresentationPolicy v) {
@@ -291,6 +282,7 @@ class _RenderScrollbar extends RenderObject {
   set geometry(_ScrollbarGeometry v) {
     if (_geometry == v) return;
     _geometry = v;
+    v.host = this;
     markNeedsPaintOnly();
   }
 
@@ -317,20 +309,9 @@ class _RenderScrollbar extends RenderObject {
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     if (size.isEmpty) return;
     final h = size.rows;
-    // Screen coordinates, matching the pointer region registered for this bar
-    // (see PointerRegion.paint) — see [_ScrollbarGeometry].
-    _geometry
-      ..top = (screenOffset ?? offset).row
-      ..height = h;
-
     final (content, viewport, scrollOffset) = _metrics();
     final int thumbSize;
     final int thumbTop;

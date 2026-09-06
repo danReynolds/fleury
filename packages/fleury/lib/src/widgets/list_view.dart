@@ -929,20 +929,11 @@ class _ListViewState extends State<ListView> {
                           children: [built, separator],
                         );
                   // The GestureDetector wraps the WHOLE block (not the item
-                  // alone): the lazy list threads screenOffset to item roots, so
-                  // the tap region lands at the item's true screen row even when
-                  // a tall block overflows the viewport and its inner Column
-                  // paints through the clip path (which drops screenOffset for its
-                  // own children). A tap on a separator row therefore selects the
-                  // item it trails.
-                  //
-                  // With the RepaintBoundary outermost, the boundary becomes the
-                  // block's render root — it passes the threaded screenOffset
-                  // through on repaint and replays the tap region at that same
-                  // screenOffset on cache-hit, so a scrolled-but-unchanged item
-                  // blits its cached cells at the new row AND its tap region
-                  // follows. Caching a lazy row across scroll is the bigger win
-                  // here; the eager path only saved localized in-place updates.
+                  // alone), so a tap on a separator row selects the item it
+                  // trails. Its region, like every other piece of geometry, is
+                  // derived from layout, so a scrolled-but-unchanged block
+                  // whose RepaintBoundary blits its cached cells at the new row
+                  // has its tap region follow for free.
                   return _maybeBoundary(
                     GestureDetector(
                       onTapDown: (_, _) => _handleItemTap(index),
@@ -1086,6 +1077,13 @@ Never _throwUnboundedListHeight() {
 ///      state, not user-mutable fields, and notifying during layout
 ///      would loop.
 class _RenderListView extends RenderObject implements RenderObjectWithChildren {
+  @override
+  CellOffset childOffsetOf(RenderObject child) =>
+      _childOffsets[child] ?? CellOffset.zero;
+
+  @override
+  bool presentsChild(RenderObject child) => _visibleChildren.contains(child);
+
   _RenderListView({required ListController controller})
     : _controller = controller;
 
@@ -1109,6 +1107,13 @@ class _RenderListView extends RenderObject implements RenderObjectWithChildren {
 
   @override
   List<RenderObject> get children => List.unmodifiable(_children);
+
+  @override
+  void visitRenderChildren(void Function(RenderObject child) visitor) {
+    for (final child in _children) {
+      visitor(child);
+    }
+  }
 
   @override
   void replaceAllChildren(List<RenderObject> newChildren) {
@@ -1274,21 +1279,11 @@ class _RenderListView extends RenderObject implements RenderObjectWithChildren {
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     for (final c in _children) {
       if (!_visibleChildren.contains(c)) continue;
       final co = _childOffsets[c] ?? CellOffset.zero;
-      c.paint(
-        buffer,
-        offset + co,
-        screenOffset: (screenOffset ?? offset) + co,
-        clipRect: clipRect,
-      );
+      c.paint(buffer, offset + co);
     }
   }
 }
@@ -1646,6 +1641,16 @@ class _LazyListElement extends RenderObjectElement {
 ///      without notifying.
 class _RenderLazyListView extends RenderObject
     implements RenderObjectWithChildren {
+  @override
+  CellOffset childOffsetOf(RenderObject child) =>
+      _childOffsets[child] ?? CellOffset.zero;
+
+  @override
+  bool presentsChild(RenderObject child) {
+    final index = _indexByObject[child];
+    return index != null && identical(_activeByIndex[index], child);
+  }
+
   _RenderLazyListView({required ListController controller})
     : _controller = controller;
 
@@ -1683,6 +1688,13 @@ class _RenderLazyListView extends RenderObject
 
   @override
   List<RenderObject> get children => _activeByIndex.values.toList();
+
+  @override
+  void visitRenderChildren(void Function(RenderObject child) visitor) {
+    for (final child in _activeByIndex.values) {
+      visitor(child);
+    }
+  }
 
   @override
   void replaceAllChildren(List<RenderObject> newChildren) {
@@ -1962,20 +1974,10 @@ class _RenderLazyListView extends RenderObject
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     for (final child in _activeByIndex.values) {
       final co = _childOffsets[child] ?? CellOffset.zero;
-      child.paint(
-        buffer,
-        offset + co,
-        screenOffset: (screenOffset ?? offset) + co,
-        clipRect: clipRect,
-      );
+      child.paint(buffer, offset + co);
     }
   }
 }

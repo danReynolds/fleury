@@ -435,12 +435,7 @@ final class _RenderRawPaintedText extends RenderObject {
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     buffer.writeText(offset, _text);
   }
 }

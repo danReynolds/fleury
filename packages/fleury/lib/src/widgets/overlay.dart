@@ -551,6 +551,9 @@ class _Visibility extends SingleChildRenderObjectWidget {
 
 class _RenderVisibility extends RenderObject
     implements RenderObjectWithSingleChild {
+  @override
+  bool presentsChild(RenderObject child) => _visible;
+
   _RenderVisibility({required bool visible}) : _visible = visible;
 
   bool _visible;
@@ -580,18 +583,8 @@ class _RenderVisibility extends RenderObject
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     if (!_visible) return;
-    _child?.paint(
-      buffer,
-      offset,
-      screenOffset: screenOffset ?? offset,
-      clipRect: clipRect,
-    );
+    _child?.paint(buffer, offset);
   }
 }

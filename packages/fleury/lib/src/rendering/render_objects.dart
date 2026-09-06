@@ -380,41 +380,15 @@ class RenderText extends RenderObject
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     // Selection geometry lives in SCREEN coordinates. We track two
     // rectangles:
     //
-    //   - paintRect: where this Selectable's content WOULD live on
-    //     screen if nothing clipped it (the full bounds, including
-    //     scrolled-off rows). The grapheme-walk algorithm walks lines
-    //     starting at `paintRect.offset.row`, so this MUST be the
-    //     anchor of the full content even when partially off-screen.
+    // Selection geometry is derived from layout, not recorded here:
+    // `selectionPaintRect` is the full content rect on screen (including
+    // any portion scrolled off) and `selectionClipRect` the ancestor clip,
+    // both read from [screenGeometry] when the mixin needs them.
     //
-    //   - clipRect: the visible window. A click outside the clip is
-    //     not a hit; the delegate treats it as before/after.
-    //
-    // `cellBounds` (the public Selectable interface) reports the
-    // INTERSECTION so the delegate's reading-order sort and visible-
-    // region checks see only the on-screen portion. Selectables with
-    // empty intersections (fully scrolled off) report null and are
-    // skipped.
-    final selectionBounds = CellRect(
-      offset: screenOffset ?? offset,
-      size: size,
-    );
-    _updateRetainedSelectionGeometry(selectionBounds, clipRect);
-    if (RetainedPaintGeometryCapture.isActive) {
-      RetainedPaintGeometryCapture.record(
-        _replaySelectionGeometry,
-        selectionBounds,
-        clipRect: clipRect,
-      );
-    }
     // Selection is constant during this synchronous paint. Resolve once:
     // resolving per glyph repeatedly scans the document's line lengths.
     final selection = getSelectionRange();
@@ -663,23 +637,11 @@ class RenderText extends RenderObject
   // operates on a flat-text view of our wrapped lines. We expose the
   // three required hooks (bounds, lines, width resolution) here.
 
-  CellRect? _selectionPaintRect;
-  CellRect? _selectionClipRect;
-
-  void _updateRetainedSelectionGeometry(CellRect? bounds, CellRect? clipRect) {
-    _selectionPaintRect = bounds;
-    _selectionClipRect = bounds == null ? null : clipRect;
-  }
-
-  // ignore: prefer_function_declarations_over_variables
-  late final RetainedPaintGeometryCallback _replaySelectionGeometry =
-      _updateRetainedSelectionGeometry;
+  @override
+  CellRect? get selectionPaintRect => screenGeometry()?.bounds;
 
   @override
-  CellRect? get selectionPaintRect => _selectionPaintRect;
-
-  @override
-  CellRect? get selectionClipRect => _selectionClipRect;
+  CellRect? get selectionClipRect => screenGeometry()?.clip;
 
   @override
   List<String> get selectionLines => _lines;
@@ -864,18 +826,8 @@ class RenderSizedBox extends RenderObject
       _height ?? (_child?.computeMinIntrinsicHeight(width) ?? 0);
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
-    _child?.paint(
-      buffer,
-      offset,
-      screenOffset: screenOffset ?? offset,
-      clipRect: clipRect,
-    );
+  void performPaint(CellBuffer buffer, CellOffset offset) {
+    _child?.paint(buffer, offset);
   }
 }
 
@@ -886,6 +838,10 @@ class RenderSizedBox extends RenderObject
 /// Insets a child by [padding] cells on each side.
 class RenderPadding extends RenderObject
     implements RenderObjectWithSingleChild {
+  @override
+  CellOffset childOffsetOf(RenderObject child) =>
+      CellOffset(_padding.left, _padding.top);
+
   RenderPadding({EdgeInsets padding = EdgeInsets.zero, RenderObject? child})
     : _padding = padding {
     if (child != null) {
@@ -982,28 +938,14 @@ class RenderPadding extends RenderObject
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     final c = _child;
     if (c == null) return;
     final childOffset = CellOffset(
       offset.col + _padding.left,
       offset.row + _padding.top,
     );
-    final screen = screenOffset ?? offset;
-    c.paint(
-      buffer,
-      childOffset,
-      screenOffset: CellOffset(
-        screen.col + _padding.left,
-        screen.row + _padding.top,
-      ),
-      clipRect: clipRect,
-    );
+    c.paint(buffer, childOffset);
   }
 }
 
@@ -1026,6 +968,10 @@ class RenderPadding extends RenderObject
 /// (`w < 2·edge` or `h < 2`), the border is skipped and the child paints
 /// in place — this avoids garbled glyphs when a layout collapses.
 class RenderBorder extends RenderObject implements RenderObjectWithSingleChild {
+  @override
+  CellOffset childOffsetOf(RenderObject child) =>
+      _framed ? CellOffset(_edgeWidth, 1) : CellOffset.zero;
+
   RenderBorder({
     required BoxBorder border,
     TextPresentationPolicy textPolicy = TextPresentationPolicy.spec,
@@ -1166,12 +1112,7 @@ class RenderBorder extends RenderObject implements RenderObjectWithSingleChild {
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     final w = size.cols;
     final h = size.rows;
     final c = _child;
@@ -1183,12 +1124,7 @@ class RenderBorder extends RenderObject implements RenderObjectWithSingleChild {
     if (!_framed) {
       // Too small for a real border — paint the child in place if
       // any, skip the frame entirely.
-      c?.paint(
-        buffer,
-        offset,
-        screenOffset: screenOffset ?? offset,
-        clipRect: clipRect,
-      );
+      c?.paint(buffer, offset);
       return;
     }
     final g = BorderGlyphs.forStyle(_border.style);
@@ -1233,11 +1169,6 @@ class RenderBorder extends RenderObject implements RenderObjectWithSingleChild {
     }
 
     final innerOffset = CellOffset(offset.col + edge, offset.row + 1);
-    c?.paint(
-      buffer,
-      innerOffset,
-      screenOffset: (screenOffset ?? offset) + CellOffset(edge, 1),
-      clipRect: clipRect,
-    );
+    c?.paint(buffer, innerOffset);
   }
 }

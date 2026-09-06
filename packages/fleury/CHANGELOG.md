@@ -24,6 +24,15 @@ elements, state, layout) and terminal-native internals.
 
 - **Widgets & layout** — a Flutter-shaped widget/element/render tree targeting a
   terminal cell grid.
+- **Derived geometry** — a render object's screen position is derived from
+  layout (`RenderObject.screenGeometry()`, over the `childOffsetOf` /
+  `childClipOf` / `presentsChild` contract) and never recorded during paint.
+  `paint(buffer, offset)` is a non-virtual template that debug-checks child
+  placement against the contract; render objects override `performPaint`.
+  Pointer hit-testing walks the tree, `FocusNode.rect` / `caretRect` are
+  derived getters, semantic bounds derive at collection, and `BoundsNotifier`
+  publishes a `RenderGeometry`. There is no `screenOffset` or `clipRect` paint
+  parameter (RFC 0024).
 - **Two surfaces** — render to a terminal, or serve the same app to a browser
   over a structured wire (`fleury serve`).
 - **Semantics, built in** — interactive and content widgets contribute a

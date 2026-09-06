@@ -112,8 +112,7 @@ class _RenderProbe extends RenderObject {
   CellSize performLayout(CellConstraints constraints) =>
       constraints.constrain(const CellSize(5, 1));
   @override
-  void paint(CellBuffer buffer, CellOffset offset,
-      {CellOffset? screenOffset, CellRect? clipRect}) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     if (toggle.fail) throw StateError('probe paint failure');
     buffer.writeText(offset, 'probe');
   }

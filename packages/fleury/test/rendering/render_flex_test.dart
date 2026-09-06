@@ -14,12 +14,7 @@ class _FixedSize extends RenderObject {
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     // Tests inspect `size` / offsets, not painted output.
   }
 }
@@ -31,7 +26,6 @@ class _PaintCountingBox extends RenderObject {
   final String marker;
   int paintCount = 0;
   CellOffset? lastOffset;
-  CellOffset? lastScreenOffset;
 
   @override
   CellSize performLayout(CellConstraints constraints) {
@@ -39,15 +33,9 @@ class _PaintCountingBox extends RenderObject {
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     paintCount += 1;
     lastOffset = offset;
-    lastScreenOffset = screenOffset;
     buffer.writeGrapheme(offset, marker);
   }
 }
@@ -64,12 +52,7 @@ class _CjkLeaf extends RenderObject {
       constraints.constrain(intrinsic);
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     buffer.writeText(offset, text);
   }
 }
@@ -93,15 +76,7 @@ void main() {
       final buffer = CellBuffer(const CellSize(20, 1));
       buffer.writeGrapheme(const CellOffset(3, 0), 'X'); // sibling past the box
 
-      flex.paint(
-        buffer,
-        CellOffset.zero,
-        screenOffset: CellOffset.zero,
-        clipRect: const CellRect(
-          offset: CellOffset.zero,
-          size: CellSize(20, 1),
-        ),
-      );
+      flex.paint(buffer, CellOffset.zero);
 
       expect(buffer.atColRow(0, 0).grapheme, '你');
       expect(buffer.atColRow(1, 0).role, CellRole.continuation);
@@ -273,11 +248,7 @@ void main() {
       flex.layout(const CellConstraints(maxCols: 1));
 
       final buffer = CellBuffer(const CellSize(1, 3));
-      flex.paint(
-        buffer,
-        const CellOffset(0, -10),
-        screenOffset: const CellOffset(5, -10),
-      );
+      flex.paint(buffer, const CellOffset(0, -10));
 
       expect(
         [
@@ -287,7 +258,7 @@ void main() {
         [10, 11, 12],
       );
       expect(children[10].lastOffset, const CellOffset(0, 0));
-      expect(children[10].lastScreenOffset, const CellOffset(5, 0));
+      expect(flex.childOffsetOf(children[10]), const CellOffset(0, 10));
       expect(buffer.atColRow(0, 0).grapheme, 'K');
       expect(buffer.atColRow(0, 1).grapheme, 'L');
       expect(buffer.atColRow(0, 2).grapheme, 'M');
@@ -306,11 +277,7 @@ void main() {
       flex.layout(const CellConstraints(maxRows: 1));
 
       final buffer = CellBuffer(const CellSize(3, 1));
-      flex.paint(
-        buffer,
-        const CellOffset(-2, 0),
-        screenOffset: const CellOffset(-2, 7),
-      );
+      flex.paint(buffer, const CellOffset(-2, 0));
 
       expect(
         [
@@ -320,7 +287,7 @@ void main() {
         [2, 3, 4],
       );
       expect(children[2].lastOffset, const CellOffset(0, 0));
-      expect(children[2].lastScreenOffset, const CellOffset(0, 7));
+      expect(flex.childOffsetOf(children[2]), const CellOffset(2, 0));
       expect(buffer.atColRow(0, 0).grapheme, '2');
       expect(buffer.atColRow(1, 0).grapheme, '3');
       expect(buffer.atColRow(2, 0).grapheme, '4');

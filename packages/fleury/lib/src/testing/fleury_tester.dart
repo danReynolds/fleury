@@ -33,6 +33,7 @@ import '../foundation/geometry.dart';
 import '../foundation/key.dart' show UniqueKey;
 import '../rendering/cell.dart';
 import '../rendering/cell_buffer.dart';
+import '../rendering/render_object.dart';
 import '../rendering/surface_capabilities.dart';
 import '../rendering/width_policy.dart' show TextPresentationPolicy;
 import '../rendering/render_flex.dart' show RenderFlex;
@@ -727,6 +728,12 @@ class FleuryTester {
     _owner.flushBuild();
   }
 
+  /// The root render object of the mounted tree, or null before mounting.
+  RenderObject? get rootRenderObject {
+    final root = _root;
+    return root == null ? null : _owner.findRootRenderObject(root);
+  }
+
   /// Renders the current tree into a fresh [CellBuffer] sized to
   /// [size] (defaulting to [viewportSize]). An explicit size also updates
   /// [viewportSize] and ambient MediaQuery, like a terminal resize.
@@ -748,6 +755,7 @@ class FleuryTester {
     final buffer = CellBuffer(viewportSize);
     _pointerRouter.beginFrame();
     _owner.renderFrame(_root!, buffer);
+    _pointerRouter.endFrame();
     return buffer;
   }
 

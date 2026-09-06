@@ -61,12 +61,7 @@ class _CountingCell extends RenderObject {
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {}
+  void performPaint(CellBuffer buffer, CellOffset offset) {}
 }
 
 class _ImageCell extends LeafRenderObjectWidget {
@@ -82,12 +77,7 @@ class _ImageCellRender extends RenderObject {
       constraints.constrain(const CellSize(4, 2));
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     buffer.writeImage(
       offset,
       Uint8List.fromList([1]),
@@ -497,7 +487,8 @@ void main() {
       );
     });
 
-    Table longTable() => Table(
+    Table longTable({TableController? controller}) => Table(
+      controller: controller,
       selectable: true,
       autofocus: true,
       headerSeparator: false,
@@ -530,6 +521,30 @@ void main() {
       // Selection is now r3; window shows r2,r3 (r3 at the bottom).
       expect(_lines(tester, cols: 4, rows: 3), ['H', 'r2', 'r3']);
     });
+
+    testWidgets(
+      'clicking under a scrolled window selects the row shown there',
+      (tester) {
+        final c = TableController();
+        tester.pumpWidget(longTable(controller: c));
+        tester.render(size: const CellSize(4, 3));
+        tester.sendKey(const KeyEvent(KeyCode.end));
+        expect(_lines(tester, cols: 4, rows: 3), ['H', 'r8', 'r9']);
+
+        // Screen row 1 shows r8: the body is scrolled under the pinned header,
+        // so the row's hit region must follow its scrolled position, not its
+        // natural one.
+        _clickAt(tester, col: 0, row: 1);
+        expect(c.selectedIndex, 8);
+        // The header occupies screen row 0 and is not a body row.
+        _clickAt(tester, col: 0, row: 0);
+        expect(
+          c.selectedIndex,
+          8,
+          reason: 'the pinned header is not selectable',
+        );
+      },
+    );
   });
 
   group('semantics', () {
