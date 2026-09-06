@@ -88,11 +88,16 @@ for the unmemoized walk.
   pruned by its box unless it says `hitTestsBeyondBounds` (a `Stack`, whose
   `Positioned` children may overflow), and by any clip. Walk order is paint
   order, so the topmost region is the last hit. Hover, press, and drag
-  capture reconcile against reachability after every frame.
+  capture reconcile after every frame against reachability: a target that
+  left the tree, is no longer presented, or is fully clipped out is
+  dropped, as the registry dropped it.
 - **Focus.** `FocusNode.rect` and `caretRect` are getters over a
   `ScreenGeometrySource` (the `Focus` widget's render object) and a
   `CaretHost` (an editable's render object exposing `localCaretRect`).
-  Traversal resolves each node's rect once per sort.
+  Hosts attach when the widget's render object is created and detach when
+  the widget unmounts, so an app-owned node that outlives its widget
+  reports nothing and retains no dead subtree. Traversal resolves each
+  node's rect once per sort.
 - **Semantics.** `_RenderSemanticBounds` is a plain pass-through box; a node
   derives its bounds at collection. When a paint pass ends,
   `SemanticDirtyTracker.refreshGeometry` re-derives every mounted node and
