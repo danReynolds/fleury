@@ -15,7 +15,8 @@ void main(List<String> args) {
     '--lines': '1000',
     '--frames': '60',
     '--operation': 'all',
-    '--policy': 'spec'
+    '--policy': 'spec',
+    '--wrap': 'true'
   };
   for (var i = 0; i < args.length; i += 2) {
     if (i + 1 == args.length || !options.containsKey(args[i])) {
@@ -45,6 +46,11 @@ void main(List<String> args) {
     _ => throw ArgumentError('Invalid text policy'),
   };
   final kind = options['--kind']!;
+  final softWrap = switch (options['--wrap']) {
+    'true' => true,
+    'false' => false,
+    _ => throw ArgumentError('Invalid wrap value'),
+  };
   final count = int.parse(options['--lines']!);
   final frames = int.parse(options['--frames']!);
   if (!['plain', 'rich', 'spans'].contains(kind) || count < 50 || frames < 2) {
@@ -76,8 +82,8 @@ void main(List<String> args) {
     Widget app(int revision, {TextSpan? text}) => ScrollView(
         controller: controller,
         child: kind == 'plain'
-            ? Text(documents[revision])
-            : RichText(text: text ?? spans[revision]));
+            ? Text(documents[revision], softWrap: softWrap)
+            : RichText(text: text ?? spans[revision], softWrap: softWrap));
     SampleFrameHost? host;
     if (operation != 'open') {
       host = SampleFrameHost(app(0), size, textPolicy: policy);
@@ -169,6 +175,7 @@ void main(List<String> args) {
     stdout.writeln(jsonEncode({
       'kind': kind,
       'policy': policyName,
+      'wrap': softWrap,
       'lines': count,
       'operation': operation,
       'frames': frames,

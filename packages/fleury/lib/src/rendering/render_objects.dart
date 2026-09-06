@@ -306,6 +306,20 @@ class RenderText extends RenderObject
     if (cached != null && constraints == _cachedConstraints) {
       return cached;
     }
+    if (cached != null && !_softWrap) {
+      // Unwrapped paragraphs are independent of the viewport width. Reuse
+      // their measured widths, while refreshing the line-list identity so
+      // point-based selection observes the new geometry on the next paint.
+      _lines = List<String>.of(_lines);
+      var widest = 0;
+      for (final width in _lineWidths) {
+        if (width > widest) widest = width;
+      }
+      final result = constraints.constrain(CellSize(widest, _lines.length));
+      _cachedConstraints = constraints;
+      _cachedSize = result;
+      return result;
+    }
 
     if (!_softWrap || maxCols == null) {
       // No-wrap with newlines: split into paragraphs, clip each to

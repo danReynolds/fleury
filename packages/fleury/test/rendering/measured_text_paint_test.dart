@@ -4,6 +4,54 @@ import 'package:fleury/src/rendering/cell_buffer.dart'
 import 'package:test/test.dart';
 
 void main() {
+  test(
+    'unwrapped resize reuses measured paragraphs and invalidates on edits',
+    () {
+      final resolver = _CountingWidthResolver();
+      final text = RenderText(
+        text: 'a界b\nx\nlongest discarded paragraph',
+        softWrap: false,
+        maxLines: 2,
+        widthResolver: resolver,
+      )..layout(const CellConstraints(maxCols: 2));
+      final previousLines = text.selectionLines;
+      resolver.reset();
+      expect(text.layout(const CellConstraints()), const CellSize(4, 2));
+      expect(resolver.textCalls, 0);
+      expect(resolver.graphemeCalls, 0);
+      expect(text.selectionLines, previousLines);
+      expect(identical(text.selectionLines, previousLines), isFalse);
+      expect(
+        text.layout(const CellConstraints(maxCols: 0)),
+        const CellSize(0, 2),
+      );
+      expect(
+        text.layout(const CellConstraints(minCols: 8, maxRows: 1)),
+        const CellSize(8, 1),
+      );
+      text.text = 'longer\ny';
+      expect(text.layout(const CellConstraints()), const CellSize(6, 2));
+      expect(resolver.textCalls, greaterThan(0));
+      text.maxLines = 1;
+      expect(text.layout(const CellConstraints()), const CellSize(6, 1));
+      text.softWrap = true;
+      expect(
+        text.layout(const CellConstraints(maxCols: 2)),
+        const CellSize(2, 1),
+      );
+      text.softWrap = false;
+      expect(text.layout(const CellConstraints()), const CellSize(6, 1));
+      text
+        ..text = ''
+        ..layout(const CellConstraints(maxCols: 3))
+        ..text = '─\n…'
+        ..textPolicy = const TextPresentationPolicy(
+          widths: CellWidthPolicy.cjk,
+        );
+      expect(text.layout(const CellConstraints()), const CellSize(2, 1));
+    },
+  );
+
   test('buffer text placement reuses widths, including clipped clusters', () {
     final resolver = _CountingWidthResolver();
     final buffer = CellBuffer(const CellSize(3, 1));
