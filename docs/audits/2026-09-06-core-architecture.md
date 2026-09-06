@@ -2,8 +2,8 @@
 
 This pass targets shared framework work in ordinary app lifecycle and state
 updates. It changes no document viewer, text-layout algorithm or specialized
-widget. The final baseline is main `522ab372`, including the separately merged
-derived-geometry architecture. Production changes were reviewed individually
+widget. The measurement baseline is main `522ab372`, including the separately
+merged derived-geometry architecture. Production changes were reviewed individually
 before moving to the next candidate, then rebased and requalified together.
 
 ## Retained changes
@@ -38,7 +38,14 @@ derived-geometry, semantic and pipeline checks passed, as did the profiling
 host's two tests. Final contributor, wire and commit-specific CI results are
 recorded in the associated PR.
 
-## Final comparisons against current main
+Before merge, the pass was also rebased onto `c8fb3124` (testing controls and
+guide changes). Production changes applied without conflict; the generated
+browser client was rebuilt. All 179 focused reconciliation, geometry and
+semantic tests passed, with clean source analysis. Exact-commit CI qualification
+is recorded in the PR. The measurements below remain comparisons against the
+explicit `522ab372` baseline.
+
+## Recorded comparisons against main `522ab372`
 
 Values are medians of three fresh-process AOT medians, in microseconds.
 
