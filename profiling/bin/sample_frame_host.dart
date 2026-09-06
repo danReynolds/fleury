@@ -68,7 +68,8 @@ final class SampleFrameHost {
   int? get leafRenderObjectIndex =>
       _text == null ? null : renderObjects.indexOf(_text!);
 
-  FrameSample frame(String mode, int iteration) {
+  FrameSample frame(String mode, int iteration,
+      {void Function(TuiRenderedFrame frame)? onFramePresented}) {
     final watch = Stopwatch()..start();
     if (mode == 'leaf') {
       _text?.text = '${iteration & 1} $_originalText';
@@ -108,6 +109,7 @@ final class SampleFrameHost {
         })!;
     // Exact diff, scroll eligibility and frame construction after paint.
     final finish = watch.elapsedMicroseconds - paintFinished;
+    onFramePresented?.call(frame);
     _loop.commit(frame);
     tester.binding.flushPostFrameCallbacks(tester.clock.now);
     watch.stop();
