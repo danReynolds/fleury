@@ -1,5 +1,7 @@
 // Post-GC document ownership across mount, replace, resize and unmount.
 // Project-class shallow bytes exclude SDK strings/lists and VM/tool overhead.
+// sdkStrings reports separate process-wide post-GC Dart string class totals;
+// compare phase deltas, not absolute totals or an allocation rate.
 // Use --deterministic --enable-vm-service=0 --disable-service-auth-codes.
 import 'dart:convert';
 import 'dart:developer' as developer;
@@ -39,6 +41,8 @@ Future<void> main(List<String> args) async {
     host.renderObjects.whereType<Selectable>().single.dispatchSelectionEvent(
         const SelectionGranularEvent(granularity: SelectionGranularity.all));
     host.frame('clean', 3);
+    // Exercise snapshot-scoped semantic bookkeeping before lifecycle GC.
+    SemanticTree.fromElement(host.tester.root!);
     return host;
   }
 
@@ -73,6 +77,16 @@ Future<void> main(List<String> args) async {
         'kind': kind,
         'phase': phase,
         'heap': profile.memoryUsage?.toJson(),
+        'sdkStrings': [
+          for (final m in profile.members!)
+            if (m.classRef?.library?.uri == 'dart:core' &&
+                ['_OneByteString', '_TwoByteString'].contains(m.classRef?.name))
+              {
+                'class': m.classRef!.name,
+                'instances': m.instancesCurrent,
+                'bytes': m.bytesCurrent
+              }
+        ],
         'classes': classes
       }));
     }

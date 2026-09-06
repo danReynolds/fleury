@@ -1291,9 +1291,17 @@ bool isPositionalSemanticId(String id) =>
 int _childIndexOf(Element element) {
   final parent = element.elementParent;
   if (parent == null) return 0;
+  // Single-child wrappers cost one visit already; hashing them makes ordinary
+  // deep app trees slower. Batch only the framework's multi-child lists.
+  final indices = parent is MultiChildRenderObjectElement
+      ? _snapshotChildIndices
+      : null;
+  final cached = indices?[element];
+  if (cached != null) return cached;
   var index = 0;
   var result = -1;
   parent.visitChildren((child) {
+    indices?[child] = index;
     if (identical(child, element)) result = index;
     index++;
   });
@@ -1579,12 +1587,11 @@ final class SemanticsElement extends ComponentElement
   /// snapshot-local `element-<hash>` form (still NOT stable across rebuilds;
   /// see [SemanticNodeId]).
   ///
-  /// Recomputed on every read (it is O(depth)): the value is position-dependent,
-  /// so caching it would need a freshness signal that covers *non-Semantics*
-  /// reshuffles — which shift a positional segment without any
-  /// [SemanticsElement] lifecycle event. That signal (a build-owner structure
-  /// generation) is folded into the deferred A3 work; until then, always-fresh
-  /// is the only provably correct choice.
+  /// Recomputed on every read: the value is position-dependent, including
+  /// *non-Semantics* reshuffles that shift a positional segment without any
+  /// [SemanticsElement] lifecycle event. Full snapshots share sibling indices
+  /// only for their synchronous walk; no identity or position cache survives
+  /// into the next update or action dispatch.
   SemanticNodeId get _nodeId {
     final explicitId = widget.id;
     if (explicitId != null) {
@@ -1929,10 +1936,23 @@ List<SemanticNode> _collectFrom(
   Element element, [
   Map<SemanticNodeId, Element>? elements,
 ]) {
-  final nodes = <SemanticNode>[];
-  _collectInto(element, nodes, elements);
-  return nodes;
+  final previous = _snapshotChildIndices;
+  _snapshotChildIndices = Map<Element, int>.identity();
+  try {
+    final nodes = <SemanticNode>[];
+    _collectInto(element, nodes, elements);
+    return nodes;
+  } finally {
+    _snapshotChildIndices = previous;
+  }
 }
+
+// A full snapshot reads a settled tree synchronously. Index each encountered
+// sibling list once during that walk, rather than scanning it once per leaf.
+// No indices survive the snapshot: retained-leaf updates, action dispatch and
+// later snapshots must see the current tree position. Stack discipline also
+// isolates nested snapshots and releases the map when a contributor throws.
+Map<Element, int>? _snapshotChildIndices;
 
 void _collectInto(
   Element element,
