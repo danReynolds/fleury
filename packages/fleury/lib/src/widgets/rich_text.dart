@@ -172,6 +172,30 @@ class _LoweredGlyph extends _Glyph {
   final String? groupSource;
 }
 
+// One bounded index per flattening operation. Sharing is safe only when both
+// the grapheme and its immutable style match; lowered atoms are never pooled
+// because their group identity belongs to a particular source position.
+class _GlyphFactory {
+  _GlyphFactory(this.resolver, this.policy);
+  final WidthResolver resolver;
+  final CellWidthPolicy policy;
+  final _ascii = List<_Glyph?>.filled(95, null);
+
+  _Glyph glyph(String text, CellStyle style) {
+    final code = text.length == 1 ? text.codeUnitAt(0) : -1;
+    if (code >= 0x20 && code <= 0x7e) {
+      final previous = _ascii[code - 0x20];
+      if (previous != null && identical(previous.style, style)) return previous;
+      return _ascii[code - 0x20] = _Glyph(
+        text,
+        resolver.widthOfGrapheme(text, policy),
+        style,
+      );
+    }
+    return _Glyph(text, resolver.widthOfGrapheme(text, policy), style);
+  }
+}
+
 /// Lays out and paints a flattened [TextSpan] tree as styled cells, with
 /// word wrap, maxLines, and ellipsis/clip overflow. One style per glyph,
 /// resolved by cascading each span's style onto its parent's.
@@ -377,41 +401,28 @@ class RenderRichText extends RenderObject
   }
 
   List<_Glyph> _flatten(List<({String text, CellStyle style})> runs) {
+    final factory = _GlyphFactory(_widthResolver, _policy);
     return _textPolicy.lowering == ClusterLowering.split
-        ? _flattenLowered(runs)
-        : _flattenPreserved(runs);
+        ? _flattenLowered(runs, factory)
+        : _flattenPreserved(runs, factory);
   }
 
   /// The byte-identical legacy path: per-span grapheme walk, no detection.
   /// Every unprobed/preserve surface goes through here unchanged (property
   /// gate 2).
-  List<_Glyph> _flattenPreserved(List<({String text, CellStyle style})> runs) {
+  List<_Glyph> _flattenPreserved(
+    List<({String text, CellStyle style})> runs,
+    _GlyphFactory factory,
+  ) {
     final out = <_Glyph>[];
     for (final run in runs) {
-      // Printable ASCII has a small, fixed key space. Share its immutable
-      // glyphs within this run; the temporary index dies after flattening.
-      // Wider clusters keep the ordinary resolver path.
-      final ascii = List<_Glyph?>.filled(95, null);
       for (final paragraph in _splitKeepingBreaks(run.text)) {
         if (paragraph == '\n') {
           out.add(_Glyph('\n', 0, run.style));
           continue;
         }
         for (final g in sanitizeForDisplay(paragraph).characters) {
-          final code = g.length == 1 ? g.codeUnitAt(0) : -1;
-          if (code >= 0x20 && code <= 0x7e) {
-            out.add(
-              ascii[code - 0x20] ??= _Glyph(
-                g,
-                _widthResolver.widthOfGrapheme(g, _policy),
-                run.style,
-              ),
-            );
-          } else {
-            out.add(
-              _Glyph(g, _widthResolver.widthOfGrapheme(g, _policy), run.style),
-            );
-          }
+          out.add(factory.glyph(g, run.style));
         }
       }
     }
@@ -425,12 +436,15 @@ class RenderRichText extends RenderObject
   /// boundary. Each cluster takes the style in effect at its base; a lowered
   /// component inherits the style covering that component's own base
   /// (RFC 0019 §6.4).
-  List<_Glyph> _flattenLowered(List<({String text, CellStyle style})> runs) {
+  List<_Glyph> _flattenLowered(
+    List<({String text, CellStyle style})> runs,
+    _GlyphFactory factory,
+  ) {
     final out = <_Glyph>[];
     final paragraphText = StringBuffer();
     // Style per code unit of paragraphText. Rebuilt at flatten time only —
-    // never per frame — and cleared per paragraph, so the cost is one byte
-    // of style reference per code unit of the longest paragraph.
+    // never per frame — and cleared per paragraph: one style reference per
+    // code unit of the longest paragraph.
     final unitStyles = <CellStyle>[];
 
     void flushParagraph() {
@@ -440,13 +454,7 @@ class RenderRichText extends RenderObject
       for (final cluster in text.characters) {
         final components = splitEmojiZwjSequence(cluster);
         if (components == null) {
-          out.add(
-            _Glyph(
-              cluster,
-              _widthResolver.widthOfGrapheme(cluster, _policy),
-              unitStyles[offset],
-            ),
-          );
+          out.add(factory.glyph(cluster, unitStyles[offset]));
         } else {
           final groupId = _nextGroupId++;
           var componentOffset = offset;

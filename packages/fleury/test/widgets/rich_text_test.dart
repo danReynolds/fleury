@@ -13,6 +13,43 @@ String _row(CellBuffer buf, int row) {
 }
 
 void main() {
+  test('shared ASCII glyphs keep each source style on every policy', () {
+    for (final policy in [
+      TextPresentationPolicy.spec,
+      const TextPresentationPolicy(lowering: ClusterLowering.split),
+    ]) {
+      final render = RenderRichText(
+        span: const TextSpan(
+          children: [
+            TextSpan(
+              text: 'aa',
+              style: CellStyle(foreground: AnsiColor(1)),
+            ),
+            TextSpan(
+              text: 'aa',
+              style: CellStyle(foreground: AnsiColor(2)),
+            ),
+            TextSpan(
+              text: 'aa',
+              style: CellStyle(foreground: AnsiColor(1)),
+            ),
+          ],
+        ),
+        base: CellStyle.none,
+        textPolicy: policy,
+      )..layout(const CellConstraints(maxCols: 6));
+      final buffer = CellBuffer(const CellSize(6, 1));
+      render.paint(buffer, CellOffset.zero);
+      for (var col = 0; col < 6; col++) {
+        expect(buffer.atColRow(col, 0).grapheme, 'a');
+        expect(
+          buffer.atColRow(col, 0).style.foreground,
+          AnsiColor(col == 2 || col == 3 ? 2 : 1),
+        );
+      }
+    }
+  });
+
   test(
     'bounded glyph sharing preserves diverse text and width policy updates',
     () {
