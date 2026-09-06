@@ -71,18 +71,17 @@ class TextEdgeRelation {
 mixin SelectableTextMixin on RenderObject implements Selectable {
   // ----- Required from the host -------------------------------------
 
-  /// The painted rect of this Selectable in SCREEN coordinates,
-  /// including any portion currently scrolled off (or otherwise
-  /// clipped). The grapheme-walk algorithm anchors at
-  /// `selectionPaintRect.offset` and walks line-by-line from there,
-  /// so this must reflect the full content's position even when only
-  /// a slice is visible. Null before the first paint.
+  /// This Selectable's rect in SCREEN coordinates, including any portion
+  /// currently scrolled off (or otherwise clipped). The grapheme-walk
+  /// algorithm anchors at `selectionPaintRect.offset` and walks
+  /// line-by-line from there, so this must reflect the full content's
+  /// position even when only a slice is visible. Derived from layout
+  /// (`screenGeometry().bounds`); null while the host is not presented.
   CellRect? get selectionPaintRect;
 
-  /// The visible clip applied to this Selectable in screen
-  /// coordinates, or null when no clip is active (the legacy case
-  /// where everything painted IS on-screen). Hit-tests reject
-  /// points outside `selectionPaintRect ∩ selectionClipRect`.
+  /// The clip in effect for this Selectable in screen coordinates
+  /// (`screenGeometry().clip`), or null when nothing clips. Hit-tests
+  /// reject points outside `selectionPaintRect ∩ selectionClipRect`.
   CellRect? get selectionClipRect;
 
   /// The flat text of each visually-laid-out line (post-wrap). The
@@ -143,9 +142,9 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
   @override
   CellRect? get cellBounds => selectionPaintRect;
 
-  /// The currently-visible portion of [cellBounds] after applying
-  /// the inherited clipRect. Null when the Selectable is fully
-  /// off-screen, OR when it hasn't painted yet. Used by visibility
+  /// The currently-visible portion of [cellBounds] after applying the
+  /// ancestor clip. Null when the Selectable is fully off-screen or not
+  /// presented. Used by visibility
   /// queries (e.g. SelectionArea's auto-scroll, which only counts
   /// visible Selectables toward the edge-detection region).
   @override

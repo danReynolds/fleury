@@ -44,12 +44,7 @@ class _RenderThemedCell extends RenderObject {
       constraints.constrain(const CellSize(1, 1));
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     buffer.writeGrapheme(offset, 'x', style: CellStyle(foreground: _color));
   }
 }

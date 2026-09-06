@@ -1,21 +1,22 @@
-// Painted-bounds observation — the primitive.
+// Bounds observation — the primitive.
 //
 // Three pieces, one reactive pattern:
 //
-//   BoundsObserver  (widget)  observes its child's painted screen-space
-//                             bounds and publishes them
+//   BoundsObserver  (widget)  publishes its child's screen geometry — derived
+//                             from layout, never recorded during paint
 //   BoundsNotifier  (state)   holds the observation — `bounds` and
 //                             `visibleBounds` — and notifies on change
 //   consumers                 react: `BoundsAnchor` anchors its child to the
-//                             bounds the SAME frame (render-tier); any
-//                             `ListenableBuilder` rebuilds the NEXT frame
-//                             (build-tier, readouts and derived UI)
+//                             observed widget's live geometry the SAME frame
+//                             (render-tier); any `ListenableBuilder` rebuilds
+//                             the NEXT frame (build-tier, readouts and
+//                             derived UI)
 //
 // Anchoring is this primitive's first use case, not its definition — see
 // `anchored.dart` for `Anchored` and the alignment placement math. Anything
 // that needs to know where a widget landed on screen (an inspector
 // highlight, a test, a derived readout) starts here rather than inventing
-// another paint-geometry channel.
+// another geometry channel.
 
 import '../foundation/change_notifier.dart';
 import '../foundation/geometry.dart';
@@ -25,45 +26,51 @@ import '../rendering/render_object.dart';
 import 'align.dart' show Alignment;
 import 'framework.dart';
 
-/// The observable: one widget's painted screen-space bounds, live.
+/// The observable: one widget's screen geometry, live.
 ///
 /// Written by exactly one [BoundsObserver] (debug-asserted); read and
-/// listened to by anything. [BoundsAnchor] listens at the render tier and
-/// repositions the same frame; a `ListenableBuilder` reacts at the build
-/// tier on the following frame.
+/// listened to by anything. [BoundsAnchor] reads the observed widget's
+/// [liveGeometry] at the render tier and repositions the same frame; a
+/// `ListenableBuilder` reacts to [bounds] at the build tier on the following
+/// frame.
 ///
 /// Publishing a *different* value notifies listeners, so a consumer whose
 /// own subtree is clean still reacts when the observed widget moves.
 /// Equal values are dropped, so a static widget re-publishing identical
-/// bounds every paint costs one comparison.
+/// geometry every frame costs one comparison and never requests another.
 class BoundsNotifier with ChangeNotifier {
-  CellRect? _bounds;
-  CellRect? _visible;
+  RenderGeometry? _geometry;
   Object? _writer;
 
-  /// The full painted bounds in absolute cell coordinates — including any
-  /// portion scrolled out of view — or null before the widget first paints
-  /// and after it leaves the tree.
-  CellRect? get bounds => _bounds;
+  /// The observed widget's full bounds in absolute cell coordinates —
+  /// including any portion scrolled out of view — or null while the widget
+  /// is not presented (not yet laid out, hidden, or gone from the tree).
+  CellRect? get bounds => _geometry?.bounds;
 
-  /// The on-screen portion of [bounds] (its intersection with the clip in
-  /// effect when it painted), or null when the widget is fully scrolled or
-  /// clipped out of view. [BoundsAnchor] hides while this is null.
-  CellRect? get visibleBounds => _visible;
+  /// The on-screen portion of [bounds], or null when the widget is fully
+  /// scrolled or clipped out of view. [BoundsAnchor] hides while this is
+  /// null.
+  CellRect? get visibleBounds => _geometry?.visible;
+
+  /// The observed widget's geometry as derived from layout right now, read
+  /// straight from the observer rather than from the last publication.
+  /// Render-tier consumers use it during their own frame so they place
+  /// themselves against the observed widget's current position regardless
+  /// of paint order. A notifier nobody observes — one published by hand, or
+  /// by a programmatic source — reports its last publication instead.
+  RenderGeometry? get liveGeometry {
+    final writer = _writer;
+    return writer is ScreenGeometrySource ? writer.screenGeometry() : _geometry;
+  }
 
   /// Publishes a new observation. Called by the owning [BoundsObserver];
   /// not intended for app code.
   ///
   /// Returns true when the observation actually changed (and listeners were
-  /// notified). The paint-pass sweep reads this to tell a real retraction
-  /// from a re-visit of an already-retracted observer.
-  bool publish(CellRect? bounds, {CellRect? clip}) {
-    final visible = bounds == null
-        ? null
-        : (clip == null ? bounds : clip.intersect(bounds));
-    if (bounds == _bounds && visible == _visible) return false;
-    _bounds = bounds;
-    _visible = visible;
+  /// notified).
+  bool publish(RenderGeometry? geometry) {
+    if (geometry == _geometry) return false;
+    _geometry = geometry;
     notifyListeners();
     return true;
   }
@@ -89,8 +96,8 @@ class BoundsNotifier with ChangeNotifier {
   }
 }
 
-/// The observer: publishes its child's painted bounds into [notifier]
-/// every paint. Layout- and paint-transparent — the child renders unchanged.
+/// The observer: publishes its child's screen geometry into [notifier]
+/// every frame. Layout- and paint-transparent — the child renders unchanged.
 class BoundsObserver extends SingleChildRenderObjectWidget {
   const BoundsObserver({
     super.key,
@@ -145,12 +152,14 @@ class RenderBoundsObserver extends RenderObject
 
   // A participant of its owner's paint pass (see
   // [RenderDamageTracker.endPaintPass]): when a pass ends without this
-  // observer having painted or replayed, its subtree stopped painting while
-  // staying mounted — the other IndexedStack tab, a route beneath an opaque
-  // one — and the observation is retracted, so a float anchored to it hides
-  // instead of hovering over whatever now paints there. Registration happens
-  // on the first publish (that is when the tree's tracker is reachable);
-  // unmount unregisters through [detachFromBounds].
+  // observer having painted, its subtree stopped painting while staying
+  // mounted — the other IndexedStack tab, a route beneath an opaque one, a
+  // cached repaint boundary — and the sweep asks it to re-derive: a hidden
+  // widget derives null and a float anchored to it hides instead of hovering
+  // over whatever now paints there; a cached one derives its unchanged
+  // geometry and notifies nobody. Registration happens on the first publish
+  // (that is when the tree's tracker is reachable); unmount unregisters
+  // through [detachFromBounds].
   RenderDamageTracker? _registeredWith;
   int _publishedPass = -1;
 
@@ -158,11 +167,9 @@ class RenderBoundsObserver extends RenderObject
   int get publishedPaintPass => _publishedPass;
 
   @override
-  void retractPaintFacts() {
-    _notifier.publish(null);
-  }
+  void refreshPaintFacts() => _publishDerived();
 
-  void _publish(CellRect? bounds, CellRect? clip) {
+  void _publishDerived() {
     final tracker = rootFrameDamage;
     if (tracker != null) {
       if (!identical(tracker, _registeredWith)) {
@@ -172,7 +179,7 @@ class RenderBoundsObserver extends RenderObject
       }
       _publishedPass = tracker.paintPass;
     }
-    _notifier.publish(bounds, clip: clip);
+    _notifier.publish(screenGeometry());
   }
 
   BoundsNotifier _notifier;
@@ -209,40 +216,10 @@ class RenderBoundsObserver extends RenderObject
       _child?.layout(constraints) ?? constraints.constrain(CellSize.zero);
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
-    // Screen coordinates: a BoundsAnchor places overlay content from this rect
-    // in root/absolute space, so a scratch-local offset would misplace floats
-    // anchored inside composited subtrees.
-    final bounds = CellRect(offset: screenOffset ?? offset, size: size);
-    _publish(bounds, clipRect);
-    if (RetainedPaintGeometryCapture.isActive) {
-      RetainedPaintGeometryCapture.record(
-        _replayBounds,
-        bounds,
-        clipRect: clipRect,
-      );
-    }
-    _child?.paint(
-      buffer,
-      offset,
-      screenOffset: screenOffset ?? offset,
-      clipRect: clipRect,
-    );
+  void performPaint(CellBuffer buffer, CellOffset offset) {
+    _publishDerived();
+    _child?.paint(buffer, offset);
   }
-
-  // Stable callback retained by repaint boundaries. It deliberately reads the
-  // current notifier so swapping notifiers invalidates once without keeping
-  // the old one alive in a cached closure. The clip rides along so
-  // visibleBounds stays truthful under cached paints.
-  // ignore: prefer_function_declarations_over_variables
-  late final RetainedPaintGeometryCallback _replayBounds = (bounds, clip) {
-    _publish(bounds, clip);
-  };
 }
 
 /// Anchors its [child] to bounds observed elsewhere: it repositions the same
@@ -301,6 +278,13 @@ class BoundsAnchor extends SingleChildRenderObjectWidget {
 /// [BoundsAnchor].
 class RenderBoundsAnchor extends RenderObject
     implements RenderObjectWithSingleChild {
+  @override
+  bool presentsChild(RenderObject child) =>
+      _notifier.liveGeometry?.visible != null;
+
+  @override
+  CellOffset childOffsetOf(RenderObject child) => _placeChild(child.size);
+
   RenderBoundsAnchor(
     this._notifier,
     this._gap,
@@ -385,37 +369,21 @@ class RenderBoundsAnchor extends RenderObject
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     final c = _child;
     if (c == null) return;
     // Bounds fully scrolled or clipped out of view: nothing to anchor to —
     // hide rather than float over unrelated content.
-    if (_notifier.visibleBounds == null) return;
-    // Resolve placement at paint time: the observer publishes during its own
-    // paint, which runs before this float's (in-flow content paints below the
-    // overlay), so we read the current frame's bounds.
-    //
-    // PAINT ORDER: that ordering is what makes tracking same-frame. A
-    // BoundsAnchor painted BEFORE its observed widget (e.g. earlier in a
-    // plain Stack) reads the previous frame's bounds and converges one frame
-    // later — correct, just delayed. Overlays paint last, so the usual case
-    // is always current.
+    if (_notifier.liveGeometry?.visible == null) return;
+    // Placement reads the observed widget's geometry as derived from this
+    // frame's layout, so tracking is same-frame whatever the paint order: a
+    // BoundsAnchor painted before its observed widget still lands on it.
     final placement = _placeChild(c.size);
-    _child!.paint(
-      buffer,
-      offset + placement,
-      screenOffset: (screenOffset ?? offset) + placement,
-      clipRect: clipRect,
-    );
+    _child!.paint(buffer, offset + placement);
   }
 
   CellOffset _placeChild(CellSize childSize) {
-    final r = _notifier.bounds;
+    final r = _notifier.liveGeometry?.bounds;
     if (r == null) return CellOffset.zero;
     // Gap pushes the layer away along whichever axis it sits outside on.
     final gapped = _gap == 0

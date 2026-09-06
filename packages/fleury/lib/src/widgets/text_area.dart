@@ -697,6 +697,9 @@ class _TextAreaDisplay extends LeafRenderObjectWidget {
   final int? maxLines;
 
   @override
+  LeafRenderObjectElement createElement() => _TextAreaDisplayElement(this);
+
+  @override
   RenderObject createRenderObject(BuildContext context) => RenderTextArea(
     focusNode: focusNode,
     policy: MediaQuery.textPolicyOf(context).widths,
@@ -776,7 +779,18 @@ final class TextAreaDebugStats {
 
 /// Lays out text as rows and scrolls vertically to keep the cursor line
 /// visible; paints a one-cell cursor at the selection.
-class RenderTextArea extends RenderObject {
+/// Releases the focus node's caret host when the editable leaves the tree.
+class _TextAreaDisplayElement extends LeafRenderObjectElement {
+  _TextAreaDisplayElement(_TextAreaDisplay super.widget);
+
+  @override
+  void unmount() {
+    (maybeRenderObject as RenderTextArea?)?.detachFromFocus();
+    super.unmount();
+  }
+}
+
+class RenderTextArea extends RenderObject implements CaretHost {
   RenderTextArea({
     required FocusNode focusNode,
     required String text,
@@ -801,7 +815,9 @@ class RenderTextArea extends RenderObject {
        _minLines = minLines,
        _maxLines = maxLines,
        _widthResolver = widthResolver,
-       _policy = policy;
+       _policy = policy {
+    _focusNode.attachCaretHost(this);
+  }
 
   /// Identity fast path for model text.
   ///
@@ -844,8 +860,9 @@ class RenderTextArea extends RenderObject {
 
   set focusNode(FocusNode value) {
     if (identical(_focusNode, value)) return;
-    _focusNode.caretRect = null;
+    _focusNode.detachCaretHost(this);
     _focusNode = value;
+    value.attachCaretHost(this);
     markNeedsPaintOnly();
   }
 
@@ -1047,28 +1064,8 @@ class RenderTextArea extends RenderObject {
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
-    if (size.isEmpty) {
-      _focusNode.caretRect = null;
-      return;
-    }
-    final screen = screenOffset ?? offset;
-    final screenCaret = _caretRect(screen, null);
-    if (screenCaret != null && FocusGeometryCapture.isActive) {
-      FocusGeometryCapture.record(
-        _replayCaret,
-        screenCaret,
-        clipRect: clipRect,
-      );
-    }
-    _focusNode.caretRect = clipRect == null
-        ? screenCaret
-        : screenCaret?.intersect(clipRect);
+  void performPaint(CellBuffer buffer, CellOffset offset) {
+    if (size.isEmpty) return;
 
     // Empty: paint the (possibly multi-line) placeholder, with the
     // cursor over the very first cell when visible.
@@ -1169,7 +1166,7 @@ class RenderTextArea extends RenderObject {
     }
   }
 
-  CellRect? _caretRect(CellOffset paintOffset, CellRect? clipRect) {
+  CellRect? _caretRect() {
     final lines = _showPlaceholder ? _linesOf(_placeholder) : _lines;
     if (lines.isEmpty) return null;
     final (cursorLine, cursorCol) = _cursorLineCol(lines);
@@ -1181,20 +1178,17 @@ class RenderTextArea extends RenderObject {
     final visibleStart = _scrollLeft;
     final visibleEnd = _scrollLeft + size.cols;
     if (cursorCell < visibleStart || cursorCell >= visibleEnd) return null;
-    final rect = CellRect(
-      offset: CellOffset(
-        paintOffset.col + cursorCell - visibleStart,
-        paintOffset.row + cursorLine - _scrollTop,
-      ),
+    return CellRect(
+      offset: CellOffset(cursorCell - visibleStart, cursorLine - _scrollTop),
       size: const CellSize(1, 1),
     );
-    return clipRect == null ? rect : rect.intersect(clipRect);
   }
 
-  // ignore: prefer_function_declarations_over_variables
-  late final FocusGeometryCallback _replayCaret = (bounds) {
-    _focusNode.caretRect = _focusNode.acceptsInput ? bounds : null;
-  };
+  /// Called on unmount: this render object no longer owns the node's caret.
+  void detachFromFocus() => _focusNode.detachCaretHost(this);
+
+  @override
+  CellRect? get localCaretRect => size.isEmpty ? null : _caretRect();
 
   int _lineStartOffset(List<String> lines, int lineIndex) {
     var offset = 0;

@@ -297,12 +297,7 @@ class RenderCanvas extends RenderObject {
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     if (size.cols == 0 || size.rows == 0) return;
     final buf = subCellBufferFor(_marker, size.cols, size.rows);
     _painter.paint(_SubCellCtx(buf, _bounds));

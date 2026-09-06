@@ -64,8 +64,8 @@ void main() {
     });
   });
 
-  group('paint-pass retraction is a one-shot owned by the sweep', () {
-    test('an unpublished participant is retracted once, not every pass', () {
+  group('the paint-pass sweep refreshes participants that did not paint', () {
+    test('an unpublished participant is refreshed on every pass', () {
       final tracker = RenderDamageTracker();
       final participant = _CountingParticipant();
       tracker.registerPaintPassParticipant(participant);
@@ -74,28 +74,28 @@ void main() {
         tracker.endPaintPass();
       }
       expect(
-        participant.retractions,
-        1,
+        participant.refreshes,
+        3,
         reason:
-            'a participant that stays mounted without painting is '
-            'unpublished on every later pass; asking it to retract each '
-            'time is what made every frame request the next one',
+            'a participant that stays mounted without painting re-derives '
+            'its fact from layout every pass; publishing an unchanged fact '
+            'notifies nobody, so this never requests the next frame',
       );
     });
 
-    test('a fresh publish re-arms the retraction', () {
+    test('a participant that published in the pass is left alone', () {
       final tracker = RenderDamageTracker();
       final participant = _CountingParticipant();
       tracker.registerPaintPassParticipant(participant);
       tracker.beginPaintPass();
       tracker.endPaintPass();
-      expect(participant.retractions, 1);
+      expect(participant.refreshes, 1);
       participant.published = tracker.beginPaintPass(); // painted this pass
       tracker.endPaintPass();
-      expect(participant.retractions, 1);
+      expect(participant.refreshes, 1);
       tracker.beginPaintPass(); // and not this one
       tracker.endPaintPass();
-      expect(participant.retractions, 2);
+      expect(participant.refreshes, 2);
     });
 
     test('reset also returns the phase to idle', () {
@@ -108,13 +108,13 @@ void main() {
 
 final class _CountingParticipant implements PaintPassParticipant {
   int published = -1;
-  int retractions = 0;
+  int refreshes = 0;
 
   @override
   int get publishedPaintPass => published;
 
   @override
-  void retractPaintFacts() {
-    retractions++;
+  void refreshPaintFacts() {
+    refreshes++;
   }
 }

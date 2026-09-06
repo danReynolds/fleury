@@ -20,12 +20,7 @@ class _ImageLeafRender extends RenderObject {
   CellSize performLayout(CellConstraints constraints) =>
       constraints.constrain(const CellSize(4, 2));
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     buffer.writeImage(
       offset,
       Uint8List.fromList([1, 2, 3, 4]),
@@ -88,12 +83,7 @@ class _RenderBoom extends RenderObject {
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     // Partial write BEFORE the throw: atomicity must bury it.
     buffer.writeText(offset, 'part', style: CellStyle.none);
     if (_mode == BoomMode.paint) throw StateError('paint-boom');

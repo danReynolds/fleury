@@ -35,30 +35,19 @@ import 'render_object.dart';
 /// Which phase the contained exception escaped from.
 enum FrameContainmentPhase { layout, paint }
 
-/// A contained layout/paint failure: the error, where it escaped, and the
-/// screen region the error presentation occupies.
+/// A contained layout/paint failure: the error and where it escaped. The
+/// screen region the error presentation occupies is the boundary's own
+/// derived geometry ([RenderObject.screenGeometry]).
 final class FrameContainmentError {
   const FrameContainmentError({
     required this.error,
     required this.stack,
     required this.phase,
-    this.paintedRegion,
   });
 
   final Object error;
   final StackTrace stack;
   final FrameContainmentPhase phase;
-
-  /// Where the presentation painted, in screen cells — the semantic
-  /// `errorBoundary` node's bounds. Null before the first errored paint.
-  final CellRect? paintedRegion;
-
-  FrameContainmentError _withRegion(CellRect? region) => FrameContainmentError(
-    error: error,
-    stack: stack,
-    phase: phase,
-    paintedRegion: region,
-  );
 }
 
 /// Implemented by render objects that absorb subtree layout/paint
@@ -72,6 +61,9 @@ abstract interface class RenderErrorContainment {
 /// The containment render object. See the library comment for the model.
 class RenderErrorBoundary extends RenderObject
     implements RenderObjectWithSingleChild, RenderErrorContainment {
+  @override
+  bool presentsChild(RenderObject child) => _containedError == null;
+
   RenderObject? _child;
 
   /// When true, contained exceptions are rethrown instead of absorbed —
@@ -182,72 +174,26 @@ class RenderErrorBoundary extends RenderObject
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     final contained = _containedError;
     if (contained != null) {
       // Layout already failed: never paint (or hit-test-register) the
       // inconsistent subtree; present the failure instead.
-      _paintPresentation(buffer, offset, contained, screenOffset, clipRect);
+      paintCellErrorPresentation(buffer, offset, size, contained.error);
       return;
     }
     final c = _child;
     if (c == null) return;
     try {
-      c.paint(buffer, offset, screenOffset: screenOffset, clipRect: clipRect);
+      c.paint(buffer, offset);
     } catch (error, stack) {
       if (rethrowContained) rethrow;
       _contain(error, stack, FrameContainmentPhase.paint);
       // Atomicity: overwrite the whole rect, burying any partial child
       // writes from the throw.
-      _paintPresentation(
-        buffer,
-        offset,
-        _containedError!,
-        screenOffset,
-        clipRect,
-      );
+      paintCellErrorPresentation(buffer, offset, size, _containedError!.error);
     }
   }
-
-  void _paintPresentation(
-    CellBuffer buffer,
-    CellOffset offset,
-    FrameContainmentError contained,
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  ) {
-    paintCellErrorPresentation(
-      buffer,
-      offset,
-      size,
-      contained.error,
-      clipRect: clipRect,
-    );
-    final bounds = CellRect(offset: screenOffset ?? offset, size: size);
-    _updateRetainedPaintedRegion(bounds, clipRect);
-    if (RetainedPaintGeometryCapture.isActive) {
-      RetainedPaintGeometryCapture.record(
-        _replayPaintedRegion,
-        bounds,
-        clipRect: clipRect,
-      );
-    }
-  }
-
-  void _updateRetainedPaintedRegion(CellRect? bounds, CellRect? _) {
-    final contained = _containedError;
-    if (contained == null) return;
-    _containedError = contained._withRegion(bounds);
-  }
-
-  // ignore: prefer_function_declarations_over_variables
-  late final RetainedPaintGeometryCallback _replayPaintedRegion =
-      _updateRetainedPaintedRegion;
 
   void _contain(Object error, StackTrace stack, FrameContainmentPhase phase) {
     final alreadyErrored = _containedError != null;

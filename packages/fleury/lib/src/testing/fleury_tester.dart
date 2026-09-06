@@ -33,6 +33,7 @@ import '../foundation/geometry.dart';
 import '../foundation/key.dart' show UniqueKey;
 import '../rendering/cell.dart';
 import '../rendering/cell_buffer.dart';
+import '../rendering/render_object.dart';
 import '../rendering/surface_capabilities.dart';
 import '../rendering/width_policy.dart' show TextPresentationPolicy;
 import '../rendering/render_flex.dart' show RenderFlex;
@@ -723,6 +724,12 @@ class FleuryTester {
     _owner.flushBuild();
   }
 
+  /// The root render object of the mounted tree, or null before pumpWidget.
+  RenderObject? get rootRenderObject {
+    final root = _root;
+    return root == null ? null : _owner.findRootRenderObject(root);
+  }
+
   /// Renders the current tree into a fresh [CellBuffer] sized to
   /// [size] (defaulting to [viewportSize]).
   CellBuffer render({CellSize? size}) {
@@ -741,6 +748,7 @@ class FleuryTester {
     final buffer = CellBuffer(size ?? viewportSize);
     _pointerRouter.beginFrame();
     _owner.renderFrame(root, buffer);
+    _pointerRouter.endFrame();
     return buffer;
   }
 

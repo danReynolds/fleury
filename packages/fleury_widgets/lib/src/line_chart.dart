@@ -878,12 +878,7 @@ class RenderLineChart extends RenderObject {
   static const _bottomGutter = 1; // x-axis labels
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     final w = size.cols;
     final h = size.rows;
     if (w == 0 || h == 0 || _series.isEmpty) return;

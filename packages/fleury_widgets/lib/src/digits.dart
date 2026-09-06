@@ -211,12 +211,7 @@ class RenderDigits extends RenderObject {
   int computeMaxIntrinsicHeight(int? width) => _rows;
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     if (size.cols == 0 || size.rows == 0) return;
     _prepare();
     final glyphs = _cachedGlyphs!;

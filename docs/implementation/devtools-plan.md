@@ -129,7 +129,8 @@ debug frames appear when enabled and are absent by default.
 
 The browser-DevTools gesture (crosshair → owning widget chain, constraints/
 size/offset, cell style, semantic node). Still uniquely feasible (pointer
-hit-testing, retained geometry, and `SemanticPaintBoundsCapture` all exist)
+hit-testing, derived geometry — `RenderObject.screenGeometry` — and semantic
+bounds all exist)
 and still the flashiest demo — but an *occasional* tool next to the
 daily-drivers above, so it waits until DT1–DT4 land. Design notes preserved
 from the original plan: inspect mode as shell state claiming arrows/click; a

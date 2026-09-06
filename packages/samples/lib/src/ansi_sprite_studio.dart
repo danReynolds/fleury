@@ -953,12 +953,7 @@ class _RenderSpriteGrid extends RenderObject {
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     final visibleWidth = size.cols ~/ 2;
     final visibleHeight = size.rows;
     for (var y = 0; y < _height && y < visibleHeight; y++) {

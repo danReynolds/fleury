@@ -131,18 +131,8 @@ class RenderFlexible extends RenderObject
       _child?.computeMinIntrinsicHeight(width) ?? 0;
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
-    _child?.paint(
-      buffer,
-      offset,
-      screenOffset: screenOffset ?? offset,
-      clipRect: clipRect,
-    );
+  void performPaint(CellBuffer buffer, CellOffset offset) {
+    _child?.paint(buffer, offset);
   }
 }
 
@@ -156,6 +146,14 @@ class RenderFlexible extends RenderObject
 /// division is given to the leftmost flexible children in order, so the
 /// layout is deterministic.
 class RenderFlex extends RenderObject implements RenderObjectWithChildren {
+  @override
+  CellOffset childOffsetOf(RenderObject child) =>
+      _childOffsets[child] ?? CellOffset.zero;
+
+  @override
+  CellRect? childClipOf(RenderObject child) =>
+      _overflow > 0 ? CellRect(offset: CellOffset.zero, size: size) : null;
+
   RenderFlex({
     Axis direction = Axis.horizontal,
     MainAxisSize mainAxisSize = MainAxisSize.max,
@@ -229,6 +227,13 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
 
   @override
   List<RenderObject> get children => List.unmodifiable(_children);
+
+  @override
+  void visitRenderChildren(void Function(RenderObject child) visitor) {
+    for (final child in _children) {
+      visitor(child);
+    }
+  }
 
   @override
   void replaceAllChildren(List<RenderObject> newChildren) {
@@ -423,24 +428,13 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     if (_overflow > 0) {
       // Clip overflowing children to the box (so they don't corrupt
       // siblings or paint out of the buffer), then flag the edge.
-      _paintClipped(
-        buffer,
-        offset,
-        screenOffset: screenOffset ?? offset,
-        clipRect: clipRect,
-      );
+      _paintClipped(buffer, offset);
       return;
     }
-    final baseScreenOffset = screenOffset ?? offset;
     for (final c in _children) {
       final childOffset = _childOffsets[c] ?? CellOffset.zero;
       final paintOffset = offset + childOffset;
@@ -448,12 +442,7 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
           !_subtreeNeedsOffscreenPaint(c)) {
         continue;
       }
-      c.paint(
-        buffer,
-        paintOffset,
-        screenOffset: baseScreenOffset + childOffset,
-        clipRect: clipRect,
-      );
+      c.paint(buffer, paintOffset);
     }
   }
 
@@ -487,12 +476,7 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
     return false;
   }
 
-  void _paintClipped(
-    CellBuffer buffer,
-    CellOffset offset, {
-    required CellOffset screenOffset,
-    required CellRect? clipRect,
-  }) {
+  void _paintClipped(CellBuffer buffer, CellOffset offset) {
     if (size.isEmpty) return;
     // Scratch large enough to hold every child at its offset, so painting
     // never runs off the edge; we then blit only the box region.
@@ -506,25 +490,9 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
       if (reachRow > h) h = reachRow;
     }
     final scratch = CellBuffer(CellSize(w, h));
-    final ownScreenRect = CellRect(offset: screenOffset, size: size);
-    final inheritedIntersection = clipRect?.intersect(ownScreenRect);
-    // A null clip means unbounded, so represent a real but empty intersection
-    // with a zero-sized rectangle instead of accidentally dropping clipping.
-    final effectiveClip = clipRect == null
-        ? ownScreenRect
-        : inheritedIntersection ??
-              CellRect(offset: screenOffset, size: CellSize.zero);
-    paintWithGeometryClip(ownScreenRect, () {
-      for (final c in _children) {
-        final childOffset = _childOffsets[c] ?? CellOffset.zero;
-        c.paint(
-          scratch,
-          childOffset,
-          screenOffset: screenOffset + childOffset,
-          clipRect: effectiveClip,
-        );
-      }
-    });
+    for (final c in _children) {
+      c.paint(scratch, _childOffsets[c] ?? CellOffset.zero);
+    }
     for (var r = 0; r < size.rows; r++) {
       final tr = offset.row + r;
       if (tr < 0 || tr >= buffer.size.rows) continue;

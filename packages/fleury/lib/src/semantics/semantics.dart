@@ -1300,9 +1300,32 @@ abstract interface class SemanticValueContributor {
 /// child-inclusive semantics, moves, mounts, unmounts, or stale elements force
 /// hosts back to [SemanticTree.fromElement].
 final class SemanticDirtyTracker {
+  SemanticDirtyTracker();
+
+  /// A tracker that re-derives node geometry at the end of every paint pass
+  /// of [owner]'s render tree.
+  SemanticDirtyTracker.attached(BuildOwner owner) {
+    owner.renderDamageTracker.addPaintPassListener(refreshGeometry);
+  }
+
   bool _requiresFullRebuild = false;
   final Map<SemanticNodeId, SemanticsElement> _dirtyLeafElements =
       <SemanticNodeId, SemanticsElement>{};
+
+  /// Every mounted, active [SemanticsElement]: the nodes whose geometry a
+  /// frame can move.
+  final Set<SemanticsElement> _geometryElements =
+      Set<SemanticsElement>.identity();
+
+  /// Re-derives every node's bounds from layout; the ones that moved record
+  /// themselves dirty. Geometry is never recorded during paint, so this is
+  /// how a scroll or a relayout reaches the wire as a retained leaf update.
+  /// Runs when a paint pass ends; safe to call at any time.
+  void refreshGeometry() {
+    for (final element in _geometryElements) {
+      element.refreshBounds();
+    }
+  }
 
   /// Whether any dirt has accumulated since the last [takeDirtySnapshot].
   ///
@@ -1371,7 +1394,7 @@ final Expando<SemanticDirtyTracker> _semanticDirtyTrackers =
 /// the widgets layer takes no dependency on semantics.
 extension SemanticDirtyOwner on BuildOwner {
   SemanticDirtyTracker get semanticDirtyTracker =>
-      _semanticDirtyTrackers[this] ??= SemanticDirtyTracker();
+      _semanticDirtyTrackers[this] ??= SemanticDirtyTracker.attached(this);
 }
 
 /// Semantic dirty state captured for one rendered frame.
@@ -1483,7 +1506,9 @@ final class SemanticsElement extends ComponentElement
   @override
   void mount(Element? parent) {
     super.mount(parent);
-    owner.semanticDirtyTracker.recordStructureDirty();
+    owner.semanticDirtyTracker
+      ..recordStructureDirty()
+      .._geometryElements.add(this);
   }
 
   @override
@@ -1501,26 +1526,30 @@ final class SemanticsElement extends ComponentElement
 
   @override
   void deactivate() {
-    owner.semanticDirtyTracker.recordStructureDirty();
+    owner.semanticDirtyTracker
+      ..recordStructureDirty()
+      .._geometryElements.remove(this);
     super.deactivate();
   }
 
   @override
   void activate() {
     super.activate();
-    owner.semanticDirtyTracker.recordStructureDirty();
+    owner.semanticDirtyTracker
+      ..recordStructureDirty()
+      .._geometryElements.add(this);
   }
 
   @override
   void unmount() {
-    owner.semanticDirtyTracker.recordStructureDirty();
+    owner.semanticDirtyTracker
+      ..recordStructureDirty()
+      .._geometryElements.remove(this);
     super.unmount();
   }
 
   @override
-  Widget buildChild() {
-    return _SemanticBounds(onPaintBounds: _updateBounds, child: widget.child);
-  }
+  Widget buildChild() => _SemanticBounds(child: widget.child);
 
   /// The node's identity. An explicit [Semantics.id] wins; otherwise a [Key] on
   /// the widget yields a stable, deterministic id (`key:<key>`) that survives
@@ -1571,6 +1600,20 @@ final class SemanticsElement extends ComponentElement
 
   bool get _canBuildRetainedLeaf => !widget.includeChildren;
 
+  /// This node's visible screen rectangle, derived from the layout of the
+  /// render object beneath it; null when it is not presented or is clipped
+  /// out entirely.
+  CellRect? _deriveBounds() => findRenderObject()?.screenGeometry()?.visible;
+
+  /// Re-derives the bounds from layout state and records the node dirty when
+  /// they moved. [SemanticDirtyTracker.refreshGeometry] calls it for every
+  /// mounted node when a paint pass ends.
+  void refreshBounds() {
+    if (!mounted) return;
+    final next = _deriveBounds();
+    if (next != _bounds) _updateBounds(next);
+  }
+
   void _updateBounds(CellRect? bounds) {
     if (_bounds == bounds) return;
     _bounds = bounds;
@@ -1619,6 +1662,8 @@ final class SemanticsElement extends ComponentElement
         ? children
         : const <SemanticNode>[];
     final id = _nodeId;
+    final bounds = _deriveBounds();
+    _bounds = bounds;
     final cached = _cachedSemanticNode;
     if (cached != null &&
         semanticChildren.isEmpty &&
@@ -1635,7 +1680,7 @@ final class SemanticsElement extends ComponentElement
         cached.expanded == widget.expanded &&
         cached.busy == widget.busy &&
         cached.validationError == widget.validationError &&
-        cached.bounds == _bounds &&
+        cached.bounds == bounds &&
         identical(cached.actions, widget.actions) &&
         cached.state.hasSameValues(widget.state)) {
       return cached;
@@ -1653,7 +1698,7 @@ final class SemanticsElement extends ComponentElement
       expanded: widget.expanded,
       busy: widget.busy,
       validationError: widget.validationError,
-      bounds: _bounds,
+      bounds: bounds,
       actions: widget.actions,
       children: semanticChildren,
       state: widget.state,
@@ -1726,11 +1771,6 @@ final class _ExcludeSemanticsElement extends ComponentElement
     implements SemanticChildrenProvider {
   _ExcludeSemanticsElement(ExcludeSemantics super.widget);
 
-  /// Painted bounds of the excluded subtree, captured via [_SemanticBounds].
-  /// The collection walk contributes these as an exclusion-shadow node so the
-  /// web coverage fallback suppresses text over the hidden region.
-  CellRect? _bounds;
-
   @override
   ExcludeSemantics get widget => super.widget as ExcludeSemantics;
 
@@ -1770,15 +1810,12 @@ final class _ExcludeSemanticsElement extends ComponentElement
   }
 
   @override
-  Widget buildChild() {
-    // Observe the excluded subtree's painted bounds (like [SemanticsElement])
-    // so the collection walk can contribute an exclusion-shadow node. No dirty
-    // signal on change: a repaint of the excluded content already lands in the
-    // coverage dirty-rows, forcing a fresh full walk that re-reads [_bounds].
-    return _SemanticBounds(onPaintBounds: _updateBounds, child: widget.child);
-  }
+  Widget buildChild() => _SemanticBounds(child: widget.child);
 
-  void _updateBounds(CellRect? bounds) => _bounds = bounds;
+  /// The excluded subtree's visible screen rectangle, derived from layout
+  /// when the collection walk contributes an exclusion-shadow node so the web
+  /// coverage fallback suppresses text over the hidden region.
+  CellRect? _deriveBounds() => findRenderObject()?.screenGeometry()?.visible;
 
   @override
   void visitSemanticChildren(void Function(Element child) visitor) {
@@ -1787,39 +1824,24 @@ final class _ExcludeSemanticsElement extends ComponentElement
   }
 }
 
+/// The render object a semantic node's geometry is derived from: a
+/// pass-through box whose screen rectangle is the node's bounds.
 final class _SemanticBounds extends SingleChildRenderObjectWidget {
-  const _SemanticBounds({
-    required this.onPaintBounds,
-    required Widget super.child,
-  });
-
-  final void Function(CellRect? bounds) onPaintBounds;
+  const _SemanticBounds({required Widget super.child});
 
   @override
-  RenderObject createRenderObject(BuildContext context) {
-    return _RenderSemanticBounds(onPaintBounds: onPaintBounds);
-  }
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderSemanticBounds();
 
   @override
   void updateRenderObject(
     BuildContext context,
     covariant _RenderSemanticBounds renderObject,
-  ) {
-    renderObject.onPaintBounds = onPaintBounds;
-  }
+  ) {}
 }
 
 final class _RenderSemanticBounds extends RenderObject
     implements RenderObjectWithSingleChild {
-  _RenderSemanticBounds({
-    required void Function(CellRect? bounds) onPaintBounds,
-  }) : _onPaintBounds = onPaintBounds;
-
-  void Function(CellRect? bounds) _onPaintBounds;
-  set onPaintBounds(void Function(CellRect? bounds) value) {
-    _onPaintBounds = value;
-  }
-
   RenderObject? _child;
 
   @override
@@ -1861,21 +1883,8 @@ final class _RenderSemanticBounds extends RenderObject
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
-    final rect = CellRect(offset: screenOffset ?? offset, size: size);
-    SemanticPaintBoundsCapture.record(_onPaintBounds, rect, clipRect: clipRect);
-    _onPaintBounds(clipRect == null ? rect : rect.intersect(clipRect));
-    _child?.paint(
-      buffer,
-      offset,
-      screenOffset: screenOffset ?? offset,
-      clipRect: clipRect,
-    );
+  void performPaint(CellBuffer buffer, CellOffset offset) {
+    _child?.paint(buffer, offset);
   }
 }
 
@@ -1921,7 +1930,7 @@ void _collectInto(
         // Synthesized id, positional like the coverage-fallback scheme:
         // anchored to the presentation's screen position so two errored
         // boundaries never collide, stable while the boundary stays put.
-        final region = contained.paintedRegion;
+        final region = render.screenGeometry()?.visible;
         output.add(
           SemanticNode(
             id: SemanticNodeId(
@@ -1934,7 +1943,7 @@ void _collectInto(
               'error': '${contained.error}',
               'phase': contained.phase.name,
             }),
-            bounds: contained.paintedRegion,
+            bounds: region,
           ),
         );
         return;
@@ -1946,8 +1955,8 @@ void _collectInto(
     // cells must NOT leak back through the web text-coverage fallback. Emit an
     // invisible, content-free shadow node carrying the subtree's painted
     // bounds; coverage treats that region as covered without exposing any text.
-    // Bounds are null only before the first paint (nothing on screen to leak).
-    final bounds = element._bounds;
+    // Bounds are null while nothing of it is on screen (nothing to leak).
+    final bounds = element._deriveBounds();
     if (bounds != null) {
       output.add(
         SemanticNode(

@@ -689,12 +689,7 @@ class _RenderPaintPulse extends RenderObject {
       constraints.constrain(const CellSize(4, 1));
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     buffer.writeGrapheme(
       offset,
       _holder.value >= 1.0 ? 'D' : 'p',
@@ -744,12 +739,7 @@ class _RenderImageBox extends RenderObject {
       constraints.constrain(CellSize(_width, 1));
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     buffer.writeImage(
       offset,
       Uint8List.fromList('IMG'.codeUnits),

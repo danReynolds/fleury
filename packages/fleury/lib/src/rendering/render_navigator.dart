@@ -30,6 +30,17 @@ import 'render_object.dart';
 /// the visible suffix of the route stack.
 class RenderNavigatorStack extends RenderObject
     implements RenderObjectWithChildren {
+  @override
+  bool presentsChild(RenderObject child) {
+    final start = _firstPainted < 0
+        ? 0
+        : (_firstPainted > _children.length ? _children.length : _firstPainted);
+    for (var i = start; i < _children.length; i++) {
+      if (identical(_children[i], child)) return true;
+    }
+    return false;
+  }
+
   RenderNavigatorStack({int firstPainted = 0}) : _firstPainted = firstPainted;
 
   /// Index of the first child to paint, root-first. Children below this
@@ -49,6 +60,13 @@ class RenderNavigatorStack extends RenderObject
 
   @override
   List<RenderObject> get children => List.unmodifiable(_children);
+
+  @override
+  void visitRenderChildren(void Function(RenderObject child) visitor) {
+    for (final child in _children) {
+      visitor(child);
+    }
+  }
 
   @override
   void replaceAllChildren(List<RenderObject> newChildren) {
@@ -88,22 +106,12 @@ class RenderNavigatorStack extends RenderObject
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     final start = _firstPainted < 0
         ? 0
         : (_firstPainted > _children.length ? _children.length : _firstPainted);
     for (var i = start; i < _children.length; i++) {
-      _children[i].paint(
-        buffer,
-        offset,
-        screenOffset: screenOffset ?? offset,
-        clipRect: clipRect,
-      );
+      _children[i].paint(buffer, offset);
     }
   }
 }

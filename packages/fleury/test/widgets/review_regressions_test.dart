@@ -95,12 +95,7 @@ class _RenderProtocolBox extends RenderObject {
       constraints.constrain(const CellSize(2, 1));
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     buffer.writeImage(
       offset,
       Uint8List.fromList('IMG-BYTES'.codeUnits),

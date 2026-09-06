@@ -45,12 +45,7 @@ class _RenderDot extends RenderObject {
       constraints.constrain(CellSize(_cols, 1));
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     for (var c = 0; c < _cols; c++) {
       buffer.writeGrapheme(
         offset + CellOffset(c, 0),

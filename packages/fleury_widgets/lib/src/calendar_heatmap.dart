@@ -486,12 +486,7 @@ class RenderCalendarHeatmap extends RenderObject {
   int computeMaxIntrinsicHeight(int? width) => _monthLabelHeight + 7;
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     if (size.cols == 0 || size.rows == 0 || _weekCount == 0) return;
 
     // Resolve intensity range — autoscale falls back to the observed

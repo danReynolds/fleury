@@ -116,12 +116,7 @@ class _RenderImageProbe extends RenderObject {
       constraints.constrain(const CellSize(4, 2));
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellRect? clipRect,
-    CellOffset? screenOffset,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     buffer.writeImage(
       offset,
       Uint8List.fromList([_generation, 1, 2, 3]),

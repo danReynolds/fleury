@@ -449,12 +449,7 @@ class RenderBarChart extends RenderObject {
   int computeMaxIntrinsicHeight(int? width) => 8 + _chromeRows;
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     final w = size.cols;
     final h = size.rows;
     if (w == 0 || h == 0 || _bars.isEmpty) return;

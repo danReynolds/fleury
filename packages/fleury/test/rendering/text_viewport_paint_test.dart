@@ -1,6 +1,8 @@
 import 'dart:collection';
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/src/rendering/render_object.dart'
+    show RenderDamageTracker;
 import 'package:fleury/src/widgets/rich_text.dart' show RenderRichText;
 import 'package:test/test.dart';
 
@@ -65,7 +67,7 @@ void main() {
               base: CellStyle.none,
             )
           : RenderText(text: content);
-      render.layout(const CellConstraints(maxCols: 20));
+      _Framed(render, const CellConstraints(maxCols: 20));
       render.paint(CellBuffer(const CellSize(20, 3)), CellOffset.zero);
       final selectable = render as Selectable;
       const points = [
@@ -170,7 +172,12 @@ void main() {
     final render = RenderText(
       text: List.filled(1000, 'a漢👩‍💻').join('\n'),
       widthResolver: resolver,
-    )..layout(const CellConstraints(maxCols: 20));
+    );
+    _Framed(
+      render,
+      const CellConstraints(maxCols: 20),
+      offset: const CellOffset(10, 20),
+    );
     for (final row in [0, -400, -997]) {
       resolver.calls = 0;
       render.paint(CellBuffer(const CellSize(20, 3)), CellOffset(0, row));
@@ -182,17 +189,12 @@ void main() {
     }
     for (final row in [3, -1000]) {
       resolver.calls = 0;
-      render.paint(
-        CellBuffer(const CellSize(20, 3)),
-        CellOffset(0, row),
-        screenOffset: const CellOffset(10, 20),
-        clipRect: CellRect.fromLTWH(10, 20, 20, 3),
-      );
+      render.paint(CellBuffer(const CellSize(20, 3)), CellOffset(0, row));
       expect(resolver.calls, 0);
       expect(
         render.cellBounds,
         CellRect.fromLTWH(10, 20, render.size.cols, 1000),
-        reason: 'hidden paint must still register full selection geometry',
+        reason: 'geometry is layout state; a hidden paint does not change it',
       );
     }
   });
@@ -238,12 +240,16 @@ void main() {
                         maxLines: maxLines,
                         style: const CellStyle(foreground: AnsiColor(3)),
                       );
-                render.layout(const CellConstraints(maxCols: 8));
+                const screen = CellOffset(10, 20);
+                final framed = _Framed(
+                  render,
+                  const CellConstraints(maxCols: 8),
+                  offset: screen,
+                );
                 final selectable = render as Selectable;
                 for (final selected in [false, true]) {
                   final full = CellBuffer(const CellSize(8, 40));
-                  const screen = CellOffset(10, 20);
-                  render.paint(full, CellOffset.zero, screenOffset: screen);
+                  render.paint(full, CellOffset.zero);
                   if (selected) {
                     selectable.dispatchSelectionEvent(
                       const SelectionEdgeUpdateEvent(
@@ -258,19 +264,15 @@ void main() {
                       ),
                     );
                     full.clear();
-                    render.paint(full, CellOffset.zero, screenOffset: screen);
+                    render.paint(full, CellOffset.zero);
                   }
                   for (var top = -2; top <= render.size.rows + 1; top++) {
                     final actual = CellBuffer(const CellSize(8, 2));
                     // Buffer and screen coordinates intentionally differ: a
                     // scroll scratch must not use the screen clip as its grid.
                     final clip = CellRect.fromLTWH(10, 20 + top, 8, 2);
-                    render.paint(
-                      actual,
-                      CellOffset(0, -top),
-                      screenOffset: screen,
-                      clipRect: clip,
-                    );
+                    framed.clip = clip;
+                    render.paint(actual, CellOffset(0, -top));
                     for (var row = 0; row < 2; row++) {
                       for (var col = 0; col < 8; col++) {
                         final sourceRow = top + row;
@@ -370,4 +372,60 @@ class _LinesText extends RenderText {
   List<String> lines;
   @override
   List<String> get selectionLines => lines;
+}
+
+/// A root that gives a bare render object the screen geometry a tree would:
+/// it places [child] at [offset], clips it to [clip] (both in screen cells,
+/// the root sitting at the origin), and carries the frame tracker geometry is
+/// memoized against. The child is laid out with [childConstraints]; the root
+/// itself is never painted — tests paint the child straight into scratch
+/// buffers, as a viewport would.
+final class _Framed extends RenderObject
+    implements RenderObjectWithSingleChild {
+  _Framed(
+    RenderObject child,
+    this.childConstraints, {
+    this.offset = CellOffset.zero,
+  }) {
+    attachFrameDamageTracker(
+      RenderDamageTracker()..screenSize = const CellSize(400, 400),
+    );
+    this.child = child;
+    layout(const CellConstraints());
+  }
+
+  final CellConstraints childConstraints;
+  final CellOffset offset;
+
+  CellRect? _clip;
+  set clip(CellRect? value) {
+    _clip = value;
+    markNeedsPaintOnly(); // a new geometry epoch
+  }
+
+  RenderObject? _child;
+  @override
+  RenderObject? get child => _child;
+  @override
+  set child(RenderObject? value) {
+    if (identical(_child, value)) return;
+    if (_child != null) dropChild(_child!);
+    _child = value;
+    if (value != null) adoptChild(value);
+  }
+
+  @override
+  CellOffset childOffsetOf(RenderObject child) => offset;
+
+  @override
+  CellRect? childClipOf(RenderObject child) => _clip;
+
+  @override
+  CellSize performLayout(CellConstraints constraints) {
+    _child?.layout(childConstraints);
+    return constraints.constrain(const CellSize(400, 400));
+  }
+
+  @override
+  void performPaint(CellBuffer buffer, CellOffset offset) {}
 }

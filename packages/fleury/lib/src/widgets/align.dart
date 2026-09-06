@@ -89,6 +89,9 @@ final class Center extends SingleChildRenderObjectWidget {
 /// loosened constraints, then places the child at the alignment-
 /// determined offset within the parent's box.
 class RenderAlign extends RenderObject implements RenderObjectWithSingleChild {
+  @override
+  CellOffset childOffsetOf(RenderObject child) => _childOffset;
+
   RenderAlign({required Alignment alignment, RenderObject? child})
     : _alignment = alignment {
     if (child != null) {
@@ -210,17 +213,7 @@ class RenderAlign extends RenderObject implements RenderObjectWithSingleChild {
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
-    _child?.paint(
-      buffer,
-      offset + _childOffset,
-      screenOffset: (screenOffset ?? offset) + _childOffset,
-      clipRect: clipRect,
-    );
+  void performPaint(CellBuffer buffer, CellOffset offset) {
+    _child?.paint(buffer, offset + _childOffset);
   }
 }
