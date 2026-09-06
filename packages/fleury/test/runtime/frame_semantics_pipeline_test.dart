@@ -92,6 +92,47 @@ final class _LiveContributorElement extends ComponentElement
 
 void main() {
   test(
+    'input dirt supersedes pending leaf updates and presents current values',
+    () {
+      final owner = BuildOwner();
+      Widget label(String value) => Semantics(
+        id: const SemanticNodeId('status'),
+        role: SemanticRole.status,
+        label: value,
+        includeChildren: false,
+        child: const SizedBox(),
+      );
+      final root = owner.mountRoot(label('before'));
+      addTearDown(root.unmount);
+      final tracker = owner.semanticDirtyTracker;
+      final presenter = _CapturingPresenter();
+      final pipeline = FrameSemanticsPipeline(
+        presenter: presenter,
+        dirtyTracker: tracker,
+        readRoot: () => root,
+        coverageFallback: false,
+      );
+      addTearDown(pipeline.dispose);
+      pipeline.onFramePresented(_renderFrame(), null);
+      pipeline.flushNow('initial');
+      expect(tracker.takeDirtySnapshot().isClean, isTrue);
+      owner.updateRoot(root, label('after'));
+      expect(tracker.hasDirt, isTrue);
+      pipeline.markSemanticsDirty();
+      expect(tracker.takeDirtySnapshot().requiresFullRebuild, isTrue);
+      pipeline.onFramePresented(_renderFrame(), null);
+      pipeline.flushNow('input');
+      expect(
+        presenter.presented.last
+            .nodeById(const SemanticNodeId('status'))
+            ?.label,
+        'after',
+      );
+      expect(tracker.takeDirtySnapshot().isClean, isTrue);
+    },
+  );
+
+  test(
     'dispose completes a pending awaitIdle instead of stranding it',
     () async {
       final pipeline = FrameSemanticsPipeline(
