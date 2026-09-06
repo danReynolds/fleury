@@ -14,12 +14,7 @@ class _Marker extends RenderObject {
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     for (var r = 0; r < size.rows; r++) {
       for (var c = 0; c < size.cols; c++) {
         if (offset.col + c >= buffer.size.cols) break;
@@ -258,12 +253,7 @@ class _WideMarker extends RenderObject {
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     if (size.isEmpty) return;
     buffer.writeGrapheme(offset, '中');
   }

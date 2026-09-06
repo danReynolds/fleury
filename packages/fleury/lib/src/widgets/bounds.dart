@@ -216,19 +216,9 @@ class RenderBoundsObserver extends RenderObject
       _child?.layout(constraints) ?? constraints.constrain(CellSize.zero);
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     _publishDerived();
-    _child?.paint(
-      buffer,
-      offset,
-      screenOffset: screenOffset ?? offset,
-      clipRect: clipRect,
-    );
+    _child?.paint(buffer, offset);
   }
 }
 
@@ -379,12 +369,7 @@ class RenderBoundsAnchor extends RenderObject
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     final c = _child;
     if (c == null) return;
     // Bounds fully scrolled or clipped out of view: nothing to anchor to —
@@ -394,12 +379,7 @@ class RenderBoundsAnchor extends RenderObject
     // frame's layout, so tracking is same-frame whatever the paint order: a
     // BoundsAnchor painted before its observed widget still lands on it.
     final placement = _placeChild(c.size);
-    _child!.paint(
-      buffer,
-      offset + placement,
-      screenOffset: (screenOffset ?? offset) + placement,
-      clipRect: clipRect,
-    );
+    _child!.paint(buffer, offset + placement);
   }
 
   CellOffset _placeChild(CellSize childSize) {

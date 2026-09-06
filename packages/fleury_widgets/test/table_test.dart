@@ -61,12 +61,7 @@ class _CountingCell extends RenderObject {
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {}
+  void performPaint(CellBuffer buffer, CellOffset offset) {}
 }
 
 class _ImageCell extends LeafRenderObjectWidget {
@@ -82,12 +77,7 @@ class _ImageCellRender extends RenderObject {
       constraints.constrain(const CellSize(4, 2));
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     buffer.writeImage(
       offset,
       Uint8List.fromList([1]),

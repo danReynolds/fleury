@@ -26,12 +26,7 @@ class _TextLeaf extends RenderObject {
       constraints.constrain(intrinsic);
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     buffer.writeText(offset, text);
   }
 }
@@ -54,15 +49,7 @@ void main() {
       // A sibling sits one column past the clip box.
       buffer.writeGrapheme(const CellOffset(3, 0), 'X');
 
-      clip.paint(
-        buffer,
-        CellOffset.zero,
-        screenOffset: CellOffset.zero,
-        clipRect: const CellRect(
-          offset: CellOffset.zero,
-          size: CellSize(20, 1),
-        ),
-      );
+      clip.paint(buffer, CellOffset.zero);
 
       // The first '你' fits within the clip (cols 0..1).
       expect(buffer.atColRow(0, 0).grapheme, '你');
@@ -93,15 +80,7 @@ void main() {
 
       final buffer = CellBuffer(const CellSize(20, 1));
       buffer.writeGrapheme(const CellOffset(2, 0), 'X');
-      clip.paint(
-        buffer,
-        CellOffset.zero,
-        screenOffset: CellOffset.zero,
-        clipRect: const CellRect(
-          offset: CellOffset.zero,
-          size: CellSize(20, 1),
-        ),
-      );
+      clip.paint(buffer, CellOffset.zero);
 
       expect(buffer.atColRow(0, 0).grapheme, '你');
       expect(buffer.atColRow(1, 0).role, CellRole.continuation);

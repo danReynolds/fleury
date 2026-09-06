@@ -4,6 +4,10 @@
 
 Initial public release.
 
+- **Render objects derive geometry.** The catalog's render objects override
+  `performPaint(buffer, offset)`; `RenderTable` declares its pinned-header and
+  scrolled-body placement through core's geometry contract so its rows
+  hit-test and expose semantic bounds without paint-time recording (RFC 0024).
 - **`WidgetRoles`.** The catalog's domain semantic roles (`patchReview`,
   `toolCall`, `messageList`, `message`, `approval`, …) live here rather than in
   core's `SemanticRole`, each declaring the core role it projects through. Match

@@ -141,9 +141,10 @@ them, it does not replace them.
 - **Per-frame semantics cost.** Mitigated by incremental diffing + the enabled
   flag. Measure against the same frame budget as the web render gate; native
   keeps it AT-gated so non-AT native sessions pay nothing.
-- **Geometry plumbing.** Requires the frame pipeline to associate contributing
-  elements with render paint bounds. Aligns with R2's damage work (both need
-  paint-time geometry), so sequence them together.
+- **Geometry plumbing.** Node bounds are derived from layout state
+  (`RenderObject.screenGeometry`, RFC 0024): collected on demand, and
+  re-derived for every mounted node when a paint pass ends so a scroll reaches
+  the wire as retained leaf updates. Nothing is recorded during paint.
 - **Identity stability for dynamic lists.** Framework-owned identity is stable
   for retained nodes, but unkeyed reorderable/virtualized lists still need
   explicit keys for durable semantic identity. The RFC should not hide that

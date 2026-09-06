@@ -96,34 +96,18 @@ class RenderCellEffect extends RenderObject
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     final c = _child;
     if (c == null) return;
     if (_passthrough) {
-      c.paint(
-        buffer,
-        offset,
-        screenOffset: screenOffset ?? offset,
-        clipRect: clipRect,
-      );
+      c.paint(buffer, offset);
       return;
     }
     final size = c.size;
     if (size.isEmpty) return;
 
     final scratch = CellBuffer(size);
-    final screen = screenOffset ?? offset;
-    // Paint at a scratch-local origin but propagate the TRUE screen position:
-    // descendants that record absolute geometry (focus bounds, pointer
-    // regions) must not capture scratch-local coordinates.
-    // Effects deliberately keep interaction geometry in the child's stable
-    // layout position, but inherited clipping must still apply.
-    c.paint(scratch, CellOffset.zero, screenOffset: screen, clipRect: clipRect);
+    c.paint(scratch, CellOffset.zero);
 
     final cols = buffer.size.cols;
     final rows = buffer.size.rows;
@@ -259,69 +243,25 @@ class RenderCellTranslation extends RenderObject
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     final c = _child;
     final translation = _resolvedOffset;
     if (c == null || translation == null || c.size.isEmpty) return;
     if (translation == CellOffset.zero) {
-      c.paint(
-        buffer,
-        offset,
-        screenOffset: screenOffset ?? offset,
-        clipRect: clipRect,
-      );
+      c.paint(buffer, offset);
       return;
     }
 
-    final screen = screenOffset ?? offset;
-    final ownScreenRect = CellRect(offset: screen, size: size);
-    final inheritedHitBox = clipRect?.intersect(ownScreenRect);
-    final effectiveGeometryClip = clipRect == null
-        ? ownScreenRect
-        : inheritedHitBox ?? CellRect(offset: screen, size: CellSize.zero);
     final scratch = CellBuffer(c.size);
-
-    // The child records geometry where it is visibly painted, not at its
-    // stable layout origin. Interaction remains bounded by the layout box even
-    // though the translated cells themselves may overflow it.
-    paintWithGeometryClip(ownScreenRect, () {
-      c.paint(
-        scratch,
-        CellOffset.zero,
-        screenOffset: screen + translation,
-        clipRect: effectiveGeometryClip,
-      );
-    });
-
-    final translatedChildRect = CellRect(
-      offset: screen + translation,
-      size: c.size,
-    );
-    final visible =
-        clipRect?.intersect(translatedChildRect) ??
-        (clipRect == null ? translatedChildRect : null);
-    if (visible == null) return;
-
-    final sourceRect = CellRect.fromLTWH(
-      visible.left - translatedChildRect.left,
-      visible.top - translatedChildRect.top,
-      visible.size.cols,
-      visible.size.rows,
-    );
-    final destination = CellOffset(
-      offset.col + visible.left - ownScreenRect.left,
-      offset.row + visible.top - ownScreenRect.top,
-    );
+    c.paint(scratch, CellOffset.zero);
+    // The translated cells may overflow this object's own box; the buffer —
+    // a viewport's scratch, or the screen — is the only clip. Interaction
+    // geometry stays bounded by the layout box (see [childClipOf]).
     _compositePaintedRect(
       source: scratch,
-      sourceRect: sourceRect,
+      sourceRect: CellRect(offset: CellOffset.zero, size: c.size),
       destination: buffer,
-      destinationOffset: destination,
+      destinationOffset: offset + translation,
     );
   }
 }
@@ -426,48 +366,23 @@ class RenderClip extends RenderObject implements RenderObjectWithSingleChild {
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     final c = _child;
     if (c == null) return;
     final clipped = size;
     if (c.size.isEmpty) return;
 
     final scratch = CellBuffer(c.size);
-    final screen = screenOffset ?? offset;
-    final ownScreenRect = CellRect(offset: screen, size: clipped);
-    final inheritedIntersection = clipRect?.intersect(ownScreenRect);
-    final visibleBox = clipRect == null ? ownScreenRect : inheritedIntersection;
-    final effectiveClip = clipRect == null
-        ? ownScreenRect
-        : inheritedIntersection ??
-              CellRect(offset: screen, size: CellSize.zero);
-    // Scratch-local origin, true screen position — see RenderCellEffect.
-    paintWithGeometryClip(ownScreenRect, () {
-      c.paint(
-        scratch,
-        CellOffset.zero,
-        screenOffset: screen - _alignedSourceOffset(c.size, clipped),
-        clipRect: effectiveClip,
-      );
-    });
-    if (visibleBox == null || clipped.isEmpty) return;
-
-    final targetLocal = visibleBox.offset - ownScreenRect.offset;
-    final alignedSource = _alignedSourceOffset(c.size, clipped);
-    final sourceRect = CellRect(
-      offset: alignedSource + targetLocal,
-      size: visibleBox.size,
-    );
+    c.paint(scratch, CellOffset.zero);
+    if (clipped.isEmpty) return;
     _compositePaintedRect(
       source: scratch,
-      sourceRect: sourceRect,
+      sourceRect: CellRect(
+        offset: _alignedSourceOffset(c.size, clipped),
+        size: clipped,
+      ),
       destination: buffer,
-      destinationOffset: offset + targetLocal,
+      destinationOffset: offset,
     );
   }
 

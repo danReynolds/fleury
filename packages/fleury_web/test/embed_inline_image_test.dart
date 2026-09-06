@@ -99,12 +99,7 @@ class _RenderProbeImage extends RenderObject {
       constraints.constrain(const CellSize(4, 2));
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     if (images == InlineImageSupport.placements) {
       buffer.writeImage(offset, bytes, width: 4, height: 2);
     } else {

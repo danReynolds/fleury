@@ -35,8 +35,7 @@ List<String> _lines(FleuryTester tester, {int cols = 6, required int rows}) {
 class _PaintProbe {
   CellSize? bufferSize;
   CellOffset? offset;
-  CellOffset? screenOffset;
-  CellRect? clipRect;
+  RenderObject? render;
 }
 
 class _PaintProbeWidget extends LeafRenderObjectWidget {
@@ -87,17 +86,11 @@ class _PaintProbeRender extends RenderObject {
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     _probe
       ..bufferSize = buffer.size
       ..offset = offset
-      ..screenOffset = screenOffset
-      ..clipRect = clipRect;
+      ..render = this;
 
     for (var r = 0; r < _desiredSize.rows; r++) {
       buffer.writeGrapheme(CellOffset(offset.col, offset.row + r), 'x');
@@ -210,9 +203,19 @@ void main() {
     expect(ctl.maxOffset, 36);
     expect(probe.bufferSize, const CellSize(6, 4));
     expect(probe.offset, const CellOffset(0, -10));
-    expect(probe.screenOffset, const CellOffset(0, -10));
+    // The scratch-local paint offset says nothing about the screen; the
+    // child's screen geometry is derived from the viewport's contract.
+    final geometry = probe.render!.screenGeometry()!;
     expect(
-      probe.clipRect,
+      geometry.bounds,
+      const CellRect(offset: CellOffset(0, -10), size: CellSize(6, 40)),
+    );
+    expect(
+      geometry.clip,
+      const CellRect(offset: CellOffset.zero, size: CellSize(6, 4)),
+    );
+    expect(
+      geometry.visible,
       const CellRect(offset: CellOffset.zero, size: CellSize(6, 4)),
     );
   });

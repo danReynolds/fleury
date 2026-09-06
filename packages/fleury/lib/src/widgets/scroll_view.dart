@@ -406,53 +406,25 @@ class _RenderScrollView extends RenderObject
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     final c = _child;
     if (c == null) return;
     final childSize = c.size;
     if (childSize.isEmpty || size.isEmpty) return;
 
-    // Our screen rect. clipRect is intersected with any ancestor clip
-    // so a ScrollView nested inside another clipped region honors
-    // both boundaries.
-    final ourScreenOffset = screenOffset ?? offset;
-    final ourScreenRect = CellRect(offset: ourScreenOffset, size: size);
-    final inheritedIntersection = clipRect?.intersect(ourScreenRect);
-    if (clipRect != null &&
-        inheritedIntersection == null &&
-        !isRetainingPaintGeometry) {
+    // Entirely outside the buffer: nothing of the viewport can land.
+    final bufferRect = CellRect(offset: CellOffset.zero, size: buffer.size);
+    if (CellRect(offset: offset, size: size).intersect(bufferRect) == null) {
       return;
     }
-    // A retained boundary must cache locally hidden viewport content too: an
-    // ancestor scroll can reveal it later without invalidating this subtree.
-    // Preserve a real empty clip for geometry while still walking/painting the
-    // viewport into the boundary-local cache.
-    final effectiveClip = clipRect == null
-        ? ourScreenRect
-        : inheritedIntersection ??
-              CellRect(offset: ourScreenOffset, size: CellSize.zero);
 
     final scroll = _controller.offset;
-    // Paint only the visible viewport into scratch. The negative child offset
-    // drops rows above the scroll window while screenOffset preserves the
-    // child's full screen-space origin for selection and hit-testing.
+    // Paint only the visible viewport into scratch: the negative child offset
+    // drops the rows above the scroll window and the scratch's bounds clip
+    // the rest. Descendants derive their screen position from
+    // [childOffsetOf], never from where they land in the scratch.
     final scratch = CellBuffer(size);
-    paintWithGeometryClip(ourScreenRect, () {
-      c.paint(
-        scratch,
-        CellOffset(0, -scroll),
-        screenOffset: CellOffset(
-          ourScreenOffset.col,
-          ourScreenOffset.row - scroll,
-        ),
-        clipRect: effectiveClip,
-      );
-    });
+    c.paint(scratch, CellOffset(0, -scroll));
 
     final bufCols = buffer.size.cols;
     final bufRows = buffer.size.rows;

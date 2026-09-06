@@ -62,6 +62,13 @@ class RenderNavigatorStack extends RenderObject
   List<RenderObject> get children => List.unmodifiable(_children);
 
   @override
+  void visitRenderChildren(void Function(RenderObject child) visitor) {
+    for (final child in _children) {
+      visitor(child);
+    }
+  }
+
+  @override
   void replaceAllChildren(List<RenderObject> newChildren) {
     if (hasSameRenderChildrenInOrder(_children, newChildren)) return;
     final newSet = Set<RenderObject>.identity()..addAll(newChildren);
@@ -99,22 +106,12 @@ class RenderNavigatorStack extends RenderObject
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     final start = _firstPainted < 0
         ? 0
         : (_firstPainted > _children.length ? _children.length : _firstPainted);
     for (var i = start; i < _children.length; i++) {
-      _children[i].paint(
-        buffer,
-        offset,
-        screenOffset: screenOffset ?? offset,
-        clipRect: clipRect,
-      );
+      _children[i].paint(buffer, offset);
     }
   }
 }

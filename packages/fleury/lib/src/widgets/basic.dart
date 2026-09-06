@@ -901,12 +901,7 @@ class _RenderFilledBox extends RenderObject
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     final s = size;
     final fillStyle = CellStyle(background: _color);
     // Pre-fill every covered cell with our background — gives empty
@@ -925,12 +920,7 @@ class _RenderFilledBox extends RenderObject
     // so cells the child touches lose our bg. Walk back through and
     // merge our bg into any cell the child painted that didn't set
     // its own background.
-    _child?.paint(
-      buffer,
-      offset,
-      screenOffset: screenOffset ?? offset,
-      clipRect: clipRect,
-    );
+    _child?.paint(buffer, offset);
     for (var r = 0; r < s.rows; r++) {
       for (var col = 0; col < s.cols; col++) {
         final c = offset.col + col;
@@ -1188,18 +1178,8 @@ class _RenderConstrainedBox extends RenderObject
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
-    _child?.paint(
-      buffer,
-      offset,
-      screenOffset: screenOffset ?? offset,
-      clipRect: clipRect,
-    );
+  void performPaint(CellBuffer buffer, CellOffset offset) {
+    _child?.paint(buffer, offset);
   }
 }
 
@@ -1296,17 +1276,7 @@ class _RenderAspectRatio extends RenderObject
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
-    _child?.paint(
-      buffer,
-      offset,
-      screenOffset: screenOffset ?? offset,
-      clipRect: clipRect,
-    );
+  void performPaint(CellBuffer buffer, CellOffset offset) {
+    _child?.paint(buffer, offset);
   }
 }

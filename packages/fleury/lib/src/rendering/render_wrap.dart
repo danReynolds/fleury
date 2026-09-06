@@ -45,6 +45,13 @@ class RenderWrap extends RenderObject implements RenderObjectWithChildren {
   List<RenderObject> get children => List.unmodifiable(_children);
 
   @override
+  void visitRenderChildren(void Function(RenderObject child) visitor) {
+    for (final child in _children) {
+      visitor(child);
+    }
+  }
+
+  @override
   void replaceAllChildren(List<RenderObject> newChildren) {
     if (hasSameRenderChildrenInOrder(_children, newChildren)) return;
     final newSet = Set<RenderObject>.identity()..addAll(newChildren);
@@ -97,20 +104,10 @@ class RenderWrap extends RenderObject implements RenderObjectWithChildren {
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     for (final child in _children) {
       final o = _offsets[child] ?? CellOffset.zero;
-      child.paint(
-        buffer,
-        offset + o,
-        screenOffset: (screenOffset ?? offset) + o,
-        clipRect: clipRect,
-      );
+      child.paint(buffer, offset + o);
     }
   }
 }

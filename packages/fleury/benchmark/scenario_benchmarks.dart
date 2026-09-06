@@ -2005,12 +2005,7 @@ class _RenderViewportPaintRow extends RenderObject {
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     _counter.record(_index);
     buffer.writeText(offset, 'viewport row $_index');
   }

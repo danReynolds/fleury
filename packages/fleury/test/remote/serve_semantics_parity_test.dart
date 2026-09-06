@@ -60,12 +60,7 @@ class _RenderOrphanText extends RenderObject {
       constraints.constrain(CellSize(_text.length, 1));
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellRect? clipRect,
-    CellOffset? screenOffset,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     buffer.writeText(offset, _text);
   }
 }

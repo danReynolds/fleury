@@ -357,12 +357,7 @@ class RenderHeatmap extends RenderObject {
   int computeMaxIntrinsicHeight(int? width) => _colLabelHeight + _rows;
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     if (size.cols == 0 || size.rows == 0 || _values.isEmpty) return;
 
     // Compute min/max (autoscale fallback) over the finite cells only —

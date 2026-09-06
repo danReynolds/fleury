@@ -17,12 +17,7 @@ class _RenderBoom extends RenderObject {
       throw StateError('layout failed on purpose');
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {}
+  void performPaint(CellBuffer buffer, CellOffset offset) {}
 }
 
 void main() {

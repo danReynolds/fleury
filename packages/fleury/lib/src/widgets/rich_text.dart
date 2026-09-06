@@ -580,18 +580,7 @@ class RenderRichText extends RenderObject
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
-    // Selection geometry lives in screen coordinates. paintRect is
-    // the full content rect (including any portion scrolled off);
-    // clipRect is the visible window. Together they let the mixin
-    // route hit-tests correctly even inside a ScrollView. See
-    // SelectableTextMixin for the contract.
-
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     if (_lines.isEmpty || size.isEmpty) return;
     final visibleRows = _lines.length < size.rows ? _lines.length : size.rows;
     var lineStartOffset = 0;

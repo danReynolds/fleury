@@ -88,18 +88,8 @@ class RenderPositioned extends RenderObject
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
-    _child?.paint(
-      buffer,
-      offset,
-      screenOffset: screenOffset ?? offset,
-      clipRect: clipRect,
-    );
+  void performPaint(CellBuffer buffer, CellOffset offset) {
+    _child?.paint(buffer, offset);
   }
 }
 
@@ -129,6 +119,11 @@ enum StackFit {
 /// This is the primitive behind modals, popovers, status overlays, and
 /// any other "thing on top of thing" surface a TUI needs.
 class RenderStack extends RenderObject implements RenderObjectWithChildren {
+  /// A [Positioned] child may sit outside the stack's box and is still
+  /// painted (nothing here clips), so it stays interactive there too.
+  @override
+  bool get hitTestsBeyondBounds => true;
+
   @override
   CellOffset childOffsetOf(RenderObject child) =>
       _childOffsets[child] ?? CellOffset.zero;
@@ -150,6 +145,13 @@ class RenderStack extends RenderObject implements RenderObjectWithChildren {
 
   @override
   List<RenderObject> get children => List.unmodifiable(_children);
+
+  @override
+  void visitRenderChildren(void Function(RenderObject child) visitor) {
+    for (final child in _children) {
+      visitor(child);
+    }
+  }
 
   @override
   void replaceAllChildren(List<RenderObject> newChildren) {
@@ -259,21 +261,10 @@ class RenderStack extends RenderObject implements RenderObjectWithChildren {
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
-    final so = screenOffset ?? offset;
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     for (final c in _children) {
       final childOffset = _childOffsets[c] ?? CellOffset.zero;
-      c.paint(
-        buffer,
-        offset + childOffset,
-        screenOffset: so + childOffset,
-        clipRect: clipRect,
-      );
+      c.paint(buffer, offset + childOffset);
     }
   }
 }
@@ -306,6 +297,13 @@ class RenderIndexedStack extends RenderObject
 
   @override
   List<RenderObject> get children => List.unmodifiable(_children);
+
+  @override
+  void visitRenderChildren(void Function(RenderObject child) visitor) {
+    for (final child in _children) {
+      visitor(child);
+    }
+  }
 
   @override
   void replaceAllChildren(List<RenderObject> newChildren) {
@@ -365,18 +363,8 @@ class RenderIndexedStack extends RenderObject
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     if (_index < 0 || _index >= _children.length) return;
-    _children[_index].paint(
-      buffer,
-      offset,
-      screenOffset: screenOffset ?? offset,
-      clipRect: clipRect,
-    );
+    _children[_index].paint(buffer, offset);
   }
 }

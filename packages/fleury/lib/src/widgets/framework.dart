@@ -1662,8 +1662,7 @@ class BuildOwner {
     _finalizeInactiveElements();
 
     sw?.reset();
-    // Root paint: buffer IS the screen, so screenOffset == offset.
-    // clipRect == the full screen rect — anything outside is off-screen.
+    // Root paint: the buffer is the screen.
     // A numbered paint pass on this owner's tracker: when it ends, facts
     // about subtrees that stayed mounted without painting are re-derived, and
     // paint-pass listeners (semantics geometry) run — see
@@ -1671,12 +1670,7 @@ class BuildOwner {
     renderDamageTracker.phase = RenderFramePhase.paint;
     renderDamageTracker.beginPaintPass();
     try {
-      rootRender.paint(
-        buffer,
-        CellOffset.zero,
-        screenOffset: CellOffset.zero,
-        clipRect: CellRect(offset: CellOffset.zero, size: buffer.size),
-      );
+      rootRender.paint(buffer, CellOffset.zero);
     } finally {
       try {
         renderDamageTracker.endPaintPass();

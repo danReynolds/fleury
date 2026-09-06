@@ -51,18 +51,8 @@ class _RenderIntrinsicWidth extends RenderObject
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
-    _child?.paint(
-      buffer,
-      offset,
-      screenOffset: screenOffset ?? offset,
-      clipRect: clipRect,
-    );
+  void performPaint(CellBuffer buffer, CellOffset offset) {
+    _child?.paint(buffer, offset);
   }
 
   // Defer to child for intrinsics: we just tighten *layout* to the child's
@@ -126,18 +116,8 @@ class _RenderIntrinsicHeight extends RenderObject
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
-    _child?.paint(
-      buffer,
-      offset,
-      screenOffset: screenOffset ?? offset,
-      clipRect: clipRect,
-    );
+  void performPaint(CellBuffer buffer, CellOffset offset) {
+    _child?.paint(buffer, offset);
   }
 
   @override

@@ -213,17 +213,7 @@ class RenderAlign extends RenderObject implements RenderObjectWithSingleChild {
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
-    _child?.paint(
-      buffer,
-      offset + _childOffset,
-      screenOffset: (screenOffset ?? offset) + _childOffset,
-      clipRect: clipRect,
-    );
+  void performPaint(CellBuffer buffer, CellOffset offset) {
+    _child?.paint(buffer, offset + _childOffset);
   }
 }

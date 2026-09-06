@@ -19,12 +19,7 @@ class _BoomRender extends RenderObject {
   CellSize performLayout(CellConstraints constraints) =>
       throw StateError('layout-boom');
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {}
+  void performPaint(CellBuffer buffer, CellOffset offset) {}
 }
 
 /// An app that, once mounted, inserts a full-screen "modal" overlay entry —

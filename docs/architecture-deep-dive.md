@@ -88,6 +88,19 @@ the next frame buffer instead of re-walking the subtree. It is not a GPU layer,
 and it is not a blanket performance answer. It is useful for paint-expensive
 subtrees that change rarely.
 
+Where a render object sits on screen is derived from layout state, never
+recorded during paint. Every container declares where it put each child
+(`childOffsetOf`), what it clips it to (`childClipOf`), and whether it presents
+it (`presentsChild`); `RenderObject.screenGeometry()` composes those up the
+parent chain, memoized per invalidation epoch. Pointer hit-testing walks the
+tree with that contract, focus rectangles and carets are getters over it,
+semantic bounds derive from it at collection and are re-derived when a paint
+pass ends, and `BoundsAnchor` reads the observed widget's live geometry. Paint
+itself is a non-virtual template — `paint(buffer, offset)` checks each child's
+placement against the contract in debug mode and delegates to
+`performPaint` — so every painted frame of every test verifies the two agree.
+See [RFC 0024](rfcs/0024-derived-geometry.md).
+
 ### CellBuffer: frame truth and paint damage
 
 `CellBuffer` is the frame image: a two-dimensional grid where each cell is a

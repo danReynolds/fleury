@@ -1,26 +1,30 @@
-// Geometry-model probe (derived-geometry migration baseline).
+// Geometry probe.
 //
-// Fleury's render objects do not know their own screen position; every
-// consumer of geometry — pointer regions, focus rectangles, semantic bounds,
-// retained selection geometry — records it during paint, and repaint
-// boundaries replay those records on cache hits. The alternative is to derive
-// geometry from layout state on demand. This probe measures both sides of
-// that trade on one fixture, so the migration can be judged on numbers:
+// Fleury derives every render object's screen position from layout state
+// (`RenderObject.screenGeometry`): nothing is recorded during paint and a
+// repaint boundary's cache hit skips the subtree walk entirely. This probe
+// measures the frame paths that geometry feeds on one fixture, so a change
+// to the render tier can be judged on numbers — and compared with the
+// paint-time-capture baseline recorded before the migration
+// (docs/rfcs/0024-derived-geometry.md):
 //
-//   paint      a localized update (one row) and a full update, i.e. the cost
-//              of recording + replaying geometry at every boundary (each
-//              frame renders into a fresh buffer: a constant both sides pay)
-//   pointer    hover and tap events routed through the region registry
+//   paint      a localized update (one row) and a full update
+//   pointer    hover and tap events, hit-tested by walking the render tree
 //   focus      Tab traversal steps (geometry-sorted order)
-//   semantics  a full semantic snapshot (bounds come from paint records)
+//   semantics  a full semantic snapshot (bounds derived at collection)
+//   derived    the raw cost of deriving geometry for every region and every
+//              render object in one epoch
+//   late       the paint, hover, and semantics rows again after everything
+//              else has run, so JIT warmth is comparable across orderings
+//              and probes — compare those, not the first rows
 //
 //   dart run bin/geometry_probe.dart [--items=N] [--frames=N] [--events=N]
 //                                    [--json=PATH]
 //
 // Fixture: a ListView.builder of N rows (auto repaint boundary per row), each
 // row a GestureDetector + Focus + Semantics list item around a live Text, so
-// every row registers a pointer region, a focus rectangle, a semantic bound,
-// and a text selection record — the four capture channels.
+// every row has a pointer region, a focus rectangle, a semantic bound, and
+// text selection geometry.
 
 import 'dart:convert';
 import 'dart:io';
@@ -137,7 +141,7 @@ void main(List<String> args) {
       models[i % visible].bump();
       tester.pump();
       tester.render();
-    }),
+    }, warmup: 200),
   );
   samples.add(
     _measure('paint: all mounted rows change', frames, (i) {
@@ -146,7 +150,7 @@ void main(List<String> args) {
       }
       tester.pump();
       tester.render();
-    }),
+    }, warmup: 200),
   );
   samples.add(
     _measure('pointer: hover event', events, (i) {
@@ -197,35 +201,10 @@ void main(List<String> args) {
     }, warmup: 5),
   );
 
-  // ---- derived model ------------------------------------------------------
+  // ---- derivation cost ----------------------------------------------------
   //
-  // The same fixture with the four capture channels switched off at every
-  // boundary (paint rows), and the geometry consumers answered by walking
-  // layout state instead (query rows). The query rows are upper bounds: a
-  // migrated hit-test would walk top-down and stop early; here every
-  // candidate's geometry is derived on every event.
-  RenderRepaintBoundary.debugSkipGeometryCapture = true;
-  for (var v = 0; v < visible; v++) {
-    models[v].bump(); // invalidate every cache once so the flag takes effect
-  }
-  tester.pump();
-  tester.render();
-  samples.add(
-    _measure('paint (no capture): one row changes', frames, (i) {
-      models[i % visible].bump();
-      tester.pump();
-      tester.render();
-    }),
-  );
-  samples.add(
-    _measure('paint (no capture): all mounted rows change', frames, (i) {
-      for (var v = 0; v < visible; v++) {
-        models[v].bump();
-      }
-      tester.pump();
-      tester.render();
-    }),
-  );
+  // Geometry is memoized per epoch, so a frame that asks for many nodes pays
+  // one short walk per node; a new epoch (any invalidation) starts over.
   final root = tester.rootRenderObject!;
   final listeners =
       renderSubtree(root).whereType<RenderPointerListener>().toList();
@@ -234,21 +213,10 @@ void main(List<String> args) {
     'derived: ${listeners.length} pointer regions, $all render objects',
   );
   samples.add(
-    _measure('derived: hover hit-test (all regions)', events, (i) {
-      final col = rnd.nextInt(_cols);
-      final row = rnd.nextInt(_rows);
-      RenderPointerListener? hit;
-      for (final listener in listeners) {
-        final visibleRect = screenGeometryOf(listener)?.visible;
-        if (visibleRect != null && visibleRect.contains(CellOffset(col, row))) {
-          hit = listener; // last in paint order wins
-        }
-      }
-      if (hit == null && col < 0) stdout.write(''); // keep the loop honest
-    }),
-  );
-  samples.add(
-    _measure('derived: geometry of every region', 200, (i) {
+    _measure('derived: geometry of every region (fresh epoch)', 200, (i) {
+      models[i % visible].bump();
+      tester.pump();
+      tester.render();
       for (final listener in listeners) {
         screenGeometryOf(listener);
       }
@@ -261,7 +229,51 @@ void main(List<String> args) {
       }
     }, warmup: 5),
   );
-  RenderRepaintBoundary.debugSkipGeometryCapture = false;
+
+  // ---- late rows ------------------------------------------------------------
+  //
+  // The same paths again after every other row has run, so JIT warmth is
+  // comparable across probes and orderings; plus a frame with nothing dirty.
+
+  samples.add(
+    _measure('late: no-op frame (nothing dirty)', frames, (i) {
+      tester.pump();
+      tester.render();
+    }, warmup: 200),
+  );
+  samples.add(
+    _measure('late: paint one row changes', frames, (i) {
+      models[i % visible].bump();
+      tester.pump();
+      tester.render();
+    }, warmup: 200),
+  );
+  samples.add(
+    _measure('late: paint all mounted rows change', frames, (i) {
+      for (var v = 0; v < visible; v++) {
+        models[v].bump();
+      }
+      tester.pump();
+      tester.render();
+    }, warmup: 200),
+  );
+  samples.add(
+    _measure('late: hover event', events, (i) {
+      tester.sendMouse(
+        MouseEvent(
+          kind: MouseEventKind.moved,
+          button: MouseButton.none,
+          col: rnd.nextInt(_cols),
+          row: rnd.nextInt(_rows),
+        ),
+      );
+    }),
+  );
+  samples.add(
+    _measure('late: semantics full snapshot', 50, (i) {
+      tester.semantics();
+    }, warmup: 5),
+  );
 
   stdout.writeln('');
   stdout.writeln(

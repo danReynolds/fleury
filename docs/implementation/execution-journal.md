@@ -20943,3 +20943,48 @@ Validation:
 Next:
 - Consider a default `frameInterval` (~16 ms) after real-terminal validation.
 - Remaining Tier 2: async-compute seam (Isolate.run); focus-preservation.
+
+## 2026-09-05 - Derived Geometry (RFC 0024)
+
+Status: Complete
+
+Context:
+- The architecture review named paint-time geometry capture + RepaintBoundary
+  replay as the framework's one real complexity hotspot, and a spike
+  (`derived_geometry_oracle_test`, `geometry_probe`) showed a per-child
+  contract on containers could answer every consumer from layout state.
+
+Changes:
+- `RenderObject.screenGeometry()` (bounds, accumulated clip, visible),
+  memoized against `RenderDamageTracker.geometryEpoch`; contract methods
+  `childOffsetOf`, `childClipOf`, `presentsChild`, `hitTestsBeyondBounds`,
+  `visitRenderChildren` implemented across core containers and `RenderTable`.
+- Consumers derive: `PointerRouter` walks the tree from `root` (pruned by
+  box and clip); `FocusNode.rect`/`caretRect` are getters over
+  `ScreenGeometrySource`/`CaretHost`; semantic bounds derive at collection
+  and `SemanticDirtyTracker.refreshGeometry` runs when a paint pass ends;
+  `BoundsNotifier` carries a `RenderGeometry` and `BoundsAnchor` reads live
+  geometry; selection and error-boundary geometry derive.
+- `paint(buffer, offset)` is a non-virtual template with a debug placement
+  check; render objects override `performPaint`. Deleted: `screenOffset` and
+  `clipRect` paint parameters (53 signatures), the four capture channels, the
+  clip scope, `paintWithGeometryClip`, and all RepaintBoundary replay.
+- `derived_geometry_contract_test` checks pointer/focus/semantic geometry
+  against where labels land in the rendered frame, plus two tests that prove
+  the placement check fires.
+
+Decisions:
+- Paint never reports geometry; layout is the single source. Recorded in the
+  decision log; design and numbers in RFC 0024.
+- `Stack` answers `hitTestsBeyondBounds` so overflowing `Positioned` children
+  stay interactive (old registry behavior) instead of Flutter's box rule.
+
+Validation:
+- Analyze clean across all packages; core 3063, `fleury_widgets` 1188,
+  `fleury_web` 523 (vm+chrome), samples/storybook/mcp/console/test suites
+  green; fast gates, `wire-gate`, and `serve-wire-live` pass without
+  re-baselining. Probe (late rows, mean µs): one-row paint 104→53, no-op
+  frame 51→36, hover 0.6→4.7, semantics snapshot 904→916.
+
+Next:
+- Reactive-state RFC 0023 (spike branch) is the other open architecture item.

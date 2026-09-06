@@ -1778,12 +1778,7 @@ class RenderTextInput extends RenderObject implements CaretHost {
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     // The node's caret is derived from this render object's layout (see
     // [localCaretRect]); nothing about geometry is recorded here.
     _focusNode.attachCaretHost(this);
@@ -1886,22 +1881,17 @@ class RenderTextInput extends RenderObject implements CaretHost {
     }
   }
 
-  CellRect? _caretRect(CellOffset paintOffset, CellRect? clipRect) {
+  CellRect? _caretRect() {
     final cursorCell = _displayCellForTextOffset(_selection.extentOffset);
     final visibleStart = _scrollLeft;
     final visibleEnd = _scrollLeft + size.cols;
     if (cursorCell < visibleStart || cursorCell >= visibleEnd) return null;
-    final rect = CellRect(
-      offset: CellOffset(
-        paintOffset.col + cursorCell - visibleStart,
-        paintOffset.row,
-      ),
+    return CellRect(
+      offset: CellOffset(cursorCell - visibleStart, 0),
       size: const CellSize(1, 1),
     );
-    return clipRect == null ? rect : rect.intersect(clipRect);
   }
 
   @override
-  CellRect? get localCaretRect =>
-      size.isEmpty ? null : _caretRect(CellOffset.zero, null);
+  CellRect? get localCaretRect => size.isEmpty ? null : _caretRect();
 }

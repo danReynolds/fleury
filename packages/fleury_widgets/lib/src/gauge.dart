@@ -239,12 +239,7 @@ class RenderGauge extends RenderObject {
   int computeMaxIntrinsicHeight(int? width) => 1;
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     final w = size.cols;
     if (w == 0 || size.rows == 0) return;
 

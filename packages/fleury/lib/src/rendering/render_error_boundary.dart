@@ -174,52 +174,25 @@ class RenderErrorBoundary extends RenderObject
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     final contained = _containedError;
     if (contained != null) {
       // Layout already failed: never paint (or hit-test-register) the
       // inconsistent subtree; present the failure instead.
-      _paintPresentation(buffer, offset, contained, screenOffset, clipRect);
+      paintCellErrorPresentation(buffer, offset, size, contained.error);
       return;
     }
     final c = _child;
     if (c == null) return;
     try {
-      c.paint(buffer, offset, screenOffset: screenOffset, clipRect: clipRect);
+      c.paint(buffer, offset);
     } catch (error, stack) {
       if (rethrowContained) rethrow;
       _contain(error, stack, FrameContainmentPhase.paint);
       // Atomicity: overwrite the whole rect, burying any partial child
       // writes from the throw.
-      _paintPresentation(
-        buffer,
-        offset,
-        _containedError!,
-        screenOffset,
-        clipRect,
-      );
+      paintCellErrorPresentation(buffer, offset, size, _containedError!.error);
     }
-  }
-
-  void _paintPresentation(
-    CellBuffer buffer,
-    CellOffset offset,
-    FrameContainmentError contained,
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  ) {
-    paintCellErrorPresentation(
-      buffer,
-      offset,
-      size,
-      contained.error,
-      clipRect: clipRect,
-    );
   }
 
   void _contain(Object error, StackTrace stack, FrameContainmentPhase phase) {

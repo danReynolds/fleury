@@ -783,9 +783,12 @@ class FocusManager extends ChangeNotifier {
         .where(isTraversable)
         .where((n) => trap == null || _isUnderScopeMarker(n, trap))
         .toList();
+    // Geometry is derived on read; resolve each node's rect once, not once
+    // per comparison.
+    final rects = <FocusNode, CellRect?>{for (final n in nodes) n: n.rect};
     nodes.sort((a, b) {
-      final ra = a.rect;
-      final rb = b.rect;
+      final ra = rects[a];
+      final rb = rects[b];
       if (ra != null && rb != null) {
         if (ra.top != rb.top) return ra.top - rb.top;
         if (ra.left != rb.left) return ra.left - rb.left;
@@ -1406,18 +1409,8 @@ class _RenderFocusBounds extends RenderObject
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
-    _child?.paint(
-      buffer,
-      offset,
-      screenOffset: screenOffset ?? offset,
-      clipRect: clipRect,
-    );
+  void performPaint(CellBuffer buffer, CellOffset offset) {
+    _child?.paint(buffer, offset);
   }
 }
 

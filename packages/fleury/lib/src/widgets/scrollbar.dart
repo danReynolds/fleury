@@ -183,15 +183,10 @@ class _RenderRequireBoundedWidth extends RenderObject
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     final c = _child;
     if (c != null) {
-      c.paint(buffer, offset, screenOffset: screenOffset, clipRect: clipRect);
+      c.paint(buffer, offset);
     }
   }
 }
@@ -314,12 +309,7 @@ class _RenderScrollbar extends RenderObject {
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     if (size.isEmpty) return;
     final h = size.rows;
     final (content, viewport, scrollOffset) = _metrics();

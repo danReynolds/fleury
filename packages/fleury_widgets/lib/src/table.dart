@@ -754,6 +754,13 @@ class RenderTable extends RenderObject implements RenderObjectWithChildren {
   List<RenderObject> get children => List.unmodifiable(_children);
 
   @override
+  void visitRenderChildren(void Function(RenderObject child) visitor) {
+    for (final child in _children) {
+      visitor(child);
+    }
+  }
+
+  @override
   void replaceAllChildren(List<RenderObject> newChildren) {
     if (_hasSameRenderChildrenInOrder(_children, newChildren)) return;
     final newSet = Set<RenderObject>.identity()..addAll(newChildren);
@@ -977,12 +984,7 @@ class RenderTable extends RenderObject implements RenderObjectWithChildren {
   }
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
+  void performPaint(CellBuffer buffer, CellOffset offset) {
     if (_naturalHeight == 0 || _ownWidth == 0) return;
 
     // Natural-mode fast path: when the table fits in its allotted size,

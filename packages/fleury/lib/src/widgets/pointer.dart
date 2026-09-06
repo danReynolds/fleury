@@ -66,10 +66,12 @@ final class PointerDownDetails {
 ///
 /// Regions are found by hit-testing the rendered tree top-down from [root]:
 /// each container reports where it put its children, what it clips, and which
-/// of them it presents ([RenderObject.childOffsetOf] and friends), so the
-/// walk descends only through subtrees that can contain the point. Paint
-/// order — later siblings on top, children over their parents — is the walk
-/// order, so the topmost region is the last hit collected.
+/// of them it presents ([RenderObject.childOffsetOf] and friends), and a
+/// subtree is pruned by its box unless it says otherwise
+/// ([RenderObject.hitTestsBeyondBounds]), so an event walks one chain of the
+/// tree rather than every region. Paint order — later siblings on top,
+/// children over their parents — is the walk order, so the topmost region is
+/// the last hit collected.
 class PointerRouter {
   final Set<RenderObject> _inputExcludedSubtrees = <RenderObject>{};
   final List<RenderPointerListener> _hits = <RenderPointerListener>[];
@@ -217,15 +219,14 @@ class PointerRouter {
         _inputExcludedSubtrees.contains(node)) {
       return;
     }
-    if (node is RenderPointerListener && identical(node._router, this)) {
-      final s = node.size;
-      if (col >= 0 &&
-          row >= 0 &&
-          col < s.cols &&
-          row < s.rows &&
-          (clip == null || clip.contains(CellOffset(col, row)))) {
-        _hits.add(node);
-      }
+    final s = node.size;
+    final inside = col >= 0 && row >= 0 && col < s.cols && row < s.rows;
+    if (!inside && !node.hitTestsBeyondBounds) return;
+    if (inside &&
+        node is RenderPointerListener &&
+        identical(node._router, this) &&
+        (clip == null || clip.contains(CellOffset(col, row)))) {
+      _hits.add(node);
     }
     node.visitRenderChildren((child) {
       if (!node.presentsChild(child)) return;
@@ -784,22 +785,7 @@ class RenderPointerListener extends RenderObject
       _child?.layout(constraints) ?? constraints.constrain(CellSize.zero);
 
   @override
-  void paint(
-    CellBuffer buffer,
-    CellOffset offset, {
-    CellOffset? screenOffset,
-    CellRect? clipRect,
-  }) {
-    _child?.paint(
-      buffer,
-      offset,
-      screenOffset: screenOffset ?? offset,
-      clipRect: clipRect,
-    );
+  void performPaint(CellBuffer buffer, CellOffset offset) {
+    _child?.paint(buffer, offset);
   }
-
-  /// This region's visible screen rectangle, derived from layout state; null
-  /// when it is clipped out or not presented.
-  @visibleForTesting
-  CellRect? get debugScreenRect => screenGeometry()?.visible;
 }
