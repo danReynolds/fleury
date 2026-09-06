@@ -1,15 +1,8 @@
-// Does `_nodeId` recomputation need the deferred structure-generation cache?
-//
-// `_nodeId` is recomputed on every read. For an UNKEYED node it calls
-// `semanticAnchorOf`, which walks the element tree to the nearest key (or the
-// root) and calls `_childIndexOf` at each level — and `_childIndexOf` is O(width)
-// (it `visitChildren` to find the index). So a WIDE unkeyed parent makes the
-// whole semantic build O(K²): each of K children scans all K siblings.
-//
-// This measures the real cost: `SemanticTree.fromElement` on a wide tree of
-// UNKEYED semantic leaves (the O(K²) path) vs the same tree with explicit
-// `Semantics(id:)` on each leaf (O(1) `_nodeId`, no anchor walk). The delta is
-// what a cache would save. Run: dart run bin/semantic_id_probe.dart
+// Unkeyed-root control: id derivation versus explicit ids.
+// `semanticAnchorOf` skips sibling indices when no keyed ancestor exists,
+// so this fixture does not exercise wide positional ids under runtime roots.
+// See semantic_build_probe.dart for keyed scopes and settled sample apps.
+// Run: dart run bin/semantic_id_probe.dart
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/fleury_host.dart';
@@ -87,7 +80,7 @@ void main() {
   }
   print('');
   print(
-      'overhead = the _nodeId anchor-walk cost a structure-gen cache removes.');
+      'overhead = unkeyed id derivation versus explicit ids in this fixture.');
   print('At 60fps a frame is 16667µs; the semantic build runs post-frame,');
   print('coalesced, only on a semantically-dirty frame.');
 }
