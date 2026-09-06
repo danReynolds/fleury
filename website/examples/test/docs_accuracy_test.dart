@@ -295,11 +295,11 @@ void main() {
 
     test('testing guide uses the current Git package boundary', () {
       final guide = File(
-        p.join(repo.path, 'website/src/content/docs/guides/testing.md'),
+        p.join(repo.path, 'website/src/content/docs/guides/testing.mdx'),
       ).readAsStringSync();
       expect(guide, contains('path: packages/fleury_test'));
-      expect(guide, contains('fleury_test: ^0.1.0'));
-      expect(guide, contains('After the packages are published together'));
+      expect(guide, contains('fleury` dependency override'));
+      expect(guide, contains('pre-release Git installation'));
     });
 
     test('layout guidance preserves cell width-over-height semantics', () {

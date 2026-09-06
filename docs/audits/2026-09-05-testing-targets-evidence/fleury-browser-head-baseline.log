@@ -1,0 +1,39 @@
+00:00 +0: loading test/run_tui_surface_test.dart
+Compiled 16,964,138 input bytes (11,915,494 characters source) to 2,392,425 characters JavaScript in 8.78 seconds
+
+00:00 +0: IME composition input is queued and dispatched during a frame
+00:00 +0 -1: IME composition input is queued and dispatched during a frame [E]
+  Bad state: No pending frame flush.
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/js_helper.dart 1376:19   Object.wrapException
+  test/run_tui_surface_test.dart 65:24                                      _FakeFlush.fire
+  test/run_tui_surface_test.dart 717:7                                      <fn>
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/async_patch.dart 339:19  _wrapJsFunctionForAsync.closure.$protected
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/async_patch.dart 365:23  _wrapJsFunctionForAsync.<fn>
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/async_patch.dart 313:7   _awaitOnObject.<fn>
+  org-dartlang-sdk:///lib/async/zone_root.dart 48:46                        StaticClosure._rootRunUnary
+  org-dartlang-sdk:///lib/async/zone.dart 732:34                            _CustomZone.runUnary
+  org-dartlang-sdk:///lib/async/future_impl.dart 186:29                     _Future._propagateToListeners.handleValueCallback
+  org-dartlang-sdk:///lib/async/future_impl.dart 977:13                     Object._Future._propagateToListeners
+  
+00:00 +0 -1: semantic action request before first semantic tree records notFound
+00:00 +0 -2: semantic action request before first semantic tree records notFound [E]
+  Expected: true
+    Actual: <false>
+  
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/js_helper.dart 1424:15   Object.throwExpression
+  package:matcher                                                           Object.expect
+  test/run_tui_surface_test.dart 1489:7                                     <fn>
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/async_patch.dart 339:19  _wrapJsFunctionForAsync.closure.$protected
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/async_patch.dart 365:23  _wrapJsFunctionForAsync.<fn>
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/async_patch.dart 313:7   _awaitOnObject.<fn>
+  org-dartlang-sdk:///lib/async/zone_root.dart 48:46                        StaticClosure._rootRunUnary
+  org-dartlang-sdk:///lib/async/zone.dart 732:34                            _CustomZone.runUnary
+  
+00:00 +0 -2: Some tests failed.
+
+Failing tests:
+  test/run_tui_surface_test.dart: IME composition input is queued and dispatched during a frame
+  test/run_tui_surface_test.dart: semantic action request before first semantic tree records notFound
+
+Consider enabling the flag chain-stack-traces to receive more detailed exceptions.
+For example, 'dart test --chain-stack-traces'.

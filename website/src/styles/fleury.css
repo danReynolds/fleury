@@ -1279,9 +1279,15 @@ th:nth-last-child(-n + 2) .ct::after {
   display: flex;
   justify-content: flex-start;
   align-items: flex-start;
+  container: cds-preview / inline-size;
 }
 .cds-demo .fleury-frame {
   margin: 0;
+}
+@container cds-preview (max-width: 30rem) {
+  .fleury-hint {
+    display: none;
+  }
 }
 
 /* Two columns inline when the breakout is genuinely wide enough for both. ─*/
@@ -1292,6 +1298,9 @@ th:nth-last-child(-n + 2) .ct::after {
        panes drift apart vertically. */
     align-items: start;
     gap: 0 1.75rem;
+  }
+  .cds.cds-bounded-code:not(.is-fs) .cds-body {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
   .cds.cds-demo-wide:not(.is-fs) .cds-body {
     grid-template-columns: minmax(19rem, 2fr) minmax(0, 3fr);
@@ -1394,6 +1403,7 @@ th:nth-last-child(-n + 2) .ct::after {
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   /* Top-align so "You write" and "Fleury renders" pin to the same line. */
   align-items: start;
   gap: 0 2rem;
@@ -1409,6 +1419,9 @@ th:nth-last-child(-n + 2) .ct::after {
   flex: 1;
   min-height: 0;
 }
+.cds-modal-pane:not(.cds-modal-demo) {
+  align-self: stretch;
+}
 .cds-modal-demo {
   align-items: center;
 }
@@ -1423,6 +1436,7 @@ th:nth-last-child(-n + 2) .ct::after {
   .cds-modal-body,
   .cds-modal.cds-demo-wide .cds-modal-body {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
     overflow: auto;
   }
 }

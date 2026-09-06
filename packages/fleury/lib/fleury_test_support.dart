@@ -29,6 +29,7 @@ export 'src/semantics/semantics.dart'
         SemanticRole,
         SemanticState,
         SemanticTree,
+        SemanticQueryError,
         Semantics,
         invokeSemanticActionFromElement;
 export 'src/semantics/accessibility.dart'

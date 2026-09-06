@@ -777,13 +777,11 @@ void main() {
       expect(field.state.pasteInsertedLength, 2);
       expect(field.state.pasteTotalLength, 6);
 
-      tester.pump();
-      expect(controller.text, 'abcd');
-
-      tester.pump();
+      // A post-frame pass consumes as many chunks as its time budget permits.
+      // The first chunk is synchronous; completion need not take one frame
+      // per chunk.
+      tester.pumpAndSettle();
       expect(controller.text, 'abcdef');
-
-      tester.pump();
       field = tester.semantics().single(role: SemanticRole.textField);
       expect(field.state.pasteInProgress, isFalse);
       expect(field.state.pasteInsertedLength, 0);

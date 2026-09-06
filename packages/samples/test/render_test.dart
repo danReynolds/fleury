@@ -68,6 +68,7 @@ void main() {
     testWidgets('streams a Claude-Code-style turn: todos, tools, diff', (
       tester,
     ) {
+      tester.viewportSize = tall;
       tester.pumpWidget(const AgentApp());
       tester.pump(const Duration(seconds: 6)); // drain the streamed reply
       final out = tester.renderToString(size: tall);
@@ -80,6 +81,7 @@ void main() {
     });
 
     testWidgets('Enter advances to the next scripted turn', (tester) {
+      tester.viewportSize = tall;
       tester.pumpWidget(const AgentApp());
       tester.pump(const Duration(seconds: 6));
       tester.sendKey(const KeyEvent(KeyCode.enter)); // submit → next

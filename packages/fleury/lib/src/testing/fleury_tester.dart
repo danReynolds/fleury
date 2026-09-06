@@ -5,8 +5,8 @@
 //
 //   - pumpWidget(w)          mount or replace the user widget
 //   - pumpFleuryHome(w)      mount w as a standard FleuryApp home
-//   - pump([duration])       advance scheduler + flush builds
-//   - pumpAndSettle(...)     pump until no active tickers
+//   - pump([duration])       advance scheduler + complete a frame
+//   - pumpAndSettle(...)     pump until frames are quiescent
 //   - find(finder)           apply a Finder to the tree
 //   - findOne(finder)        single-element variant with helpful errors
 //   - sendKey(KeyEvent)      dispatch a key event
@@ -331,8 +331,21 @@ class FleuryTester {
   /// this matches `WidgetTester.pumpWidget` semantics, where state
   /// keyed by the wrappers (e.g. focused node identity) survives
   /// across re-pumps.
+  /// Completes the first frame, including layout and post-frame callbacks.
   void pumpWidget(Widget widget) {
     _assertNotDisposed('pumpWidget');
+    mountWidget(widget);
+    pump();
+  }
+
+  /// Mounts or updates [widget] without laying it out or painting it.
+  ///
+  /// This partial-phase operation is for framework tests that inspect build
+  /// work or deliberately defer a render failure. Application tests use
+  /// [pumpWidget]. Call `owner.flushBuild()` for later build-only updates,
+  /// [render] for layout/paint, or [pump] to complete a frame.
+  void mountWidget(Widget widget) {
+    _assertNotDisposed('mountWidget');
     _currentUserWidget = widget;
     if (_root == null) {
       _root = _owner.mountRoot(_wrap());
@@ -362,9 +375,8 @@ class FleuryTester {
     );
   }
 
-  /// Advances time and flushes any pending rebuilds. When [duration]
-  /// is null, just flushes — useful after dispatching an event that
-  /// only mutates state.
+  /// Advances time and completes a frame: build, layout, paint, then
+  /// post-frame callbacks. When [duration] is null, time does not advance.
   ///
   /// SYNCHRONOUS: `pump` never turns the event loop, so it cannot observe
   /// async work — a `StreamBuilder`/`QueryBuilder` whose first value arrives
@@ -388,14 +400,9 @@ class FleuryTester {
   /// low-level single-tick semantics (e.g. asserting one specific
   /// frame emit).
   ///
-  /// Layout divergence from production: `pump` only flushes builds
-  /// before draining post-frame callbacks, not layout. In a real
-  /// runtime, `renderFrame` lays out + paints before draining, so a
-  /// post-frame callback that reads `context.findRenderObject()?.size`
-  /// sees the freshly-painted geometry. In tests, call [render] (or
-  /// [renderToString]) before [pump] when a queued post-frame callback
-  /// needs accurate geometry — otherwise the lookup returns null or
-  /// stale dimensions.
+  /// Callbacks see the geometry just painted. A callback that schedules more
+  /// work leaves it for the next frame; pumping does not implicitly settle.
+  /// For build-only framework checks, use `owner.flushBuild()` explicitly.
   void pump([Duration? duration]) {
     _assertNotDisposed('pump');
     if (duration != null && duration > Duration.zero) {
@@ -409,10 +416,7 @@ class FleuryTester {
         _scheduler.advance(remaining);
       }
     }
-    _owner.flushBuild();
-    // Mirrors the runtime's drain order: build flush first, then
-    // post-frame callbacks see the up-to-date tree. Drain is a no-op
-    // when no callbacks are queued — idle pumps stay free.
+    if (_root != null) render();
     _binding.flushPostFrameCallbacks(_clock.now);
   }
 
@@ -724,23 +728,26 @@ class FleuryTester {
   }
 
   /// Renders the current tree into a fresh [CellBuffer] sized to
-  /// [size] (defaulting to [viewportSize]).
+  /// [size] (defaulting to [viewportSize]). An explicit size also updates
+  /// [viewportSize] and ambient MediaQuery, like a terminal resize.
+  ///
+  /// Does not advance time or drain post-frame callbacks; use [pump] for a
+  /// complete frame. Framework tests may use this partial phase after
+  /// [mountWidget] to inspect layout or paint before callbacks run.
   CellBuffer render({CellSize? size}) {
     _assertNotDisposed('render');
-    final root = _root;
-    if (root == null) {
+    if (_root == null) {
       throw StateError(
         'FleuryTester.render called before pumpWidget; the tree is empty.',
       );
     }
-    // Ahead of frame production, exactly where `FrameDriver` calls its
-    // `onLatchInput` — so a render in a test does to the sampled keyboard
-    // what a render in a real app does (RFC 0020 §5.6). With a ticker
-    // registered this is a no-op and the tick publishes instead.
+    if (size != null) viewportSize = size;
+    // Latch sampled input before producing the frame, as the runtime does.
+    // With a ticker registered this is a no-op; the tick publishes instead.
     _publishFrameLatch();
-    final buffer = CellBuffer(size ?? viewportSize);
+    final buffer = CellBuffer(viewportSize);
     _pointerRouter.beginFrame();
-    _owner.renderFrame(root, buffer);
+    _owner.renderFrame(_root!, buffer);
     return buffer;
   }
 
@@ -857,7 +864,7 @@ class FleuryTester {
   /// Invokes a semantic action on a node in the current semantic tree.
   ///
   /// When [node] is omitted, the remaining filters must identify exactly one
-  /// node that advertises [action]. This is intentionally semantic-first: tests
+  /// node before checking action availability. Tests
   /// can exercise app commands, controls, fields, and app-authored regions by
   /// role/label/action instead of reaching through widget internals.
   ///
@@ -885,23 +892,26 @@ class FleuryTester {
     }
 
     final tree = semantics();
-    final target = _resolveSemanticActionTarget(
-      tree,
-      action,
-      node: node,
-      id: id,
-      role: role,
-      label: label,
-      value: value,
-      focused: focused,
-      selected: selected,
-      enabled: enabled,
-      checked: checked,
-      busy: busy,
-      validationError: validationError,
-    );
-    if (target == null) {
-      return SemanticActionInvocationResult.notFound(action);
+    final SemanticNode target;
+    try {
+      target = _resolveSemanticActionTarget(
+        tree,
+        node: node,
+        id: id,
+        role: role,
+        label: label,
+        value: value,
+        focused: focused,
+        selected: selected,
+        enabled: enabled,
+        checked: checked,
+        busy: busy,
+        validationError: validationError,
+      );
+    } on SemanticQueryError catch (error) {
+      return error.matchCount == 0
+          ? SemanticActionInvocationResult.notFound(action, error: error)
+          : SemanticActionInvocationResult.ambiguous(action, error: error);
     }
     if (!target.enabled) {
       return SemanticActionInvocationResult.disabled(target, action);
@@ -1122,9 +1132,8 @@ class FleuryTester {
     return null;
   }
 
-  SemanticNode? _resolveSemanticActionTarget(
-    SemanticTree tree,
-    SemanticAction action, {
+  SemanticNode _resolveSemanticActionTarget(
+    SemanticTree tree, {
     SemanticNode? node,
     SemanticNodeId? id,
     SemanticRole? role,
@@ -1137,29 +1146,19 @@ class FleuryTester {
     bool? busy,
     String? validationError,
   }) {
-    if (node != null) {
-      for (final current in tree.nodes) {
-        if (current.id == node.id) return current;
-      }
-      return null;
-    }
-    try {
-      return tree.single(
-        id: id,
-        role: role,
-        label: label,
-        value: value,
-        action: action,
-        focused: focused,
-        selected: selected,
-        enabled: enabled,
-        checked: checked,
-        busy: busy,
-        validationError: validationError,
-      );
-    } on StateError {
-      return null;
-    }
+    if (node != null) return tree.single(id: node.id);
+    return tree.single(
+      id: id,
+      role: role,
+      label: label,
+      value: value,
+      focused: focused,
+      selected: selected,
+      enabled: enabled,
+      checked: checked,
+      busy: busy,
+      validationError: validationError,
+    );
   }
 }
 

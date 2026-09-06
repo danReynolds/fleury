@@ -56,7 +56,7 @@ void main() {
     });
 
     testWidgets('throws on unsupported characters', (tester) {
-      tester.pumpWidget(
+      tester.mountWidget(
         const SizedBox(width: 5, height: 5, child: Digits('abc')),
       );
       expect(

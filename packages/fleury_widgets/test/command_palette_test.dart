@@ -164,6 +164,7 @@ void main() {
     final result = await tester.invokeSemanticAction(
       SemanticAction.submit,
       role: WidgetRoles.commandPalette,
+      allowFailure: true,
     );
     expect(result.status, SemanticActionInvocationStatus.notFound);
   });

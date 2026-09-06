@@ -229,6 +229,7 @@ void main() {
       final result = await tester.invokeSemanticAction(
         SemanticAction.open,
         node: trigger,
+        allowFailure: true,
       );
       expect(result.status, SemanticActionInvocationStatus.disabled);
     });
@@ -841,6 +842,7 @@ void main() {
       final result = await tester.invokeSemanticAction(
         SemanticAction.activate,
         node: red,
+        allowFailure: true,
       );
       expect(result.status, SemanticActionInvocationStatus.disabled);
     });

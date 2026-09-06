@@ -383,7 +383,7 @@ void main() {
           builder: (_) => _floatAt(2, _BumpCounter(key: float, label: 'float')),
         ),
       );
-      tester.pump();
+      tester.owner.flushBuild();
       RepaintBoundaryDebugStats.beginFrame(enabled: true);
       tester.render(size: size);
       var stats = RepaintBoundaryDebugStats.takeFrameStats();
@@ -395,7 +395,7 @@ void main() {
       );
 
       float.currentState!.bump();
-      tester.pump();
+      tester.owner.flushBuild();
       RepaintBoundaryDebugStats.beginFrame(enabled: true);
       final out = tester.renderToString(size: size);
       stats = RepaintBoundaryDebugStats.takeFrameStats();
@@ -410,7 +410,7 @@ void main() {
 
       // Churn the base instead: its boundary repaints, the float blits.
       base.currentState!.bump();
-      tester.pump();
+      tester.owner.flushBuild();
       RepaintBoundaryDebugStats.beginFrame(enabled: true);
       final out2 = tester.renderToString(size: size);
       stats = RepaintBoundaryDebugStats.takeFrameStats();
@@ -441,7 +441,7 @@ void main() {
       tester.render(size: size); // two visible entries: engaged
 
       floatEntry.remove();
-      tester.pump();
+      tester.owner.flushBuild();
       RepaintBoundaryDebugStats.beginFrame(enabled: true);
       var out = tester.renderToString(size: size);
       var stats = RepaintBoundaryDebugStats.takeFrameStats();
@@ -454,7 +454,7 @@ void main() {
 
       // The base keeps rendering correctly through the disengaged boundary.
       base.currentState!.bump();
-      tester.pump();
+      tester.owner.flushBuild();
       RepaintBoundaryDebugStats.beginFrame(enabled: true);
       out = tester.renderToString(size: size);
       stats = RepaintBoundaryDebugStats.takeFrameStats();
@@ -489,7 +489,7 @@ void main() {
       tester.render(size: size); // warm both caches
 
       base.currentState!.bump(); // float cache-hits, blits over fresh base
-      tester.pump();
+      tester.owner.flushBuild();
       RepaintBoundaryDebugStats.beginFrame(enabled: true);
       final out = tester.renderToString(size: size);
       final stats = RepaintBoundaryDebugStats.takeFrameStats();
@@ -551,7 +551,7 @@ void main() {
       tester.render(size: size); // warm both caches
 
       float.currentState!.bump();
-      tester.pump();
+      tester.owner.flushBuild();
       RepaintBoundaryDebugStats.beginFrame(enabled: true);
       tester.render(size: size);
       final stats = RepaintBoundaryDebugStats.takeFrameStats();
@@ -607,7 +607,7 @@ void main() {
       expect(node.bounds, CellRect.fromLTWH(2, 1, 6, 1));
 
       float.currentState!.bump();
-      tester.pump();
+      tester.owner.flushBuild();
       RepaintBoundaryDebugStats.beginFrame(enabled: true);
       tester.render(size: size);
       final stats = RepaintBoundaryDebugStats.takeFrameStats();
@@ -643,7 +643,7 @@ void main() {
       expect(warm.imagePlacements, hasLength(1), reason: 'carried on repaint');
 
       float.currentState!.bump();
-      tester.pump();
+      tester.owner.flushBuild();
       RepaintBoundaryDebugStats.beginFrame(enabled: true);
       final buf = tester.render(size: size);
       final stats = RepaintBoundaryDebugStats.takeFrameStats();
@@ -672,7 +672,7 @@ void main() {
       // so the message line fits inside the panel.
       var mode = BoomMode.paint;
       late final OverlayEntry boomEntry;
-      tester.pumpWidget(
+      tester.mountWidget(
         Overlay(
           initialEntries: [
             // Containment is entry-granular: the presentation fills the

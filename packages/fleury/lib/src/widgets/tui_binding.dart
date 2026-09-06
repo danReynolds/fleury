@@ -115,7 +115,7 @@ class TuiBinding implements TickerProvider {
 
   /// Drains the post-frame callback queue. Called by the runtime
   /// (native + web) after `renderer.renderDiff` and by
-  /// [FleuryTester.pump] after the build flush. Idempotent — a no-op
+  /// [FleuryTester.pump] after layout and paint. Idempotent — a no-op
   /// when no callbacks are queued.
   ///
   /// Driven by `TuiBinding` consumers (`run_app`, web hosts,

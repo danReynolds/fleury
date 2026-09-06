@@ -267,6 +267,7 @@ void main() {
       final result = await tester.invokeSemanticAction(
         SemanticAction.select,
         node: swatch,
+        allowFailure: true,
       );
       expect(result.status, SemanticActionInvocationStatus.disabled);
     });

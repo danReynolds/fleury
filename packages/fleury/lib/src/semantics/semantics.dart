@@ -7,6 +7,7 @@ import '../rendering/layout.dart';
 import '../rendering/render_error_boundary.dart';
 import '../rendering/render_object.dart';
 import '../widgets/framework.dart';
+import 'inspection.dart' show SemanticTreeInspection;
 
 /// Identity of a semantic node.
 ///
@@ -344,6 +345,7 @@ enum SemanticActionInvocationStatus {
   completed,
   disabled,
   notFound,
+  ambiguous,
   unsupported,
   failed,
 }
@@ -380,12 +382,25 @@ final class SemanticActionInvocationResult {
     );
   }
 
-  factory SemanticActionInvocationResult.notFound(SemanticAction action) {
+  factory SemanticActionInvocationResult.notFound(
+    SemanticAction action, {
+    Object? error,
+  }) {
     return SemanticActionInvocationResult._(
       action: action,
       status: SemanticActionInvocationStatus.notFound,
+      error: error,
     );
   }
+
+  factory SemanticActionInvocationResult.ambiguous(
+    SemanticAction action, {
+    required SemanticQueryError error,
+  }) => SemanticActionInvocationResult._(
+    action: action,
+    status: SemanticActionInvocationStatus.ambiguous,
+    error: error,
+  );
 
   factory SemanticActionInvocationResult.unsupported(
     SemanticNode node,
@@ -636,6 +651,11 @@ final class SemanticState {
   int? get composingStart => _int('composingStart');
   int? get composingEnd => _int('composingEnd');
   bool? get readOnly => _bool('readOnly');
+
+  /// Whether this node represents text editing, independent of its role or
+  /// current availability. Custom editable controls can opt in to text helpers;
+  /// focus/setValue capabilities and readOnly still govern actual operations.
+  bool? get textEditable => _bool('textEditable');
   bool? get obscureText => _bool('obscureText');
   bool? get redactedValue => _bool('redactedValue');
   String? get clipboardPolicy => _string('clipboardPolicy');
@@ -798,6 +818,13 @@ final class SemanticNode {
     final labelPart = label == null ? '' : ', label: $label';
     return 'SemanticNode($role$labelPart, id: $id)';
   }
+}
+
+/// A semantic selector matched zero or multiple nodes.
+class SemanticQueryError extends StateError {
+  SemanticQueryError(this.matchCount, super.message);
+
+  final int matchCount;
 }
 
 /// Immutable semantic snapshot of a mounted Fleury app.
@@ -964,8 +991,33 @@ final class SemanticTree {
       activeFallback: activeFallback,
     ).toList(growable: false);
     if (matches.length == 1) return matches.single;
-    throw StateError(
-      'Expected exactly one semantic node, found ${matches.length}.',
+    final query = <String, Object?>{
+      'id': ?id,
+      'role': ?role?.name,
+      'label': ?label,
+      // A caller may be searching for a secret even when no node matches.
+      // Preserve the criterion without formatting its value into diagnostics.
+      if (value != null) 'value': '<redacted>',
+      'action': ?action?.name,
+      'focused': ?focused,
+      'selected': ?selected,
+      'enabled': ?enabled,
+      'checked': ?checked,
+      'busy': ?busy,
+      'validationError': ?validationError,
+      'capabilityRequirement': ?capabilityRequirement,
+      'activeFallback': ?activeFallback,
+    };
+    final treeLines = debugTree(includeState: false).split('\n');
+    final treeSummary = [
+      ...treeLines.take(60),
+      if (treeLines.length > 60) '… ${treeLines.length - 60} more lines',
+    ].join('\n');
+    throw SemanticQueryError(
+      matches.length,
+      'Expected exactly one semantic node, found ${matches.length} for $query.\n'
+      '${matches.isEmpty ? '' : 'Matches: ${matches.take(8).join(', ')}\n'}'
+      '\n$treeSummary',
     );
   }
 }

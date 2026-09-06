@@ -117,6 +117,7 @@ void main() {
     // content originally lived at screen row 0.
     final controller = ScrollController(offset: 2);
     SelectedContent? captured;
+    tester.viewportSize = const CellSize(30, 2);
     tester.pumpWidget(
       SelectionArea(
         onSelectionChanged: (sel) => captured = sel,

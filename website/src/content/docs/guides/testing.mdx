@@ -1,0 +1,760 @@
+---
+title: Testing
+description: Find controls, exercise behavior and keyboard input, and test asynchronous work with FleuryTester.
+---
+
+import FleuryExample from '../../../components/FleuryExample.astro';
+import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
+
+A widget test runs your UI without opening a terminal. Mount the widget, perform
+an action, and check the result. The examples below use the same widgets in the
+live demos and executable tests.
+
+## Write your first test
+
+This counter starts at zero. `tester.button('Add one')` finds its button by its
+**role** and **label**: the kind of control and its name. `Button` publishes both
+automatically. **Press** invokes the control's logical action and completes its
+resulting frame. It does not send a mouse click or a keyboard event.
+
+The **Logical test** checks that the button increments the counter. The
+**Keyboard test** checks that Enter reaches the focused button and increments
+it too. Try the counter, then compare the tests with its source:
+
+<CodeDemoSplit
+  files={['Counter source', 'Logical test', 'Keyboard test']}
+  initialFile="Logical test"
+  codeLabel="Widget source and executable tests"
+  demoLabel="Try the widget"
+  layout="balanced"
+  codeMaxHeight="34rem"
+>
+<Fragment slot="code-0">
+```dart
+import 'package:fleury/fleury_core.dart';
+import 'package:fleury_widgets/fleury_widgets_web.dart';
+
+class Counter extends StatefulWidget {
+  const Counter({super.key});
+
+  @override
+  State<Counter> createState() => _CounterState();
+}
+
+class _CounterState extends State<Counter> {
+  int count = 0;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text('Count: $count'),
+      Button(
+        label: 'Add one',
+        autofocus: true,
+        onPressed: () => setState(() => count++),
+      ),
+    ],
+  );
+}
+```
+</Fragment>
+<Fragment slot="code-1">
+```dart
+import 'package:fleury/fleury.dart';
+import 'package:fleury_test/fleury_test.dart';
+import 'package:test/test.dart';
+
+import '../lib/testing_guide.dart';
+
+void main() {
+  testWidgets('adds one', (tester) async {
+    tester.pumpWidget(const Counter());
+    await tester.button('Add one').press();
+    expect(tester.exists(text('Count: 1')), isTrue);
+  });
+}
+```
+</Fragment>
+<Fragment slot="code-2">
+```dart
+import 'package:fleury/fleury.dart';
+import 'package:fleury_test/fleury_test.dart';
+import 'package:test/test.dart';
+
+import '../lib/testing_guide.dart';
+
+void main() {
+  testWidgets('adds one using the keyboard', (tester) {
+    tester.pumpWidget(const Counter());
+    expect(tester.button('Add one'), isFocused);
+    tester.press(KeySequence.enter);
+    expect(tester.exists(text('Count: 1')), isTrue);
+  });
+}
+```
+</Fragment>
+<FleuryExample slot="demo" id="testing.counter" cols={32} rows={5} interactive />
+</CodeDemoSplit>
+
+`testWidgets` gives each test a fresh tester and disposes it afterward.
+`pumpWidget` mounts the widget and completes its first frame; you can interact
+with it immediately. `expect(actual, matcher)` comes from Dart's `package:test`.
+Here, `exists(text(...))` returns a boolean and the standard `isTrue` matcher
+requires `true`. Target matchers such as `isFocused` check a control's state.
+
+Keep keyboard and pointer tests when input routing matters. A passing logical
+press can coexist with a broken shortcut, focus route, or mouse hit target.
+
+## Run the tests
+
+Add `fleury_test` and `test` to your app's development dependencies. During the
+pre-release Git installation, use:
+
+```yaml
+dev_dependencies:
+  fleury_test:
+    git:
+      url: https://github.com/danReynolds/fleury.git
+      path: packages/fleury_test
+  test: ^1.26.3
+```
+
+Keep the `fleury` dependency override from
+[Getting started](/fleury/getting-started/) so the app and tester use the same
+checkout. Run `dart test` from your application package. In a Fleury checkout,
+run every example from this guide with:
+
+```sh
+cd website/examples
+dart test test/testing_guide_test.dart
+```
+
+## Find a component, then its controls
+
+A **widget type** identifies an implementation, such as `DraftEditor`.
+A **semantic role** describes meaning, such as button, text field, or dialog.
+A custom editor can contain ordinary fields and buttons without needing an
+editor role or a special tester class.
+
+The editor below uses the same interface for both levels:
+
+```dart
+final editor = tester.target(type: DraftEditor);
+final draft = editor.field('Draft');
+final save = editor.button('Save');
+```
+
+These variables hold reusable queries. Each action or assertion finds the current
+match, so rebuilding the widget does not leave a stale control reference.
+Type matching is exact; use a widget `key` to distinguish repeated components.
+Role and label matching is exact and case-sensitive. A missing or ambiguous
+parent fails even when the child assertion expects zero matches.
+
+A type-only target is a scope. Use it to find children or count matching widgets;
+select a semantic control before reading its state or invoking an action.
+`target(type: DraftEditor, role: SemanticRole.button, label: 'Save')` is shorthand
+for the same two-step query. Semantic scopes search their semantic descendants.
+Popups presented outside the editor are selected from the tester root.
+
+The three shortcuts return the same `FleuryTarget`:
+
+| Selector | What it finds |
+|---|---|
+| `button('Save')` | Exactly the button role with label Save. |
+| `field('Draft')` | A text-editing control labelled Draft, including multiline, numeric, password, and autocomplete fields. |
+| `checkbox('Offline')` | Exactly the checkbox role with label Offline. |
+| `target(role: SemanticRole.dialog, label: 'Discard changes?')` | Any role through the common query interface. |
+
+Give controls stable purpose labels. For `Select`, use `semanticLabel: 'Colour'`;
+its fallback is the selected option and therefore changes with its value.
+For `Autocomplete`, `fieldSemanticLabel` names the input and `semanticLabel`
+names its suggestion menu. Nearby text does not automatically name a field.
+
+Roles form an open vocabulary. A package can declare a role with
+`SemanticRole('reviewApproval', base: SemanticRole.button)` and select it through
+`target(role: approvalRole, label: 'Approve')`. The base tells unfamiliar
+surfaces how to present it; role queries still match the exact declared name.
+For example, `WidgetRoles.approval` projects to a browser button but remains
+distinct from `SemanticRole.button` in these tests. Composites made from ordinary
+controls usually need no new role.
+
+## Frames, time, and waiting
+
+A **frame** rebuilds changed widgets, computes sizes and positions, paints cells,
+and runs post-frame callbacks. You control frame progression and animation time:
+
+| Operation | What it does |
+|---|---|
+| `pumpWidget(widget)` | Mount or update the root and complete its first frame. |
+| `pump()` | Complete a frame without advancing time. |
+| `pump(duration)` | Advance Fleury's ticker clock through its intervals, then complete a frame. |
+| `pumpAndSettle()` | Advance that clock and process frames until the UI is quiet; useful for finite animations. |
+| `await settle()` | Yield to Dart's event loop and process frames until the UI stays quiet. |
+| `render()` / `renderToString()` | Build, lay out, and paint a snapshot, without advancing time or running post-frame callbacks. |
+
+You do not need `render()` after `pumpWidget()` to prepare input. Use rendering
+for snapshots. `pump` does not run ordinary Dart timers. `settle` lets future,
+timer, and stream callbacks run, but cannot know whether a service request has
+finished. Control that work in the test rather than sleeping for a guessed delay.
+
+A target action awaits its semantic handler and completes one resulting frame.
+It does not retry, advance animation time, or settle automatically. Work the
+application starts separately can remain pending when the action returns.
+
+## Test an editing workflow
+
+This editor saves a draft, preserves it after a failed save, and asks before
+throwing changes away. Edit the text and use **Save** or **Ctrl+S**. Turn on
+**Offline** to see a failure, then turn it off and retry. The live demo uses a
+local service with a short delay.
+
+The **Save** test supplies a persistence callback, replaces the draft with `fill`,
+and presses Save. The **Keyboard** test types into the initially focused field
+and sends Ctrl+S. `fill` focuses and replaces through the normal editing handler;
+`type` sends text to the current input focus. Use `paste` when testing paste
+behavior, including multiline paste or undo grouping.
+
+The tests mount `FleuryApp(title: ..., home: DraftEditor(...))` explicitly because
+the editor needs application navigation for its dialog. A widget that already
+builds the full application can go directly into `pumpWidget`.
+
+<CodeDemoSplit
+  files={['Editor source', 'Save', 'Keyboard', 'Failure and retry', 'Discard dialog']}
+  initialFile="Save"
+  codeLabel="Widget source and executable tests"
+  demoLabel="Try the widget"
+  layout="demo-wide"
+  codeMaxHeight="34rem"
+>
+<Fragment slot="code-0">
+```dart
+import 'dart:async';
+
+import 'package:fleury/fleury_core.dart';
+import 'package:fleury_widgets/fleury_widgets_web.dart';
+
+/// The application owns editing; its caller supplies persistence.
+class DraftEditor extends StatefulWidget {
+  const DraftEditor({super.key, required this.save});
+
+  final Future<void> Function(String text) save;
+
+  @override
+  State<DraftEditor> createState() => _DraftEditorState();
+}
+
+class _DraftEditorState extends State<DraftEditor> {
+  final document = TextEditingController(text: 'Ship the testing guide.');
+  String savedText = 'Ship the testing guide.';
+  String status = 'All changes saved';
+  bool saving = false;
+
+  bool get dirty => document.text != savedText;
+
+  Future<void> save() async {
+    if (saving || !dirty) return;
+    final draft = document.text;
+    setState(() {
+      saving = true;
+      status = 'Saving…';
+    });
+    try {
+      await widget.save(draft);
+      if (!mounted) return;
+      setState(() {
+        savedText = draft;
+        status = 'All changes saved';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => status = 'Save failed. Your draft is safe.');
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
+  }
+
+  Future<void> discard(BuildContext context) async {
+    final confirmed = await context.present<bool>(const _DiscardDialog());
+    if (!mounted || confirmed != true) return;
+    setState(() {
+      document.text = savedText;
+      status = 'Changes discarded';
+    });
+  }
+
+  @override
+  void dispose() {
+    document.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => KeyBindings(
+    bindings: [
+      KeyBinding(KeySequence.ctrl.s, onTrigger: (_) => unawaited(save())),
+    ],
+    child: Padding(
+      padding: const EdgeInsets.all(1),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text('release-notes.md', style: CellStyle(bold: true)),
+          const SizedBox(height: 1),
+          Expanded(
+            child: TextArea(
+              controller: document,
+              autofocus: true,
+              readOnly: saving,
+              semanticLabel: 'Draft',
+              onChanged: (_) => setState(() => status = 'Unsaved changes'),
+            ),
+          ),
+          const SizedBox(height: 1),
+          Row(
+            children: [
+              Button(
+                label: 'Save',
+                variant: ButtonVariant.primary,
+                onPressed: saving || !dirty ? null : () => unawaited(save()),
+              ),
+              const SizedBox(width: 1),
+              Button(
+                label: 'Discard',
+                onPressed: saving || !dirty
+                    ? null
+                    : () => unawaited(discard(context)),
+              ),
+              const Spacer(),
+              const Text('Ctrl+S', style: CellStyle(dim: true)),
+            ],
+          ),
+          const SizedBox(height: 1),
+          Text(status),
+        ],
+      ),
+    ),
+  );
+}
+
+class _DiscardDialog extends StatelessWidget {
+  const _DiscardDialog();
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 38,
+    height: 7,
+    child: Dialog(
+      title: 'Discard changes?',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Return to the last saved draft.'),
+          const SizedBox(height: 1),
+          Row(
+            children: [
+              Button(
+                label: 'Keep editing',
+                autofocus: true,
+                onPressed: () => context.pop(false),
+              ),
+              const SizedBox(width: 1),
+              Button(
+                label: 'Discard draft',
+                onPressed: () => context.pop(true),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+}
+```
+</Fragment>
+<Fragment slot="code-1">
+```dart
+import 'package:fleury/fleury.dart';
+import 'package:fleury_test/fleury_test.dart';
+import 'package:test/test.dart';
+
+import '../lib/testing_guide.dart';
+
+void main() {
+  testWidgets('fills and saves a draft', (tester) async {
+    String? saved;
+    tester.pumpWidget(
+      FleuryApp(
+        title: 'Draft editor',
+        home: DraftEditor(save: (text) async => saved = text),
+      ),
+    );
+    final editor = tester.target(type: DraftEditor);
+    await editor.field('Draft').fill('Ready for review.');
+    expect(editor.button('Save'), isEnabled);
+    await editor.button('Save').press();
+    await tester.settle();
+    expect(saved, 'Ready for review.');
+    expect(editor.button('Save'), isDisabled);
+  });
+}
+```
+</Fragment>
+<Fragment slot="code-2">
+```dart
+import 'package:fleury/fleury.dart';
+import 'package:fleury_test/fleury_test.dart';
+import 'package:test/test.dart';
+
+import '../lib/testing_guide.dart';
+
+void main() {
+  testWidgets('saves the draft with Ctrl+S', (tester) async {
+    String? saved;
+    tester.pumpWidget(
+      FleuryApp(
+        title: 'Draft editor',
+        home: DraftEditor(save: (text) async => saved = text),
+      ),
+    );
+    final editor = tester.target(type: DraftEditor);
+    expect(editor.field('Draft'), isFocused);
+    tester.type(' Ready for review.');
+    tester.press(KeySequence.ctrl.s);
+    await tester.settle();
+
+    expect(saved, 'Ship the testing guide. Ready for review.');
+    expect(tester.exists(text('All changes saved')), isTrue);
+    expect(editor.button('Save'), isDisabled);
+  });
+}
+```
+</Fragment>
+<Fragment slot="code-3">
+```dart
+import 'dart:async';
+
+import 'package:fleury/fleury.dart';
+import 'package:fleury_test/fleury_test.dart';
+import 'package:test/test.dart';
+
+import '../lib/testing_guide.dart';
+
+void main() {
+  testWidgets('keeps the draft after a failed save, then retries', (
+    tester,
+  ) async {
+    var request = Completer<void>();
+    final submitted = <String>[];
+    tester.pumpWidget(
+      FleuryApp(
+        title: 'Draft editor',
+        home: DraftEditor(
+          save: (text) {
+            submitted.add(text);
+            return request.future;
+          },
+        ),
+      ),
+    );
+    final editor = tester.target(type: DraftEditor);
+    await editor.field('Draft').fill('Ready for review.');
+    await editor.button('Save').press();
+
+    expect(tester.exists(text('Saving…')), isTrue);
+    expect(editor.button('Save'), isDisabled);
+    tester.press(KeySequence.ctrl.s);
+    expect(submitted, ['Ready for review.']);
+
+    request.completeError(StateError('Offline'));
+    await tester.settle();
+    expect(tester.exists(text('Save failed. Your draft is safe.')), isTrue);
+    expect(editor.field('Draft'), hasValue('Ready for review.'));
+    expect(editor.button('Save'), isEnabled);
+
+    request = Completer<void>();
+    await editor.button('Save').press();
+    request.complete();
+    await tester.settle();
+    expect(submitted, ['Ready for review.', 'Ready for review.']);
+    expect(tester.exists(text('All changes saved')), isTrue);
+  });
+}
+```
+</Fragment>
+<Fragment slot="code-4">
+```dart
+import 'package:fleury/fleury.dart';
+import 'package:fleury_test/fleury_test.dart';
+import 'package:test/test.dart';
+
+import '../lib/testing_guide.dart';
+
+void main() {
+  testWidgets('cancels a discard and restores focus to its button', (
+    tester,
+  ) async {
+    tester.pumpWidget(
+      FleuryApp(
+        title: 'Draft editor',
+        home: DraftEditor(save: (_) async {}),
+      ),
+    );
+    final editor = tester.target(type: DraftEditor);
+    tester.type(' More detail.');
+    await editor.button('Discard').press();
+    tester.pumpAndSettle();
+
+    final dialog = tester.target(
+      role: SemanticRole.dialog,
+      label: 'Discard changes?',
+    );
+    expect(dialog.button('Keep editing'), isFocused);
+    // A type scope cannot expose controls covered by the modal.
+    expect(editor.field('Draft'), hasCount(0));
+    expect(editor.button('Save'), hasCount(0));
+    tester.press(KeySequence.escape);
+    await tester.settle();
+
+    expect(dialog, hasCount(0));
+    expect(editor.button('Discard'), isFocused);
+    expect(editor.field('Draft'), hasValue(contains('More detail.')));
+  });
+
+  testWidgets('discards only after confirmation', (tester) async {
+    tester.pumpWidget(
+      FleuryApp(
+        title: 'Draft editor',
+        home: DraftEditor(save: (_) async {}),
+      ),
+    );
+    final editor = tester.target(type: DraftEditor);
+    await editor.field('Draft').fill('Unsaved draft');
+    await editor.button('Discard').press();
+    tester.pumpAndSettle();
+    final dialog = tester.target(
+      role: SemanticRole.dialog,
+      label: 'Discard changes?',
+    );
+    await dialog.button('Discard draft').press();
+    await tester.settle();
+
+    expect(dialog, hasCount(0));
+    expect(editor.field('Draft'), hasValue('Ship the testing guide.'));
+    expect(tester.exists(text('Changes discarded')), isTrue);
+  });
+}
+```
+</Fragment>
+<FleuryExample slot="demo" id="testing.editor" cols={58} rows={16} interactive />
+</CodeDemoSplit>
+
+In **Failure and retry**, `Completer` from `dart:async` holds the save open. The
+test checks the pending UI, completes the request with an error, verifies the
+draft survived, then completes a successful retry. The callback is the only
+persistence dependency; it does not need a mock server or a real disk write.
+A `StreamController` can similarly control when a stream emits.
+
+In **Discard dialog**, the test selects the presented dialog from the root and
+then finds its buttons. The original editor stays mounted, but its covered
+controls disappear from published semantics while the modal is active. After
+Escape, the test checks both the preserved draft and restored button focus.
+
+## Assert state and explain failures
+
+Use `hasCount(0)` for absence and `hasCount(n)` for a known number of matches.
+State assertions require exactly one control, including inside `isNot(...)`:
+
+| Matcher | Meaning |
+|---|---|
+| `isEnabled` / `isDisabled` | The control's current availability. |
+| `isFocused` | The control reports focus. It does not prove Tab traversal. |
+| `isChecked` / `isUnchecked` | Its checked state; an absent checked state is an error. |
+| `hasValue(valueOrMatcher)` | Its published value, such as `hasValue(contains('review'))`. |
+| `hasCount(n)` | Current widget matches for a type/key scope, or published semantic matches for a control query. |
+
+Read `target.snapshot` for other state, such as `expanded`, `selected`, `busy`,
+and validation errors. `target.snapshots` returns an immutable list of current
+semantic matches. Saved snapshots describe that moment; saved queries resolve
+again on the next use. Virtualized collections expose only their published
+window, so a semantic count is not the total number of application records.
+
+Missing scopes, duplicate labels, disabled actions, unsupported operations, and
+handler errors fail with the query and the relevant state or capabilities.
+Disambiguate repeated labels with a type/key or semantic scope. Queries never
+pick the first enabled control or scroll to manufacture a match.
+
+For example, filling a read-only field reports the failed editability check;
+it does not focus the field and then fail halfway through. If focus remounts a
+field, `fill` stops before sending text to the replacement. Redacted value
+assertions hide both actual and expected values; assert a fixture-owned save
+callback when the semantic value is intentionally private.
+
+## Reuse the same operations for other controls
+
+Use `target(role: ..., label: ...)` for trees, tabs, forms, or custom controls.
+The common operations are `press`, `focus`, `open`, `close`, `select`, `submit`,
+`copy`, `setValue`, `fill`, `check`, and `uncheck`. `perform(action)` covers less
+common advertised actions. A new widget does not need a new tester type.
+
+`check` and `uncheck` ensure the desired checked state without toggling twice.
+An already-correct state succeeds even if the control is disabled. When a change
+is needed, the control must be enabled, support value setting, and actually reach
+the requested state. Checkable options can have a string value such as an option
+key; checked state is a separate boolean.
+
+Controlled widgets need an owner that applies their change callbacks. If a
+library test only records the callback, use `setValue(true)` and assert what was
+reported. In an application behavior test, use `check()` and verify the resulting
+UI. MultiSelect options support the same desired-state operation as Checkbox.
+
+`setValue`, `open`, `close`, and `submit` request an operation. Validation can
+reject a form, a route guard can veto closing, and a numeric field can reject or
+normalize input. Assert the result. Filling an invalid NumberInput value does
+not bypass its normal filter or promise that the requested text was accepted.
+
+## Custom controls and asynchronous handlers
+
+A composite made from ordinary controls inherits their semantics. A custom
+primitive publishes its meaning with `Semantics`: a role, label, state, and
+handlers for the actions it supports. Custom text editors can set
+`SemanticState({'textEditable': true})`; filling also requires focus and setValue
+capabilities, enabled state, and a non-read-only field. Existing textField and
+textArea roles remain compatible when that extra property is absent.
+
+This small publishing control deliberately returns its operation's Future from
+`onAction`. Its **Pending test** starts the action without awaiting it, waits for
+a fixture-owned start signal, and pumps to inspect the pending state. It then
+completes the request and awaits the action. Awaiting `press()` before completing
+that request would leave the test waiting on itself.
+
+<CodeDemoSplit
+  files={['Control source', 'Pending test']}
+  initialFile="Pending test"
+  codeLabel="Widget source and executable tests"
+  demoLabel="Try the widget"
+  layout="balanced"
+  codeMaxHeight="34rem"
+>
+<Fragment slot="code-0">
+```dart
+import 'dart:async';
+
+import 'package:fleury/fleury_core.dart';
+import 'package:fleury_widgets/fleury_widgets_web.dart';
+
+/// An async control whose semantic handler returns the operation's Future.
+class PublishControl extends StatefulWidget {
+  const PublishControl({super.key, required this.publish, this.onStarted});
+  final Future<void> Function() publish;
+  final VoidCallback? onStarted;
+
+  @override
+  State<PublishControl> createState() => _PublishControlState();
+}
+
+class _PublishControlState extends State<PublishControl> {
+  bool busy = false;
+  String status = 'Ready';
+
+  Future<void> publish() async {
+    if (busy) return;
+    setState(() {
+      busy = true;
+      status = 'Publishing…';
+    });
+    widget.onStarted?.call();
+    try {
+      await widget.publish();
+      if (mounted) setState(() => status = 'Published');
+    } catch (_) {
+      if (mounted) setState(() => status = 'Publish failed');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    role: SemanticRole.button,
+    label: 'Publish',
+    value: status,
+    enabled: !busy,
+    busy: busy,
+    includeChildren: false,
+    actions: {if (!busy) SemanticAction.activate},
+    onAction: (_) => publish(),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Button(
+          label: 'Publish',
+          onPressed: busy ? null : () => unawaited(publish()),
+        ),
+        const SizedBox(height: 1),
+        Text(status),
+      ],
+    ),
+  );
+}
+```
+</Fragment>
+<Fragment slot="code-1">
+```dart
+import 'dart:async';
+
+import 'package:fleury/fleury.dart';
+import 'package:fleury_test/fleury_test.dart';
+import 'package:test/test.dart';
+
+import '../lib/testing_guide.dart';
+
+void main() {
+  testWidgets('observes a custom async handler before it completes', (
+    tester,
+  ) async {
+    final started = Completer<void>();
+    final request = Completer<void>();
+    tester.pumpWidget(
+      PublishControl(
+        publish: () => request.future,
+        onStarted: started.complete,
+      ),
+    );
+    final publish = tester.button('Publish');
+    final action = publish.press();
+    await started.future;
+    tester.pump();
+    expect(publish, hasValue('Publishing…'));
+    expect(publish, isDisabled);
+    request.complete();
+    await action;
+    expect(publish, hasValue('Published'));
+    expect(publish, isEnabled);
+  });
+}
+```
+</Fragment>
+<FleuryExample slot="demo" id="testing.publish" cols={32} rows={6} interactive />
+</CodeDemoSplit>
+
+The wrapper supplies one semantic control and suppresses duplicate child
+semantics. Its visible Button still handles ordinary input. Most application
+buttons can use Button's existing semantics directly, as the counter does.
+
+## Check rendering and animations
+
+Use behavior assertions for state transitions and rendering assertions for the
+cells users see. The executable suite also checks the editor at 42 × 12 cells
+with `matchesGolden('testing/editor.txt')` and advances a progress animation by
+500 milliseconds using `pump`.
+
+Golden files live under `test/goldens/`. A missing file fails the test. Create or
+update an intentional baseline with `FLEURY_UPDATE_GOLDENS=1 dart test`, then
+review its diff. Use `pumpAndSettle` for finite animation completion; an endlessly
+running spinner needs a chosen frame or duration instead.
+
+For input routing, focus traversal, dragging, paste, or terminal decoding, keep
+real input tests. For rejected semantic actions and exact status values, the
+lower-level `invokeSemanticAction(..., allowFailure: true)` remains available.

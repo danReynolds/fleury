@@ -108,7 +108,7 @@ void main() {
     // An inflexible Row child receives an unbounded main axis
     // (maxCols == null); a width-keyed builder computes (null ?? 0) ~/ 3 = 0
     // and used to blank the pane with no diagnostic.
-    tester.pumpWidget(
+    tester.mountWidget(
       Row(
         children: [
           LayoutBuilder(
@@ -154,7 +154,7 @@ void main() {
   testWidgets('the builder is memoized: repeated layout passes with '
       'unchanged constraints do not re-run it', (tester) {
     var runs = 0;
-    tester.pumpWidget(
+    tester.mountWidget(
       LayoutBuilder(
         builder: (context, constraints) {
           runs++;
@@ -245,7 +245,7 @@ void main() {
     // the render-damage loop this fix removes.
     final flag = Flag();
     var runs = 0;
-    tester.pumpWidget(
+    tester.mountWidget(
       LayoutBuilder(
         builder: (context, constraints) {
           runs++;
@@ -329,7 +329,7 @@ void main() {
     // the never-built (or half-built) child.
     var boom = true;
     var runs = 0;
-    tester.pumpWidget(
+    tester.mountWidget(
       LayoutBuilder(
         builder: (context, constraints) {
           runs++;
@@ -363,7 +363,7 @@ void main() {
     // builder on the same pass instead of the flag being wiped by the epilogue.
     var runs = 0;
     var reentered = false;
-    tester.pumpWidget(
+    tester.mountWidget(
       LayoutBuilder(
         builder: (context, constraints) {
           runs++;

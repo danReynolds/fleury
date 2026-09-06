@@ -2,6 +2,11 @@
 
 ## 0.1.0
 
+- MultiSelect options expose a boolean semantic `setValue` action alongside
+  toggling, so tests and other semantic consumers can request a desired checked
+  state without changing the option key or dispatching duplicate callbacks.
+- Tree branches publish the shared `expanded` state as well as tree metadata.
+
 Initial public release.
 
 - **`WidgetRoles`.** The catalog's domain semantic roles (`patchReview`,

@@ -2,6 +2,21 @@
 
 ## 0.1.0
 
+- **Editable semantic state.** Text inputs publish `textEditable` independently
+  of role, enabled, and read-only state, allowing compound and custom fields to
+  participate in shared field queries.
+
+- **Complete test frames.** `FleuryTester.pumpWidget` and `pump` now build,
+  lay out, paint, and then run post-frame callbacks. Tests can use layout-time
+  children and pointer targets immediately after mounting. `render(size: ...)`
+  also resizes the ambient `MediaQuery` and subsequent frames. Framework tests
+  that need separate phases can use `mountWidget`, `owner.flushBuild()`, and
+  `render` explicitly; set the viewport before mounting size-sensitive trees.
+- **Semantic diagnostics.** Semantic action targeting resolves identity before
+  availability, distinguishing `ambiguous`, `notFound`, `disabled`, and
+  `unsupported` results. `SemanticTree.single` throws a `SemanticQueryError`
+  (a `StateError`) with selectors, match count, and a redacted tree summary.
+
 Initial public release.
 
 A Dart-native terminal UI framework with Flutter-style ergonomics (widgets,

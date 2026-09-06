@@ -326,6 +326,7 @@ void main() {
     final result = await tester.invokeSemanticAction(
       SemanticAction.activate,
       node: statusHeader,
+      allowFailure: true,
     );
     expect(result.completed, isFalse);
     expect(sorted, 'run');
@@ -425,6 +426,7 @@ void main() {
   testWidgets('renders visible rows only and exposes virtualized semantics', (
     tester,
   ) {
+    tester.viewportSize = const CellSize(20, 6);
     final requestedRows = <int>{};
     tester.pumpWidget(
       DataTable(

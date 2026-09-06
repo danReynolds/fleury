@@ -1,0 +1,64 @@
+{
+  "date": "2026-09-05",
+  "base_commit": "a9eb740aacc60c8fd8483abaa1aa8ce49f78c3c0",
+  "validation": "working tree; not a clean commit or release receipt",
+  "results": {
+    "fleury-testing-check-final": [
+      "00:45 +2962 ~1: All tests passed!",
+      "00:00 +44: All tests passed!",
+      "00:05 +1098 ~1: All tests passed!",
+      "00:00 +7: All tests passed!",
+      "00:00 +4: All tests passed!",
+      "00:01 +25: All tests passed!",
+      "00:41 +43: All tests passed!",
+      "00:07 +27 -1: [Chrome, Dart2Js] test/run_tui_surface_test.dart: IME composition input is queued and dispatched during a frame [E]",
+      "00:07 +60 -2: [Chrome, Dart2Js] test/run_tui_surface_test.dart: semantic action request before first semantic tree records notFound [E]",
+      "00:58 +287 -3: [Chrome, Dart2Js] test/mount_app_test.dart: mountApp assembles retained DOM rendering and browser input [E]",
+      "01:17 +386 -4: [Chrome, Dart2Js] test/dom_demo_test.dart: retained DOM demo renders and handles browser input [E]",
+      "04:30 +512 -4: Some tests failed.",
+      "Command failed in packages/fleury_web with exit code 1: dart test -p vm,chrome"
+    ],
+    "fleury-targets-final": [
+      "00:00 +44: All tests passed!"
+    ],
+    "fleury-widgets-final": [
+      "00:08 +1100 ~1: All tests passed!"
+    ],
+    "fleury-website-final": [
+      "# pass 2",
+      "# fail 0",
+      "00:05 +65: All tests passed!",
+      "21:43:01 [build] 144 page(s) built in 5.31s"
+    ],
+    "fleury-samples-test": [
+      "00:04 +92: All tests passed!"
+    ],
+    "fleury-mcp-test": [
+      "00:20 +138 -1: test/mcp_showcase_e2e_test.dart: MCP drives the real Fleury showcases files: open a folder (discovered by role+label) reveals its children [E]",
+      "01:00 +147 -1: Some tests failed."
+    ],
+    "fleury-mcp-showcases-rerun": [
+      "00:29 +5: All tests passed!"
+    ],
+    "fleury-integration-test": [
+      "03:57 +45: All tests passed!"
+    ]
+  },
+  "source_sha256": {
+    "packages/fleury_test/lib/src/fleury_tester.dart": "e3006e658cbab732aadfa3d1b3feb4fe0fa39fb23c5d85417c8b9bb45909b6df",
+    "packages/fleury_test/lib/src/fleury_target.dart": "54714bf41da0dc7d719fc90da9f7348aff06b542d80828e5211c58bf3f40843a",
+    "packages/fleury_test/lib/src/target_matchers.dart": "0593ef636d563bea1939bec91d1cc14407568f81822f1592c2442c9a57d4bd18",
+    "packages/fleury_test/test/target_test.dart": "7db838d8416b4cbfa0062e41415829e1163779e0bcbd6005bc152ce9a0f215d6",
+    "packages/fleury_widgets/test/testing_targets_test.dart": "2ba887509e9da5abeea6f356b137bec34bb9af87671be46d0781dde50ac6f342",
+    "packages/fleury_widgets/lib/src/select.dart": "52c89e1dbf63e7a2dec3e8338d8699bab4ac57d8a5e31f41fe7cad0ba7d4b369",
+    "packages/fleury_widgets/lib/src/tree.dart": "3bf7101166715a7d72007fc99e8c5bfdc20b8801072fad91b2501ff84ef96710",
+    "packages/fleury/lib/src/semantics/semantics.dart": "3e17c24debb9feff3a01c228b4b4d2ea0a9ac6265d0fb2380c6191269d5fde70",
+    "packages/fleury/lib/src/widgets/text_input.dart": "fceb650fcd26bb03e30ed15da2306e3f34513642feafbee70ea2e8dd2fba8df7",
+    "packages/fleury/lib/src/widgets/text_area.dart": "e1af8da9df5a8d8d44b49aa90768aee33811412c68c437f23f46844b57db0b19",
+    "website/examples/lib/testing_guide.dart": "bba6f7a2e6a2167fad0d5aec518c0109087ac55ba513df2f0fc6a5a592152e32",
+    "website/examples/test/testing_guide_test.dart": "d1da2ed88945b9238c5fcbfd70d0a3dd178a542092da1d80a899872ee6fe7f47",
+    "website/src/content/docs/guides/testing.mdx": "1f31a32210e47948d5a8cf8b0c3b619f2389f6b334301d925c5fc989f5f0e0c3",
+    "website/src/components/CodeDemoSplit.astro": "e659191761a39e64a9a669d75144966c1959c37558060dff20b07fcd8a817478",
+    "website/src/styles/fleury.css": "30792de381bc73a8dd4d7bea7b3e98a30911608691fe4e22003b681e75255b79"
+  }
+}

@@ -370,6 +370,7 @@ void main() {
       final result = await tester.invokeSemanticAction(
         SemanticAction.increment,
         node: node,
+        allowFailure: true,
       );
       expect(result.status, SemanticActionInvocationStatus.disabled);
     });

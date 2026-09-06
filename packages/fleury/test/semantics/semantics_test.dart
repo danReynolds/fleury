@@ -11,7 +11,7 @@ void main() {
 
     expect(node.value, 'Hello semantics');
     expect(node.children, isEmpty);
-    expect(node.bounds, isNull);
+    expect(node.bounds, CellRect.fromLTWH(0, 0, 15, 1));
   });
 
   testWidgets('Semantics wrapper records visible bounds after render', (

@@ -38,7 +38,6 @@ Future<CommandInvocationResult> _invoke(
 ) async {
   final result = await tester.invokeCommand(command);
   await _flushAsyncUi(tester);
-  tester.render(size: const CellSize(110, 32));
   return result;
 }
 
@@ -1483,6 +1482,7 @@ void main() {
   testWidgets('composer submission and log burst update transcript', (
     tester,
   ) async {
+    tester.viewportSize = const CellSize(110, 36);
     tester.pumpWidget(const DemoConsoleApp());
 
     await _invoke(tester, demoCommandGoTranscript);
@@ -1498,13 +1498,13 @@ void main() {
 
     tester.sendKey(const KeyEvent(KeyCode.enter));
     await _flushAsyncUi(tester);
-    tester.render(size: const CellSize(80, 24));
+    tester.pump();
 
     expect(tester.exists(text('[log] user: operator note')), isTrue);
 
     final burst = await _invoke(tester, demoCommandAppendLogBurst);
     expect(burst.status, CommandInvocationStatus.completed);
-    tester.render(size: const CellSize(80, 24));
+    tester.pump();
     expect(tester.exists(text('[log] stream: burst 1.3')), isTrue);
 
     var log = tester.semantics().single(
@@ -1522,7 +1522,7 @@ void main() {
       label: 'Transcript events',
     );
     expect(focusedTranscript.completed, isTrue);
-    tester.render(size: const CellSize(80, 24));
+    tester.pump();
     log = tester.semantics().single(
       role: WidgetRoles.messageList,
       label: 'Transcript events',
@@ -1556,7 +1556,7 @@ void main() {
       label: candidate.label,
     );
     expect(selected.completed, isTrue);
-    tester.render(size: const CellSize(80, 24));
+    tester.pump();
 
     final selectedMessage = tester.semantics().single(
       role: WidgetRoles.message,
@@ -1578,6 +1578,7 @@ void main() {
   testWidgets('transcript selection preserves stable identity across appends', (
     tester,
   ) async {
+    tester.viewportSize = const CellSize(110, 32);
     tester.pumpWidget(const DemoConsoleApp());
 
     await _invoke(tester, demoCommandGoTranscript);
@@ -1938,6 +1939,7 @@ void main() {
   testWidgets('diagnostics capture updates status and transcript state', (
     tester,
   ) async {
+    tester.viewportSize = const CellSize(110, 36);
     tester.pumpWidget(const DemoConsoleApp());
 
     await _invoke(tester, demoCommandGoDiagnostics);
@@ -1946,7 +1948,7 @@ void main() {
     expect(tester.exists(text('Debug captures: 1')), isTrue);
     expect(tester.exists(text('Debug: captures 1')), isTrue);
     expect(tester.exists(text('Diagnostics')), isTrue);
-    tester.render(size: const CellSize(110, 36));
+    tester.pump();
 
     final diagnostic = tester.semantics().single(
       role: SemanticRole.diagnostic,
@@ -2053,7 +2055,7 @@ void main() {
       label: 'Demo trace timeline',
     );
     expect(focusedTimeline.completed, isTrue);
-    tester.render(size: const CellSize(80, 24));
+    tester.pump();
     var updatedTimeline = tester.semantics().single(
       role: WidgetRoles.traceTimeline,
       label: 'Demo trace timeline',
@@ -2077,7 +2079,7 @@ void main() {
       label: 'Diagnostics capture',
     );
     expect(traceResult.completed, isTrue);
-    tester.render(size: const CellSize(80, 24));
+    tester.pump();
     updatedTimeline = tester.semantics().single(
       role: WidgetRoles.traceTimeline,
       label: 'Demo trace timeline',
@@ -2095,7 +2097,7 @@ void main() {
     );
 
     await _invoke(tester, demoCommandGoTranscript);
-    tester.render(size: const CellSize(110, 36));
+    tester.pump();
     expect(
       tester.exists(
         text('[log] diagnose: terminal profile: ansi-256, mouse pending'),

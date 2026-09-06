@@ -1,0 +1,52 @@
+00:00 +0: loading test/mount_app_test.dart
+00:00 +0: loading test/dom_demo_test.dart
+Compiled 17,022,330 input bytes (11,973,686 characters source) to 2,196,250 characters JavaScript in 6.10 seconds
+
+00:00 +0: loading test/mount_app_test.dart
+Compiled 17,025,988 input bytes (11,977,344 characters source) to 2,240,962 characters JavaScript in 6.20 seconds
+
+00:00 +0: test/mount_app_test.dart: mountApp assembles retained DOM rendering and browser input
+00:00 +0 -1: test/dom_demo_test.dart: retained DOM demo renders and handles browser input
+00:00 +0 -1: test/mount_app_test.dart: mountApp assembles retained DOM rendering and browser input [E]
+  Expected: an object with length of <2>
+    Actual: [
+              Instance of 'WebFrameInstrumentation',
+              Instance of 'WebFrameInstrumentation',
+              Instance of 'WebFrameInstrumentation'
+            ]
+     Which: has length of <3>
+  
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/js_helper.dart 1424:15   Object.throwExpression
+  package:matcher                                                           Object.expect
+  test/mount_app_test.dart 137:5                                            <fn>
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/async_patch.dart 339:19  _wrapJsFunctionForAsync.closure.$protected
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/async_patch.dart 365:23  _wrapJsFunctionForAsync.<fn>
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/async_patch.dart 313:7   _awaitOnObject.<fn>
+  org-dartlang-sdk:///lib/async/zone_root.dart 48:46                        StaticClosure._rootRunUnary
+  org-dartlang-sdk:///lib/async/zone.dart 732:34                            _CustomZone.runUnary
+  
+00:00 +0 -2: test/dom_demo_test.dart: retained DOM demo renders and handles browser input [E]
+  Expected: true
+    Actual: <false>
+  
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/js_helper.dart 1424:15   Object.throwExpression
+  package:matcher                                                           Object.expect
+  test/dom_demo_test.dart 101:5                                             <fn>
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/async_patch.dart 339:19  _wrapJsFunctionForAsync.closure.$protected
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/async_patch.dart 365:23  _wrapJsFunctionForAsync.<fn>
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/async_patch.dart 313:7   _awaitOnObject.<fn>
+  org-dartlang-sdk:///lib/async/zone_root.dart 48:46                        StaticClosure._rootRunUnary
+  org-dartlang-sdk:///lib/async/zone.dart 732:34                            _CustomZone.runUnary
+  
+00:00 +0 -2: test/mount_app_test.dart: mountApp disposes generated DOM roots after contained build errors
+00:00 +1 -2: test/mount_app_test.dart: mountApp retains but clears caller-supplied visual and semantic roots
+00:00 +2 -2: test/mount_app_test.dart: mountApp rejects disabled semantics without diagnostics acknowledgement
+00:00 +3 -2: test/mount_app_test.dart: mountApp allows disabled semantics only for acknowledged diagnostics
+00:00 +4 -2: Some tests failed.
+
+Failing tests:
+  test/dom_demo_test.dart: retained DOM demo renders and handles browser input
+  test/mount_app_test.dart: mountApp assembles retained DOM rendering and browser input
+
+Consider enabling the flag chain-stack-traces to receive more detailed exceptions.
+For example, 'dart test --chain-stack-traces'.

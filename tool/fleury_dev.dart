@@ -454,6 +454,7 @@ class _Runner {
         'test/api_extract_test.dart',
         'test/docs_accuracy_test.dart',
         'test/doc_snippets_test.dart',
+        'test/testing_guide_test.dart',
       ], workingDirectory: webExamples);
 
       // dart2js smoke: the doc-examples entrypoint pulls in fleury_core,

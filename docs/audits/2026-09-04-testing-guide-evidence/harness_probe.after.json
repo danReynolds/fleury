@@ -1,0 +1,13 @@
+{
+  "afterMount": true,
+  "afterPump": true,
+  "afterRender": true,
+  "renderSizeOverride": "layout=40; media=40",
+  "action:Missing": "notFound",
+  "action:Save": "ambiguous",
+  "action:Disabled": "disabled",
+  "missingQueryDiagnostic": "Bad state: Expected exactly one semantic node, found 0 for {role: button, label: Missing}.\n\nSemanticInspectionSnapshot(schemaVersion: 1, nodeCount: 7, actionCount: 4, focusedNodeId: none, roleCounts: {app: 1, button: 3, text: 3})\napp#root\n  button#auto:OverlayEntry#8xsfe4/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/button label:\"Save\" actions:[activate, focus]\n    text#auto:OverlayEntry#8xsfe4/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/text label:\"[ Save ]\" value:\"[ Save ]\"\n  button#auto:OverlayEntry#8xsfe4/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~1/~0/~0/~0/~0/~0/~0/button label:\"Save\" actions:[activate, focus]\n    text#auto:OverlayEntry#8xsfe4/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~1/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/text label:\"[ Save ]\" value:\"[ Save ]\"\n  button#auto:OverlayEntry#8xsfe4/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~2/~0/~0/~0/~0/~0/~0/button label:\"Disabled\" disabled\n    text#auto:OverlayEntry#8xsfe4/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/~2/~0/~0/~0/~0/~0/~0/~0/~0/~0/~0/text label:\"[ Disabled ]\" value:\"[ Disabled ]\"",
+  "settledWithUnfinishedFuture": true,
+  "requestCompleted": false,
+  "afterControlledCompletion": true
+}

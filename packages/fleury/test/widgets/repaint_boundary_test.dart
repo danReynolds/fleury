@@ -314,7 +314,7 @@ void main() {
       expect(target.visibleBounds, isNull);
 
       controller.jumpTo(1);
-      tester.pump();
+      tester.owner.flushBuild();
       RepaintBoundaryDebugStats.beginFrame(enabled: true);
       tester.render(size: const CellSize(6, 1));
       final stats = RepaintBoundaryDebugStats.takeFrameStats();
@@ -712,7 +712,7 @@ void main() {
       );
 
       scrollController.jumpTo(1);
-      tester.pump();
+      tester.owner.flushBuild();
       RepaintBoundaryDebugStats.beginFrame(enabled: true);
       tester.render(size: size);
       final stats = RepaintBoundaryDebugStats.takeFrameStats();
@@ -790,7 +790,7 @@ void main() {
         );
 
         outer.jumpTo(0);
-        tester.pump();
+        tester.owner.flushBuild();
         RepaintBoundaryDebugStats.beginFrame(enabled: true);
         final second = tester.renderToString(size: size, emptyMark: ' ');
         final stats = RepaintBoundaryDebugStats.takeFrameStats();
@@ -896,7 +896,7 @@ void main() {
         );
 
         outer.jumpTo(1);
-        tester.pump();
+        tester.owner.flushBuild();
         RepaintBoundaryDebugStats.beginFrame(enabled: true);
         final second = tester.renderToString(size: size, emptyMark: ' ');
         final stats = RepaintBoundaryDebugStats.takeFrameStats();
@@ -953,7 +953,7 @@ void main() {
       expect(tester.renderToString(size: size).trim(), 'first');
 
       controller.jumpTo(1);
-      tester.pump();
+      tester.owner.flushBuild();
       RepaintBoundaryDebugStats.beginFrame(enabled: true);
       expect(tester.renderToString(size: size).trim(), 'second');
       final stats = RepaintBoundaryDebugStats.takeFrameStats();
