@@ -140,24 +140,35 @@ class _RawRichTextElement extends LeafRenderObjectElement {
 }
 
 class _Glyph {
-  const _Glyph(
-    this.grapheme,
-    this.width,
-    this.style, {
-    this.isBreak = false,
-    this.groupId,
-    this.groupSource,
-  });
+  const _Glyph(this.grapheme, this.width, this.style);
   final String grapheme;
   final int width;
   final CellStyle style;
-  final bool isBreak;
+  bool get isBreak => grapheme == '\n';
+
+  // Ordinary glyphs carry only paint data. Lowering metadata is needed only
+  // by atoms of split clusters; keeping it there avoids two null fields on
+  // every ordinary glyph in the document.
+  int? get groupId => null;
+  String? get groupSource => null;
+}
+
+class _LoweredGlyph extends _Glyph {
+  const _LoweredGlyph(
+    super.grapheme,
+    super.width,
+    super.style, {
+    required this.groupId,
+    this.groupSource,
+  });
 
   /// Non-null when this glyph is one atom of a lowered cluster group; equal
   /// ids mark atoms of the same source cluster.
-  final int? groupId;
+  @override
+  final int groupId;
 
   /// The canonical source cluster, carried on the group's FIRST atom only.
+  @override
   final String? groupSource;
 }
 
@@ -327,7 +338,7 @@ class RenderRichText extends RenderObject
       if (text != null && text.isNotEmpty) {
         for (final paragraph in _splitKeepingBreaks(text)) {
           if (paragraph == '\n') {
-            out.add(_Glyph('\n', 0, style, isBreak: true));
+            out.add(_Glyph('\n', 0, style));
             continue;
           }
           for (final g in sanitizeForDisplay(paragraph).characters) {
@@ -384,7 +395,7 @@ class RenderRichText extends RenderObject
           for (var c = 0; c < components.length; c++) {
             final component = components[c];
             out.add(
-              _Glyph(
+              _LoweredGlyph(
                 component,
                 _widthResolver.widthOfGrapheme(component, _policy),
                 unitStyles[componentOffset],
@@ -409,7 +420,7 @@ class RenderRichText extends RenderObject
         for (final paragraph in _splitKeepingBreaks(text)) {
           if (paragraph == '\n') {
             flushParagraph();
-            out.add(_Glyph('\n', 0, style, isBreak: true));
+            out.add(_Glyph('\n', 0, style));
             continue;
           }
           final sanitized = sanitizeForDisplay(paragraph);

@@ -11,7 +11,7 @@ final class FrameSample {
 }
 
 final class SampleFrameHost {
-  SampleFrameHost(Widget app, this.size)
+  SampleFrameHost(Widget app, this.size, {bool settle = true})
       : tester = FleuryTester(viewportSize: size) {
     tester.pumpWidget(app);
     PointerRouter? router;
@@ -28,6 +28,7 @@ final class SampleFrameHost {
     visit(tester.root!);
     _router = router!;
     _loop = TuiFrameLoop(renderDamage: tester.owner.renderDamageTracker);
+    if (!settle) return;
     // Adaptive builders can mount descendants after the first layout. Settle
     // those frames before selecting a leaf or collecting the full tree.
     for (var i = 0; i < 30; i++) {
@@ -52,7 +53,7 @@ final class SampleFrameHost {
     _text = null;
   }
 
-  final CellSize size;
+  CellSize size;
   final FleuryTester tester;
   final renderObjects = <RenderObject>[];
   late final PointerRouter _router;
