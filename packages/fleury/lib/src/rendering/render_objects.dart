@@ -152,6 +152,10 @@ class RenderText extends RenderObject
   /// is painted. The display form lives in [_text] via [_projection].
   String get text => _logicalText;
   set text(String value) {
+    // Ambient rebuilds resend the same text. The canonical value is already
+    // sanitized; equality lets those updates skip splitting/scanning/joining
+    // a whole document without retaining a second copy of the source.
+    if (value == _logicalText) return;
     final sanitized = _sanitizePreservingNewlines(value);
     if (sanitized == _logicalText) return;
     _logicalText = sanitized;
