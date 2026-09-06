@@ -6,6 +6,30 @@ import 'package:test/test.dart';
 import '../bin/sample_frame_host.dart';
 
 void main() {
+  test('resize updates ambient MediaQuery and rendered constraints together',
+      () {
+    final observed = <CellSize>[];
+    final host = SampleFrameHost(
+      _ViewportProbe(observed),
+      const CellSize(80, 24),
+      settle: false,
+    );
+    addTearDown(host.tester.dispose);
+    host.frame('clean', 0);
+    expect(observed.last, const CellSize(80, 24));
+    host.size = const CellSize(60, 20);
+    expect(host.tester.viewportSize, host.size);
+    expect(host.frame('clean', 1).changed, isTrue);
+    expect(observed.last, const CellSize(60, 20));
+    final text = host.renderObjects.whereType<RenderText>().single;
+    expect(text.text, '60x20');
+    expect(text.constraints.maxCols, 60);
+    final builds = observed.length;
+    host.size = const CellSize(60, 20);
+    host.frame('clean', 2);
+    expect(observed.length, builds);
+  });
+
   test('failed paint aborts pointer and focus input, then a frame recovers',
       () {
     final toggle = _FailureToggle();
@@ -61,6 +85,17 @@ void main() {
 
 class _FailureToggle {
   bool fail = false;
+}
+
+class _ViewportProbe extends StatelessWidget {
+  const _ViewportProbe(this.observed);
+  final List<CellSize> observed;
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    observed.add(size);
+    return Text('${size.cols}x${size.rows}');
+  }
 }
 
 class _PaintProbe extends LeafRenderObjectWidget {

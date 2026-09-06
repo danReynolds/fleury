@@ -306,6 +306,20 @@ class RenderText extends RenderObject
     if (cached != null && constraints == _cachedConstraints) {
       return cached;
     }
+    if (cached != null && !_softWrap) {
+      // Unwrapped paragraphs are independent of the viewport width. Reuse
+      // their measured widths, while refreshing the line-list identity so
+      // point-based selection observes the new geometry on the next paint.
+      _lines = List<String>.of(_lines);
+      var widest = 0;
+      for (final width in _lineWidths) {
+        if (width > widest) widest = width;
+      }
+      final result = constraints.constrain(CellSize(widest, _lines.length));
+      _cachedConstraints = constraints;
+      _cachedSize = result;
+      return result;
+    }
 
     if (!_softWrap || maxCols == null) {
       // No-wrap with newlines: split into paragraphs, clip each to
@@ -406,10 +420,11 @@ class RenderText extends RenderObject
         clipRect: clipRect,
       );
     }
-    if (_text.isEmpty || size.isEmpty) return;
     // Selection is constant during this synchronous paint. Resolve once:
     // resolving per glyph repeatedly scans the document's line lengths.
     final selection = getSelectionRange();
+    // Refresh even an empty paint so selection drops obsolete line snapshots.
+    if (_text.isEmpty || size.isEmpty) return;
     final visibleRows = _lines.length < size.rows ? _lines.length : size.rows;
     if (offset.row >= buffer.size.rows || offset.row + visibleRows <= 0) return;
     final selectedStyle = selection == null

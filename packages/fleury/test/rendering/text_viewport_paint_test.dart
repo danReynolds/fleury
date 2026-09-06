@@ -1,8 +1,101 @@
+import 'dart:collection';
+
 import 'package:fleury/fleury.dart';
 import 'package:fleury/src/widgets/rich_text.dart' show RenderRichText;
 import 'package:test/test.dart';
 
 void main() {
+  test('repeated length and range queries reuse current layout length', () {
+    final lines = _CountingLines(['abc', '', '漢👩‍💻']);
+    final render = _LinesText(lines);
+    expect(render.contentLength, 11);
+    expect(lines.reads, 3);
+    render.layout(const CellConstraints(maxCols: 20));
+    render.paint(CellBuffer(const CellSize(20, 3)), CellOffset.zero);
+    render.dispatchSelectionEvent(
+      const SelectionGranularEvent(granularity: SelectionGranularity.all),
+    );
+    lines.reads = 0;
+    for (var i = 0; i < 100; i++) {
+      expect(render.contentLength, 11);
+      expect(render.getSelectionRange(), (start: 0, end: 11));
+    }
+    expect(lines.reads, 0);
+
+    final replacement = _CountingLines(['x', '']);
+    render.lines = replacement;
+    expect(
+      render.contentLength,
+      2,
+      reason: 'replacement is visible before paint',
+    );
+    expect(replacement.reads, 2);
+    expect(render.getSelectionRange(), (start: 0, end: 2));
+    render.dispatchSelectionEvent(const SelectionClearEvent());
+    render.lines = _CountingLines([]);
+    render.paint(CellBuffer(const CellSize(20, 3)), CellOffset.zero);
+    expect(render.contentLength, 0);
+    expect(render.getSelectionRange(), isNull);
+  });
+  for (final rich in [false, true]) {
+    test('empty and zero-sized paints still refresh selection, rich=$rich', () {
+      var reads = 0;
+      final RenderObject render = rich
+          ? _RangeCountingRichText('', () => reads++)
+          : _RangeCountingText('', () => reads++);
+      render.layout(const CellConstraints(maxCols: 20));
+      render.paint(CellBuffer(const CellSize(20, 3)), CellOffset.zero);
+      expect(reads, 1);
+      if (render is RenderRichText) {
+        render.setSpan(const TextSpan(text: 'abc'), CellStyle.none);
+      } else {
+        (render as RenderText).text = 'abc';
+      }
+      render.layout(CellConstraints.tight(CellSize.zero));
+      reads = 0;
+      render.paint(CellBuffer(const CellSize(20, 3)), CellOffset.zero);
+      expect(reads, 1);
+    });
+
+    test('partial copy preserves line separators and Unicode, rich=$rich', () {
+      const content = 'a漢\n\nb👩‍💻c';
+      final RenderObject render = rich
+          ? RenderRichText(
+              span: const TextSpan(text: content),
+              base: CellStyle.none,
+            )
+          : RenderText(text: content);
+      render.layout(const CellConstraints(maxCols: 20));
+      render.paint(CellBuffer(const CellSize(20, 3)), CellOffset.zero);
+      final selectable = render as Selectable;
+      const points = [
+        (CellOffset(0, 0), 0),
+        (CellOffset(1, 0), 1),
+        (CellOffset(3, 0), 2),
+        (CellOffset(0, 1), 3),
+        (CellOffset(0, 2), 4),
+        (CellOffset(1, 2), 5),
+        (CellOffset(3, 2), 10),
+        (CellOffset(4, 2), 11),
+      ];
+      for (final a in points) {
+        for (final b in points) {
+          selectable.dispatchSelectionEvent(
+            SelectionEdgeUpdateEvent(globalPosition: a.$1, isStart: true),
+          );
+          selectable.dispatchSelectionEvent(
+            SelectionEdgeUpdateEvent(globalPosition: b.$1, isStart: false),
+          );
+          final start = a.$2 < b.$2 ? a.$2 : b.$2;
+          final end = a.$2 < b.$2 ? b.$2 : a.$2;
+          expect(
+            selectable.getSelectedContent()?.plainText,
+            start == end ? null : content.substring(start, end),
+          );
+        }
+      }
+    });
+  }
   for (final rich in [false, true]) {
     test('highlight cells share immutable styles, rich=$rich', () {
       const base = CellStyle(foreground: AnsiColor(3), inverse: false);
@@ -251,4 +344,30 @@ class _RangeCountingRichText extends RenderRichText {
     onRead();
     return super.getSelectionRange();
   }
+}
+
+class _CountingLines extends ListBase<String> {
+  _CountingLines(this.values);
+  final List<String> values;
+  int reads = 0;
+  @override
+  int get length => values.length;
+  @override
+  set length(int value) => throw UnsupportedError('read-only');
+  @override
+  String operator [](int index) {
+    reads++;
+    return values[index];
+  }
+
+  @override
+  void operator []=(int index, String value) =>
+      throw UnsupportedError('read-only');
+}
+
+class _LinesText extends RenderText {
+  _LinesText(this.lines) : super(text: 'abc\n\n漢👩‍💻');
+  List<String> lines;
+  @override
+  List<String> get selectionLines => lines;
 }

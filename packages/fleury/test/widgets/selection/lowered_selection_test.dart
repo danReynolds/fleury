@@ -139,6 +139,25 @@ void main() {
   });
 
   group('render-object level', () {
+    test('RichText preserves newlines between distinct lowered groups', () {
+      for (final (source, width, expected) in [
+        ('a $_family\nb $_family\n', 20, 'a $_family\nb $_family\n'),
+        ('$_family\n\nx', 20, '$_family\n\nx'),
+        ('$_family$_family', 6, '$_family\n$_family'),
+      ]) {
+        final render = RenderRichText(
+          span: TextSpan(text: source),
+          base: CellStyle.none,
+          textPolicy: _split,
+        )..layout(CellConstraints(maxCols: width));
+        render.paint(CellBuffer(CellSize(width, 5)), CellOffset.zero);
+        render.dispatchSelectionEvent(
+          const SelectionGranularEvent(granularity: SelectionGranularity.all),
+        );
+        expect(render.getSelectedContent()?.plainText, expected);
+      }
+    });
+
     test('a forced component break never leaks into the copied source', () {
       // 'x' + family at maxCols 4 wraps as 'x👨' / '👩👦' — the group's flat
       // range spans the inserted line break. The splice must yield the

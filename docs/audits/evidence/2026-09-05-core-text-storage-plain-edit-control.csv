@@ -1,0 +1,7 @@
+variant,run,kind,policy,wrap,lines,operation,frames,changedFrames,copiedUnits,fingerprint,medianUs,p95Us,dart
+after,0,plain,spec,True,10000,edit,100,100,0,37686951,28328,29745,"3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on ""macos_arm64"""
+after,1,plain,spec,True,10000,edit,100,100,0,37686951,28155,29563,"3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on ""macos_arm64"""
+after,2,plain,spec,True,10000,edit,100,100,0,37686951,28365,29689,"3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on ""macos_arm64"""
+base,0,plain,spec,True,10000,edit,100,100,0,37686951,28420,30195,"3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on ""macos_arm64"""
+base,1,plain,spec,True,10000,edit,100,100,0,37686951,28299,29840,"3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on ""macos_arm64"""
+base,2,plain,spec,True,10000,edit,100,100,0,37686951,28336,29861,"3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on ""macos_arm64"""

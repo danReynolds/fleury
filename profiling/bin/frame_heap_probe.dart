@@ -26,7 +26,8 @@ Future<void> main(List<String> args) async {
           '--rows',
           '--frames',
           '--warmup',
-          '--selected'
+          '--selected',
+          '--policy'
         ].contains(args[i])) {
       throw ArgumentError('Unknown flag or missing value: ${args[i]}');
     }
@@ -42,6 +43,12 @@ Future<void> main(List<String> args) async {
   if (!['true', 'false'].contains(selectedValue))
     throw ArgumentError('Invalid selection');
   final selected = selectedValue == 'true';
+  final policyName = options['--policy'] ?? 'spec';
+  final policy = switch (policyName) {
+    'spec' => TextPresentationPolicy.spec,
+    'split' => const TextPresentationPolicy(lowering: ClusterLowering.split),
+    _ => throw ArgumentError('Invalid text policy'),
+  };
   final document = !name.endsWith('-document')
       ? ''
       : List.generate(
@@ -77,7 +84,7 @@ Future<void> main(List<String> args) async {
     scheme: 'ws',
     pathSegments: [...server.pathSegments.where((s) => s.isNotEmpty), 'ws'],
   ).toString());
-  final host = SampleFrameHost(app, CellSize(cols, rows));
+  final host = SampleFrameHost(app, CellSize(cols, rows), textPolicy: policy);
   try {
     if (selected) {
       if (!name.endsWith('-document'))
@@ -125,6 +132,7 @@ Future<void> main(List<String> args) async {
         (b['liveAfterBytes'] as int).compareTo(a['liveAfterBytes'] as int));
     stdout.writeln(jsonEncode({
       'app': name,
+      'policy': policyName,
       'mode': mode,
       'selected': selected,
       'columns': cols,
