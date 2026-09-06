@@ -93,7 +93,7 @@ These are informational measurements; no gate or tolerance was weakened.
 ## Final measurements
 
 Baseline: `85ea87fe` (main after #217). Candidate production revision:
-`f614571e`. Dart 3.12.2, macOS 26.2 arm64, 10 logical CPUs. Values below are
+`f614571e`, with the corrected resize host at `95f79ce8`. Dart 3.12.2, macOS 26.2 arm64, 10 logical CPUs. Values below are
 the mean of two per-process AOT medians with alternating execution order.
 Raw median/p95, output fingerprints, frame counts and copy lengths are in
 `evidence/2026-09-05-core-text-storage-document.csv` (376 records). Opening
@@ -101,28 +101,32 @@ and editing still scale with document size; unchanged rebuilds reuse layout.
 
 | Workload | Main | Candidate |
 | --- | ---: | ---: |
-| Rich text, 1,000 lines: open + first frame | 11.66 ms | 6.92 ms |
-| Rich text, 1,000 lines: equal-content rebuild + frame | 12.48 ms | 0.098 ms |
-| Rich text, 1,000 lines: edit + frame | 12.84 ms | 6.99 ms |
-| Rich text, 1,000 lines: wrapped resize + frame | 5.74 ms | 3.43 ms |
-| 1,000 styled spans: open / edit + frame | 11.42 / 12.81 ms | 7.48 / 7.68 ms |
-| Rich text, 10,000 lines: open / edit + frame | 129.68 / 211.74 ms | 69.00 / 72.35 ms |
-| Rich text, 10,000 lines: wrapped resize + frame | 103.31 ms | 37.56 ms |
-| Rich text, 10,000 lines: unwrapped resize + frame | 66.03 ms | 0.110 ms |
-| Plain text, 10,000 lines: unwrapped resize + frame | 5.53 ms | 0.214 ms |
-| Plain text, 10,000 lines: pointer drag + frame | 0.360 ms | 0.103 ms |
-| Rich text, 10,000 lines: partial / full copy + frame | 1.054 / 0.945 ms | 0.180 / 0.791 ms |
-| Plain text, 10,000 lines: partial / full copy + frame | 0.831 / 0.821 ms | 0.163 / 0.713 ms |
+| Rich text, 1,000 lines: open + first frame | 10.87 ms | 6.63 ms |
+| Rich text, 1,000 lines: equal-content rebuild + frame | 12.16 ms | 0.097 ms |
+| Rich text, 1,000 lines: edit + frame | 12.17 ms | 6.70 ms |
+| Rich text, 1,000 lines: wrapped resize + frame | 12.21 ms | 3.31 ms |
+| 1,000 styled spans: open / edit + frame | 10.99 / 12.36 ms | 7.04 / 7.36 ms |
+| Rich text, 10,000 lines: open / edit + frame | 123.72 / 192.97 ms | 66.82 / 68.49 ms |
+| Rich text, 10,000 lines: wrapped resize + frame | 157.61 ms | 36.97 ms |
+| Rich text, 10,000 lines: unwrapped resize + frame | 178.12 ms | 0.111 ms |
+| Plain text, 10,000 lines: unwrapped resize + frame | 9.04 ms | 3.474 ms |
+| Plain text, 10,000 lines: pointer drag + frame | 0.355 ms | 0.107 ms |
+| Rich text, 10,000 lines: partial / full copy + frame | 0.845 / 0.986 ms | 0.174 / 0.697 ms |
+| Plain text, 10,000 lines: partial / full copy + frame | 0.886 / 0.901 ms | 0.156 / 0.567 ms |
 
-The one-span and many-span variants both improve. The final unwrapped change
-was separately compared against the preceding optimized candidate: 10,000-line
-rich/spans resize falls from roughly 39–43 ms to 0.11 ms under both spec and
-split policies. Its plain-text control falls from 7.59 ms to 0.25 ms. Separate
-runs naturally differ in absolute timing; do not multiply these speedups.
+The one-span and many-span variants both improve. Final resize timing includes
+propagating the viewport to ambient MediaQuery, rebuilding its dependents,
+layout, paint, diff and commit. Historical nowrap incremental receipts
+record constraint-only changes and are retained to explain the implementation
+decision; they are superseded for runtime claims by the final document CSV.
+The ambient rebuild is material: final plain-text unwrapped resize is 3.47 ms
+at 10,000 lines, not the 0.21 ms measured when ambient work was omitted.
 
-Plain wrapped opening/resize remain within about 1% of main in the final
-series; the 10,000-line edit control is 6.1% slower. No plain wrapped-edit win
-is claimed. The 45 sample-app/mode/viewport controls range from 2.1% slower to
+Plain wrapped opening/edit/resize remain within 0.4% of main in the corrected
+series. An earlier 6.1% edit slowdown did not repeat: three additional
+alternating isolated 10,000-line edit controls average 28.35 ms on main versus
+28.28 ms on the candidate (0.2% faster). No plain wrapped-edit win is claimed.
+The 45 sample-app/mode/viewport controls range from 2.1% slower to
 8.1% faster, with matching changed-frame counts, render-object counts and
 mutated-leaf identities. They establish a small-control comparison, not a
 claim of another broad frame speedup. Forced clean frames are not idle cost:
@@ -137,8 +141,8 @@ non-ASCII occurrences; lowered atoms remain distinct. These totals exclude
 SDK strings/lists and are not total application memory.
 
 As a separate whole-process measure, the 1,000-line rich-text all-operation
-AOT batch peaks at 218.7 MiB RSS on main versus 83.6 MiB on the candidate;
-the 10,000-line batch is 301.2 versus 185.1 MiB. This includes fixtures, VM,
+AOT batch peaks at 221.4 MiB RSS on main versus 83.5 MiB on the candidate;
+the 10,000-line batch is 305.5 versus 177.5 MiB. This includes fixtures, VM,
 all operations and temporary allocation/GC effects. It is not steady-state
 RAM, and results differ by fixture and process execution history.
 
@@ -163,12 +167,21 @@ was regenerated with source fingerprint `e79aad9efd8e7a92`.
 
 Copilot's first review claimed that the profiling switch requires explicit
 break/return statements. Pinned Dart analysis and AOT compilation/runs prove
-that finding false; its evidence response is recorded on PR #218. The final
-production revision was submitted for another review. Final contributor,
-wire, CI and merge receipts are recorded in
+that finding false. Its second review correctly found that the profiling
+host resized the render buffer without updating ambient MediaQuery. Follow-up
+`95f79ce8` delegates size to `FleuryTester.viewportSize`; the regression checks
+ambient size, painted text, constraints and same-size no-op behavior. Both
+host tests and analysis pass. All document CPU/RSS and lifecycle measurements
+were refreshed with the corrected identical host on both revisions. The
+non-resizing sample and retained-heap controls are unchanged; the manifest
+records their earlier harness revision separately.
+
+The complete contributor check passed 5,358 tests across 12 suites on the
+final production tree, with one pre-existing skip. The terminal-wire gate
+also passed. Subsequent changes affect only profiling tools and evidence.
+Final exact-head CI and merge receipts are recorded in
 [PR #218](https://github.com/danReynolds/fleury/pull/218). The evidence manifest
-pins production source hashes and AOT binary hashes so later documentation
-commits do not change which implementation these measurements describe.
+pins production and harness revisions, source hashes and AOT binary hashes.
 
 ## Workloads and proof boundaries
 
