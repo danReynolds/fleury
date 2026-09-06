@@ -373,15 +373,30 @@ class RenderRichText extends RenderObject
   List<_Glyph> _flattenPreserved(List<({String text, CellStyle style})> runs) {
     final out = <_Glyph>[];
     for (final run in runs) {
+      // Printable ASCII has a small, fixed key space. Share its immutable
+      // glyphs within this run; the temporary index dies after flattening.
+      // Wider clusters keep the ordinary resolver path.
+      final ascii = List<_Glyph?>.filled(95, null);
       for (final paragraph in _splitKeepingBreaks(run.text)) {
         if (paragraph == '\n') {
           out.add(_Glyph('\n', 0, run.style));
           continue;
         }
         for (final g in sanitizeForDisplay(paragraph).characters) {
-          out.add(
-            _Glyph(g, _widthResolver.widthOfGrapheme(g, _policy), run.style),
-          );
+          final code = g.length == 1 ? g.codeUnitAt(0) : -1;
+          if (code >= 0x20 && code <= 0x7e) {
+            out.add(
+              ascii[code - 0x20] ??= _Glyph(
+                g,
+                _widthResolver.widthOfGrapheme(g, _policy),
+                run.style,
+              ),
+            );
+          } else {
+            out.add(
+              _Glyph(g, _widthResolver.widthOfGrapheme(g, _policy), run.style),
+            );
+          }
         }
       }
     }

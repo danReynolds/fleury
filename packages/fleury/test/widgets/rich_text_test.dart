@@ -13,6 +13,43 @@ String _row(CellBuffer buf, int row) {
 }
 
 void main() {
+  test(
+    'bounded glyph sharing preserves diverse text and width policy updates',
+    () {
+      final text =
+          List.generate(180, (i) => String.fromCharCode(0x4e00 + i)).join() +
+          '─👩‍💻─👩‍💻';
+      final rich = RenderRichText(
+        span: TextSpan(text: text),
+        base: CellStyle.none,
+        softWrap: false,
+      );
+      final plain = RenderText(text: text, softWrap: false);
+      for (final policy in [
+        TextPresentationPolicy.spec,
+        const TextPresentationPolicy(widths: CellWidthPolicy.cjk),
+      ]) {
+        rich.textPolicy = policy;
+        plain.textPolicy = policy;
+        const size = CellSize(400, 1);
+        final expected = CellBuffer(size);
+        final actual = CellBuffer(size);
+        rich.layout(CellConstraints.tight(size));
+        plain.layout(CellConstraints.tight(size));
+        rich.paint(actual, CellOffset.zero);
+        plain.paint(expected, CellOffset.zero);
+        for (var col = 0; col < size.cols; col++) {
+          expect(actual.atColRow(col, 0), expected.atColRow(col, 0));
+        }
+        rich.dispatchSelectionEvent(
+          const SelectionGranularEvent(granularity: SelectionGranularity.all),
+        );
+        expect(rich.getSelectedContent()?.plainText, text);
+        rich.dispatchSelectionEvent(const SelectionClearEvent());
+      }
+    },
+  );
+
   test('equal resolved runs reuse measurement and layout', () {
     final resolver = _CountingWidthResolver();
     TextSpan source() => TextSpan(
