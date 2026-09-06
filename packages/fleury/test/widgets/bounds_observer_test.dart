@@ -75,19 +75,34 @@ void main() {
       chip.addListener(() => notifications++);
 
       chip.publish(
-        const CellRect(offset: CellOffset(3, 2), size: CellSize(4, 1)),
+        RenderGeometry(
+          bounds: const CellRect(
+            offset: CellOffset(3, 2),
+            size: CellSize(4, 1),
+          ),
+        ),
       );
       expect(notifications, 1, reason: 'first paint published bounds');
 
       // A static widget re-publishes identical bounds every paint — that
       // must stay free, or every frame would invalidate every consumer.
       chip.publish(
-        const CellRect(offset: CellOffset(3, 2), size: CellSize(4, 1)),
+        RenderGeometry(
+          bounds: const CellRect(
+            offset: CellOffset(3, 2),
+            size: CellSize(4, 1),
+          ),
+        ),
       );
       expect(notifications, 1, reason: 'equal observation dropped');
 
       chip.publish(
-        const CellRect(offset: CellOffset(14, 2), size: CellSize(4, 1)),
+        RenderGeometry(
+          bounds: const CellRect(
+            offset: CellOffset(14, 2),
+            size: CellSize(4, 1),
+          ),
+        ),
       );
       expect(notifications, 2, reason: 'the widget moved');
 
@@ -102,8 +117,10 @@ void main() {
       const full = CellRect(offset: CellOffset(10, 2), size: CellSize(8, 1));
 
       chip.publish(
-        full,
-        clip: const CellRect(offset: CellOffset(0, 0), size: CellSize(14, 8)),
+        RenderGeometry(
+          bounds: full,
+          clip: const CellRect(offset: CellOffset(0, 0), size: CellSize(14, 8)),
+        ),
       );
       expect(chip.bounds, full, reason: 'full bounds always kept');
       expect(
@@ -114,8 +131,10 @@ void main() {
 
       // Scrolled entirely out of the clip: visible goes null, full stays.
       chip.publish(
-        full,
-        clip: const CellRect(offset: CellOffset(0, 4), size: CellSize(40, 4)),
+        RenderGeometry(
+          bounds: full,
+          clip: const CellRect(offset: CellOffset(0, 4), size: CellSize(40, 4)),
+        ),
       );
       expect(chip.bounds, full);
       expect(chip.visibleBounds, isNull);
@@ -161,14 +180,24 @@ void main() {
 
       // Drive the notifier directly: visible → the float paints.
       chip.publish(
-        const CellRect(offset: CellOffset(2, 0), size: CellSize(4, 1)),
+        RenderGeometry(
+          bounds: const CellRect(
+            offset: CellOffset(2, 0),
+            size: CellSize(4, 1),
+          ),
+        ),
       );
       expect(_find(tester, '¤'), isNotNull, reason: 'visible anchor → float');
 
       // Same bounds, but fully outside the clip → the float disappears.
       chip.publish(
-        const CellRect(offset: CellOffset(2, 0), size: CellSize(4, 1)),
-        clip: const CellRect(offset: CellOffset(0, 6), size: CellSize(40, 2)),
+        RenderGeometry(
+          bounds: const CellRect(
+            offset: CellOffset(2, 0),
+            size: CellSize(4, 1),
+          ),
+          clip: const CellRect(offset: CellOffset(0, 6), size: CellSize(40, 2)),
+        ),
       );
       expect(
         _find(tester, '¤'),

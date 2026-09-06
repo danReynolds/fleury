@@ -66,6 +66,14 @@ KeyEventResult moveOrEscape({
   return KeyEventResult.handled;
 }
 
+/// Implemented by an editable text render object: where its caret is, in its
+/// own coordinates. [FocusNode.caretRect] projects it onto the screen.
+abstract interface class CaretHost implements ScreenGeometrySource {
+  /// The caret cell relative to this render object's origin, or null when
+  /// the caret is scrolled out of the widget's own visible text.
+  CellRect? get localCaretRect;
+}
+
 /// Marker interface for objects that contribute key bindings to the
 /// active focus chain.
 ///
@@ -187,24 +195,69 @@ class FocusNode {
   /// editable widget that registered [textInputClaimant].
   TextCompositionClaimant? textCompositionClaimant;
 
-  /// Bounding rectangle of the focusable region in absolute cell
-  /// coordinates, populated by the framework on every paint pass.
-  /// Null until the node's owning `Focus` widget has been painted at
-  /// least once.
-  ///
-  /// Used by `FocusTraversalGroup` to do directional traversal
-  /// (left/right/up/down arrows move focus to the spatially nearest
-  /// focusable). Don't write to this from app code.
-  CellRect? rect;
+  /// This node's rectangle on screen in absolute cells, derived from the
+  /// layout of the `Focus` widget that carries it. Null when the node cannot
+  /// take input, has no widget, or its widget is not presented or is fully
+  /// clipped out of view (scrolled past the viewport): you scroll to such a
+  /// widget, you don't arrow to it. Directional traversal, reading order, and
+  /// click-to-focus read it; nothing writes it.
+  CellRect? get rect {
+    final host = _boundsHost;
+    if (host == null) return null;
+    final manager = _manager;
+    if (manager != null && !manager._acceptsInput(this)) return null;
+    final geometry = host.screenGeometry();
+    if (geometry == null || geometry.visible == null) return null;
+    return geometry.bounds;
+  }
 
-  /// Latest painted caret rectangle in absolute cell coordinates, when this
-  /// focus node owns an editable text widget.
+  ScreenGeometrySource? _boundsHost;
+
+  /// Framework-internal: the source of this node's geometry — the render
+  /// object of the `Focus` widget that carries it.
+  @internal
+  void attachBoundsHost(ScreenGeometrySource host) => _boundsHost = host;
+
+  /// Framework-internal: forgets [host] if it is the current bounds host.
+  @internal
+  void detachBoundsHost(ScreenGeometrySource host) {
+    if (identical(_boundsHost, host)) _boundsHost = null;
+  }
+
+  /// The caret rectangle in absolute cells when this node owns an editable
+  /// text widget, derived from that widget's layout and clipped to what is
+  /// visible; null when there is no caret on screen.
   ///
-  /// Hosts use this for IME candidate-window placement and future semantic
-  /// focus geometry. The value is populated during paint, clipped to the
-  /// visible viewport when possible, and may be null before the first paint or
-  /// when the caret is outside the visible region.
-  CellRect? caretRect;
+  /// Hosts use this for IME candidate-window placement and terminal cursor
+  /// positioning.
+  CellRect? get caretRect {
+    final host = _caretHost;
+    if (host == null) return null;
+    final manager = _manager;
+    if (manager != null && !manager._acceptsInput(this)) return null;
+    final local = host.localCaretRect;
+    if (local == null) return null;
+    final geometry = host.screenGeometry();
+    final visible = geometry?.visible;
+    if (geometry == null || visible == null) return null;
+    return CellRect(
+      offset: geometry.bounds.offset + local.offset,
+      size: local.size,
+    ).intersect(visible);
+  }
+
+  CaretHost? _caretHost;
+
+  /// Framework-internal: the editable render object that owns this node's
+  /// caret.
+  @internal
+  void attachCaretHost(CaretHost host) => _caretHost = host;
+
+  /// Framework-internal: forgets [host] if it is the current caret host.
+  @internal
+  void detachCaretHost(CaretHost host) {
+    if (identical(_caretHost, host)) _caretHost = null;
+  }
 
   /// Whether this node can currently take focus.
   bool get canRequestFocus => _canRequestFocus;
@@ -272,8 +325,8 @@ class FocusNode {
     bindingSource = null;
     textInputClaimant = null;
     textCompositionClaimant = null;
-    rect = null;
-    caretRect = null;
+    _boundsHost = null;
+    _caretHost = null;
   }
 
   @override
@@ -364,17 +417,13 @@ class FocusManager extends ChangeNotifier {
 
   /// Makes focus routing inert after a frame-wide render failure.
   ///
-  /// The host did not present the partially painted frame, so geometry and
-  /// claimants touched during it cannot safely receive input until another
-  /// frame begins and completes.
+  /// The host did not present the partially painted frame, so claimants
+  /// touched during it cannot safely receive input — and no node reports
+  /// geometry — until another frame begins and completes.
   @internal
   void abortFrame() {
     if (_disposed) return;
     _frameInputAborted = true;
-    for (final node in _attachedNodes) {
-      node.rect = null;
-      node.caretRect = null;
-    }
   }
 
   void _registerFocusTrap(_FocusScopeMarkerElement element) {
@@ -577,14 +626,6 @@ class FocusManager extends ChangeNotifier {
         ? _inputExcludedSubtrees.add(root)
         : _inputExcludedSubtrees.remove(root);
     if (!changed) return;
-    if (excluded) {
-      for (final node in _attachedNodes) {
-        if (_isUnderElement(node, root)) {
-          node.rect = null;
-          node.caretRect = null;
-        }
-      }
-    }
     _notifyManagerScopeChanged();
   }
 
@@ -1328,16 +1369,17 @@ class _FocusBounds extends SingleChildRenderObjectWidget {
 
 class _RenderFocusBounds extends RenderObject
     implements RenderObjectWithSingleChild {
-  _RenderFocusBounds({required FocusNode node}) : _node = node;
+  _RenderFocusBounds({required FocusNode node}) : _node = node {
+    node.attachBoundsHost(this);
+  }
 
   FocusNode _node;
   FocusNode get node => _node;
   set node(FocusNode value) {
     if (identical(_node, value)) return;
-    // Releasing the old node — clear any rect we'd recorded so a
-    // stale bounding box doesn't drive directional traversal.
-    _node.rect = null;
+    _node.detachBoundsHost(this);
     _node = value;
+    value.attachBoundsHost(this);
     markNeedsPaintOnly();
   }
 
@@ -1370,43 +1412,13 @@ class _RenderFocusBounds extends RenderObject
     CellOffset? screenOffset,
     CellRect? clipRect,
   }) {
-    // Record the focus bounds in *screen* space, not the local paint offset.
-    // Inside a ScrollView the child paints into a scratch buffer at a
-    // content-space, scroll-relative offset, so `offset` is not where the
-    // widget actually appears on screen. Directional traversal compares
-    // on-screen geometry, so feeding it the local offset put scrolled focus
-    // targets at phantom positions (e.g. a panel's controls reported over a
-    // sibling pane). `screenOffset` is the real screen origin.
-    final screen = screenOffset ?? offset;
-    final bounds = CellRect(offset: screen, size: size);
-    if (FocusGeometryCapture.isActive) {
-      // Directional traversal uses the complete focusable rectangle whenever
-      // any part is visible; clipping is only a visibility gate.
-      FocusGeometryCapture.record(
-        _replayBounds,
-        bounds,
-        clipRect: clipRect,
-        clipToBounds: false,
-      );
-    }
-    // A focusable that is fully clipped out of view (e.g. scrolled past the
-    // viewport) records no rect, so it can't act as a directional-traversal
-    // candidate while invisible — you scroll to it, you don't arrow to it.
-    _node.rect =
-        _node.acceptsInput &&
-            (clipRect == null || clipRect.intersect(bounds) != null)
-        ? bounds
-        : null;
-    _child?.paint(buffer, offset, screenOffset: screen, clipRect: clipRect);
+    _child?.paint(
+      buffer,
+      offset,
+      screenOffset: screenOffset ?? offset,
+      clipRect: clipRect,
+    );
   }
-
-  // Stable callback captured by repaint boundaries. It reads the current node
-  // so swapping FocusNode invalidates/repaints once without retaining the old
-  // node in a cached closure.
-  // ignore: prefer_function_declarations_over_variables
-  late final FocusGeometryCallback _replayBounds = (bounds) {
-    _node.rect = _node.acceptsInput ? bounds : null;
-  };
 }
 
 // ---------------------------------------------------------------------------

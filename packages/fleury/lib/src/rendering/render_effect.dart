@@ -187,7 +187,8 @@ class RenderCellTranslation extends RenderObject
   // Interaction stays bounded by the layout box even when translated cells
   // overflow it (see paint).
   @override
-  CellRect? get childClip => CellRect(offset: CellOffset.zero, size: size);
+  CellRect? childClipOf(RenderObject child) =>
+      CellRect(offset: CellOffset.zero, size: size);
 
   RenderCellTranslation({
     double horizontalFraction = 0,
@@ -337,7 +338,8 @@ class RenderClip extends RenderObject implements RenderObjectWithSingleChild {
       CellOffset.zero - _alignedSourceOffset(child.size, size);
 
   @override
-  CellRect? get childClip => CellRect(offset: CellOffset.zero, size: size);
+  CellRect? childClipOf(RenderObject child) =>
+      CellRect(offset: CellOffset.zero, size: size);
 
   RenderClip({
     double widthFactor = 1.0,

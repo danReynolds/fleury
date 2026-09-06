@@ -61,12 +61,18 @@ final class PointerDownDetails {
       'modifiers: $modifiers)';
 }
 
-/// Per-frame registry of pointer-listening regions plus hover state.
-/// One instance per runtime; [beginFrame] clears it before each paint and
-/// regions re-register as they paint.
+/// Routes mouse events to the pointer regions under the pointer, plus hover,
+/// press, and drag capture state. One instance per runtime.
+///
+/// Regions are found by hit-testing the rendered tree top-down from [root]:
+/// each container reports where it put its children, what it clips, and which
+/// of them it presents ([RenderObject.childOffsetOf] and friends), so the
+/// walk descends only through subtrees that can contain the point. Paint
+/// order — later siblings on top, children over their parents — is the walk
+/// order, so the topmost region is the last hit collected.
 class PointerRouter {
-  final List<RenderPointerListener> _regions = <RenderPointerListener>[];
   final Set<RenderObject> _inputExcludedSubtrees = <RenderObject>{};
+  final List<RenderPointerListener> _hits = <RenderPointerListener>[];
   RenderPointerListener? _hovered;
   RenderPointerListener? _downTarget;
   MouseButton _downButton = MouseButton.none;
@@ -77,41 +83,37 @@ class PointerRouter {
   RenderPointerListener? _dragTarget;
   bool _dragging = false;
 
-  /// Clears the registry at the start of a paint pass.
-  void beginFrame() {
-    if (_disposed) return;
-    _regions.clear();
-  }
+  /// The root of the rendered tree, set by the host after each frame. Null
+  /// before the first frame: nothing is hit-testable.
+  RenderObject? root;
 
-  /// Reconciles captured targets against the regions painted this frame.
+  /// Starts a frame. Nothing to reset: regions are found from layout state.
+  void beginFrame() {}
+
+  /// Reconciles captured targets against the rendered tree.
   ///
-  /// A pointer render object can disappear while it owns hover, press, or drag
-  /// capture. Render objects register during paint, so anything absent after a
-  /// completed paint is no longer safe to call. Clear those references without
-  /// synthesizing callbacks into an already-unmounted widget subtree.
+  /// A pointer render object can leave the tree, or stop being presented,
+  /// while it owns hover, press, or drag capture. Anything a hit-test can no
+  /// longer reach is dropped without synthesizing callbacks into an unmounted
+  /// or hidden widget subtree.
   void endFrame() {
     if (_disposed) return;
-    if (_hovered != null && !_regions.contains(_hovered)) {
-      _hovered = null;
-    }
-    if (_downTarget != null && !_regions.contains(_downTarget)) {
+    if (_hovered != null && !_isLive(_hovered!)) _hovered = null;
+    if (_downTarget != null && !_isLive(_downTarget!)) {
       _downTarget = null;
       _downButton = MouseButton.none;
     }
-    if (_dragTarget != null && !_regions.contains(_dragTarget)) {
+    if (_dragTarget != null && !_isLive(_dragTarget!)) {
       _dragTarget = null;
       _dragging = false;
     }
   }
 
-  /// Discards every registration and capture from an unsuccessful frame.
-  ///
-  /// [beginFrame] replaces the previously presented registry as paint runs.
-  /// If paint then throws, the partial registry does not describe a frame the
-  /// host presented and must not remain interactive.
+  /// Discards every captured target after an unsuccessful frame: a partial
+  /// paint was never presented, so nothing touched during it may stay
+  /// interactive.
   void abortFrame() {
     if (_disposed) return;
-    _regions.clear();
     _hovered = null;
     _downTarget = null;
     _downButton = MouseButton.none;
@@ -119,7 +121,7 @@ class PointerRouter {
     _dragging = false;
   }
 
-  /// Permanently releases every painted region and captured pointer target.
+  /// Permanently releases every captured pointer target.
   ///
   /// Teardown deliberately does not synthesize exit or drag-end callbacks:
   /// those callbacks belong to an application tree that is already being
@@ -127,7 +129,8 @@ class PointerRouter {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _regions.clear();
+    root = null;
+    _hits.clear();
     _inputExcludedSubtrees.clear();
     _hovered = null;
     _downTarget = null;
@@ -136,44 +139,30 @@ class PointerRouter {
     _dragging = false;
   }
 
-  /// Makes every pointer listener below [root] inert while [excluded] is true.
+  /// Makes every pointer listener below [subtree] inert while [excluded] is
+  /// true.
   ///
   /// Error boundaries use this when a child throws after partially painting:
-  /// registrations created before the throw, including registrations replayed
-  /// later by an enclosing repaint boundary, must not remain clickable behind
-  /// the error presentation.
+  /// its regions must not remain clickable behind the error presentation.
   @internal
-  void setSubtreeInputExcluded(RenderObject root, bool excluded) {
+  void setSubtreeInputExcluded(RenderObject subtree, bool excluded) {
     if (_disposed) return;
     if (excluded) {
-      if (!_inputExcludedSubtrees.add(root)) return;
-      _regions.removeWhere((region) => _isUnderExcludedRoot(region, root));
-      if (_hovered != null && _isUnderExcludedRoot(_hovered!, root)) {
+      if (!_inputExcludedSubtrees.add(subtree)) return;
+      if (_hovered != null && _isUnderExcludedRoot(_hovered!, subtree)) {
         _hovered = null;
       }
-      if (_downTarget != null && _isUnderExcludedRoot(_downTarget!, root)) {
+      if (_downTarget != null && _isUnderExcludedRoot(_downTarget!, subtree)) {
         _downTarget = null;
         _downButton = MouseButton.none;
       }
-      if (_dragTarget != null && _isUnderExcludedRoot(_dragTarget!, root)) {
+      if (_dragTarget != null && _isUnderExcludedRoot(_dragTarget!, subtree)) {
         _dragTarget = null;
         _dragging = false;
       }
       return;
     }
-    _inputExcludedSubtrees.remove(root);
-  }
-
-  // Registers a region in paint order (later = on top). Called by the
-  // region's render object during paint.
-  void _register(RenderPointerListener region) {
-    if (_disposed) return;
-    if (_inputExcludedSubtrees.any(
-      (root) => _isUnderExcludedRoot(region, root),
-    )) {
-      return;
-    }
-    _regions.add(region);
+    _inputExcludedSubtrees.remove(subtree);
   }
 
   static bool _isUnderExcludedRoot(RenderObject node, RenderObject root) {
@@ -185,8 +174,21 @@ class PointerRouter {
     return false;
   }
 
+  bool _isExcluded(RenderObject node) {
+    for (final root in _inputExcludedSubtrees) {
+      if (_isUnderExcludedRoot(node, root)) return true;
+    }
+    return false;
+  }
+
+  /// Whether [region] can still be reached by a hit-test: routed here,
+  /// presented in the rendered tree, and not input-excluded.
+  bool _isLive(RenderPointerListener region) =>
+      identical(region._router, this) &&
+      region.screenGeometry() != null &&
+      !_isExcluded(region);
+
   void _remove(RenderPointerListener region) {
-    _regions.remove(region);
     if (identical(_hovered, region)) _hovered = null;
     if (identical(_downTarget, region)) {
       _downTarget = null;
@@ -198,22 +200,69 @@ class PointerRouter {
     }
   }
 
+  /// Collects every region under ([col], [row]) into [_hits], in paint
+  /// order, by walking the rendered tree from [root].
+  void _collectHits(int col, int row) {
+    _hits.clear();
+    final start = root;
+    if (start == null) return;
+    _visitHits(start, col, row, null);
+  }
+
+  /// [col]/[row] are relative to [node]'s origin; [clip] is the accumulated
+  /// ancestor clip in the same coordinates (null when unbounded).
+  void _visitHits(RenderObject node, int col, int row, CellRect? clip) {
+    if (!node.hasLayout) return;
+    if (_inputExcludedSubtrees.isNotEmpty &&
+        _inputExcludedSubtrees.contains(node)) {
+      return;
+    }
+    if (node is RenderPointerListener && identical(node._router, this)) {
+      final s = node.size;
+      if (col >= 0 &&
+          row >= 0 &&
+          col < s.cols &&
+          row < s.rows &&
+          (clip == null || clip.contains(CellOffset(col, row)))) {
+        _hits.add(node);
+      }
+    }
+    node.visitRenderChildren((child) {
+      if (!node.presentsChild(child)) return;
+      var childClip = clip;
+      final ownClip = node.childClipOf(child);
+      if (ownClip != null) {
+        childClip = clip == null
+            ? ownClip
+            : (clip.intersect(ownClip) ??
+                  CellRect(offset: ownClip.offset, size: CellSize.zero));
+        // Nothing below can contain a point outside this clip.
+        if (!childClip.contains(CellOffset(col, row))) return;
+      }
+      final offset = node.childOffsetOf(child);
+      final nextClip = childClip == null
+          ? null
+          : CellRect(
+              offset: CellOffset(
+                childClip.offset.col - offset.col,
+                childClip.offset.row - offset.row,
+              ),
+              size: childClip.size,
+            );
+      _visitHits(child, col - offset.col, row - offset.row, nextClip);
+    });
+  }
+
   /// Topmost region containing ([col], [row]) for which [pred] holds.
   RenderPointerListener? _topmost(
     int col,
     int row,
     bool Function(RenderPointerListener) pred,
   ) {
-    for (var i = _regions.length - 1; i >= 0; i--) {
-      final r = _regions[i];
-      final rect = r._rect;
-      if (rect == null || !pred(r)) continue;
-      if (col >= rect.left &&
-          col < rect.right &&
-          row >= rect.top &&
-          row < rect.bottom) {
-        return r;
-      }
+    _collectHits(col, row);
+    for (var i = _hits.length - 1; i >= 0; i--) {
+      final r = _hits[i];
+      if (pred(r)) return r;
     }
     return null;
   }
@@ -719,8 +768,6 @@ class RenderPointerListener extends RenderObject
   /// leave it false. See [PointerRouter.focusAbsorbedAt].
   bool absorbsFocus = false;
 
-  CellRect? _rect;
-
   RenderObject? _child;
   @override
   RenderObject? get child => _child;
@@ -743,39 +790,16 @@ class RenderPointerListener extends RenderObject
     CellOffset? screenOffset,
     CellRect? clipRect,
   }) {
-    // Screen coordinates: mouse events arrive in absolute terminal
-    // coordinates, and inside a composited subtree (an effect's scratch
-    // buffer) the local offset is scratch-relative — hit-testing against it
-    // targets phantom positions.
-    final screen = screenOffset ?? offset;
-    final bounds = CellRect(offset: screen, size: size);
-    _rect = clipRect == null ? bounds : bounds.intersect(clipRect);
-    if (_rect != null) _router?._register(this);
-    // Record for a possible enclosing RepaintBoundary: on a cache-hit frame it
-    // skips this paint, so it must replay the registration or the region goes
-    // dead. The capture normalizes this screen rectangle against its owning
-    // boundary's screen origin and re-translates it on replay. Guarded on an
-    // active capture and using a reused closure field, so an unenclosed region
-    // allocates nothing on this hot path.
-    if (PointerRegionCapture.isActive) {
-      PointerRegionCapture.record(_replayRegister, bounds, clipRect: clipRect);
-    }
-    _child?.paint(buffer, offset, screenOffset: screen, clipRect: clipRect);
+    _child?.paint(
+      buffer,
+      offset,
+      screenOffset: screenOffset ?? offset,
+      clipRect: clipRect,
+    );
   }
 
-  /// The screen rectangle this region registered from its last paint, clipped
-  /// by its ancestors; null when it was clipped out. Test oracle for derived
-  /// geometry.
+  /// This region's visible screen rectangle, derived from layout state; null
+  /// when it is clipped out or not presented.
   @visibleForTesting
-  CellRect? get debugScreenRect => _rect;
-
-  // Re-registration closure for RepaintBoundary replay, allocated once per
-  // render object (not per paint). A field (not a method) on purpose: a method
-  // tear-off would allocate a fresh bound closure on every pass, defeating the
-  // point — this mirrors the semantic record's stable field.
-  // ignore: prefer_function_declarations_over_variables
-  late final PointerRegionRegister _replayRegister = (screenRect) {
-    _rect = screenRect;
-    if (screenRect != null) _router?._register(this);
-  };
+  CellRect? get debugScreenRect => screenGeometry()?.visible;
 }

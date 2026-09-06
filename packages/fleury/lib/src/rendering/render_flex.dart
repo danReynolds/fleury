@@ -161,7 +161,7 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
       _childOffsets[child] ?? CellOffset.zero;
 
   @override
-  CellRect? get childClip =>
+  CellRect? childClipOf(RenderObject child) =>
       _overflow > 0 ? CellRect(offset: CellOffset.zero, size: size) : null;
 
   RenderFlex({

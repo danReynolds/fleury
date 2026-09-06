@@ -81,7 +81,7 @@ export 'src/rendering/cell.dart'
         IndexedColor,
         RgbColor;
 export 'src/rendering/geometry.dart'
-    show RenderGeometry, renderSubtree, screenGeometryOf;
+    show RenderGeometry, ScreenGeometrySource, renderSubtree, screenGeometryOf;
 export 'src/rendering/cell_buffer.dart'
     show
         CellBuffer,

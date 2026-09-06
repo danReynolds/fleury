@@ -776,7 +776,7 @@ final class TextAreaDebugStats {
 
 /// Lays out text as rows and scrolls vertically to keep the cursor line
 /// visible; paints a one-cell cursor at the selection.
-class RenderTextArea extends RenderObject {
+class RenderTextArea extends RenderObject implements CaretHost {
   RenderTextArea({
     required FocusNode focusNode,
     required String text,
@@ -844,8 +844,9 @@ class RenderTextArea extends RenderObject {
 
   set focusNode(FocusNode value) {
     if (identical(_focusNode, value)) return;
-    _focusNode.caretRect = null;
+    _focusNode.detachCaretHost(this);
     _focusNode = value;
+    value.attachCaretHost(this);
     markNeedsPaintOnly();
   }
 
@@ -1053,22 +1054,10 @@ class RenderTextArea extends RenderObject {
     CellOffset? screenOffset,
     CellRect? clipRect,
   }) {
-    if (size.isEmpty) {
-      _focusNode.caretRect = null;
-      return;
-    }
-    final screen = screenOffset ?? offset;
-    final screenCaret = _caretRect(screen, null);
-    if (screenCaret != null && FocusGeometryCapture.isActive) {
-      FocusGeometryCapture.record(
-        _replayCaret,
-        screenCaret,
-        clipRect: clipRect,
-      );
-    }
-    _focusNode.caretRect = clipRect == null
-        ? screenCaret
-        : screenCaret?.intersect(clipRect);
+    // The node's caret is derived from this render object's layout (see
+    // [localCaretRect]); nothing about geometry is recorded here.
+    _focusNode.attachCaretHost(this);
+    if (size.isEmpty) return;
 
     // Empty: paint the (possibly multi-line) placeholder, with the
     // cursor over the very first cell when visible.
@@ -1191,10 +1180,9 @@ class RenderTextArea extends RenderObject {
     return clipRect == null ? rect : rect.intersect(clipRect);
   }
 
-  // ignore: prefer_function_declarations_over_variables
-  late final FocusGeometryCallback _replayCaret = (bounds) {
-    _focusNode.caretRect = _focusNode.acceptsInput ? bounds : null;
-  };
+  @override
+  CellRect? get localCaretRect =>
+      size.isEmpty ? null : _caretRect(CellOffset.zero, null);
 
   int _lineStartOffset(List<String> lines, int lineIndex) {
     var offset = 0;

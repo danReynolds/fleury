@@ -148,7 +148,7 @@ final class TuiRuntime {
     pointerRouter.beginFrame();
     focusManager.beginFrame();
     try {
-      owner.renderFrame(
+      pointerRouter.root = owner.renderFrame(
         root,
         buffer,
         onPhaseTiming: onPhaseTiming,

@@ -1650,7 +1650,9 @@ class BuildOwner {
     // MaterialApp expands to fill; we don't have that wrapper yet and
     // forcing it would break the "small widget at root" common case.)
     sw?.reset();
-    renderDamageTracker.phase = RenderFramePhase.layout;
+    renderDamageTracker
+      ..screenSize = buffer.size
+      ..phase = RenderFramePhase.layout;
     rootRender.layout(CellConstraints.loose(buffer.size));
     final layoutElapsed = sw?.elapsed ?? Duration.zero;
     // Layout can rebuild (LayoutBuilder) and deactivate subtrees AFTER this
@@ -1662,9 +1664,10 @@ class BuildOwner {
     sw?.reset();
     // Root paint: buffer IS the screen, so screenOffset == offset.
     // clipRect == the full screen rect — anything outside is off-screen.
-    // A numbered paint pass on this owner's tracker, so paint-time facts
-    // (painted bounds) that no subtree refreshed this pass are retracted when
-    // it ends — see [RenderDamageTracker.endPaintPass].
+    // A numbered paint pass on this owner's tracker: when it ends, facts
+    // about subtrees that stayed mounted without painting are re-derived, and
+    // paint-pass listeners (semantics geometry) run — see
+    // [RenderDamageTracker.endPaintPass].
     renderDamageTracker.phase = RenderFramePhase.paint;
     renderDamageTracker.beginPaintPass();
     try {

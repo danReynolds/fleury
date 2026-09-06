@@ -699,6 +699,57 @@ class RenderTable extends RenderObject implements RenderObjectWithChildren {
 
   int get _headerOffset => _hasHeader ? 1 : 0;
 
+  /// Whether the table paints its natural layout straight through: no
+  /// selection and enough room for every row and column.
+  bool get _paintsNaturally =>
+      _selectedRow == null &&
+      size.rows >= _naturalHeight &&
+      size.cols >= _ownWidth;
+
+  /// The natural row that lands on the first body row of the output when
+  /// the body scrolls.
+  int get _bodyScrollTopY {
+    if (_selectedRow == null) return _headerBlock;
+    final anchorGridRow = _visibleFirst + _headerOffset;
+    return anchorGridRow < _rowY.length ? _rowY[anchorGridRow] : _headerBlock;
+  }
+
+  /// Rows of the output the pinned header occupies.
+  int get _headerRowsShown =>
+      _headerBlock < size.rows ? _headerBlock : size.rows;
+
+  bool _isHeaderChild(RenderObject child) =>
+      (_offsets[child] ?? CellOffset.zero).row < _headerBlock;
+
+  // ---- Derived geometry -----------------------------------------------------
+  //
+  // Natural mode paints each child at its natural offset. Otherwise the
+  // header block stays pinned while the body is scrolled up by
+  // [_bodyScrollTopY] and both are windowed to the table's size; a body cell
+  // scrolled under the header is clipped, not covered, so the two regions
+  // answer with different clips.
+
+  @override
+  CellOffset childOffsetOf(RenderObject child) {
+    final natural = _offsets[child] ?? CellOffset.zero;
+    if (_paintsNaturally || _isHeaderChild(child)) return natural;
+    return CellOffset(
+      natural.col,
+      natural.row - _bodyScrollTopY + _headerBlock,
+    );
+  }
+
+  @override
+  CellRect? childClipOf(RenderObject child) {
+    if (_paintsNaturally) return null;
+    final cols = size.cols < _ownWidth ? size.cols : _ownWidth;
+    final headerRows = _headerRowsShown;
+    if (_isHeaderChild(child)) {
+      return CellRect.fromLTWH(0, 0, cols, headerRows);
+    }
+    return CellRect.fromLTWH(0, headerRows, cols, size.rows - headerRows);
+  }
+
   @override
   List<RenderObject> get children => List.unmodifiable(_children);
 
@@ -936,9 +987,7 @@ class RenderTable extends RenderObject implements RenderObjectWithChildren {
 
     // Natural-mode fast path: when the table fits in its allotted size,
     // paint children directly to the real buffer (no scratch allocation).
-    if (_selectedRow == null &&
-        size.rows >= _naturalHeight &&
-        size.cols >= _ownWidth) {
+    if (_paintsNaturally) {
       _paintNatural(buffer, offset);
       return;
     }
@@ -953,19 +1002,14 @@ class RenderTable extends RenderObject implements RenderObjectWithChildren {
 
     final outRows = size.rows;
     final outCols = size.cols;
-    final int bodyScrollTopY;
+    final bodyScrollTopY = _bodyScrollTopY;
     final int selTop;
     final int selBot;
     if (_selectedRow != null) {
-      final anchorGridRow = _visibleFirst + _headerOffset;
-      bodyScrollTopY = anchorGridRow < _rowY.length
-          ? _rowY[anchorGridRow]
-          : _headerBlock;
       final selGrid = _selectedRow! + _headerOffset;
       selTop = selGrid < _rowY.length ? _rowY[selGrid] : -1;
       selBot = selGrid < _rowHeight.length ? selTop + _rowHeight[selGrid] : -1;
     } else {
-      bodyScrollTopY = _headerBlock;
       selTop = -1;
       selBot = -1;
     }
@@ -1015,7 +1059,7 @@ class RenderTable extends RenderObject implements RenderObjectWithChildren {
     // windows, so carry their off-grid image placements separately using the
     // exact row mapping applied above. A whole-scratch replay would scroll the
     // header or expose hidden body rows.
-    final headerRows = _headerBlock < outRows ? _headerBlock : outRows;
+    final headerRows = _headerRowsShown;
     if (maxCol > 0 && headerRows > 0) {
       buffer.compositeImageRectFrom(
         scratch,

@@ -61,9 +61,37 @@ final class RenderDamageTracker {
   bool _requiresFullDiff = false;
   bool _visualChange = false;
 
+  // ---- Geometry epoch -----------------------------------------------------
+  //
+  // Derived screen geometry (`RenderObject.screenGeometry`) is memoized per
+  // render object against this counter. Any invalidation may move something,
+  // and a paint pass begins after layout has settled, so both advance it.
+  int _geometryEpoch = 0;
+
+  /// Advances whenever derived geometry may have changed.
+  int get geometryEpoch => _geometryEpoch;
+
+  /// The size of the buffer the tree renders into, set by the owner before
+  /// each frame's layout. The outermost clip of every derived geometry.
+  CellSize? screenSize;
+
+  final List<void Function()> _paintPassListeners = <void Function()>[];
+
+  /// Registers [listener] to run when a paint pass ends — the point at which
+  /// this frame's layout, and so every derived geometry, is final. The
+  /// semantics tier re-derives node bounds here.
+  void addPaintPassListener(void Function() listener) {
+    _paintPassListeners.add(listener);
+  }
+
+  void removePaintPassListener(void Function() listener) {
+    _paintPassListeners.remove(listener);
+  }
+
   void recordLayoutOrConservativePaint() {
     _requiresFullDiff = true;
     _visualChange = true;
+    _geometryEpoch++;
     _invalidated();
   }
 
@@ -72,6 +100,7 @@ final class RenderDamageTracker {
   /// consumes it via [takeVisualChange].
   void recordVisualChange() {
     _visualChange = true;
+    _geometryEpoch++;
     _invalidated();
   }
 
@@ -98,7 +127,7 @@ final class RenderDamageTracker {
     _requiresFullDiff = false;
     _visualChange = false;
     _carryVisualChange = false;
-    _retracted.clear();
+    _geometryEpoch++;
     phase = RenderFramePhase.idle;
   }
 
@@ -131,58 +160,44 @@ final class RenderDamageTracker {
   /// another owner).
   void unregisterPaintPassParticipant(PaintPassParticipant participant) {
     _participants.remove(participant);
-    _retracted.remove(participant);
   }
 
-  /// Participants whose facts this tracker has withdrawn and that have not
-  /// published since. The one-shot lives HERE, in the sweep, so no
-  /// participant can reinstate the spin by notifying on every retraction.
-  final Set<PaintPassParticipant> _retracted =
-      Set<PaintPassParticipant>.identity();
-
   /// Starts a root paint pass; returns its number.
-  int beginPaintPass() => ++_paintPass;
+  int beginPaintPass() {
+    _geometryEpoch++;
+    return ++_paintPass;
+  }
 
-  /// Ends the current pass: every participant that did not publish in it
-  /// retracts. Retraction only invalidates paint (a listener marking its
-  /// boundary dirty), never restructures the tree, so iterating the live set
-  /// is safe. A retraction that withdrew a live fact notifies its observers,
-  /// whose invalidation lands in the paint phase, so [onInvalidate] asks for
-  /// the frame that repaints without the stale fact.
-  ///
-  /// Only a retraction that actually WITHDREW a live fact may do that. A
-  /// participant that stays mounted without painting — the other IndexedStack
-  /// tab, a route under an opaque one — is unpublished in every later pass
-  /// too, so a retraction that re-notified every pass made each frame request
-  /// the next: the app spun frames at full speed forever after a single tab
-  /// switch, and every assertion that only checked "a retraction frame
-  /// followed" was satisfied by the spin. The sweep therefore remembers whom
-  /// it has retracted and asks again only after a fresh publish.
+  /// Ends the current pass: every participant that did not publish in it —
+  /// its subtree stayed mounted but did not paint (a cached repaint boundary,
+  /// the other IndexedStack tab, a route beneath an opaque one) — re-derives
+  /// its fact from layout state and publishes it. Publishing an unchanged
+  /// fact notifies nobody, so a participant that stays hidden costs one
+  /// derivation per pass and never requests a frame.
   void endPaintPass() {
     for (final participant in _participants) {
-      if (participant.publishedPaintPass == _paintPass) {
-        _retracted.remove(participant);
-        continue;
-      }
-      if (!_retracted.add(participant)) continue; // withdrawn already
-      participant.retractPaintFacts();
+      if (participant.publishedPaintPass == _paintPass) continue;
+      participant.refreshPaintFacts();
+    }
+    for (var i = 0; i < _paintPassListeners.length; i++) {
+      _paintPassListeners[i]();
     }
   }
 }
 
-/// A render object that publishes a paint-time fact about its subtree — its
-/// painted bounds — and must retract it when a root paint pass ends without
-/// the subtree having painted or replayed. It registers with the tree's
-/// [RenderDamageTracker] when it first publishes and unregisters on detach.
+/// A render object that publishes a fact about its subtree's geometry — its
+/// bounds on screen — during its own paint, and re-derives that fact when a
+/// root paint pass ends without the subtree having painted. It registers with
+/// the tree's [RenderDamageTracker] when it first publishes and unregisters on
+/// detach.
 abstract interface class PaintPassParticipant {
   /// The [RenderDamageTracker.paintPass] this participant last published in.
   int get publishedPaintPass;
 
-  /// Withdraw the published fact: the subtree no longer paints. The tracker
-  /// calls this at most once per withdrawal — a participant that stays
-  /// unpublished is not asked again until it publishes — so an
-  /// implementation may notify unconditionally.
-  void retractPaintFacts();
+  /// Re-derive the fact from layout state and publish it. Called at the end
+  /// of every pass in which this participant did not paint; the fact may be
+  /// unchanged, in which case publishing must notify nobody.
+  void refreshPaintFacts();
 }
 
 typedef SemanticPaintBoundsCallback = void Function(CellRect? bounds);
@@ -988,7 +1003,7 @@ abstract class ParentData {
 /// Subclasses must call `super.layout` (or invoke the protocol on each
 /// child themselves); the framework relies on `_size` being current after
 /// every layout pass.
-abstract class RenderObject {
+abstract class RenderObject implements ScreenGeometrySource {
   RenderObject? _parent;
   ParentData? parentData;
 
@@ -1202,6 +1217,9 @@ abstract class RenderObject {
   void adoptChild(RenderObject child) {
     assert(child._parent == null, 'Render object adopted twice.');
     child._parent = this;
+    // The subtree may have been built detached or under another root: its
+    // memoized geometry must resolve against this tree's epoch.
+    child._forgetGeometryTracker();
     setupParentData(child);
     markNeedsLayout();
   }
@@ -1335,9 +1353,11 @@ abstract class RenderObject {
   /// outside the mounted window, a contained-error subtree.
   bool presentsChild(RenderObject child) => true;
 
-  /// The clip this render object imposes on its children, in its own
-  /// coordinates, or null when it does not clip.
-  CellRect? get childClip => null;
+  /// The clip this render object imposes on [child], in its own coordinates,
+  /// or null when it does not clip. Usually the same rectangle for every
+  /// child (a viewport); a container with several scrolling regions — a
+  /// table with a pinned header — answers per child.
+  CellRect? childClipOf(RenderObject child) => null;
 
   /// Visits the direct render children, single- and multi-child alike.
   void visitRenderChildren(void Function(RenderObject child) visitor) {
@@ -1350,6 +1370,103 @@ abstract class RenderObject {
         visitor(child);
       }
     }
+  }
+
+  // ---- Derived screen geometry ---------------------------------------------
+  //
+  // Position and visibility are derived from layout state on demand — every
+  // container reports where it put each child ([childOffsetOf]), what it
+  // clips ([childClipOf]) and whether it presents the child at all
+  // ([presentsChild]) — and memoized against the tree's geometry epoch, which
+  // advances on every invalidation and at the start of every paint pass. A
+  // memo hit allocates nothing; a miss resolves the ancestor chain once and
+  // leaves every ancestor memoized for the other queries of the same epoch.
+
+  RenderDamageTracker? _geometryTracker;
+  int _geometryStamp = -1;
+  RenderGeometry? _screenGeometry;
+  CellOffset _screenOrigin = CellOffset.zero;
+  CellRect? _screenClip; // zero-sized when fully clipped
+
+  /// Whether this render object has been laid out at least once.
+  bool get hasLayout => _size != null;
+
+  /// This render object's screen geometry, derived from layout state: where
+  /// it is, and how much of it is visible.
+  ///
+  /// Null when it is not presented — hidden by an ancestor's policy
+  /// ([presentsChild]), detached from the rendered tree, or not laid out yet.
+  /// Reflects the latest completed layout at any time between frames, and
+  /// the current frame's layout once its paint pass has begun.
+  @override
+  RenderGeometry? screenGeometry() {
+    if (_size == null) return null;
+    final tracker = _geometryTracker ??= _rootFrameDamage;
+    if (tracker == null) return null; // never attached to a rendered tree
+    final epoch = tracker.geometryEpoch;
+    if (_geometryStamp != epoch) _resolveScreenGeometry(epoch);
+    return _screenGeometry;
+  }
+
+  void _resolveScreenGeometry(int epoch) {
+    final parent = _parent;
+    var presented = false;
+    if (parent == null) {
+      // Only the rendered root carries the tracker; the top of a detached
+      // subtree has none and presents nothing.
+      final tracker = _frameDamage;
+      presented = tracker != null;
+      _screenOrigin = CellOffset.zero;
+      // The screen is the outermost clip.
+      final screen = tracker?.screenSize;
+      _screenClip = screen == null
+          ? null
+          : CellRect(offset: CellOffset.zero, size: screen);
+    } else {
+      if (parent._geometryStamp != epoch) parent._resolveScreenGeometry(epoch);
+      if (parent._screenGeometry != null && parent.presentsChild(this)) {
+        presented = true;
+        _screenOrigin = parent._screenOrigin + parent.childOffsetOf(this);
+        var clip = parent._screenClip;
+        final ownClip = parent.childClipOf(this);
+        if (ownClip != null) {
+          final screenClip = CellRect(
+            offset: parent._screenOrigin + ownClip.offset,
+            size: ownClip.size,
+          );
+          clip = clip == null
+              ? screenClip
+              : (clip.intersect(screenClip) ??
+                    CellRect(offset: screenClip.offset, size: CellSize.zero));
+        }
+        _screenClip = clip;
+      }
+    }
+    if (presented) {
+      final bounds = CellRect(offset: _screenOrigin, size: size);
+      final clip = _screenClip;
+      final previous = _screenGeometry;
+      // Keep the instance when nothing moved: consumers compare and cache it.
+      if (previous == null ||
+          previous.bounds != bounds ||
+          previous.clip != clip) {
+        _screenGeometry = RenderGeometry(bounds: bounds, clip: clip);
+      }
+    } else {
+      _screenGeometry = null;
+    }
+    _geometryStamp = epoch;
+  }
+
+  /// Drops the memoized tracker below a subtree that is moving to another
+  /// parent, so it resolves against its new root's epoch. A freshly built
+  /// subtree has never resolved and costs nothing here.
+  void _forgetGeometryTracker() {
+    if (_geometryTracker == null) return;
+    _geometryTracker = null;
+    _geometryStamp = -1;
+    _screenGeometry = null;
+    visitRenderChildren((child) => child._forgetGeometryTracker());
   }
 
   // ---- Intrinsic sizing -------------------------------------------------
@@ -1401,6 +1518,45 @@ abstract class RenderObject {
     if (self is! RenderObjectWithSingleChild) return 0;
     return self.child?.computeMinIntrinsicHeight(width) ?? 0;
   }
+}
+
+/// Where something sits on screen and how much of it is visible.
+final class RenderGeometry {
+  RenderGeometry({required this.bounds, this.clip})
+    : visible = bounds.size.isEmpty
+          ? null
+          : (clip == null ? bounds : bounds.intersect(clip));
+
+  /// The full rectangle in screen cells, ignoring clips.
+  final CellRect bounds;
+
+  /// The intersection of every clip an ancestor applies, in screen cells —
+  /// the screen itself is the outermost — or null when nothing clips.
+  final CellRect? clip;
+
+  /// The part of [bounds] inside [clip], or null when nothing of it is
+  /// visible (clipped out, or empty).
+  final CellRect? visible;
+
+  @override
+  bool operator ==(Object other) =>
+      other is RenderGeometry && other.bounds == bounds && other.clip == clip;
+
+  @override
+  int get hashCode => Object.hash(bounds, clip);
+
+  @override
+  String toString() =>
+      'RenderGeometry(bounds: $bounds, clip: $clip, visible: $visible)';
+}
+
+/// Something that knows where it is on screen. Every [RenderObject] is one;
+/// focus nodes, carets, and bounds notifiers read geometry through this
+/// interface rather than recording it during paint, so a test can stand in
+/// a fixed rectangle without mounting a tree.
+abstract interface class ScreenGeometrySource {
+  /// The current screen geometry, or null when not presented.
+  RenderGeometry? screenGeometry();
 }
 
 /// Marker interface for render objects that hold exactly one child. The

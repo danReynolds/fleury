@@ -1568,7 +1568,7 @@ class _TextInputDisplay extends LeafRenderObjectWidget {
 ///
 /// Layout: width = text intrinsic width (in cells) + 1 for the
 /// trailing cursor position, clipped to constraints. Height = 1.
-class RenderTextInput extends RenderObject {
+class RenderTextInput extends RenderObject implements CaretHost {
   RenderTextInput({
     required FocusNode focusNode,
     required String text,
@@ -1637,8 +1637,9 @@ class RenderTextInput extends RenderObject {
 
   set focusNode(FocusNode value) {
     if (identical(_focusNode, value)) return;
-    _focusNode.caretRect = null;
+    _focusNode.detachCaretHost(this);
     _focusNode = value;
+    value.attachCaretHost(this);
     markNeedsPaintOnly();
   }
 
@@ -1783,22 +1784,10 @@ class RenderTextInput extends RenderObject {
     CellOffset? screenOffset,
     CellRect? clipRect,
   }) {
-    if (size.isEmpty) {
-      _focusNode.caretRect = null;
-      return;
-    }
-    final screen = screenOffset ?? offset;
-    final screenCaret = _caretRect(screen, null);
-    if (screenCaret != null && FocusGeometryCapture.isActive) {
-      FocusGeometryCapture.record(
-        _replayCaret,
-        screenCaret,
-        clipRect: clipRect,
-      );
-    }
-    _focusNode.caretRect = clipRect == null
-        ? screenCaret
-        : screenCaret?.intersect(clipRect);
+    // The node's caret is derived from this render object's layout (see
+    // [localCaretRect]); nothing about geometry is recorded here.
+    _focusNode.attachCaretHost(this);
+    if (size.isEmpty) return;
     final row = offset.row;
     var col = offset.col;
     final maxCol = offset.col + size.cols;
@@ -1912,8 +1901,7 @@ class RenderTextInput extends RenderObject {
     return clipRect == null ? rect : rect.intersect(clipRect);
   }
 
-  // ignore: prefer_function_declarations_over_variables
-  late final FocusGeometryCallback _replayCaret = (bounds) {
-    _focusNode.caretRect = _focusNode.acceptsInput ? bounds : null;
-  };
+  @override
+  CellRect? get localCaretRect =>
+      size.isEmpty ? null : _caretRect(CellOffset.zero, null);
 }

@@ -344,7 +344,8 @@ class _RenderScrollView extends RenderObject
       CellOffset(0, -_controller.offset);
 
   @override
-  CellRect? get childClip => CellRect(offset: CellOffset.zero, size: size);
+  CellRect? childClipOf(RenderObject child) =>
+      CellRect(offset: CellOffset.zero, size: size);
 
   _RenderScrollView({
     required ScrollController controller,

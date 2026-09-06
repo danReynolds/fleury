@@ -35,30 +35,19 @@ import 'render_object.dart';
 /// Which phase the contained exception escaped from.
 enum FrameContainmentPhase { layout, paint }
 
-/// A contained layout/paint failure: the error, where it escaped, and the
-/// screen region the error presentation occupies.
+/// A contained layout/paint failure: the error and where it escaped. The
+/// screen region the error presentation occupies is the boundary's own
+/// derived geometry ([RenderObject.screenGeometry]).
 final class FrameContainmentError {
   const FrameContainmentError({
     required this.error,
     required this.stack,
     required this.phase,
-    this.paintedRegion,
   });
 
   final Object error;
   final StackTrace stack;
   final FrameContainmentPhase phase;
-
-  /// Where the presentation painted, in screen cells — the semantic
-  /// `errorBoundary` node's bounds. Null before the first errored paint.
-  final CellRect? paintedRegion;
-
-  FrameContainmentError _withRegion(CellRect? region) => FrameContainmentError(
-    error: error,
-    stack: stack,
-    phase: phase,
-    paintedRegion: region,
-  );
 }
 
 /// Implemented by render objects that absorb subtree layout/paint
@@ -231,26 +220,7 @@ class RenderErrorBoundary extends RenderObject
       contained.error,
       clipRect: clipRect,
     );
-    final bounds = CellRect(offset: screenOffset ?? offset, size: size);
-    _updateRetainedPaintedRegion(bounds, clipRect);
-    if (RetainedPaintGeometryCapture.isActive) {
-      RetainedPaintGeometryCapture.record(
-        _replayPaintedRegion,
-        bounds,
-        clipRect: clipRect,
-      );
-    }
   }
-
-  void _updateRetainedPaintedRegion(CellRect? bounds, CellRect? _) {
-    final contained = _containedError;
-    if (contained == null) return;
-    _containedError = contained._withRegion(bounds);
-  }
-
-  // ignore: prefer_function_declarations_over_variables
-  late final RetainedPaintGeometryCallback _replayPaintedRegion =
-      _updateRetainedPaintedRegion;
 
   void _contain(Object error, StackTrace stack, FrameContainmentPhase phase) {
     final alreadyErrored = _containedError != null;

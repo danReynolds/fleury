@@ -2,9 +2,8 @@ import 'package:fleury/fleury.dart';
 import '../support/harness.dart';
 import 'package:test/test.dart';
 
-/// Builds a [FocusNode] with a pre-recorded `rect` so the traversal
-/// algorithm has something to score without needing a full mount /
-/// paint cycle.
+/// Builds a [FocusNode] whose geometry is a fixed rectangle, so the traversal
+/// algorithm has something to score without a full mount / render cycle.
 FocusNode _node({
   required int left,
   required int top,
@@ -18,7 +17,18 @@ FocusNode _node({
     canRequestFocus: canRequestFocus,
     skipTraversal: skipTraversal,
     debugLabel: label,
-  )..rect = CellRect.fromLTWH(left, top, width, height);
+  )..attachBoundsHost(
+    _FixedGeometry(CellRect.fromLTWH(left, top, width, height)),
+  );
+}
+
+final class _FixedGeometry implements ScreenGeometrySource {
+  _FixedGeometry(this.rect);
+
+  final CellRect rect;
+
+  @override
+  RenderGeometry? screenGeometry() => RenderGeometry(bounds: rect);
 }
 
 KeyEvent _code(KeyCode kc) => KeyEvent(kc);

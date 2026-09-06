@@ -206,8 +206,6 @@ class RenderRichText extends RenderObject
   late List<_Glyph> _glyphs;
   List<List<_Glyph>> _lines = const [];
   bool _moreLinesTruncated = false;
-  CellRect? _selectionPaintRect;
-  CellRect? _selectionClipRect;
   // Cached flat-text view per line — recomputed whenever _lines is
   // rebuilt (which happens on layout, not paint). The mixin reads
   // this on every event.
@@ -216,10 +214,10 @@ class RenderRichText extends RenderObject
   // ----- SelectableTextMixin hooks -----------------------------------
 
   @override
-  CellRect? get selectionPaintRect => _selectionPaintRect;
+  CellRect? get selectionPaintRect => screenGeometry()?.bounds;
 
   @override
-  CellRect? get selectionClipRect => _selectionClipRect;
+  CellRect? get selectionClipRect => screenGeometry()?.clip;
 
   @override
   List<String> get selectionLines => _selectionLines;
@@ -593,18 +591,6 @@ class RenderRichText extends RenderObject
     // clipRect is the visible window. Together they let the mixin
     // route hit-tests correctly even inside a ScrollView. See
     // SelectableTextMixin for the contract.
-    final selectionBounds = CellRect(
-      offset: screenOffset ?? offset,
-      size: size,
-    );
-    _updateRetainedSelectionGeometry(selectionBounds, clipRect);
-    if (RetainedPaintGeometryCapture.isActive) {
-      RetainedPaintGeometryCapture.record(
-        _replaySelectionGeometry,
-        selectionBounds,
-        clipRect: clipRect,
-      );
-    }
 
     if (_lines.isEmpty || size.isEmpty) return;
     final visibleRows = _lines.length < size.rows ? _lines.length : size.rows;
@@ -634,15 +620,6 @@ class RenderRichText extends RenderObject
       lineStartOffset += _selectionLines[i].length + 1;
     }
   }
-
-  void _updateRetainedSelectionGeometry(CellRect? bounds, CellRect? clipRect) {
-    _selectionPaintRect = bounds;
-    _selectionClipRect = bounds == null ? null : clipRect;
-  }
-
-  // ignore: prefer_function_declarations_over_variables
-  late final RetainedPaintGeometryCallback _replaySelectionGeometry =
-      _updateRetainedSelectionGeometry;
 
   void _paintLine(
     CellBuffer buffer,
