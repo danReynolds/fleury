@@ -4,6 +4,46 @@ import 'package:test/test.dart';
 
 void main() {
   for (final rich in [false, true]) {
+    test('partial copy preserves line separators and Unicode, rich=$rich', () {
+      const content = 'a漢\n\nb👩‍💻c';
+      final RenderObject render = rich
+          ? RenderRichText(
+              span: const TextSpan(text: content),
+              base: CellStyle.none,
+            )
+          : RenderText(text: content);
+      render.layout(const CellConstraints(maxCols: 20));
+      render.paint(CellBuffer(const CellSize(20, 3)), CellOffset.zero);
+      final selectable = render as Selectable;
+      const points = [
+        (CellOffset(0, 0), 0),
+        (CellOffset(1, 0), 1),
+        (CellOffset(3, 0), 2),
+        (CellOffset(0, 1), 3),
+        (CellOffset(0, 2), 4),
+        (CellOffset(1, 2), 5),
+        (CellOffset(3, 2), 10),
+        (CellOffset(4, 2), 11),
+      ];
+      for (final a in points) {
+        for (final b in points) {
+          selectable.dispatchSelectionEvent(
+            SelectionEdgeUpdateEvent(globalPosition: a.$1, isStart: true),
+          );
+          selectable.dispatchSelectionEvent(
+            SelectionEdgeUpdateEvent(globalPosition: b.$1, isStart: false),
+          );
+          final start = a.$2 < b.$2 ? a.$2 : b.$2;
+          final end = a.$2 < b.$2 ? b.$2 : a.$2;
+          expect(
+            selectable.getSelectedContent()?.plainText,
+            start == end ? null : content.substring(start, end),
+          );
+        }
+      }
+    });
+  }
+  for (final rich in [false, true]) {
     test('highlight cells share immutable styles, rich=$rich', () {
       const base = CellStyle(foreground: AnsiColor(3), inverse: false);
       final RenderObject render = rich

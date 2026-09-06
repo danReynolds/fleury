@@ -10,13 +10,31 @@ import 'package:fleury/fleury.dart';
 import 'sample_frame_host.dart';
 
 void main(List<String> args) {
-  final options = {'--kind': 'rich', '--lines': '1000', '--frames': '60'};
+  final options = {
+    '--kind': 'rich',
+    '--lines': '1000',
+    '--frames': '60',
+    '--operation': 'all'
+  };
   for (var i = 0; i < args.length; i += 2) {
     if (i + 1 == args.length || !options.containsKey(args[i])) {
       throw ArgumentError(
-          'Expected --kind plain|rich|spans, --lines N, --frames N');
+          'Expected --kind plain|rich|spans, --lines N, --frames N, --operation NAME');
     }
     options[args[i]] = args[i + 1];
+  }
+  const operations = [
+    'open',
+    'rebuild-same',
+    'rebuild-equal',
+    'edit',
+    'resize',
+    'drag',
+    'copy'
+  ];
+  final operationFilter = options['--operation']!;
+  if (operationFilter != 'all' && !operations.contains(operationFilter)) {
+    throw ArgumentError('Invalid operation');
   }
   final kind = options['--kind']!;
   final count = int.parse(options['--lines']!);
@@ -44,15 +62,8 @@ void main(List<String> args) {
   // Equal content in distinct span trees exercises the public update path.
   final equalSpans = [span(0), span(0)];
   const size = CellSize(80, 24);
-  for (final operation in [
-    'open',
-    'rebuild-same',
-    'rebuild-equal',
-    'edit',
-    'resize',
-    'drag',
-    'copy'
-  ]) {
+  for (final operation in operations) {
+    if (operationFilter != 'all' && operation != operationFilter) continue;
     final controller = ScrollController();
     Widget app(int revision, {TextSpan? text}) => ScrollView(
         controller: controller,

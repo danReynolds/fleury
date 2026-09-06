@@ -490,11 +490,29 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
   SelectedContent? getSelectedContent() {
     final range = getSelectionRange();
     if (range == null || range.start == range.end) return null;
-    final flat = _flatText();
     final groups = loweredGroups;
     if (groups.isEmpty) {
-      return SelectedContent(plainText: flat.substring(range.start, range.end));
+      // A short selection in a large document should copy only its intersecting
+      // lines, without first allocating a joined string for the whole document.
+      final out = StringBuffer();
+      var offset = 0;
+      for (final line in selectionLines) {
+        final lineEnd = offset + line.length;
+        if (range.start < lineEnd && range.end > offset) {
+          out.write(
+            line.substring(
+              (range.start - offset).clamp(0, line.length),
+              (range.end - offset).clamp(0, line.length),
+            ),
+          );
+        }
+        if (range.end <= lineEnd) break;
+        if (range.start <= lineEnd) out.write('\n');
+        offset = lineEnd + 1;
+      }
+      return SelectedContent(plainText: out.toString());
     }
+    final flat = _flatText();
     // Copy answers from SOURCE (RFC 0019 decision 3): each lowered group's
     // flat range — which may contain a forced line break between atoms — is
     // spliced back to its canonical joined cluster, exactly once. The range
