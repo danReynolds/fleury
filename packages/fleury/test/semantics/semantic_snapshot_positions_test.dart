@@ -49,6 +49,72 @@ class _AnchorElement extends ComponentElement implements SemanticContributor {
 }
 
 void main() {
+  test(
+    'pending full rebuild skips positional work and resumes leaf tracking',
+    () {
+      const count = 100;
+      final owner = BuildOwner();
+      Widget scene(String label) => _CountingColumn(
+        children: [
+          for (var i = 0; i < count; i++)
+            Semantics(
+              role: SemanticRole.status,
+              label: '$label-$i',
+              includeChildren: false,
+              child: const SizedBox(),
+            ),
+        ],
+      );
+      final root = owner.mountRoot(scene('before')) as _CountingElement;
+      addTearDown(root.unmount);
+      final tracker = owner.semanticDirtyTracker;
+      root.childVisits = 0;
+      owner.updateRoot(root, scene('after'));
+      expect(root.childVisits, lessThanOrEqualTo(count * 3));
+      expect(tracker.takeDirtySnapshot().requiresFullRebuild, isTrue);
+      final full = SemanticTree.fromElement(root);
+      expect(
+        full.root.children.map((node) => node.label),
+        orderedEquals(List.generate(count, (i) => 'after-$i')),
+      );
+
+      owner.updateRoot(root, scene('retained'));
+      final next = tracker.takeDirtySnapshot();
+      expect(next.requiresFullRebuild, isFalse);
+      expect(next.leafUpdates.length, count);
+      expect(
+        next.leafUpdates.keys.toSet(),
+        full.root.children.map((node) => node.id).toSet(),
+      );
+      expect(
+        next.leafUpdates.values.map((node) => node.label),
+        orderedEquals(List.generate(count, (i) => 'retained-$i')),
+      );
+    },
+  );
+
+  test(
+    'pending full rebuild still validates explicit reserved ids on update',
+    () {
+      final owner = BuildOwner();
+      final root = owner.mountRoot(
+        const Semantics(role: SemanticRole.status, child: SizedBox()),
+      );
+      addTearDown(root.unmount);
+      expect(
+        () => owner.updateRoot(
+          root,
+          const Semantics(
+            id: SemanticNodeId('element-reserved'),
+            role: SemanticRole.status,
+            child: SizedBox(),
+          ),
+        ),
+        throwsArgumentError,
+      );
+    },
+  );
+
   test('wide snapshot traversal stays linear across nested snapshots', () {
     final innerOwner = BuildOwner();
     final inner = innerOwner.mountRoot(
