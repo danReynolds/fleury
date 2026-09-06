@@ -1,0 +1,61 @@
+{
+  "baselineCommit": "85ea87fec94ccbfaa4097703384bd1c8b96fe649",
+  "productionRevision": "f614571e22f9f526632b154a0e08e01116cd84d2",
+  "dart": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+  "platform": "macOS 26.2 arm64, 10 logical CPUs",
+  "timingMethod": "Two alternating AOT runs; mean of per-run medians in prose; raw medians and p95 in CSV; whole frame, no terminal encoding or transport",
+  "memoryMethod": "Explicit GC, deterministic JIT VM-service shallow Fleury-class bytes; SDK objects and external storage excluded. Process peak RSS is a separate AOT all-operation workload measurement.",
+  "contract": {
+    "cases": 7680,
+    "mainLayoutFingerprint": 2643625153,
+    "mainCopyFingerprint": 3255039233,
+    "candidateLayoutFingerprint": 2643625153,
+    "candidateCopyFingerprint": 1645656357,
+    "candidateCombinedFingerprint": 3670255327,
+    "resizeCombinedFingerprint": 3670255327,
+    "intentionalCopyChanges": 578,
+    "intentionalChange": "Newlines preserved after split emoji groups; all display fingerprints unchanged"
+  },
+  "files": {
+    "2026-09-05-core-text-storage-nowrap-incremental.csv": "df3f0b12f4a5577b094a05f2e24bb52c7d3e3bcbe66cea92f0b3febeac039c9d",
+    "2026-09-05-core-text-storage-factory.csv": "a3d192df39b80b5438278246c232d7b4623064a2bcc128db300e2d8bc6d2a9f5",
+    "2026-09-05-core-text-storage-incremental.csv": "704d81de78c677833e8fc9da038134a4808f0e9c261a40e1e79801b7e88d8a21",
+    "2026-09-05-core-text-storage-heap.csv": "12375b3b85f211796c749f5a69ae7ebb79539c2fc818a8b14ebc77d9cf6bfc99",
+    "2026-09-05-core-text-storage-document.csv": "c3b3895fb8253d7ccea9572083bb71b638134b065edd8b2a95a3df0495b6121f",
+    "2026-09-05-core-text-storage-peak-rss.csv": "ea6316632051bb3ad62f03c2893a7511e72725d4b574cba96f2b25dac1057e5e",
+    "2026-09-05-core-text-storage-samples.csv": "b6a839b45df96d5484e22b7bef35638850a1273758806d5c783ccced8e8399ea",
+    "2026-09-05-core-text-storage-lifecycle.csv": "f856591a4758d2983af62edcbb1e7df94f3b5ff4493d7e026cbbcf28fd6f0e2c"
+  },
+  "binaries": {
+    "fleury-storage-final5-base": "a978074fe85c1edeac725eae9eb4b16f593869d4782cc0b0110252667359832a",
+    "fleury-storage-final5-after": "dceaec31e7cf4a304a812b5941bc9f63eee21db79befc61fd31911031489c62c",
+    "fleury-storage-pipeline5-base": "70029734bbb2e736ed460797f68c2bd5cdc2c10627c34d4babf97feea962039c",
+    "fleury-storage-pipeline5-after": "9c91dec4af1dd1882dca1c3cdeacbb89f323cdb7e8fbdbfe812d289da7460c14"
+  },
+  "sourceHashes": {
+    "packages/fleury/lib/src/widgets/rich_text.dart": "9f9ea22e1342376aa6b56892538183c73061e1fb76ae2230d048fde9ad192abe",
+    "packages/fleury/lib/src/rendering/render_objects.dart": "31f8f313bdf7993709f3c4e1b47870f4cbd55378ffc175b5c686cc6c69826a6a",
+    "packages/fleury/lib/src/rendering/selectable_text_mixin.dart": "a97341f4aba201143ee189d2619180c436015d3b912f1693f2846fd64eb35f9b",
+    "profiling/bin/document_work_probe.dart": "dc7e7f58c4a71faf064482671f4afe61d012634cc4605ea4d2352d92033d52cb",
+    "profiling/bin/frame_heap_probe.dart": "7278e32635df08d13d94fdb9498a2f32a148b720ef1df53f13fe8d50d6458df8",
+    "profiling/bin/document_heap_probe.dart": "4246c4d1fa520f3fc4b44c96fc8f22f8f1e431592681e5f69f23caeca5228511",
+    "profiling/bin/sample_frame_host.dart": "5957fb6b28d0044c97f7054cb83eb4c2c45e548cc2f550c1c3821fb3204114d5",
+    "profiling/bin/frame_pipeline_probe.dart": "0effbb06d1ee60448459354b6f44362527ff65cc92d7baa587c63354546814d0"
+  },
+  "qualification": {
+    "targetedTestsPassed": 137,
+    "fastGatesPassed": 8,
+    "profilingAnalysis": "pass",
+    "contractFresh": "pass",
+    "contractResize": "pass",
+    "embeddedClientSourceFingerprint": "e79aad9efd8e7a92",
+    "finalContributorWireCiAndReviewRecord": "https://github.com/danReynolds/fleury/pull/218"
+  },
+  "incrementalRevisions": {
+    "factoryControl": "5c799041",
+    "factoryCandidate": "308a19ee",
+    "nowrapControl": "308a19ee",
+    "nowrapPlainCandidate": "61fbeacd",
+    "nowrapRichCandidate": "f614571e"
+  }
+}
