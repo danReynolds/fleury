@@ -279,7 +279,13 @@ class RenderRichText extends RenderObject
             openSource = g.groupSource ?? g.grapheme;
           }
         }
-        buf.write(g.grapheme);
+        // Keep single code units in StringBuffer's character buffer instead
+        // of making each glyph a separate string fragment to concatenate.
+        if (g.grapheme.length == 1) {
+          buf.writeCharCode(g.grapheme.codeUnitAt(0));
+        } else {
+          buf.write(g.grapheme);
+        }
         flatOffset += g.grapheme.length;
       }
       out.add(buf.toString());
