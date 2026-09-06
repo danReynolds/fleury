@@ -517,71 +517,53 @@ class RenderRichText extends RenderObject
 
   List<List<_Glyph>> _wrap(int? maxCols) {
     final lines = <List<_Glyph>>[];
-    var para = <_Glyph>[];
-    void flushPara() {
-      _wrapParagraph(para, maxCols, lines);
-      para = <_Glyph>[];
-    }
-
-    for (final g in _glyphs) {
-      if (g.isBreak) {
-        flushPara();
-      } else {
-        para.add(g);
+    var start = 0;
+    for (var i = 0; i < _glyphs.length; i++) {
+      if (_glyphs[i].isBreak) {
+        _wrapParagraph(start, i, maxCols, lines);
+        start = i + 1;
       }
     }
-    flushPara();
+    _wrapParagraph(start, _glyphs.length, maxCols, lines);
     return lines;
   }
 
-  void _wrapParagraph(List<_Glyph> para, int? maxCols, List<List<_Glyph>> out) {
-    if (para.isEmpty) {
+  void _wrapParagraph(
+    int start,
+    int end,
+    int? maxCols,
+    List<List<_Glyph>> out,
+  ) {
+    if (start == end) {
       out.add(const <_Glyph>[]);
       return;
     }
-    // Split into words on single spaces (empty words = consecutive spaces),
-    // remembering the ACTUAL space glyph that separated each pair so a LINK's
-    // internal spaces can keep the link. Without this, the whitespace inside a
-    // multi-word link is re-emitted unstyled and the link fractures into one
-    // `<a>` (and one underline segment) per word.
-    final words = <List<_Glyph>>[];
-    final separators = <_Glyph>[];
-    var word = <_Glyph>[];
-    for (final g in para) {
-      if (g.grapheme == ' ') {
-        words.add(word);
-        separators.add(g);
-        word = <_Glyph>[];
-      } else {
-        word.add(g);
-      }
-    }
-    words.add(word);
-
+    // Walk word ranges in the existing glyph list. Paragraphs, words and
+    // separators need no intermediate copies; only the resulting lines own
+    // new lists. Empty words still represent consecutive/trailing spaces.
     var line = <_Glyph>[];
     var lineWidth = 0;
-    int widthOf(List<_Glyph> ws) {
-      var w = 0;
-      for (final g in ws) {
-        w += g.width;
-      }
-      return w;
-    }
-
+    var wordEnd = start;
     const emptySpace = _Glyph(' ', 1, CellStyle.none);
-    for (var i = 0; i < words.length; i++) {
-      final w = words[i];
+    for (var wordStart = start; wordStart <= end; wordStart = wordEnd + 1) {
+      wordEnd = wordStart;
+      var ww = 0;
+      while (wordEnd < end && _glyphs[wordEnd].grapheme != ' ') {
+        ww += _glyphs[wordEnd].width;
+        wordEnd++;
+      }
       // The space preceding this word. Re-emit the ORIGINAL space glyph (with
       // its style) only when it carries a link, so a multi-word link stays ONE
       // contiguous run — one `<a>`, one unbroken underline — rather than
       // splitting at every space. A non-link separator stays a bare unstyled
       // space, so every non-link run is byte-identical to before (no wire or
       // paint drift). Whitespace at a wrap boundary is still dropped.
-      final separator = i > 0 && separators[i - 1].style.linkUri != null
-          ? separators[i - 1]
+      final separator =
+          wordStart > start && _glyphs[wordStart - 1].style.linkUri != null
+          ? _glyphs[wordStart - 1]
           : emptySpace;
       final isFirst = lineWidth == 0;
-      if (w.isEmpty) {
+      if (wordStart == wordEnd) {
         if (!isFirst &&
             (!_softWrap || maxCols == null || lineWidth + 1 <= maxCols)) {
           line.add(separator);
@@ -589,14 +571,15 @@ class RenderRichText extends RenderObject
         }
         continue;
       }
-      final ww = widthOf(w);
       final needed = isFirst ? ww : 1 + ww;
       if (!_softWrap || maxCols == null || lineWidth + needed <= maxCols) {
         if (!isFirst) {
           line.add(separator);
           lineWidth += 1;
         }
-        line.addAll(w);
+        for (var i = wordStart; i < wordEnd; i++) {
+          line.add(_glyphs[i]);
+        }
         lineWidth += ww;
       } else {
         if (!isFirst) {
@@ -605,7 +588,8 @@ class RenderRichText extends RenderObject
           lineWidth = 0;
         }
         if (ww > maxCols) {
-          for (final g in w) {
+          for (var i = wordStart; i < wordEnd; i++) {
+            final g = _glyphs[i];
             if (lineWidth > 0 && lineWidth + g.width > maxCols) {
               out.add(line);
               line = <_Glyph>[];
@@ -615,7 +599,9 @@ class RenderRichText extends RenderObject
             lineWidth += g.width;
           }
         } else {
-          line.addAll(w);
+          for (var i = wordStart; i < wordEnd; i++) {
+            line.add(_glyphs[i]);
+          }
           lineWidth = ww;
         }
       }
