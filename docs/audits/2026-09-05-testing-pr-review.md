@@ -177,3 +177,13 @@ file with three snapshot regressions; the final owned suite has 448 test files.
 Formatting and source diff whitespace checks passed (captured logs and golden
 terminal cells retain their literal whitespace). GitHub CI supplies the full
 integrated Linux run and cross-platform create matrix before merge.
+
+
+### PR browser review follow-up
+
+The final Playwright-persona review of PR #221 found a minor presentation bug:
+expanding a completed inline Preferences run copied its execution highlight into
+a fresh runner. Attachment now clears only the new runner's code scope. A live
+browser check confirmed the expanded demo starts with zero highlighted lines,
+keeps the inline highlight, passes all four assertions with its own highlight,
+and disposes on close while preserving the inline result.

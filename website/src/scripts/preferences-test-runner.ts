@@ -82,6 +82,8 @@ export function attachPreferencesTest(
   });
   const clearHighlight = () => codeScope.querySelectorAll('.fleury-test-line')
     .forEach((line) => line.classList.remove('fleury-test-line'));
+  // Expanded demos can clone code from an inline run that already has a step.
+  clearHighlight();
   const highlight = (code: string) => {
     clearHighlight();
     const normalize = (text: string) => text.replace(/\s+/g, '');
