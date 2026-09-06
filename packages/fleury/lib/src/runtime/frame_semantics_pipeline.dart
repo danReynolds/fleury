@@ -117,6 +117,10 @@ final class FrameSemanticsPipeline {
   /// skips the walk again once a flush confirms nothing changed.
   void markSemanticsDirty() {
     _semanticDirty = true;
+    // This flush must walk the full tree. Tell the tracker now so intervening
+    // updates do not collect positional leaf ids or construct replacements
+    // that flushNow would discard in favor of that same full walk.
+    _dirtyTracker.recordStructureDirty();
   }
 
   /// Accumulates one presented frame and schedules a deferred flush when

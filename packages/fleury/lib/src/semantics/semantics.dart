@@ -1566,6 +1566,17 @@ final class SemanticsElement extends ComponentElement
 
   @override
   void update(covariant Semantics newWidget) {
+    // Once structure dirt requires a full snapshot, computing positional ids
+    // cannot improve the pending update. Ordinary terminal hosts also leave
+    // that dirt pending when they have no semantic presenter. Explicit ids
+    // retain their validation through the regular path below.
+    if (owner.semanticDirtyTracker._requiresFullRebuild &&
+        widget.id == null &&
+        newWidget.id == null) {
+      super.update(newWidget);
+      rebuild(force: true);
+      return;
+    }
     final oldId = _nodeId;
     final oldIncludeChildren = widget.includeChildren;
     super.update(newWidget);

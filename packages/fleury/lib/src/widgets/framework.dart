@@ -1929,10 +1929,18 @@ class MultiChildRenderObjectElement extends RenderObjectElement {
   MultiChildRenderObjectWidget get widget =>
       super.widget as MultiChildRenderObjectWidget;
 
+  bool _reconcilingChildren = false;
+
   @override
   void performRebuild() {
-    _children = _reconcileChildren(_children, widget.children);
-    _syncChildRenderObjects();
+    final previous = _reconcilingChildren;
+    _reconcilingChildren = true;
+    try {
+      _children = _reconcileChildren(_children, widget.children);
+      _syncChildRenderObjects();
+    } finally {
+      _reconcilingChildren = previous;
+    }
   }
 
   List<Element> _reconcileChildren(
@@ -2187,23 +2195,15 @@ class MultiChildRenderObjectElement extends RenderObjectElement {
     RenderObject child,
     RenderObjectElement element,
   ) {
-    // When THIS element rebuilds, performRebuild installs children in order
-    // via _syncChildRenderObjects and this hook fires for already-installed
-    // render objects (the identical-guard below no-ops). But an attach can
-    // also arrive from a DESCENDANT rebuilding alone — a leaf dependent
-    // (notifyDependents / setState below) swapping its subtree's render
-    // object while this element never rebuilds. Ignoring that attach
-    // silently dropped the new render object: the old one was eagerly
-    // removed by removeChildRenderObject and nothing ever installed the
-    // replacement, so the child simply vanished from the screen.
-    //
-    // Append eagerly so the render object is attached within this frame,
-    // then mark this element dirty: our own performRebuild re-syncs the
-    // order from the (by then updated) element children in the SAME
-    // flushBuild pass loop, correcting the append position if the child
-    // belongs between existing siblings. Sibling widgets are identical
-    // instances (this element's widget didn't change), so the re-run is
-    // skip-cheap.
+    // This element's own reconciliation installs the complete ordered list,
+    // including a coherent partial tree on failure. Attaching each new child
+    // eagerly would rebuild that growing list once per child.
+    if (_reconcilingChildren) return;
+
+    // A descendant can replace its render root without this element rebuilding.
+    // Attach immediately in that case, then reconcile the parent in the same
+    // build flush to restore sibling order. Existing sibling widgets are the
+    // same instances, so their updates are skipped.
     final ro = renderObject as RenderObjectWithChildren;
     if (ro.children.any((c) => identical(c, child))) return;
     ro.replaceAllChildren([...ro.children, child]);

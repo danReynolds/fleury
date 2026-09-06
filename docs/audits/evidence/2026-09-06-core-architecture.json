@@ -1,0 +1,33 @@
+{
+  "baselineRevision": "522ab372532942dcc7c15017d11b59cf5b5b8bae",
+  "candidateRevision": "cde1e73487e8ad5a6aa3aedae5fa7fd359a23474",
+  "candidateSourceSha256": {
+    "packages/fleury/lib/src/widgets/framework.dart": "5c2dc15e0919498942d983d29155f89f288fbb6322c3c2779dbdd2ef855c583e",
+    "packages/fleury/lib/src/semantics/semantics.dart": "ebf67254422c88403160f49ad8465f21d18092bccc4d2d45876e1160798f98ba",
+    "packages/fleury/lib/src/runtime/frame_semantics_pipeline.dart": "bd644ebc4e7454a088a29c54e0b7a2f8ddecb4db5c6853e84abd3963d9262df7"
+  },
+  "baselineSourceSha256": {
+    "packages/fleury/lib/src/widgets/framework.dart": "c55678856f3916a5c362e555011f13666727b4edc78eb667f6ab782996d247c7",
+    "packages/fleury/lib/src/semantics/semantics.dart": "4d0486a8ecf2b4f1dbdd1fe559b51d3ea8d728a0406306b4806dc070e15685c1",
+    "packages/fleury/lib/src/runtime/frame_semantics_pipeline.dart": "3cf24d86485e36b266532ad03d877f84f3aba1e6c918ea7af5289f154ef0229a"
+  },
+  "harnessSha256": {
+    "profiling/bin/core_lifecycle_probe.dart": "4ed7fe641a7de441a886355e76e2d4ee6abd869cf6ba90d587472f11f505b6e2",
+    "profiling/bin/sample_frame_host.dart": "fbb5936bd6e3c93062f5255e987dda84664162e8697910bd251f48303d0c0dad"
+  },
+  "aotBinarySha256": {
+    "base": "38e46c951ebd539b8a0e2f22bf266241a31a4e685fa667e879d1fb84a2bb65af",
+    "after": "6bef12d6f8d6993097d2914f97324df70057fd7200f8a661e05e8d30627a5920"
+  },
+  "sdk": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+  "method": "Three alternating fresh AOT pairs per surface; 160 measured iterations, 15 mount warmups and 30 update warmups; 120x40. Serial native execution outside the filesystem sandbox. No own tests or compilation ran during timings. Host is shared, not an isolated performance lab. Median of process medians.",
+  "boundaries": "Terminal timings include mutation, build/layout/paint, exact diff and commit. Structured timings add presentation planning, synchronous post-commit semantic flush, coverage, semantic diff and real wire encoding; no event dispatch, actual scheduling delay, transport, DOM or terminal display. Control trees contain short labels. 64/256-row cases extend beyond the viewport. No total-RAM or allocation-rate claim.",
+  "parity": "All 48 control-tree cases have matching final rendered-text fingerprints and every measured frame changes output. Sample mounts have no captured fingerprint; functional regressions cover geometry/order/lifecycle.",
+  "trialNotes": "The three trial CSVs predate the derived-geometry merge and use main cc3569d3. Attachment/semantic trials used the earlier terminal-only harness; pipeline trial used the extended harness. Those trials ran in the filesystem sandbox and are exploratory; the final latest-main native measurements supersede their absolute timings.",
+  "files": {
+    "2026-09-06-core-architecture-frames.csv": "f3fe3a193101159ff0a56ef5f6ea61be2cc19d69b35c1ddf82b998b7d66ae5bd",
+    "2026-09-06-core-architecture-attachment-trial.csv": "90e6f22a6582f0b07e89cb00e10aada3f4c2a9091bc483a8139f64f7ba08e800",
+    "2026-09-06-core-architecture-semantic-trial.csv": "b5b54600150458532102c7bb1a95f79c11a542d1a512fea833f6d9c7b44d2468",
+    "2026-09-06-core-architecture-pipeline-trial.csv": "19037b4c2827bff10a032ccec818c03e7248196f236b23616b9bcf311d1530a7"
+  }
+}
