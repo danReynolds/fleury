@@ -2,7 +2,7 @@
 
 2026-09-05. This is a simulated developer perspective, not interviews or measured usability research. The reviewer adopts the expectations of a developer comfortable with React Testing Library and user-event, then tests those expectations against Fleury's source and proposal. Source inspection and official documentation verification only; no production tests or implementation changes were made.
 
-Reviewed the [proposal](/Users/dan/Coding/fleury/docs/implementation/rfc-testing-controls.md), [suite audit](/Users/dan/Coding/fleury/docs/audits/2026-09-05-testing-controls-suite-audit.md), guide, actual controls, selected tests, and the web semantic presenter. The latest chat proposal adds `type:` to the same target interface; that addition is not yet in the written proposal and is evaluated as an unresolved design change.
+Reviewed the [proposal](../implementation/rfc-testing-controls.md), [suite audit](2026-09-05-testing-controls-suite-audit.md), guide, actual controls, selected tests, and the web semantic presenter. The latest chat proposal adds `type:` to the same target interface; that addition is not yet in the written proposal and is evaluated as an unresolved design change.
 
 ## Judgment
 
@@ -12,7 +12,7 @@ The current design is close enough to specify and prototype. Resolve findings 1â
 
 ## 1. High: type scoping needs a contract before it joins the semantic interface
 
-**Observed fact.** The proposal defines every target as a semantic query with a `SemanticNode` snapshot and semantic descendants ([proposal:131](/Users/dan/Coding/fleury/docs/implementation/rfc-testing-controls.md:131)). Existing type finders instead match element `runtimeType` exactly ([finders:40](/Users/dan/Coding/fleury/packages/fleury/lib/src/testing/finders.dart:40)). An application composite may have no semantic node, or contribute multiple descendants. Select mounts its popup through an overlay ([Select:200](/Users/dan/Coding/fleury/packages/fleury_widgets/lib/src/select.dart:200)).
+**Observed fact.** The proposal defines every target as a semantic query with a `SemanticNode` snapshot and semantic descendants ([proposal:131](../implementation/rfc-testing-controls.md#L131)). Existing type finders instead match element `runtimeType` exactly ([finders:40](../../packages/fleury/lib/src/testing/finders.dart#L40)). An application composite may have no semantic node, or contribute multiple descendants. Select mounts its popup through an overlay ([Select:200](../../packages/fleury_widgets/lib/src/select.dart#L200)).
 
 **Persona judgment.** This reads well:
 
@@ -29,7 +29,7 @@ Keep type selection available for component integration tests. Lead application 
 
 ## 2. High: predictable names matter more than additional selector conveniences
 
-**Observed fact.** Button publishes its visible label directly ([controls:870](/Users/dan/Coding/fleury/packages/fleury_widgets/lib/src/controls.dart:870)). TextInput uses `semanticLabel`, then placeholder ([TextInput:1582](/Users/dan/Coding/fleury/packages/fleury/lib/src/widgets/text_input.dart:1582)). Select uses `semanticLabel`, then its current option label, and also exposes that option label as value ([Select:343](/Users/dan/Coding/fleury/packages/fleury_widgets/lib/src/select.dart:343)). Autocomplete's `semanticLabel` names its suggestion menu; `fieldSemanticLabel` names the field ([Autocomplete:58](/Users/dan/Coding/fleury/packages/fleury_widgets/lib/src/autocomplete.dart:58)).
+**Observed fact.** Button publishes its visible label directly ([controls:870](../../packages/fleury_widgets/lib/src/controls.dart#L870)). TextInput uses `semanticLabel`, then placeholder ([TextInput:1582](../../packages/fleury/lib/src/widgets/text_input.dart#L1582)). Select uses `semanticLabel`, then its current option label, and also exposes that option label as value ([Select:343](../../packages/fleury_widgets/lib/src/select.dart#L343)). Autocomplete's `semanticLabel` names its suggestion menu; `fieldSemanticLabel` names the field ([Autocomplete:58](../../packages/fleury_widgets/lib/src/autocomplete.dart#L58)).
 
 **Persona judgment.** I would naturally write `Autocomplete(semanticLabel: 'Customer')` and then `tester.field('Customer')`. That does not name the field under the current contract. I could also retain `tester.button('Red')` for an unnamed Select, set its value to Blue, and find that my reusable query no longer matches. The resolver is behaving correctly; the control's identity is poorly expressed.
 
@@ -39,7 +39,7 @@ Testing Library's role queries use the accessible name, which may come from a fo
 
 ## 3. High: coordinate field/fill with the role taxonomy before hard-coding the two-role family
 
-**Observed fact.** `field` currently means textField/textArea, and `fill` explicitly requires those roles ([proposal:80](/Users/dan/Coding/fleury/docs/implementation/rfc-testing-controls.md:80), [proposal:296](/Users/dan/Coding/fleury/docs/implementation/rfc-testing-controls.md:296)). NumberInput builds TextInput ([NumberInput:278](/Users/dan/Coding/fleury/packages/fleury_widgets/lib/src/number_input.dart:278)). Autocomplete currently publishes a text field plus menu/menuItem suggestions ([Autocomplete:292](/Users/dan/Coding/fleury/packages/fleury_widgets/lib/src/autocomplete.dart:292)). The discussion proposes assessing comboBox/listBox/option and more precise numeric roles.
+**Observed fact.** `field` currently means textField/textArea, and `fill` explicitly requires those roles ([proposal:80](../implementation/rfc-testing-controls.md#L80), [proposal:296](../implementation/rfc-testing-controls.md#L296)). NumberInput builds TextInput ([NumberInput:278](../../packages/fleury_widgets/lib/src/number_input.dart#L278)). Autocomplete currently publishes a text field plus menu/menuItem suggestions ([Autocomplete:292](../../packages/fleury_widgets/lib/src/autocomplete.dart#L292)). The discussion proposes assessing comboBox/listBox/option and more precise numeric roles.
 
 **Persona judgment.** A future accessibility improvement must not make `field('Customer').fill('Acme')` stop working simply because Autocomplete acquired a comboBox role. Conversely, accepting every `setValue` target would incorrectly treat sliders and tables as editable text.
 
@@ -49,7 +49,7 @@ Combobox is a justified candidate because it expresses input with an associated 
 
 ## 4. Medium: document the two role vocabularies; do not remove domain information merely to match ARIA
 
-**Observed fact.** Fleury already has an explicit web projection: command and approval map to browser button; patchFile to listitem; toolCall and tokenMeter to status; textField/textArea to textbox ([presenter:509](/Users/dan/Coding/fleury/packages/fleury_web/lib/src/semantics/semantic_dom_presenter.dart:509)). The proposed `button` alias matches the exact Fleury button role. Therefore a browser role query and an in-process Fleury role query do not necessarily select the same set of nodes.
+**Observed fact.** Fleury already has an explicit web projection: command and approval map to browser button; patchFile to listitem; toolCall and tokenMeter to status; textField/textArea to textbox ([presenter:509](../../packages/fleury_web/lib/src/semantics/semantic_dom_presenter.dart#L509)). The proposed `button` alias matches the exact Fleury button role. Therefore a browser role query and an in-process Fleury role query do not necessarily select the same set of nodes.
 
 **Persona judgment.** This is more significant than whether there are 30 or 65 enum values. A React developer expects `getByRole('button')` to mean the accessible button category. Fleury currently exposes a richer internal vocabulary, which can be valuable to agents and inspectors but needs a clear boundary.
 
@@ -59,7 +59,7 @@ Combobox is a justified candidate because it expresses input with an associated 
 
 ## 5. Medium: logical press is useful, but user-event users will overestimate its input coverage
 
-**Observed fact.** The plan explicitly defines `press` as one semantic activation and `fill` as focused semantic replacement; it preserves real keys and pointer APIs ([proposal:266](/Users/dan/Coding/fleury/docs/implementation/rfc-testing-controls.md:266)). The revised guide already explains this near the first example and retains Ctrl+S ([guide:95](/Users/dan/Coding/fleury/website/src/content/docs/guides/testing.mdx:95)). Select's existing test intentionally changes the value without mounting its popup ([test:151](/Users/dan/Coding/fleury/packages/fleury_widgets/test/select_test.dart:151)).
+**Observed fact.** The plan explicitly defines `press` as one semantic activation and `fill` as focused semantic replacement; it preserves real keys and pointer APIs ([proposal:266](../implementation/rfc-testing-controls.md#L266)). The revised guide already explains this near the first example and retains Ctrl+S ([guide:95](../../website/src/content/docs/guides/testing.mdx#L95)). Select's existing test intentionally changes the value without mounting its popup ([test:151](../../packages/fleury_widgets/test/select_test.dart#L151)).
 
 **Persona judgment.** `await button.press()` looks like a user interaction. In user-event, interactions model multiple events plus interactability checks. Fleury's operation proves a narrower semantic contract, even when the application outcome is the same. [user-event introduction](https://testing-library.com/docs/user-event/intro/)
 
@@ -69,7 +69,7 @@ Combobox is a justified candidate because it expresses input with an associated 
 
 ## 6. Medium: strict scopes and absence are good; teach query lifetime and async lifetime with failure examples
 
-**Observed fact.** The proposal's `snapshot` is strict, `snapshots` supports zero/many, missing parents fail, and actions re-resolve their query ([proposal:153](/Users/dan/Coding/fleury/docs/implementation/rfc-testing-controls.md:153)). Matchers preserve duplicate/missing failures under negation and redact secrets ([proposal:333](/Users/dan/Coding/fleury/docs/implementation/rfc-testing-controls.md:333)). Actions do not retry or settle arbitrary application work ([proposal:280](/Users/dan/Coding/fleury/docs/implementation/rfc-testing-controls.md:280)).
+**Observed fact.** The proposal's `snapshot` is strict, `snapshots` supports zero/many, missing parents fail, and actions re-resolve their query ([proposal:153](../implementation/rfc-testing-controls.md#L153)). Matchers preserve duplicate/missing failures under negation and redact secrets ([proposal:333](../implementation/rfc-testing-controls.md#L333)). Actions do not retry or settle arbitrary application work ([proposal:280](../implementation/rfc-testing-controls.md#L280)).
 
 **Persona judgment.** This is a strong, small surface. I do not need get/query/find name families, but I do need to see that `final save = ...` stores a query, not a node, and that `await save.press()` does not wait for a separately started request. Testing Library distinguishes immediate required matches, optional absence, and eventual queries explicitly. [Query cardinality and waiting](https://testing-library.com/docs/queries/about/)
 

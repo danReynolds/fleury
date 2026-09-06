@@ -25,8 +25,9 @@ its integration with current main. Two additional defects were fixed:
   and legitimate exclusion markers.
 
 Current-main integration also restores the existing synchronous segmented-paste
-expectations, tests declared custom roles, and explains exact role matching in
-the guide. The earlier implementation receipt and feasibility probes are
+expectations and fixes a WhichKey fixture to set its viewport before the first
+complete frame. The original popup layout assertions remain intact. Declared
+custom roles are tested and exact role matching is explained in the guide. The earlier implementation receipt and feasibility probes are
 explicitly historical evidence.
 
 ## Validation
@@ -37,6 +38,24 @@ explicitly historical evidence.
 - Website production build passed: 66 Dart documentation tests, 2 Node checks,
   dart2js examples, and 144 generated pages.
 - The shared remote client asset was regenerated with Dart 3.12.2.
-- Full contributor validation is running; final results will be recorded here.
+- Core non-integration: 3,209 passed, 1 skipped. Testing facade: 49 passed.
+- Widgets with a DST-observing timezone: 1,197 passed, 1 skipped.
+- Themes / Git / example console / storybook: 7 / 4 / 25 / 43 passed.
+- Browser package (VM + Chrome): 523 passed. Samples: 92 passed.
+- MCP: 151 passed, including the real showcase end-to-end cases.
+- Core integration, serial: 63 passed.
+- All local test suites passed: 5,431 tests in total, with 2 declared skips.
+  Formatting of changed library, test, and example files and `git diff --check`
+  passed. The launcher retains its pre-existing formatting; its only code
+  change is the guide test registration.
 
-These are local checks. CI and platform-specific evidence are tracked on the PR.
+The contributor launcher stopped at the WhichKey fixture. After correcting it,
+the full widget suite and every remaining suite were run explicitly; the earlier
+core and facade passes remained valid. The website build also exercised the
+documentation gate and compiled the complete browser example surface.
+
+These are local checks on macOS with Dart 3.12.2. GitHub CI and the cross-platform
+create matrix have not run: automatic approval review blocked the push and PR
+creation, requiring explicit permission for publication to the public
+`danReynolds/fleury` repository. No PR has been created. The branch and review
+are complete locally. No actionable review findings remain after the fixes.
