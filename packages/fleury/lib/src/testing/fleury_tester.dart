@@ -747,7 +747,7 @@ class FleuryTester {
     _publishFrameLatch();
     final buffer = CellBuffer(size ?? viewportSize);
     _pointerRouter.beginFrame();
-    _pointerRouter.root = _owner.renderFrame(root, buffer);
+    _owner.renderFrame(root, buffer);
     _pointerRouter.endFrame();
     return buffer;
   }

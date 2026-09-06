@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:characters/characters.dart';
+import 'package:meta/meta.dart';
 
 import '../foundation/geometry.dart';
 import 'cell.dart';
@@ -10,6 +11,74 @@ import 'width_resolver.dart';
 export 'inline_image.dart';
 
 CellStyle _paintStyle(CellStyle style) => plainCellStyle(style);
+
+/// Paints a grapheme already measured by the layout/paint caller.
+///
+/// Internal bridge, excluded from the public barrels. Measurement and
+/// placement share one width decision; clipping and wide-pair repair remain
+/// owned by the buffer. The caller supplies a sanitized single grapheme and
+/// a width of 0, 1, or 2 under its current surface policy.
+@internal
+int paintMeasuredGrapheme(
+  CellBuffer buffer,
+  int col,
+  int row,
+  String grapheme,
+  int width,
+  CellStyle style,
+) {
+  assert(width >= 0 && width <= 2);
+  if (width == 0 || !buffer._containsColRow(col, row)) return 0;
+  return buffer._placeGrapheme(col, row, grapheme, width, _paintStyle(style));
+}
+
+/// Supplies [color] to painted glyphs in [rect] without their own background.
+///
+/// Internal composition pass, excluded from public barrels. Reuses the merged
+/// style across consecutive uses of one immutable source style without a
+/// retained cache. A leading at the right edge still restyles its continuation
+/// outside the rectangle, matching [CellBuffer.restyleCell]. Empty cells and
+/// image overlays are untouched.
+@internal
+void applyCellBackground(CellBuffer buffer, CellRect rect, Color color) {
+  final clipped = rect.intersect(
+    CellRect(offset: CellOffset.zero, size: buffer._size),
+  );
+  if (clipped == null) return;
+  final background = CellStyle(background: color);
+  CellStyle? previousStyle;
+  var merged = background;
+  final cols = buffer._size.cols;
+  for (var row = clipped.top; row < clipped.bottom; row++) {
+    final base = row * cols;
+    var firstChanged = -1;
+    var endChanged = 0;
+    for (var col = clipped.left; col < clipped.right; col++) {
+      final index = base + col;
+      final cell = buffer._cells[index];
+      if (cell.role != CellRole.leading || cell.style.background != null) {
+        continue;
+      }
+      if (!identical(previousStyle, cell.style)) {
+        previousStyle = cell.style;
+        merged = cell.style.merge(background);
+      }
+      buffer._cells[index] = Cell.leading(
+        grapheme: cell.grapheme!,
+        style: merged,
+      );
+      final wide =
+          col + 1 < cols &&
+          buffer._cells[index + 1].role == CellRole.continuation;
+      if (wide) buffer._cells[index + 1] = Cell.continuation(style: merged);
+      if (firstChanged < 0) firstChanged = col;
+      endChanged = col + (wide ? 2 : 1);
+    }
+    if (firstChanged >= 0) {
+      buffer._recordDamageRect(firstChanged, row, endChanged - firstChanged, 1);
+    }
+  }
+}
 
 /// A two-dimensional grid of [Cell]s representing one frame of the terminal
 /// rendering output.
@@ -135,6 +204,37 @@ final class CellBuffer {
     _cells.fillRange(0, _cells.length, const Cell.empty());
     _images.clear();
     _imagePlacements.clear();
+  }
+
+  /// Fills [rect] with single-cell spaces painted with [style].
+  ///
+  /// Clips to this buffer and repairs wide pairs cut by either horizontal
+  /// edge, just like individual [writeGrapheme] calls. The immutable blank
+  /// cell is shared across the region, so a uniform fill does not allocate
+  /// or measure a glyph for every cell. Image placements are left unchanged,
+  /// as they are by individual grapheme writes.
+  void fillRect(CellRect rect, {CellStyle style = CellStyle.none}) {
+    final clipped = rect.intersect(
+      CellRect(offset: CellOffset.zero, size: _size),
+    );
+    if (clipped == null || clipped.size.isEmpty) return;
+    final left = clipped.left;
+    final right = clipped.right;
+    final fill = Cell.leading(grapheme: ' ', style: _paintStyle(style));
+    _recordDamageRect(
+      left - 1,
+      clipped.top,
+      right - left + 2,
+      clipped.size.rows,
+    );
+    for (var row = clipped.top; row < clipped.bottom; row++) {
+      // The interior is completely replaced; only the two edges can leave
+      // an orphaned half outside the fill.
+      _evictWideNeighbors(left, row);
+      _evictWideNeighbors(right - 1, row);
+      final base = row * _size.cols;
+      _cells.fillRange(base + left, base + right, fill);
+    }
   }
 
   /// Scrolls the buffer up by [rows] rows: row `r + rows` moves to row `r`,
@@ -585,14 +685,7 @@ final class CellBuffer {
       final width = widthResolver.widthOfGrapheme(grapheme, policy);
       if (width == 0) continue;
       if (col >= 0) {
-        _writeGraphemeAt(
-          col,
-          row,
-          grapheme,
-          style: paintStyle,
-          widthResolver: widthResolver,
-          policy: policy,
-        );
+        _placeGrapheme(col, row, grapheme, width, paintStyle);
       }
       col += width;
     }
@@ -910,13 +1003,28 @@ final class CellBuffer {
     var right = 0;
     var top = rowCount;
     var bottom = 0;
+    // Bulk fills repeat immutable cells. Reuse the last proven-equal pair
+    // within this scan; Cell equality remains the authority for new pairs.
+    // No state survives the call, so subsequent writes need no invalidation.
+    Cell? equalMine;
+    Cell? equalTheirs;
 
     for (var row = 0; row < rowCount; row++) {
       final base = row * cols;
       var first = -1;
       var last = -1;
       for (var col = 0; col < cols; col++) {
-        if (mine[base + col] != theirs[base + col]) {
+        final cell = mine[base + col];
+        final previousCell = theirs[base + col];
+        if (identical(cell, previousCell) ||
+            (identical(cell, equalMine) &&
+                identical(previousCell, equalTheirs))) {
+          continue;
+        }
+        if (cell == previousCell) {
+          equalMine = cell;
+          equalTheirs = previousCell;
+        } else {
           dirtyCells++;
           if (first < 0) first = col;
           last = col;

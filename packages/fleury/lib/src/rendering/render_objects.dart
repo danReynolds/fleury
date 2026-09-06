@@ -128,6 +128,10 @@ class RenderText extends RenderObject
   /// has been called at least once.
   List<String> _lines = const <String>[];
 
+  // Widths measured by the current multi-line layout. A single unwrapped
+  // line uses _intrinsicWidth directly, so short labels allocate no list.
+  List<int> _lineWidths = const <int>[];
+
   /// Memoized layout result, keyed on the constraints that produced
   /// it. The wrap algorithm is the hottest path in the renderer
   /// (see `benchmark/widgets_benchmarks.dart`); reusing a cached
@@ -158,6 +162,7 @@ class RenderText extends RenderObject
       _text = display;
       _intrinsicWidth = nextIntrinsicWidth;
       _lines = <String>[display];
+      _lineWidths = const <int>[];
       _moreLinesTruncated = false;
       markNeedsPaintOnly();
       return;
@@ -271,6 +276,7 @@ class RenderText extends RenderObject
   CellSize performLayout(CellConstraints constraints) {
     if (_text.isEmpty) {
       _lines = const <String>[];
+      _lineWidths = const <int>[];
       _moreLinesTruncated = false;
       return constraints.constrain(CellSize.zero);
     }
@@ -285,6 +291,7 @@ class RenderText extends RenderObject
     if (!hasNewlines &&
         (!_softWrap || maxCols == null || _intrinsicWidth <= maxCols)) {
       _lines = <String>[_text];
+      _lineWidths = const <int>[];
       _moreLinesTruncated = false;
       final cols = maxCols == null
           ? _intrinsicWidth
@@ -298,6 +305,20 @@ class RenderText extends RenderObject
     final cached = _cachedSize;
     if (cached != null && constraints == _cachedConstraints) {
       return cached;
+    }
+    if (cached != null && !_softWrap) {
+      // Unwrapped paragraphs are independent of the viewport width. Reuse
+      // their measured widths, while refreshing the line-list identity so
+      // point-based selection observes the new geometry on the next paint.
+      _lines = List<String>.of(_lines);
+      var widest = 0;
+      for (final width in _lineWidths) {
+        if (width > widest) widest = width;
+      }
+      final result = constraints.constrain(CellSize(widest, _lines.length));
+      _cachedConstraints = constraints;
+      _cachedSize = result;
+      return result;
     }
 
     if (!_softWrap || maxCols == null) {
@@ -317,10 +338,13 @@ class RenderText extends RenderObject
     }
 
     var maxLineWidth = 0;
+    final lineWidths = <int>[];
     for (final line in _lines) {
       final w = _widthResolver.widthOfText(line, _policy);
+      lineWidths.add(w);
       if (w > maxLineWidth) maxLineWidth = w;
     }
+    _lineWidths = lineWidths;
     final cols = maxCols == null
         ? maxLineWidth
         : (maxLineWidth < maxCols ? maxLineWidth : maxCols);
@@ -369,12 +393,29 @@ class RenderText extends RenderObject
     // `selectionPaintRect` is the full content rect on screen (including
     // any portion scrolled off) and `selectionClipRect` the ancestor clip,
     // both read from [screenGeometry] when the mixin needs them.
+    //
+    // Selection is constant during this synchronous paint. Resolve once:
+    // resolving per glyph repeatedly scans the document's line lengths.
+    final selection = getSelectionRange();
+    // Refresh even an empty paint so selection drops obsolete line snapshots.
     if (_text.isEmpty || size.isEmpty) return;
     final visibleRows = _lines.length < size.rows ? _lines.length : size.rows;
+    if (offset.row >= buffer.size.rows || offset.row + visibleRows <= 0) return;
+    final selectedStyle = selection == null
+        ? _style
+        : _style.merge(const CellStyle(inverse: true));
     var lineStartOffset = 0;
     for (var i = 0; i < visibleRows; i++) {
+      final row = offset.row + i;
+      if (row >= buffer.size.rows) break;
+      if (row < 0) {
+        // Preserve selection offsets without walking off-screen graphemes.
+        // Full selection geometry was recorded above, including hidden rows.
+        lineStartOffset += _lines[i].length + 1;
+        continue;
+      }
       final isLastVisible = i == visibleRows - 1;
-      final lineWidth = _widthResolver.widthOfText(_lines[i], _policy);
+      final lineWidth = _lineWidths.isEmpty ? _intrinsicWidth : _lineWidths[i];
       final clipped = lineWidth > size.cols;
       final ellipsize =
           _overflow == TextOverflow.ellipsis &&
@@ -395,10 +436,12 @@ class RenderText extends RenderObject
         buffer,
         _lines[i],
         offset.col + dx,
-        offset.row + i,
+        row,
         ellipsize,
         offset.col + size.cols,
         lineStartOffset,
+        selection,
+        selectedStyle,
       );
       lineStartOffset += _lines[i].length + 1; // implicit newline
     }
@@ -412,6 +455,8 @@ class RenderText extends RenderObject
     bool ellipsize,
     int maxCol,
     int lineStartOffset,
+    ({int start, int end})? selection,
+    CellStyle selectedStyle,
   ) {
     // Reserve what the ellipsis actually measures on this surface. `…` is
     // East Asian Ambiguous, so an ambiguous-wide terminal draws it two cells
@@ -430,16 +475,11 @@ class RenderText extends RenderObject
       // Cell style is the painting style merged with a selection
       // highlight (reverse) when this grapheme falls inside the
       // current selection range.
-      final cellStyle = isOffsetSelected(off)
-          ? _style.merge(const CellStyle(inverse: true))
+      final cellStyle =
+          selection != null && off >= selection.start && off < selection.end
+          ? selectedStyle
           : _style;
-      buffer.writeGrapheme(
-        CellOffset(col, row),
-        grapheme,
-        style: cellStyle,
-        widthResolver: _widthResolver,
-        policy: _policy,
-      );
+      paintMeasuredGrapheme(buffer, col, row, grapheme, w, cellStyle);
       col += w;
       off += grapheme.length;
     }
@@ -447,13 +487,7 @@ class RenderText extends RenderObject
     // fit INSIDE the box, never half-in with its continuation cell over the
     // neighbour.
     if (ellipsize && col + ellipsisWidth <= maxCol) {
-      buffer.writeGrapheme(
-        CellOffset(col, row),
-        _ellipsis,
-        style: _style,
-        widthResolver: _widthResolver,
-        policy: _policy,
-      );
+      paintMeasuredGrapheme(buffer, col, row, _ellipsis, ellipsisWidth, _style);
     }
   }
 

@@ -1,0 +1,9 @@
+kind,side,run,columns,rows,frames,warmup,selected,mode,changed_frames,live_before_bytes,live_after_bytes,live_styles,style_bytes
+plain,base,1,80,24,400,300,True,clean,0,375568,375568,3172,253760
+plain,base,2,80,24,400,300,True,clean,0,375568,375568,3172,253760
+plain,after,1,80,24,400,300,True,clean,0,122288,122288,6,480
+plain,after,2,80,24,400,300,True,clean,0,122288,122288,6,480
+rich,base,1,80,24,400,300,True,clean,0,4662720,4662720,3172,253760
+rich,base,2,80,24,400,300,True,clean,0,4662720,4662720,3172,253760
+rich,after,1,80,24,400,300,True,clean,0,4474560,4474560,820,65600
+rich,after,2,80,24,400,300,True,clean,0,4474560,4474560,820,65600

@@ -18,6 +18,7 @@
 // compatible". See tool/ucd_width_tables.dart.
 
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:fleury/fleury.dart';
 import 'package:fleury/src/rendering/width_tables.dart';
@@ -81,6 +82,74 @@ void main() {
     expect(widthTablesUnicodeVersion, matches(RegExp(r'^\d+\.\d+\.\d+$')));
     expect(widthTablesFingerprint, isNotEmpty);
   });
+
+  test(
+    'combined lookup preserves every scalar under every width-axis pairing',
+    () {
+      // Derive the old resolver's answer directly from its original property
+      // tables, independently of the generator's combined partition.
+      final expected = Uint8List(0x110000);
+      void assign(List<int> ranges, int cls) {
+        for (var i = 0; i < ranges.length; i += 2) {
+          for (var code = ranges[i]; code <= ranges[i + 1]; code++) {
+            expected[code] = cls;
+          }
+        }
+      }
+
+      assign(ambiguousRanges, 3);
+      assign(wideRanges, 2);
+      assign(emojiPresentationRanges, 4);
+      assign(zeroWidthRanges, 1);
+
+      final actual = Uint8List(expected.length);
+      expect(scalarWidthRanges.length % 3, 0);
+      var previousEnd = -1;
+      var previousClass = -1;
+      for (var i = 0; i < scalarWidthRanges.length; i += 3) {
+        final start = scalarWidthRanges[i];
+        final end = scalarWidthRanges[i + 1];
+        final cls = scalarWidthRanges[i + 2];
+        expect(start, greaterThan(previousEnd));
+        expect(end, greaterThanOrEqualTo(start));
+        expect(end, lessThan(expected.length));
+        expect(cls, inInclusiveRange(1, 4));
+        expect(start == previousEnd + 1 && cls == previousClass, isFalse);
+        actual.fillRange(start, end + 1, cls);
+        previousEnd = end;
+        previousClass = cls;
+      }
+      const resolver = DefaultWidthResolver();
+      final policies = [
+        for (final ambiguous in CellWidth.values)
+          for (final emoji in CellWidth.values)
+            CellWidthPolicy(ambiguous: ambiguous, emojiPresentation: emoji),
+      ];
+      for (var code = 0; code < expected.length; code++) {
+        final cls = expected[code];
+        if (actual[code] != cls) {
+          fail('classification mismatch at U+${code.toRadixString(16)}');
+        }
+        final grapheme = String.fromCharCode(code);
+        for (final policy in policies) {
+          final width = switch (cls) {
+            1 => 0,
+            2 => 2,
+            3 => policy.ambiguous == CellWidth.two ? 2 : 1,
+            4 => policy.emojiPresentation == CellWidth.two ? 2 : 1,
+            _ => 1,
+          };
+          final measured = resolver.widthOfGrapheme(grapheme, policy);
+          if (measured != width) {
+            fail(
+              'width mismatch at U+${code.toRadixString(16)} under $policy: '
+              '$measured instead of $width',
+            );
+          }
+        }
+      }
+    },
+  );
 
   test('curated deviations from the raw UCD survive regeneration', () {
     // These three are deliberate and load-bearing; a regeneration that dropped

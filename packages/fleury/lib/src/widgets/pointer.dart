@@ -64,14 +64,16 @@ final class PointerDownDetails {
 /// Routes mouse events to the pointer regions under the pointer, plus hover,
 /// press, and drag capture state. One instance per runtime.
 ///
-/// Regions are found by hit-testing the rendered tree top-down from [root]:
-/// each container reports where it put its children, what it clips, and which
-/// of them it presents ([RenderObject.childOffsetOf] and friends), and a
-/// subtree is pruned by its box unless it says otherwise
-/// ([RenderObject.hitTestsBeyondBounds]), so an event walks one chain of the
-/// tree rather than every region. Paint order — later siblings on top,
-/// children over their parents — is the walk order, so the topmost region is
-/// the last hit collected.
+/// Regions are found by hit-testing the rendered tree top-down from the
+/// [PointerRouterScope] that shares this router: each container reports where
+/// it put its children, what it clips, and which of them it presents
+/// ([RenderObject.childOffsetOf] and friends), and a subtree is pruned by its
+/// box unless it says otherwise ([RenderObject.hitTestsBeyondBounds]), so an
+/// event walks one chain of the tree rather than every region. Paint order —
+/// later siblings on top, children over their parents — is the walk order, so
+/// the topmost region is the last hit collected. Nothing is wired per frame:
+/// whoever renders the tree only reports whether the frame completed
+/// ([endFrame]) or failed ([abortFrame]).
 class PointerRouter {
   final Set<RenderObject> _inputExcludedSubtrees = <RenderObject>{};
   final List<RenderPointerListener> _hits = <RenderPointerListener>[];
@@ -85,15 +87,26 @@ class PointerRouter {
   RenderPointerListener? _dragTarget;
   bool _dragging = false;
 
-  /// Framework-internal: the root of the rendered tree, set by the host
-  /// after each frame. Null before the first frame: nothing is hit-testable.
-  @internal
-  RenderObject? root;
+  /// The element of the outermost [PointerRouterScope] carrying this router;
+  /// hit-testing starts at the render object below it.
+  Element? _scope;
+
+  /// A frame failed after [beginFrame] and none has completed since: the
+  /// tree on screen was never presented, so nothing in it is hit-testable.
+  bool _aborted = false;
+
+  void _attachScope(Element scope) {
+    _scope ??= scope; // the outermost scope mounts first and wins
+  }
+
+  void _detachScope(Element scope) {
+    if (identical(_scope, scope)) _scope = null;
+  }
 
   /// Starts a frame. Nothing to reset: regions are found from layout state.
   void beginFrame() {}
 
-  /// Reconciles captured targets against the rendered tree.
+  /// Marks the frame presented and reconciles captured targets against it.
   ///
   /// A pointer render object can leave the tree, or stop being presented,
   /// while it owns hover, press, or drag capture. Anything a hit-test can no
@@ -101,6 +114,7 @@ class PointerRouter {
   /// or hidden widget subtree.
   void endFrame() {
     if (_disposed) return;
+    _aborted = false;
     if (_hovered != null && !_isLive(_hovered!)) _hovered = null;
     if (_downTarget != null && !_isLive(_downTarget!)) {
       _downTarget = null;
@@ -112,11 +126,12 @@ class PointerRouter {
     }
   }
 
-  /// Discards every captured target after an unsuccessful frame: a partial
-  /// paint was never presented, so nothing touched during it may stay
-  /// interactive.
+  /// Makes routing inert after an unsuccessful frame: a partial paint was
+  /// never presented, so nothing in the tree may be hit and nothing captured
+  /// during it may stay interactive, until a frame completes.
   void abortFrame() {
     if (_disposed) return;
+    _aborted = true;
     _hovered = null;
     _downTarget = null;
     _downButton = MouseButton.none;
@@ -132,7 +147,7 @@ class PointerRouter {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    root = null;
+    _scope = null;
     _hits.clear();
     _inputExcludedSubtrees.clear();
     _hovered = null;
@@ -204,10 +219,11 @@ class PointerRouter {
   }
 
   /// Collects every region under ([col], [row]) into [_hits], in paint
-  /// order, by walking the rendered tree from [root].
+  /// order, by walking the rendered tree below the router's scope.
   void _collectHits(int col, int row) {
     _hits.clear();
-    final start = root;
+    if (_aborted) return;
+    final start = _scope?.findRenderObject();
     if (start == null) return;
     _visitHits(start, col, row, null);
   }
@@ -425,6 +441,40 @@ class PointerRouterScope extends InheritedWidget {
   @override
   bool updateShouldNotify(PointerRouterScope oldWidget) =>
       !identical(router, oldWidget.router);
+
+  @override
+  InheritedElement createElement() => _PointerRouterScopeElement(this);
+}
+
+/// Tells the router where its tree is: hit-testing starts at the render
+/// object below this element, for as long as it is mounted.
+class _PointerRouterScopeElement extends InheritedElement {
+  _PointerRouterScopeElement(PointerRouterScope super.widget);
+
+  @override
+  PointerRouterScope get widget => super.widget as PointerRouterScope;
+
+  @override
+  void mount(Element? parent) {
+    super.mount(parent);
+    widget.router._attachScope(this);
+  }
+
+  @override
+  void update(covariant PointerRouterScope newWidget) {
+    final old = widget.router;
+    super.update(newWidget);
+    if (!identical(old, newWidget.router)) {
+      old._detachScope(this);
+      newWidget.router._attachScope(this);
+    }
+  }
+
+  @override
+  void unmount() {
+    widget.router._detachScope(this);
+    super.unmount();
+  }
 }
 
 /// Reports taps (and right-clicks) on its [child]. A tap is a press and

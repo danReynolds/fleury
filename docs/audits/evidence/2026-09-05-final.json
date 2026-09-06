@@ -1,0 +1,2386 @@
+{
+  "baselineCommit": "5bb7a6fd24bcd0a258a07fd28dabcc7a74c22016",
+  "candidateCodeCommit": "bffe37fa",
+  "sourceSha256": {
+    "packages/fleury/lib/src/rendering/cell_buffer.dart": "2ad9a8282bd8fe14bf21515a9e5e6fb5effdaf9507755fc0a493518d2bdea37a",
+    "packages/fleury/lib/src/rendering/cell.dart": "0b19349b27eb464477a4ff7525c0b94f07870be4da007b9640b4e3444ced9a51",
+    "packages/fleury/lib/src/rendering/render_objects.dart": "796f970005c133fbe0fc94325399d34160fa3fc2902aa3a2533fc109692a4592",
+    "packages/fleury/lib/src/rendering/width_resolver.dart": "353f1b69b5db3ff632c71234dad9906586fce715f4942bb98a6a4a51edd143e3",
+    "packages/fleury/lib/src/rendering/width_tables.dart": "3302b74d903cd35b20953074c3d87ac15d34d9a9685197e8820715dcbf8e5942",
+    "packages/fleury/lib/src/widgets/basic.dart": "5d5feadb3461018137af4f781db9d4d2fc46e26658eb64035391e9012d05c13e",
+    "profiling/bin/frame_pipeline_probe.dart": "aa81c9a82fb696ec9eb13a5a6938f97ccffeebe81ca256b87558d0ed5c05bad3",
+    "profiling/bin/retained_tax_probe.dart": "fb3f7c9f1c6391dcee4bdba3bc21a00e23dbdddf788f882cc4abb16aa89a6257"
+  },
+  "environment": "Dart 3.12.2 AOT, macOS arm64, 10 logical CPUs",
+  "method": "Three viewports; base/candidate/candidate/base. Pipeline: 30 initialization frames before tree enumeration, 30 warmup, 300 frames per mode, counters disabled. Retained: 30 warmup, 200 frames per mode, debug counters enabled. Own compilation and tests stopped during timings; shared host not isolated.",
+  "limits": "Pipeline clean forces rendering; production idle skips it. Leaf mutates a visible RenderText directly, not widget state or user input. Total includes buffer preparation, build/layout/paint, exact diff, scroll classification, commit and post-frame callbacks; excludes encoding, transport and terminal display. Medians and p95 are per-run distributions, not device or energy evidence.",
+  "allStructuralCountersMatch": true,
+  "allVisibleLeafFramesChanged": true,
+  "pipelineTreeCountsMatchRetainedProbe": true,
+  "files": {
+    "pipeline": {
+      "file": "2026-09-05-final-pipeline.csv",
+      "sha256": "bc18629f9bee39692913aa0ea4213c65ef0a72110936c324c53ae04bedff2169",
+      "records": 180
+    },
+    "retained": {
+      "file": "2026-09-05-final-retained.csv",
+      "sha256": "c4306628fbce82eb05d371ae95fcd9501deb3bbe2ad92ec5878bad362062e9b1",
+      "records": 240
+    }
+  },
+  "summaryMeanOfRunMedians": [
+    {
+      "columns": 80,
+      "app": "dashboard",
+      "totalUs": {
+        "base": 209.5,
+        "candidate": 123.5
+      },
+      "reductionPercent": 41.05,
+      "paintUs": {
+        "base": 169.5,
+        "candidate": 93.5
+      },
+      "paintReductionPercent": 44.84
+    },
+    {
+      "columns": 80,
+      "app": "agent",
+      "totalUs": {
+        "base": 99.5,
+        "candidate": 37
+      },
+      "reductionPercent": 62.81,
+      "paintUs": {
+        "base": 61.5,
+        "candidate": 20.5
+      },
+      "paintReductionPercent": 66.67
+    },
+    {
+      "columns": 80,
+      "app": "files",
+      "totalUs": {
+        "base": 111,
+        "candidate": 50
+      },
+      "reductionPercent": 54.95,
+      "paintUs": {
+        "base": 73,
+        "candidate": 28
+      },
+      "paintReductionPercent": 61.64
+    },
+    {
+      "columns": 80,
+      "app": "editor",
+      "totalUs": {
+        "base": 90,
+        "candidate": 36.5
+      },
+      "reductionPercent": 59.44,
+      "paintUs": {
+        "base": 51.5,
+        "candidate": 21
+      },
+      "paintReductionPercent": 59.22
+    },
+    {
+      "columns": 80,
+      "app": "finance",
+      "totalUs": {
+        "base": 163.5,
+        "candidate": 78.5
+      },
+      "reductionPercent": 51.99,
+      "paintUs": {
+        "base": 126,
+        "candidate": 51.5
+      },
+      "paintReductionPercent": 59.13
+    },
+    {
+      "columns": 120,
+      "app": "dashboard",
+      "totalUs": {
+        "base": 402,
+        "candidate": 210.5
+      },
+      "reductionPercent": 47.64,
+      "paintUs": {
+        "base": 312,
+        "candidate": 153.5
+      },
+      "paintReductionPercent": 50.8
+    },
+    {
+      "columns": 120,
+      "app": "agent",
+      "totalUs": {
+        "base": 205,
+        "candidate": 63.5
+      },
+      "reductionPercent": 69.02,
+      "paintUs": {
+        "base": 116.5,
+        "candidate": 35.5
+      },
+      "paintReductionPercent": 69.53
+    },
+    {
+      "columns": 120,
+      "app": "files",
+      "totalUs": {
+        "base": 222,
+        "candidate": 79
+      },
+      "reductionPercent": 64.41,
+      "paintUs": {
+        "base": 131.5,
+        "candidate": 46
+      },
+      "paintReductionPercent": 65.02
+    },
+    {
+      "columns": 120,
+      "app": "editor",
+      "totalUs": {
+        "base": 189.5,
+        "candidate": 59.5
+      },
+      "reductionPercent": 68.6,
+      "paintUs": {
+        "base": 99.5,
+        "candidate": 34
+      },
+      "paintReductionPercent": 65.83
+    },
+    {
+      "columns": 120,
+      "app": "finance",
+      "totalUs": {
+        "base": 398.5,
+        "candidate": 197.5
+      },
+      "reductionPercent": 50.44,
+      "paintUs": {
+        "base": 311.5,
+        "candidate": 135
+      },
+      "paintReductionPercent": 56.66
+    },
+    {
+      "columns": 200,
+      "app": "dashboard",
+      "totalUs": {
+        "base": 805,
+        "candidate": 380
+      },
+      "reductionPercent": 52.8,
+      "paintUs": {
+        "base": 554.5,
+        "candidate": 256
+      },
+      "paintReductionPercent": 53.83
+    },
+    {
+      "columns": 200,
+      "app": "agent",
+      "totalUs": {
+        "base": 479,
+        "candidate": 128
+      },
+      "reductionPercent": 73.28,
+      "paintUs": {
+        "base": 240.5,
+        "candidate": 66
+      },
+      "paintReductionPercent": 72.56
+    },
+    {
+      "columns": 200,
+      "app": "files",
+      "totalUs": {
+        "base": 508.5,
+        "candidate": 149.5
+      },
+      "reductionPercent": 70.6,
+      "paintUs": {
+        "base": 264,
+        "candidate": 80.5
+      },
+      "paintReductionPercent": 69.51
+    },
+    {
+      "columns": 200,
+      "app": "editor",
+      "totalUs": {
+        "base": 468,
+        "candidate": 120.5
+      },
+      "reductionPercent": 74.25,
+      "paintUs": {
+        "base": 215,
+        "candidate": 66
+      },
+      "paintReductionPercent": 69.3
+    },
+    {
+      "columns": 200,
+      "app": "finance",
+      "totalUs": {
+        "base": 876,
+        "candidate": 419
+      },
+      "reductionPercent": 52.17,
+      "paintUs": {
+        "base": 609,
+        "candidate": 276
+      },
+      "paintReductionPercent": 54.68
+    }
+  ],
+  "coreScenarios": [
+    {
+      "series": "core",
+      "variant": "base",
+      "run": 1,
+      "scenario": "SB.1",
+      "warmup": 3,
+      "iterations": 40,
+      "metrics": {
+        "journeyUs": {
+          "min": 167,
+          "median": 178,
+          "p95": 293,
+          "p99": 327,
+          "max": 337,
+          "samples": 40
+        },
+        "startupMountUs": {
+          "min": 12,
+          "median": 15,
+          "p95": 28,
+          "p99": 33,
+          "max": 34,
+          "samples": 40
+        },
+        "firstFrameUs": {
+          "min": 2,
+          "median": 3,
+          "p95": 8,
+          "p99": 42,
+          "max": 63,
+          "samples": 40
+        },
+        "commandToFrameUs": {
+          "min": 27,
+          "median": 29,
+          "p95": 111,
+          "p99": 130,
+          "max": 134,
+          "samples": 40
+        },
+        "semanticQueryUs": {
+          "min": 24,
+          "median": 25,
+          "p95": 42,
+          "p99": 132,
+          "max": 187,
+          "samples": 40
+        },
+        "firstFrameLayoutPerformed": {
+          "min": 14,
+          "median": 14,
+          "p95": 14,
+          "p99": 14,
+          "max": 14,
+          "samples": 40
+        },
+        "firstFrameLayoutSkipped": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 40
+        },
+        "commandFrameLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 40
+        },
+        "commandFrameLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 40
+        },
+        "lastCommandFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "firstFrameAnsiBytes": 28,
+        "semanticNodeCount": 6,
+        "commandCount": 1,
+        "counterValue": 1
+      }
+    },
+    {
+      "series": "core",
+      "variant": "base",
+      "run": 1,
+      "scenario": "SB.2",
+      "warmup": 3,
+      "iterations": 40,
+      "metrics": {
+        "journeyUs": {
+          "min": 2596,
+          "median": 2757,
+          "p95": 2972,
+          "p99": 3004,
+          "max": 3023,
+          "samples": 40
+        },
+        "mountUs": {
+          "min": 53,
+          "median": 66,
+          "p95": 108,
+          "p99": 146,
+          "max": 148,
+          "samples": 40
+        },
+        "firstRenderUs": {
+          "min": 101,
+          "median": 108,
+          "p95": 141,
+          "p99": 172,
+          "max": 173,
+          "samples": 40
+        },
+        "cursorMoveUs": {
+          "min": 42,
+          "median": 46,
+          "p95": 122,
+          "p99": 197,
+          "max": 226,
+          "samples": 160
+        },
+        "insertionDeletionUs": {
+          "min": 44,
+          "median": 47,
+          "p95": 87,
+          "p99": 147,
+          "max": 154,
+          "samples": 120
+        },
+        "selectionUs": {
+          "min": 106,
+          "median": 114,
+          "p95": 196,
+          "p99": 257,
+          "max": 291,
+          "samples": 200
+        },
+        "pasteCompleteUs": {
+          "min": 390,
+          "median": 424,
+          "p95": 586,
+          "p99": 589,
+          "max": 589,
+          "samples": 40
+        },
+        "undoRedoUs": {
+          "min": 122,
+          "median": 130,
+          "p95": 222,
+          "p99": 241,
+          "max": 243,
+          "samples": 80
+        },
+        "historyNavigationUs": {
+          "min": 44,
+          "median": 47,
+          "p95": 121,
+          "p99": 154,
+          "max": 172,
+          "samples": 80
+        },
+        "completionAcceptUs": {
+          "min": 45,
+          "median": 49,
+          "p95": 84,
+          "p99": 151,
+          "max": 161,
+          "samples": 40
+        },
+        "secretRenderUs": {
+          "min": 28,
+          "median": 30,
+          "p95": 34,
+          "p99": 106,
+          "max": 147,
+          "samples": 40
+        },
+        "semanticQueryUs": {
+          "min": 47,
+          "median": 52,
+          "p95": 65,
+          "p99": 126,
+          "max": 156,
+          "samples": 40
+        },
+        "firstFrameAnsiBytes": 869,
+        "finalAnsiBytes": 864,
+        "semanticNodeCount": 9,
+        "textCharsRequested": 10000,
+        "initialEditorChars": 10126,
+        "finalEditorChars": 15158,
+        "pasteChars": 5028,
+        "pasteFrameCount": 1,
+        "completionAccepted": true,
+        "historyRestoredDraft": true,
+        "secretSemanticRedacted": true,
+        "rssDeltaBytes": 2539520
+      }
+    },
+    {
+      "series": "core",
+      "variant": "base",
+      "run": 1,
+      "scenario": "SB.12",
+      "warmup": 3,
+      "iterations": 40,
+      "metrics": {
+        "phase": "all",
+        "journeyUs": {
+          "min": 630945,
+          "median": 646433,
+          "p95": 660081,
+          "p99": 666902,
+          "max": 668368,
+          "samples": 40
+        },
+        "firstFrameUs": {
+          "min": 48,
+          "median": 51,
+          "p95": 64,
+          "p99": 129,
+          "max": 162,
+          "samples": 40
+        },
+        "commandToFrameUs": {
+          "min": 73,
+          "median": 77,
+          "p95": 94,
+          "p99": 107,
+          "max": 114,
+          "samples": 40
+        },
+        "idleFrameUs": {
+          "min": 36,
+          "median": 38,
+          "p95": 52,
+          "p99": 66,
+          "max": 72,
+          "samples": 40
+        },
+        "paintOnlyFrameUs": {
+          "min": 61,
+          "median": 63,
+          "p95": 74,
+          "p99": 119,
+          "max": 147,
+          "samples": 40
+        },
+        "textPaintOnlyFrameUs": {
+          "min": 60,
+          "median": 62,
+          "p95": 79,
+          "p99": 98,
+          "max": 106,
+          "samples": 40
+        },
+        "childListNoOpFrameUs": {
+          "min": 58,
+          "median": 60,
+          "p95": 117,
+          "p99": 180,
+          "max": 212,
+          "samples": 40
+        },
+        "viewportFirstFrameUs": {
+          "min": 223,
+          "median": 233,
+          "p95": 272,
+          "p99": 357,
+          "max": 410,
+          "samples": 40
+        },
+        "viewportScrollFrameUs": {
+          "min": 74,
+          "median": 78,
+          "p95": 97,
+          "p99": 102,
+          "max": 102,
+          "samples": 40
+        },
+        "viewportFirstPaintedRows": {
+          "min": 24,
+          "median": 24,
+          "p95": 24,
+          "p99": 24,
+          "max": 24,
+          "samples": 40
+        },
+        "viewportScrolledPaintedRows": {
+          "min": 24,
+          "median": 24,
+          "p95": 24,
+          "p99": 24,
+          "max": 24,
+          "samples": 40
+        },
+        "updateLayoutPerformed": {
+          "min": 14,
+          "median": 14,
+          "p95": 14,
+          "p99": 14,
+          "max": 14,
+          "samples": 40
+        },
+        "updateLayoutSkipped": {
+          "min": 3,
+          "median": 3,
+          "p95": 3,
+          "p99": 3,
+          "max": 3,
+          "samples": 40
+        },
+        "idleLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 40
+        },
+        "idleLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 40
+        },
+        "paintOnlyLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 40
+        },
+        "paintOnlyLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 40
+        },
+        "textPaintOnlyLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 40
+        },
+        "textPaintOnlyLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 40
+        },
+        "childListNoOpLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 40
+        },
+        "childListNoOpLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 40
+        },
+        "semanticQueryUs": {
+          "min": 296,
+          "median": 310,
+          "p95": 401,
+          "p99": 429,
+          "max": 433,
+          "samples": 40
+        },
+        "lastFirstFrameLayout": {
+          "performedCount": 85,
+          "skippedCount": 0,
+          "totalCount": 85,
+          "skippedRatio": 0.0
+        },
+        "lastUpdateFrameLayout": {
+          "performedCount": 14,
+          "skippedCount": 3,
+          "totalCount": 17,
+          "skippedRatio": 0.17647058823529413
+        },
+        "lastIdleFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "lastPaintOnlyFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "lastTextPaintOnlyFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "lastChildListNoOpFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "staticRows": 32,
+        "viewportRows": 24,
+        "viewportTotalRows": 2000,
+        "viewportScrollOffset": 1000,
+        "lastViewportFirstPaintedRows": 24,
+        "lastViewportScrolledPaintedRows": 24,
+        "semanticNodeCount": 40,
+        "counterValue": 10,
+        "paintAccent": true,
+        "textVariant": true
+      }
+    },
+    {
+      "series": "core",
+      "variant": "base",
+      "run": 2,
+      "scenario": "SB.1",
+      "warmup": 3,
+      "iterations": 40,
+      "metrics": {
+        "journeyUs": {
+          "min": 168,
+          "median": 189,
+          "p95": 276,
+          "p99": 337,
+          "max": 359,
+          "samples": 40
+        },
+        "startupMountUs": {
+          "min": 13,
+          "median": 15,
+          "p95": 31,
+          "p99": 35,
+          "max": 36,
+          "samples": 40
+        },
+        "firstFrameUs": {
+          "min": 2,
+          "median": 3,
+          "p95": 7,
+          "p99": 8,
+          "max": 8,
+          "samples": 40
+        },
+        "commandToFrameUs": {
+          "min": 27,
+          "median": 29,
+          "p95": 44,
+          "p99": 55,
+          "max": 57,
+          "samples": 40
+        },
+        "semanticQueryUs": {
+          "min": 24,
+          "median": 26,
+          "p95": 130,
+          "p99": 180,
+          "max": 199,
+          "samples": 40
+        },
+        "firstFrameLayoutPerformed": {
+          "min": 14,
+          "median": 14,
+          "p95": 14,
+          "p99": 14,
+          "max": 14,
+          "samples": 40
+        },
+        "firstFrameLayoutSkipped": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 40
+        },
+        "commandFrameLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 40
+        },
+        "commandFrameLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 40
+        },
+        "lastCommandFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "firstFrameAnsiBytes": 28,
+        "semanticNodeCount": 6,
+        "commandCount": 1,
+        "counterValue": 1
+      }
+    },
+    {
+      "series": "core",
+      "variant": "base",
+      "run": 2,
+      "scenario": "SB.2",
+      "warmup": 3,
+      "iterations": 40,
+      "metrics": {
+        "journeyUs": {
+          "min": 2454,
+          "median": 2764,
+          "p95": 3185,
+          "p99": 3628,
+          "max": 3798,
+          "samples": 40
+        },
+        "mountUs": {
+          "min": 50,
+          "median": 64,
+          "p95": 91,
+          "p99": 134,
+          "max": 143,
+          "samples": 40
+        },
+        "firstRenderUs": {
+          "min": 103,
+          "median": 110,
+          "p95": 134,
+          "p99": 271,
+          "max": 299,
+          "samples": 40
+        },
+        "cursorMoveUs": {
+          "min": 43,
+          "median": 47,
+          "p95": 75,
+          "p99": 148,
+          "max": 201,
+          "samples": 160
+        },
+        "insertionDeletionUs": {
+          "min": 45,
+          "median": 48,
+          "p95": 56,
+          "p99": 159,
+          "max": 205,
+          "samples": 120
+        },
+        "selectionUs": {
+          "min": 108,
+          "median": 117,
+          "p95": 185,
+          "p99": 303,
+          "max": 317,
+          "samples": 200
+        },
+        "pasteCompleteUs": {
+          "min": 390,
+          "median": 413,
+          "p95": 543,
+          "p99": 603,
+          "max": 633,
+          "samples": 40
+        },
+        "undoRedoUs": {
+          "min": 124,
+          "median": 131,
+          "p95": 176,
+          "p99": 292,
+          "max": 297,
+          "samples": 80
+        },
+        "historyNavigationUs": {
+          "min": 45,
+          "median": 47,
+          "p95": 56,
+          "p99": 121,
+          "max": 200,
+          "samples": 80
+        },
+        "completionAcceptUs": {
+          "min": 45,
+          "median": 49,
+          "p95": 69,
+          "p99": 135,
+          "max": 165,
+          "samples": 40
+        },
+        "secretRenderUs": {
+          "min": 29,
+          "median": 30,
+          "p95": 40,
+          "p99": 63,
+          "max": 72,
+          "samples": 40
+        },
+        "semanticQueryUs": {
+          "min": 47,
+          "median": 51,
+          "p95": 63,
+          "p99": 78,
+          "max": 86,
+          "samples": 40
+        },
+        "firstFrameAnsiBytes": 869,
+        "finalAnsiBytes": 864,
+        "semanticNodeCount": 9,
+        "textCharsRequested": 10000,
+        "initialEditorChars": 10126,
+        "finalEditorChars": 15158,
+        "pasteChars": 5028,
+        "pasteFrameCount": 1,
+        "completionAccepted": true,
+        "historyRestoredDraft": true,
+        "secretSemanticRedacted": true,
+        "rssDeltaBytes": 6897664
+      }
+    },
+    {
+      "series": "core",
+      "variant": "base",
+      "run": 2,
+      "scenario": "SB.12",
+      "warmup": 3,
+      "iterations": 40,
+      "metrics": {
+        "phase": "all",
+        "journeyUs": {
+          "min": 644114,
+          "median": 662534,
+          "p95": 696625,
+          "p99": 802587,
+          "max": 863752,
+          "samples": 40
+        },
+        "firstFrameUs": {
+          "min": 49,
+          "median": 53,
+          "p95": 59,
+          "p99": 83,
+          "max": 98,
+          "samples": 40
+        },
+        "commandToFrameUs": {
+          "min": 75,
+          "median": 80,
+          "p95": 157,
+          "p99": 234,
+          "max": 246,
+          "samples": 40
+        },
+        "idleFrameUs": {
+          "min": 37,
+          "median": 39,
+          "p95": 55,
+          "p99": 102,
+          "max": 129,
+          "samples": 40
+        },
+        "paintOnlyFrameUs": {
+          "min": 62,
+          "median": 65,
+          "p95": 220,
+          "p99": 230,
+          "max": 234,
+          "samples": 40
+        },
+        "textPaintOnlyFrameUs": {
+          "min": 62,
+          "median": 64,
+          "p95": 69,
+          "p99": 139,
+          "max": 168,
+          "samples": 40
+        },
+        "childListNoOpFrameUs": {
+          "min": 59,
+          "median": 62,
+          "p95": 72,
+          "p99": 116,
+          "max": 126,
+          "samples": 40
+        },
+        "viewportFirstFrameUs": {
+          "min": 232,
+          "median": 247,
+          "p95": 301,
+          "p99": 362,
+          "max": 391,
+          "samples": 40
+        },
+        "viewportScrollFrameUs": {
+          "min": 76,
+          "median": 82,
+          "p95": 89,
+          "p99": 110,
+          "max": 121,
+          "samples": 40
+        },
+        "viewportFirstPaintedRows": {
+          "min": 24,
+          "median": 24,
+          "p95": 24,
+          "p99": 24,
+          "max": 24,
+          "samples": 40
+        },
+        "viewportScrolledPaintedRows": {
+          "min": 24,
+          "median": 24,
+          "p95": 24,
+          "p99": 24,
+          "max": 24,
+          "samples": 40
+        },
+        "updateLayoutPerformed": {
+          "min": 14,
+          "median": 14,
+          "p95": 14,
+          "p99": 14,
+          "max": 14,
+          "samples": 40
+        },
+        "updateLayoutSkipped": {
+          "min": 3,
+          "median": 3,
+          "p95": 3,
+          "p99": 3,
+          "max": 3,
+          "samples": 40
+        },
+        "idleLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 40
+        },
+        "idleLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 40
+        },
+        "paintOnlyLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 40
+        },
+        "paintOnlyLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 40
+        },
+        "textPaintOnlyLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 40
+        },
+        "textPaintOnlyLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 40
+        },
+        "childListNoOpLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 40
+        },
+        "childListNoOpLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 40
+        },
+        "semanticQueryUs": {
+          "min": 301,
+          "median": 317,
+          "p95": 348,
+          "p99": 364,
+          "max": 373,
+          "samples": 40
+        },
+        "lastFirstFrameLayout": {
+          "performedCount": 85,
+          "skippedCount": 0,
+          "totalCount": 85,
+          "skippedRatio": 0.0
+        },
+        "lastUpdateFrameLayout": {
+          "performedCount": 14,
+          "skippedCount": 3,
+          "totalCount": 17,
+          "skippedRatio": 0.17647058823529413
+        },
+        "lastIdleFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "lastPaintOnlyFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "lastTextPaintOnlyFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "lastChildListNoOpFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "staticRows": 32,
+        "viewportRows": 24,
+        "viewportTotalRows": 2000,
+        "viewportScrollOffset": 1000,
+        "lastViewportFirstPaintedRows": 24,
+        "lastViewportScrolledPaintedRows": 24,
+        "semanticNodeCount": 40,
+        "counterValue": 10,
+        "paintAccent": true,
+        "textVariant": true
+      }
+    },
+    {
+      "series": "core",
+      "variant": "candidate",
+      "run": 1,
+      "scenario": "SB.1",
+      "warmup": 3,
+      "iterations": 40,
+      "metrics": {
+        "journeyUs": {
+          "min": 166,
+          "median": 190,
+          "p95": 483,
+          "p99": 1624,
+          "max": 2260,
+          "samples": 40
+        },
+        "startupMountUs": {
+          "min": 12,
+          "median": 16,
+          "p95": 29,
+          "p99": 66,
+          "max": 73,
+          "samples": 40
+        },
+        "firstFrameUs": {
+          "min": 2,
+          "median": 3,
+          "p95": 5,
+          "p99": 9,
+          "max": 12,
+          "samples": 40
+        },
+        "commandToFrameUs": {
+          "min": 26,
+          "median": 31,
+          "p95": 177,
+          "p99": 1244,
+          "max": 1850,
+          "samples": 40
+        },
+        "semanticQueryUs": {
+          "min": 24,
+          "median": 27,
+          "p95": 76,
+          "p99": 382,
+          "max": 485,
+          "samples": 40
+        },
+        "firstFrameLayoutPerformed": {
+          "min": 14,
+          "median": 14,
+          "p95": 14,
+          "p99": 14,
+          "max": 14,
+          "samples": 40
+        },
+        "firstFrameLayoutSkipped": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 40
+        },
+        "commandFrameLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 40
+        },
+        "commandFrameLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 40
+        },
+        "lastCommandFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "firstFrameAnsiBytes": 28,
+        "semanticNodeCount": 6,
+        "commandCount": 1,
+        "counterValue": 1
+      }
+    },
+    {
+      "series": "core",
+      "variant": "candidate",
+      "run": 1,
+      "scenario": "SB.2",
+      "warmup": 3,
+      "iterations": 40,
+      "metrics": {
+        "journeyUs": {
+          "min": 2565,
+          "median": 2833,
+          "p95": 4138,
+          "p99": 4289,
+          "max": 4303,
+          "samples": 40
+        },
+        "mountUs": {
+          "min": 55,
+          "median": 71,
+          "p95": 140,
+          "p99": 251,
+          "max": 303,
+          "samples": 40
+        },
+        "firstRenderUs": {
+          "min": 93,
+          "median": 100,
+          "p95": 130,
+          "p99": 180,
+          "max": 211,
+          "samples": 40
+        },
+        "cursorMoveUs": {
+          "min": 40,
+          "median": 43,
+          "p95": 166,
+          "p99": 289,
+          "max": 401,
+          "samples": 160
+        },
+        "insertionDeletionUs": {
+          "min": 41,
+          "median": 44,
+          "p95": 158,
+          "p99": 215,
+          "max": 905,
+          "samples": 120
+        },
+        "selectionUs": {
+          "min": 99,
+          "median": 105,
+          "p95": 194,
+          "p99": 226,
+          "max": 368,
+          "samples": 200
+        },
+        "pasteCompleteUs": {
+          "min": 380,
+          "median": 429,
+          "p95": 675,
+          "p99": 897,
+          "max": 925,
+          "samples": 40
+        },
+        "undoRedoUs": {
+          "min": 115,
+          "median": 124,
+          "p95": 423,
+          "p99": 663,
+          "max": 875,
+          "samples": 80
+        },
+        "historyNavigationUs": {
+          "min": 42,
+          "median": 44,
+          "p95": 58,
+          "p99": 78,
+          "max": 84,
+          "samples": 80
+        },
+        "completionAcceptUs": {
+          "min": 42,
+          "median": 45,
+          "p95": 79,
+          "p99": 163,
+          "max": 214,
+          "samples": 40
+        },
+        "secretRenderUs": {
+          "min": 25,
+          "median": 27,
+          "p95": 29,
+          "p99": 60,
+          "max": 78,
+          "samples": 40
+        },
+        "semanticQueryUs": {
+          "min": 48,
+          "median": 54,
+          "p95": 289,
+          "p99": 485,
+          "max": 517,
+          "samples": 40
+        },
+        "firstFrameAnsiBytes": 869,
+        "finalAnsiBytes": 864,
+        "semanticNodeCount": 9,
+        "textCharsRequested": 10000,
+        "initialEditorChars": 10126,
+        "finalEditorChars": 15158,
+        "pasteChars": 5028,
+        "pasteFrameCount": 1,
+        "completionAccepted": true,
+        "historyRestoredDraft": true,
+        "secretSemanticRedacted": true,
+        "rssDeltaBytes": 2162688
+      }
+    },
+    {
+      "series": "core",
+      "variant": "candidate",
+      "run": 1,
+      "scenario": "SB.12",
+      "warmup": 3,
+      "iterations": 40,
+      "metrics": {
+        "phase": "all",
+        "journeyUs": {
+          "min": 647401,
+          "median": 674034,
+          "p95": 712260,
+          "p99": 793380,
+          "max": 801299,
+          "samples": 40
+        },
+        "firstFrameUs": {
+          "min": 47,
+          "median": 52,
+          "p95": 100,
+          "p99": 133,
+          "max": 152,
+          "samples": 40
+        },
+        "commandToFrameUs": {
+          "min": 71,
+          "median": 80,
+          "p95": 252,
+          "p99": 357,
+          "max": 420,
+          "samples": 40
+        },
+        "idleFrameUs": {
+          "min": 34,
+          "median": 37,
+          "p95": 39,
+          "p99": 56,
+          "max": 60,
+          "samples": 40
+        },
+        "paintOnlyFrameUs": {
+          "min": 59,
+          "median": 63,
+          "p95": 179,
+          "p99": 227,
+          "max": 234,
+          "samples": 40
+        },
+        "textPaintOnlyFrameUs": {
+          "min": 59,
+          "median": 63,
+          "p95": 90,
+          "p99": 109,
+          "max": 120,
+          "samples": 40
+        },
+        "childListNoOpFrameUs": {
+          "min": 56,
+          "median": 62,
+          "p95": 75,
+          "p99": 120,
+          "max": 130,
+          "samples": 40
+        },
+        "viewportFirstFrameUs": {
+          "min": 228,
+          "median": 246,
+          "p95": 295,
+          "p99": 891,
+          "max": 1026,
+          "samples": 40
+        },
+        "viewportScrollFrameUs": {
+          "min": 73,
+          "median": 80,
+          "p95": 131,
+          "p99": 255,
+          "max": 285,
+          "samples": 40
+        },
+        "viewportFirstPaintedRows": {
+          "min": 24,
+          "median": 24,
+          "p95": 24,
+          "p99": 24,
+          "max": 24,
+          "samples": 40
+        },
+        "viewportScrolledPaintedRows": {
+          "min": 24,
+          "median": 24,
+          "p95": 24,
+          "p99": 24,
+          "max": 24,
+          "samples": 40
+        },
+        "updateLayoutPerformed": {
+          "min": 14,
+          "median": 14,
+          "p95": 14,
+          "p99": 14,
+          "max": 14,
+          "samples": 40
+        },
+        "updateLayoutSkipped": {
+          "min": 3,
+          "median": 3,
+          "p95": 3,
+          "p99": 3,
+          "max": 3,
+          "samples": 40
+        },
+        "idleLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 40
+        },
+        "idleLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 40
+        },
+        "paintOnlyLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 40
+        },
+        "paintOnlyLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 40
+        },
+        "textPaintOnlyLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 40
+        },
+        "textPaintOnlyLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 40
+        },
+        "childListNoOpLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 40
+        },
+        "childListNoOpLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 40
+        },
+        "semanticQueryUs": {
+          "min": 299,
+          "median": 326,
+          "p95": 414,
+          "p99": 698,
+          "max": 751,
+          "samples": 40
+        },
+        "lastFirstFrameLayout": {
+          "performedCount": 85,
+          "skippedCount": 0,
+          "totalCount": 85,
+          "skippedRatio": 0.0
+        },
+        "lastUpdateFrameLayout": {
+          "performedCount": 14,
+          "skippedCount": 3,
+          "totalCount": 17,
+          "skippedRatio": 0.17647058823529413
+        },
+        "lastIdleFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "lastPaintOnlyFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "lastTextPaintOnlyFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "lastChildListNoOpFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "staticRows": 32,
+        "viewportRows": 24,
+        "viewportTotalRows": 2000,
+        "viewportScrollOffset": 1000,
+        "lastViewportFirstPaintedRows": 24,
+        "lastViewportScrolledPaintedRows": 24,
+        "semanticNodeCount": 40,
+        "counterValue": 10,
+        "paintAccent": true,
+        "textVariant": true
+      }
+    },
+    {
+      "series": "core",
+      "variant": "candidate",
+      "run": 2,
+      "scenario": "SB.1",
+      "warmup": 3,
+      "iterations": 40,
+      "metrics": {
+        "journeyUs": {
+          "min": 166,
+          "median": 184,
+          "p95": 313,
+          "p99": 369,
+          "max": 375,
+          "samples": 40
+        },
+        "startupMountUs": {
+          "min": 12,
+          "median": 15,
+          "p95": 28,
+          "p99": 133,
+          "max": 199,
+          "samples": 40
+        },
+        "firstFrameUs": {
+          "min": 2,
+          "median": 3,
+          "p95": 5,
+          "p99": 53,
+          "max": 84,
+          "samples": 40
+        },
+        "commandToFrameUs": {
+          "min": 27,
+          "median": 29,
+          "p95": 48,
+          "p99": 139,
+          "max": 172,
+          "samples": 40
+        },
+        "semanticQueryUs": {
+          "min": 24,
+          "median": 26,
+          "p95": 68,
+          "p99": 151,
+          "max": 151,
+          "samples": 40
+        },
+        "firstFrameLayoutPerformed": {
+          "min": 14,
+          "median": 14,
+          "p95": 14,
+          "p99": 14,
+          "max": 14,
+          "samples": 40
+        },
+        "firstFrameLayoutSkipped": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 40
+        },
+        "commandFrameLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 40
+        },
+        "commandFrameLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 40
+        },
+        "lastCommandFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "firstFrameAnsiBytes": 28,
+        "semanticNodeCount": 6,
+        "commandCount": 1,
+        "counterValue": 1
+      }
+    },
+    {
+      "series": "core",
+      "variant": "candidate",
+      "run": 2,
+      "scenario": "SB.2",
+      "warmup": 3,
+      "iterations": 40,
+      "metrics": {
+        "journeyUs": {
+          "min": 2469,
+          "median": 2641,
+          "p95": 2874,
+          "p99": 2901,
+          "max": 2916,
+          "samples": 40
+        },
+        "mountUs": {
+          "min": 53,
+          "median": 68,
+          "p95": 83,
+          "p99": 89,
+          "max": 91,
+          "samples": 40
+        },
+        "firstRenderUs": {
+          "min": 93,
+          "median": 97,
+          "p95": 119,
+          "p99": 139,
+          "max": 149,
+          "samples": 40
+        },
+        "cursorMoveUs": {
+          "min": 39,
+          "median": 43,
+          "p95": 99,
+          "p99": 159,
+          "max": 220,
+          "samples": 160
+        },
+        "insertionDeletionUs": {
+          "min": 41,
+          "median": 43,
+          "p95": 121,
+          "p99": 171,
+          "max": 223,
+          "samples": 120
+        },
+        "selectionUs": {
+          "min": 98,
+          "median": 103,
+          "p95": 162,
+          "p99": 212,
+          "max": 286,
+          "samples": 200
+        },
+        "pasteCompleteUs": {
+          "min": 378,
+          "median": 411,
+          "p95": 530,
+          "p99": 657,
+          "max": 730,
+          "samples": 40
+        },
+        "undoRedoUs": {
+          "min": 114,
+          "median": 121,
+          "p95": 244,
+          "p99": 275,
+          "max": 277,
+          "samples": 80
+        },
+        "historyNavigationUs": {
+          "min": 41,
+          "median": 43,
+          "p95": 55,
+          "p99": 68,
+          "max": 69,
+          "samples": 80
+        },
+        "completionAcceptUs": {
+          "min": 41,
+          "median": 45,
+          "p95": 50,
+          "p99": 55,
+          "max": 57,
+          "samples": 40
+        },
+        "secretRenderUs": {
+          "min": 25,
+          "median": 26,
+          "p95": 34,
+          "p99": 47,
+          "max": 52,
+          "samples": 40
+        },
+        "semanticQueryUs": {
+          "min": 48,
+          "median": 55,
+          "p95": 196,
+          "p99": 200,
+          "max": 201,
+          "samples": 40
+        },
+        "firstFrameAnsiBytes": 869,
+        "finalAnsiBytes": 864,
+        "semanticNodeCount": 9,
+        "textCharsRequested": 10000,
+        "initialEditorChars": 10126,
+        "finalEditorChars": 15158,
+        "pasteChars": 5028,
+        "pasteFrameCount": 1,
+        "completionAccepted": true,
+        "historyRestoredDraft": true,
+        "secretSemanticRedacted": true,
+        "rssDeltaBytes": 2424832
+      }
+    },
+    {
+      "series": "core",
+      "variant": "candidate",
+      "run": 2,
+      "scenario": "SB.12",
+      "warmup": 3,
+      "iterations": 40,
+      "metrics": {
+        "phase": "all",
+        "journeyUs": {
+          "min": 648221,
+          "median": 667395,
+          "p95": 766414,
+          "p99": 862059,
+          "max": 914530,
+          "samples": 40
+        },
+        "firstFrameUs": {
+          "min": 47,
+          "median": 50,
+          "p95": 55,
+          "p99": 62,
+          "max": 67,
+          "samples": 40
+        },
+        "commandToFrameUs": {
+          "min": 72,
+          "median": 76,
+          "p95": 91,
+          "p99": 243,
+          "max": 266,
+          "samples": 40
+        },
+        "idleFrameUs": {
+          "min": 35,
+          "median": 36,
+          "p95": 38,
+          "p99": 39,
+          "max": 39,
+          "samples": 40
+        },
+        "paintOnlyFrameUs": {
+          "min": 59,
+          "median": 61,
+          "p95": 232,
+          "p99": 248,
+          "max": 258,
+          "samples": 40
+        },
+        "textPaintOnlyFrameUs": {
+          "min": 59,
+          "median": 61,
+          "p95": 94,
+          "p99": 95,
+          "max": 95,
+          "samples": 40
+        },
+        "childListNoOpFrameUs": {
+          "min": 57,
+          "median": 59,
+          "p95": 86,
+          "p99": 168,
+          "max": 213,
+          "samples": 40
+        },
+        "viewportFirstFrameUs": {
+          "min": 227,
+          "median": 243,
+          "p95": 308,
+          "p99": 761,
+          "max": 1028,
+          "samples": 40
+        },
+        "viewportScrollFrameUs": {
+          "min": 74,
+          "median": 79,
+          "p95": 124,
+          "p99": 171,
+          "max": 198,
+          "samples": 40
+        },
+        "viewportFirstPaintedRows": {
+          "min": 24,
+          "median": 24,
+          "p95": 24,
+          "p99": 24,
+          "max": 24,
+          "samples": 40
+        },
+        "viewportScrolledPaintedRows": {
+          "min": 24,
+          "median": 24,
+          "p95": 24,
+          "p99": 24,
+          "max": 24,
+          "samples": 40
+        },
+        "updateLayoutPerformed": {
+          "min": 14,
+          "median": 14,
+          "p95": 14,
+          "p99": 14,
+          "max": 14,
+          "samples": 40
+        },
+        "updateLayoutSkipped": {
+          "min": 3,
+          "median": 3,
+          "p95": 3,
+          "p99": 3,
+          "max": 3,
+          "samples": 40
+        },
+        "idleLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 40
+        },
+        "idleLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 40
+        },
+        "paintOnlyLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 40
+        },
+        "paintOnlyLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 40
+        },
+        "textPaintOnlyLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 40
+        },
+        "textPaintOnlyLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 40
+        },
+        "childListNoOpLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 40
+        },
+        "childListNoOpLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 40
+        },
+        "semanticQueryUs": {
+          "min": 307,
+          "median": 321,
+          "p95": 349,
+          "p99": 420,
+          "max": 451,
+          "samples": 40
+        },
+        "lastFirstFrameLayout": {
+          "performedCount": 85,
+          "skippedCount": 0,
+          "totalCount": 85,
+          "skippedRatio": 0.0
+        },
+        "lastUpdateFrameLayout": {
+          "performedCount": 14,
+          "skippedCount": 3,
+          "totalCount": 17,
+          "skippedRatio": 0.17647058823529413
+        },
+        "lastIdleFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "lastPaintOnlyFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "lastTextPaintOnlyFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "lastChildListNoOpFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "staticRows": 32,
+        "viewportRows": 24,
+        "viewportTotalRows": 2000,
+        "viewportScrollOffset": 1000,
+        "lastViewportFirstPaintedRows": 24,
+        "lastViewportScrolledPaintedRows": 24,
+        "semanticNodeCount": 40,
+        "counterValue": 10,
+        "paintAccent": true,
+        "textVariant": true
+      }
+    },
+    {
+      "series": "counter",
+      "variant": "base",
+      "run": 1,
+      "scenario": "SB.1",
+      "warmup": 50,
+      "iterations": 1000,
+      "metrics": {
+        "journeyUs": {
+          "min": 162,
+          "median": 180,
+          "p95": 280,
+          "p99": 330,
+          "max": 1119,
+          "samples": 1000
+        },
+        "startupMountUs": {
+          "min": 12,
+          "median": 14,
+          "p95": 28,
+          "p99": 82,
+          "max": 155,
+          "samples": 1000
+        },
+        "firstFrameUs": {
+          "min": 2,
+          "median": 3,
+          "p95": 5,
+          "p99": 8,
+          "max": 23,
+          "samples": 1000
+        },
+        "commandToFrameUs": {
+          "min": 26,
+          "median": 29,
+          "p95": 39,
+          "p99": 72,
+          "max": 197,
+          "samples": 1000
+        },
+        "semanticQueryUs": {
+          "min": 23,
+          "median": 26,
+          "p95": 110,
+          "p99": 153,
+          "max": 264,
+          "samples": 1000
+        },
+        "firstFrameLayoutPerformed": {
+          "min": 14,
+          "median": 14,
+          "p95": 14,
+          "p99": 14,
+          "max": 14,
+          "samples": 1000
+        },
+        "firstFrameLayoutSkipped": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 1000
+        },
+        "commandFrameLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 1000
+        },
+        "commandFrameLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 1000
+        },
+        "lastCommandFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "firstFrameAnsiBytes": 28,
+        "semanticNodeCount": 6,
+        "commandCount": 1,
+        "counterValue": 1
+      }
+    },
+    {
+      "series": "counter",
+      "variant": "base",
+      "run": 2,
+      "scenario": "SB.1",
+      "warmup": 50,
+      "iterations": 1000,
+      "metrics": {
+        "journeyUs": {
+          "min": 161,
+          "median": 171,
+          "p95": 253,
+          "p99": 304,
+          "max": 648,
+          "samples": 1000
+        },
+        "startupMountUs": {
+          "min": 12,
+          "median": 13,
+          "p95": 22,
+          "p99": 51,
+          "max": 281,
+          "samples": 1000
+        },
+        "firstFrameUs": {
+          "min": 2,
+          "median": 3,
+          "p95": 4,
+          "p99": 7,
+          "max": 19,
+          "samples": 1000
+        },
+        "commandToFrameUs": {
+          "min": 26,
+          "median": 27,
+          "p95": 37,
+          "p99": 75,
+          "max": 113,
+          "samples": 1000
+        },
+        "semanticQueryUs": {
+          "min": 23,
+          "median": 24,
+          "p95": 91,
+          "p99": 123,
+          "max": 154,
+          "samples": 1000
+        },
+        "firstFrameLayoutPerformed": {
+          "min": 14,
+          "median": 14,
+          "p95": 14,
+          "p99": 14,
+          "max": 14,
+          "samples": 1000
+        },
+        "firstFrameLayoutSkipped": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 1000
+        },
+        "commandFrameLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 1000
+        },
+        "commandFrameLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 1000
+        },
+        "lastCommandFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "firstFrameAnsiBytes": 28,
+        "semanticNodeCount": 6,
+        "commandCount": 1,
+        "counterValue": 1
+      }
+    },
+    {
+      "series": "counter",
+      "variant": "candidate",
+      "run": 1,
+      "scenario": "SB.1",
+      "warmup": 50,
+      "iterations": 1000,
+      "metrics": {
+        "journeyUs": {
+          "min": 165,
+          "median": 178,
+          "p95": 290,
+          "p99": 401,
+          "max": 500,
+          "samples": 1000
+        },
+        "startupMountUs": {
+          "min": 12,
+          "median": 14,
+          "p95": 28,
+          "p99": 80,
+          "max": 180,
+          "samples": 1000
+        },
+        "firstFrameUs": {
+          "min": 2,
+          "median": 3,
+          "p95": 5,
+          "p99": 7,
+          "max": 27,
+          "samples": 1000
+        },
+        "commandToFrameUs": {
+          "min": 26,
+          "median": 28,
+          "p95": 42,
+          "p99": 108,
+          "max": 200,
+          "samples": 1000
+        },
+        "semanticQueryUs": {
+          "min": 24,
+          "median": 26,
+          "p95": 109,
+          "p99": 164,
+          "max": 351,
+          "samples": 1000
+        },
+        "firstFrameLayoutPerformed": {
+          "min": 14,
+          "median": 14,
+          "p95": 14,
+          "p99": 14,
+          "max": 14,
+          "samples": 1000
+        },
+        "firstFrameLayoutSkipped": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 1000
+        },
+        "commandFrameLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 1000
+        },
+        "commandFrameLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 1000
+        },
+        "lastCommandFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "firstFrameAnsiBytes": 28,
+        "semanticNodeCount": 6,
+        "commandCount": 1,
+        "counterValue": 1
+      }
+    },
+    {
+      "series": "counter",
+      "variant": "candidate",
+      "run": 2,
+      "scenario": "SB.1",
+      "warmup": 50,
+      "iterations": 1000,
+      "metrics": {
+        "journeyUs": {
+          "min": 165,
+          "median": 179,
+          "p95": 277,
+          "p99": 336,
+          "max": 637,
+          "samples": 1000
+        },
+        "startupMountUs": {
+          "min": 12,
+          "median": 14,
+          "p95": 23,
+          "p99": 56,
+          "max": 181,
+          "samples": 1000
+        },
+        "firstFrameUs": {
+          "min": 2,
+          "median": 3,
+          "p95": 5,
+          "p99": 8,
+          "max": 29,
+          "samples": 1000
+        },
+        "commandToFrameUs": {
+          "min": 26,
+          "median": 29,
+          "p95": 41,
+          "p99": 88,
+          "max": 158,
+          "samples": 1000
+        },
+        "semanticQueryUs": {
+          "min": 24,
+          "median": 26,
+          "p95": 109,
+          "p99": 157,
+          "max": 233,
+          "samples": 1000
+        },
+        "firstFrameLayoutPerformed": {
+          "min": 14,
+          "median": 14,
+          "p95": 14,
+          "p99": 14,
+          "max": 14,
+          "samples": 1000
+        },
+        "firstFrameLayoutSkipped": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 1000
+        },
+        "commandFrameLayoutPerformed": {
+          "min": 0,
+          "median": 0,
+          "p95": 0,
+          "p99": 0,
+          "max": 0,
+          "samples": 1000
+        },
+        "commandFrameLayoutSkipped": {
+          "min": 1,
+          "median": 1,
+          "p95": 1,
+          "p99": 1,
+          "max": 1,
+          "samples": 1000
+        },
+        "lastCommandFrameLayout": {
+          "performedCount": 0,
+          "skippedCount": 1,
+          "totalCount": 1,
+          "skippedRatio": 1.0
+        },
+        "firstFrameAnsiBytes": 28,
+        "semanticNodeCount": 6,
+        "commandCount": 1,
+        "counterValue": 1
+      }
+    }
+  ]
+}

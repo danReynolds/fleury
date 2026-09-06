@@ -140,25 +140,60 @@ class _RawRichTextElement extends LeafRenderObjectElement {
 }
 
 class _Glyph {
-  const _Glyph(
-    this.grapheme,
-    this.width,
-    this.style, {
-    this.isBreak = false,
-    this.groupId,
-    this.groupSource,
-  });
+  const _Glyph(this.grapheme, this.width, this.style);
   final String grapheme;
   final int width;
   final CellStyle style;
-  final bool isBreak;
+  bool get isBreak => grapheme == '\n';
+
+  // Ordinary glyphs carry only paint data. Lowering metadata is needed only
+  // by atoms of split clusters; keeping it there avoids two null fields on
+  // every ordinary glyph in the document.
+  int? get groupId => null;
+  String? get groupSource => null;
+}
+
+class _LoweredGlyph extends _Glyph {
+  const _LoweredGlyph(
+    super.grapheme,
+    super.width,
+    super.style, {
+    required this.groupId,
+    this.groupSource,
+  });
 
   /// Non-null when this glyph is one atom of a lowered cluster group; equal
   /// ids mark atoms of the same source cluster.
-  final int? groupId;
+  @override
+  final int groupId;
 
   /// The canonical source cluster, carried on the group's FIRST atom only.
+  @override
   final String? groupSource;
+}
+
+// One bounded index per flattening operation. Sharing is safe only when both
+// the grapheme and its immutable style match; lowered atoms are never pooled
+// because their group identity belongs to a particular source position.
+class _GlyphFactory {
+  _GlyphFactory(this.resolver, this.policy);
+  final WidthResolver resolver;
+  final CellWidthPolicy policy;
+  final _ascii = List<_Glyph?>.filled(95, null);
+
+  _Glyph glyph(String text, CellStyle style) {
+    final code = text.length == 1 ? text.codeUnitAt(0) : -1;
+    if (code >= 0x20 && code <= 0x7e) {
+      final previous = _ascii[code - 0x20];
+      if (previous != null && identical(previous.style, style)) return previous;
+      return _ascii[code - 0x20] = _Glyph(
+        text,
+        resolver.widthOfGrapheme(text, policy),
+        style,
+      );
+    }
+    return _Glyph(text, resolver.widthOfGrapheme(text, policy), style);
+  }
 }
 
 /// Lays out and paints a flattened [TextSpan] tree as styled cells, with
@@ -187,7 +222,8 @@ class RenderRichText extends RenderObject
        _textPolicy = textPolicy {
     _span = span;
     _base = base;
-    _glyphs = _flatten(span, base);
+    _runs = _project(span, base);
+    _glyphs = _flatten(_runs);
   }
 
   bool _softWrap;
@@ -203,8 +239,12 @@ class RenderRichText extends RenderObject
   /// Width axes of [_textPolicy] — what every measurement call uses.
   CellWidthPolicy get _policy => _textPolicy.widths;
 
+  // A value snapshot of source runs, including span boundaries. Re-projecting
+  // on update observes changes even when callers reuse a mutable children list.
+  late List<({String text, CellStyle style})> _runs;
   late List<_Glyph> _glyphs;
   List<List<_Glyph>> _lines = const [];
+  int _laidOutWidth = 0;
   bool _moreLinesTruncated = false;
   // Cached flat-text view per line — recomputed whenever _lines is
   // rebuilt (which happens on layout, not paint). The mixin reads
@@ -251,7 +291,16 @@ class RenderRichText extends RenderObject
     }
 
     for (var lineIndex = 0; lineIndex < _lines.length; lineIndex++) {
-      if (lineIndex > 0) flatOffset++; // the implicit '\n' between lines
+      if (lineIndex > 0) {
+        // A newline belongs to a lowered group only when that same group
+        // continues on the next row. Otherwise copy must preserve it.
+        if (openGroupId != null &&
+            (_lines[lineIndex].isEmpty ||
+                _lines[lineIndex].first.groupId != openGroupId)) {
+          closeGroup();
+        }
+        flatOffset++; // the implicit '\n' between lines
+      }
       final buf = StringBuffer();
       for (final g in _lines[lineIndex]) {
         if (g.groupId != openGroupId) {
@@ -262,7 +311,13 @@ class RenderRichText extends RenderObject
             openSource = g.groupSource ?? g.grapheme;
           }
         }
-        buf.write(g.grapheme);
+        // Keep single code units in StringBuffer's character buffer instead
+        // of making each glyph a separate string fragment to concatenate.
+        if (g.grapheme.length == 1) {
+          buf.writeCharCode(g.grapheme.codeUnitAt(0));
+        } else {
+          buf.write(g.grapheme);
+        }
         flatOffset += g.grapheme.length;
       }
       out.add(buf.toString());
@@ -278,14 +333,18 @@ class RenderRichText extends RenderObject
     // itself, so re-flatten and dirty LAYOUT (property gate 14).
     if (_textPolicy == value) return;
     _textPolicy = value;
-    _glyphs = _flatten(_span, _base);
+    _runs = _project(_span, _base);
+    _glyphs = _flatten(_runs);
     markNeedsLayout();
   }
 
   void setSpan(TextSpan span, CellStyle base) {
     _span = span;
     _base = base;
-    _glyphs = _flatten(span, base);
+    final runs = _project(span, base);
+    if (_sameRuns(runs, _runs)) return;
+    _runs = runs;
+    _glyphs = _flatten(runs);
     markNeedsLayout();
   }
 
@@ -308,33 +367,15 @@ class RenderRichText extends RenderObject
     markNeedsPaintOnly();
   }
 
-  List<_Glyph> _flatten(TextSpan span, CellStyle inherited) {
-    return _textPolicy.lowering == ClusterLowering.split
-        ? _flattenLowered(span, inherited)
-        : _flattenPreserved(span, inherited);
-  }
-
-  /// The byte-identical legacy path: per-span grapheme walk, no detection.
-  /// Every unprobed/preserve surface goes through here unchanged (property
-  /// gate 2).
-  List<_Glyph> _flattenPreserved(TextSpan span, CellStyle inherited) {
-    final out = <_Glyph>[];
+  static List<({String text, CellStyle style})> _project(
+    TextSpan span,
+    CellStyle inherited,
+  ) {
+    final runs = <({String text, CellStyle style})>[];
     void visit(TextSpan s, CellStyle parent) {
       final style = s.style == null ? parent : parent.merge(s.style!);
       final text = s.text;
-      if (text != null && text.isNotEmpty) {
-        for (final paragraph in _splitKeepingBreaks(text)) {
-          if (paragraph == '\n') {
-            out.add(_Glyph('\n', 0, style, isBreak: true));
-            continue;
-          }
-          for (final g in sanitizeForDisplay(paragraph).characters) {
-            out.add(
-              _Glyph(g, _widthResolver.widthOfGrapheme(g, _policy), style),
-            );
-          }
-        }
-      }
+      if (text != null && text.isNotEmpty) runs.add((text: text, style: style));
       final children = s.children;
       if (children != null) {
         for (final child in children) {
@@ -344,6 +385,46 @@ class RenderRichText extends RenderObject
     }
 
     visit(span, inherited);
+    return runs;
+  }
+
+  static bool _sameRuns(
+    List<({String text, CellStyle style})> a,
+    List<({String text, CellStyle style})> b,
+  ) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  List<_Glyph> _flatten(List<({String text, CellStyle style})> runs) {
+    final factory = _GlyphFactory(_widthResolver, _policy);
+    return _textPolicy.lowering == ClusterLowering.split
+        ? _flattenLowered(runs, factory)
+        : _flattenPreserved(runs, factory);
+  }
+
+  /// The byte-identical legacy path: per-span grapheme walk, no detection.
+  /// Every unprobed/preserve surface goes through here unchanged (property
+  /// gate 2).
+  List<_Glyph> _flattenPreserved(
+    List<({String text, CellStyle style})> runs,
+    _GlyphFactory factory,
+  ) {
+    final out = <_Glyph>[];
+    for (final run in runs) {
+      for (final paragraph in _splitKeepingBreaks(run.text)) {
+        if (paragraph == '\n') {
+          out.add(_Glyph('\n', 0, run.style));
+          continue;
+        }
+        for (final g in sanitizeForDisplay(paragraph).characters) {
+          out.add(factory.glyph(g, run.style));
+        }
+      }
+    }
     return out;
   }
 
@@ -354,12 +435,15 @@ class RenderRichText extends RenderObject
   /// boundary. Each cluster takes the style in effect at its base; a lowered
   /// component inherits the style covering that component's own base
   /// (RFC 0019 §6.4).
-  List<_Glyph> _flattenLowered(TextSpan span, CellStyle inherited) {
+  List<_Glyph> _flattenLowered(
+    List<({String text, CellStyle style})> runs,
+    _GlyphFactory factory,
+  ) {
     final out = <_Glyph>[];
     final paragraphText = StringBuffer();
     // Style per code unit of paragraphText. Rebuilt at flatten time only —
-    // never per frame — and cleared per paragraph, so the cost is one byte
-    // of style reference per code unit of the longest paragraph.
+    // never per frame — and cleared per paragraph: one style reference per
+    // code unit of the longest paragraph.
     final unitStyles = <CellStyle>[];
 
     void flushParagraph() {
@@ -369,20 +453,14 @@ class RenderRichText extends RenderObject
       for (final cluster in text.characters) {
         final components = splitEmojiZwjSequence(cluster);
         if (components == null) {
-          out.add(
-            _Glyph(
-              cluster,
-              _widthResolver.widthOfGrapheme(cluster, _policy),
-              unitStyles[offset],
-            ),
-          );
+          out.add(factory.glyph(cluster, unitStyles[offset]));
         } else {
           final groupId = _nextGroupId++;
           var componentOffset = offset;
           for (var c = 0; c < components.length; c++) {
             final component = components[c];
             out.add(
-              _Glyph(
+              _LoweredGlyph(
                 component,
                 _widthResolver.widthOfGrapheme(component, _policy),
                 unitStyles[componentOffset],
@@ -400,32 +478,20 @@ class RenderRichText extends RenderObject
       unitStyles.clear();
     }
 
-    void visit(TextSpan s, CellStyle parent) {
-      final style = s.style == null ? parent : parent.merge(s.style!);
-      final text = s.text;
-      if (text != null && text.isNotEmpty) {
-        for (final paragraph in _splitKeepingBreaks(text)) {
-          if (paragraph == '\n') {
-            flushParagraph();
-            out.add(_Glyph('\n', 0, style, isBreak: true));
-            continue;
-          }
-          final sanitized = sanitizeForDisplay(paragraph);
-          paragraphText.write(sanitized);
-          for (var i = 0; i < sanitized.length; i++) {
-            unitStyles.add(style);
-          }
+    for (final run in runs) {
+      for (final paragraph in _splitKeepingBreaks(run.text)) {
+        if (paragraph == '\n') {
+          flushParagraph();
+          out.add(_Glyph('\n', 0, run.style));
+          continue;
         }
-      }
-      final children = s.children;
-      if (children != null) {
-        for (final child in children) {
-          visit(child, style);
+        final sanitized = sanitizeForDisplay(paragraph);
+        paragraphText.write(sanitized);
+        for (var i = 0; i < sanitized.length; i++) {
+          unitStyles.add(run.style);
         }
       }
     }
-
-    visit(span, inherited);
     flushParagraph();
     return out;
   }
@@ -441,8 +507,16 @@ class RenderRichText extends RenderObject
 
   @override
   CellSize performLayout(CellConstraints constraints) {
+    if (!_softWrap && !needsLayout) {
+      // A constraint-only resize cannot change unwrapped lines. Keep their
+      // glyphs and source groups, but refresh selection identity so screen
+      // points are resolved against the new paint geometry.
+      _selectionLines = List<String>.of(_selectionLines);
+      return constraints.constrain(CellSize(_laidOutWidth, _lines.length));
+    }
     if (_glyphs.isEmpty) {
       _lines = const [];
+      _laidOutWidth = 0;
       _moreLinesTruncated = false;
       _refreshSelectionLines();
       return constraints.constrain(CellSize.zero);
@@ -464,6 +538,7 @@ class RenderRichText extends RenderObject
       }
       if (w > widest) widest = w;
     }
+    _laidOutWidth = widest;
     final cols = maxCols == null
         ? widest
         : (widest < maxCols ? widest : maxCols);
@@ -473,71 +548,53 @@ class RenderRichText extends RenderObject
 
   List<List<_Glyph>> _wrap(int? maxCols) {
     final lines = <List<_Glyph>>[];
-    var para = <_Glyph>[];
-    void flushPara() {
-      _wrapParagraph(para, maxCols, lines);
-      para = <_Glyph>[];
-    }
-
-    for (final g in _glyphs) {
-      if (g.isBreak) {
-        flushPara();
-      } else {
-        para.add(g);
+    var start = 0;
+    for (var i = 0; i < _glyphs.length; i++) {
+      if (_glyphs[i].isBreak) {
+        _wrapParagraph(start, i, maxCols, lines);
+        start = i + 1;
       }
     }
-    flushPara();
+    _wrapParagraph(start, _glyphs.length, maxCols, lines);
     return lines;
   }
 
-  void _wrapParagraph(List<_Glyph> para, int? maxCols, List<List<_Glyph>> out) {
-    if (para.isEmpty) {
+  void _wrapParagraph(
+    int start,
+    int end,
+    int? maxCols,
+    List<List<_Glyph>> out,
+  ) {
+    if (start == end) {
       out.add(const <_Glyph>[]);
       return;
     }
-    // Split into words on single spaces (empty words = consecutive spaces),
-    // remembering the ACTUAL space glyph that separated each pair so a LINK's
-    // internal spaces can keep the link. Without this, the whitespace inside a
-    // multi-word link is re-emitted unstyled and the link fractures into one
-    // `<a>` (and one underline segment) per word.
-    final words = <List<_Glyph>>[];
-    final separators = <_Glyph>[];
-    var word = <_Glyph>[];
-    for (final g in para) {
-      if (g.grapheme == ' ') {
-        words.add(word);
-        separators.add(g);
-        word = <_Glyph>[];
-      } else {
-        word.add(g);
-      }
-    }
-    words.add(word);
-
+    // Walk word ranges in the existing glyph list. Paragraphs, words and
+    // separators need no intermediate copies; only the resulting lines own
+    // new lists. Empty words still represent consecutive/trailing spaces.
     var line = <_Glyph>[];
     var lineWidth = 0;
-    int widthOf(List<_Glyph> ws) {
-      var w = 0;
-      for (final g in ws) {
-        w += g.width;
-      }
-      return w;
-    }
-
+    var wordEnd = start;
     const emptySpace = _Glyph(' ', 1, CellStyle.none);
-    for (var i = 0; i < words.length; i++) {
-      final w = words[i];
+    for (var wordStart = start; wordStart <= end; wordStart = wordEnd + 1) {
+      wordEnd = wordStart;
+      var ww = 0;
+      while (wordEnd < end && _glyphs[wordEnd].grapheme != ' ') {
+        ww += _glyphs[wordEnd].width;
+        wordEnd++;
+      }
       // The space preceding this word. Re-emit the ORIGINAL space glyph (with
       // its style) only when it carries a link, so a multi-word link stays ONE
       // contiguous run — one `<a>`, one unbroken underline — rather than
       // splitting at every space. A non-link separator stays a bare unstyled
       // space, so every non-link run is byte-identical to before (no wire or
       // paint drift). Whitespace at a wrap boundary is still dropped.
-      final separator = i > 0 && separators[i - 1].style.linkUri != null
-          ? separators[i - 1]
+      final separator =
+          wordStart > start && _glyphs[wordStart - 1].style.linkUri != null
+          ? _glyphs[wordStart - 1]
           : emptySpace;
       final isFirst = lineWidth == 0;
-      if (w.isEmpty) {
+      if (wordStart == wordEnd) {
         if (!isFirst &&
             (!_softWrap || maxCols == null || lineWidth + 1 <= maxCols)) {
           line.add(separator);
@@ -545,14 +602,15 @@ class RenderRichText extends RenderObject
         }
         continue;
       }
-      final ww = widthOf(w);
       final needed = isFirst ? ww : 1 + ww;
       if (!_softWrap || maxCols == null || lineWidth + needed <= maxCols) {
         if (!isFirst) {
           line.add(separator);
           lineWidth += 1;
         }
-        line.addAll(w);
+        for (var i = wordStart; i < wordEnd; i++) {
+          line.add(_glyphs[i]);
+        }
         lineWidth += ww;
       } else {
         if (!isFirst) {
@@ -561,7 +619,8 @@ class RenderRichText extends RenderObject
           lineWidth = 0;
         }
         if (ww > maxCols) {
-          for (final g in w) {
+          for (var i = wordStart; i < wordEnd; i++) {
+            final g = _glyphs[i];
             if (lineWidth > 0 && lineWidth + g.width > maxCols) {
               out.add(line);
               line = <_Glyph>[];
@@ -571,7 +630,9 @@ class RenderRichText extends RenderObject
             lineWidth += g.width;
           }
         } else {
-          line.addAll(w);
+          for (var i = wordStart; i < wordEnd; i++) {
+            line.add(_glyphs[i]);
+          }
           lineWidth = ww;
         }
       }
@@ -581,10 +642,23 @@ class RenderRichText extends RenderObject
 
   @override
   void performPaint(CellBuffer buffer, CellOffset offset) {
+    // Resolve once for this paint rather than scanning the document's line
+    // lengths again for every glyph.
+    final selection = getSelectionRange();
+    // Refresh even an empty paint so selection drops obsolete line snapshots.
     if (_lines.isEmpty || size.isEmpty) return;
     final visibleRows = _lines.length < size.rows ? _lines.length : size.rows;
+    if (offset.row >= buffer.size.rows || offset.row + visibleRows <= 0) return;
     var lineStartOffset = 0;
     for (var i = 0; i < visibleRows; i++) {
+      final row = offset.row + i;
+      if (row >= buffer.size.rows) break;
+      if (row < 0) {
+        // Keep flat selection offsets without traversing hidden glyphs.
+        // Selection and retained geometry were recorded before culling.
+        lineStartOffset += _selectionLines[i].length + 1;
+        continue;
+      }
       final line = _lines[i];
       final isLastVisible = i == visibleRows - 1;
       var lineWidth = 0;
@@ -600,9 +674,10 @@ class RenderRichText extends RenderObject
         buffer,
         line,
         offset.col,
-        offset.row + i,
+        row,
         ellipsize,
         lineStartOffset,
+        selection,
       );
       // +length of the line's flat text, +1 for the implicit newline
       // separator. Matches what `selectionLines.join('\n')` produces.
@@ -617,20 +692,32 @@ class RenderRichText extends RenderObject
     int row,
     bool ellipsize,
     int lineStartOffset,
+    ({int start, int end})? selection,
   ) {
     final maxCol = startCol + size.cols;
     final contentMaxCol = ellipsize ? maxCol - 1 : maxCol;
     var col = startCol;
     var off = lineStartOffset;
+    CellStyle? previousStyle;
+    CellStyle? previousSelectedStyle;
     for (final g in line) {
       if (col + g.width > contentMaxCol) break;
       // Per-glyph style merged with reverse-video when this cell
       // falls inside the live selection. Inverse cascades over the
       // span's own foreground/background so styled spans still get
       // the selection highlight.
-      final cellStyle = isOffsetSelected(off)
-          ? g.style.merge(const CellStyle(inverse: true))
-          : g.style;
+      var cellStyle = g.style;
+      if (selection != null && off >= selection.start && off < selection.end) {
+        // Glyphs in a span share their immutable paint style. Keep the
+        // highlighted value shared too, with no cache retained after this line.
+        if (!identical(previousStyle, cellStyle)) {
+          previousStyle = cellStyle;
+          previousSelectedStyle = cellStyle.merge(
+            const CellStyle(inverse: true),
+          );
+        }
+        cellStyle = previousSelectedStyle!;
+      }
       buffer.writeGrapheme(
         CellOffset(col, row),
         g.grapheme,

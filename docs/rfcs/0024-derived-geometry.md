@@ -83,8 +83,9 @@ for the unmemoized walk.
 
 ### 3.3 Consumers
 
-- **Pointer.** `PointerRouter` hit-tests the rendered tree top-down from
-  `root` (set by the runtime and the tester after each frame). A subtree is
+- **Pointer.** `PointerRouter` hit-tests the rendered tree top-down from the
+  render object below its `PointerRouterScope` (the scope's element attaches
+  itself on mount, so no frame producer wires anything). A subtree is
   pruned by its box unless it says `hitTestsBeyondBounds` (a `Stack`, whose
   `Positioned` children may overflow), and by any clip. Walk order is paint
   order, so the topmost region is the last hit. Hover, press, and drag

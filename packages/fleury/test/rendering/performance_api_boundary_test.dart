@@ -48,6 +48,16 @@ void main() {
       );
       expect(
         text,
+        isNot(contains('paintMeasuredGrapheme')),
+        reason: '$path must not expose the internal measured-paint bridge.',
+      );
+      expect(
+        text,
+        isNot(contains('applyCellBackground')),
+        reason: '$path must not expose the internal composition helper.',
+      );
+      expect(
+        text,
         isNot(contains('_isOutsidePaintBuffer')),
         reason:
             '$path must not expose private viewport paint-culling machinery.',

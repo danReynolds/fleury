@@ -127,6 +127,12 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
   /// lines are unchanged.
   List<String>? _relatedLines;
 
+  // Layout replaces the lines list when content or wrapping changes. Keep the
+  // scalar length with that identity so repeated range queries during a frame
+  // do not sum the same document again. No per-line index is retained.
+  List<String>? _contentLengthLines;
+  int _cachedContentLength = 0;
+
   /// The full painted rect of this Selectable in SCREEN coordinates,
   /// including any portion currently scrolled off-screen. Returned to
   /// the delegate as `cellBounds` for reading-order purposes — a
@@ -156,11 +162,14 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
   @override
   int get contentLength {
     final lines = selectionLines;
+    if (identical(lines, _contentLengthLines)) return _cachedContentLength;
     var total = 0;
     for (final line in lines) {
       total += line.length;
     }
-    return total + (lines.isEmpty ? 0 : lines.length - 1);
+    _cachedContentLength = total + (lines.isEmpty ? 0 : lines.length - 1);
+    _contentLengthLines = lines;
+    return _cachedContentLength;
   }
 
   /// Hook for paint code. Returns true if the character at the given
@@ -489,11 +498,34 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
   SelectedContent? getSelectedContent() {
     final range = getSelectionRange();
     if (range == null || range.start == range.end) return null;
-    final flat = _flatText();
     final groups = loweredGroups;
     if (groups.isEmpty) {
-      return SelectedContent(plainText: flat.substring(range.start, range.end));
+      // Keep the SDK's bulk join for a full-document copy. Slicing each line
+      // separately only helps when the selection covers part of the document.
+      if (range.start == 0 && range.end == contentLength) {
+        return SelectedContent(plainText: _flatText());
+      }
+      // A short selection in a large document should copy only its intersecting
+      // lines, without first allocating a joined string for the whole document.
+      final out = StringBuffer();
+      var offset = 0;
+      for (final line in selectionLines) {
+        final lineEnd = offset + line.length;
+        if (range.start < lineEnd && range.end > offset) {
+          out.write(
+            line.substring(
+              (range.start - offset).clamp(0, line.length),
+              (range.end - offset).clamp(0, line.length),
+            ),
+          );
+        }
+        if (range.end <= lineEnd) break;
+        if (range.start <= lineEnd) out.write('\n');
+        offset = lineEnd + 1;
+      }
+      return SelectedContent(plainText: out.toString());
     }
+    final flat = _flatText();
     // Copy answers from SOURCE (RFC 0019 decision 3): each lowered group's
     // flat range — which may contain a forced line break between atoms — is
     // spliced back to its canonical joined cluster, exactly once. The range
@@ -559,6 +591,10 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
   /// has painted at least once: relating needs [selectionPaintRect].
   void _refreshEdgesIfLinesChanged() {
     final lines = selectionLines;
+    // A paint with no live selection still releases an obsolete line snapshot.
+    if (_contentLengthLines != null && !identical(lines, _contentLengthLines)) {
+      _contentLengthLines = null;
+    }
     if (identical(lines, _relatedLines)) return;
     if (selectionPaintRect == null) return;
     _relatedLines = lines;
