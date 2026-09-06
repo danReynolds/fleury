@@ -166,21 +166,11 @@ void main() {
     );
 
     tester.render(size: const CellSize(80, 6));
-    var result = await tester.invokeSemanticAction(
-      SemanticAction.open,
-      role: SemanticRole.treeItem,
-      label: 'src/',
-    );
-    expect(result.completed, isTrue);
+    await tester.target(role: SemanticRole.treeItem, label: 'src/').open();
     expect(changedDirectory, endsWith('${Platform.pathSeparator}src'));
 
     tester.render(size: const CellSize(80, 6));
-    result = await tester.invokeSemanticAction(
-      SemanticAction.open,
-      role: SemanticRole.treeItem,
-      label: 'main.dart',
-    );
-    expect(result.completed, isTrue);
+    await tester.target(role: SemanticRole.treeItem, label: 'main.dart').open();
     expect(activated?.name, 'main.dart');
   });
 
@@ -242,13 +232,10 @@ void main() {
       );
 
       tester.render(size: const CellSize(80, 6));
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.copy,
-        role: SemanticRole.treeItem,
-        label: 'deploy.log',
-      );
+      await tester
+          .target(role: SemanticRole.treeItem, label: 'deploy.log')
+          .copy();
 
-      expect(result.completed, isTrue);
       expect(
         tester.clipboard.readInProcess(),
         endsWith('${Platform.pathSeparator}deploy.log'),

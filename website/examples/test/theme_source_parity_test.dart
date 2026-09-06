@@ -132,6 +132,7 @@ void main() {
     expect(invalid.underline, isTrue);
     expect(disabled.dim, isTrue);
 
+    tester.viewportSize = CellSize(example.cols, example.rows);
     tester.pumpWidget(example.builder());
     final output = tester.renderToString(
       size: CellSize(example.cols, example.rows),
@@ -160,6 +161,7 @@ void main() {
     ]) {
       final example = exampleList.singleWhere((example) => example.id == id);
       expect(example.code, isNotNull, reason: '$id must show its source');
+      tester.viewportSize = CellSize(example.cols, example.rows);
       tester.pumpWidget(example.builder());
       final output = tester.renderToString(
         size: CellSize(example.cols, example.rows),
@@ -173,24 +175,14 @@ void main() {
     final invalid = exampleList.singleWhere(
       (example) => example.id == 'themes.invalid_none',
     );
+    tester.viewportSize = CellSize(invalid.cols, invalid.rows);
     tester.pumpWidget(invalid.builder());
-    await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.button,
-      label: 'Submit',
-    );
-    tester.pump();
+    await tester.button('Submit').press();
     final output = tester.renderToString(
       size: CellSize(invalid.cols, invalid.rows),
       emptyMark: ' ',
     );
     expect(output, contains('Enter a query.'));
-    expect(
-      tester
-          .semantics()
-          .single(role: SemanticRole.textField, label: 'Query')
-          .validationError,
-      'Enter a query.',
-    );
+    expect(tester.field('Query').snapshot.validationError, 'Enter a query.');
   });
 }

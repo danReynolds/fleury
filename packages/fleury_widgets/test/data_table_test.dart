@@ -402,7 +402,7 @@ void main() {
       ),
     );
     expect(sorted, ['run']);
-    expect(tester.semantics().single(role: SemanticRole.table).focused, isTrue);
+    expect(tester.target(role: SemanticRole.table), isFocused);
 
     tester.sendMouse(
       const MouseEvent(
@@ -589,7 +589,7 @@ void main() {
           .state['rowKey'],
       'RUN-2',
     );
-    expect(tester.semantics().single(role: SemanticRole.table).focused, isTrue);
+    expect(tester.target(role: SemanticRole.table), isFocused);
   });
 
   testWidgets('wheel scroll moves the DataTable selection', (tester) {
@@ -689,33 +689,18 @@ void main() {
     );
 
     tester.render(size: const CellSize(20, 6));
-    final targetRow = tester.semantics().single(
-      role: SemanticRole.tableRow,
-      label: 'RUN-2',
-      action: SemanticAction.select,
-    );
+    final row = tester
+        .target(role: SemanticRole.table)
+        .target(role: SemanticRole.tableRow, label: 'RUN-2');
 
-    var result = await tester.invokeSemanticAction(
-      SemanticAction.select,
-      node: targetRow,
-    );
+    await row.select();
 
-    expect(result.completed, isTrue);
     expect(controller.selectedIndex, 2);
-    expect(tester.semantics().single(role: SemanticRole.table).focused, isTrue);
+    expect(tester.target(role: SemanticRole.table), isFocused);
 
-    final selectedRow = tester.semantics().single(
-      role: SemanticRole.tableRow,
-      label: 'RUN-2',
-      selected: true,
-      action: SemanticAction.activate,
-    );
-    result = await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      node: selectedRow,
-    );
+    expect(row.snapshot.selected, isTrue);
+    await row.press();
 
-    expect(result.completed, isTrue);
     expect(selected, 2);
   });
 
@@ -926,12 +911,8 @@ void main() {
       );
 
       tester.render(size: const CellSize(20, 6));
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.copy,
-        role: SemanticRole.table,
-      );
+      await tester.target(role: SemanticRole.table).copy();
 
-      expect(result.completed, isTrue);
       expect(tester.clipboard.readInProcess(), 'Run\tStatus\nrun-1\tfailed');
       expect(copied?.rowKey, 'RUN-1');
       expect(copied?.report.result, ClipboardWriteResult.inProcessOnly);

@@ -127,8 +127,9 @@ If a custom semantic handler returns a pending Future, retain the action Future,
 await a fixture-owned handler-start signal, pump and inspect the pending UI,
 complete the request, then await the action. An app-owned save started separately
 by a void callback can remain pending after `press()` returns. The
-[Testing guide](https://danreynolds.github.io/fleury/guides/testing/) pairs both
-shapes with widget source and executable tests.
+[Testing guide](https://danreynolds.github.io/fleury/guides/testing/) shows a
+controlled save. Its [extended tests](../../website/examples/test/testing_guide_test.dart)
+also cover a custom handler that returns its pending Future.
 
 Set `viewportSize` before mounting when initial size matters.
 `render(size: ...)` resizes and updates MediaQuery. Rendering produces a snapshot

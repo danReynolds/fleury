@@ -327,20 +327,14 @@ void main() {
         ),
       );
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.select,
-        role: SemanticRole.radio,
-        label: 'ANSI color 5 magenta',
-      );
+      await tester
+          .target(role: SemanticRole.radio, label: 'ANSI color 5 magenta')
+          .select();
 
-      expect(result.completed, isTrue);
       expect(received, const AnsiColor(5));
       expect(
-        tester
-            .semantics()
-            .single(role: SemanticRole.list, label: 'Colors')
-            .focused,
-        isTrue,
+        tester.target(role: SemanticRole.list, label: 'Colors'),
+        isFocused,
       );
     });
 

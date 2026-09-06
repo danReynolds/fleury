@@ -110,13 +110,8 @@ void main() {
     expect(log.focused, isFalse);
     expect(log.actions, contains(SemanticAction.navigate));
 
-    final result = await tester.invokeSemanticAction(
-      SemanticAction.focus,
-      role: SemanticRole.log,
-      label: 'Runtime logs',
-    );
+    await tester.target(role: SemanticRole.log, label: 'Runtime logs').focus();
 
-    expect(result.completed, isTrue);
     tester.render(size: const CellSize(60, 4));
     log = tester.semantics().single(
       role: SemanticRole.log,
@@ -204,13 +199,12 @@ void main() {
       );
 
       tester.render(size: const CellSize(60, 4));
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.copy,
+      final entry = tester.target(
         role: SemanticRole.listItem,
-        selected: true,
+        label: 'needs attention',
       );
-
-      expect(result.completed, isTrue);
+      expect(entry.snapshot.selected, isTrue);
+      await entry.copy();
       expect(tester.clipboard.readInProcess(), '[WARN worker] needs attention');
       expect(copied?.entryIndex, 1);
       expect(copied?.viewIndex, 1);
@@ -242,13 +236,10 @@ void main() {
       );
       expect(row.selected, isFalse);
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.activate,
-        role: SemanticRole.listItem,
-        label: 'middle row',
-      );
+      await tester
+          .target(role: SemanticRole.listItem, label: 'middle row')
+          .press();
 
-      expect(result.completed, isTrue);
       expect(controller.followTail, isFalse);
       expect(controller.selectedIndex, 1);
 

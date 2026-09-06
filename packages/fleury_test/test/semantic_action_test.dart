@@ -246,6 +246,105 @@ void main() {
     }
   });
 
+  for (final flag in ['redactedValue', 'obscureText', 'clipboardRedacted']) {
+    testWidgets('$flag validation-error selectors stay private', (
+      tester,
+    ) async {
+      const secret = 'private-validation-input';
+      const absentSecret = 'private-absent-validation-input';
+      const validationError = 'Invalid input: $secret';
+      const absentValidationError = 'Invalid input: $absentSecret';
+      Widget protectedField() => Semantics(
+        role: SemanticRole.textField,
+        label: 'Password',
+        value: secret,
+        validationError: validationError,
+        enabled: false,
+        state: SemanticState({flag: true}),
+        child: const EmptyBox(),
+      );
+      final safeMessage = allOf(
+        contains('Password'),
+        contains('textField'),
+        contains('validationError: <redacted>'),
+        isNot(contains(secret)),
+        isNot(contains(absentSecret)),
+      );
+
+      tester.pumpWidget(Column(children: [protectedField(), protectedField()]));
+      for (final query in {
+        validationError: 2,
+        absentValidationError: 0,
+      }.entries) {
+        expect(
+          () => tester.semantics().single(
+            role: SemanticRole.textField,
+            label: 'Password',
+            validationError: query.key,
+          ),
+          throwsA(
+            isA<SemanticQueryError>()
+                .having((error) => error.matchCount, 'matches', query.value)
+                .having((error) => error.message, 'message', safeMessage),
+          ),
+        );
+        await expectLater(
+          tester.invokeSemanticAction(
+            SemanticAction.setValue,
+            role: SemanticRole.textField,
+            label: 'Password',
+            validationError: query.key,
+            payload: 'replacement',
+          ),
+          throwsA(
+            isA<TestFailure>().having(
+              (error) => error.message,
+              'message',
+              safeMessage,
+            ),
+          ),
+        );
+      }
+
+      // Matching still uses the original message, and an explicitly requested
+      // result retains the target's original validation details.
+      tester.pumpWidget(protectedField());
+      expect(
+        tester
+            .semantics()
+            .single(validationError: validationError)
+            .validationError,
+        validationError,
+      );
+      await expectLater(
+        tester.invokeSemanticAction(
+          SemanticAction.setValue,
+          role: SemanticRole.textField,
+          label: 'Password',
+          validationError: validationError,
+          payload: 'replacement',
+        ),
+        throwsA(
+          isA<TestFailure>().having(
+            (error) => error.message,
+            'message',
+            allOf(safeMessage, contains('disabled')),
+          ),
+        ),
+      );
+      final result = await tester.invokeSemanticAction(
+        SemanticAction.setValue,
+        role: SemanticRole.textField,
+        label: 'Password',
+        validationError: validationError,
+        payload: 'replacement',
+        allowFailure: true,
+      );
+      expect(result.status, SemanticActionInvocationStatus.disabled);
+      expect(result.node!.validationError, validationError);
+    });
+  }
+
   testWidgets(
     'handler messages stay private while explicit results retain errors',
     (tester) async {

@@ -79,13 +79,10 @@ void main() {
         ),
       );
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.submit,
-        role: WidgetRoles.approval,
-        label: 'Approve deploy?',
-      );
+      await tester
+          .target(role: WidgetRoles.approval, label: 'Approve deploy?')
+          .submit();
 
-      expect(result.completed, isTrue);
       expect(decision, ApprovalDecision.approved);
     });
 
@@ -98,13 +95,10 @@ void main() {
         ),
       );
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.cancel,
-        role: WidgetRoles.approval,
-        label: 'Approve deploy?',
-      );
+      await tester
+          .target(role: WidgetRoles.approval, label: 'Approve deploy?')
+          .perform(SemanticAction.cancel);
 
-      expect(result.completed, isTrue);
       expect(decision, ApprovalDecision.denied);
     });
 

@@ -333,18 +333,12 @@ void main() {
         isNotEmpty,
       );
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.dismiss,
-        role: SemanticRole.notification,
-        label: 'Saved',
-      );
-      expect(result.completed, isTrue);
+      await tester
+          .target(role: SemanticRole.notification, label: 'Saved')
+          .perform(SemanticAction.dismiss);
       tester.pump();
 
-      expect(
-        tester.semantics().where(role: SemanticRole.notification),
-        isEmpty,
-      );
+      expect(tester.target(role: SemanticRole.notification), hasCount(0));
       expect(_screen(tester).contains('Saved'), isFalse);
     });
 
@@ -377,17 +371,10 @@ void main() {
       expect(node.state['notificationActionLabel'], 'Undo');
       expect(node.state['notificationActionKey'], 'Alt+U');
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.activate,
-        node: node,
-      );
-      expect(result.completed, isTrue);
+      await tester.target(id: node.id).press();
       expect(undone, 1);
       tester.pump();
-      expect(
-        tester.semantics().where(role: SemanticRole.notification),
-        isEmpty,
-      );
+      expect(tester.target(role: SemanticRole.notification), hasCount(0));
     });
 
     testWidgets('accessibility snapshot summarizes notification actions', (

@@ -169,14 +169,11 @@ void main() {
       );
 
       tester.render(size: const CellSize(100, 18));
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.copy,
-        role: WidgetRoles.patchFile,
-        label: 'lib/app.dart',
-      );
+      await tester
+          .target(role: WidgetRoles.patchFile, label: 'lib/app.dart')
+          .copy();
       await Future<void>.delayed(Duration.zero);
 
-      expect(result.completed, isTrue);
       expect(
         tester.clipboard.readInProcess(),
         'lib/app.dart | pending | +2 -1 1 hunks',
@@ -200,13 +197,10 @@ void main() {
       );
 
       tester.render(size: const CellSize(100, 18));
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.activate,
-        role: WidgetRoles.patchFile,
-        label: 'test/app_test.dart',
-      );
+      await tester
+          .target(role: WidgetRoles.patchFile, label: 'test/app_test.dart')
+          .press();
 
-      expect(result.completed, isTrue);
       expect(selected?.file.path, 'test/app_test.dart');
       expect(diffController.selectedIndex, 10);
       final review = tester.semantics().single(
@@ -241,12 +235,9 @@ void main() {
       expect(review.focused, isFalse);
       expect(review.actions, contains(SemanticAction.navigate));
 
-      var result = await tester.invokeSemanticAction(
-        SemanticAction.focus,
-        role: WidgetRoles.patchReview,
-        label: 'Launch patch',
-      );
-      expect(result.completed, isTrue);
+      await tester
+          .target(role: WidgetRoles.patchReview, label: 'Launch patch')
+          .focus();
 
       tester.render(size: const CellSize(100, 18));
       review = tester.semantics().single(
@@ -256,12 +247,9 @@ void main() {
       );
       expect(review.state.selectedPatchFilePath, 'lib/app.dart');
 
-      result = await tester.invokeSemanticAction(
-        SemanticAction.activate,
-        role: WidgetRoles.patchFile,
-        label: 'test/app_test.dart',
-      );
-      expect(result.completed, isTrue);
+      await tester
+          .target(role: WidgetRoles.patchFile, label: 'test/app_test.dart')
+          .press();
       expect(controller.selectedIndex, 1);
       expect(selected?.file.path, 'test/app_test.dart');
       expect(diffController.selectedIndex, 10);

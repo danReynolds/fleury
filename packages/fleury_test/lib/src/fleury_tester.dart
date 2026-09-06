@@ -51,8 +51,9 @@ class FleuryTester extends support.FleuryTester {
   ///
   /// Use [allowFailure] only when asserting an expected rejection or callback
   /// failure. The package-neutral harness keeps its result-returning contract.
-  /// Default diagnostics omit value selectors and handler messages, which may
-  /// contain input. With [allowFailure], the result retains its original error.
+  /// Default diagnostics omit value/validation-error selectors and handler
+  /// messages, which may contain input. With [allowFailure], the result retains
+  /// its original error.
   @override
   Future<support.SemanticActionInvocationResult> invokeSemanticAction(
     support.SemanticAction action, {
@@ -97,7 +98,7 @@ class FleuryTester extends support.FleuryTester {
         'enabled': ?enabled,
         'checked': ?checked,
         'busy': ?busy,
-        'validationError': ?validationError,
+        if (validationError != null) 'validationError': '<redacted>',
       };
       final queryFailed =
           result.status == support.SemanticActionInvocationStatus.notFound ||

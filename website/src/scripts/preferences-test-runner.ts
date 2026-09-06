@@ -194,6 +194,7 @@ export function attachPreferencesTest(
     snapshot.remove();
     if (badge && originalBadge) badge.innerHTML = originalBadge;
     host.hidden = false;
+    delete host.dataset.testWired;
     document.removeEventListener('astro:before-swap', dispose);
   };
   document.addEventListener('astro:before-swap', dispose, { once: true });

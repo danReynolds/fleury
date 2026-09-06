@@ -16,8 +16,7 @@ library;
 
 import 'dart:async';
 
-import 'package:fleury/fleury_core.dart'
-    show CellSize, SemanticAction, SemanticRole;
+import 'package:fleury/fleury_core.dart' show CellSize;
 import 'package:fleury_doc_examples/registry.dart';
 import 'package:fleury_test/fleury_test.dart';
 import 'package:test/test.dart';
@@ -68,19 +67,13 @@ void main() {
     final example = exampleList.singleWhere(
       (example) => example.id == 'loading.snapshot',
     );
+    final tester = FleuryTester(
+      viewportSize: CellSize(example.cols, example.rows),
+    );
+    addTearDown(tester.dispose);
     final errors = await _unhandledErrorsFrom(() {
-      final tester = FleuryTester();
       tester.pumpWidget(example.builder());
-      unawaited(
-        tester
-            .invokeSemanticAction(
-              SemanticAction.setValue,
-              role: SemanticRole.button,
-              label: 'Snapshot state',
-              payload: 'Error',
-            )
-            .then((_) => tester.pump()),
-      );
+      unawaited(tester.button('Snapshot state').setValue('Error'));
     });
     expect(
       errors,
@@ -96,13 +89,9 @@ void main() {
     final example = exampleList.singleWhere(
       (example) => example.id == 'loading.snapshot',
     );
+    tester.viewportSize = CellSize(example.cols, example.rows);
     tester.pumpWidget(example.builder());
-    await tester.invokeSemanticAction(
-      SemanticAction.setValue,
-      role: SemanticRole.button,
-      label: 'Snapshot state',
-      payload: 'Error',
-    );
+    await tester.button('Snapshot state').setValue('Error');
     // Let the zero-duration timer that fails the future actually run.
     await Future<void>.delayed(const Duration(milliseconds: 10));
     tester.pump();

@@ -164,12 +164,12 @@ void main() {
       expect(picker.focused, isFalse);
       expect(picker.actions, contains(SemanticAction.navigate));
 
-      var result = await tester.invokeSemanticAction(
-        SemanticAction.navigate,
-        role: WidgetRoles.fileMentionPicker,
-        label: 'Composer mentions',
-      );
-      expect(result.completed, isTrue);
+      await tester
+          .target(
+            role: WidgetRoles.fileMentionPicker,
+            label: 'Composer mentions',
+          )
+          .perform(SemanticAction.navigate);
 
       tester.render(size: const CellSize(90, 7));
       picker = tester.semantics().single(
@@ -179,12 +179,9 @@ void main() {
       );
       expect(picker.state.selectedFilePath, 'lib/main.dart');
 
-      result = await tester.invokeSemanticAction(
-        SemanticAction.activate,
-        role: WidgetRoles.fileMention,
-        label: 'Launch plan',
-      );
-      expect(result.completed, isTrue);
+      await tester
+          .target(role: WidgetRoles.fileMention, label: 'Launch plan')
+          .press();
       expect(controller.selectedIndex, 1);
       expect(picked?.entry.path, 'docs/launch.md');
 
@@ -283,13 +280,10 @@ void main() {
         );
 
         tester.render(size: const CellSize(90, 6));
-        final result = await tester.invokeSemanticAction(
-          SemanticAction.copy,
-          role: WidgetRoles.fileMention,
-          label: 'Main entrypoint',
-        );
+        await tester
+            .target(role: WidgetRoles.fileMention, label: 'Main entrypoint')
+            .copy();
 
-        expect(result.completed, isTrue);
         expect(tester.clipboard.readInProcess(), '@lib/main.dart:12');
         expect(copied?.entryIndex, 0);
         expect(copied?.viewIndex, 0);

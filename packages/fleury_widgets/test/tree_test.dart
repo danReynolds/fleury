@@ -232,29 +232,14 @@ void main() {
     );
 
     tester.render(size: const CellSize(20, 4));
-    var result = await tester.invokeSemanticAction(
-      SemanticAction.focus,
-      role: SemanticRole.tree,
-      label: 'Project tree',
-    );
-    expect(result.completed, isTrue);
-    expect(tester.semantics().single(role: SemanticRole.tree).focused, isTrue);
+    await tester.target(role: SemanticRole.tree, label: 'Project tree').focus();
+    expect(tester.target(role: SemanticRole.tree), isFocused);
 
-    result = await tester.invokeSemanticAction(
-      SemanticAction.open,
-      role: SemanticRole.treeItem,
-      label: 'src',
-    );
-    expect(result.completed, isTrue);
+    await tester.target(role: SemanticRole.treeItem, label: 'src').open();
     tester.render(size: const CellSize(20, 4));
     expect(tester.semantics().single(label: 'a.dart'), isA<SemanticNode>());
 
-    result = await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.treeItem,
-      label: 'b.dart',
-    );
-    expect(result.completed, isTrue);
+    await tester.target(role: SemanticRole.treeItem, label: 'b.dart').press();
     expect(activated, 'b.dart');
   });
 
@@ -263,11 +248,7 @@ void main() {
     tester.pumpWidget(_tree());
     tester.render(size: const CellSize(20, 4));
 
-    await tester.invokeSemanticAction(
-      SemanticAction.open,
-      role: SemanticRole.treeItem,
-      label: 'src',
-    );
+    await tester.target(role: SemanticRole.treeItem, label: 'src').open();
     tester.render(size: const CellSize(20, 4));
     expect(tester.semantics().single(label: 'a.dart'), isA<SemanticNode>());
 
@@ -280,16 +261,11 @@ void main() {
     expect(expanded.actions, contains(SemanticAction.close));
     expect(expanded.actions, isNot(contains(SemanticAction.open)));
 
-    final result = await tester.invokeSemanticAction(
-      SemanticAction.close,
-      role: SemanticRole.treeItem,
-      label: 'src',
-    );
-    expect(result.completed, isTrue);
+    await tester.target(role: SemanticRole.treeItem, label: 'src').close();
     tester.render(size: const CellSize(20, 4));
     expect(
-      tester.semantics().where(label: 'a.dart'),
-      isEmpty,
+      tester.target(label: 'a.dart'),
+      hasCount(0),
       reason: 'collapsing removed the children from the tree',
     );
     expect(

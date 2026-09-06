@@ -215,13 +215,11 @@ void main() {
       );
 
       tester.render(size: const CellSize(90, 12));
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.copy,
-        role: SemanticRole.markdownBlock,
-        selected: true,
-      );
-
-      expect(result.completed, isTrue);
+      final selected = tester
+          .target(role: SemanticRole.markdownBlock)
+          .snapshots
+          .singleWhere((node) => node.selected);
+      await tester.target(id: selected.id).copy();
       expect(tester.clipboard.readInProcess(), contains('> unsafe safe'));
       expect(tester.clipboard.readInProcess(), isNot(contains('secret')));
       expect(copied?.block.kind, MarkdownBlockKind.blockquote);
@@ -249,13 +247,13 @@ void main() {
       );
       expect(block.selected, isFalse);
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.activate,
-        role: SemanticRole.markdownBlock,
-        label: 'Semantic graph drives tests',
-      );
+      await tester
+          .target(
+            role: SemanticRole.markdownBlock,
+            label: 'Semantic graph drives tests',
+          )
+          .press();
 
-      expect(result.completed, isTrue);
       expect(controller.selectedIndex, 3);
 
       tester.render(size: const CellSize(90, 12));

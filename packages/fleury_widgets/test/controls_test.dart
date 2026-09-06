@@ -90,21 +90,10 @@ void main() {
         Checkbox(value: false, label: 'Wrap', onChanged: (v) => changed = v),
       );
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.activate,
-        role: SemanticRole.checkbox,
-        label: 'Wrap',
-      );
+      await tester.checkbox('Wrap').press();
 
-      expect(result.completed, isTrue);
       expect(changed, isTrue);
-      expect(
-        tester
-            .semantics()
-            .single(role: SemanticRole.checkbox, label: 'Wrap')
-            .focused,
-        isTrue,
-      );
+      expect(tester.checkbox('Wrap'), isFocused);
     });
 
     testWidgets('null onChanged disables checkbox', (tester) async {
@@ -161,13 +150,8 @@ void main() {
         Toggle(value: true, label: 'Feature', onChanged: (v) => changed = v),
       );
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.activate,
-        role: SemanticRole.toggle,
-        label: 'Feature',
-      );
+      await tester.target(role: SemanticRole.toggle, label: 'Feature').press();
 
-      expect(result.completed, isTrue);
       expect(changed, isFalse);
     });
 
@@ -253,13 +237,8 @@ void main() {
         ),
       );
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.activate,
-        role: SemanticRole.radio,
-        label: 'Three',
-      );
+      await tester.target(role: SemanticRole.radio, label: 'Three').press();
 
-      expect(result.completed, isTrue);
       expect(picked, 3);
     });
 
@@ -333,10 +312,7 @@ void main() {
         );
         expect(on.completed, isTrue);
         tester.pumpWidget(build()); // controlled widget reflects the new value
-        expect(
-          tester.semantics().single(role: SemanticRole.checkbox).checked,
-          isTrue,
-        );
+        expect(tester.target(role: SemanticRole.checkbox), isChecked);
 
         // Idempotent: setting true again leaves it true (no toggle).
         await tester.invokeSemanticAction(
@@ -353,10 +329,7 @@ void main() {
           payload: false,
         );
         tester.pumpWidget(build());
-        expect(
-          tester.semantics().single(role: SemanticRole.checkbox).checked,
-          isFalse,
-        );
+        expect(tester.target(role: SemanticRole.checkbox), isUnchecked);
       },
     );
 

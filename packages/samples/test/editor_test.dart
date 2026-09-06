@@ -65,6 +65,7 @@ void main() {
 
   group('nano — modeless: text and Ctrl-chords coexist', () {
     testWidgets('the shortcut bar advertises the commands', (tester) {
+      tester.viewportSize = _size;
       tester.pumpWidget(const EditorApp());
       final out = _render(tester);
       expect(out, contains('Write Out')); // ^O
@@ -72,8 +73,8 @@ void main() {
     });
 
     testWidgets('typing inserts, and ^K cuts a line (no mode)', (tester) {
+      tester.viewportSize = _size;
       tester.pumpWidget(const EditorApp());
-      tester.render(size: _size);
 
       tester.type('Z');
       expect(_render(tester), contains('ZThe quick'), reason: 'text inserts');
@@ -90,8 +91,8 @@ void main() {
 
   group('vim — modal claimant flip', () {
     testWidgets('NORMAL declines text; commands route as keys', (tester) {
+      tester.viewportSize = _size;
       tester.pumpWidget(const EditorApp());
-      tester.render(size: _size);
       tester.press(KeySequence.ctrl.b); // → vim NORMAL
       expect(_render(tester), contains('NORMAL'));
 
@@ -107,8 +108,8 @@ void main() {
     });
 
     testWidgets('i enters INSERT where text is claimed; Esc returns', (tester) {
+      tester.viewportSize = _size;
       tester.pumpWidget(const EditorApp());
-      tester.render(size: _size);
       tester.press(KeySequence.ctrl.b); // → vim NORMAL
       tester.press(KeyCode.i); // → INSERT
       expect(_render(tester), contains('INSERT'));
@@ -125,8 +126,8 @@ void main() {
     });
 
     testWidgets('the Space leader fires a sequenced command', (tester) {
+      tester.viewportSize = _size;
       tester.pumpWidget(const EditorApp());
-      tester.render(size: _size);
       tester.press(KeySequence.ctrl.b); // → vim NORMAL
 
       tester.press(KeySequence.space.w); // leader → write / save
@@ -134,8 +135,8 @@ void main() {
     });
 
     testWidgets('A appends after the last character (end of line)', (tester) {
+      tester.viewportSize = _size;
       tester.pumpWidget(const EditorApp());
-      tester.render(size: _size);
       tester.press(KeySequence.ctrl.b); // → vim NORMAL
       tester.press(KeyCode.char('A')); // append at end of line 1
       tester.type('!');
@@ -147,8 +148,8 @@ void main() {
     });
 
     testWidgets('which-key reveals the d-prefix completions', (tester) async {
+      tester.viewportSize = _size;
       tester.pumpWidget(const EditorApp());
-      tester.render(size: _size);
       tester.press(KeySequence.ctrl.b); // → vim NORMAL
 
       tester.press(KeyCode.d); // start the `d` prefix — a pending sequence
@@ -168,8 +169,8 @@ void main() {
     testWidgets('m<letter> records a position and \'<letter> returns to it', (
       tester,
     ) async {
+      tester.viewportSize = _size;
       tester.pumpWidget(const EditorApp());
-      tester.render(size: _size);
       tester.press(KeySequence.ctrl.b); // → vim NORMAL
 
       tester.press(KeyCode.char('G')); // last line
@@ -179,7 +180,6 @@ void main() {
       // editor's own `a` (append) binding — nextKey outranks the routed lanes.
       tester.press(KeyCode.a);
       await tester.settle();
-      tester.render(size: _size);
       expect(_render(tester), contains("mark 'a set"));
       expect(
         _render(tester),
@@ -192,41 +192,37 @@ void main() {
       await tester.settle();
       tester.press(KeyCode.a);
       await tester.settle();
-      tester.render(size: _size);
       expect(_render(tester), contains("jumped to 'a"));
     });
 
     testWidgets('Escape cancels the prompt without setting anything', (
       tester,
     ) async {
+      tester.viewportSize = _size;
       tester.pumpWidget(const EditorApp());
-      tester.render(size: _size);
       tester.press(KeySequence.ctrl.b);
       tester.press(KeyCode.m);
       await tester.settle();
       tester.press(KeyCode.escape);
       await tester.settle();
-      tester.render(size: _size);
       expect(_render(tester), isNot(contains('mark')));
 
       // And the editor is still usable: Escape was consumed by the prompt,
       // not left to also flip a mode.
       tester.press(KeyCode.i);
-      tester.render(size: _size);
       expect(_render(tester), contains('INSERT'));
     });
 
     testWidgets('an unset mark says so instead of jumping somewhere wrong', (
       tester,
     ) async {
+      tester.viewportSize = _size;
       tester.pumpWidget(const EditorApp());
-      tester.render(size: _size);
       tester.press(KeySequence.ctrl.b);
       tester.press(KeyCode.char("'"));
       await tester.settle();
       tester.press(KeyCode.z);
       await tester.settle();
-      tester.render(size: _size);
       expect(_render(tester), contains("mark 'z is not set"));
     });
   });

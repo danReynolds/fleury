@@ -221,12 +221,9 @@ void main() {
       expect(timeline.focused, isFalse);
       expect(timeline.actions, contains(SemanticAction.navigate));
 
-      var result = await tester.invokeSemanticAction(
-        SemanticAction.focus,
-        role: WidgetRoles.traceTimeline,
-        label: 'Demo trace',
-      );
-      expect(result.completed, isTrue);
+      await tester
+          .target(role: WidgetRoles.traceTimeline, label: 'Demo trace')
+          .focus();
 
       tester.render(size: const CellSize(90, 5));
       timeline = tester.semantics().single(
@@ -236,12 +233,9 @@ void main() {
       );
       expect(timeline.state.selectedTraceId, 'trace.boot');
 
-      result = await tester.invokeSemanticAction(
-        SemanticAction.activate,
-        role: WidgetRoles.traceEvent,
-        label: 'Capture diagnostics',
-      );
-      expect(result.completed, isTrue);
+      await tester
+          .target(role: WidgetRoles.traceEvent, label: 'Capture diagnostics')
+          .press();
       expect(controller.selectedIndex, 2);
       expect(selected?.event.id, 'trace.diagnostics');
 
@@ -336,13 +330,10 @@ void main() {
         );
 
         tester.render(size: const CellSize(90, 5));
-        final result = await tester.invokeSemanticAction(
-          SemanticAction.copy,
-          role: WidgetRoles.traceEvent,
-          label: 'Boot demo console',
-        );
+        await tester
+            .target(role: WidgetRoles.traceEvent, label: 'Boot demo console')
+            .copy();
 
-        expect(result.completed, isTrue);
         expect(
           tester.clipboard.readInProcess(),
           'Boot demo console | app | succeeded | 12ms | app | '

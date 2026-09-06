@@ -1004,7 +1004,8 @@ final class SemanticTree {
       'enabled': ?enabled,
       'checked': ?checked,
       'busy': ?busy,
-      'validationError': ?validationError,
+      // Validation messages can include the input that failed validation.
+      if (validationError != null) 'validationError': '<redacted>',
       'capabilityRequirement': ?capabilityRequirement,
       'activeFallback': ?activeFallback,
     };

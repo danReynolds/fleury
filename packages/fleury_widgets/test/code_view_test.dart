@@ -203,24 +203,18 @@ void main() {
       );
 
       tester.render(size: const CellSize(80, 12));
-      var result = await tester.invokeSemanticAction(
-        SemanticAction.focus,
-        role: SemanticRole.code,
-        label: 'Source fixture',
-      );
-      expect(result.completed, isTrue);
-      expect(
-        tester.semantics().single(role: SemanticRole.code).focused,
-        isTrue,
-      );
+      await tester
+          .target(role: SemanticRole.code, label: 'Source fixture')
+          .focus();
+      expect(tester.target(role: SemanticRole.code), isFocused);
 
-      result = await tester.invokeSemanticAction(
-        SemanticAction.copy,
-        role: SemanticRole.codeLine,
-        label: 'final class DemoScreen extends StatelessWidget {',
-      );
+      await tester
+          .target(
+            role: SemanticRole.codeLine,
+            label: 'final class DemoScreen extends StatelessWidget {',
+          )
+          .copy();
 
-      expect(result.completed, isTrue);
       expect(
         tester.clipboard.readInProcess(),
         'final class DemoScreen extends StatelessWidget {',
@@ -250,13 +244,13 @@ void main() {
       );
       expect(line.selected, isFalse);
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.activate,
-        role: SemanticRole.codeLine,
-        label: '  // Builds source diagnostics.',
-      );
+      await tester
+          .target(
+            role: SemanticRole.codeLine,
+            label: '  // Builds source diagnostics.',
+          )
+          .press();
 
-      expect(result.completed, isTrue);
       expect(controller.selectedIndex, 4);
 
       tester.render(size: const CellSize(80, 12));

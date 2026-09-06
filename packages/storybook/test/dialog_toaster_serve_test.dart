@@ -33,6 +33,7 @@ void main() {
     'an app-wide Toaster (the Dialog-story crash)',
     (tester) {
       late BuildContext storyBuildContext;
+      tester.viewportSize = const CellSize(40, 10);
       tester.pumpWidget(
         _Capture((context) {
           // Same shape as _OverlayStory.build: this context is the parent of the
@@ -41,7 +42,6 @@ void main() {
           return const Toaster(child: Text('story body'));
         }),
       );
-      tester.render(size: const CellSize(40, 10));
 
       expect(
         () => Toaster.show(storyBuildContext, 'Dialog result: cancelled'),
@@ -56,6 +56,7 @@ void main() {
     (tester) {
       late BuildContext storyBuildContext;
       Object? thrown;
+      tester.viewportSize = const CellSize(40, 10);
       tester.pumpWidget(
         // The StorybookApp fix: a Toaster wrapping the whole app, above every
         // story's build context.
@@ -68,7 +69,6 @@ void main() {
           );
         }),
       );
-      tester.render(size: const CellSize(40, 10));
 
       try {
         Toaster.show(storyBuildContext, 'Dialog result: cancelled');

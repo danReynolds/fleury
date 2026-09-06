@@ -299,13 +299,8 @@ void main() {
         ),
       );
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.submit,
-        role: SemanticRole.textField,
-        label: 'Retry count',
-      );
+      await tester.field('Retry count').submit();
 
-      expect(result.completed, isTrue);
       expect(submitted, 5);
       expect(controller.text, '5');
       expect(

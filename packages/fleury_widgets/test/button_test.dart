@@ -106,21 +106,10 @@ void main() {
       var presses = 0;
       tester.pumpWidget(Button(label: 'Save', onPressed: () => presses++));
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.activate,
-        role: SemanticRole.button,
-        label: 'Save',
-      );
+      await tester.button('Save').press();
 
-      expect(result.completed, isTrue);
       expect(presses, 1);
-      expect(
-        tester
-            .semantics()
-            .single(role: SemanticRole.button, label: 'Save')
-            .focused,
-        isTrue,
-      );
+      expect(tester.button('Save'), isFocused);
     });
 
     testWidgets('variant tints the label from the color scheme', (tester) {

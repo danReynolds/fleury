@@ -6,10 +6,9 @@ import 'package:test/test.dart';
 import '../lib/fleury_example_console.dart';
 
 SemanticNode _demoApp(FleuryTester tester) {
-  return tester.semantics().single(
-    role: SemanticRole.app,
-    label: 'Fleury Demo Console',
-  );
+  return tester
+      .target(role: SemanticRole.app, label: 'Fleury Demo Console')
+      .snapshot;
 }
 
 List<SemanticNode> _paletteCommandRows(FleuryTester tester) {
@@ -76,10 +75,9 @@ void main() {
     expect(app.state.commandCount, greaterThanOrEqualTo(8));
     expect(app.state.statusCount, 4);
 
-    final navigation = tester.semantics().single(
-      role: SemanticRole.navigation,
-      label: 'Demo console navigation',
-    );
+    final navigation = tester
+        .target(role: SemanticRole.navigation, label: 'Demo console navigation')
+        .snapshot;
     expect(navigation.state.screenCount, 12);
     expect(navigation.state.activeScreenId, 'overview');
 
@@ -102,10 +100,9 @@ void main() {
     expect(model.state.modelLatencyMs, 42);
     expect(model.state.contextLimit, 128000);
 
-    final workflow = tester.semantics().single(
-      role: SemanticRole.region,
-      label: 'Demo workflow snapshot',
-    );
+    final workflow = tester
+        .target(role: SemanticRole.region, label: 'Demo workflow snapshot')
+        .snapshot;
     expect(workflow.state.workflowHealth, 'needsAttention');
     expect(workflow.state['workflowId'], 'demo-console');
     expect(workflow.state.messageCount, 2);
@@ -157,42 +154,37 @@ void main() {
     expect(debugStatus.states, contains('command debug.captureSnapshot'));
     expect(debugStatus.actions, contains(SemanticAction.activate));
 
-    final token = tester.semantics().single(
-      role: WidgetRoles.tokenMeter,
-      label: 'Context',
-    );
+    final token = tester
+        .target(role: WidgetRoles.tokenMeter, label: 'Context')
+        .snapshot;
     expect(token.state.contextUsed, greaterThan(2400));
     expect(token.state.contextRatioPercent, greaterThanOrEqualTo(1));
 
-    final contextPanel = tester.semantics().single(
-      role: WidgetRoles.contextPanel,
-      label: 'Demo context',
-    );
+    final contextPanel = tester
+        .target(role: WidgetRoles.contextPanel, label: 'Demo context')
+        .snapshot;
     expect(contextPanel.state['contextItemCount'], 4);
     expect(contextPanel.state['contextTokenCount'], greaterThan(2300));
     expect(contextPanel.state.contextLimit, 128000);
     expect(contextPanel.state.selectedContextItemId, 'ctx.demo-console');
 
-    final contextPressure = tester.semantics().single(
-      role: SemanticRole.chart,
-      label: 'Context pressure',
-    );
+    final contextPressure = tester
+        .target(role: SemanticRole.chart, label: 'Context pressure')
+        .snapshot;
     expect(contextPressure.state.chartType, 'gauge');
     expect(contextPressure.state.chartLatestValue, greaterThan(0));
     expect(contextPressure.state.progressTotal, 100);
 
-    final transcriptTrend = tester.semantics().single(
-      role: SemanticRole.chart,
-      label: 'Transcript trend',
-    );
+    final transcriptTrend = tester
+        .target(role: SemanticRole.chart, label: 'Transcript trend')
+        .snapshot;
     expect(transcriptTrend.state.chartType, 'sparkline');
     expect(transcriptTrend.state.chartPointCount, 2);
     expect(transcriptTrend.state.chartLatestValue, greaterThan(0));
 
-    final activityMix = tester.semantics().single(
-      role: SemanticRole.chart,
-      label: 'Activity mix',
-    );
+    final activityMix = tester
+        .target(role: SemanticRole.chart, label: 'Activity mix')
+        .snapshot;
     expect(activityMix.state.chartType, 'bar');
     expect(activityMix.state.chartBarCount, 3);
     expect(activityMix.state.chartSegmentCount, 3);
@@ -206,22 +198,18 @@ void main() {
       contains('chart bar, 3 bars, 3 segments, min 0, max 8'),
     );
 
-    var plan = tester.semantics().single(
-      role: WidgetRoles.taskGraph,
-      label: 'Demo workflow plan',
-    );
+    var plan = tester
+        .target(role: WidgetRoles.taskGraph, label: 'Demo workflow plan')
+        .snapshot;
     expect(plan.state['taskCount'], 4);
     expect(plan.state['succeededTaskCount'], 1);
     expect(plan.state['pendingTaskCount'], 3);
     expect(plan.actions, contains(SemanticAction.focus));
     expect(plan.actions, contains(SemanticAction.navigate));
 
-    final focusedPlan = await tester.invokeSemanticAction(
-      SemanticAction.focus,
-      role: WidgetRoles.taskGraph,
-      label: 'Demo workflow plan',
-    );
-    expect(focusedPlan.completed, isTrue);
+    await tester
+        .target(role: WidgetRoles.taskGraph, label: 'Demo workflow plan')
+        .focus();
 
     tester.render(size: const CellSize(90, 26));
     plan = tester.semantics().single(
@@ -231,12 +219,9 @@ void main() {
     );
     expect(plan.state.selectedTaskId, 'setup');
 
-    final selectedTask = await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.task,
-      label: 'Capture diagnostics',
-    );
-    expect(selectedTask.completed, isTrue);
+    await tester
+        .target(role: SemanticRole.task, label: 'Capture diagnostics')
+        .press();
     tester.render(size: const CellSize(90, 26));
 
     final diagnosticsTask = tester.semantics().single(
@@ -260,21 +245,15 @@ void main() {
   ) async {
     tester.pumpWidget(const DemoConsoleApp());
 
-    final runs = await tester.invokeSemanticAction(
-      SemanticAction.navigate,
-      role: SemanticRole.listItem,
-      label: 'Runs',
-    );
-    expect(runs.completed, isTrue);
+    await tester
+        .target(role: SemanticRole.listItem, label: 'Runs')
+        .perform(SemanticAction.navigate);
     expect(_demoApp(tester).state.activeScreenId, 'runs');
     expect(tester.exists(text('Runs')), isTrue);
 
-    final overview = await tester.invokeSemanticAction(
-      SemanticAction.navigate,
-      role: SemanticRole.listItem,
-      label: 'Overview',
-    );
-    expect(overview.completed, isTrue);
+    await tester
+        .target(role: SemanticRole.listItem, label: 'Overview')
+        .perform(SemanticAction.navigate);
     expect(_demoApp(tester).state.activeScreenId, 'overview');
   });
 
@@ -290,12 +269,9 @@ void main() {
     expect(contextPanel.focused, isFalse);
     expect(contextPanel.actions, contains(SemanticAction.navigate));
 
-    final focusResult = await tester.invokeSemanticAction(
-      SemanticAction.focus,
-      role: WidgetRoles.contextPanel,
-      label: 'Demo context',
-    );
-    expect(focusResult.completed, isTrue);
+    await tester
+        .target(role: WidgetRoles.contextPanel, label: 'Demo context')
+        .focus();
     tester.render(size: const CellSize(110, 32));
     expect(
       tester
@@ -334,12 +310,9 @@ void main() {
       ),
     );
 
-    final result = await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: WidgetRoles.contextItem,
-      label: 'Demo console source',
-    );
-    expect(result.completed, isTrue);
+    await tester
+        .target(role: WidgetRoles.contextItem, label: 'Demo console source')
+        .press();
 
     await _invoke(tester, demoCommandGoTranscript);
     tester.render(size: const CellSize(110, 32));
@@ -380,16 +353,14 @@ void main() {
     expect(diagnostics.status, CommandInvocationStatus.completed);
     tester.render(size: const CellSize(100, 50));
 
-    final taskTimeline = tester.semantics().single(
-      role: WidgetRoles.traceTimeline,
-      label: 'Demo trace timeline',
-    );
+    final taskTimeline = tester
+        .target(role: WidgetRoles.traceTimeline, label: 'Demo trace timeline')
+        .snapshot;
     expect(taskTimeline.state.traceEventCount, greaterThanOrEqualTo(4));
 
-    final workerEvent = tester.semantics().single(
-      role: WidgetRoles.traceEvent,
-      label: 'Fake worker',
-    );
+    final workerEvent = tester
+        .target(role: WidgetRoles.traceEvent, label: 'Fake worker')
+        .snapshot;
     expect(workerEvent.state.traceKind, 'task');
     expect(workerEvent.state.traceStatus, 'running');
     expect(workerEvent.state.source, 'fake-worker');
@@ -398,10 +369,9 @@ void main() {
     final overviewAgain = await _invoke(tester, demoCommandGoOverview);
     expect(overviewAgain.status, CommandInvocationStatus.completed);
 
-    final plan = tester.semantics().single(
-      role: WidgetRoles.taskGraph,
-      label: 'Demo workflow plan',
-    );
+    final plan = tester
+        .target(role: WidgetRoles.taskGraph, label: 'Demo workflow plan')
+        .snapshot;
     expect(plan.state['runningTaskCount'], 1);
 
     final model = tester.semantics().single(
@@ -425,17 +395,16 @@ void main() {
     expect(planWorker.state.progressCurrent, 15);
     expect(planWorker.state.progressTotal, 100);
 
-    final progress = tester.semantics().single(role: SemanticRole.progress);
+    final progress = tester.target(role: SemanticRole.progress).snapshot;
     expect(progress.value, closeTo(0.15, 0.0001));
     expect(progress.state.progressLabel, '15%');
 
     final cancel = await _invoke(tester, demoCommandCancelWorker);
     expect(cancel.status, CommandInvocationStatus.completed);
 
-    final canceled = tester.semantics().single(
-      role: SemanticRole.status,
-      label: 'Fake worker',
-    );
+    final canceled = tester
+        .target(role: SemanticRole.status, label: 'Fake worker')
+        .snapshot;
     expect(canceled.value, 'canceled');
     expect(canceled.state['workerStatus'], 'canceled');
     expect(tester.exists(text('Worker: canceled')), isTrue);
@@ -448,7 +417,7 @@ void main() {
     tester.pump(const Duration(milliseconds: 300));
     tester.render(size: const CellSize(80, 24));
 
-    final palette = tester.semantics().single(role: WidgetRoles.commandPalette);
+    final palette = tester.target(role: WidgetRoles.commandPalette).snapshot;
     expect(palette.state.collectionRowCount, greaterThan(0));
 
     tester.type('screen.diagnostics');
@@ -490,11 +459,7 @@ void main() {
     expect(approval.state['severity'], 'warning');
     expect(approval.state['detailCount'], 2);
 
-    final approved = await tester.invokeSemanticAction(
-      SemanticAction.submit,
-      node: approval,
-    );
-    expect(approved.completed, isTrue);
+    await tester.target(id: approval.id).submit();
     await _settleModal(tester);
 
     await _invoke(tester, demoCommandGoTranscript);
@@ -521,10 +486,9 @@ void main() {
     await _flushAsyncUi(tester);
     tester.render(size: const CellSize(90, 26));
 
-    final panel = tester.semantics().single(
-      role: SemanticRole.region,
-      label: 'Global search',
-    );
+    final panel = tester
+        .target(role: SemanticRole.region, label: 'Global search')
+        .snapshot;
     expect(panel.state.filterText, 'API deploy smoke');
     expect(panel.state.collectionRowCount, 1);
     expect(panel.state.selectedKey, 'run.RUN-1002');
@@ -552,12 +516,9 @@ void main() {
     expect(row.state['runId'], 'RUN-1002');
     expect(row.state['screenId'], 'runs');
 
-    final activated = await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.listItem,
-      label: 'API deploy smoke',
-    );
-    expect(activated.completed, isTrue);
+    await tester
+        .target(role: SemanticRole.listItem, label: 'API deploy smoke')
+        .press();
     await _flushAsyncUi(tester);
     expect(_demoApp(tester).state.activeScreenId, 'runs');
 
@@ -595,12 +556,9 @@ void main() {
     expect(log.state['totalEntryCount'], demoIndexedLogInitialCount);
     expect(log.state.selectedKey, 'IDX-1000');
 
-    final focusedLog = await tester.invokeSemanticAction(
-      SemanticAction.focus,
-      role: SemanticRole.log,
-      label: 'Indexed demo logs',
-    );
-    expect(focusedLog.completed, isTrue);
+    await tester
+        .target(role: SemanticRole.log, label: 'Indexed demo logs')
+        .focus();
     tester.render(size: const CellSize(96, 28));
     log = tester.semantics().single(
       role: SemanticRole.log,
@@ -639,11 +597,7 @@ void main() {
         .singleWhere((node) => node.state['rowKey'] == 'IDX-1004');
     expect(secondRow.actions, contains(SemanticAction.activate));
 
-    final selectedLogRow = await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      node: secondRow,
-    );
-    expect(selectedLogRow.completed, isTrue);
+    await tester.target(id: secondRow.id).press();
     tester.render(size: const CellSize(96, 28));
 
     final selectedIndexedRow = tester.semantics().single(
@@ -653,10 +607,9 @@ void main() {
     );
     expect(selectedIndexedRow.state['rowKey'], 'IDX-1004');
 
-    log = tester.semantics().single(
-      role: SemanticRole.log,
-      label: 'Indexed demo logs',
-    );
+    log = tester
+        .target(role: SemanticRole.log, label: 'Indexed demo logs')
+        .snapshot;
     expect(log.state.selectedKey, 'IDX-1004');
     expect(log.state['selectedIndex'], 1);
     expect(log.state['followTail'], isFalse);
@@ -667,10 +620,9 @@ void main() {
     await _flushAsyncUi(tester);
     tester.render(size: const CellSize(96, 28));
 
-    log = tester.semantics().single(
-      role: SemanticRole.log,
-      label: 'Indexed demo logs',
-    );
+    log = tester
+        .target(role: SemanticRole.log, label: 'Indexed demo logs')
+        .snapshot;
     expect(
       log.state['totalEntryCount'],
       demoIndexedLogInitialCount + demoIndexedLogAppendCount,
@@ -703,51 +655,24 @@ void main() {
       action: SemanticAction.submit,
     );
     expect(form.busy, isFalse);
-    final rejected = await tester.invokeSemanticAction(
-      SemanticAction.submit,
-      node: form,
-    );
-    expect(rejected.completed, isTrue);
+    await tester.target(id: form.id).submit();
     await _flushAsyncUi(tester);
     expect(tester.exists(text('Enter a project name.')), isTrue);
     expect(
       tester
-          .semantics()
-          .single(role: SemanticRole.textField, label: 'Project')
+          .target(role: SemanticRole.textField, label: 'Project')
+          .snapshot
           .validationError,
       'Enter a project name.',
     );
 
-    await tester.invokeSemanticAction(
-      SemanticAction.setValue,
-      role: SemanticRole.textField,
-      label: 'Project',
-      payload: 'dune',
-    );
-    await tester.invokeSemanticAction(
-      SemanticAction.setValue,
-      role: SemanticRole.button,
-      label: 'Environment',
-      payload: 'prod',
-    );
-    await tester.invokeSemanticAction(
-      SemanticAction.setValue,
-      role: SemanticRole.button,
-      label: 'Region',
-      payload: 'eu-west-1',
-    );
-    await tester.invokeSemanticAction(
-      SemanticAction.setValue,
-      role: SemanticRole.checkbox,
-      label: 'I understand this changes remote state',
-      payload: true,
-    );
-    final submit = await tester.invokeSemanticAction(
-      SemanticAction.submit,
-      role: SemanticRole.form,
-      label: 'Connection setup',
-    );
-    expect(submit.completed, isTrue);
+    await tester.field('Project').fill('dune');
+    await tester.button('Environment').setValue('prod');
+    await tester.button('Region').setValue('eu-west-1');
+    await tester.checkbox('I understand this changes remote state').check();
+    await tester
+        .target(role: SemanticRole.form, label: 'Connection setup')
+        .submit();
     await _flushAsyncUi(tester);
 
     await _invoke(tester, demoCommandGoTranscript);
@@ -767,7 +692,7 @@ void main() {
     tester.pump();
 
     tester.render(size: const CellSize(80, 24));
-    final table = tester.semantics().single(role: SemanticRole.table);
+    final table = tester.target(role: SemanticRole.table).snapshot;
     expect(table.state.collectionRowCount, 1);
     expect(table.state.filterText, 'failed');
     expect(tester.semantics().byLabel('API deploy smoke'), isNotEmpty);
@@ -791,7 +716,7 @@ void main() {
       const AnsiColor(14),
     );
 
-    var table = tester.semantics().single(role: SemanticRole.table);
+    var table = tester.target(role: SemanticRole.table).snapshot;
     expect(table.focused, isTrue);
     expect(table.state.selectedKey, 'RUN-1001');
     expect(table.state.collectionRowCount, 4);
@@ -808,7 +733,7 @@ void main() {
 
     tester.sendKey(const KeyEvent(KeyCode.arrowDown));
     tester.render(size: const CellSize(80, 24));
-    table = tester.semantics().single(role: SemanticRole.table);
+    table = tester.target(role: SemanticRole.table).snapshot;
     expect(table.state.selectedKey, 'RUN-1002');
     selectedCells = tester.semantics().where(
       role: SemanticRole.tableCell,
@@ -868,19 +793,17 @@ void main() {
     await _invoke(tester, demoCommandFocusTreeTable);
     tester.render(size: const CellSize(90, 24));
 
-    var tree = tester.semantics().single(
-      role: SemanticRole.tree,
-      label: 'Framework component tree',
-    );
+    var tree = tester
+        .target(role: SemanticRole.tree, label: 'Framework component tree')
+        .snapshot;
     expect(tree.focused, isTrue);
     expect(tree.state.collectionColumnCount, 3);
     expect(tree.state.selectedKey, 'core');
     expect(tree.state['expandedCount'], 1);
 
-    final semanticGraph = tester.semantics().single(
-      role: SemanticRole.treeItem,
-      label: 'Semantic Graph',
-    );
+    final semanticGraph = tester
+        .target(role: SemanticRole.treeItem, label: 'Semantic Graph')
+        .snapshot;
     expect(semanticGraph.state['rowKey'], 'semantic-graph');
     expect(semanticGraph.state['depth'], 1);
 
@@ -943,10 +866,9 @@ void main() {
     expect(json.state['selectedPath'], r'$');
     expect(json.state.clipboardPolicy, 'inProcessOnly');
 
-    final unsafe = tester.semantics().single(
-      role: SemanticRole.jsonNode,
-      label: 'unsafeOutput',
-    );
+    final unsafe = tester
+        .target(role: SemanticRole.jsonNode, label: 'unsafeOutput')
+        .snapshot;
     expect(unsafe.value, isNot(contains('token')));
     expect(unsafe.state.outputSanitized, isTrue);
     expect(unsafe.state['jsonPath'], r'$.unsafeOutput');
@@ -984,12 +906,9 @@ void main() {
     expect(initialPatch.focused, isFalse);
     expect(initialPatch.actions, contains(SemanticAction.navigate));
 
-    final focusPatch = await tester.invokeSemanticAction(
-      SemanticAction.focus,
-      role: WidgetRoles.patchReview,
-      label: 'Framework patch review',
-    );
-    expect(focusPatch.completed, isTrue);
+    await tester
+        .target(role: WidgetRoles.patchReview, label: 'Framework patch review')
+        .focus();
     tester.render(size: const CellSize(90, 26));
     expect(
       tester
@@ -1083,12 +1002,12 @@ void main() {
     expect(tester.clipboard.readInProcess(), isNot(contains('token')));
     expect(tester.clipboard.readInProcess(), isNot(contains('\x1b]52')));
 
-    final deletedLine = await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.diffLine,
-      label: '-  final mode = \'legacy\';',
-    );
-    expect(deletedLine.completed, isTrue);
+    await tester
+        .target(
+          role: SemanticRole.diffLine,
+          label: '-  final mode = \'legacy\';',
+        )
+        .press();
     tester.render(size: const CellSize(90, 26));
 
     final selectedDeletion = tester.semantics().single(
@@ -1099,19 +1018,15 @@ void main() {
     );
     expect(selectedDeletion.state['oldLine'], 2);
 
-    final updatedDiff = tester.semantics().single(
-      role: SemanticRole.diff,
-      label: 'Framework patch review diff',
-    );
+    final updatedDiff = tester
+        .target(role: SemanticRole.diff, label: 'Framework patch review diff')
+        .snapshot;
     expect(updatedDiff.state['selectedDiffKind'], 'deletion');
     expect(updatedDiff.state['selectedOldLine'], 2);
 
-    final selectPatch = await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: WidgetRoles.patchFile,
-      label: 'lib/framework.dart',
-    );
-    expect(selectPatch.completed, isTrue);
+    await tester
+        .target(role: WidgetRoles.patchFile, label: 'lib/framework.dart')
+        .press();
 
     await _invoke(tester, demoCommandGoTranscript);
     tester.render(size: const CellSize(90, 26));
@@ -1182,12 +1097,12 @@ void main() {
     expect(tester.clipboard.readInProcess(), isNot(contains('token')));
     expect(tester.clipboard.readInProcess(), isNot(contains('\x1b]52')));
 
-    final classLine = await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.codeLine,
-      label: 'final class LaunchShell extends StatelessWidget {',
-    );
-    expect(classLine.completed, isTrue);
+    await tester
+        .target(
+          role: SemanticRole.codeLine,
+          label: 'final class LaunchShell extends StatelessWidget {',
+        )
+        .press();
     tester.render(size: const CellSize(90, 26));
 
     final selectedClassLine = tester.semantics().single(
@@ -1198,10 +1113,9 @@ void main() {
     );
     expect(selectedClassLine.state['lineNumber'], 3);
 
-    final updatedCode = tester.semantics().single(
-      role: SemanticRole.code,
-      label: 'Framework source',
-    );
+    final updatedCode = tester
+        .target(role: SemanticRole.code, label: 'Framework source')
+        .snapshot;
     expect(updatedCode.state.selectedKey, 3);
     expect(updatedCode.state['selectedCodeLineKind'], 'declaration');
 
@@ -1253,10 +1167,7 @@ void main() {
     expect(markdown.state['selectedMarkdownBlockKind'], 'blockquote');
     expect(markdown.state.clipboardPolicy, 'inProcessOnly');
 
-    final link = tester.semantics().single(
-      role: SemanticRole.link,
-      label: 'docs',
-    );
+    final link = tester.target(role: SemanticRole.link, label: 'docs').snapshot;
     expect(link.value, 'https://danreynolds.github.io/fleury/');
     expect(link.state['markdownBlockIndex'], 2);
     expect(link.state.capabilityResolution, 'disabledByPolicy');
@@ -1287,12 +1198,12 @@ void main() {
     );
     expect(capabilityBlock.selected, isFalse);
 
-    final selectedBlock = await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.markdownBlock,
-      label: 'Capability policy guards output',
-    );
-    expect(selectedBlock.completed, isTrue);
+    await tester
+        .target(
+          role: SemanticRole.markdownBlock,
+          label: 'Capability policy guards output',
+        )
+        .press();
 
     tester.render(size: const CellSize(90, 26));
     final selectedDocBlock = tester.semantics().single(
@@ -1304,10 +1215,9 @@ void main() {
     expect(selectedDocBlock.state['rowIndex'], 4);
     expect(selectedDocBlock.state['markdownBlockKind'], 'bullet');
 
-    final selectedMarkdown = tester.semantics().single(
-      role: SemanticRole.markdown,
-      label: 'Launch docs',
-    );
+    final selectedMarkdown = tester
+        .target(role: SemanticRole.markdown, label: 'Launch docs')
+        .snapshot;
     expect(selectedMarkdown.focused, isTrue);
     expect(selectedMarkdown.state.selectedKey, 4);
     expect(selectedMarkdown.state['selectedIndex'], 4);
@@ -1507,21 +1417,17 @@ void main() {
     tester.pump();
     expect(tester.exists(text('[log] stream: burst 1.3')), isTrue);
 
-    var log = tester.semantics().single(
-      role: WidgetRoles.messageList,
-      label: 'Transcript events',
-    );
+    var log = tester
+        .target(role: WidgetRoles.messageList, label: 'Transcript events')
+        .snapshot;
     expect(log.state.collectionRowCount, 6);
     expect(log.state['author'], 'stream');
     expect(log.actions, contains(SemanticAction.focus));
     expect(log.actions, contains(SemanticAction.navigate));
 
-    final focusedTranscript = await tester.invokeSemanticAction(
-      SemanticAction.focus,
-      role: WidgetRoles.messageList,
-      label: 'Transcript events',
-    );
-    expect(focusedTranscript.completed, isTrue);
+    await tester
+        .target(role: WidgetRoles.messageList, label: 'Transcript events')
+        .focus();
     tester.pump();
     log = tester.semantics().single(
       role: WidgetRoles.messageList,
@@ -1535,10 +1441,9 @@ void main() {
     expect(disabled.status, CommandInvocationStatus.disabled);
     expect(tester.exists(text('[log] stream: burst 2.1')), isFalse);
 
-    log = tester.semantics().single(
-      role: WidgetRoles.messageList,
-      label: 'Transcript events',
-    );
+    log = tester
+        .target(role: WidgetRoles.messageList, label: 'Transcript events')
+        .snapshot;
     expect(log.state['author'], 'logs');
 
     final candidate = tester
@@ -1550,12 +1455,9 @@ void main() {
         )
         .first;
     final candidateKey = candidate.state['rowKey'];
-    final selected = await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: WidgetRoles.message,
-      label: candidate.label,
-    );
-    expect(selected.completed, isTrue);
+    await tester
+        .target(role: WidgetRoles.message, label: candidate.label)
+        .press();
     tester.pump();
 
     final selectedMessage = tester.semantics().single(
@@ -1594,11 +1496,7 @@ void main() {
     final targetId = target.state.messageId;
     expect(targetId, isNotNull);
 
-    final activated = await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      node: target,
-    );
-    expect(activated.completed, isTrue);
+    await tester.target(id: target.id).press();
     tester.render(size: const CellSize(110, 32));
 
     var selected = tester.semantics().single(
@@ -1630,10 +1528,9 @@ void main() {
     expect(selected.state.messageId, targetId);
     expect(selected.state['rowIndex'], 3);
 
-    final log = tester.semantics().single(
-      role: WidgetRoles.messageList,
-      label: 'Transcript events',
-    );
+    final log = tester
+        .target(role: WidgetRoles.messageList, label: 'Transcript events')
+        .snapshot;
     expect(log.state.collectionRowCount, 8);
     expect(log.state.selectedMessageId, targetId);
     expect(log.state['selectedIndex'], 3);
@@ -1650,10 +1547,9 @@ void main() {
     tester.type('/su');
     tester.render(size: const CellSize(110, 32));
 
-    final menu = tester.semantics().single(
-      role: SemanticRole.menu,
-      label: 'Completions',
-    );
+    final menu = tester
+        .target(role: SemanticRole.menu, label: 'Completions')
+        .snapshot;
     expect(menu.focused, isTrue);
     expect(menu.expanded, isTrue);
     expect(menu.state.filterText, '/su');
@@ -1671,11 +1567,7 @@ void main() {
     expect(option.state.menuItemPosition, 1);
     expect(option.state.menuItemCount, 1);
 
-    final accepted = await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      node: option,
-    );
-    expect(accepted.completed, isTrue);
+    await tester.target(id: option.id).press();
 
     var composer = tester.semantics().single(
       role: SemanticRole.textField,
@@ -1753,12 +1645,9 @@ void main() {
     expect(composer.value, 'draft follow-up');
     expect(composer.state.historyBrowsing, isFalse);
 
-    final cleared = await tester.invokeSemanticAction(
-      SemanticAction.clear,
-      role: SemanticRole.textField,
-      label: 'Type a note and press Enter',
-    );
-    expect(cleared.completed, isTrue);
+    await tester
+        .field('Type a note and press Enter')
+        .perform(SemanticAction.clear);
 
     tester.type('/');
     tester.render(size: const CellSize(110, 32));
@@ -1784,10 +1673,12 @@ void main() {
     await _invoke(tester, demoCommandGoTranscript);
     tester.render(size: const CellSize(110, 30));
 
-    var picker = tester.semantics().single(
-      role: WidgetRoles.fileMentionPicker,
-      label: 'Composer file mentions',
-    );
+    var picker = tester
+        .target(
+          role: WidgetRoles.fileMentionPicker,
+          label: 'Composer file mentions',
+        )
+        .snapshot;
     expect(picker.state['totalMentionCount'], 4);
     expect(picker.state['filteredMentionCount'], 4);
     expect(
@@ -1797,12 +1688,12 @@ void main() {
     expect(picker.actions, contains(SemanticAction.focus));
     expect(picker.actions, contains(SemanticAction.navigate));
 
-    final focusedPicker = await tester.invokeSemanticAction(
-      SemanticAction.navigate,
-      role: WidgetRoles.fileMentionPicker,
-      label: 'Composer file mentions',
-    );
-    expect(focusedPicker.completed, isTrue);
+    await tester
+        .target(
+          role: WidgetRoles.fileMentionPicker,
+          label: 'Composer file mentions',
+        )
+        .perform(SemanticAction.navigate);
     tester.render(size: const CellSize(110, 30));
     picker = tester.semantics().single(
       role: WidgetRoles.fileMentionPicker,
@@ -1824,17 +1715,16 @@ void main() {
     expect(mention.state.fileLanguage, 'dart');
     expect(mention.state.mentionText, '@demo-console');
 
-    final result = await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: WidgetRoles.fileMention,
-      label: 'Demo console app',
-    );
-    expect(result.completed, isTrue);
+    await tester
+        .target(role: WidgetRoles.fileMention, label: 'Demo console app')
+        .press();
 
-    final composer = tester.semantics().single(
-      role: SemanticRole.textField,
-      label: 'Type a note and press Enter',
-    );
+    final composer = tester
+        .target(
+          role: SemanticRole.textField,
+          label: 'Type a note and press Enter',
+        )
+        .snapshot;
     expect(composer.value, '@demo-console');
 
     tester.render(size: const CellSize(110, 30));
@@ -1871,10 +1761,12 @@ void main() {
     await _invoke(tester, demoCommandGoTranscript);
     tester.render(size: const CellSize(110, 32));
 
-    var navigator = tester.semantics().single(
-      role: WidgetRoles.conversationNavigator,
-      label: 'Demo conversations',
-    );
+    var navigator = tester
+        .target(
+          role: WidgetRoles.conversationNavigator,
+          label: 'Demo conversations',
+        )
+        .snapshot;
     expect(navigator.state['totalConversationCount'], 3);
     expect(navigator.state['filteredConversationCount'], 3);
     expect(navigator.state.selectedConversationId, 'thread.transcript');
@@ -1882,12 +1774,12 @@ void main() {
     expect(navigator.actions, contains(SemanticAction.focus));
     expect(navigator.actions, contains(SemanticAction.navigate));
 
-    final focusedNavigator = await tester.invokeSemanticAction(
-      SemanticAction.navigate,
-      role: WidgetRoles.conversationNavigator,
-      label: 'Demo conversations',
-    );
-    expect(focusedNavigator.completed, isTrue);
+    await tester
+        .target(
+          role: WidgetRoles.conversationNavigator,
+          label: 'Demo conversations',
+        )
+        .perform(SemanticAction.navigate);
     tester.render(size: const CellSize(110, 32));
     navigator = tester.semantics().single(
       role: WidgetRoles.conversationNavigator,
@@ -1905,12 +1797,9 @@ void main() {
     expect(worker.state.conversationStatus, 'idle');
     expect(worker.state.conversationMessageCount, 0);
 
-    final result = await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: WidgetRoles.conversation,
-      label: 'Worker activity',
-    );
-    expect(result.completed, isTrue);
+    await tester
+        .target(role: WidgetRoles.conversation, label: 'Worker activity')
+        .press();
 
     tester.render(size: const CellSize(110, 32));
     expect(
@@ -1978,66 +1867,53 @@ void main() {
     expect(diagnosticFallbackState, contains('debug captures 1'));
     expect(diagnosticFallbackState, contains('OSC 8 disabledByDefault'));
 
-    final captureResult = await tester.invokeSemanticAction(
-      SemanticAction.captureDebug,
-      role: SemanticRole.diagnostic,
-      label: 'Terminal diagnostics',
-    );
-    expect(captureResult.completed, isTrue);
+    await tester
+        .target(role: SemanticRole.diagnostic, label: 'Terminal diagnostics')
+        .perform(SemanticAction.captureDebug);
     await _flushAsyncUi(tester);
     expect(tester.exists(text('Debug captures: 2')), isTrue);
     expect(_demoApp(tester).state.lastCommandId, 'debug.captureSnapshot');
 
-    final diagnoseResult = await tester.invokeSemanticAction(
-      SemanticAction.diagnose,
-      role: SemanticRole.diagnostic,
-      label: 'Terminal diagnostics',
-    );
-    expect(diagnoseResult.completed, isTrue);
+    await tester
+        .target(role: SemanticRole.diagnostic, label: 'Terminal diagnostics')
+        .perform(SemanticAction.diagnose);
     await _flushAsyncUi(tester);
 
-    final images = tester.semantics().single(
-      role: SemanticRole.diagnostic,
-      label: 'Inline images',
-    );
+    final images = tester
+        .target(role: SemanticRole.diagnostic, label: 'Inline images')
+        .snapshot;
     expect(images.state.terminalCapability, 'inlineImages');
     expect(images.state.capabilityRequirement, 'preferred');
     expect(images.state.capabilityResolution, 'degraded');
     expect(images.state.activeFallback, 'glyph image');
 
-    final links = tester.semantics().single(
-      role: SemanticRole.diagnostic,
-      label: 'Markdown links',
-    );
+    final links = tester
+        .target(role: SemanticRole.diagnostic, label: 'Markdown links')
+        .snapshot;
     expect(links.state.terminalCapability, 'osc8Hyperlinks');
     expect(links.state.capabilityRequirement, 'prohibited');
     expect(links.state.capabilityResolution, 'disabledByPolicy');
     expect(links.state.activeFallback, 'visible URL');
 
-    final clipboard = tester.semantics().single(
-      role: SemanticRole.diagnostic,
-      label: 'Clipboard write',
-    );
+    final clipboard = tester
+        .target(role: SemanticRole.diagnostic, label: 'Clipboard write')
+        .snapshot;
     expect(clipboard.state.clipboardPolicy, 'allowed');
     expect(clipboard.state.clipboardCapability, 'clipboardWrite');
     expect(clipboard.state.clipboardCapabilityResolution, 'available');
     expect(clipboard.state.clipboardRedacted, isFalse);
 
-    final osc52 = tester.semantics().single(
-      role: SemanticRole.diagnostic,
-      label: 'OSC 52 clipboard',
-    );
+    final osc52 = tester
+        .target(role: SemanticRole.diagnostic, label: 'OSC 52 clipboard')
+        .snapshot;
     expect(osc52.state.terminalCapability, 'osc52Clipboard');
     expect(osc52.state.capabilityResolution, 'unverified');
     expect(osc52.state.activeFallback, 'in-process register');
     expect(osc52.state.clipboardTransport, 'osc52');
 
-    final rowDiagnose = await tester.invokeSemanticAction(
-      SemanticAction.diagnose,
-      role: SemanticRole.diagnostic,
-      label: 'Inline images',
-    );
-    expect(rowDiagnose.completed, isTrue);
+    await tester
+        .target(role: SemanticRole.diagnostic, label: 'Inline images')
+        .perform(SemanticAction.diagnose);
     await _flushAsyncUi(tester);
 
     final timeline = tester.semantics().single(
@@ -2049,12 +1925,9 @@ void main() {
     expect(timeline.state['runningTraceEventCount'], 1);
     expect(timeline.state.selectedTraceId, 'trace.boot');
 
-    final focusedTimeline = await tester.invokeSemanticAction(
-      SemanticAction.focus,
-      role: WidgetRoles.traceTimeline,
-      label: 'Demo trace timeline',
-    );
-    expect(focusedTimeline.completed, isTrue);
+    await tester
+        .target(role: WidgetRoles.traceTimeline, label: 'Demo trace timeline')
+        .focus();
     tester.pump();
     var updatedTimeline = tester.semantics().single(
       role: WidgetRoles.traceTimeline,
@@ -2073,12 +1946,9 @@ void main() {
     expect(captureTrace.state.traceStatus, 'succeeded');
     expect(captureTrace.state.source, 'diagnostics');
 
-    final traceResult = await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: WidgetRoles.traceEvent,
-      label: 'Diagnostics capture',
-    );
-    expect(traceResult.completed, isTrue);
+    await tester
+        .target(role: WidgetRoles.traceEvent, label: 'Diagnostics capture')
+        .press();
     tester.pump();
     updatedTimeline = tester.semantics().single(
       role: WidgetRoles.traceTimeline,

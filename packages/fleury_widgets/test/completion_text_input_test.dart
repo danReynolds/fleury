@@ -247,24 +247,15 @@ void main() {
     tester.type('ch');
     _screen(tester);
 
-    final result = await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.menuItem,
-      label: 'cherry-pick',
-    );
+    await tester
+        .target(role: SemanticRole.menuItem, label: 'cherry-pick')
+        .press();
 
-    expect(result.completed, isTrue);
     expect(controller.text, 'cherry-pick');
     expect(controller.selection, const TextSelection.collapsed(offset: 11));
     expect(accepted?.label, 'cherry-pick');
-    expect(tester.semantics().where(role: SemanticRole.menu), isEmpty);
-    expect(
-      tester
-          .semantics()
-          .single(role: SemanticRole.textField, label: 'Command')
-          .value,
-      'cherry-pick',
-    );
+    expect(tester.target(role: SemanticRole.menu), hasCount(0));
+    expect(tester.field('Command'), hasValue('cherry-pick'));
   });
 
   testWidgets('semantic close hides completions without clearing text', (
@@ -283,15 +274,10 @@ void main() {
     tester.type('ch');
     _screen(tester);
 
-    final result = await tester.invokeSemanticAction(
-      SemanticAction.close,
-      role: SemanticRole.menu,
-      label: 'Completions',
-    );
+    await tester.target(role: SemanticRole.menu, label: 'Completions').close();
 
-    expect(result.completed, isTrue);
     expect(controller.text, 'ch');
-    expect(tester.semantics().where(role: SemanticRole.menu), isEmpty);
+    expect(tester.target(role: SemanticRole.menu), hasCount(0));
   });
 
   testWidgets('sanitizes unsafe completion labels and details', (tester) {

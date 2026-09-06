@@ -75,13 +75,10 @@ void main() {
     tester.pump(const Duration(milliseconds: 300));
     expect(Navigator.of(ctx).depth, 2);
 
-    final result = await tester.invokeSemanticAction(
-      SemanticAction.dismiss,
-      role: SemanticRole.dialog,
-      label: 'Confirm',
-    );
+    await tester
+        .target(role: SemanticRole.dialog, label: 'Confirm')
+        .perform(SemanticAction.dismiss);
 
-    expect(result.completed, isTrue);
     tester.pump(const Duration(milliseconds: 300));
     await Future<void>.delayed(Duration.zero);
     tester.pump();

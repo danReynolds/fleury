@@ -22,6 +22,7 @@ void main() {
   testWidgets('theme studio compares presets and exposes a custom editor', (
     tester,
   ) async {
+    tester.viewportSize = _showcaseSize;
     tester.pumpWidget(const ThemingShowcaseApp());
 
     String rendered() =>
@@ -46,13 +47,7 @@ void main() {
     tester.sendKey(const KeyEvent(KeyCode.escape));
     expect(rendered(), contains('rendered by Nord'));
 
-    await tester.invokeSemanticAction(
-      SemanticAction.setValue,
-      role: SemanticRole.button,
-      label: 'Theme',
-      payload: 'Custom',
-    );
-    tester.pump();
+    await tester.button('Theme').setValue('Custom');
 
     expect(rendered(), contains('CUSTOM THEME'));
     expect(rendered(), contains('Dark'));
@@ -67,80 +62,42 @@ void main() {
     expect(rendered(), contains('primary actions.'));
     expect(rendered(), contains('Reset custom theme'));
 
-    await tester.invokeSemanticAction(
-      SemanticAction.setValue,
-      role: SemanticRole.button,
-      label: 'Border',
-      payload: 'Double-line',
-    );
-    tester.pump();
+    await tester.button('Border').setValue('Double-line');
     expect(rendered(), contains('╔'));
     expect(rendered(), contains('═'));
     expect(rendered(), contains('Double-line border'));
 
     expect(
-      tester.semantics().single(
-        role: SemanticRole.list,
-        label: 'Primary color',
-      ),
-      isNotNull,
+      tester.target(role: SemanticRole.list, label: 'Primary color'),
+      hasCount(1),
     );
 
-    await tester.invokeSemanticAction(
-      SemanticAction.select,
-      role: SemanticRole.radio,
-      label: 'Primary: ANSI 7 (#E5E5E5)',
-    );
-    tester.pump();
+    await tester
+        .target(role: SemanticRole.radio, label: 'Primary: ANSI 7 (#E5E5E5)')
+        .select();
     expect(_styleAt(tester, 'Form controls').foreground, const AnsiColor(7));
     expect(
-      tester
-          .semantics()
-          .single(role: SemanticRole.list, label: 'Primary color')
-          .value,
-      'Primary: ANSI 7 (#E5E5E5)',
+      tester.target(role: SemanticRole.list, label: 'Primary color'),
+      hasValue('Primary: ANSI 7 (#E5E5E5)'),
     );
 
-    await tester.invokeSemanticAction(
-      SemanticAction.setValue,
-      role: SemanticRole.button,
-      label: 'Palette role',
-      payload: 'Error',
-    );
-    tester.pump();
+    await tester.button('Palette role').setValue('Error');
     expect(rendered(), contains('Error color'));
     expect(
-      tester.semantics().single(role: SemanticRole.list, label: 'Error color'),
-      isNotNull,
+      tester.target(role: SemanticRole.list, label: 'Error color'),
+      hasCount(1),
     );
 
-    await tester.invokeSemanticAction(
-      SemanticAction.activate,
-      role: SemanticRole.button,
-      label: 'Reset custom theme',
-    );
-    tester.pump();
+    await tester.button('Reset custom theme').press();
     expect(
-      tester
-          .semantics()
-          .single(role: SemanticRole.list, label: 'Error color')
-          .value,
-      'Error: ANSI 9 (#FF0000)',
+      tester.target(role: SemanticRole.list, label: 'Error color'),
+      hasValue('Error: ANSI 9 (#FF0000)'),
     );
 
-    await tester.invokeSemanticAction(
-      SemanticAction.setValue,
-      role: SemanticRole.textField,
-      label: 'Service name',
-      payload: '',
-    );
-    tester.pump();
+    await tester.field('Service name').fill('');
     expect(rendered(), contains('Service name is required.'));
     expect(
-      tester
-          .semantics()
-          .single(role: SemanticRole.textField, label: 'Service name')
-          .validationError,
+      tester.field('Service name').snapshot.validationError,
       'Service name is required.',
     );
   });

@@ -376,13 +376,8 @@ void main() {
         ),
       );
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.select,
-        role: SemanticRole.tab,
-        label: 'Run',
-      );
+      await tester.target(role: SemanticRole.tab, label: 'Run').select();
 
-      expect(result.completed, isTrue);
       expect(c.index, 2);
       expect(_row(tester, 1), 'run');
       final selected = tester.semantics().single(

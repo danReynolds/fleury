@@ -153,9 +153,13 @@ const examplesBundle = '/fleury/fleury-examples.js';
 
 <script>
   import { attachPreferencesTest } from '../scripts/preferences-test-runner';
-  for (const host of document.querySelectorAll<HTMLElement>('[data-fleury-test="preferences"]')) {
-    if (host.dataset.testWired) continue;
-    host.dataset.testWired = 'true';
-    attachPreferencesTest(host, host.closest('.cds') ?? host.parentElement!);
-  }
+  const wireTests = () => {
+    for (const host of document.querySelectorAll<HTMLElement>('[data-fleury-test="preferences"]')) {
+      if (host.dataset.testWired) continue;
+      host.dataset.testWired = 'true';
+      attachPreferencesTest(host, host.closest('.cds') ?? host.parentElement!);
+    }
+  };
+  wireTests();
+  document.addEventListener('astro:page-load', wireTests);
 </script>

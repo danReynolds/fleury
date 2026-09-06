@@ -104,14 +104,14 @@ void main() {
       tester.pumpWidget(const AppShellDemo());
       tester.render(size: _size);
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.navigate,
-        role: SemanticRole.command,
-        label: 'Open Production Deployment',
-      );
+      await tester
+          .target(
+            role: SemanticRole.command,
+            label: 'Open Production Deployment',
+          )
+          .perform(SemanticAction.navigate);
       tester.pump(_transitionDuration);
 
-      expect(result.completed, isTrue);
       expect(tester.renderToString(size: _size), contains('refreshes: 0'));
     });
 

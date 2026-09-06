@@ -240,13 +240,10 @@ index 1111111..2222222 100644
       );
 
       tester.render(size: const CellSize(80, 12));
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.copy,
-        role: SemanticRole.diffLine,
-        label: '+  print("new");',
-      );
+      await tester
+          .target(role: SemanticRole.diffLine, label: '+  print("new");')
+          .copy();
 
-      expect(result.completed, isTrue);
       expect(tester.clipboard.readInProcess(), contains('@@ -1,4 +1,5 @@'));
       expect(tester.clipboard.readInProcess(), contains('+  print("new");'));
       expect(copied?.row.text, '+  print("new");');
@@ -275,13 +272,10 @@ index 1111111..2222222 100644
       );
       expect(row.selected, isFalse);
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.activate,
-        role: SemanticRole.diffLine,
-        label: '+  run();',
-      );
+      await tester
+          .target(role: SemanticRole.diffLine, label: '+  run();')
+          .press();
 
-      expect(result.completed, isTrue);
       expect(controller.selectedIndex, 8);
 
       tester.render(size: const CellSize(80, 12));

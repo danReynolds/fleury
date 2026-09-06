@@ -161,13 +161,8 @@ void main() {
     );
 
     tester.render(size: const CellSize(80, 8));
-    final result = await tester.invokeSemanticAction(
-      SemanticAction.open,
-      role: SemanticRole.jsonNode,
-      label: 'meta',
-    );
+    await tester.target(role: SemanticRole.jsonNode, label: 'meta').open();
 
-    expect(result.completed, isTrue);
     tester.render(size: const CellSize(80, 8));
     final version = tester.semantics().single(
       role: SemanticRole.jsonNode,
@@ -188,11 +183,7 @@ void main() {
       ),
     );
     tester.render(size: const CellSize(80, 8));
-    await tester.invokeSemanticAction(
-      SemanticAction.open,
-      role: SemanticRole.jsonNode,
-      label: 'meta',
-    );
+    await tester.target(role: SemanticRole.jsonNode, label: 'meta').open();
     tester.render(size: const CellSize(80, 8));
     expect(
       tester.semantics().where(role: SemanticRole.jsonNode, label: 'version'),
@@ -207,16 +198,11 @@ void main() {
     expect(meta.actions, contains(SemanticAction.close));
     expect(meta.actions, isNot(contains(SemanticAction.open)));
 
-    final result = await tester.invokeSemanticAction(
-      SemanticAction.close,
-      role: SemanticRole.jsonNode,
-      label: 'meta',
-    );
-    expect(result.completed, isTrue);
+    await tester.target(role: SemanticRole.jsonNode, label: 'meta').close();
     tester.render(size: const CellSize(80, 8));
     expect(
-      tester.semantics().where(role: SemanticRole.jsonNode, label: 'version'),
-      isEmpty,
+      tester.target(role: SemanticRole.jsonNode, label: 'version'),
+      hasCount(0),
       reason: 'collapsing meta hides its children',
     );
   });
@@ -287,13 +273,8 @@ void main() {
       );
 
       tester.render(size: const CellSize(80, 8));
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.copy,
-        role: SemanticRole.jsonNode,
-        label: 'meta',
-      );
+      await tester.target(role: SemanticRole.jsonNode, label: 'meta').copy();
 
-      expect(result.completed, isTrue);
       expect(tester.clipboard.readInProcess(), contains('"version": 1'));
       expect(copied?.row.path, r'$.meta');
       expect(copied?.report.result, ClipboardWriteResult.inProcessOnly);

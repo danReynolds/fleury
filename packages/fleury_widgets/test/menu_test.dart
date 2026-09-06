@@ -447,11 +447,7 @@ void main() {
       tester.sendKey(const KeyEvent(KeyCode.arrowRight)); // open submenu
       tester.render(size: const CellSize(30, 10));
 
-      await tester.invokeSemanticAction(
-        SemanticAction.close,
-        role: SemanticRole.button,
-        label: 'File menu',
-      );
+      await tester.button('File menu').close();
       tester.pump();
 
       final out = _screen(tester, cols: 30, rows: 10);
@@ -499,12 +495,8 @@ void main() {
       expect(trigger.expanded, isFalse);
       expect(trigger.state.menuItemCount, 3);
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.open,
-        node: trigger,
-      );
+      await tester.button('Edit menu').open();
 
-      expect(result.completed, isTrue);
       tester.render(size: const CellSize(30, 8));
       final tree = tester.semantics();
       final menu = tree.single(role: SemanticRole.menu, label: 'Edit menu');
@@ -531,21 +523,12 @@ void main() {
         ),
       );
 
-      await tester.invokeSemanticAction(
-        SemanticAction.open,
-        role: SemanticRole.button,
-        label: 'Edit menu',
-      );
+      await tester.button('Edit menu').open();
       tester.render(size: const CellSize(30, 8));
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.activate,
-        role: SemanticRole.menuItem,
-        label: 'Copy',
-      );
+      await tester.target(role: SemanticRole.menuItem, label: 'Copy').press();
 
-      expect(result.completed, isTrue);
       expect(ran, 'copy');
-      expect(tester.semantics().where(role: SemanticRole.menu), isEmpty);
+      expect(tester.target(role: SemanticRole.menu), hasCount(0));
       expect(
         tester
             .semantics()
@@ -575,20 +558,11 @@ void main() {
           ],
         ),
       );
-      await tester.invokeSemanticAction(
-        SemanticAction.open,
-        role: SemanticRole.button,
-        label: 'File menu',
-      );
+      await tester.button('File menu').open();
       tester.render(size: const CellSize(40, 8));
 
-      final result = await tester.invokeSemanticAction(
-        SemanticAction.open,
-        role: SemanticRole.menuItem,
-        label: 'Open',
-      );
+      await tester.target(role: SemanticRole.menuItem, label: 'Open').open();
 
-      expect(result.completed, isTrue);
       tester.render(size: const CellSize(40, 8));
       final tree = tester.semantics();
       final submenu = tree.single(role: SemanticRole.menu, label: 'Open');
@@ -616,11 +590,7 @@ void main() {
         ),
       );
 
-      await tester.invokeSemanticAction(
-        SemanticAction.open,
-        role: SemanticRole.button,
-        label: 'Edit menu',
-      );
+      await tester.button('Edit menu').open();
       tester.render(size: const CellSize(30, 8));
 
       final snapshot = tester.accessibilitySnapshot();
