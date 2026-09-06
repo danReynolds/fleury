@@ -1,0 +1,44 @@
+{
+  "baselineRevision": "e5217c0f456febaa0aebb033d0485cfb78487309",
+  "productionRevision": "b938c4f793f2025c4cb7ac6220d3e8c26fb024e8",
+  "baselineSourceSha256": {
+    "packages/fleury/lib/src/rendering/render_objects.dart": "31f8f313bdf7993709f3c4e1b47870f4cbd55378ffc175b5c686cc6c69826a6a",
+    "packages/fleury/lib/src/semantics/semantics.dart": "4b27725b826e9014b447c4e33fe40fdd3e13866a919c35b35918ad0e7247e8ad"
+  },
+  "candidateSourceSha256": {
+    "packages/fleury/lib/src/rendering/render_objects.dart": "0457d3303eb5585de7410ff55bd23b03765a3e05758aa6409538b9b9933b70b8",
+    "packages/fleury/lib/src/semantics/semantics.dart": "5411f1675f6da9f33a7f08a26d9b4fae665fd8985b76ab2b22ca96cc01967ead"
+  },
+  "harnessSha256": {
+    "profiling/bin/document_work_probe.dart": "dc7e7f58c4a71faf064482671f4afe61d012634cc4605ea4d2352d92033d52cb",
+    "profiling/bin/sample_frame_host.dart": "ac7e45f76f526446a48b9d6f954b1ea2054ab62a45a427f6858b1194afd42a29",
+    "profiling/bin/semantic_build_probe.dart": "3a66471030d60b07150f09d30801431687e4914a388647a45e563069e4746a8c",
+    "profiling/bin/document_heap_probe.dart": "53e61979942ffdadb10ca3a554d33b122d06b95cca5c48c1a11af4ac80c62c93",
+    "profiling/bin/frame_pipeline_probe.dart": "0effbb06d1ee60448459354b6f44362527ff65cc92d7baa587c63354546814d0"
+  },
+  "aotBinarySha256": {
+    "fleury-runtime-final-frame-base": "1b304f32978709c6fdebb1967e25e538dd74a9846bf66f0ce941739334fc3e75",
+    "fleury-runtime-final-semantic-after": "d49feb8fd861118258c6b9a16b1e93cd010a610ba57949ed75517b1812355c6f",
+    "fleury-runtime-final-document-after": "79f0a1166819f623b9d11df91c90605bc9ea74b33bebc2ed063c9cf1c1c22b5a",
+    "fleury-runtime-final-frame-after": "9a8e3f596bf96eaf2c91933045e806a78efed55a761278fce095c34e74c9aea5",
+    "fleury-runtime-final-document-base": "58af3c35f4350f525cf8d0b27045c138bd1468d014362607900d11d8c0a81c2d",
+    "fleury-runtime-final-semantic-base": "3366dc7741ed0d96d5415ef15d53e5fe04823d5b9e64137d19b850f30ba64e60"
+  },
+  "sdk": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+  "os": "ProductName:\t\tmacOS\nProductVersion:\t\t26.2\nBuildVersion:\t\t25C56",
+  "method": "Three alternating fresh AOT processes per workload/revision; 60 document frames, 300 semantic builds, 600 sample frames/mode. Serial execution. Two fresh deterministic VM-service processes per revision for post-GC lifecycle.",
+  "documentParity": "All final fingerprints, copiedUnits and changedFrames match across revisions and repetitions.",
+  "focusedControls": "Five alternating pairs after the broad sweep: 200 document frames for 10k wrapped full-copy and unwrapped open, 100 semantic builds for all cases. Broad sweep showed host contention; read focused controls alongside it.",
+  "boundaries": "Document CPU excludes terminal encoding/transport/display. Semantic CPU measures full tree construction only, not idle or retained-leaf flushes. Heap values are post-GC live bytes, never allocation rates. SDK strings are process-wide class totals; compare lifecycle deltas. No total application RAM claim.",
+  "files": {
+    "2026-09-06-core-runtime-performance-document.csv": "8268d75595d88e37cffe2592ceb6302596aa95050151eab96f6efd80533a8d64",
+    "2026-09-06-core-runtime-performance-focused-controls.csv": "bd25113bfe0a6d11fe915bf3ef5c10c66f6e1b2bfcdd945cc89e1adf0cff5f94",
+    "2026-09-06-core-runtime-performance-frame.csv": "eb8b5d51a5c744d0f853d5f1a60c52a77f13145642af6dcb49d79cb2ee4e913f",
+    "2026-09-06-core-runtime-performance-heap.csv": "ecba3b7ac69e957fa506493891bc478f4d5dc626658cc8b5ffda064c7fe7ff91",
+    "2026-09-06-core-runtime-performance-semantic.csv": "8908f730095c98ec255b4a6d1ecda72fe2f90e593e30b844261e300f058e24fb",
+    "2026-09-06-core-runtime-performance-trial-equality.csv": "3760f57657b5a775daad8d0328053717b86a541e15bd4d2f5c9cd782b40fac55",
+    "2026-09-06-core-runtime-performance-trial-multiline.csv": "7a8e7fcca886cd443ed6b02b1968f4c8c3c04dc9c9de449de828df2fd3c61c04",
+    "2026-09-06-core-runtime-performance-trial-semantic-indices.csv": "adaa7f0cab3c9cf0cd84a3722f67167af6c0fe6e6ad76f984d4f81982fe220bd",
+    "2026-09-06-core-runtime-performance-trial-semantic-wide.csv": "46abef346c589cf3bebcba94e7af799ec8617a47fbca82dbd669fffdec8cbbae"
+  }
+}
