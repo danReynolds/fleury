@@ -1,0 +1,154 @@
+{
+  "baselineRevision": "25bd5cc0a03b9470fabf9ef01372e92b044705b4",
+  "candidateIdentity": "Baseline plus the retained framework diff; exact candidate source hashes below, before commit.",
+  "baselineFrameworkSha256": "8640d3854cb26744537c9f2a641dea23cd2da0b7634a03dc153f426b5780cd9d",
+  "method": {
+    "dart": "3.12.2",
+    "platform": "macOS arm64",
+    "viewport": [
+      120,
+      40
+    ],
+    "aot": {
+      "pairs": 3,
+      "order": [
+        [
+          "base",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "base"
+        ],
+        [
+          "base",
+          "candidate"
+        ]
+      ],
+      "coreIterationsPerCase": 500,
+      "inputIterationsPerCase": 1000,
+      "coreCases": 53,
+      "inputCases": 11,
+      "rejectedBurstTrialIterationsPerCase": 1000,
+      "rejectedBurstTrialCases": 18,
+      "execution": "One timed process at a time; no own compiler or test concurrency; shared host"
+    },
+    "liveStorage": {
+      "flags": [
+        "--deterministic",
+        "--enable-vm-service=0",
+        "--disable-service-auth-codes"
+      ],
+      "leafFrames": 300,
+      "gc": true,
+      "objectInspection": "Mounted Element fields via VM service; exact shallow set bytes; field inspection after global heap sample"
+    },
+    "allocationTraces": {
+      "flags": [
+        "--deterministic",
+        "--profiler",
+        "--enable-vm-service=0",
+        "--disable-service-auth-codes"
+      ],
+      "warmupFrames": 1000,
+      "extraTracedWarmupFrames": 100,
+      "mountWarmupCycles": 10,
+      "subscribers": 64,
+      "burst": 8,
+      "mountCycles": [
+        1,
+        5
+      ],
+      "steadyFrames": 5,
+      "api": [
+        "setTraceClassAllocation",
+        "getAllocationTraces"
+      ],
+      "timing": "Diagnostic JIT runs, separate from latency runs; not timing evidence",
+      "calibration": {
+        "allocations": 123,
+        "retainedAfterGc": 17,
+        "retainedBytesAfterGc": 272
+      }
+    }
+  },
+  "sourceSha256": {
+    "packages/fleury/lib/src/widgets/framework.dart": "eb9757acc25d12e45e64ca76fc099fb6681acf94744e138ff17c6f7ddbe93426",
+    "packages/fleury/lib/src/remote/remote_client_asset.dart": "037e61a6d7952c67899f96dbf71001fd7469259012643ee7c719e73f8a09a637",
+    "packages/fleury/test/widgets/dependency_lifecycle_test.dart": "11c8d46321d5b3251026ce05f37a1100b596bae79973c6e16f3bec1754ba182f",
+    "profiling/bin/core_lifecycle_probe.dart": "4ed7fe641a7de441a886355e76e2d4ee6abd869cf6ba90d587472f11f505b6e2",
+    "profiling/bin/core_input_probe.dart": "1e99302f78da4cbcc85334462706fbd2420947e92227caea8252cd1b28c950d1",
+    "profiling/bin/core_lifetime_probe.dart": "26d3887440b8a7a96d382d263a858dbf84d7abf03500db30aaf303152e930965",
+    "profiling/bin/sample_frame_host.dart": "fbb5936bd6e3c93062f5255e987dda84664162e8697910bd251f48303d0c0dad",
+    "profiling/bin/dependency_storage_probe.dart": "910c0e01ad40546b94fa3c208cdfbb5e31a1be1d38e11cc4ffc75e0b1552e605",
+    "profiling/bin/live_allocation_probe.dart": "1ba033aa830d81b25623f8fe29524d9c58bed6172f46ceb6ec70376edfe1022c",
+    "profiling/bin/notification_burst_probe.dart": "efce446478b201cdb2f5347b844cb3c24df7e58ebee27660e24739273fb629fa"
+  },
+  "remoteClient": {
+    "sourceFingerprint": "de86ab31c2873d83",
+    "javascriptBytes": 399949,
+    "javascriptChanged": false,
+    "javascriptSha256": "4749ce105ea34f7bb62bd3be7561b9b5ff9a77417ac43952d9035754183e9ee5"
+  },
+  "executables": {
+    "core": {
+      "base": "ddbafd238a4615f5abdace0670260ecd723fc180d6b3255c935e505f703fb80f",
+      "candidate": "f7b514b06acd18e86c5c6188fdeedebc09667c559649aa461d1c3deb11ea72b6"
+    },
+    "input": {
+      "base": "d2accb0dfac53b26497f084aa75024e23bafd8d313a01042afb851a4e1a0ee04",
+      "candidate": "0e6df16db0dc715c0ffcd41f302e897bc8254d68bcb36928636e05548086f758"
+    },
+    "rejectedNotificationTrial": {
+      "base": "b8700cd2b75e4efe1131fd5664b5177e01e15d0a45269cedeb5c274012fc793b",
+      "candidate": "4091cf229524f0c66ebb9200cfe37dacd5cee75e1ce622a313f0c12609785dbd"
+    }
+  },
+  "artifacts": {
+    "2026-09-06-dependency-allocation-traces.json": {
+      "sha256": "b0670371edba4c795eefe7c9520630dfbd72daa81bf4df1e70be76d57efa6996",
+      "records": 20
+    },
+    "2026-09-06-dependency-burst-trial.csv": {
+      "sha256": "039446dafe1c9549e13fb18805f0f6663142a77b915aaa8a7216531525513546",
+      "rows": 108
+    },
+    "2026-09-06-dependency-controls.csv": {
+      "sha256": "46fd5dcaa7f3b6fc22929ac57ba62db756b3a37fb9fb9fbee98f8a97342e3c07",
+      "rows": 384
+    },
+    "2026-09-06-dependency-heap.json": {
+      "sha256": "93b018370c0530e309122f0d0f663235509e7228116bbfb238207da71bda6099",
+      "records": 10
+    },
+    "2026-09-06-dependency-lifetime.json": {
+      "sha256": "56ccbeed64bc92be1ebadf8bd47b09c4e07ea86a808a2fe454c2ebc4b5921708",
+      "records": 4
+    },
+    "2026-09-06-dependency-rejected-coalescing.patch": {
+      "sha256": "92a6fe4d549db176459a52d36df4b92ed6b21438e47f81140801e12775c7e3a9"
+    }
+  },
+  "qualification": {
+    "workspaceCheck": {
+      "passed": true,
+      "testsPassed": 5489,
+      "existingSkips": 2
+    },
+    "focusedTestsPassed": 162,
+    "fastPerfGatesPassed": 8,
+    "postDisposeObservations": 4,
+    "localReview": "No actionable correctness finding after re-entrancy and throwing-source review",
+    "hostedCi": "See pull request checks for the committed head"
+  },
+  "boundaries": [
+    "Exact shallow savings for the two element-owned dependency sets, not a total application RAM percentage or AOT RSS measurement",
+    "48 core output fingerprints, 11 input fingerprints and all 18 rejected burst-trial output fingerprints match",
+    "Five core mount cases have no fingerprint",
+    "Allocation trace counts describe selected classes under instrumented JIT; stack tails can be truncated; no total allocated bytes or GC-pause claim",
+    "Dart 3.12.2 accumulatedSize and instancesAccumulated are heap-walk inventories in the calibration, not cumulative allocation counters",
+    "Core controls exclude input dispatch; input controls use real runApp scheduling with an in-memory peer and muted animations; neither includes network or physical display latency",
+    "The coalescing patch and burst CSV describe a rejected trial and are not the retained candidate",
+    "The rejected coalescing patch uses zero context; apply to baseline with git apply --unidiff-zero only for reproduction"
+  ]
+}
