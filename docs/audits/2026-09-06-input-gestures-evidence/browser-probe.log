@@ -15,7 +15,7 @@ assembled browser: clickedFieldFocused=false, caret=6
 00:00 +2 -1: checks click focus in the assembled browser host [E]
   Expected: true
     Actual: <false>
-  
+
   org-dartlang-sdk:///lib/_internal/js_runtime/lib/js_helper.dart 1424:15   Object.throwExpression
   package:matcher                                                           Object.expect
   test/input_gestures_dx_probe_test.dart 117:5                              <fn>
@@ -24,7 +24,7 @@ assembled browser: clickedFieldFocused=false, caret=6
   org-dartlang-sdk:///lib/_internal/js_runtime/lib/async_patch.dart 313:7   _awaitOnObject.<fn>
   org-dartlang-sdk:///lib/async/zone_root.dart 48:46                        StaticClosure._rootRunUnary
   org-dartlang-sdk:///lib/async/zone.dart 732:34                            _CustomZone.runUnary
-  
+
 00:00 +2 -1: Some tests failed.
 
 Failing tests:
