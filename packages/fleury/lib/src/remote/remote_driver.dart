@@ -146,6 +146,7 @@ final class RemoteTerminalDriver
   bool? get supervisorDebugWire => _supervisorDebugWire;
   int _protocolVersion = 1;
   Completer<void>? _handshake;
+  ({Object error, StackTrace stack})? _handshakeFailure;
   Future<void>? _restoreFuture;
 
   @override
@@ -269,6 +270,10 @@ final class RemoteTerminalDriver
     }
     // INIT completion resumes enter in a later microtask. Teardown may have
     // started in between; never reactivate a session whose resources closed.
+    final failure = _handshakeFailure;
+    if (failure != null) {
+      Error.throwWithStackTrace(failure.error, failure.stack);
+    }
     if (_restoreFuture != null) {
       throw StateError('RemoteTerminalDriver was restored during enter().');
     }
@@ -544,6 +549,11 @@ final class RemoteTerminalDriver
   }
 
   void _onFrame(RemoteFrame frame) {
+    if (_restoreFuture != null ||
+        _handshakeFailure != null ||
+        _events.isClosed) {
+      return;
+    }
     switch (frame) {
       case InitFrame f:
         if (f.provisional) {
@@ -708,6 +718,9 @@ final class RemoteTerminalDriver
 
   void _onTransportError(Object error, StackTrace stackTrace) {
     if (!_active) {
+      // INIT may already have completed the future while enter's continuation
+      // is still queued. Keep startup failure authoritative in that gap too.
+      _handshakeFailure ??= (error: error, stack: stackTrace);
       if (!(_handshake?.isCompleted ?? true)) {
         _handshake?.completeError(error, stackTrace);
       }
@@ -720,13 +733,10 @@ final class RemoteTerminalDriver
     _parserFlushTimer?.cancel();
     _parserFlushTimer = null;
     if (!_active) {
-      // Handshake never landed — fail the enter() future so the caller
-      // can fall back or report cleanly.
-      if (!(_handshake?.isCompleted ?? true)) {
-        _handshake?.completeError(
-          StateError('Remote peer disconnected before sending INIT.'),
-        );
-      }
+      _onTransportError(
+        StateError('Remote peer disconnected before startup completed.'),
+        StackTrace.current,
+      );
       return;
     }
     if (!wantsPresentationPlans) _parser.finish(_sink);

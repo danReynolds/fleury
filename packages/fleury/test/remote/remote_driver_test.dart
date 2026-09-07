@@ -121,6 +121,47 @@ void main() {
       expect(transport.closed, isTrue);
     });
 
+    for (final error in [false, true]) {
+      test(
+        '${error ? 'transport error' : 'peer BYE'} after INIT cancels startup',
+        () async {
+          final transport = _FakeTransport(synchronous: true);
+          final driver = RemoteTerminalDriver(
+            transport,
+            superviseHandshakeWait: true,
+          );
+          addTearDown(driver.restore);
+          final outcome = driver
+              .enter(TerminalMode.interactive)
+              .then<Object?>(
+                (_) => 'entered',
+                onError: (Object error) => error,
+              );
+          transport.emit(
+            const InitFrame(
+              size: CellSize(80, 24),
+              colorMode: ColorMode.truecolor,
+              imageProtocol: ImageProtocol.halfBlock,
+              tmuxPassthrough: false,
+            ),
+          );
+          if (error) {
+            transport.emitError(
+              const RemoteProtocolException('startup failed'),
+            );
+          } else {
+            transport.emit(const ByeFrame());
+          }
+
+          expect(
+            await outcome,
+            error ? isA<RemoteProtocolException>() : isA<StateError>(),
+          );
+          expect(driver.isActive, isFalse);
+        },
+      );
+    }
+
     test(
       'enter() blocks until INIT lands, then reports its size+caps',
       (() async {
