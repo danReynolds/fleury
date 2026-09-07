@@ -1,0 +1,1724 @@
+[
+  {
+    "pair": 1,
+    "scenario": "cursor-blink-80x24",
+    "version": "base",
+    "measurement": {
+      "pair": 1,
+      "version": "base",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "f3bd029fa0b6d5f926ae2c710280d9b163853ad56cab442d2c85c982a497e845",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        4.06640625,
+        5.7509765625,
+        7.5625
+      ],
+      "loadAfter": [
+        4.4189453125,
+        5.74658203125,
+        7.52880859375
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 1,
+    "scenario": "cursor-blink-80x24",
+    "version": "candidate",
+    "measurement": {
+      "pair": 1,
+      "version": "candidate",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "90341d0250868dddb09ad490231c5da7085f5a3adeaa3b64d0cbc05a697d24cb",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        4.4189453125,
+        5.74658203125,
+        7.52880859375
+      ],
+      "loadAfter": [
+        4.2451171875,
+        5.6435546875,
+        7.46044921875
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 1,
+    "scenario": "full-frame-churn-160x50",
+    "version": "base",
+    "measurement": {
+      "pair": 1,
+      "version": "base",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "f3bd029fa0b6d5f926ae2c710280d9b163853ad56cab442d2c85c982a497e845",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        7.818359375,
+        6.3896484375,
+        7.66748046875
+      ],
+      "loadAfter": [
+        7.1806640625,
+        6.31982421875,
+        7.6201171875
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 1,
+    "scenario": "full-frame-churn-160x50",
+    "version": "candidate",
+    "measurement": {
+      "pair": 1,
+      "version": "candidate",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "90341d0250868dddb09ad490231c5da7085f5a3adeaa3b64d0cbc05a697d24cb",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        7.1806640625,
+        6.31982421875,
+        7.6201171875
+      ],
+      "loadAfter": [
+        8.22802734375,
+        6.5966796875,
+        7.69580078125
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 1,
+    "scenario": "noop-160x50",
+    "version": "base",
+    "measurement": {
+      "pair": 1,
+      "version": "base",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "f3bd029fa0b6d5f926ae2c710280d9b163853ad56cab442d2c85c982a497e845",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        4.2451171875,
+        5.6435546875,
+        7.46044921875
+      ],
+      "loadAfter": [
+        6.53125,
+        6.083984375,
+        7.58544921875
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 1,
+    "scenario": "noop-160x50",
+    "version": "candidate",
+    "measurement": {
+      "pair": 1,
+      "version": "candidate",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "90341d0250868dddb09ad490231c5da7085f5a3adeaa3b64d0cbc05a697d24cb",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        6.53125,
+        6.083984375,
+        7.58544921875
+      ],
+      "loadAfter": [
+        7.818359375,
+        6.3896484375,
+        7.66748046875
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 1,
+    "scenario": "normal-80x24",
+    "version": "base",
+    "measurement": {
+      "pair": 1,
+      "version": "base",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "f3bd029fa0b6d5f926ae2c710280d9b163853ad56cab442d2c85c982a497e845",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        5.26513671875,
+        6.435546875,
+        7.9833984375
+      ],
+      "loadAfter": [
+        4.8359375,
+        6.28271484375,
+        7.9013671875
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 1,
+    "scenario": "normal-80x24",
+    "version": "candidate",
+    "measurement": {
+      "pair": 1,
+      "version": "candidate",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "90341d0250868dddb09ad490231c5da7085f5a3adeaa3b64d0cbc05a697d24cb",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        4.8359375,
+        6.28271484375,
+        7.9013671875
+      ],
+      "loadAfter": [
+        4.6494140625,
+        6.17041015625,
+        7.83251953125
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 1,
+    "scenario": "resize-burst",
+    "version": "base",
+    "measurement": {
+      "pair": 1,
+      "version": "base",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "f3bd029fa0b6d5f926ae2c710280d9b163853ad56cab442d2c85c982a497e845",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        8.22802734375,
+        6.5966796875,
+        7.69580078125
+      ],
+      "loadAfter": [
+        8.7314453125,
+        6.8291015625,
+        7.75390625
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 1,
+    "scenario": "resize-burst",
+    "version": "candidate",
+    "measurement": {
+      "pair": 1,
+      "version": "candidate",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "90341d0250868dddb09ad490231c5da7085f5a3adeaa3b64d0cbc05a697d24cb",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        8.7314453125,
+        6.8291015625,
+        7.75390625
+      ],
+      "loadAfter": [
+        7.09765625,
+        6.57958984375,
+        7.64208984375
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 1,
+    "scenario": "single-dirty-cell-160x50",
+    "version": "base",
+    "measurement": {
+      "pair": 1,
+      "version": "base",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "f3bd029fa0b6d5f926ae2c710280d9b163853ad56cab442d2c85c982a497e845",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        4.6494140625,
+        6.17041015625,
+        7.83251953125
+      ],
+      "loadAfter": [
+        4.892578125,
+        6.14599609375,
+        7.79443359375
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 1,
+    "scenario": "single-dirty-cell-160x50",
+    "version": "candidate",
+    "measurement": {
+      "pair": 1,
+      "version": "candidate",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "90341d0250868dddb09ad490231c5da7085f5a3adeaa3b64d0cbc05a697d24cb",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        4.892578125,
+        6.14599609375,
+        7.79443359375
+      ],
+      "loadAfter": [
+        4.45458984375,
+        5.99072265625,
+        7.7099609375
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 1,
+    "scenario": "text-input-burst-80x24",
+    "version": "base",
+    "measurement": {
+      "pair": 1,
+      "version": "base",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "f3bd029fa0b6d5f926ae2c710280d9b163853ad56cab442d2c85c982a497e845",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        4.45458984375,
+        5.99072265625,
+        7.7099609375
+      ],
+      "loadAfter": [
+        4.20458984375,
+        5.85986328125,
+        7.6328125
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 1,
+    "scenario": "text-input-burst-80x24",
+    "version": "candidate",
+    "measurement": {
+      "pair": 1,
+      "version": "candidate",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "90341d0250868dddb09ad490231c5da7085f5a3adeaa3b64d0cbc05a697d24cb",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        4.20458984375,
+        5.85986328125,
+        7.6328125
+      ],
+      "loadAfter": [
+        4.06640625,
+        5.7509765625,
+        7.5625
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 2,
+    "scenario": "cursor-blink-80x24",
+    "version": "base",
+    "measurement": {
+      "pair": 2,
+      "version": "base",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "f3bd029fa0b6d5f926ae2c710280d9b163853ad56cab442d2c85c982a497e845",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        7.36474609375,
+        6.74755859375,
+        7.57373046875
+      ],
+      "loadAfter": [
+        7.380859375,
+        6.7763671875,
+        7.5693359375
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 2,
+    "scenario": "cursor-blink-80x24",
+    "version": "candidate",
+    "measurement": {
+      "pair": 2,
+      "version": "candidate",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "90341d0250868dddb09ad490231c5da7085f5a3adeaa3b64d0cbc05a697d24cb",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        7.294921875,
+        6.71533203125,
+        7.578125
+      ],
+      "loadAfter": [
+        7.36474609375,
+        6.74755859375,
+        7.57373046875
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 2,
+    "scenario": "full-frame-churn-160x50",
+    "version": "base",
+    "measurement": {
+      "pair": 2,
+      "version": "base",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "f3bd029fa0b6d5f926ae2c710280d9b163853ad56cab442d2c85c982a497e845",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        8.14892578125,
+        7.1201171875,
+        7.65673828125
+      ],
+      "loadAfter": [
+        6.93994140625,
+        6.9013671875,
+        7.56884765625
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 2,
+    "scenario": "full-frame-churn-160x50",
+    "version": "candidate",
+    "measurement": {
+      "pair": 2,
+      "version": "candidate",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "90341d0250868dddb09ad490231c5da7085f5a3adeaa3b64d0cbc05a697d24cb",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        9.51171875,
+        7.3154296875,
+        7.734375
+      ],
+      "loadAfter": [
+        8.14892578125,
+        7.1201171875,
+        7.65673828125
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 2,
+    "scenario": "noop-160x50",
+    "version": "base",
+    "measurement": {
+      "pair": 2,
+      "version": "base",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "f3bd029fa0b6d5f926ae2c710280d9b163853ad56cab442d2c85c982a497e845",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        7.33984375,
+        6.78857421875,
+        7.55908203125
+      ],
+      "loadAfter": [
+        9.51171875,
+        7.3154296875,
+        7.734375
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 2,
+    "scenario": "noop-160x50",
+    "version": "candidate",
+    "measurement": {
+      "pair": 2,
+      "version": "candidate",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "90341d0250868dddb09ad490231c5da7085f5a3adeaa3b64d0cbc05a697d24cb",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        7.380859375,
+        6.7763671875,
+        7.5693359375
+      ],
+      "loadAfter": [
+        7.33984375,
+        6.78857421875,
+        7.55908203125
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 2,
+    "scenario": "normal-80x24",
+    "version": "base",
+    "measurement": {
+      "pair": 2,
+      "version": "base",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "f3bd029fa0b6d5f926ae2c710280d9b163853ad56cab442d2c85c982a497e845",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        6.54052734375,
+        6.4775390625,
+        7.59326171875
+      ],
+      "loadAfter": [
+        5.6015625,
+        6.2734375,
+        7.50048828125
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 2,
+    "scenario": "normal-80x24",
+    "version": "candidate",
+    "measurement": {
+      "pair": 2,
+      "version": "candidate",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "90341d0250868dddb09ad490231c5da7085f5a3adeaa3b64d0cbc05a697d24cb",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        7.09765625,
+        6.57958984375,
+        7.64208984375
+      ],
+      "loadAfter": [
+        6.54052734375,
+        6.4775390625,
+        7.59326171875
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 2,
+    "scenario": "resize-burst",
+    "version": "base",
+    "measurement": {
+      "pair": 2,
+      "version": "base",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "f3bd029fa0b6d5f926ae2c710280d9b163853ad56cab442d2c85c982a497e845",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        5.6845703125,
+        6.61572265625,
+        7.4501953125
+      ],
+      "loadAfter": [
+        5.0986328125,
+        6.41455078125,
+        7.357421875
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 2,
+    "scenario": "resize-burst",
+    "version": "candidate",
+    "measurement": {
+      "pair": 2,
+      "version": "candidate",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "90341d0250868dddb09ad490231c5da7085f5a3adeaa3b64d0cbc05a697d24cb",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        6.93994140625,
+        6.9013671875,
+        7.56884765625
+      ],
+      "loadAfter": [
+        5.6845703125,
+        6.61572265625,
+        7.4501953125
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 2,
+    "scenario": "single-dirty-cell-160x50",
+    "version": "base",
+    "measurement": {
+      "pair": 2,
+      "version": "base",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "f3bd029fa0b6d5f926ae2c710280d9b163853ad56cab442d2c85c982a497e845",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        5.763671875,
+        6.27587890625,
+        7.4794921875
+      ],
+      "loadAfter": [
+        6.705078125,
+        6.4580078125,
+        7.52294921875
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 2,
+    "scenario": "single-dirty-cell-160x50",
+    "version": "candidate",
+    "measurement": {
+      "pair": 2,
+      "version": "candidate",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "90341d0250868dddb09ad490231c5da7085f5a3adeaa3b64d0cbc05a697d24cb",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        5.6015625,
+        6.2734375,
+        7.50048828125
+      ],
+      "loadAfter": [
+        5.763671875,
+        6.27587890625,
+        7.4794921875
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 2,
+    "scenario": "text-input-burst-80x24",
+    "version": "base",
+    "measurement": {
+      "pair": 2,
+      "version": "base",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "f3bd029fa0b6d5f926ae2c710280d9b163853ad56cab442d2c85c982a497e845",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        8.0673828125,
+        6.822265625,
+        7.630859375
+      ],
+      "loadAfter": [
+        7.294921875,
+        6.71533203125,
+        7.578125
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 2,
+    "scenario": "text-input-burst-80x24",
+    "version": "candidate",
+    "measurement": {
+      "pair": 2,
+      "version": "candidate",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "90341d0250868dddb09ad490231c5da7085f5a3adeaa3b64d0cbc05a697d24cb",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        6.705078125,
+        6.4580078125,
+        7.52294921875
+      ],
+      "loadAfter": [
+        8.0673828125,
+        6.822265625,
+        7.630859375
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 3,
+    "scenario": "cursor-blink-80x24",
+    "version": "base",
+    "measurement": {
+      "pair": 3,
+      "version": "base",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "f3bd029fa0b6d5f926ae2c710280d9b163853ad56cab442d2c85c982a497e845",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        6.013671875,
+        6.3466796875,
+        7.22998046875
+      ],
+      "loadAfter": [
+        6.3779296875,
+        6.41064453125,
+        7.23681640625
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 3,
+    "scenario": "cursor-blink-80x24",
+    "version": "candidate",
+    "measurement": {
+      "pair": 3,
+      "version": "candidate",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "90341d0250868dddb09ad490231c5da7085f5a3adeaa3b64d0cbc05a697d24cb",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        6.3779296875,
+        6.41064453125,
+        7.23681640625
+      ],
+      "loadAfter": [
+        7.35498046875,
+        6.6201171875,
+        7.29638671875
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 3,
+    "scenario": "full-frame-churn-160x50",
+    "version": "base",
+    "measurement": {
+      "pair": 3,
+      "version": "base",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "f3bd029fa0b6d5f926ae2c710280d9b163853ad56cab442d2c85c982a497e845",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        5.99072265625,
+        6.3662109375,
+        7.18017578125
+      ],
+      "loadAfter": [
+        7.3662109375,
+        6.63037109375,
+        7.25830078125
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 3,
+    "scenario": "full-frame-churn-160x50",
+    "version": "candidate",
+    "measurement": {
+      "pair": 3,
+      "version": "candidate",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "90341d0250868dddb09ad490231c5da7085f5a3adeaa3b64d0cbc05a697d24cb",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        7.3662109375,
+        6.63037109375,
+        7.25830078125
+      ],
+      "loadAfter": [
+        8.09716796875,
+        6.8271484375,
+        7.31689453125
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 3,
+    "scenario": "noop-160x50",
+    "version": "base",
+    "measurement": {
+      "pair": 3,
+      "version": "base",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "f3bd029fa0b6d5f926ae2c710280d9b163853ad56cab442d2c85c982a497e845",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        7.35498046875,
+        6.6201171875,
+        7.29638671875
+      ],
+      "loadAfter": [
+        6.85107421875,
+        6.54052734375,
+        7.25537109375
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 3,
+    "scenario": "noop-160x50",
+    "version": "candidate",
+    "measurement": {
+      "pair": 3,
+      "version": "candidate",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "90341d0250868dddb09ad490231c5da7085f5a3adeaa3b64d0cbc05a697d24cb",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        6.85107421875,
+        6.54052734375,
+        7.25537109375
+      ],
+      "loadAfter": [
+        5.99072265625,
+        6.3662109375,
+        7.18017578125
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 3,
+    "scenario": "normal-80x24",
+    "version": "base",
+    "measurement": {
+      "pair": 3,
+      "version": "base",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "f3bd029fa0b6d5f926ae2c710280d9b163853ad56cab442d2c85c982a497e845",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        5.0986328125,
+        6.41455078125,
+        7.357421875
+      ],
+      "loadAfter": [
+        4.8427734375,
+        6.3173828125,
+        7.3115234375
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 3,
+    "scenario": "normal-80x24",
+    "version": "candidate",
+    "measurement": {
+      "pair": 3,
+      "version": "candidate",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "90341d0250868dddb09ad490231c5da7085f5a3adeaa3b64d0cbc05a697d24cb",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        4.8427734375,
+        6.3173828125,
+        7.3115234375
+      ],
+      "loadAfter": [
+        5.0244140625,
+        6.28515625,
+        7.2822265625
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 3,
+    "scenario": "resize-burst",
+    "version": "base",
+    "measurement": {
+      "pair": 3,
+      "version": "base",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "f3bd029fa0b6d5f926ae2c710280d9b163853ad56cab442d2c85c982a497e845",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        8.09716796875,
+        6.8271484375,
+        7.31689453125
+      ],
+      "loadAfter": [
+        7.470703125,
+        6.77099609375,
+        7.28564453125
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 3,
+    "scenario": "resize-burst",
+    "version": "candidate",
+    "measurement": {
+      "pair": 3,
+      "version": "candidate",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "90341d0250868dddb09ad490231c5da7085f5a3adeaa3b64d0cbc05a697d24cb",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        7.470703125,
+        6.77099609375,
+        7.28564453125
+      ],
+      "loadAfter": [
+        6.95947265625,
+        6.68505859375,
+        7.2451171875
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 3,
+    "scenario": "single-dirty-cell-160x50",
+    "version": "base",
+    "measurement": {
+      "pair": 3,
+      "version": "base",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "f3bd029fa0b6d5f926ae2c710280d9b163853ad56cab442d2c85c982a497e845",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        5.0244140625,
+        6.28515625,
+        7.2822265625
+      ],
+      "loadAfter": [
+        4.9931640625,
+        6.220703125,
+        7.2412109375
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 3,
+    "scenario": "single-dirty-cell-160x50",
+    "version": "candidate",
+    "measurement": {
+      "pair": 3,
+      "version": "candidate",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "90341d0250868dddb09ad490231c5da7085f5a3adeaa3b64d0cbc05a697d24cb",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        4.9931640625,
+        6.220703125,
+        7.2412109375
+      ],
+      "loadAfter": [
+        5.234375,
+        6.2099609375,
+        7.21923828125
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 3,
+    "scenario": "text-input-burst-80x24",
+    "version": "base",
+    "measurement": {
+      "pair": 3,
+      "version": "base",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "f3bd029fa0b6d5f926ae2c710280d9b163853ad56cab442d2c85c982a497e845",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        5.234375,
+        6.2099609375,
+        7.21923828125
+      ],
+      "loadAfter": [
+        6.5556640625,
+        6.453125,
+        7.28271484375
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  },
+  {
+    "pair": 3,
+    "scenario": "text-input-burst-80x24",
+    "version": "candidate",
+    "measurement": {
+      "pair": 3,
+      "version": "candidate",
+      "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+      "runnerSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "javascriptSha256": "90341d0250868dddb09ad490231c5da7085f5a3adeaa3b64d0cbc05a697d24cb",
+      "pageSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88",
+      "loadBefore": [
+        6.5556640625,
+        6.453125,
+        7.28271484375
+      ],
+      "loadAfter": [
+        6.013671875,
+        6.3466796875,
+        7.22998046875
+      ]
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 100,
+      "requestedSteps": 100,
+      "warmupFrames": 30,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    }
+  }
+]

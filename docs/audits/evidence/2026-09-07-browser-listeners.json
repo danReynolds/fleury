@@ -1,0 +1,290 @@
+[
+  {
+    "kind": "fleurySemanticListenerProbe",
+    "passiveLabels": 128,
+    "semanticNodes": 132,
+    "fingerprint": 1332103016,
+    "requests": [
+      "run:activate",
+      "root:activate"
+    ],
+    "defaultPrevented": [
+      true,
+      true,
+      true
+    ],
+    "summary": {
+      "frameCount": 1
+    },
+    "browserMetrics": {
+      "layoutDurationMs": 4.333,
+      "recalcStyleDurationMs": 0.361,
+      "scriptDurationMs": 9.016,
+      "taskDurationMs": 18.512,
+      "jsHeapUsedBytes": 1763404.0,
+      "jsHeapTotalBytes": 5505024.0,
+      "domDocumentCount": 4,
+      "domNodeCount": 300,
+      "jsEventListenerCount": 132
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 128,
+      "requestedSteps": 128,
+      "warmupFrames": 2,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    },
+    "version": "base"
+  },
+  {
+    "kind": "fleurySemanticListenerProbe",
+    "passiveLabels": 16,
+    "semanticNodes": 20,
+    "fingerprint": 1118006514,
+    "requests": [
+      "run:activate",
+      "root:activate"
+    ],
+    "defaultPrevented": [
+      true,
+      true,
+      true
+    ],
+    "summary": {
+      "frameCount": 1
+    },
+    "browserMetrics": {
+      "layoutDurationMs": 3.449,
+      "recalcStyleDurationMs": 0.195,
+      "scriptDurationMs": 7.3709999999999996,
+      "taskDurationMs": 17.564,
+      "jsHeapUsedBytes": 1747036.0,
+      "jsHeapTotalBytes": 4718592.0,
+      "domDocumentCount": 4,
+      "domNodeCount": 76,
+      "jsEventListenerCount": 20
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 16,
+      "requestedSteps": 16,
+      "warmupFrames": 2,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    },
+    "version": "base"
+  },
+  {
+    "kind": "fleurySemanticListenerProbe",
+    "passiveLabels": 64,
+    "semanticNodes": 68,
+    "fingerprint": 2001900408,
+    "requests": [
+      "run:activate",
+      "root:activate"
+    ],
+    "defaultPrevented": [
+      true,
+      true,
+      true
+    ],
+    "summary": {
+      "frameCount": 1
+    },
+    "browserMetrics": {
+      "layoutDurationMs": 3.738,
+      "recalcStyleDurationMs": 0.251,
+      "scriptDurationMs": 6.904999999999999,
+      "taskDurationMs": 15.547,
+      "jsHeapUsedBytes": 2055160.0,
+      "jsHeapTotalBytes": 4194304.0,
+      "domDocumentCount": 4,
+      "domNodeCount": 172,
+      "jsEventListenerCount": 68
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 64,
+      "requestedSteps": 64,
+      "warmupFrames": 2,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    },
+    "version": "base"
+  },
+  {
+    "kind": "fleurySemanticListenerProbe",
+    "passiveLabels": 128,
+    "semanticNodes": 132,
+    "fingerprint": 1332103016,
+    "requests": [
+      "run:activate",
+      "root:activate"
+    ],
+    "defaultPrevented": [
+      true,
+      true,
+      true
+    ],
+    "summary": {
+      "frameCount": 1
+    },
+    "browserMetrics": {
+      "layoutDurationMs": 3.671,
+      "recalcStyleDurationMs": 0.294,
+      "scriptDurationMs": 9.046,
+      "taskDurationMs": 18.139,
+      "jsHeapUsedBytes": 1713852.0,
+      "jsHeapTotalBytes": 4718592.0,
+      "domDocumentCount": 4,
+      "domNodeCount": 300,
+      "jsEventListenerCount": 4
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 128,
+      "requestedSteps": 128,
+      "warmupFrames": 2,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    },
+    "version": "candidate"
+  },
+  {
+    "kind": "fleurySemanticListenerProbe",
+    "passiveLabels": 16,
+    "semanticNodes": 20,
+    "fingerprint": 1118006514,
+    "requests": [
+      "run:activate",
+      "root:activate"
+    ],
+    "defaultPrevented": [
+      true,
+      true,
+      true
+    ],
+    "summary": {
+      "frameCount": 1
+    },
+    "browserMetrics": {
+      "layoutDurationMs": 3.398,
+      "recalcStyleDurationMs": 0.18000000000000002,
+      "scriptDurationMs": 6.207,
+      "taskDurationMs": 14.781,
+      "jsHeapUsedBytes": 1742460.0,
+      "jsHeapTotalBytes": 3932160.0,
+      "domDocumentCount": 4,
+      "domNodeCount": 76,
+      "jsEventListenerCount": 4
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 16,
+      "requestedSteps": 16,
+      "warmupFrames": 2,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    },
+    "version": "candidate"
+  },
+  {
+    "kind": "fleurySemanticListenerProbe",
+    "passiveLabels": 64,
+    "semanticNodes": 68,
+    "fingerprint": 2001900408,
+    "requests": [
+      "run:activate",
+      "root:activate"
+    ],
+    "defaultPrevented": [
+      true,
+      true,
+      true
+    ],
+    "summary": {
+      "frameCount": 1
+    },
+    "browserMetrics": {
+      "layoutDurationMs": 3.671,
+      "recalcStyleDurationMs": 0.216,
+      "scriptDurationMs": 6.981,
+      "taskDurationMs": 15.58,
+      "jsHeapUsedBytes": 2030132.0,
+      "jsHeapTotalBytes": 4194304.0,
+      "domDocumentCount": 4,
+      "domNodeCount": 172,
+      "jsEventListenerCount": 4
+    },
+    "runEnvironment": {
+      "schemaVersion": 1,
+      "chromeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "chromeBrowser": "Chrome/152.0.7977.82",
+      "chromeUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+      "devtoolsProtocolVersion": "1.3",
+      "v8Version": "15.2.124.21",
+      "webkitVersion": "537.36 (@d04cdb24d67b081f6cf80200ffc5233f44b61109)",
+      "dartVersion": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+      "operatingSystem": "macos",
+      "operatingSystemVersion": "Version 26.2 (Build 25C56)",
+      "headless": true,
+      "requestedFrames": 64,
+      "requestedSteps": 64,
+      "warmupFrames": 2,
+      "frameBudgetMs": 16.67,
+      "semanticsEnabled": true
+    },
+    "version": "candidate"
+  }
+]

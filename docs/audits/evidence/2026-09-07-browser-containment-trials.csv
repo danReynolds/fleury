@@ -1,0 +1,7 @@
+variant,scenario,appP50Ms,browserP50Ms
+baseline-exploratory,single-dirty-cell-160x50,0.3,0.736
+baseline-exploratory,normal-80x24,0.899,1.203
+row-containment,single-dirty-cell-160x50,0.599,1.221
+row-containment,normal-80x24,1,1.499
+semantic-containment,single-dirty-cell-160x50,0.501,1.166
+semantic-containment,normal-80x24,1.098,1.467
