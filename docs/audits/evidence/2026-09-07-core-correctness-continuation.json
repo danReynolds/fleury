@@ -1,0 +1,212 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryCoreCorrectnessContinuation",
+  "baselineRevision": "944f7fb71e9b99ec6644b797ecbb1d4b6ecc09b8",
+  "productionRevision": "3559e00f7d65d4d760ce3b3968c2f8a8e6852e6b",
+  "candidateIdentity": "Exact qualified production, test and generated asset bytes recorded in sourceHashes; documentation commit follows.",
+  "sourceHashes": {
+    "packages/fleury/lib/src/editing/text_paste.dart": {
+      "candidate": "a042a276fc714c8deda19453de1b92a56361cc1ce8b2bcbef32705c7480a284f",
+      "baseline": "65088e35b8232d2566025e07af70c85f3177d51dbdd435a3e858b3990780627f"
+    },
+    "packages/fleury/lib/src/remote/remote_client_asset.dart": {
+      "candidate": "96b85fa3e1be27ceddfeb9536be9f3dca70fe40395b7275cd2a9a0e7904a08f9",
+      "baseline": "d4b112da5c61e1cb22ff4d4692ea27dc8c22dd40658a19b4c979eea847d1a79b"
+    },
+    "packages/fleury/lib/src/remote/remote_driver.dart": {
+      "candidate": "1245638b7dea95aa45cc2ed9925f9cad9c8e6845de5e9952fb054304a26f8a7f",
+      "baseline": "18ad178aa8ba7fa2d2c8035ee87fdf1b02e7a2e18226e82d4e3848aee4d27207"
+    },
+    "packages/fleury/lib/src/terminal/input_parser.dart": {
+      "candidate": "06be5badf7710d98c1089fc480b4c9d746c646a66ff11e210ac9a38bc6daed52",
+      "baseline": "f693995202e65bd1d0046176d141feb6bc39195cc410fa40d2d3cb31a3fabcfe"
+    },
+    "packages/fleury/lib/src/widgets/focus.dart": {
+      "candidate": "88aa2e549e7886fb5b4db87889b2a1f0b17826a8c04296ecc23fe2b7eff167d6",
+      "baseline": "c0cc930db8232b3109f800ad470522407c14460cdd043e44c4ab183e0febaeab"
+    },
+    "packages/fleury/lib/src/widgets/navigator.dart": {
+      "candidate": "9c829efa71fd621bd8f4f601aadd2d8f21c46fc2bd219cdfc2b81619e647472e",
+      "baseline": "968b331225ebd7a6c672ee1c5d91c36b87e0bac56a222ad8f864c2fab87eb157"
+    },
+    "packages/fleury/lib/src/widgets/overlay.dart": {
+      "candidate": "bb9cea697fc53d7771e659aa96aff760166e6de3ef4a4abeaaa6bde10e208009",
+      "baseline": "76257724819bbe39f087c0d94e3d38656a41a078310c402d35afc128348a74f4"
+    },
+    "packages/fleury/test/editing/text_paste_test.dart": {
+      "candidate": "1506f75e8fae4a2e6a92bb4fe1a6fc805f3fb1d46b465d4d4480a6eaf759f92c",
+      "baseline": "505ad99855daf6475519c81406f580604d216de52574ab1364a8748b550fc8eb"
+    },
+    "packages/fleury/test/remote/remote_driver_test.dart": {
+      "candidate": "c45e623b1bdd2843b7381b601ae7d75461ff847c3ea648e70f0ac8b1ed077633",
+      "baseline": "6b81cc5b58787c069c3d23f0dc490dc64eaa4c010c1eb3b83e471b8fad360ab9"
+    },
+    "packages/fleury/test/terminal/input_parser_test.dart": {
+      "candidate": "e69e892b00778ea478504f0e18de403d5f93a6b7fd1723192ba7e8bf22617b26",
+      "baseline": "af4311ae05dd80744b94c2ffb73444c61204c4713992ee579b8bf74f7ddf34bd"
+    },
+    "packages/fleury/test/widgets/focus_manager_rebinding_test.dart": {
+      "candidate": "a39a5c5ec297920365c60f2516d94f0a9bb2f8529be1ed6c8a41a0aa4337f355",
+      "baseline": null
+    },
+    "packages/fleury/test/widgets/navigator_test.dart": {
+      "candidate": "3b5858a76befefe7ba335cd974c94e9913af756f16924971fc0dbb7bd96d7675",
+      "baseline": "3acc1be86cd72960306e703d67cdb5cfb4b0a530e3188e0377036dd15bde1d15"
+    },
+    "packages/fleury/test/widgets/overlay_test.dart": {
+      "candidate": "47918f8d3ab27c4051bf1e854077e186709ccd0912fdd70ebff7e700bccbc141",
+      "baseline": "621f895ae4e4a03b6226914d7076a5fd8a4f07c71b352ceb487c07ebd6336020"
+    }
+  },
+  "firstPassEvidence": "2026-09-07-core-correctness.json",
+  "method": {
+    "independentReview": false,
+    "newRegressionAndControlCases": 15,
+    "newDefectReproductionsFailedOnMain": 14,
+    "combinedNewCases": 31,
+    "combinedDefectReproductions": 27
+  },
+  "findings": [
+    {
+      "id": "C4",
+      "area": "Legacy Alt Unicode input",
+      "baseline": "Alt modifier lost; non-ASCII shortcut emitted as ordinary text.",
+      "newTests": 5,
+      "baselineFailures": 4,
+      "focusedPassed": 120
+    },
+    {
+      "id": "C5",
+      "area": "Focus ownership and provider rebinding",
+      "baseline": "Cross-session focus accepted; retained controls, traps and exclusions left on old manager.",
+      "newTests": 6,
+      "baselineFailures": 6,
+      "focusedPassed": 246
+    },
+    {
+      "id": "C6",
+      "area": "Synchronous paste listener reentrancy",
+      "baseline": "Older invocation clears a newer paste, dropping accepted tail characters and corrupting transaction ownership.",
+      "newTests": 4,
+      "baselineFailures": 4,
+      "focusedPassed": 139
+    }
+  ],
+  "qualification": {
+    "command": "dart tool/fleury_dev.dart check",
+    "totalPassedTests": 5567,
+    "suitePassCounts": [
+      3315,
+      52,
+      1200,
+      7,
+      4,
+      25,
+      43,
+      534,
+      92,
+      151,
+      78,
+      2,
+      64
+    ],
+    "allQualificationCommandsExitCode": 0,
+    "webTests": 534,
+    "existingSkips": 2,
+    "fastGates": [
+      "serve-semantics-gate",
+      "image-bench",
+      "bundle-size",
+      "alloc-gate",
+      "input-alloc-gate",
+      "paint-gate",
+      "selection-gate",
+      "runtime-gate"
+    ],
+    "nativeWireGate": "dart tool/fleury_dev.dart benchmark wire-gate",
+    "liveServeGate": "dart tool/fleury_dev.dart benchmark serve-wire-live",
+    "baselineOrToleranceChanges": false,
+    "dart": "3.12.2 macOS arm64"
+  },
+  "nonPassingAttempt": {
+    "log": "fleury-correctness-continuation-timing-failure.log",
+    "reason": "Unchanged wall-clock grapheme ratio test failed under concurrent suite: 1187 us versus 136 us, threshold 6x. Isolated 9-test suite and unchanged full rerun passed. No source or threshold modification.",
+    "excludedFromFinalQualification": true
+  },
+  "client": {
+    "javascriptBytes": 401255,
+    "javascriptUnchangedFromBaseline": true,
+    "sourceFingerprint": "f364e3c24abce927"
+  },
+  "artifacts": {
+    "2026-09-07-core-correctness-continuation-baseline.log": {
+      "sha256": "f7c0ac47e3092ce64ec541cca1cadd3e8a6182ea0cd214dc302b446584cac5a7",
+      "bytes": 9504,
+      "normalization": "Trailing whitespace stripped; original raw log hashes retained separately."
+    }
+  },
+  "localLogReceipts": {
+    "fleury-correctness-continuation-full-check.log": {
+      "sha256": "5cdd5c3c136ac621adfb6eb1afa31fcc7608b608a9e72e1d2ef43ef3897af8e9",
+      "bytes": 751368
+    },
+    "fleury-correctness-continuation-gates.log": {
+      "sha256": "59731c2d3c8dcaa9125957bc7657750f7800cf3ae0a2314733dfabd30139bcbc",
+      "bytes": 6137
+    },
+    "fleury-correctness-continuation-wire-gate.log": {
+      "sha256": "33e8efdb41617bfae123b8a8a2b2120162a617436d509ca444c0ed294541698e",
+      "bytes": 1021
+    },
+    "fleury-correctness-continuation-serve-wire-live.log": {
+      "sha256": "085482d5a6f6971a5cd7e9cb39a823fbbf2342b59e6312ec6b9b94d9c86de7e9",
+      "bytes": 1381
+    },
+    "fleury-correctness-continuation-client-build.log": {
+      "sha256": "40d2c5c8626ebaba629440e07b94963d144a79dca7c3e62d22ad4a641bca798c",
+      "bytes": 246
+    },
+    "fleury-correctness-continuation-timing-failure.log": {
+      "sha256": "762668c39b224578c98073f2e148e5399325d57395baf30070527bc79a0f6d6c",
+      "bytes": 481404
+    },
+    "fleury-correctness-alt-utf8-baseline.log": {
+      "sha256": "42e87f2bae6000aaf91a7dd54845bcd1492ae400e151709b88767b81f31d498d",
+      "bytes": 3076
+    },
+    "fleury-correctness-alt-utf8.log": {
+      "sha256": "d2690d4630b347c9115407e94846a882ce1c4b77fc8bc831d010961b296d2e5c",
+      "bytes": 11090
+    },
+    "fleury-correctness-focus-rebinding-baseline.log": {
+      "sha256": "e82a1b0d538132c627a0525ff27faddf16e2d8998123f211637d73791890c130",
+      "bytes": 3382
+    },
+    "fleury-correctness-focus-integration.log": {
+      "sha256": "376ba2f588354c6a4504ef8c7a35136f0310db0172a798ca6ef7ac275ecbfdb5",
+      "bytes": 36795
+    },
+    "fleury-correctness-paste-reentrancy-baseline.log": {
+      "sha256": "1d201e34bcfdf8a088b1d820c9f2708132fbcb3d6a083decaf87ffb4cfaa3cb3",
+      "bytes": 2985
+    },
+    "fleury-correctness-paste-followup-baseline.log": {
+      "sha256": "37c5c4f12a317a0691e9a603005f24f1c530f73fc00154983aca4f7aef58dbde",
+      "bytes": 871
+    },
+    "fleury-correctness-paste-reentrancy.log": {
+      "sha256": "87ddceed1985cd6387a09722c69bde6e9a0a1a497bc34b969eb121dafa24d925",
+      "bytes": 16736
+    },
+    "fleury-correctness-grapheme-isolated.log": {
+      "sha256": "dfb394a5cb8e931a226e1a26cbb2d42d02b8faf3e5d790a42576dcc74c8c8355",
+      "bytes": 1134
+    }
+  },
+  "boundaries": [
+    "Local source review is not independent approval.",
+    "No attended terminal/accessibility walkthrough or long-session memory soak.",
+    "Inspected async source replacement and pending-key dispatch are not certified exhaustive.",
+    "Timing axes in wire gates are informational; no performance win is claimed."
+  ]
+}

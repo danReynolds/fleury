@@ -25,6 +25,12 @@
   `Theme.of`, `Focus.of`, `MediaQuery.of`, and friends keep their signatures;
   `Form.of` readers now rebuild when the controller notifies (see the
   fleury_widgets changelog).
+- **Unicode shortcuts.** Legacy Alt input retains its modifier across UTF-8
+  reads instead of becoming ordinary text input.
+- **Focus ownership.** Retained controls, traps, and exclusion scopes follow
+  manager replacement; focus requests reject nodes owned by another session.
+- **Reentrant paste.** Synchronous model listeners can start another paste
+  without truncating accepted content or splitting its undo transaction.
 - **Navigation cancellation.** Removing an entering replacement or stack-clear
   route no longer lets its cancelled transition delete the revealed route.
 - **Overlay ownership.** Invalid insertions and initial entry lists are checked

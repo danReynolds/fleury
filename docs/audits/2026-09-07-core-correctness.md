@@ -1,5 +1,9 @@
 # Shared lifecycle correctness audit
 
+This records the first pass, qualified at `10d1b2a8`. The subsequent
+[TUI and reactive lifecycle continuation](2026-09-07-core-correctness-continuation.md)
+records the additional fixes and combined qualification for the updated PR.
+
 Final baseline: `944f7fb71e9b99ec6644b797ecbb1d4b6ecc09b8`, main after #226.
 The pass started after #225 and was rebased when the pointer/gesture work
 merged. The three affected production files are identical between those two
