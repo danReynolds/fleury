@@ -133,6 +133,32 @@ void main() {
     await tester.settle();
     expect(navigator.depth, 2);
   });
+  testWidgets('Review then Escape before validation preserves deployment', (
+    tester,
+  ) async {
+    tester.viewportSize = const CellSize(84, 30);
+    tester.pumpWidget(const FormsShowcaseApp());
+    await tester.field('Service name').fill('audit-worker');
+    await tester.target(role: SemanticRole.form).submit();
+    await Future<void>.delayed(const Duration(milliseconds: 240));
+    await tester.settle();
+    await tester.button('Review').focus();
+    final navigator =
+        (tester.findOne(byType(Navigator)) as StatefulElement).state
+            as NavigatorState;
+    expect(navigator.depth, 2);
+    tester.sendKey(const KeyEvent(KeyCode.enter));
+    tester.sendKey(const KeyEvent(KeyCode.escape));
+    tester.pump();
+    expect(navigator.depth, 2);
+    await tester.settle();
+    expect(navigator.depth, 3);
+    expect(
+      tester.renderToString(size: tester.viewportSize),
+      contains('Confirm the complete deployment before it starts.'),
+    );
+  });
+
   testWidgets('Submit then Escape before validation stays on review', (
     tester,
   ) async {

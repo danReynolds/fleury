@@ -338,47 +338,44 @@ class _ReviewScreenState extends State<_ReviewScreen> {
     final draft = widget.draft;
     return ListenableBuilder(
       listenable: _form,
-      builder: (context, child) => PopScope(
-        canPop: !_form.isBusy,
-        child: _ShowcaseScreen(
-          step: 3,
-          title: 'Review',
-          description: 'Confirm the complete deployment before it starts.',
-          child: Form(
-            controller: _form,
-            semanticLabel: 'Review service',
-            onSubmit: _deploy,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text('Service      ${draft.name.text.trim()}'),
-                Text('Access       ${draft.private ? 'Private' : 'Public'}'),
-                Text('Target       ${draft.environment} / ${draft.region}'),
-                Text('Replicas     ${draft.replicas.toInt()}'),
-                Text('Telemetry    ${draft.telemetry.join(', ')}'),
-                Text('Auto deploy  ${draft.autoDeploy ? 'On' : 'Off'}'),
-                const SizedBox(height: 1),
-                FormField(
-                  validator: () => draft.confirmed
+      builder: (context, child) => _ShowcaseScreen(
+        step: 3,
+        title: 'Review',
+        description: 'Confirm the complete deployment before it starts.',
+        child: Form(
+          controller: _form,
+          semanticLabel: 'Review service',
+          onSubmit: _deploy,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text('Service      ${draft.name.text.trim()}'),
+              Text('Access       ${draft.private ? 'Private' : 'Public'}'),
+              Text('Target       ${draft.environment} / ${draft.region}'),
+              Text('Replicas     ${draft.replicas.toInt()}'),
+              Text('Telemetry    ${draft.telemetry.join(', ')}'),
+              Text('Auto deploy  ${draft.autoDeploy ? 'On' : 'Off'}'),
+              const SizedBox(height: 1),
+              FormField(
+                validator: () => draft.confirmed
+                    ? null
+                    : 'Confirm the production deployment.',
+                child: Checkbox(
+                  value: draft.confirmed,
+                  autofocus: true,
+                  label: 'I reviewed these settings',
+                  onChanged: _form.isSubmitting
                       ? null
-                      : 'Confirm the production deployment.',
-                  child: Checkbox(
-                    value: draft.confirmed,
-                    autofocus: true,
-                    label: 'I reviewed these settings',
-                    onChanged: _form.isSubmitting
-                        ? null
-                        : (value) => setState(() => draft.confirmed = value),
-                  ),
+                      : (value) => setState(() => draft.confirmed = value),
                 ),
-                const SizedBox(height: 1),
-                _FormActions(
-                  controller: _form,
-                  nextLabel: 'Deploy service',
-                  onBack: context.pop,
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 1),
+              _FormActions(
+                controller: _form,
+                nextLabel: 'Deploy service',
+                onBack: context.pop,
+              ),
+            ],
           ),
         ),
       ),
@@ -497,15 +494,18 @@ class _FormActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: controller,
-    builder: (context, child) => Row(
-      children: <Widget>[
-        Button(label: 'Back', onPressed: controller.isBusy ? null : onBack),
-        const SizedBox(width: 2),
-        Button(
-          label: controller.isBusy ? 'Working…' : nextLabel,
-          onPressed: controller.isBusy ? null : controller.submit,
-        ),
-      ],
+    builder: (context, child) => PopScope(
+      canPop: !controller.isBusy,
+      child: Row(
+        children: <Widget>[
+          Button(label: 'Back', onPressed: controller.isBusy ? null : onBack),
+          const SizedBox(width: 2),
+          Button(
+            label: controller.isBusy ? 'Working…' : nextLabel,
+            onPressed: controller.isBusy ? null : controller.submit,
+          ),
+        ],
+      ),
     ),
   );
 }
