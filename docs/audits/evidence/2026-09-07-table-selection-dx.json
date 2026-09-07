@@ -1,0 +1,48 @@
+{
+  "baseline": "7ee0acc69c2b68bb291f3461a16ce791e7ede4e7",
+  "main": "944f7fb71e9b99ec6644b797ecbb1d4b6ecc09b8",
+  "scope": "Declarative table row selection DX; affected packages and browser gallery. Earlier full repository and performance receipts are not relabeled.",
+  "dart": "3.12.2",
+  "source_files": {
+    "packages/fleury_widgets/lib/src/data_table.dart": "8957cff86c3be7e6ba785eaabc8758aa8c731071cd3f083fea5cbae7375a9876",
+    "packages/fleury_widgets/test/data_table_controller_test.dart": "3d15a84aed64b59b7af33a177c66d758030d72662bc268ee2a3443daa707a125",
+    "packages/fleury_widgets/test/data_table_selection_test.dart": "c6e2cd796993f19a5c332fc1befc903f578ad220d26f106e08c62967b343881f",
+    "packages/samples/lib/src/finance.dart": "83730158f86eca976df7ac9c190299f319aff9b55ec33e790efcabedd4b2bfc8",
+    "packages/samples/test/finance_test.dart": "5fc32092c8bd92ff04c672e33939ec0adb11fa30e723a29a97479ae5f0b43460"
+  },
+  "tests": {
+    "widgets": 1219,
+    "samples": 94,
+    "documentation": 78,
+    "browser": 41,
+    "existing_widget_skips": 1
+  },
+  "analysis": "Widget and sample analyses exit 0; four existing widget informational lints in untouched files.",
+  "review": "Local source and interaction review; layout-time accepted range and rejected-request activation/copy covered. Independent approval is separate.",
+  "local_logs": {
+    "widgets-analysis": {
+      "path": "/tmp/fleury-table-dx-widgets-analysis.log",
+      "sha256": "6617e02a57df5b2b7ddb4babc31f9e35c8c5d56ffbcd84ed0ff1e68caa831f90"
+    },
+    "samples-analysis": {
+      "path": "/tmp/fleury-table-dx-samples-analysis.log",
+      "sha256": "fdaf4d81a4e469cc6ed0424008b57196a4f0e25d5349ba989a6c653142e08484"
+    },
+    "widgets": {
+      "path": "/tmp/fleury-table-dx-widgets.log",
+      "sha256": "cd9acb9fe9771bcc7a6f64915568a80fd25bf99a0816e2b051d47adbd0600d1b"
+    },
+    "samples": {
+      "path": "/tmp/fleury-table-dx-samples.log",
+      "sha256": "0ca26076037ddd60df78ae56255da93242fe93fc25dc456a46996ef9b75d1143"
+    },
+    "docs": {
+      "path": "/tmp/fleury-table-dx-docs.log",
+      "sha256": "bbc5f00daf9dd0fbe97068b668eb0eef39d6322ab666a194eccd532ec1f55709"
+    },
+    "browser": {
+      "path": "/tmp/fleury-table-dx-browser.log",
+      "sha256": "eebd155f9463f2aab675b20e067e2976346b80a01045eb5ebe6a12193559a869"
+    }
+  }
+}

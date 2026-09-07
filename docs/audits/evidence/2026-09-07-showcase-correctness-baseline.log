@@ -1,0 +1,141 @@
+table baseline, original source e40d9b95, expected failure
+
+00:00 +0: loading test/showcase_table_baseline_probe_test.dart
+00:00 +0: table observers never receive coordinates invalid for the new data
+selection notifications: [0,2 (1x3), 0,0 (1x1)]
+00:00 +0 -1: table observers never receive coordinates invalid for the new data [E]
+  Expected: empty
+    Actual: ['0,2']
+  A detail listener must not read a removed cell during a size update.
+
+  package:matcher                                    expect
+  test/showcase_table_baseline_probe_test.dart 32:5  main.<fn>
+  package:fleury_test/src/fleury_tester.dart 161:19  testWidgets.<fn>
+
+00:00 +0 -1: Some tests failed.
+
+Failing tests:
+  test/showcase_table_baseline_probe_test.dart: table observers never receive coordinates invalid for the new data
+
+Consider enabling the flag chain-stack-traces to receive more detailed exceptions.
+For example, 'dart test --chain-stack-traces'.
+
+finance baseline, original source e40d9b95, expected failure
+
+00:00 +0: loading test/finance_test.dart
+00:00 +0: finance showcase expanding a filter preserves selection before the next frame
+00:00 +0 -1: finance showcase expanding a filter preserves selection before the next frame [E]
+  Expected: <73>
+    Actual: <7>
+
+  package:matcher                                    expect
+  test/finance_test.dart 294:9                       main.<fn>.<fn>
+  package:fleury_test/src/fleury_tester.dart 161:19  testWidgets.<fn>
+
+00:00 +0 -1: finance showcase batched filters including empty results leave no stale selection work
+00:00 +0 -2: finance showcase batched filters including empty results leave no stale selection work [E]
+  Expected: <7>
+    Actual: <73>
+
+  package:matcher                                    expect
+  test/finance_test.dart 315:9                       main.<fn>.<fn>
+  package:fleury_test/src/fleury_tester.dart 161:19  testWidgets.<fn>
+
+00:00 +0 -2: Some tests failed.
+
+Failing tests:
+  test/finance_test.dart: finance showcase batched filters including empty results leave no stale selection work
+  test/finance_test.dart: finance showcase expanding a filter preserves selection before the next frame
+
+Consider enabling the flag chain-stack-traces to receive more detailed exceptions.
+For example, 'dart test --chain-stack-traces'.
+
+Existing gallery assertion failures at original source e40d9b95
+00:00 +0: loading test/examples_browser_test.dart
+Compiled 21,046,774 input bytes (15,994,779 characters source) to 6,368,455 characters JavaScript in 13.3 seconds
+
+00:00 +0: form.basic mounts its form and field semantics
+00:00 +0 -1: form.basic mounts its form and field semantics [E]
+  Expected: not null
+    Actual: <null>
+
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/js_helper.dart 1424:15   Object.throwExpression
+  package:matcher                                                           Object.expect
+  test/examples_browser_test.dart 328:5                                     <fn>
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/async_patch.dart 339:19  _wrapJsFunctionForAsync.closure.$protected
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/async_patch.dart 365:23  _wrapJsFunctionForAsync.<fn>
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/async_patch.dart 313:7   _awaitOnObject.<fn>
+  org-dartlang-sdk:///lib/async/zone_root.dart 48:46                        StaticClosure._rootRunUnary
+  org-dartlang-sdk:///lib/async/zone.dart 732:34                            _CustomZone.runUnary
+
+00:00 +0 -1: formerly source-only web widgets mount as live examples
+00:00 +0 -2: formerly source-only web widgets mount as live examples [E]
+  Expected: contains all of [
+              'canvas.basic',
+              'checkbox.basic',
+              'formwizard.basic',
+              'keyhintbar.basic',
+              'markdowntext.basic',
+              'multiselect.basic',
+              'radio.basic',
+              'radiogroup.basic',
+              'switch.basic',
+              'toggle.basic',
+              'tokenmeter.basic'
+            ]
+    Actual: LinkedHashMapKeysIterable<String>:[
+              'home.monitor',
+              'tutorial.filter',
+              'gauge.basic',
+              'sparkline.basic',
+              'linechart.basic',
+              'linechart.lab.braille1',
+              'linechart.lab.braille2',
+              'linechart.lab.octant',
+              'areachart.basic',
+              'barchart.basic',
+              'histogram.basic',
+              'heatmap.basic',
+              'canvas.basic',
+              'panel.basic',
+              'progressbar.basic',
+              'digits.basic',
+              'datatable.basic',
+              'tree.basic',
+              'markdown.basic',
+              'markdowntext.basic',
+              'codeview.basic',
+              'jsonview.basic',
+              'messagelist.basic',
+              'contextpanel.basic',
+              ...
+            ]
+     Which: has no match for 'formwizard.basic' at index 2
+
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/js_helper.dart 1424:15   Object.throwExpression
+  package:matcher                                                           Object.expect
+  test/examples_browser_test.dart 357:5                                     <fn>
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/async_patch.dart 339:19  _wrapJsFunctionForAsync.closure.$protected
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/async_patch.dart 365:23  _wrapJsFunctionForAsync.<fn>
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/async_patch.dart 265:3   Object._asyncStartSync
+  test/examples_browser_test.dart 357:5                                     main.<fn>
+
+00:00 +0 -2: forms.project exposes validation and a successful typed submit
+00:00 +0 -3: forms.project exposes validation and a successful typed submit [E]
+  Expected: contains 'status: Fix 2 field(s)'
+    Actual: '                                                                  Create project                                                   Name                                                             Fleury app                                                       Enter a project name.                                            Slug                                                             fleury-app                                                       Use lowercase letters, numbers, and hyphens.                     [x] Private project                                              [ Create ]                                                                                                                                                                                                                                                          status: Fill in the project details                                                                                              Create projectNameSlugPrivate project[x] Private projectCreate[ Create ]status: Fill in the project details'
+     Which: does not contain 'status: Fix 2 field(s)'
+
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/js_helper.dart 1424:15   Object.throwExpression
+  package:matcher                                                           Object.expect
+  test/examples_browser_test.dart 1251:7                                    <fn>
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/async_patch.dart 339:19  _wrapJsFunctionForAsync.closure.$protected
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/async_patch.dart 365:23  _wrapJsFunctionForAsync.<fn>
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/async_patch.dart 313:7   _awaitOnObject.<fn>
+  org-dartlang-sdk:///lib/async/zone_root.dart 48:46                        StaticClosure._rootRunUnary
+  org-dartlang-sdk:///lib/async/zone.dart 732:34                            _CustomZone.runUnary
+
+00:00 +0 -3: Some tests failed.
+
+Consider enabling the flag chain-stack-traces to receive more detailed exceptions.
+For example, 'dart test --chain-stack-traces'.

@@ -245,6 +245,7 @@ final class TextPasteDriver {
       discard();
       return;
     }
+    final generation = _generation;
     final pending = StringBuffer();
     final session = _session;
     if (session != null) {
@@ -256,6 +257,7 @@ final class TextPasteDriver {
     }
     final text = pending.toString();
     if (text.isNotEmpty) _applyBulk(text);
+    if (generation != _generation) return;
     _complete();
   }
 
@@ -267,7 +269,13 @@ final class TextPasteDriver {
         !_finalReceived &&
         event.pasteId == _activePasteId;
     if (!continuesActivePaste) {
-      finish();
+      // Finishing edits the model synchronously. A listener may start a new
+      // paste during that edit; finish its accepted tail too before this
+      // caller takes ownership, instead of combining two session records.
+      do {
+        finish();
+      } while (_active);
+      if (!_isAttached()) return;
       _active = true;
       _activePasteId = event.pasteId;
     }
@@ -311,6 +319,7 @@ final class TextPasteDriver {
       final session = _session!;
       final remaining = session.takeRemaining();
       if (remaining != null) _applyBulk(remaining);
+      if (generation != _generation) return;
       _session = null;
       if (_currentSegmentIsFinal) _complete();
     }
@@ -332,10 +341,14 @@ final class TextPasteDriver {
   }
 
   void _applyBulk(String text) {
-    _applyEdit(text, coalesce: _transactionStarted);
+    final coalesce = _transactionStarted;
+    // Model notifications are synchronous. Publish this edit's transaction
+    // state first so a listener finishing/replacing the paste sees the edit
+    // it is responding to, and never write over a replacement after it runs.
     _transactionStarted = true;
     _insertedLength += text.length;
     _updateProgress();
+    _applyEdit(text, coalesce: coalesce);
   }
 
   bool _applyNextStep(int generation) {
@@ -356,9 +369,10 @@ final class TextPasteDriver {
         continue;
       }
 
-      _applyEdit(batch, coalesce: _transactionStarted);
-      _transactionStarted = true;
-      _insertedLength += batch.length;
+      _applyBulk(batch);
+      // A controller listener can finish, discard, or start a new paste.
+      // The old iterator and final-segment flag no longer own this driver.
+      if (generation != _generation) return true;
       if (session.isComplete) {
         _session = null;
         if (_currentSegmentIsFinal) _complete();

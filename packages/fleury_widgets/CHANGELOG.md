@@ -6,6 +6,10 @@
   widget that reads it rebuilds when the controller notifies (submission
   state, errors) without a `ListenableBuilder`.
 
+- `DataTable.selectedIndex` and `onSelectionChanged` support app-owned row
+  selection, so filtering and sorting can update data and selection together
+  without controller synchronization. Table dimensions stay widget-owned and
+  update atomically before controller listeners are notified.
 - MultiSelect options expose a boolean semantic `setValue` action alongside
   toggling, so tests and other semantic consumers can request a desired checked
   state without changing the option key or dispatching duplicate callbacks.

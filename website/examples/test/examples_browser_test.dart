@@ -325,16 +325,18 @@ void main() {
     final fixture = await _mountExample('form.basic');
 
     final semantics = fixture.host.querySelector('.fleury-semantics')!;
+    final form = semantics.querySelector('[role="form"]');
+    expect(form, isNotNull);
     expect(
-      semantics.querySelector('[role="form"][aria-label="Project settings"]'),
+      form!.querySelector('[role="textbox"][aria-label="Name"]'),
       isNotNull,
     );
     expect(
-      semantics.querySelector('[role="region"][aria-label="Name"]'),
+      form.querySelector('[role="textbox"][aria-label="Slug"]'),
       isNotNull,
     );
     expect(
-      semantics.querySelector('[role="region"][aria-label="Private project"]'),
+      form.querySelector('[role="checkbox"][aria-label="Private project"]'),
       isNotNull,
     );
   });
@@ -343,7 +345,8 @@ void main() {
     const ids = <String>[
       'canvas.basic',
       'checkbox.basic',
-      'formwizard.basic',
+      'formfield.basic',
+      'formcontroller.basic',
       'keyhintbar.basic',
       'markdowntext.basic',
       'multiselect.basic',
@@ -1248,15 +1251,26 @@ void main() {
       expect(fixture.host.textContent, contains('Fill in the project details'));
       (buttonNamed('Create') as web.HTMLElement).click();
       await settle();
-      expect(fixture.host.textContent, contains('status: Fix 2 field(s)'));
+      expect(fixture.host.textContent, isNot(contains('status: Created')));
       expect(
         fixture.host.querySelector('.fleury-screen')?.textContent,
-        allOf(contains('Name is required'), contains('Slug is required')),
+        allOf(
+          contains('Enter a project name.'),
+          contains('Use lowercase letters, numbers, and hyphens.'),
+        ),
         reason: 'field errors must be painted beside the controls',
       );
 
       final textboxes = fixture.host.querySelectorAll(
         '.fleury-semantics [role="textbox"]',
+      );
+      expect(
+        (textboxes.item(0)! as web.Element).getAttribute('aria-invalid'),
+        'true',
+      );
+      expect(
+        (textboxes.item(1)! as web.Element).getAttribute('aria-invalid'),
+        'true',
       );
       (textboxes.item(0)! as web.HTMLElement).click();
       await settle();
@@ -1267,17 +1281,19 @@ void main() {
       final checkbox = fixture.host.querySelector(
         '.fleury-semantics [role="checkbox"]',
       )!;
+      expect(checkbox.getAttribute('aria-checked'), 'true');
       (checkbox as web.HTMLElement).click();
       await settle();
       (buttonNamed('Create') as web.HTMLElement).click();
       await settle();
 
       expect(fixture.host.textContent, contains('status: Created Fleury'));
+      expect(fixture.host.textContent, contains('(fleury-app)'));
       expect(
         fixture.host
             .querySelector('.fleury-semantics [role="checkbox"]')
             ?.getAttribute('aria-checked'),
-        'true',
+        'false',
       );
     },
   );

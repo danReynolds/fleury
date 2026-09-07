@@ -146,6 +146,8 @@ final class RemoteTerminalDriver
   bool? get supervisorDebugWire => _supervisorDebugWire;
   int _protocolVersion = 1;
   Completer<void>? _handshake;
+  ({Object error, StackTrace stack})? _handshakeFailure;
+  Future<void>? _restoreFuture;
 
   @override
   bool get wantsPresentationPlans => _protocolVersion >= 2;
@@ -187,12 +189,18 @@ final class RemoteTerminalDriver
         'RemoteTerminalDriver.enter called on an active driver.',
       );
     }
-    if (_events.isClosed) {
+    if (_restoreFuture != null || _events.isClosed) {
       // restore() closed the event stream and the transport; there is no
       // second session on this driver. Fail loudly rather than hang on a
       // handshake nothing can deliver.
       throw StateError(
         'RemoteTerminalDriver cannot be re-entered after restore(): '
+        'create a new driver for a new session.',
+      );
+    }
+    if (_handshake != null) {
+      throw StateError(
+        'RemoteTerminalDriver.enter has already started: '
         'create a new driver for a new session.',
       );
     }
@@ -260,6 +268,15 @@ final class RemoteTerminalDriver
         }
       }
     }
+    // INIT completion resumes enter in a later microtask. Teardown may have
+    // started in between; never reactivate a session whose resources closed.
+    final failure = _handshakeFailure;
+    if (failure != null) {
+      Error.throwWithStackTrace(failure.error, failure.stack);
+    }
+    if (_restoreFuture != null) {
+      throw StateError('RemoteTerminalDriver was restored during enter().');
+    }
     _active = true;
     final sink = surfaceSink;
     return sink == null
@@ -292,9 +309,19 @@ final class RemoteTerminalDriver
   static Duration inputFlushDelay = const Duration(milliseconds: 30);
 
   @override
-  Future<void> restore() async {
+  Future<void> restore() => _restoreFuture ??= _restore();
+
+  Future<void> _restore() async {
     final wasActive = _active;
     _active = false;
+    final handshake = _handshake;
+    if (handshake != null && !handshake.isCompleted) {
+      // Cancelling the subscription below suppresses onDone. Resolve the
+      // waiter here, including supervised sessions with no handshake timeout.
+      handshake.completeError(
+        StateError('RemoteTerminalDriver was restored before receiving INIT.'),
+      );
+    }
     _parserFlushTimer?.cancel();
     _parserFlushTimer = null;
     if (wasActive) {
@@ -522,6 +549,11 @@ final class RemoteTerminalDriver
   }
 
   void _onFrame(RemoteFrame frame) {
+    if (_restoreFuture != null ||
+        _handshakeFailure != null ||
+        _events.isClosed) {
+      return;
+    }
     switch (frame) {
       case InitFrame f:
         if (f.provisional) {
@@ -686,6 +718,9 @@ final class RemoteTerminalDriver
 
   void _onTransportError(Object error, StackTrace stackTrace) {
     if (!_active) {
+      // INIT may already have completed the future while enter's continuation
+      // is still queued. Keep startup failure authoritative in that gap too.
+      _handshakeFailure ??= (error: error, stack: stackTrace);
       if (!(_handshake?.isCompleted ?? true)) {
         _handshake?.completeError(error, stackTrace);
       }
@@ -698,13 +733,10 @@ final class RemoteTerminalDriver
     _parserFlushTimer?.cancel();
     _parserFlushTimer = null;
     if (!_active) {
-      // Handshake never landed — fail the enter() future so the caller
-      // can fall back or report cleanly.
-      if (!(_handshake?.isCompleted ?? true)) {
-        _handshake?.completeError(
-          StateError('Remote peer disconnected before sending INIT.'),
-        );
-      }
+      _onTransportError(
+        StateError('Remote peer disconnected before startup completed.'),
+        StackTrace.current,
+      );
       return;
     }
     if (!wantsPresentationPlans) _parser.finish(_sink);

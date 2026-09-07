@@ -1,6 +1,7 @@
 import 'package:fleury/fleury.dart';
 import 'package:fleury_samples/src/finance.dart';
 import 'package:fleury_test/fleury_test.dart';
+import 'package:fleury_widgets/fleury_widgets.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -256,6 +257,9 @@ void main() {
           .target(role: SemanticRole.tableRow, label: 'tx-jul-shoppers')
           .select();
       tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      // The responsive LayoutBuilder accepts the app-owned selection during
+      // layout; complete that frame before the next navigation request.
+      tester.pump();
       tester.sendKey(const KeyEvent(KeyCode.arrowDown));
       expect(tester.renderToString(size: wide), contains('ID 2026-07-spotify'));
 
@@ -268,6 +272,63 @@ void main() {
       expect(output, contains('ID 2026-07-netflix'));
       expect(output, isNot(contains('ID 2026-01-netflix')));
     });
+
+    testWidgets('expanding a filter preserves selection in one rebuild', (
+      tester,
+    ) async {
+      tester.viewportSize = wide;
+      tester.pumpWidget(const FinanceApp());
+      final search = tester.findOne(byType(TextInput)).widget as TextInput;
+      search.onChanged!('Netflix');
+      tester.pump();
+      await tester
+          .target(role: SemanticRole.tableRow, label: '2026-01-netflix')
+          .select();
+      expect(tester.renderToString(size: wide), contains('ID 2026-01-netflix'));
+
+      search.onChanged!('');
+      final rows = FinanceLedger.sample().queryTransactions();
+      final selected = rows.indexWhere((row) => row.id == '2026-01-netflix');
+      expect(selected, greaterThan(6));
+      tester.pump();
+
+      final table = tester.findOne(byType(DataTable)).widget as DataTable;
+      expect(table.rowCount, rows.length);
+      expect(table.selectedIndex, selected);
+      expect(
+        tester
+            .semantics()
+            .single(role: SemanticRole.table)
+            .state['selectedKey'],
+        '2026-01-netflix',
+      );
+      expect(tester.renderToString(size: wide), contains('ID 2026-01-netflix'));
+    });
+
+    testWidgets(
+      'batched filters including empty results leave no stale selection work',
+      (tester) async {
+        tester.viewportSize = wide;
+        tester.pumpWidget(const FinanceApp());
+        final search = tester.findOne(byType(TextInput)).widget as TextInput;
+        search.onChanged!('Netflix');
+        search.onChanged!('no matching merchant');
+        search.onChanged!('');
+        final rows = FinanceLedger.sample().queryTransactions();
+        tester.pump();
+        var table = tester.findOne(byType(DataTable)).widget as DataTable;
+        expect(table.rowCount, rows.length);
+        expect(table.selectedIndex, 0);
+        await tester
+            .target(role: SemanticRole.tableRow, label: rows[1].id)
+            .select();
+        tester.pump();
+
+        table = tester.findOne(byType(DataTable)).widget as DataTable;
+        expect(table.selectedIndex, 1);
+        expect(tester.renderToString(size: wide), contains('ID ${rows[1].id}'));
+      },
+    );
 
     testWidgets('stress mode mounts 2,500 deterministic rows on demand', (
       tester,
