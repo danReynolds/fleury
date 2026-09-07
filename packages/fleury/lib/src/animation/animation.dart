@@ -218,7 +218,7 @@ class Animation<T> extends ChangeNotifier implements ElementDependency {
   /// [SingleTickerProviderStateMixin] ticker.
   ///
   /// Called from the [value] getter on every subscribing build.
-  /// `TickerMode.of` establishes an inherited dependency on the
+  /// `TickerMode.of` establishes a scope dependency on the
   /// reading element, so a TickerMode flip rebuilds that element and
   /// re-resolves the flag here. Resolution is per-subscribing-build: an
   /// animation displayed in a single subtree (the common case) mutes with

@@ -14,7 +14,7 @@ independently in a notifier, or be shared with a subtree through `BuildContext`.
 |---|---|
 | Local state owned by a widget | `StatefulWidget` and `setState` |
 | Shared state with an independent owner | [Notifiers](#notifiers) |
-| Contextual state scoped to a widget subtree | [Inherited widgets](#sharing-state-through-the-tree) |
+| Contextual state scoped to a widget subtree | [Scope](#sharing-state-through-the-tree) |
 
 ## Local state
 
@@ -259,131 +259,36 @@ mutating a list or map in place does not replace it.
 
 ## Sharing state through the tree
 
-Inherited widgets solve tree-scoped sharing. They make a value available to a
-specific subtree through `BuildContext`, so intermediate widgets do not need to
-accept and forward it. A notifier owns and publishes changing state; an
-inherited widget controls where a value is available. `InheritedNotifier`
-combines both roles.
+A `Scope` makes a value available to one subtree through `BuildContext`, so
+the widgets in between do not accept and forward it. A notifier owns and
+publishes changing state; a scope controls where a value is available. The
+type argument is the key: a descendant reads the nearest `Scope<T>` above it
+with `Scope.of<T>(context)`.
 
 ```text
-CounterScreen (owns count = 3)
-└── CounterScope(count: 3)       ← provides context to this subtree
+CounterScreen (owns counter)
+└── Scope<CounterModel>(value: counter)   ← available to this subtree
     ├── Header
-    │   └── CounterBadge         ← CounterScope.of(context) returns 3
+    │   └── CounterBadge     ← Scope.of<CounterModel>(context)
     └── Body
-        └── NestedCount          ← CounterScope.of(context) returns 3
+        └── CounterPanel     ← Scope.of<CounterModel>(context)
 ```
 
-`Header` and `Body` do not receive or forward `count`. Any descendant can use
-its own `BuildContext` to find the nearest `CounterScope` above it.
+`Header` and `Body` do not receive or forward the model. Any descendant can
+use its own `BuildContext` to find the nearest `Scope<CounterModel>` above it.
 
-### InheritedWidget
+### Sharing a model
 
-This counter still belongs to a stateful widget. `CounterScope` carries its
-current value to any descendant that calls `CounterScope.of(context)`:
+The screen still owns the model; the scope shares it. Because `CounterModel`
+is a `ChangeNotifier`, every widget that read it rebuilds when it notifies —
+no `ListenableBuilder` is needed below the scope:
 
 <CodeDemoSplit
-  files={['counter_scope.dart', 'counter_screen.dart']}
-  initialFile="counter_scope.dart"
+  files={['counter_screen.dart', 'counter_panel.dart']}
+  initialFile="counter_screen.dart"
   layout="demo-wide"
 >
 <Fragment slot="code-0">
-```dart
-class CounterScope extends InheritedWidget {
-  const CounterScope({
-    required this.count,
-    required super.child,
-  });
-
-  final int count;
-
-  static int of(BuildContext context) => context
-      .dependOnInheritedWidgetOfExactType<CounterScope>()!
-      .count;
-
-  @override
-  bool updateShouldNotify(CounterScope oldWidget) =>
-      count != oldWidget.count;
-}
-```
-</Fragment>
-<Fragment slot="code-1">
-```dart
-class _CounterScreenState extends State<CounterScreen> {
-  int count = 0;
-
-  @override
-  Widget build(BuildContext context) => CounterScope(
-    count: count,
-    child: Column(
-      children: [
-        const NestedCount(),
-        Button(
-          label: 'Increment',
-          onPressed: () => setState(() => count++),
-        ),
-      ],
-    ),
-  );
-}
-
-class NestedCount extends StatelessWidget {
-  const NestedCount();
-
-  @override
-  Widget build(BuildContext context) =>
-      Text('Count: ${CounterScope.of(context)}');
-}
-```
-</Fragment>
-<FleuryExample
-  slot="demo"
-  id="state.inherited-widget"
-  cols={38}
-  rows={9}
-  interactive
-/>
-</CodeDemoSplit>
-
-Calling `setState` replaces the scope with the new count.
-`updateShouldNotify` decides whether widgets that called `of` need to rebuild.
-
-### InheritedNotifier
-
-When you are already working with a notifier, as in the previous examples,
-`InheritedNotifier` is a convenience layer on top of `InheritedWidget`. It
-takes a `Listenable` and rebuilds dependent descendants whenever that object
-notifies:
-
-<CodeDemoSplit
-  files={['counter_model.dart', 'counter_screen.dart']}
-  initialFile="counter_model.dart"
-  layout="demo-wide"
->
-<Fragment slot="code-0">
-```dart
-class CounterModel extends ChangeNotifier {
-  int count = 0;
-
-  void increment() {
-    count++;
-    notifyListeners();
-  }
-}
-
-class CounterScope extends InheritedNotifier<CounterModel> {
-  const CounterScope({
-    required CounterModel counter,
-    required super.child,
-  }) : super(notifier: counter);
-
-  static CounterModel of(BuildContext context) => context
-      .dependOnInheritedWidgetOfExactType<CounterScope>()!
-      .notifier;
-}
-```
-</Fragment>
-<Fragment slot="code-1">
 ```dart
 class _CounterScreenState extends State<CounterScreen> {
   final counter = CounterModel();
@@ -395,18 +300,19 @@ class _CounterScreenState extends State<CounterScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => CounterScope(
-    counter: counter,
-    child: const CounterPanel(),
-  );
+  Widget build(BuildContext context) =>
+      Scope(value: counter, child: const CounterPanel());
 }
-
+```
+</Fragment>
+<Fragment slot="code-1">
+```dart
 class CounterPanel extends StatelessWidget {
   const CounterPanel();
 
   @override
   Widget build(BuildContext context) {
-    final counter = CounterScope.of(context);
+    final counter = Scope.of<CounterModel>(context);
     return Column(
       children: [
         Text('Count: ${counter.count}'),
@@ -422,16 +328,67 @@ class CounterPanel extends StatelessWidget {
 </Fragment>
 <FleuryExample
   slot="demo"
-  id="state.inherited-notifier"
-  cols={44}
-  rows={11}
+  id="state.scope"
+  cols={38}
+  rows={9}
   interactive
 />
 </CodeDemoSplit>
 
-The owner still creates and disposes the model. The difference is who drives
-updates: a plain `InheritedWidget` is replaced by its parent, while an
-`InheritedNotifier` also reacts directly to its notifier.
+`Scope.of` works in `build`, in `initState`, and in event handlers. Reading a
+scope subscribes the reader. A value that is not a `Listenable` — a settings
+object, say — rebuilds its readers when the scope is rebuilt with a value
+that is not equal to the previous one.
+
+### Letting the scope own the model
+
+When nothing outside the subtree needs the model, skip the `StatefulWidget`
+and let the scope create and dispose it:
+
+<CodeDemoSplit layout="demo-wide">
+<Fragment slot="code">
+```dart
+class CounterScreen extends StatelessWidget {
+  const CounterScreen();
+
+  @override
+  Widget build(BuildContext context) => Scope<CounterModel>.create(
+    create: (context) => CounterModel(),
+    child: const CounterPanel(),
+  );
+}
+```
+</Fragment>
+<FleuryExample
+  slot="demo"
+  id="state.scope-create"
+  cols={38}
+  rows={9}
+  interactive
+/>
+</CodeDemoSplit>
+
+`create` runs once, when the scope mounts, and may read scopes above it. On
+unmount a `ChangeNotifier` is disposed automatically; pass `dispose:` for
+anything else. Rebuilding the widget does not create a new model.
+
+### Scopes and rebuilds
+
+Notification is coarse: every widget that read a scope rebuilds when its
+value notifies. That keeps the model simple — there is no field-level
+tracking to reason about — and it decides how to split state:
+
+- **One scope per rate of change.** A chat transcript that grows on every
+  token and the user's settings belong in two scopes, not one model.
+- **Narrow a hot rebuild with `ListenableBuilder`.** Below a scope, wrap only
+  the part that depends on a fast-changing notifier.
+- **Nearest wins.** An inner `Scope<T>` shadows an outer one. That is also
+  how a test overrides a value: wrap the widget under test in its own scope.
+- **Keep a value needed in `dispose` in a field.** By then the element has
+  left the tree, so `Scope.of` throws.
+
+The built-in `.of` helpers — `Theme.of`, `MediaQuery.of`, `Focus.of`,
+`FleuryApp.of` — are scopes read the same way.
 
 ## Key APIs
 
@@ -440,8 +397,8 @@ updates: a plain `InheritedWidget` is replaced by its parent, while an
 | [`StatefulWidget`](#local-state) | Own local UI state |
 | [`ChangeNotifier`](#changenotifier) | Publish related observable state |
 | [`ValueNotifier<T>`](#valuenotifier) | Publish one observable value |
-| [`InheritedWidget`](#inheritedwidget) | Share data with descendants |
-| [`InheritedNotifier<T>`](#inheritednotifier) | Share an existing `Listenable` with descendants |
+| [`Scope<T>`](#sharing-state-through-the-tree) | Share a value with a subtree; readers rebuild when it notifies or is replaced |
+| [`Scope.create`](#letting-the-scope-own-the-model) | Let the scope create, share, and dispose the value |
 
 ## Next steps
 

@@ -32,20 +32,13 @@ class _Source implements ElementDependency {
   }
 }
 
-class _Scope extends InheritedWidget {
-  const _Scope({required this.source, required super.child});
-  final _Source source;
-  @override
-  bool updateShouldNotify(_Scope oldWidget) => source != oldWidget.source;
-}
-
 class _Reader extends StatelessWidget {
   const _Reader({super.key, required this.log, this.second});
   final List<String> log;
   final _Source? second;
   @override
   Widget build(BuildContext context) {
-    final source = context.dependOnInheritedWidgetOfExactType<_Scope>()!.source;
+    final source = Scope.of<_Source>(context);
     final element = context as Element;
     element.dependOnExternal(source);
     element.dependOnExternal(source);
@@ -61,8 +54,8 @@ void main() {
     final source = _Source('one');
     final log = <String>[];
     final root = owner.mountRoot(
-      _Scope(
-        source: source,
+      Scope<_Source>(
+        value: source,
         child: _Reader(log: log),
       ),
     );
@@ -80,8 +73,8 @@ void main() {
     final first = _Source('first', throwOnRemove: true);
     final second = _Source('second');
     final root = owner.mountRoot(
-      _Scope(
-        source: first,
+      Scope<_Source>(
+        value: first,
         child: _Reader(log: [], second: second),
       ),
     );
@@ -108,8 +101,14 @@ void main() {
       final reader = _Reader(key: key, log: log);
       Widget scene(bool moved) => Row(
         children: [
-          _Scope(source: first, child: moved ? const EmptyBox() : reader),
-          _Scope(source: second, child: moved ? reader : const EmptyBox()),
+          Scope<_Source>(
+            value: first,
+            child: moved ? const EmptyBox() : reader,
+          ),
+          Scope<_Source>(
+            value: second,
+            child: moved ? reader : const EmptyBox(),
+          ),
         ],
       );
       final root = owner.mountRoot(scene(false));

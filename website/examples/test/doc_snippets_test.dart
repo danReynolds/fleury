@@ -305,20 +305,20 @@ void main() {
     );
   });
 
-  testWidgets('state management guide inherited widget updates its reader', (
+  testWidgets('state management guide shared scope updates its reader', (
     tester,
   ) async {
-    tester.pumpWidget(state_management.inheritedWidgetDemoApp());
+    tester.pumpWidget(state_management.scopeDemoApp());
     expect(tester.renderToString(emptyMark: ' '), contains('Count: 0'));
 
     await tester.button('Increment').press();
     expect(tester.renderToString(emptyMark: ' '), contains('Count: 1'));
   });
 
-  testWidgets('state management guide inherited notifier updates its reader', (
+  testWidgets('state management guide owned scope updates its reader', (
     tester,
   ) async {
-    tester.pumpWidget(state_management.inheritedNotifierDemoApp());
+    tester.pumpWidget(state_management.scopeCreateDemoApp());
     expect(tester.renderToString(emptyMark: ' '), contains('Count: 0'));
 
     await tester.button('Increment').press();

@@ -1,5 +1,5 @@
 // Regression: a render-object swap driven by a DESCENDANT rebuilding alone
-// (an InheritedNotifier dependent, or a setState below a multi-child render
+// (a Scope dependent, or a setState below a multi-child render
 // widget) must attach the new render object into the multi-child parent.
 // MultiChildRenderObjectElement.insertChildRenderObject used to be a no-op —
 // it relied on its own performRebuild to install children, so a leaf-driven

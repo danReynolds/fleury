@@ -163,10 +163,12 @@ of the API track until after the storybook work, not arch blockers.
    Hybrid-Islands seam as a designed-for backstop. Closes the questions, arms
    contributors.
 
-7. **Resolve the state-management posture before API freeze.** `InheritedWidget`
-   + `ChangeNotifier` is the whole built-in story, with no Dart-terminal
-   Riverpod fallback. Decide: stay minimal + "bring your own", ship a first-party
-   reactive-state story, or define adapter seams now.
+7. **Resolve the state-management posture before API freeze.** ✅ Resolved
+   2026-09-07 (RFC 0025): three answers, one primitive each — `setState` for
+   widget-local state, `Scope<T>` for tree-local state (replacing
+   `InheritedWidget` + `InheritedNotifier`), notifiers for anything with an
+   independent owner. Coarse notification; field-level reactivity was measured
+   and rejected (RFC 0023 §7–§8 on the spike branch).
 
 ## ⏸ Gated (need a product / posture decision first)
 

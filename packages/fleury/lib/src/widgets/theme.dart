@@ -288,44 +288,30 @@ class Theme extends StatelessWidget {
   final Widget child;
 
   static ThemeData of(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<_ThemeScope>()?.data ??
-      ThemeData.fallback;
+      Scope.maybeOf<ThemeData>(context) ?? ThemeData.fallback;
 
   static ThemeData? maybeOf(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<_ThemeScope>()?.data;
+      Scope.maybeOf<ThemeData>(context);
 
   @override
-  Widget build(BuildContext context) => _ThemeScope(
-    data: data,
+  Widget build(BuildContext context) => Scope<ThemeData>(
+    value: data,
     child: DefaultTextStyle(style: data.textStyle, child: child),
   );
-}
-
-class _ThemeScope extends InheritedWidget {
-  const _ThemeScope({required this.data, required super.child});
-
-  final ThemeData data;
-
-  @override
-  bool updateShouldNotify(_ThemeScope oldWidget) => data != oldWidget.data;
 }
 
 /// Cascades a base [CellStyle] onto descendant [Text] widgets, which merge
 /// their own style on top. Nest it to restyle a subtree (e.g. dim a whole
 /// panel) without touching each `Text`.
-class DefaultTextStyle extends InheritedWidget {
-  const DefaultTextStyle({
-    super.key,
-    required this.style,
-    required super.child,
-  });
+class DefaultTextStyle extends StatelessWidget {
+  const DefaultTextStyle({super.key, required this.style, required this.child});
 
   final CellStyle style;
+  final Widget child;
 
   /// The cascaded style in scope, or [CellStyle.none] when none.
   static CellStyle of(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<DefaultTextStyle>()?.style ??
-      CellStyle.none;
+      Scope.maybeOf<_DefaultTextStyleData>(context)?.style ?? CellStyle.none;
 
   /// Layers [style] *on top of* the ambient default for [child], rather
   /// than replacing it — so an inner scope can add a color without
@@ -337,8 +323,27 @@ class DefaultTextStyle extends InheritedWidget {
   }) => _MergeDefaultTextStyle(key: key, style: style, child: child);
 
   @override
-  bool updateShouldNotify(DefaultTextStyle oldWidget) =>
-      style != oldWidget.style;
+  Widget build(BuildContext context) => Scope<_DefaultTextStyleData>(
+    value: _DefaultTextStyleData(style),
+    child: child,
+  );
+}
+
+/// The scope value behind [DefaultTextStyle]: its own type, so a `CellStyle`
+/// shared through some other `Scope` can never be mistaken for the text
+/// default. Equal when the styles are, so an unchanged style does not
+/// rebuild readers.
+final class _DefaultTextStyleData {
+  const _DefaultTextStyleData(this.style);
+
+  final CellStyle style;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _DefaultTextStyleData && other.style == style;
+
+  @override
+  int get hashCode => style.hashCode;
 }
 
 class _MergeDefaultTextStyle extends StatelessWidget {
@@ -361,7 +366,7 @@ class _MergeDefaultTextStyle extends StatelessWidget {
 /// Ergonomic shortcuts for the most-typed Theme accessors. Saves the
 /// `Theme.of(context).colorScheme.error` mouthful in app code; the
 /// dependency tracking is identical (each getter ultimately calls
-/// `Theme.of(context)`, which establishes the InheritedWidget link).
+/// `Theme.of(context)`, which establishes the scope dependency).
 ///
 /// ```dart
 /// Text('!', style: CellStyle(foreground: context.colors.error))
@@ -373,7 +378,7 @@ extension FleuryThemeContext on BuildContext {
   ThemeData get theme => Theme.of(this);
 
   /// Shorthand for `Theme.of(this).colorScheme`. Establishes a
-  /// dependency on the same InheritedWidget — equivalent to
+  /// dependency on the same scope — equivalent to
   /// [theme]`.colorScheme`.
   ColorScheme get colors => Theme.of(this).colorScheme;
 }

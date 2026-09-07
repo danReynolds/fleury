@@ -544,55 +544,52 @@ class PointerRouter {
   }
 }
 
-/// Shares a [PointerRouter] with its subtree. Read by pointer widgets so
-/// their render objects can register. Provided once near the root.
-class PointerRouterScope extends InheritedWidget {
+/// Shares a [PointerRouter] with its subtree — a `Scope<PointerRouter>`.
+/// Read by pointer widgets so their render objects can register. Provided
+/// once near the root.
+class PointerRouterScope extends Scope<PointerRouter> {
   const PointerRouterScope({
     super.key,
     required this.router,
     required super.child,
-  });
+  }) : super(value: router);
 
+  /// The router this scope shares (also the scope's value).
   final PointerRouter router;
 
   static PointerRouter? maybeOf(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<PointerRouterScope>()?.router;
+      Scope.maybeOf<PointerRouter>(context);
 
   @override
-  bool updateShouldNotify(PointerRouterScope oldWidget) =>
-      !identical(router, oldWidget.router);
-
-  @override
-  InheritedElement createElement() => _PointerRouterScopeElement(this);
+  ScopeElement<PointerRouter> createElement() =>
+      _PointerRouterScopeElement(this);
 }
 
 /// Tells the router where its tree is: hit-testing starts at the render
 /// object below this element, for as long as it is mounted.
-class _PointerRouterScopeElement extends InheritedElement {
+class _PointerRouterScopeElement extends ScopeElement<PointerRouter> {
   _PointerRouterScopeElement(PointerRouterScope super.widget);
-
-  @override
-  PointerRouterScope get widget => super.widget as PointerRouterScope;
 
   @override
   void mount(Element? parent) {
     super.mount(parent);
-    widget.router._attachScope(this);
+    value._attachScope(this);
   }
 
   @override
   void update(covariant PointerRouterScope newWidget) {
-    final old = widget.router;
+    final old = value;
     super.update(newWidget);
-    if (!identical(old, newWidget.router)) {
+    final next = value;
+    if (!identical(old, next)) {
       old._detachScope(this);
-      newWidget.router._attachScope(this);
+      next._attachScope(this);
     }
   }
 
   @override
   void unmount() {
-    widget.router._detachScope(this);
+    value._detachScope(this);
     super.unmount();
   }
 }

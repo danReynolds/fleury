@@ -249,7 +249,7 @@ Set<String> _frameworkWidgetClasses(Iterable<String> sources) {
     'SingleChildRenderObjectWidget',
     'MultiChildRenderObjectWidget',
     'ProxyWidget',
-    'InheritedWidget',
+    'Scope',
   };
   var changed = true;
   while (changed) {

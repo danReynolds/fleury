@@ -3,7 +3,6 @@ import 'dart:async' show FutureOr, unawaited;
 import '../foundation/change_notifier.dart';
 import '../semantics/semantics.dart';
 import '../widgets/framework.dart';
-import '../widgets/inherited_notifier.dart';
 import '../widgets/key_bindings.dart';
 
 /// Stable identifier for an app command.
@@ -335,13 +334,13 @@ List<AppCommand> _copyAndValidateCommands(List<AppCommand> commands) {
   return copy;
 }
 
-/// Shares a [CommandRegistry] with descendants.
-class CommandRegistryScope extends InheritedNotifier<CommandRegistry> {
+/// Shares a [CommandRegistry] with descendants — a `Scope<CommandRegistry>`.
+class CommandRegistryScope extends Scope<CommandRegistry> {
   const CommandRegistryScope({
     super.key,
     required CommandRegistry registry,
     required super.child,
-  }) : super(notifier: registry);
+  }) : super(value: registry);
 
   static CommandRegistry of(BuildContext context) {
     final registry = maybeOf(context);
@@ -351,11 +350,8 @@ class CommandRegistryScope extends InheritedNotifier<CommandRegistry> {
     return registry;
   }
 
-  static CommandRegistry? maybeOf(BuildContext context) {
-    return context
-        .dependOnInheritedWidgetOfExactType<CommandRegistryScope>()
-        ?.notifier;
-  }
+  static CommandRegistry? maybeOf(BuildContext context) =>
+      Scope.maybeOf<CommandRegistry>(context);
 }
 
 /// Adds commands to the active app command scope.

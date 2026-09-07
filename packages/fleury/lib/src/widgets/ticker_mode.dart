@@ -20,9 +20,11 @@
 
 import 'framework.dart';
 
-/// Inherited muting lever for tickers in this subtree.
-class TickerMode extends InheritedWidget {
-  const TickerMode({super.key, required this.enabled, required super.child});
+/// Muting lever for tickers in this subtree — a scope read by every
+/// ticker-owning widget below it.
+class TickerMode extends Scope<_TickerModeData> {
+  const TickerMode({super.key, required this.enabled, required super.child})
+    : super(value: enabled ? _TickerModeData.on : _TickerModeData.off);
 
   /// When true, descendant tickers fire their callbacks normally.
   /// When false, descendant tickers continue to advance their
@@ -33,11 +35,18 @@ class TickerMode extends InheritedWidget {
 
   /// Returns the [enabled] value of the nearest ancestor
   /// [TickerMode], or `true` if no ancestor exists.
-  static bool of(BuildContext context) {
-    final scope = context.dependOnInheritedWidgetOfExactType<TickerMode>();
-    return scope?.enabled ?? true;
-  }
+  static bool of(BuildContext context) =>
+      Scope.maybeOf<_TickerModeData>(context)?.enabled ?? true;
+}
 
-  @override
-  bool updateShouldNotify(TickerMode old) => enabled != old.enabled;
+/// The scope value behind [TickerMode]: its own type rather than a bare
+/// `bool`, so no other scope can collide with it. Two canonical constants,
+/// so an unchanged flag is an identical value and readers stay put.
+final class _TickerModeData {
+  const _TickerModeData._(this.enabled);
+
+  final bool enabled;
+
+  static const on = _TickerModeData._(true);
+  static const off = _TickerModeData._(false);
 }

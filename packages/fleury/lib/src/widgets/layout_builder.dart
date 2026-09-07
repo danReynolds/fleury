@@ -66,7 +66,7 @@ class _LayoutBuilderElement extends RenderObjectElement {
   void markNeedsBuild() {
     // The builder only runs inside performLayout, and the layout pass
     // short-circuits a node whose constraints are unchanged — so an
-    // element-level invalidation (an InheritedWidget dependency firing, a
+    // element-level invalidation (a Scope dependency firing, a
     // setState-driven parent rebuild reaching us) must force a relayout or
     // the builder never re-runs and the subtree goes stale. Flutter's
     // equivalent is scheduleLayoutCallback() = markNeedsLayout() +

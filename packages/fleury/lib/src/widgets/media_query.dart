@@ -54,10 +54,12 @@ final class MediaQueryData {
 /// preferred accessor: it stays correct if the data grows new fields
 /// (where reading the whole object would over-rebuild, Flutter's
 /// well-known `MediaQuery.of` footgun).
-class MediaQuery extends InheritedWidget {
-  const MediaQuery({super.key, required this.data, required super.child});
-
-  final MediaQueryData data;
+class MediaQuery extends Scope<MediaQueryData> {
+  const MediaQuery({
+    super.key,
+    required MediaQueryData data,
+    required super.child,
+  }) : super(value: data);
 
   /// The full data in scope. Throws if there is no [MediaQuery] ancestor.
   static MediaQueryData of(BuildContext context) {
@@ -72,7 +74,7 @@ class MediaQuery extends InheritedWidget {
   }
 
   static MediaQueryData? maybeOf(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<MediaQuery>()?.data;
+      Scope.maybeOf<MediaQueryData>(context);
 
   /// The surface size in cells — the common case. Prefer this over
   /// [of] so a widget only depends on the size.
@@ -108,7 +110,4 @@ class MediaQuery extends InheritedWidget {
   /// glyph-fallback path works everywhere.
   static InlineImageSupport imagesOf(BuildContext context) =>
       maybeOf(context)?.capabilities.images ?? InlineImageSupport.none;
-
-  @override
-  bool updateShouldNotify(MediaQuery oldWidget) => data != oldWidget.data;
 }
