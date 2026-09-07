@@ -1128,26 +1128,41 @@ final class NativePosixTerminalModeController
   static const _termiosStorageBytes = 256;
   final _PosixTermiosBindings? _bindings;
   List<int>? _original;
+  int? _restoreFd;
 
   @override
   bool enableRawMode() {
     final bindings = _bindings;
     if (bindings == null) return false;
+    // Cancelling dart:io stdin closes fd 0 asynchronously. Keep our own
+    // close-on-exec descriptor so cleanup never races that close.
+    _restoreFd ??= bindings.duplicate(0, Platform.isMacOS ? 67 : 1030, 0);
+    final fd = _restoreFd!;
+    if (fd < 0) {
+      _restoreFd = null;
+      return false;
+    }
     final storage = calloc<Uint8>(_termiosStorageBytes);
+    var entered = false;
     try {
       final original = _original;
       if (original == null) {
-        if (bindings.tcgetattr(0, storage.cast<Void>()) != 0) return false;
+        if (bindings.tcgetattr(fd, storage.cast<Void>()) != 0) return false;
         _original = List<int>.of(storage.asTypedList(_termiosStorageBytes));
       } else {
         storage.asTypedList(_termiosStorageBytes).setAll(0, original);
       }
       bindings.cfmakeraw(storage.cast<Void>());
-      return bindings.tcsetattr(0, _tcsanow, storage.cast<Void>()) == 0;
+      entered = bindings.tcsetattr(fd, _tcsanow, storage.cast<Void>()) == 0;
+      return entered;
     } on Object {
       return false;
     } finally {
       calloc.free(storage);
+      if (!entered) {
+        bindings.close(fd);
+        _restoreFd = null;
+      }
     }
   }
 
@@ -1155,15 +1170,18 @@ final class NativePosixTerminalModeController
   bool restoreMode() {
     final bindings = _bindings;
     final original = _original;
-    if (bindings == null || original == null) return false;
+    final fd = _restoreFd;
+    if (bindings == null || original == null || fd == null) return false;
     final storage = calloc<Uint8>(_termiosStorageBytes);
     try {
       storage.asTypedList(_termiosStorageBytes).setAll(0, original);
-      return bindings.tcsetattr(0, _tcsanow, storage.cast<Void>()) == 0;
+      return bindings.tcsetattr(fd, _tcsanow, storage.cast<Void>()) == 0;
     } on Object {
       return false;
     } finally {
       calloc.free(storage);
+      bindings.close(fd);
+      _restoreFd = null;
     }
   }
 
@@ -1182,6 +1200,8 @@ final class _PosixTermiosBindings {
     required this.tcgetattr,
     required this.tcsetattr,
     required this.cfmakeraw,
+    required this.duplicate,
+    required this.close,
   });
 
   static _PosixTermiosBindings? load() {
@@ -1198,6 +1218,14 @@ final class _PosixTermiosBindings {
         cfmakeraw: libc.lookupFunction<_CfmakerawNative, _CfmakerawDart>(
           'cfmakeraw',
         ),
+        duplicate: libc
+            .lookupFunction<
+              Int32 Function(Int32, Int32, VarArgs<(Int32,)>),
+              int Function(int, int, int)
+            >('fcntl'),
+        close: libc.lookupFunction<Int32 Function(Int32), int Function(int)>(
+          'close',
+        ),
       );
     } on Object {
       // Non-glibc/non-Darwin POSIX target: retain the old ICANON/ECHO fallback.
@@ -1210,6 +1238,8 @@ final class _PosixTermiosBindings {
   final _TcgetattrDart tcgetattr;
   final _TcsetattrDart tcsetattr;
   final _CfmakerawDart cfmakeraw;
+  final int Function(int, int, int) duplicate;
+  final int Function(int) close;
 }
 
 /// The keyboard tier this session actually pushes, from what the app asked for
