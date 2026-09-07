@@ -2,6 +2,7 @@
 library;
 
 import 'dart:async';
+import 'dart:js_interop';
 
 import 'package:fleury/fleury_host.dart';
 import 'package:fleury_web/src/dom_grid/dom_grid_surface.dart';
@@ -640,6 +641,93 @@ void main() {
 
       await host.dispose();
       expect(metrics.disposed, isTrue);
+    },
+  );
+
+  test('active frames retain unchanged DOM geometry', () async {
+    final root = web.document.createElement('div') as web.HTMLElement;
+    final metrics = _FakeMetrics(_box(cols: 16, rows: 2));
+    final surface = DomGridSurface(root: root, size: CellSize.zero);
+    final flush = _FakeFlush();
+    final key = GlobalKey<_CounterState>();
+    final host = await runTuiSurface(
+      () => _Counter(key: key),
+      surface: surface,
+      cellMetrics: metrics,
+      flushScheduler: flush.schedule,
+    );
+    addTearDown(host.dispose);
+    flush.fire();
+    await host.awaitSemanticIdle();
+    root.style.setProperty('cursor', 'pointer');
+    final writes = <web.MutationRecord>[];
+    final observer = web.MutationObserver(
+      ((JSArray<web.MutationRecord> records, web.MutationObserver _) {
+        writes.addAll(records.toDart);
+      }).toJS,
+    )..observe(root, web.MutationObserverInit(attributes: true, subtree: true));
+    addTearDown(() => observer.disconnect());
+
+    for (var i = 1; i <= 3; i++) {
+      // A fresh value-equal measurement must behave like the cached instance.
+      metrics.box = _box(cols: 16, rows: 2);
+      key.currentState!.increment();
+      flush.fire();
+      await host.awaitSemanticIdle();
+      expect(root.textContent, contains('count $i'));
+    }
+    writes.addAll(observer.takeRecords().toDart);
+    expect(writes.length, 0);
+    expect(root.style.getPropertyValue('cursor'), 'pointer');
+    expect(root.style.width, '160px');
+  });
+
+  test(
+    'host applies new geometry and restores an externally resized surface',
+    () async {
+      final root = web.document.createElement('div') as web.HTMLElement;
+      final metrics = _FakeMetrics(_box(cols: 16, rows: 2));
+      final surface = DomGridSurface(root: root, size: CellSize.zero);
+      final flush = _FakeFlush();
+      final key = GlobalKey<_CounterState>();
+      final host = await runTuiSurface(
+        () => _Counter(key: key),
+        surface: surface,
+        cellMetrics: metrics,
+        flushScheduler: flush.schedule,
+      );
+      addTearDown(host.dispose);
+      flush.fire();
+      await host.awaitSemanticIdle();
+      metrics.emitResize(
+        const MeasuredCellBox(
+          cssCellWidth: 12,
+          cssCellHeight: 24,
+          layoutCellWidth: 11.5,
+          cssCanvasWidth: 192,
+          cssCanvasHeight: 48,
+          devicePixelRatio: 2,
+          cols: 16,
+          rows: 2,
+        ),
+      );
+      flush.fire();
+      await host.awaitSemanticIdle();
+      expect(root.style.width, '192px');
+      expect(root.style.height, '48px');
+      expect(root.style.letterSpacing, '0.5px');
+      expect(
+        (surface.rowElements.first as web.HTMLElement).style.height,
+        '24px',
+      );
+
+      surface.resize(const CellSize(4, 1));
+      key.currentState!.increment();
+      flush.fire();
+      await host.awaitSemanticIdle();
+      expect(surface.size, const CellSize(16, 2));
+      expect(surface.rowElements, hasLength(2));
+      expect(root.textContent, contains('count 1'));
     },
   );
 

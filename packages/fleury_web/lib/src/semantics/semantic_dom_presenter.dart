@@ -144,6 +144,7 @@ final class SemanticDomPresenter
       stats,
     );
     _applyNativeControlAttributes(element, core, valueText);
+    _syncActionListener(node, element);
 
     final hostsContent = !_isNativeTextControl(core);
     if (hostsContent) {
@@ -230,6 +231,7 @@ final class SemanticDomPresenter
       stats,
     );
     _applyNativeControlAttributes(element, core, valueText);
+    _syncActionListener(node, element);
     if (node.children.isEmpty || _isNativeTextControl(core)) {
       _replaceOwnText(node.id.value, element, node, core, valueText);
     }
@@ -251,7 +253,6 @@ final class SemanticDomPresenter
     _attributesById.remove(id);
     _ownTextById.remove(id);
     _textNodesById.remove(id);
-    _addActionListener(id, element);
     if (existing == null) {
       stats.createdElementCount += 1;
     } else {
@@ -378,6 +379,17 @@ final class SemanticDomPresenter
       _attributesById.remove(id);
       _ownTextById.remove(id);
       _textNodesById.remove(id);
+    }
+  }
+
+  void _syncActionListener(SemanticNode node, web.Element element) {
+    final id = node.id.value;
+    // Enabled passive nodes let clicks bubble without doing any work. Disabled
+    // nodes still need a guard, even with no action, to block ancestor actions.
+    if (node.enabled && node.actions.isEmpty) {
+      _removeActionListener(id, element);
+    } else if (!_clickListenersById.containsKey(id)) {
+      _addActionListener(id, element);
     }
   }
 

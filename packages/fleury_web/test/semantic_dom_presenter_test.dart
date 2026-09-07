@@ -356,6 +356,61 @@ void main() {
       expect(requests, isEmpty);
     });
 
+    for (final incremental in [false, true]) {
+      test('action changes preserve bubbling and disabled guards '
+          '(incremental: $incremental)', () {
+        final root = web.document.createElement('div');
+        final presenter = SemanticDomPresenter(root: root);
+        addTearDown(presenter.dispose);
+        final requests = <String>[];
+        presenter.onSemanticActionRequest = (id, action) =>
+            requests.add(id.value);
+        final owner = SemanticsOwner();
+        web.Element? child;
+        for (final (actionable, enabled, expected) in [
+          (false, true, 'root'),
+          (true, true, 'child'),
+          (false, true, 'root'),
+          (false, false, null),
+          (true, true, 'child'),
+        ]) {
+          final tree = SemanticTree(
+            root: SemanticNode(
+              id: const SemanticNodeId('root'),
+              role: SemanticRole.app,
+              actions: const {SemanticAction.activate},
+              children: [
+                SemanticNode(
+                  id: const SemanticNodeId('child'),
+                  role: SemanticRole.text,
+                  label: 'Child',
+                  enabled: enabled,
+                  actions: {if (actionable) SemanticAction.activate},
+                ),
+              ],
+            ),
+          );
+          presenter.present(
+            tree,
+            update: incremental ? owner.update(tree) : null,
+          );
+          final current = root.querySelector(
+            '[data-fleury-semantic-id="child"]',
+          )!;
+          if (child != null) expect(current, same(child));
+          child = current;
+          requests.clear();
+          final event = web.Event(
+            'click',
+            web.EventInit(bubbles: true, cancelable: true),
+          );
+          child.dispatchEvent(event);
+          expect(requests, expected == null ? isEmpty : equals([expected]));
+          expect(event.defaultPrevented, isTrue);
+        }
+      });
+    }
+
     test('dispose clears retained action listeners and callbacks', () async {
       final root = web.document.createElement('div');
       final presenter = SemanticDomPresenter(root: root);

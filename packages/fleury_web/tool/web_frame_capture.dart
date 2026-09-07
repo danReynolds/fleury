@@ -360,6 +360,7 @@ Map<String, Object?> _analyzeFrameTrace(List<Map<String, Object?>> events) {
     }
   }
   final frameStarts = <int>[];
+  final callbackDurations = <int>[];
   final completes = <(int ts, int dur, String bucket)>[];
   for (final event in events) {
     if (event['tid'] != mainTid) continue;
@@ -368,6 +369,10 @@ Map<String, Object?> _analyzeFrameTrace(List<Map<String, Object?>> events) {
     if (ts is! int) continue;
     if (name == 'FireAnimationFrame') {
       frameStarts.add(ts);
+      final duration = event['dur'];
+      if (event['ph'] == 'X' && duration is int) {
+        callbackDurations.add(duration);
+      }
       continue;
     }
     final bucket = renderingNames[name];
@@ -404,6 +409,7 @@ Map<String, Object?> _analyzeFrameTrace(List<Map<String, Object?>> events) {
     for (final frame in perFrame)
       frame['styleUs']! + frame['layoutUs']! + frame['paintUs']!,
   ]..sort();
+  final sortedCallbacks = [...callbackDurations]..sort();
   double percentile(List<int> sorted, double p) {
     if (sorted.isEmpty) return 0;
     final index = (sorted.length * p).round().clamp(1, sorted.length) - 1;
@@ -412,6 +418,15 @@ Map<String, Object?> _analyzeFrameTrace(List<Map<String, Object?>> events) {
 
   return {
     'frameCount': perFrame.length,
+    // The complete callback includes host input/geometry work outside the
+    // Dart render slices. Keep it separate from subsequent browser rendering.
+    'animationFrameCallbackUs': callbackDurations,
+    'animationFrameCallbackMs': {
+      'sampleCount': sortedCallbacks.length,
+      'p50': percentile(sortedCallbacks, 0.50),
+      'p95': percentile(sortedCallbacks, 0.95),
+      'max': sortedCallbacks.isEmpty ? 0 : sortedCallbacks.last / 1000.0,
+    },
     'frames': [
       for (final frame in perFrame)
         {

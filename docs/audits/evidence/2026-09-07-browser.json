@@ -1,0 +1,1436 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryBrowserPresentationEvidence",
+  "baselineRevision": "80343208771bf65145afb29c01b18bf0ea0aab1b",
+  "candidateIdentity": "Source hashes below identify the measured candidate before its evidence commit.",
+  "sourceSha256": {
+    "packages/fleury_web/lib/src/run_tui_surface.dart": {
+      "candidateSha256": "20797a31e0bc31c15da2e75dc45d189dcc57d09d0329ab1bf443c78d38f9185d",
+      "baselineSha256": "a9e34231977dfc9e7c1746b41f6733ac221b71bbe30729c457dd431c0ba9c64a"
+    },
+    "packages/fleury_web/lib/src/semantics/semantic_dom_presenter.dart": {
+      "candidateSha256": "cf8692c655f4711cd0023198be0890f7b4f4214d695912fe922ecd3eedd66bfa",
+      "baselineSha256": "8d55369b8c49d906a14468e6ecb961675d312450d49a378afe92e1f69bc835ac"
+    },
+    "packages/fleury/lib/src/remote/remote_client_asset.dart": {
+      "candidateSha256": "05623a61b4730f352b955a306aad52c4bf841cf5909c0fc0e3d3736197ba5e5a",
+      "baselineSha256": "037e61a6d7952c67899f96dbf71001fd7469259012643ee7c719e73f8a09a637"
+    },
+    "packages/fleury_web/test/run_tui_surface_test.dart": {
+      "candidateSha256": "3c923f7a14e33957ceedf668a8393728dc2a3f51a208f007aa3d4be2dbffcef0",
+      "baselineSha256": "2e9cba4b2e648277d8126e6a1c04b7e9f48a9bb0531ec4cbac0c399236420596"
+    },
+    "packages/fleury_web/test/semantic_dom_presenter_test.dart": {
+      "candidateSha256": "fce6037a031d2ce9d57fd4a3ac75ee2b8f2675eb0b216c0dc5d983e88ccaebc6",
+      "baselineSha256": "8d0f4d9a3cc2c240554ddc747aa9ebd7a3c1ae729bd12d2cf88132af53760164"
+    },
+    "packages/fleury_web/tool/web_frame_capture.dart": {
+      "candidateSha256": "7be998373346ad4c452981d9cea3f7ceca192c426f134cb8398c6082a5ab7562",
+      "baselineSha256": "ea54825361321e7bd5163093f99a72b32eed496db42c25cf2e37ff1e842e48c5"
+    },
+    "packages/fleury_web/web/benchmark_capture.dart": {
+      "candidateSha256": "6bb02d48cf7cf0470dfe702c93fd8865b6074de93226bbe1786e2bed202da71d",
+      "baselineSha256": "6bb02d48cf7cf0470dfe702c93fd8865b6074de93226bbe1786e2bed202da71d"
+    },
+    "packages/fleury_web/lib/src/benchmark/web_benchmark_scenarios.dart": {
+      "candidateSha256": "107ff06cc3c49e3cfab1d982795188511051e8ea2d8057e3c612e2b911e705d3",
+      "baselineSha256": "107ff06cc3c49e3cfab1d982795188511051e8ea2d8057e3c612e2b911e705d3"
+    },
+    "packages/fleury_web/web/semantic_listener_probe.dart": {
+      "candidateSha256": "d0a1a33ee7dafe3476b8c2155b666c3becec58bba0ca6d54189d3e1ad00e4826"
+    }
+  },
+  "compiledPages": {
+    "baseline": {
+      "javascriptSha256": "f3bd029fa0b6d5f926ae2c710280d9b163853ad56cab442d2c85c982a497e845",
+      "htmlSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88"
+    },
+    "candidate": {
+      "javascriptSha256": "90341d0250868dddb09ad490231c5da7085f5a3adeaa3b64d0cbc05a697d24cb",
+      "htmlSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88"
+    },
+    "rejectedSurfaceGuard": {
+      "javascriptSha256": "234ce32b7728cfe532f61169c8d9e2868222dc639ed1c0deac859d160d221c43",
+      "htmlSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88"
+    },
+    "listenerBaseline": {
+      "javascriptSha256": "7a79b3e7c05bdf12310d611e90ad9905bc5c498ca615ab416f63292bcd3b2dd6",
+      "htmlSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88"
+    },
+    "listenerCandidate": {
+      "javascriptSha256": "d5c22af05105bf4e0b0211feca44d0bcbf0e1df37b724d558e2321235bff8a80",
+      "htmlSha256": "5e989d7e37a72f7d831e457148b6e01e9e44e4a5388251474e1bd8944cb58c88"
+    },
+    "rowContainmentTrial": {
+      "javascriptSha256": "f3bd029fa0b6d5f926ae2c710280d9b163853ad56cab442d2c85c982a497e845",
+      "htmlSha256": "b18a96d55960060e58834c40fb3c021563ba955623f0b34c4b8eb4b384411267"
+    },
+    "semanticContainmentTrial": {
+      "javascriptSha256": "f3bd029fa0b6d5f926ae2c710280d9b163853ad56cab442d2c85c982a497e845",
+      "htmlSha256": "7dea62a5215125e9a0367bebcb8aa71f74baa4820e97cf2b30bf2493e7d53996"
+    }
+  },
+  "artifacts": {
+    "2026-09-07-browser-final.csv": {
+      "sha256": "0ef94b2c76c101c37591de9e13dbfa551759e9fa23961b41072da61ddb87b644",
+      "records": 42,
+      "bytes": 5827
+    },
+    "2026-09-07-browser-traces.csv": {
+      "sha256": "9e4c889b3e9ea16590c3cc58d44c7a7580e9fe92a5565ab4fb89ee8ae4e14f2c",
+      "records": 7811,
+      "bytes": 357129
+    },
+    "2026-09-07-browser-environments.json": {
+      "sha256": "0d41068c07b3fffc525223f253fad6e79d2dd22384ec18174e0f83b28f21c5f5",
+      "records": 42,
+      "bytes": 64935
+    },
+    "2026-09-07-browser-listeners.json": {
+      "sha256": "0f6c5549517fe8b5cf87dfce83411df2bfdef9349369f974c1497947565a8e54",
+      "records": 6,
+      "bytes": 9180
+    },
+    "2026-09-07-browser-rejected-surface-guard.csv": {
+      "sha256": "4400ae981e7b5cd763103963b939109d13e461660038a77864f917236a3f792a",
+      "records": 42,
+      "bytes": 3102
+    },
+    "2026-09-07-browser-containment-trials.csv": {
+      "sha256": "564f3fa23255d3145d26fff9000c20f350262aabf88f78ec08c5c4c8b1cd1b9b",
+      "records": 6,
+      "bytes": 335
+    }
+  },
+  "method": {
+    "compiler": "Dart 3.12.2 dart2js -O2 on macOS arm64",
+    "browser": "Chrome 152.0.7977.82 native headless",
+    "requestedSteps": 100,
+    "warmupSteps": 30,
+    "pairsPerScenario": 3,
+    "orderByPair": [
+      [
+        "base",
+        "candidate"
+      ],
+      [
+        "candidate",
+        "base"
+      ],
+      [
+        "base",
+        "candidate"
+      ]
+    ],
+    "timedChromeProcessesAtOnce": 1,
+    "ownTestsOrCompilersAlongsideFinalTiming": false,
+    "host": "Shared host; load before/after each process recorded in environments artifact.",
+    "viewport": "Scenario names are nominal; actual snapped cell dimensions recorded per process below.",
+    "matchingPairs": 21,
+    "frameworkFrames": 6000,
+    "tracedCallbacksIncludingStartup": 7811,
+    "matchedFields": [
+      "frame count",
+      "active frame count",
+      "viewports",
+      "runEnvironment",
+      "dirtyRows",
+      "dirtyCells",
+      "spans",
+      "domNodesCreated",
+      "rowsReplaced",
+      "semanticNodes",
+      "semanticAddedNodes",
+      "semanticRemovedNodes",
+      "semanticUpdatedNodes",
+      "semanticUncoveredCells"
+    ],
+    "nativeListenerProbe": "One mounted presenter per fresh process, no disposal before Memory.getDOMCounters. --frames selects labels, not timed steps.",
+    "listenerBaseline": "Same final probe compiled against baseline semantic presenter. The host guard was already present but the probe does not import or use that host.",
+    "baselinePage": "Compiled at reviewed #224 head 878e802b67e334af9da34311ee3f64dbd691ecc7; its tracked tree was verified identical to baselineRevision after merge."
+  },
+  "findings": {
+    "geometryControl": {
+      "activeUpdates": 3,
+      "rows": 2,
+      "baselineAttributeWrites": 6,
+      "candidateAttributeWrites": 0,
+      "baselineAssertionFailedAsExpected": true
+    },
+    "nativeListeners": [
+      {
+        "passiveLabels": 16,
+        "baseline": 20,
+        "candidate": 4
+      },
+      {
+        "passiveLabels": 64,
+        "baseline": 68,
+        "candidate": 4
+      },
+      {
+        "passiveLabels": 128,
+        "baseline": 132,
+        "candidate": 4
+      }
+    ],
+    "normalCallbackP50Ms": {
+      "baselineMedianOfProcesses": 1.484,
+      "candidateMedianOfProcesses": 1.399,
+      "pairedReductionRangePercent": [
+        5,
+        15
+      ]
+    },
+    "timingQualification": "Other controls are mixed; one single-cell pair reverses direction, resize medians are flat, aggregate cursor callback p95 rises 0.307 ms. No universal latency or frame-rate claim."
+  },
+  "measurementBoundaries": [
+    "Native listener reductions are fixture-specific object counts, not total RAM percentages or byte savings.",
+    "Normal capture heap and DOM counters are sampled after teardown without forced GC and are not used as retained-memory or leak evidence.",
+    "Dart totalFrameMs excludes host input/geometry work and is not the full animation callback duration.",
+    "Chrome callback and style/layout/paint durations may overlap due to synchronous rendering; never add them.",
+    "Chrome traces include warmup/startup callbacks and do not measure physical display or end-to-end input latency.",
+    "Framework counter parity is not a whole-app DOM fingerprint; exact DOM fingerprints are checked for the separate native listener fixtures.",
+    "Clean frames already skip rendering; variations in their callback timings do not establish a new optimization."
+  ],
+  "rejectedTrials": {
+    "surfaceGuard": "Additional metric equality guard inside DomGridSurface.resize; several controls slower across three pairs. Removed in favor of the host comparison already performed. Separate CSV and compiled hash retained.",
+    "rowContainment": ".fleury-row { contain: layout; }",
+    "semanticContainment": ".fleury-semantics { contain: strict; }",
+    "containmentBoundary": "Exploratory CSS-only single runs, not a robust paired comparison; no clear lead and no CSS retained."
+  },
+  "qualification": {
+    "contributorCheck": "dart tool/fleury_dev.dart check",
+    "passingTests": 5493,
+    "existingSkips": 2,
+    "webTests": 527,
+    "focusedFinalTests": 60,
+    "fastGates": [
+      "serve-semantics-gate",
+      "image-bench",
+      "bundle-size",
+      "alloc-gate",
+      "input-alloc-gate",
+      "paint-gate",
+      "selection-gate",
+      "runtime-gate"
+    ],
+    "baselineOrToleranceChanges": false,
+    "reportingToolBoundary": "Full contributor check qualified final production changes before the reporting-only callback addition. Final capture tool and listener probe then analyzed with no issues; all 42 final timing captures exercised the addition.",
+    "review": "Local source review found no actionable correctness issue; not an independent approval.",
+    "logsSha256": {
+      "fleury-browser-full-check.log": "c7ca4abaf7301de33d6e0d557795ca4146fd41844439012fd71a9a09d5369b65",
+      "fleury-browser-gates.log": "1be38f9e1ae5641b12682656c918f58b16ec7aa159ac2c7facfa6cfff4a20c6b",
+      "fleury-browser-focused-final.log": "14637d1739fe2bd2a29948f7d771c96d384eaade7ad37f1366034f91fd5f63af",
+      "fleury-browser-host-guard-baseline-test.log": "bf72afcbd9a6b7bf4cee78d9ef26694432aa00615566dee199cd4552b407dca0"
+    }
+  },
+  "remoteClient": {
+    "baselineJavascriptBytes": 399949,
+    "candidateJavascriptBytes": 400047,
+    "deltaBytes": 98,
+    "sourceFingerprint": "830af984a971a41a"
+  },
+  "rawCaptureHashesAndCounters": [
+    {
+      "file": "1-cursor-blink-80x24-base.json",
+      "sha256": "24d28c502cbe04b9111719cbfff552b5bf1f844da54410c1c77d304804e84f93",
+      "pair": 1,
+      "scenario": "cursor-blink-80x24",
+      "version": "base",
+      "frames": 100,
+      "activeFrames": 100,
+      "viewports": [
+        {
+          "cols": 77,
+          "rows": 24
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 200,
+        "dirtyCells": 15400,
+        "spans": 300,
+        "domNodesCreated": 300,
+        "rowsReplaced": 200,
+        "semanticNodes": 2500,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 131
+    },
+    {
+      "file": "1-cursor-blink-80x24-candidate.json",
+      "sha256": "cc7f605135f970592d3b43bd8735682e69269e18b04d784a6fb3987a5096a8e9",
+      "pair": 1,
+      "scenario": "cursor-blink-80x24",
+      "version": "candidate",
+      "frames": 100,
+      "activeFrames": 100,
+      "viewports": [
+        {
+          "cols": 77,
+          "rows": 24
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 200,
+        "dirtyCells": 15400,
+        "spans": 300,
+        "domNodesCreated": 300,
+        "rowsReplaced": 200,
+        "semanticNodes": 2500,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 131
+    },
+    {
+      "file": "1-full-frame-churn-160x50-base.json",
+      "sha256": "2f6bb3a9284bb1292377daab2c5235214928efcfa0dfd1f0ca9fa03ef02fa924",
+      "pair": 1,
+      "scenario": "full-frame-churn-160x50",
+      "version": "base",
+      "frames": 100,
+      "activeFrames": 100,
+      "viewports": [
+        {
+          "cols": 154,
+          "rows": 50
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 5000,
+        "dirtyCells": 770000,
+        "spans": 5000,
+        "domNodesCreated": 5000,
+        "rowsReplaced": 5000,
+        "semanticNodes": 5100,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 130
+    },
+    {
+      "file": "1-full-frame-churn-160x50-candidate.json",
+      "sha256": "805cade97c55ce9d403cec730a71f08b8f7219ddee06d35c4805c2ea06fc8568",
+      "pair": 1,
+      "scenario": "full-frame-churn-160x50",
+      "version": "candidate",
+      "frames": 100,
+      "activeFrames": 100,
+      "viewports": [
+        {
+          "cols": 154,
+          "rows": 50
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 5000,
+        "dirtyCells": 770000,
+        "spans": 5000,
+        "domNodesCreated": 5000,
+        "rowsReplaced": 5000,
+        "semanticNodes": 5100,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 131
+    },
+    {
+      "file": "1-noop-160x50-base.json",
+      "sha256": "b1148393d1bb12d2d8c066d670b7358e635ed5fbc9de7c4b31761a6ab34b2a74",
+      "pair": 1,
+      "scenario": "noop-160x50",
+      "version": "base",
+      "frames": 100,
+      "activeFrames": 0,
+      "viewports": [
+        {
+          "cols": 154,
+          "rows": 50
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 0,
+        "dirtyCells": 0,
+        "spans": 0,
+        "domNodesCreated": 0,
+        "rowsReplaced": 0,
+        "semanticNodes": 5100,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 130
+    },
+    {
+      "file": "1-noop-160x50-candidate.json",
+      "sha256": "87e2c9aebad6d874fdaaca44d02aa482151492605e34f2a953d19fb3f60e6ebe",
+      "pair": 1,
+      "scenario": "noop-160x50",
+      "version": "candidate",
+      "frames": 100,
+      "activeFrames": 0,
+      "viewports": [
+        {
+          "cols": 154,
+          "rows": 50
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 0,
+        "dirtyCells": 0,
+        "spans": 0,
+        "domNodesCreated": 0,
+        "rowsReplaced": 0,
+        "semanticNodes": 5100,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 131
+    },
+    {
+      "file": "1-normal-80x24-base.json",
+      "sha256": "289d2a9530e40b0b42eabad726216a6a1f4aafe3ab34c6e7250732c5382caed0",
+      "pair": 1,
+      "scenario": "normal-80x24",
+      "version": "base",
+      "frames": 100,
+      "activeFrames": 100,
+      "viewports": [
+        {
+          "cols": 77,
+          "rows": 24
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 2000,
+        "dirtyCells": 154000,
+        "spans": 2000,
+        "domNodesCreated": 2000,
+        "rowsReplaced": 2000,
+        "semanticNodes": 2400,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 130
+    },
+    {
+      "file": "1-normal-80x24-candidate.json",
+      "sha256": "6a33ee1723c86a0d5afbcf3af50c547b1ac81026214932b79d9a0b395187e6c4",
+      "pair": 1,
+      "scenario": "normal-80x24",
+      "version": "candidate",
+      "frames": 100,
+      "activeFrames": 100,
+      "viewports": [
+        {
+          "cols": 77,
+          "rows": 24
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 2000,
+        "dirtyCells": 154000,
+        "spans": 2000,
+        "domNodesCreated": 2000,
+        "rowsReplaced": 2000,
+        "semanticNodes": 2400,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 130
+    },
+    {
+      "file": "1-resize-burst-base.json",
+      "sha256": "e3f5044a41cde825f5d6ac883650a3f5247fceee2b0e0a5d37708405b9158c4c",
+      "pair": 1,
+      "scenario": "resize-burst",
+      "version": "base",
+      "frames": 300,
+      "activeFrames": 200,
+      "viewports": [
+        {
+          "cols": 77,
+          "rows": 24
+        },
+        {
+          "cols": 154,
+          "rows": 50
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 5700,
+        "dirtyCells": 708400,
+        "spans": 5850,
+        "domNodesCreated": 5850,
+        "rowsReplaced": 5700,
+        "semanticNodes": 7200,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 388
+    },
+    {
+      "file": "1-resize-burst-candidate.json",
+      "sha256": "2f108baf17807f70e7a59321266bed5b232ec3588422bd4b9808b4a250922b94",
+      "pair": 1,
+      "scenario": "resize-burst",
+      "version": "candidate",
+      "frames": 300,
+      "activeFrames": 200,
+      "viewports": [
+        {
+          "cols": 77,
+          "rows": 24
+        },
+        {
+          "cols": 154,
+          "rows": 50
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 5700,
+        "dirtyCells": 708400,
+        "spans": 5850,
+        "domNodesCreated": 5850,
+        "rowsReplaced": 5700,
+        "semanticNodes": 7200,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 389
+    },
+    {
+      "file": "1-single-dirty-cell-160x50-base.json",
+      "sha256": "01bf8addcf41cc967bcccbb83b062f9f92829da8ded13fcf9a6e9b897fec4864",
+      "pair": 1,
+      "scenario": "single-dirty-cell-160x50",
+      "version": "base",
+      "frames": 100,
+      "activeFrames": 100,
+      "viewports": [
+        {
+          "cols": 154,
+          "rows": 50
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 100,
+        "dirtyCells": 15400,
+        "spans": 100,
+        "domNodesCreated": 100,
+        "rowsReplaced": 100,
+        "semanticNodes": 5100,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 131
+    },
+    {
+      "file": "1-single-dirty-cell-160x50-candidate.json",
+      "sha256": "676e1d901a816970d8dc60698b0c6c3511ddd76f488aa96fd81b334e207b3390",
+      "pair": 1,
+      "scenario": "single-dirty-cell-160x50",
+      "version": "candidate",
+      "frames": 100,
+      "activeFrames": 100,
+      "viewports": [
+        {
+          "cols": 154,
+          "rows": 50
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 100,
+        "dirtyCells": 15400,
+        "spans": 100,
+        "domNodesCreated": 100,
+        "rowsReplaced": 100,
+        "semanticNodes": 5100,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 130
+    },
+    {
+      "file": "1-text-input-burst-80x24-base.json",
+      "sha256": "9ceb964dda43813055ba2eec61a48e44fb8362a232f77194413f6e74b982c42f",
+      "pair": 1,
+      "scenario": "text-input-burst-80x24",
+      "version": "base",
+      "frames": 200,
+      "activeFrames": 100,
+      "viewports": [
+        {
+          "cols": 77,
+          "rows": 24
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 100,
+        "dirtyCells": 7700,
+        "spans": 245,
+        "domNodesCreated": 245,
+        "rowsReplaced": 100,
+        "semanticNodes": 5000,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 261
+    },
+    {
+      "file": "1-text-input-burst-80x24-candidate.json",
+      "sha256": "cd94c85f90269bc5f78d29d4ca0a09e45f7e8a6ac33d53d4a334eb2214c2eed8",
+      "pair": 1,
+      "scenario": "text-input-burst-80x24",
+      "version": "candidate",
+      "frames": 200,
+      "activeFrames": 100,
+      "viewports": [
+        {
+          "cols": 77,
+          "rows": 24
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 100,
+        "dirtyCells": 7700,
+        "spans": 245,
+        "domNodesCreated": 245,
+        "rowsReplaced": 100,
+        "semanticNodes": 5000,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 260
+    },
+    {
+      "file": "2-cursor-blink-80x24-base.json",
+      "sha256": "c8653559ac77b0a83763e7052878cb0f8e95a8ca35f861a498efb8d0b0ae53f9",
+      "pair": 2,
+      "scenario": "cursor-blink-80x24",
+      "version": "base",
+      "frames": 100,
+      "activeFrames": 100,
+      "viewports": [
+        {
+          "cols": 77,
+          "rows": 24
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 200,
+        "dirtyCells": 15400,
+        "spans": 300,
+        "domNodesCreated": 300,
+        "rowsReplaced": 200,
+        "semanticNodes": 2500,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 130
+    },
+    {
+      "file": "2-cursor-blink-80x24-candidate.json",
+      "sha256": "a374d600c2ebf99bb7ded66b1dbaa11c06f376930fb8a241e1888bd5dba750a1",
+      "pair": 2,
+      "scenario": "cursor-blink-80x24",
+      "version": "candidate",
+      "frames": 100,
+      "activeFrames": 100,
+      "viewports": [
+        {
+          "cols": 77,
+          "rows": 24
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 200,
+        "dirtyCells": 15400,
+        "spans": 300,
+        "domNodesCreated": 300,
+        "rowsReplaced": 200,
+        "semanticNodes": 2500,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 131
+    },
+    {
+      "file": "2-full-frame-churn-160x50-base.json",
+      "sha256": "3060e1dcbe61d8e87c79cc2724223108701d284aff3ab7caab45c50dda28377e",
+      "pair": 2,
+      "scenario": "full-frame-churn-160x50",
+      "version": "base",
+      "frames": 100,
+      "activeFrames": 100,
+      "viewports": [
+        {
+          "cols": 154,
+          "rows": 50
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 5000,
+        "dirtyCells": 770000,
+        "spans": 5000,
+        "domNodesCreated": 5000,
+        "rowsReplaced": 5000,
+        "semanticNodes": 5100,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 131
+    },
+    {
+      "file": "2-full-frame-churn-160x50-candidate.json",
+      "sha256": "ad1912092b9e91c67d877d84e01d97d08a9f59c3996ab62e8697aff8e4a3834c",
+      "pair": 2,
+      "scenario": "full-frame-churn-160x50",
+      "version": "candidate",
+      "frames": 100,
+      "activeFrames": 100,
+      "viewports": [
+        {
+          "cols": 154,
+          "rows": 50
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 5000,
+        "dirtyCells": 770000,
+        "spans": 5000,
+        "domNodesCreated": 5000,
+        "rowsReplaced": 5000,
+        "semanticNodes": 5100,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 131
+    },
+    {
+      "file": "2-noop-160x50-base.json",
+      "sha256": "ab402cf575bafa5b3c3be5eaed639282d67e3bb45e7e393ae3d317ab8a863ffb",
+      "pair": 2,
+      "scenario": "noop-160x50",
+      "version": "base",
+      "frames": 100,
+      "activeFrames": 0,
+      "viewports": [
+        {
+          "cols": 154,
+          "rows": 50
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 0,
+        "dirtyCells": 0,
+        "spans": 0,
+        "domNodesCreated": 0,
+        "rowsReplaced": 0,
+        "semanticNodes": 5100,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 130
+    },
+    {
+      "file": "2-noop-160x50-candidate.json",
+      "sha256": "02ed799c2ba8a47c14cd3db9bd5b20078b477a0f2522ce459b3d00828f9c1dc9",
+      "pair": 2,
+      "scenario": "noop-160x50",
+      "version": "candidate",
+      "frames": 100,
+      "activeFrames": 0,
+      "viewports": [
+        {
+          "cols": 154,
+          "rows": 50
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 0,
+        "dirtyCells": 0,
+        "spans": 0,
+        "domNodesCreated": 0,
+        "rowsReplaced": 0,
+        "semanticNodes": 5100,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 130
+    },
+    {
+      "file": "2-normal-80x24-base.json",
+      "sha256": "174785fc16a40936e2b9f5582b1754b07fb25568ab0e61c5fe29bfd3bbf44a83",
+      "pair": 2,
+      "scenario": "normal-80x24",
+      "version": "base",
+      "frames": 100,
+      "activeFrames": 100,
+      "viewports": [
+        {
+          "cols": 77,
+          "rows": 24
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 2000,
+        "dirtyCells": 154000,
+        "spans": 2000,
+        "domNodesCreated": 2000,
+        "rowsReplaced": 2000,
+        "semanticNodes": 2400,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 131
+    },
+    {
+      "file": "2-normal-80x24-candidate.json",
+      "sha256": "b7f621ccdfe76175e4f8c4b27757551923e1f4fccd9697745cfb60cb9099b403",
+      "pair": 2,
+      "scenario": "normal-80x24",
+      "version": "candidate",
+      "frames": 100,
+      "activeFrames": 100,
+      "viewports": [
+        {
+          "cols": 77,
+          "rows": 24
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 2000,
+        "dirtyCells": 154000,
+        "spans": 2000,
+        "domNodesCreated": 2000,
+        "rowsReplaced": 2000,
+        "semanticNodes": 2400,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 131
+    },
+    {
+      "file": "2-resize-burst-base.json",
+      "sha256": "4c213410e2ffd792ca7237417bcc1ca14d31d6328bd3befa9e883497ca5501a7",
+      "pair": 2,
+      "scenario": "resize-burst",
+      "version": "base",
+      "frames": 300,
+      "activeFrames": 200,
+      "viewports": [
+        {
+          "cols": 77,
+          "rows": 24
+        },
+        {
+          "cols": 154,
+          "rows": 50
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 5700,
+        "dirtyCells": 708400,
+        "spans": 5850,
+        "domNodesCreated": 5850,
+        "rowsReplaced": 5700,
+        "semanticNodes": 7200,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 388
+    },
+    {
+      "file": "2-resize-burst-candidate.json",
+      "sha256": "6f15e867a0cb1c85b05e83f7d018d4e03d0718ec44adb02f2158e758acaebddb",
+      "pair": 2,
+      "scenario": "resize-burst",
+      "version": "candidate",
+      "frames": 300,
+      "activeFrames": 200,
+      "viewports": [
+        {
+          "cols": 77,
+          "rows": 24
+        },
+        {
+          "cols": 154,
+          "rows": 50
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 5700,
+        "dirtyCells": 708400,
+        "spans": 5850,
+        "domNodesCreated": 5850,
+        "rowsReplaced": 5700,
+        "semanticNodes": 7200,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 388
+    },
+    {
+      "file": "2-single-dirty-cell-160x50-base.json",
+      "sha256": "dad23dd2e74d6667f25241058eaf0f7d734c988f28c286b795ba3c7beeab93e4",
+      "pair": 2,
+      "scenario": "single-dirty-cell-160x50",
+      "version": "base",
+      "frames": 100,
+      "activeFrames": 100,
+      "viewports": [
+        {
+          "cols": 154,
+          "rows": 50
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 100,
+        "dirtyCells": 15400,
+        "spans": 100,
+        "domNodesCreated": 100,
+        "rowsReplaced": 100,
+        "semanticNodes": 5100,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 130
+    },
+    {
+      "file": "2-single-dirty-cell-160x50-candidate.json",
+      "sha256": "00d6219258b6500da9e0575511fcb33cb755368aca1b6eacdb476e020427f24a",
+      "pair": 2,
+      "scenario": "single-dirty-cell-160x50",
+      "version": "candidate",
+      "frames": 100,
+      "activeFrames": 100,
+      "viewports": [
+        {
+          "cols": 154,
+          "rows": 50
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 100,
+        "dirtyCells": 15400,
+        "spans": 100,
+        "domNodesCreated": 100,
+        "rowsReplaced": 100,
+        "semanticNodes": 5100,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 131
+    },
+    {
+      "file": "2-text-input-burst-80x24-base.json",
+      "sha256": "86feb9df7823b3a6d8a5c76ea17ce771fe2d9c0b5852aa05c87b91b23657e3e7",
+      "pair": 2,
+      "scenario": "text-input-burst-80x24",
+      "version": "base",
+      "frames": 200,
+      "activeFrames": 100,
+      "viewports": [
+        {
+          "cols": 77,
+          "rows": 24
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 100,
+        "dirtyCells": 7700,
+        "spans": 245,
+        "domNodesCreated": 245,
+        "rowsReplaced": 100,
+        "semanticNodes": 5000,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 260
+    },
+    {
+      "file": "2-text-input-burst-80x24-candidate.json",
+      "sha256": "19ce362eed27c1c7aa01f074f1b1a50e98da75ce3bd469fe266a376274698fc8",
+      "pair": 2,
+      "scenario": "text-input-burst-80x24",
+      "version": "candidate",
+      "frames": 200,
+      "activeFrames": 100,
+      "viewports": [
+        {
+          "cols": 77,
+          "rows": 24
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 100,
+        "dirtyCells": 7700,
+        "spans": 245,
+        "domNodesCreated": 245,
+        "rowsReplaced": 100,
+        "semanticNodes": 5000,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 260
+    },
+    {
+      "file": "3-cursor-blink-80x24-base.json",
+      "sha256": "44a59e1a2255a6114afc770a87896972f1cb6a837f2b64d3dbd1a3595f902a16",
+      "pair": 3,
+      "scenario": "cursor-blink-80x24",
+      "version": "base",
+      "frames": 100,
+      "activeFrames": 100,
+      "viewports": [
+        {
+          "cols": 77,
+          "rows": 24
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 200,
+        "dirtyCells": 15400,
+        "spans": 300,
+        "domNodesCreated": 300,
+        "rowsReplaced": 200,
+        "semanticNodes": 2500,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 131
+    },
+    {
+      "file": "3-cursor-blink-80x24-candidate.json",
+      "sha256": "b03ec92fd0b8d27a5dd9fc5e6eca9b5c32bd9c473e87650c57a908005d30ca54",
+      "pair": 3,
+      "scenario": "cursor-blink-80x24",
+      "version": "candidate",
+      "frames": 100,
+      "activeFrames": 100,
+      "viewports": [
+        {
+          "cols": 77,
+          "rows": 24
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 200,
+        "dirtyCells": 15400,
+        "spans": 300,
+        "domNodesCreated": 300,
+        "rowsReplaced": 200,
+        "semanticNodes": 2500,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 130
+    },
+    {
+      "file": "3-full-frame-churn-160x50-base.json",
+      "sha256": "ac79c8e915c7230189daccad846f8320dd53ab81cf504f894a718965e48ba618",
+      "pair": 3,
+      "scenario": "full-frame-churn-160x50",
+      "version": "base",
+      "frames": 100,
+      "activeFrames": 100,
+      "viewports": [
+        {
+          "cols": 154,
+          "rows": 50
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 5000,
+        "dirtyCells": 770000,
+        "spans": 5000,
+        "domNodesCreated": 5000,
+        "rowsReplaced": 5000,
+        "semanticNodes": 5100,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 130
+    },
+    {
+      "file": "3-full-frame-churn-160x50-candidate.json",
+      "sha256": "f343f0844d065b5f6cfccfd48e13b838e85a1f7fefd06c0127a3ffcf4a51830d",
+      "pair": 3,
+      "scenario": "full-frame-churn-160x50",
+      "version": "candidate",
+      "frames": 100,
+      "activeFrames": 100,
+      "viewports": [
+        {
+          "cols": 154,
+          "rows": 50
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 5000,
+        "dirtyCells": 770000,
+        "spans": 5000,
+        "domNodesCreated": 5000,
+        "rowsReplaced": 5000,
+        "semanticNodes": 5100,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 131
+    },
+    {
+      "file": "3-noop-160x50-base.json",
+      "sha256": "9707ad5231ccfbb1578d0030adadf78b50d4943447d44bb74697bfa770d318fb",
+      "pair": 3,
+      "scenario": "noop-160x50",
+      "version": "base",
+      "frames": 100,
+      "activeFrames": 0,
+      "viewports": [
+        {
+          "cols": 154,
+          "rows": 50
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 0,
+        "dirtyCells": 0,
+        "spans": 0,
+        "domNodesCreated": 0,
+        "rowsReplaced": 0,
+        "semanticNodes": 5100,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 131
+    },
+    {
+      "file": "3-noop-160x50-candidate.json",
+      "sha256": "8bafeb2b0868e76b29905ac8228aac61c012c53dccc21cbd8577f59e7fa1380b",
+      "pair": 3,
+      "scenario": "noop-160x50",
+      "version": "candidate",
+      "frames": 100,
+      "activeFrames": 0,
+      "viewports": [
+        {
+          "cols": 154,
+          "rows": 50
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 0,
+        "dirtyCells": 0,
+        "spans": 0,
+        "domNodesCreated": 0,
+        "rowsReplaced": 0,
+        "semanticNodes": 5100,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 131
+    },
+    {
+      "file": "3-normal-80x24-base.json",
+      "sha256": "81d35ae90fbcefad9ba6a0153d646b732706f1ff70687930b633b3448cb5d141",
+      "pair": 3,
+      "scenario": "normal-80x24",
+      "version": "base",
+      "frames": 100,
+      "activeFrames": 100,
+      "viewports": [
+        {
+          "cols": 77,
+          "rows": 24
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 2000,
+        "dirtyCells": 154000,
+        "spans": 2000,
+        "domNodesCreated": 2000,
+        "rowsReplaced": 2000,
+        "semanticNodes": 2400,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 130
+    },
+    {
+      "file": "3-normal-80x24-candidate.json",
+      "sha256": "99404cd04a867eefeef61a0f1199e049f62ae7b714883ef4a078a0c9e3df5ed6",
+      "pair": 3,
+      "scenario": "normal-80x24",
+      "version": "candidate",
+      "frames": 100,
+      "activeFrames": 100,
+      "viewports": [
+        {
+          "cols": 77,
+          "rows": 24
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 2000,
+        "dirtyCells": 154000,
+        "spans": 2000,
+        "domNodesCreated": 2000,
+        "rowsReplaced": 2000,
+        "semanticNodes": 2400,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 131
+    },
+    {
+      "file": "3-resize-burst-base.json",
+      "sha256": "35017088f1210f85d3d061ed4eea83e2525751123bcbd384dbef952b00ec2624",
+      "pair": 3,
+      "scenario": "resize-burst",
+      "version": "base",
+      "frames": 300,
+      "activeFrames": 200,
+      "viewports": [
+        {
+          "cols": 77,
+          "rows": 24
+        },
+        {
+          "cols": 154,
+          "rows": 50
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 5700,
+        "dirtyCells": 708400,
+        "spans": 5850,
+        "domNodesCreated": 5850,
+        "rowsReplaced": 5700,
+        "semanticNodes": 7200,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 389
+    },
+    {
+      "file": "3-resize-burst-candidate.json",
+      "sha256": "45def5265219bcd435ee5ad85af9f1d48ecc0b56b051f98b3b56eefe55d8f40c",
+      "pair": 3,
+      "scenario": "resize-burst",
+      "version": "candidate",
+      "frames": 300,
+      "activeFrames": 200,
+      "viewports": [
+        {
+          "cols": 77,
+          "rows": 24
+        },
+        {
+          "cols": 154,
+          "rows": 50
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 5700,
+        "dirtyCells": 708400,
+        "spans": 5850,
+        "domNodesCreated": 5850,
+        "rowsReplaced": 5700,
+        "semanticNodes": 7200,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 389
+    },
+    {
+      "file": "3-single-dirty-cell-160x50-base.json",
+      "sha256": "fdfcdd6a22c8a90feff40bf0f108ae6a80d73bc4d14b36938afbb4d835ad7d7d",
+      "pair": 3,
+      "scenario": "single-dirty-cell-160x50",
+      "version": "base",
+      "frames": 100,
+      "activeFrames": 100,
+      "viewports": [
+        {
+          "cols": 154,
+          "rows": 50
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 100,
+        "dirtyCells": 15400,
+        "spans": 100,
+        "domNodesCreated": 100,
+        "rowsReplaced": 100,
+        "semanticNodes": 5100,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 131
+    },
+    {
+      "file": "3-single-dirty-cell-160x50-candidate.json",
+      "sha256": "ae2e7c32ccd0e79318c07f805bd815ae3df896918b8078b1caeef9b386aba0d4",
+      "pair": 3,
+      "scenario": "single-dirty-cell-160x50",
+      "version": "candidate",
+      "frames": 100,
+      "activeFrames": 100,
+      "viewports": [
+        {
+          "cols": 154,
+          "rows": 50
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 100,
+        "dirtyCells": 15400,
+        "spans": 100,
+        "domNodesCreated": 100,
+        "rowsReplaced": 100,
+        "semanticNodes": 5100,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 130
+    },
+    {
+      "file": "3-text-input-burst-80x24-base.json",
+      "sha256": "6dcf153534c0a6a33b85f6d78328daaf7e0dfa7a56bc93bf1b994f3817ecef94",
+      "pair": 3,
+      "scenario": "text-input-burst-80x24",
+      "version": "base",
+      "frames": 200,
+      "activeFrames": 100,
+      "viewports": [
+        {
+          "cols": 77,
+          "rows": 24
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 100,
+        "dirtyCells": 7700,
+        "spans": 245,
+        "domNodesCreated": 245,
+        "rowsReplaced": 100,
+        "semanticNodes": 5000,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 261
+    },
+    {
+      "file": "3-text-input-burst-80x24-candidate.json",
+      "sha256": "f1a71eca48641212cafcd7856574f92cccc515dc2b5e7fca276dc5bb4437f4d1",
+      "pair": 3,
+      "scenario": "text-input-burst-80x24",
+      "version": "candidate",
+      "frames": 200,
+      "activeFrames": 100,
+      "viewports": [
+        {
+          "cols": 77,
+          "rows": 24
+        }
+      ],
+      "counterTotals": {
+        "dirtyRows": 100,
+        "dirtyCells": 7700,
+        "spans": 245,
+        "domNodesCreated": 245,
+        "rowsReplaced": 100,
+        "semanticNodes": 5000,
+        "semanticAddedNodes": 0,
+        "semanticRemovedNodes": 0,
+        "semanticUpdatedNodes": 0,
+        "semanticUncoveredCells": 0
+      },
+      "traceCallbacks": 261
+    }
+  ]
+}
