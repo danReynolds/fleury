@@ -25,6 +25,12 @@
   `Theme.of`, `Focus.of`, `MediaQuery.of`, and friends keep their signatures;
   `Form.of` readers now rebuild when the controller notifies (see the
   fleury_widgets changelog).
+- **Navigation cancellation.** Removing an entering replacement or stack-clear
+  route no longer lets its cancelled transition delete the revealed route.
+- **Overlay ownership.** Invalid insertions and initial entry lists are checked
+  before attachment, preserving the original owner and allowing safe retries.
+- **Remote startup.** Teardown resolves pending handshakes, overlapping startup
+  calls are rejected, and peer failures cannot reactivate a closing session.
 
 - **Pointer input and selection.** TextInput and TextArea support click-to-caret,
   drag selection, Shift-click, and word/line selection. TextInput fills bounded
