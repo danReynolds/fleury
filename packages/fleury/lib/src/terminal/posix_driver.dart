@@ -41,6 +41,7 @@ class PosixTerminalDriver
     Stdin? stdinOverride,
     Stdout? stdoutOverride,
     this.signalGrace = const Duration(seconds: 5),
+    this.suspendOnCtrlZ = true,
     @visibleForTesting void Function(int exitCode)? forceExitOverride,
     @visibleForTesting bool Function()? selfStopOverride,
     @visibleForTesting PosixTerminalModeController? terminalModeController,
@@ -83,6 +84,13 @@ class PosixTerminalDriver
   /// app-owned shutdown: a supervisor's SIGTERM must always end the
   /// process even when the app hangs mid-teardown.
   final Duration signalGrace;
+
+  /// Whether the driver owns the Ctrl+Z restore/stop/resume workflow.
+  /// Set false for applications that must close sensitive state instead of
+  /// suspending. The chord is then delivered as an ordinary [KeyEvent], so
+  /// the application can finish cleanup and request an orderly exit.
+  /// This does not make external SIGTSTP/SIGCONT observable to Dart.
+  final bool suspendOnCtrlZ;
 
   /// Test seam: replaces the `exit()` call in the force path so grace
   /// behavior is assertable without killing the test process.
@@ -691,7 +699,8 @@ class PosixTerminalDriver
   String _exitSequences(TerminalMode mode) => buildTerminalExitSequences(mode);
 
   bool _interceptParsedEvent(TuiEvent event) {
-    if (!_active ||
+    if (!suspendOnCtrlZ ||
+        !_active ||
         !_nativeRawMode ||
         event is! KeyEvent ||
         event.code.character != 'z' ||

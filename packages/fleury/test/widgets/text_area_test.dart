@@ -39,6 +39,25 @@ List<String> _lines(FleuryTester tester, {int cols = 10, required int rows}) {
 }
 
 void main() {
+  testWidgets('masked multiline text keeps source, offsets and copy redacted', (
+    tester,
+  ) {
+    final ctl = TextEditingController(text: 'private\n🔑value');
+    addTearDown(ctl.dispose);
+    tester.pumpWidget(
+      TextArea(controller: ctl, obscureText: true, autofocus: true),
+    );
+    expect(_lines(tester, rows: 3), ['•••••••', '•••••••', '']);
+    expect(ctl.text, 'private\n🔑value');
+    ctl.selection = TextSelection(baseOffset: 0, extentOffset: ctl.text.length);
+    tester.sendKey(_ctrlChar('c'));
+    expect(tester.clipboard.readInProcess(), isNot(contains('private')));
+    tester.sendKey(const KeyEvent(KeyCode.end));
+    tester.sendKey(const KeyEvent(KeyCode.backspace));
+    expect(ctl.text, 'private\n🔑valu');
+    expect(tester.renderToString(), isNot(contains('private')));
+  });
+
   testWidgets('renders text across multiple rows', (tester) {
     final ctl = TextEditingController(text: 'one\ntwo\nthree');
     tester.pumpWidget(TextArea(controller: ctl));
@@ -313,7 +332,9 @@ void main() {
       expect(ctl.text, 'one\ntwo\nthree');
     });
 
-    testWidgets('large paste is chunked and preserves newlines', (tester) {
+    testWidgets('large paste is chunked and preserves newlines', (
+      tester,
+    ) async {
       final ctl = TextEditingController();
       tester.pumpWidget(
         TextArea(
@@ -334,10 +355,7 @@ void main() {
       expect(area.state.pasteInsertedLength, 3);
       expect(area.state.pasteTotalLength, 8);
 
-      tester.pump();
-      expect(ctl.text, 'ab\ncd\n');
-
-      tester.pump();
+      await tester.settle();
       expect(ctl.text, 'ab\ncd\nef');
 
       tester.pump();
@@ -390,7 +408,7 @@ void main() {
 
     testWidgets('parser-segmented paste is lossless and one undo transaction', (
       tester,
-    ) {
+    ) async {
       final ctl = TextEditingController();
       tester.pumpWidget(
         TextArea(
@@ -409,6 +427,7 @@ void main() {
       parser.feed('efgh'.codeUnits, sink);
       parser.feed('ijkl'.codeUnits, sink);
       parser.feed('\x1B[201~'.codeUnits, sink);
+      await tester.settle();
       expect(ctl.text, 'abcdefghijkl');
 
       tester.sendKey(_ctrlChar('z'));

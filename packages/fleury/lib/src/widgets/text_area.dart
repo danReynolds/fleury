@@ -57,6 +57,7 @@ class TextArea extends StatefulWidget {
     this.cursorStyle = const CellStyle(inverse: true),
     this.enabled = true,
     this.readOnly = false,
+    this.obscureText = false,
     this.validationError,
     this.semanticLabel,
     this.semanticState = SemanticState.empty,
@@ -134,6 +135,13 @@ class TextArea extends StatefulWidget {
 
   /// Policy future copy/cut actions should use for this area.
   final TextClipboardPolicy clipboardPolicy;
+
+  /// Mask every UTF-16 code unit except line breaks. Selection offsets remain
+  /// aligned with the editor's real value. While masked, semantics and
+  /// copy/cut/kill-ring capture are redacted regardless of clipboardPolicy.
+  /// Set clipboardPolicy to redacted explicitly when a Show control should
+  /// retain that policy after turning masking off.
+  final bool obscureText;
 
   /// Keymap used to resolve non-text key events into editing actions.
   final TextEditingKeymap keymap;
@@ -281,6 +289,10 @@ class _TextAreaState extends State<TextArea>
       _formRegistration?.controlValueChanged(this);
     }
   }
+
+  TextClipboardPolicy get _effectiveClipboardPolicy => widget.obscureText
+      ? TextClipboardPolicy.redacted
+      : widget.clipboardPolicy;
 
   bool get _canEdit => widget.enabled && !widget.readOnly;
 
@@ -503,7 +515,7 @@ class _TextAreaState extends State<TextArea>
   /// .allowed]. Redacted / disabled fields skip capture so a later Ctrl+Y
   /// elsewhere cannot recover the plaintext, matching the copy/cut path.
   bool get _captureKillRingText =>
-      widget.clipboardPolicy == TextClipboardPolicy.allowed;
+      _effectiveClipboardPolicy == TextClipboardPolicy.allowed;
 
   KeyEventResult _copyOrCutSelection({required bool cut}) {
     if (!widget.enabled) return KeyEventResult.ignored;
@@ -514,7 +526,7 @@ class _TextAreaState extends State<TextArea>
     if (selected.isEmpty) return KeyEventResult.ignored;
     if (cut && !_canEdit) return KeyEventResult.handled;
 
-    switch (widget.clipboardPolicy) {
+    switch (_effectiveClipboardPolicy) {
       case TextClipboardPolicy.allowed:
         unawaited(ClipboardScope.of(context).write(selected));
         break;
@@ -795,7 +807,7 @@ class _TextAreaState extends State<TextArea>
       label:
           widget.semanticLabel ??
           (widget.placeholder.isEmpty ? null : widget.placeholder),
-      value: widget.clipboardPolicy == TextClipboardPolicy.redacted
+      value: _effectiveClipboardPolicy == TextClipboardPolicy.redacted
           ? null
           : _controller.text,
       enabled: widget.enabled,
@@ -807,7 +819,7 @@ class _TextAreaState extends State<TextArea>
         if (_canEdit) SemanticAction.setValue,
         if (widget.enabled &&
             _controller.hasSelection &&
-            widget.clipboardPolicy != TextClipboardPolicy.disabled)
+            _effectiveClipboardPolicy != TextClipboardPolicy.disabled)
           SemanticAction.copy,
         if (widget.enabled && widget.onSubmit != null) SemanticAction.submit,
       },
@@ -818,8 +830,9 @@ class _TextAreaState extends State<TextArea>
         'composingStart': _controller.composing.normalizedStart,
         'composingEnd': _controller.composing.normalizedEnd,
         'readOnly': widget.readOnly,
-        'redactedValue': widget.clipboardPolicy == TextClipboardPolicy.redacted,
-        ...textClipboardSemanticState(widget.clipboardPolicy),
+        'redactedValue':
+            _effectiveClipboardPolicy == TextClipboardPolicy.redacted,
+        ...textClipboardSemanticState(_effectiveClipboardPolicy),
         'pasteInProgress': _pasteProgress.active,
         'pasteInsertedLength': _pasteProgress.insertedLength,
         'pasteTotalLength': _pasteProgress.totalLength,
@@ -838,7 +851,9 @@ class _TextAreaState extends State<TextArea>
           // would make the Focus widget overwrite them on every rebuild.
           child: _TextAreaDisplay(
             focusNode: _focusNode,
-            text: _controller.text,
+            text: widget.obscureText
+                ? _controller.text.replaceAll(RegExp(r'[^\n]'), '•')
+                : _controller.text,
             selection: _controller.selection,
             placeholder: widget.placeholder,
             placeholderStyle: displayPlaceholderStyle,
