@@ -1,6 +1,6 @@
 // Compile-checked source behind the State management guide. It gives one
 // ChangeNotifier model a clear owner and demonstrates constructor-based and
-// inherited access to the same model.
+// scope-based access to the same model.
 //
 // Run it:  dart run doc_snippets/shared_state.dart
 

@@ -11,16 +11,20 @@
   A `Listenable` value notifies readers through the scope; a plain value
   notifies when replaced by a non-equal one (`updateShouldNotify`). Removed:
   `InheritedWidget`, `InheritedNotifier`, `InheritedElement`,
-  `BuildContext.dependOnInheritedWidgetOfExactType`,
-  `BuildContext.getInheritedWidgetOfExactType`, `StatusHost`, and
-  `StatusHostScope` (the status bar reads `Scope.of<StatusController>`). The
-  framework's scopes (`MediaQuery`, `TickerMode`, `ClipboardScope`,
-  `KeyboardScope`, `TuiBindingScope`, `FleuryAppScope`, …) are `Scope<T>`
-  subclasses with the same constructors; their duplicate value getters
-  (`MediaQuery.data`, `KeyboardScope.notifier`, `ClipboardScope.clipboard`,
-  `LogBufferScope.buffer`, `TuiBindingScope.binding`) are gone — read through
-  `.of`. `DefaultTextStyle` is a `StatelessWidget` over a private scope value.
-  `Theme.of`, `Focus.of`, `Form.of`, and friends are unchanged.
+  `BuildContext.dependOnInheritedWidgetOfExactType`, and
+  `BuildContext.getInheritedWidgetOfExactType`. The framework's scopes
+  (`MediaQuery`, `TickerMode`, `ClipboardScope`, `KeyboardScope`,
+  `TuiBindingScope`, `FleuryAppScope`, …) are `Scope<T>` subclasses with the
+  same constructors; their duplicate value getters (`MediaQuery.data`,
+  `KeyboardScope.notifier`, `ClipboardScope.clipboard`,
+  `LogBufferScope.buffer` / `.notifier`, `TuiBindingScope.binding`,
+  `SelectionScope.registrar`, `FleuryAppScope.notifier`,
+  `CommandRegistryScope.notifier`) are gone — read through `.of`;
+  `PointerRouterScope.router` and `TerminalSessionScope.session` stay.
+  `DefaultTextStyle` is a `StatelessWidget` over a private scope value.
+  `Theme.of`, `Focus.of`, `MediaQuery.of`, and friends keep their signatures;
+  `Form.of` readers now rebuild when the controller notifies (see the
+  fleury_widgets changelog).
 
 - **Pointer input and selection.** TextInput and TextArea support click-to-caret,
   drag selection, Shift-click, and word/line selection. TextInput fills bounded

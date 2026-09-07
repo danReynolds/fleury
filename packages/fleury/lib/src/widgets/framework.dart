@@ -2350,8 +2350,9 @@ class Scope<T extends Object> extends ProxyWidget {
 
   /// Shares an object the scope itself owns.
   ///
-  /// [create] runs once, when the scope mounts, with the scope's own
-  /// [BuildContext] — it may read the scopes above it. Rebuilding the widget
+  /// [create] runs once — when the scope mounts, or when this position
+  /// switches from a shared value to an owned one — with the scope's own
+  /// [BuildContext], so it may read the scopes above it. Rebuilding the widget
   /// does not run it again. When the scope unmounts the object is disposed:
   /// through [dispose] when given, otherwise a [ChangeNotifier] is disposed
   /// automatically and any other value is simply dropped.
@@ -2474,36 +2475,40 @@ class ScopeElement<T extends Object> extends ComponentElement {
     super.update(newWidget);
     final previous = _value;
     final wasOwned = _owned;
-    final T next;
     final create = newWidget._create;
+    final T next;
+    final bool nextOwned;
     if (create != null) {
       // An owning scope keeps its object across rebuilds; create runs once.
       // Only a scope that previously shared a value creates here.
-      if (wasOwned) {
-        next = previous;
-      } else {
-        next = create(this);
-        _owned = true;
-      }
+      next = wasOwned ? previous : create(this);
+      nextOwned = true;
     } else {
       next = newWidget._value!;
-      _owned = false;
+      nextOwned = false;
     }
-    if (!identical(next, previous)) {
-      // Keep the replacement live throughout the synchronous child rebuild
-      // below: a descendant may notify while it rebuilds. The element now
-      // exposes newWidget even if that rebuild throws, so the subscription
-      // follows the new value rather than rolling back.
-      _listen(next);
-      _value = next;
-    }
-    if (newWidget.updateShouldNotify(oldWidget)) notifyDependents();
+    var swapped = false;
     try {
+      if (!identical(next, previous)) {
+        // Keep the replacement live throughout the synchronous child rebuild
+        // below: a descendant may notify while it rebuilds. The element now
+        // exposes newWidget even if that rebuild throws, so the subscription
+        // follows the new value rather than rolling back.
+        _listen(next);
+        _value = next;
+        swapped = true;
+      }
+      // Ownership flips only once the value is in place. An object that
+      // stays (owned → shared with the same instance) passes to whoever
+      // supplies it now; one whose listener failed to attach stays owned and
+      // is released on unmount.
+      _owned = nextOwned;
+      if (newWidget.updateShouldNotify(oldWidget)) notifyDependents();
       rebuild(force: true);
     } finally {
-      // A scope that stopped owning its object disposes it once the subtree
-      // has re-read the replacement.
-      if (wasOwned && !_owned) _release(oldWidget, previous);
+      // An object this scope created and no longer shares is released once
+      // the subtree has re-read the replacement.
+      if (swapped && wasOwned && !nextOwned) _release(oldWidget, previous);
     }
   }
 

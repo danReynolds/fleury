@@ -1053,8 +1053,6 @@ class FocusManager extends ChangeNotifier {
   }
 }
 
-/// Inherited handle that lets descendants reach the surrounding
-/// [FocusManager] without threading it through constructors.
 /// Identity-only handle on a [FocusManager].
 ///
 /// Broad framework boundaries sometimes need to rebind when the surrounding

@@ -15,8 +15,8 @@ typedef LayoutWidgetBuilder =
 /// The [builder] runs during the layout pass, so it always sees current
 /// constraints — but NOT on every pass: it re-runs only when the incoming
 /// constraints change or the element was invalidated (a parent rebuild
-/// delivering a new widget, an inherited dependency changing, a setState
-/// above). Reading an inherited widget (e.g. [MediaQuery]) inside it works
+/// delivering a new widget, a scope dependency changing, a setState
+/// above). Reading a scope (e.g. [MediaQuery]) inside it works
 /// and re-runs when that ancestor changes. The memoization matters: layout
 /// re-enters from the root every frame that renders, and an
 /// unconditionally re-run builder re-instantiates its subtree per frame —

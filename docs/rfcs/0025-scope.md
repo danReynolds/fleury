@@ -43,9 +43,11 @@ Flutter-shaped, and the framework earns simplicity elsewhere.
 That left the tree-local story with two-and-a-half primitives (`InheritedWidget`,
 `InheritedNotifier`, and a hand-written `.of` + `updateShouldNotify` +
 `dependOnInheritedWidgetOfExactType` per scope). Every framework scope repeated
-that boilerplate, and `TickerMode`, `DefaultTextStyle`, and the focus providers
-each needed their own element or a second widget to get identity-only
-semantics. One primitive with the type as the key removes all of it.
+that boilerplate, and the focus manager needed a second widget to get
+identity-only semantics. One primitive with the type as the key removes all of
+it. (Under `Scope`, `TickerMode` and `DefaultTextStyle` instead need private
+value types so a user `Scope<bool>` or `Scope<CellStyle>` cannot collide with
+them — §3.3.)
 
 ## 3. Design
 
@@ -120,7 +122,11 @@ Three cases needed a value type of their own instead of a flag:
 - `TickerMode` shares a private two-constant `_TickerModeData` rather than a
   `bool`, and `DefaultTextStyle` (now a `StatelessWidget`) shares a private
   `_DefaultTextStyleData` rather than a `CellStyle`, so no user scope of those
-  common types can collide with them.
+  common types can collide with them. `DefaultTextStyle` keeps a
+  `StatelessWidget` layer (one extra element per instance) because a const
+  constructor cannot build a wrapper from its `style` parameter in the
+  initializer list; `TickerMode` avoids the layer only because its wrapper is
+  one of two constants.
 - The focus manager is shared twice: `Scope<FocusManager>` (notifying, what
   `Focus.of` reads) and `Scope<_FocusManagerIdentity>` (an equality-by-manager
   handle for boundaries that must rebind on replacement but not rebuild on

@@ -158,8 +158,9 @@ shuffled:
 
 You've already used this. Every `.of(context)` call reads from a **`Scope`** — a
 widget that sits high in the tree, shares one value with everything beneath it,
-and rebuilds any descendant that read it when the value is replaced or, for a
-`ChangeNotifier`, notifies. The built-ins you've met (`Theme`, `MediaQuery`,
+and rebuilds any descendant that read it when the value is replaced by one that
+is not equal or, for a `Listenable` such as a `ChangeNotifier`, when it
+notifies. The built-ins you've met (`Theme`, `MediaQuery`,
 `DefaultTextStyle`) are scopes, each fronted by a `.of(context)` helper.
 
 You'd reach for your own when a model — a current user, a router, a feature

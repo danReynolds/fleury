@@ -21021,7 +21021,8 @@ Changes:
   and a const no-op registrar for `SelectionScope(registrar: null)`.
 - Deleted: `StatusHost` + `StatusHostScope` (the bar reads
   `Scope.of<StatusController>` and drops its `ListenableBuilder`), the
-  duplicate value getters on the named scopes, `inherited_notifier.dart`.
+  duplicate value getters on the named scopes (`PointerRouterScope.router`
+  and `TerminalSessionScope.session` stay), `inherited_notifier.dart`.
 - Docs: state-management guide (tree section rewritten around `Scope`, two
   live examples `state.scope` / `state.scope-create`), widgets-and-state
   concepts page, coming-from-Flutter row, README, changelogs, decision log,

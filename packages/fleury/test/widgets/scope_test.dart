@@ -246,6 +246,32 @@ class _Plain {
   int disposeCalls = 0;
 }
 
+/// Starts as an owning scope; [share] rebuilds the same position as a sharing
+/// scope of whatever object is handed in (possibly the created one).
+class _HandoffHost extends StatefulWidget {
+  const _HandoffHost({required this.child});
+  final Widget child;
+  @override
+  State<_HandoffHost> createState() => _HandoffHostState();
+}
+
+class _HandoffHostState extends State<_HandoffHost> {
+  _Model? created;
+  _Model? shared;
+  void share(_Model model) => setState(() => shared = model);
+
+  @override
+  Widget build(BuildContext context) {
+    final shared = this.shared;
+    if (shared != null)
+      return Scope<_Model>(value: shared, child: widget.child);
+    return Scope<_Model>.create(
+      create: (_) => created = _Model(7),
+      child: widget.child,
+    );
+  }
+}
+
 /// Runs [builder] with its own context (Fleury has no `Builder` widget).
 class _Build extends StatelessWidget {
   const _Build(this.builder);
@@ -701,6 +727,55 @@ void main() {
       );
       root.unmount();
       expect(order, ['child', 'dispose']);
+    });
+
+    test('handing the owned object over as a shared value keeps it alive', () {
+      final owner = BuildOwner();
+      final log = <int>[];
+      final root =
+          owner.mountRoot(_HandoffHost(child: _Reader(log: log)))
+              as StatefulElement;
+      final host = root.state as _HandoffHostState;
+      final model = host.created!;
+      expect(log, [7]);
+
+      // The parent now supplies the very object the scope created: ownership
+      // passes to the parent, nothing is disposed, the scope keeps listening.
+      host.share(model);
+      owner.flushBuild();
+      expect(model.disposed, isFalse);
+      expect(model.hasListeners, isTrue);
+      model.increment();
+      owner.flushBuild();
+      expect(log, [7, 7, 8]);
+
+      root.unmount();
+      expect(
+        model.disposed,
+        isFalse,
+        reason: 'a shared value is never disposed',
+      );
+      expect(model.hasListeners, isFalse);
+    });
+
+    test('a failed hand-off leaves the object owned and disposes it later', () {
+      final owner = BuildOwner();
+      final root =
+          owner.mountRoot(_HandoffHost(child: _Reader(log: <int>[])))
+              as StatefulElement;
+      final host = root.state as _HandoffHostState;
+      final created = host.created!;
+
+      // A disposed notifier refuses listeners, so the swap fails before the
+      // scope adopts it; the created object must still be released later.
+      host.share(_Model()..dispose());
+      expect(owner.flushBuild, throwsStateError);
+      expect(created.disposed, isFalse);
+      expect(created.hasListeners, isTrue, reason: 'still the live value');
+
+      root.unmount();
+      expect(created.disposed, isTrue);
+      expect(created.hasListeners, isFalse);
     });
 
     test('switching between a shared and an owned value at one position', () {

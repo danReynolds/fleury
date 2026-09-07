@@ -61,7 +61,7 @@ Future<void> main(List<String> args) async {
       elementShallowBytes += object.json!['size'] as int;
       for (final field in object.fields ?? const <BoundField>[]) {
         final fieldName = field.decl!.name!;
-        if (!['_inheritedDependencies', '_externalDependencies', '_dependents']
+        if (!['_scopeDependencies', '_externalDependencies', '_dependents']
             .contains(fieldName)) continue;
         final stats = storage.putIfAbsent(
             fieldName,

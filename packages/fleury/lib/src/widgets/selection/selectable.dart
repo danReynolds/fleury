@@ -119,7 +119,9 @@ abstract interface class SelectionRegistrar {
 /// Pass `registrar: null` to mask a deeper subtree from any
 /// ancestor `SelectionArea` — useful for forms or interactive panels
 /// embedded inside a selectable region that shouldn't themselves
-/// participate in selection.
+/// participate in selection. Read the registrar through [maybeOf]: a
+/// direct `Scope.of<SelectionRegistrar>` below a masked subtree returns the
+/// no-op registrar that stands in for `null`, not `null` itself.
 class SelectionScope extends Scope<SelectionRegistrar> {
   /// [registrar] is the registrar that ought to own Selectables in this
   /// subtree, or `null` to disable selection for the subtree (Selectables

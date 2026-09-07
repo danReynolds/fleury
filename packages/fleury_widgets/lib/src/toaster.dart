@@ -85,7 +85,9 @@ class Toaster extends StatefulWidget {
     CellStyle? style,
     ToastAction? action,
   }) {
-    final state = Scope.maybeOf<_ToasterState>(context);
+    // An action from a handler: locate the toaster without subscribing the
+    // caller to anything (the state never changes identity or notifies).
+    final state = context.findAncestorStateOfType<_ToasterState>();
     if (state == null) {
       throw StateError(
         'No Toaster above this BuildContext. Wrap your app in a Toaster.',
@@ -348,9 +350,6 @@ class _ToasterState extends State<Toaster> {
     // Always wrap (even with no bindings) so the child's position in the tree
     // is stable: conditionally adding/removing this wrapper as toasts come and
     // go would re-parent the child and tear down e.g. an open menu's overlay.
-    return Scope<_ToasterState>(
-      value: this,
-      child: KeyBindings(bindings: bindings, child: widget.child),
-    );
+    return KeyBindings(bindings: bindings, child: widget.child);
   }
 }
