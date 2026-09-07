@@ -77,6 +77,86 @@ void main() {
   });
 
   group('TextPasteDriver', () {
+    test('a paste arriving through a reentrant finish keeps every accepted '
+        'transaction', () {
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+      final pending = <void Function()>[];
+      late final TextPasteDriver driver;
+      driver = TextPasteDriver(
+        policy: () =>
+            const TextPastePolicy(largePasteThreshold: 0, chunkSize: 2),
+        documentLength: () => controller.text.length,
+        applyEdit: (text, {required coalesce}) =>
+            controller.paste(text, coalesce: coalesce),
+        isAttached: () => true,
+        onProgressChanged: () {},
+        schedulePostFrame: pending.add,
+      );
+      driver.start(const PasteEvent('abcdef'), 'abcdef');
+      var nested = false;
+      controller.addListener(() {
+        if (nested) return;
+        nested = true;
+        driver.start(const PasteEvent('UVWXYZ12'), 'UVWXYZ12');
+      });
+      // Flushing abcdef invokes the listener, which starts another paste
+      // before this caller can begin inserting its own payload.
+      driver.start(const PasteEvent('!'), '!');
+      for (var step = 0; pending.isNotEmpty && step < 20; step++) {
+        pending.removeAt(0)();
+      }
+      expect(controller.text, 'abcdefUVWXYZ12!');
+      controller.undo();
+      expect(controller.text, 'abcdefUVWXYZ12');
+      controller.undo();
+      expect(controller.text, 'abcdef');
+      controller.undo();
+      expect(controller.text, isEmpty);
+      expect(driver.isActive, isFalse);
+    });
+
+    for (final trigger in ['first step', 'later step', 'finish']) {
+      test('a listener starting another paste during $trigger keeps both '
+          'payloads and undo transactions', () {
+        final controller = TextEditingController();
+        addTearDown(controller.dispose);
+        final pending = <void Function()>[];
+        late final TextPasteDriver driver;
+        driver = TextPasteDriver(
+          policy: () =>
+              const TextPastePolicy(largePasteThreshold: 0, chunkSize: 2),
+          documentLength: () => controller.text.length,
+          applyEdit: (text, {required coalesce}) =>
+              controller.paste(text, coalesce: coalesce),
+          isAttached: () => true,
+          onProgressChanged: () {},
+          schedulePostFrame: pending.add,
+        );
+        var edits = 0;
+        var replaced = false;
+        controller.addListener(() {
+          edits++;
+          if (!replaced && edits == (trigger == 'first step' ? 1 : 2)) {
+            replaced = true;
+            driver.start(const PasteEvent('UVWXYZ12'), 'UVWXYZ12');
+          }
+        });
+        driver.start(const PasteEvent('abcdef'), 'abcdef');
+        if (trigger == 'finish') driver.finish();
+        for (var step = 0; pending.isNotEmpty && step < 20; step++) {
+          pending.removeAt(0)();
+        }
+        expect(controller.text, 'abcdefUVWXYZ12');
+        expect(driver.isActive, isFalse);
+        expect(driver.progress.active, isFalse);
+        controller.undo();
+        expect(controller.text, 'abcdef', reason: 'new paste is one undo');
+        controller.undo();
+        expect(controller.text, isEmpty, reason: 'original paste is one undo');
+      });
+    }
+
     test('applies a large paste in O(log n) edits and linear copying', () {
       final model = _FakeModel();
       final pending = <void Function()>[];
