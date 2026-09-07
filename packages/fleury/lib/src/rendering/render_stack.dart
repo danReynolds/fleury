@@ -156,6 +156,16 @@ class RenderStack extends RenderObject implements RenderObjectWithChildren {
   @override
   void replaceAllChildren(List<RenderObject> newChildren) {
     if (hasSameRenderChildrenInOrder(_children, newChildren)) return;
+    final removedIndex = singleRemovedRenderChildIndex(_children, newChildren);
+    if (removedIndex != null) {
+      final removed = _children[removedIndex];
+      dropChild(removed);
+      _childOffsets.remove(removed);
+      _children.removeAt(removedIndex);
+      markNeedsLayout();
+      return;
+    }
+
     final newSet = Set<RenderObject>.identity()..addAll(newChildren);
     for (final c in List<RenderObject>.from(_children)) {
       if (!newSet.contains(c)) {
@@ -308,6 +318,15 @@ class RenderIndexedStack extends RenderObject
   @override
   void replaceAllChildren(List<RenderObject> newChildren) {
     if (hasSameRenderChildrenInOrder(_children, newChildren)) return;
+    final removedIndex = singleRemovedRenderChildIndex(_children, newChildren);
+    if (removedIndex != null) {
+      final removed = _children[removedIndex];
+      dropChild(removed);
+      _children.removeAt(removedIndex);
+      markNeedsLayout();
+      return;
+    }
+
     final newSet = Set<RenderObject>.identity()..addAll(newChildren);
     for (final c in List<RenderObject>.from(_children)) {
       if (!newSet.contains(c)) dropChild(c);

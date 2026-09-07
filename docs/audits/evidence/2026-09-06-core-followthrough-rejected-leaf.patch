@@ -1,0 +1,36 @@
+diff --git a/packages/fleury/lib/src/semantics/semantics.dart b/packages/fleury/lib/src/semantics/semantics.dart
+index 3d259f69..db954842 100644
+--- a/packages/fleury/lib/src/semantics/semantics.dart
++++ b/packages/fleury/lib/src/semantics/semantics.dart
+@@ -2084,6 +2084,14 @@ SemanticNode _bindOwnedActionTargetTokens(
+   Element element,
+   List<SemanticNode> graftedChildren,
+ ) {
++  if (node.children.isEmpty &&
++      node.actions.isEmpty &&
++      node.actionTargetToken == null) {
++    // Most semantic leaves are plain text. Revoke any previous action lease
++    // without allocating signatures/maps or walking an action-free leaf twice.
++    elementActionTargetTokens(element, const <Object, Object>{});
++    return node;
++  }
+   final graftedIds = graftedChildren.isEmpty
+       ? const <SemanticNodeId>{}
+       : <SemanticNodeId>{for (final child in graftedChildren) child.id};
+diff --git a/packages/fleury/lib/src/widgets/framework.dart b/packages/fleury/lib/src/widgets/framework.dart
+index cbf55977..2df2eb45 100644
+--- a/packages/fleury/lib/src/widgets/framework.dart
++++ b/packages/fleury/lib/src/widgets/framework.dart
+@@ -490,6 +490,12 @@ Map<Object, String> elementActionTargetTokens(
+   Element element,
+   Map<Object, Object> signatures,
+ ) {
++  if (signatures.isEmpty) {
++    // Disappearing actions must revoke their leases even when no replacement
++    // map is needed. A later action at the same position gets a fresh nonce.
++    element._actionTargetLeases = null;
++    return const <Object, String>{};
++  }
+   final previous = element._actionTargetLeases;
+   final next = <Object, _ElementActionTargetLease>{};
+   final tokens = <Object, String>{};

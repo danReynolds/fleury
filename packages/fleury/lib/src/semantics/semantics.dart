@@ -1245,6 +1245,8 @@ String _renderSemanticKeySegment(Key key) {
 /// own-`key:` form, this scheme treats `Key`s as structural identifiers, not a
 /// place to encode secrets.
 String? semanticAnchorOf(Element element) {
+  final anchors = _snapshotAnchors;
+  if (anchors != null) return _snapshotAnchorOf(element, anchors)?.anchor;
   final scope = <String>[]; // keyed segments, leaf→root
   // Elements below the nearest key (leaf→root). We only need their POSITIONAL
   // indices, but `_childIndexOf` is O(siblings), and a fully-unkeyed subtree
@@ -1267,6 +1269,37 @@ String? semanticAnchorOf(Element element) {
   if (!sawKey) return null; // no `_childIndexOf` computed for the unkeyed case
   final tail = <String>[for (final t in tailElements) '~${_childIndexOf(t)}'];
   return 'auto:${[...scope.reversed, ...tail.reversed].join('/')}';
+}
+
+// A keyed child discards its parent's positional tail, but keeps ALL keyed
+// ancestors. Carry both strings so descendants can reuse the common path
+// without changing the public identity scheme. Null also gets memoized: an
+// entirely unkeyed tree must not calculate sibling positions it will discard.
+typedef _SemanticAnchor = ({String scope, String anchor});
+
+_SemanticAnchor? _snapshotAnchorOf(
+  Element element,
+  Map<Element, _SemanticAnchor?> anchors,
+) {
+  if (anchors.containsKey(element)) return anchors[element];
+  final parent = element.elementParent;
+  final prefix = parent == null ? null : _snapshotAnchorOf(parent, anchors);
+  final key = element.widget.key;
+  final _SemanticAnchor? result;
+  if (key != null && key is! GlobalKey) {
+    final segment = escapeSemanticIdSegment(_renderSemanticKeySegment(key));
+    final scope = prefix == null ? 'auto:$segment' : '${prefix.scope}/$segment';
+    result = (scope: scope, anchor: scope);
+  } else if (prefix != null) {
+    result = (
+      scope: prefix.scope,
+      anchor: '${prefix.anchor}/~${_childIndexOf(element)}',
+    );
+  } else {
+    result = null;
+  }
+  anchors[element] = result;
+  return result;
 }
 
 /// Whether [id] is an auto-generated *positional* id — one that can come to
@@ -1629,9 +1662,9 @@ final class SemanticsElement extends ComponentElement
   ///
   /// Recomputed on every read: the value is position-dependent, including
   /// *non-Semantics* reshuffles that shift a positional segment without any
-  /// [SemanticsElement] lifecycle event. Full snapshots share sibling indices
-  /// only for their synchronous walk; no identity or position cache survives
-  /// into the next update or action dispatch.
+  /// [SemanticsElement] lifecycle event. Full snapshots share ancestor prefixes
+  /// and sibling indices only for their synchronous walk; no identity or
+  /// position cache survives into the next update or action dispatch.
   SemanticNodeId get _nodeId {
     final explicitId = widget.id;
     if (explicitId != null) {
@@ -1957,13 +1990,16 @@ List<SemanticNode> _collectFrom(
   Map<SemanticNodeId, Element>? elements,
 ]) {
   final previous = _snapshotChildIndices;
+  final previousAnchors = _snapshotAnchors;
   _snapshotChildIndices = Map<Element, int>.identity();
+  _snapshotAnchors = Map<Element, _SemanticAnchor?>.identity();
   try {
     final nodes = <SemanticNode>[];
     _collectInto(element, nodes, elements);
     return nodes;
   } finally {
     _snapshotChildIndices = previous;
+    _snapshotAnchors = previousAnchors;
   }
 }
 
@@ -1973,6 +2009,9 @@ List<SemanticNode> _collectFrom(
 // later snapshots must see the current tree position. Stack discipline also
 // isolates nested snapshots and releases the map when a contributor throws.
 Map<Element, int>? _snapshotChildIndices;
+// Shared prefixes have the same synchronous lifetime as sibling indices.
+// No Element or path survives into another snapshot, retained update or action.
+Map<Element, _SemanticAnchor?>? _snapshotAnchors;
 
 void _collectInto(
   Element element,

@@ -1,0 +1,430 @@
+{
+  "observations": [
+    {
+      "kind": "post-dispose-heap",
+      "cycle": 0,
+      "projectLiveBytes": 4192,
+      "projectLiveInstances": 129,
+      "heap": {
+        "type": "MemoryUsage",
+        "externalUsage": 80,
+        "heapCapacity": 49364992,
+        "heapUsage": 33199104
+      },
+      "dart": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\""
+    },
+    {
+      "kind": "post-dispose-heap",
+      "cycle": 1,
+      "projectLiveBytes": 4192,
+      "projectLiveInstances": 129,
+      "heap": {
+        "type": "MemoryUsage",
+        "externalUsage": 80,
+        "heapCapacity": 60375040,
+        "heapUsage": 33462048
+      },
+      "dart": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\""
+    },
+    {
+      "kind": "post-dispose-heap",
+      "cycle": 2,
+      "projectLiveBytes": 4192,
+      "projectLiveInstances": 129,
+      "heap": {
+        "type": "MemoryUsage",
+        "externalUsage": 80,
+        "heapCapacity": 60899328,
+        "heapUsage": 33570528
+      },
+      "dart": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\""
+    },
+    {
+      "kind": "post-dispose-heap",
+      "cycle": 3,
+      "projectLiveBytes": 4192,
+      "projectLiveInstances": 129,
+      "heap": {
+        "type": "MemoryUsage",
+        "externalUsage": 80,
+        "heapCapacity": 60375040,
+        "heapUsage": 33735136
+      },
+      "dart": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\""
+    }
+  ],
+  "unchangedClassInventory": [
+    {
+      "class": "SemanticRole",
+      "library": "package:fleury/src/semantics/semantics.dart",
+      "bytes": 512,
+      "instances": 16
+    },
+    {
+      "class": "SpecialKey",
+      "library": "package:fleury/src/input/events.dart",
+      "bytes": 224,
+      "instances": 7
+    },
+    {
+      "class": "KeyCode",
+      "library": "package:fleury/src/input/events.dart",
+      "bytes": 224,
+      "instances": 7
+    },
+    {
+      "class": "MainAxisAlignment",
+      "library": "package:fleury/src/rendering/render_flex.dart",
+      "bytes": 192,
+      "instances": 6
+    },
+    {
+      "class": "CellStyle",
+      "library": "package:fleury/src/rendering/cell.dart",
+      "bytes": 160,
+      "instances": 2
+    },
+    {
+      "class": "CellRunKind",
+      "library": "package:fleury/src/rendering/cell_span.dart",
+      "bytes": 160,
+      "instances": 5
+    },
+    {
+      "class": "CellRole",
+      "library": "package:fleury/src/rendering/cell.dart",
+      "bytes": 128,
+      "instances": 4
+    },
+    {
+      "class": "_ElementLifecycle",
+      "library": "package:fleury/src/widgets/framework.dart",
+      "bytes": 128,
+      "instances": 4
+    },
+    {
+      "class": "RenderFramePhase",
+      "library": "package:fleury/src/rendering/render_object.dart",
+      "bytes": 128,
+      "instances": 4
+    },
+    {
+      "class": "PendingKeySequence",
+      "library": "package:fleury/src/input/events.dart",
+      "bytes": 128,
+      "instances": 2
+    },
+    {
+      "class": "CrossAxisAlignment",
+      "library": "package:fleury/src/rendering/render_flex.dart",
+      "bytes": 128,
+      "instances": 4
+    },
+    {
+      "class": "CellSize",
+      "library": "package:fleury/src/foundation/geometry.dart",
+      "bytes": 96,
+      "instances": 3
+    },
+    {
+      "class": "StackFit",
+      "library": "package:fleury/src/rendering/render_stack.dart",
+      "bytes": 96,
+      "instances": 3
+    },
+    {
+      "class": "TextAlign",
+      "library": "package:fleury/src/rendering/render_objects.dart",
+      "bytes": 96,
+      "instances": 3
+    },
+    {
+      "class": "EdgeInsets",
+      "library": "package:fleury/src/rendering/edge_insets.dart",
+      "bytes": 96,
+      "instances": 2
+    },
+    {
+      "class": "SemanticPresentationStats",
+      "library": "package:fleury/src/semantics/semantic_presenter.dart",
+      "bytes": 80,
+      "instances": 1
+    },
+    {
+      "class": "CellWidth",
+      "library": "package:fleury/src/rendering/width_policy.dart",
+      "bytes": 64,
+      "instances": 2
+    },
+    {
+      "class": "ClusterLowering",
+      "library": "package:fleury/src/rendering/width_policy.dart",
+      "bytes": 64,
+      "instances": 2
+    },
+    {
+      "class": "SurfaceCapabilities",
+      "library": "package:fleury/src/rendering/surface_capabilities.dart",
+      "bytes": 64,
+      "instances": 1
+    },
+    {
+      "class": "SemanticDirtySnapshot",
+      "library": "package:fleury/src/semantics/semantics.dart",
+      "bytes": 64,
+      "instances": 2
+    },
+    {
+      "class": "WidthCorrection",
+      "library": "package:fleury/src/rendering/cell_span.dart",
+      "bytes": 64,
+      "instances": 2
+    },
+    {
+      "class": "KeyboardLatchClock",
+      "library": "package:fleury/src/input/keyboard_state.dart",
+      "bytes": 64,
+      "instances": 2
+    },
+    {
+      "class": "FrameContainmentPhase",
+      "library": "package:fleury/src/rendering/render_error_boundary.dart",
+      "bytes": 64,
+      "instances": 2
+    },
+    {
+      "class": "TextOverflow",
+      "library": "package:fleury/src/rendering/render_objects.dart",
+      "bytes": 64,
+      "instances": 2
+    },
+    {
+      "class": "Axis",
+      "library": "package:fleury/src/rendering/render_flex.dart",
+      "bytes": 64,
+      "instances": 2
+    },
+    {
+      "class": "CellBufferDiff",
+      "library": "package:fleury/src/rendering/cell_buffer.dart",
+      "bytes": 48,
+      "instances": 1
+    },
+    {
+      "class": "SemanticState",
+      "library": "package:fleury/src/semantics/semantics.dart",
+      "bytes": 48,
+      "instances": 3
+    },
+    {
+      "class": "CellConstraints",
+      "library": "package:fleury/src/rendering/layout.dart",
+      "bytes": 48,
+      "instances": 1
+    },
+    {
+      "class": "KeyboardCapabilities",
+      "library": "package:fleury/src/input/keyboard_state.dart",
+      "bytes": 48,
+      "instances": 1
+    },
+    {
+      "class": "KeyboardSnapshot",
+      "library": "package:fleury/src/input/keyboard_state.dart",
+      "bytes": 48,
+      "instances": 1
+    },
+    {
+      "class": "CellOffset",
+      "library": "package:fleury/src/foundation/geometry.dart",
+      "bytes": 32,
+      "instances": 1
+    },
+    {
+      "class": "TuiDirtyRows",
+      "library": "package:fleury/src/runtime/tui_frame_loop.dart",
+      "bytes": 32,
+      "instances": 1
+    },
+    {
+      "class": "TextPresentationPolicy",
+      "library": "package:fleury/src/rendering/width_policy.dart",
+      "bytes": 32,
+      "instances": 1
+    },
+    {
+      "class": "CellWidthPolicy",
+      "library": "package:fleury/src/rendering/width_policy.dart",
+      "bytes": 32,
+      "instances": 1
+    },
+    {
+      "class": "ColorMode",
+      "library": "package:fleury/src/rendering/surface_capabilities.dart",
+      "bytes": 32,
+      "instances": 1
+    },
+    {
+      "class": "BuildFlushStats",
+      "library": "package:fleury/src/widgets/framework.dart",
+      "bytes": 32,
+      "instances": 1
+    },
+    {
+      "class": "GlyphTier",
+      "library": "package:fleury/src/rendering/surface_capabilities.dart",
+      "bytes": 32,
+      "instances": 1
+    },
+    {
+      "class": "SelectionGeometry",
+      "library": "package:fleury/src/widgets/selection/selection.dart",
+      "bytes": 32,
+      "instances": 1
+    },
+    {
+      "class": "SelectionStatus",
+      "library": "package:fleury/src/widgets/selection/selection.dart",
+      "bytes": 32,
+      "instances": 1
+    },
+    {
+      "class": "InlineImageSupport",
+      "library": "package:fleury/src/rendering/surface_capabilities.dart",
+      "bytes": 32,
+      "instances": 1
+    },
+    {
+      "class": "PointerPrecision",
+      "library": "package:fleury/src/rendering/surface_capabilities.dart",
+      "bytes": 32,
+      "instances": 1
+    },
+    {
+      "class": "Cell",
+      "library": "package:fleury/src/rendering/cell.dart",
+      "bytes": 32,
+      "instances": 1
+    },
+    {
+      "class": "TextEdgeKind",
+      "library": "package:fleury/src/rendering/selectable_text_mixin.dart",
+      "bytes": 32,
+      "instances": 1
+    },
+    {
+      "class": "TextEdgeRelation",
+      "library": "package:fleury/src/rendering/selectable_text_mixin.dart",
+      "bytes": 32,
+      "instances": 1
+    },
+    {
+      "class": "MouseButton",
+      "library": "package:fleury/src/input/events.dart",
+      "bytes": 32,
+      "instances": 1
+    },
+    {
+      "class": "AnimationPolicy",
+      "library": "package:fleury/src/animation/animation_policy.dart",
+      "bytes": 32,
+      "instances": 1
+    },
+    {
+      "class": "MainAxisSize",
+      "library": "package:fleury/src/rendering/render_flex.dart",
+      "bytes": 32,
+      "instances": 1
+    },
+    {
+      "class": "SemanticCoverageAudit",
+      "library": "package:fleury/src/semantics/semantic_coverage.dart",
+      "bytes": 32,
+      "instances": 1
+    },
+    {
+      "class": "FrameUnchanged",
+      "library": "package:fleury/src/runtime/tui_frame_loop.dart",
+      "bytes": 16,
+      "instances": 1
+    },
+    {
+      "class": "CellSpanBuilder",
+      "library": "package:fleury/src/rendering/cell_span.dart",
+      "bytes": 16,
+      "instances": 1
+    },
+    {
+      "class": "DefaultWidthResolver",
+      "library": "package:fleury/src/rendering/width_resolver.dart",
+      "bytes": 16,
+      "instances": 1
+    },
+    {
+      "class": "AgentApp",
+      "library": "package:fleury_samples/src/agent_tui.dart",
+      "bytes": 16,
+      "instances": 1
+    },
+    {
+      "class": "EmptyBox",
+      "library": "package:fleury/src/widgets/basic.dart",
+      "bytes": 16,
+      "instances": 1
+    },
+    {
+      "class": "SemanticNodeId",
+      "library": "package:fleury/src/semantics/semantics.dart",
+      "bytes": 16,
+      "instances": 1
+    },
+    {
+      "class": "SystemClock",
+      "library": "package:fleury/src/animation/clock.dart",
+      "bytes": 16,
+      "instances": 1
+    },
+    {
+      "class": "PresentationFullRepaint",
+      "library": "package:fleury/src/runtime/frame_presentation.dart",
+      "bytes": 16,
+      "instances": 1
+    },
+    {
+      "class": "FramePresentationPlanner",
+      "library": "package:fleury/src/runtime/frame_presentation.dart",
+      "bytes": 16,
+      "instances": 1
+    },
+    {
+      "class": "FileManagerApp",
+      "library": "package:fleury_samples/src/file_manager.dart",
+      "bytes": 16,
+      "instances": 1
+    },
+    {
+      "class": "FinanceApp",
+      "library": "package:fleury_samples/src/finance.dart",
+      "bytes": 16,
+      "instances": 1
+    },
+    {
+      "class": "EditorApp",
+      "library": "package:fleury_samples/src/editor.dart",
+      "bytes": 16,
+      "instances": 1
+    },
+    {
+      "class": "DashboardApp",
+      "library": "package:fleury_samples/src/dashboard.dart",
+      "bytes": 16,
+      "instances": 1
+    },
+    {
+      "class": "FrameFullRepaint",
+      "library": "package:fleury/src/runtime/tui_frame_loop.dart",
+      "bytes": 16,
+      "instances": 1
+    }
+  ]
+}

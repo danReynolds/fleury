@@ -499,8 +499,10 @@ final class SemanticsWireEncoder {
     _lastFlattenedNodes = 0;
   }
 
-  static Uint8List _bytes(Map<String, Object?> payload) =>
-      Uint8List.fromList(utf8.encode(jsonEncode(payload)));
+  static Uint8List _bytes(Map<String, Object?> payload) {
+    final bytes = _semanticJsonEncoder.convert(payload);
+    return bytes is Uint8List ? bytes : Uint8List.fromList(bytes);
+  }
 
   static Uint8List _fullBytes(
     String rootId,
@@ -524,8 +526,12 @@ int _checkedSemanticPayloadLimit(int value) {
   return value;
 }
 
+// Encode directly to UTF-8, avoiding an intermediate JSON string and a
+// redundant copy of the resulting typed bytes. The converter retains no input.
+final _semanticJsonEncoder = JsonUtf8Encoder();
+
 int _semanticNodeWireLength(Map<String, Object?> node) =>
-    utf8.encode(jsonEncode(node)).length;
+    _semanticJsonEncoder.convert(node).length;
 
 bool _semanticWireIdIsValid(String id) {
   if (id.isEmpty) return false;

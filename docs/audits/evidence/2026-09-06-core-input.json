@@ -1,0 +1,61 @@
+{
+  "baselineRevision": "3980fc981eaadfc5cdd73a5ba345828d47fdef8a",
+  "candidateProductionRevision": "74a362f9545448c92e3c87a3f608b82f444b6ec5",
+  "method": {
+    "dart": "3.12.2",
+    "platform": "macOS arm64",
+    "viewport": [
+      120,
+      40
+    ],
+    "inputIterations": 1000,
+    "coreIterations": 300,
+    "warmupInputs": 30,
+    "coreUpdateWarmups": 30,
+    "coreMountWarmups": 15,
+    "freshProcessPairs": 3,
+    "order": [
+      "baseline,candidate",
+      "candidate,baseline",
+      "baseline,candidate"
+    ],
+    "execution": "native outside filesystem sandbox; no own concurrent tests/compilers; shared host",
+    "inputTiming": "in-memory peer enqueue through real runApp dispatch, scheduled frame and semantic flush, ending on the first timer turn after onEvent",
+    "fingerprints": "semantic snapshots including full positional paths; only OverlayEntry/UniqueKey identity hashes and dashboard clock text normalized; inspection omits action lease nonce values",
+    "scope": "input full semantic refresh policy preserved; no socket or physical display latency claim"
+  },
+  "sourceSha256": {
+    "packages/fleury/lib/src/semantics/semantics.dart": "076874efd94d85788174a82ec087332756d50b334eefe6afdf1eda7f10d3eb50",
+    "profiling/bin/core_input_probe.dart": "1e99302f78da4cbcc85334462706fbd2420947e92227caea8252cd1b28c950d1",
+    "profiling/bin/core_lifecycle_probe.dart": "4ed7fe641a7de441a886355e76e2d4ee6abd869cf6ba90d587472f11f505b6e2",
+    "profiling/bin/sample_frame_host.dart": "fbb5936bd6e3c93062f5255e987dda84664162e8697910bd251f48303d0c0dad",
+    "profiling/bin/core_lifetime_probe.dart": "26d3887440b8a7a96d382d263a858dbf84d7abf03500db30aaf303152e930965"
+  },
+  "measuredInputHarnessSha256": "929a8b3cc656e5f7cf1281019450c1d27b14967ef4eacbe92997923faa46113f",
+  "harnessNote": "After measurement only the header comment was clarified: TickerMode does not mute the separate TextInput caret timer. Measured body unchanged.",
+  "executables": {
+    "inputBaseline": "85ceb29b64d01bdd8d29db73f063b8e29ac7f370e22c82d63bf19bdebeef87a9",
+    "inputCandidate": "60312b6fc49f3e75d7b40d9df64fbae7750853d45e07f260ed8599b419616a6d",
+    "coreBaseline": "043c1875ec2a5602572ccb52ccde238a49af237a514ec2dc448b45a123ba747a",
+    "coreCandidate": "98bb0ae6223f7b40e24270310ba81db89e53a26bab1669e9e24c1fa71b606fad"
+  },
+  "artifacts": {
+    "2026-09-06-core-input-interactions.csv": {
+      "rows": 66,
+      "sha256": "fcb1110e3cb5ad760a707671c69a17250f9d497e089ef2a72212528c48cdb2d3"
+    },
+    "2026-09-06-core-input-frames.csv": {
+      "rows": 318,
+      "sha256": "50f7b3a81f7e254c2a453fed10984224cafe41e4068fcf2e8a4d7c8f56941212"
+    },
+    "2026-09-06-core-input-lifetime.json": {
+      "sha256": "7a9f6004dfd7b6f8135e3e05e3f66a52c7aec32fbc20238ce6061e97c6661f38"
+    }
+  },
+  "boundaries": [
+    "No total-RAM reduction or allocation-rate claim",
+    "Caret timers remain active; forms windows include 1 extra idle visual frame / 2 extra typing visual frames per 1000 inputs",
+    "All 11 input fingerprints agree across all 6 processes; all 48 control-tree text fingerprints agree; 5 mount cases have no fingerprint",
+    "Warm AOT process medians; p99 has shared-host outliers and is not a universal latency guarantee"
+  ]
+}
