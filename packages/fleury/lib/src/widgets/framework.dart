@@ -616,13 +616,19 @@ abstract class Element implements BuildContext {
   /// Shared by [unmount] (permanent) and [deactivate] (temporary; the next
   /// rebuild re-establishes whatever the new tree position warrants).
   void _detachDependencies() {
-    for (final ancestor in _inheritedDependencies) {
-      ancestor._dependents.remove(this);
+    final inherited = _inheritedDependencies;
+    if (inherited != null) {
+      for (final ancestor in inherited) {
+        ancestor._dependents.remove(this);
+      }
+      _inheritedDependencies = null;
     }
-    _inheritedDependencies.clear();
 
-    final dependencies = _externalDependencies.toList();
-    _externalDependencies.clear();
+    // Transfer ownership before callbacks: a re-entrant registration gets a
+    // fresh set, leaving this batch stable without allocating a list copy.
+    final dependencies = _externalDependencies;
+    _externalDependencies = null;
+    if (dependencies == null) return;
     final errors = _TeardownErrors();
     for (final dep in dependencies) {
       errors.capture(() => dep.removeDependent(this));
@@ -688,7 +694,8 @@ abstract class Element implements BuildContext {
   void _deactivate() {
     assert(_lifecycle == _ElementLifecycle.active);
     _hadDependenciesWhenDeactivated =
-        _inheritedDependencies.isNotEmpty || _externalDependencies.isNotEmpty;
+        (_inheritedDependencies?.isNotEmpty ?? false) ||
+        (_externalDependencies?.isNotEmpty ?? false);
     _detachDependencies();
     _owner?._dirtyElements.remove(this);
     _lifecycle = _ElementLifecycle.inactive;
@@ -771,18 +778,19 @@ abstract class Element implements BuildContext {
   void forgetChild(Element child) {}
 
   // Ancestors this element has registered with via
-  // [dependOnInheritedWidgetOfExactType]. Cleared on unmount.
-  final Set<InheritedElement> _inheritedDependencies = <InheritedElement>{};
+  // [dependOnInheritedWidgetOfExactType]. Most structural elements never read
+  // inherited state; allocate storage only when the first edge is registered.
+  Set<InheritedElement>? _inheritedDependencies;
 
   // Non-widget dependencies (e.g. Animation) read during build. Detached
   // on unmount so the source stops marking this element dirty.
-  final Set<ElementDependency> _externalDependencies = <ElementDependency>{};
+  Set<ElementDependency>? _externalDependencies;
 
   /// Registers [dependency] as something this element's build read,
   /// so it rebuilds when the dependency changes and detaches on
   /// unmount. Idempotent. Called by [ElementDependency] sources.
   void dependOnExternal(ElementDependency dependency) {
-    if (_externalDependencies.add(dependency)) {
+    if ((_externalDependencies ??= <ElementDependency>{}).add(dependency)) {
       dependency.addDependent(this);
     }
   }
@@ -792,7 +800,7 @@ abstract class Element implements BuildContext {
     final ancestor = _findInheritedElementOfExactType<T>();
     if (ancestor == null) return null;
     ancestor._dependents.add(this);
-    _inheritedDependencies.add(ancestor);
+    (_inheritedDependencies ??= <InheritedElement>{}).add(ancestor);
     return ancestor.widget as T;
   }
 

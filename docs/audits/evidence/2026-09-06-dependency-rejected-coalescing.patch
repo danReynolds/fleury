@@ -1,0 +1,20 @@
+diff --git a/packages/fleury/lib/src/widgets/inherited_notifier.dart b/packages/fleury/lib/src/widgets/inherited_notifier.dart
+--- a/packages/fleury/lib/src/widgets/inherited_notifier.dart
++++ b/packages/fleury/lib/src/widgets/inherited_notifier.dart
+@@ -39,0 +40 @@
++  bool _notificationPending = false;
+@@ -42 +43,13 @@
+-    notifyDependents();
++    _notificationPending = true;
++    markNeedsBuild();
++  }
++
++  @override
++  Widget buildChild() {
++    if (_notificationPending) {
++      // Publish once for the burst before rebuilding any descendant. Clear
++      // first so a notification during that rebuild queues another pass.
++      _notificationPending = false;
++      notifyDependents();
++    }
++    return super.buildChild();

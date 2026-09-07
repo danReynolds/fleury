@@ -1,0 +1,1574 @@
+[
+  {
+    "class": "_Set",
+    "frames": 1,
+    "surface": "terminal",
+    "operation": "mount",
+    "allocations": 898,
+    "sampleCount": 898,
+    "traceOrigin": 907421294313,
+    "windowStart": 907421292892,
+    "windowEnd": 907421305103,
+    "truncatedStacks": 843,
+    "liveBefore": [
+      {
+        "accumulatedSize": 56064,
+        "bytesCurrent": 56064,
+        "instancesAccumulated": 876,
+        "instancesCurrent": 876
+      }
+    ],
+    "liveAfter": [
+      {
+        "accumulatedSize": 56064,
+        "bytesCurrent": 56064,
+        "instancesAccumulated": 876,
+        "instancesCurrent": 876
+      }
+    ],
+    "topStacks": [
+      {
+        "count": 260,
+        "stack": "Element.Element <- RenderObjectElement.RenderObjectElement <- SingleChildRenderObjectElement.SingleChildRenderObjectElement <- SingleChildRenderObjectWidget.createElement <- Element.inflateWidget <- Element.updateChild <- ComponentElement.performRebuild"
+      },
+      {
+        "count": 132,
+        "stack": "Element.Element <- ComponentElement.ComponentElement <- StatelessElement.StatelessElement <- StatelessWidget.createElement <- Element.inflateWidget <- Element.updateChild <- SingleChildRenderObjectElement.performRebuild"
+      },
+      {
+        "count": 130,
+        "stack": "Element.Element <- ComponentElement.ComponentElement <- StatelessElement.StatelessElement <- StatelessWidget.createElement <- Element.inflateWidget <- MultiChildRenderObjectElement._reconcileChildren <- MultiChildRenderObjectElement.performRebuild"
+      },
+      {
+        "count": 130,
+        "stack": "Element.Element <- ComponentElement.ComponentElement <- SemanticsElement.SemanticsElement <- Semantics.createElement <- Element.inflateWidget <- Element.updateChild <- ComponentElement.performRebuild"
+      },
+      {
+        "count": 130,
+        "stack": "Element.Element <- RenderObjectElement.RenderObjectElement <- LeafRenderObjectElement.LeafRenderObjectElement <- _RawTextElement._RawTextElement <- _RawText.createElement <- Element.inflateWidget <- Element.updateChild"
+      },
+      {
+        "count": 32,
+        "stack": "Element.Element <- RenderObjectElement.RenderObjectElement <- MultiChildRenderObjectElement.MultiChildRenderObjectElement <- MultiChildRenderObjectWidget.createElement <- Element.inflateWidget <- MultiChildRenderObjectElement._reconcileChildren <- MultiChildRenderObjectElement.performRebuild"
+      },
+      {
+        "count": 16,
+        "stack": "MultiChildRenderObjectElement._reconcileChildren <- MultiChildRenderObjectElement.performRebuild <- Element.rebuild <- RenderObjectElement.rebuild <- RenderObjectElement.mount <- Element.inflateWidget <- MultiChildRenderObjectElement._reconcileChildren"
+      },
+      {
+        "count": 8,
+        "stack": "Element.Element <- ComponentElement.ComponentElement <- InheritedElement.InheritedElement <- InheritedWidget.createElement <- Element.inflateWidget <- Element.updateChild <- ComponentElement.performRebuild"
+      },
+      {
+        "count": 8,
+        "stack": "Element.Element <- ComponentElement.ComponentElement <- InheritedElement.InheritedElement <- _InheritedNotifierElement._InheritedNotifierElement <- InheritedNotifier.createElement <- Element.inflateWidget <- Element.updateChild"
+      },
+      {
+        "count": 6,
+        "stack": "Element.Element <- ComponentElement.ComponentElement <- StatefulElement.StatefulElement <- StatefulWidget.createElement <- Element.inflateWidget <- Element.updateChild <- ComponentElement.performRebuild"
+      },
+      {
+        "count": 4,
+        "stack": "InheritedElement.InheritedElement <- InheritedWidget.createElement <- Element.inflateWidget <- Element.updateChild <- ComponentElement.performRebuild <- Element.rebuild <- ComponentElement._firstBuild"
+      },
+      {
+        "count": 4,
+        "stack": "Element.Element <- RenderObjectElement.RenderObjectElement <- MultiChildRenderObjectElement.MultiChildRenderObjectElement <- MultiChildRenderObjectWidget.createElement <- Element.inflateWidget <- Element.updateChild <- ComponentElement.performRebuild"
+      },
+      {
+        "count": 4,
+        "stack": "CellBuffer.diffAgainst <- TuiFrameLoop.render <- SampleFrameHost.frame <- SampleFrameHost.SampleFrameHost <- BurstWorkload.BurstWorkload <- work <- main"
+      },
+      {
+        "count": 3,
+        "stack": "FocusManager.FocusManager <- FleuryTester.FleuryTester <- SampleFrameHost.SampleFrameHost <- BurstWorkload.BurstWorkload <- work <- main <- handleValueCallback"
+      },
+      {
+        "count": 3,
+        "stack": "InheritedElement.InheritedElement <- _InheritedNotifierElement._InheritedNotifierElement <- InheritedNotifier.createElement <- Element.inflateWidget <- Element.updateChild <- ComponentElement.performRebuild <- Element.rebuild"
+      }
+    ],
+    "calibrationSum": -1,
+    "dart": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+    "version": "base",
+    "probeSha256": "1ba033aa830d81b25623f8fe29524d9c58bed6172f46ceb6ec70376edfe1022c",
+    "workloadSha256": "efce446478b201cdb2f5347b844cb3c24df7e58ebee27660e24739273fb629fa",
+    "frameworkSha256": "8640d3854cb26744537c9f2a641dea23cd2da0b7634a03dc153f426b5780cd9d"
+  },
+  {
+    "class": "_Set",
+    "frames": 5,
+    "surface": "terminal",
+    "operation": "mount",
+    "allocations": 4492,
+    "sampleCount": 4492,
+    "traceOrigin": 907428301067,
+    "windowStart": 907428300340,
+    "windowEnd": 907428349207,
+    "truncatedStacks": 4215,
+    "liveBefore": [
+      {
+        "accumulatedSize": 56064,
+        "bytesCurrent": 56064,
+        "instancesAccumulated": 876,
+        "instancesCurrent": 876
+      }
+    ],
+    "liveAfter": [
+      {
+        "accumulatedSize": 56064,
+        "bytesCurrent": 56064,
+        "instancesAccumulated": 876,
+        "instancesCurrent": 876
+      }
+    ],
+    "topStacks": [
+      {
+        "count": 1300,
+        "stack": "Element.Element <- RenderObjectElement.RenderObjectElement <- SingleChildRenderObjectElement.SingleChildRenderObjectElement <- SingleChildRenderObjectWidget.createElement <- Element.inflateWidget <- Element.updateChild <- ComponentElement.performRebuild"
+      },
+      {
+        "count": 660,
+        "stack": "Element.Element <- ComponentElement.ComponentElement <- StatelessElement.StatelessElement <- StatelessWidget.createElement <- Element.inflateWidget <- Element.updateChild <- SingleChildRenderObjectElement.performRebuild"
+      },
+      {
+        "count": 650,
+        "stack": "Element.Element <- ComponentElement.ComponentElement <- StatelessElement.StatelessElement <- StatelessWidget.createElement <- Element.inflateWidget <- MultiChildRenderObjectElement._reconcileChildren <- MultiChildRenderObjectElement.performRebuild"
+      },
+      {
+        "count": 650,
+        "stack": "Element.Element <- ComponentElement.ComponentElement <- SemanticsElement.SemanticsElement <- Semantics.createElement <- Element.inflateWidget <- Element.updateChild <- ComponentElement.performRebuild"
+      },
+      {
+        "count": 650,
+        "stack": "Element.Element <- RenderObjectElement.RenderObjectElement <- LeafRenderObjectElement.LeafRenderObjectElement <- _RawTextElement._RawTextElement <- _RawText.createElement <- Element.inflateWidget <- Element.updateChild"
+      },
+      {
+        "count": 160,
+        "stack": "Element.Element <- RenderObjectElement.RenderObjectElement <- MultiChildRenderObjectElement.MultiChildRenderObjectElement <- MultiChildRenderObjectWidget.createElement <- Element.inflateWidget <- MultiChildRenderObjectElement._reconcileChildren <- MultiChildRenderObjectElement.performRebuild"
+      },
+      {
+        "count": 80,
+        "stack": "MultiChildRenderObjectElement._reconcileChildren <- MultiChildRenderObjectElement.performRebuild <- Element.rebuild <- RenderObjectElement.rebuild <- RenderObjectElement.mount <- Element.inflateWidget <- MultiChildRenderObjectElement._reconcileChildren"
+      },
+      {
+        "count": 40,
+        "stack": "Element.Element <- ComponentElement.ComponentElement <- InheritedElement.InheritedElement <- InheritedWidget.createElement <- Element.inflateWidget <- Element.updateChild <- ComponentElement.performRebuild"
+      },
+      {
+        "count": 40,
+        "stack": "Element.Element <- ComponentElement.ComponentElement <- InheritedElement.InheritedElement <- _InheritedNotifierElement._InheritedNotifierElement <- InheritedNotifier.createElement <- Element.inflateWidget <- Element.updateChild"
+      },
+      {
+        "count": 30,
+        "stack": "Element.Element <- ComponentElement.ComponentElement <- StatefulElement.StatefulElement <- StatefulWidget.createElement <- Element.inflateWidget <- Element.updateChild <- ComponentElement.performRebuild"
+      },
+      {
+        "count": 20,
+        "stack": "InheritedElement.InheritedElement <- InheritedWidget.createElement <- Element.inflateWidget <- Element.updateChild <- ComponentElement.performRebuild <- Element.rebuild <- ComponentElement._firstBuild"
+      },
+      {
+        "count": 20,
+        "stack": "Element.Element <- RenderObjectElement.RenderObjectElement <- MultiChildRenderObjectElement.MultiChildRenderObjectElement <- MultiChildRenderObjectWidget.createElement <- Element.inflateWidget <- Element.updateChild <- ComponentElement.performRebuild"
+      },
+      {
+        "count": 20,
+        "stack": "CellBuffer.diffAgainst <- TuiFrameLoop.render <- SampleFrameHost.frame <- SampleFrameHost.SampleFrameHost <- BurstWorkload.BurstWorkload <- work <- main"
+      },
+      {
+        "count": 15,
+        "stack": "FocusManager.FocusManager <- FleuryTester.FleuryTester <- SampleFrameHost.SampleFrameHost <- BurstWorkload.BurstWorkload <- work <- main <- handleValueCallback"
+      },
+      {
+        "count": 15,
+        "stack": "InheritedElement.InheritedElement <- _InheritedNotifierElement._InheritedNotifierElement <- InheritedNotifier.createElement <- Element.inflateWidget <- Element.updateChild <- ComponentElement.performRebuild <- Element.rebuild"
+      }
+    ],
+    "calibrationSum": -1,
+    "dart": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+    "version": "base",
+    "probeSha256": "1ba033aa830d81b25623f8fe29524d9c58bed6172f46ceb6ec70376edfe1022c",
+    "workloadSha256": "efce446478b201cdb2f5347b844cb3c24df7e58ebee27660e24739273fb629fa",
+    "frameworkSha256": "8640d3854cb26744537c9f2a641dea23cd2da0b7634a03dc153f426b5780cd9d"
+  },
+  {
+    "class": "_TeardownErrors",
+    "frames": 5,
+    "surface": "terminal",
+    "operation": "mount",
+    "allocations": 5400,
+    "sampleCount": 5400,
+    "traceOrigin": 907434519000,
+    "windowStart": 907434513068,
+    "windowEnd": 907434561260,
+    "truncatedStacks": 5110,
+    "liveBefore": [
+      {
+        "accumulatedSize": 0,
+        "bytesCurrent": 0,
+        "instancesAccumulated": 0,
+        "instancesCurrent": 0
+      }
+    ],
+    "liveAfter": [
+      {
+        "accumulatedSize": 0,
+        "bytesCurrent": 0,
+        "instancesAccumulated": 0,
+        "instancesCurrent": 0
+      }
+    ],
+    "topStacks": [
+      {
+        "count": 745,
+        "stack": "Element._detachDependencies <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount"
+      },
+      {
+        "count": 655,
+        "stack": "Element._detachDependencies <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount"
+      },
+      {
+        "count": 650,
+        "stack": "Element.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount"
+      },
+      {
+        "count": 325,
+        "stack": "RenderObjectElement.unmount <- _RawTextElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _TeardownErrors.capture"
+      },
+      {
+        "count": 325,
+        "stack": "Element._detachDependencies <- _TeardownErrors.capture <- Element.unmount <- SemanticsElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture"
+      },
+      {
+        "count": 325,
+        "stack": "Element._detachDependencies <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _RawTextElement.unmount <- _TeardownErrors.capture"
+      },
+      {
+        "count": 325,
+        "stack": "Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _RawTextElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture"
+      },
+      {
+        "count": 325,
+        "stack": "Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount <- SemanticsElement.unmount <- _TeardownErrors.capture"
+      },
+      {
+        "count": 325,
+        "stack": "RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount <- SemanticsElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture"
+      },
+      {
+        "count": 325,
+        "stack": "Element.unmount <- SemanticsElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture"
+      },
+      {
+        "count": 320,
+        "stack": "Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- Element.unmount"
+      },
+      {
+        "count": 320,
+        "stack": "RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount"
+      },
+      {
+        "count": 85,
+        "stack": "Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount"
+      },
+      {
+        "count": 80,
+        "stack": "RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount"
+      },
+      {
+        "count": 25,
+        "stack": "Element._detachDependencies <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- StatefulElement.unmount <- _TeardownErrors.capture <- Element.unmount"
+      }
+    ],
+    "calibrationSum": -1,
+    "dart": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+    "version": "base",
+    "probeSha256": "1ba033aa830d81b25623f8fe29524d9c58bed6172f46ceb6ec70376edfe1022c",
+    "workloadSha256": "efce446478b201cdb2f5347b844cb3c24df7e58ebee27660e24739273fb629fa",
+    "frameworkSha256": "8640d3854cb26744537c9f2a641dea23cd2da0b7634a03dc153f426b5780cd9d"
+  },
+  {
+    "class": "_GrowableList",
+    "frames": 5,
+    "surface": "terminal",
+    "operation": "mount",
+    "allocations": 11090,
+    "sampleCount": 11090,
+    "traceOrigin": 907440741415,
+    "windowStart": 907440741221,
+    "windowEnd": 907440790815,
+    "truncatedStacks": 9906,
+    "liveBefore": [
+      {
+        "accumulatedSize": 57344,
+        "bytesCurrent": 57344,
+        "instancesAccumulated": 1792,
+        "instancesCurrent": 1792
+      }
+    ],
+    "liveAfter": [
+      {
+        "accumulatedSize": 1455776,
+        "bytesCurrent": 1455776,
+        "instancesAccumulated": 45493,
+        "instancesCurrent": 45493
+      }
+    ],
+    "topStacks": [
+      {
+        "count": 2145,
+        "stack": "_GrowableList._GrowableList._ofEfficientLengthIterable <- _GrowableList._GrowableList.of <- List.List.of <- __Set&_HashVMBase&SetMixin.toList <- Element._detachDependencies <- _TeardownErrors.capture <- Element.unmount"
+      },
+      {
+        "count": 892,
+        "stack": "Element.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount"
+      },
+      {
+        "count": 745,
+        "stack": "Element._detachDependencies <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount"
+      },
+      {
+        "count": 655,
+        "stack": "Element._detachDependencies <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount"
+      },
+      {
+        "count": 448,
+        "stack": "Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _RawTextElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture"
+      },
+      {
+        "count": 446,
+        "stack": "Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount <- SemanticsElement.unmount <- _TeardownErrors.capture"
+      },
+      {
+        "count": 446,
+        "stack": "Element.unmount <- SemanticsElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture"
+      },
+      {
+        "count": 440,
+        "stack": "Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- Element.unmount"
+      },
+      {
+        "count": 410,
+        "stack": "_GrowableList._allocateData <- _GrowableList._GrowableList <- _GrowableList._GrowableList._ofOther <- _GrowableList._GrowableList.of <- List.List.of <- Iterable.toList <- MultiChildRenderObjectElement.removeChildRenderObject"
+      },
+      {
+        "count": 325,
+        "stack": "Element._detachDependencies <- _TeardownErrors.capture <- Element.unmount <- SemanticsElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture"
+      },
+      {
+        "count": 325,
+        "stack": "_TeardownErrors._TeardownErrors <- RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount <- SemanticsElement.unmount <- _TeardownErrors.capture <- Element.unmount"
+      },
+      {
+        "count": 325,
+        "stack": "_TeardownErrors._TeardownErrors <- RenderObjectElement.unmount <- _RawTextElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount"
+      },
+      {
+        "count": 325,
+        "stack": "Element._detachDependencies <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _RawTextElement.unmount <- _TeardownErrors.capture"
+      },
+      {
+        "count": 320,
+        "stack": "_TeardownErrors._TeardownErrors <- RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture"
+      },
+      {
+        "count": 257,
+        "stack": "_GrowableList._GrowableList._literal1 <- RenderText.performLayout <- RenderObject.layout <- _RenderSemanticBounds.performLayout <- RenderObject.layout <- RenderSizedBox.performLayout <- RenderObject.layout"
+      }
+    ],
+    "calibrationSum": -1,
+    "dart": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+    "version": "base",
+    "probeSha256": "1ba033aa830d81b25623f8fe29524d9c58bed6172f46ceb6ec70376edfe1022c",
+    "workloadSha256": "efce446478b201cdb2f5347b844cb3c24df7e58ebee27660e24739273fb629fa",
+    "frameworkSha256": "8640d3854cb26744537c9f2a641dea23cd2da0b7634a03dc153f426b5780cd9d"
+  },
+  {
+    "class": "_List",
+    "frames": 5,
+    "surface": "terminal",
+    "operation": "mount",
+    "allocations": 6498,
+    "sampleCount": 6498,
+    "traceOrigin": 907447910208,
+    "windowStart": 907447909576,
+    "windowEnd": 907447962742,
+    "truncatedStacks": 4990,
+    "liveBefore": [
+      {
+        "accumulatedSize": 6692352,
+        "bytesCurrent": 6692352,
+        "instancesAccumulated": 68854,
+        "instancesCurrent": 68854
+      }
+    ],
+    "liveAfter": [
+      {
+        "accumulatedSize": 44930560,
+        "bytesCurrent": 44930560,
+        "instancesAccumulated": 192676,
+        "instancesCurrent": 192676
+      }
+    ],
+    "topStacks": [
+      {
+        "count": 603,
+        "stack": "_GrowableList._allocateData <- _GrowableList._grow <- _GrowableList._growToNextCapacity <- _GrowableList.add <- ComponentElement.visitChildren <- <anonymous closure> <- _TeardownErrors.capture"
+      },
+      {
+        "count": 457,
+        "stack": "_GrowableList._allocateData <- _GrowableList._grow <- _GrowableList._growToNextCapacity <- ComponentElement.visitChildren <- <anonymous closure> <- _TeardownErrors.capture <- Element.unmount"
+      },
+      {
+        "count": 440,
+        "stack": "__Set&_HashVMBase&SetMixin&_HashBase&_OperatorEqualsAndHashCode&_LinkedHashSetMixin._init <- __Set&_HashVMBase&SetMixin&_HashBase&_OperatorEqualsAndHashCode&_LinkedHashSetMixin._rehash <- __Set&_HashVMBase&SetMixin&_HashBase&_OperatorEqualsAndHashCode&_LinkedHashSetMixin._add <- __Set&_HashVMBase&SetMixin&_HashBase&_OperatorEqualsAndHashCode&_LinkedHashSetMixin.add <- Element.dependOnInheritedWidgetOfExactType <- MediaQuery.maybeOf <- MediaQuery.textPolicyOf"
+      },
+      {
+        "count": 435,
+        "stack": "_GrowableList._allocateData <- _GrowableList._grow <- _GrowableList._growToNextCapacity <- _GrowableList.add <- _GrowableList._GrowableList._ofOther <- _GrowableList._GrowableList.of <- List.List.of"
+      },
+      {
+        "count": 391,
+        "stack": "_List._List <- _List._List._ofGrowableList <- _List._List.of <- List.List.of <- List.List.from <- List.List.unmodifiable <- RenderFlex.children"
+      },
+      {
+        "count": 379,
+        "stack": "_GrowableList._allocateData <- _GrowableList._grow <- _GrowableList._growToNextCapacity <- _GrowableList.add <- SingleChildRenderObjectElement.visitChildren <- <anonymous closure> <- _TeardownErrors.capture"
+      },
+      {
+        "count": 345,
+        "stack": "__Set&_HashVMBase&SetMixin&_HashBase&_OperatorEqualsAndHashCode&_LinkedHashSetMixin._init <- __Set&_HashVMBase&SetMixin&_HashBase&_OperatorEqualsAndHashCode&_LinkedHashSetMixin._rehash <- __Set&_HashVMBase&SetMixin&_HashBase&_OperatorEqualsAndHashCode&_LinkedHashSetMixin._add <- __Set&_HashVMBase&SetMixin&_HashBase&_OperatorEqualsAndHashCode&_LinkedHashSetMixin.add <- Element.dependOnInheritedWidgetOfExactType <- BurstScope.watch <- _Status.build"
+      },
+      {
+        "count": 325,
+        "stack": "_List._List <- _RenderText&RenderObject&ChangeNotifier._RenderText&RenderObject&ChangeNotifier <- _RenderText&RenderObject&ChangeNotifier&SelectionRegistrant._RenderText&RenderObject&ChangeNotifier&SelectionRegistrant <- _RenderText&RenderObject&ChangeNotifier&SelectionRegistrant&SelectableTextMixin._RenderText&RenderObject&ChangeNotifier&SelectionRegistrant&SelectableTextMixin <- RenderText.RenderText <- _RawText.createRenderObject <- RenderObjectElement.mount"
+      },
+      {
+        "count": 325,
+        "stack": "_List._List <- _RenderText&RenderObject&ChangeNotifier.addListener <- SelectionContainerDelegate.add <- _RenderText&RenderObject&ChangeNotifier&SelectionRegistrant.attachToSelection <- _RawText.createRenderObject <- RenderObjectElement.mount <- Element.inflateWidget"
+      },
+      {
+        "count": 320,
+        "stack": "_Status.build <- Element.runWithBuildTarget <- ComponentElement.performRebuild <- Element.rebuild <- BuildOwner._flushBuild <- BuildOwner.flushBuild <- BuildOwner._renderFramePhases"
+      },
+      {
+        "count": 320,
+        "stack": "_Status.build <- Element.runWithBuildTarget <- ComponentElement.performRebuild <- Element.rebuild <- ComponentElement._firstBuild <- ComponentElement.mount <- Element.inflateWidget"
+      },
+      {
+        "count": 320,
+        "stack": "_GrowableList._GrowableList._literal1 <- RenderText.performLayout <- RenderObject.layout <- _RenderSemanticBounds.performLayout <- RenderObject.layout <- RenderSizedBox.performLayout <- RenderObject.layout"
+      },
+      {
+        "count": 291,
+        "stack": "_GrowableList._allocateData <- _GrowableList._grow <- _GrowableList._growToNextCapacity <- SingleChildRenderObjectElement.visitChildren <- <anonymous closure> <- _TeardownErrors.capture <- Element.unmount"
+      },
+      {
+        "count": 185,
+        "stack": "_GrowableList._allocateData <- _GrowableList._grow <- _GrowableList._growToNextCapacity <- _GrowableList.add <- MultiChildRenderObjectElement._syncChildRenderObjects <- MultiChildRenderObjectElement.performRebuild <- Element.rebuild"
+      },
+      {
+        "count": 180,
+        "stack": "_GrowableList._allocateData <- _GrowableList._grow <- _GrowableList._growToNextCapacity <- _GrowableList.add <- BurstWorkload.BurstWorkload <- work <- main"
+      }
+    ],
+    "calibrationSum": -1,
+    "dart": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+    "version": "base",
+    "probeSha256": "1ba033aa830d81b25623f8fe29524d9c58bed6172f46ceb6ec70376edfe1022c",
+    "workloadSha256": "efce446478b201cdb2f5347b844cb3c24df7e58ebee27660e24739273fb629fa",
+    "frameworkSha256": "8640d3854cb26744537c9f2a641dea23cd2da0b7634a03dc153f426b5780cd9d"
+  },
+  {
+    "class": "Cell",
+    "frames": 5,
+    "surface": "structured",
+    "operation": "update",
+    "allocations": 4080,
+    "sampleCount": 4080,
+    "traceOrigin": 907455399672,
+    "windowStart": 907455398665,
+    "windowEnd": 907455409528,
+    "truncatedStacks": 0,
+    "liveBefore": [
+      {
+        "accumulatedSize": 53536,
+        "bytesCurrent": 53536,
+        "instancesAccumulated": 1673,
+        "instancesCurrent": 1673
+      }
+    ],
+    "liveAfter": [
+      {
+        "accumulatedSize": 53536,
+        "bytesCurrent": 53536,
+        "instancesAccumulated": 1673,
+        "instancesCurrent": 1673
+      }
+    ],
+    "topStacks": [
+      {
+        "count": 4080,
+        "stack": "CellBuffer._placeGrapheme <- paintMeasuredGrapheme <- RenderText._paintLine <- RenderText.performPaint <- RenderObject.paint <- _RenderSemanticBounds.performPaint <- RenderObject.paint"
+      }
+    ],
+    "calibrationSum": -1,
+    "dart": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+    "version": "base",
+    "probeSha256": "1ba033aa830d81b25623f8fe29524d9c58bed6172f46ceb6ec70376edfe1022c",
+    "workloadSha256": "efce446478b201cdb2f5347b844cb3c24df7e58ebee27660e24739273fb629fa",
+    "frameworkSha256": "8640d3854cb26744537c9f2a641dea23cd2da0b7634a03dc153f426b5780cd9d"
+  },
+  {
+    "class": "CellStyle",
+    "frames": 5,
+    "surface": "structured",
+    "operation": "update",
+    "allocations": 320,
+    "sampleCount": 320,
+    "traceOrigin": 907462625925,
+    "windowStart": 907462624994,
+    "windowEnd": 907462637784,
+    "truncatedStacks": 0,
+    "liveBefore": [
+      {
+        "accumulatedSize": 10480,
+        "bytesCurrent": 10480,
+        "instancesAccumulated": 131,
+        "instancesCurrent": 131
+      }
+    ],
+    "liveAfter": [
+      {
+        "accumulatedSize": 10480,
+        "bytesCurrent": 10480,
+        "instancesAccumulated": 131,
+        "instancesCurrent": 131
+      }
+    ],
+    "topStacks": [
+      {
+        "count": 320,
+        "stack": "CellStyle.merge <- Text.build <- Element.runWithBuildTarget <- ComponentElement.performRebuild <- Element.rebuild <- StatelessElement.update <- Element.updateChild"
+      }
+    ],
+    "calibrationSum": -1,
+    "dart": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+    "version": "base",
+    "probeSha256": "1ba033aa830d81b25623f8fe29524d9c58bed6172f46ceb6ec70376edfe1022c",
+    "workloadSha256": "efce446478b201cdb2f5347b844cb3c24df7e58ebee27660e24739273fb629fa",
+    "frameworkSha256": "8640d3854cb26744537c9f2a641dea23cd2da0b7634a03dc153f426b5780cd9d"
+  },
+  {
+    "class": "SemanticNode",
+    "frames": 5,
+    "surface": "structured",
+    "operation": "update",
+    "allocations": 325,
+    "sampleCount": 325,
+    "traceOrigin": 907470510447,
+    "windowStart": 907470509178,
+    "windowEnd": 907470515552,
+    "truncatedStacks": 0,
+    "liveBefore": [
+      {
+        "accumulatedSize": 9504,
+        "bytesCurrent": 9504,
+        "instancesAccumulated": 66,
+        "instancesCurrent": 66
+      }
+    ],
+    "liveAfter": [
+      {
+        "accumulatedSize": 9504,
+        "bytesCurrent": 9504,
+        "instancesAccumulated": 66,
+        "instancesCurrent": 66
+      }
+    ],
+    "topStacks": [
+      {
+        "count": 320,
+        "stack": "SemanticsElement.buildSemanticNode <- _collectInto <- <anonymous closure> <- ComponentElement.visitChildren <- _collectInto <- <anonymous closure> <- SingleChildRenderObjectElement.visitChildren"
+      },
+      {
+        "count": 5,
+        "stack": "SemanticTree.SemanticTree.fromElement <- FrameSemanticsPipeline.flushNow <- BurstWorkload.frame <- work <- main <- handleValueCallback <- _Future._propagateToListeners"
+      }
+    ],
+    "calibrationSum": -1,
+    "dart": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+    "version": "base",
+    "probeSha256": "1ba033aa830d81b25623f8fe29524d9c58bed6172f46ceb6ec70376edfe1022c",
+    "workloadSha256": "efce446478b201cdb2f5347b844cb3c24df7e58ebee27660e24739273fb629fa",
+    "frameworkSha256": "8640d3854cb26744537c9f2a641dea23cd2da0b7634a03dc153f426b5780cd9d"
+  },
+  {
+    "class": "SemanticNodeId",
+    "frames": 5,
+    "surface": "structured",
+    "operation": "update",
+    "allocations": 325,
+    "sampleCount": 325,
+    "traceOrigin": 907476933213,
+    "windowStart": 907476931924,
+    "windowEnd": 907476938140,
+    "truncatedStacks": 0,
+    "liveBefore": [
+      {
+        "accumulatedSize": 1056,
+        "bytesCurrent": 1056,
+        "instancesAccumulated": 66,
+        "instancesCurrent": 66
+      }
+    ],
+    "liveAfter": [
+      {
+        "accumulatedSize": 1056,
+        "bytesCurrent": 1056,
+        "instancesAccumulated": 66,
+        "instancesCurrent": 66
+      }
+    ],
+    "topStacks": [
+      {
+        "count": 325,
+        "stack": "SemanticsElement._nodeId <- SemanticsElement.buildSemanticNode <- _collectInto <- <anonymous closure> <- ComponentElement.visitChildren <- _collectInto <- <anonymous closure>"
+      }
+    ],
+    "calibrationSum": -1,
+    "dart": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+    "version": "base",
+    "probeSha256": "1ba033aa830d81b25623f8fe29524d9c58bed6172f46ceb6ec70376edfe1022c",
+    "workloadSha256": "efce446478b201cdb2f5347b844cb3c24df7e58ebee27660e24739273fb629fa",
+    "frameworkSha256": "8640d3854cb26744537c9f2a641dea23cd2da0b7634a03dc153f426b5780cd9d"
+  },
+  {
+    "class": "_List",
+    "frames": 5,
+    "surface": "structured",
+    "operation": "update",
+    "allocations": 7237,
+    "sampleCount": 7237,
+    "traceOrigin": 907483707879,
+    "windowStart": 907483707695,
+    "windowEnd": 907483716126,
+    "truncatedStacks": 5,
+    "liveBefore": [
+      {
+        "accumulatedSize": 7111280,
+        "bytesCurrent": 7111280,
+        "instancesAccumulated": 73244,
+        "instancesCurrent": 73244
+      }
+    ],
+    "liveAfter": [
+      {
+        "accumulatedSize": 38437072,
+        "bytesCurrent": 38437072,
+        "instancesAccumulated": 211885,
+        "instancesCurrent": 211885
+      }
+    ],
+    "topStacks": [
+      {
+        "count": 586,
+        "stack": "__Map&_HashVMBase&MapMixin&_HashBase&_OperatorEqualsAndHashCode&_LinkedHashMapMixin._init <- __Map&_HashVMBase&MapMixin&_HashBase&_OperatorEqualsAndHashCode&_LinkedHashMapMixin._rehash <- __Map&_HashVMBase&MapMixin&_HashBase&_OperatorEqualsAndHashCode&_LinkedHashMapMixin._insert <- __Map&_HashVMBase&MapMixin&_HashBase&_OperatorEqualsAndHashCode&_LinkedHashMapMixin._set <- __Map&_HashVMBase&MapMixin&_HashBase&_OperatorEqualsAndHashCode&_LinkedHashMapMixin.[]= <- SemanticInspectionNode._scalarJson <- SemanticInspectionNode.toScalarJson"
+      },
+      {
+        "count": 336,
+        "stack": "_GrowableList._allocateData <- _GrowableList._grow <- _GrowableList._growToNextCapacity <- _GrowableList.add <- _JsonStringifier._checkCycle <- _JsonStringifier.writeJsonValue <- _JsonStringifier.writeObject"
+      },
+      {
+        "count": 327,
+        "stack": "_GrowableList._allocateData <- _GrowableList._grow <- _GrowableList._growToNextCapacity <- _GrowableList.add <- StringBuffer._addPart <- StringBuffer._writeString <- StringBuffer.write"
+      },
+      {
+        "count": 325,
+        "stack": "_snapshotAnchorOf <- _snapshotAnchorOf <- _snapshotAnchorOf <- _snapshotAnchorOf <- semanticAnchorOf <- SemanticsElement._nodeId <- SemanticsElement.buildSemanticNode"
+      },
+      {
+        "count": 325,
+        "stack": "_snapshotAnchorOf <- _snapshotAnchorOf <- _snapshotAnchorOf <- semanticAnchorOf <- SemanticsElement._nodeId <- SemanticsElement.buildSemanticNode <- _collectInto"
+      },
+      {
+        "count": 325,
+        "stack": "_snapshotAnchorOf <- _snapshotAnchorOf <- semanticAnchorOf <- SemanticsElement._nodeId <- SemanticsElement.buildSemanticNode <- _collectInto <- <anonymous closure>"
+      },
+      {
+        "count": 325,
+        "stack": "_snapshotAnchorOf <- semanticAnchorOf <- SemanticsElement._nodeId <- SemanticsElement.buildSemanticNode <- _collectInto <- <anonymous closure> <- ComponentElement.visitChildren"
+      },
+      {
+        "count": 325,
+        "stack": "SemanticsElement._nodeId <- SemanticsElement.buildSemanticNode <- _collectInto <- <anonymous closure> <- ComponentElement.visitChildren <- _collectInto <- <anonymous closure>"
+      },
+      {
+        "count": 320,
+        "stack": "_Status.build <- Element.runWithBuildTarget <- ComponentElement.performRebuild <- Element.rebuild <- BuildOwner._flushBuild <- BuildOwner.flushBuild <- BuildOwner._renderFramePhases"
+      },
+      {
+        "count": 320,
+        "stack": "_GrowableList._GrowableList._literal1 <- RenderText.text= <- _RawText.updateRenderObject <- RenderObjectElement.update <- Element.updateChild <- SingleChildRenderObjectElement.performRebuild <- Element.rebuild"
+      },
+      {
+        "count": 320,
+        "stack": "_JsonStringifier.writeMap <- _JsonStringifier.writeJsonValue <- _JsonStringifier.writeObject <- _JsonUtf8Stringifier.stringify <- JsonUtf8Encoder.convert <- _semanticNodeWireLength <- SemanticsWireEncoder._finishPatch"
+      },
+      {
+        "count": 320,
+        "stack": "_JsonStringifier.writeMap <- _JsonStringifier.writeJsonValue <- _JsonStringifier.writeObject <- _JsonStringifier.writeMap <- _JsonStringifier.writeJsonValue <- _JsonStringifier.writeObject <- _JsonUtf8Stringifier.stringify"
+      },
+      {
+        "count": 320,
+        "stack": "_GrowableList._allocateData <- _GrowableList._grow <- _GrowableList._growToNextCapacity <- _GrowableList.add <- addChunk <- _JsonUtf8Stringifier.flush <- _JsonUtf8Stringifier.stringify"
+      },
+      {
+        "count": 320,
+        "stack": "_JsonStringifier.writeMap <- _JsonStringifier.writeJsonValue <- _JsonStringifier.writeObject <- _JsonStringifier.writeList <- _JsonStringifier.writeJsonValue <- _JsonStringifier.writeObject <- _JsonStringifier.writeMap"
+      },
+      {
+        "count": 320,
+        "stack": "_JsonStringifier.writeMap <- _JsonStringifier.writeJsonValue <- _JsonStringifier.writeObject <- _JsonStringifier.writeMap <- _JsonStringifier.writeJsonValue <- _JsonStringifier.writeObject <- _JsonStringifier.writeList"
+      }
+    ],
+    "calibrationSum": -1,
+    "dart": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+    "version": "base",
+    "probeSha256": "1ba033aa830d81b25623f8fe29524d9c58bed6172f46ceb6ec70376edfe1022c",
+    "workloadSha256": "efce446478b201cdb2f5347b844cb3c24df7e58ebee27660e24739273fb629fa",
+    "frameworkSha256": "8640d3854cb26744537c9f2a641dea23cd2da0b7634a03dc153f426b5780cd9d"
+  },
+  {
+    "class": "_GrowableList",
+    "frames": 5,
+    "surface": "structured",
+    "operation": "update",
+    "allocations": 2834,
+    "sampleCount": 2834,
+    "traceOrigin": 907490389728,
+    "windowStart": 907490389460,
+    "windowEnd": 907490396818,
+    "truncatedStacks": 0,
+    "liveBefore": [
+      {
+        "accumulatedSize": 57408,
+        "bytesCurrent": 57408,
+        "instancesAccumulated": 1794,
+        "instancesCurrent": 1794
+      }
+    ],
+    "liveAfter": [
+      {
+        "accumulatedSize": 705792,
+        "bytesCurrent": 705792,
+        "instancesAccumulated": 22056,
+        "instancesCurrent": 22056
+      }
+    ],
+    "topStacks": [
+      {
+        "count": 975,
+        "stack": "_StringBase.replaceAll <- escapeSemanticIdSegment <- SemanticsElement._nodeId <- SemanticsElement.buildSemanticNode <- _collectInto <- <anonymous closure> <- ComponentElement.visitChildren"
+      },
+      {
+        "count": 320,
+        "stack": "_GrowableList._GrowableList._literal1 <- RenderText.text= <- _RawText.updateRenderObject <- RenderObjectElement.update <- Element.updateChild <- SingleChildRenderObjectElement.performRebuild <- Element.rebuild"
+      },
+      {
+        "count": 320,
+        "stack": "_collectInto <- <anonymous closure> <- ComponentElement.visitChildren <- _collectInto <- <anonymous closure> <- SingleChildRenderObjectElement.visitChildren <- _collectInto"
+      },
+      {
+        "count": 320,
+        "stack": "SemanticInspectionNode.SemanticInspectionNode._redact <- SemanticInspectionNode.SemanticInspectionNode._fromSemanticNodeShallow <- SemanticInspectionNode.flattenLiveNode <- SemanticsWireEncoder.encodeTree <- _Encoder.present <- FrameSemanticsPipeline.flushNow <- BurstWorkload.frame"
+      },
+      {
+        "count": 320,
+        "stack": "JsonUtf8Encoder.convert <- _semanticNodeWireLength <- SemanticsWireEncoder._finishPatch <- SemanticsWireEncoder.encodeTree <- _Encoder.present <- FrameSemanticsPipeline.flushNow <- BurstWorkload.frame"
+      },
+      {
+        "count": 320,
+        "stack": "_GrowableList._allocateData <- _GrowableList._GrowableList <- _JsonStringifier._JsonStringifier <- _JsonUtf8Stringifier._JsonUtf8Stringifier <- _JsonUtf8Stringifier.stringify <- JsonUtf8Encoder.convert <- _semanticNodeWireLength"
+      },
+      {
+        "count": 80,
+        "stack": "_GrowableList._allocateData <- _GrowableList._GrowableList <- CellSpanBuilder.buildRow <- CellSpanBuilder.buildDirtyRows <- FramePresentationPlanner.build <- BurstWorkload._present <- SampleFrameHost.frame"
+      },
+      {
+        "count": 80,
+        "stack": "_GrowableList._allocateData <- _GrowableList._GrowableList.withCapacity <- StringBuffer._addPart <- StringBuffer._writeString <- StringBuffer.write <- appendText <- CellSpanBuilder.buildRow"
+      },
+      {
+        "count": 15,
+        "stack": "_StringBase.replaceAll <- escapeSemanticIdSegment <- _snapshotAnchorOf <- _snapshotAnchorOf <- _snapshotAnchorOf <- _snapshotAnchorOf <- _snapshotAnchorOf"
+      },
+      {
+        "count": 6,
+        "stack": "_GrowableList._allocateData <- _GrowableList._GrowableList <- _JsonStringifier._JsonStringifier <- _JsonStringStringifier._JsonStringStringifier <- _JsonStringStringifier.printOn <- _JsonStringStringifier.stringify <- JsonEncoder.convert"
+      },
+      {
+        "count": 6,
+        "stack": "_GrowableList._allocateData <- _GrowableList._GrowableList.withCapacity <- StringBuffer._addPart <- StringBuffer._writeString <- StringBuffer.write <- _JsonStringStringifier.writeString <- _JsonStringifier.writeMap"
+      },
+      {
+        "count": 5,
+        "stack": "_GrowableList._GrowableList._ofEfficientLengthIterable <- _GrowableList._GrowableList.of <- List.List.of <- __Set&_HashVMBase&SetMixin.toList <- BuildOwner._flushBuild <- BuildOwner.flushBuild <- BuildOwner._renderFramePhases"
+      },
+      {
+        "count": 5,
+        "stack": "_GrowableList._GrowableList._ofEfficientLengthIterable <- _GrowableList._GrowableList.of <- List.List.of <- __Set&_HashVMBase&SetMixin.toList <- TuiDirtyRows.TuiDirtyRows.fromRows <- FrameChanged.dirtyRowsFor <- FramePresentationPlanner.build"
+      },
+      {
+        "count": 5,
+        "stack": "_GrowableList._allocateData <- _GrowableList._GrowableList <- TuiDirtyRows.TuiDirtyRows.fromRows <- FrameChanged.dirtyRowsFor <- FramePresentationPlanner.build <- BurstWorkload._present <- SampleFrameHost.frame"
+      },
+      {
+        "count": 5,
+        "stack": "_GrowableList._allocateData <- _GrowableList._GrowableList <- CellSpanBuilder.buildDirtyRows <- FramePresentationPlanner.build <- BurstWorkload._present <- SampleFrameHost.frame <- BurstWorkload.frame"
+      }
+    ],
+    "calibrationSum": -1,
+    "dart": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+    "version": "base",
+    "probeSha256": "1ba033aa830d81b25623f8fe29524d9c58bed6172f46ceb6ec70376edfe1022c",
+    "workloadSha256": "efce446478b201cdb2f5347b844cb3c24df7e58ebee27660e24739273fb629fa",
+    "frameworkSha256": "8640d3854cb26744537c9f2a641dea23cd2da0b7634a03dc153f426b5780cd9d"
+  },
+  {
+    "class": "_Map",
+    "frames": 5,
+    "surface": "structured",
+    "operation": "update",
+    "allocations": 2618,
+    "sampleCount": 2618,
+    "traceOrigin": 907496819035,
+    "windowStart": 907496818625,
+    "windowEnd": 907496825582,
+    "truncatedStacks": 0,
+    "liveBefore": [
+      {
+        "accumulatedSize": 897600,
+        "bytesCurrent": 897600,
+        "instancesAccumulated": 14025,
+        "instancesCurrent": 14025
+      }
+    ],
+    "liveAfter": [
+      {
+        "accumulatedSize": 7592768,
+        "bytesCurrent": 7592768,
+        "instancesAccumulated": 118637,
+        "instancesCurrent": 118637
+      }
+    ],
+    "topStacks": [
+      {
+        "count": 650,
+        "stack": "Map.Map._fromLiteral <- elementActionTargetTokens <- _bindOwnedActionTargetTokens <- _collectInto <- <anonymous closure> <- ComponentElement.visitChildren <- _collectInto"
+      },
+      {
+        "count": 325,
+        "stack": "Map.Map._fromLiteral <- _bindOwnedActionTargetTokens <- _collectInto <- <anonymous closure> <- ComponentElement.visitChildren <- _collectInto <- <anonymous closure>"
+      },
+      {
+        "count": 320,
+        "stack": "Map.Map._fromLiteral <- _semanticStateToJson <- SemanticInspectionNode.SemanticInspectionNode._redact <- SemanticInspectionNode.SemanticInspectionNode._fromSemanticNodeShallow <- SemanticInspectionNode.flattenLiveNode <- SemanticsWireEncoder.encodeTree <- _Encoder.present"
+      },
+      {
+        "count": 320,
+        "stack": "LinkedHashMap.LinkedHashMap.from <- Map.Map.unmodifiable <- SemanticState.values <- _semanticStateToJson <- SemanticInspectionNode.SemanticInspectionNode._redact <- SemanticInspectionNode.SemanticInspectionNode._fromSemanticNodeShallow <- SemanticInspectionNode.flattenLiveNode"
+      },
+      {
+        "count": 320,
+        "stack": "LinkedHashMap.LinkedHashMap.from <- Map.Map.unmodifiable <- SemanticInspectionNode.SemanticInspectionNode._ <- SemanticInspectionNode.SemanticInspectionNode._redact <- SemanticInspectionNode.SemanticInspectionNode._fromSemanticNodeShallow <- SemanticInspectionNode.flattenLiveNode <- SemanticsWireEncoder.encodeTree"
+      },
+      {
+        "count": 320,
+        "stack": "Map.Map._fromLiteral <- SemanticInspectionNode._scalarJson <- SemanticInspectionNode.toScalarJson <- SemanticInspectionNode.flattenLiveNode <- SemanticsWireEncoder.encodeTree <- _Encoder.present <- FrameSemanticsPipeline.flushNow"
+      },
+      {
+        "count": 320,
+        "stack": "Map.Map._fromLiteral <- _cellRectToJson <- SemanticInspectionNode._scalarJson <- SemanticInspectionNode.toScalarJson <- SemanticInspectionNode.flattenLiveNode <- SemanticsWireEncoder.encodeTree <- _Encoder.present"
+      },
+      {
+        "count": 10,
+        "stack": "LinkedHashMap.LinkedHashMap.from <- Map.Map.unmodifiable <- SemanticTreeUpdate.SemanticTreeUpdate._ <- SemanticTreeUpdate.SemanticTreeUpdate._diffFromNextNodes <- SemanticsOwner.update <- FrameSemanticsPipeline.flushNow <- BurstWorkload.frame"
+      },
+      {
+        "count": 10,
+        "stack": "Map.Map._fromLiteral <- SemanticsWireEncoder._finishPatch <- SemanticsWireEncoder.encodeTree <- _Encoder.present <- FrameSemanticsPipeline.flushNow <- BurstWorkload.frame <- work"
+      },
+      {
+        "count": 5,
+        "stack": "Map.Map._fromLiteral <- SemanticTree.SemanticTree.fromElement <- FrameSemanticsPipeline.flushNow <- BurstWorkload.frame <- work <- main <- handleValueCallback"
+      },
+      {
+        "count": 5,
+        "stack": "Map.Map._fromLiteral <- SemanticTreeUpdate.SemanticTreeUpdate._diffFromNextNodes <- SemanticsOwner.update <- FrameSemanticsPipeline.flushNow <- BurstWorkload.frame <- work <- main"
+      },
+      {
+        "count": 5,
+        "stack": "Map.Map._fromLiteral <- SemanticsWireEncoder.encodeTree <- _Encoder.present <- FrameSemanticsPipeline.flushNow <- BurstWorkload.frame <- work <- main"
+      },
+      {
+        "count": 5,
+        "stack": "Map.Map._fromLiteral <- _semanticFullPayloadLength <- SemanticsWireEncoder._finishPatch <- SemanticsWireEncoder.encodeTree <- _Encoder.present <- FrameSemanticsPipeline.flushNow <- BurstWorkload.frame"
+      },
+      {
+        "count": 2,
+        "stack": "createMapFromKeyValueListUnsafe <- _JsonListener.endObject <- __JsonStringParser&_JsonParserWithListener&_ChunkedJsonParser.parse <- _parseJson <- JsonDecoder.convert <- JsonCodec.decode <- jsonDecode"
+      },
+      {
+        "count": 1,
+        "stack": "Map.Map._fromLiteral <- <anonymous closure> <- VmService._call <- VmService.getVMTimelineMicros <- main <- handleValueCallback <- _Future._propagateToListeners"
+      }
+    ],
+    "calibrationSum": -1,
+    "dart": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+    "version": "base",
+    "probeSha256": "1ba033aa830d81b25623f8fe29524d9c58bed6172f46ceb6ec70376edfe1022c",
+    "workloadSha256": "efce446478b201cdb2f5347b844cb3c24df7e58ebee27660e24739273fb629fa",
+    "frameworkSha256": "8640d3854cb26744537c9f2a641dea23cd2da0b7634a03dc153f426b5780cd9d"
+  },
+  {
+    "class": "_OneByteString",
+    "frames": 5,
+    "surface": "structured",
+    "operation": "update",
+    "allocations": 2098,
+    "sampleCount": 2098,
+    "traceOrigin": 907503097700,
+    "windowStart": 907503097502,
+    "windowEnd": 907503104431,
+    "truncatedStacks": 0,
+    "liveBefore": [
+      {
+        "accumulatedSize": 5816000,
+        "bytesCurrent": 5816000,
+        "instancesAccumulated": 141602,
+        "instancesCurrent": 141602
+      }
+    ],
+    "liveAfter": [
+      {
+        "accumulatedSize": 42063488,
+        "bytesCurrent": 42063488,
+        "instancesAccumulated": 1164235,
+        "instancesCurrent": 1164235
+      }
+    ],
+    "topStacks": [
+      {
+        "count": 788,
+        "stack": "allocateOneByteString <- _OneByteString._allocate <- _OneByteString._concatAll <- _StringBase._interpolate <- _snapshotAnchorOf <- _snapshotAnchorOf <- _snapshotAnchorOf"
+      },
+      {
+        "count": 323,
+        "stack": "allocateOneByteString <- _OneByteString._allocate <- _OneByteString._concatAll <- _StringBase._interpolate <- _snapshotAnchorOf <- semanticAnchorOf <- SemanticsElement._nodeId"
+      },
+      {
+        "count": 323,
+        "stack": "allocateOneByteString <- _OneByteString._allocate <- _OneByteString._concatAll <- _StringBase._interpolate <- SemanticsElement._nodeId <- SemanticsElement.buildSemanticNode <- _collectInto"
+      },
+      {
+        "count": 323,
+        "stack": "allocateOneByteString <- _OneByteString._allocate <- _OneByteString._concatAll <- _StringBase._interpolate <- _snapshotAnchorOf <- _snapshotAnchorOf <- semanticAnchorOf"
+      },
+      {
+        "count": 256,
+        "stack": "allocateOneByteString <- _OneByteString._allocate <- _OneByteString._concatAll <- _StringBase._interpolate <- _Status.build <- Element.runWithBuildTarget <- ComponentElement.performRebuild"
+      },
+      {
+        "count": 64,
+        "stack": "_StringBase._concatRangeNative <- _StringBase._concatRange <- StringBuffer.toString <- _PendingTextRun.toSpanRun <- flushPending <- CellSpanBuilder.buildRow <- CellSpanBuilder.buildDirtyRows"
+      },
+      {
+        "count": 7,
+        "stack": "_OneByteString._substringUncheckedNative <- _StringBase._substringUnchecked <- _StringBase.substring <- _JsonStringParser.getString <- __JsonStringParser&_JsonParserWithListener&_ChunkedJsonParser.parseString <- __JsonStringParser&_JsonParserWithListener&_ChunkedJsonParser.parse <- _parseJson"
+      },
+      {
+        "count": 5,
+        "stack": "_StringBase._concatRangeNative <- _StringBase._concatRange <- StringBuffer.toString <- _JsonStringStringifier.stringify <- JsonEncoder.convert <- JsonCodec.encode <- jsonEncode"
+      },
+      {
+        "count": 4,
+        "stack": "allocateOneByteString <- _OneByteString._allocate <- _IntegerImplementation.toRadixString <- _renderSemanticKeySegment <- _snapshotAnchorOf <- _snapshotAnchorOf <- _snapshotAnchorOf"
+      },
+      {
+        "count": 4,
+        "stack": "allocateOneByteString <- _OneByteString._allocate <- _OneByteString._concatAll <- _StringBase._interpolate <- _renderSemanticKeySegment <- _snapshotAnchorOf <- _snapshotAnchorOf"
+      },
+      {
+        "count": 1,
+        "stack": "allocateOneByteString <- _Utf8Decoder.convertSingle <- Utf8Decoder.convert <- Utf8Codec.decode <- _WebSocketProtocolTransformer._messageFrameEnd <- _WebSocketProtocolTransformer.add <- _SinkTransformerStreamSubscription._handleData"
+      }
+    ],
+    "calibrationSum": -1,
+    "dart": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+    "version": "base",
+    "probeSha256": "1ba033aa830d81b25623f8fe29524d9c58bed6172f46ceb6ec70376edfe1022c",
+    "workloadSha256": "efce446478b201cdb2f5347b844cb3c24df7e58ebee27660e24739273fb629fa",
+    "frameworkSha256": "8640d3854cb26744537c9f2a641dea23cd2da0b7634a03dc153f426b5780cd9d"
+  },
+  {
+    "class": "AllocationSentinel",
+    "frames": 0,
+    "surface": "structured",
+    "operation": "update",
+    "allocations": 123,
+    "sampleCount": 123,
+    "traceOrigin": 907509466528,
+    "windowStart": 907509466027,
+    "windowEnd": 907509467073,
+    "truncatedStacks": 0,
+    "liveBefore": [
+      {
+        "accumulatedSize": 16,
+        "bytesCurrent": 16,
+        "instancesAccumulated": 1,
+        "instancesCurrent": 1
+      }
+    ],
+    "liveAfter": [
+      {
+        "accumulatedSize": 272,
+        "bytesCurrent": 272,
+        "instancesAccumulated": 17,
+        "instancesCurrent": 17
+      }
+    ],
+    "topStacks": [
+      {
+        "count": 123,
+        "stack": "main <- handleValueCallback <- _Future._propagateToListeners <- _Future._completeWithValue <- <anonymous closure> <- _microtaskLoop <- _startMicrotaskLoop"
+      }
+    ],
+    "calibrationSum": 1938,
+    "dart": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+    "version": "base",
+    "probeSha256": "1ba033aa830d81b25623f8fe29524d9c58bed6172f46ceb6ec70376edfe1022c",
+    "workloadSha256": "efce446478b201cdb2f5347b844cb3c24df7e58ebee27660e24739273fb629fa",
+    "frameworkSha256": "8640d3854cb26744537c9f2a641dea23cd2da0b7634a03dc153f426b5780cd9d"
+  },
+  {
+    "class": "_Set",
+    "frames": 1,
+    "surface": "terminal",
+    "operation": "mount",
+    "allocations": 189,
+    "sampleCount": 189,
+    "traceOrigin": 907514903633,
+    "windowStart": 907514903110,
+    "windowEnd": 907514910548,
+    "truncatedStacks": 167,
+    "liveBefore": [
+      {
+        "accumulatedSize": 10688,
+        "bytesCurrent": 10688,
+        "instancesAccumulated": 167,
+        "instancesCurrent": 167
+      }
+    ],
+    "liveAfter": [
+      {
+        "accumulatedSize": 10688,
+        "bytesCurrent": 10688,
+        "instancesAccumulated": 167,
+        "instancesCurrent": 167
+      }
+    ],
+    "topStacks": [
+      {
+        "count": 65,
+        "stack": "Element.dependOnInheritedWidgetOfExactType <- MediaQuery.maybeOf <- MediaQuery.textPolicyOf <- Text.build <- Element.runWithBuildTarget <- ComponentElement.performRebuild <- Element.rebuild"
+      },
+      {
+        "count": 64,
+        "stack": "Element.dependOnInheritedWidgetOfExactType <- BurstScope.watch <- _Status.build <- Element.runWithBuildTarget <- ComponentElement.performRebuild <- Element.rebuild <- ComponentElement._firstBuild"
+      },
+      {
+        "count": 16,
+        "stack": "Element.dependOnInheritedWidgetOfExactType <- MediaQuery.maybeOf <- MediaQuery.textPolicyOf <- Flex.createRenderObject <- RenderObjectElement.mount <- Element.inflateWidget <- MultiChildRenderObjectElement._reconcileChildren"
+      },
+      {
+        "count": 16,
+        "stack": "MultiChildRenderObjectElement._reconcileChildren <- MultiChildRenderObjectElement.performRebuild <- Element.rebuild <- RenderObjectElement.rebuild <- RenderObjectElement.mount <- Element.inflateWidget <- MultiChildRenderObjectElement._reconcileChildren"
+      },
+      {
+        "count": 4,
+        "stack": "InheritedElement.InheritedElement <- InheritedWidget.createElement <- Element.inflateWidget <- Element.updateChild <- ComponentElement.performRebuild <- Element.rebuild <- ComponentElement._firstBuild"
+      },
+      {
+        "count": 4,
+        "stack": "CellBuffer.diffAgainst <- TuiFrameLoop.render <- SampleFrameHost.frame <- SampleFrameHost.SampleFrameHost <- BurstWorkload.BurstWorkload <- work <- main"
+      },
+      {
+        "count": 3,
+        "stack": "FocusManager.FocusManager <- FleuryTester.FleuryTester <- SampleFrameHost.SampleFrameHost <- BurstWorkload.BurstWorkload <- work <- main <- handleValueCallback"
+      },
+      {
+        "count": 3,
+        "stack": "InheritedElement.InheritedElement <- _InheritedNotifierElement._InheritedNotifierElement <- InheritedNotifier.createElement <- Element.inflateWidget <- Element.updateChild <- ComponentElement.performRebuild <- Element.rebuild"
+      },
+      {
+        "count": 2,
+        "stack": "InputDispatcher.InputDispatcher <- FleuryTester.FleuryTester <- SampleFrameHost.SampleFrameHost <- BurstWorkload.BurstWorkload <- work <- main <- handleValueCallback"
+      },
+      {
+        "count": 2,
+        "stack": "BuildOwner.BuildOwner <- FleuryTester.FleuryTester <- SampleFrameHost.SampleFrameHost <- BurstWorkload.BurstWorkload <- work <- main <- handleValueCallback"
+      },
+      {
+        "count": 2,
+        "stack": "MultiChildRenderObjectElement._reconcileChildren <- MultiChildRenderObjectElement.performRebuild <- Element.rebuild <- RenderObjectElement.rebuild <- RenderObjectElement.mount <- Element.inflateWidget <- Element.updateChild"
+      },
+      {
+        "count": 1,
+        "stack": "PointerRouter.PointerRouter <- FleuryTester.FleuryTester <- SampleFrameHost.SampleFrameHost <- BurstWorkload.BurstWorkload <- work <- main <- handleValueCallback"
+      },
+      {
+        "count": 1,
+        "stack": "InheritedElement.InheritedElement <- InheritedWidget.createElement <- BuildOwner.mountRoot <- FleuryTester.mountWidget <- FleuryTester.pumpWidget <- SampleFrameHost.SampleFrameHost <- BurstWorkload.BurstWorkload"
+      },
+      {
+        "count": 1,
+        "stack": "InheritedElement.InheritedElement <- _PointerRouterScopeElement._PointerRouterScopeElement <- PointerRouterScope.createElement <- Element.inflateWidget <- Element.updateChild <- ComponentElement.performRebuild <- Element.rebuild"
+      },
+      {
+        "count": 1,
+        "stack": "Element.dependOnInheritedWidgetOfExactType <- _FocusManagerIdentityProvider.maybeOf <- Focus.maybeOfIdentityDependency <- ErrorBoundary._configure <- ErrorBoundary.createRenderObject <- RenderObjectElement.mount <- Element.inflateWidget"
+      }
+    ],
+    "calibrationSum": -1,
+    "dart": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+    "version": "candidate",
+    "probeSha256": "1ba033aa830d81b25623f8fe29524d9c58bed6172f46ceb6ec70376edfe1022c",
+    "workloadSha256": "efce446478b201cdb2f5347b844cb3c24df7e58ebee27660e24739273fb629fa",
+    "frameworkSha256": "eb9757acc25d12e45e64ca76fc099fb6681acf94744e138ff17c6f7ddbe93426"
+  },
+  {
+    "class": "_Set",
+    "frames": 5,
+    "surface": "terminal",
+    "operation": "mount",
+    "allocations": 947,
+    "sampleCount": 947,
+    "traceOrigin": 907521278323,
+    "windowStart": 907521277747,
+    "windowEnd": 907521323135,
+    "truncatedStacks": 835,
+    "liveBefore": [
+      {
+        "accumulatedSize": 10688,
+        "bytesCurrent": 10688,
+        "instancesAccumulated": 167,
+        "instancesCurrent": 167
+      }
+    ],
+    "liveAfter": [
+      {
+        "accumulatedSize": 10688,
+        "bytesCurrent": 10688,
+        "instancesAccumulated": 167,
+        "instancesCurrent": 167
+      }
+    ],
+    "topStacks": [
+      {
+        "count": 325,
+        "stack": "Element.dependOnInheritedWidgetOfExactType <- MediaQuery.maybeOf <- MediaQuery.textPolicyOf <- Text.build <- Element.runWithBuildTarget <- ComponentElement.performRebuild <- Element.rebuild"
+      },
+      {
+        "count": 320,
+        "stack": "Element.dependOnInheritedWidgetOfExactType <- BurstScope.watch <- _Status.build <- Element.runWithBuildTarget <- ComponentElement.performRebuild <- Element.rebuild <- ComponentElement._firstBuild"
+      },
+      {
+        "count": 80,
+        "stack": "Element.dependOnInheritedWidgetOfExactType <- MediaQuery.maybeOf <- MediaQuery.textPolicyOf <- Flex.createRenderObject <- RenderObjectElement.mount <- Element.inflateWidget <- MultiChildRenderObjectElement._reconcileChildren"
+      },
+      {
+        "count": 80,
+        "stack": "MultiChildRenderObjectElement._reconcileChildren <- MultiChildRenderObjectElement.performRebuild <- Element.rebuild <- RenderObjectElement.rebuild <- RenderObjectElement.mount <- Element.inflateWidget <- MultiChildRenderObjectElement._reconcileChildren"
+      },
+      {
+        "count": 20,
+        "stack": "InheritedElement.InheritedElement <- InheritedWidget.createElement <- Element.inflateWidget <- Element.updateChild <- ComponentElement.performRebuild <- Element.rebuild <- ComponentElement._firstBuild"
+      },
+      {
+        "count": 20,
+        "stack": "CellBuffer.diffAgainst <- TuiFrameLoop.render <- SampleFrameHost.frame <- SampleFrameHost.SampleFrameHost <- BurstWorkload.BurstWorkload <- work <- main"
+      },
+      {
+        "count": 15,
+        "stack": "FocusManager.FocusManager <- FleuryTester.FleuryTester <- SampleFrameHost.SampleFrameHost <- BurstWorkload.BurstWorkload <- work <- main <- handleValueCallback"
+      },
+      {
+        "count": 15,
+        "stack": "InheritedElement.InheritedElement <- _InheritedNotifierElement._InheritedNotifierElement <- InheritedNotifier.createElement <- Element.inflateWidget <- Element.updateChild <- ComponentElement.performRebuild <- Element.rebuild"
+      },
+      {
+        "count": 10,
+        "stack": "InputDispatcher.InputDispatcher <- FleuryTester.FleuryTester <- SampleFrameHost.SampleFrameHost <- BurstWorkload.BurstWorkload <- work <- main <- handleValueCallback"
+      },
+      {
+        "count": 10,
+        "stack": "BuildOwner.BuildOwner <- FleuryTester.FleuryTester <- SampleFrameHost.SampleFrameHost <- BurstWorkload.BurstWorkload <- work <- main <- handleValueCallback"
+      },
+      {
+        "count": 10,
+        "stack": "MultiChildRenderObjectElement._reconcileChildren <- MultiChildRenderObjectElement.performRebuild <- Element.rebuild <- RenderObjectElement.rebuild <- RenderObjectElement.mount <- Element.inflateWidget <- Element.updateChild"
+      },
+      {
+        "count": 5,
+        "stack": "PointerRouter.PointerRouter <- FleuryTester.FleuryTester <- SampleFrameHost.SampleFrameHost <- BurstWorkload.BurstWorkload <- work <- main <- handleValueCallback"
+      },
+      {
+        "count": 5,
+        "stack": "InheritedElement.InheritedElement <- InheritedWidget.createElement <- BuildOwner.mountRoot <- FleuryTester.mountWidget <- FleuryTester.pumpWidget <- SampleFrameHost.SampleFrameHost <- BurstWorkload.BurstWorkload"
+      },
+      {
+        "count": 5,
+        "stack": "InheritedElement.InheritedElement <- _PointerRouterScopeElement._PointerRouterScopeElement <- PointerRouterScope.createElement <- Element.inflateWidget <- Element.updateChild <- ComponentElement.performRebuild <- Element.rebuild"
+      },
+      {
+        "count": 5,
+        "stack": "Element.dependOnInheritedWidgetOfExactType <- _FocusManagerIdentityProvider.maybeOf <- Focus.maybeOfIdentityDependency <- ErrorBoundary._configure <- ErrorBoundary.createRenderObject <- RenderObjectElement.mount <- Element.inflateWidget"
+      }
+    ],
+    "calibrationSum": -1,
+    "dart": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+    "version": "candidate",
+    "probeSha256": "1ba033aa830d81b25623f8fe29524d9c58bed6172f46ceb6ec70376edfe1022c",
+    "workloadSha256": "efce446478b201cdb2f5347b844cb3c24df7e58ebee27660e24739273fb629fa",
+    "frameworkSha256": "eb9757acc25d12e45e64ca76fc099fb6681acf94744e138ff17c6f7ddbe93426"
+  },
+  {
+    "class": "_TeardownErrors",
+    "frames": 5,
+    "surface": "terminal",
+    "operation": "mount",
+    "allocations": 3255,
+    "sampleCount": 3255,
+    "traceOrigin": 907527390113,
+    "windowStart": 907527383926,
+    "windowEnd": 907527428879,
+    "truncatedStacks": 3080,
+    "liveBefore": [
+      {
+        "accumulatedSize": 0,
+        "bytesCurrent": 0,
+        "instancesAccumulated": 0,
+        "instancesCurrent": 0
+      }
+    ],
+    "liveAfter": [
+      {
+        "accumulatedSize": 0,
+        "bytesCurrent": 0,
+        "instancesAccumulated": 0,
+        "instancesCurrent": 0
+      }
+    ],
+    "topStacks": [
+      {
+        "count": 650,
+        "stack": "Element.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount"
+      },
+      {
+        "count": 325,
+        "stack": "Element.unmount <- SemanticsElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture"
+      },
+      {
+        "count": 325,
+        "stack": "RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount <- SemanticsElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture"
+      },
+      {
+        "count": 325,
+        "stack": "Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount <- SemanticsElement.unmount <- _TeardownErrors.capture"
+      },
+      {
+        "count": 325,
+        "stack": "RenderObjectElement.unmount <- _RawTextElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _TeardownErrors.capture"
+      },
+      {
+        "count": 325,
+        "stack": "Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _RawTextElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture"
+      },
+      {
+        "count": 320,
+        "stack": "RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount"
+      },
+      {
+        "count": 320,
+        "stack": "Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- Element.unmount"
+      },
+      {
+        "count": 85,
+        "stack": "Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount"
+      },
+      {
+        "count": 80,
+        "stack": "RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount"
+      },
+      {
+        "count": 10,
+        "stack": "RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- StatefulElement.unmount <- _TeardownErrors.capture <- Element.unmount"
+      },
+      {
+        "count": 10,
+        "stack": "Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- StatefulElement.unmount"
+      },
+      {
+        "count": 10,
+        "stack": "Element.unmount <- _TeardownErrors.capture <- StatefulElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- Element.unmount"
+      },
+      {
+        "count": 5,
+        "stack": "StatefulElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount"
+      },
+      {
+        "count": 5,
+        "stack": "Element.unmount <- _TeardownErrors.capture <- StatefulElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount"
+      }
+    ],
+    "calibrationSum": -1,
+    "dart": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+    "version": "candidate",
+    "probeSha256": "1ba033aa830d81b25623f8fe29524d9c58bed6172f46ceb6ec70376edfe1022c",
+    "workloadSha256": "efce446478b201cdb2f5347b844cb3c24df7e58ebee27660e24739273fb629fa",
+    "frameworkSha256": "eb9757acc25d12e45e64ca76fc099fb6681acf94744e138ff17c6f7ddbe93426"
+  },
+  {
+    "class": "_GrowableList",
+    "frames": 5,
+    "surface": "terminal",
+    "operation": "mount",
+    "allocations": 6907,
+    "sampleCount": 6907,
+    "traceOrigin": 907533712676,
+    "windowStart": 907533712414,
+    "windowEnd": 907533761809,
+    "truncatedStacks": 5849,
+    "liveBefore": [
+      {
+        "accumulatedSize": 57344,
+        "bytesCurrent": 57344,
+        "instancesAccumulated": 1792,
+        "instancesCurrent": 1792
+      }
+    ],
+    "liveAfter": [
+      {
+        "accumulatedSize": 1054208,
+        "bytesCurrent": 1054208,
+        "instancesAccumulated": 32944,
+        "instancesCurrent": 32944
+      }
+    ],
+    "topStacks": [
+      {
+        "count": 892,
+        "stack": "Element.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount"
+      },
+      {
+        "count": 448,
+        "stack": "Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _RawTextElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture"
+      },
+      {
+        "count": 446,
+        "stack": "Element.unmount <- SemanticsElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture"
+      },
+      {
+        "count": 446,
+        "stack": "Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount <- SemanticsElement.unmount <- _TeardownErrors.capture"
+      },
+      {
+        "count": 440,
+        "stack": "Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- Element.unmount"
+      },
+      {
+        "count": 410,
+        "stack": "_GrowableList._allocateData <- _GrowableList._GrowableList <- _GrowableList._GrowableList._ofOther <- _GrowableList._GrowableList.of <- List.List.of <- Iterable.toList <- MultiChildRenderObjectElement.removeChildRenderObject"
+      },
+      {
+        "count": 325,
+        "stack": "_TeardownErrors._TeardownErrors <- RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount <- SemanticsElement.unmount <- _TeardownErrors.capture <- Element.unmount"
+      },
+      {
+        "count": 325,
+        "stack": "_TeardownErrors._TeardownErrors <- RenderObjectElement.unmount <- _RawTextElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount"
+      },
+      {
+        "count": 320,
+        "stack": "_TeardownErrors._TeardownErrors <- RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture"
+      },
+      {
+        "count": 320,
+        "stack": "_GrowableList._GrowableList._literal1 <- RenderText.performLayout <- RenderObject.layout <- _RenderSemanticBounds.performLayout <- RenderObject.layout <- RenderSizedBox.performLayout <- RenderObject.layout"
+      },
+      {
+        "count": 235,
+        "stack": "_GrowableList._allocateData <- _GrowableList._GrowableList <- Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount"
+      },
+      {
+        "count": 206,
+        "stack": "_GrowableList._allocateData <- _GrowableList._GrowableList <- Element.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount"
+      },
+      {
+        "count": 204,
+        "stack": "_TeardownErrors._TeardownErrors <- Element.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _TeardownErrors.capture"
+      },
+      {
+        "count": 131,
+        "stack": "_TeardownErrors._TeardownErrors <- Element.unmount <- _TeardownErrors.capture <- RenderObjectElement.unmount <- _TeardownErrors.capture <- Element.unmount <- _TeardownErrors.capture"
+      },
+      {
+        "count": 128,
+        "stack": "_GrowableList._GrowableList._literal1 <- RenderText.text= <- _RawText.updateRenderObject <- RenderObjectElement.update <- Element.updateChild <- SingleChildRenderObjectElement.performRebuild <- Element.rebuild"
+      }
+    ],
+    "calibrationSum": -1,
+    "dart": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+    "version": "candidate",
+    "probeSha256": "1ba033aa830d81b25623f8fe29524d9c58bed6172f46ceb6ec70376edfe1022c",
+    "workloadSha256": "efce446478b201cdb2f5347b844cb3c24df7e58ebee27660e24739273fb629fa",
+    "frameworkSha256": "eb9757acc25d12e45e64ca76fc099fb6681acf94744e138ff17c6f7ddbe93426"
+  },
+  {
+    "class": "_List",
+    "frames": 5,
+    "surface": "terminal",
+    "operation": "mount",
+    "allocations": 6498,
+    "sampleCount": 6498,
+    "traceOrigin": 907540019551,
+    "windowStart": 907540019347,
+    "windowEnd": 907540064433,
+    "truncatedStacks": 4990,
+    "liveBefore": [
+      {
+        "accumulatedSize": 6687568,
+        "bytesCurrent": 6687568,
+        "instancesAccumulated": 68844,
+        "instancesCurrent": 68844
+      }
+    ],
+    "liveAfter": [
+      {
+        "accumulatedSize": 44925168,
+        "bytesCurrent": 44925168,
+        "instancesAccumulated": 192677,
+        "instancesCurrent": 192677
+      }
+    ],
+    "topStacks": [
+      {
+        "count": 603,
+        "stack": "_GrowableList._allocateData <- _GrowableList._grow <- _GrowableList._growToNextCapacity <- _GrowableList.add <- ComponentElement.visitChildren <- <anonymous closure> <- _TeardownErrors.capture"
+      },
+      {
+        "count": 457,
+        "stack": "_GrowableList._allocateData <- _GrowableList._grow <- _GrowableList._growToNextCapacity <- ComponentElement.visitChildren <- <anonymous closure> <- _TeardownErrors.capture <- Element.unmount"
+      },
+      {
+        "count": 440,
+        "stack": "__Set&_HashVMBase&SetMixin&_HashBase&_OperatorEqualsAndHashCode&_LinkedHashSetMixin._init <- __Set&_HashVMBase&SetMixin&_HashBase&_OperatorEqualsAndHashCode&_LinkedHashSetMixin._rehash <- __Set&_HashVMBase&SetMixin&_HashBase&_OperatorEqualsAndHashCode&_LinkedHashSetMixin._add <- __Set&_HashVMBase&SetMixin&_HashBase&_OperatorEqualsAndHashCode&_LinkedHashSetMixin.add <- Element.dependOnInheritedWidgetOfExactType <- MediaQuery.maybeOf <- MediaQuery.textPolicyOf"
+      },
+      {
+        "count": 435,
+        "stack": "_GrowableList._allocateData <- _GrowableList._grow <- _GrowableList._growToNextCapacity <- _GrowableList.add <- _GrowableList._GrowableList._ofOther <- _GrowableList._GrowableList.of <- List.List.of"
+      },
+      {
+        "count": 391,
+        "stack": "_List._List <- _List._List._ofGrowableList <- _List._List.of <- List.List.of <- List.List.from <- List.List.unmodifiable <- RenderFlex.children"
+      },
+      {
+        "count": 379,
+        "stack": "_GrowableList._allocateData <- _GrowableList._grow <- _GrowableList._growToNextCapacity <- _GrowableList.add <- SingleChildRenderObjectElement.visitChildren <- <anonymous closure> <- _TeardownErrors.capture"
+      },
+      {
+        "count": 345,
+        "stack": "__Set&_HashVMBase&SetMixin&_HashBase&_OperatorEqualsAndHashCode&_LinkedHashSetMixin._init <- __Set&_HashVMBase&SetMixin&_HashBase&_OperatorEqualsAndHashCode&_LinkedHashSetMixin._rehash <- __Set&_HashVMBase&SetMixin&_HashBase&_OperatorEqualsAndHashCode&_LinkedHashSetMixin._add <- __Set&_HashVMBase&SetMixin&_HashBase&_OperatorEqualsAndHashCode&_LinkedHashSetMixin.add <- Element.dependOnInheritedWidgetOfExactType <- BurstScope.watch <- _Status.build"
+      },
+      {
+        "count": 325,
+        "stack": "_List._List <- _RenderText&RenderObject&ChangeNotifier._RenderText&RenderObject&ChangeNotifier <- _RenderText&RenderObject&ChangeNotifier&SelectionRegistrant._RenderText&RenderObject&ChangeNotifier&SelectionRegistrant <- _RenderText&RenderObject&ChangeNotifier&SelectionRegistrant&SelectableTextMixin._RenderText&RenderObject&ChangeNotifier&SelectionRegistrant&SelectableTextMixin <- RenderText.RenderText <- _RawText.createRenderObject <- RenderObjectElement.mount"
+      },
+      {
+        "count": 325,
+        "stack": "_List._List <- _RenderText&RenderObject&ChangeNotifier.addListener <- SelectionContainerDelegate.add <- _RenderText&RenderObject&ChangeNotifier&SelectionRegistrant.attachToSelection <- _RawText.createRenderObject <- RenderObjectElement.mount <- Element.inflateWidget"
+      },
+      {
+        "count": 320,
+        "stack": "_Status.build <- Element.runWithBuildTarget <- ComponentElement.performRebuild <- Element.rebuild <- BuildOwner._flushBuild <- BuildOwner.flushBuild <- BuildOwner._renderFramePhases"
+      },
+      {
+        "count": 320,
+        "stack": "_Status.build <- Element.runWithBuildTarget <- ComponentElement.performRebuild <- Element.rebuild <- ComponentElement._firstBuild <- ComponentElement.mount <- Element.inflateWidget"
+      },
+      {
+        "count": 320,
+        "stack": "_GrowableList._GrowableList._literal1 <- RenderText.performLayout <- RenderObject.layout <- _RenderSemanticBounds.performLayout <- RenderObject.layout <- RenderSizedBox.performLayout <- RenderObject.layout"
+      },
+      {
+        "count": 291,
+        "stack": "_GrowableList._allocateData <- _GrowableList._grow <- _GrowableList._growToNextCapacity <- SingleChildRenderObjectElement.visitChildren <- <anonymous closure> <- _TeardownErrors.capture <- Element.unmount"
+      },
+      {
+        "count": 185,
+        "stack": "_GrowableList._allocateData <- _GrowableList._grow <- _GrowableList._growToNextCapacity <- _GrowableList.add <- MultiChildRenderObjectElement._syncChildRenderObjects <- MultiChildRenderObjectElement.performRebuild <- Element.rebuild"
+      },
+      {
+        "count": 180,
+        "stack": "_GrowableList._allocateData <- _GrowableList._grow <- _GrowableList._growToNextCapacity <- _GrowableList.add <- BurstWorkload.BurstWorkload <- work <- main"
+      }
+    ],
+    "calibrationSum": -1,
+    "dart": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+    "version": "candidate",
+    "probeSha256": "1ba033aa830d81b25623f8fe29524d9c58bed6172f46ceb6ec70376edfe1022c",
+    "workloadSha256": "efce446478b201cdb2f5347b844cb3c24df7e58ebee27660e24739273fb629fa",
+    "frameworkSha256": "eb9757acc25d12e45e64ca76fc099fb6681acf94744e138ff17c6f7ddbe93426"
+  },
+  {
+    "class": "AllocationSentinel",
+    "frames": 0,
+    "surface": "structured",
+    "operation": "update",
+    "allocations": 123,
+    "sampleCount": 123,
+    "traceOrigin": 907547471715,
+    "windowStart": 907547471281,
+    "windowEnd": 907547472186,
+    "truncatedStacks": 0,
+    "liveBefore": [
+      {
+        "accumulatedSize": 16,
+        "bytesCurrent": 16,
+        "instancesAccumulated": 1,
+        "instancesCurrent": 1
+      }
+    ],
+    "liveAfter": [
+      {
+        "accumulatedSize": 272,
+        "bytesCurrent": 272,
+        "instancesAccumulated": 17,
+        "instancesCurrent": 17
+      }
+    ],
+    "topStacks": [
+      {
+        "count": 123,
+        "stack": "main <- handleValueCallback <- _Future._propagateToListeners <- _Future._completeWithValue <- <anonymous closure> <- _microtaskLoop <- _startMicrotaskLoop"
+      }
+    ],
+    "calibrationSum": 1938,
+    "dart": "3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+    "version": "candidate",
+    "probeSha256": "1ba033aa830d81b25623f8fe29524d9c58bed6172f46ceb6ec70376edfe1022c",
+    "workloadSha256": "efce446478b201cdb2f5347b844cb3c24df7e58ebee27660e24739273fb629fa",
+    "frameworkSha256": "eb9757acc25d12e45e64ca76fc099fb6681acf94744e138ff17c6f7ddbe93426"
+  }
+]
