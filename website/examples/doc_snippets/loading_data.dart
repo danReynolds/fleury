@@ -17,13 +17,11 @@ enum SnapshotPreview { disconnected, waiting, error, empty, success }
 Future<List<String>>? futureFor(SnapshotPreview preview) => switch (preview) {
   SnapshotPreview.disconnected => null,
   SnapshotPreview.waiting => Completer<List<String>>().future,
-  // Fails asynchronously, not at construction: a `Future.error(...)` is
-  // already failed when `setState` assigns it, and FutureBuilder subscribes a
-  // microtask later — too late to keep the error handled.
-  SnapshotPreview.error => Future<List<String>>.delayed(
-    Duration.zero,
-    () => throw StateError('Connection lost'),
-  ),
+  // Own the failure immediately, even if rendering is delayed or this preview
+  // is replaced before a frame. FutureBuilder still receives the same error.
+  SnapshotPreview.error => Future<List<String>>.error(
+    StateError('Connection lost'),
+  )..ignore(),
   SnapshotPreview.empty => Future<List<String>>.value(const <String>[]),
   SnapshotPreview.success => Future<List<String>>.value(const <String>[
     'alpha.log',

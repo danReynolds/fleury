@@ -456,6 +456,7 @@ class _Runner {
         'test/doc_snippets_test.dart',
         'test/testing_guide_test.dart',
         'test/input_guide_test.dart',
+        'test/loading_error_future_test.dart',
       ], workingDirectory: webExamples);
       // The guide's Run test button executes the actual tester in the browser.
       // Keep its shared scenario and JS handle lifecycle in the PR gate too.
@@ -464,6 +465,7 @@ class _Runner {
         '-p',
         'chrome',
         'test/preferences_runner_browser_test.dart',
+        'test/loading_error_browser_test.dart',
       ], workingDirectory: webExamples);
 
       // dart2js smoke: the doc-examples entrypoint pulls in fleury_core,
