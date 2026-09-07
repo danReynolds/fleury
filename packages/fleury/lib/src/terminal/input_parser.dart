@@ -114,6 +114,7 @@ class InputParser {
 
   _State _state = _State.ground;
   final List<int> _pendingUtf8 = <int>[];
+  bool _pendingUtf8Alt = false;
   final List<int> _escapeBytes = <int>[];
   final _LegacySequenceTable _legacySequences;
   final List<int> _legacyCandidate = <int>[];
@@ -278,9 +279,7 @@ class InputParser {
         sink.add(const KeyEvent(KeyCode.escape));
       case _State.utf8Continuation:
         if (_pendingUtf8.isNotEmpty) {
-          sink.add(
-            TextInputEvent(utf8.decode(_pendingUtf8, allowMalformed: true)),
-          );
+          _emitPendingUtf8(sink);
         }
       case _State.paste:
         _finishPaste(sink);
@@ -294,6 +293,7 @@ class InputParser {
         break;
     }
     _pendingUtf8.clear();
+    _pendingUtf8Alt = false;
     _resetCsi();
     _clearEscapeSequence();
     _state = _State.ground;
@@ -492,6 +492,18 @@ class InputParser {
       );
       _clearEscapeSequence();
       _state = _State.ground;
+      return;
+    }
+    if (byte >= 0xc2 && byte <= 0xf4) {
+      // The legacy ESC prefix applies to an entire Unicode scalar, not just
+      // ASCII. Keep it with the UTF-8 accumulator across reads/idle flushes
+      // so a non-ASCII shortcut never falls into the text-insertion lane.
+      _clearEscapeSequence();
+      _pendingUtf8
+        ..clear()
+        ..add(byte);
+      _pendingUtf8Alt = true;
+      _state = _State.utf8Continuation;
       return;
     }
     // Unknown sequence — reset to ground and keep the byte.
@@ -1318,16 +1330,35 @@ class InputParser {
     if ((byte & 0xC0) != 0x80) {
       // Not a continuation byte — bail and re-process from ground.
       _pendingUtf8.clear();
+      _pendingUtf8Alt = false;
       _state = _State.ground;
       _consumeGround(byte, sink);
       return;
     }
     _pendingUtf8.add(byte);
     if (!_isUtf8Complete(_pendingUtf8)) return;
-    final decoded = utf8.decode(_pendingUtf8, allowMalformed: true);
-    _pendingUtf8.clear();
     _state = _State.ground;
-    sink.add(TextInputEvent(decoded));
+    _emitPendingUtf8(sink);
+  }
+
+  void _emitPendingUtf8(TuiEventSink sink) {
+    final decoded = utf8.decode(_pendingUtf8, allowMalformed: true);
+    final alt = _pendingUtf8Alt;
+    _pendingUtf8.clear();
+    _pendingUtf8Alt = false;
+    if (alt) {
+      // Malformed sequences can decode to multiple replacement scalars.
+      for (final scalar in decoded.runes) {
+        sink.add(
+          KeyEvent(
+            KeyCode.forCharacter(String.fromCharCode(scalar)),
+            modifiers: const {KeyModifier.alt},
+          ),
+        );
+      }
+    } else {
+      sink.add(TextInputEvent(decoded));
+    }
   }
 
   bool _isUtf8Complete(List<int> bytes) {
