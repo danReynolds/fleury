@@ -263,8 +263,9 @@ class _HandoffHostState extends State<_HandoffHost> {
   @override
   Widget build(BuildContext context) {
     final shared = this.shared;
-    if (shared != null)
+    if (shared != null) {
       return Scope<_Model>(value: shared, child: widget.child);
+    }
     return Scope<_Model>.create(
       create: (_) => created = _Model(7),
       child: widget.child,

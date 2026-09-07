@@ -21040,7 +21040,9 @@ Decisions:
 Validation:
 - Analyze clean across every package; `check` green: core 3299,
   `fleury_widgets` 1200, `fleury_web` 534 (vm+chrome), samples/storybook/
-  mcp/console/website/profiling suites green; `scope_test.dart` 24 cases.
+  mcp/console/website/profiling suites green; `scope_test.dart` 26 cases
+  (two added by the review: ownership hand-off with the same instance, and a
+  hand-off whose listener fails to attach).
 - Fast gates pass without re-baselining: alloc-gate 8283 B/frame vs 9139
   baseline (−9.4%), paint-gate counters identical, selection/runtime/wire
   semantics unchanged; input-alloc-gate 210.4 B/key vs 207.9 (+1.2%; a

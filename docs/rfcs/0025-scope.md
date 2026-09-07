@@ -155,13 +155,16 @@ change.
 
 ## 5. Validation
 
-- `scope_test.dart` (24 cases): lookup and exact keying, plain-value
+- `scope_test.dart` (26 cases): lookup and exact keying, plain-value
   replacement and `didChangeDependencies`, a narrowed `updateShouldNotify`,
   attach-before-mount, live replacement during a child rebuild, detach on
   replacement and on unmount, failed child update, non-subscribing read,
   `initState` read, `dispose` read error, `create` once with an upstream read,
-  auto-dispose vs `dispose:`, children-before-dispose order, and switching
-  constructors at one position.
+  auto-dispose vs `dispose:`, children-before-dispose order, switching
+  constructors at one position, and the two hand-off cases the review found
+  (handing the owned object over as the shared value keeps it alive; a
+  hand-off whose listener fails to attach leaves the object owned and
+  disposed on unmount).
 - The dependency-lifecycle and reparenting suites run against `Scope`
   unchanged in intent; the whole check is green and the perf gates pass (see
   the execution journal entry).
