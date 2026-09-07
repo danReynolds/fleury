@@ -42,13 +42,66 @@ class _AnchorElement extends ComponentElement implements SemanticContributor {
 
   @override
   SemanticNode buildSemanticNode(List<SemanticNode> children) {
-    final id = SemanticNodeId(semanticAnchorOf(this)!);
+    final id = SemanticNodeId(semanticAnchorOf(this) ?? 'element-$hashCode');
     widget.onSnapshot?.call();
     return SemanticNode(id: id, role: SemanticRole.button, children: children);
   }
 }
 
 void main() {
+  for (final keyedRoot in [false, true]) {
+    test(
+      'snapshot prefixes match live identity rules (keyed root: $keyedRoot)',
+      () {
+        final owner = BuildOwner();
+        final global = GlobalKey();
+        final root = owner.mountRoot(
+          Column(
+            key: keyedRoot ? const ValueKey('outer/~%') : null,
+            children: [
+              const _AnchorProbe(),
+              Padding(
+                padding: EdgeInsets.zero,
+                child: Column(
+                  children: [
+                    const _AnchorProbe(),
+                    Column(
+                      key: const ValueKey('inner/~%'),
+                      children: [
+                        _AnchorProbe(key: global),
+                        const _AnchorProbe(),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+        addTearDown(root.unmount);
+        final expected = <String>[];
+        void visit(Element element) {
+          if (element is _AnchorElement) {
+            // Outside snapshot collection this is the original live parent
+            // walk, independent of the snapshot prefix-sharing algorithm.
+            expected.add(
+              semanticAnchorOf(element) ?? 'element-${element.hashCode}',
+            );
+          }
+          element.visitChildren(visit);
+        }
+
+        visit(root);
+        final tree = SemanticTree.fromElement(root);
+        expect(tree.root.children.map((n) => n.id.value), expected);
+        expect(
+          semanticAnchorOf(global.currentContext! as Element),
+          '${keyedRoot ? 'auto:outer%2F%7E%25/' : 'auto:'}inner%2F%7E%25/~0',
+        );
+      },
+    );
+  }
+
   test(
     'pending full rebuild skips positional work and resumes leaf tracking',
     () {
@@ -189,4 +242,34 @@ void main() {
       },
     );
   }
+
+  test(
+    'a reparented GlobalKey gets its new keyed scope on the next snapshot',
+    () {
+      final owner = BuildOwner();
+      final key = GlobalKey();
+      final child = _AnchorProbe(key: key);
+      Widget scene(bool moved) => Column(
+        children: [
+          Column(key: const ValueKey('a'), children: [if (!moved) child]),
+          Column(key: const ValueKey('b'), children: [if (moved) child]),
+        ],
+      );
+      final root = owner.mountRoot(scene(false));
+      addTearDown(root.unmount);
+      final element = key.currentContext;
+      final before = SemanticTree.fromElement(root);
+      expect(before.root.children.single.id.value, 'auto:a/~0');
+      owner.updateRoot(root, scene(true));
+      expect(key.currentContext, same(element));
+      final after = SemanticTree.fromElement(root);
+      expect(after.root.children.single.id.value, 'auto:b/~0');
+      expect(
+        after.elementById(const SemanticNodeId('auto:b/~0')),
+        same(element),
+      );
+      expect(after.elementById(const SemanticNodeId('auto:a/~0')), isNull);
+      expect(before.root.children.single.id.value, 'auto:a/~0');
+    },
+  );
 }
