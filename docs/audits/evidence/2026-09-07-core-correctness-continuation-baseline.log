@@ -1,0 +1,183 @@
+Baseline production source: 944f7fb71e9b99ec6644b797ecbb1d4b6ecc09b8
+
+
+alt-utf8
+00:00 +0: loading test/terminal/input_parser_test.dart
+00:00 +0: Escape disambiguation Alt+é survives every UTF-8 read boundary
+00:00 +0 -1: Escape disambiguation Alt+é survives every UTF-8 read boundary [E]
+  Expected: [KeyEvent:KeyEvent(alt+é), TextInputEvent:TextInputEvent("ñ")]
+    Actual: [TextInputEvent:TextInputEvent("é"), TextInputEvent:TextInputEvent("ñ")]
+     Which: at location [0] is TextInputEvent:<TextInputEvent("é")> instead of KeyEvent:<KeyEvent(alt+é)>
+  read boundary 1
+
+  package:matcher                              expect
+  test/terminal/input_parser_test.dart 392:11  main.<fn>.<fn>
+
+00:00 +0 -1: Escape disambiguation Alt+中 survives every UTF-8 read boundary
+00:00 +0 -2: Escape disambiguation Alt+中 survives every UTF-8 read boundary [E]
+  Expected: [KeyEvent:KeyEvent(alt+中), TextInputEvent:TextInputEvent("ñ")]
+    Actual: [TextInputEvent:TextInputEvent("中"), TextInputEvent:TextInputEvent("ñ")]
+     Which: at location [0] is TextInputEvent:<TextInputEvent("中")> instead of KeyEvent:<KeyEvent(alt+中)>
+  read boundary 1
+
+  package:matcher                              expect
+  test/terminal/input_parser_test.dart 392:11  main.<fn>.<fn>
+
+00:00 +0 -2: Escape disambiguation Alt+🙂 survives every UTF-8 read boundary
+00:00 +0 -3: Escape disambiguation Alt+🙂 survives every UTF-8 read boundary [E]
+  Expected: [KeyEvent:KeyEvent(alt+🙂), TextInputEvent:TextInputEvent("ñ")]
+    Actual: [TextInputEvent:TextInputEvent("🙂"), TextInputEvent:TextInputEvent("ñ")]
+     Which: at location [0] is TextInputEvent:<TextInputEvent("🙂")> instead of KeyEvent:<KeyEvent(alt+🙂)>
+  read boundary 1
+
+  package:matcher                              expect
+  test/terminal/input_parser_test.dart 392:11  main.<fn>.<fn>
+
+00:00 +0 -3: Escape disambiguation truncated Alt UTF-8 preserves the modifier at EOF then resets
+00:00 +0 -4: Escape disambiguation truncated Alt UTF-8 preserves the modifier at EOF then resets [E]
+  Expected: [KeyEvent:KeyEvent(alt+�), TextInputEvent:TextInputEvent("é")]
+    Actual: [TextInputEvent:TextInputEvent("�"), TextInputEvent:TextInputEvent("é")]
+     Which: at location [0] is TextInputEvent:<TextInputEvent("�")> instead of KeyEvent:<KeyEvent(alt+�)>
+
+  package:matcher                             expect
+  test/terminal/input_parser_test.dart 407:7  main.<fn>.<fn>
+
+00:00 +0 -4: Escape disambiguation malformed Alt UTF-8 does not modify the next key
+00:00 +1 -4: Some tests failed.
+
+Failing tests:
+  test/terminal/input_parser_test.dart: Escape disambiguation Alt+é survives every UTF-8 read boundary
+  test/terminal/input_parser_test.dart: Escape disambiguation Alt+中 survives every UTF-8 read boundary
+  test/terminal/input_parser_test.dart: Escape disambiguation Alt+🙂 survives every UTF-8 read boundary
+  test/terminal/input_parser_test.dart: Escape disambiguation truncated Alt UTF-8 preserves the modifier at EOF then resets
+
+Consider enabling the flag chain-stack-traces to receive more detailed exceptions.
+For example, 'dart test --chain-stack-traces'.
+
+
+focus-rebinding
+00:00 +0: loading test/widgets/focus_manager_rebinding_test.dart
+00:00 +0: manager replacement preserves sibling trap activation order
+00:00 +0 -1: manager replacement preserves sibling trap activation order [E]
+  Expected: false
+    Actual: <true>
+
+  package:matcher                                      expect
+  test/widgets/focus_manager_rebinding_test.dart 38:5  main.<fn>
+  test/support/test_widgets.dart 41:19                 testWidgets.<fn>
+
+00:00 +0 -1: exclusion changes notify only the replacement manager
+00:00 +0 -2: exclusion changes notify only the replacement manager [E]
+  Expected: false
+    Actual: <true>
+
+  package:matcher                                      expect
+  test/widgets/focus_manager_rebinding_test.dart 59:5  main.<fn>
+  ===== asynchronous gap ===========================
+  test/support/test_widgets.dart 41:9                  testWidgets.<fn>
+
+00:00 +0 -2: focus manager rejects a node owned by another session
+00:00 +0 -3: focus manager rejects a node owned by another session [E]
+  Expected: false
+    Actual: <true>
+
+  package:matcher                                      expect
+  test/widgets/focus_manager_rebinding_test.dart 88:5  main.<fn>
+  test/support/test_widgets.dart 41:19                 testWidgets.<fn>
+
+00:00 +0 -3: retained focus nodes rebind to a replacement manager (old disposed: false)
+00:00 +0 -4: retained focus nodes rebind to a replacement manager (old disposed: false) [E]
+  Expected: empty
+    Actual: [
+              FocusNode:FocusNode(KeyDetector, focus=false),
+              FocusNode:FocusNode(#10a5aaf2, focus=true)
+            ]
+
+  package:matcher                                       expect
+  test/widgets/focus_manager_rebinding_test.dart 118:7  main.<fn>
+  test/support/test_widgets.dart 41:19                  testWidgets.<fn>
+
+00:00 +0 -4: retained focus nodes rebind to a replacement manager (old disposed: true)
+00:00 +0 -5: retained focus nodes rebind to a replacement manager (old disposed: true) [E]
+  Expected: contains FocusNode:<FocusNode(#212422d3, focus=false)>
+    Actual: []
+     Which: does not contain FocusNode:<FocusNode(#212422d3, focus=false)>
+
+  package:matcher                                       expect
+  test/widgets/focus_manager_rebinding_test.dart 120:7  main.<fn>
+  test/support/test_widgets.dart 41:19                  testWidgets.<fn>
+
+00:00 +0 -5: retained focus traps move to the replacement manager
+00:00 +0 -6: retained focus traps move to the replacement manager [E]
+  Expected: false
+    Actual: <true>
+
+  package:matcher                                       expect
+  test/widgets/focus_manager_rebinding_test.dart 154:5  main.<fn>
+  test/support/test_widgets.dart 41:19                  testWidgets.<fn>
+
+00:00 +0 -6: Some tests failed.
+
+Failing tests:
+  test/widgets/focus_manager_rebinding_test.dart: exclusion changes notify only the replacement manager
+  test/widgets/focus_manager_rebinding_test.dart: focus manager rejects a node owned by another session
+  test/widgets/focus_manager_rebinding_test.dart: manager replacement preserves sibling trap activation order
+  test/widgets/focus_manager_rebinding_test.dart: retained focus nodes rebind to a replacement manager (old disposed: false)
+  ... and 2 more
+
+Consider enabling the flag chain-stack-traces to receive more detailed exceptions.
+For example, 'dart test --chain-stack-traces'.
+
+
+paste-reentrancy
+00:00 +0: loading test/editing/text_paste_test.dart
+00:00 +0: TextPasteDriver a paste arriving through a reentrant finish keeps every accepted transaction
+00:00 +0 -1: TextPasteDriver a paste arriving through a reentrant finish keeps every accepted transaction [E]
+  Expected: 'abcdefUVWXYZ12!'
+    Actual: 'abcdefUVWXYZ!'
+     Which: is different.
+            Expected: ... cdefUVWXYZ12!
+              Actual: ... cdefUVWXYZ!
+                                    ^
+             Differ at offset 12
+
+  package:matcher                          expect
+  test/editing/text_paste_test.dart 109:7  main.<fn>.<fn>
+
+00:00 +0 -1: TextPasteDriver a listener starting another paste during first step keeps both payloads and undo transactions
+00:00 +0 -2: TextPasteDriver a listener starting another paste during first step keeps both payloads and undo transactions [E]
+  Expected: 'abcdefUVWXYZ12'
+    Actual: 'abcdefUVWXYZ'
+     Which: is different. Both strings start the same, but the actual value is missing the following trailing characters: 12
+
+  package:matcher                          expect
+  test/editing/text_paste_test.dart 150:9  main.<fn>.<fn>
+
+00:00 +0 -2: TextPasteDriver a listener starting another paste during later step keeps both payloads and undo transactions
+00:00 +0 -3: TextPasteDriver a listener starting another paste during later step keeps both payloads and undo transactions [E]
+  Expected: 'abcdefUVWXYZ12'
+    Actual: 'abcdefUVWXYZ'
+     Which: is different. Both strings start the same, but the actual value is missing the following trailing characters: 12
+
+  package:matcher                          expect
+  test/editing/text_paste_test.dart 150:9  main.<fn>.<fn>
+
+00:00 +0 -3: TextPasteDriver a listener starting another paste during finish keeps both payloads and undo transactions
+00:00 +0 -4: TextPasteDriver a listener starting another paste during finish keeps both payloads and undo transactions [E]
+  Expected: 'abcdefUVWXYZ12'
+    Actual: 'abcdefUVWXYZ'
+     Which: is different. Both strings start the same, but the actual value is missing the following trailing characters: 12
+
+  package:matcher                          expect
+  test/editing/text_paste_test.dart 150:9  main.<fn>.<fn>
+
+00:00 +0 -4: Some tests failed.
+
+Failing tests:
+  test/editing/text_paste_test.dart: TextPasteDriver a listener starting another paste during finish keeps both payloads and undo transactions
+  test/editing/text_paste_test.dart: TextPasteDriver a listener starting another paste during first step keeps both payloads and undo transactions
+  test/editing/text_paste_test.dart: TextPasteDriver a listener starting another paste during later step keeps both payloads and undo transactions
+  test/editing/text_paste_test.dart: TextPasteDriver a paste arriving through a reentrant finish keeps every accepted transaction
+
+Consider enabling the flag chain-stack-traces to receive more detailed exceptions.
+For example, 'dart test --chain-stack-traces'.

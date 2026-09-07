@@ -3497,12 +3497,7 @@ class _LiveSeriesState extends State<_LiveSeries>
     super.didChangeDependencies();
     if (_ticker == null && TuiBinding.maybeOf(context) != null) {
       _ticker = createTicker(_onTick);
-      // Let the initial chart paint before the stream starts — otherwise the
-      // browser DOM host can keep re-scheduling and never complete the first
-      // paint of a constantly-rebuilding leaf.
-      Future<void>.delayed(const Duration(milliseconds: 250), () {
-        if (mounted && _ticker != null && !_ticker!.isActive) _ticker!.start();
-      });
+      _ticker!.start();
     }
   }
 

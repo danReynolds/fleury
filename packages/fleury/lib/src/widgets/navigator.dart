@@ -527,7 +527,7 @@ class NavigatorState extends State<Navigator> {
           duration: transition.duration ?? RouteTransition.defaultDuration,
         )
         .then((_) {
-          if (!mounted) return;
+          if (!mounted || !_routes.contains(route)) return;
           _remove(route);
           _rebuild();
         });
@@ -597,7 +597,10 @@ class NavigatorState extends State<Navigator> {
           // to(1.0) but still completes it. We must NOT flip a now-leaving
           // route opaque (it would cover the screen beneath during its exit),
           // nor a modal route (the screen behind must stay visible).
-          if (mounted && !route.leaving) {
+          // Stack operations can also remove an entering route outright.
+          // Disposing its animation completes this callback too; a retired
+          // replacement/clear must not remove the routes we just revealed.
+          if (mounted && !route.leaving && _routes.contains(route)) {
             if (route.presentAlignment == null) route.opaque = true;
             _onEntered(route);
             _rebuild();

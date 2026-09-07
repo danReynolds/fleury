@@ -250,10 +250,6 @@ final class _DemoNavigationController extends ChangeNotifier {
     notifyListeners();
     return true;
   }
-
-  void refresh() {
-    notifyListeners();
-  }
 }
 
 class _DemoConsoleAppState extends State<DemoConsoleApp> {
@@ -429,7 +425,6 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
 
   void _mutate(void Function() update) {
     setState(update);
-    _navigation.refresh();
   }
 
   bool get _workerRunning => _workerStatus == _DemoWorkerStatus.running;

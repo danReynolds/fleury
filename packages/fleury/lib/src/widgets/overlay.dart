@@ -99,8 +99,15 @@ class OverlayEntry extends ChangeNotifier {
   }
 
   void _attach(OverlayState state) {
-    _checkNotDisposed();
+    _checkCanAttach();
     _state = state;
+  }
+
+  void _checkCanAttach() {
+    _checkNotDisposed();
+    if (_state != null) {
+      throw StateError('Entry is already inserted into an Overlay.');
+    }
   }
 
   void _detach() {
@@ -302,6 +309,15 @@ class OverlayState extends State<Overlay> {
   @override
   void initState() {
     super.initState();
+    // Validate the whole batch before taking ownership. In particular, a
+    // failed mount must not detach an entry belonging to another overlay.
+    final seen = Set<OverlayEntry>.identity();
+    for (final entry in widget.initialEntries) {
+      entry._checkCanAttach();
+      if (!seen.add(entry)) {
+        throw StateError('Overlay initialEntries contains a duplicate entry.');
+      }
+    }
     for (final entry in widget.initialEntries) {
       entry._attach(this);
       entry.addListener(_onEntryChanged);
@@ -339,33 +355,26 @@ class OverlayState extends State<Overlay> {
   /// [below] is supplied, the entry goes on top of the current
   /// stack.
   void insert(OverlayEntry entry, {OverlayEntry? above, OverlayEntry? below}) {
-    assert(
-      above == null || below == null,
-      'Provide at most one of above / below.',
-    );
-    assert(entry._state == null, 'Entry is already inserted into an Overlay.');
-    entry._attach(this);
-    entry.addListener(_onEntryChanged);
+    if (above != null && below != null) {
+      throw ArgumentError('Provide at most one of above / below.');
+    }
+    final anchor = above ?? below;
+    final anchorIndex = anchor == null ? -1 : _entries.indexOf(anchor);
+    if (anchor != null && anchorIndex == -1) {
+      throw StateError(
+        'insert(..., ${above != null ? 'above' : 'below'}: anchor) '
+        '— anchor is not in this Overlay.',
+      );
+    }
+    // setState rejects a disposed overlay before attaching. Invalid anchors
+    // and entries must leave ownership and listeners unchanged for a retry.
     setState(() {
-      if (above != null) {
-        final index = _entries.indexOf(above);
-        if (index == -1) {
-          throw StateError(
-            'insert(..., above: anchor) — anchor is not in this Overlay.',
-          );
-        }
-        _entries.insert(index + 1, entry);
-      } else if (below != null) {
-        final index = _entries.indexOf(below);
-        if (index == -1) {
-          throw StateError(
-            'insert(..., below: anchor) — anchor is not in this Overlay.',
-          );
-        }
-        _entries.insert(index, entry);
-      } else {
-        _entries.add(entry);
-      }
+      entry._attach(this);
+      entry.addListener(_onEntryChanged);
+      final index = anchor == null
+          ? _entries.length
+          : anchorIndex + (above != null ? 1 : 0);
+      _entries.insert(index, entry);
     });
   }
 

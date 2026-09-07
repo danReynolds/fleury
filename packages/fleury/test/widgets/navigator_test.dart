@@ -1092,6 +1092,51 @@ void main() {
   });
 
   group('robustness', () {
+    for (final clearStack in [false, true]) {
+      for (final popToRoot in [false, true]) {
+        testWidgets(
+          'removing an entering ${clearStack ? 'clear' : 'replacement'} route '
+          'with ${popToRoot ? 'popToRoot' : 'popUntil'} preserves the target',
+          (tester) async {
+            final key = GlobalKey<NavigatorState>();
+            tester.pumpWidget(Navigator(key: key, home: const _Alpha()));
+            final nav = key.currentState!;
+            final removed = clearStack
+                ? nav.pushAndClear<String>(const _Beta())
+                : nav.pushReplacement<String>(const _Beta());
+            tester.pump(const Duration(milliseconds: 50));
+            final top = nav.push<String>(
+              const Text('top'),
+              transition: RouteTransition.none,
+            );
+            tester.pump();
+
+            if (popToRoot) {
+              nav.popToRoot();
+            } else {
+              nav.popUntil<_Alpha>();
+            }
+            expect(await removed, isNull);
+            expect(await top, isNull);
+            await Future<void>.delayed(Duration.zero);
+            tester.pump();
+
+            expect(nav.depth, 1);
+            expect(_screen(tester), 'alpha');
+            expect(nav.activeRouteContext, isNotNull);
+            nav.push<void>(
+              const Text('next'),
+              transition: RouteTransition.none,
+            );
+            tester.pump();
+            nav.pop();
+            tester.pump();
+            expect(_screen(tester), 'alpha');
+          },
+        );
+      }
+    }
+
     testWidgets('pop during the entrance keeps the screen beneath '
         'visible (B1: no stale opaque flip)', (tester) async {
       BuildContext? home;
