@@ -6,10 +6,10 @@
   widget that reads it rebuilds when the controller notifies (submission
   state, errors) without a `ListenableBuilder`.
 
-- `DataTableController.update` applies dimensions and selection together, so
-  filtering and sorting can restore selection without waiting for a frame.
-  Table rebuilds also update both dimensions before notifying listeners,
-  including when only the dimensions change.
+- `DataTable.selectedIndex` and `onSelectionChanged` support app-owned row
+  selection, so filtering and sorting can update data and selection together
+  without controller synchronization. Table dimensions stay widget-owned and
+  update atomically before controller listeners are notified.
 - MultiSelect options expose a boolean semantic `setValue` action alongside
   toggling, so tests and other semantic consumers can request a desired checked
   state without changing the option key or dispatching duplicate callbacks.

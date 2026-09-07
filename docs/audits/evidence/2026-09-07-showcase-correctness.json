@@ -100,5 +100,6 @@
       "path": "/tmp/fleury-showcase-fix-empty-update-red.log",
       "sha256": "e0f0198d80784287b62a9fccbb8f093ef8dd91fb6cf460308f6af68390153553"
     }
-  }
+  },
+  "scope": "Historical showcase implementation at 7ee0acc69c2b68bb291f3461a16ce791e7ede4e7, before the declarative selection DX revision."
 }

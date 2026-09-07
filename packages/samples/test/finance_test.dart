@@ -257,6 +257,9 @@ void main() {
           .target(role: SemanticRole.tableRow, label: 'tx-jul-shoppers')
           .select();
       tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      // The responsive LayoutBuilder accepts the app-owned selection during
+      // layout; complete that frame before the next navigation request.
+      tester.pump();
       tester.sendKey(const KeyEvent(KeyCode.arrowDown));
       expect(tester.renderToString(size: wide), contains('ID 2026-07-spotify'));
 
@@ -270,60 +273,59 @@ void main() {
       expect(output, isNot(contains('ID 2026-01-netflix')));
     });
 
-    testWidgets(
-      'expanding a filter preserves selection before the next frame',
-      (tester) {
-        tester.viewportSize = wide;
-        tester.pumpWidget(const FinanceApp());
-        final search = tester.findOne(byType(TextInput)).widget as TextInput;
-        search.onChanged!('Netflix');
-        tester.pump();
-        final table = tester.findOne(byType(DataTable)).widget as DataTable;
-        final controller = table.controller!;
-        controller.selectedIndex = 6;
-        tester.pump();
-        expect(
-          tester.renderToString(size: wide),
-          contains('ID 2026-01-netflix'),
-        );
+    testWidgets('expanding a filter preserves selection in one rebuild', (
+      tester,
+    ) async {
+      tester.viewportSize = wide;
+      tester.pumpWidget(const FinanceApp());
+      final search = tester.findOne(byType(TextInput)).widget as TextInput;
+      search.onChanged!('Netflix');
+      tester.pump();
+      await tester
+          .target(role: SemanticRole.tableRow, label: '2026-01-netflix')
+          .select();
+      expect(tester.renderToString(size: wide), contains('ID 2026-01-netflix'));
 
-        search.onChanged!('');
-        final rows = FinanceLedger.sample().queryTransactions();
-        final selected = rows.indexWhere((row) => row.id == '2026-01-netflix');
-        expect(selected, greaterThan(6));
-        expect(controller.rowCount, rows.length);
-        expect(controller.selectedIndex, selected);
-        tester.pump();
+      search.onChanged!('');
+      final rows = FinanceLedger.sample().queryTransactions();
+      final selected = rows.indexWhere((row) => row.id == '2026-01-netflix');
+      expect(selected, greaterThan(6));
+      tester.pump();
 
-        expect(controller.selectedIndex, selected);
-        expect(
-          tester.renderToString(size: wide),
-          contains('ID 2026-01-netflix'),
-        );
-      },
-    );
+      final table = tester.findOne(byType(DataTable)).widget as DataTable;
+      expect(table.rowCount, rows.length);
+      expect(table.selectedIndex, selected);
+      expect(
+        tester
+            .semantics()
+            .single(role: SemanticRole.table)
+            .state['selectedKey'],
+        '2026-01-netflix',
+      );
+      expect(tester.renderToString(size: wide), contains('ID 2026-01-netflix'));
+    });
 
     testWidgets(
       'batched filters including empty results leave no stale selection work',
-      (tester) {
+      (tester) async {
         tester.viewportSize = wide;
         tester.pumpWidget(const FinanceApp());
         final search = tester.findOne(byType(TextInput)).widget as TextInput;
-        final table = tester.findOne(byType(DataTable)).widget as DataTable;
-        final controller = table.controller!;
         search.onChanged!('Netflix');
-        expect(controller.rowCount, 7);
         search.onChanged!('no matching merchant');
-        expect(controller.rowCount, 0);
         search.onChanged!('');
         final rows = FinanceLedger.sample().queryTransactions();
-        expect(controller.rowCount, rows.length);
-        expect(controller.selectedIndex, 0);
         tester.pump();
-        controller.selectedIndex = 1;
+        var table = tester.findOne(byType(DataTable)).widget as DataTable;
+        expect(table.rowCount, rows.length);
+        expect(table.selectedIndex, 0);
+        await tester
+            .target(role: SemanticRole.tableRow, label: rows[1].id)
+            .select();
         tester.pump();
 
-        expect(controller.selectedIndex, 1);
+        table = tester.findOne(byType(DataTable)).widget as DataTable;
+        expect(table.selectedIndex, 1);
         expect(tester.renderToString(size: wide), contains('ID ${rows[1].id}'));
       },
     );

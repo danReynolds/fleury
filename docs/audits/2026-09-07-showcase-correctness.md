@@ -1,47 +1,59 @@
-# Showcase-driven controller correctness
+# Showcase-driven table correctness and selection DX
 
 This follows the showcase workaround audit on `e40d9b95` in PR #227, based on
 main `944f7fb7`. The inspection covered app samples, the developer console,
-and live documentation examples. The concrete controller defect and finance
-reproductions were checked against that original source before qualification.
+and live documentation examples. The concrete controller defect was reproduced
+against that original source. The selection DX revision follows `7ee0acc6`.
 
 ## Chosen contract
 
-`DataTableController.update` accepts optional row count, column count, and
-selection coordinates. It applies the complete state before notifying
-listeners. A table uses the same operation when mounting, rebuilding, or
-changing controllers. Dimension-only changes notify; unchanged updates are
-silent. An empty call preserves a constructor-supplied selection before mount.
+Dimensions belong to `DataTable`. Applications that own row selection supply
+`selectedIndex` and `onSelectionChanged` alongside their rows:
+
+```dart
+DataTable(
+  rowCount: rows.length,
+  columns: columns,
+  cellBuilder: (row, column) => rows[row][column] ?? '',
+  selectedIndex: selectedRow,
+  onSelectionChanged: (row) => setState(() => selectedRow = row),
+)
+```
+
+Updating rows and the desired selection in one app state change is sufficient.
+The widget resolves selection against the new dimensions when it rebuilds.
+It clamps out-of-range indices and uses zero as the empty-table sentinel.
+Configuration changes do not echo through `onSelectionChanged`; navigation
+requests do. The app accepts a request by rebuilding with the new index.
+`onSelect` remains row activation, separate from cursor movement.
+
+The existing controller remains available for imperative row, cell, and range
+selection. An assertion rejects supplying both a controller and `selectedIndex`.
+Without either, the table manages selection internally. Controller listeners
+still receive dimension changes, after both dimensions and all selection
+coordinates have been committed. Unchanged rebuilds remain silent. Nested
+listener selection changes are not overwritten after notification.
 
 This fixes the demonstrated invalid intermediate state: shrinking a 5-by-3
 table to 1-by-1 previously notified listeners with selection `(0, 2)` and old
 column count 3 before correcting it to `(0, 0)` and column count 1. A detail
 listener using the new application data could read a removed cell.
 
-Applications replace their data before calling `update`, and supply the same
-counts as the next table widget. That also lets them select a newly added row
-before the next frame. Existing single-coordinate setters continue clamping
-against the controller's current dimensions. Explicit selection in `update`
-collapses the range; a dimensions-only update clamps both range endpoints.
-Nested listener updates remain authoritative because the outer operation does
-not write state after notification.
-
-The alternatives considered were a second controlled-selection mode on the
-widget, automatic key remapping, and deferred pending-selection requests.
-Each introduces additional ownership or timing semantics. The small controller
-operation fits the existing imperative API and leaves stable identity and the
-fallback after filtering with the application. No per-rebuild key search or
-new selection model is needed. Suppressing notifications alone would hide
-legitimate changes without resolving selection against the new row count.
+The dimension operation is private. Having applications repeat widget counts
+in a controller update created a second source of truth. Declarative row
+selection removes that duplication. Stable row identity and fallback selection
+after filtering remain app decisions; the framework does not search all row
+keys on every rebuild or queue selection corrections for a later frame.
 
 ## Application simplification
 
-Finance computes the intended transaction ID, replaces its rows and selected
-ID, then calls `update(rowCount: ..., selectedIndex: ...)` in the same state
-change. It no longer primes against the old row count, suppresses listeners
-across a frame, or queues a post-frame correction. Tests cover shrinking,
-expanding while retaining a transaction outside the old index range, and
-several filters including an empty result before any intervening frame.
+Finance keeps the selected transaction ID in app state, resolves it against
+filtered rows, and passes the corresponding index to the table. Its table
+controller, listener, disposal, and manual count updates are removed. Tests
+cover shrinking, expanding while retaining a transaction outside the old index
+range, and several filters including an empty result before a single rebuild.
+Keyboard interactions complete a frame between requests so the responsive
+`LayoutBuilder` can deliver the accepted selection.
 
 Two other audit findings were obsolete workarounds on the qualified paths:
 
@@ -59,38 +71,39 @@ framework defects by this audit and were left outside this change.
 
 ## Review and validation
 
-The change adds 16 cases: 11 controller tests, two finance regressions, and
-three browser chart tests. Controller coverage includes initial mount,
-replacement, simultaneous dimension changes, range endpoints, dimension-only
-notification, selecting new rows, empty data, listener reentrancy, no-op calls,
-and disposal. Local review found and corrected the pre-mount empty-update
-case; its failing first-implementation probe was retained in the local logs.
+The showcase pass now adds 24 cases: seven controller tests, 12 declarative
+selection tests, two finance regressions, and three browser chart tests.
+Local source and interaction review covered atomic clamping, empty data,
+controller replacement, notification reentrancy, accepted and rejected input,
+activation and copy, pointer and semantic selection, ownership transitions,
+and extended cell ranges through layout-time rebuilds.
 
-The original source fails the mixed-dimension observer probe and both new
-finance timing regressions. The new `update` API tests establish its added
-contract; they are not presented as historical regressions of an API that did
-not exist. The archived baseline evidence is alongside this document.
+Review found that restoring a controlled selection during a child's build
+could discard its requested range before a parent `LayoutBuilder` delivered
+the accepted row. Rendering now uses the app-owned row while retaining the
+requested range for that acknowledgement. Each new interaction starts from
+the accepted selection, so rejected requests do not leak into activation or
+copy. The layout-time range and rejected-request tests cover those boundaries.
 
-The full contributor run (`dart tool/fleury_dev.dart check`) passed 5,582 tests,
-including 534 web tests and 64 integration tests, with two existing skips.
-Package analyses and the browser/dart2js smoke passed. The last pre-mount
-no-op regression and the complete gallery suite were added during review;
-after those corrections, the full widget suite passed 1,211 tests and the exact
-expanded browser gate passed 41 tests. These counts overlap and are not added
-together. Final affected-file analysis passed; widget analysis reports four
-existing informational lints in untouched files.
+Final DX qualification passed:
 
-The broader gallery run initially found three stale tests, all independently
-reproduced at the unchanged baseline: references to removed FormWizard demos,
-old FormField semantic wrappers, and old form validation/status text and
-checkbox defaults. The tests now assert the current controls' semantics,
-visible validation errors, invalid-field attributes, successful typed submit,
-and actual checkbox state. All 36 gallery tests pass and now run in the normal
-PR gate instead of silently falling outside its selected browser files.
+- Full widget suite: **1,219 passed**, one existing skip.
+- All samples: **94 passed**, including all 13 finance cases.
+- Documentation/API checks: **78 passed**.
+- Expanded Chrome gate: **41 passed**, including finance and real-rAF charts.
+- Widget and sample analysis passed; four existing informational widget lints
+  remain in untouched files. Patch whitespace checks passed.
 
-[Qualification evidence](evidence/2026-09-07-showcase-correctness.json) records
-the source-file and local-log hashes. The
-[baseline log](evidence/2026-09-07-showcase-correctness-baseline.log) separates
-controller/finance reproductions from the existing gallery assertion failures.
-The previous core pass's performance and wire-gate receipts remain scoped to
-`e40d9b95`; they were not rerun or relabeled for this showcase change.
+These are affected-surface checks, not a new full repository or performance run.
+[DX qualification evidence](evidence/2026-09-07-table-selection-dx.json) records
+the exact source and local-log hashes.
+
+The earlier full contributor run passed 5,582 tests, with final follow-up runs
+of 1,211 widget tests and 41 browser tests before this API revision. Those
+receipts and the original baseline failures remain historical evidence for
+`7ee0acc6` in the [original qualification record](evidence/2026-09-07-showcase-correctness.json)
+and [baseline log](evidence/2026-09-07-showcase-correctness-baseline.log).
+The archived finance probes exercise the superseded controller-update contract.
+The gallery run also found three stale tests, reproduced at the unchanged
+baseline; the corrected gallery now participates in the normal PR gate.
+Earlier core performance and wire receipts remain scoped to `e40d9b95`.

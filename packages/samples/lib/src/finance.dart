@@ -28,7 +28,6 @@ class _FinanceBodyState extends State<_FinanceBody> {
   late final FinanceLedger _ledger = FinanceLedger.sample();
   late final List<FinanceTransaction> _stressRows = _ledger
       .stressTransactions();
-  final DataTableController _tableController = DataTableController();
   final TextEditingController _searchController = TextEditingController();
 
   late List<FinanceTransaction> _rows;
@@ -44,14 +43,10 @@ class _FinanceBodyState extends State<_FinanceBody> {
     super.initState();
     _rows = _ledger.queryTransactions();
     _selectedTransactionId = _rows.firstOrNull?.id;
-    _tableController.addListener(_onTableSelectionChanged);
   }
 
   @override
   void dispose() {
-    _tableController
-      ..removeListener(_onTableSelectionChanged)
-      ..dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -63,15 +58,6 @@ class _FinanceBodyState extends State<_FinanceBody> {
       if (transaction.id == selectedId) return transaction;
     }
     return null;
-  }
-
-  void _onTableSelectionChanged() {
-    if (_rows.isEmpty) return;
-    final index = _tableController.selectedIndex;
-    if (index < 0 || index >= _rows.length) return;
-    final nextId = _rows[index].id;
-    if (nextId == _selectedTransactionId || !mounted) return;
-    setState(() => _selectedTransactionId = nextId);
   }
 
   void _refreshRows({
@@ -102,10 +88,6 @@ class _FinanceBodyState extends State<_FinanceBody> {
       nextRows,
       _selectedTransactionId,
     );
-    final nextSelectedIndex = nextSelected == null
-        ? 0
-        : nextRows.indexWhere((transaction) => transaction.id == nextSelected);
-
     setState(() {
       _query = nextQuery;
       _accountFilter = nextAccount;
@@ -114,10 +96,6 @@ class _FinanceBodyState extends State<_FinanceBody> {
       _stressMode = nextStress;
       _rows = nextRows;
       _selectedTransactionId = nextSelected;
-      _tableController.update(
-        rowCount: nextRows.length,
-        selectedIndex: nextSelectedIndex,
-      );
     });
   }
 
@@ -704,7 +682,10 @@ class _FinanceBodyState extends State<_FinanceBody> {
           : DataTable(
               rowCount: _rows.length,
               columns: columns,
-              controller: _tableController,
+              selectedIndex: _rows.indexWhere(
+                (transaction) => transaction.id == _selectedTransactionId,
+              ),
+              onSelectionChanged: _selectRow,
               rowKeyBuilder: (row) => _rows[row].id,
               cellBuilder: (row, columnId) {
                 final transaction = _rows[row];
