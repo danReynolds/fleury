@@ -459,11 +459,15 @@ class _Runner {
       ], workingDirectory: webExamples);
       // The guide's Run test button executes the actual tester in the browser.
       // Keep its shared scenario and JS handle lifecycle in the PR gate too.
+      // Live charts exercise production rAF scheduling; manually flushing the
+      // catalog tests would conceal first-paint starvation under animation.
       await _run('dart', [
         'test',
         '-p',
         'chrome',
         'test/preferences_runner_browser_test.dart',
+        'test/live_charts_browser_test.dart',
+        'test/examples_browser_test.dart',
       ], workingDirectory: webExamples);
 
       // dart2js smoke: the doc-examples entrypoint pulls in fleury_core,

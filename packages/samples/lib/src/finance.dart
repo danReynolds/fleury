@@ -38,7 +38,6 @@ class _FinanceBodyState extends State<_FinanceBody> {
   FinanceTransactionSort _sort = FinanceTransactionSort.newest;
   String _query = '';
   bool _stressMode = false;
-  bool _syncingTableSelection = false;
 
   @override
   void initState() {
@@ -67,7 +66,7 @@ class _FinanceBodyState extends State<_FinanceBody> {
   }
 
   void _onTableSelectionChanged() {
-    if (_syncingTableSelection || _rows.isEmpty) return;
+    if (_rows.isEmpty) return;
     final index = _tableController.selectedIndex;
     if (index < 0 || index >= _rows.length) return;
     final nextId = _rows[index].id;
@@ -107,19 +106,6 @@ class _FinanceBodyState extends State<_FinanceBody> {
         ? 0
         : nextRows.indexWhere((transaction) => transaction.id == nextSelected);
 
-    // DataTableController is positional. Prime it while the old row count is
-    // still installed, then hold the listener guard through the rebuild and
-    // reconcile the stable row ID after DataTable installs its new row count.
-    // Without the across-frame guard, a shrinking filter can synchronously
-    // clamp index 10 to index 6 and overwrite the intended selected ID.
-    _syncingTableSelection = true;
-    final oldRowCount = _tableController.rowCount;
-    if (oldRowCount > 0) {
-      _tableController.selectedIndex = nextSelectedIndex.clamp(
-        0,
-        oldRowCount - 1,
-      );
-    }
     setState(() {
       _query = nextQuery;
       _accountFilter = nextAccount;
@@ -128,31 +114,11 @@ class _FinanceBodyState extends State<_FinanceBody> {
       _stressMode = nextStress;
       _rows = nextRows;
       _selectedTransactionId = nextSelected;
+      _tableController.update(
+        rowCount: nextRows.length,
+        selectedIndex: nextSelectedIndex,
+      );
     });
-    _scheduleTableSelectionSync(nextSelected);
-  }
-
-  void _scheduleTableSelectionSync(String? selectedId) {
-    void sync() {
-      if (!mounted) return;
-      try {
-        if (selectedId == null) return;
-        final index = _rows.indexWhere(
-          (transaction) => transaction.id == selectedId,
-        );
-        if (index < 0 || _tableController.selectedIndex == index) return;
-        _tableController.selectedIndex = index;
-      } finally {
-        _syncingTableSelection = false;
-      }
-    }
-
-    final binding = TuiBinding.maybeOf(context);
-    if (binding == null) {
-      sync();
-    } else {
-      binding.addPostFrameCallback((_) => sync());
-    }
   }
 
   void _selectRow(int rowIndex) {

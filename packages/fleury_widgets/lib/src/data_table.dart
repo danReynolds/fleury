@@ -512,25 +512,72 @@ class DataTableController extends ChangeNotifier {
     );
   }
 
-  void _setRowCount(int value) {
+  /// Applies new table dimensions and an optional selection together.
+  ///
+  /// Use after replacing the app's row data when sorting, filtering, or
+  /// appending also changes the desired selection. Unlike assigning
+  /// [selectedIndex] alone, the selection is clamped against the new counts.
+  /// Omitted counts retain their current values; negative counts become zero.
+  /// Omitted selection coordinates are retained subject to the new bounds.
+  /// Supplying either selection coordinate collapses the range to the resulting
+  /// cell. Otherwise both ends of the current range are clamped independently.
+  /// Listeners run once after all changed values have been applied.
+  ///
+  /// The table also calls this when it mounts or rebuilds. Pass the same counts
+  /// as the next [DataTable] so that rebuild does not change them back. Update
+  /// the data before calling this, so synchronous listeners see matching rows:
+  ///
+  /// ```dart
+  /// setState(() {
+  ///   rows = nextRows;
+  ///   controller.update(rowCount: rows.length, selectedIndex: nextIndex);
+  /// });
+  /// ```
+  void update({
+    int? rowCount,
+    int? columnCount,
+    int? selectedIndex,
+    int? selectedColumnIndex,
+  }) {
     _checkNotDisposed();
-    _rowCount = value < 0 ? 0 : value;
-    final clamped = _clamp(_selectedIndex);
-    final anchor = _clamp(_anchorRow);
-    if (_selectedIndex == clamped && _anchorRow == anchor) return;
-    _selectedIndex = clamped;
-    _anchorRow = anchor;
-    notifyListeners();
-  }
-
-  void _setColumnCount(int value) {
-    _checkNotDisposed();
-    _columnCount = value < 0 ? 0 : value;
-    final clamped = _clampColumn(_selectedColumnIndex);
-    final anchor = _clampColumn(_anchorColumn);
-    if (_selectedColumnIndex == clamped && _anchorColumn == anchor) return;
-    _selectedColumnIndex = clamped;
-    _anchorColumn = anchor;
+    if (rowCount == null &&
+        columnCount == null &&
+        selectedIndex == null &&
+        selectedColumnIndex == null) {
+      return;
+    }
+    final nextRowCount = rowCount == null
+        ? _rowCount
+        : (rowCount < 0 ? 0 : rowCount);
+    final nextColumnCount = columnCount == null
+        ? _columnCount
+        : (columnCount < 0 ? 0 : columnCount);
+    final maxRow = nextRowCount <= 0 ? 0 : nextRowCount - 1;
+    final maxColumn = nextColumnCount <= 0 ? 0 : nextColumnCount - 1;
+    final nextRow = (selectedIndex ?? _selectedIndex).clamp(0, maxRow);
+    final nextColumn = (selectedColumnIndex ?? _selectedColumnIndex).clamp(
+      0,
+      maxColumn,
+    );
+    final collapse = selectedIndex != null || selectedColumnIndex != null;
+    final nextAnchorRow = collapse ? nextRow : _anchorRow.clamp(0, maxRow);
+    final nextAnchorColumn = collapse
+        ? nextColumn
+        : _anchorColumn.clamp(0, maxColumn);
+    if (_rowCount == nextRowCount &&
+        _columnCount == nextColumnCount &&
+        _selectedIndex == nextRow &&
+        _selectedColumnIndex == nextColumn &&
+        _anchorRow == nextAnchorRow &&
+        _anchorColumn == nextAnchorColumn) {
+      return;
+    }
+    _rowCount = nextRowCount;
+    _columnCount = nextColumnCount;
+    _selectedIndex = nextRow;
+    _selectedColumnIndex = nextColumn;
+    _anchorRow = nextAnchorRow;
+    _anchorColumn = nextAnchorColumn;
     notifyListeners();
   }
 
@@ -689,8 +736,7 @@ class _DataTableState extends State<DataTable> {
     _controller = widget.controller ?? DataTableController();
     _ownsController = widget.controller == null;
     _controller
-      .._setRowCount(widget.rowCount)
-      .._setColumnCount(widget.columns.length)
+      ..update(rowCount: widget.rowCount, columnCount: widget.columns.length)
       ..addListener(_onChange);
     _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'DataTable');
     _ownsFocusNode = widget.focusNode == null;
@@ -711,8 +757,10 @@ class _DataTableState extends State<DataTable> {
       _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'DataTable');
       _ownsFocusNode = widget.focusNode == null;
     }
-    _controller._setRowCount(widget.rowCount);
-    _controller._setColumnCount(widget.columns.length);
+    _controller.update(
+      rowCount: widget.rowCount,
+      columnCount: widget.columns.length,
+    );
   }
 
   void _onChange() => setState(() {});

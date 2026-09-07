@@ -1,0 +1,104 @@
+{
+  "baseline": "e40d9b9557140e41a0973ee55dee552715d207c1",
+  "main": "944f7fb71e9b99ec6644b797ecbb1d4b6ecc09b8",
+  "dart": "Dart SDK version: 3.12.2 (stable) (Tue Jun 9 01:11:39 2026 -0700) on \"macos_arm64\"",
+  "source_files": {
+    "packages/fleury_widgets/lib/src/data_table.dart": "8ec4b71783135dc1258277709bdc3268de0ed7a660ca14a5c69a533bc4b93fb0",
+    "packages/fleury_widgets/test/data_table_controller_test.dart": "1c2d36a87525acd9493d1ae036315e7dd54cb7e0995d315e1f621bc5158961f7",
+    "packages/samples/lib/src/finance.dart": "e4c032244d9c08809731099fd27e2ffe218ba8cc697007f28f384c2a53636f55",
+    "packages/samples/test/finance_test.dart": "43b4bd4b241e71c872f0cbbc5118d8ee7fb3006ab138656d6648745b633a4c88",
+    "packages/fleury_example_console/lib/fleury_example_console.dart": "215e35f0393f4822a44696d172601df2d1c8363194306deb2edfd734a14dd12d",
+    "website/examples/lib/registry.dart": "ed31bdd7c8acf90968196053b1e407be6e0b58062112e0adaf4b3be5368c9244",
+    "website/examples/test/live_charts_browser_test.dart": "21d7257dcec26b727be31076b046e33f7e3371ad0c86e0cfe1710a18349282b1",
+    "website/examples/test/examples_browser_test.dart": "89ca1cba6314c74c7ff76ae20dad87a4d55307b8c11dc4131d807d18dad47a2a",
+    "tool/fleury_dev.dart": "557eb025d684e503c5c6e3ffbb583502bbab2ebacf6a8fc4767baf70fbed9eab"
+  },
+  "new_tests": {
+    "controller": 11,
+    "finance": 2,
+    "browser_charts": 3
+  },
+  "qualification": {
+    "full_check": {
+      "exit": 0,
+      "passed": 5582,
+      "suite_counts": [
+        3315,
+        52,
+        1210,
+        7,
+        4,
+        25,
+        43,
+        534,
+        94,
+        151,
+        78,
+        5,
+        64
+      ],
+      "existing_skips": 2,
+      "scope": "Broad run; final no-op case and expanded gallery gate qualified in follow-up runs below."
+    },
+    "final_widgets": {
+      "exit": 0,
+      "passed": 1211,
+      "existing_skips": 1
+    },
+    "final_browser_gate": {
+      "exit": 0,
+      "passed": 41,
+      "files": [
+        "preferences_runner_browser_test.dart",
+        "live_charts_browser_test.dart",
+        "examples_browser_test.dart"
+      ]
+    },
+    "analysis": "All package analyses completed in the full run; final widget and browser-test analyses and tool analysis passed. Four existing widget informational lints remain in untouched files.",
+    "baseline_probes": {
+      "table_defect": 1,
+      "finance_update_contract": 2,
+      "stale_gallery_assertions": 3
+    },
+    "counts_overlap": true,
+    "prior_performance_and_wire_receipts": "Remain scoped to e40d9b95; not rerun for this update."
+  },
+  "local_logs": {
+    "full-check": {
+      "path": "/tmp/fleury-showcase-fix-full-check.log",
+      "sha256": "f6ae6d6ec109dcfc3588c67baa977ec315d08642f971b0f61e8bd2d878a5a8aa"
+    },
+    "widgets-final": {
+      "path": "/tmp/fleury-showcase-fix-widgets-final.log",
+      "sha256": "d07a6b42c70949b68d3075e0215eaa520004edc167e2ad49ff311881fbc62e4c"
+    },
+    "browser-final": {
+      "path": "/tmp/fleury-showcase-fix-browser-final.log",
+      "sha256": "2f5eff123cf2ff7d67c6ef74c68d4d0b629ae0a4852dbe5dc93edd2258f3c0d9"
+    },
+    "table-final": {
+      "path": "/tmp/fleury-showcase-fix-table-final.log",
+      "sha256": "b7559d1d930d911cbd85b1a36e2bce6d68a561431465336aad3e243ff540a5e4"
+    },
+    "finance": {
+      "path": "/tmp/fleury-showcase-fix-finance.log",
+      "sha256": "fc0dbea5b152beab88144b0899236357ee2cfccdb10f337b72d20c9461747fc3"
+    },
+    "table-baseline": {
+      "path": "/tmp/fleury-showcase-fix-table-baseline.log",
+      "sha256": "5f0b406fd900a957e2c45163f0ba75ec52f65535804d155145180efe7bb81a7d"
+    },
+    "finance-baseline": {
+      "path": "/tmp/fleury-showcase-fix-finance-baseline.log",
+      "sha256": "d93dd9b50febea10d9b8214a4afc793121299f6a0d7489b2adc7790c5f978ec2"
+    },
+    "gallery-baseline": {
+      "path": "/tmp/fleury-showcase-fix-gallery-baseline.log",
+      "sha256": "086830de67175610c51255ad2fbe0a60bd5cdb1bfccfad32a703af5266685e49"
+    },
+    "empty-update-red": {
+      "path": "/tmp/fleury-showcase-fix-empty-update-red.log",
+      "sha256": "e0f0198d80784287b62a9fccbb8f093ef8dd91fb6cf460308f6af68390153553"
+    }
+  }
+}

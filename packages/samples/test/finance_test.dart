@@ -1,6 +1,7 @@
 import 'package:fleury/fleury.dart';
 import 'package:fleury_samples/src/finance.dart';
 import 'package:fleury_test/fleury_test.dart';
+import 'package:fleury_widgets/fleury_widgets.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -268,6 +269,64 @@ void main() {
       expect(output, contains('ID 2026-07-netflix'));
       expect(output, isNot(contains('ID 2026-01-netflix')));
     });
+
+    testWidgets(
+      'expanding a filter preserves selection before the next frame',
+      (tester) {
+        tester.viewportSize = wide;
+        tester.pumpWidget(const FinanceApp());
+        final search = tester.findOne(byType(TextInput)).widget as TextInput;
+        search.onChanged!('Netflix');
+        tester.pump();
+        final table = tester.findOne(byType(DataTable)).widget as DataTable;
+        final controller = table.controller!;
+        controller.selectedIndex = 6;
+        tester.pump();
+        expect(
+          tester.renderToString(size: wide),
+          contains('ID 2026-01-netflix'),
+        );
+
+        search.onChanged!('');
+        final rows = FinanceLedger.sample().queryTransactions();
+        final selected = rows.indexWhere((row) => row.id == '2026-01-netflix');
+        expect(selected, greaterThan(6));
+        expect(controller.rowCount, rows.length);
+        expect(controller.selectedIndex, selected);
+        tester.pump();
+
+        expect(controller.selectedIndex, selected);
+        expect(
+          tester.renderToString(size: wide),
+          contains('ID 2026-01-netflix'),
+        );
+      },
+    );
+
+    testWidgets(
+      'batched filters including empty results leave no stale selection work',
+      (tester) {
+        tester.viewportSize = wide;
+        tester.pumpWidget(const FinanceApp());
+        final search = tester.findOne(byType(TextInput)).widget as TextInput;
+        final table = tester.findOne(byType(DataTable)).widget as DataTable;
+        final controller = table.controller!;
+        search.onChanged!('Netflix');
+        expect(controller.rowCount, 7);
+        search.onChanged!('no matching merchant');
+        expect(controller.rowCount, 0);
+        search.onChanged!('');
+        final rows = FinanceLedger.sample().queryTransactions();
+        expect(controller.rowCount, rows.length);
+        expect(controller.selectedIndex, 0);
+        tester.pump();
+        controller.selectedIndex = 1;
+        tester.pump();
+
+        expect(controller.selectedIndex, 1);
+        expect(tester.renderToString(size: wide), contains('ID ${rows[1].id}'));
+      },
+    );
 
     testWidgets('stress mode mounts 2,500 deterministic rows on demand', (
       tester,
