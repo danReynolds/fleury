@@ -16,7 +16,10 @@ import 'package:test/test.dart';
 class _FakeTransport
     with SynchronousSendTransport
     implements RemoteFrameTransport {
-  final _in = StreamController<RemoteFrame>.broadcast();
+  _FakeTransport({bool synchronous = false})
+    : _in = StreamController<RemoteFrame>.broadcast(sync: synchronous);
+
+  final StreamController<RemoteFrame> _in;
   final List<RemoteFrame> sent = [];
   bool closed = false;
 
@@ -42,6 +45,82 @@ class _FakeTransport
 
 void main() {
   group('RemoteTerminalDriver', () {
+    test('restore cancels a pending supervised handshake', () async {
+      final transport = _FakeTransport();
+      final driver = RemoteTerminalDriver(
+        transport,
+        superviseHandshakeWait: true,
+      );
+      final outcome = driver
+          .enter(TerminalMode.interactive)
+          .then<Object?>((_) => 'entered', onError: (Object error) => error);
+      await driver.restore();
+
+      expect(
+        await outcome.timeout(const Duration(milliseconds: 250)),
+        isA<StateError>(),
+      );
+      expect(driver.isActive, isFalse);
+      expect(transport.closed, isTrue);
+      await expectLater(
+        driver.enter(TerminalMode.interactive),
+        throwsStateError,
+      );
+    });
+
+    test('concurrent enter preserves the first handshake', () async {
+      final transport = _FakeTransport();
+      final driver = RemoteTerminalDriver(
+        transport,
+        superviseHandshakeWait: true,
+      );
+      addTearDown(driver.restore);
+      Future<Object?> enter() => driver
+          .enter(TerminalMode.interactive)
+          .then<Object?>((_) => 'entered', onError: (Object error) => error);
+      final first = enter();
+      final second = enter();
+      transport.emit(
+        const InitFrame(
+          size: CellSize(80, 24),
+          colorMode: ColorMode.truecolor,
+          imageProtocol: ImageProtocol.halfBlock,
+          tmuxPassthrough: false,
+        ),
+      );
+
+      expect(
+        await second.timeout(const Duration(milliseconds: 250)),
+        isA<StateError>(),
+      );
+      expect(await first.timeout(const Duration(milliseconds: 250)), 'entered');
+      expect(driver.isActive, isTrue);
+    });
+
+    test('restore wins after INIT but before enter resumes', () async {
+      final transport = _FakeTransport(synchronous: true);
+      final driver = RemoteTerminalDriver(
+        transport,
+        superviseHandshakeWait: true,
+      );
+      final outcome = driver
+          .enter(TerminalMode.interactive)
+          .then<Object?>((_) => 'entered', onError: (Object error) => error);
+      transport.emit(
+        const InitFrame(
+          size: CellSize(80, 24),
+          colorMode: ColorMode.truecolor,
+          imageProtocol: ImageProtocol.halfBlock,
+          tmuxPassthrough: false,
+        ),
+      );
+      await driver.restore();
+
+      expect(await outcome, isA<StateError>());
+      expect(driver.isActive, isFalse);
+      expect(transport.closed, isTrue);
+    });
+
     test(
       'enter() blocks until INIT lands, then reports its size+caps',
       (() async {
