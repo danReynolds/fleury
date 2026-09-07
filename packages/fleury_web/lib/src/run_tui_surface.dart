@@ -342,7 +342,11 @@ Future<MountedApp> runTuiSurface(
     if (metricsChanged) semanticsPipeline?.markSemanticsDirty();
     if (measured != null) {
       lastMetrics = measured;
-      surface.resize(measured.size, metrics: measured);
+      // Geometry delivery is independent of painting. Cached measurements
+      // need no DOM writes; still restore a surface resized outside the host.
+      if (metricsChanged || surface.size != measured.size) {
+        surface.resize(measured.size, metrics: measured);
+      }
     }
     return FrameViewportSnapshot(surface.size, metricsChanged: metricsChanged);
   }
