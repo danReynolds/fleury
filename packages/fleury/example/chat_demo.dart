@@ -85,7 +85,7 @@ class _ChatAppState extends State<ChatApp> {
     });
   }
 
-  // Focus.of(context) participates in InheritedNotifier dependency
+  // Focus.of(context) participates in Scope dependency
   // tracking, so this build runs on every focus change automatically —
   // no manual listener needed.
   bool _isFocused(BuildContext context, FocusNode node) =>

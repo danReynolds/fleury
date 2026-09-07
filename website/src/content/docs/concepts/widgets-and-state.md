@@ -130,7 +130,7 @@ final size  = MediaQuery.sizeOf(context);  // terminal size, in cells
 These walk up the tree to find the nearest ancestor that provides the value, and
 they **subscribe** this widget to it — change the theme and every widget that
 read `Theme.of(context)` rebuilds. That's the mechanism behind theming and
-responsive layout; it's an `InheritedWidget` under the hood (see below). There
+responsive layout; it's a `Scope` under the hood (see below). There
 are shorthands too: `context.theme` and `context.colors`.
 
 Note one difference from a render tree: a `BuildContext` has no `.size`. A widget
@@ -154,19 +154,22 @@ shuffled:
   `State` from elsewhere via `key.currentState`. Powerful but heavier — prefer
   lifting state up before reaching for one.
 
-## Sharing data down the tree: InheritedWidget
+## Sharing data down the tree: Scope
 
-You've already used this. Every `.of(context)` call reads from an
-**`InheritedWidget`** — a widget that sits high in the tree, exposes data to
-everything beneath it, and rebuilds any descendant that read it when the value
-changes. The built-ins you've met (`Theme`, `MediaQuery`, `DefaultTextStyle`) are
-all inherited widgets, each fronted by a `.of(context)` helper.
+You've already used this. Every `.of(context)` call reads from a **`Scope`** — a
+widget that sits high in the tree, shares one value with everything beneath it,
+and rebuilds any descendant that read it when the value is replaced by one that
+is not equal or, for a `Listenable` such as a `ChangeNotifier`, when it
+notifies. The built-ins you've met (`Theme`, `MediaQuery`,
+`DefaultTextStyle`) are scopes, each fronted by a `.of(context)` helper.
 
-You'd write your own when app-wide state — a current user, a router, a feature
+You'd reach for your own when a model — a current user, a router, a feature
 flag — needs to reach many widgets, and you'd rather not thread it through ten
-constructors to get there. Descendants opt in with
-`context.dependOnInheritedWidgetOfExactType<T>()` (or your own `.of` helper) and
-rebuild automatically when it changes.
+constructors to get there. Wrap the subtree in `Scope(value: model, child: ...)`
+(or `Scope<Model>.create(...)` to let the scope own the model) and read it
+anywhere below with `Scope.of<Model>(context)`. The type argument is the key,
+and the nearest scope of that type wins. The
+[State management](/fleury/guides/state-management/) guide covers the rest.
 
 ---
 

@@ -84,8 +84,8 @@ class ErrorBoundary extends SingleChildRenderObjectWidget {
 /// Refreshes the imperative containment bridge on dependency-only rebuilds.
 ///
 /// The base render-object element updates render configuration only when its
-/// widget instance changes; inherited notifications rebuild its child without
-/// calling `updateRenderObject`. Input services are inherited, so this narrow
+/// widget instance changes; scope notifications rebuild its child without
+/// calling `updateRenderObject`. Input services come from scopes, so this narrow
 /// element hook keeps the bridge aligned with the element's current tree.
 final class _ErrorBoundaryElement extends SingleChildRenderObjectElement {
   _ErrorBoundaryElement(ErrorBoundary super.widget);

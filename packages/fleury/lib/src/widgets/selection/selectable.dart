@@ -107,44 +107,53 @@ abstract interface class SelectionRegistrar {
   void remove(Selectable selectable);
 }
 
-/// InheritedWidget that publishes the ambient [SelectionRegistrar] to
-/// the subtree.
+/// Publishes the ambient [SelectionRegistrar] to the subtree — a
+/// `Scope<SelectionRegistrar>`.
 ///
 /// Used by Selectable widgets at mount time to find the area they
 /// belong to. The registrar reference is stable for the lifetime of
-/// the surrounding `SelectionArea`, so plain
-/// `getInheritedWidgetOfExactType` (no `dependOn…`) is sufficient
-/// when callers only need to register / deregister and don't want to
+/// the surrounding `SelectionArea`, so [maybeOf] reads it without a
+/// rebuild dependency: callers only register / deregister and must not
 /// rebuild on registrar identity changes.
 ///
 /// Pass `registrar: null` to mask a deeper subtree from any
 /// ancestor `SelectionArea` — useful for forms or interactive panels
 /// embedded inside a selectable region that shouldn't themselves
-/// participate in selection.
-class SelectionScope extends InheritedWidget {
+/// participate in selection. Read the registrar through [maybeOf]: a
+/// direct `Scope.of<SelectionRegistrar>` below a masked subtree returns the
+/// no-op registrar that stands in for `null`, not `null` itself.
+class SelectionScope extends Scope<SelectionRegistrar> {
+  /// [registrar] is the registrar that ought to own Selectables in this
+  /// subtree, or `null` to disable selection for the subtree (Selectables
+  /// there see no ambient registrar and silently no-op).
   const SelectionScope({
     super.key,
-    required this.registrar,
+    required SelectionRegistrar? registrar,
     required super.child,
-  });
-
-  /// The registrar that ought to own Selectables in this subtree, or
-  /// `null` to disable selection for the subtree (Selectables there
-  /// see no ambient registrar and silently no-op).
-  final SelectionRegistrar? registrar;
+  }) : super(value: registrar ?? const _NoSelection());
 
   /// Looks up the ambient registrar without subscribing to changes.
   /// Returns null when no [SelectionScope] is in scope OR when the
   /// nearest scope's registrar is null — Selectables under either
   /// condition silently no-op their registration.
   static SelectionRegistrar? maybeOf(BuildContext context) {
-    final scope = context.getInheritedWidgetOfExactType<SelectionScope>();
-    return scope?.registrar;
+    final registrar = Scope.maybeOfWithoutDependency<SelectionRegistrar>(
+      context,
+    );
+    return registrar is _NoSelection ? null : registrar;
   }
+}
+
+/// What `SelectionScope(registrar: null)` shares: a registrar that owns
+/// nothing, so [SelectionScope.maybeOf] reports no area below it.
+final class _NoSelection implements SelectionRegistrar {
+  const _NoSelection();
 
   @override
-  bool updateShouldNotify(SelectionScope old) =>
-      !identical(old.registrar, registrar);
+  void add(Selectable selectable) {}
+
+  @override
+  void remove(Selectable selectable) {}
 }
 
 /// Mixin a render object can apply to handle [SelectionRegistrar]

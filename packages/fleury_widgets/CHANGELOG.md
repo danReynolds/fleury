@@ -2,6 +2,10 @@
 
 ## 0.1.0
 
+- `Form.of(context)` now shares the `FormController` through a `Scope`, so a
+  widget that reads it rebuilds when the controller notifies (submission
+  state, errors) without a `ListenableBuilder`.
+
 - MultiSelect options expose a boolean semantic `setValue` action alongside
   toggling, so tests and other semantic consumers can request a desired checked
   state without changing the option key or dispatching duplicate callbacks.

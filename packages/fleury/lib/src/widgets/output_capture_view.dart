@@ -10,7 +10,6 @@ import '../runtime/output_capture.dart';
 import 'align.dart';
 import 'basic.dart';
 import 'framework.dart';
-import 'inherited_notifier.dart';
 import 'layout_builder.dart';
 import 'listenable_builder.dart';
 import 'media_query.dart';
@@ -19,17 +18,15 @@ import 'theme.dart';
 /// Shares a [LogBuffer] with descendants. `runApp` installs one above the
 /// app so [OutputCaptureView] / [OutputCaptureConsole] (including in floating overlays) can find
 /// the captured output without it being threaded through constructors.
-class LogBufferScope extends InheritedNotifier<LogBuffer> {
+class LogBufferScope extends Scope<LogBuffer> {
   const LogBufferScope({
     super.key,
     required LogBuffer buffer,
     required super.child,
-  }) : super(notifier: buffer);
-
-  LogBuffer get buffer => notifier;
+  }) : super(value: buffer);
 
   static LogBuffer? maybeOf(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<LogBufferScope>()?.notifier;
+      Scope.maybeOf<LogBuffer>(context);
 
   static LogBuffer of(BuildContext context) {
     final buffer = maybeOf(context);

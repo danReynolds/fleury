@@ -20988,3 +20988,67 @@ Validation:
 
 Next:
 - Reactive-state RFC 0023 (spike branch) is the other open architecture item.
+
+## 2026-09-07 - Scope: One Tree-Local State Primitive (RFC 0025)
+
+`Scope<T>` replaces `InheritedWidget`, `InheritedNotifier`, `InheritedElement`,
+and the two `BuildContext` lookup methods. This closes the state-management
+posture question: `setState` for widget-local state, `Scope<T>` for a subtree,
+notifiers for anything with an independent owner — and no field-level
+reactivity (the spike's measurement, RFC 0023 §7–§8, did not justify it).
+
+Changes:
+- `Scope(value:)` shares an object its owner keeps; `Scope<T>.create(create:,
+  dispose:)` owns one (created at mount with a context that can read scopes
+  above, `ChangeNotifier` disposed after the children, `dispose:` otherwise);
+  `Scope.of<T>` / `Scope.maybeOf<T>` read the nearest scope whose type
+  argument is exactly `T` and subscribe the reader — from `build`,
+  `initState`, or a handler; `dispose` gets a pointed error.
+- `ScopeElement<T>` absorbs the old inherited element and the notifier
+  element: the dependents set, `notifyDependents`, and a listener attached
+  before the child cascade mounts, swapped with the replacement live during
+  the child rebuild, detached on unmount. A plain value notifies through
+  `updateShouldNotify` (default `!=`).
+- Every framework scope is a `Scope<T>` at its install site (`Theme`,
+  navigator, focus manager, `Form`, `Toaster`, the status controller) or a
+  `Scope<T>` subclass keeping its constructor (`MediaQuery`, `TickerMode`,
+  `ClipboardScope`, `KeyboardScope`, `PendingSequenceScope`,
+  `TuiBindingScope`, `TerminalSessionScope`, `LogBufferScope`,
+  `FleuryAppScope`, `CommandRegistryScope`, `FormControlScope`,
+  `SelectionScope`, `PointerRouterScope` with its element hook). Colliding
+  value types got private wrappers: `_TickerModeData`, `_DefaultTextStyleData`
+  (`DefaultTextStyle` is now a `StatelessWidget`), `_FocusManagerIdentity`,
+  and a const no-op registrar for `SelectionScope(registrar: null)`.
+- Deleted: `StatusHost` + `StatusHostScope` (the bar reads
+  `Scope.of<StatusController>` and drops its `ListenableBuilder`), the
+  duplicate value getters on the named scopes (`PointerRouterScope.router`
+  and `TerminalSessionScope.session` stay), `inherited_notifier.dart`.
+- Docs: state-management guide (tree section rewritten around `Scope`, two
+  live examples `state.scope` / `state.scope-create`), widgets-and-state
+  concepts page, coming-from-Flutter row, README, changelogs, decision log,
+  architecture priority #7 resolved, RFC 0025.
+
+Decisions:
+- Type argument is the key, matched exactly (`Type ==` at scope elements:
+  82 ns vs 99–122 ns for `widget is Scope<T>` per six-scope walk in JIT,
+  32 vs 53 ns AOT). No `read`/`select`, no `listen:` flag; the one
+  non-subscribing lookup is `@internal Scope.maybeOfWithoutDependency`.
+- Two behaviour changes on purpose: `Form.of` readers now rebuild when the
+  controller notifies; the status bar depends on the status controller
+  directly.
+
+Validation:
+- Analyze clean across every package; `check` green: core 3299,
+  `fleury_widgets` 1200, `fleury_web` 534 (vm+chrome), samples/storybook/
+  mcp/console/website/profiling suites green; `scope_test.dart` 26 cases
+  (two added by the review: ownership hand-off with the same instance, and a
+  hand-off whose listener fails to attach).
+- Fast gates pass without re-baselining: alloc-gate 8283 B/frame vs 9139
+  baseline (−9.4%), paint-gate counters identical, selection/runtime/wire
+  semantics unchanged; input-alloc-gate 210.4 B/key vs 207.9 (+1.2%; a
+  +7.7% reading under a concurrent test run was contention).
+
+Next:
+- Global state review: `FleuryApp.extensions` as root scopes so
+  `Scope.of<T>` reaches app state, one lookup API, the guide's app-level
+  section.

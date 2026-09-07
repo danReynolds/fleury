@@ -56,7 +56,7 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
   AnimationPolicy _motionPolicy = AnimationPolicy.enabled;
 
   /// The surface keyboard, sampled once per simulation frame. Resolved in
-  /// [didChangeDependencies] — where inherited lookups belong — so it is
+  /// [didChangeDependencies] — where scope lookups belong — so it is
   /// non-null by the time any tick runs, and re-resolves if capabilities
   /// change. The handle itself is stable for the app's lifetime (§15).
   late Keyboard _keyboard;

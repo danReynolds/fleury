@@ -165,7 +165,7 @@ class Form extends StatefulWidget {
 
   /// The controller for the nearest enclosing form, if one exists.
   static FormController? maybeOf(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<_FormScope>()?.controller;
+      Scope.maybeOf<FormController>(context);
 
   @override
   State<Form> createState() => _FormWidgetState();
@@ -270,8 +270,8 @@ final class _FormWidgetState extends State<Form> implements _FormHost {
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: _controller,
     child: widget.child,
-    builder: (context, child) => _FormScope(
-      controller: _controller,
+    builder: (context, child) => Scope<FormController>(
+      value: _controller,
       child: Semantics(
         role: SemanticRole.form,
         label: widget.semanticLabel,
@@ -288,16 +288,6 @@ final class _FormWidgetState extends State<Form> implements _FormHost {
       ),
     ),
   );
-}
-
-final class _FormScope extends InheritedWidget {
-  const _FormScope({required this.controller, required super.child});
-
-  final FormController controller;
-
-  @override
-  bool updateShouldNotify(_FormScope oldWidget) =>
-      !identical(controller, oldWidget.controller);
 }
 
 /// One validated value in a [Form].

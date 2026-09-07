@@ -18,7 +18,6 @@ import '../input/keyboard_state.dart';
 import '../runtime/input_dispatcher.dart';
 import 'focus.dart';
 import 'framework.dart';
-import 'inherited_notifier.dart';
 
 /// The surface's keyboard: what it guarantees, and what is held right now.
 ///
@@ -133,8 +132,8 @@ final class Keyboard {
   /// bumps [KeyboardSnapshot.sessionGeneration] on the same handle rather
   /// than replacing it, so caching the handle in a `State` field is safe.
   static Keyboard of(BuildContext context) {
-    final scope = context.dependOnInheritedWidgetOfExactType<KeyboardScope>();
-    if (scope == null) {
+    final notifier = Scope.maybeOf<KeyboardStateNotifier>(context);
+    if (notifier == null) {
       throw StateError(
         'Keyboard.of() found no KeyboardScope.\n'
         'The scope is installed by runApp (and by the browser embed host), '
@@ -143,17 +142,19 @@ final class Keyboard {
         'tree in a KeyboardScope.',
       );
     }
-    return Keyboard._(scope.notifier.session);
+    return Keyboard._(notifier.session);
   }
 
   static InputDispatcher _dispatcherOf(BuildContext context) {
     // Non-subscribing: nextKey is normally called from a callback, where
     // establishing a build dependency would be wrong.
-    final scope = context.getInheritedWidgetOfExactType<KeyboardScope>();
-    if (scope == null) {
+    final notifier = Scope.maybeOfWithoutDependency<KeyboardStateNotifier>(
+      context,
+    );
+    if (notifier == null) {
       throw StateError('Keyboard.nextKey() found no KeyboardScope.');
     }
-    return scope.notifier.dispatcher;
+    return notifier.dispatcher;
   }
 }
 
@@ -182,22 +183,23 @@ final class KeyboardStateNotifier with ChangeNotifier {
   void notifyCapabilitiesChanged() => notifyListeners();
 }
 
-/// Shares the session keyboard with the widget tree. Installed by the host
-/// composition root; depended on by [Keyboard.of].
-final class KeyboardScope extends InheritedNotifier<KeyboardStateNotifier> {
+/// Shares the session keyboard with the widget tree — a
+/// `Scope<KeyboardStateNotifier>`. Installed by the host composition root;
+/// depended on by [Keyboard.of].
+final class KeyboardScope extends Scope<KeyboardStateNotifier> {
   const KeyboardScope({
     super.key,
-    required super.notifier,
+    required KeyboardStateNotifier notifier,
     required super.child,
-  });
+  }) : super(value: notifier);
 
   /// Framework-internal: the dispatcher owning this surface's input lanes,
   /// or null outside a running app. Non-subscribing — a widget reaching for
   /// the observation lane must not rebuild on capability changes.
-  static InputDispatcher? maybeDispatcherOf(BuildContext context) => context
-      .getInheritedWidgetOfExactType<KeyboardScope>()
-      ?.notifier
-      .dispatcher;
+  static InputDispatcher? maybeDispatcherOf(BuildContext context) =>
+      Scope.maybeOfWithoutDependency<KeyboardStateNotifier>(
+        context,
+      )?.dispatcher;
 }
 
 /// Conditional, widget-internal key handling — the framework's floor.

@@ -2,6 +2,30 @@
 
 ## 0.1.0
 
+- **`Scope<T>` replaces `InheritedWidget` and `InheritedNotifier`.** One
+  tree-local state primitive: `Scope(value: model, child: ...)` shares an
+  object its owner keeps, `Scope<T>.create(create: ..., dispose: ...)` lets the
+  scope own one (created on mount, disposed on unmount, `ChangeNotifier`
+  disposed automatically), and `Scope.of<T>(context)` / `Scope.maybeOf<T>`
+  read the nearest scope of that type from `build`, `initState`, or a handler.
+  A `Listenable` value notifies readers through the scope; a plain value
+  notifies when replaced by a non-equal one (`updateShouldNotify`). Removed:
+  `InheritedWidget`, `InheritedNotifier`, `InheritedElement`,
+  `BuildContext.dependOnInheritedWidgetOfExactType`, and
+  `BuildContext.getInheritedWidgetOfExactType`. The framework's scopes
+  (`MediaQuery`, `TickerMode`, `ClipboardScope`, `KeyboardScope`,
+  `TuiBindingScope`, `FleuryAppScope`, …) are `Scope<T>` subclasses with the
+  same constructors; their duplicate value getters (`MediaQuery.data`,
+  `KeyboardScope.notifier`, `ClipboardScope.clipboard`,
+  `LogBufferScope.buffer` / `.notifier`, `TuiBindingScope.binding`,
+  `SelectionScope.registrar`, `FleuryAppScope.notifier`,
+  `CommandRegistryScope.notifier`) are gone — read through `.of`;
+  `PointerRouterScope.router` and `TerminalSessionScope.session` stay.
+  `DefaultTextStyle` is a `StatelessWidget` over a private scope value.
+  `Theme.of`, `Focus.of`, `MediaQuery.of`, and friends keep their signatures;
+  `Form.of` readers now rebuild when the controller notifies (see the
+  fleury_widgets changelog).
+
 - **Pointer input and selection.** TextInput and TextArea support click-to-caret,
   drag selection, Shift-click, and word/line selection. TextInput fills bounded
   width; constrain it explicitly when an inline field should be narrower.

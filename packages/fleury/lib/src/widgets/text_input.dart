@@ -886,7 +886,7 @@ class _TextInputState extends State<TextInput>
   void didChangeDependencies() {
     super.didChangeDependencies();
     // Rebuild on focus change so cursor visibility flips.
-    // dependOnInheritedWidgetOfExactType subscribes us to the
+    // Scope.of subscribes us to the
     // FocusManagerScope.
     Focus.maybeOf(context);
     final registration = FormControlScope.maybeOf(context);

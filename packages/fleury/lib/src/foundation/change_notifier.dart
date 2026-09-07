@@ -6,7 +6,7 @@ import '../widgets/framework.dart' show VoidCallback;
 
 /// An object that can notify listeners when something about it changes.
 ///
-/// Used by `ListenableBuilder`, `InheritedNotifier`, and any mutable
+/// Used by `ListenableBuilder`, `Scope`, and any mutable
 /// model that wants to broadcast changes without imposing a Stream
 /// subscription model on consumers.
 abstract interface class Listenable {

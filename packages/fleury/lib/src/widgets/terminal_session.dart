@@ -40,9 +40,8 @@ final class TerminalSession {
       withTerminalHandoff(driver, operation);
 
   /// The nearest session, or null on a surface without one (the browser).
-  static TerminalSession? maybeOf(BuildContext context) => context
-      .dependOnInheritedWidgetOfExactType<TerminalSessionScope>()
-      ?.session;
+  static TerminalSession? maybeOf(BuildContext context) =>
+      Scope.maybeOf<TerminalSession>(context);
 
   /// The nearest session; throws when there is none.
   static TerminalSession of(BuildContext context) {
@@ -61,12 +60,12 @@ final class TerminalSession {
 
 /// Provides a [TerminalSession] to a subtree. `runApp` installs one above the
 /// app root; tests and hosts with their own driver can install their own.
-final class TerminalSessionScope extends InheritedWidget {
+final class TerminalSessionScope extends Scope<TerminalSession> {
   const TerminalSessionScope({
     super.key,
     required this.session,
     required super.child,
-  });
+  }) : super(value: session);
 
   final TerminalSession session;
 
