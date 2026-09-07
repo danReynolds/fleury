@@ -42,11 +42,11 @@
   "artifacts": {
     "2026-09-06-core-input-interactions.csv": {
       "rows": 66,
-      "sha256": "73fa290b3a84a27057ee05f8cc6963dc3214b87c1255e22c5192dc9e5502521c"
+      "sha256": "fcb1110e3cb5ad760a707671c69a17250f9d497e089ef2a72212528c48cdb2d3"
     },
     "2026-09-06-core-input-frames.csv": {
       "rows": 318,
-      "sha256": "b8eaed48753d1e329ecc2d60b9e6ac773a236018731b93849dad8e1bc721f6cb"
+      "sha256": "50f7b3a81f7e254c2a453fed10984224cafe41e4068fcf2e8a4d7c8f56941212"
     },
     "2026-09-06-core-input-lifetime.json": {
       "sha256": "7a9f6004dfd7b6f8135e3e05e3f66a52c7aec32fbc20238ce6061e97c6661f38"

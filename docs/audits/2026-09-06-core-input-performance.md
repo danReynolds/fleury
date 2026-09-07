@@ -87,6 +87,14 @@ Structured 64-row unkeyed controls improve by 42% for one label (365 to 212 us),
 (1,260 to 1,104 us). These controls establish that the input win is not bought
 with a material regression elsewhere in the measured framework paths.
 
+An additional snapshot-only control exposes the temporary map's setup cost:
+one semantic node under 8/32/128 padding wrappers adds 0.45–15.25 us, and a
+shallow, fully unkeyed 64-label tree adds 9.3 us. Keyed trees with multiple
+labels improve substantially. Runtime roots are keyed; the ordinary input
+measurements above remain the main qualification. This is not a claim that
+every tree shape improves. The [review receipt and reproducible control](https://github.com/danReynolds/fleury/pull/223#issuecomment-5563349544)
+record all 18 cases across three alternating AOT process pairs.
+
 The teardown probe again reports 4,192 bytes in 129 Fleury-package instances,
 with the exact same class inventory after warmup and three further lifecycle
 cycles. It retains no mounted element/render trees. This is a bounded teardown
