@@ -374,14 +374,16 @@ export 'src/widgets/pointer.dart'
         AbsorbPointer,
         GestureDetector,
         MouseRegion,
+        MouseCursor,
         PointerRouter,
         PointerRouterScope,
-        PointerScrollListener,
-        PointerDownCallback,
-        PointerDownDetails,
-        PointerModifiedTapCallback,
-        PointerTapCallback,
-        PointerPositionCallback;
+        PointerCallback,
+        PointerDetails,
+        PointerDragCallback,
+        PointerDragDetails,
+        PointerScrollCallback,
+        PointerScrollDetails,
+        PointerTapCallback;
 export 'src/widgets/scroll_view.dart' show ScrollController, ScrollView;
 export 'src/widgets/scrollbar.dart' show Scrollbar;
 export 'src/widgets/listenable_builder.dart'

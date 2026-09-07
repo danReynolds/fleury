@@ -70,6 +70,30 @@ void _click(FleuryTester tester, int col) {
 
 void main() {
   group('RangeSlider', () {
+    testWidgets(
+      'inset slider ignores secondary input and handles the first drag move',
+      (tester) {
+        _HostedSlider.lastValues = null;
+        tester.pumpWidget(
+          const Padding(
+            padding: EdgeInsets.only(left: 6, top: 2),
+            child: _HostedSlider(initial: (0, 10), min: 0, max: 10),
+          ),
+        );
+        void send(MouseEventKind kind, int col, MouseButton button) =>
+            tester.sendMouse(
+              MouseEvent(kind: kind, button: button, col: col, row: 2),
+            );
+        send(MouseEventKind.down, 9, MouseButton.right);
+        send(MouseEventKind.up, 9, MouseButton.right);
+        expect(_HostedSlider.lastValues, isNull);
+        send(MouseEventKind.down, 6, MouseButton.left);
+        send(MouseEventKind.drag, 9, MouseButton.left);
+        send(MouseEventKind.up, 9, MouseButton.left);
+        expect(_HostedSlider.lastValues, (3, 10));
+      },
+    );
+
     testWidgets('clicking the track moves the nearest handle there', (tester) {
       _HostedSlider.lastValues = null;
       tester.pumpWidget(const _HostedSlider(initial: (0, 10), min: 0, max: 10));

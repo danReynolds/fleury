@@ -1387,6 +1387,11 @@ class _FocusBoundsElement extends SingleChildRenderObjectElement {
   }
 }
 
+/// The focus owner on a presented render hit. Used by pointer routing.
+@internal
+FocusNode? focusNodeForPointerHit(RenderObject object) =>
+    object is _RenderFocusBounds ? object.node : null;
+
 class _RenderFocusBounds extends RenderObject
     implements RenderObjectWithSingleChild {
   _RenderFocusBounds({required FocusNode node}) : _node = node {

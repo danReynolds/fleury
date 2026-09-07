@@ -132,10 +132,10 @@ void main() {
         ),
       );
 
-      expect(presenter.showsPointerCursorAt(const CellOffset(2, 3)), isTrue);
-      expect(presenter.showsPointerCursorAt(const CellOffset(6, 3)), isTrue);
-      expect(presenter.showsPointerCursorAt(const CellOffset(7, 3)), isFalse);
-      expect(presenter.showsPointerCursorAt(const CellOffset(3, 5)), isFalse);
+      expect(presenter.mouseCursorAt(const CellOffset(2, 3)), 'pointer');
+      expect(presenter.mouseCursorAt(const CellOffset(6, 3)), 'pointer');
+      expect(presenter.mouseCursorAt(const CellOffset(7, 3)), isNull);
+      expect(presenter.mouseCursorAt(const CellOffset(3, 5)), 'default');
     });
 
     test('projects safe semantic links as anchors', () {

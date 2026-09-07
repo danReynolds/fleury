@@ -22,6 +22,45 @@ void main() {
     });
 
     test(
+      'SGR mouse input edits at the click and focus loss cancels a drag',
+      () async {
+        final resultFile = File('${tempDir.path}/pointer-result.json');
+        // Real terminal byte reports, with one-based SGR cell positions:
+        // click the second field at column 2, type X, drag, then CSI O focus loss.
+        const reports =
+            '\x1b[<0;3;3M\x1b[<0;3;3mX\x1b[<0;2;4M\x1b[<32;4;4M\x1b[O';
+        final capture = await _capturePty(
+          tempDir,
+          'pointer-input',
+          extraArgs: [
+            '--cols',
+            '40',
+            '--rows',
+            '8',
+            '--input-hex',
+            reports.codeUnits
+                .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+                .join(),
+            '--input-after-output-ms',
+            '1200',
+          ],
+          fixtureArgs: ['--pointer-result=${resultFile.path}'],
+        );
+        if (capture == null) return;
+        expect(capture.metadata['timedOut'], isFalse);
+        expect(capture.metadata['exitCode'], 0);
+        expect(capture.output, contains('POINTER-READY'));
+        expect(jsonDecode(resultFile.readAsStringSync()), {
+          'text': 'abXcdef',
+          'updates': 1,
+          'cancelled': true,
+        });
+        _expectTerminalRestored(capture.output);
+      },
+      skip: skipPty,
+    );
+
+    test(
       'boots, renders first frame, resizes, and restores on SIGINT',
       () async {
         final capture = await _capturePty(

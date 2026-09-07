@@ -16,10 +16,10 @@ MouseEvent _at(
   modifiers: modifiers,
 );
 
-PointerDownCallback _logPointerDown(List<String> log) => (details) {
+PointerCallback _logPointerDown(List<String> log) => (details) {
   log.add(
     'details ${details.button.name} '
-    '${details.col},${details.row} ${details.hasAlt}',
+    '${details.globalPosition.col},${details.globalPosition.row} ${details.hasAlt}',
   );
 };
 
@@ -84,7 +84,7 @@ void main() {
     testWidgets(
       'onPointerDown reports coordinates, every button, and modifiers',
       (tester) {
-        final details = <PointerDownDetails>[];
+        final details = <PointerDetails>[];
         tester.pumpWidget(
           GestureDetector(
             onPointerDown: details.add,
@@ -121,7 +121,10 @@ void main() {
           MouseButton.middle,
         ]);
         for (final detail in details) {
-          expect((detail.col, detail.row), (3, 1));
+          expect(
+            (detail.globalPosition.col, detail.globalPosition.row),
+            (3, 1),
+          );
           expect(detail.modifiers, {KeyModifier.ctrl, KeyModifier.shift});
           expect(detail.hasCtrl, isTrue);
           expect(detail.hasShift, isTrue);
@@ -143,37 +146,27 @@ void main() {
       },
     );
 
-    testWidgets('new and legacy pointer-down callbacks coexist', (tester) {
+    testWidgets('raw down reports secondary clicks without primary tap-down', (
+      tester,
+    ) {
       final log = <String>[];
       tester.pumpWidget(
         GestureDetector(
-          onTapDown: (col, row) => log.add('position $col,$row'),
-          onTapDownWithModifiers: (col, row, modifiers) {
-            log.add(
-              'modified $col,$row ${modifiers.contains(KeyModifier.alt)}',
-            );
-          },
+          onTapDown: (_) => log.add('primary'),
           onPointerDown: _logPointerDown(log),
-          child: const SizedBox(width: 5, height: 1, child: Text('A')),
+          child: const SizedBox(width: 5, height: 1),
         ),
       );
-      tester.render(size: const CellSize(5, 1));
-
       tester.sendMouse(
         _at(
           MouseEventKind.down,
           2,
           0,
           button: MouseButton.right,
-          modifiers: const <KeyModifier>{KeyModifier.alt},
+          modifiers: {KeyModifier.alt},
         ),
       );
-
-      expect(log, [
-        'position 2,0',
-        'modified 2,0 true',
-        'details right 2,0 true',
-      ]);
+      expect(log, ['details right 2,0 true']);
     });
 
     testWidgets('onPointerDown updates when GestureDetector rebuilds', (
@@ -242,7 +235,7 @@ void main() {
       final cols = <int>[];
       tester.pumpWidget(
         MouseRegion(
-          onHover: (c, r) => cols.add(c),
+          onHover: (details) => cols.add(details.globalPosition.col),
           child: const SizedBox(width: 6, height: 1, child: Text('A')),
         ),
       );
@@ -322,9 +315,13 @@ void main() {
         Column(
           children: [
             GestureDetector(
-              onDragStart: (c, r) => log.add('start $c,$r'),
-              onDragUpdate: (c, r) => log.add('update $c,$r'),
-              onDragEnd: () => log.add('end'),
+              onDragStart: (details) => log.add(
+                'start ${details.globalPosition.col},${details.globalPosition.row}',
+              ),
+              onDragUpdate: (details) => log.add(
+                'update ${details.globalPosition.col},${details.globalPosition.row}',
+              ),
+              onDragEnd: (_) => log.add('end'),
               child: const SizedBox(width: 5, height: 1, child: Text('A')),
             ),
             const SizedBox(width: 5, height: 1, child: Text('B')),
@@ -338,7 +335,7 @@ void main() {
       // Pointer leaves A's row into B's — capture keeps it on A.
       tester.sendMouse(_at(MouseEventKind.drag, 2, 1));
       tester.sendMouse(_at(MouseEventKind.up, 2, 1));
-      expect(log, ['start 2,0', 'update 2,1', 'end']);
+      expect(log, ['start 2,0', 'update 2,0', 'update 2,1', 'end']);
     });
 
     testWidgets('a drag suppresses the tap', (tester) {
@@ -347,8 +344,8 @@ void main() {
       tester.pumpWidget(
         GestureDetector(
           onTap: () => taps++,
-          onDragStart: (c, r) => drags.add('start'),
-          onDragEnd: () => drags.add('end'),
+          onDragStart: (details) => drags.add('start'),
+          onDragEnd: (_) => drags.add('end'),
           child: const SizedBox(width: 6, height: 1, child: Text('A')),
         ),
       );
@@ -370,7 +367,7 @@ void main() {
       // still reach the inner onTap rather than being swallowed.
       tester.pumpWidget(
         MouseRegion(
-          onHover: (col, row) {},
+          onHover: (details) {},
           child: GestureDetector(
             onTap: () => taps++,
             child: const SizedBox(width: 5, height: 1, child: Text('A')),

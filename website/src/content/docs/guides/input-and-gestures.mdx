@@ -1,0 +1,119 @@
+---
+title: Input & gestures
+description: Click to edit, drag a splitter, and compose hover and scrolling with small running examples.
+---
+
+import FleuryExample from '../../../components/FleuryExample.astro';
+import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
+import InputGuideCode from '../../../components/InputGuideCode.astro';
+
+Click a field, drag a handle, or scroll a pane. Fleury’s ordinary controls handle
+mouse input alongside the keyboard; `GestureDetector` and `MouseRegion` let you
+add those interactions to your own widgets.
+
+In a terminal, enable mouse reporting when starting your app. `mouseMotion`
+includes clicks, drags, scrolling, and hover:
+
+```dart
+runApp(const MyApp(), mode: const TerminalMode(mouseMotion: true));
+```
+
+Mouse reporting is off by default to preserve the terminal’s native text
+selection. Use `mouse: true` when you only need clicks, drags, and scrolling.
+The browser demos already receive pointer input.
+
+## Click to edit
+
+Click inside either field to place its caret. Drag to select text, Shift-click
+to extend the selection, or double-click a word. Tab moves to the next field.
+`TextInput` and `TextArea` provide this behavior themselves:
+
+<CodeDemoSplit files={['contact_fields.dart', 'contact_fields_test.dart']} codeLabel="Source and test" demoLabel="Try it" layout="code-wide" codeMaxHeight="26rem">
+<InputGuideCode slot="code-0" file="contact_fields.dart" />
+<InputGuideCode slot="code-1" file="contact_fields_test.dart" test />
+<FleuryExample slot="demo" id="input.editing" cols={38} rows={10} interactive />
+</CodeDemoSplit>
+
+The test sends a press and release at a cell, then types at the resulting caret.
+That checks the input path. A [logical `fill()` test](/fleury/guides/testing/)
+checks what the application does with the entered value.
+
+## Press, release, or cancel
+
+Press **Open notes.md** to see its pressed state. Release on the tile to open
+it, or move outside before releasing to cancel. Right-click shows file details;
+Enter opens the file; **I** shows its details.
+
+<CodeDemoSplit files={['press_tile.dart', 'press_tile_test.dart']} codeLabel="Source and test" demoLabel="Press and drag away" layout="code-wide" codeMaxHeight="28rem">
+<InputGuideCode slot="code-0" file="press_tile.dart" />
+<InputGuideCode slot="code-1" file="press_tile_test.dart" test />
+<FleuryExample slot="demo" id="input.press" cols={38} rows={8} interactive />
+</CodeDemoSplit>
+
+`onTap` runs after a completed primary click. `onTapDown` starts the pressed
+visual; `onTapUp` and `onTapCancel` both clear it. `onSecondaryTap` handles a
+right click. Ordinary `Button` widgets already handle activation and keyboard
+focus. These callbacks let a custom target show its press and cancellation.
+
+## Drag a handle
+
+Grab the vertical divider and move it left or right. Keep dragging beyond the
+handle, then release: it retains the gesture until you finish. You can also
+focus it and use **← / →**.
+
+<CodeDemoSplit files={['split_pane.dart', 'split_pane_test.dart']} codeLabel="Source and test" demoLabel="Drag or use arrow keys" layout="code-wide" codeMaxHeight="28rem">
+<InputGuideCode slot="code-0" file="split_pane.dart" />
+<InputGuideCode slot="code-1" file="split_pane_test.dart" test />
+<FleuryExample slot="demo" id="input.splitter" cols={38} rows={9} interactive />
+</CodeDemoSplit>
+
+`details.delta.col` is movement in **cells**, so the same handler works inside
+padding or a panel. When you need a position, `localPosition` starts at the
+receiving widget’s origin; `globalPosition` starts at the application surface.
+
+`MouseRegion(cursor: MouseCursor.resizeLeftRight)` gives the handle its resize
+cursor in a browser. The cursor stays with the captured drag. `onDragEnd`
+handles release; `onDragCancel` handles interruption, such as losing focus.
+
+## Select text to copy
+
+Type in **Reply**, then drag from the note’s heading into the next line.
+Press **Ctrl+C** to copy the selection. Shift-click extends it; **Ctrl+A** selects the note and **Esc** clears
+it. The count below the note is outside the selection area.
+
+<CodeDemoSplit files={['selectable_note.dart', 'selectable_note_test.dart']} codeLabel="Source and test" demoLabel="Select across the lines" layout="code-wide" codeMaxHeight="26rem">
+<InputGuideCode slot="code-0" file="selectable_note.dart" />
+<InputGuideCode slot="code-1" file="selectable_note_test.dart" test />
+<FleuryExample slot="demo" id="input.selection" cols={38} rows={12} interactive />
+</CodeDemoSplit>
+
+`FleuryApp` already enables drag selection for ordinary text. Use `SelectionArea`
+for a region with its own selection, callbacks, or options such as
+`copyOnRelease: true`. Selecting the note gives its region keyboard focus;
+Copy, Select All, and Escape now act on the note. Clicking Reply returns focus
+to the field. You do not need an extra `Focus` wrapper.
+
+## Keep hover and scrolling together
+
+Move from **notes.md** onto **Pin**: the row stays hovered while the button
+receives its own interaction. Scroll **Recent** to its end, then keep
+scrolling: **All notes** moves to reveal older notes. Turn on **Keep scrolling
+in Recent** and repeat to see the wheel stop at that pane’s edge.
+
+<CodeDemoSplit files={['hover_notes.dart', 'hover_notes_test.dart']} codeLabel="Source and test" demoLabel="Hover, click, and scroll" layout="code-wide" codeMaxHeight="28rem">
+<InputGuideCode slot="code-0" file="hover_notes.dart" />
+<InputGuideCode slot="code-1" file="hover_notes_test.dart" test />
+<FleuryExample slot="demo" id="input.scrolling" cols={38} rows={16} interactive />
+</CodeDemoSplit>
+
+`ScrollView` and `ListView` handle the wheel. At an edge, their default
+`edgeBehavior: EdgeBehavior.bubble` offers the event to a scrollable ancestor.
+The checkbox switches the inner pane to `EdgeBehavior.contain`.
+
+For shortcut sequences, text entry, and focus traversal, continue with
+[key handling](/fleury/guides/focus-and-keyboard/) and
+[focus management](/fleury/guides/focus/).
+
+The source and tests shown here are the files used by the live examples. Run
+all five from the checkout with `cd website/examples && dart test test/input_guide_test.dart`.
+Their shared `pointer_test_helpers.dart` sends a mouse event and pumps a frame.

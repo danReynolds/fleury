@@ -461,9 +461,17 @@ void main() {
         );
         expect(
           taps,
-          1,
-          reason: 'the replayed pointer region uses screen space',
+          0,
+          reason:
+              'the editable owns its click; it does not activate an ancestor',
         );
+        expect(
+          controller.caretOffset,
+          0,
+          reason: 'the cached editor maps its screen origin correctly',
+        );
+        tester.pump();
+        expect(focusNode.caretRect, CellRect.fromLTWH(5, 2, 1, 1));
       },
     );
 

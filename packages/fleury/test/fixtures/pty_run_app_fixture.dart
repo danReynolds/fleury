@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
 
@@ -37,6 +38,21 @@ Never _exitWith(AppExit appExit) => exit(switch (appExit.signal) {
 });
 
 Future<void> main(List<String> args) async {
+  final pointerArg = args
+      .where((a) => a.startsWith('--pointer-result='))
+      .firstOrNull;
+  if (pointerArg != null) {
+    final result = <String, Object?>{'updates': 0, 'cancelled': false};
+    final appExit = await runApp(
+      _PtyPointerApp(result),
+      mode: const TerminalMode(mouseMotion: true),
+      enableHotReload: false,
+    );
+    File(
+      pointerArg.substring('--pointer-result='.length),
+    ).writeAsStringSync(jsonEncode(result));
+    _exitWith(appExit);
+  }
   final hookArg = args.where((a) => a.startsWith('--stray-hook=')).firstOrNull;
   if (hookArg != null) {
     final hookFile = File(hookArg.substring('--stray-hook='.length));
@@ -211,4 +227,41 @@ class _BoomRender extends RenderObject {
 
   @override
   void performPaint(CellBuffer buffer, CellOffset offset) {}
+}
+
+class _PtyPointerApp extends StatefulWidget {
+  const _PtyPointerApp(this.result);
+  final Map<String, Object?> result;
+  @override
+  State<_PtyPointerApp> createState() => _PtyPointerAppState();
+}
+
+class _PtyPointerAppState extends State<_PtyPointerApp> {
+  final controller = TextEditingController(text: 'abcdef');
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      const Text('POINTER-READY'),
+      const TextInput(autofocus: true),
+      TextInput(
+        controller: controller,
+        onChanged: (text) => widget.result['text'] = text,
+      ),
+      GestureDetector(
+        onDragUpdate: (_) =>
+            widget.result['updates'] = (widget.result['updates'] as int) + 1,
+        onDragCancel: () {
+          widget.result['cancelled'] = true;
+          requestExit();
+        },
+        child: const SizedBox(width: 8, height: 1, child: Text('Drag me')),
+      ),
+    ],
+  );
 }

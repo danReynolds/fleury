@@ -197,7 +197,12 @@ final class DomCellMetrics implements CellMetrics {
     final box = _cached;
     if (box == null || box.cols <= 0 || box.rows <= 0) return null;
     final origin = _currentCanvasOrigin();
-    return cellForPoint(clientX - origin.left, clientY - origin.top);
+    // Capture can deliver movement/release outside the surface. Clamping would
+    // turn a release outside into a click on the edge control.
+    return CellOffset(
+      ((clientX - origin.left) / box.cssCellWidth).floor(),
+      ((clientY - origin.top) / box.cssCellHeight).floor(),
+    );
   }
 
   @override

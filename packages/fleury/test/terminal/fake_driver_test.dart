@@ -98,7 +98,10 @@ void main() {
       expect(driver.handoffCallCount, 1);
       expect(driver.handoffSuspendCallCount, 1);
       expect(driver.handoffResumeCallCount, 1);
-      expect(events, [const ResizeEvent(CellSize(80, 24))]);
+      expect(events, [
+        const TerminalFocusEvent(focused: false),
+        const ResizeEvent(CellSize(80, 24)),
+      ]);
       await sub.cancel();
       await driver.dispose();
     });

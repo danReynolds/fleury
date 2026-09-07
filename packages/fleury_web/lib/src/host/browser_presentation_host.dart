@@ -226,11 +226,12 @@ final class BrowserPresentationHost {
         hostElement: host,
         pointerTarget: surfaceRoot,
         cellMetrics: metrics,
-        pointerCursorResolver: semanticPresenter?.showsPointerCursorAt,
+        mouseCursorResolver: semanticPresenter?.mouseCursorAt,
         focusCoordinator: webFocusCoordinator,
         clipboard: webClipboard,
         captureKeyboardFromDocument: _captureKeyboardFromDocument,
       );
+      semanticPresenter?.onPointerCursorChanged = input.refreshPointerCursor;
       return BrowserHostComponents(
         hostElement: host,
         surface: surface,

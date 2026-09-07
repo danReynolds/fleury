@@ -1,0 +1,16 @@
+00:00 +0: loading test/widgets/pointer_test.dart
+00:00 +0: GestureDetector onTap fires on a press+release in the same region
+00:00 +1: GestureDetector a press-in / release-out does not fire onTap
+00:00 +2: GestureDetector onSecondaryTap fires on a right click
+00:00 +3: GestureDetector onPointerDown reports coordinates, every button, and modifiers
+00:00 +4: GestureDetector new and legacy pointer-down callbacks coexist
+00:00 +5: GestureDetector onPointerDown updates when GestureDetector rebuilds
+00:00 +6: MouseRegion hover enter/exit fire as the pointer crosses regions
+00:00 +7: MouseRegion hover onHover reports the moving position within the region
+00:00 +8: scroll routing the wheel scrolls the list under the pointer, unfocused
+00:00 +9: scroll routing the wheel scrolls a ScrollView viewport
+00:00 +10: drag start/update/end fire, and the drag is captured outside
+00:00 +11: drag a drag suppresses the tap
+00:00 +12: hit-test precedence a tap skips an occluding hover-only region to reach onTap
+00:00 +13: hit-test precedence an absorb boundary handles outside taps but not descendants
+00:00 +14: All tests passed!

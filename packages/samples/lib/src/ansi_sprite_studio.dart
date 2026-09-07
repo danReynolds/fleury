@@ -298,11 +298,19 @@ class _AnsiSpriteStudioBodyState extends State<_AnsiSpriteStudioBody> {
               child: BoundsObserver(
                 notifier: _canvasBounds,
                 child: GestureDetector(
-                  onPointerDown: _armPointerStroke,
+                  onTapDown: _armPointerStroke,
+                  onTapCancel: _endPointerStroke,
                   onTap: _commitPointerTap,
-                  onDragStart: _beginPointerDrag,
-                  onDragUpdate: _paintAtScreenCell,
-                  onDragEnd: _endPointerStroke,
+                  onDragStart: (details) => _beginPointerDrag(
+                    details.globalPressPosition.col,
+                    details.globalPressPosition.row,
+                  ),
+                  onDragUpdate: (details) => _paintAtScreenCell(
+                    details.globalPosition.col,
+                    details.globalPosition.row,
+                  ),
+                  onDragEnd: (_) => _endPointerStroke(),
+                  onDragCancel: _endPointerStroke,
                   child: Semantics(
                     role: SemanticRole.image,
                     label: 'Editable sprite canvas',
@@ -626,10 +634,10 @@ class _AnsiSpriteStudioBodyState extends State<_AnsiSpriteStudioBody> {
     );
   }
 
-  void _armPointerStroke(PointerDownDetails details) {
+  void _armPointerStroke(PointerDetails details) {
     _canvasFocus.requestFocus();
     if (details.button != MouseButton.left) return;
-    _pointerDown = (details.col, details.row);
+    _pointerDown = (details.globalPosition.col, details.globalPosition.row);
     _lastStrokeCell = null;
     _model.beginStroke();
   }
@@ -641,6 +649,7 @@ class _AnsiSpriteStudioBodyState extends State<_AnsiSpriteStudioBody> {
   }
 
   void _beginPointerDrag(int col, int row) {
+    _model.beginStroke();
     final down = _pointerDown;
     if (down != null) _paintAtScreenCell(down.$1, down.$2);
     _pointerDown = null;

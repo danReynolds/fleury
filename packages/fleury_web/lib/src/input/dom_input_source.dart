@@ -19,7 +19,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     required web.Element hostElement,
     required CellMetrics cellMetrics,
     web.Element? pointerTarget,
-    this.pointerCursorResolver,
+    this.mouseCursorResolver,
     web.HTMLTextAreaElement? textArea,
     web.Document? document,
     WebFocusCoordinator? focusCoordinator,
@@ -37,7 +37,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
 
   final web.Element _hostElement;
   final web.Element _pointerTarget;
-  final bool Function(CellOffset cell)? pointerCursorResolver;
+  final String? Function(CellOffset cell)? mouseCursorResolver;
   final CellMetrics _cellMetrics;
   final web.Document _document;
   final web.HTMLTextAreaElement? _textArea;
@@ -68,9 +68,12 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
   String? _suppressNextInputText;
   var _compositionSuppressionGeneration = 0;
   MouseButton _pressedButton = MouseButton.none;
-  MouseButton _captureLostButton = MouseButton.none;
+  int? _pressedPointerId;
+  bool _pointerOnSurface = false;
   var _suppressNextPointerClick = false;
   String? _cursorBeforeStart;
+  String? _capturedCursor;
+  CellOffset? _pointerCell;
 
   // The last move this source emitted, so an identical re-emit can be
   // dropped. Browsers fire pointermove at 60-120 Hz while the grid's
@@ -164,10 +167,12 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     _suppressNextInputText = null;
     _compositionSuppressionGeneration += 1;
     _pressedButton = MouseButton.none;
-    _captureLostButton = MouseButton.none;
+    _pressedPointerId = null;
     _suppressNextPointerClick = false;
     _forgetLastMove();
     _cursorBeforeStart = null;
+    _capturedCursor = null;
+    _pointerCell = null;
     _focusCoordinator?.handleBrowserFocusOut(WebFocusTarget.keyboardCapture);
     _clearTextArea();
     final textArea = _activeTextArea;
@@ -440,7 +445,10 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
   }
 
   void _handleVisibilityChange(web.Event raw) {
-    if (web.document.visibilityState == 'hidden') _sweepOpenPresses();
+    if (web.document.visibilityState == 'hidden') {
+      _sweepOpenPresses();
+      _cancelPointer();
+    }
   }
 
   void _handleInput(web.Event raw) {
@@ -541,6 +549,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     // Keyboard-capture blur is authority loss for held keys: the release
     // will be delivered to whatever got focus, never to us.
     _sweepOpenPresses();
+    _cancelPointer();
     _focusCoordinator?.handleBrowserFocusOut(WebFocusTarget.keyboardCapture);
   }
 
@@ -556,22 +565,29 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
   }
 
   void _handlePointerDown(web.Event raw) {
+    final event = raw as web.PointerEvent;
+    if (_pressedPointerId != null && _pressedPointerId != event.pointerId)
+      return;
+    if (_pressedButton != MouseButton.none) _cancelPointer();
     // A new physical gesture supersedes any orphaned compatibility-click
     // marker left by a prior gesture (for example, if the browser omitted its
     // click because the original target detached).
     _suppressNextPointerClick = false;
-    _captureLostButton = MouseButton.none;
     _forgetLastMove();
     // A cell-grid link owns its whole gesture: let the browser navigate the
     // href natively. Capturing the pointer here would retarget the click away
     // from the anchor, and routing it as an app pointer event would consume it.
     if (_cellGridLinkAnchor(raw) != null) return;
     ensureKeyboardCapture();
-    final event = raw as web.PointerEvent;
     final button = _buttonFor(event.button);
     final cell = _cellForPointer(event);
     if (button == MouseButton.none || cell == null) return;
     _pressedButton = button;
+    _pressedPointerId = event.pointerId;
+    _pointerOnSurface = true;
+    _pointerCell = cell;
+    _capturedCursor = mouseCursorResolver?.call(cell);
+    refreshPointerCursor();
     try {
       _pointerTarget.setPointerCapture(event.pointerId);
     } catch (_) {
@@ -597,15 +613,21 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     if (_cellGridLinkAnchor(raw) != null) return;
     _forgetLastMove();
     final event = raw as web.PointerEvent;
+    if (_pressedPointerId != null && _pressedPointerId != event.pointerId)
+      return;
     var button = _buttonFor(event.button);
     if (button == MouseButton.none && _pressedButton != MouseButton.none) {
       button = _pressedButton;
     }
-    if (button == MouseButton.none && _captureLostButton != MouseButton.none) {
-      button = _captureLostButton;
-    }
     final cell = _cellForPointer(event);
     if (button == MouseButton.none || cell == null) return;
+    // Release ownership before the DOM releases capture; its lost-capture
+    // event can be synchronous and must not cancel an ordinary completion.
+    _pressedButton = MouseButton.none;
+    _pressedPointerId = null;
+    _capturedCursor = null;
+    _pointerCell = cell;
+    refreshPointerCursor();
     try {
       if (_pointerTarget.hasPointerCapture(event.pointerId)) {
         _pointerTarget.releasePointerCapture(event.pointerId);
@@ -615,7 +637,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     }
     _suppressNextPointerClick = true;
     _pressedButton = MouseButton.none;
-    _captureLostButton = MouseButton.none;
+    _pressedPointerId = null;
     raw.preventDefault();
     _emit(
       MouseEvent(
@@ -628,42 +650,65 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     );
   }
 
+  void _cancelPointer() {
+    final button = _pressedButton;
+    final active = _pointerOnSurface || button != MouseButton.none;
+    _pressedButton = MouseButton.none;
+    _pressedPointerId = null;
+    _pointerOnSurface = false;
+    _pointerCell = null;
+    _capturedCursor = null;
+    _suppressNextPointerClick = true;
+    _forgetLastMove();
+    if (active) {
+      _emit(
+        MouseEvent(kind: MouseEventKind.cancel, button: button, col: 0, row: 0),
+      );
+    }
+    _restorePointerCursor();
+  }
+
   void _handlePointerCancel(web.Event raw) {
     final event = raw as web.PointerEvent;
+    if (_pressedPointerId != null && _pressedPointerId != event.pointerId)
+      return;
+    _cancelPointer();
     try {
       if (_pointerTarget.hasPointerCapture(event.pointerId)) {
         _pointerTarget.releasePointerCapture(event.pointerId);
       }
     } catch (_) {
-      // Best-effort counterpart to pointerdown capture.
+      /* Synthetic events may not own DOM capture. */
     }
-    _pressedButton = MouseButton.none;
-    _captureLostButton = MouseButton.none;
-    _suppressNextPointerClick = false;
-    _forgetLastMove();
   }
 
-  void _handleLostPointerCapture(web.Event _) {
-    // Pointer capture is normally released between pointerup and click. If it
-    // arrives earlier, stop drag routing but remember which press still needs
-    // its up event. `pointercancel` owns true cancellation; a later pointerup or
-    // compatibility click can close this interrupted press without emitting a
-    // second down.
-    _forgetLastMove();
-    if (_pressedButton != MouseButton.none) {
-      _captureLostButton = _pressedButton;
-      _pressedButton = MouseButton.none;
-    }
+  void _handleLostPointerCapture(web.Event raw) {
+    final event = raw as web.PointerEvent;
+    if (_pressedPointerId == event.pointerId) _cancelPointer();
   }
 
   void _handlePointerMove(web.Event raw) {
     final event = raw as web.PointerEvent;
+    if (_pressedPointerId != null && _pressedPointerId != event.pointerId)
+      return;
+    final heldMask = switch (_pressedButton) {
+      MouseButton.left => 1,
+      MouseButton.right => 2,
+      MouseButton.middle => 4,
+      MouseButton.none => 0,
+    };
+    if (heldMask != 0 && event.buttons != heldMask) {
+      _cancelPointer();
+      return;
+    }
     final cell = _cellForPointer(event);
     if (cell == null) {
       _restorePointerCursor();
       return;
     }
-    _syncPointerCursor(cell);
+    _pointerOnSurface = true;
+    _pointerCell = cell;
+    refreshPointerCursor();
     final dragging = event.buttons != 0 && _pressedButton != MouseButton.none;
     raw.preventDefault();
     final kind = dragging ? MouseEventKind.drag : MouseEventKind.moved;
@@ -718,20 +763,38 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
   static bool _sameModifiers(Set<KeyModifier> a, Set<KeyModifier> b) =>
       a.length == b.length && a.containsAll(b);
 
-  void _handlePointerLeave(web.Event _) => _restorePointerCursor();
+  void _handlePointerLeave(web.Event _) {
+    _pointerOnSurface = false;
+    _pointerCell = null;
+    _forgetLastMove();
+    _restorePointerCursor();
+    _emit(
+      const MouseEvent(
+        kind: MouseEventKind.leave,
+        button: MouseButton.none,
+        col: 0,
+        row: 0,
+      ),
+    );
+  }
 
   web.CSSStyleDeclaration? get _pointerStyle =>
       _pointerTarget.isA<web.HTMLElement>()
       ? (_pointerTarget as web.HTMLElement).style
       : null;
 
-  void _syncPointerCursor(CellOffset cell) {
-    final style = _pointerStyle;
-    if (style == null) return;
-    if (pointerCursorResolver?.call(cell) ?? false) {
-      style.setProperty('cursor', 'pointer');
-    } else {
+  /// Re-resolves a stationary pointer after the presented geometry changes.
+  /// During capture, keep the press owner's cursor until release or cancel.
+  void refreshPointerCursor() {
+    final cell = _pointerCell;
+    if (!_started || cell == null) return;
+    final cursor = _pressedPointerId != null
+        ? _capturedCursor
+        : mouseCursorResolver?.call(cell);
+    if (cursor == null) {
       _restorePointerCursor();
+    } else {
+      _pointerStyle?.setProperty('cursor', cursor);
     }
   }
 
@@ -766,9 +829,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     if (cell == null) return;
     raw.preventDefault();
     final modifiers = _modifiersFromMouse(event);
-    final openButton = _pressedButton != MouseButton.none
-        ? _pressedButton
-        : _captureLostButton;
+    final openButton = _pressedButton;
     if (openButton != MouseButton.none) {
       _emit(
         MouseEvent(
@@ -780,7 +841,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
         ),
       );
       _pressedButton = MouseButton.none;
-      _captureLostButton = MouseButton.none;
+      _pressedPointerId = null;
       return;
     }
     _emit(
