@@ -996,13 +996,18 @@ class _DataTableState extends State<DataTable> {
           // Wheel over the table scrolls the row window by moving the selection
           // (the window follows the selected row; selection changes don't fire
           // onSelect, so scrolling never triggers a row action).
-          child: PointerScrollListener(
-            router: PointerRouterScope.maybeOf(context),
-            onScrollUp: () => _scrollBy(-1),
-            onScrollDown: () => _scrollBy(1),
+          child: MouseRegion(
+            onScroll: (details) {
+              _scrollBy(details.delta.row);
+              return true;
+            },
             child: GestureDetector(
-              onTapDownWithModifiers: (col, row, modifiers) {
-                _pendingPointerHit = _hitTestPointer(col, row, modifiers);
+              onTapDown: (details) {
+                _pendingPointerHit = _hitTestPointer(
+                  details.globalPosition.col,
+                  details.globalPosition.row,
+                  details.modifiers,
+                );
               },
               onTap: () {
                 final hit = _pendingPointerHit;

@@ -285,10 +285,13 @@ class _ScrollViewState extends State<ScrollView> {
 
   @override
   Widget build(BuildContext context) {
-    final Widget content = PointerScrollListener(
-      router: PointerRouterScope.maybeOf(context),
-      onScrollUp: () => _controller.scrollBy(-3),
-      onScrollDown: () => _controller.scrollBy(3),
+    final Widget content = MouseRegion(
+      onScroll: (details) {
+        final before = _controller.offset;
+        _controller.scrollBy(details.delta.row * 3);
+        return _controller.offset != before ||
+            widget.edgeBehavior == EdgeBehavior.contain;
+      },
       child: KeyDetector(
         onKey: _detectKey,
         child: Focus(

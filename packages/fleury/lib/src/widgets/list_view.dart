@@ -821,16 +821,24 @@ class _ListViewState extends State<ListView> {
   /// hovering an unfocused list and scrolling it just works. Moves the
   /// selection when there is one (the viewport follows it), otherwise
   /// jumps the scroll-only viewport.
-  void _scrollBy(int delta) {
+  bool _scrollBy(int delta) {
     final count = widget.effectiveItemCount;
-    if (count == 0) return;
-    final sel = _controller.selectedIndex;
-    if (sel != null) {
-      _setUserSelection((sel + delta).clamp(0, count - 1));
+    if (count == 0) return widget.edgeBehavior == EdgeBehavior.contain;
+    final selection = _controller.selectedIndex;
+    if (selection != null) {
+      final next = (selection + delta).clamp(0, count - 1);
+      if (next == selection) return widget.edgeBehavior == EdgeBehavior.contain;
+      _setUserSelection(next);
     } else {
-      final first = _controller.visibleRange?.first ?? 0;
+      final range = _controller.visibleRange;
+      final first = range?.first ?? 0;
+      if ((delta < 0 && first == 0) ||
+          (delta > 0 && range != null && range.last >= count - 1)) {
+        return widget.edgeBehavior == EdgeBehavior.contain;
+      }
       _controller.jumpToIndex((first + delta).clamp(0, count - 1));
     }
+    return true;
   }
 
   @override
@@ -867,10 +875,8 @@ class _ListViewState extends State<ListView> {
   @override
   Widget build(BuildContext context) {
     final selected = _controller.selectedIndex;
-    final Widget content = PointerScrollListener(
-      router: PointerRouterScope.maybeOf(context),
-      onScrollUp: () => _scrollBy(-1),
-      onScrollDown: () => _scrollBy(1),
+    final Widget content = MouseRegion(
+      onScroll: (details) => _scrollBy(details.delta.row),
       child: KeyDetector(
         onKey: _detectKey,
         child: Focus(
@@ -892,7 +898,7 @@ class _ListViewState extends State<ListView> {
                     for (var i = 0; i < widget.children!.length; i++)
                       _maybeBoundary(
                         GestureDetector(
-                          onTapDown: (_, _) => _handleItemTap(i),
+                          onTapDown: (details) => _handleItemTap(i),
                           child: widget.children![i],
                         ),
                       ),
@@ -936,7 +942,7 @@ class _ListViewState extends State<ListView> {
                   // has its tap region follow for free.
                   return _maybeBoundary(
                     GestureDetector(
-                      onTapDown: (_, _) => _handleItemTap(index),
+                      onTapDown: (details) => _handleItemTap(index),
                       child: content,
                     ),
                   );

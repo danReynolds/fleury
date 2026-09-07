@@ -25,7 +25,8 @@ final class SemanticDomPresenter
   final Map<String, String> _ownTextById = {};
   final Map<String, web.Text> _textNodesById = {};
   final Map<String, JSFunction> _clickListenersById = {};
-  final List<CellRect> _pointerCursorRegions = <CellRect>[];
+  final List<(CellRect, String)> _pointerCursorRegions = [];
+  void Function()? onPointerCursorChanged;
   SemanticActionRequestHandler? _onSemanticActionRequest;
 
   web.Element get rootElement => _root;
@@ -47,6 +48,7 @@ final class SemanticDomPresenter
     SemanticTreeUpdate? update,
   }) {
     _syncPointerCursorRegions(tree.root);
+    onPointerCursorChanged?.call();
     if (update != null && !update.hasChanges && _elementsById.isNotEmpty) {
       return SemanticPresentationStats.retained(nodeCount: tree.nodeCount);
     }
@@ -62,28 +64,19 @@ final class SemanticDomPresenter
     return stats.toPresentationStats(update);
   }
 
-  /// Whether an enabled, pointer-actionable semantic node covers [cell].
-  ///
-  /// The painted cell grid cannot express a browser cursor by itself. The
-  /// browser input layer uses this semantic geometry to show the ordinary hand
-  /// cursor over buttons without adding invisible DOM overlays that would
-  /// intercept Fleury's pointer routing.
-  bool showsPointerCursorAt(CellOffset cell) {
-    for (var i = _pointerCursorRegions.length - 1; i >= 0; i--) {
-      final bounds = _pointerCursorRegions[i];
-      if (cell.col >= bounds.left &&
-          cell.col < bounds.right &&
-          cell.row >= bounds.top &&
-          cell.row < bounds.bottom) {
-        return true;
-      }
+  /// Browser cursor at the frontmost matching region. Explicit MouseRegion
+  /// hints and ordinary control cursors share semantic geometry on both hosts.
+  String? mouseCursorAt(CellOffset cell) {
+    for (final (bounds, cursor) in _pointerCursorRegions.reversed) {
+      if (bounds.contains(cell)) return cursor;
     }
-    return false;
+    return null;
   }
 
   @override
   Future<void> dispose() async {
     _onSemanticActionRequest = null;
+    onPointerCursorChanged = null;
     _root.textContent = '';
     for (final entry in _clickListenersById.entries) {
       _elementsById[entry.key]?.removeEventListener('click', entry.value);
@@ -101,12 +94,27 @@ final class SemanticDomPresenter
 
     void visit(SemanticNode node) {
       final bounds = node.bounds;
-      if (bounds != null &&
-          !bounds.size.isEmpty &&
-          node.enabled &&
-          _usesPointerCursor(node.role.coreRole) &&
-          node.actions.isNotEmpty) {
-        _pointerCursorRegions.add(bounds);
+      final explicit = switch (node.state['mouseCursor']) {
+        'basic' => 'default',
+        'pointer' => 'pointer',
+        'text' => 'text',
+        'resizeLeftRight' => 'ew-resize',
+        'resizeUpDown' => 'ns-resize',
+        _ => null,
+      };
+      final role = node.role.coreRole;
+      final editing =
+          role == SemanticRole.textField || role == SemanticRole.textArea;
+      final actionable = _usesPointerCursor(role) && node.actions.isNotEmpty;
+      final cursor =
+          explicit ??
+          (editing
+              ? 'text'
+              : actionable
+              ? 'pointer'
+              : null);
+      if (bounds != null && !bounds.size.isEmpty && cursor != null) {
+        _pointerCursorRegions.add((bounds, node.enabled ? cursor : 'default'));
       }
       for (final child in node.children) {
         visit(child);

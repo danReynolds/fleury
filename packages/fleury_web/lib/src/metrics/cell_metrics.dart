@@ -120,7 +120,8 @@ abstract interface class CellMetrics {
   /// outside that phase.
   CellOffset cellForPoint(double x, double y);
 
-  /// Maps a browser viewport/client point to a surface cell.
+  /// Maps a browser viewport/client point to a surface cell, preserving outside
+  /// coordinates (negative or beyond the grid) during pointer capture.
   ///
   /// DOM-backed implementations may read the host's current origin so pointer
   /// input remains correct when the page scrolls or surrounding layout moves

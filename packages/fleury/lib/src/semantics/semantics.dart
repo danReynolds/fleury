@@ -1351,6 +1351,13 @@ abstract interface class SemanticContributor {
   SemanticNode buildSemanticNode(List<SemanticNode> children);
 }
 
+/// A contributor that can transparently pass through its children when it has
+/// no metadata to publish, without changing their mounted identity.
+abstract interface class OptionalSemanticContributor
+    implements SemanticContributor {
+  bool get contributesSemanticNode;
+}
+
 /// Implemented by elements whose semantic subtree differs from their mounted
 /// element subtree.
 ///
@@ -2072,6 +2079,11 @@ void _collectInto(
         ),
       );
     }
+    return;
+  }
+  if (element is OptionalSemanticContributor &&
+      !(element as OptionalSemanticContributor).contributesSemanticNode) {
+    element.visitChildren((child) => _collectInto(child, output, elements));
     return;
   }
   if (element is SemanticChildrenProvider) {

@@ -7,10 +7,9 @@ import 'glyphs.dart';
 enum _ActiveHandle { low, high }
 
 /// Painted track geometry: the render object writes it each paint and the
-/// pointer handlers read it to map an absolute column → slider value (the
+/// pointer handlers read it to map a local column → slider value (the
 /// write-at-paint / read-elsewhere idiom shared with Scrollbar).
 class _SliderGeometry {
-  int left = 0;
   int width = 0;
 }
 
@@ -207,12 +206,12 @@ class _RangeSliderState extends State<RangeSlider> {
     }
   }
 
-  /// The slider value under absolute column [col], snapped to the
+  /// The slider value under local column [col], snapped to the
   /// [RangeSlider.step] grid.
   num _valueForColumn(int col) {
     final width = _geom.width;
     if (width <= 1) return widget.min;
-    final local = (col - _geom.left).clamp(0, width - 1);
+    final local = col.clamp(0, width - 1);
     final fraction = local / (width - 1);
     final raw = widget.min + fraction * (widget.max - widget.min);
     final steps = ((raw - widget.min) / widget.step).round();
@@ -220,15 +219,15 @@ class _RangeSliderState extends State<RangeSlider> {
     return snapped.clamp(widget.min, widget.max);
   }
 
-  /// The handle whose painted column is nearest absolute column [col]; ties at
+  /// The handle whose painted column is nearest local column [col]; ties at
   /// the edges resolve to the handle on that side.
   _ActiveHandle _nearestHandle(int col) {
     final width = _geom.width;
     if (width <= 1) return _active;
     final (lo, hi) = _normalized;
     final span = widget.max - widget.min;
-    final loCol = _geom.left + ((lo - widget.min) / span * (width - 1)).round();
-    final hiCol = _geom.left + ((hi - widget.min) / span * (width - 1)).round();
+    final loCol = ((lo - widget.min) / span * (width - 1)).round();
+    final hiCol = ((hi - widget.min) / span * (width - 1)).round();
     if (col <= loCol) return _ActiveHandle.low;
     if (col >= hiCol) return _ActiveHandle.high;
     return (col - loCol) <= (hiCol - col)
@@ -443,10 +442,10 @@ class _RangeSliderState extends State<RangeSlider> {
             child: GestureDetector(
               // A press grabs the nearest handle; the drag (always preceded by the
               // press) then just slides that same grabbed handle.
-              onTapDown: (col, _) => _grabAt(col),
-              onDragStart: (col, _) => _dragTo(col),
-              onDragUpdate: (col, _) => _dragTo(col),
-              onDragEnd: () => _dragHandle = null,
+              onTapDown: (details) => _grabAt(details.localPosition.col),
+              onDragUpdate: (details) => _dragTo(details.localPosition.col),
+              onDragEnd: (_) => _dragHandle = null,
+              onDragCancel: () => _dragHandle = null,
               child: slider,
             ),
           ),
@@ -659,11 +658,9 @@ class _RenderRangeSlider extends RenderObject {
   @override
   void performPaint(CellBuffer buffer, CellOffset offset) {
     final w = size.cols;
-    // Record the painted track span so the State's pointer handlers can map an
-    // absolute column back to a value (written even when off-screen below).
-    _geometry
-      ..left = offset.col
-      ..width = w;
+    // Record the painted track span so the State's pointer handlers can map a
+    // local column back to a value (written even when off-screen below).
+    _geometry.width = w;
     if (w == 0 || size.rows == 0) return;
     if (offset.row < 0 || offset.row >= buffer.size.rows) return;
 

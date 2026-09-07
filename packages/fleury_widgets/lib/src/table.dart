@@ -422,10 +422,11 @@ class _TableState extends State<Table> {
           focusNode: _focusNode,
           autofocus: widget.autofocus,
           // Wheel over the table scrolls the row window by moving the selection.
-          child: PointerScrollListener(
-            router: PointerRouterScope.maybeOf(context),
-            onScrollUp: () => _scrollBy(-1),
-            onScrollDown: () => _scrollBy(1),
+          child: MouseRegion(
+            onScroll: (details) {
+              _scrollBy(details.delta.row);
+              return true;
+            },
             child: table,
           ),
         ),

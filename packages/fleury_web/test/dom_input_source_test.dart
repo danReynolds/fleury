@@ -549,7 +549,7 @@ void main() {
   });
 
   test(
-    'DomInputSource closes the original press when pointerup is missing',
+    'DomInputSource cancels lost capture and accepts a subsequent keyboard click',
     () {
       final events = <TuiEvent>[];
       final host = web.document.createElement('div');
@@ -621,6 +621,18 @@ void main() {
       );
 
       expect(events, [
+        const MouseEvent(
+          kind: MouseEventKind.down,
+          button: MouseButton.left,
+          col: 1,
+          row: 2,
+        ),
+        const MouseEvent(
+          kind: MouseEventKind.cancel,
+          button: MouseButton.left,
+          col: 0,
+          row: 0,
+        ),
         const MouseEvent(
           kind: MouseEventKind.down,
           button: MouseButton.left,
@@ -1273,6 +1285,12 @@ void main() {
         row: 1,
       ),
       const MouseEvent(
+        kind: MouseEventKind.cancel,
+        button: MouseButton.left,
+        col: 0,
+        row: 0,
+      ),
+      const MouseEvent(
         kind: MouseEventKind.moved,
         button: MouseButton.none,
         col: 2,
@@ -1283,6 +1301,12 @@ void main() {
         button: MouseButton.left,
         col: 1,
         row: 1,
+      ),
+      const MouseEvent(
+        kind: MouseEventKind.cancel,
+        button: MouseButton.left,
+        col: 0,
+        row: 0,
       ),
       const MouseEvent(
         kind: MouseEventKind.moved,
@@ -1315,7 +1339,8 @@ void main() {
           rows: 3,
         ),
       ),
-      pointerCursorResolver: (cell) => cell == const CellOffset(1, 1),
+      mouseCursorResolver: (cell) =>
+          cell == const CellOffset(1, 1) ? 'pointer' : null,
     );
     addTearDown(() {
       source.dispose();

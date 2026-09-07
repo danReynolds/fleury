@@ -12,6 +12,7 @@ import '../../foundation/key.dart';
 import '../clipboard_scope.dart';
 import '../../input/events.dart' show KeyModifier;
 import '../framework.dart';
+import '../focus.dart';
 import '../key_bindings.dart';
 import '../pointer.dart';
 import '../scroll_view.dart' show ScrollController;
@@ -48,6 +49,9 @@ typedef SelectionChangedCallback = void Function(SelectedContent? content);
 /// pushes the selection through the ambient clipboard's `write` (which
 /// tries platform tools, OSC 52, and an in-process register in that
 /// order); Esc clears.
+/// Selecting text gives the region keyboard focus. It does not autofocus or
+/// add a Tab stop by default; nested controls keep their own focus behavior.
+/// Supply [focusNode] to control focus or opt the region into traversal.
 ///
 /// **Auto-copy.** Set `copyOnRelease: true` to fire a clipboard
 /// write on every mouse-release that completes a non-empty drag —
@@ -120,6 +124,7 @@ typedef SelectionChangedCallback = void Function(SelectedContent? content);
 class SelectionArea extends StatefulWidget {
   const SelectionArea({
     super.key,
+    this.focusNode,
     this.onSelectionChanged,
     this.copyOnRelease = false,
     this.copyClearsSelection = false,
@@ -147,6 +152,13 @@ class SelectionArea extends StatefulWidget {
   /// ```
   static Widget disabled({Key? key, required Widget child}) =>
       _DisabledSelection(key: key, child: child);
+
+  /// Optional caller-owned focus node for this region. Without one, the area
+  /// manages a node that receives pointer focus but is skipped by Tab.
+  ///
+  /// The supplied node's focusability and traversal settings are preserved.
+  /// Mounting the area never requests focus; selecting its text does.
+  final FocusNode? focusNode;
 
   /// Called whenever the active selection changes. Receives a
   /// [SelectedContent] (whose `plainText` is the concatenated
@@ -611,12 +623,24 @@ class _SelectionAreaState extends State<SelectionArea> {
             onTrigger: (e) => _extendToLineEdge(1, e),
           ),
         ],
-        child: GestureDetector(
-          onTapDownWithModifiers: _onTapDown,
-          onDragStart: _onDragUpdate,
-          onDragUpdate: _onDragUpdate,
-          onDragEnd: _onDragEnd,
-          child: widget.child,
+        child: Focus(
+          focusNode: widget.focusNode,
+          skipTraversal: widget.focusNode == null ? true : null,
+          debugLabel: 'SelectionArea',
+          child: GestureDetector(
+            onTapDown: (details) => _onTapDown(
+              details.globalPosition.col,
+              details.globalPosition.row,
+              details.modifiers,
+            ),
+            onDragUpdate: (details) => _onDragUpdate(
+              details.globalPosition.col,
+              details.globalPosition.row,
+            ),
+            onDragEnd: (_) => _onDragEnd(),
+            onDragCancel: _cancelAutoScroll,
+            child: widget.child,
+          ),
         ),
       ),
     );
@@ -674,16 +698,36 @@ class _DisabledSelection extends StatelessWidget {
 /// Deliberately scoped to the app root: floating host layers (the runtime
 /// error overlay, the debug shell, toasts, menus) are separate overlay
 /// entries and keep their own selection context.
-class DefaultRootSelection extends StatelessWidget {
+class DefaultRootSelection extends StatefulWidget {
   const DefaultRootSelection({super.key, required this.child});
 
   /// The app root to make selectable.
   final Widget child;
 
   @override
+  State<DefaultRootSelection> createState() => _DefaultRootSelectionState();
+}
+
+class _DefaultRootSelectionState extends State<DefaultRootSelection> {
+  // Root selection is already on the app's active focus chain. Moving focus
+  // here would leave the app's own shortcut scopes, including modal bindings.
+  final _focusNode = FocusNode(
+    canRequestFocus: false,
+    skipTraversal: true,
+    debugLabel: 'DefaultRootSelection',
+  );
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) => SelectionArea(
+    focusNode: _focusNode,
     copyClearsSelection: true,
     selectAllShortcut: false,
-    child: child,
+    child: widget.child,
   );
 }

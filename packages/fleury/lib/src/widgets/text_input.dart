@@ -26,6 +26,7 @@ import '../editing/text_editing.dart';
 import '../editing/text_history.dart';
 import '../editing/text_keymap.dart';
 import '../editing/text_paste.dart';
+import '../editing/text_pointer_selection.dart';
 import '../foundation/change_notifier.dart';
 import '../foundation/geometry.dart';
 import '../rendering/cell.dart';
@@ -1377,6 +1378,58 @@ class _TextInputState extends State<TextInput>
     super.dispose();
   }
 
+  final TextPointerSelection _pointerSelection = TextPointerSelection();
+
+  int? _offsetForPointer(PointerDetails details) {
+    RenderTextInput? display;
+    void visit(RenderObject object) {
+      if (object is RenderTextInput) {
+        display = object;
+        return;
+      }
+      object.visitRenderChildren(visit);
+    }
+
+    final root = context.findRenderObject();
+    if (root == null) return null;
+    visit(root);
+    final object = display;
+    final geometry = object?.screenGeometry();
+    if (object == null || geometry == null) return null;
+    return object.textOffsetAt(details.globalPosition - geometry.bounds.offset);
+  }
+
+  void _pointerDown(PointerDetails details) {
+    if (!widget.enabled ||
+        !(Focus.maybeOf(context)?.isClickable(_focusNode) ?? false)) {
+      return;
+    }
+    final offset = _offsetForPointer(details);
+    if (offset == null) return;
+    _controller.selection = _pointerSelection.down(
+      _controller.value,
+      offset,
+      details,
+      obscured: widget.obscureText,
+    );
+    _focusNode.requestFocus();
+  }
+
+  void _pointerDrag(PointerDragDetails details) {
+    if (!widget.enabled ||
+        !(Focus.maybeOf(context)?.isClickable(_focusNode) ?? false)) {
+      return;
+    }
+    final offset = _offsetForPointer(details);
+    if (offset == null) return;
+    final selection = _pointerSelection.drag(
+      _controller.value,
+      offset,
+      obscured: widget.obscureText,
+    );
+    if (selection != null) _controller.selection = selection;
+  }
+
   @override
   Widget build(BuildContext context) {
     // Compute cursor visibility from focus + blink state. The
@@ -1497,7 +1550,13 @@ class _TextInputState extends State<TextInput>
       onExit: () {
         if (_hovered) setState(() => _hovered = false);
       },
-      child: content,
+      child: GestureDetector(
+        onTapDown: _pointerDown,
+        onDragUpdate: _pointerDrag,
+        onDragEnd: (_) => _pointerSelection.end(),
+        onDragCancel: _pointerSelection.end,
+        child: ExcludeFocus(excluding: !widget.enabled, child: content),
+      ),
     );
   }
 }
@@ -1567,11 +1626,6 @@ class _TextInputDisplay extends LeafRenderObjectWidget {
   }
 }
 
-/// Paints the [text] of a [TextInput] with a one-cell reverse cursor
-/// at the current [selection] code-unit index.
-///
-/// Layout: width = text intrinsic width (in cells) + 1 for the
-/// trailing cursor position, clipped to constraints. Height = 1.
 /// Releases the focus node's caret host when the editable leaves the tree.
 class _TextInputDisplayElement extends LeafRenderObjectElement {
   _TextInputDisplayElement(_TextInputDisplay super.widget);
@@ -1583,6 +1637,8 @@ class _TextInputDisplayElement extends LeafRenderObjectElement {
   }
 }
 
+/// Paints a single line with its selection and caret. Fills bounded width;
+/// with unbounded width, uses the text's cell width plus a trailing caret cell.
 class RenderTextInput extends RenderObject implements CaretHost {
   RenderTextInput({
     required FocusNode focusNode,
@@ -1728,7 +1784,7 @@ class RenderTextInput extends RenderObject implements CaretHost {
   CellSize performLayout(CellConstraints constraints) {
     final intrinsic = _intrinsicWidth;
     final maxCols = constraints.maxCols;
-    final cols = maxCols == null ? intrinsic : intrinsic.clamp(0, maxCols);
+    final cols = maxCols ?? intrinsic;
     final nextSize = constraints.constrain(CellSize(cols, 1));
     _syncHorizontalScroll(nextSize.cols, intrinsic);
     return nextSize;
@@ -1762,6 +1818,24 @@ class RenderTextInput extends RenderObject implements CaretHost {
       if (textOffset <= codeUnitOffset) return cell;
     }
     return cell;
+  }
+
+  /// Maps a displayed cell to a grapheme boundary, including horizontal scroll
+  /// and obscuring glyphs. The second half of a wide glyph selects its end.
+  int textOffsetAt(CellOffset position) {
+    final wanted = position.col + _scrollLeft;
+    var cell = 0;
+    var offset = 0;
+    for (final grapheme in _text.characters) {
+      final width = _displayWidthOf(grapheme);
+      if (wanted <= cell) return offset;
+      if (wanted < cell + width) {
+        return wanted - cell < width / 2 ? offset : offset + grapheme.length;
+      }
+      cell += width;
+      offset += grapheme.length;
+    }
+    return _text.length;
   }
 
   int _displayBoundaryAtOrAfter(int cellOffset) {

@@ -234,11 +234,13 @@ void main() {
           child: MouseRegion(
             onEnter: () => log.add('enter'),
             onExit: () => log.add('exit'),
-            onHover: (col, row) => log.add('hover:$col,$row'),
+            onHover: (details) => log.add(
+              'hover:${details.globalPosition.col},${details.globalPosition.row}',
+            ),
             child: GestureDetector(
               onTap: () => log.add('tap'),
-              onDragStart: (col, row) => log.add('drag-start'),
-              onDragEnd: () => log.add('drag-end'),
+              onDragStart: (details) => log.add('drag-start'),
+              onDragEnd: (_) => log.add('drag-end'),
               child: const SizedBox(width: 5, height: 1, child: Text('hit')),
             ),
           ),
@@ -314,11 +316,13 @@ void main() {
           child: MouseRegion(
             onEnter: () => log.add('enter'),
             onExit: () => log.add('exit'),
-            onHover: (col, row) => log.add('hover:$col,$row'),
+            onHover: (details) => log.add(
+              'hover:${details.globalPosition.col},${details.globalPosition.row}',
+            ),
             child: GestureDetector(
               onTap: () => log.add('tap'),
-              onDragStart: (col, row) => log.add('drag-start'),
-              onDragEnd: () => log.add('drag-end'),
+              onDragStart: (details) => log.add('drag-start'),
+              onDragEnd: (_) => log.add('drag-end'),
               child: const SizedBox(width: 5, height: 1, child: Text('hit')),
             ),
           ),
@@ -414,7 +418,9 @@ void main() {
           child: Column(
             children: [
               MouseRegion(
-                onHover: (col, row) => log.add('hover:$col,$row'),
+                onHover: (details) => log.add(
+                  'hover:${details.globalPosition.col},${details.globalPosition.row}',
+                ),
                 child: const SizedBox(width: 5, height: 1, child: Text('hit')),
               ),
             ],

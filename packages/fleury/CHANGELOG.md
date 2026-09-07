@@ -2,6 +2,24 @@
 
 ## 0.1.0
 
+- **Pointer input and selection.** TextInput and TextArea support click-to-caret,
+  drag selection, Shift-click, and word/line selection. TextInput fills bounded
+  width; constrain it explicitly when an inline field should be narrower.
+  Pointer focus follows the presented, clipped hit order. Explicit SelectionArea
+  regions receive selection focus without an extra Focus wrapper and accept an
+  optional caller-owned `focusNode`.
+- **Pointer callback migration.** Position callbacks take `PointerDetails`
+  (`localPosition`, `globalPosition`, button, modifiers); drag callbacks take
+  `PointerDragDetails` with delta and the original press position. Replace
+  `(col, row)` callbacks and `onTapDownWithModifiers` with these details;
+  `PointerDownDetails` is replaced by `PointerDetails`. The tap family is primary
+  button only; use `onSecondaryTap` for right clicks or `onPointerDown` for raw
+  button presses. `onTapCancel` and `onDragCancel` handle interruption, and
+  `onDragUpdate` receives the first movement. Replace `PointerScrollListener`
+  with `MouseRegion.onScroll`, returning whether the wheel step was handled.
+  Nested scrolling honors `EdgeBehavior`, hover includes ancestor regions, and
+  `MouseRegion.cursor` supplies browser cursor hints.
+
 - **Editable semantic state.** Text inputs publish `textEditable` independently
   of role, enabled, and read-only state, allowing compound and custom fields to
   participate in shared field queries.

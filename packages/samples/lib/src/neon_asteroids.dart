@@ -278,7 +278,7 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
     ticker.start();
   }
 
-  void _pointerDown(PointerDownDetails details) {
+  void _pointerDown(PointerDetails details) {
     if (details.button != MouseButton.left) return;
     if (_game.phase == NeonAsteroidsPhase.paused) {
       _togglePause();
@@ -296,7 +296,7 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
     // resumed a paused run leaves the game playing, and a release-time phase
     // check would read that as "the player shot".
     _input.pointerArmed = true;
-    _aimAt(details.col, details.row);
+    _aimAt(details.globalPosition.col, details.globalPosition.row);
   }
 
   void _pointerTapUp(int col, int row) {
@@ -506,10 +506,20 @@ class _NeonAsteroidsBodyState extends State<_NeonAsteroidsBody> {
       onAction: _onSemanticAction,
       child: GestureDetector(
         onPointerDown: _pointerDown,
-        onTapUp: _pointerTapUp,
-        onDragStart: _pointerDrag,
-        onDragUpdate: _pointerDrag,
-        onDragEnd: () {
+        onTapUp: (details) => _pointerTapUp(
+          details.globalPosition.col,
+          details.globalPosition.row,
+        ),
+        onTapCancel: () => _input.pointerArmed = false,
+        onDragUpdate: (details) => _pointerDrag(
+          details.globalPosition.col,
+          details.globalPosition.row,
+        ),
+        onDragCancel: () {
+          _input.pointerThrust = false;
+          _input.pointerArmed = false;
+        },
+        onDragEnd: (_) {
           _input.pointerThrust = false;
           _input.pointerArmed = false;
         },

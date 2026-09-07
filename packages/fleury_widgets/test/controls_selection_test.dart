@@ -34,6 +34,40 @@ void _dragAcross(FleuryTester tester, int toCol) {
 }
 
 void main() {
+  testWidgets(
+    'a nested button retains focus and activation inside a selection area',
+    (tester) {
+      var presses = 0;
+      tester.pumpWidget(
+        SelectionArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('hello world'),
+              Button(
+                label: 'Save',
+                onPressed: () => presses++,
+                autofocus: true,
+              ),
+            ],
+          ),
+        ),
+      );
+      expect(tester.button('Save'), isFocused);
+      _dragAcross(tester, 5);
+      tester.press(KeySequence.ctrl.c);
+      expect(tester.clipboard.readInProcess(), 'hello');
+      tester.sendMouse(_d(3, 1));
+      tester.sendMouse(_u(3, 1));
+      tester.pump();
+      expect(tester.button('Save'), isFocused);
+      expect(presses, 1);
+      tester.press(KeySequence.enter);
+      expect(presses, 2);
+    },
+  );
+
   testWidgets('an enabled Button is not selectable text', (tester) {
     tester.pumpWidget(Button(label: 'Save', onPressed: () {}));
     tester.render(size: const CellSize(20, 3));

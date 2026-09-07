@@ -18,6 +18,7 @@ import 'package:characters/characters.dart';
 import '../editing/text_editing.dart';
 import '../editing/text_keymap.dart';
 import '../editing/text_paste.dart';
+import '../editing/text_pointer_selection.dart';
 import '../foundation/geometry.dart';
 import '../rendering/cell.dart';
 import '../rendering/cell_buffer.dart';
@@ -572,6 +573,53 @@ class _TextAreaState extends State<TextArea>
     super.dispose();
   }
 
+  final TextPointerSelection _pointerSelection = TextPointerSelection();
+
+  int? _offsetForPointer(PointerDetails details) {
+    RenderTextArea? display;
+    void visit(RenderObject object) {
+      if (object is RenderTextArea) {
+        display = object;
+        return;
+      }
+      object.visitRenderChildren(visit);
+    }
+
+    final root = context.findRenderObject();
+    if (root == null) return null;
+    visit(root);
+    final object = display;
+    final geometry = object?.screenGeometry();
+    if (object == null || geometry == null) return null;
+    return object.textOffsetAt(details.globalPosition - geometry.bounds.offset);
+  }
+
+  void _pointerDown(PointerDetails details) {
+    if (!widget.enabled ||
+        !(Focus.maybeOf(context)?.isClickable(_focusNode) ?? false)) {
+      return;
+    }
+    final offset = _offsetForPointer(details);
+    if (offset == null) return;
+    _controller.selection = _pointerSelection.down(
+      _controller.value,
+      offset,
+      details,
+    );
+    _focusNode.requestFocus();
+  }
+
+  void _pointerDrag(PointerDragDetails details) {
+    if (!widget.enabled ||
+        !(Focus.maybeOf(context)?.isClickable(_focusNode) ?? false)) {
+      return;
+    }
+    final offset = _offsetForPointer(details);
+    if (offset == null) return;
+    final selection = _pointerSelection.drag(_controller.value, offset);
+    if (selection != null) _controller.selection = selection;
+  }
+
   @override
   Widget build(BuildContext context) {
     final focused = _focusNode.hasFocus;
@@ -667,7 +715,13 @@ class _TextAreaState extends State<TextArea>
       onExit: () {
         if (_hovered) setState(() => _hovered = false);
       },
-      child: content,
+      child: GestureDetector(
+        onTapDown: _pointerDown,
+        onDragUpdate: _pointerDrag,
+        onDragEnd: (_) => _pointerSelection.end(),
+        onDragCancel: _pointerSelection.end,
+        child: ExcludeFocus(excluding: !widget.enabled, child: content),
+      ),
     );
   }
 }
@@ -1025,6 +1079,28 @@ class RenderTextArea extends RenderObject implements CaretHost {
       if (textOffset <= codeUnitOffset) return cell;
     }
     return cell;
+  }
+
+  /// Maps the actual scrolled viewport to a UTF-16 grapheme boundary.
+  int textOffsetAt(CellOffset position) {
+    final lines = _lines;
+    final lineIndex = (position.row + _scrollTop).clamp(0, lines.length - 1);
+    final line = lines[lineIndex];
+    final start = _lineStartOffset(lines, lineIndex);
+    final wanted = position.col + _scrollLeft;
+    var cell = 0;
+    var offset = 0;
+    for (final grapheme in line.characters) {
+      final width = _widthResolver.widthOfGrapheme(grapheme, _policy);
+      if (wanted <= cell) return start + offset;
+      if (wanted < cell + width) {
+        return start +
+            (wanted - cell < width / 2 ? offset : offset + grapheme.length);
+      }
+      cell += width;
+      offset += grapheme.length;
+    }
+    return start + line.length;
   }
 
   int _displayBoundaryAtOrAfter(String line, int cellOffset) {

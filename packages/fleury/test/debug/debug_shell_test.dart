@@ -38,10 +38,11 @@ class _ScrollProbe extends StatelessWidget {
   final void Function() onScroll;
 
   @override
-  Widget build(BuildContext context) => PointerScrollListener(
-    router: PointerRouterScope.maybeOf(context),
-    onScrollUp: onScroll,
-    onScrollDown: onScroll,
+  Widget build(BuildContext context) => MouseRegion(
+    onScroll: (_) {
+      onScroll();
+      return true;
+    },
     child: const Text('scrollable spanning the full app width'),
   );
 }

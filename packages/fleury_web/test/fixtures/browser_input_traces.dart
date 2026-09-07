@@ -420,6 +420,14 @@ const browserInputTraceFixtures = <TraceMap>[
       },
       {
         'type': 'mouse',
+        'kind': 'cancel',
+        'button': 'left',
+        'col': 0,
+        'row': 0,
+        'modifiers': <String>[],
+      },
+      {
+        'type': 'mouse',
         'kind': 'moved',
         'button': 'none',
         'col': 2,
@@ -432,6 +440,14 @@ const browserInputTraceFixtures = <TraceMap>[
         'button': 'left',
         'col': 1,
         'row': 2,
+        'modifiers': <String>[],
+      },
+      {
+        'type': 'mouse',
+        'kind': 'cancel',
+        'button': 'left',
+        'col': 0,
+        'row': 0,
         'modifiers': <String>[],
       },
       {

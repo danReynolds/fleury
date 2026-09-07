@@ -14,6 +14,7 @@ import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 
 import 'testing_guide.dart' as testing;
+import 'input_guide.dart' as input;
 
 /// Builds the root widget for one live example.
 typedef ExampleBuilder = Widget Function();
@@ -2134,6 +2135,64 @@ form.clearErrors();''',
     rows: 9,
     interactive: true,
     builder: () => const _InheritedNotifierTour(),
+  ),
+  ExampleInfo(
+    id: 'input.editing',
+    widget: 'Pointer editing',
+    category: 'Guide examples',
+    blurb: 'Click, drag-select, and move between ordinary text fields.',
+    cols: 38,
+    rows: 10,
+    interactive: true,
+    builder: () =>
+        const Padding(padding: EdgeInsets.all(1), child: input.ContactFields()),
+  ),
+  ExampleInfo(
+    id: 'input.press',
+    widget: 'Press and cancel',
+    category: 'Guide examples',
+    blurb: 'Press, release outside to cancel, or right-click for details.',
+    cols: 38,
+    rows: 8,
+    interactive: true,
+    builder: () =>
+        const Padding(padding: EdgeInsets.all(1), child: input.PressTile()),
+  ),
+  ExampleInfo(
+    id: 'input.selection',
+    widget: 'Select a note',
+    category: 'Guide examples',
+    blurb: 'Select across text widgets and copy the note.',
+    cols: 38,
+    rows: 12,
+    interactive: true,
+    builder: () => const Padding(
+      padding: EdgeInsets.all(1),
+      child: input.SelectableNote(),
+    ),
+  ),
+  ExampleInfo(
+    id: 'input.splitter',
+    widget: 'Pointer splitter',
+    category: 'Guide examples',
+    blurb: 'Drag a captured handle or resize it with the arrow keys.',
+    cols: 38,
+    rows: 9,
+    interactive: true,
+    builder: () =>
+        const Padding(padding: EdgeInsets.all(1), child: input.SplitPane()),
+  ),
+  ExampleInfo(
+    id: 'input.scrolling',
+    widget: 'Nested pointer regions',
+    category: 'Guide examples',
+    blurb:
+        'A hovered row retains its state over child controls; wheel scrolling hands off at edges.',
+    cols: 38,
+    rows: 16,
+    interactive: true,
+    builder: () =>
+        const Padding(padding: EdgeInsets.all(1), child: input.HoverNotes()),
   ),
   ExampleInfo(
     id: 'testing.counter',

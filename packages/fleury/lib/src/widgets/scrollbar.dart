@@ -90,11 +90,9 @@ class _ScrollbarState extends State<Scrollbar> {
   final _ScrollbarGeometry _geom = _ScrollbarGeometry();
 
   void _jumpToRow(int row) {
-    final bounds = _geom.host?.screenGeometry()?.bounds;
-    if (bounds == null) return;
-    final height = bounds.size.rows;
+    final height = _geom.host?.size.rows ?? 0;
     if (height <= 1) return;
-    final f = ((row - bounds.top) / (height - 1)).clamp(0.0, 1.0);
+    final f = (row / (height - 1)).clamp(0.0, 1.0);
     widget._scrollTo(f);
   }
 
@@ -111,9 +109,9 @@ class _ScrollbarState extends State<Scrollbar> {
         children: [
           Expanded(child: widget.child),
           GestureDetector(
-            onTapDown: (col, row) => _jumpToRow(row),
-            onDragStart: (col, row) => _jumpToRow(row),
-            onDragUpdate: (col, row) => _jumpToRow(row),
+            onTapDown: (details) => _jumpToRow(details.localPosition.row),
+
+            onDragUpdate: (details) => _jumpToRow(details.localPosition.row),
             child: SizedBox(
               // The gutter reserves what the bar's glyphs actually draw:
               // `█` and `│` are East Asian Ambiguous, so a surface whose

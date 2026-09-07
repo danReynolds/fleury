@@ -1,14 +1,4 @@
-// Widget-level pointer routing. Mouse events arrive from the driver as
-// absolute cell coordinates; this layer maps them to the widgets under
-// the pointer and fires their tap / hover / scroll callbacks.
-//
-// Rather than retrofit a `hitTest` onto every render object, regions
-// register their painted rect into a [PointerRouter] during paint — the
-// same paint-time-rect idiom the focus system and Anchor already use, and
-// exactly right for a transform-free cell grid where paint order is z
-// order. The router is cleared each frame and repopulated on paint, so
-// only what's currently on screen is hit-testable.
-
+// Pointer hit-testing follows presented layout, clipping, and paint order.
 import 'package:meta/meta.dart';
 
 import '../foundation/geometry.dart';
@@ -17,410 +7,540 @@ import '../rendering/layout.dart';
 import '../rendering/render_object.dart';
 import '../input/events.dart';
 import 'framework.dart';
+import 'focus.dart';
+import '../semantics/semantics.dart';
+
+/// Pointer shapes for hosts that can display them, such as the browser.
+/// Terminal hosts keep their own pointer appearance.
+enum MouseCursor { basic, pointer, text, resizeLeftRight, resizeUpDown }
 
 typedef PointerTapCallback = void Function();
-typedef PointerPositionCallback = void Function(int col, int row);
-typedef PointerDownCallback = void Function(PointerDownDetails details);
+typedef PointerCallback = void Function(PointerDetails details);
+typedef PointerDragCallback = void Function(PointerDragDetails details);
+typedef PointerScrollCallback = bool Function(PointerScrollDetails details);
 
-/// Like [PointerPositionCallback] but also exposes the keyboard
-/// modifiers the terminal reported on the originating mouse event.
-/// Used by gestures that distinguish plain click from Shift / Ctrl /
-/// Alt-click — e.g. Shift+Click in a [SelectionArea] extends the
-/// selection to the click point instead of starting a new one.
-typedef PointerModifiedTapCallback =
-    void Function(int col, int row, Set<KeyModifier> modifiers);
-
-/// Details for a pointer-button press reported by [GestureDetector].
-///
-/// [col] and [row] are absolute terminal cell coordinates. The modifier set is
-/// an immutable snapshot, so callers can safely retain these details after the
-/// callback returns.
+/// A pointer position in terminal cells. Local coordinates are relative to the
+/// receiving region; global coordinates are relative to the application surface.
 @immutable
-final class PointerDownDetails {
-  PointerDownDetails({
-    required this.col,
-    required this.row,
+class PointerDetails {
+  PointerDetails({
+    required this.localPosition,
+    required this.globalPosition,
     required this.button,
-    Set<KeyModifier> modifiers = const <KeyModifier>{},
-  }) : modifiers = modifiers.isEmpty
-           ? const <KeyModifier>{}
-           : Set<KeyModifier>.unmodifiable(modifiers);
+    Set<KeyModifier> modifiers = const {},
+  }) : modifiers = Set<KeyModifier>.unmodifiable(modifiers);
 
-  final int col;
-  final int row;
+  final CellOffset localPosition;
+  final CellOffset globalPosition;
   final MouseButton button;
   final Set<KeyModifier> modifiers;
-
   bool get hasCtrl => modifiers.contains(KeyModifier.ctrl);
   bool get hasAlt => modifiers.contains(KeyModifier.alt);
   bool get hasShift => modifiers.contains(KeyModifier.shift);
-
-  @override
-  String toString() =>
-      'PointerDownDetails(${button.name} @$col,$row, '
-      'modifiers: $modifiers)';
 }
 
-/// Routes mouse events to the pointer regions under the pointer, plus hover,
-/// press, and drag capture state. One instance per runtime.
-///
-/// Regions are found by hit-testing the rendered tree top-down from the
-/// [PointerRouterScope] that shares this router: each container reports where
-/// it put its children, what it clips, and which of them it presents
-/// ([RenderObject.childOffsetOf] and friends), and a subtree is pruned by its
-/// box unless it says otherwise ([RenderObject.hitTestsBeyondBounds]), so an
-/// event walks one chain of the tree rather than every region. Paint order —
-/// later siblings on top, children over their parents — is the walk order, so
-/// the topmost region is the last hit collected. Nothing is wired per frame:
-/// whoever renders the tree only reports whether the frame completed
-/// ([endFrame]) or failed ([abortFrame]).
+/// Captured primary-button motion, including the initial press and movement
+/// since the previous report. Delta stays stable when the region itself moves.
+@immutable
+final class PointerDragDetails extends PointerDetails {
+  PointerDragDetails({
+    required super.localPosition,
+    required super.globalPosition,
+    required super.button,
+    super.modifiers,
+    required this.delta,
+    required this.globalPressPosition,
+  });
+  final CellOffset delta;
+  final CellOffset globalPressPosition;
+}
+
+/// One wheel step. Negative [delta.row] scrolls up, positive scrolls down.
+@immutable
+final class PointerScrollDetails extends PointerDetails {
+  PointerScrollDetails({
+    required super.localPosition,
+    required super.globalPosition,
+    required super.button,
+    super.modifiers,
+    required this.delta,
+  });
+  final CellOffset delta;
+}
+
+/// Routes pointer input against the presented render tree. Gesture capture lasts
+/// until the matching release or cancellation; hover and wheel follow ancestors.
 class PointerRouter {
-  final Set<RenderObject> _inputExcludedSubtrees = <RenderObject>{};
-  final List<RenderPointerListener> _hits = <RenderPointerListener>[];
-  RenderPointerListener? _hovered;
+  final Set<RenderObject> _inputExcludedSubtrees = {};
+  final List<RenderObject> _hits = [];
+  final Set<RenderPointerListener> _cursorRegions = {};
+  bool _cursorRegionsChanged = false;
+  List<RenderPointerListener> _hovered = [];
+  final List<RenderPointerListener> _tapTargets = [];
   RenderPointerListener? _downTarget;
-  MouseButton _downButton = MouseButton.none;
-  var _disposed = false;
-
-  // Drag capture: once a drag begins over a region it keeps receiving the
-  // motion until release, even when the pointer leaves its bounds.
   RenderPointerListener? _dragTarget;
+  MouseEvent? _press;
+  CellOffset? _lastDragPosition;
+  MouseEvent? _lastHoverEvent;
   bool _dragging = false;
-
-  /// The element of the outermost [PointerRouterScope] carrying this router;
-  /// hit-testing starts at the render object below it.
+  bool _disposed = false;
+  bool _aborted = false;
   Element? _scope;
 
-  /// A frame failed after [beginFrame] and none has completed since: the
-  /// tree on screen was never presented, so nothing in it is hit-testable.
-  bool _aborted = false;
-
-  void _attachScope(Element scope) {
-    _scope ??= scope; // the outermost scope mounts first and wins
-  }
-
+  void _attachScope(Element scope) => _scope ??= scope;
   void _detachScope(Element scope) {
     if (identical(_scope, scope)) _scope = null;
   }
 
-  /// Starts a frame. Nothing to reset: regions are found from layout state.
   void beginFrame() {}
 
-  /// Marks the frame presented and reconciles captured targets against it.
-  ///
-  /// A pointer render object can leave the tree, or stop being presented,
-  /// while it owns hover, press, or drag capture. Anything a hit-test can no
-  /// longer reach is dropped without synthesizing callbacks into an unmounted
-  /// or hidden widget subtree.
+  /// Reconciles targets after layout. Hidden live controls receive cancellation;
+  /// removed or error-excluded subtrees receive no callbacks.
   void endFrame() {
     if (_disposed) return;
     _aborted = false;
-    if (_hovered != null && !_isLive(_hovered!)) _hovered = null;
-    if (_downTarget != null && !_isLive(_downTarget!)) {
-      _downTarget = null;
-      _downButton = MouseButton.none;
+    _dropInactive();
+    for (final region in _cursorRegions) {
+      final bounds = region.screenGeometry()?.visible;
+      if (region._cursorBounds != bounds) {
+        region._cursorBounds = bounds;
+        _cursorRegionsChanged = true;
+      }
     }
-    if (_dragTarget != null && !_isLive(_dragTarget!)) {
+    if (_cursorRegionsChanged) {
+      _scope?.owner.semanticDirtyTracker.recordStructureDirty();
+      _cursorRegionsChanged = false;
+    }
+    final event = _lastHoverEvent;
+    if (event != null) _updateHover(event);
+  }
+
+  void _dropInactive() {
+    final exits = _hovered.where((r) => !_isLive(r)).toList();
+    final cancelled = _tapTargets.where((r) => !_isLive(r)).toList();
+    _hovered.removeWhere(exits.contains);
+    _tapTargets.removeWhere(cancelled.contains);
+    if (_downTarget != null && !_isLive(_downTarget!)) _downTarget = null;
+    final drag = _dragTarget;
+    final cancelDrag = _dragging && drag != null && !_isLive(drag);
+    if (drag != null && !_isLive(drag)) {
       _dragTarget = null;
       _dragging = false;
     }
+    if (_downTarget == null && _dragTarget == null) _clearSequence();
+    for (final target in exits.reversed) {
+      if (_isAttached(target)) target.onExit?.call();
+    }
+    for (final target in cancelled) {
+      if (_isAttached(target)) target.onTapCancel?.call();
+    }
+    if (cancelDrag && _isAttached(drag)) drag.onDragCancel?.call();
   }
 
-  /// Makes routing inert after an unsuccessful frame: a partial paint was
-  /// never presented, so nothing in the tree may be hit and nothing captured
-  /// during it may stay interactive, until a frame completes.
   void abortFrame() {
-    if (_disposed) return;
     _aborted = true;
-    _hovered = null;
-    _downTarget = null;
-    _downButton = MouseButton.none;
-    _dragTarget = null;
-    _dragging = false;
+    _hovered.clear();
+    _lastHoverEvent = null;
+    _clearSequence();
   }
 
-  /// Permanently releases every captured pointer target.
-  ///
-  /// Teardown deliberately does not synthesize exit or drag-end callbacks:
-  /// those callbacks belong to an application tree that is already being
-  /// dismantled. Subsequent routing is inert. Idempotent.
+  /// Teardown is silent: the application tree may already be unmounted.
   void dispose() {
-    if (_disposed) return;
     _disposed = true;
     _scope = null;
     _hits.clear();
+    _cursorRegions.clear();
     _inputExcludedSubtrees.clear();
-    _hovered = null;
-    _downTarget = null;
-    _downButton = MouseButton.none;
-    _dragTarget = null;
-    _dragging = false;
+    abortFrame();
   }
 
-  /// Makes every pointer listener below [subtree] inert while [excluded] is
-  /// true.
-  ///
-  /// Error boundaries use this when a child throws after partially painting:
-  /// its regions must not remain clickable behind the error presentation.
   @internal
   void setSubtreeInputExcluded(RenderObject subtree, bool excluded) {
     if (_disposed) return;
     if (excluded) {
-      if (!_inputExcludedSubtrees.add(subtree)) return;
-      if (_hovered != null && _isUnderExcludedRoot(_hovered!, subtree)) {
-        _hovered = null;
-      }
-      if (_downTarget != null && _isUnderExcludedRoot(_downTarget!, subtree)) {
-        _downTarget = null;
-        _downButton = MouseButton.none;
-      }
-      if (_dragTarget != null && _isUnderExcludedRoot(_dragTarget!, subtree)) {
-        _dragTarget = null;
-        _dragging = false;
-      }
-      return;
+      _inputExcludedSubtrees.add(subtree);
+      _dropInactive();
+    } else {
+      _inputExcludedSubtrees.remove(subtree);
     }
-    _inputExcludedSubtrees.remove(subtree);
   }
 
-  static bool _isUnderExcludedRoot(RenderObject node, RenderObject root) {
-    RenderObject? current = node;
-    while (current != null) {
+  static bool _under(RenderObject node, RenderObject root) {
+    for (
+      RenderObject? current = node;
+      current != null;
+      current = current.parent
+    ) {
       if (identical(current, root)) return true;
-      current = current.parent;
     }
     return false;
   }
 
-  bool _isExcluded(RenderObject node) {
-    for (final root in _inputExcludedSubtrees) {
-      if (_isUnderExcludedRoot(node, root)) return true;
-    }
-    return false;
-  }
-
-  /// Whether [region] can still be reached by a hit-test: routed here,
-  /// presented with some part on screen, and not input-excluded.
-  bool _isLive(RenderPointerListener region) =>
+  bool _isAttached(RenderPointerListener region) =>
       identical(region._router, this) &&
-      region.screenGeometry()?.visible != null &&
-      !_isExcluded(region);
+      !_inputExcludedSubtrees.any((root) => _under(region, root));
+
+  bool _isLive(RenderPointerListener region) =>
+      _isAttached(region) && region.screenGeometry()?.visible != null;
+
+  void _updateCursorRegion(RenderPointerListener region) {
+    if (region.cursor == null) {
+      _cursorRegions.remove(region);
+    } else {
+      _cursorRegions.add(region);
+    }
+    _cursorRegionsChanged = true;
+  }
 
   void _remove(RenderPointerListener region) {
-    if (identical(_hovered, region)) _hovered = null;
-    if (identical(_downTarget, region)) {
-      _downTarget = null;
-      _downButton = MouseButton.none;
-    }
+    if (_cursorRegions.remove(region)) _cursorRegionsChanged = true;
+    _hovered.remove(region);
+    _tapTargets.remove(region);
+    if (identical(_downTarget, region)) _downTarget = null;
     if (identical(_dragTarget, region)) {
       _dragTarget = null;
       _dragging = false;
     }
   }
 
-  /// Collects every region under ([col], [row]) into [_hits], in paint
-  /// order, by walking the rendered tree below the router's scope.
   void _collectHits(int col, int row) {
     _hits.clear();
-    if (_aborted) return;
+    if (_aborted || _disposed) return;
     final start = _scope?.findRenderObject();
-    if (start == null) return;
-    _visitHits(start, col, row, null);
+    if (start != null) _visitHits(start, col, row, null);
   }
 
-  /// [col]/[row] are relative to [node]'s origin; [clip] is the accumulated
-  /// ancestor clip in the same coordinates (null when unbounded).
   void _visitHits(RenderObject node, int col, int row, CellRect? clip) {
-    if (!node.hasLayout) return;
-    if (_inputExcludedSubtrees.isNotEmpty &&
-        _inputExcludedSubtrees.contains(node)) {
-      return;
-    }
-    final s = node.size;
-    final inside = col >= 0 && row >= 0 && col < s.cols && row < s.rows;
+    if (!node.hasLayout || _inputExcludedSubtrees.contains(node)) return;
+    final point = CellOffset(col, row);
+    if (clip != null && !clip.contains(point)) return;
+    final inside =
+        col >= 0 && row >= 0 && col < node.size.cols && row < node.size.rows;
     if (!inside && !node.hitTestsBeyondBounds) return;
-    if (inside &&
-        node is RenderPointerListener &&
-        identical(node._router, this) &&
-        (clip == null || clip.contains(CellOffset(col, row)))) {
-      _hits.add(node);
-    }
+    if (inside) _hits.add(node);
     node.visitRenderChildren((child) {
       if (!node.presentsChild(child)) return;
       var childClip = clip;
       final ownClip = node.childClipOf(child);
       if (ownClip != null) {
-        childClip = clip == null
-            ? ownClip
-            : (clip.intersect(ownClip) ??
-                  CellRect(offset: ownClip.offset, size: CellSize.zero));
-        // Nothing below can contain a point outside this clip.
-        if (!childClip.contains(CellOffset(col, row))) return;
+        childClip = clip == null ? ownClip : clip.intersect(ownClip);
+        if (childClip == null || !childClip.contains(point)) return;
       }
       final offset = node.childOffsetOf(child);
-      final nextClip = childClip == null
-          ? null
-          : CellRect(
-              offset: CellOffset(
-                childClip.offset.col - offset.col,
-                childClip.offset.row - offset.row,
-              ),
-              size: childClip.size,
-            );
-      _visitHits(child, col - offset.col, row - offset.row, nextClip);
+      _visitHits(
+        child,
+        col - offset.col,
+        row - offset.row,
+        childClip == null
+            ? null
+            : CellRect(offset: childClip.offset - offset, size: childClip.size),
+      );
     });
   }
 
-  /// Topmost region containing ([col], [row]) for which [pred] holds.
   RenderPointerListener? _topmost(
     int col,
     int row,
-    bool Function(RenderPointerListener) pred,
+    bool Function(RenderPointerListener) test,
   ) {
     _collectHits(col, row);
-    for (var i = _hits.length - 1; i >= 0; i--) {
-      final r = _hits[i];
-      if (pred(r)) return r;
+    for (final hit in _hits.reversed) {
+      if (hit is RenderPointerListener &&
+          identical(hit._router, this) &&
+          test(hit)) {
+        return hit;
+      }
     }
     return null;
   }
 
-  /// Whether the topmost region at ([col], [row]) absorbs click-to-focus —
-  /// an [AbsorbPointer] overlay covering that cell. The dispatcher checks
-  /// this before its click-to-focus pass so a click on an overlay can't move
-  /// app focus to a focusable painted invisibly underneath.
-  bool focusAbsorbedAt(int col, int row) {
-    if (_disposed) return false;
-    return _topmost(col, row, (_) => true)?.absorbsFocus ?? false;
+  /// Uses the same clipped, front-to-back hit order as gestures. A foreground
+  /// gesture boundary cannot focus an unrelated sibling behind it.
+  @internal
+  FocusNode? focusTargetAt(int col, int row, FocusManager manager) {
+    _collectHits(col, row);
+    for (final hit in _hits.reversed) {
+      final node = focusNodeForPointerHit(hit);
+      if (node != null && manager.isClickable(node)) return node;
+      if (hit is RenderPointerListener && (_hasTap(hit) || _hasDrag(hit))) {
+        if (hit.absorbsFocus) return null;
+        for (
+          RenderObject? parent = hit.parent;
+          parent != null;
+          parent = parent.parent
+        ) {
+          final ancestor = focusNodeForPointerHit(parent);
+          if (ancestor != null && manager.isClickable(ancestor)) {
+            return ancestor;
+          }
+          if (parent is RenderPointerListener && parent.absorbsFocus) {
+            return null;
+          }
+        }
+        return null;
+      }
+    }
+    return null;
   }
 
-  /// Routes [event] to the matching region(s). Returns whether any
-  /// handler fired (the dispatcher runs click-to-focus afterwards unless
-  /// [focusAbsorbedAt] blocks it).
+  bool focusAbsorbedAt(int col, int row) =>
+      _topmost(col, row, (r) => _hasTap(r) || _hasDrag(r))?.absorbsFocus ??
+      false;
+
+  PointerDetails _details(RenderPointerListener target, MouseEvent event) {
+    final global = CellOffset(event.col, event.row);
+    return PointerDetails(
+      localPosition:
+          global - (target.screenGeometry()?.bounds.offset ?? CellOffset.zero),
+      globalPosition: global,
+      button: event.button,
+      modifiers: event.modifiers,
+    );
+  }
+
+  PointerDragDetails _dragDetails(
+    RenderPointerListener target,
+    MouseEvent event,
+    CellOffset delta,
+  ) {
+    final details = _details(target, event);
+    final press = _press!;
+    return PointerDragDetails(
+      localPosition: details.localPosition,
+      globalPosition: details.globalPosition,
+      button: press.button,
+      modifiers: details.modifiers,
+      delta: delta,
+      globalPressPosition: CellOffset(press.col, press.row),
+    );
+  }
+
+  void _clearSequence() {
+    _downTarget = null;
+    _dragTarget = null;
+    _tapTargets.clear();
+    _press = null;
+    _lastDragPosition = null;
+    _dragging = false;
+  }
+
+  void _cancelTaps() {
+    final targets = List<RenderPointerListener>.of(_tapTargets);
+    _tapTargets.clear();
+    for (final target in targets) {
+      if (_isLive(target)) target.onTapCancel?.call();
+    }
+  }
+
+  /// Releases input authority (for example terminal focus loss or suspension).
+  /// Live widgets receive cancellation and hover exit; disposed widgets do not.
+  void cancel() {
+    if (_disposed) return;
+    final drag = _dragging ? _dragTarget : null;
+    _cancelTaps();
+    _clearSequence();
+    if (drag != null && _isLive(drag)) drag.onDragCancel?.call();
+    _leave();
+  }
+
+  void _leave() {
+    _lastHoverEvent = null;
+    final previous = _hovered;
+    _hovered = [];
+    for (final target in previous.reversed) {
+      if (_isLive(target)) target.onExit?.call();
+    }
+  }
+
   bool route(MouseEvent event) {
-    if (_disposed) return false;
+    if (_disposed || _aborted) return false;
+    if (event.kind == MouseEventKind.cancel) {
+      cancel();
+      return true;
+    }
+    if (event.kind == MouseEventKind.leave) {
+      _leave();
+      return true;
+    }
     _updateHover(event);
     switch (event.kind) {
       case MouseEventKind.scrollUp:
-        final t = _topmost(event.col, event.row, (r) => r.onScrollUp != null);
-        t?.onScrollUp?.call();
-        return t != null;
       case MouseEventKind.scrollDown:
-        final t = _topmost(event.col, event.row, (r) => r.onScrollDown != null);
-        t?.onScrollDown?.call();
-        return t != null;
-      case MouseEventKind.down:
-        _downTarget = _topmost(event.col, event.row, _hasTap);
-        _downButton = event.button;
-        _downTarget?.onTapDown?.call(event.col, event.row);
-        _downTarget?.onTapDownWithModifiers?.call(
+        final target = _topmost(
           event.col,
           event.row,
-          event.modifiers,
+          (r) => r.onScroll != null || _hasTap(r) || _hasDrag(r),
         );
-        _downTarget?.onPointerDown?.call(
-          PointerDownDetails(
-            col: event.col,
-            row: event.row,
-            button: event.button,
-            modifiers: event.modifiers,
-          ),
-        );
-        // Arm (but don't start) a drag from the region under the press.
-        _dragTarget = event.button == MouseButton.left
-            ? _topmost(event.col, event.row, _hasDrag)
-            : null;
-        _dragging = false;
-        // The region that will receive the drag sees the press too. Tap-down
-        // went only to the topmost TAP region; when that is a tap-only widget
-        // (a GestureDetector — every ListView item is one) sitting over a
-        // drag region (a SelectionArea), the drag region never learned where
-        // the press landed: a selection had no anchor, so list content, logs
-        // and transcripts could not be selected at all, and a drag extended
-        // from whatever stale anchor was left.
-        final dragTarget = _dragTarget;
-        if (dragTarget != null && !identical(dragTarget, _downTarget)) {
-          dragTarget.onTapDown?.call(event.col, event.row);
-          dragTarget.onTapDownWithModifiers?.call(
-            event.col,
-            event.row,
-            event.modifiers,
-          );
-          dragTarget.onPointerDown?.call(
-            PointerDownDetails(
-              col: event.col,
-              row: event.row,
-              button: event.button,
-              modifiers: event.modifiers,
-            ),
-          );
+        for (RenderObject? node = target; node != null; node = node.parent) {
+          if (node is! RenderPointerListener || !_isLive(node)) continue;
+          final details = _details(node, event);
+          if (node.onScroll?.call(
+                PointerScrollDetails(
+                  localPosition: details.localPosition,
+                  globalPosition: details.globalPosition,
+                  button: details.button,
+                  modifiers: details.modifiers,
+                  delta: CellOffset(
+                    0,
+                    event.kind == MouseEventKind.scrollUp ? -1 : 1,
+                  ),
+                ),
+              ) ??
+              false) {
+            return true;
+          }
         }
-        return _downTarget != null || _dragTarget != null;
+        return false;
+      case MouseEventKind.down:
+        if (_press != null) {
+          _cancelTaps();
+          final drag = _dragging ? _dragTarget : null;
+          _clearSequence();
+          if (drag != null && _isLive(drag)) drag.onDragCancel?.call();
+        }
+        _press = event;
+        _lastDragPosition = CellOffset(event.col, event.row);
+        _downTarget = _topmost(
+          event.col,
+          event.row,
+          (r) => _hasTap(r) || _hasDrag(r),
+        );
+        // A parent selection region can claim motion that starts on a tap-only child.
+        if (event.button == MouseButton.left) {
+          for (
+            RenderObject? node = _downTarget;
+            node != null;
+            node = node.parent
+          ) {
+            if (node is RenderPointerListener && _hasDrag(node)) {
+              _dragTarget = node;
+              break;
+            }
+          }
+        }
+        final targets = <RenderPointerListener>{?_downTarget, ?_dragTarget};
+        for (final target in targets) {
+          if (!_isLive(target)) continue;
+          target.onPointerDown?.call(_details(target, event));
+          if (event.button == MouseButton.left && _isLive(target)) {
+            _tapTargets.add(target);
+            target.onTapDown?.call(_details(target, event));
+          }
+        }
+        return targets.isNotEmpty;
       case MouseEventKind.up:
-        // A completed drag consumes the release — no tap fires.
-        if (_dragging) {
-          _dragTarget?.onDragEnd?.call();
-          _dragTarget = null;
-          _dragging = false;
-          _downTarget = null;
+        final press = _press;
+        if (press == null) return false;
+        if (event.button != press.button) {
+          cancel();
           return true;
         }
-        final t = _topmost(event.col, event.row, _hasTap);
-        t?.onTapUp?.call(event.col, event.row);
-        var fired = false;
-        if (t != null && identical(t, _downTarget)) {
-          if (_downButton == MouseButton.left && t.onTap != null) {
-            t.onTap!();
-            fired = true;
-          } else if (_downButton == MouseButton.right &&
-              t.onSecondaryTap != null) {
-            t.onSecondaryTap!();
-            fired = true;
-          }
+        final target = _downTarget;
+        final drag = _dragTarget;
+        if (_dragging && drag != null) {
+          final details = _dragDetails(
+            drag,
+            event,
+            CellOffset(event.col, event.row) - _lastDragPosition!,
+          );
+          _clearSequence();
+          if (_isLive(drag)) drag.onDragEnd?.call(details);
+          return true;
         }
-        _downTarget = null;
-        _dragTarget = null;
-        _downButton = MouseButton.none;
-        return fired || t != null;
-      case MouseEventKind.drag:
-        // Captured drag: route to the armed target regardless of position.
-        if (_dragTarget != null) {
-          if (!_dragging) {
-            _dragging = true;
-            _dragTarget!.onDragStart?.call(event.col, event.row);
+        final released = _topmost(
+          event.col,
+          event.row,
+          (r) => _hasTap(r) || _hasDrag(r),
+        );
+        final inside = target != null && identical(target, released);
+        final taps = List<RenderPointerListener>.of(_tapTargets);
+        _clearSequence();
+        for (final tap in taps) {
+          if (!_isLive(tap)) continue;
+          if (inside) {
+            tap.onTapUp?.call(_details(tap, event));
           } else {
-            _dragTarget!.onDragUpdate?.call(event.col, event.row);
+            tap.onTapCancel?.call();
           }
+        }
+        if (inside && _isLive(target)) {
+          if (press.button == MouseButton.left && taps.isNotEmpty) {
+            target.onTap?.call();
+          }
+          if (press.button == MouseButton.right) target.onSecondaryTap?.call();
+        }
+        return target != null;
+      case MouseEventKind.drag:
+        final press = _press;
+        if (press == null) return false;
+        if (event.button != press.button) {
+          cancel();
           return true;
         }
-        _hovered?.onHover?.call(event.col, event.row);
-        return _hovered != null;
+        final position = CellOffset(event.col, event.row);
+        final delta = position - _lastDragPosition!;
+        if (delta == CellOffset.zero) return false;
+        _lastDragPosition = position;
+        final drag = _dragTarget;
+        if (!_dragging) {
+          _cancelTaps();
+          if (drag == null) _downTarget = null;
+          if (drag != null && _isLive(drag)) {
+            _dragging = true;
+            drag.onDragStart?.call(_dragDetails(drag, event, delta));
+          }
+        }
+        if (drag != null && _isLive(drag) && _press != null) {
+          drag.onDragUpdate?.call(_dragDetails(drag, event, delta));
+        }
+        return drag != null;
       case MouseEventKind.moved:
-        _hovered?.onHover?.call(event.col, event.row);
-        return _hovered != null;
+        for (final target in List<RenderPointerListener>.of(_hovered)) {
+          if (_isLive(target)) target.onHover?.call(_details(target, event));
+        }
+        return _hovered.isNotEmpty;
+      case MouseEventKind.cancel:
+      case MouseEventKind.leave:
+        return false;
     }
   }
 
   static bool _hasTap(RenderPointerListener r) =>
       r.onTap != null ||
       r.onTapDown != null ||
-      r.onTapDownWithModifiers != null ||
       r.onPointerDown != null ||
       r.onTapUp != null ||
+      r.onTapCancel != null ||
       r.onSecondaryTap != null;
-
   static bool _hasDrag(RenderPointerListener r) =>
-      r.onDragStart != null || r.onDragUpdate != null || r.onDragEnd != null;
-
+      r.onDragStart != null ||
+      r.onDragUpdate != null ||
+      r.onDragEnd != null ||
+      r.onDragCancel != null;
   static bool _hasHover(RenderPointerListener r) =>
       r.onEnter != null || r.onExit != null || r.onHover != null;
 
   void _updateHover(MouseEvent event) {
-    final next = _topmost(event.col, event.row, _hasHover);
-    if (identical(next, _hovered)) return;
-    _hovered?.onExit?.call();
+    _lastHoverEvent = event;
+    final top = _topmost(
+      event.col,
+      event.row,
+      (r) => _hasHover(r) || _hasTap(r) || _hasDrag(r),
+    );
+    final next = <RenderPointerListener>[];
+    for (RenderObject? node = top; node != null; node = node.parent) {
+      if (node is RenderPointerListener && _isLive(node) && _hasHover(node)) {
+        next.insert(0, node);
+      }
+    }
+    final previous = _hovered;
     _hovered = next;
-    next?.onEnter?.call();
+    for (final target in previous.reversed) {
+      if (!next.contains(target) && _isLive(target)) target.onExit?.call();
+    }
+    for (final target in next) {
+      if (!previous.contains(target) && _isLive(target)) target.onEnter?.call();
+    }
   }
 }
 
@@ -486,38 +606,31 @@ class GestureDetector extends StatelessWidget {
     super.key,
     this.onTap,
     this.onTapDown,
-    this.onTapDownWithModifiers,
     this.onPointerDown,
     this.onTapUp,
+    this.onTapCancel,
     this.onSecondaryTap,
     this.onDragStart,
     this.onDragUpdate,
     this.onDragEnd,
+    this.onDragCancel,
     required this.child,
   });
 
   /// Called after a left-button press and release complete in this region.
   final PointerTapCallback? onTap;
 
-  /// Called on button press with absolute terminal cell coordinates.
-  final PointerPositionCallback? onTapDown;
+  /// Begins a primary-button press. Paired with [onTapUp] or [onTapCancel].
+  final PointerCallback? onTapDown;
 
-  /// Fires on any button press alongside [onTapDown], with the
-  /// terminal-reported modifier set. Use when you need to distinguish
-  /// plain click from Shift / Ctrl / Alt-click. Both callbacks fire
-  /// on every press routed to this region — register only the one you care
-  /// about.
-  final PointerModifiedTapCallback? onTapDownWithModifiers;
+  /// Reports any button press. Use [onTapDown] for primary-button gestures.
+  final PointerCallback? onPointerDown;
 
-  /// Called on any button press with its coordinates, button, and modifiers.
-  ///
-  /// This fires alongside [onTapDown] and [onTapDownWithModifiers] when those
-  /// legacy callbacks are also supplied.
-  final PointerDownCallback? onPointerDown;
+  /// Completes a primary press released inside the original region.
+  final PointerCallback? onTapUp;
 
-  /// Called on a non-drag button release over this region, with absolute
-  /// terminal cell coordinates. A completed drag suppresses this callback.
-  final PointerPositionCallback? onTapUp;
+  /// The press was interrupted, dragged, or released outside its region.
+  final PointerTapCallback? onTapCancel;
 
   /// Called after a right-button press and release complete in this region.
   final PointerTapCallback? onSecondaryTap;
@@ -526,13 +639,16 @@ class GestureDetector extends StatelessWidget {
   /// release. The region keeps receiving [onDragUpdate] even when the
   /// pointer leaves it (pointer capture), so sliders and splitters track
   /// smoothly. A drag suppresses [onTap].
-  final PointerPositionCallback? onDragStart;
+  final PointerDragCallback? onDragStart;
 
-  /// Called for captured pointer motion after a drag has started.
-  final PointerPositionCallback? onDragUpdate;
+  /// Called for every changed cell during capture, including the first movement.
+  final PointerDragCallback? onDragUpdate;
 
   /// Called when the captured drag ends on button release.
-  final PointerTapCallback? onDragEnd;
+  final PointerDragCallback? onDragEnd;
+
+  /// The captured drag was interrupted before release.
+  final PointerTapCallback? onDragCancel;
 
   /// Subtree whose painted bounds form the interactive region.
   final Widget child;
@@ -542,13 +658,14 @@ class GestureDetector extends StatelessWidget {
     router: PointerRouterScope.maybeOf(context),
     onTap: onTap,
     onTapDown: onTapDown,
-    onTapDownWithModifiers: onTapDownWithModifiers,
     onPointerDown: onPointerDown,
     onTapUp: onTapUp,
+    onTapCancel: onTapCancel,
     onSecondaryTap: onSecondaryTap,
     onDragStart: onDragStart,
     onDragUpdate: onDragUpdate,
     onDragEnd: onDragEnd,
+    onDragCancel: onDragCancel,
     child: child,
   );
 }
@@ -562,6 +679,8 @@ class MouseRegion extends StatelessWidget {
     this.onEnter,
     this.onExit,
     this.onHover,
+    this.onScroll,
+    this.cursor,
     required this.child,
   });
 
@@ -571,8 +690,15 @@ class MouseRegion extends StatelessWidget {
   /// Called when the pointer leaves the child's painted bounds.
   final PointerTapCallback? onExit;
 
-  /// Called on pointer motion within the region with absolute cell coordinates.
-  final PointerPositionCallback? onHover;
+  /// Called on pointer motion with coordinates relative to this region and the surface.
+  final PointerCallback? onHover;
+
+  /// Return true to consume the wheel step, false to offer it to an ancestor.
+  final PointerScrollCallback? onScroll;
+
+  /// Overrides the host's pointer shape inside this region. Null lets the
+  /// host use its ordinary control cursor. Descendant controls can override it.
+  final MouseCursor? cursor;
 
   /// Subtree whose painted bounds define the hover region.
   final Widget child;
@@ -583,6 +709,8 @@ class MouseRegion extends StatelessWidget {
     onEnter: onEnter,
     onExit: onExit,
     onHover: onHover,
+    onScroll: onScroll,
+    cursor: cursor,
     child: child,
   );
 }
@@ -592,32 +720,42 @@ class _PointerListener extends SingleChildRenderObjectWidget {
     required this.router,
     this.onTap,
     this.onTapDown,
-    this.onTapDownWithModifiers,
     this.onPointerDown,
     this.onTapUp,
+    this.onTapCancel,
     this.onSecondaryTap,
     this.onDragStart,
     this.onDragUpdate,
     this.onDragEnd,
+    this.onDragCancel,
     this.onEnter,
     this.onExit,
     this.onHover,
+    this.onScroll,
+    this.cursor,
     required Widget super.child,
   });
 
   final PointerRouter? router;
+  final MouseCursor? cursor;
   final PointerTapCallback? onTap;
-  final PointerPositionCallback? onTapDown;
-  final PointerModifiedTapCallback? onTapDownWithModifiers;
-  final PointerDownCallback? onPointerDown;
-  final PointerPositionCallback? onTapUp;
+  final PointerCallback? onTapDown;
+  final PointerCallback? onPointerDown;
+  final PointerCallback? onTapUp;
+  final PointerTapCallback? onTapCancel;
   final PointerTapCallback? onSecondaryTap;
-  final PointerPositionCallback? onDragStart;
-  final PointerPositionCallback? onDragUpdate;
-  final PointerTapCallback? onDragEnd;
+  final PointerDragCallback? onDragStart;
+  final PointerDragCallback? onDragUpdate;
+  final PointerDragCallback? onDragEnd;
+
+  /// The captured drag was interrupted before release.
+  final PointerTapCallback? onDragCancel;
   final PointerTapCallback? onEnter;
   final PointerTapCallback? onExit;
-  final PointerPositionCallback? onHover;
+  final PointerCallback? onHover;
+
+  /// Return true to consume the wheel step, false to offer it to an ancestor.
+  final PointerScrollCallback? onScroll;
 
   @override
   SingleChildRenderObjectElement createElement() =>
@@ -627,18 +765,21 @@ class _PointerListener extends SingleChildRenderObjectWidget {
   RenderObject createRenderObject(BuildContext context) =>
       RenderPointerListener()
         ..router = router
+        ..cursor = cursor
         ..onTap = onTap
         ..onTapDown = onTapDown
-        ..onTapDownWithModifiers = onTapDownWithModifiers
         ..onPointerDown = onPointerDown
         ..onTapUp = onTapUp
+        ..onTapCancel = onTapCancel
         ..onSecondaryTap = onSecondaryTap
         ..onDragStart = onDragStart
         ..onDragUpdate = onDragUpdate
         ..onDragEnd = onDragEnd
+        ..onDragCancel = onDragCancel
         ..onEnter = onEnter
         ..onExit = onExit
-        ..onHover = onHover;
+        ..onHover = onHover
+        ..onScroll = onScroll;
 
   @override
   void updateRenderObject(
@@ -647,57 +788,21 @@ class _PointerListener extends SingleChildRenderObjectWidget {
   ) {
     renderObject
       ..router = router
+      ..cursor = cursor
       ..onTap = onTap
       ..onTapDown = onTapDown
-      ..onTapDownWithModifiers = onTapDownWithModifiers
       ..onPointerDown = onPointerDown
       ..onTapUp = onTapUp
+      ..onTapCancel = onTapCancel
       ..onSecondaryTap = onSecondaryTap
       ..onDragStart = onDragStart
       ..onDragUpdate = onDragUpdate
       ..onDragEnd = onDragEnd
+      ..onDragCancel = onDragCancel
       ..onEnter = onEnter
       ..onExit = onExit
-      ..onHover = onHover;
-  }
-}
-
-/// A scroll-only pointer region (no public widget) used by core scrollables
-/// to claim wheel events under the pointer. Exposed for ListView /
-/// ScrollView to wrap their viewports.
-class PointerScrollListener extends SingleChildRenderObjectWidget {
-  const PointerScrollListener({
-    super.key,
-    required this.router,
-    this.onScrollUp,
-    this.onScrollDown,
-    required Widget super.child,
-  });
-
-  final PointerRouter? router;
-  final PointerTapCallback? onScrollUp;
-  final PointerTapCallback? onScrollDown;
-
-  @override
-  SingleChildRenderObjectElement createElement() =>
-      _PointerListenerElement(this);
-
-  @override
-  RenderObject createRenderObject(BuildContext context) =>
-      RenderPointerListener()
-        ..router = router
-        ..onScrollUp = onScrollUp
-        ..onScrollDown = onScrollDown;
-
-  @override
-  void updateRenderObject(
-    BuildContext context,
-    covariant RenderPointerListener renderObject,
-  ) {
-    renderObject
-      ..router = router
-      ..onScrollUp = onScrollUp
-      ..onScrollDown = onScrollDown;
+      ..onHover = onHover
+      ..onScroll = onScroll;
   }
 }
 
@@ -708,24 +813,23 @@ class PointerScrollListener extends SingleChildRenderObjectWidget {
 ///
 /// This is the input counterpart of painting an opaque overlay: an overlay
 /// that covers cells visually must also cover them for input, or clicks fall
-/// through to hidden widgets (pointer regions resolve topmost-by-paint-order
-/// *per handler kind*, so covering one kind does not cover the others). The
-/// debug shell's floating panel is the canonical user. Descendant regions
-/// (e.g. buttons inside the overlay) paint later, register on top of this
-/// boundary, and keep working.
+/// through to hidden widgets. The debug shell's floating panel uses this
+/// boundary. Its descendant controls remain interactive: hit testing visits
+/// them before the boundary and stops here before reaching content behind it.
 class AbsorbPointer extends SingleChildRenderObjectWidget {
   const AbsorbPointer({super.key, this.onTap, required Widget super.child});
 
   /// Called when a left-button tap lands on this boundary.
   ///
-  /// Descendant pointer regions still win because they paint above the
-  /// boundary. This is useful for a full-screen popup barrier: taps on the
+  /// Descendant pointer regions are visited before the boundary. This is
+  /// useful for a full-screen popup barrier: taps on the
   /// popup reach its controls, while taps anywhere else dismiss it without
   /// activating content underneath.
   final PointerTapCallback? onTap;
 
   static void _noop() {}
-  static void _noopAt(int col, int row) {}
+  static void _noopAt(PointerDetails details) {}
+  static bool _consumeScroll(PointerScrollDetails details) => true;
 
   @override
   SingleChildRenderObjectElement createElement() =>
@@ -739,12 +843,11 @@ class AbsorbPointer extends SingleChildRenderObjectWidget {
         ..onSecondaryTap = _noop
         ..onDragStart = _noopAt
         ..onDragUpdate = _noopAt
-        ..onDragEnd = _noop
+        ..onDragEnd = _noopAt
         ..onEnter = _noop
         ..onExit = _noop
         ..onHover = _noopAt
-        ..onScrollUp = _noop
-        ..onScrollDown = _noop
+        ..onScroll = _consumeScroll
         ..absorbsFocus = true;
 
   @override
@@ -762,8 +865,26 @@ class AbsorbPointer extends SingleChildRenderObjectWidget {
 /// rather than waiting for the next paint pass. Hosts schedule frames
 /// asynchronously, and a failed update can leave a subtree inactive, so input
 /// must not reach it between reconciliation and the replacement frame.
-final class _PointerListenerElement extends SingleChildRenderObjectElement {
+final class _PointerListenerElement extends SingleChildRenderObjectElement
+    implements OptionalSemanticContributor {
   _PointerListenerElement(super.widget);
+
+  @override
+  bool get contributesSemanticNode =>
+      (renderObject as RenderPointerListener).cursor != null;
+
+  @override
+  SemanticNode buildSemanticNode(List<SemanticNode> children) => SemanticNode(
+    id: SemanticNodeId(
+      '${semanticAnchorOf(this) ?? 'element-$hashCode'}/pointerCursor',
+    ),
+    role: SemanticRole.region,
+    bounds: renderObject.screenGeometry()?.visible,
+    state: SemanticState({
+      'mouseCursor': (renderObject as RenderPointerListener).cursor!.name,
+    }),
+    children: children,
+  );
 
   @override
   void deactivate() {
@@ -796,23 +917,34 @@ class RenderPointerListener extends RenderObject
     if (identical(_router, value)) return;
     _router?._remove(this);
     _router = value;
+    if (_cursor != null) _router?._updateCursorRegion(this);
+    markNeedsPaintOnly();
+  }
+
+  MouseCursor? _cursor;
+  CellRect? _cursorBounds;
+  MouseCursor? get cursor => _cursor;
+  set cursor(MouseCursor? value) {
+    if (_cursor == value) return;
+    _cursor = value;
+    _router?._updateCursorRegion(this);
     markNeedsPaintOnly();
   }
 
   PointerTapCallback? onTap;
-  PointerPositionCallback? onTapDown;
-  PointerModifiedTapCallback? onTapDownWithModifiers;
-  PointerDownCallback? onPointerDown;
-  PointerPositionCallback? onTapUp;
+  PointerCallback? onTapDown;
+  PointerCallback? onPointerDown;
+  PointerCallback? onTapUp;
+  PointerTapCallback? onTapCancel;
   PointerTapCallback? onSecondaryTap;
-  PointerPositionCallback? onDragStart;
-  PointerPositionCallback? onDragUpdate;
-  PointerTapCallback? onDragEnd;
+  PointerDragCallback? onDragStart;
+  PointerDragCallback? onDragUpdate;
+  PointerDragCallback? onDragEnd;
+  PointerTapCallback? onDragCancel;
   PointerTapCallback? onEnter;
   PointerTapCallback? onExit;
-  PointerPositionCallback? onHover;
-  PointerTapCallback? onScrollUp;
-  PointerTapCallback? onScrollDown;
+  PointerCallback? onHover;
+  PointerScrollCallback? onScroll;
 
   /// When true, cells this region covers also block the dispatcher's
   /// click-to-focus pass — a click here must not move app focus to a

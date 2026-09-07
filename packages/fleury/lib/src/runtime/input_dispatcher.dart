@@ -295,56 +295,20 @@ class InputDispatcher {
     return KeyEventResult.ignored;
   }
 
-  /// Click-to-focus: a left-button press moves focus to the smallest
-  /// (innermost) traversable focus node whose painted rect contains the
-  /// pointer. Runs alongside [PointerRouter] (which handles taps, hover,
-  /// and scroll) — clicking a focusable both activates and focuses it.
-  ///
-  /// While a focus trap is open, only nodes inside it are clickable —
-  /// a stray click on a focusable behind a modal dialog must not change
-  /// focus and slip past the focus boundary. Mouse filtering is
-  /// applied here (rather than via `traversalCandidates`) so a node
-  /// that opted out of Tab traversal (`skipTraversal: true` — e.g. a
-  /// Button) can still receive focus via click.
+  /// Focus and gestures share the visible hit order. Resolve before callbacks
+  /// change the tree, then focus after a field has placed its intended caret.
   KeyEventResult _dispatchMouse(MouseEvent event) {
-    pointerRouter?.route(event);
-    if (event.kind != MouseEventKind.down || event.button != MouseButton.left) {
-      return KeyEventResult.ignored;
-    }
-    // An AbsorbPointer overlay (e.g. the floating debug panel) covering the
-    // click blocks click-to-focus: focus rects carry no z-order against
-    // overlays, so without this a click on the overlay would move focus to
-    // whatever focusable is painted invisibly underneath it.
-    if (pointerRouter?.focusAbsorbedAt(event.col, event.row) ?? false) {
+    final router = pointerRouter;
+    final target =
+        event.kind == MouseEventKind.down && event.button == MouseButton.left
+        ? router?.focusTargetAt(event.col, event.row, focusManager)
+        : null;
+    final handled = router?.route(event) ?? false;
+    if (target != null && focusManager.isClickable(target)) {
+      target.requestFocus();
       return KeyEventResult.handled;
     }
-    FocusNode? best;
-    var bestArea = 1 << 62;
-    for (final node in focusManager.attachedNodes) {
-      // Mouse-clickable: can request focus AND lives outside any
-      // ExcludeFocus. We use `isClickable` (not `isTraversable`) so a
-      // node that opted out of Tab (skipTraversal: true — e.g. Button)
-      // still responds to a click.
-      if (!focusManager.isClickable(node)) continue;
-      final r = node.rect;
-      if (r == null) continue;
-      if (event.col < r.left ||
-          event.col >= r.right ||
-          event.row < r.top ||
-          event.row >= r.bottom) {
-        continue;
-      }
-      final area = (r.right - r.left) * (r.bottom - r.top);
-      if (area < bestArea) {
-        bestArea = area;
-        best = node;
-      }
-    }
-    if (best != null) {
-      best.requestFocus();
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
+    return handled ? KeyEventResult.handled : KeyEventResult.ignored;
   }
 
   /// Stage 2-3 of the batch pipeline (RFC 0020 §6): feed the session

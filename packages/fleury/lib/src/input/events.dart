@@ -2211,7 +2211,20 @@ final class TextCompositionEvent extends TuiEvent {
 enum MouseButton { left, middle, right, none }
 
 /// What a [MouseEvent] reports.
-enum MouseEventKind { down, up, drag, moved, scrollUp, scrollDown }
+enum MouseEventKind {
+  down,
+  up,
+  drag,
+  moved,
+  scrollUp,
+  scrollDown,
+
+  /// Input authority was lost; cancel the captured gesture and hover.
+  cancel,
+
+  /// The pointer left the surface; clear hover, retaining active capture.
+  leave,
+}
 
 /// A mouse report (SGR 1006). [col]/[row] are 0-based cell coordinates.
 /// Only delivered when the app enabled `TerminalMode.mouse`.

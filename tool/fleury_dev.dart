@@ -455,6 +455,7 @@ class _Runner {
         'test/docs_accuracy_test.dart',
         'test/doc_snippets_test.dart',
         'test/testing_guide_test.dart',
+        'test/input_guide_test.dart',
       ], workingDirectory: webExamples);
       // The guide's Run test button executes the actual tester in the browser.
       // Keep its shared scenario and JS handle lifecycle in the PR gate too.

@@ -1,0 +1,67 @@
+{
+  "textInput_bare": {
+    "clickedFieldFocused": true,
+    "caretAfterClickAtColumn2": 6,
+    "expectedCaret": 2
+  },
+  "textInput_bare_text": "abcdefX",
+  "textInput_app": {
+    "clickedFieldFocused": true,
+    "caretAfterClickAtColumn2": 6,
+    "expectedCaret": 2
+  },
+  "textInput_app_text": "abcdefX",
+  "textArea": {
+    "focused": true,
+    "caretAfterClickAtColumn1": 12,
+    "selectionAfterDrag": "TextSelection.collapsed(offset: 12)"
+  },
+  "releaseOutside": {
+    "pressed": true,
+    "callbacks": [
+      "down"
+    ]
+  },
+  "updateOnlyDrag": {
+    "callbacks": [],
+    "expected": [
+      "3,0"
+    ]
+  },
+  "mismatchedRelease": {
+    "leftTaps": 1,
+    "expected": 0
+  },
+  "nestedHover": [
+    "outer enter",
+    "outer exit",
+    "inner enter"
+  ],
+  "overlappingFocus": {
+    "frontTaps": 1,
+    "frontFocused": false,
+    "behindFocused": true
+  },
+  "emptyInputHitArea": "CellRect(CellOffset(0, 0), CellSize(1x1))",
+  "emptyInputClickColumn3Focused": false,
+  "nestedWheelAtInnerEdge": {
+    "inner": 3,
+    "innerMax": 3,
+    "outer": 0,
+    "outerMax": 4
+  },
+  "rangeSliderRightClickChanges": [
+    "(20, 53)"
+  ],
+  "paddedDragCoordinates": [
+    "down 11,2",
+    "start 12,2",
+    "update 14,2"
+  ],
+  "clippedFocusOutsideViewport": {
+    "before": false,
+    "afterClickAboveViewport": true,
+    "rect": "CellRect(CellOffset(0, 0), CellSize(10x6))",
+    "viewportRows": "2..5"
+  }
+}

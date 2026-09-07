@@ -1,0 +1,34 @@
+00:00 +0: loading test/input_gestures_dx_probe_test.dart
+00:00 +0: characterizes cancellation delivery through real DOM source and router
+cancel: pressed=true (should clear)
+cancel then late up: taps=1 (should be 0)
+00:00 +1: characterizes hover leave delivery through DOM source
+pointerleave: hovered=true (should clear)
+00:00 +2: checks click focus in the assembled browser host
+browser click-focus bestArea sentinel=0
+browser before click: a=CellRect(CellOffset(0, 0), CellSize(20x1)), b=CellRect(CellOffset(0, 1), CellSize(20x1)), span=abcdef                        , bounds=[object DOMRect], cellWidth=10
+browser routed down: MouseButton.left 2,1; b.rect=CellRect(CellOffset(0, 1), CellSize(20x1))
+absorbed=false; nodes=[KeyDetector:CellRect(CellOffset(0, 0), CellSize(20x1)):clickable=false, a:CellRect(CellOffset(0, 0), CellSize(20x1)):clickable=true, KeyDetector:CellRect(CellOffset(0, 1), CellSize(20x1)):clickable=false, b:CellRect(CellOffset(0, 1), CellSize(20x1)):clickable=true]
+after pointerdown: focused=a, a=true, b=false
+after pointerup: focused=a, a=true, b=false
+assembled browser: clickedFieldFocused=false, caret=6
+00:00 +2 -1: checks click focus in the assembled browser host [E]
+  Expected: true
+    Actual: <false>
+  
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/js_helper.dart 1424:15   Object.throwExpression
+  package:matcher                                                           Object.expect
+  test/input_gestures_dx_probe_test.dart 117:5                              <fn>
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/async_patch.dart 339:19  _wrapJsFunctionForAsync.closure.$protected
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/async_patch.dart 365:23  _wrapJsFunctionForAsync.<fn>
+  org-dartlang-sdk:///lib/_internal/js_runtime/lib/async_patch.dart 313:7   _awaitOnObject.<fn>
+  org-dartlang-sdk:///lib/async/zone_root.dart 48:46                        StaticClosure._rootRunUnary
+  org-dartlang-sdk:///lib/async/zone.dart 732:34                            _CustomZone.runUnary
+  
+00:00 +2 -1: Some tests failed.
+
+Failing tests:
+  test/input_gestures_dx_probe_test.dart: checks click focus in the assembled browser host
+
+Consider enabling the flag chain-stack-traces to receive more detailed exceptions.
+For example, 'dart test --chain-stack-traces'.

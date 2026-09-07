@@ -676,7 +676,10 @@ Future<AppExit> _runAppImpl(
         // never report them. Recover now (RFC 0020 §10) — otherwise every
         // held key stays held forever, a hold never ends, and sampled
         // state lies until something else is pressed.
-        if (!event.focused) dispatcher.recoverHeldKeys();
+        if (!event.focused) {
+          dispatcher.recoverHeldKeys();
+          runtime.pointerRouter.cancel();
+        }
         return;
       }
 

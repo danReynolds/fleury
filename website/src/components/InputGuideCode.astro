@@ -1,0 +1,21 @@
+---
+import { Code } from '@astrojs/starlight/components';
+const sources = import.meta.glob<string>('../../examples/{lib,test}/input/*.dart', {
+  query: '?raw', import: 'default', eager: true,
+});
+interface Props { file: string; test?: boolean }
+const { file, test = false } = Astro.props;
+const code = sources[`../../examples/${test ? 'test' : 'lib'}/input/${file}`];
+if (!code) throw new Error(`Input guide file is missing: ${file}`);
+const regions = [...code.matchAll(/^[ \t]*\/\/ #docregion interaction\r?\n([\s\S]*?)^[ \t]*\/\/ #enddocregion interaction[ \t]*$/gm)];
+if (!test && !regions.length) throw new Error(`Input guide excerpt is missing: ${file}`);
+const dedent = (value: string) => {
+  const lines = value.trimEnd().split('\n');
+  const indent = Math.min(...lines.filter((line) => line.trim()).map((line) => line.match(/^ */)![0].length));
+  return lines.map((line) => line.slice(indent)).join('\n');
+};
+const excerpt = regions.map((region) => dedent(region[1])).join('\n\n');
+const complete = code.replace(/^[ \t]*\/\/ #(end)?docregion interaction[ \t]*\r?\n/gm, '');
+---
+<Code code={test ? complete : excerpt} lang="dart" wrap />
+{!test && <details><summary>Complete source file</summary><Code code={complete} lang="dart" wrap /></details>}

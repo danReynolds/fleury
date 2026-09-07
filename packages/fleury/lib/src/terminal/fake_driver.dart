@@ -134,6 +134,7 @@ final class FakeTerminalDriver
     if (!_active) return await operation();
 
     handoffSuspendCallCount += 1;
+    _events.add(const TerminalFocusEvent(focused: false));
     _handoffActive = true;
     _active = false;
     try {

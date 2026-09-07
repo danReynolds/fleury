@@ -249,6 +249,9 @@ class WindowsTerminalDriver
         handoffMode = mode;
         didHandoff = true;
         _handoffActive = true;
+        if (!_events.isClosed) {
+          _events.add(const TerminalFocusEvent(focused: false));
+        }
 
         final input = _stdinSubscription;
         if (input != null) {
