@@ -74,6 +74,7 @@ void main() {
     final log = tree.single(role: SemanticRole.log);
     expect(log.state.collectionRowCount, 2);
     expect(log.state['followTail'], isFalse);
+    expect(log.state['isFollowing'], isFalse);
     expect(log.state['copyEnabled'], isTrue);
 
     final row = tree
@@ -240,7 +241,8 @@ void main() {
           .target(role: SemanticRole.listItem, label: 'middle row')
           .press();
 
-      expect(controller.followTail, isFalse);
+      expect(controller.followTail, isTrue);
+      expect(controller.isFollowing, isTrue);
       expect(controller.selectedIndex, 1);
 
       tester.render(size: const CellSize(60, 5));
@@ -255,7 +257,8 @@ void main() {
       final log = tester.semantics().single(role: SemanticRole.log);
       expect(log.state.selectedKey, 'middle');
       expect(log.state['selectedIndex'], 1);
-      expect(log.state['followTail'], isFalse);
+      expect(log.state['followTail'], isTrue);
+      expect(log.state['isFollowing'], isTrue);
       expect(log.focused, isTrue);
     });
 
@@ -471,7 +474,7 @@ void main() {
     );
   });
 
-  testWidgets('followTail advances selection when entries append', (tester) {
+  testWidgets('following appends preserves the selected entry', (tester) {
     final controller = LogRegionController(followTail: true);
     tester.pumpWidget(
       LogRegion(
@@ -498,10 +501,10 @@ void main() {
     );
     tester.render(size: const CellSize(40, 3));
 
-    expect(controller.selectedIndex, 2);
+    expect(controller.selectedIndex, 1);
     expect(
       tester.semantics().single(role: SemanticRole.log).state['selectedIndex'],
-      2,
+      1,
     );
   });
 
@@ -522,13 +525,12 @@ void main() {
       // Jump to an earlier entry to read history.
       controller.jumpToIndex(2);
       tester.render(size: const CellSize(40, 3));
-      expect(controller.followTail, isFalse);
+      expect(controller.followTail, isTrue);
+      expect(controller.isFollowing, isFalse);
       expect(
         controller.selectedIndex,
-        2,
-        reason:
-            'the jump must move the selection to the target so a later '
-            'relayout keeps it in view',
+        7,
+        reason: 'scrolling preserves the selected entry',
       );
       expect(controller.visibleRange?.first, 2);
 
@@ -538,8 +540,9 @@ void main() {
 
       // The viewport must stay on the jumped-to region, not snap back to the
       // stale tail selection.
-      expect(controller.followTail, isFalse);
-      expect(controller.selectedIndex, 2);
+      expect(controller.followTail, isTrue);
+      expect(controller.isFollowing, isFalse);
+      expect(controller.selectedIndex, 7);
       expect(
         controller.visibleRange?.first,
         2,

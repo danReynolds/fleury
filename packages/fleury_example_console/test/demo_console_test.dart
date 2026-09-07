@@ -1421,7 +1421,11 @@ void main() {
         .target(role: WidgetRoles.messageList, label: 'Transcript events')
         .snapshot;
     expect(log.state.collectionRowCount, 6);
-    expect(log.state['author'], 'stream');
+    expect(
+      log.state['author'],
+      'worker',
+      reason: 'following new output preserves the logical selection',
+    );
     expect(log.actions, contains(SemanticAction.focus));
     expect(log.actions, contains(SemanticAction.navigate));
 
@@ -1434,7 +1438,11 @@ void main() {
       label: 'Transcript events',
       focused: true,
     );
-    expect(log.state['author'], 'stream');
+    expect(
+      log.state['author'],
+      'worker',
+      reason: 'following new output preserves the logical selection',
+    );
 
     await _invoke(tester, demoCommandToggleStream);
     final disabled = await _invoke(tester, demoCommandAppendLogBurst);
@@ -1444,7 +1452,7 @@ void main() {
     log = tester
         .target(role: WidgetRoles.messageList, label: 'Transcript events')
         .snapshot;
-    expect(log.state['author'], 'logs');
+    expect(log.state['author'], 'worker');
 
     final candidate = tester
         .semantics()
@@ -1534,7 +1542,7 @@ void main() {
     expect(log.state.collectionRowCount, 8);
     expect(log.state.selectedMessageId, targetId);
     expect(log.state['selectedIndex'], 3);
-    expect(log.state['followTail'], isFalse);
+    expect(log.state['followTail'], isTrue);
   });
 
   testWidgets('composer completions accept slash commands semantically', (

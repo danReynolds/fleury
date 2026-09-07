@@ -9,9 +9,9 @@ Matcher _stateError(String message) {
 
 void main() {
   group('ListController construction', () {
-    test('default has null selection and zero item count', () {
+    test('default selects the first item and has zero item count', () {
       final c = ListController();
-      expect(c.selectedIndex, isNull);
+      expect(c.selectedIndex, 0);
       expect(c.itemCount, 0);
       expect(c.visibleRange, isNull);
     });
@@ -55,7 +55,7 @@ void main() {
 
   group('lifecycle', () {
     test('dispose is idempotent and keeps final readable state', () {
-      final c = ListController(selectedIndex: 3, pinToBottom: true);
+      final c = ListController(selectedIndex: 3, followTail: true);
 
       c.dispose();
       c.dispose();
@@ -63,7 +63,7 @@ void main() {
       expect(c.selectedIndex, 3);
       expect(c.itemCount, 0);
       expect(c.visibleRange, isNull);
-      expect(c.pinToBottom, isTrue);
+      expect(c.followTail, isTrue);
     });
 
     test('mutating after dispose throws a lifecycle error', () {
@@ -72,7 +72,7 @@ void main() {
       const message = 'ListController has been disposed.';
       expect(() => c.selectedIndex = 2, _stateError(message));
       expect(() => c.jumpToIndex(2), _stateError(message));
-      expect(() => c.pinToBottom = true, _stateError(message));
+      expect(() => c.followTail = true, _stateError(message));
     });
   });
 }

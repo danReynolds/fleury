@@ -37,9 +37,9 @@ ListView.builder(
   onActivate: (index) {
     openTask(index);
   },
-  itemBuilder: (context, index, selected) => Text(
+  itemBuilder: (context, index, active) => Text(
     'Task ${(index + 1).toString().padLeft(4, '0')}',
-    style: selected
+    style: active
         ? Theme.of(context).selectionStyle
         : CellStyle.none,
   ),
@@ -60,7 +60,7 @@ Click the list, then try its complete keyboard model:
 - Up and Down move one item; PageUp and PageDown move by the visible page.
 - Home and End jump to the first and last item.
 - Enter activates the selected task.
-- The mouse wheel moves the selection and viewport without requiring focus.
+- The mouse wheel scrolls the viewport without changing selection or focus.
 
 The example contains 1,000 rows, but only a viewport-sized window is mounted.
 Selection movement automatically scrolls just enough to keep the active row
@@ -81,7 +81,8 @@ Use `.builder` for data-backed collections and `.separated` when the gaps or
 section dividers are generated. Lazy rows may have different heights; Fleury
 still lays out only the visible window.
 
-`onActivate` runs for Enter and pointer activation. `onSelectionChanged` runs
+`onActivate` runs for Enter and a completed click. Pressing a row selects and
+focuses it; dragging away or cancelling the press prevents activation. `onSelectionChanged` runs
 when user input moves the cursor, which makes it useful for a preview pane or a
 selection status line.
 
@@ -93,12 +94,15 @@ list:
 ```dart
 final list = ListController(selectedIndex: 0);
 
-list.selectedIndex = 24;
-list.jumpToIndex(24);
-list.jumpToBottom();
+list.selectedIndex = 24; // Select and reveal item 24.
+list.jumpToIndex(100);   // Read farther down without changing selection.
+list.scrollBy(3);       // Scroll three terminal rows, including within a tall item.
+list.jumpToBottom();    // Show the end.
 ```
 
-The controller also reports `visibleRange`, `itemCount`, and unseen tail items.
+A jump stays in place across rebuilds; moving the selection reveals it again.
+The controller reports `visibleRange`, `itemCount`, `atTop`, and `atBottom`,
+and notifies listeners after a frame changes those viewport metrics.
 Create it once in `State`, listen when the surrounding UI depends on it, and
 dispose it with that state.
 
@@ -160,18 +164,26 @@ Logs, chats, and transcripts can follow new rows without fighting a reader who
 scrolls upward:
 
 ```dart
-final log = ListController(pinToBottom: true);
+final log = ListController(followTail: true);
 
 ListView.builder(
   controller: log,
+  selectable: false,
   itemCount: lines.length,
-  itemBuilder: (context, index, selected) => Text(lines[index]),
+  itemBuilder: (context, index, active) => Text(lines[index]),
 )
 ```
 
-Moving away from the last item temporarily stops following. Returning to the
-tail resumes it, and `unseenCount` lets the UI expose how many rows arrived
-while the reader was away.
+Scrolling away pauses following. `followTail` keeps the policy enabled;
+`isFollowing` reports whether the viewport is currently following. Return with
+`log.jumpToBottom()` to resume, or set `log.followTail = false` to disable it.
+`unseenCount` counts appended items while the reader is away. A growing final
+item also stays in view while following.
+
+`selectable: false` makes this a passive feed: arrows scroll by terminal row,
+page keys scroll by viewport, and clicking does not select a row. Child controls
+remain interactive. For a selectable list that starts without a selection, use
+`ListController(selectedIndex: null)` instead.
 
 ## API reference
 

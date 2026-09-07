@@ -2,6 +2,12 @@
 
 ## 0.1.0
 
+- MessageListController and LogRegionController separate the enabled `followTail`
+  policy from read-only `isFollowing`, and expose `atBottom` and `unseenCount`.
+  `jumpToIndex` preserves selection, and following incoming output no longer
+  selects each new row. `scrollToBottom` catches up and enables following.
+  Semantic state now includes both the policy and whether it is currently active.
+
 - MultiSelect options expose a boolean semantic `setValue` action alongside
   toggling, so tests and other semantic consumers can request a desired checked
   state without changing the option key or dispatching duplicate callbacks.

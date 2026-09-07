@@ -314,7 +314,7 @@ void main() {
     tester.pumpWidget(app(1)); // m0 evicted, m3 appended
     tester.render(size: const CellSize(40, 3));
     expect(controller.followTail, isTrue, reason: 'first eviction');
-    expect(controller.selectedIndex, 2, reason: 'following moved to m3');
+    expect(controller.selectedIndex, 1, reason: 'selection remains on m2');
 
     tester.pumpWidget(app(2)); // m1 evicted, m4 appended
     tester.render(size: const CellSize(40, 3));
@@ -323,7 +323,7 @@ void main() {
       role: WidgetRoles.messageList,
       label: 'Conversation',
     );
-    expect(list.state.selectedMessageId, 'm4');
+    expect(list.state.selectedMessageId, 'm2');
   });
 
   testWidgets('reorder preserves selection and refreshed message state', (
@@ -480,7 +480,9 @@ void main() {
     expect(controller.selectedIndex, isNull);
   });
 
-  testWidgets('preserves tail-follow selection on append', (tester) {
+  testWidgets('follows appended output without changing selected message', (
+    tester,
+  ) {
     final controller = MessageListController(followTail: true);
     tester.pumpWidget(
       MessageList(
@@ -509,12 +511,12 @@ void main() {
     tester.render(size: const CellSize(60, 5));
 
     expect(controller.followTail, isTrue);
-    expect(controller.selectedIndex, 2);
+    expect(controller.selectedIndex, 1);
     final list = tester.semantics().single(
       role: WidgetRoles.messageList,
       label: 'Conversation',
     );
-    expect(list.state.selectedMessageId, 'm3');
+    expect(list.state.selectedMessageId, 'm2');
   });
 
   testWidgets('a streamed append does not re-engage followTail after the app '
@@ -580,11 +582,12 @@ void main() {
       // Jump to an earlier message to read history mid-stream.
       controller.jumpToIndex(2);
       tester.render(size: const CellSize(40, 3));
-      expect(controller.followTail, isFalse);
+      expect(controller.followTail, isTrue);
+      expect(controller.isFollowing, isFalse);
       expect(
         controller.selectedIndex,
-        2,
-        reason: 'the jump must move the selection to the target',
+        7,
+        reason: 'scrolling preserves the selected message',
       );
       expect(controller.visibleRange?.first, 2);
 
@@ -595,8 +598,9 @@ void main() {
       tester.render(size: const CellSize(40, 3));
 
       // The viewport stays on the jumped-to region and follow stays off.
-      expect(controller.followTail, isFalse);
-      expect(controller.selectedIndex, 2);
+      expect(controller.followTail, isTrue);
+      expect(controller.isFollowing, isFalse);
+      expect(controller.selectedIndex, 7);
       expect(
         controller.visibleRange?.first,
         2,
@@ -730,13 +734,8 @@ void main() {
     );
   });
 
-  // Follow-mode is coupled to the cursor by `ListController.selectedIndex`
-  // (documented on `pinToBottom`): moving off the last item stops following,
-  // returning to it resumes. Activation is just a selection move, so it must
-  // ride that coupling rather than fight it — a pre-emptive `followTail = false`
-  // is undone for the tail row and redundant for every other row, and only
-  // leaks a spurious "not following" notification in between.
-  group('activation rides the tail-follow coupling', () {
+  // Activating a visible message preserves the viewport's follow policy.
+  group('activation preserves viewport following', () {
     const messages = [
       MessageEntry(id: 'm1', role: MessageRole.user, text: 'first'),
       MessageEntry(id: 'm2', role: MessageRole.assistant, text: 'second'),
@@ -777,7 +776,9 @@ void main() {
       );
     });
 
-    testWidgets('activating an older row disengages following', (tester) async {
+    testWidgets('selecting a visible older row leaves following enabled', (
+      tester,
+    ) async {
       final controller = MessageListController(followTail: true);
       tester.pumpWidget(
         MessageList(
@@ -790,7 +791,8 @@ void main() {
 
       await tester.target(role: WidgetRoles.message, label: 'first').press();
       expect(controller.selectedIndex, 0);
-      expect(controller.followTail, isFalse);
+      expect(controller.followTail, isTrue);
+      expect(controller.isFollowing, isTrue);
     });
 
     testWidgets('copying the newest row keeps following, with no flap', (

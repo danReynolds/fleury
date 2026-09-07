@@ -2,6 +2,22 @@
 
 ## 0.1.0
 
+- **List scrolling and selection.** Wheel, scrollbar, and `jumpToIndex` move the
+  viewport without changing selection; jumps survive rebuilds. Keyboard selection
+  reveals the selected item. Oversized rows can scroll within an item.
+  `ListController` now exposes `scrollBy`, fractional scrollbar metrics, and
+  post-frame viewport notifications; `ScrollController` also notifies after its
+  layout metrics change.
+- **Following output.** Use `followTail` for the enabled policy and `isFollowing`
+  for its current state. Leaving the end pauses following; returning resumes it
+  only when enabled. Following appends preserve logical selection. `pinToBottom`
+  is deprecated, and `jumpToBottom` no longer enables following on ordinary lists.
+- **List interaction.** Primary down selects and focuses; a completed click or
+  Enter activates. Dragging away, cancellation, or removing the keyed item cancels
+  activation. Explicit null initial selection is honored; `selectable: false`
+  keeps a list passive while retaining scrolling and child controls. The builder
+  boolean is named `active` to distinguish its visual cue from logical selection.
+
 - **Pointer input and selection.** TextInput and TextArea support click-to-caret,
   drag selection, Shift-click, and word/line selection. TextInput fills bounded
   width; constrain it explicitly when an inline field should be narrower.

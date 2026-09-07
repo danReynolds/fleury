@@ -227,6 +227,8 @@ void main() {
 
       tester.sendMouse(_mouse(MouseEventKind.down, 1, 2));
       expect(selections, [1, 2]);
+      expect(activations, [1]);
+      tester.sendMouse(_mouse(MouseEventKind.up, 1, 2));
       expect(activations, [1, 2]);
 
       controller.selectedIndex = 0;
@@ -842,7 +844,7 @@ void main() {
       tester.pumpWidget(list(20));
       tester.render(size: const CellSize(20, 5));
       controller.selectedIndex = null; // scroll-only
-      controller.jumpToBottom(); // follow the tail
+      controller.followTail = true; // follow the tail
       tester.render(size: const CellSize(20, 5));
       expect(controller.visibleRange, (first: 15, last: 19));
 
@@ -902,10 +904,9 @@ void main() {
     });
   });
 
-  group('pinToBottom', () {
-    testWidgets('appending items moves the selection to the new last '
-        'item', (tester) {
-      final controller = ListController(pinToBottom: true);
+  group('followTail', () {
+    testWidgets('following appends preserves logical selection', (tester) {
+      final controller = ListController(followTail: true);
       tester.pumpWidget(
         ListView.builder(
           controller: controller,
@@ -916,8 +917,8 @@ void main() {
       tester.render();
       expect(
         controller.selectedIndex,
-        2,
-        reason: 'following starts on the tail (following implies at-bottom)',
+        0,
+        reason: 'following scrolls without selecting a different item',
       );
       expect(controller.atBottom, isTrue);
 
@@ -931,14 +932,14 @@ void main() {
       );
       expect(
         controller.selectedIndex,
-        4,
-        reason: 'pinToBottom should advance to new last item',
+        0,
+        reason: 'following does not advance selection',
       );
     });
 
     testWidgets('default off: appending items does not move the '
         'selection', (tester) {
-      final controller = ListController(); // pinToBottom defaults to false
+      final controller = ListController(); // followTail defaults to false
       tester.pumpWidget(
         ListView.builder(
           controller: controller,
@@ -959,12 +960,12 @@ void main() {
       expect(
         controller.selectedIndex,
         0,
-        reason: 'without pinToBottom the cursor stays where it was',
+        reason: 'appending never changes the logical selection',
       );
     });
 
-    testWidgets('itemCount shrinking does not trigger pinToBottom', (tester) {
-      final controller = ListController(selectedIndex: 3, pinToBottom: true);
+    testWidgets('itemCount shrinking clamps selection', (tester) {
+      final controller = ListController(selectedIndex: 3, followTail: true);
       tester.pumpWidget(
         ListView.builder(
           controller: controller,
@@ -975,8 +976,7 @@ void main() {
       tester.render();
       expect(controller.selectedIndex, 3);
 
-      // Shrink. pinToBottom should NOT advance — count went down,
-      // not up. But the existing selection gets clamped to 1 (new
+      // Shrinking clamps the logical selection to a surviving index. But the existing selection gets clamped to 1 (new
       // last index).
       tester.pumpWidget(
         ListView.builder(
@@ -989,261 +989,8 @@ void main() {
     });
   });
 
-  group('tail-follow (F2)', () {
-    testWidgets('scrolling off the tail unpins and counts arrivals; '
-        'jumpToBottom catches up', (tester) {
-      final controller = ListController(pinToBottom: true);
-      tester.pumpWidget(
-        ListView.builder(
-          controller: controller,
-          itemCount: 5,
-          itemBuilder: _itemBuilder,
-        ),
-      );
-      tester.render();
-      expect(controller.selectedIndex, 4);
-      expect(controller.pinToBottom, isTrue);
-      expect(controller.atBottom, isTrue);
-
-      // User scrolls up to read history — moving off the tail stops following.
-      controller.selectedIndex = 1;
-      expect(controller.pinToBottom, isFalse);
-      expect(controller.atBottom, isFalse);
-
-      // New items arrive while unfollowed: the cursor stays put (no yank) and
-      // the arrivals are counted.
-      tester.pumpWidget(
-        ListView.builder(
-          controller: controller,
-          itemCount: 8,
-          itemBuilder: _itemBuilder,
-        ),
-      );
-      expect(controller.selectedIndex, 1, reason: 'no yank while reading');
-      expect(controller.unseenCount, 3);
-      expect(controller.pinToBottom, isFalse);
-
-      // Catch up.
-      controller.jumpToBottom();
-      expect(controller.selectedIndex, 7);
-      expect(controller.pinToBottom, isTrue);
-      expect(controller.unseenCount, 0);
-      expect(controller.atBottom, isTrue);
-    });
-
-    testWidgets('returning the cursor to the tail re-pins and clears unseen', (
-      tester,
-    ) {
-      final controller = ListController(pinToBottom: true);
-      tester.pumpWidget(
-        ListView.builder(
-          controller: controller,
-          itemCount: 5,
-          itemBuilder: _itemBuilder,
-        ),
-      );
-      tester.render();
-
-      controller.selectedIndex = 2; // scroll up → unpin
-      tester.pumpWidget(
-        ListView.builder(
-          controller: controller,
-          itemCount: 7,
-          itemBuilder: _itemBuilder,
-        ),
-      );
-      expect(controller.unseenCount, 2);
-      expect(controller.pinToBottom, isFalse);
-
-      // Cursor back to the last item → re-pin, unseen cleared.
-      controller.selectedIndex = 6;
-      expect(controller.pinToBottom, isTrue);
-      expect(controller.unseenCount, 0);
-      expect(controller.atBottom, isTrue);
-
-      // Subsequent appends follow again.
-      tester.pumpWidget(
-        ListView.builder(
-          controller: controller,
-          itemCount: 9,
-          itemBuilder: _itemBuilder,
-        ),
-      );
-      expect(controller.selectedIndex, 8);
-      expect(controller.unseenCount, 0);
-    });
-
-    testWidgets('unseenCount stays zero while following', (tester) {
-      final controller = ListController(pinToBottom: true);
-      tester.pumpWidget(
-        ListView.builder(
-          controller: controller,
-          itemCount: 3,
-          itemBuilder: _itemBuilder,
-        ),
-      );
-      tester.render();
-      tester.pumpWidget(
-        ListView.builder(
-          controller: controller,
-          itemCount: 6,
-          itemBuilder: _itemBuilder,
-        ),
-      );
-      expect(controller.selectedIndex, 5);
-      expect(controller.unseenCount, 0, reason: 'following → nothing unseen');
-    });
-
-    testWidgets('a non-following list is NOT dragged into follow by selecting '
-        'its last item', (tester) {
-      // A plain selection list (a JSON tree, a file picker, a chat with follow
-      // turned off) constructs a controller with no pinToBottom. Landing the
-      // cursor on the last item must not silently engage follow — otherwise
-      // appends would start yanking the cursor to the tail. Regression guard:
-      // the F2 cursor↔follow coupling must stay scoped to follow-capable lists.
-      final controller = ListController(selectedIndex: 0);
-      tester.pumpWidget(
-        ListView.builder(
-          controller: controller,
-          itemCount: 5,
-          itemBuilder: _itemBuilder,
-        ),
-      );
-      tester.render();
-      expect(controller.pinToBottom, isFalse);
-
-      controller.selectedIndex = 4; // onto the last item
-      expect(
-        controller.pinToBottom,
-        isFalse,
-        reason: 'selecting the tail must not engage follow on a plain list',
-      );
-
-      // An append does not yank the cursor down either.
-      tester.pumpWidget(
-        ListView.builder(
-          controller: controller,
-          itemCount: 7,
-          itemBuilder: _itemBuilder,
-        ),
-      );
-      expect(controller.selectedIndex, 4, reason: 'no yank on a plain list');
-    });
-
-    testWidgets('enabling pinToBottom makes a plain list follow-capable so the '
-        'cursor coupling then engages', (tester) {
-      // Turning following on later (via the setter) latches follow-capability:
-      // from then on the cursor couples the way a constructed-following list
-      // does — off the tail unpins, back to the tail re-pins.
-      final controller = ListController(selectedIndex: 0);
-      tester.pumpWidget(
-        ListView.builder(
-          controller: controller,
-          itemCount: 5,
-          itemBuilder: _itemBuilder,
-        ),
-      );
-      tester.render();
-
-      // Precondition: not yet follow-capable — selecting the tail must NOT pin.
-      // (Without the _followsCursor gate this would wrongly engage follow, so
-      // this step makes the test a real guard for the latch, not just a
-      // happy-path characterization of the already-following coupling.)
-      controller.selectedIndex = 4;
-      expect(
-        controller.pinToBottom,
-        isFalse,
-        reason: 'a not-yet-follow-capable list does not pin on tail selection',
-      );
-
-      controller.pinToBottom = true; // explicit enable → snaps to tail
-      expect(controller.selectedIndex, 4);
-      expect(controller.pinToBottom, isTrue);
-
-      controller.selectedIndex = 1; // scroll up now unpins
-      expect(controller.pinToBottom, isFalse);
-
-      controller.selectedIndex = 4; // back to the tail re-pins
-      expect(controller.pinToBottom, isTrue);
-    });
-
-    testWidgets('following a growing list anchors the tail at the BOTTOM of '
-        'the viewport, not the top', (tester) {
-      // Regression: a following list must show the newest *screenful* — the
-      // tail at the bottom — not collapse to just the last item at row 0 with
-      // a blank viewport below. Advancing the selection is what pulls the
-      // viewport; a pending jump on every append would top-anchor the newest
-      // item and hide everything above it (a chat that only shows its last
-      // message).
-      final controller = ListController(pinToBottom: true);
-      tester.pumpWidget(
-        ListView.builder(
-          controller: controller,
-          itemCount: 3,
-          itemBuilder: _itemBuilder,
-          autofocus: true,
-        ),
-      );
-      tester.render(size: const CellSize(10, 5));
-
-      // Grow well past the viewport while following.
-      tester.pumpWidget(
-        ListView.builder(
-          controller: controller,
-          itemCount: 20,
-          itemBuilder: _itemBuilder,
-          autofocus: true,
-        ),
-      );
-      tester.render(size: const CellSize(10, 5));
-
-      expect(controller.selectedIndex, 19, reason: 'follow advanced to tail');
-      expect(
-        controller.visibleRange,
-        (first: 15, last: 19),
-        reason: 'the last screenful is visible with the tail at the bottom',
-      );
-      expect(controller.atBottom, isTrue);
-    });
-
-    testWidgets('jumpToBottom bottom-anchors the tail after scrolling up', (
-      tester,
-    ) {
-      // Locks the explicit catch-up path (the setter / jumpToBottom snap-to-
-      // tail), not just the append path exercised above: after scrolling up to
-      // read history, catching up must show the newest screenful with the tail
-      // at the bottom — a pending jump here would top-anchor it and blank the
-      // rows above.
-      final controller = ListController(pinToBottom: true);
-      tester.pumpWidget(
-        ListView.builder(
-          controller: controller,
-          itemCount: 20,
-          itemBuilder: _itemBuilder,
-          autofocus: true,
-        ),
-      );
-      tester.render(size: const CellSize(10, 5));
-      expect(controller.visibleRange, (first: 15, last: 19));
-
-      // Scroll up to read history — moving off the tail unpins.
-      controller.selectedIndex = 2;
-      tester.render(size: const CellSize(10, 5));
-      expect(controller.pinToBottom, isFalse);
-      expect(controller.visibleRange, (first: 2, last: 6));
-
-      // Catch up.
-      controller.jumpToBottom();
-      tester.render(size: const CellSize(10, 5));
-      expect(controller.selectedIndex, 19);
-      expect(controller.pinToBottom, isTrue);
-      expect(
-        controller.visibleRange,
-        (first: 15, last: 19),
-        reason: 'jumpToBottom shows the last screenful, tail at the bottom',
-      );
-    });
-  });
+  // Viewport-based following (including passive lists and oversized items)
+  // is exercised for both renderers in list_view_dx_test.dart.
 
   group('lazy ListView.builder', () {
     testWidgets('duplicate keyed items fail on their initial mount', (tester) {
@@ -1357,25 +1104,25 @@ void main() {
       tester.render(size: const CellSize(10, 5));
 
       expect(controller.visibleRange, (first: 6, last: 10));
-      expect(mountCounts[5], 1, reason: 'index 5 was the first probe not fit');
+      final mounted = {
+        for (final e in mountCounts.entries)
+          if (e.value > (unmountCounts[e.key] ?? 0)) e.key,
+      };
       expect(
-        unmountCounts[5],
-        1,
-        reason: 'a non-visible probe must not leak in the sparse element map',
+        mounted,
+        {6, 7, 8, 9, 10},
+        reason:
+            'only the final viewport remains mounted, including after probes',
       );
     });
 
     testWidgets('a following list does not leak its pre-jump first-walk window '
         'on the first layout (L)', (tester) {
-      // Audit #1337: pinToBottom sets the selection to the last item in
-      // initState, so the *first* layout walks the anchor-0 window (0..9),
-      // then the selection (999) forces the backward probe + a re-walk to the
-      // tail. The end-of-layout sweep must dispose the pre-jump first walk AND
-      // the non-fitting probe boundary — not just the (empty) prior active set,
-      // or those subtrees stay mounted forever and get rebuilt every rebuild.
+      // Starting at the tail must leave only the final viewport mounted,
+      // including any items visited while measuring the bottom alignment.
       final mountCounts = <int, int>{};
       final unmountCounts = <int, int>{};
-      final controller = ListController(pinToBottom: true);
+      final controller = ListController(followTail: true);
       tester.pumpWidget(
         ListView.builder(
           controller: controller,
@@ -1389,7 +1136,7 @@ void main() {
       );
       tester.render(size: const CellSize(10, 10));
 
-      expect(controller.selectedIndex, 999);
+      expect(controller.selectedIndex, 0);
       expect(controller.visibleRange, (first: 990, last: 999));
 
       // Net-mounted = mounted but not (yet) unmounted. Only the visible tail
@@ -1529,17 +1276,17 @@ void main() {
     });
 
     testWidgets(
-      'keyed reorder disengages follow when selected identity leaves tail',
+      'keyed reorder preserves selection while viewport keeps following',
       (tester) {
         var items = <String>['a', 'b', 'c'];
-        final controller = ListController(pinToBottom: true);
+        final controller = ListController(selectedIndex: 2, followTail: true);
 
         Widget app() => _keyedStringList(items, controller: controller);
 
         tester.pumpWidget(app());
         tester.render(size: const CellSize(12, 3));
         expect(controller.selectedIndex, 2);
-        expect(controller.pinToBottom, isTrue);
+        expect(controller.isFollowing, isTrue);
         expect(controller.atBottom, isTrue);
 
         items = ['c', 'a', 'b'];
@@ -1548,18 +1295,19 @@ void main() {
 
         expect(controller.selectedIndex, 0, reason: 'selected identity is c');
         expect(
-          controller.pinToBottom,
-          isFalse,
-          reason: 'identity preservation wins over following after reorder',
+          controller.isFollowing,
+          isTrue,
+          reason:
+              'following describes the viewport, independently of selection',
         );
-        expect(controller.atBottom, isFalse);
+        expect(controller.atBottom, isTrue);
         expect(controller.unseenCount, 0);
 
         items = [...items, 'd'];
         tester.pumpWidget(app());
 
         expect(controller.selectedIndex, 0, reason: 'append does not yank c');
-        expect(controller.unseenCount, 1);
+        expect(controller.unseenCount, 0);
       },
     );
 
@@ -1571,32 +1319,32 @@ void main() {
       // second-to-last index as "left the tail" — follow died on the FIRST
       // eviction, silently, with unseenCount stuck at 0.
       var items = <String>['a', 'b', 'c'];
-      final controller = ListController(pinToBottom: true);
+      final controller = ListController(selectedIndex: 2, followTail: true);
 
       Widget app() => _keyedStringList(items, controller: controller);
 
       tester.pumpWidget(app());
       tester.render(size: const CellSize(12, 3));
       expect(controller.selectedIndex, 2);
-      expect(controller.pinToBottom, isTrue);
+      expect(controller.isFollowing, isTrue);
 
       items = ['b', 'c', 'd'];
       tester.pumpWidget(app());
       tester.render(size: const CellSize(12, 3));
       expect(
-        controller.pinToBottom,
+        controller.isFollowing,
         isTrue,
         reason: 'an eviction is not a reorder',
       );
-      expect(controller.selectedIndex, 2, reason: 'following moved to d');
+      expect(controller.selectedIndex, 1, reason: 'selection remains on c');
       expect(controller.atBottom, isTrue);
       expect(controller.unseenCount, 0);
 
       items = ['c', 'd', 'e'];
       tester.pumpWidget(app());
       tester.render(size: const CellSize(12, 3));
-      expect(controller.pinToBottom, isTrue, reason: 'and stays engaged');
-      expect(controller.selectedIndex, 2, reason: 'following moved to e');
+      expect(controller.isFollowing, isTrue, reason: 'and stays engaged');
+      expect(controller.selectedIndex, 0, reason: 'selection remains on c');
     });
 
     testWidgets('a keyed rolling window while NOT following counts the '
@@ -1604,23 +1352,24 @@ void main() {
       var items = <String>['a', 'b', 'c'];
       final controller = ListController(selectedIndex: 1);
 
-      Widget app() => _keyedStringList(items, controller: controller);
+      Widget app() =>
+          _keyedStringList(items, controller: controller, height: 2);
 
       tester.pumpWidget(app());
       tester.render(size: const CellSize(12, 3));
-      expect(controller.pinToBottom, isFalse);
+      expect(controller.isFollowing, isFalse);
 
       items = ['b', 'c', 'd'];
       tester.pumpWidget(app());
       tester.render(size: const CellSize(12, 3));
       expect(controller.selectedIndex, 0, reason: 'selected identity is b');
-      expect(controller.pinToBottom, isFalse);
+      expect(controller.isFollowing, isFalse);
       expect(controller.unseenCount, 1, reason: 'd arrived at the tail');
     });
 
     testWidgets('keyed scroll-only pin remains on the current tail', (tester) {
       var items = <String>['a', 'b', 'c'];
-      final controller = ListController(pinToBottom: true);
+      final controller = ListController(followTail: true);
 
       Widget app() =>
           _keyedStringList(items, controller: controller, height: 2);
@@ -1629,7 +1378,7 @@ void main() {
       tester.render(size: const CellSize(12, 2));
       controller.selectedIndex = null;
       tester.render(size: const CellSize(12, 2));
-      expect(controller.pinToBottom, isTrue);
+      expect(controller.isFollowing, isTrue);
       expect(controller.atBottom, isTrue);
 
       items = ['c', 'a', 'b'];
@@ -1637,7 +1386,7 @@ void main() {
       tester.render(size: const CellSize(12, 2));
 
       expect(controller.selectedIndex, isNull);
-      expect(controller.pinToBottom, isTrue);
+      expect(controller.isFollowing, isTrue);
       expect(controller.atBottom, isTrue);
       expect(controller.visibleRange?.last, 2);
     });

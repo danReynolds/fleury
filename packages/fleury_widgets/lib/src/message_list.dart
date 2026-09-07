@@ -125,7 +125,7 @@ class MessageListController extends ChangeNotifier {
     : _list = ListController(
         selectedIndex:
             selectedIndex ?? (followTail ? _tailSelectionSentinel : 0),
-        pinToBottom: followTail,
+        followTail: followTail,
       ) {
     _list.addListener(notifyListeners);
   }
@@ -141,38 +141,31 @@ class MessageListController extends ChangeNotifier {
     _list.selectedIndex = value;
   }
 
-  bool get followTail => _list.pinToBottom;
+  /// Whether following new output is enabled. Scrolling away pauses it;
+  /// [isFollowing] reports the current viewport state.
+  bool get followTail => _list.followTail;
   set followTail(bool value) {
     _checkNotDisposed();
-    if (_list.pinToBottom == value) return;
-    _list.pinToBottom = value;
-    if (value && _list.itemCount > 0) {
-      _list.selectedIndex = _list.itemCount - 1;
-    }
-    notifyListeners();
+    _list.followTail = value;
   }
+
+  bool get isFollowing => _list.isFollowing;
+  bool get atBottom => _list.atBottom;
+  int get unseenCount => _list.unseenCount;
 
   ({int first, int last})? get visibleRange => _list.visibleRange;
 
+  /// Scrolls to an item without changing which item is selected.
   void jumpToIndex(int index) {
     _checkNotDisposed();
-    // Move the selection onto the target too, not just the scroll anchor. The
-    // pending jump is consumed by a single layout; on the next relayout (every
-    // streamed append re-lays the list) the selection-visibility pass would
-    // otherwise re-anchor the viewport back onto the old selection, silently
-    // reverting the jump. Anchoring the selection here keeps the target in
-    // view across relayouts. Follow is owned by the coupling — a non-tail
-    // index disengages it, the tail index engages it — so nothing sets it
-    // here: an explicit `followTail = false` first was dead for a non-tail
-    // index and, for the tail, a flap (listeners saw false, then true).
-    _list.selectedIndex = index;
     _list.jumpToIndex(index);
   }
 
+  /// Returns to the latest output and enables following.
   void scrollToBottom() {
     _checkNotDisposed();
-    followTail = true;
-    if (_list.itemCount > 0) _list.selectedIndex = _list.itemCount - 1;
+    _list.followTail = true;
+    _list.jumpToBottom();
   }
 
   void _checkNotDisposed() {
@@ -404,13 +397,8 @@ class _MessageListState extends State<MessageList> {
     );
   }
 
-  /// Moves the cursor onto [index]. Follow-mode is not touched here: it is
-  /// coupled to the cursor by `ListController.selectedIndex` (see
-  /// `ListController.pinToBottom`) — landing on an older row disengages
-  /// following, landing back on the newest row resumes it, which is the
-  /// documented contract. A pre-emptive `followTail = false` would be undone
-  /// by that coupling for the tail row and duplicated for every other one,
-  /// leaving only a spurious "not following" notification behind.
+  /// Selects a message and reveals it. Following resumes only if the
+  /// resulting viewport reaches the end and the policy is still enabled.
   void _activateAt(int index) {
     if (index < 0 || index >= widget.messages.length) return;
     _focusList();
@@ -504,6 +492,7 @@ class _MessageListState extends State<MessageList> {
           'collectionRowCount': widget.messages.length,
           'totalMessageCount': widget.messages.length,
           'followTail': _controller.followTail,
+          'isFollowing': _controller.isFollowing,
           'copyEnabled': copyEnabled,
           'copyIncludesPrefix': widget.copyOptions.includePrefix,
           'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,

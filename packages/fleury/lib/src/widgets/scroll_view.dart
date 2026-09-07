@@ -35,6 +35,7 @@ import 'keyboard.dart';
 import 'list_view.dart' show EdgeBehavior;
 import 'pointer.dart';
 import 'scrollbar.dart';
+import 'tui_binding.dart';
 
 /// Mutable scroll state for a [ScrollView]: the current offset plus
 /// read-only metrics the render object writes back after each layout.
@@ -53,6 +54,9 @@ class ScrollController extends ChangeNotifier {
   int _contentExtent = 0;
   bool _metricsKnown = false;
   bool _disposed = false;
+  TuiBinding? _binding;
+  bool _metricsNotificationPending = false;
+  int _attachment = 0;
 
   /// Rows scrolled from the top. Clamped to `0..maxOffset`.
   int get offset => _offset;
@@ -102,10 +106,10 @@ class ScrollController extends ChangeNotifier {
     offset = _metricsKnown ? _maxOffset : _offset;
   }
 
-  /// Called by the render object during layout. Direct field writes (no
-  /// notify) — these mirror layout state and notifying here would loop.
+  /// Layout writes metrics immediately; observers are notified after the frame.
   void _applyMetrics(int contentExtent, int viewportExtent) {
     _checkNotDisposed();
+    final before = (_contentExtent, _viewportExtent, _offset);
     _contentExtent = contentExtent;
     _viewportExtent = viewportExtent;
     final max = contentExtent - viewportExtent;
@@ -113,6 +117,27 @@ class ScrollController extends ChangeNotifier {
     _metricsKnown = true;
     if (_offset > _maxOffset) _offset = _maxOffset;
     if (_offset < 0) _offset = 0;
+    if (before != (_contentExtent, _viewportExtent, _offset)) {
+      _notifyAfterFrame();
+    }
+  }
+
+  void _notifyAfterFrame() {
+    final binding = _binding;
+    if (binding == null || _metricsNotificationPending) return;
+    _metricsNotificationPending = true;
+    final attachment = _attachment;
+    binding.addPostFrameCallback((_) {
+      if (_disposed || attachment != _attachment) return;
+      _metricsNotificationPending = false;
+      notifyListeners();
+    });
+  }
+
+  void _detach() {
+    _attachment++;
+    _metricsNotificationPending = false;
+    _binding = null;
   }
 
   void _checkNotDisposed() {
@@ -125,6 +150,7 @@ class ScrollController extends ChangeNotifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    _detach();
     super.dispose();
   }
 }
@@ -200,6 +226,7 @@ class _ScrollViewState extends State<ScrollView> {
     super.didUpdateWidget(oldWidget);
     if (widget.controller != oldWidget.controller) {
       _controller.removeListener(_onChange);
+      _controller._detach();
       if (_ownsController) _controller.dispose();
       _controller = widget.controller ?? ScrollController();
       _ownsController = widget.controller == null;
@@ -278,6 +305,7 @@ class _ScrollViewState extends State<ScrollView> {
   @override
   void dispose() {
     _controller.removeListener(_onChange);
+    _controller._detach();
     if (_ownsController) _controller.dispose();
     if (_ownsFocusNode) _focusNode.dispose();
     super.dispose();
@@ -285,6 +313,7 @@ class _ScrollViewState extends State<ScrollView> {
 
   @override
   Widget build(BuildContext context) {
+    _controller._binding = TuiBinding.maybeOf(context);
     final Widget content = MouseRegion(
       onScroll: (details) {
         final before = _controller.offset;

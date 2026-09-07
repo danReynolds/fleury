@@ -18,10 +18,8 @@
 //     items in the viewport, on demand during layout, so they scale to
 //     tens of thousands of variable-height rows.
 //
-// Item heights are whatever the child reports at layout: multi-line
-// rows are honored, and an item taller than the whole viewport is shown
-// from its top (there is no intra-item scrolling — its lower rows stay
-// clipped while it is the selection anchor).
+// Items are measured at their natural height. The viewport keeps an item
+// anchor and a row offset, so tall items can be read without skipping content.
 //
 // What's intentionally not here yet:
 //   - Horizontal scrolling. Items are constrained to the viewport
@@ -41,6 +39,7 @@ import 'framework.dart';
 import 'keyboard.dart';
 import 'pointer.dart';
 import 'scrollbar.dart';
+import 'tui_binding.dart';
 
 /// Returns the stable data identity for the item currently at [index].
 ///
@@ -58,9 +57,9 @@ typedef ListItemKeyBuilder = Object Function(int index);
 /// once per mounted row when a parent supplies an updated list configuration.
 typedef ListItemIndexCallback = int? Function(Object key);
 
-/// How a [ListView] handles up/down at the first/last item.
+/// How scrollable widgets handle navigation or wheel input at an edge.
 enum EdgeBehavior {
-  /// The key is consumed (no-op) and focus stays in the list. Opt in for a
+  /// The input is consumed (no-op) and stays in this scrollable. Opt in for a
   /// standalone/primary list that should keep focus at its edges.
   contain,
 
@@ -71,260 +70,296 @@ enum EdgeBehavior {
   bubble,
 }
 
-/// Mutable model for a [ListView]: the currently active item and a
-/// pending programmatic scroll command.
+/// Selection and viewport state for a [ListView].
 ///
-/// `selectedIndex` is a code-clamped item index in `0..itemCount-1`,
-/// or `null` for scroll-only mode (no cursor; the widget renders
-/// items from the top and arrow chords are not consumed). The widget
-/// updates [itemCount] before each build and writes the post-layout
-/// [visibleRange] back here so listeners can observe what's on
-/// screen without re-running layout themselves.
+/// Selection changes reveal the new selection. Scrolling leaves selection alone,
+/// and a rebuild preserves the viewport. Listeners receive changed viewport
+/// metrics after the frame, when [visibleRange] describes the rendered content.
 class ListController extends ChangeNotifier {
-  ListController({int? selectedIndex, bool pinToBottom = false})
-    : _selectedIndex = selectedIndex,
-      _pinToBottom = pinToBottom,
-      _followsCursor = pinToBottom;
+  ListController({
+    int? selectedIndex = 0,
+    bool followTail = false,
+    @Deprecated('Use followTail instead.') bool? pinToBottom,
+  }) : _selectedIndex = selectedIndex,
+       _restoreSelectionWhenNonEmpty = selectedIndex != null,
+       _followTail = pinToBottom ?? followTail,
+       _isFollowing = pinToBottom ?? followTail,
+       _pendingBottom = pinToBottom ?? followTail;
 
   int? _selectedIndex;
   int _itemCount = 0;
+  bool _attached = false;
+  bool _selectable = true;
+  bool _restoreSelectionWhenNonEmpty;
   ({int first, int last})? _visibleRange;
+  int _viewportExtent = 0;
+  bool _atTop = true;
+  bool _atBottom = true;
+  double _scrollFraction = 0;
+  double _visibleFraction = 1;
   int? _pendingJumpIndex;
-  bool _pinToBottom;
-  // Whether this list *follows its cursor* to the tail (`less +F` / chat).
-  // Latched true only by an explicit follow-enable — construction with
-  // `pinToBottom: true`, the [pinToBottom] setter, or [jumpToBottom] — and
-  // never cleared: disengaging (scrolling up) is temporary, so returning to
-  // the tail can resume. It gates the selection→follow coupling in
-  // [selectedIndex] so scroll-only and selection-only lists (a JSON tree, a
-  // file picker, a chat with follow turned off) aren't dragged into follow
-  // mode just by selecting their last row. The coupling's own pin writes do
-  // NOT latch it, so a non-following list stays non-following.
-  bool _followsCursor;
-  bool _restoreSelectionWhenNonEmpty = true;
+  int? _pendingRevealIndex;
+  int _pendingScrollRows = 0;
+  double? _pendingFraction;
+  bool _pendingBottom;
+  bool _followTail;
+  bool _isFollowing;
   int _unseenCount = 0;
   bool _disposed = false;
+  TuiBinding? _binding;
+  bool _metricsNotificationPending = false;
+  int _attachment = 0;
 
-  /// Whether the list is *following the tail* (`less +F` / chat behaviour).
-  ///
-  /// While following, appended items advance the viewport — and the selection,
-  /// when there is one — to stay on the newest item.
-  ///
-  /// On a **follow-capable** list, following engages and disengages
-  /// **automatically with the cursor**: moving the selection off the last item
-  /// (scrolling up to read history) stops following, so new arrivals no longer
-  /// yank you down; returning to the last item resumes it. A list is
-  /// follow-capable once following has been *explicitly* enabled — constructed
-  /// with `pinToBottom: true`, or turned on later via this setter or
-  /// [jumpToBottom]. A plain selection list (never follow-enabled) is **not**
-  /// dragged into follow mode just by selecting its last row, so use
-  /// `pinToBottom: true` (or the setter) to opt a chat/log into the coupling.
-  /// Setting this manually snaps to the tail (`true`) or freezes in place
-  /// (`false`); [jumpToBottom] is the explicit "catch up" action.
-  ///
-  /// For a scroll-only list (no selection) following advances the viewport to
-  /// the last item on each append.
-  ///
-  /// With keyed lazy data, arrival tracking intentionally assumes an
-  /// order-preserving feed, not an arbitrary collection diff. Selection,
-  /// viewport, and row state still follow identity through reorders, but an
-  /// update that mixes reordering with insertion should not rely on
-  /// [unseenCount] to classify which rows are new.
-  bool get pinToBottom => _pinToBottom;
-  set pinToBottom(bool value) {
+  /// Whether new output should be followed while the viewport is at its end.
+  /// Scrolling away pauses following without disabling this policy. Setting it
+  /// false keeps it disabled even after returning to the end; true catches up.
+  bool get followTail => _followTail;
+  set followTail(bool value) {
     _checkNotDisposed();
-    if (_pinToBottom == value) return;
-    _pinToBottom = value;
+    if (_followTail == value) return;
+    _followTail = value;
+    _isFollowing = value;
+    if (!value) _pendingBottom = false;
     if (value) {
-      _followsCursor = true;
+      _clearRequests();
+      _pendingBottom = true;
       _unseenCount = 0;
-      _snapToTail();
     }
     notifyListeners();
   }
 
-  /// Whether the tail is currently in view: the selection is on the last item
-  /// (selection lists), the last item is visible (scroll-only lists), or the
-  /// list is empty. When true, following is engaged.
-  bool get atBottom {
-    if (_itemCount == 0) return true;
-    if (_selectedIndex != null) return _selectedIndex == _itemCount - 1;
-    final last = _visibleRange?.last;
-    return last == null || last >= _itemCount - 1;
+  /// Whether the viewport is currently following output. False while reading
+  /// history, even when [followTail] remains enabled.
+  bool get isFollowing => _isFollowing;
+
+  @Deprecated(
+    'Read isFollowing; set followTail to enable or disable following.',
+  )
+  bool get pinToBottom => isFollowing;
+  @Deprecated('Use followTail instead.')
+  set pinToBottom(bool value) {
+    if (value && followTail) {
+      jumpToBottom();
+    } else {
+      followTail = value;
+    }
   }
 
-  /// Items appended while *not* following (unpinned) — the count behind a
-  /// "N new ↓" affordance. Cleared when following re-engages or on
-  /// [jumpToBottom].
+  /// Whether the viewport includes the first / final row of content.
+  bool get atTop => _atTop;
+  bool get atBottom => _atBottom;
+
+  /// Appended items not yet seen at the end of an ordered feed. Prepends do not
+  /// count when stable item keys are provided. Mixed reorders and insertions are
+  /// not a general unread-item diff. Cleared on reaching the end.
   int get unseenCount => _unseenCount;
-
-  /// Catches up to the newest item and resumes following, clearing
-  /// [unseenCount]. The explicit action behind a "jump to latest" key or the
-  /// "N new ↓" chip.
-  void jumpToBottom() {
-    _checkNotDisposed();
-    _pinToBottom = true;
-    _followsCursor = true;
-    _unseenCount = 0;
-    _snapToTail();
-    notifyListeners();
-  }
-
-  /// Total number of items in the list. Set by [ListView] from its
-  /// `itemCount` argument on every rebuild.
   int get itemCount => _itemCount;
 
-  /// The first/last item indices currently visible in the viewport.
-  /// Null when the list is empty or before the first layout pass.
+  /// Visible item indices, including partially visible items; null when empty
+  /// or before layout. Items can occupy more than one terminal row.
   ({int first, int last})? get visibleRange => _visibleRange;
 
-  /// Index of the active (highlighted) item, or `null` for a
-  /// scroll-only list. Values outside `0..itemCount-1` are clamped on
-  /// write.
+  /// Approximate scrollbar position in 0..1. Unmeasured items count equally;
+  /// partial visible items contribute their measured fraction. The endpoints
+  /// always correspond to the first and final content rows.
+  double get scrollFraction => _scrollFraction;
+
+  /// Fraction of the item collection visible, accounting for partial rows.
+  /// This is an estimate for variable-height items not yet measured.
+  double get visibleFraction => _visibleFraction;
+
+  /// Logical selected index, independent of focus and scrolling. Defaults to
+  /// zero; an explicit null starts without a selection. A non-selectable list
+  /// keeps this null. Values clamp once attached to a list.
   int? get selectedIndex => _selectedIndex;
   set selectedIndex(int? value) {
     _checkNotDisposed();
+    if (!_selectable) return;
     _restoreSelectionWhenNonEmpty = value != null;
-    final clamped = _clampSelection(value);
-    var changed = _selectedIndex != clamped;
-    _selectedIndex = clamped;
-    // On a follow-capable list, follow-mode couples to cursor movement: landing
-    // on the last item follows the tail, moving off it stops. Gated on
-    // [_followsCursor] so a plain selection list (a JSON tree, a file picker, a
-    // chat with follow turned off) isn't dragged into follow mode just by
-    // selecting its last row. (Scroll-only lists keep pin explicit — internal
-    // re-clamps go through [_clampSelection] directly, not here.)
-    if (_followsCursor && clamped != null && _itemCount > 0) {
-      final onTail = clamped == _itemCount - 1;
-      if (_pinToBottom != onTail) {
-        _pinToBottom = onTail;
-        changed = true;
-      }
-      if (onTail && _unseenCount != 0) {
-        _unseenCount = 0;
-        changed = true;
-      }
-    }
-    if (changed) notifyListeners();
-  }
-
-  /// Scrolls the viewport so [index] is at the top — clamped to the last
-  /// full page, so a jump near the end never leaves rows empty below the
-  /// final item. Selection is not changed. Indices outside `0..itemCount-1`
-  /// are clamped.
-  void jumpToIndex(int index) {
-    _checkNotDisposed();
-    final clamped = _itemCount == 0 ? 0 : index.clamp(0, _itemCount - 1);
-    _pendingJumpIndex = clamped;
+    final next = _clampSelection(value);
+    if (next == _selectedIndex) return;
+    _selectedIndex = next;
+    _clearRequests();
+    _pendingRevealIndex = next;
+    // The completed viewport, not the selected index, decides whether to resume.
+    _isFollowing = false;
     notifyListeners();
   }
 
-  /// Applies a new [itemCount] pushed by the [ListView] on rebuild, running the
-  /// follow-mode state machine: while following, appends advance to the tail
-  /// and clear [unseenCount]; while not following, appends only accumulate
-  /// [unseenCount] (no viewport/selection movement). Identity-aware
-  /// non-growth changes preserve the selected item and disengage following if
-  /// that item no longer occupies the tail. In scroll-only mode there is no
-  /// selected identity to preserve, so an explicit pin stays authoritative.
-  /// Internal — the widget owns the count.
+  /// Places an item at the top, clamped to the final full viewport. Does not
+  /// change selection. The resulting position survives unrelated rebuilds.
+  void jumpToIndex(int index) {
+    _checkNotDisposed();
+    _clearRequests();
+    _pendingJumpIndex = _itemCount == 0
+        ? index
+        : index.clamp(0, _itemCount - 1);
+    _isFollowing = false;
+    notifyListeners();
+  }
+
+  /// Scrolls by terminal rows, including within an oversized item.
+  void scrollBy(int rows) {
+    _checkNotDisposed();
+    if (rows == 0) return;
+    _pendingRevealIndex = null;
+    _pendingBottom = false;
+    _pendingScrollRows += rows;
+    _isFollowing = false;
+    notifyListeners();
+  }
+
+  /// Moves a scrollbar to an approximate fraction of the collection. Zero and
+  /// one reach the actual content edges, including a single oversized item.
+  void jumpToFraction(double fraction) {
+    _checkNotDisposed();
+    if (!fraction.isFinite) throw ArgumentError.value(fraction, 'fraction');
+    _clearRequests();
+    _pendingFraction = fraction.clamp(0.0, 1.0);
+    _isFollowing = false;
+    notifyListeners();
+  }
+
+  /// Shows the final content row. Resumes following only if [followTail] is
+  /// enabled; a normal list does not become a live feed by jumping to its end.
+  void jumpToBottom() {
+    _checkNotDisposed();
+    _clearRequests();
+    _pendingBottom = true;
+    _isFollowing = _followTail;
+    _unseenCount = 0;
+    notifyListeners();
+  }
+
+  void _clearRequests() {
+    _pendingJumpIndex = null;
+    _pendingRevealIndex = null;
+    _pendingScrollRows = 0;
+    _pendingFraction = null;
+    _pendingBottom = false;
+  }
+
+  void _revealSelection() {
+    if (_selectedIndex == null) return;
+    _clearRequests();
+    _pendingRevealIndex = _selectedIndex;
+    _isFollowing = false;
+    notifyListeners();
+  }
+
   void _handleCountChange(
     int newCount, {
     int? selectedIndex,
     int? appendedCount,
     bool identityAware = false,
   }) {
+    final before = (_itemCount, _selectedIndex, _unseenCount);
     final oldCount = _itemCount;
-    final oldSelection = _selectedIndex;
-    final oldUnseenCount = _unseenCount;
-    final oldPinToBottom = _pinToBottom;
     _itemCount = newCount;
-    final grew = newCount > oldCount && newCount > 0;
-    final tailGrowth = appendedCount ?? (grew ? newCount - oldCount : 0);
     if (newCount == 0) {
-      // Once attached, an empty list has no valid cursor. `_clampSelection`
-      // preserves values while itemCount is still unknown during controller
-      // construction, so the attached-empty case must be explicit here.
-      _restoreSelectionWhenNonEmpty = oldSelection != null;
+      if (oldCount > 0) _restoreSelectionWhenNonEmpty = _selectedIndex != null;
       _selectedIndex = null;
     } else if (identityAware) {
       _selectedIndex = _clampSelection(selectedIndex);
+    } else {
+      _selectedIndex = _clampSelection(_selectedIndex);
     }
-    if (oldCount == 0 &&
+    if (_selectable &&
+        oldCount == 0 &&
         newCount > 0 &&
         _selectedIndex == null &&
         _restoreSelectionWhenNonEmpty) {
-      _selectedIndex = _pinToBottom ? newCount - 1 : 0;
+      _selectedIndex = 0;
+      if (!_isFollowing) _pendingRevealIndex = 0;
     }
-    if (_pinToBottom && tailGrowth > 0) {
-      _snapToTail();
-      _unseenCount = 0;
-    } else if (tailGrowth > 0) {
-      _unseenCount += tailGrowth;
-      _selectedIndex = _clampSelection(_selectedIndex);
-    } else {
-      _selectedIndex = _clampSelection(_selectedIndex);
-    }
-    if (identityAware && tailGrowth == 0 && _pinToBottom && newCount > 0) {
-      if (_selectedIndex == null) {
-        // Scroll-only lists have no selected identity whose preservation can
-        // win over following, so keep the explicit pin truthful across keyed
-        // reorders by targeting the current tail.
-        _snapToTail();
-      } else if (_selectedIndex != newCount - 1) {
-        // A keyed reorder should not silently change which item is selected.
-        // When the followed identity moves away from the tail, preserve that
-        // identity and truthfully leave follow mode instead of claiming both
-        // `pinToBottom` and `!atBottom`.
-        _pinToBottom = false;
+    final arrived =
+        appendedCount ?? (newCount > oldCount ? newCount - oldCount : 0);
+    if (arrived > 0) {
+      if (_isFollowing) {
+        _unseenCount = 0;
+      } else {
+        _unseenCount += arrived;
       }
     }
-    if (oldCount != _itemCount ||
-        oldSelection != _selectedIndex ||
-        oldUnseenCount != _unseenCount ||
-        oldPinToBottom != _pinToBottom) {
-      notifyListeners();
-    }
-  }
-
-  /// Moves the follow target to the newest item. When the list has a
-  /// selection, advancing it is enough — the layout's selection-visibility
-  /// pass then anchors the tail at the *bottom* of the viewport (the newest
-  /// screenful). Only a scroll-only list (no selection) needs an explicit
-  /// pending jump. Issuing a pending jump when there IS a selection would
-  /// instead anchor the newest item at the *top* of the viewport and hide the
-  /// screenful above it — a following chat/log would show only its last line.
-  /// Callers own the follow flags and [unseenCount]; this only moves the
-  /// target, and is a no-op on an empty list.
-  void _snapToTail() {
-    if (_itemCount == 0) return;
-    if (_selectedIndex != null) {
-      _selectedIndex = _itemCount - 1;
-    } else {
-      _pendingJumpIndex = _itemCount - 1;
-    }
+    if (before != (_itemCount, _selectedIndex, _unseenCount)) notifyListeners();
   }
 
   int? _clampSelection(int? value) {
-    if (value == null) return null;
-    // Before itemCount is known (no widget has attached yet), preserve
-    // the caller's value verbatim. The widget calls back through this
-    // setter once it has pushed itemCount, which is when real clamping
-    // can happen.
-    if (_itemCount == 0) return value;
+    if (!_selectable || value == null) return null;
+    if (_itemCount == 0) return _attached ? null : value;
     return value.clamp(0, _itemCount - 1);
   }
 
-  void _checkNotDisposed() {
-    if (_disposed) {
-      throw StateError('ListController has been disposed.');
+  void _applyViewport({
+    required ({int first, int last})? range,
+    required int extent,
+    required bool atTop,
+    required bool atBottom,
+    required double scrollFraction,
+    required double visibleFraction,
+  }) {
+    final before = (
+      _visibleRange,
+      _viewportExtent,
+      _atTop,
+      _atBottom,
+      _scrollFraction,
+      _visibleFraction,
+      _isFollowing,
+      _unseenCount,
+    );
+    _visibleRange = range;
+    _viewportExtent = extent;
+    _atTop = atTop;
+    _atBottom = atBottom;
+    _scrollFraction = scrollFraction;
+    _visibleFraction = visibleFraction;
+    _isFollowing = _followTail && atBottom;
+    if (atBottom) _unseenCount = 0;
+    if (before !=
+        (
+          _visibleRange,
+          _viewportExtent,
+          _atTop,
+          _atBottom,
+          _scrollFraction,
+          _visibleFraction,
+          _isFollowing,
+          _unseenCount,
+        )) {
+      _notifyAfterFrame();
     }
+  }
+
+  void _notifyAfterFrame() {
+    final binding = _binding;
+    if (binding == null || _metricsNotificationPending) return;
+    _metricsNotificationPending = true;
+    final attachment = _attachment;
+    binding.addPostFrameCallback((_) {
+      if (_disposed || attachment != _attachment) return;
+      _metricsNotificationPending = false;
+      notifyListeners();
+    });
+  }
+
+  void _detach() {
+    _attachment++;
+    _metricsNotificationPending = false;
+    _binding = null;
+    _attached = false;
+  }
+
+  void _checkNotDisposed() {
+    if (_disposed) throw StateError('ListController has been disposed.');
   }
 
   @override
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _pendingJumpIndex = null;
+    _detach();
+    _clearRequests();
     super.dispose();
   }
 }
@@ -337,7 +372,7 @@ class ListController extends ChangeNotifier {
 ///     built upfront on each rebuild; the layout/paint pass only
 ///     visits items that fit in the viewport. Best when you have a
 ///     bounded set of widgets you already constructed.
-///   - `ListView.builder(itemCount: N, itemBuilder: (ctx, i, sel) {})` —
+///   - `ListView.builder(itemCount: N, itemBuilder: (context, index, active) {})` —
 ///     lazy. Only items currently within the viewport are mounted as
 ///     element subtrees; items scroll into/out of the mounted set as
 ///     the user navigates. Supports variable item heights. Best for
@@ -355,7 +390,7 @@ class ListController extends ChangeNotifier {
 ///     coordinating sidebar + main pane focus traversal) can react.
 ///
 /// [itemBuilder] (lazy form) is invoked with `(context, index,
-/// selected)` for every visible item. The `selected` flag is the
+/// active)` for every visible item. The `active` flag is the
 /// active selected-row cue: by default it is true only while this
 /// [ListView] has focus. The [ListController.selectedIndex] still
 /// retains the logical selection while focus is elsewhere. Composite
@@ -375,6 +410,7 @@ class ListView extends StatefulWidget {
     this.focusNode,
     required List<Widget> this.children,
     this.autofocus = false,
+    this.selectable = true,
     this.edgeBehavior = EdgeBehavior.bubble,
     this.onActivate,
     this.onSelectionChanged,
@@ -388,7 +424,7 @@ class ListView extends StatefulWidget {
        findChildIndexCallback = null;
 
   /// Lazy constructor: build items on demand by index, mount only the
-  /// visible ones. Each item builder invocation receives a `selected`
+  /// visible ones. Each item builder invocation receives an `active`
   /// flag for styling the active row.
   const ListView.builder({
     super.key,
@@ -399,6 +435,7 @@ class ListView extends StatefulWidget {
     this.itemKeyBuilder,
     this.findChildIndexCallback,
     this.autofocus = false,
+    this.selectable = true,
     this.edgeBehavior = EdgeBehavior.bubble,
     this.onActivate,
     this.onSelectionChanged,
@@ -435,6 +472,7 @@ class ListView extends StatefulWidget {
     this.itemKeyBuilder,
     this.findChildIndexCallback,
     this.autofocus = false,
+    this.selectable = true,
     this.edgeBehavior = EdgeBehavior.bubble,
     this.onActivate,
     this.onSelectionChanged,
@@ -465,8 +503,8 @@ class ListView extends StatefulWidget {
   final int? itemCount;
 
   /// Per-index widget builder (lazy form). Mutually exclusive with
-  /// [children]. Invoked with `(context, index, selected)`.
-  final Widget Function(BuildContext context, int index, bool selected)?
+  /// [children]. Invoked with `(context, index, active)`.
+  final Widget Function(BuildContext context, int index, bool active)?
   itemBuilder;
 
   /// Per-gap separator builder ([ListView.separated] form). Called with
@@ -506,6 +544,11 @@ class ListView extends StatefulWidget {
   /// Whether to request focus on first mount.
   final bool autofocus;
 
+  /// Whether rows have a selection cursor and can activate. False keeps the
+  /// list scrollable by wheel and keyboard, without selecting rows. Interactive
+  /// child widgets keep their own input behavior.
+  final bool selectable;
+
   /// What to do with up/down at the boundary of the list. See
   /// [EdgeBehavior].
   final EdgeBehavior edgeBehavior;
@@ -520,7 +563,7 @@ class ListView extends StatefulWidget {
   /// than collapsing the list; wrap the list in an Expanded or a SizedBox.
   final bool scrollbar;
 
-  /// Called when the user activates an item with Enter or a pointer press.
+  /// Called when the user activates an item with Enter or a completed click.
   /// Not invoked when the list is empty or there is no selection.
   final void Function(int index)? onActivate;
 
@@ -552,6 +595,7 @@ class _ListViewState extends State<ListView> {
   late FocusNode _focusNode;
   bool _ownsController = false;
   bool _ownsFocusNode = false;
+  Object? _pressedItem;
   Object? _selectedItemKey;
   Object? _firstItemKey;
   Object? _lastItemKey;
@@ -581,12 +625,9 @@ class _ListViewState extends State<ListView> {
     var controllerChanged = false;
     if (widget.controller != oldWidget.controller) {
       _controller.removeListener(_onControllerChange);
+      _controller._detach();
       if (_ownsController) _controller.dispose();
-      _controller =
-          widget.controller ??
-          ListController(
-            selectedIndex: widget.effectiveItemCount > 0 ? 0 : null,
-          );
+      _controller = widget.controller ?? ListController();
       _ownsController = widget.controller == null;
       _initializeController(widget.effectiveItemCount);
       _controller.addListener(_onControllerChange);
@@ -596,6 +637,14 @@ class _ListViewState extends State<ListView> {
       if (_ownsFocusNode) _focusNode.dispose();
       _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'ListView');
       _ownsFocusNode = widget.focusNode == null;
+    }
+    if (widget.selectable != oldWidget.selectable) {
+      _pressedItem = null;
+      _controller._selectable = widget.selectable;
+      _controller._restoreSelectionWhenNonEmpty = widget.selectable;
+      _controller._selectedIndex =
+          widget.selectable && widget.effectiveItemCount > 0 ? 0 : null;
+      _controller._pendingRevealIndex = _controller._selectedIndex;
     }
     final newCount = widget.effectiveItemCount;
     final identityAware =
@@ -621,26 +670,31 @@ class _ListViewState extends State<ListView> {
         identityAware: true,
       );
     } else if (!controllerChanged && newCount != oldCount) {
-      // Runs the follow-mode state machine (advance-to-tail while following,
-      // accumulate unseenCount otherwise) and re-clamps the selection.
+      // Track new arrivals and clamp selection without coupling it to following.
       _controller._handleCountChange(newCount);
     }
     _captureIdentitySnapshot();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _controller._binding = TuiBinding.maybeOf(context);
+  }
+
   void _initializeController(int count) {
     _controller._itemCount = count;
-    // Attaching a controller establishes the current data snapshot; it is not
-    // an arrival event and must not inflate unseenCount. Default the cursor
-    // when items exist, otherwise clamp an explicit initial selection.
-    if (count == 0) {
-      _controller._selectedIndex = null;
-    } else if (_controller._selectedIndex == null) {
-      _controller._selectedIndex = _controller._pinToBottom ? count - 1 : 0;
-    } else {
-      _controller._selectedIndex = _controller._clampSelection(
-        _controller._selectedIndex,
-      );
+    _controller._attached = true;
+    _controller._selectable = widget.selectable;
+    _controller._selectedIndex = _controller._clampSelection(
+      _controller._selectedIndex,
+    );
+    if (!widget.selectable) _controller._restoreSelectionWhenNonEmpty = false;
+    if (!_controller._pendingBottom &&
+        _controller._pendingJumpIndex == null &&
+        _controller._pendingFraction == null &&
+        _controller._pendingScrollRows == 0) {
+      _controller._pendingRevealIndex = _controller._selectedIndex;
     }
   }
 
@@ -745,9 +799,17 @@ class _ListViewState extends State<ListView> {
     return index;
   }
 
-  void _setUserSelection(int index) {
+  void _setUserSelection(int index, {bool reveal = true}) {
+    if (!widget.selectable) return;
     final before = _controller.selectedIndex;
     _controller.selectedIndex = index;
+    if (!reveal) {
+      // The pressed item is already visible. Revealing its top would move a
+      // partially visible row under the pointer before the click finishes.
+      _controller._pendingRevealIndex = null;
+    } else if (_controller.selectedIndex == before) {
+      _controller._revealSelection();
+    }
     final after = _controller.selectedIndex;
     if (after != null && after != before) {
       widget.onSelectionChanged?.call(after);
@@ -766,9 +828,32 @@ class _ListViewState extends State<ListView> {
     if (count == 0) return KeyEventResult.ignored;
 
     final selected = _controller.selectedIndex;
-    // Scroll-only mode is supported via the controller's jumpToIndex,
-    // but arrow chords only operate when a selection cursor is present.
-    if (selected == null) return KeyEventResult.ignored;
+    if (!widget.selectable || selected == null) {
+      switch (code) {
+        case KeyCode.arrowUp:
+          return _scrollBy(-1)
+              ? KeyEventResult.handled
+              : KeyEventResult.ignored;
+        case KeyCode.arrowDown:
+          return _scrollBy(1) ? KeyEventResult.handled : KeyEventResult.ignored;
+        case KeyCode.pageUp:
+          return _scrollBy(-_controller._viewportExtent)
+              ? KeyEventResult.handled
+              : KeyEventResult.ignored;
+        case KeyCode.pageDown:
+          return _scrollBy(_controller._viewportExtent)
+              ? KeyEventResult.handled
+              : KeyEventResult.ignored;
+        case KeyCode.home:
+          _controller.jumpToIndex(0);
+          return KeyEventResult.handled;
+        case KeyCode.end:
+          _controller.jumpToBottom();
+          return KeyEventResult.handled;
+        default:
+          return KeyEventResult.ignored;
+      }
+    }
 
     switch (code) {
       case KeyCode.arrowUp:
@@ -817,63 +902,57 @@ class _ListViewState extends State<ListView> {
         : KeyEventResult.handled;
   }
 
-  /// Scroll-wheel handler — works whether or not the list is focused, so
-  /// hovering an unfocused list and scrolling it just works. Moves the
-  /// selection when there is one (the viewport follows it), otherwise
-  /// jumps the scroll-only viewport.
+  /// Viewport movement is independent of selection and never takes focus.
   bool _scrollBy(int delta) {
-    final count = widget.effectiveItemCount;
-    if (count == 0) return widget.edgeBehavior == EdgeBehavior.contain;
-    final selection = _controller.selectedIndex;
-    if (selection != null) {
-      final next = (selection + delta).clamp(0, count - 1);
-      if (next == selection) return widget.edgeBehavior == EdgeBehavior.contain;
-      _setUserSelection(next);
-    } else {
-      final range = _controller.visibleRange;
-      final first = range?.first ?? 0;
-      if ((delta < 0 && first == 0) ||
-          (delta > 0 && range != null && range.last >= count - 1)) {
-        return widget.edgeBehavior == EdgeBehavior.contain;
-      }
-      _controller.jumpToIndex((first + delta).clamp(0, count - 1));
+    if (delta == 0 ||
+        (delta < 0 && _controller.atTop) ||
+        (delta > 0 && _controller.atBottom)) {
+      return widget.edgeBehavior == EdgeBehavior.contain;
     }
+    _controller.scrollBy(delta);
     return true;
   }
 
   @override
   void dispose() {
     _controller.removeListener(_onControllerChange);
+    _controller._detach();
     if (_ownsController) _controller.dispose();
     if (_ownsFocusNode) _focusNode.dispose();
     super.dispose();
   }
 
-  /// Pointer press on an item: select it, take focus, and fire [onActivate] —
-  /// the click-to-activate convention, so a mouse reaches the same outcome
-  /// as moving the selection and pressing Enter.
-  ///
-  /// Acts on the press (tap-down), not the release: the press triggers a
-  /// click-to-focus rebuild, and over the serve wire that rebuild lands
-  /// between the down and up events — recreating the item's pointer region
-  /// so a release-time identity match would miss. Selecting on press is
-  /// robust to that and gives instant feedback.
-  void _handleItemTap(int index) {
-    final count = widget.effectiveItemCount;
-    if (index < 0 || index >= count) return;
-    _setUserSelection(index);
+  Object _itemIdentity(int index) {
+    final key =
+        widget.itemKeyBuilder?.call(index) ?? widget.children?[index].key;
+    return key == null ? (index: index) : (key: key);
+  }
+
+  void _handleItemDown(int index) {
+    if (index < 0 || index >= widget.effectiveItemCount) return;
+    _pressedItem = _itemIdentity(index);
+    _setUserSelection(index, reveal: false);
     _focusNode.requestFocus();
+  }
+
+  void _handleItemTap(int index) {
+    final pressed = _pressedItem;
+    _pressedItem = null;
+    if (!widget.selectable ||
+        index < 0 ||
+        index >= widget.effectiveItemCount ||
+        pressed != _itemIdentity(index)) {
+      return;
+    }
     widget.onActivate?.call(index);
   }
 
-  /// Wraps an item in a [RepaintBoundary] when [ListView.addRepaintBoundaries]
-  /// is on (the default). Kept as one seam so the eager and lazy item paths
-  /// wrap identically.
   Widget _maybeBoundary(Widget item) =>
       widget.addRepaintBoundaries ? RepaintBoundary(child: item) : item;
 
   @override
   Widget build(BuildContext context) {
+    _controller._binding = TuiBinding.maybeOf(context);
     final selected = _controller.selectedIndex;
     final Widget content = MouseRegion(
       onScroll: (details) => _scrollBy(details.delta.row),
@@ -898,7 +977,9 @@ class _ListViewState extends State<ListView> {
                     for (var i = 0; i < widget.children!.length; i++)
                       _maybeBoundary(
                         GestureDetector(
-                          onTapDown: (details) => _handleItemTap(i),
+                          onTapDown: (_) => _handleItemDown(i),
+                          onTap: () => _handleItemTap(i),
+                          onTapCancel: () => _pressedItem = null,
                           child: widget.children![i],
                         ),
                       ),
@@ -909,8 +990,8 @@ class _ListViewState extends State<ListView> {
               // Lazy: builder + count. Item subtrees are mounted on demand by
               // the render object during layout; wrap each so a press selects it.
               // `.separated` composes a non-selectable separator into the row
-              // block below its item — the press target stays the item only (a
-              // click on the separator does nothing), and separators never enter
+              // block below its item. Clicking the block selects its item;
+              // separators never enter
               // the index math because they are sub-parts of an item's block.
               final separatorBuilder = widget.separatorBuilder;
               final itemCount = widget.itemCount!;
@@ -942,7 +1023,9 @@ class _ListViewState extends State<ListView> {
                   // has its tap region follow for free.
                   return _maybeBoundary(
                     GestureDetector(
-                      onTapDown: (details) => _handleItemTap(index),
+                      onTapDown: (_) => _handleItemDown(index),
+                      onTap: () => _handleItemTap(index),
+                      onTapCancel: () => _pressedItem = null,
                       child: content,
                     ),
                   );
@@ -1065,23 +1148,204 @@ Never _throwUnboundedListHeight() {
   );
 }
 
-/// Lays out a vertical stack of children with a movable scroll anchor.
-///
-/// Strategy:
-///   1. Resolve the pending jump command (if any) into the scroll
-///      anchor — the index of the first item that should be visible
-///      at the top of the viewport.
-///   2. If a selection exists and lies above the anchor, drop the
-///      anchor to the selection (scroll up to reveal it).
-///   3. Lay out items starting at the anchor, accumulating rows
-///      until the viewport is full.
-///   4. If the selection lies below the last item that fit, advance
-///      the anchor so the selection becomes the last visible item,
-///      then re-lay out.
-///   5. Write `itemCount` and `visibleRange` back to the controller
-///      without notifying — these are read-only mirrors of layout
-///      state, not user-mutable fields, and notifying during layout
-///      would loop.
+/// Shared row-based viewport math for eager and lazy lists. Only measuring an
+/// item can mount it; all walks stop at the viewport except an explicit jump or
+/// scroll through intervening rows. No global height table is required.
+class _ListViewportLayout {
+  int anchor = 0;
+  int rowOffset = 0;
+
+  Map<int, int> layout({
+    required ListController controller,
+    required int count,
+    required int rows,
+    required int Function(int index) measure,
+  }) {
+    if (count == 0 || rows == 0) {
+      // A temporarily collapsed viewport must not discard follow intent.
+      if (rows == 0 && controller._isFollowing) {
+        controller._pendingBottom = true;
+      }
+      if (count == 0) {
+        anchor = 0;
+        rowOffset = 0;
+      }
+      controller._applyViewport(
+        range: null,
+        extent: rows,
+        atTop: count == 0,
+        atBottom: count == 0,
+        scrollFraction: 0,
+        visibleFraction: count == 0 ? 1 : 0,
+      );
+      return {};
+    }
+    final heights = <int, int>{};
+    int height(int index) => heights.putIfAbsent(index, () => measure(index));
+
+    void normalize() {
+      while (rowOffset < 0 && anchor > 0) {
+        anchor--;
+        rowOffset += height(anchor);
+      }
+      if (rowOffset < 0) rowOffset = 0;
+      while (anchor < count - 1 &&
+          rowOffset > 0 &&
+          rowOffset >= height(anchor)) {
+        rowOffset -= height(anchor);
+        anchor++;
+      }
+      final lastHeight = height(anchor);
+      if (anchor == count - 1 && rowOffset >= lastHeight) {
+        rowOffset = lastHeight > 0 ? lastHeight - 1 : 0;
+      }
+    }
+
+    void endAt(int index) {
+      anchor = index;
+      rowOffset = height(index) - rows;
+      normalize();
+    }
+
+    var reachesEnd = false;
+    Map<int, int> window() {
+      final offsets = <int, int>{};
+      var row = -rowOffset;
+      var index = anchor;
+      for (; index < count && row < rows; index++) {
+        final extent = height(index);
+        if (extent > 0) offsets[index] = row;
+        row += extent;
+      }
+      reachesEnd = index == count && row <= rows;
+      return offsets;
+    }
+
+    anchor = anchor.clamp(0, count - 1);
+    final jump = controller._pendingJumpIndex;
+    final fraction = controller._pendingFraction;
+    final priorRange = controller.visibleRange;
+    final selected = controller.selectedIndex;
+    final keepSelectionOnResize =
+        jump == null &&
+        fraction == null &&
+        !controller._pendingBottom &&
+        controller._pendingScrollRows == 0 &&
+        !controller._isFollowing &&
+        controller._viewportExtent != rows &&
+        selected != null &&
+        priorRange != null &&
+        selected >= priorRange.first &&
+        selected <= priorRange.last;
+    final reveal =
+        controller._pendingRevealIndex ??
+        (keepSelectionOnResize ? selected : null);
+    final scroll = controller._pendingScrollRows;
+    final bottom = controller._pendingBottom || controller._isFollowing;
+    controller._clearRequests();
+
+    if (bottom) {
+      endAt(count - 1);
+    } else if (jump != null) {
+      anchor = jump.clamp(0, count - 1);
+      rowOffset = 0;
+    } else if (fraction != null) {
+      if (fraction == 1) {
+        endAt(count - 1);
+      } else {
+        final position = fraction * count * (1 - controller.visibleFraction);
+        anchor = position.floor().clamp(0, count - 1);
+        rowOffset = ((position - anchor) * height(anchor)).round();
+      }
+    }
+    if (!bottom && jump == null && fraction == null) {
+      // Preserve the anchor identity on reflow instead of interpreting an old
+      // local offset as movement into a different item.
+      final anchorHeight = height(anchor);
+      rowOffset = rowOffset.clamp(0, anchorHeight > 0 ? anchorHeight - 1 : 0);
+    }
+    rowOffset += scroll;
+    normalize();
+    var offsets = window();
+
+    if (reveal != null) {
+      final target = reveal.clamp(0, count - 1);
+      final top = offsets[target];
+      if (top == null || top < 0 || top + height(target) > rows) {
+        if (target <= anchor || height(target) > rows) {
+          anchor = target;
+          rowOffset = 0;
+        } else {
+          endAt(target);
+        }
+        offsets = window();
+      }
+    }
+    // A shrink or resize can leave blank space at the end. Backfill without
+    // changing selection, including a jump whose target has zero height.
+    final end = offsets.isEmpty
+        ? 0
+        : offsets.values.last + height(offsets.keys.last);
+    if (reachesEnd && end < rows && (anchor > 0 || rowOffset > 0)) {
+      rowOffset -= rows - end;
+      normalize();
+      offsets = window();
+    }
+    final first = offsets.isEmpty ? null : offsets.keys.first;
+    final last = offsets.isEmpty ? null : offsets.keys.last;
+    final atTop = anchor == 0 && rowOffset == 0;
+    final atBottom = reachesEnd;
+    var visibleUnits = 0.0;
+    for (final entry in offsets.entries) {
+      final start = entry.value.clamp(0, rows);
+      final end = (entry.value + height(entry.key)).clamp(0, rows);
+      visibleUnits += (end - start) / height(entry.key);
+    }
+    final position =
+        anchor + (height(anchor) == 0 ? 0.0 : rowOffset / height(anchor));
+    final maxPosition = count - visibleUnits;
+    controller._applyViewport(
+      range: first == null ? null : (first: first, last: last!),
+      extent: rows,
+      atTop: atTop,
+      atBottom: atBottom,
+      scrollFraction: atTop
+          ? 0
+          : atBottom
+          ? 1
+          : (maxPosition <= 0 ? 0 : (position / maxPosition).clamp(0.0, 1.0)),
+      visibleFraction: atTop && atBottom
+          ? 1
+          : (visibleUnits / count).clamp(0.0, 1.0),
+    );
+    return offsets;
+  }
+}
+
+void _paintListViewport(
+  CellBuffer buffer,
+  CellOffset offset,
+  CellSize size,
+  Map<RenderObject, CellOffset> children,
+) {
+  final needsClip = children.entries.any(
+    (entry) =>
+        entry.value.row < 0 ||
+        entry.value.row + entry.key.size.rows > size.rows,
+  );
+  if (!needsClip) {
+    for (final entry in children.entries) {
+      entry.key.paint(buffer, offset + entry.value);
+    }
+    return;
+  }
+  final scratch = CellBuffer(size);
+  for (final entry in children.entries) {
+    entry.key.paint(scratch, entry.value);
+  }
+  buffer.copyFrom(scratch, offset);
+}
+
 class _RenderListView extends RenderObject implements RenderObjectWithChildren {
   @override
   CellOffset childOffsetOf(RenderObject child) =>
@@ -1089,6 +1353,10 @@ class _RenderListView extends RenderObject implements RenderObjectWithChildren {
 
   @override
   bool presentsChild(RenderObject child) => _visibleChildren.contains(child);
+
+  @override
+  CellRect? childClipOf(RenderObject child) =>
+      CellRect(offset: CellOffset.zero, size: size);
 
   _RenderListView({required ListController controller})
     : _controller = controller;
@@ -1109,7 +1377,7 @@ class _RenderListView extends RenderObject implements RenderObjectWithChildren {
   /// Index of the first item that should appear at the top of the
   /// viewport. Persists across layouts so scroll position is stable
   /// when only selection / item count changes.
-  int _scrollAnchor = 0;
+  final _viewport = _ListViewportLayout();
 
   @override
   List<RenderObject> get children => List.unmodifiable(_children);
@@ -1164,145 +1432,30 @@ class _RenderListView extends RenderObject implements RenderObjectWithChildren {
 
   @override
   CellSize performLayout(CellConstraints constraints) {
-    final maxRows = constraints.maxRows;
-    final maxCols = constraints.maxCols;
     final count = _children.length;
-
-    if (maxRows == null && count > 0) _throwUnboundedListHeight();
-
-    if (count == 0 || maxRows == null || maxRows == 0) {
-      _visibleChildren.clear();
-      _controller._visibleRange = null;
-      // itemCount mirror — the widget already pushed it pre-build,
-      // but covering the empty-children case here keeps the field
-      // consistent regardless of how the renderer was reached.
-      _controller._itemCount = count;
-      return constraints.constrain(CellSize(maxCols ?? 0, maxRows ?? 0));
-    }
-
-    // (1) Apply pending jump. When the user has explicitly asked to
-    // jump, that intent wins over selection-follow — leaving the
-    // selection off-screen until the user moves it is preferable to
-    // silently undoing their scroll.
-    final pending = _controller._pendingJumpIndex;
-    final hadPendingJump = pending != null;
-    if (hadPendingJump) {
-      _scrollAnchor = pending.clamp(0, count - 1);
-      _controller._pendingJumpIndex = null;
-    }
-    _scrollAnchor = _scrollAnchor.clamp(0, count - 1);
-
-    final selected = _controller._selectedIndex;
-
-    // (2) Selection above the anchor — pull the anchor up.
-    if (!hadPendingJump && selected != null && selected < _scrollAnchor) {
-      _scrollAnchor = selected;
-    }
-
-    final childCC = CellConstraints(maxCols: maxCols);
-    var (firstVisible, lastVisible) = _layoutFromAnchor(
-      _scrollAnchor,
-      maxRows,
-      childCC,
+    final rows = constraints.maxRows;
+    if (rows == null && count > 0) _throwUnboundedListHeight();
+    final offsets = _viewport.layout(
+      controller: _controller,
+      count: count,
+      rows: rows ?? 0,
+      measure: (index) => _children[index]
+          .layout(CellConstraints(maxCols: constraints.maxCols))
+          .rows,
     );
-
-    // (3) Under-filled tail. The anchor sat past the last full page — a
-    // tail jump on a scroll-only list, items removed, a taller viewport — so
-    // the walk ran out of items with rows to spare. Re-anchor so the last
-    // item ends at the bottom, then re-walk. The check is a comparison; the
-    // re-walk runs only when the viewport actually under-filled, never on a
-    // full page, so a following log pays it once and then fills.
-    if (lastVisible == count - 1 &&
-        _filledRows < maxRows &&
-        _scrollAnchor > 0) {
-      final tailAnchor = _anchorThatEndsAt(count - 1, maxRows, childCC);
-      if (tailAnchor < _scrollAnchor) {
-        _scrollAnchor = tailAnchor;
-        (firstVisible, lastVisible) = _layoutFromAnchor(
-          _scrollAnchor,
-          maxRows,
-          childCC,
-        );
-      }
-    }
-
-    // (4) Selection below the last visible — recompute anchor so
-    // selection is the bottom-most visible item, then re-layout.
-    if (!hadPendingJump && selected != null && selected > lastVisible) {
-      final newAnchor = _anchorThatEndsAt(selected, maxRows, childCC);
-      if (newAnchor != _scrollAnchor) {
-        _scrollAnchor = newAnchor;
-        final (f, l) = _layoutFromAnchor(_scrollAnchor, maxRows, childCC);
-        _controller._visibleRange = (first: f, last: l);
-      } else {
-        _controller._visibleRange = (first: firstVisible, last: lastVisible);
-      }
-    } else {
-      _controller._visibleRange = (first: firstVisible, last: lastVisible);
-    }
-    _controller._itemCount = count;
-
-    return constraints.constrain(CellSize(maxCols ?? 0, maxRows));
-  }
-
-  /// Rows the last forward walk filled — the under-fill check in
-  /// [performLayout] reads it to decide whether to re-anchor at the tail.
-  int _filledRows = 0;
-
-  /// Lays out children starting at [anchor], placing each below the
-  /// previous one until [maxRows] is reached. Updates [_childOffsets]
-  /// and [_visibleChildren]. Returns the (first, last) visible index.
-  (int, int) _layoutFromAnchor(
-    int anchor,
-    int maxRows,
-    CellConstraints childCC,
-  ) {
+    _childOffsets.clear();
     _visibleChildren.clear();
-    var row = 0;
-    var last = anchor - 1;
-    for (var i = anchor; i < _children.length; i++) {
-      if (row >= maxRows) break;
-      final child = _children[i];
-      final remaining = maxRows - row;
-      final cc = CellConstraints(maxCols: childCC.maxCols, maxRows: remaining);
-      final size = child.layout(cc);
-      _childOffsets[child] = CellOffset(0, row);
+    for (final entry in offsets.entries) {
+      final child = _children[entry.key];
+      _childOffsets[child] = CellOffset(0, entry.value);
       _visibleChildren.add(child);
-      row += size.rows;
-      last = i;
     }
-    _filledRows = row;
-    return (anchor, last);
-  }
-
-  /// Computes the smallest anchor `a` such that laying out items
-  /// from `a` forward keeps [target] within the viewport. Walks
-  /// backwards from [target], laying each child out at the width the
-  /// child would actually receive, summing heights until adding one
-  /// more would exceed [maxRows]. The first child whose height
-  /// doesn't fit is the boundary; the next one is the anchor.
-  int _anchorThatEndsAt(int target, int maxRows, CellConstraints childCC) {
-    var rows = 0;
-    var anchor = target;
-    for (var i = target; i >= 0; i--) {
-      final child = _children[i];
-      final cc = CellConstraints(maxCols: childCC.maxCols);
-      final size = child.layout(cc);
-      if (rows + size.rows > maxRows) break;
-      rows += size.rows;
-      anchor = i;
-    }
-    return anchor;
+    return constraints.constrain(CellSize(constraints.maxCols ?? 0, rows ?? 0));
   }
 
   @override
-  void performPaint(CellBuffer buffer, CellOffset offset) {
-    for (final c in _children) {
-      if (!_visibleChildren.contains(c)) continue;
-      final co = _childOffsets[c] ?? CellOffset.zero;
-      c.paint(buffer, offset + co);
-    }
-  }
+  void performPaint(CellBuffer buffer, CellOffset offset) =>
+      _paintListViewport(buffer, offset, size, _childOffsets);
 }
 
 // ---------------------------------------------------------------------------
@@ -1525,7 +1678,7 @@ class _LazyListElement extends RenderObjectElement {
     // Re-update each currently-mounted child with a freshly-built
     // widget from the (possibly new) itemBuilder. This is what
     // propagates a selectedIndex change to existing items so their
-    // `selected` flag can re-render the highlight without us
+    // `active` flag can re-render the highlight without us
     // having to unmount/remount.
     final maxValid = widget.itemCount;
     final toRemove = <int>[];
@@ -1640,22 +1793,9 @@ class _LazyListElement extends RenderObjectElement {
 /// scroll anchor (top-of-viewport data index) that persists across
 /// layouts.
 ///
-/// Layout strategy:
-///
-///   1. Apply pending jump command from the controller (if any) by
-///      moving the scroll anchor.
-///   2. If a selection is active and lies above the anchor, drop the
-///      anchor to the selection (pull viewport up).
-///   3. Walk items forward from the anchor, asking the element to
-///      `createChild(i)` for each, laying them out, accumulating
-///      rows until the viewport is full.
-///   4. If a selection lies below the last visible item, compute a
-///      new anchor that brings the selection into view as the
-///      bottom-most item, and re-walk.
-///   5. Unmount any items that were active before this layout but
-///      are no longer in the new visible range.
-///   6. Write `itemCount` and `visibleRange` back to the controller
-///      without notifying.
+/// Uses the shared row-offset viewport layout, measuring and mounting only the
+/// rows it visits. It then unmounts items outside the final visible range.
+/// Selection is revealed only on request; ordinary rebuilds keep the anchor.
 class _RenderLazyListView extends RenderObject
     implements RenderObjectWithChildren {
   @override
@@ -1700,7 +1840,9 @@ class _RenderLazyListView extends RenderObject
   /// so reparenting is well-defined.
   final Set<RenderObject> _adopted = Set<RenderObject>.identity();
 
-  int _scrollAnchor = 0;
+  final _viewport = _ListViewportLayout();
+  int get _scrollAnchor => _viewport.anchor;
+  set _scrollAnchor(int value) => _viewport.anchor = value;
   Object? _scrollAnchorItemKey;
 
   @override
@@ -1789,212 +1931,49 @@ class _RenderLazyListView extends RenderObject
   }
 
   @override
+  CellRect? childClipOf(RenderObject child) =>
+      CellRect(offset: CellOffset.zero, size: size);
+
+  @override
   CellSize performLayout(CellConstraints constraints) {
-    final maxRows = constraints.maxRows;
-    final maxCols = constraints.maxCols;
+    final rows = constraints.maxRows;
     final element = _element;
     final count = _controller._itemCount;
-
-    if (maxRows == null && count > 0 && element != null) {
+    if (rows == null && count > 0 && element != null) {
       _throwUnboundedListHeight();
     }
-
-    if (element == null || count == 0 || maxRows == null || maxRows == 0) {
-      // Unmount any leftovers from a previous non-empty layout.
-      _unmountAllVisible(element);
-      _controller._visibleRange = null;
-      if (count == 0) _scrollAnchorItemKey = null;
-      return constraints.constrain(CellSize(maxCols ?? 0, maxRows ?? 0));
-    }
-
-    // (1) Apply pending jump.
-    final pending = _controller._pendingJumpIndex;
-    final hadPendingJump = pending != null;
-    if (hadPendingJump) {
-      _scrollAnchor = pending.clamp(0, count - 1);
-      _controller._pendingJumpIndex = null;
-    }
-    _scrollAnchor = _scrollAnchor.clamp(0, count - 1);
-
-    final selected = _controller._selectedIndex;
-
-    // (2) Selection above the anchor — pull the anchor up.
-    if (!hadPendingJump && selected != null && selected < _scrollAnchor) {
-      _scrollAnchor = selected;
-    }
-
-    final childCC = CellConstraints(maxCols: maxCols);
-    // Rebuild the active map in final visual-index order on every layout.
-    // Updating an existing Map key does not change insertion order; retaining
-    // the prior order across a scroll or keyed reorder would make paint and
-    // semantic traversal disagree with the newly-computed row offsets.
+    final measured = <int, RenderObject>{};
+    final offsets = _viewport.layout(
+      controller: _controller,
+      count: element == null ? 0 : count,
+      rows: rows ?? 0,
+      measure: (index) {
+        final child = element!.createChild(index)!;
+        measured[index] = child;
+        return child.layout(CellConstraints(maxCols: constraints.maxCols)).rows;
+      },
+    );
     _activeByIndex.clear();
     _indexByObject.clear();
     _childOffsets.clear();
-    final newlyVisible = <int>{};
-
-    var (firstVisible, lastVisible) = _layoutFromAnchor(
-      element,
-      _scrollAnchor,
-      maxRows,
-      childCC,
-      newlyVisible,
-    );
-
-    // (3) Under-filled tail — see the eager path. Here the backwards probe
-    // mounts items, which is why this runs only on an actual under-fill;
-    // the leftover sweep in (5) reclaims whatever the probe mounted.
-    if (lastVisible == count - 1 &&
-        _filledRows < maxRows &&
-        _scrollAnchor > 0) {
-      final tailAnchor = _anchorThatEndsAt(
-        element,
-        count - 1,
-        maxRows,
-        childCC,
-      );
-      if (tailAnchor < _scrollAnchor) {
-        _scrollAnchor = tailAnchor;
-        _activeByIndex.clear();
-        _childOffsets.clear();
-        final result = _layoutFromAnchor(
-          element,
-          _scrollAnchor,
-          maxRows,
-          childCC,
-          newlyVisible,
-        );
-        firstVisible = result.$1;
-        lastVisible = result.$2;
+    for (final entry in offsets.entries) {
+      final child = measured[entry.key]!;
+      _activeByIndex[entry.key] = child;
+      _indexByObject[child] = entry.key;
+      _childOffsets[child] = CellOffset(0, entry.value);
+    }
+    if (element != null) {
+      for (final index in element.mountedIndices) {
+        if (!offsets.containsKey(index)) element.disposeChild(index);
       }
     }
-
-    // (4) Selection below the last visible — recompute anchor so the
-    // selection becomes the bottom-most visible item, then re-walk.
-    if (!hadPendingJump && selected != null && selected > lastVisible) {
-      final newAnchor = _anchorThatEndsAt(element, selected, maxRows, childCC);
-      if (newAnchor != _scrollAnchor) {
-        _scrollAnchor = newAnchor;
-        newlyVisible.clear();
-        // We need to clear offsets / active map for the re-walk
-        // because the second walk replays from a different anchor.
-        _activeByIndex.clear();
-        _childOffsets.clear();
-        // Note: `_indexByObject` and `_adopted` stay populated; the
-        // unmount-leftovers pass at the end will sweep anything that
-        // didn't end up in `newlyVisible`.
-        final result = _layoutFromAnchor(
-          element,
-          _scrollAnchor,
-          maxRows,
-          childCC,
-          newlyVisible,
-        );
-        firstVisible = result.$1;
-        lastVisible = result.$2;
-      }
-    }
-
-    // (5) Unmount every mounted item that is not visible in the final window.
-    // This includes transient children mounted by [_anchorThatEndsAt] while it
-    // probes backwards for a variable-height selection anchor. Sweeping only
-    // the previous active map leaves the first non-fitting probe mounted
-    // forever because it was created during this layout but never made active.
-    for (final i in element.mountedIndices) {
-      if (!newlyVisible.contains(i)) {
-        element.disposeChild(i);
-      }
-    }
-
-    _controller._visibleRange = (first: firstVisible, last: lastVisible);
-    _controller._itemCount = count;
-    _scrollAnchorItemKey = element.itemKeyAt(_scrollAnchor);
-
-    return constraints.constrain(CellSize(maxCols ?? 0, maxRows));
-  }
-
-  /// Rows the last forward walk filled — the under-fill check in
-  /// [performLayout] reads it to decide whether to re-anchor at the tail.
-  int _filledRows = 0;
-
-  /// Walks items forward from [anchor], mounting each via
-  /// [element.createChild] and laying it out, accumulating rows
-  /// until [maxRows] is reached or `itemCount` runs out. Updates
-  /// `_activeByIndex`, `_indexByObject`, `_childOffsets`, and the
-  /// caller-provided [newlyVisible] set. Returns (first, last) data
-  /// indices currently in the viewport.
-  (int, int) _layoutFromAnchor(
-    _LazyListElement element,
-    int anchor,
-    int maxRows,
-    CellConstraints childCC,
-    Set<int> newlyVisible,
-  ) {
-    var row = 0;
-    var last = anchor - 1;
-    final count = _controller._itemCount;
-    for (var i = anchor; i < count; i++) {
-      if (row >= maxRows) break;
-      final remaining = maxRows - row;
-      final child = element.createChild(i);
-      if (child == null) break;
-      final size = child.layout(
-        CellConstraints(maxCols: childCC.maxCols, maxRows: remaining),
-      );
-      _activeByIndex[i] = child;
-      _indexByObject[child] = i;
-      _childOffsets[child] = CellOffset(0, row);
-      newlyVisible.add(i);
-      row += size.rows;
-      last = i;
-    }
-    _filledRows = row;
-    return (anchor, last);
-  }
-
-  /// Computes the smallest anchor `a` such that laying out items
-  /// from `a` forward keeps [target] within the viewport. Walks
-  /// backwards from [target], mounting each item, summing heights.
-  /// Items mounted by this probe but not retained in the final
-  /// window will be cleaned up by the caller's unmount-leftovers
-  /// sweep at the end of layout.
-  int _anchorThatEndsAt(
-    _LazyListElement element,
-    int target,
-    int maxRows,
-    CellConstraints childCC,
-  ) {
-    var rows = 0;
-    var anchor = target;
-    for (var i = target; i >= 0; i--) {
-      final child = element.createChild(i);
-      if (child == null) break;
-      final size = child.layout(CellConstraints(maxCols: childCC.maxCols));
-      if (rows + size.rows > maxRows) break;
-      rows += size.rows;
-      anchor = i;
-    }
-    return anchor;
-  }
-
-  void _unmountAllVisible(_LazyListElement? element) {
-    if (element == null) {
-      _activeByIndex.clear();
-      _childOffsets.clear();
-      return;
-    }
-    for (final i in _activeByIndex.keys.toList()) {
-      element.disposeChild(i);
-    }
-    _activeByIndex.clear();
-    _childOffsets.clear();
+    _scrollAnchorItemKey = count == 0
+        ? null
+        : element?.itemKeyAt(_scrollAnchor);
+    return constraints.constrain(CellSize(constraints.maxCols ?? 0, rows ?? 0));
   }
 
   @override
-  void performPaint(CellBuffer buffer, CellOffset offset) {
-    for (final child in _activeByIndex.values) {
-      final co = _childOffsets[child] ?? CellOffset.zero;
-      child.paint(buffer, offset + co);
-    }
-  }
+  void performPaint(CellBuffer buffer, CellOffset offset) =>
+      _paintListViewport(buffer, offset, size, _childOffsets);
 }
