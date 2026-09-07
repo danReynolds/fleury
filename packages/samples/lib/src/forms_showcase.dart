@@ -99,9 +99,10 @@ class _ServiceDetailsScreenState extends State<_ServiceDetailsScreen> {
   }
 
   Future<void> _continue() async {
+    final name = widget.draft.name.text.trim();
     await Future<void>.delayed(const Duration(milliseconds: 220));
     if (!mounted) return;
-    if (widget.draft.name.text.trim().toLowerCase() == 'fleury') {
+    if (name.toLowerCase() == 'fleury') {
       setState(() => _nameError = 'That service name is already in use.');
       await _form.validate();
       return;
@@ -114,67 +115,73 @@ class _ServiceDetailsScreenState extends State<_ServiceDetailsScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => _ShowcaseScreen(
-    step: 1,
-    title: 'Service details',
-    description: 'Start with the identity and visibility of the service.',
-    child: Form(
-      controller: _form,
-      semanticLabel: 'Create service details',
-      onSubmit: _continue,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          const Text('Name'),
-          FormField(
-            error: _nameError,
-            validator: () => widget.draft.name.text.trim().isEmpty
-                ? 'Enter a service name.'
-                : null,
-            child: SizedBox(
-              width: 42,
-              child: TextInput(
-                controller: widget.draft.name,
-                autofocus: true,
-                semanticLabel: 'Service name',
-                placeholder: 'webhook-worker',
-                onChanged: (_) {
-                  if (_nameError != null) {
-                    setState(() => _nameError = null);
-                  }
-                },
-                onSubmit: (_) => _form.submit(),
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: _form,
+    builder: (context, child) => _ShowcaseScreen(
+      step: 1,
+      title: 'Service details',
+      description: 'Start with the identity and visibility of the service.',
+      child: Form(
+        controller: _form,
+        semanticLabel: 'Create service details',
+        onSubmit: _continue,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Text('Name'),
+            FormField(
+              error: _nameError,
+              validator: () => widget.draft.name.text.trim().isEmpty
+                  ? 'Enter a service name.'
+                  : null,
+              child: SizedBox(
+                width: 42,
+                child: TextInput(
+                  controller: widget.draft.name,
+                  readOnly: _form.isSubmitting,
+                  autofocus: true,
+                  semanticLabel: 'Service name',
+                  placeholder: 'webhook-worker',
+                  onChanged: (_) {
+                    if (_nameError != null) {
+                      setState(() => _nameError = null);
+                    }
+                  },
+                  onSubmit: (_) => _form.submit(),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 1),
-          const Text('Description'),
-          FormField(
-            validator: () => widget.draft.description.text.trim().length < 10
-                ? 'Add a little more detail.'
-                : null,
-            child: SizedBox(
-              width: 52,
-              child: TextArea(
-                controller: widget.draft.description,
-                semanticLabel: 'Description',
-                minLines: 2,
-                maxLines: 2,
+            const SizedBox(height: 1),
+            const Text('Description'),
+            FormField(
+              validator: () => widget.draft.description.text.trim().length < 10
+                  ? 'Add a little more detail.'
+                  : null,
+              child: SizedBox(
+                width: 52,
+                child: TextArea(
+                  controller: widget.draft.description,
+                  readOnly: _form.isSubmitting,
+                  semanticLabel: 'Description',
+                  minLines: 2,
+                  maxLines: 2,
+                ),
               ),
             ),
-          ),
-          FormField(
-            child: Checkbox(
-              value: widget.draft.private,
-              label: 'Private service',
-              onChanged: (value) =>
-                  setState(() => widget.draft.private = value),
+            FormField(
+              child: Checkbox(
+                value: widget.draft.private,
+                label: 'Private service',
+                onChanged: _form.isSubmitting
+                    ? null
+                    : (value) => setState(() => widget.draft.private = value),
+              ),
             ),
-          ),
-          const Text('Tip: try the reserved name “fleury”.'),
-          const SizedBox(height: 1),
-          _SubmitButton(controller: _form, label: 'Continue'),
-        ],
+            const Text('Tip: try the reserved name “fleury”.'),
+            const SizedBox(height: 1),
+            _SubmitButton(controller: _form, label: 'Continue'),
+          ],
+        ),
       ),
     ),
   );
@@ -329,41 +336,47 @@ class _ReviewScreenState extends State<_ReviewScreen> {
   @override
   Widget build(BuildContext context) {
     final draft = widget.draft;
-    return _ShowcaseScreen(
-      step: 3,
-      title: 'Review',
-      description: 'Confirm the complete deployment before it starts.',
-      child: Form(
-        controller: _form,
-        semanticLabel: 'Review service',
-        onSubmit: _deploy,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text('Service      ${draft.name.text.trim()}'),
-            Text('Access       ${draft.private ? 'Private' : 'Public'}'),
-            Text('Target       ${draft.environment} / ${draft.region}'),
-            Text('Replicas     ${draft.replicas.toInt()}'),
-            Text('Telemetry    ${draft.telemetry.join(', ')}'),
-            Text('Auto deploy  ${draft.autoDeploy ? 'On' : 'Off'}'),
-            const SizedBox(height: 1),
-            FormField(
-              validator: () =>
-                  draft.confirmed ? null : 'Confirm the production deployment.',
-              child: Checkbox(
-                value: draft.confirmed,
-                autofocus: true,
-                label: 'I reviewed these settings',
-                onChanged: (value) => setState(() => draft.confirmed = value),
+    return ListenableBuilder(
+      listenable: _form,
+      builder: (context, child) => _ShowcaseScreen(
+        step: 3,
+        title: 'Review',
+        description: 'Confirm the complete deployment before it starts.',
+        child: Form(
+          controller: _form,
+          semanticLabel: 'Review service',
+          onSubmit: _deploy,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text('Service      ${draft.name.text.trim()}'),
+              Text('Access       ${draft.private ? 'Private' : 'Public'}'),
+              Text('Target       ${draft.environment} / ${draft.region}'),
+              Text('Replicas     ${draft.replicas.toInt()}'),
+              Text('Telemetry    ${draft.telemetry.join(', ')}'),
+              Text('Auto deploy  ${draft.autoDeploy ? 'On' : 'Off'}'),
+              const SizedBox(height: 1),
+              FormField(
+                validator: () => draft.confirmed
+                    ? null
+                    : 'Confirm the production deployment.',
+                child: Checkbox(
+                  value: draft.confirmed,
+                  autofocus: true,
+                  label: 'I reviewed these settings',
+                  onChanged: _form.isSubmitting
+                      ? null
+                      : (value) => setState(() => draft.confirmed = value),
+                ),
               ),
-            ),
-            const SizedBox(height: 1),
-            _FormActions(
-              controller: _form,
-              nextLabel: 'Deploy service',
-              onBack: context.pop,
-            ),
-          ],
+              const SizedBox(height: 1),
+              _FormActions(
+                controller: _form,
+                nextLabel: 'Deploy service',
+                onBack: context.pop,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -461,8 +474,8 @@ class _SubmitButton extends StatelessWidget {
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: controller,
     builder: (context, child) => Button(
-      label: controller.isSubmitting ? 'Checking…' : label,
-      onPressed: controller.isSubmitting ? null : controller.submit,
+      label: controller.isBusy ? 'Checking…' : label,
+      onPressed: controller.isBusy ? null : controller.submit,
     ),
   );
 }
@@ -481,18 +494,18 @@ class _FormActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: controller,
-    builder: (context, child) => Row(
-      children: <Widget>[
-        Button(
-          label: 'Back',
-          onPressed: controller.isSubmitting ? null : onBack,
-        ),
-        const SizedBox(width: 2),
-        Button(
-          label: controller.isSubmitting ? 'Working…' : nextLabel,
-          onPressed: controller.isSubmitting ? null : controller.submit,
-        ),
-      ],
+    builder: (context, child) => PopScope(
+      canPop: !controller.isBusy,
+      child: Row(
+        children: <Widget>[
+          Button(label: 'Back', onPressed: controller.isBusy ? null : onBack),
+          const SizedBox(width: 2),
+          Button(
+            label: controller.isBusy ? 'Working…' : nextLabel,
+            onPressed: controller.isBusy ? null : controller.submit,
+          ),
+        ],
+      ),
     ),
   );
 }
