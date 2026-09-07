@@ -339,7 +339,7 @@ class _ReviewScreenState extends State<_ReviewScreen> {
     return ListenableBuilder(
       listenable: _form,
       builder: (context, child) => PopScope(
-        canPop: !_form.isSubmitting,
+        canPop: !_form.isBusy,
         child: _ShowcaseScreen(
           step: 3,
           title: 'Review',
@@ -477,8 +477,8 @@ class _SubmitButton extends StatelessWidget {
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: controller,
     builder: (context, child) => Button(
-      label: controller.isSubmitting ? 'Checking…' : label,
-      onPressed: controller.isSubmitting ? null : controller.submit,
+      label: controller.isBusy ? 'Checking…' : label,
+      onPressed: controller.isBusy ? null : controller.submit,
     ),
   );
 }
@@ -499,14 +499,11 @@ class _FormActions extends StatelessWidget {
     listenable: controller,
     builder: (context, child) => Row(
       children: <Widget>[
-        Button(
-          label: 'Back',
-          onPressed: controller.isSubmitting ? null : onBack,
-        ),
+        Button(label: 'Back', onPressed: controller.isBusy ? null : onBack),
         const SizedBox(width: 2),
         Button(
-          label: controller.isSubmitting ? 'Working…' : nextLabel,
-          onPressed: controller.isSubmitting ? null : controller.submit,
+          label: controller.isBusy ? 'Working…' : nextLabel,
+          onPressed: controller.isBusy ? null : controller.submit,
         ),
       ],
     ),

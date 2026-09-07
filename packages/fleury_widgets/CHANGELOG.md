@@ -2,6 +2,11 @@
 
 ## 0.1.0
 
+- `FormController.isBusy` reports the whole accepted submit attempt, including
+  validation, so submit and Back actions can be guarded immediately. Field
+  editing can still use `isSubmitting` to lock only after validation succeeds.
+  Submission also cancels safely if a notification detaches its form.
+
 - `Form.of(context)` now shares the `FormController` through a `Scope`, so a
   widget that reads it rebuilds when the controller notifies (submission
   state, errors) without a `ListenableBuilder`.
