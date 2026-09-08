@@ -874,7 +874,9 @@ void main() {
       expect(changes, ['a', 'a\n', 'a\nb']);
     });
 
-    testWidgets('reports programmatic and semantic edits', (tester) async {
+    testWidgets('reports semantic edits but keeps programmatic writes quiet', (
+      tester,
+    ) async {
       final changes = <String>[];
       final controller = TextEditingController();
       tester.pumpWidget(
@@ -888,7 +890,7 @@ void main() {
         payload: 'semantic\nvalue',
       );
 
-      expect(changes, ['programmatic', 'semantic\nvalue']);
+      expect(changes, ['semantic\nvalue']);
     });
 
     testWidgets(
@@ -904,7 +906,11 @@ void main() {
         first.text = 'stale edit';
         second.text = 'second edit';
 
-        expect(changes, ['first edit', 'second edit']);
+        expect(changes, isEmpty);
+        expect(
+          tester.semantics().single(role: SemanticRole.textArea).value,
+          'second edit',
+        );
       },
     );
 

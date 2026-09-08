@@ -5,9 +5,9 @@ import 'package:test/test.dart';
 
 DataTable _table({
   int rows = 8,
-  int? selectedIndex,
+  int? currentRowIndex,
   DataTableController? controller,
-  void Function(int)? onSelectionChanged,
+  void Function(int)? onFocusedItemChanged,
   void Function(int)? onSelect,
   DataTableSelectionMode mode = DataTableSelectionMode.row,
 }) => DataTable(
@@ -19,91 +19,86 @@ DataTable _table({
   cellBuilder: (row, column) => '$row,$column',
   rowKeyBuilder: (row) => 'row-$row',
   autofocus: true,
-  selectedIndex: selectedIndex,
+  currentRowIndex: currentRowIndex,
   controller: controller,
-  onSelectionChanged: onSelectionChanged,
+  onFocusedItemChanged: onFocusedItemChanged,
   onSelect: onSelect,
   selectionMode: mode,
 );
 
-String? _selectedKey(FleuryTester tester) {
+String? _currentKey(FleuryTester tester) {
   tester.render(size: const CellSize(20, 10));
-  return tester
-          .semantics()
-          .single(role: SemanticRole.table)
-          .state['selectedKey']
+  return tester.semantics().single(role: SemanticRole.table).state['currentKey']
       as String?;
 }
 
 void main() {
-  test('controller and app-owned selection cannot be combined', () {
+  test('controller and parent-owned cursor cannot be combined', () {
     expect(
-      () => _table(controller: DataTableController(), selectedIndex: 0),
+      () => _table(controller: DataTableController(), currentRowIndex: 0),
       throwsA(isA<AssertionError>()),
     );
   });
 
-  testWidgets('new rows and their selection arrive in one widget update', (
+  testWidgets('new rows and their cursor arrive in one widget update', (
     tester,
   ) {
     final requests = <int>[];
     tester.pumpWidget(
-      _table(rows: 1, selectedIndex: 0, onSelectionChanged: requests.add),
+      _table(rows: 1, currentRowIndex: 0, onFocusedItemChanged: requests.add),
     );
-    expect(_selectedKey(tester), 'row-0');
+    expect(_currentKey(tester), 'row-0');
 
     tester.pumpWidget(
-      _table(rows: 8, selectedIndex: 7, onSelectionChanged: requests.add),
+      _table(rows: 8, currentRowIndex: 7, onFocusedItemChanged: requests.add),
     );
 
-    expect(_selectedKey(tester), 'row-7');
+    expect(_currentKey(tester), 'row-7');
     expect(requests, isEmpty, reason: 'app updates must not echo as input');
   });
 
-  testWidgets('clamping and empty data never echo selection requests', (
-    tester,
-  ) {
+  testWidgets('clamping and empty data never echo cursor requests', (tester) {
     final requests = <int>[];
     Widget table(int rows, int selected) => _table(
       rows: rows,
-      selectedIndex: selected,
-      onSelectionChanged: requests.add,
+      currentRowIndex: selected,
+      onFocusedItemChanged: requests.add,
     );
     tester.pumpWidget(table(8, 7));
     tester.pumpWidget(table(2, 7));
-    expect(_selectedKey(tester), 'row-1');
+    expect(_currentKey(tester), 'row-1');
     tester.pumpWidget(table(0, 7));
-    expect(_selectedKey(tester), isNull);
+    expect(_currentKey(tester), isNull);
     tester.pumpWidget(table(8, 7));
-    expect(_selectedKey(tester), 'row-7');
+    expect(_currentKey(tester), 'row-7');
     tester.pumpWidget(table(8, -1));
-    expect(_selectedKey(tester), 'row-0');
+    expect(_currentKey(tester), 'row-0');
     expect(requests, isEmpty);
   });
 
-  testWidgets('ignored keyboard requests retain the app-owned selection', (
+  testWidgets('ignored keyboard requests retain the parent-owned cursor', (
     tester,
   ) {
     final requests = <int>[];
     tester.pumpWidget(
-      _table(selectedIndex: 2, onSelectionChanged: requests.add),
+      _table(currentRowIndex: 2, onFocusedItemChanged: requests.add),
     );
     tester.sendKey(const KeyEvent(KeyCode.arrowDown));
-    expect(_selectedKey(tester), 'row-2');
+    expect(_currentKey(tester), 'row-2');
     tester.sendKey(const KeyEvent(KeyCode.arrowDown));
-    expect(_selectedKey(tester), 'row-2');
+    expect(_currentKey(tester), 'row-2');
     expect(requests, [3, 3]);
   });
 
   testWidgets(
-    'activation and copy use the accepted row after a rejected request',
+    'confirmation and copy use the accepted row after a rejected request',
     (tester) async {
       final activations = <int>[];
-      tester.pumpWidget(_table(selectedIndex: 2, onSelect: activations.add));
+      tester.pumpWidget(_table(currentRowIndex: 2, onSelect: activations.add));
       tester.sendKey(const KeyEvent(KeyCode.arrowDown));
       tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(activations, [2]);
-      expect(_selectedKey(tester), 'row-2');
+      expect(_currentKey(tester), 'row-2');
       await tester.target(role: SemanticRole.table).copy();
       expect(tester.clipboard.readInProcess(), contains('2,a\t2,b'));
       expect(tester.clipboard.readInProcess(), isNot(contains('3,a')));
@@ -111,7 +106,7 @@ void main() {
   );
 
   testWidgets(
-    'accepted navigation updates selection and activation is separate',
+    'accepted navigation updates the cursor and confirmation is separate',
     (tester) async {
       final selected = ValueNotifier(0);
       final requests = <int>[];
@@ -120,8 +115,8 @@ void main() {
         ValueListenableBuilder<int>(
           valueListenable: selected,
           builder: (context, value, child) => _table(
-            selectedIndex: value,
-            onSelectionChanged: (row) {
+            currentRowIndex: value,
+            onFocusedItemChanged: (row) {
               requests.add(row);
               selected.value = row;
             },
@@ -130,7 +125,7 @@ void main() {
         ),
       );
       tester.sendKey(const KeyEvent(KeyCode.arrowDown));
-      expect(_selectedKey(tester), 'row-1');
+      expect(_currentKey(tester), 'row-1');
       expect(requests, [1]);
       expect(activations, isEmpty);
 
@@ -139,17 +134,17 @@ void main() {
       expect(requests, [1]);
 
       await tester.target(role: SemanticRole.tableRow, label: 'row-3').select();
-      expect(_selectedKey(tester), 'row-3');
+      expect(_currentKey(tester), 'row-3');
       expect(requests, [1, 3]);
       await tester.target(role: SemanticRole.tableRow, label: 'row-4').press();
-      expect(_selectedKey(tester), 'row-4');
+      expect(_currentKey(tester), 'row-4');
       expect(requests, [1, 3, 4]);
-      expect(activations, [1, 4]);
+      expect(activations, [1, 3, 4]);
     },
   );
 
   testWidgets(
-    'pointer selection reports a request without activating the row',
+    'completed pointer selection requests the cursor and confirms the row',
     (tester) {
       final selected = ValueNotifier(0);
       final requests = <int>[];
@@ -158,8 +153,8 @@ void main() {
         ValueListenableBuilder<int>(
           valueListenable: selected,
           builder: (context, value, child) => _table(
-            selectedIndex: value,
-            onSelectionChanged: (row) {
+            currentRowIndex: value,
+            onFocusedItemChanged: (row) {
               requests.add(row);
               selected.value = row;
             },
@@ -173,9 +168,9 @@ void main() {
           MouseEvent(kind: kind, button: MouseButton.left, col: 1, row: 4),
         );
       }
-      expect(_selectedKey(tester), 'row-2');
+      expect(_currentKey(tester), 'row-2');
       expect(requests, [2]);
-      expect(activations, isEmpty);
+      expect(activations, [2]);
     },
   );
 
@@ -189,9 +184,9 @@ void main() {
         valueListenable: selected,
         builder: (context, value, child) => LayoutBuilder(
           builder: (context, constraints) => _table(
-            selectedIndex: value,
+            currentRowIndex: value,
             mode: DataTableSelectionMode.cell,
-            onSelectionChanged: (row) {
+            onFocusedItemChanged: (row) {
               requests.add(row);
               selected.value = row;
             },
@@ -204,85 +199,84 @@ void main() {
     tester.sendKey(
       const KeyEvent(KeyCode.arrowDown, modifiers: {KeyModifier.shift}),
     );
-    expect(_selectedKey(tester), 'row-1');
+    expect(_currentKey(tester), 'row-1');
     var state = tester.semantics().single(role: SemanticRole.table).state;
     expect(state.selectionStartRow, 0);
     expect(state.selectionEndRow, 1);
     expect(state.selectionStartColumn, 1);
     expect(state.selectionEndColumn, 1);
 
-    // An app-initiated jump starts a new range at the destination.
+    // An app-initiated cursor jump preserves the independent selected range.
     selected.value = 5;
     tester.pump();
-    expect(_selectedKey(tester), 'row-5');
+    expect(_currentKey(tester), 'row-5');
     state = tester.semantics().single(role: SemanticRole.table).state;
-    expect(state.selectionStartRow, 5);
-    expect(state.selectionEndRow, 5);
+    expect(state.selectionStartRow, 0);
+    expect(state.selectionEndRow, 1);
+    expect(requests, [1]);
+  });
+
+  testWidgets('internal cursor reports row changes without a controller', (
+    tester,
+  ) {
+    final requests = <int>[];
+    tester.pumpWidget(_table(onFocusedItemChanged: requests.add));
+    tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+    expect(_currentKey(tester), 'row-1');
+    expect(requests, [1]);
+    tester.pumpWidget(_table(rows: 1, onFocusedItemChanged: requests.add));
+    expect(_currentKey(tester), 'row-0');
     expect(requests, [1]);
   });
 
   testWidgets(
-    'uncontrolled selection reports row changes without a controller',
+    'interaction callback can redirect a cursor without echoing controller writes',
     (tester) {
+      final controller = DataTableController();
       final requests = <int>[];
-      tester.pumpWidget(_table(onSelectionChanged: requests.add));
-      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
-      expect(_selectedKey(tester), 'row-1');
+      tester.pumpWidget(
+        _table(
+          controller: controller,
+          onFocusedItemChanged: (row) {
+            requests.add(row);
+            if (row == 1) controller.currentRowIndex = 2;
+          },
+        ),
+      );
+      tester.press(KeySequence.down);
+      expect(_currentKey(tester), 'row-2');
       expect(requests, [1]);
-      tester.pumpWidget(_table(rows: 1, onSelectionChanged: requests.add));
-      expect(_selectedKey(tester), 'row-0');
+      controller.currentColumnIndex = 1;
       expect(requests, [1]);
     },
   );
 
-  testWidgets('controller callbacks tolerate a reentrant selection change', (
+  testWidgets('switching cursor ownership detaches the old controller', (
     tester,
   ) {
-    final controller = DataTableController();
-    final requests = <int>[];
-    tester.pumpWidget(
-      _table(
-        controller: controller,
-        onSelectionChanged: (row) {
-          requests.add(row);
-          if (row == 1) controller.selectedIndex = 2;
-        },
-      ),
-    );
-    controller.selectedIndex = 1;
-    tester.pump();
-    expect(_selectedKey(tester), 'row-2');
-    expect(requests, [1, 2]);
-    controller.selectedColumnIndex = 1;
-    expect(requests, [1, 2]);
-  });
-
-  testWidgets('switching selection ownership detaches the old controller', (
-    tester,
-  ) {
-    final controller = DataTableController(selectedIndex: 4);
+    final controller = DataTableController(initialRowIndex: 4);
     final requests = <int>[];
     tester.pumpWidget(_table(controller: controller));
     tester.pumpWidget(
-      _table(selectedIndex: 2, onSelectionChanged: requests.add),
+      _table(currentRowIndex: 2, onFocusedItemChanged: requests.add),
     );
-    controller.selectedIndex = 6;
-    expect(_selectedKey(tester), 'row-2');
+    controller.currentRowIndex = 6;
+    expect(_currentKey(tester), 'row-2');
     expect(requests, isEmpty);
 
-    tester.pumpWidget(_table(onSelectionChanged: requests.add));
+    tester.pumpWidget(_table(onFocusedItemChanged: requests.add));
     tester.sendKey(const KeyEvent(KeyCode.arrowDown));
-    expect(_selectedKey(tester), 'row-3');
+    expect(_currentKey(tester), 'row-3');
     expect(requests, [3]);
 
     tester.pumpWidget(
-      _table(controller: controller, onSelectionChanged: requests.add),
+      _table(controller: controller, onFocusedItemChanged: requests.add),
     );
-    expect(_selectedKey(tester), 'row-6');
+    expect(_currentKey(tester), 'row-6');
     expect(requests, [3]);
   });
 
-  testWidgets('a selection callback can replace the table with empty data', (
+  testWidgets('a browsing callback can replace the table with empty data', (
     tester,
   ) {
     final rows = ValueNotifier(8);
@@ -292,8 +286,8 @@ void main() {
         valueListenable: rows,
         builder: (context, value, child) => _table(
           rows: value,
-          selectedIndex: 0,
-          onSelectionChanged: (row) {
+          currentRowIndex: 0,
+          onFocusedItemChanged: (row) {
             requests.add(row);
             rows.value = 0;
           },
@@ -301,7 +295,7 @@ void main() {
       ),
     );
     tester.sendKey(const KeyEvent(KeyCode.arrowDown));
-    expect(_selectedKey(tester), isNull);
+    expect(_currentKey(tester), isNull);
     expect(requests, [1]);
   });
 }

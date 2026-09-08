@@ -6,6 +6,31 @@
   reexport them unchanged. Core buttons and companion value controls share
   one internal focus/activation implementation.
 
+- Collection controllers use `initialIndex` for their constructor seed and
+  `currentIndex` for the live browsing cursor. DataTableController uses
+  `initialRowIndex` and `initialColumnIndex` with its existing live properties.
+  Explicit null row cursors stay unset; omitted row cursors default to zero.
+  Log and message tail-following controls the viewport independently of that cursor.
+- NumberInput.initialValue and FileBrowser.initialDirectory are one-time seeds;
+  parent rebuilds preserve edits and navigation. NumberInput rejects a seed
+  alongside an external controller. FileBrowserController.openDirectory handles
+  later navigation and exposes currentDirectory to observers.
+- FileBrowser and SearchPanel honor incoming controller cursors on mount and
+  replacement. Tables, tabs, data tables, and file browsers reject multiple active
+  owning views; normal deactivation and reattachment remain supported.
+- JsonView uses `defaultExpandedDepth` for its continuing expansion fallback.
+  Tree.initialExpandedDepth remains a one-time seed.
+- Text editing wrappers emit `onChanged` for user and semantic edits, including
+  numeric normalization and choosing a completion. Programmatic writes notify
+  controller listeners instead. See `docs/widget-state-ownership.md` for migration.
+
+- MessageListController and LogRegionController separate the enabled `followTail`
+  policy from read-only `isFollowing`, and expose `atBottom` and `unseenCount`.
+  `jumpToIndex` preserves selection, and following incoming output no longer
+  selects each new row. `scrollToBottom` catches up and enables following.
+  Semantic state now includes both the policy and whether it is currently active.
+
+
 - `FormController.isBusy` reports the whole accepted submit attempt, including
   validation, so submit and Back actions can be guarded immediately. Field
   editing can still use `isSubmitting` to lock only after validation succeeds.
@@ -15,10 +40,13 @@
   widget that reads it rebuilds when the controller notifies (submission
   state, errors) without a `ListenableBuilder`.
 
-- `DataTable.selectedIndex` and `onSelectionChanged` support app-owned row
-  selection, so filtering and sorting can update data and selection together
-  without controller synchronization. Table dimensions stay widget-owned and
+- `DataTable.currentRowIndex` and `onFocusedItemChanged` support a parent-owned
+  row cursor, so filtering and sorting can update data and cursor together
+  without controller synchronization. This replaces `selectedIndex` and
+  `onSelectionChanged`; the parent must accept requests through a rebuild.
+  Table dimensions stay widget-owned and
   update atomically before controller listeners are notified.
+
 - MultiSelect options expose a boolean semantic `setValue` action alongside
   toggling, so tests and other semantic consumers can request a desired checked
   state without changing the option key or dispatching duplicate callbacks.

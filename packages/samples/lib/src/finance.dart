@@ -682,10 +682,10 @@ class _FinanceBodyState extends State<_FinanceBody> {
           : DataTable(
               rowCount: _rows.length,
               columns: columns,
-              selectedIndex: _rows.indexWhere(
+              currentRowIndex: _rows.indexWhere(
                 (transaction) => transaction.id == _selectedTransactionId,
               ),
-              onSelectionChanged: _selectRow,
+              onFocusedItemChanged: _selectRow,
               rowKeyBuilder: (row) => _rows[row].id,
               cellBuilder: (row, columnId) {
                 final transaction = _rows[row];

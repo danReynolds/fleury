@@ -294,7 +294,7 @@ void main() {
 
       final table = tester.findOne(byType(DataTable)).widget as DataTable;
       expect(table.rowCount, rows.length);
-      expect(table.selectedIndex, selected);
+      expect(table.currentRowIndex, selected);
       expect(
         tester
             .semantics()
@@ -318,14 +318,14 @@ void main() {
         tester.pump();
         var table = tester.findOne(byType(DataTable)).widget as DataTable;
         expect(table.rowCount, rows.length);
-        expect(table.selectedIndex, 0);
+        expect(table.currentRowIndex, 0);
         await tester
             .target(role: SemanticRole.tableRow, label: rows[1].id)
             .select();
         tester.pump();
 
         table = tester.findOne(byType(DataTable)).widget as DataTable;
-        expect(table.selectedIndex, 1);
+        expect(table.currentRowIndex, 1);
         expect(tester.renderToString(size: wide), contains('ID ${rows[1].id}'));
       },
     );

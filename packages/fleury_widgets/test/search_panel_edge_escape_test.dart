@@ -14,7 +14,7 @@ void main() {
     final queryFocus = FocusNode(debugLabel: 'query');
     final resultsFocus = FocusNode(debugLabel: 'results');
     final queryController = TextEditingController();
-    final listController = ListController(selectedIndex: 0);
+    final listController = ListController(initialIndex: 0);
 
     tester.pumpWidget(
       FocusTraversalGroup(

@@ -115,7 +115,7 @@ void main() {
     // After scrolling, the visible row 0 is content row N. A drag at
     // screen row 0 must select that VISIBLE content, not whatever
     // content originally lived at screen row 0.
-    final controller = ScrollController(offset: 2);
+    final controller = ScrollController(initialOffset: 2);
     SelectedContent? captured;
     tester.viewportSize = const CellSize(30, 2);
     tester.pumpWidget(

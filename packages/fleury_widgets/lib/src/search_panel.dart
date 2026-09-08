@@ -279,7 +279,7 @@ class _SearchPanelState extends State<SearchPanel> {
     _query = widget.queryController ?? TextEditingController();
     _ownsQuery = widget.queryController == null;
     _query.addListener(_onQueryChange);
-    _list = widget.controller ?? ListController(selectedIndex: 0);
+    _list = widget.controller ?? ListController(initialIndex: 0);
     _ownsList = widget.controller == null;
     _queryFocusNode =
         widget.queryFocusNode ?? FocusNode(debugLabel: 'SearchPanel query');
@@ -287,7 +287,7 @@ class _SearchPanelState extends State<SearchPanel> {
     _resultsFocusNode =
         widget.resultsFocusNode ?? FocusNode(debugLabel: 'SearchPanel results');
     _ownsResultsFocusNode = widget.resultsFocusNode == null;
-    _resetSelectionForOrder(_currentOrder);
+    _resetSelectionForOrder(_currentOrder, preserveCurrent: true);
     _list.addListener(_onListChange);
   }
 
@@ -314,7 +314,7 @@ class _SearchPanelState extends State<SearchPanel> {
     if (widget.controller != oldWidget.controller) {
       _list.removeListener(_onListChange);
       if (_ownsList) _list.dispose();
-      _list = widget.controller ?? ListController(selectedIndex: 0);
+      _list = widget.controller ?? ListController(initialIndex: 0);
       _ownsList = widget.controller == null;
     }
     if (widget.queryFocusNode != oldWidget.queryFocusNode) {
@@ -345,15 +345,15 @@ class _SearchPanelState extends State<SearchPanel> {
       _preserveSelectionForOrder(_currentOrder, previousResult);
     }
     if (widget.controller != oldWidget.controller) {
-      _resetSelectionForOrder(_currentOrder);
+      _resetSelectionForOrder(_currentOrder, preserveCurrent: true);
       _list.addListener(_onListChange);
     }
   }
 
   void _onQueryChange() {
-    final previous = _list.selectedIndex;
+    final previous = _list.currentIndex;
     _resetSelectionForOrder(_currentOrder);
-    if (_list.selectedIndex == previous) setState(() {});
+    if (_list.currentIndex == previous) setState(() {});
   }
 
   void _onListChange() => setState(() {});
@@ -374,8 +374,15 @@ class _SearchPanelState extends State<SearchPanel> {
   List<int> get _currentOrder =>
       _resultIndex.order(query: _query.text, matcher: widget.matcher);
 
-  void _resetSelectionForOrder(List<int> order) {
-    _list.selectedIndex = order.isEmpty ? null : 0;
+  void _resetSelectionForOrder(
+    List<int> order, {
+    bool preserveCurrent = false,
+  }) {
+    _list.currentIndex = order.isEmpty
+        ? null
+        : preserveCurrent
+        ? _list.currentIndex?.clamp(0, order.length - 1)
+        : 0;
   }
 
   void _preserveSelectionForOrder(
@@ -383,29 +390,29 @@ class _SearchPanelState extends State<SearchPanel> {
     SearchResult? previousResult,
   ) {
     if (order.isEmpty) {
-      _list.selectedIndex = null;
+      _list.currentIndex = null;
       return;
     }
 
     if (previousResult != null) {
       final preserved = _matchingViewIndex(order, previousResult);
       if (preserved != null) {
-        _list.selectedIndex = preserved;
+        _list.currentIndex = preserved;
         return;
       }
     }
 
-    final selectedIndex = _list.selectedIndex;
-    _list.selectedIndex = selectedIndex == null
+    final currentIndex = _list.currentIndex;
+    _list.currentIndex = currentIndex == null
         ? 0
-        : selectedIndex.clamp(0, order.length - 1);
+        : currentIndex.clamp(0, order.length - 1);
   }
 
   void _move(int delta) {
     final order = _currentOrder;
     if (order.isEmpty) return;
-    final current = _list.selectedIndex ?? 0;
-    _list.selectedIndex = (current + delta).clamp(0, order.length - 1);
+    final current = _list.currentIndex ?? 0;
+    _list.currentIndex = (current + delta).clamp(0, order.length - 1);
   }
 
   void _activateSelected() {
@@ -456,14 +463,14 @@ class _SearchPanelState extends State<SearchPanel> {
   Future<void> _activateResultAt(int viewIndex) async {
     final order = _currentOrder;
     if (viewIndex < 0 || viewIndex >= order.length) return;
-    _list.selectedIndex = viewIndex;
+    _list.currentIndex = viewIndex;
     _activateSelected();
   }
 
   Future<void> _copyResultAt(int viewIndex) async {
     final order = _currentOrder;
     if (viewIndex < 0 || viewIndex >= order.length) return;
-    _list.selectedIndex = viewIndex;
+    _list.currentIndex = viewIndex;
     await _copySelection();
   }
 
@@ -476,9 +483,9 @@ class _SearchPanelState extends State<SearchPanel> {
     List<int> order,
   ) {
     if (order.isEmpty) return null;
-    final selectedIndex = _list.selectedIndex;
-    if (selectedIndex == null) return null;
-    final viewIndex = selectedIndex.clamp(0, order.length - 1);
+    final currentIndex = _list.currentIndex;
+    if (currentIndex == null) return null;
+    final viewIndex = currentIndex.clamp(0, order.length - 1);
     final sourceIndex = order[viewIndex];
     return _SelectedSearchResult(
       viewIndex: viewIndex,
@@ -519,7 +526,6 @@ class _SearchPanelState extends State<SearchPanel> {
     final selected = _selectedResult(order);
     final copyEnabled = widget.copySelection && selected != null;
     final canActivate = widget.onActivate != null;
-    final panelFocused = _queryFocusNode.hasFocus || _resultsFocusNode.hasFocus;
     // Category section headers only make sense in the browse (no-query) order,
     // where results are grouped; a search re-ranks them.
     final grouped = widget.groupByCategory && _query.text.trim().isEmpty;
@@ -534,11 +540,10 @@ class _SearchPanelState extends State<SearchPanel> {
             controller: _list,
             focusNode: _resultsFocusNode,
             itemCount: order.length,
-            selectionActive: panelFocused,
-            onActivate: (_) => _activateSelected(),
+            onSelect: (_) => _activateSelected(),
             itemBuilder: (context, viewIndex, activeSelected) {
               final sourceIndex = order[viewIndex];
-              final selected = viewIndex == _list.selectedIndex;
+              final selected = viewIndex == _list.currentIndex;
               final row = _SearchResultRow(
                 result: widget.results[sourceIndex],
                 sourceIndex: sourceIndex,
@@ -677,7 +682,7 @@ class _SearchPanelState extends State<SearchPanel> {
             'visibleRangeStart': visibleRange.first,
             'visibleRangeEnd': visibleRange.last,
           },
-          if (_list.selectedIndex != null) 'selectedIndex': _list.selectedIndex,
+          if (_list.currentIndex != null) 'currentIndex': _list.currentIndex,
           if (selected != null) ..._selectedResultState(selected.result),
         }),
         child: panel,

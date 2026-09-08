@@ -251,32 +251,31 @@ void main() {
   });
 
   group('scroll routing', () {
-    testWidgets('the wheel scrolls the list under the pointer, unfocused', (
-      tester,
-    ) {
-      final c = ListController(selectedIndex: 0);
-      tester.pumpWidget(
-        ListView(
-          controller: c,
-          // not autofocused — scrolling must work without focus
-          children: const [Text('0'), Text('1'), Text('2'), Text('3')],
-        ),
-      );
-      tester.render(size: const CellSize(10, 4));
-
-      tester.sendMouse(
-        _at(MouseEventKind.scrollDown, 1, 1, button: MouseButton.none),
-      );
-      expect(c.selectedIndex, 1);
-      tester.sendMouse(
-        _at(MouseEventKind.scrollDown, 1, 1, button: MouseButton.none),
-      );
-      expect(c.selectedIndex, 2);
-      tester.sendMouse(
-        _at(MouseEventKind.scrollUp, 1, 1, button: MouseButton.none),
-      );
-      expect(c.selectedIndex, 1);
-    });
+    testWidgets(
+      'the wheel scrolls the list under the pointer without selecting',
+      (tester) {
+        final c = ListController();
+        tester.pumpWidget(
+          ListView(
+            controller: c,
+            children: const [Text('0'), Text('1'), Text('2'), Text('3')],
+          ),
+        );
+        tester.render(size: const CellSize(10, 2));
+        tester.sendMouse(
+          _at(MouseEventKind.scrollDown, 1, 1, button: MouseButton.none),
+        );
+        tester.pump();
+        expect(c.currentIndex, 0);
+        expect(c.visibleRange, (first: 1, last: 2));
+        tester.sendMouse(
+          _at(MouseEventKind.scrollUp, 1, 1, button: MouseButton.none),
+        );
+        tester.pump();
+        expect(c.currentIndex, 0);
+        expect(c.visibleRange, (first: 0, last: 1));
+      },
+    );
 
     testWidgets('the wheel scrolls a ScrollView viewport', (tester) {
       final c = ScrollController();

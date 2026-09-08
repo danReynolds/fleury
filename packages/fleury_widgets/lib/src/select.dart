@@ -863,7 +863,7 @@ class _SelectList<T> extends StatefulWidget {
 
 class _SelectListState<T> extends State<_SelectList<T>> {
   late final ListController _list = ListController(
-    selectedIndex: widget.initialIndex,
+    initialIndex: widget.initialIndex,
   );
   final FocusNode _focus = FocusNode(debugLabel: 'select-list');
   int? _reportedIndex;
@@ -872,7 +872,7 @@ class _SelectListState<T> extends State<_SelectList<T>> {
   void initState() {
     super.initState();
     if (widget.onHighlighted != null) {
-      _reportedIndex = _list.selectedIndex;
+      _reportedIndex = _list.currentIndex;
       _list.addListener(_reportHighlight);
     }
   }
@@ -883,7 +883,7 @@ class _SelectListState<T> extends State<_SelectList<T>> {
   /// [ListController] is a ChangeNotifier that also fires for scroll changes,
   /// hence the guard on the index actually landing somewhere new and enabled.
   void _reportHighlight() {
-    final i = _list.selectedIndex;
+    final i = _list.currentIndex;
     if (i == null || i == _reportedIndex) return;
     if (i < 0 || i >= widget.options.length || !_enabled(i)) return;
     _reportedIndex = i;
@@ -933,21 +933,21 @@ class _SelectListState<T> extends State<_SelectList<T>> {
   KeyEventResult _onKey(KeyEvent event) {
     switch (event.code) {
       case KeyCode.arrowUp:
-        final n = _step(_list.selectedIndex ?? widget.options.length, -1);
-        if (n != null) _list.selectedIndex = n;
+        final n = _step(_list.currentIndex ?? widget.options.length, -1);
+        if (n != null) _list.currentIndex = n;
         return KeyEventResult.handled;
       case KeyCode.arrowDown:
-        final n = _step(_list.selectedIndex ?? -1, 1);
-        if (n != null) _list.selectedIndex = n;
+        final n = _step(_list.currentIndex ?? -1, 1);
+        if (n != null) _list.currentIndex = n;
         return KeyEventResult.handled;
       case KeyCode.home:
-        _list.selectedIndex = _firstEnabled();
+        _list.currentIndex = _firstEnabled();
         return KeyEventResult.handled;
       case KeyCode.end:
-        _list.selectedIndex = _lastEnabled();
+        _list.currentIndex = _lastEnabled();
         return KeyEventResult.handled;
       case KeyCode.enter:
-        final i = _list.selectedIndex;
+        final i = _list.currentIndex;
         if (i != null) _pick(i);
         return KeyEventResult.handled;
       case KeyCode.escape:
@@ -970,14 +970,14 @@ class _SelectListState<T> extends State<_SelectList<T>> {
   /// the type-to-search convention (Textual Select, W3C APG combobox).
   KeyEventResult _typeahead(String ch) {
     final lower = ch.toLowerCase();
-    final start = (_list.selectedIndex ?? -1) + 1;
+    final start = (_list.currentIndex ?? -1) + 1;
     for (var k = 0; k < widget.options.length; k++) {
       final i = (start + k) % widget.options.length;
       if (!_enabled(i)) continue;
       if (sanitizeOptionLabel(
         widget.options[i].label,
       ).toLowerCase().startsWith(lower)) {
-        _list.selectedIndex = i;
+        _list.currentIndex = i;
         break;
       }
     }
@@ -1020,7 +1020,7 @@ class _SelectListState<T> extends State<_SelectList<T>> {
       state: SemanticState({
         'menuDepth': 0,
         'menuItemCount': widget.options.length,
-        'selectedKey': _list.selectedIndex,
+        'selectedKey': _list.currentIndex,
         'appliedIndex': widget.appliedIndex,
       }),
       onAction: (action) {
@@ -1060,7 +1060,7 @@ class _SelectListState<T> extends State<_SelectList<T>> {
                     height: widget.options.length,
                     child: ListView.builder(
                       controller: _list,
-                      selectionActive: true,
+
                       itemCount: widget.options.length,
                       itemBuilder: (_, i, selected) {
                         final option = widget.options[i];
@@ -1072,8 +1072,8 @@ class _SelectListState<T> extends State<_SelectList<T>> {
                         final row = option.enabled
                             ? MouseRegion(
                                 onEnter: () {
-                                  if (_list.selectedIndex != i) {
-                                    _list.selectedIndex = i;
+                                  if (_list.currentIndex != i) {
+                                    _list.currentIndex = i;
                                   }
                                 },
                                 child: GestureDetector(
@@ -1114,7 +1114,7 @@ class _SelectListState<T> extends State<_SelectList<T>> {
                             switch (action) {
                               case SemanticAction.select:
                               case SemanticAction.activate:
-                                _list.selectedIndex = i;
+                                _list.currentIndex = i;
                                 _pick(i);
                                 return;
                               case _:

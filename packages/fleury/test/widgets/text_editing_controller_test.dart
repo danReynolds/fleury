@@ -539,23 +539,23 @@ void main() {
       expect(previous?.text, 'two');
       expect(previous?.selection, const TextSelection.collapsed(offset: 3));
       expect(history.isBrowsing, isTrue);
-      expect(history.selectedIndex, 1);
+      expect(history.currentIndex, 1);
       expect(history.draft, 'draft');
 
       expect(
         history.navigatePrevious(TextEditingValue(text: 'two'))?.text,
         'one',
       );
-      expect(history.selectedIndex, 0);
+      expect(history.currentIndex, 0);
 
       expect(
         history.navigatePrevious(TextEditingValue(text: 'one'))?.text,
         'one',
       );
-      expect(history.selectedIndex, 0);
+      expect(history.currentIndex, 0);
 
       expect(history.navigateNext()?.text, 'two');
-      expect(history.selectedIndex, 1);
+      expect(history.currentIndex, 1);
 
       final restored = history.navigateNext();
       expect(restored?.text, 'draft');
@@ -583,7 +583,7 @@ void main() {
           history.navigatePrevious(TextEditingValue(text: 'draft'))?.text,
           'one',
         );
-        expect(history.selectedIndex, 0);
+        expect(history.currentIndex, 0);
 
         // At the oldest entry `navigatePrevious` CLAMPS — it keeps returning
         // that entry rather than refusing. This is the behaviour the deleted
@@ -592,7 +592,7 @@ void main() {
           history.navigatePrevious(TextEditingValue(text: 'one'))?.text,
           'one',
         );
-        expect(history.selectedIndex, 0);
+        expect(history.currentIndex, 0);
         expect(history.isBrowsing, isTrue);
       },
     );
@@ -630,7 +630,7 @@ void main() {
 
       expect(history.entries, ['one', 'two']);
       expect(history.isBrowsing, isFalse);
-      expect(history.selectedIndex, isNull);
+      expect(history.currentIndex, isNull);
       expect(history.draft, isNull);
     });
 

@@ -13,14 +13,14 @@ void main() {
   group('LogRegionController lifecycle', () {
     test('dispose is idempotent and keeps final readable state', () {
       final controller = LogRegionController(
-        selectedIndex: 2,
+        initialIndex: 2,
         followTail: false,
       );
 
       controller.dispose();
       controller.dispose();
 
-      expect(controller.selectedIndex, 2);
+      expect(controller.currentIndex, 2);
       expect(controller.followTail, isFalse);
       expect(controller.visibleRange, isNull);
     });
@@ -29,7 +29,7 @@ void main() {
       final controller = LogRegionController(followTail: true)..dispose();
 
       const message = 'LogRegionController has been disposed.';
-      expect(() => controller.selectedIndex = 1, _stateError(message));
+      expect(() => controller.currentIndex = 1, _stateError(message));
       expect(() => controller.followTail = false, _stateError(message));
       expect(() => controller.jumpToIndex(1), _stateError(message));
       expect(() => controller.scrollToBottom(), _stateError(message));
@@ -74,6 +74,7 @@ void main() {
     final log = tree.single(role: SemanticRole.log);
     expect(log.state.collectionRowCount, 2);
     expect(log.state['followTail'], isFalse);
+    expect(log.state['isFollowing'], isFalse);
     expect(log.state['copyEnabled'], isTrue);
 
     final row = tree
@@ -124,7 +125,7 @@ void main() {
   group('copy/export', () {
     testWidgets('Ctrl+C copies the selected log entry', (tester) async {
       final controller = LogRegionController(
-        selectedIndex: 1,
+        initialIndex: 1,
         followTail: false,
       );
       LogRegionCopyResult? copied;
@@ -175,7 +176,7 @@ void main() {
 
     testWidgets('semantic copy copies the selected log entry', (tester) async {
       final controller = LogRegionController(
-        selectedIndex: 1,
+        initialIndex: 1,
         followTail: false,
       );
       LogRegionCopyResult? copied;
@@ -240,8 +241,9 @@ void main() {
           .target(role: SemanticRole.listItem, label: 'middle row')
           .press();
 
-      expect(controller.followTail, isFalse);
-      expect(controller.selectedIndex, 1);
+      expect(controller.followTail, isTrue);
+      expect(controller.isFollowing, isTrue);
+      expect(controller.currentIndex, 1);
 
       tester.render(size: const CellSize(60, 5));
       row = tester.semantics().single(
@@ -254,8 +256,9 @@ void main() {
 
       final log = tester.semantics().single(role: SemanticRole.log);
       expect(log.state.selectedKey, 'middle');
-      expect(log.state['selectedIndex'], 1);
-      expect(log.state['followTail'], isFalse);
+      expect(log.state['currentIndex'], 1);
+      expect(log.state['followTail'], isTrue);
+      expect(log.state['isFollowing'], isTrue);
       expect(log.focused, isTrue);
     });
 
@@ -287,7 +290,7 @@ void main() {
       tester,
     ) async {
       final controller = LogRegionController(
-        selectedIndex: 0,
+        initialIndex: 0,
         followTail: false,
       );
       LogRegionCopyResult? copied;
@@ -350,7 +353,7 @@ void main() {
         fallback.states,
         contains(
           'log 3 entries, 1 filtered, filter active, severities error, '
-          'copy includes prefix, selected index 0, last c',
+          'copy includes prefix, current index 0, last c',
         ),
       );
 
@@ -471,8 +474,8 @@ void main() {
     );
   });
 
-  testWidgets('followTail advances selection when entries append', (tester) {
-    final controller = LogRegionController(followTail: true);
+  testWidgets('following appends preserves the selected entry', (tester) {
+    final controller = LogRegionController(initialIndex: 1, followTail: true);
     tester.pumpWidget(
       LogRegion(
         controller: controller,
@@ -484,7 +487,7 @@ void main() {
     );
     tester.render(size: const CellSize(40, 3));
 
-    expect(controller.selectedIndex, 1);
+    expect(controller.currentIndex, 1);
 
     tester.pumpWidget(
       LogRegion(
@@ -498,10 +501,10 @@ void main() {
     );
     tester.render(size: const CellSize(40, 3));
 
-    expect(controller.selectedIndex, 2);
+    expect(controller.currentIndex, 1);
     expect(
-      tester.semantics().single(role: SemanticRole.log).state['selectedIndex'],
-      2,
+      tester.semantics().single(role: SemanticRole.log).state['currentIndex'],
+      1,
     );
   });
 
@@ -509,26 +512,25 @@ void main() {
     'jumpToIndex survives a later append instead of snapping back to the '
     'tail selection',
     (tester) {
-      final controller = LogRegionController(followTail: true);
+      final controller = LogRegionController(initialIndex: 7, followTail: true);
       List<LogEntry> build(int count) => [
         for (var i = 0; i < count; i++) LogEntry(id: 'e$i', message: 'line $i'),
       ];
 
       tester.pumpWidget(LogRegion(controller: controller, entries: build(8)));
       tester.render(size: const CellSize(40, 3));
-      expect(controller.selectedIndex, 7);
+      expect(controller.currentIndex, 7);
       expect(controller.visibleRange?.first, 5);
 
       // Jump to an earlier entry to read history.
       controller.jumpToIndex(2);
       tester.render(size: const CellSize(40, 3));
-      expect(controller.followTail, isFalse);
+      expect(controller.followTail, isTrue);
+      expect(controller.isFollowing, isFalse);
       expect(
-        controller.selectedIndex,
-        2,
-        reason:
-            'the jump must move the selection to the target so a later '
-            'relayout keeps it in view',
+        controller.currentIndex,
+        7,
+        reason: 'scrolling preserves the selected entry',
       );
       expect(controller.visibleRange?.first, 2);
 
@@ -538,8 +540,9 @@ void main() {
 
       // The viewport must stay on the jumped-to region, not snap back to the
       // stale tail selection.
-      expect(controller.followTail, isFalse);
-      expect(controller.selectedIndex, 2);
+      expect(controller.followTail, isTrue);
+      expect(controller.isFollowing, isFalse);
+      expect(controller.currentIndex, 7);
       expect(
         controller.visibleRange?.first,
         2,

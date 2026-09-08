@@ -248,10 +248,10 @@ void main() {
       );
       tester.render();
       expect(node.hasFocus, isTrue);
-      expect(controller.selectedIndex, 0);
+      expect(controller.currentIndex, 0);
 
       tester.sendKey(_code(KeyCode.arrowDown));
-      expect(controller.selectedIndex, 1);
+      expect(controller.currentIndex, 1);
       expect(node.hasFocus, isTrue);
     });
 

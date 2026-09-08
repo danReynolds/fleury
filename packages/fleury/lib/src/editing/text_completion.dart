@@ -44,7 +44,7 @@ final class TextCompletionState {
     required this.range,
     required this.query,
     required this.options,
-    required this.selectedIndex,
+    required this.currentIndex,
   });
 
   static const inactive = TextCompletionState._(
@@ -52,14 +52,14 @@ final class TextCompletionState {
     range: TextRange.empty,
     query: '',
     options: <TextCompletionOption>[],
-    selectedIndex: null,
+    currentIndex: null,
   );
 
   factory TextCompletionState.open({
     required TextRange range,
     String query = '',
     Iterable<TextCompletionOption> options = const <TextCompletionOption>[],
-    int? selectedIndex,
+    int? currentIndex,
   }) {
     final optionList = List<TextCompletionOption>.unmodifiable(options);
     return TextCompletionState._(
@@ -67,8 +67,8 @@ final class TextCompletionState {
       range: range,
       query: query,
       options: optionList,
-      selectedIndex: _normalizeSelectedIndex(
-        selectedIndex ?? 0,
+      currentIndex: _normalizeCurrentIndex(
+        currentIndex ?? 0,
         optionList.length,
       ),
     );
@@ -78,12 +78,12 @@ final class TextCompletionState {
   final TextRange range;
   final String query;
   final List<TextCompletionOption> options;
-  final int? selectedIndex;
+  final int? currentIndex;
 
   bool get hasOptions => options.isNotEmpty;
 
-  TextCompletionOption? get selectedOption {
-    final index = selectedIndex;
+  TextCompletionOption? get currentOption {
+    final index = currentIndex;
     if (index == null || index < 0 || index >= options.length) return null;
     return options[index];
   }
@@ -96,7 +96,7 @@ final class TextCompletionState {
     TextCompletionOption? option,
     bool singleLine = false,
   }) {
-    final selected = option ?? selectedOption;
+    final selected = option ?? currentOption;
     if (!active || selected == null) return null;
     return TextEditingModel.replaceRange(
       value,
@@ -117,14 +117,14 @@ final class TextCompletionController extends ChangeNotifier {
 
   TextCompletionState get state => _state;
   bool get isOpen => _state.active;
-  int? get selectedIndex => _state.selectedIndex;
-  TextCompletionOption? get selectedOption => _state.selectedOption;
+  int? get currentIndex => _state.currentIndex;
+  TextCompletionOption? get currentOption => _state.currentOption;
 
   void open({
     required TextRange range,
     String query = '',
     Iterable<TextCompletionOption> options = const <TextCompletionOption>[],
-    int? selectedIndex,
+    int? currentIndex,
   }) {
     _checkNotDisposed();
     _setState(
@@ -132,7 +132,7 @@ final class TextCompletionController extends ChangeNotifier {
         range: range,
         query: query,
         options: options,
-        selectedIndex: selectedIndex,
+        currentIndex: currentIndex,
       ),
     );
   }
@@ -152,7 +152,7 @@ final class TextCompletionController extends ChangeNotifier {
         range: range ?? _state.range,
         query: query ?? _state.query,
         options: optionList,
-        selectedIndex: _state.selectedIndex,
+        currentIndex: _state.currentIndex,
       ),
     );
   }
@@ -163,27 +163,28 @@ final class TextCompletionController extends ChangeNotifier {
     _setState(TextCompletionState.inactive);
   }
 
-  void select(int index) {
+  /// Moves the current suggestion without accepting it or taking keyboard focus.
+  void focusOption(int index) {
     _checkNotDisposed();
     if (!_state.active || _state.options.isEmpty) return;
-    final nextIndex = _normalizeSelectedIndex(index, _state.options.length);
-    if (nextIndex == _state.selectedIndex) return;
-    _setSelectedIndex(nextIndex);
+    final nextIndex = _normalizeCurrentIndex(index, _state.options.length);
+    if (nextIndex == _state.currentIndex) return;
+    _setCurrentIndex(nextIndex);
   }
 
-  void moveSelection(int delta, {bool wrap = true}) {
+  void moveCurrent(int delta, {bool wrap = true}) {
     _checkNotDisposed();
     if (!_state.active || _state.options.isEmpty || delta == 0) return;
-    final current = _state.selectedIndex ?? 0;
+    final current = _state.currentIndex ?? 0;
     final count = _state.options.length;
     final nextIndex = wrap
         ? (current + delta) % count
         : _clampInt(current + delta, 0, count - 1);
-    if (nextIndex == _state.selectedIndex) return;
-    _setSelectedIndex(nextIndex);
+    if (nextIndex == _state.currentIndex) return;
+    _setCurrentIndex(nextIndex);
   }
 
-  /// Applies the selected completion to [value] and closes the controller.
+  /// Applies the current completion to [value] and closes the controller.
   ///
   /// Returns null when completion is inactive or no option is selected.
   TextEditingValue? accept(TextEditingValue value, {bool singleLine = false}) {
@@ -194,14 +195,14 @@ final class TextCompletionController extends ChangeNotifier {
     return next;
   }
 
-  void _setSelectedIndex(int? selectedIndex) {
+  void _setCurrentIndex(int? currentIndex) {
     _setState(
       TextCompletionState._(
         active: _state.active,
         range: _state.range,
         query: _state.query,
         options: _state.options,
-        selectedIndex: selectedIndex,
+        currentIndex: currentIndex,
       ),
     );
   }
@@ -227,7 +228,7 @@ final class TextCompletionController extends ChangeNotifier {
   }
 }
 
-int? _normalizeSelectedIndex(int? index, int optionCount) {
+int? _normalizeCurrentIndex(int? index, int optionCount) {
   if (optionCount <= 0) return null;
   if (index == null) return null;
   return _clampInt(index, 0, optionCount - 1);

@@ -81,7 +81,7 @@ class Tree<T> extends StatefulWidget {
 
   /// Branch nodes shallower than this depth start expanded. `0` (the default)
   /// leaves every branch collapsed; `1` expands the roots, `2` their children,
-  /// and so on. Matches `JsonView.initialExpandedDepth`.
+  /// and so on. Changes after mount do not reset expansion.
   final int initialExpandedDepth;
 
   @override
@@ -90,7 +90,7 @@ class Tree<T> extends StatefulWidget {
 
 class _TreeState<T> extends State<Tree<T>> {
   final Set<TreeNode<T>> _expanded = Set<TreeNode<T>>.identity();
-  final ListController _list = ListController(selectedIndex: 0);
+  final ListController _list = ListController(initialIndex: 0);
   List<_TreeRow<T>> _flat = const [];
   late FocusNode _focusNode;
   bool _ownsFocusNode = false;
@@ -143,14 +143,14 @@ class _TreeState<T> extends State<Tree<T>> {
   }
 
   _TreeRow<T>? get _selected {
-    final i = _list.selectedIndex;
+    final i = _list.currentIndex;
     if (i == null || i < 0 || i >= _flat.length) return null;
     return _flat[i];
   }
 
   KeyEventResult _expandOrEnter() {
     final sel = _selected;
-    final i = _list.selectedIndex;
+    final i = _list.currentIndex;
     if (sel == null || i == null) return KeyEventResult.ignored;
     final node = sel.node;
     if (!node.isBranch) return KeyEventResult.ignored;
@@ -159,7 +159,7 @@ class _TreeState<T> extends State<Tree<T>> {
       return KeyEventResult.handled;
     }
     // Already expanded → step into the first child.
-    _list.selectedIndex = i + 1;
+    _list.currentIndex = i + 1;
     return KeyEventResult.handled;
   }
 
@@ -168,11 +168,11 @@ class _TreeState<T> extends State<Tree<T>> {
   KeyEventResult _typeahead(String ch) {
     if (_flat.isEmpty) return KeyEventResult.handled;
     final lower = ch.toLowerCase();
-    final start = (_list.selectedIndex ?? -1) + 1;
+    final start = (_list.currentIndex ?? -1) + 1;
     for (var k = 0; k < _flat.length; k++) {
       final i = (start + k) % _flat.length;
       if (_flat[i].node.label.toLowerCase().startsWith(lower)) {
-        _list.selectedIndex = i;
+        _list.currentIndex = i;
         break;
       }
     }
@@ -181,7 +181,7 @@ class _TreeState<T> extends State<Tree<T>> {
 
   KeyEventResult _collapseOrParent() {
     final sel = _selected;
-    final i = _list.selectedIndex;
+    final i = _list.currentIndex;
     if (sel == null || i == null) return KeyEventResult.ignored;
     final node = sel.node;
     final depth = sel.depth;
@@ -191,7 +191,7 @@ class _TreeState<T> extends State<Tree<T>> {
     }
     for (var j = i - 1; j >= 0; j--) {
       if (_flat[j].depth < depth) {
-        _list.selectedIndex = j;
+        _list.currentIndex = j;
         return KeyEventResult.handled;
       }
     }
@@ -213,7 +213,7 @@ class _TreeState<T> extends State<Tree<T>> {
   void _openRow(int index) {
     if (index < 0 || index >= _flat.length) return;
     _focusNode.requestFocus();
-    _list.selectedIndex = index;
+    _list.currentIndex = index;
     final node = _flat[index].node;
     if (!node.isBranch) return;
     setState(() => _expanded.add(node));
@@ -222,7 +222,7 @@ class _TreeState<T> extends State<Tree<T>> {
   void _closeRow(int index) {
     if (index < 0 || index >= _flat.length) return;
     _focusNode.requestFocus();
-    _list.selectedIndex = index;
+    _list.currentIndex = index;
     final node = _flat[index].node;
     if (!node.isBranch) return;
     setState(() => _expanded.remove(node));
@@ -231,7 +231,7 @@ class _TreeState<T> extends State<Tree<T>> {
   void _activateRow(int index) {
     if (index < 0 || index >= _flat.length) return;
     _focusNode.requestFocus();
-    _list.selectedIndex = index;
+    _list.currentIndex = index;
     final node = _flat[index].node;
     if (node.isBranch) {
       _openRow(index);
@@ -282,7 +282,7 @@ class _TreeState<T> extends State<Tree<T>> {
           'visibleRangeStart': _list.visibleRange!.first,
           'visibleRangeEnd': _list.visibleRange!.last,
         },
-        if (_list.selectedIndex != null) 'selectedIndex': _list.selectedIndex,
+        if (_list.currentIndex != null) 'currentIndex': _list.currentIndex,
         if (_selected != null) 'selectedKey': _selected!.key,
       }),
       child: KeyDetector(
@@ -316,10 +316,10 @@ class _TreeState<T> extends State<Tree<T>> {
             focusNode: _focusNode,
             autofocus: widget.autofocus,
             itemCount: _flat.length,
-            onActivate: _onEnter,
+            onSelect: _onEnter,
             itemBuilder: (context, i, activeSelected) {
               final row = _flat[i];
-              final selected = i == _list.selectedIndex;
+              final selected = i == _list.currentIndex;
               return _TreeRowWidget<T>(
                 row: row,
                 rowIndex: i,

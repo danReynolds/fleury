@@ -220,7 +220,7 @@ final class _WireMarkdownAppState extends State<_WireMarkdownApp> {
     setState(() {
       final selected =
           _document.blocks.isEmpty ? 0 : _document.blocks.length - 1;
-      _controller.selectedIndex = selected;
+      _controller.currentIndex = selected;
       _controller.jumpToIndex(selected);
     });
     TuiBinding.of(context).addPostFrameCallback((_) {

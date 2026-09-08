@@ -61,10 +61,10 @@ final class FileMentionEntry {
 typedef FileMentionMatcher =
     bool Function(FileMentionEntry entry, String query);
 
-/// Controller for [FileMentionPicker] selection and viewport state.
+/// Controller for [FileMentionPicker] browsing and viewport state.
 class FileMentionPickerController extends ChangeNotifier {
-  FileMentionPickerController({int selectedIndex = 0})
-    : _list = ListController(selectedIndex: selectedIndex) {
+  FileMentionPickerController({int? initialIndex = 0})
+    : _list = ListController(initialIndex: initialIndex) {
     _list.addListener(notifyListeners);
   }
 
@@ -73,10 +73,10 @@ class FileMentionPickerController extends ChangeNotifier {
 
   ListController get _listController => _list;
 
-  int? get selectedIndex => _list.selectedIndex;
-  set selectedIndex(int? value) {
+  int? get currentIndex => _list.currentIndex;
+  set currentIndex(int? value) {
     _checkNotDisposed();
-    _list.selectedIndex = value;
+    _list.currentIndex = value;
   }
 
   ({int first, int last})? get visibleRange => _list.visibleRange;
@@ -374,9 +374,9 @@ class _FileMentionPickerState extends State<FileMentionPicker> {
   );
 
   void _onQueryChange() {
-    final previous = _controller.selectedIndex;
+    final previous = _controller.currentIndex;
     _resetSelection(_currentOrder);
-    if (_controller.selectedIndex == previous) setState(() {});
+    if (_controller.currentIndex == previous) setState(() {});
   }
 
   void _onControllerChange() => setState(() {});
@@ -387,15 +387,15 @@ class _FileMentionPickerState extends State<FileMentionPicker> {
     _selectionSyncGeneration++;
     _pendingSelectedMentionPath = null;
     if (order.isEmpty) {
-      _controller.selectedIndex = null;
+      _controller.currentIndex = null;
       return;
     }
-    final selectedIndex = _controller.selectedIndex;
-    if (preserveCurrent && selectedIndex != null) {
-      _controller.selectedIndex = selectedIndex.clamp(0, order.length - 1);
+    final currentIndex = _controller.currentIndex;
+    if (preserveCurrent) {
+      _controller.currentIndex = currentIndex?.clamp(0, order.length - 1);
       return;
     }
-    _controller.selectedIndex = 0;
+    _controller.currentIndex = 0;
   }
 
   void _syncSelectionAfterOrderUpdate(
@@ -406,16 +406,13 @@ class _FileMentionPickerState extends State<FileMentionPicker> {
     _pendingSelectedMentionPath = null;
     final order = _currentOrder;
     if (order.isEmpty) {
-      _controller.selectedIndex = null;
+      _controller.currentIndex = null;
       return;
     }
-    final selectedIndex = _controller.selectedIndex;
-    if (selectedIndex == null) {
-      _controller.selectedIndex = 0;
-      return;
-    }
-    if (selectedIndex >= 0 && selectedIndex < oldOrder.length) {
-      final selectedPath = oldEntries[oldOrder[selectedIndex]].path;
+    final currentIndex = _controller.currentIndex;
+    if (currentIndex == null) return;
+    if (currentIndex >= 0 && currentIndex < oldOrder.length) {
+      final selectedPath = oldEntries[oldOrder[currentIndex]].path;
       final nextIndex = order.indexWhere(
         (entryIndex) => widget.entries[entryIndex].path == selectedPath,
       );
@@ -424,13 +421,13 @@ class _FileMentionPickerState extends State<FileMentionPicker> {
         return;
       }
     }
-    _controller.selectedIndex = selectedIndex.clamp(0, order.length - 1);
+    _controller.currentIndex = currentIndex.clamp(0, order.length - 1);
   }
 
   void _selectIndexAfterListCountRefresh(String selectedPath, int nextIndex) {
     final knownItemCount = _controller._listController.itemCount;
     if (knownItemCount == 0 || nextIndex < knownItemCount) {
-      _controller.selectedIndex = nextIndex;
+      _controller.currentIndex = nextIndex;
       return;
     }
 
@@ -460,7 +457,7 @@ class _FileMentionPickerState extends State<FileMentionPicker> {
       return;
     }
     _pendingSelectedMentionPath = null;
-    _controller.selectedIndex = nextIndex;
+    _controller.currentIndex = nextIndex;
   }
 
   void _focusQuery() {
@@ -480,15 +477,15 @@ class _FileMentionPickerState extends State<FileMentionPicker> {
   void _move(int delta) {
     final order = _currentOrder;
     if (order.isEmpty) return;
-    final current = _controller.selectedIndex ?? 0;
-    _controller.selectedIndex = (current + delta).clamp(0, order.length - 1);
+    final current = _controller.currentIndex ?? 0;
+    _controller.currentIndex = (current + delta).clamp(0, order.length - 1);
   }
 
   _SelectedMention? _selectedMention(List<int> order) {
     if (order.isEmpty) return null;
-    final selectedIndex = _controller.selectedIndex;
-    if (selectedIndex == null) return null;
-    final viewIndex = selectedIndex.clamp(0, order.length - 1);
+    final currentIndex = _controller.currentIndex;
+    if (currentIndex == null) return null;
+    final viewIndex = currentIndex.clamp(0, order.length - 1);
     final entryIndex = order[viewIndex];
     return _SelectedMention(
       viewIndex: viewIndex,
@@ -553,7 +550,7 @@ class _FileMentionPickerState extends State<FileMentionPicker> {
     final order = _currentOrder;
     if (viewIndex < 0 || viewIndex >= order.length) return;
     _focusResultsOrQuery();
-    _controller.selectedIndex = viewIndex;
+    _controller.currentIndex = viewIndex;
     _pickSelected();
   }
 
@@ -561,7 +558,7 @@ class _FileMentionPickerState extends State<FileMentionPicker> {
     final order = _currentOrder;
     if (viewIndex < 0 || viewIndex >= order.length) return;
     _focusResultsOrQuery();
-    _controller.selectedIndex = viewIndex;
+    _controller.currentIndex = viewIndex;
     await _copySelection();
   }
 
@@ -587,7 +584,6 @@ class _FileMentionPickerState extends State<FileMentionPicker> {
     final visibleRange = _controller.visibleRange;
     final copyEnabled = widget.copySelection && selected != null;
     final canPick = widget.onPick != null;
-    final panelFocused = _queryFocusNode.hasFocus || _resultsFocusNode.hasFocus;
 
     Widget panel = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -611,12 +607,12 @@ class _FileMentionPickerState extends State<FileMentionPicker> {
               : ListView.builder(
                   controller: _controller._listController,
                   focusNode: _resultsFocusNode,
-                  selectionActive: panelFocused,
+
                   itemCount: order.length,
-                  onActivate: (_) => _pickSelected(),
+                  onSelect: (_) => _pickSelected(),
                   itemBuilder: (context, viewIndex, activeSelected) {
                     final entryIndex = order[viewIndex];
-                    final selected = viewIndex == _controller.selectedIndex;
+                    final selected = viewIndex == _controller.currentIndex;
                     return _FileMentionRow(
                       entry: widget.entries[entryIndex],
                       entryIndex: entryIndex,
@@ -685,7 +681,7 @@ class _FileMentionPickerState extends State<FileMentionPicker> {
             'visibleRangeStart': visibleRange.first,
             'visibleRangeEnd': visibleRange.last,
           },
-          'selectedIndex': ?_controller.selectedIndex,
+          'currentIndex': ?_controller.currentIndex,
           if (selected != null) ..._selectedMentionState(selected.entry),
         }),
         child: panel,

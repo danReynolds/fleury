@@ -364,7 +364,7 @@ void main() {
       expect(tree.actions, contains(SemanticAction.focus));
       expect(tree.actions, contains(SemanticAction.navigate));
       expect(tree.state.collectionRowCount, 3);
-      expect(tree.state['selectedIndex'], 0);
+      expect(tree.state['currentIndex'], 0);
       expect(tree.state['selectedPath'], '$dir${Platform.pathSeparator}sub');
       expect(tree.state['selectedEntryType'], 'directory');
       expect(tree.state['selectedIsDirectory'], isTrue);
@@ -433,7 +433,7 @@ void main() {
         tester
             .semantics()
             .single(role: SemanticRole.tree)
-            .state['selectedIndex'],
+            .state['currentIndex'],
         1,
       );
     });

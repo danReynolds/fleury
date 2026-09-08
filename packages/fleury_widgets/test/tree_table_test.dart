@@ -48,14 +48,14 @@ void main() {
   group('TreeTableController lifecycle', () {
     test('dispose is idempotent and keeps final readable state', () {
       final controller = TreeTableController(
-        selectedIndex: 1,
+        initialIndex: 1,
         expandedKeys: const {'app'},
       );
 
       controller.dispose();
       controller.dispose();
 
-      expect(controller.selectedIndex, 1);
+      expect(controller.currentIndex, 1);
       expect(controller.expandedKeys, {'app'});
       expect(controller.isExpanded('app'), isTrue);
       expect(controller.visibleRange, isNull);
@@ -66,7 +66,7 @@ void main() {
         ..dispose();
 
       const message = 'TreeTableController has been disposed.';
-      expect(() => controller.selectedIndex = 1, _stateError(message));
+      expect(() => controller.currentIndex = 1, _stateError(message));
       expect(() => controller.expand('docs'), _stateError(message));
       expect(() => controller.collapse('app'), _stateError(message));
       expect(() => controller.toggle('docs'), _stateError(message));
@@ -482,7 +482,7 @@ void main() {
   group('copy/export', () {
     testWidgets('Ctrl+C copies the selected visible tree row', (tester) async {
       final controller = TreeTableController(
-        selectedIndex: 1,
+        initialIndex: 1,
         expandedKeys: const {'app'},
       );
       TreeTableCopyResult<String>? copied;
@@ -520,7 +520,7 @@ void main() {
       tester,
     ) async {
       final controller = TreeTableController(
-        selectedIndex: 1,
+        initialIndex: 1,
         expandedKeys: const {'app'},
       );
       TreeTableCopyResult<String>? copied;
@@ -651,7 +651,7 @@ void main() {
       cellBuilderCalls = 0;
       tester.sendKey(const KeyEvent(KeyCode.arrowDown));
       tester.render(size: const CellSize(60, 10));
-      expect(controller.selectedIndex, 1);
+      expect(controller.currentIndex, 1);
       expect(
         cellBuilderCalls,
         lessThan(nodeCount),
@@ -808,7 +808,7 @@ void main() {
       tester,
     ) {
       final controller = TreeTableController(
-        selectedIndex: 3,
+        initialIndex: 3,
         expandedKeys: const {'app'},
       );
       addTearDown(controller.dispose);
@@ -832,7 +832,7 @@ void main() {
 
       final tree = tester.semantics().single(role: SemanticRole.tree);
       expect(tree.state.collectionRowCount, 2);
-      expect(tree.state['selectedIndex'], 1);
+      expect(tree.state['currentIndex'], 1);
       expect(tree.state.selectedKey, 'docs');
     });
   });

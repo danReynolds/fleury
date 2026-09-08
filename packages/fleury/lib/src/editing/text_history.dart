@@ -22,7 +22,7 @@ final class TextHistoryController extends ChangeNotifier {
 
   final List<String> _entries = <String>[];
   String? _draft;
-  int? _selectedIndex;
+  int? _currentIndex;
   bool _disposed = false;
 
   List<String> get entries => List.unmodifiable(_entries);
@@ -31,10 +31,10 @@ final class TextHistoryController extends ChangeNotifier {
   bool get isNotEmpty => _entries.isNotEmpty;
 
   /// The selected history entry while browsing, or null for the current draft.
-  int? get selectedIndex => _selectedIndex;
+  int? get currentIndex => _currentIndex;
 
   /// Whether navigation is currently showing a history entry.
-  bool get isBrowsing => _selectedIndex != null;
+  bool get isBrowsing => _currentIndex != null;
 
   /// The draft captured before entering history browsing.
   String? get draft => _draft;
@@ -86,30 +86,30 @@ final class TextHistoryController extends ChangeNotifier {
     _checkNotDisposed();
     if (_entries.isEmpty) return null;
 
-    if (_selectedIndex == null) {
+    if (_currentIndex == null) {
       _draft = current.text;
-      _selectedIndex = _entries.length - 1;
+      _currentIndex = _entries.length - 1;
       notifyListeners();
-      return _valueFor(_entries[_selectedIndex!]);
+      return _valueFor(_entries[_currentIndex!]);
     }
 
-    if (_selectedIndex! > 0) {
-      _selectedIndex = _selectedIndex! - 1;
+    if (_currentIndex! > 0) {
+      _currentIndex = _currentIndex! - 1;
       notifyListeners();
     }
-    return _valueFor(_entries[_selectedIndex!]);
+    return _valueFor(_entries[_currentIndex!]);
   }
 
   /// Moves toward newer entries, restoring the captured draft at the end.
   TextEditingValue? navigateNext() {
     _checkNotDisposed();
-    final index = _selectedIndex;
+    final index = _currentIndex;
     if (index == null) return null;
 
     if (index < _entries.length - 1) {
-      _selectedIndex = index + 1;
+      _currentIndex = index + 1;
       notifyListeners();
-      return _valueFor(_entries[_selectedIndex!]);
+      return _valueFor(_entries[_currentIndex!]);
     }
 
     final draft = _draft ?? '';
@@ -127,9 +127,9 @@ final class TextHistoryController extends ChangeNotifier {
   TextEditingValue _valueFor(String text) => TextEditingValue(text: text);
 
   bool _clearBrowsingState() {
-    if (_draft == null && _selectedIndex == null) return false;
+    if (_draft == null && _currentIndex == null) return false;
     _draft = null;
-    _selectedIndex = null;
+    _currentIndex = null;
     return true;
   }
 

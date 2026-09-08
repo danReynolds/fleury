@@ -46,12 +46,12 @@ void main() {
   group('ConversationNavigator', () {
     group('controller lifecycle', () {
       test('dispose is idempotent and keeps final readable state', () {
-        final controller = ConversationNavigatorController(selectedIndex: 2);
+        final controller = ConversationNavigatorController(initialIndex: 2);
 
         controller.dispose();
         controller.dispose();
 
-        expect(controller.selectedIndex, 2);
+        expect(controller.currentIndex, 2);
         expect(controller.visibleRange, isNull);
       });
 
@@ -59,7 +59,7 @@ void main() {
         final controller = ConversationNavigatorController()..dispose();
 
         const message = 'ConversationNavigatorController has been disposed.';
-        expect(() => controller.selectedIndex = 1, _stateError(message));
+        expect(() => controller.currentIndex = 1, _stateError(message));
         expect(() => controller.jumpToIndex(1), _stateError(message));
       });
     });
@@ -218,7 +218,7 @@ void main() {
       await tester
           .target(role: WidgetRoles.conversation, label: 'Deploy review')
           .press();
-      expect(controller.selectedIndex, 1);
+      expect(controller.currentIndex, 1);
       expect(selected?.entry.id, 'deploy-review');
 
       tester.render(size: const CellSize(90, 7));
@@ -236,13 +236,13 @@ void main() {
         focused: true,
       );
       expect(navigator.state.selectedConversationId, 'deploy-review');
-      expect(navigator.state['selectedIndex'], 1);
+      expect(navigator.state['currentIndex'], 1);
     });
 
     testWidgets('preserves selected conversation identity across refresh', (
       tester,
     ) {
-      final controller = ConversationNavigatorController(selectedIndex: 2);
+      final controller = ConversationNavigatorController(initialIndex: 2);
       tester.pumpWidget(
         ConversationNavigator(
           semanticLabel: 'Threads',
@@ -284,7 +284,7 @@ void main() {
       tester.pump();
       tester.render(size: const CellSize(90, 8));
 
-      expect(controller.selectedIndex, 3);
+      expect(controller.currentIndex, 3);
       final navigator = tester.semantics().single(
         role: WidgetRoles.conversationNavigator,
         label: 'Threads',

@@ -9,12 +9,12 @@ import 'table.dart' show FixedColumnWidth, FlexColumnWidth, TableColumnWidth;
 /// Direction for an app-provided [DataTable] sort state.
 enum DataTableSortDirection { ascending, descending }
 
-/// Selection model used by [DataTable].
+/// Interaction model used by [DataTable].
 enum DataTableSelectionMode {
-  /// Select whole rows. This preserves the original DataTable behavior.
+  /// Browse rows, then confirm a choice with click or Enter.
   row,
 
-  /// Select a focused cell and optional rectangular cell range.
+  /// Navigate cells independently of a rectangular selection for copying.
   cell,
 }
 
@@ -55,6 +55,18 @@ final class DataTableSelectionRange {
   int get endColumn => anchorColumn > focusColumn ? anchorColumn : focusColumn;
   int get rowCount => endRow - startRow + 1;
   int get columnCount => endColumn - startColumn + 1;
+
+  @override
+  bool operator ==(Object other) =>
+      other is DataTableSelectionRange &&
+      anchorRow == other.anchorRow &&
+      anchorColumn == other.anchorColumn &&
+      focusRow == other.focusRow &&
+      focusColumn == other.focusColumn;
+
+  @override
+  int get hashCode =>
+      Object.hash(anchorRow, anchorColumn, focusRow, focusColumn);
 
   bool containsCell(int rowIndex, int columnIndex) {
     return rowIndex >= startRow &&
@@ -433,72 +445,89 @@ typedef DataTableCellBuilder = String Function(int rowIndex, String columnId);
 /// Builds a stable semantic key for one [DataTable] row.
 typedef DataTableRowKeyBuilder = Object Function(int rowIndex);
 
-/// Selected-row controller for [DataTable].
+/// Navigation and range-selection state for [DataTable].
 class DataTableController extends ChangeNotifier {
-  DataTableController({int selectedIndex = 0, int selectedColumnIndex = 0})
-    : _selectedIndex = selectedIndex,
-      _selectedColumnIndex = selectedColumnIndex,
-      _anchorRow = selectedIndex,
-      _anchorColumn = selectedColumnIndex;
+  DataTableController({int initialRowIndex = 0, int initialColumnIndex = 0})
+    : _currentRowIndex = initialRowIndex,
+      _currentColumnIndex = initialColumnIndex,
+      _anchorRow = initialRowIndex,
+      _anchorColumn = initialColumnIndex,
+      _rangeRow = initialRowIndex,
+      _rangeColumn = initialColumnIndex;
 
-  int _selectedIndex;
-  int _selectedColumnIndex;
+  int _currentRowIndex;
+  int _currentColumnIndex;
   int _anchorRow;
   int _anchorColumn;
+  int _rangeRow;
+  int _rangeColumn;
   int _rowCount = 0;
   int _columnCount = 0;
   bool _disposed = false;
+  Object? _owner;
 
-  int get selectedIndex => _selectedIndex;
-  set selectedIndex(int value) {
+  void _attach(Object owner) {
     _checkNotDisposed();
-    final clamped = _clamp(value);
-    if (_selectedIndex == clamped) return;
-    _selectedIndex = clamped;
-    _anchorRow = clamped;
-    _anchorColumn = _selectedColumnIndex;
+    if (_owner != null && !identical(_owner, owner)) {
+      throw StateError(
+        'DataTableController can attach to only one owning view at a time.',
+      );
+    }
+    _owner = owner;
+  }
+
+  void _detach(Object owner) {
+    if (identical(_owner, owner)) _owner = null;
+  }
+
+  /// Remembered navigation row, independent of the selected cell range.
+  int get currentRowIndex => _currentRowIndex;
+  set currentRowIndex(int value) => _moveCurrentTo(value, _currentColumnIndex);
+
+  /// Remembered navigation column, independent of the selected cell range.
+  int get currentColumnIndex => _currentColumnIndex;
+  set currentColumnIndex(int value) => _moveCurrentTo(_currentRowIndex, value);
+
+  void _moveCurrentTo(int rowIndex, int columnIndex) {
+    _checkNotDisposed();
+    _currentRowIndex = _clamp(rowIndex);
+    _currentColumnIndex = _clampColumn(columnIndex);
+    // An explicit navigation request also reveals an unchanged current row
+    // after the user has scrolled it out of view.
     notifyListeners();
   }
 
-  int get selectedColumnIndex => _selectedColumnIndex;
-  set selectedColumnIndex(int value) {
-    _checkNotDisposed();
-    final clamped = _clampColumn(value);
-    if (_selectedColumnIndex == clamped) return;
-    _selectedColumnIndex = clamped;
-    _anchorRow = _selectedIndex;
-    _anchorColumn = clamped;
-    notifyListeners();
-  }
-
-  /// Total row / column counts, so callers can tell when the selection sits on
+  /// Total row / column counts, so callers can tell when the cursor sits on
   /// an edge (e.g. to bubble an arrow key for boundary focus escape).
   int get rowCount => _rowCount;
   int get columnCount => _columnCount;
 
+  /// Selected cells, independent of the navigation cursor.
   DataTableSelectionRange get selectionRange => DataTableSelectionRange(
     anchorRow: _anchorRow,
     anchorColumn: _anchorColumn,
-    focusRow: _selectedIndex,
-    focusColumn: _selectedColumnIndex,
+    focusRow: _rangeRow,
+    focusColumn: _rangeColumn,
   ).clamp(rowCount: _rowCount, columnCount: _columnCount);
 
+  /// Selects and reveals a cell. With [extend], keeps the existing range anchor.
   void selectCell(int rowIndex, int columnIndex, {bool extend = false}) {
     _checkNotDisposed();
     final row = _clamp(rowIndex);
     final column = _clampColumn(columnIndex);
-    final changed = row != _selectedIndex || column != _selectedColumnIndex;
-    final anchorChanged =
-        !extend && (_anchorRow != row || _anchorColumn != column);
-    _selectedIndex = row;
-    _selectedColumnIndex = column;
+    _currentRowIndex = row;
+    _currentColumnIndex = column;
+    _rangeRow = row;
+    _rangeColumn = column;
     if (!extend) {
       _anchorRow = row;
       _anchorColumn = column;
     }
-    if (changed || anchorChanged) notifyListeners();
+    // Also notify for an explicit reveal of the same selected cell.
+    notifyListeners();
   }
 
+  /// Selects a cell relative to the cursor, optionally extending the range.
   void moveSelection({
     int rowDelta = 0,
     int columnDelta = 0,
@@ -506,55 +535,58 @@ class DataTableController extends ChangeNotifier {
   }) {
     _checkNotDisposed();
     selectCell(
-      _selectedIndex + rowDelta,
-      _selectedColumnIndex + columnDelta,
+      _currentRowIndex + rowDelta,
+      _currentColumnIndex + columnDelta,
       extend: extend,
     );
   }
 
-  // Dimensions belong to the widget. Commit them with the selection before
-  // notifying so listeners never observe coordinates from different layouts.
+  // Publish dimensions, cursor, and both range endpoints as one coherent state.
   void _updateDimensions({
     required int rowCount,
     required int columnCount,
-    int? selectedIndex,
+    int? currentRowIndex,
   }) {
     _checkNotDisposed();
-    final nextRowCount = rowCount < 0 ? 0 : rowCount;
-    final nextColumnCount = columnCount < 0 ? 0 : columnCount;
-    final maxRow = nextRowCount <= 0 ? 0 : nextRowCount - 1;
-    final maxColumn = nextColumnCount <= 0 ? 0 : nextColumnCount - 1;
-    final nextRow = (selectedIndex ?? _selectedIndex).clamp(0, maxRow);
-    final nextColumn = _selectedColumnIndex.clamp(0, maxColumn);
-    // Acknowledging a navigation request must not collapse an extended range.
-    final collapse = selectedIndex != null && nextRow != _selectedIndex;
-    final nextAnchorRow = collapse ? nextRow : _anchorRow.clamp(0, maxRow);
-    final nextAnchorColumn = collapse
-        ? nextColumn
-        : _anchorColumn.clamp(0, maxColumn);
-    if (_rowCount == nextRowCount &&
-        _columnCount == nextColumnCount &&
-        _selectedIndex == nextRow &&
-        _selectedColumnIndex == nextColumn &&
-        _anchorRow == nextAnchorRow &&
-        _anchorColumn == nextAnchorColumn) {
+    final rows = rowCount < 0 ? 0 : rowCount;
+    final columns = columnCount < 0 ? 0 : columnCount;
+    final maxRow = rows <= 0 ? 0 : rows - 1;
+    final maxColumn = columns <= 0 ? 0 : columns - 1;
+    final row = (currentRowIndex ?? _currentRowIndex).clamp(0, maxRow);
+    final column = _currentColumnIndex.clamp(0, maxColumn);
+    final anchorRow = _anchorRow.clamp(0, maxRow);
+    final anchorColumn = _anchorColumn.clamp(0, maxColumn);
+    final rangeRow = _rangeRow.clamp(0, maxRow);
+    final rangeColumn = _rangeColumn.clamp(0, maxColumn);
+    if (_rowCount == rows &&
+        _columnCount == columns &&
+        _currentRowIndex == row &&
+        _currentColumnIndex == column &&
+        _anchorRow == anchorRow &&
+        _anchorColumn == anchorColumn &&
+        _rangeRow == rangeRow &&
+        _rangeColumn == rangeColumn) {
       return;
     }
-    _rowCount = nextRowCount;
-    _columnCount = nextColumnCount;
-    _selectedIndex = nextRow;
-    _selectedColumnIndex = nextColumn;
-    _anchorRow = nextAnchorRow;
-    _anchorColumn = nextAnchorColumn;
+    _rowCount = rows;
+    _columnCount = columns;
+    _currentRowIndex = row;
+    _currentColumnIndex = column;
+    _anchorRow = anchorRow;
+    _anchorColumn = anchorColumn;
+    _rangeRow = rangeRow;
+    _rangeColumn = rangeColumn;
     notifyListeners();
   }
 
   int _clamp(int value) {
+    if (_owner == null) return value < 0 ? 0 : value;
     if (_rowCount <= 0) return 0;
     return value.clamp(0, _rowCount - 1);
   }
 
   int _clampColumn(int value) {
+    if (_owner == null) return value < 0 ? 0 : value;
     if (_columnCount <= 0) return 0;
     return value.clamp(0, _columnCount - 1);
   }
@@ -573,10 +605,12 @@ class DataTableController extends ChangeNotifier {
   }
 }
 
-/// A columnar table built for large, text-shaped data sets — thousands of
-/// rows scroll and select smoothly because only the visible rows are ever
-/// built. Selection works per row or per cell, typing jumps to a matching
-/// row, and Ctrl+C exports the selection as TSV or CSV.
+/// A virtualized table for large collections of text rows.
+///
+/// Row mode uses arrows to browse and click or Enter to choose. Cell mode
+/// keeps the navigation cursor separate from a range selected for copying;
+/// Enter or double-click runs a row command. The wheel only scrolls.
+/// Ctrl+C copies the current row or selected cell range as TSV or CSV.
 ///
 /// Unlike `Table`, this widget does not mount every cell as a widget. It asks
 /// [cellBuilder] only for the visible body rows, paints those directly into the
@@ -589,11 +623,13 @@ class DataTable extends StatefulWidget {
     required this.cellBuilder,
     this.rowKeyBuilder,
     this.controller,
-    this.selectedIndex,
-    this.onSelectionChanged,
+    this.currentRowIndex,
     this.focusNode,
     this.autofocus = false,
     this.onSelect,
+    this.onAction,
+    this.onFocusedItemChanged,
+    this.onRangeChanged,
     this.typeahead = true,
     this.selectionMode = DataTableSelectionMode.row,
     this.copySelectedRow = true,
@@ -609,8 +645,20 @@ class DataTable extends StatefulWidget {
     this.filterText,
     this.semanticLabel = 'Data table',
   }) : assert(
-         controller == null || selectedIndex == null,
-         'Use either controller or selectedIndex to own table selection.',
+         controller == null || currentRowIndex == null,
+         'Use either controller or currentRowIndex to own the row cursor.',
+       ),
+       assert(
+         selectionMode == DataTableSelectionMode.row || onSelect == null,
+         'Use onAction for a row command in cell mode.',
+       ),
+       assert(
+         selectionMode == DataTableSelectionMode.cell || onAction == null,
+         'Use onSelect to confirm a row in row mode.',
+       ),
+       assert(
+         selectionMode == DataTableSelectionMode.cell || onRangeChanged == null,
+         'onRangeChanged is available in cell mode.',
        );
 
   /// Number of source rows available to the table.
@@ -625,39 +673,18 @@ class DataTable extends StatefulWidget {
   /// Optional stable row identity used by semantics and copy callbacks.
   final DataTableRowKeyBuilder? rowKeyBuilder;
 
-  /// External selection controller. If omitted, the table owns one.
-  /// Cannot be combined with [selectedIndex].
+  /// External navigation and range controller. If omitted, the table owns one.
   final DataTableController? controller;
 
-  /// App-owned selected row, resolved against this widget's [rowCount].
+  /// Parent-owned browsing row. Supply [onFocusedItemChanged] to accept input
+  /// requests by rebuilding with the requested row. Ignored requests leave the
+  /// cursor at this value. Out-of-range values are clamped to the available rows.
   ///
-  /// Supply this with [onSelectionChanged] when filtering, sorting, or replacing
-  /// rows also determines the selection. Update the data and selected index in
-  /// the same state change; no controller dimension updates are needed.
-  /// Out-of-range values are clamped, with zero used for an empty table.
-  ///
-  /// When non-null, the app must rebuild with the requested index to accept a
-  /// selection change. If omitted, selection is managed by [controller] or the
-  /// table's internal controller. Cannot be combined with [controller].
-  ///
-  /// ```dart
-  /// DataTable(
-  ///   rowCount: rows.length,
-  ///   columns: columns,
-  ///   cellBuilder: (row, column) => rows[row][column] ?? '',
-  ///   selectedIndex: selectedRow,
-  ///   onSelectionChanged: (row) => setState(() => selectedRow = row),
-  /// )
-  /// ```
-  final int? selectedIndex;
-
-  /// Called when navigation or a controller changes the focused row.
-  ///
-  /// With [selectedIndex], this requests an app state update. Widget updates
-  /// (including clamping after a row-count change) do not invoke this callback.
-  /// Column-only changes do not invoke it either. Row activation is reported
-  /// separately by [onSelect].
-  final void Function(int rowIndex)? onSelectionChanged;
+  /// Update this and [rowCount] together when filtering or replacing data. This
+  /// live value cannot be combined with [controller]. If omitted, the supplied
+  /// controller or an internal controller owns navigation. It does not invoke
+  /// [onSelect] or change the independently selected cell range.
+  final int? currentRowIndex;
 
   /// Focus node used for keyboard navigation.
   final FocusNode? focusNode;
@@ -665,17 +692,32 @@ class DataTable extends StatefulWidget {
   /// Whether the table should request focus when mounted.
   final bool autofocus;
 
-  /// Called when the focused row is activated.
+  /// Confirms a row on a completed click, Enter, or semantic select/press.
+  /// Available in row mode. Reconfirming the same row calls this again.
   final void Function(int rowIndex)? onSelect;
 
-  /// Whether typing a printable character jumps the selection to the next
+  /// Runs a row command on Enter, a completed double-click, or semantic press.
+  /// Available in cell mode; selecting a cell range does not invoke it.
+  final void Function(int rowIndex)? onAction;
+
+  /// Reports user navigation to a different row, including pointer and semantic
+  /// input. Column-only movement, scrolling, and controller writes do not fire it.
+  final void Function(int rowIndex)? onFocusedItemChanged;
+
+  /// Reports a changed cell range after user selection, including semantic
+  /// selection. Navigation alone and programmatic controller writes do not fire
+  /// it. Available in cell mode.
+  final void Function(DataTableSelectionRange range)? onRangeChanged;
+
+  /// Whether typing a printable character moves the cursor to the next
   /// row whose first-column cell starts with it (grid type-ahead). On by
   /// default. Turn it off when the surrounding app binds bare printables
   /// (a vim-style command key, a `q` quit): a focused table with
   /// type-ahead on consumes every printable before those bindings see it.
   final bool typeahead;
 
-  /// Whether keyboard selection targets whole rows or individual cells.
+  /// Choose rows with click/Enter, or select cell ranges and invoke a separate
+  /// row command with double-click/Enter.
   final DataTableSelectionMode selectionMode;
 
   /// Whether Ctrl+C and semantic copy export the current selection.
@@ -696,7 +738,7 @@ class DataTable extends StatefulWidget {
   /// Style used for header and row separators.
   final CellStyle? separatorStyle;
 
-  /// Style merged onto the focused row or focused cell.
+  /// Style merged onto the current row in row mode or selected cells in cell mode.
   final CellStyle? selectedStyle;
 
   /// App-owned sort column identifier exposed through semantics.
@@ -730,31 +772,49 @@ class _DataTableState extends State<DataTable> {
   bool _ownsController = false;
   bool _ownsFocusNode = false;
   bool _syncingController = false;
-  late int _lastSelectedIndex;
 
   int _visibleRows = 1;
   DataTableViewportMetrics _viewport = DataTableViewportMetrics.empty;
   _DataTablePointerHit? _pendingPointerHit;
+  CellOffset? _pressPosition;
+  Object? _pressKey;
+  int _firstRow = 0;
+  int _revealRevision = 0;
+  final Stopwatch _clickClock = Stopwatch()..start();
+  Duration? _lastClickAt;
+  CellOffset? _lastClickPosition;
+  Object? _lastClickKey;
+  int? _lastClickColumn;
 
   @override
   void initState() {
     super.initState();
-    _controller = widget.controller ?? DataTableController();
-    _ownsController = widget.controller == null;
-    _syncController();
-    _controller.addListener(_onChange);
     _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'DataTable');
     _ownsFocusNode = widget.focusNode == null;
+    _controller = widget.controller ?? DataTableController();
+    _ownsController = widget.controller == null;
+    _controller._attach(this);
+    _syncController();
+    _controller.addListener(_onChange);
   }
 
   @override
   void didUpdateWidget(DataTable oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.selectionMode != oldWidget.selectionMode ||
+        widget.rowCount != oldWidget.rowCount ||
+        !_sameColumnIds(widget.columns, oldWidget.columns)) {
+      _cancelPointer();
+    }
     if (widget.controller != oldWidget.controller) {
+      _revealRevision++;
+      _cancelPointer();
       _controller.removeListener(_onChange);
+      _controller._detach(this);
       if (_ownsController) _controller.dispose();
       _controller = widget.controller ?? DataTableController();
       _ownsController = widget.controller == null;
+      _controller._attach(this);
       _controller.addListener(_onChange);
     }
     if (widget.focusNode != oldWidget.focusNode) {
@@ -765,48 +825,73 @@ class _DataTableState extends State<DataTable> {
     _syncController();
   }
 
+  bool _sameColumnIds(List<DataTableColumn> a, List<DataTableColumn> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].id != b[i].id) return false;
+    }
+    return true;
+  }
+
   void _syncController() {
+    final row = _controller.currentRowIndex;
+    final column = _controller.currentColumnIndex;
     _syncingController = true;
     try {
       _controller._updateDimensions(
         rowCount: widget.rowCount,
         columnCount: widget.columns.length,
-        selectedIndex: widget.selectedIndex,
+        currentRowIndex: widget.currentRowIndex,
       );
-      _lastSelectedIndex = _controller.selectedIndex;
+      if (row != _controller.currentRowIndex ||
+          column != _controller.currentColumnIndex) {
+        _revealRevision++;
+      }
     } finally {
       _syncingController = false;
     }
   }
 
-  void _onChange() {
-    if (_syncingController) return;
-    final selectedIndex = _controller.selectedIndex;
-    final rowChanged = selectedIndex != _lastSelectedIndex;
-    _lastSelectedIndex = selectedIndex;
-    setState(() {});
-    if (rowChanged) widget.onSelectionChanged?.call(selectedIndex);
+  void _prepareCurrent() {
+    // Each interaction starts from the parent's accepted cursor.
+    if (widget.currentRowIndex != null) _syncController();
   }
 
-  void _prepareSelection() {
-    // Start each interaction from the app's accepted row. A previous request
-    // may have been ignored, or accepted by a parent that rebuilds at layout.
-    if (widget.selectedIndex != null) _syncController();
+  void _onChange() {
+    if (!_syncingController) setState(() => _revealRevision++);
   }
 
   void _onFocusDetectorChange(bool focused) => setState(() {});
 
   @override
+  void deactivate() {
+    _controller.removeListener(_onChange);
+    _controller._detach(this);
+    super.deactivate();
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    _controller._attach(this);
+    _controller.addListener(_onChange);
+  }
+
+  @override
   void dispose() {
     _controller.removeListener(_onChange);
+    _controller._detach(this);
     if (_ownsController) _controller.dispose();
     if (_ownsFocusNode) _focusNode.dispose();
     super.dispose();
   }
 
   Future<void> _copySelection() async {
+    _prepareCurrent();
     if (widget.columns.isEmpty || widget.rowCount <= 0) return;
-    final focusRow = _controller.selectedIndex;
+    final focusRow = widget.selectionMode == DataTableSelectionMode.row
+        ? _controller.currentRowIndex
+        : _controller.selectionRange.focusRow;
     final selection = _copyRangeForCurrentMode();
     final rowKeyBuilder = widget.rowKeyBuilder;
     final rowKey = rowKeyBuilder == null ? focusRow : rowKeyBuilder(focusRow);
@@ -838,32 +923,126 @@ class _DataTableState extends State<DataTable> {
     );
   }
 
+  void _interact(void Function() update) {
+    final controller = _controller;
+    final row = controller.currentRowIndex;
+    final range = controller.selectionRange;
+    update();
+    if (!mounted || !identical(controller, _controller)) return;
+    final nextRow = controller.currentRowIndex;
+    final nextRange = controller.selectionRange;
+    if (row != nextRow) widget.onFocusedItemChanged?.call(nextRow);
+    if (!mounted ||
+        !identical(controller, _controller) ||
+        controller.currentRowIndex != nextRow ||
+        controller.selectionRange != nextRange) {
+      return;
+    }
+    if (widget.selectionMode == DataTableSelectionMode.cell &&
+        range != nextRange) {
+      widget.onRangeChanged?.call(nextRange);
+    }
+  }
+
+  void _confirmCurrent() {
+    if (!mounted || widget.rowCount <= 0 || widget.columns.isEmpty) return;
+    final callback = widget.selectionMode == DataTableSelectionMode.row
+        ? widget.onSelect
+        : widget.onAction;
+    callback?.call(_controller.currentRowIndex);
+  }
+
+  bool _moveTo(
+    int row,
+    int column, {
+    bool extend = false,
+    bool select = false,
+    bool keyboard = false,
+  }) {
+    final controller = _controller;
+    final mode = widget.selectionMode;
+    final nextRow = controller._clamp(row);
+    final nextColumn = controller._clampColumn(column);
+    final key = _rowKey(nextRow);
+    final columnId = widget.columns[nextColumn].id;
+    _interact(() {
+      if (widget.selectionMode == DataTableSelectionMode.cell &&
+          (extend || select)) {
+        if (keyboard &&
+            extend &&
+            (controller._rangeRow != controller.currentRowIndex ||
+                controller._rangeColumn != controller.currentColumnIndex)) {
+          // Start a new keyboard range from the cursor after plain navigation.
+          controller._anchorRow = controller.currentRowIndex;
+          controller._anchorColumn = controller.currentColumnIndex;
+        }
+        controller.selectCell(row, column, extend: extend);
+      } else {
+        controller._moveCurrentTo(row, column);
+      }
+    });
+    // A preview/range callback may replace the table or move the cursor. Never
+    // turn that into a command on a different row than the input addressed.
+    return mounted &&
+        identical(controller, _controller) &&
+        widget.selectionMode == mode &&
+        nextRow < widget.rowCount &&
+        nextColumn < widget.columns.length &&
+        controller.currentRowIndex == nextRow &&
+        controller.currentColumnIndex == nextColumn &&
+        _rowKey(nextRow) == key &&
+        widget.columns[nextColumn].id == columnId;
+  }
+
+  void _moveBy({int rowDelta = 0, int columnDelta = 0, bool extend = false}) =>
+      _moveTo(
+        _controller.currentRowIndex + rowDelta,
+        _controller.currentColumnIndex + columnDelta,
+        extend: extend,
+        keyboard: true,
+      );
+
   Future<bool> _handleSemanticAction(
     SemanticNode target,
     SemanticAction action,
   ) async {
-    _prepareSelection();
+    _prepareCurrent();
+    final header = target.state['header'] == true;
+    if (header) {
+      final columnId = target.state['columnId'];
+      if (action == SemanticAction.activate &&
+          columnId is String &&
+          _canSortColumn(columnId)) {
+        widget.onSort!(columnId);
+        return true;
+      }
+      return false;
+    }
     switch (action) {
       case SemanticAction.focus:
-        _focusNode.requestFocus();
-        return true;
       case SemanticAction.select:
-        _focusNode.requestFocus();
-        return _selectSemanticTarget(target);
       case SemanticAction.activate:
-        // A header cell activate is a sort request, not a row selection.
-        if (target.state['header'] == true) {
-          final columnId = target.state['columnId'];
-          if (columnId is String && _canSortColumn(columnId)) {
-            widget.onSort!(columnId);
-            return true;
-          }
-          return false;
+        _resetClickSeries();
+        if (widget.rowCount <= 0 || widget.columns.isEmpty) {
+          if (action != SemanticAction.focus) return false;
+          _focusNode.requestFocus();
+          return true;
         }
-        if (widget.onSelect == null) return false;
+        final row = target.state['rowIndex'];
+        final column = target.state['columnIndex'];
         _focusNode.requestFocus();
-        _selectSemanticTarget(target);
-        widget.onSelect!.call(_controller.selectedIndex);
+        if (!mounted) return false;
+        final moved = _moveTo(
+          row is int ? row : _controller.currentRowIndex,
+          column is int ? column : _controller.currentColumnIndex,
+          select: action == SemanticAction.select,
+        );
+        if (moved &&
+            (action == SemanticAction.activate ||
+                (action == SemanticAction.select &&
+                    widget.selectionMode == DataTableSelectionMode.row))) {
+          _confirmCurrent();
+        }
         return true;
       case SemanticAction.copy:
         if (!widget.copySelectedRow) return false;
@@ -874,41 +1053,22 @@ class _DataTableState extends State<DataTable> {
     }
   }
 
-  /// `setValue` on the table node jumps the windowed row range to a target row
-  /// INDEX (0-based) — the off-window reach an agent can't otherwise get
-  /// without growing the whole grid. The window follows the selection, so the
-  /// target row then appears in the next snapshot. Clamped to the row range;
-  /// does not fire `onSelect` (it's navigation, not a row action).
+  /// Navigate to a row index without confirming it or changing a cell range.
   bool _handleSemanticSetValue(SemanticNode target, Object? value) {
+    _prepareCurrent();
     if (target.role != SemanticRole.table || widget.rowCount <= 0) return false;
     final index = coerceSemanticInt(value);
     if (index == null) return false;
-    _prepareSelection();
+    _resetClickSeries();
     _focusNode.requestFocus();
-    _controller.selectedIndex = index.clamp(0, widget.rowCount - 1);
-    return true;
-  }
-
-  bool _selectSemanticTarget(SemanticNode target) {
-    final rowIndex = target.state['rowIndex'];
-    if (rowIndex is! int || rowIndex < 0) {
-      return target.role == SemanticRole.table;
-    }
-    final columnIndex = target.state['columnIndex'];
-    if (widget.selectionMode == DataTableSelectionMode.cell &&
-        columnIndex is int &&
-        columnIndex >= 0) {
-      _controller.selectCell(rowIndex, columnIndex);
-    } else {
-      _controller.selectedIndex = rowIndex;
-    }
+    _moveTo(index, _controller.currentColumnIndex);
     return true;
   }
 
   DataTableSelectionRange _copyRangeForCurrentMode() {
     final range = widget.selectionMode == DataTableSelectionMode.row
         ? DataTableSelectionRange.row(
-            rowIndex: _controller.selectedIndex,
+            rowIndex: _controller.currentRowIndex,
             columnCount: widget.columns.length,
           )
         : _controller.selectionRange;
@@ -927,8 +1087,11 @@ class _DataTableState extends State<DataTable> {
   }
 
   KeyEventResult _onKey(KeyEvent event) {
-    _prepareSelection();
-    if (widget.rowCount <= 0) return KeyEventResult.ignored;
+    _prepareCurrent();
+    _resetClickSeries();
+    if (widget.rowCount <= 0 || widget.columns.isEmpty) {
+      return KeyEventResult.ignored;
+    }
     if (widget.copySelectedRow &&
         widget.columns.isNotEmpty &&
         event.hasCtrl &&
@@ -943,23 +1106,23 @@ class _DataTableState extends State<DataTable> {
       // escape — they're an editing gesture, not navigation.
       case KeyCode.arrowUp:
         return moveOrEscape(
-          atEdge: !extend && _controller.selectedIndex <= 0,
-          move: () => _controller.moveSelection(rowDelta: -1, extend: extend),
+          atEdge: !extend && _controller.currentRowIndex <= 0,
+          move: () => _moveBy(rowDelta: -1, extend: extend),
         );
       case KeyCode.arrowDown:
         return moveOrEscape(
           atEdge:
-              !extend && _controller.selectedIndex >= _controller.rowCount - 1,
-          move: () => _controller.moveSelection(rowDelta: 1, extend: extend),
+              !extend &&
+              _controller.currentRowIndex >= _controller.rowCount - 1,
+          move: () => _moveBy(rowDelta: 1, extend: extend),
         );
       case KeyCode.arrowLeft:
         if (widget.selectionMode != DataTableSelectionMode.cell) {
           return KeyEventResult.ignored;
         }
         return moveOrEscape(
-          atEdge: !extend && _controller.selectedColumnIndex <= 0,
-          move: () =>
-              _controller.moveSelection(columnDelta: -1, extend: extend),
+          atEdge: !extend && _controller.currentColumnIndex <= 0,
+          move: () => _moveBy(columnDelta: -1, extend: extend),
         );
       case KeyCode.arrowRight:
         if (widget.selectionMode != DataTableSelectionMode.cell) {
@@ -968,14 +1131,14 @@ class _DataTableState extends State<DataTable> {
         return moveOrEscape(
           atEdge:
               !extend &&
-              _controller.selectedColumnIndex >= _controller.columnCount - 1,
-          move: () => _controller.moveSelection(columnDelta: 1, extend: extend),
+              _controller.currentColumnIndex >= _controller.columnCount - 1,
+          move: () => _moveBy(columnDelta: 1, extend: extend),
         );
       case KeyCode.pageUp:
-        _controller.moveSelection(rowDelta: -_visibleRows, extend: extend);
+        _moveBy(rowDelta: -_visibleRows, extend: extend);
         return KeyEventResult.handled;
       case KeyCode.pageDown:
-        _controller.moveSelection(rowDelta: _visibleRows, extend: extend);
+        _moveBy(rowDelta: _visibleRows, extend: extend);
         return KeyEventResult.handled;
       case KeyCode.home:
         // Ctrl+Home → first cell (0,0) in cell mode; plain Home → top row,
@@ -983,18 +1146,28 @@ class _DataTableState extends State<DataTable> {
         final homeColumn =
             event.hasCtrl && widget.selectionMode == DataTableSelectionMode.cell
             ? 0
-            : _controller.selectedColumnIndex;
-        _controller.selectCell(0, homeColumn);
+            : _controller.currentColumnIndex;
+        _moveTo(0, homeColumn, extend: extend, keyboard: true);
         return KeyEventResult.handled;
       case KeyCode.end:
         final endColumn =
             event.hasCtrl && widget.selectionMode == DataTableSelectionMode.cell
             ? _controller.columnCount - 1
-            : _controller.selectedColumnIndex;
-        _controller.selectCell(widget.rowCount - 1, endColumn);
+            : _controller.currentColumnIndex;
+        _moveTo(widget.rowCount - 1, endColumn, extend: extend, keyboard: true);
+        return KeyEventResult.handled;
+      case const KeyCode.char(' '):
+        if (widget.selectionMode != DataTableSelectionMode.cell) {
+          return KeyEventResult.ignored;
+        }
+        _moveTo(
+          _controller.currentRowIndex,
+          _controller.currentColumnIndex,
+          select: true,
+        );
         return KeyEventResult.handled;
       case KeyCode.enter:
-        widget.onSelect?.call(_controller.selectedIndex);
+        _confirmCurrent();
         return KeyEventResult.handled;
       default:
         final ch = event.code.character;
@@ -1011,16 +1184,16 @@ class _DataTableState extends State<DataTable> {
     }
   }
 
-  /// Jump the selection to the next row whose first-column cell starts with
+  /// Move the cursor to the next row whose first-column cell starts with
   /// [ch] (wrapping) — spreadsheet/grid type-ahead.
   KeyEventResult _typeahead(String ch) {
     final columnId = widget.columns.first.id;
     final lower = ch.toLowerCase();
-    final start = _controller.selectedIndex + 1;
+    final start = _controller.currentRowIndex + 1;
     for (var k = 0; k < widget.rowCount; k++) {
       final i = (start + k) % widget.rowCount;
       if (widget.cellBuilder(i, columnId).toLowerCase().startsWith(lower)) {
-        _controller.selectCell(i, _controller.selectedColumnIndex);
+        _moveTo(i, _controller.currentColumnIndex);
         break;
       }
     }
@@ -1029,19 +1202,6 @@ class _DataTableState extends State<DataTable> {
 
   @override
   Widget build(BuildContext context) {
-    final selectedRow = widget.selectedIndex == null
-        ? _controller.selectedIndex
-        : _controller._clamp(widget.selectedIndex!);
-    // Paint only the accepted row while retaining the requested range until
-    // the parent updates. A LayoutBuilder can acknowledge it later this frame.
-    final selectionRange = selectedRow == _controller.selectedIndex
-        ? _controller.selectionRange
-        : DataTableSelectionRange(
-            anchorRow: selectedRow,
-            focusRow: selectedRow,
-            anchorColumn: _controller.selectedColumnIndex,
-            focusColumn: _controller.selectedColumnIndex,
-          );
     final theme = Theme.of(context);
     final widgetTheme = FleuryWidgetTheme.from(theme);
     final selectedStyle = _focusNode.hasFocus
@@ -1053,9 +1213,16 @@ class _DataTableState extends State<DataTable> {
       cellBuilder: widget.cellBuilder,
       semanticLabel: widget.semanticLabel,
       rowKeyBuilder: widget.rowKeyBuilder,
-      selectedRow: selectedRow,
-      selectedColumn: _controller.selectedColumnIndex,
-      selectionRange: selectionRange,
+      selectedRow: widget.currentRowIndex == null
+          ? _controller.currentRowIndex
+          : _controller._clamp(widget.currentRowIndex!),
+      selectedColumn: _controller.currentColumnIndex,
+      viewportStart: _firstRow,
+      revealRevision: _revealRevision,
+      currentStyle: _focusNode.hasFocus
+          ? theme.focusedStyle.merge(const CellStyle(underline: true))
+          : CellStyle.none,
+      selectionRange: _controller.selectionRange,
       selectionMode: widget.selectionMode,
       focusNode: _focusNode,
       columnSpacing: widget.columnSpacing,
@@ -1070,9 +1237,12 @@ class _DataTableState extends State<DataTable> {
       copyOptions: widget.copyOptions,
       onViewport: (viewport) {
         _viewport = viewport;
+        _firstRow = viewport.visibleFirst;
         _visibleRows = viewport.visibleRows < 1 ? 1 : viewport.visibleRows;
       },
-      onSelect: widget.onSelect,
+      onSelect: widget.selectionMode == DataTableSelectionMode.row
+          ? widget.onSelect
+          : widget.onAction,
       sortingEnabled: widget.onSort != null,
       onSemanticAction: _handleSemanticAction,
       onSemanticSetValue: _handleSemanticSetValue,
@@ -1086,47 +1256,22 @@ class _DataTableState extends State<DataTable> {
         child: Focus(
           focusNode: _focusNode,
           autofocus: widget.autofocus,
-          // Wheel over the table scrolls the row window by moving the selection
-          // (the window follows the selected row; selection changes don't fire
-          // onSelect, so scrolling never triggers a row action).
           child: MouseRegion(
-            onScroll: (details) {
-              _scrollBy(details.delta.row);
-              return true;
-            },
+            onScroll: (details) => _scrollBy(details.delta.row),
             child: GestureDetector(
               onTapDown: (details) {
+                _pressPosition = details.globalPosition;
                 _pendingPointerHit = _hitTestPointer(
                   details.globalPosition.col,
                   details.globalPosition.row,
                   details.modifiers,
                 );
+                final row = _pendingPointerHit?.rowIndex;
+                _pressKey = row == null ? null : _rowKey(row);
               },
-              onTap: () {
-                final hit = _pendingPointerHit;
-                _pendingPointerHit = null;
-                if (hit == null) return;
-                _prepareSelection();
-                _focusNode.requestFocus();
-                final sortColumnId = hit.sortColumnId;
-                if (sortColumnId != null) {
-                  if (_canSortColumn(sortColumnId)) {
-                    widget.onSort!(sortColumnId);
-                  }
-                  return;
-                }
-                final rowIndex = hit.rowIndex!;
-                if (widget.selectionMode == DataTableSelectionMode.cell &&
-                    hit.columnIndex != null) {
-                  _controller.selectCell(
-                    rowIndex,
-                    hit.columnIndex!,
-                    extend: hit.extend,
-                  );
-                } else {
-                  _controller.selectedIndex = rowIndex;
-                }
-              },
+              onTapUp: _completeClick,
+              onTapCancel: _cancelPointer,
+              onDragStart: (_) => _cancelPointer(),
               child: table,
             ),
           ),
@@ -1135,14 +1280,91 @@ class _DataTableState extends State<DataTable> {
     );
   }
 
-  /// Wheel scroll moves the selection (the row window follows it). Selection
-  /// changes don't fire onSelect — that's reserved for Enter / activate.
-  void _scrollBy(int delta) {
-    _prepareSelection();
-    final count = _controller.rowCount;
-    if (count == 0) return;
-    final next = (_controller.selectedIndex + delta).clamp(0, count - 1);
-    if (next != _controller.selectedIndex) _controller.selectedIndex = next;
+  Object _rowKey(int row) => widget.rowKeyBuilder?.call(row) ?? row;
+
+  void _resetClickSeries() {
+    _lastClickAt = null;
+    _lastClickPosition = null;
+    _lastClickKey = null;
+    _lastClickColumn = null;
+  }
+
+  void _cancelPointer() {
+    _pendingPointerHit = null;
+    _pressPosition = null;
+    _pressKey = null;
+    _resetClickSeries();
+  }
+
+  void _completeClick(PointerDetails details) {
+    _prepareCurrent();
+    final hit = _pendingPointerHit;
+    final pressedAt = _pressPosition;
+    final key = _pressKey;
+    _pendingPointerHit = null;
+    _pressPosition = null;
+    _pressKey = null;
+    final released = _hitTestPointer(
+      details.globalPosition.col,
+      details.globalPosition.row,
+      details.modifiers,
+    );
+    if (hit == null ||
+        released == null ||
+        pressedAt != details.globalPosition ||
+        hit.rowIndex != released.rowIndex ||
+        hit.columnIndex != released.columnIndex ||
+        hit.sortColumnId != released.sortColumnId ||
+        (hit.rowIndex != null && key != _rowKey(hit.rowIndex!))) {
+      _resetClickSeries();
+      return;
+    }
+    _focusNode.requestFocus();
+    if (!mounted) return;
+    final sortColumn = hit.sortColumnId;
+    if (sortColumn != null) {
+      _resetClickSeries();
+      if (_canSortColumn(sortColumn)) widget.onSort!(sortColumn);
+      return;
+    }
+    final row = hit.rowIndex!;
+    final now = _clickClock.elapsed;
+    final doubleClick =
+        !hit.extend &&
+        _lastClickAt != null &&
+        now - _lastClickAt! < const Duration(milliseconds: 500) &&
+        _lastClickPosition == details.globalPosition &&
+        _lastClickKey == key &&
+        _lastClickColumn == hit.columnIndex;
+    if (hit.extend || doubleClick) {
+      _resetClickSeries();
+    } else {
+      _lastClickAt = now;
+      _lastClickPosition = details.globalPosition;
+      _lastClickKey = key;
+      _lastClickColumn = hit.columnIndex;
+    }
+    // The second click invokes the command without collapsing a selected range.
+    final moved = _moveTo(
+      row,
+      hit.columnIndex ?? _controller.currentColumnIndex,
+      extend: hit.extend,
+      select: !doubleClick,
+    );
+    if (moved &&
+        (widget.selectionMode == DataTableSelectionMode.row || doubleClick)) {
+      _confirmCurrent();
+    }
+  }
+
+  bool _scrollBy(int delta) {
+    _cancelPointer();
+    final count = widget.rowCount < 0 ? 0 : widget.rowCount;
+    final maxFirst = (count - _visibleRows).clamp(0, count);
+    final next = (_firstRow + delta).clamp(0, maxFirst);
+    if (next == _firstRow) return false;
+    setState(() => _firstRow = next);
+    return true;
   }
 
   _DataTablePointerHit? _hitTestPointer(
@@ -1257,6 +1479,9 @@ class _DataTableRenderWidget extends LeafRenderObjectWidget {
     required this.rowKeyBuilder,
     required this.selectedRow,
     required this.selectedColumn,
+    required this.viewportStart,
+    required this.revealRevision,
+    required this.currentStyle,
     required this.selectionRange,
     required this.selectionMode,
     required this.focusNode,
@@ -1283,6 +1508,9 @@ class _DataTableRenderWidget extends LeafRenderObjectWidget {
   final DataTableRowKeyBuilder? rowKeyBuilder;
   final int selectedRow;
   final int selectedColumn;
+  final int viewportStart;
+  final int revealRevision;
+  final CellStyle currentStyle;
   final DataTableSelectionRange selectionRange;
   final DataTableSelectionMode selectionMode;
   final FocusNode focusNode;
@@ -1311,6 +1539,10 @@ class _DataTableRenderWidget extends LeafRenderObjectWidget {
       columns: columns,
       cellBuilder: cellBuilder,
       selectedRow: selectedRow,
+      currentColumn: selectedColumn,
+      viewportStart: viewportStart,
+      revealRevision: revealRevision,
+      currentStyle: currentStyle,
       selectionRange: selectionRange,
       selectionMode: selectionMode,
       columnSpacing: columnSpacing,
@@ -1334,6 +1566,10 @@ class _DataTableRenderWidget extends LeafRenderObjectWidget {
       ..columns = columns
       ..cellBuilder = cellBuilder
       ..selectedRow = selectedRow
+      ..currentColumn = selectedColumn
+      ..viewportStart = viewportStart
+      ..revealRevision = revealRevision
+      ..currentStyle = currentStyle
       ..selectionRange = selectionRange
       ..selectionMode = selectionMode
       ..columnSpacing = columnSpacing
@@ -1406,11 +1642,14 @@ class _DataTableElement extends LeafRenderObjectElement
       selected: widget.rowCount > 0,
       actions: <SemanticAction>{
         SemanticAction.focus,
-        SemanticAction.select,
-        if (widget.onSelect != null) SemanticAction.activate,
+        if (widget.rowCount > 0 && widget.columns.isNotEmpty) ...{
+          SemanticAction.select,
+          if (widget.onSelect != null) SemanticAction.activate,
+        },
         // Jump the windowed row range to a target row INDEX — the off-window
         // reach an agent otherwise can't get without resizing the whole grid.
-        if (widget.rowCount > 0) SemanticAction.setValue,
+        if (widget.rowCount > 0 && widget.columns.isNotEmpty)
+          SemanticAction.setValue,
         if (widget.copySelectedRow &&
             widget.rowCount > 0 &&
             widget.columns.isNotEmpty)
@@ -1423,10 +1662,13 @@ class _DataTableElement extends LeafRenderObjectElement
         'virtualized': true,
         'visibleRangeStart': visibleFirst,
         'visibleRangeEnd': visibleEnd,
-        'selectedKey': selectedKey,
+        'currentKey': selectedKey,
+        'currentRowIndex': selected,
+        if (widget.selectionMode == DataTableSelectionMode.row)
+          'selectedKey': selectedKey,
         'selectionMode': widget.selectionMode.name,
-        'selectedColumnIndex': selectedColumn,
-        'selectedColumnId': selectedColumnId,
+        'currentColumnIndex': selectedColumn,
+        'currentColumnId': selectedColumnId,
         'selectionStartRow': range.startRow,
         'selectionEndRow': range.endRow,
         'selectionStartColumn': range.startColumn,
@@ -1511,18 +1753,20 @@ class _DataTableElement extends LeafRenderObjectElement
     final rowId = widget.rowKeyBuilder == null
         ? '$scope/table/row/~$key'
         : '$scope/table/row/${escapeSemanticIdSegment('$key')}';
-    final rowSelected = rowIndex == selected;
+    final rowSelected = widget.selectionMode == DataTableSelectionMode.row
+        ? rowIndex == selected
+        : range.startRow <= rowIndex && rowIndex <= range.endRow;
     return SemanticNode(
       id: SemanticNodeId(rowId),
       role: SemanticRole.tableRow,
       label: key.toString(),
       selected: rowSelected,
+      focused: widget.focusNode.hasFocus && rowIndex == selected,
       actions: <SemanticAction>{
+        SemanticAction.focus,
         SemanticAction.select,
         if (widget.onSelect != null) SemanticAction.activate,
-        if (widget.copySelectedRow &&
-            widget.columns.isNotEmpty &&
-            rowIndex == selected)
+        if (widget.copySelectedRow && widget.columns.isNotEmpty && rowSelected)
           SemanticAction.copy,
       },
       state: SemanticState({
@@ -1557,7 +1801,12 @@ class _DataTableElement extends LeafRenderObjectElement
       label: text,
       value: text,
       selected: selectedCell,
+      focused:
+          widget.focusNode.hasFocus &&
+          rowIndex == selected &&
+          columnIndex == widget.selectedColumn,
       actions: <SemanticAction>{
+        SemanticAction.focus,
         SemanticAction.select,
         if (widget.onSelect != null) SemanticAction.activate,
         if (widget.copySelectedRow && widget.columns.isNotEmpty && selectedCell)
@@ -1599,6 +1848,10 @@ class RenderDataTable extends RenderObject {
     required List<DataTableColumn> columns,
     required DataTableCellBuilder cellBuilder,
     required int selectedRow,
+    required int currentColumn,
+    required int viewportStart,
+    required int revealRevision,
+    required CellStyle currentStyle,
     required DataTableSelectionRange selectionRange,
     required DataTableSelectionMode selectionMode,
     required int columnSpacing,
@@ -1612,6 +1865,10 @@ class RenderDataTable extends RenderObject {
        _columns = columns,
        _cellBuilder = cellBuilder,
        _selectedRow = selectedRow,
+       _currentColumn = currentColumn,
+       _visibleFirst = viewportStart,
+       _revealRevision = revealRevision,
+       _currentStyle = currentStyle,
        _selectionRange = selectionRange,
        _selectionMode = selectionMode,
        _columnSpacing = columnSpacing,
@@ -1650,7 +1907,11 @@ class RenderDataTable extends RenderObject {
   void Function(DataTableViewportMetrics) _onViewport;
 
   List<int> _columnWidths = const [];
-  int _visibleFirst = 0;
+  int _visibleFirst;
+  int _revealRevision;
+  int _currentColumn;
+  CellStyle _currentStyle;
+  bool _revealCurrent = true;
   int _visibleRows = 0;
   int _tableWidth = 0;
 
@@ -1685,6 +1946,32 @@ class RenderDataTable extends RenderObject {
     } else {
       markNeedsPaintOnly();
     }
+  }
+
+  set viewportStart(int value) {
+    if (_visibleFirst == value) return;
+    _visibleFirst = value;
+    _revealCurrent = false;
+    markNeedsLayout();
+  }
+
+  set revealRevision(int value) {
+    if (_revealRevision == value) return;
+    _revealRevision = value;
+    _revealCurrent = true;
+    if (!_rowVisible(_selectedRow)) markNeedsLayout();
+  }
+
+  set currentColumn(int value) {
+    if (_currentColumn == value) return;
+    _currentColumn = value;
+    markNeedsPaintOnly();
+  }
+
+  set currentStyle(CellStyle value) {
+    if (_currentStyle == value) return;
+    _currentStyle = value;
+    markNeedsPaintOnly();
   }
 
   set selectionRange(DataTableSelectionRange value) {
@@ -1824,8 +2111,11 @@ class RenderDataTable extends RenderObject {
     }
     final selected = _selectedRow.clamp(0, _rowCount - 1);
     var first = _visibleFirst.clamp(0, _rowCount - 1);
-    if (selected < first) first = selected;
-    if (selected >= first + bodyRows) first = selected - bodyRows + 1;
+    if (_revealCurrent) {
+      if (selected < first) first = selected;
+      if (selected >= first + bodyRows) first = selected - bodyRows + 1;
+      _revealCurrent = false;
+    }
     final maxFirst = (_rowCount - bodyRows).clamp(0, _rowCount - 1);
     if (first > maxFirst) first = maxFirst;
     _visibleFirst = first;
@@ -1903,9 +2193,14 @@ class RenderDataTable extends RenderObject {
             selectedRow ||
             (_selectionMode == DataTableSelectionMode.cell &&
                 selectionRange.containsCell(rowIndex, col));
-        final style = selectedCell
+        var style = selectedCell
             ? _columns[col].style.merge(_selectedStyle)
             : _columns[col].style;
+        if (rowIndex == _selectedRow &&
+            (_selectionMode == DataTableSelectionMode.row ||
+                col == _currentColumn)) {
+          style = style.merge(_currentStyle);
+        }
         _writeCell(
           buffer,
           offset + CellOffset(colX[col], y),

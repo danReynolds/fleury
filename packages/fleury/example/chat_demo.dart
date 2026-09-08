@@ -198,7 +198,7 @@ class _ChatAppState extends State<ChatApp> {
             softWrap: false,
           );
         },
-        onActivate: (index) => setState(() => _activeChannel = index),
+        onSelect: (index) => setState(() => _activeChannel = index),
       ),
     );
   }
@@ -272,7 +272,7 @@ class _CommandPalette extends StatefulWidget {
 
 class _CommandPaletteState extends State<_CommandPalette> {
   final _query = TextEditingController();
-  final _list = ListController(selectedIndex: 0);
+  final _list = ListController(initialIndex: 0);
   final _inputFocus = FocusNode(debugLabel: 'palette-input');
   late List<int> _matches;
 
@@ -308,23 +308,23 @@ class _CommandPaletteState extends State<_CommandPalette> {
           if (q.isEmpty || widget.channels[i].toLowerCase().contains(q)) i,
       ];
       // Clamp the highlight so it doesn't dangle past the matches.
-      if (_list.selectedIndex == null ||
-          _list.selectedIndex! >= _matches.length) {
-        _list.selectedIndex = _matches.isEmpty ? null : 0;
+      if (_list.currentIndex == null ||
+          _list.currentIndex! >= _matches.length) {
+        _list.currentIndex = _matches.isEmpty ? null : 0;
       }
     });
   }
 
   void _commit(BuildContext context) {
-    final i = _list.selectedIndex;
+    final i = _list.currentIndex;
     if (i == null || i >= _matches.length) return;
     context.pop(_matches[i]);
   }
 
   void _move(int delta) {
-    final cur = _list.selectedIndex;
+    final cur = _list.currentIndex;
     if (cur == null || _matches.isEmpty) return;
-    _list.selectedIndex = (cur + delta).clamp(0, _matches.length - 1);
+    _list.currentIndex = (cur + delta).clamp(0, _matches.length - 1);
   }
 
   @override

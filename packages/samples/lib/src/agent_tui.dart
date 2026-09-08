@@ -28,7 +28,7 @@ class _AgentBody extends StatefulWidget {
 
 class _AgentBodyState extends State<_AgentBody>
     with SingleTickerProviderStateMixin {
-  final ListController _scroll = ListController(pinToBottom: true);
+  final ListController _scroll = ListController(followTail: true);
   final TextEditingController _input = TextEditingController();
   final List<_Block> _blocks = <_Block>[];
   final List<_Block> _pending = <_Block>[];

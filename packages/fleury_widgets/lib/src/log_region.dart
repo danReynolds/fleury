@@ -139,13 +139,12 @@ final class LogRegionCopyResult {
   final ClipboardWriteReport report;
 }
 
-/// Controller for [LogRegion] selection and tail-follow behavior.
+/// Controller for [LogRegion] browsing and tail-follow behavior.
 class LogRegionController extends ChangeNotifier {
-  LogRegionController({int? selectedIndex, bool followTail = true})
+  LogRegionController({int? initialIndex = 0, bool followTail = true})
     : _list = ListController(
-        selectedIndex:
-            selectedIndex ?? (followTail ? _tailSelectionSentinel : 0),
-        pinToBottom: followTail,
+        initialIndex: initialIndex,
+        followTail: followTail,
       ) {
     _list.addListener(notifyListeners);
   }
@@ -155,42 +154,37 @@ class LogRegionController extends ChangeNotifier {
 
   ListController get _listController => _list;
 
-  int? get selectedIndex => _list.selectedIndex;
-  set selectedIndex(int? value) {
+  int? get currentIndex => _list.currentIndex;
+  set currentIndex(int? value) {
     _checkNotDisposed();
-    _list.selectedIndex = value;
+    _list.currentIndex = value;
   }
 
-  bool get followTail => _list.pinToBottom;
+  /// Whether following new output is enabled. Scrolling away pauses it;
+  /// [isFollowing] reports the current viewport state.
+  bool get followTail => _list.followTail;
   set followTail(bool value) {
     _checkNotDisposed();
-    if (_list.pinToBottom == value) return;
-    _list.pinToBottom = value;
-    if (value && _list.itemCount > 0) {
-      _list.selectedIndex = _list.itemCount - 1;
-    }
-    notifyListeners();
+    _list.followTail = value;
   }
+
+  bool get isFollowing => _list.isFollowing;
+  bool get atBottom => _list.atBottom;
+  int get unseenCount => _list.unseenCount;
 
   ({int first, int last})? get visibleRange => _list.visibleRange;
 
+  /// Scrolls to an item without changing which item is selected.
   void jumpToIndex(int index) {
     _checkNotDisposed();
-    followTail = false;
-    // Move the selection onto the target too, not just the scroll anchor. The
-    // pending jump is consumed by a single layout; on the next relayout (every
-    // streamed append re-lays the list) the selection-visibility pass would
-    // otherwise re-anchor the viewport back onto the old selection, silently
-    // reverting the jump. Anchoring the selection here keeps the target in
-    // view across relayouts. Writing a non-tail index keeps follow disengaged.
-    _list.selectedIndex = index;
     _list.jumpToIndex(index);
   }
 
+  /// Returns to the latest output and enables following.
   void scrollToBottom() {
     _checkNotDisposed();
-    followTail = true;
-    if (_list.itemCount > 0) _list.selectedIndex = _list.itemCount - 1;
+    _list.followTail = true;
+    _list.jumpToBottom();
   }
 
   void _checkNotDisposed() {
@@ -208,8 +202,6 @@ class LogRegionController extends ChangeNotifier {
     super.dispose();
   }
 }
-
-const _tailSelectionSentinel = 1 << 30;
 
 /// Exports log entries as sanitized newline-delimited text.
 LogRegionExportResult exportLogEntries(
@@ -406,10 +398,7 @@ class _LogRegionState extends State<LogRegion> {
     if (!widget.copySelection || widget.entries.isEmpty) return;
     final order = _entryOrder();
     if (order.isEmpty) return;
-    final selected = (_controller.selectedIndex ?? 0).clamp(
-      0,
-      order.length - 1,
-    );
+    final selected = (_controller.currentIndex ?? 0).clamp(0, order.length - 1);
     final sourceIndex = order[selected];
     final entry = widget.entries[sourceIndex];
     final line = _formatLogLine(
@@ -451,14 +440,12 @@ class _LogRegionState extends State<LogRegion> {
   Widget build(BuildContext context) {
     final order = _entryOrder();
     final visibleRange = _controller.visibleRange;
-    final selectedIndex = _controller.selectedIndex;
+    final currentIndex = _controller.currentIndex;
     final copyEnabled = widget.copySelection && order.isNotEmpty;
     final selectedEntry =
-        selectedIndex == null ||
-            selectedIndex < 0 ||
-            selectedIndex >= order.length
+        currentIndex == null || currentIndex < 0 || currentIndex >= order.length
         ? null
-        : widget.entries[order[selectedIndex]];
+        : widget.entries[order[currentIndex]];
 
     Widget list = ListView.builder(
       controller: _controller._listController,
@@ -467,7 +454,7 @@ class _LogRegionState extends State<LogRegion> {
       itemCount: order.length,
       itemBuilder: (context, viewIndex, activeSelected) {
         final sourceIndex = order[viewIndex];
-        final selected = viewIndex == _controller.selectedIndex;
+        final selected = viewIndex == _controller.currentIndex;
         return _LogRow(
           entry: widget.entries[sourceIndex],
           sourceIndex: sourceIndex,
@@ -479,8 +466,7 @@ class _LogRegionState extends State<LogRegion> {
           copyEnabled: copyEnabled,
           onActivate: () {
             _focusNode.requestFocus();
-            _controller.followTail = false;
-            _controller.selectedIndex = viewIndex;
+            _controller.currentIndex = viewIndex;
           },
           onCopy: _copySelection,
         );
@@ -518,6 +504,7 @@ class _LogRegionState extends State<LogRegion> {
           'filteredEntryCount': order.length,
           ..._filterState(widget.filter),
           'followTail': _controller.followTail,
+          'isFollowing': _controller.isFollowing,
           'copyEnabled': copyEnabled,
           'copyIncludesPrefix': widget.copyOptions.includePrefix,
           'clipboardPolicy': widget.copyOptions.clipboardPolicy.name,
@@ -526,7 +513,7 @@ class _LogRegionState extends State<LogRegion> {
             'visibleRangeStart': visibleRange.first,
             'visibleRangeEnd': visibleRange.last,
           },
-          ..._selectedIndexState(selectedIndex),
+          ..._currentIndexState(currentIndex),
           ..._selectedEntryState(selectedEntry),
         }),
         child: list,
@@ -535,9 +522,9 @@ class _LogRegionState extends State<LogRegion> {
   }
 }
 
-Map<String, Object?> _selectedIndexState(int? selectedIndex) {
-  if (selectedIndex == null) return const <String, Object?>{};
-  return <String, Object?>{'selectedIndex': selectedIndex};
+Map<String, Object?> _currentIndexState(int? currentIndex) {
+  if (currentIndex == null) return const <String, Object?>{};
+  return <String, Object?>{'currentIndex': currentIndex};
 }
 
 Map<String, Object?> _filterState(LogRegionFilterDescriptor? filter) {

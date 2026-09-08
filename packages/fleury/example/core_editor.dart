@@ -95,7 +95,7 @@ class _CoreEditorState extends State<CoreEditor> {
               autofocus: true,
               placeholder: 'Find a note…',
               semanticLabel: 'Search',
-              onChanged: (_) => setState(() => _list.selectedIndex = 0),
+              onChanged: (_) => setState(() => _list.currentIndex = 0),
             ),
           ),
           const SizedBox(height: 1),
@@ -106,10 +106,12 @@ class _CoreEditorState extends State<CoreEditor> {
                     controller: _list,
                     focusNode: _listFocus,
                     itemCount: names.length,
-                    onActivate: _open,
-                    itemBuilder: (_, index, selected) => Text(
+                    onSelect: _open,
+                    itemBuilder: (_, index, highlighted) => Text(
                       names[index],
-                      style: selected ? theme.selectionStyle : CellStyle.none,
+                      style: highlighted
+                          ? theme.selectionStyle
+                          : CellStyle.none,
                     ),
                     separatorBuilder: (_, index) => const SizedBox(height: 1),
                   ),

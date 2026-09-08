@@ -90,6 +90,7 @@ ProgressBar(value: null)`,
 // The "## Usage" block: a tabbed group when the widget has curated extras,
 // otherwise a single titled code frame from the extracted example.
 function usageSection(slug, widget, snippet) {
+  if (slug === 'datatable') return '<DataTableExamples />\n\n';
   const extras = EXTRA_EXAMPLES[slug];
   if (extras && extras.length) {
     const items = extras
@@ -447,14 +448,13 @@ for (const e of widgets) {
       `tableOfContents: false\n---\n\n` +
       `${importLine}\n` +
       `import WidgetLayout from '${LAYOUT_COMPONENT}';\n` +
+      (slug === 'datatable' ? `import DataTableExamples from '../../../components/DataTableExamples.astro';\n` : '') +
       (EXTRA_EXAMPLES[slug] ? `${TABS_IMPORT}\n` : '') +
       `\n` +
-      `<WidgetLayout>\n\n` +
+      (slug === 'datatable' ? '' : `<WidgetLayout>\n\n`) +
       // Right column: the live (knob-tweakable) demo only — the code below is a
       // fixed usage example, so it lives in the main column, not next to it.
-      `<Fragment slot="aside">\n\n` +
-      `${liveBlock}\n\n` +
-      `</Fragment>\n\n` +
+      (slug === 'datatable' ? '' : `<Fragment slot="aside">\n\n${liveBlock}\n\n</Fragment>\n\n`) +
       // Left column: description → see-also → usage example(s) → API breakdown.
       `${intro}\n\n` +
       seeAlsoLine(slug) +
@@ -462,7 +462,7 @@ for (const e of widgets) {
       constructorsSection(e.widget) +
       sourceSection(e.widget) +
       `**Category:** ${e.category} · [All widgets](/fleury/widgets/)\n\n` +
-      `</WidgetLayout>\n`
+      (slug === 'datatable' ? '' : `</WidgetLayout>\n`)
   );
 }
 

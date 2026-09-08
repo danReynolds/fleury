@@ -456,6 +456,8 @@ class _Runner {
         'test/doc_snippets_test.dart',
         'test/testing_guide_test.dart',
         'test/input_guide_test.dart',
+        'test/lists_guide_test.dart',
+        'test/datatable_examples_test.dart',
         'test/loading_error_future_test.dart',
       ], workingDirectory: webExamples);
       // The guide's Run test button executes the actual tester in the browser.

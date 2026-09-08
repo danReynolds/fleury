@@ -25,20 +25,20 @@ Matcher _stateError(String message) {
 void main() {
   group('FileBrowserController lifecycle', () {
     test('dispose is idempotent and keeps final readable state', () {
-      final controller = FileBrowserController(selectedIndex: 2);
+      final controller = FileBrowserController(initialIndex: 2);
 
       controller.dispose();
       controller.dispose();
 
-      expect(controller.selectedIndex, 2);
+      expect(controller.currentIndex, 2);
       expect(controller.visibleRange, isNull);
     });
 
     test('mutating after dispose throws a lifecycle error', () {
-      final controller = FileBrowserController(selectedIndex: 0)..dispose();
+      final controller = FileBrowserController(initialIndex: 0)..dispose();
 
       const message = 'FileBrowserController has been disposed.';
-      expect(() => controller.selectedIndex = 1, _stateError(message));
+      expect(() => controller.currentIndex = 1, _stateError(message));
       expect(() => controller.jumpToIndex(1), _stateError(message));
     });
   });
@@ -61,7 +61,7 @@ void main() {
     expect(tree.label, 'Files');
     expect(tree.state.collectionRowCount, 3);
     expect(tree.state['totalEntryCount'], 3);
-    expect(tree.state['selectedIndex'], 0);
+    expect(tree.state['currentIndex'], 0);
     expect(tree.state['selectedEntryType'], 'directory');
 
     final sourceDir = tester.semantics().single(

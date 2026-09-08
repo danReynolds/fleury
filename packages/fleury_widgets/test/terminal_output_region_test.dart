@@ -94,7 +94,7 @@ void main() {
         ..add(const LogLine('compile ok', LogSource.stdout))
         ..add(const LogLine('deploy failed', LogSource.stderr));
       final controller = LogRegionController(
-        selectedIndex: 0,
+        initialIndex: 0,
         followTail: false,
       );
       LogRegionCopyResult? copied;
@@ -146,7 +146,7 @@ void main() {
         ..add(const LogLine('compile ok', LogSource.stdout))
         ..add(const LogLine('deploy failed', LogSource.stderr));
       final controller = LogRegionController(
-        selectedIndex: 0,
+        initialIndex: 0,
         followTail: false,
       );
 
@@ -177,7 +177,7 @@ void main() {
           .press();
 
       expect(controller.followTail, isFalse);
-      expect(controller.selectedIndex, 1);
+      expect(controller.currentIndex, 1);
 
       tester.render(size: const CellSize(70, 4));
       row = tester.semantics().single(
@@ -195,7 +195,7 @@ void main() {
         focused: true,
       );
       expect(log.state.selectedKey, 1);
-      expect(log.state['selectedIndex'], 1);
+      expect(log.state['currentIndex'], 1);
       expect(log.state['selectedSource'], 'stderr');
     });
 
@@ -210,7 +210,7 @@ void main() {
           ..add(const LogLine('L3', LogSource.stdout));
         // A reader scrolled up and parked their selection on 'L1'.
         final controller = LogRegionController(
-          selectedIndex: 1,
+          initialIndex: 1,
           followTail: false,
         );
 

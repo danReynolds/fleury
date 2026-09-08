@@ -10,31 +10,27 @@ const _messages = [
 ];
 
 void main() {
-  testWidgets('jumpToIndex leaves follow to the coupling — no false→true '
-      'flap on a jump to the tail', (tester) {
-    // Follow is owned by the selection coupling: a non-tail index disengages
-    // it, the tail index engages it. An explicit `followTail = false` before
-    // the jump was dead for a non-tail index and, for the tail, a flap —
-    // listeners saw false, then true — the same dead pattern 8.e removed.
-    final controller = MessageListController(
-      selectedIndex: 0,
-      followTail: true,
-    );
-    tester.pumpWidget(MessageList(controller: controller, messages: _messages));
-    tester.render(size: const CellSize(40, 6));
-
-    final seen = <bool>[];
-    controller.addListener(() => seen.add(controller.followTail));
-
-    controller.jumpToIndex(2);
-    expect(controller.followTail, isTrue, reason: 'the tail engages follow');
-    expect(seen, isNot(contains(false)), reason: 'no intermediate false');
-
-    controller.jumpToIndex(0);
-    expect(
-      controller.followTail,
-      isFalse,
-      reason: 'a non-tail index disengages',
-    );
-  });
+  testWidgets(
+    'jumping pauses following without changing its policy or selection',
+    (tester) {
+      final controller = MessageListController(
+        initialIndex: 2,
+        followTail: true,
+      );
+      tester.pumpWidget(
+        MessageList(controller: controller, messages: _messages),
+      );
+      expect(controller.isFollowing, isTrue);
+      controller.jumpToIndex(0);
+      tester.pump();
+      expect(controller.followTail, isTrue);
+      expect(controller.isFollowing, isFalse);
+      expect(controller.currentIndex, 2);
+      controller.scrollToBottom();
+      tester.pump();
+      expect(controller.isFollowing, isTrue);
+      expect(controller.currentIndex, 2);
+    },
+    viewportSize: const CellSize(40, 1),
+  );
 }

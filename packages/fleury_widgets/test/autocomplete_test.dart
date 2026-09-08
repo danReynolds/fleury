@@ -335,7 +335,7 @@ void main() {
     );
     tester.sendKey(const KeyEvent(KeyCode.enter));
 
-    expect(changes, ['ap', 'apple']);
+    expect(changes, ['apple']);
     final field = tester.semantics().single(
       role: SemanticRole.textField,
       label: 'Fruit field',

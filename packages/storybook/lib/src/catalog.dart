@@ -1335,7 +1335,7 @@ class _SelectionScrollStory extends StatefulWidget {
 }
 
 class _SelectionScrollStoryState extends State<_SelectionScrollStory> {
-  late final ListController _list = ListController(selectedIndex: 0);
+  late final ListController _list = ListController(initialIndex: 0);
 
   @override
   void dispose() {
@@ -1352,7 +1352,7 @@ class _SelectionScrollStoryState extends State<_SelectionScrollStory> {
   }
 
   KeyEventResult _moveList(int delta) {
-    final selected = _list.selectedIndex;
+    final selected = _list.currentIndex;
     if (selected == null) {
       return KeyEventResult.ignored;
     }
@@ -1360,7 +1360,7 @@ class _SelectionScrollStoryState extends State<_SelectionScrollStory> {
     if (next == selected) {
       return KeyEventResult.ignored;
     }
-    _list.selectedIndex = next;
+    _list.currentIndex = next;
     return KeyEventResult.handled;
   }
 

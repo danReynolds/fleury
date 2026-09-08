@@ -91,19 +91,19 @@ class _ImageCellRender extends RenderObject {
 void main() {
   group('TableController lifecycle', () {
     test('dispose is idempotent and keeps final readable state', () {
-      final controller = TableController(selectedIndex: 2);
+      final controller = TableController(initialIndex: 2);
 
       controller.dispose();
       controller.dispose();
 
-      expect(controller.selectedIndex, 2);
+      expect(controller.currentIndex, 2);
     });
 
     test('mutating after dispose throws a lifecycle error', () {
       final controller = TableController()..dispose();
 
       const message = 'TableController has been disposed.';
-      expect(() => controller.selectedIndex = 1, _stateError(message));
+      expect(() => controller.currentIndex = 1, _stateError(message));
     });
   });
 
@@ -446,7 +446,7 @@ void main() {
       tester.render(size: const CellSize(8, 5));
       // Header on row 0, body rows at 1..3; render row 2 is body index 1 (Bo).
       _clickAt(tester, col: 0, row: 2);
-      expect(c.selectedIndex, 1, reason: 'click selected the clicked row');
+      expect(c.currentIndex, 1, reason: 'click selected the clicked row');
       expect(picked, isNull, reason: 'click selects but does not activate');
     });
 
@@ -462,7 +462,7 @@ void main() {
           row: 1,
         ),
       );
-      expect(c.selectedIndex, 1, reason: 'scrolled down one row');
+      expect(c.currentIndex, 1, reason: 'scrolled down one row');
       tester.sendMouse(
         const MouseEvent(
           kind: MouseEventKind.scrollUp,
@@ -471,14 +471,14 @@ void main() {
           row: 1,
         ),
       );
-      expect(c.selectedIndex, 0, reason: 'scrolled back up');
+      expect(c.currentIndex, 0, reason: 'scrolled back up');
     });
 
     testWidgets('a controller drives selection programmatically', (tester) {
       final c = TableController();
       tester.pumpWidget(people(controller: c));
       tester.render(size: const CellSize(8, 5));
-      c.selectedIndex = 2;
+      c.currentIndex = 2;
       final buf = tester.render(size: const CellSize(8, 5));
       expect(
         buf.atColRow(0, 3).style.inverse,
@@ -535,11 +535,11 @@ void main() {
         // so the row's hit region must follow its scrolled position, not its
         // natural one.
         _clickAt(tester, col: 0, row: 1);
-        expect(c.selectedIndex, 8);
+        expect(c.currentIndex, 8);
         // The header occupies screen row 0 and is not a body row.
         _clickAt(tester, col: 0, row: 0);
         expect(
-          c.selectedIndex,
+          c.currentIndex,
           8,
           reason: 'the pinned header is not selectable',
         );
@@ -591,7 +591,7 @@ void main() {
       );
       tester.render(size: const CellSize(8, 2));
 
-      controller.selectedIndex = 1;
+      controller.currentIndex = 1;
       tester.pump();
       final tree = tester.semantics();
       final table = tree.single(role: SemanticRole.table);
@@ -625,7 +625,7 @@ void main() {
         ),
       );
       tester.render(size: const CellSize(8, 2));
-      controller.selectedIndex = 1;
+      controller.currentIndex = 1;
       tester.pump();
 
       await tester.target(role: SemanticRole.table).press();
@@ -665,7 +665,7 @@ void main() {
 
       await tester.target(id: target.id).select();
 
-      expect(controller.selectedIndex, 1);
+      expect(controller.currentIndex, 1);
       final selectedCells = tester
           .semantics()
           .where(role: SemanticRole.tableCell, selected: true)
@@ -707,7 +707,7 @@ void main() {
 
       await tester.target(id: target.id).press();
 
-      expect(controller.selectedIndex, 1);
+      expect(controller.currentIndex, 1);
       expect(picked, 1);
     });
   });

@@ -738,8 +738,8 @@ void main() {
     testWidgets(
       'inner clips survive a changing tighter ancestor on cache replay',
       (tester) {
-        final outer = ScrollController(offset: 1);
-        final inner = ScrollController(offset: 1);
+        final outer = ScrollController(initialOffset: 1);
+        final inner = ScrollController(initialOffset: 1);
         addTearDown(outer.dispose);
         addTearDown(inner.dispose);
         var taps = 0;

@@ -53,7 +53,7 @@ void main() {
       expect(
         () =>
             NumberInput(controller: TextEditingController(), initialValue: 1.5),
-        returnsNormally,
+        throwsA(isA<AssertionError>()),
       );
     });
 

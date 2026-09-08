@@ -32,10 +32,12 @@ Keep its controller and focus node in the form's `State`. A reveal toggle must
 not replace the controller. Temporary concealment can keep the editor mounted;
 if a layout removes it, the external controller preserves committed edits.
 
-Close/cancel should unmount the form and dispose its controller and focus node.
-If reusing a controller, `draft.text = ''` resets its value and undo/redo history;
-`draft.clear()` is an undoable edit and is not a history purge. Disposal releases
-Fleury's references; Dart strings have no guaranteed memory-zeroing operation.
+Close/cancel should unmount the form, dispose its controller and focus node,
+and drop the application's references to them. Create a fresh controller for
+the next form so it cannot inherit the previous form's undo history.
+`draft.clear()` is undoable, and assigning `draft.text = ''` when the value is
+already empty does not purge its history. Neither is a sensitive-form disposal
+boundary. Dart strings have no guaranteed memory-zeroing operation.
 
 ## Choose a paste boundary deliberately
 
@@ -46,9 +48,11 @@ even when its external controller survives. Submission through the field's
 an unrelated action is not a paste-completion barrier.
 
 For forms whose application already bounds input size, set
-`pastePolicy: const TextPastePolicy.immediate()`. Each received segment is fully
-applied before returning to input dispatch; immediate unmount/remount cannot
-lose an already received tail. Segments in one paste retain a single undo step.
+`pastePolicy: const TextPastePolicy.immediate()` from the start of the form.
+Changing policy does not flush an already active chunked paste. Each received
+segment is fully applied before returning to input dispatch; immediate
+unmount/remount cannot lose an already received tail. Segments in one paste
+retain a single undo step.
 There is no disposal callback that can repopulate an intentionally cleared form.
 This policy does not enforce a size limit or preserve future terminal segments
 that arrive after the field disappears. Keep the default for unbounded editors,

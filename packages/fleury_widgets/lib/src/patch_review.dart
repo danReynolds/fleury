@@ -75,12 +75,13 @@ final class PatchReviewFile {
   String get displayId => (id ?? path).toString();
 }
 
-/// Controller for [PatchReview] file selection and viewport state.
+/// Controller for [PatchReview] file browsing and viewport state.
 class PatchReviewController extends ChangeNotifier {
   PatchReviewController({
     /// Zero-based file row selected when the controller is created.
-    int selectedIndex = 0,
-  }) : _list = ListController(selectedIndex: selectedIndex) {
+    /// Initial browsing row. Null starts without a current row.
+    int? initialIndex = 0,
+  }) : _list = ListController(initialIndex: initialIndex) {
     _list.addListener(notifyListeners);
   }
 
@@ -89,10 +90,10 @@ class PatchReviewController extends ChangeNotifier {
 
   ListController get _listController => _list;
 
-  int? get selectedIndex => _list.selectedIndex;
-  set selectedIndex(int? value) {
+  int? get currentIndex => _list.currentIndex;
+  set currentIndex(int? value) {
     _checkNotDisposed();
-    _list.selectedIndex = value;
+    _list.currentIndex = value;
   }
 
   ({int first, int last})? get visibleRange => _list.visibleRange;
@@ -429,16 +430,13 @@ class _PatchReviewState extends State<PatchReview> {
     _selectionSyncGeneration++;
     _pendingSelectedPatchFileIdentity = null;
     if (widget.files.isEmpty) {
-      _controller.selectedIndex = null;
+      _controller.currentIndex = null;
       return;
     }
-    final selectedIndex = _controller.selectedIndex;
-    if (selectedIndex == null) {
-      _controller.selectedIndex = 0;
-      return;
-    }
-    if (selectedIndex >= 0 && selectedIndex < oldFiles.length) {
-      final selectedIdentity = _fileIdentity(oldFiles[selectedIndex]);
+    final currentIndex = _controller.currentIndex;
+    if (currentIndex == null) return;
+    if (currentIndex >= 0 && currentIndex < oldFiles.length) {
+      final selectedIdentity = _fileIdentity(oldFiles[currentIndex]);
       final nextIndex = widget.files.indexWhere(
         (file) => _fileIdentity(file) == selectedIdentity,
       );
@@ -447,7 +445,7 @@ class _PatchReviewState extends State<PatchReview> {
         return;
       }
     }
-    _controller.selectedIndex = selectedIndex.clamp(0, widget.files.length - 1);
+    _controller.currentIndex = currentIndex.clamp(0, widget.files.length - 1);
   }
 
   void _selectIndexAfterListCountRefresh(
@@ -456,7 +454,7 @@ class _PatchReviewState extends State<PatchReview> {
   ) {
     final knownItemCount = _controller._listController.itemCount;
     if (knownItemCount == 0 || nextIndex < knownItemCount) {
-      _controller.selectedIndex = nextIndex;
+      _controller.currentIndex = nextIndex;
       return;
     }
 
@@ -485,7 +483,7 @@ class _PatchReviewState extends State<PatchReview> {
       return;
     }
     _pendingSelectedPatchFileIdentity = null;
-    _controller.selectedIndex = nextIndex;
+    _controller.currentIndex = nextIndex;
   }
 
   void _onFocusDetectorChange(bool focused) {
@@ -497,7 +495,7 @@ class _PatchReviewState extends State<PatchReview> {
 
   Future<void> _copySelection() async {
     if (!widget.copySelection || widget.files.isEmpty) return;
-    final selected = (_controller.selectedIndex ?? 0).clamp(
+    final selected = (_controller.currentIndex ?? 0).clamp(
       0,
       widget.files.length - 1,
     );
@@ -520,7 +518,7 @@ class _PatchReviewState extends State<PatchReview> {
   void _selectCurrent() {
     if (widget.files.isEmpty) return;
     _focusNode.requestFocus();
-    final selected = (_controller.selectedIndex ?? 0).clamp(
+    final selected = (_controller.currentIndex ?? 0).clamp(
       0,
       widget.files.length - 1,
     );
@@ -535,14 +533,14 @@ class _PatchReviewState extends State<PatchReview> {
   Future<void> _selectAt(int index) async {
     if (index < 0 || index >= widget.files.length) return;
     _focusNode.requestFocus();
-    _controller.selectedIndex = index;
+    _controller.currentIndex = index;
     _selectCurrent();
   }
 
   Future<void> _copyAt(int index) async {
     if (index < 0 || index >= widget.files.length) return;
     _focusNode.requestFocus();
-    _controller.selectedIndex = index;
+    _controller.currentIndex = index;
     await _copySelection();
   }
 
@@ -569,7 +567,7 @@ class _PatchReviewState extends State<PatchReview> {
     if (fileIndex == null) return;
     for (final row in widget.document.rows) {
       if (row.fileIndex == fileIndex) {
-        _diffController.selectedIndex = row.index;
+        _diffController.currentIndex = row.index;
         _diffController.jumpToIndex(row.index);
         return;
       }
@@ -587,13 +585,13 @@ class _PatchReviewState extends State<PatchReview> {
 
   @override
   Widget build(BuildContext context) {
-    final selectedIndex = _controller.selectedIndex;
+    final currentIndex = _controller.currentIndex;
     final selectedFile =
-        selectedIndex == null ||
-            selectedIndex < 0 ||
-            selectedIndex >= widget.files.length
+        currentIndex == null ||
+            currentIndex < 0 ||
+            currentIndex >= widget.files.length
         ? null
-        : widget.files[selectedIndex];
+        : widget.files[currentIndex];
     final visibleRange = _controller.visibleRange;
     final copyEnabled = widget.copySelection && widget.files.isNotEmpty;
     final canSelect = widget.onSelectFile != null;
@@ -610,9 +608,9 @@ class _PatchReviewState extends State<PatchReview> {
             focusNode: _focusNode,
             autofocus: widget.autofocus,
             itemCount: widget.files.length,
-            onActivate: (_) => _selectCurrent(),
+            onSelect: (_) => _selectCurrent(),
             itemBuilder: (context, index, activeSelected) {
-              final selected = index == _controller.selectedIndex;
+              final selected = index == _controller.currentIndex;
               return _PatchFileRow(
                 file: widget.files[index],
                 index: index,
@@ -697,7 +695,7 @@ class _PatchReviewState extends State<PatchReview> {
             'visibleRangeStart': visibleRange.first,
             'visibleRangeEnd': visibleRange.last,
           },
-          'selectedIndex': ?selectedIndex,
+          'currentIndex': ?currentIndex,
           if (selectedFile != null) ..._selectedFileState(selectedFile),
         }),
         child: Column(

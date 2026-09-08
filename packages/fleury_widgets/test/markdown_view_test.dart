@@ -25,12 +25,12 @@ Matcher _stateError(String message) {
 void main() {
   group('MarkdownViewController lifecycle', () {
     test('dispose is idempotent and keeps final readable state', () {
-      final controller = MarkdownViewController(selectedIndex: 5);
+      final controller = MarkdownViewController(initialIndex: 5);
 
       controller.dispose();
       controller.dispose();
 
-      expect(controller.selectedIndex, 5);
+      expect(controller.currentIndex, 5);
       expect(controller.visibleRange, isNull);
     });
 
@@ -38,7 +38,7 @@ void main() {
       final controller = MarkdownViewController()..dispose();
 
       const message = 'MarkdownViewController has been disposed.';
-      expect(() => controller.selectedIndex = 1, _stateError(message));
+      expect(() => controller.currentIndex = 1, _stateError(message));
       expect(() => controller.jumpToIndex(1), _stateError(message));
     });
   });
@@ -163,7 +163,7 @@ void main() {
     testWidgets('Ctrl+C copies the selected sanitized markdown block', (
       tester,
     ) async {
-      final controller = MarkdownViewController(selectedIndex: 5);
+      final controller = MarkdownViewController(initialIndex: 5);
       MarkdownViewCopyResult? copied;
       tester.pumpWidget(
         MarkdownView(
@@ -201,7 +201,7 @@ void main() {
     });
 
     testWidgets('semantic copy copies selected markdown block', (tester) async {
-      final controller = MarkdownViewController(selectedIndex: 5);
+      final controller = MarkdownViewController(initialIndex: 5);
       MarkdownViewCopyResult? copied;
       tester.pumpWidget(
         MarkdownView(
@@ -227,7 +227,7 @@ void main() {
     });
 
     testWidgets('semantic activate selects a markdown block', (tester) async {
-      final controller = MarkdownViewController(selectedIndex: 0);
+      final controller = MarkdownViewController(initialIndex: 0);
       tester.pumpWidget(
         MarkdownView(
           markdown: _sampleMarkdown,
@@ -254,7 +254,7 @@ void main() {
           )
           .press();
 
-      expect(controller.selectedIndex, 3);
+      expect(controller.currentIndex, 3);
 
       tester.render(size: const CellSize(90, 12));
       block = tester.semantics().single(
@@ -271,7 +271,7 @@ void main() {
       );
       expect(markdown.focused, isTrue);
       expect(markdown.state.selectedKey, 3);
-      expect(markdown.state['selectedIndex'], 3);
+      expect(markdown.state['currentIndex'], 3);
       expect(markdown.state['selectedMarkdownBlockKind'], 'bullet');
     });
 

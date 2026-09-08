@@ -300,7 +300,7 @@ void main() {
         hasCount(0),
       );
       await table.setValue(5000);
-      expect(controller.selectedIndex, 5000);
+      expect(controller.currentRowIndex, 5000);
       expect(table.snapshot.state.visibleRangeStart, lessThanOrEqualTo(5000));
       expect(table.snapshot.state.visibleRangeEnd, greaterThanOrEqualTo(5000));
       final row = table.target(role: SemanticRole.tableRow, label: 'run-5000');
@@ -308,7 +308,7 @@ void main() {
       expect(row.target(role: SemanticRole.tableCell), hasCount(1));
       expect(row.target(role: SemanticRole.tableRow), hasCount(0));
       await row.select();
-      expect(controller.selectedIndex, 5000);
+      expect(controller.currentRowIndex, 5000);
     },
   );
 }

@@ -146,7 +146,7 @@ void main() {
   });
 
   testWidgets('Scrollbar.list reflects the visible item range', (tester) {
-    final lc = ListController(selectedIndex: 0);
+    final lc = ListController(initialIndex: 0);
     tester.pumpWidget(
       Scrollbar.list(
         controller: lc,
@@ -161,7 +161,7 @@ void main() {
     expect(_col(buf, 7).contains('█'), isTrue);
     expect(_col(buf, 7).startsWith('█'), isTrue, reason: 'thumb at top');
 
-    lc.selectedIndex = 11; // jump to end → viewport follows
+    lc.currentIndex = 11; // jump to end → viewport follows
     buf = tester.render(size: const CellSize(8, 4));
     expect(_col(buf, 7).endsWith('█'), isTrue, reason: 'thumb at bottom');
   });

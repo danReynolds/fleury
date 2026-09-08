@@ -45,7 +45,7 @@ void main() {
       // that's the whole point of anchoring grapheme math against
       // the FULL paint rect.
       SelectedContent? captured;
-      final controller = ScrollController(offset: 2);
+      final controller = ScrollController(initialOffset: 2);
       tester.viewportSize = const CellSize(5, 2);
       tester.pumpWidget(
         SelectionArea(
@@ -82,7 +82,7 @@ void main() {
       // should expose cellBounds (so they sort to the right position in
       // reading order) but null visibleBounds (so auto-scroll doesn't
       // include them in its viewport-region union).
-      final controller = ScrollController(offset: 2);
+      final controller = ScrollController(initialOffset: 2);
 
       SelectionRegistrar? registrar;
       tester.pumpWidget(

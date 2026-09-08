@@ -13,14 +13,14 @@ void main() {
   group('MessageListController lifecycle', () {
     test('dispose is idempotent and keeps final readable state', () {
       final controller = MessageListController(
-        selectedIndex: 2,
+        initialIndex: 2,
         followTail: false,
       );
 
       controller.dispose();
       controller.dispose();
 
-      expect(controller.selectedIndex, 2);
+      expect(controller.currentIndex, 2);
       expect(controller.followTail, isFalse);
       expect(controller.visibleRange, isNull);
     });
@@ -29,7 +29,7 @@ void main() {
       final controller = MessageListController(followTail: true)..dispose();
 
       const message = 'MessageListController has been disposed.';
-      expect(() => controller.selectedIndex = 1, _stateError(message));
+      expect(() => controller.currentIndex = 1, _stateError(message));
       expect(() => controller.followTail = false, _stateError(message));
       expect(() => controller.jumpToIndex(1), _stateError(message));
       expect(() => controller.scrollToBottom(), _stateError(message));
@@ -38,7 +38,7 @@ void main() {
 
   testWidgets('renders messages with sanitized semantic state', (tester) {
     final controller = MessageListController(
-      selectedIndex: 0,
+      initialIndex: 0,
       followTail: false,
     );
     tester.pumpWidget(
@@ -123,7 +123,7 @@ void main() {
 
   testWidgets('semantic activate selects a message row', (tester) async {
     final controller = MessageListController(
-      selectedIndex: 0,
+      initialIndex: 0,
       followTail: false,
     );
     tester.pumpWidget(
@@ -152,7 +152,7 @@ void main() {
 
     await tester.target(role: WidgetRoles.message, label: 'answer').press();
 
-    expect(controller.selectedIndex, 1);
+    expect(controller.currentIndex, 1);
 
     tester.render(size: const CellSize(60, 5));
     row = tester.semantics().single(
@@ -168,7 +168,7 @@ void main() {
     tester,
   ) async {
     final controller = MessageListController(
-      selectedIndex: 0,
+      initialIndex: 0,
       followTail: false,
     );
     tester.pumpWidget(
@@ -209,7 +209,7 @@ void main() {
     expect(list.state.selectedMessageId, 'm1');
 
     await tester.target(role: WidgetRoles.message, label: 'answer').press();
-    expect(controller.selectedIndex, 1);
+    expect(controller.currentIndex, 1);
     expect(controller.followTail, isFalse);
 
     tester.render(size: const CellSize(60, 5));
@@ -227,14 +227,14 @@ void main() {
       focused: true,
     );
     expect(list.state.selectedMessageId, 'm2');
-    expect(list.state['selectedIndex'], 1);
+    expect(list.state['currentIndex'], 1);
   });
 
   testWidgets('synchronously preserves selected identity across prepend', (
     tester,
   ) {
     final controller = MessageListController(
-      selectedIndex: 2,
+      initialIndex: 2,
       followTail: false,
     );
     tester.pumpWidget(
@@ -269,7 +269,7 @@ void main() {
     );
 
     expect(
-      controller.selectedIndex,
+      controller.currentIndex,
       3,
       reason: 'selection remaps during the rebuild, without a deferred pump',
     );
@@ -295,7 +295,7 @@ void main() {
     // is a head-drop plus a tail-append — the count never changes. Following
     // died on the first eviction and the view silently froze while new
     // messages kept arriving.
-    final controller = MessageListController();
+    final controller = MessageListController(initialIndex: 2);
     List<MessageEntry> window(int from) => [
       for (var i = from; i < from + 3; i++)
         MessageEntry(id: 'm$i', role: MessageRole.user, text: 'msg $i'),
@@ -309,12 +309,12 @@ void main() {
     tester.pumpWidget(app(0));
     tester.render(size: const CellSize(40, 3));
     expect(controller.followTail, isTrue);
-    expect(controller.selectedIndex, 2);
+    expect(controller.currentIndex, 2);
 
     tester.pumpWidget(app(1)); // m0 evicted, m3 appended
     tester.render(size: const CellSize(40, 3));
     expect(controller.followTail, isTrue, reason: 'first eviction');
-    expect(controller.selectedIndex, 2, reason: 'following moved to m3');
+    expect(controller.currentIndex, 1, reason: 'selection remains on m2');
 
     tester.pumpWidget(app(2)); // m1 evicted, m4 appended
     tester.render(size: const CellSize(40, 3));
@@ -323,14 +323,14 @@ void main() {
       role: WidgetRoles.messageList,
       label: 'Conversation',
     );
-    expect(list.state.selectedMessageId, 'm4');
+    expect(list.state.selectedMessageId, 'm2');
   });
 
   testWidgets('reorder preserves selection and refreshed message state', (
     tester,
   ) {
     final controller = MessageListController(
-      selectedIndex: 1,
+      initialIndex: 1,
       followTail: false,
     );
     tester.pumpWidget(
@@ -364,7 +364,7 @@ void main() {
     );
 
     expect(
-      controller.selectedIndex,
+      controller.currentIndex,
       0,
       reason: 'the selected m2 row moves synchronously with its stable id',
     );
@@ -392,7 +392,7 @@ void main() {
     final last = MessageEntry(role: MessageRole.tool, text: 'last');
     final prepended = MessageEntry(role: MessageRole.system, text: 'prepended');
     final controller = MessageListController(
-      selectedIndex: 1,
+      initialIndex: 1,
       followTail: false,
     );
 
@@ -412,7 +412,7 @@ void main() {
     );
 
     expect(
-      controller.selectedIndex,
+      controller.currentIndex,
       3,
       reason: 'the same id-less MessageEntry instance is its fallback key',
     );
@@ -433,7 +433,7 @@ void main() {
       const MessageEntry(id: 'm3', text: 'third'),
     ];
     final controller = MessageListController(
-      selectedIndex: 1,
+      initialIndex: 1,
       followTail: false,
     );
     tester.pumpWidget(MessageList(controller: controller, messages: messages));
@@ -445,7 +445,7 @@ void main() {
       ..addAll(reordered);
     tester.pumpWidget(MessageList(controller: controller, messages: messages));
 
-    expect(controller.selectedIndex, 2);
+    expect(controller.currentIndex, 2);
     tester.render(size: const CellSize(60, 5));
     expect(
       tester
@@ -461,7 +461,7 @@ void main() {
     tester,
   ) {
     final controller = MessageListController(
-      selectedIndex: 1,
+      initialIndex: 1,
       followTail: false,
     );
     tester.pumpWidget(
@@ -477,11 +477,13 @@ void main() {
 
     tester.pumpWidget(MessageList(controller: controller, messages: const []));
 
-    expect(controller.selectedIndex, isNull);
+    expect(controller.currentIndex, isNull);
   });
 
-  testWidgets('preserves tail-follow selection on append', (tester) {
-    final controller = MessageListController(followTail: true);
+  testWidgets('follows appended output without changing selected message', (
+    tester,
+  ) {
+    final controller = MessageListController(initialIndex: 1, followTail: true);
     tester.pumpWidget(
       MessageList(
         semanticLabel: 'Conversation',
@@ -493,7 +495,7 @@ void main() {
       ),
     );
     tester.render(size: const CellSize(60, 5));
-    expect(controller.selectedIndex, 1);
+    expect(controller.currentIndex, 1);
 
     tester.pumpWidget(
       MessageList(
@@ -509,17 +511,17 @@ void main() {
     tester.render(size: const CellSize(60, 5));
 
     expect(controller.followTail, isTrue);
-    expect(controller.selectedIndex, 2);
+    expect(controller.currentIndex, 1);
     final list = tester.semantics().single(
       role: WidgetRoles.messageList,
       label: 'Conversation',
     );
-    expect(list.state.selectedMessageId, 'm3');
+    expect(list.state.selectedMessageId, 'm2');
   });
 
   testWidgets('a streamed append does not re-engage followTail after the app '
       'disengaged it', (tester) {
-    final controller = MessageListController(followTail: true);
+    final controller = MessageListController(initialIndex: 5, followTail: true);
     List<MessageEntry> build(int count) => [
       for (var i = 0; i < count; i++)
         MessageEntry(id: 'm$i', role: MessageRole.log, text: 'line $i'),
@@ -530,14 +532,14 @@ void main() {
 
     // Following the tail: selection on the last message, tail in view.
     expect(controller.followTail, isTrue);
-    expect(controller.selectedIndex, 5);
+    expect(controller.currentIndex, 5);
     expect(controller.visibleRange?.last, 5);
 
     // The app pauses auto-scroll to read history (documented as
     // "freezes in place").
     controller.followTail = false;
     tester.render(size: const CellSize(40, 3));
-    expect(controller.selectedIndex, 5);
+    expect(controller.currentIndex, 5);
     expect(controller.visibleRange?.last, 5);
 
     // A streamed message arrives while the reader is parked.
@@ -552,7 +554,7 @@ void main() {
       isFalse,
       reason: 'a streamed append must not silently re-engage followTail',
     );
-    expect(controller.selectedIndex, 5);
+    expect(controller.currentIndex, 5);
     expect(
       controller.visibleRange?.last,
       5,
@@ -564,7 +566,10 @@ void main() {
     'jumpToIndex survives a later append instead of snapping back to the '
     'tail selection',
     (tester) {
-      final controller = MessageListController(followTail: true);
+      final controller = MessageListController(
+        initialIndex: 7,
+        followTail: true,
+      );
       List<MessageEntry> build(int count) => [
         for (var i = 0; i < count; i++)
           MessageEntry(id: 'm$i', role: MessageRole.log, text: 'line $i'),
@@ -574,17 +579,18 @@ void main() {
         MessageList(controller: controller, messages: build(8)),
       );
       tester.render(size: const CellSize(40, 3));
-      expect(controller.selectedIndex, 7);
+      expect(controller.currentIndex, 7);
       expect(controller.visibleRange?.first, 5);
 
       // Jump to an earlier message to read history mid-stream.
       controller.jumpToIndex(2);
       tester.render(size: const CellSize(40, 3));
-      expect(controller.followTail, isFalse);
+      expect(controller.followTail, isTrue);
+      expect(controller.isFollowing, isFalse);
       expect(
-        controller.selectedIndex,
-        2,
-        reason: 'the jump must move the selection to the target',
+        controller.currentIndex,
+        7,
+        reason: 'scrolling preserves the selected message',
       );
       expect(controller.visibleRange?.first, 2);
 
@@ -595,8 +601,9 @@ void main() {
       tester.render(size: const CellSize(40, 3));
 
       // The viewport stays on the jumped-to region and follow stays off.
-      expect(controller.followTail, isFalse);
-      expect(controller.selectedIndex, 2);
+      expect(controller.followTail, isTrue);
+      expect(controller.isFollowing, isFalse);
+      expect(controller.currentIndex, 7);
       expect(
         controller.visibleRange?.first,
         2,
@@ -608,7 +615,7 @@ void main() {
   group('copy/export', () {
     testWidgets('Ctrl+C copies the selected message', (tester) async {
       final controller = MessageListController(
-        selectedIndex: 1,
+        initialIndex: 1,
         followTail: false,
       );
       MessageListCopyResult? copied;
@@ -647,7 +654,7 @@ void main() {
 
     testWidgets('semantic copy copies the selected message', (tester) async {
       final controller = MessageListController(
-        selectedIndex: 1,
+        initialIndex: 1,
         followTail: false,
       );
       MessageListCopyResult? copied;
@@ -730,13 +737,8 @@ void main() {
     );
   });
 
-  // Follow-mode is coupled to the cursor by `ListController.selectedIndex`
-  // (documented on `pinToBottom`): moving off the last item stops following,
-  // returning to it resumes. Activation is just a selection move, so it must
-  // ride that coupling rather than fight it — a pre-emptive `followTail = false`
-  // is undone for the tail row and redundant for every other row, and only
-  // leaks a spurious "not following" notification in between.
-  group('activation rides the tail-follow coupling', () {
+  // Activating a visible message preserves the viewport's follow policy.
+  group('activation preserves viewport following', () {
     const messages = [
       MessageEntry(id: 'm1', role: MessageRole.user, text: 'first'),
       MessageEntry(id: 'm2', role: MessageRole.assistant, text: 'second'),
@@ -746,7 +748,10 @@ void main() {
     testWidgets('activating the newest row keeps following, with no flap', (
       tester,
     ) async {
-      final controller = MessageListController(followTail: true);
+      final controller = MessageListController(
+        initialIndex: 2,
+        followTail: true,
+      );
       tester.pumpWidget(
         MessageList(
           semanticLabel: 'Conversation',
@@ -756,13 +761,13 @@ void main() {
       );
       tester.render(size: const CellSize(60, 6));
       expect(controller.followTail, isTrue);
-      expect(controller.selectedIndex, 2);
+      expect(controller.currentIndex, 2);
 
       final seen = <bool>[];
       controller.addListener(() => seen.add(controller.followTail));
 
       await tester.target(role: WidgetRoles.message, label: 'third').press();
-      expect(controller.selectedIndex, 2);
+      expect(controller.currentIndex, 2);
       expect(
         controller.followTail,
         isTrue,
@@ -777,7 +782,9 @@ void main() {
       );
     });
 
-    testWidgets('activating an older row disengages following', (tester) async {
+    testWidgets('selecting a visible older row leaves following enabled', (
+      tester,
+    ) async {
       final controller = MessageListController(followTail: true);
       tester.pumpWidget(
         MessageList(
@@ -789,14 +796,18 @@ void main() {
       tester.render(size: const CellSize(60, 6));
 
       await tester.target(role: WidgetRoles.message, label: 'first').press();
-      expect(controller.selectedIndex, 0);
-      expect(controller.followTail, isFalse);
+      expect(controller.currentIndex, 0);
+      expect(controller.followTail, isTrue);
+      expect(controller.isFollowing, isTrue);
     });
 
     testWidgets('copying the newest row keeps following, with no flap', (
       tester,
     ) async {
-      final controller = MessageListController(followTail: true);
+      final controller = MessageListController(
+        initialIndex: 2,
+        followTail: true,
+      );
       tester.pumpWidget(
         MessageList(
           semanticLabel: 'Conversation',
