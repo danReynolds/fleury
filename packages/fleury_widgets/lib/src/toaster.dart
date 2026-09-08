@@ -85,8 +85,10 @@ class Toaster extends StatefulWidget {
     CellStyle? style,
     ToastAction? action,
   }) {
-    final scope = context.getInheritedWidgetOfExactType<_ToasterScope>();
-    if (scope == null) {
+    // An action from a handler: locate the toaster without subscribing the
+    // caller to anything (the state never changes identity or notifies).
+    final state = context.findAncestorStateOfType<_ToasterState>();
+    if (state == null) {
       throw StateError(
         'No Toaster above this BuildContext. Wrap your app in a Toaster.',
       );
@@ -95,9 +97,9 @@ class Toaster extends StatefulWidget {
     final resolved = style == null
         ? _styleForSeverity(severity, colors)
         : _styleForSeverity(severity, colors).merge(style);
-    scope.state._enqueue(
+    state._enqueue(
       message,
-      duration ?? scope.state.widget.duration,
+      duration ?? state.widget.duration,
       resolved,
       severity,
       action,
@@ -348,18 +350,6 @@ class _ToasterState extends State<Toaster> {
     // Always wrap (even with no bindings) so the child's position in the tree
     // is stable: conditionally adding/removing this wrapper as toasts come and
     // go would re-parent the child and tear down e.g. an open menu's overlay.
-    return _ToasterScope(
-      state: this,
-      child: KeyBindings(bindings: bindings, child: widget.child),
-    );
+    return KeyBindings(bindings: bindings, child: widget.child);
   }
-}
-
-class _ToasterScope extends InheritedWidget {
-  const _ToasterScope({required this.state, required super.child});
-
-  final _ToasterState state;
-
-  @override
-  bool updateShouldNotify(_ToasterScope old) => !identical(state, old.state);
 }

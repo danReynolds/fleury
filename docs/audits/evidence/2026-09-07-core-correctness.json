@@ -1,0 +1,165 @@
+{
+  "schemaVersion": 1,
+  "kind": "fleuryCoreCorrectnessAudit",
+  "baselineRevision": "944f7fb71e9b99ec6644b797ecbb1d4b6ecc09b8",
+  "productionRevision": "4da7c0f8c53f51cabfa5faa8d930ad2f9debe116",
+  "candidateIdentity": "Exact final production/test/asset bytes recorded below; documentation/evidence commit follows.",
+  "sourceHashes": {
+    "packages/fleury/lib/src/widgets/navigator.dart": {
+      "baseline": "968b331225ebd7a6c672ee1c5d91c36b87e0bac56a222ad8f864c2fab87eb157",
+      "candidate": "9c829efa71fd621bd8f4f601aadd2d8f21c46fc2bd219cdfc2b81619e647472e"
+    },
+    "packages/fleury/lib/src/widgets/overlay.dart": {
+      "baseline": "76257724819bbe39f087c0d94e3d38656a41a078310c402d35afc128348a74f4",
+      "candidate": "bb9cea697fc53d7771e659aa96aff760166e6de3ef4a4abeaaa6bde10e208009"
+    },
+    "packages/fleury/lib/src/remote/remote_driver.dart": {
+      "baseline": "18ad178aa8ba7fa2d2c8035ee87fdf1b02e7a2e18226e82d4e3848aee4d27207",
+      "candidate": "1245638b7dea95aa45cc2ed9925f9cad9c8e6845de5e9952fb054304a26f8a7f"
+    },
+    "packages/fleury/test/widgets/navigator_test.dart": {
+      "baseline": "3acc1be86cd72960306e703d67cdb5cfb4b0a530e3188e0377036dd15bde1d15",
+      "candidate": "3b5858a76befefe7ba335cd974c94e9913af756f16924971fc0dbb7bd96d7675"
+    },
+    "packages/fleury/test/widgets/overlay_test.dart": {
+      "baseline": "621f895ae4e4a03b6226914d7076a5fd8a4f07c71b352ceb487c07ebd6336020",
+      "candidate": "47918f8d3ab27c4051bf1e854077e186709ccd0912fdd70ebff7e700bccbc141"
+    },
+    "packages/fleury/test/remote/remote_driver_test.dart": {
+      "baseline": "6b81cc5b58787c069c3d23f0dc490dc64eaa4c010c1eb3b83e471b8fad360ab9",
+      "candidate": "c45e623b1bdd2843b7381b601ae7d75461ff847c3ea648e70f0ac8b1ed077633"
+    },
+    "packages/fleury/lib/src/remote/remote_client_asset.dart": {
+      "baseline": "d4b112da5c61e1cb22ff4d4692ea27dc8c22dd40658a19b4c979eea847d1a79b",
+      "candidate": "193eb0a4f80841c32b91520bb3041a51e5b624b15c2116624f36cb9ce257627e"
+    }
+  },
+  "method": {
+    "independentReview": false,
+    "newRegressionCases": 16,
+    "defectReproductionsFailedOnCurrentMain": 13,
+    "allThreeProductionFilesUnchangedSince": "e5225106dc6887d6098bb4d2ab65812413c4d926",
+    "baselineProbe": "Temporarily restored the three production files from current main with try/finally, ran the selected new tests, then restored and verified candidate bytes."
+  },
+  "findings": [
+    {
+      "id": "C1",
+      "area": "Navigator transition cancellation",
+      "baseline": "Four replacement/clear and popUntil/popToRoot combinations leave stack depth zero.",
+      "fixed": "Completion callbacks require continued ownership of the route; destination text, context, futures and next navigation stay valid."
+    },
+    {
+      "id": "C2",
+      "area": "Overlay entry ownership",
+      "baseline": "Absent anchors or disposed hosts leave listeners/attachment behind; another overlay can steal an initial entry.",
+      "fixed": "Validate before attachment and reject duplicate/cross-owner entries in all builds; preserve owner and retries."
+    },
+    {
+      "id": "C3",
+      "area": "Remote driver startup",
+      "baseline": "Pending restore leaves an unanswered future; duplicate enter strands the first caller; local restore/peer BYE/transport error after INIT still report startup success.",
+      "fixed": "One startup attempt, shared teardown completion, explicit cancellation and preserved startup failure before activation."
+    }
+  ],
+  "qualification": {
+    "command": "dart tool/fleury_dev.dart check",
+    "totalPassedTests": 5552,
+    "suitePassCounts": [
+      3300,
+      52,
+      1200,
+      7,
+      4,
+      25,
+      43,
+      534,
+      92,
+      151,
+      78,
+      2,
+      64
+    ],
+    "existingSkips": 2,
+    "allQualificationCommandsExitCode": 0,
+    "webTests": 534,
+    "fastGates": [
+      "serve-semantics-gate",
+      "image-bench",
+      "bundle-size",
+      "alloc-gate",
+      "input-alloc-gate",
+      "paint-gate",
+      "selection-gate",
+      "runtime-gate"
+    ],
+    "focusedBeforeRebase": {
+      "navigator": 54,
+      "overlay": 31,
+      "remoteDriverAndClipboard": 30
+    },
+    "nativeWireGate": "dart tool/fleury_dev.dart benchmark wire-gate",
+    "liveServeGate": "dart tool/fleury_dev.dart benchmark serve-wire-live",
+    "baselineOrToleranceChanges": false,
+    "dart": "3.12.2 macOS arm64",
+    "interruptedChecksExcluded": [
+      "pre-peer-cancel-check",
+      "pre-input-merge-check"
+    ]
+  },
+  "client": {
+    "javascriptBytes": 401255,
+    "javascriptUnchangedFromBaseline": true,
+    "sourceFingerprint": "e163b801162ef83f"
+  },
+  "artifacts": {
+    "2026-09-07-core-correctness-baseline.log": {
+      "sha256": "80715b6e1c4810984ae0e0ae81b12e3ff0903a522843b9e686599053a4d11558",
+      "bytes": 6566,
+      "normalization": "Trailing whitespace removed; original log hash recorded separately."
+    }
+  },
+  "localLogReceipts": {
+    "fleury-correctness-current-main-baseline.log": {
+      "sha256": "474e0fea9363cf59c2ef4b65bc0b386f8b3cf5ca37348ac5bdb707a968268502",
+      "bytes": 6616
+    },
+    "fleury-correctness-full-check.log": {
+      "sha256": "0764db7c200fef61c781c921b9bf72415e4e33dce0604bd9d87100b66ddd3464",
+      "bytes": 755169
+    },
+    "fleury-correctness-gates.log": {
+      "sha256": "98d677c4e219bf05b9c4052fd563d6f3c68ef1812318cc55fe0c044715e29646",
+      "bytes": 5995
+    },
+    "fleury-correctness-wire-gate.log": {
+      "sha256": "a73985812d2cdf8e9fac383dd232258c8f8c9f7a2195239bf3b39585a6a83674",
+      "bytes": 1019
+    },
+    "fleury-correctness-serve-wire-live.log": {
+      "sha256": "54af635906c7531a300c970cdde8574658b362c91a1796cd2bffb0c8becb89c4",
+      "bytes": 1382
+    },
+    "fleury-correctness-navigator.log": {
+      "sha256": "ea5de342e262d505d5f203646c8c276dbc4ab96d5914c1203902a61ad2da825e",
+      "bytes": 3862
+    },
+    "fleury-correctness-overlay.log": {
+      "sha256": "3e2ec4851acfeba59116f5bd09723084c4529ae502e009b49ef02c8c3b1ff986",
+      "bytes": 2464
+    },
+    "fleury-correctness-remote.log": {
+      "sha256": "d3eddf191dd7ba8b39a22649f46198d1c0f7c8037d1aa603e4cb068d331f7a35",
+      "bytes": 3401
+    },
+    "fleury-correctness-client-build.log": {
+      "sha256": "3c356c57e27d55f3c06724fd12ed07f6c0814e24bd8b3148fdcfbd1f7cd452cb",
+      "bytes": 246
+    }
+  },
+  "boundaries": [
+    "Bounded source and automated-test review, not an independent approval or complete launch certification.",
+    "Current main includes #226 pointer/gesture work; that feature had a separate review.",
+    "No attended terminal/browser accessibility walkthrough or long-session memory soak is claimed.",
+    "Wire timing warnings are not evidence of a new speedup; no gate baseline or tolerance was changed."
+  ]
+}

@@ -1,0 +1,126 @@
+00:00 +0: loading test/widgets/navigator_test.dart
+00:00 +0: test/widgets/navigator_test.dart: robustness removing an entering replacement route with popUntil preserves the target
+00:00 +0 -1: test/widgets/navigator_test.dart: robustness removing an entering replacement route with popUntil preserves the target
+00:00 +0 -1: test/widgets/overlay_test.dart: Overlay invalid below anchor leaves entry reusable [E]
+  Expected: false
+    Actual: <true>
+
+  package:matcher                        expect
+  test/widgets/overlay_test.dart 180:11  main.<fn>.<fn>
+
+00:00 +0 -2: test/widgets/navigator_test.dart: robustness removing an entering replacement route with popUntil preserves the target
+00:00 +0 -2: test/widgets/overlay_test.dart: Overlay invalid above anchor leaves entry reusable [E]
+  Expected: false
+    Actual: <true>
+
+  package:matcher                        expect
+  test/widgets/overlay_test.dart 180:11  main.<fn>.<fn>
+
+00:00 +0 -3: test/widgets/navigator_test.dart: robustness removing an entering replacement route with popUntil preserves the target
+00:00 +0 -3: test/widgets/overlay_test.dart: Overlay initial entries cannot take ownership from another overlay [E]
+  Expected: throws <Instance of 'StateError'>
+    Actual: <Closure: () => Element>
+     Which: returned StatefulElement:<Overlay#46272538>
+
+  package:matcher                       expect
+  test/widgets/overlay_test.dart 326:7  main.<fn>.<fn>
+
+00:00 +0 -4: test/widgets/navigator_test.dart: robustness removing an entering replacement route with popUntil preserves the target
+00:00 +0 -4: test/widgets/overlay_test.dart: Overlay inserting into a disposed overlay leaves the entry reusable [E]
+  Expected: false
+    Actual: <true>
+
+  package:matcher                       expect
+  test/widgets/overlay_test.dart 399:7  main.<fn>.<fn>
+
+00:00 +0 -5: test/remote/remote_driver_test.dart: RemoteTerminalDriver restore cancels a pending supervised handshake
+00:00 +0 -5: test/widgets/navigator_test.dart: robustness removing an entering replacement route with popUntil preserves the target [E]
+  Expected: <1>
+    Actual: <0>
+
+  package:matcher                           expect
+  test/widgets/navigator_test.dart 1124:13  main.<fn>.<fn>
+  ===== asynchronous gap ===========================
+  test/support/test_widgets.dart 41:9       testWidgets.<fn>
+
+00:00 +0 -6: test/remote/remote_driver_test.dart: RemoteTerminalDriver restore cancels a pending supervised handshake
+00:00 +0 -6: test/widgets/navigator_test.dart: robustness removing an entering replacement route with popToRoot preserves the target [E]
+  Expected: <1>
+    Actual: <0>
+
+  package:matcher                           expect
+  test/widgets/navigator_test.dart 1124:13  main.<fn>.<fn>
+  ===== asynchronous gap ===========================
+  test/support/test_widgets.dart 41:9       testWidgets.<fn>
+
+00:00 +0 -7: test/remote/remote_driver_test.dart: RemoteTerminalDriver restore cancels a pending supervised handshake
+00:00 +0 -7: test/widgets/navigator_test.dart: robustness removing an entering clear route with popUntil preserves the target [E]
+  Expected: <1>
+    Actual: <0>
+
+  package:matcher                           expect
+  test/widgets/navigator_test.dart 1124:13  main.<fn>.<fn>
+  ===== asynchronous gap ===========================
+  test/support/test_widgets.dart 41:9       testWidgets.<fn>
+
+00:00 +0 -8: test/remote/remote_driver_test.dart: RemoteTerminalDriver restore cancels a pending supervised handshake
+00:00 +0 -8: test/widgets/navigator_test.dart: robustness removing an entering clear route with popToRoot preserves the target [E]
+  Expected: <1>
+    Actual: <0>
+
+  package:matcher                           expect
+  test/widgets/navigator_test.dart 1124:13  main.<fn>.<fn>
+  ===== asynchronous gap ===========================
+  test/support/test_widgets.dart 41:9       testWidgets.<fn>
+
+00:00 +0 -9: test/remote/remote_driver_test.dart: RemoteTerminalDriver restore cancels a pending supervised handshake [E]
+  TimeoutException after 0:00:00.250000: Future not completed
+  test/remote/remote_driver_test.dart 60:9  main.<fn>.<fn>
+
+00:00 +0 -9: test/remote/remote_driver_test.dart: RemoteTerminalDriver concurrent enter preserves the first handshake
+00:00 +0 -10: test/remote/remote_driver_test.dart: RemoteTerminalDriver concurrent enter preserves the first handshake [E]
+  Expected: <Instance of 'StateError'>
+    Actual: 'entered'
+     Which: is not an instance of 'StateError'
+
+  package:matcher                           expect
+  test/remote/remote_driver_test.dart 92:7  main.<fn>.<fn>
+
+00:00 +0 -10: test/remote/remote_driver_test.dart: RemoteTerminalDriver restore wins after INIT but before enter resumes
+00:00 +0 -11: test/remote/remote_driver_test.dart: RemoteTerminalDriver restore wins after INIT but before enter resumes [E]
+  Expected: <Instance of 'StateError'>
+    Actual: 'entered'
+     Which: is not an instance of 'StateError'
+
+  package:matcher                            expect
+  test/remote/remote_driver_test.dart 119:7  main.<fn>.<fn>
+
+00:00 +0 -11: test/remote/remote_driver_test.dart: RemoteTerminalDriver peer BYE after INIT cancels startup
+00:00 +0 -12: test/remote/remote_driver_test.dart: RemoteTerminalDriver peer BYE after INIT cancels startup [E]
+  Expected: <Instance of 'StateError'>
+    Actual: 'entered'
+     Which: is not an instance of 'StateError'
+
+  package:matcher                             expect
+  test/remote/remote_driver_test.dart 156:11  main.<fn>.<fn>
+
+00:00 +0 -12: test/remote/remote_driver_test.dart: RemoteTerminalDriver transport error after INIT cancels startup
+00:00 +0 -13: test/remote/remote_driver_test.dart: RemoteTerminalDriver transport error after INIT cancels startup [E]
+  Expected: <Instance of 'RemoteProtocolException'>
+    Actual: 'entered'
+     Which: is not an instance of 'RemoteProtocolException'
+
+  package:matcher                             expect
+  test/remote/remote_driver_test.dart 156:11  main.<fn>.<fn>
+
+00:00 +0 -13: Some tests failed.
+
+Failing tests:
+  test/remote/remote_driver_test.dart: RemoteTerminalDriver concurrent enter preserves the first handshake
+  test/remote/remote_driver_test.dart: RemoteTerminalDriver peer BYE after INIT cancels startup
+  test/remote/remote_driver_test.dart: RemoteTerminalDriver restore cancels a pending supervised handshake
+  test/remote/remote_driver_test.dart: RemoteTerminalDriver restore wins after INIT but before enter resumes
+  ... and 9 more
+
+Consider enabling the flag chain-stack-traces to receive more detailed exceptions.
+For example, 'dart test --chain-stack-traces'.

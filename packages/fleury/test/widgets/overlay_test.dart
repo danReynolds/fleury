@@ -155,6 +155,39 @@ void main() {
       expect(state.entries, [lowerEntry, anchorEntry]);
     });
 
+    for (final above in [false, true]) {
+      test(
+        'invalid ${above ? 'above' : 'below'} anchor leaves entry reusable',
+        () {
+          final owner = BuildOwner();
+          final root = owner.mountRoot(const Overlay());
+          addTearDown(root.unmount);
+          final state = _findOverlayState(root);
+          final entry = OverlayEntry(builder: (_) => const Text('reused'));
+          final missing = OverlayEntry(builder: (_) => const Text('missing'));
+          addTearDown(entry.dispose);
+          addTearDown(missing.dispose);
+
+          expect(
+            () => state.insert(
+              entry,
+              above: above ? missing : null,
+              below: above ? null : missing,
+            ),
+            throwsStateError,
+          );
+          expect(state.entries, isEmpty);
+          expect(entry.hasListeners, isFalse);
+          state.insert(entry);
+          owner.flushBuild();
+          expect(state.entries, [entry]);
+          entry.remove();
+          owner.flushBuild();
+          expect(entry.hasListeners, isFalse);
+        },
+      );
+    }
+
     test('remove unmounts the entry and shrinks the stack', () {
       final log = <String>[];
       final owner = BuildOwner();
@@ -279,6 +312,98 @@ void main() {
         _stateError('OverlayEntry has been disposed.'),
       );
       expect(state.entries, isEmpty);
+    });
+
+    test('initial entries cannot take ownership from another overlay', () {
+      final entry = OverlayEntry(builder: (_) => const Text('owned'));
+      final firstOwner = BuildOwner();
+      final firstRoot = firstOwner.mountRoot(Overlay(initialEntries: [entry]));
+      final first = _findOverlayState(firstRoot);
+      addTearDown(firstRoot.unmount);
+      final secondOwner = BuildOwner();
+      addTearDown(() => secondOwner.root?.unmount());
+
+      expect(
+        () => secondOwner.mountRoot(Overlay(initialEntries: [entry])),
+        throwsStateError,
+      );
+      expect(first.entries, [entry]);
+      entry.remove();
+      firstOwner.flushBuild();
+      expect(first.entries, isEmpty);
+      expect(entry.hasListeners, isFalse);
+    });
+
+    test('duplicate initial entries fail without leaving listeners', () {
+      final entry = OverlayEntry(builder: (_) => const Text('duplicate'));
+      final owner = BuildOwner();
+      addTearDown(() => owner.root?.unmount());
+      expect(
+        () => owner.mountRoot(Overlay(initialEntries: [entry, entry])),
+        throwsStateError,
+      );
+      expect(entry.hasListeners, isFalse);
+      final root = owner.mountRoot(const Overlay());
+      final state = _findOverlayState(root);
+      state.insert(entry);
+      owner.flushBuild();
+      expect(state.entries, [entry]);
+    });
+
+    test('duplicate insertion preserves the original owner', () {
+      final entry = OverlayEntry(builder: (_) => const Text('owned'));
+      final owner = BuildOwner();
+      final root = owner.mountRoot(Overlay(initialEntries: [entry]));
+      addTearDown(root.unmount);
+      final state = _findOverlayState(root);
+      final otherOwner = BuildOwner();
+      final otherRoot = otherOwner.mountRoot(const Overlay());
+      addTearDown(otherRoot.unmount);
+      final other = _findOverlayState(otherRoot);
+
+      expect(() => state.insert(entry), throwsStateError);
+      expect(() => other.insert(entry), throwsStateError);
+      expect(state.entries, [entry]);
+      expect(other.entries, isEmpty);
+      entry.remove();
+      owner.flushBuild();
+      expect(state.entries, isEmpty);
+      expect(entry.hasListeners, isFalse);
+    });
+
+    test('conflicting anchors reject insertion without attaching', () {
+      final owner = BuildOwner();
+      final anchor = OverlayEntry(builder: (_) => const Text('anchor'));
+      final root = owner.mountRoot(Overlay(initialEntries: [anchor]));
+      addTearDown(root.unmount);
+      final state = _findOverlayState(root);
+      final entry = OverlayEntry(builder: (_) => const Text('later'));
+      expect(
+        () => state.insert(entry, above: anchor, below: anchor),
+        throwsArgumentError,
+      );
+      expect(state.entries, [anchor]);
+      expect(entry.hasListeners, isFalse);
+      state.insert(entry, above: anchor);
+      owner.flushBuild();
+      expect(state.entries, [anchor, entry]);
+    });
+
+    test('inserting into a disposed overlay leaves the entry reusable', () {
+      final owner = BuildOwner();
+      final root = owner.mountRoot(const Overlay());
+      final state = _findOverlayState(root);
+      root.unmount();
+      final entry = OverlayEntry(builder: (_) => const Text('later'));
+      expect(() => state.insert(entry), throwsStateError);
+      expect(entry.hasListeners, isFalse);
+      final nextOwner = BuildOwner();
+      final nextRoot = nextOwner.mountRoot(const Overlay());
+      addTearDown(nextRoot.unmount);
+      final next = _findOverlayState(nextRoot);
+      next.insert(entry);
+      nextOwner.flushBuild();
+      expect(next.entries, [entry]);
     });
   });
 

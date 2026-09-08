@@ -48,8 +48,8 @@ Widget themedExampleRoot(
   child: builder(),
   builder: (context, child) {
     final theme = _themeFor(controller.style);
-    return _DocsExampleTheme(
-      data: theme,
+    return Scope<_DocsExampleTheme>(
+      value: _DocsExampleTheme(theme),
       child: Theme(
         data: theme,
         // Docs embeds are intentionally not full applications, but interactive
@@ -2139,28 +2139,28 @@ form.clearErrors();''',
     builder: () => const _DeploymentTour(),
   ),
   ExampleInfo(
-    id: 'state.inherited-widget',
-    widget: 'InheritedWidget',
+    id: 'state.scope',
+    widget: 'Scope',
     category: 'Guide examples',
     blurb:
-        'A counter scope shares parent-owned state with a nested reader through '
-        'BuildContext.',
+        'A Scope shares a parent-owned model with a nested reader through '
+        'BuildContext; the reader rebuilds when the model notifies.',
     cols: 38,
     rows: 9,
     interactive: true,
-    builder: () => const _InheritedCounterTour(),
+    builder: () => const _ScopeCounterTour(),
   ),
   ExampleInfo(
-    id: 'state.inherited-notifier',
-    widget: 'InheritedNotifier',
+    id: 'state.scope-create',
+    widget: 'Scope',
     category: 'Guide examples',
     blurb:
-        'The same counter scope listens to a model that publishes its own '
-        'changes.',
+        'Scope.create lets the scope own the model: created on mount, '
+        'disposed on unmount, read the same way.',
     cols: 38,
     rows: 9,
     interactive: true,
-    builder: () => const _InheritedNotifierTour(),
+    builder: () => const _ScopeCreateTour(),
   ),
   ExampleInfo(
     id: 'input.editing',
@@ -2740,17 +2740,22 @@ class _Framed extends StatelessWidget {
   );
 }
 
-class _DocsExampleTheme extends InheritedWidget {
-  const _DocsExampleTheme({required this.data, required super.child});
+/// The docs shell's theme override, shared through its own scope type so a
+/// `Theme` inside an example never shadows it.
+final class _DocsExampleTheme {
+  const _DocsExampleTheme(this.data);
 
   final ThemeData data;
 
   static ThemeData? maybeOf(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<_DocsExampleTheme>()?.data;
+      Scope.maybeOf<_DocsExampleTheme>(context)?.data;
 
   @override
-  bool updateShouldNotify(_DocsExampleTheme oldWidget) =>
-      oldWidget.data != data;
+  bool operator ==(Object other) =>
+      other is _DocsExampleTheme && other.data == data;
+
+  @override
+  int get hashCode => data.hashCode;
 }
 
 // ── Stateful wrappers ───────────────────────────────────────────────────────
@@ -3562,12 +3567,7 @@ class _LiveSeriesState extends State<_LiveSeries>
     super.didChangeDependencies();
     if (_ticker == null && TuiBinding.maybeOf(context) != null) {
       _ticker = createTicker(_onTick);
-      // Let the initial chart paint before the stream starts — otherwise the
-      // browser DOM host can keep re-scheduling and never complete the first
-      // paint of a constantly-rebuilding leaf.
-      Future<void>.delayed(const Duration(milliseconds: 250), () {
-        if (mounted && _ticker != null && !_ticker!.isActive) _ticker!.start();
-      });
+      _ticker!.start();
     }
   }
 
@@ -3992,13 +3992,11 @@ enum _SnapshotPreview { disconnected, waiting, error, empty, success }
 Future<List<String>>? _futureFor(_SnapshotPreview preview) => switch (preview) {
   _SnapshotPreview.disconnected => null,
   _SnapshotPreview.waiting => Completer<List<String>>().future,
-  // Fails asynchronously, not at construction: a `Future.error(...)` is
-  // already failed when `setState` assigns it, and FutureBuilder subscribes a
-  // microtask later — too late to keep the error handled.
-  _SnapshotPreview.error => Future<List<String>>.delayed(
-    Duration.zero,
-    () => throw StateError('Connection lost'),
-  ),
+  // Own the failure immediately, even if rendering is delayed or this preview
+  // is replaced before a frame. FutureBuilder still receives the same error.
+  _SnapshotPreview.error => Future<List<String>>.error(
+    StateError('Connection lost'),
+  )..ignore(),
   _SnapshotPreview.empty => Future<List<String>>.value(const <String>[]),
   _SnapshotPreview.success => Future<List<String>>.value(const <String>[
     'alpha.log',
@@ -5243,53 +5241,59 @@ class _CounterButton extends StatelessWidget {
       Button(label: 'Increment', onPressed: onPressed);
 }
 
-class _InheritedCounterScope extends InheritedWidget {
-  const _InheritedCounterScope({required this.count, required super.child});
-
-  final int count;
-
-  static int of(BuildContext context) => context
-      .dependOnInheritedWidgetOfExactType<_InheritedCounterScope>()!
-      .count;
+/// A guide-level example: a parent owns the model and shares it in a Scope.
+class _ScopeCounterTour extends StatefulWidget {
+  const _ScopeCounterTour();
 
   @override
-  bool updateShouldNotify(_InheritedCounterScope oldWidget) =>
-      count != oldWidget.count;
+  State<_ScopeCounterTour> createState() => _ScopeCounterTourState();
 }
 
-class _InheritedCounterTour extends StatefulWidget {
-  const _InheritedCounterTour();
+class _ScopeCounterTourState extends State<_ScopeCounterTour> {
+  final _counter = _CounterModel();
 
   @override
-  State<_InheritedCounterTour> createState() => _InheritedCounterTourState();
-}
-
-class _InheritedCounterTourState extends State<_InheritedCounterTour> {
-  int _count = 0;
+  void dispose() {
+    _counter.dispose();
+    super.dispose();
+  }
 
   @override
-  Widget build(BuildContext context) => _InheritedCounterScope(
-    count: _count,
-    child: _framed(
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          const Text('INHERITED COUNTER', style: CellStyle(bold: true)),
-          const SizedBox(height: 1),
-          const _NestedCounterValue(),
-          Button(label: 'Increment', onPressed: () => setState(() => _count++)),
-        ],
-      ),
-    ),
+  Widget build(BuildContext context) => Scope(
+    value: _counter,
+    child: _framed(const _ScopeCounterPanel(title: 'SHARED COUNTER')),
   );
 }
 
-class _NestedCounterValue extends StatelessWidget {
-  const _NestedCounterValue();
+/// A guide-level example: the scope owns the model it shares.
+class _ScopeCreateTour extends StatelessWidget {
+  const _ScopeCreateTour();
 
   @override
-  Widget build(BuildContext context) =>
-      Text('Count: ${_InheritedCounterScope.of(context)}');
+  Widget build(BuildContext context) => Scope<_CounterModel>.create(
+    create: (context) => _CounterModel(),
+    child: _framed(const _ScopeCounterPanel(title: 'OWNED COUNTER')),
+  );
+}
+
+class _ScopeCounterPanel extends StatelessWidget {
+  const _ScopeCounterPanel({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final counter = Scope.of<_CounterModel>(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(title, style: const CellStyle(bold: true)),
+        const SizedBox(height: 1),
+        Text('Count: ${counter.count}'),
+        Button(label: 'Increment', onPressed: counter.increment),
+      ],
+    );
+  }
 }
 
 /// A service that exposes one observable value without becoming a larger model.
@@ -5418,58 +5422,6 @@ class _CounterModel extends ChangeNotifier {
   }
 }
 
-class _CounterNotifierScope extends InheritedNotifier<_CounterModel> {
-  const _CounterNotifierScope({
-    required _CounterModel counter,
-    required super.child,
-  }) : super(notifier: counter);
-
-  static _CounterModel of(BuildContext context) => context
-      .dependOnInheritedWidgetOfExactType<_CounterNotifierScope>()!
-      .notifier;
-}
-
-class _InheritedNotifierTour extends StatefulWidget {
-  const _InheritedNotifierTour();
-
-  @override
-  State<_InheritedNotifierTour> createState() => _InheritedNotifierTourState();
-}
-
-class _InheritedNotifierTourState extends State<_InheritedNotifierTour> {
-  final _counter = _CounterModel();
-
-  @override
-  void dispose() {
-    _counter.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => _CounterNotifierScope(
-    counter: _counter,
-    child: _framed(const _NotifierCounterPanel()),
-  );
-}
-
-class _NotifierCounterPanel extends StatelessWidget {
-  const _NotifierCounterPanel();
-
-  @override
-  Widget build(BuildContext context) {
-    final counter = _CounterNotifierScope.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        const Text('NOTIFIER COUNTER', style: CellStyle(bold: true)),
-        const SizedBox(height: 1),
-        Text('Count: ${counter.count}'),
-        Button(label: 'Increment', onPressed: counter.increment),
-      ],
-    );
-  }
-}
-
 /// A guide-level form with visible invalid and successful submit states.
 class _ProjectFormTour extends StatefulWidget {
   const _ProjectFormTour();
@@ -5543,8 +5495,8 @@ class _ProjectFormTourState extends State<_ProjectFormTour> {
               ListenableBuilder(
                 listenable: _form,
                 builder: (context, child) => Button(
-                  label: _form.isSubmitting ? 'Creating…' : 'Create',
-                  onPressed: _form.isSubmitting ? null : _form.submit,
+                  label: _form.isBusy ? 'Creating…' : 'Create',
+                  onPressed: _form.isBusy ? null : _form.submit,
                 ),
               ),
             ],

@@ -670,7 +670,7 @@ class _DisabledSelection extends StatelessWidget {
 /// terminal draws). So the host enables it around every app root rather than
 /// leaving each app to opt in. There is intentionally no global off switch:
 /// the per-subtree escapes below cover the real cases, and idle selectables
-/// are free (they cost an O(1) registration + one inherited lookup, with the
+/// are free (they cost an O(1) registration + one scope lookup, with the
 /// reading-order walk happening only on a selection event, not per frame).
 ///
 /// Its chord contract is deliberately conservative, because it is always on and

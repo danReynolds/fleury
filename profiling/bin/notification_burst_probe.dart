@@ -17,19 +17,13 @@ class BurstModel extends ChangeNotifier {
   }
 }
 
-class BurstScope extends InheritedNotifier<BurstModel> {
-  const BurstScope({required super.notifier, required super.child});
-  static BurstModel watch(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<BurstScope>()!.notifier;
-}
-
 class _Status extends StatelessWidget {
   const _Status(this.index, this.record);
   final int index;
   final void Function(int, int) record;
   @override
   Widget build(BuildContext context) {
-    final value = BurstScope.watch(context).value;
+    final value = Scope.of<BurstModel>(context).value;
     record(index, value);
     return SizedBox(width: 27, child: Text('Service $index: $value'));
   }
@@ -38,8 +32,8 @@ class _Status extends StatelessWidget {
 class BurstWorkload {
   BurstWorkload({required this.count, required this.structured}) {
     host = SampleFrameHost(
-      BurstScope(
-        notifier: model,
+      Scope<BurstModel>(
+        value: model,
         child: Column(children: [
           const Text('Service status'),
           for (var row = 0; row < (count + 3) ~/ 4; row++)

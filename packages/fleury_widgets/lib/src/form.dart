@@ -21,7 +21,18 @@ final class FormController extends ChangeNotifier {
   bool get isAttached => _host != null;
 
   /// Whether [submit] is currently awaiting the form's submit callback.
+  ///
+  /// Use this to lock field editing after validation. Use [isBusy] to disable
+  /// submit/back actions throughout the entire attempt, including validation.
   bool get isSubmitting => _submitting;
+
+  /// Whether an accepted [submit] attempt is validating or submitting.
+  ///
+  /// Becomes true synchronously when [submit] is called and false when the
+  /// attempt finishes or its form detaches. Standalone [validate] calls do not
+  /// count as submission attempts. Keep fields enabled during validation;
+  /// use [isSubmitting] when temporarily disabling their editing controls.
+  bool get isBusy => _submission != null;
 
   /// Validates every mounted, enabled field and focuses the first invalid one.
   ///
@@ -37,24 +48,37 @@ final class FormController extends ChangeNotifier {
   Future<bool> submit() {
     final active = _submission;
     if (active != null) return active;
+    final host = _requireHost();
     final generation = ++_submissionGeneration;
-    final future = _runSubmission(generation, validate());
-    _submission = future;
-    return future;
+    final completion = Completer<bool>();
+    // Publish the attempt before listeners can reenter submit or detach us.
+    _submission = completion.future;
+    completion.complete(_runSubmission(generation, host));
+    return completion.future;
   }
 
-  Future<bool> _runSubmission(int generation, Future<bool> validation) async {
+  Future<bool> _runSubmission(int generation, _FormHost host) async {
+    bool isCurrent() =>
+        _submissionGeneration == generation && identical(_host, host);
     try {
-      if (!await validation) return false;
-      if (_submissionGeneration != generation) return false;
-      final host = _requireHost();
+      notifyListeners();
+      if (!isCurrent()) return false;
+      if (!await host.validate()) return false;
+      if (!isCurrent()) return false;
       _setSubmitting(true);
+      if (!isCurrent()) return false;
       await host.submit();
       return true;
     } finally {
       if (_submissionGeneration == generation) {
         _submission = null;
-        if (!_disposed) _setSubmitting(false);
+        if (!_disposed) {
+          if (_submitting) {
+            _setSubmitting(false);
+          } else {
+            notifyListeners();
+          }
+        }
       }
     }
   }
@@ -95,11 +119,16 @@ final class FormController extends ChangeNotifier {
   void _detach(_FormHost host) {
     if (!identical(_host, host)) return;
     _host = null;
-    if (_submission != null) {
+    final wasBusy = isBusy;
+    if (wasBusy) {
       _submissionGeneration++;
       _submission = null;
     }
-    if (_submitting) _setSubmitting(false);
+    if (_submitting) {
+      _setSubmitting(false);
+    } else if (wasBusy) {
+      notifyListeners();
+    }
   }
 
   void _setSubmitting(bool value) {
@@ -165,7 +194,7 @@ class Form extends StatefulWidget {
 
   /// The controller for the nearest enclosing form, if one exists.
   static FormController? maybeOf(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<_FormScope>()?.controller;
+      Scope.maybeOf<FormController>(context);
 
   @override
   State<Form> createState() => _FormWidgetState();
@@ -270,13 +299,13 @@ final class _FormWidgetState extends State<Form> implements _FormHost {
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: _controller,
     child: widget.child,
-    builder: (context, child) => _FormScope(
-      controller: _controller,
+    builder: (context, child) => Scope<FormController>(
+      value: _controller,
       child: Semantics(
         role: SemanticRole.form,
         label: widget.semanticLabel,
-        busy: _controller.isSubmitting,
-        actions: _controller.isSubmitting
+        busy: _controller.isBusy,
+        actions: _controller.isBusy
             ? const <SemanticAction>{}
             : const <SemanticAction>{SemanticAction.submit},
         onAction: (action) {
@@ -288,16 +317,6 @@ final class _FormWidgetState extends State<Form> implements _FormHost {
       ),
     ),
   );
-}
-
-final class _FormScope extends InheritedWidget {
-  const _FormScope({required this.controller, required super.child});
-
-  final FormController controller;
-
-  @override
-  bool updateShouldNotify(_FormScope oldWidget) =>
-      !identical(controller, oldWidget.controller);
 }
 
 /// One validated value in a [Form].

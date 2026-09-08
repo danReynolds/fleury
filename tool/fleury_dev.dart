@@ -438,7 +438,11 @@ class _Runner {
     // Explicit platforms: fleury_web splits VM-safe suites from
     // @TestOn('browser') ones, and a bare `dart test` silently skips the
     // browser set.
-    await _run('dart', ['test', '-p', 'vm,chrome'], workingDirectory: web);
+    await _run('dart', [
+      'test',
+      '-p',
+      'vm,chrome',
+    ], workingDirectory: web);
     await _run('dart', ['test'], workingDirectory: samples);
     await _run('dart', ['test'], workingDirectory: mcp);
     if (!quick) {
@@ -453,14 +457,21 @@ class _Runner {
         'test/testing_guide_test.dart',
         'test/input_guide_test.dart',
         'test/lists_guide_test.dart',
+        'test/datatable_examples_test.dart',
+        'test/loading_error_future_test.dart',
       ], workingDirectory: webExamples);
       // The guide's Run test button executes the actual tester in the browser.
       // Keep its shared scenario and JS handle lifecycle in the PR gate too.
+      // Live charts exercise production rAF scheduling; manually flushing the
+      // catalog tests would conceal first-paint starvation under animation.
       await _run('dart', [
         'test',
         '-p',
         'chrome',
         'test/preferences_runner_browser_test.dart',
+        'test/loading_error_browser_test.dart',
+        'test/live_charts_browser_test.dart',
+        'test/examples_browser_test.dart',
       ], workingDirectory: webExamples);
 
       // dart2js smoke: the doc-examples entrypoint pulls in fleury_core,
@@ -575,7 +586,9 @@ class _Runner {
     final depsFile = File(depsPath);
     if (depsFile.existsSync()) depsFile.deleteSync();
 
-    final assetFile = File('$fleury/lib/src/remote/remote_client_asset.dart');
+    final assetFile = File(
+      '$fleury/lib/src/remote/remote_client_asset.dart',
+    );
 
     // --check: verify freshness without rewriting the asset (the freshness
     // gate). The compile above doubles as a "still compiles" check.
@@ -598,7 +611,9 @@ class _Runner {
     final b64 = base64.encode(js);
     final lines = <String>[];
     for (var i = 0; i < b64.length; i += 100) {
-      lines.add("    '${b64.substring(i, math.min(i + 100, b64.length))}'");
+      lines.add(
+        "    '${b64.substring(i, math.min(i + 100, b64.length))}'",
+      );
     }
     final out =
         '''// GENERATED — do not edit by hand.
@@ -1741,40 +1756,33 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
   /// auto-run — invoke them explicitly. See docs/implementation/perf-gates.md.
   Future<void> benchmarkGates(List<String> args) async {
     const fast = <({String name, List<String> cmd})>[
-      (
-        name: 'serve-semantics-gate',
-        cmd: ['run', 'bin/serve_semantics_profile.dart', '--gate'],
-      ),
+      (name: 'serve-semantics-gate', cmd: [
+        'run',
+        'bin/serve_semantics_profile.dart',
+        '--gate',
+      ]),
       (name: 'image-bench', cmd: ['run', 'bin/image_bench.dart', '--gate']),
-      (
-        name: 'bundle-size',
-        cmd: ['run', 'bin/bundle_size_gate.dart', '--gate'],
-      ),
-      (
-        name: 'alloc-gate',
-        cmd: [
-          '--deterministic',
-          '--enable-vm-service=0',
-          '--disable-service-auth-codes',
-          'bin/alloc_gate.dart',
-          '--gate',
-        ],
-      ),
-      (
-        name: 'input-alloc-gate',
-        cmd: [
-          '--deterministic',
-          '--enable-vm-service=0',
-          '--disable-service-auth-codes',
-          'bin/input_alloc_gate.dart',
-          '--gate',
-        ],
-      ),
+      (name: 'bundle-size', cmd: ['run', 'bin/bundle_size_gate.dart', '--gate']),
+      (name: 'alloc-gate', cmd: [
+        '--deterministic',
+        '--enable-vm-service=0',
+        '--disable-service-auth-codes',
+        'bin/alloc_gate.dart',
+        '--gate',
+      ]),
+      (name: 'input-alloc-gate', cmd: [
+        '--deterministic',
+        '--enable-vm-service=0',
+        '--disable-service-auth-codes',
+        'bin/input_alloc_gate.dart',
+        '--gate',
+      ]),
       (name: 'paint-gate', cmd: ['run', 'bin/paint_gate.dart', '--gate']),
-      (
-        name: 'selection-gate',
-        cmd: ['run', 'bin/selection_gate.dart', '--gate'],
-      ),
+      (name: 'selection-gate', cmd: [
+        'run',
+        'bin/selection_gate.dart',
+        '--gate',
+      ]),
       (name: 'runtime-gate', cmd: ['run', 'bin/runtime_gate.dart', '--gate']),
     ];
     final results = <({String name, bool ok, int ms})>[];
@@ -1794,27 +1802,25 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       );
       final code = await process.exitCode;
       sw.stop();
-      results.add((name: gate.name, ok: code == 0, ms: sw.elapsedMilliseconds));
+      results.add((
+        name: gate.name,
+        ok: code == 0,
+        ms: sw.elapsedMilliseconds,
+      ));
     }
 
     stdout.writeln('\n=== perf gate summary ===');
     var allOk = true;
     for (final r in results) {
-      stdout.writeln(
-        '  ${r.ok ? 'PASS' : 'FAIL'}  ${r.name.padRight(22)} '
-        '${(r.ms / 1000).toStringAsFixed(1)}s',
-      );
+      stdout.writeln('  ${r.ok ? 'PASS' : 'FAIL'}  ${r.name.padRight(22)} '
+          '${(r.ms / 1000).toStringAsFixed(1)}s');
       allOk = allOk && r.ok;
     }
-    stdout.writeln(
-      '  (heavier PTY/subprocess gates not auto-run — invoke '
-      'explicitly: wire-gate, serve-wire-live)',
-    );
+    stdout.writeln('  (heavier PTY/subprocess gates not auto-run — invoke '
+        'explicitly: wire-gate, serve-wire-live)');
     if (!allOk) {
-      stderr.writeln(
-        '\nperf gates: one or more gates FAILED — see output '
-        'above and docs/implementation/perf-gates.md.',
-      );
+      stderr.writeln('\nperf gates: one or more gates FAILED — see output '
+          'above and docs/implementation/perf-gates.md.');
       exit(1);
     }
     stdout.writeln('\nperf gates: all fast gates pass.');
@@ -6750,10 +6756,8 @@ void _printBenchmarkUsage() {
     '  wire <scenario> [...]   Build/capture/analyze real PTY peer runs',
   );
   stdout.writeln('');
-  stdout.writeln(
-    'Regression gates (pass --gate to fail on regression; see '
-    'docs/implementation/perf-gates.md):',
-  );
+  stdout.writeln('Regression gates (pass --gate to fail on regression; see '
+      'docs/implementation/perf-gates.md):');
   stdout.writeln(
     '  gates                   Run the fast gate suite + pass/fail summary',
   );

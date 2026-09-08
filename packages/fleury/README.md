@@ -72,7 +72,7 @@ tree with a diffing ANSI renderer. Unhandled Ctrl+C exits by default.
 ## What's in the box
 
 - **Framework**: `Widget` / `StatefulWidget` / `State`, `BuildContext`,
-  `InheritedWidget`, keys + reconciliation, `MediaQuery`, layout
+  `Scope`, keys + reconciliation, `MediaQuery`, layout
   constraints, the `RenderObject` tree, and a swappable
   `TerminalDriver`. The launch support boundary is a modern UTF-8,
   xterm-compatible POSIX terminal; the native Windows driver is preview-only

@@ -121,17 +121,23 @@ callback completes. Concurrent calls share the same in-flight submission.
 fields. This makes it safe to set a controlled error and immediately
 `await form.validate()` without manually scheduling work.
 
-Use `isSubmitting` to disable actions and show progress:
+Use `isBusy` to disable submit and back actions throughout validation and submission:
 
 ```dart
 ListenableBuilder(
   listenable: form,
   builder: (context, child) => Button(
-    label: form.isSubmitting ? 'Creating…' : 'Create',
-    onPressed: form.isSubmitting ? null : form.submit,
+    label: form.isBusy ? 'Creating…' : 'Create',
+    onPressed: form.isBusy ? null : form.submit,
   ),
 )
 ```
+
+`isBusy` becomes true as soon as `submit()` accepts the attempt. Use it for
+`PopScope(canPop: !form.isBusy)` as well. `isSubmitting` becomes true after
+validation succeeds, while the submit callback runs: use that narrower flag
+to make text fields read-only or disable choice controls. Keeping controls
+enabled during validation ensures their required-field checks still run.
 
 You can omit the controller when submission stays inside the subtree and call
 `Form.of(context).submit()`. Pass a controller when a shortcut, command, app

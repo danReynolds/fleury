@@ -102,6 +102,131 @@ Future<bool> _submit(FleuryTester tester, FormController controller) {
 
 void main() {
   group('FormController', () {
+    testWidgets(
+      'busy covers validation and publishes the attempt before notifying',
+      (tester) async {
+        final controller = FormController();
+        final pending = Completer<void>();
+        final states = <(bool, bool)>[];
+        Future<bool>? reentrant;
+        tester.pumpWidget(
+          Form(
+            controller: controller,
+            onSubmit: () => pending.future,
+            child: const Text('ready'),
+          ),
+        );
+        controller.addListener(() {
+          states.add((controller.isBusy, controller.isSubmitting));
+          if (states.length == 1) reentrant = controller.submit();
+        });
+        final submission = controller.submit();
+        expect(controller.isBusy, isTrue);
+        expect(controller.isSubmitting, isFalse);
+        expect(reentrant, same(submission));
+        tester.pump();
+        expect(tester.semantics().single(role: SemanticRole.form).busy, isTrue);
+        await Future<void>.delayed(Duration.zero);
+        expect(controller.isSubmitting, isTrue);
+        pending.complete();
+        expect(await submission, isTrue);
+        expect(states, [(true, false), (true, true), (false, false)]);
+        tester.pumpWidget(const Text('gone'));
+        controller.dispose();
+      },
+    );
+
+    testWidgets(
+      'rejected validation clears busy and still validates enabled fields',
+      (tester) async {
+        final controller = FormController();
+        var submits = 0;
+        var validations = 0;
+        final states = <bool>[];
+        tester.pumpWidget(
+          ListenableBuilder(
+            listenable: controller,
+            builder: (context, _) => Form(
+              controller: controller,
+              onSubmit: () => submits++,
+              child: FormField(
+                validator: () {
+                  validations++;
+                  return 'Confirm first.';
+                },
+                child: Checkbox(
+                  value: false,
+                  label: 'Confirm',
+                  onChanged: controller.isSubmitting ? null : (_) {},
+                ),
+              ),
+            ),
+          ),
+        );
+        controller.addListener(() => states.add(controller.isBusy));
+        final submission = controller.submit();
+        tester.pump();
+        expect(await submission, isFalse);
+        tester.pump();
+        expect(validations, greaterThan(0));
+        expect(submits, 0);
+        expect(states, [true, false]);
+        expect(controller.isSubmitting, isFalse);
+        expect(tester.renderToString(), contains('Confirm first.'));
+        tester.pumpWidget(const Text('gone'));
+        controller.dispose();
+      },
+    );
+
+    for (final submitting in [false, true]) {
+      testWidgets(
+        'notification can detach before ${submitting ? 'callback' : 'validation'}',
+        (tester) async {
+          final controller = FormController();
+          var submits = 0;
+          tester.pumpWidget(
+            Form(
+              controller: controller,
+              onSubmit: () => submits++,
+              child: const Text('ready'),
+            ),
+          );
+          controller.addListener(() {
+            if (controller.isBusy && controller.isSubmitting == submitting) {
+              tester.pumpWidget(const Text('gone'));
+            }
+          });
+          final submission = controller.submit();
+          tester.pump();
+          expect(await submission, isFalse);
+          expect(submits, 0);
+          expect(controller.isBusy, isFalse);
+          expect(controller.isAttached, isFalse);
+          controller.dispose();
+        },
+      );
+    }
+
+    testWidgets('standalone validation does not report a busy submit attempt', (
+      tester,
+    ) async {
+      final controller = FormController();
+      tester.pumpWidget(
+        Form(
+          controller: controller,
+          onSubmit: () {},
+          child: const Text('ready'),
+        ),
+      );
+      final validation = controller.validate();
+      expect(controller.isBusy, isFalse);
+      tester.pump();
+      expect(await validation, isTrue);
+      expect(controller.isBusy, isFalse);
+      tester.pumpWidget(const Text('gone'));
+      controller.dispose();
+    });
+
     for (final submit in [false, true]) {
       testWidgets(
         'throwing validator completes ${submit ? 'submit' : 'validate'} '

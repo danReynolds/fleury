@@ -15,7 +15,7 @@
 //     it. Nested navigators "just work."
 //
 //   - Nesting + context scoping. Each Navigator wraps its routes in a
-//     [_NavigatorScope] inherited widget. `Navigator.of(context)` finds
+//     `Scope<NavigatorState>`. `Navigator.of(context)` finds
 //     the nearest enclosing navigator (the one whose region the calling
 //     widget lives in); `Navigator.of(context, rootNavigator: true)`
 //     reaches the app's top-level navigator. The two resolve different
@@ -269,9 +269,10 @@ class Navigator extends StatefulWidget {
     }
     // The nearest scope wraps the routes of the navigator whose region
     // this context lives in; fall back to an ancestor-state walk for a
-    // context sitting between a Navigator and its first _NavigatorScope.
-    final scope = context.getInheritedWidgetOfExactType<_NavigatorScope>();
-    if (scope != null) return scope.navigator;
+    // context sitting between a Navigator and its routes' scope. A
+    // non-dependent read: callers are event handlers.
+    final navigator = Scope.maybeOfWithoutDependency<NavigatorState>(context);
+    if (navigator != null) return navigator;
     return context.findAncestorStateOfType<NavigatorState>();
   }
 
@@ -526,7 +527,7 @@ class NavigatorState extends State<Navigator> {
           duration: transition.duration ?? RouteTransition.defaultDuration,
         )
         .then((_) {
-          if (!mounted) return;
+          if (!mounted || !_routes.contains(route)) return;
           _remove(route);
           _rebuild();
         });
@@ -596,7 +597,10 @@ class NavigatorState extends State<Navigator> {
           // to(1.0) but still completes it. We must NOT flip a now-leaving
           // route opaque (it would cover the screen beneath during its exit),
           // nor a modal route (the screen behind must stay visible).
-          if (mounted && !route.leaving) {
+          // Stack operations can also remove an entering route outright.
+          // Disposing its animation completes this callback too; a retired
+          // replacement/clear must not remove the routes we just revealed.
+          if (mounted && !route.leaving && _routes.contains(route)) {
             if (route.presentAlignment == null) route.opaque = true;
             _onEntered(route);
             _rebuild();
@@ -747,8 +751,8 @@ class NavigatorState extends State<Navigator> {
         'root': _isRoot,
       }),
       onAction: _handleNavigatorAction,
-      child: _NavigatorScope(
-        navigator: this,
+      child: Scope<NavigatorState>(
+        value: this,
         child: _RouteStack(
           firstPainted: _firstPainted(),
           children: <Widget>[
@@ -916,8 +920,8 @@ class _RouteHost extends StatelessWidget {
         // survive.
         child: ExcludeFocus(
           excluding: !active,
-          child: _RouteScope(
-            route: route,
+          child: Scope<_Route>(
+            value: route,
             // Per-route traversal: every route — the home page, a pushed page,
             // or a presented modal — gets arrow + Tab focus traversal for free.
             // It sits inside the route's FocusScope, so a presented route's
@@ -1023,28 +1027,6 @@ class _RouteStack extends MultiChildRenderObjectWidget {
   }
 }
 
-/// Inherited handle exposing the [NavigatorState] to its routes.
-class _NavigatorScope extends InheritedWidget {
-  const _NavigatorScope({required this.navigator, required super.child});
-
-  final NavigatorState navigator;
-
-  @override
-  bool updateShouldNotify(_NavigatorScope old) =>
-      !identical(navigator, old.navigator);
-}
-
-/// Inherited handle exposing the enclosing [_Route] to its subtree, so a
-/// [PopScope] can register its veto with the right route.
-class _RouteScope extends InheritedWidget {
-  const _RouteScope({required this.route, required super.child});
-
-  final _Route route;
-
-  @override
-  bool updateShouldNotify(_RouteScope old) => !identical(route, old.route);
-}
-
 /// Intercepts a back/Esc (maybePop) for the route it sits in.
 ///
 /// While [canPop] is false, a back/Esc on this route is vetoed and
@@ -1091,7 +1073,9 @@ class _PopScopeState extends State<PopScope> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final route = context.getInheritedWidgetOfExactType<_RouteScope>()?.route;
+    // The enclosing route's Scope<_Route>, so the veto registers with the
+    // right route (and re-registers if a move changes it).
+    final route = Scope.maybeOf<_Route>(context);
     if (!identical(route, _route)) {
       _route?.guards.remove(this);
       _route = route;

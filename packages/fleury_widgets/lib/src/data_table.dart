@@ -541,37 +541,41 @@ class DataTableController extends ChangeNotifier {
     );
   }
 
-  void _setRowCount(int value) {
+  // Publish dimensions, cursor, and both range endpoints as one coherent state.
+  void _updateDimensions({
+    required int rowCount,
+    required int columnCount,
+    int? currentRowIndex,
+  }) {
     _checkNotDisposed();
-    _rowCount = value < 0 ? 0 : value;
-    final clamped = _clamp(_currentRowIndex);
-    final anchor = _clamp(_anchorRow);
-    final end = _clamp(_rangeRow);
-    if (_currentRowIndex == clamped &&
-        _anchorRow == anchor &&
-        _rangeRow == end) {
+    final rows = rowCount < 0 ? 0 : rowCount;
+    final columns = columnCount < 0 ? 0 : columnCount;
+    final maxRow = rows <= 0 ? 0 : rows - 1;
+    final maxColumn = columns <= 0 ? 0 : columns - 1;
+    final row = (currentRowIndex ?? _currentRowIndex).clamp(0, maxRow);
+    final column = _currentColumnIndex.clamp(0, maxColumn);
+    final anchorRow = _anchorRow.clamp(0, maxRow);
+    final anchorColumn = _anchorColumn.clamp(0, maxColumn);
+    final rangeRow = _rangeRow.clamp(0, maxRow);
+    final rangeColumn = _rangeColumn.clamp(0, maxColumn);
+    if (_rowCount == rows &&
+        _columnCount == columns &&
+        _currentRowIndex == row &&
+        _currentColumnIndex == column &&
+        _anchorRow == anchorRow &&
+        _anchorColumn == anchorColumn &&
+        _rangeRow == rangeRow &&
+        _rangeColumn == rangeColumn) {
       return;
     }
-    _currentRowIndex = clamped;
-    _anchorRow = anchor;
-    _rangeRow = end;
-    notifyListeners();
-  }
-
-  void _setColumnCount(int value) {
-    _checkNotDisposed();
-    _columnCount = value < 0 ? 0 : value;
-    final clamped = _clampColumn(_currentColumnIndex);
-    final anchor = _clampColumn(_anchorColumn);
-    final end = _clampColumn(_rangeColumn);
-    if (_currentColumnIndex == clamped &&
-        _anchorColumn == anchor &&
-        _rangeColumn == end) {
-      return;
-    }
-    _currentColumnIndex = clamped;
-    _anchorColumn = anchor;
-    _rangeColumn = end;
+    _rowCount = rows;
+    _columnCount = columns;
+    _currentRowIndex = row;
+    _currentColumnIndex = column;
+    _anchorRow = anchorRow;
+    _anchorColumn = anchorColumn;
+    _rangeRow = rangeRow;
+    _rangeColumn = rangeColumn;
     notifyListeners();
   }
 
@@ -619,6 +623,7 @@ class DataTable extends StatefulWidget {
     required this.cellBuilder,
     this.rowKeyBuilder,
     this.controller,
+    this.currentRowIndex,
     this.focusNode,
     this.autofocus = false,
     this.onSelect,
@@ -640,6 +645,10 @@ class DataTable extends StatefulWidget {
     this.filterText,
     this.semanticLabel = 'Data table',
   }) : assert(
+         controller == null || currentRowIndex == null,
+         'Use either controller or currentRowIndex to own the row cursor.',
+       ),
+       assert(
          selectionMode == DataTableSelectionMode.row || onSelect == null,
          'Use onAction for a row command in cell mode.',
        ),
@@ -666,6 +675,16 @@ class DataTable extends StatefulWidget {
 
   /// External navigation and range controller. If omitted, the table owns one.
   final DataTableController? controller;
+
+  /// Parent-owned browsing row. Supply [onFocusedItemChanged] to accept input
+  /// requests by rebuilding with the requested row. Ignored requests leave the
+  /// cursor at this value. Out-of-range values are clamped to the available rows.
+  ///
+  /// Update this and [rowCount] together when filtering or replacing data. This
+  /// live value cannot be combined with [controller]. If omitted, the supplied
+  /// controller or an internal controller owns navigation. It does not invoke
+  /// [onSelect] or change the independently selected cell range.
+  final int? currentRowIndex;
 
   /// Focus node used for keyboard navigation.
   final FocusNode? focusNode;
@@ -752,6 +771,7 @@ class _DataTableState extends State<DataTable> {
   late FocusNode _focusNode;
   bool _ownsController = false;
   bool _ownsFocusNode = false;
+  bool _syncingController = false;
 
   int _visibleRows = 1;
   DataTableViewportMetrics _viewport = DataTableViewportMetrics.empty;
@@ -774,10 +794,8 @@ class _DataTableState extends State<DataTable> {
     _controller = widget.controller ?? DataTableController();
     _ownsController = widget.controller == null;
     _controller._attach(this);
-    _controller
-      .._setRowCount(widget.rowCount)
-      .._setColumnCount(widget.columns.length)
-      ..addListener(_onChange);
+    _syncController();
+    _controller.addListener(_onChange);
   }
 
   @override
@@ -804,8 +822,7 @@ class _DataTableState extends State<DataTable> {
       _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'DataTable');
       _ownsFocusNode = widget.focusNode == null;
     }
-    _controller._setRowCount(widget.rowCount);
-    _controller._setColumnCount(widget.columns.length);
+    _syncController();
   }
 
   bool _sameColumnIds(List<DataTableColumn> a, List<DataTableColumn> b) {
@@ -816,7 +833,33 @@ class _DataTableState extends State<DataTable> {
     return true;
   }
 
-  void _onChange() => setState(() => _revealRevision++);
+  void _syncController() {
+    final row = _controller.currentRowIndex;
+    final column = _controller.currentColumnIndex;
+    _syncingController = true;
+    try {
+      _controller._updateDimensions(
+        rowCount: widget.rowCount,
+        columnCount: widget.columns.length,
+        currentRowIndex: widget.currentRowIndex,
+      );
+      if (row != _controller.currentRowIndex ||
+          column != _controller.currentColumnIndex) {
+        _revealRevision++;
+      }
+    } finally {
+      _syncingController = false;
+    }
+  }
+
+  void _prepareCurrent() {
+    // Each interaction starts from the parent's accepted cursor.
+    if (widget.currentRowIndex != null) _syncController();
+  }
+
+  void _onChange() {
+    if (!_syncingController) setState(() => _revealRevision++);
+  }
 
   void _onFocusDetectorChange(bool focused) => setState(() {});
 
@@ -844,6 +887,7 @@ class _DataTableState extends State<DataTable> {
   }
 
   Future<void> _copySelection() async {
+    _prepareCurrent();
     if (widget.columns.isEmpty || widget.rowCount <= 0) return;
     final focusRow = widget.selectionMode == DataTableSelectionMode.row
         ? _controller.currentRowIndex
@@ -962,6 +1006,7 @@ class _DataTableState extends State<DataTable> {
     SemanticNode target,
     SemanticAction action,
   ) async {
+    _prepareCurrent();
     final header = target.state['header'] == true;
     if (header) {
       final columnId = target.state['columnId'];
@@ -1010,6 +1055,7 @@ class _DataTableState extends State<DataTable> {
 
   /// Navigate to a row index without confirming it or changing a cell range.
   bool _handleSemanticSetValue(SemanticNode target, Object? value) {
+    _prepareCurrent();
     if (target.role != SemanticRole.table || widget.rowCount <= 0) return false;
     final index = coerceSemanticInt(value);
     if (index == null) return false;
@@ -1041,6 +1087,7 @@ class _DataTableState extends State<DataTable> {
   }
 
   KeyEventResult _onKey(KeyEvent event) {
+    _prepareCurrent();
     _resetClickSeries();
     if (widget.rowCount <= 0 || widget.columns.isEmpty) {
       return KeyEventResult.ignored;
@@ -1166,7 +1213,9 @@ class _DataTableState extends State<DataTable> {
       cellBuilder: widget.cellBuilder,
       semanticLabel: widget.semanticLabel,
       rowKeyBuilder: widget.rowKeyBuilder,
-      selectedRow: _controller.currentRowIndex,
+      selectedRow: widget.currentRowIndex == null
+          ? _controller.currentRowIndex
+          : _controller._clamp(widget.currentRowIndex!),
       selectedColumn: _controller.currentColumnIndex,
       viewportStart: _firstRow,
       revealRevision: _revealRevision,
@@ -1248,6 +1297,7 @@ class _DataTableState extends State<DataTable> {
   }
 
   void _completeClick(PointerDetails details) {
+    _prepareCurrent();
     final hit = _pendingPointerHit;
     final pressedAt = _pressPosition;
     final key = _pressKey;

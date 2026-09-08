@@ -9,7 +9,7 @@
 //   - Widget / StatelessWidget / StatefulWidget / State
 //   - Element / ComponentElement / StatelessElement / StatefulElement
 //   - RenderObjectWidget hierarchy (leaf + single-child + multi-child)
-//   - ProxyWidget + InheritedWidget + InheritedElement
+//   - ProxyWidget + Scope + ScopeElement
 //   - Key-based reconciliation via Widget.canUpdate, plus GlobalKey
 //   - setState() + didChangeDependencies + a synchronous-flush BuildOwner
 //     + reassembleApplication
@@ -20,6 +20,7 @@
 import 'package:meta/meta.dart';
 
 import '../debug/debug_invalidation.dart';
+import '../foundation/change_notifier.dart';
 import '../foundation/fleury_error.dart';
 import '../foundation/geometry.dart';
 import '../foundation/key.dart';
@@ -304,7 +305,7 @@ abstract class State<T extends StatefulWidget> {
   @mustCallSuper
   void didUpdateWidget(covariant T oldWidget) {}
 
-  /// Tracks whether any inherited dependency (or `initState`) has
+  /// Tracks whether any scope dependency (or `initState`) has
   /// invalidated the dependency snapshot since the last
   /// [didChangeDependencies] call. The framework uses this to decide
   /// whether [didChangeDependencies] needs to fire before the next
@@ -315,11 +316,11 @@ abstract class State<T extends StatefulWidget> {
   /// Called before [build] when one of three things is true:
   ///
   ///   - This is the first build after [initState].
-  ///   - An [InheritedWidget] this state depends on (via
-  ///     `context.dependOnInheritedWidgetOfExactType`) just notified
-  ///     dependents (via swap or `notifyDependents`).
+  ///   - A [Scope] this state depends on (via [Scope.of]) just notified
+  ///     its readers: the value notified, or the scope was rebuilt with a
+  ///     value that is not equal to the previous one.
   ///
-  /// State subclasses override this to re-read inherited values and
+  /// State subclasses override this to re-read scope values and
   /// update derived state. Notable example:
   /// `SingleTickerProviderStateMixin` overrides this to sync its
   /// `Ticker.muted` against the enclosing `TickerMode`.
@@ -404,25 +405,17 @@ abstract class State<T extends StatefulWidget> {
 // ---------------------------------------------------------------------------
 
 /// A handle to the location of a widget in the element tree.
+///
+/// A value an ancestor shares through a [Scope] is read with
+/// `Scope.of<T>(context)`, which subscribes this location to it. The
+/// lookups below find ancestors by state or render object without
+/// subscribing.
 abstract interface class BuildContext {
   /// The widget currently mounted at this location.
   Widget get widget;
 
   /// True while the underlying element is in the tree.
   bool get mounted;
-
-  /// Registers this context as a dependent of the nearest ancestor
-  /// `InheritedWidget` of type [T] and returns that widget. The
-  /// element will rebuild whenever that ancestor's
-  /// [InheritedWidget.updateShouldNotify] returns true.
-  ///
-  /// Returns null if no matching ancestor exists.
-  T? dependOnInheritedWidgetOfExactType<T extends InheritedWidget>();
-
-  /// Like [dependOnInheritedWidgetOfExactType] but does not establish
-  /// a dependency. Use this when reading the widget for the lifetime
-  /// of one build call only and not caring about future updates.
-  T? getInheritedWidgetOfExactType<T extends InheritedWidget>();
 
   /// Walks ancestors looking for an [Element] whose state is of type
   /// [T]. Does not establish a dependency.
@@ -611,17 +604,17 @@ abstract class Element implements BuildContext {
     errors.throwIfAny();
   }
 
-  /// Drops every dependency edge this element holds — both inherited
-  /// ([dependOnInheritedWidgetOfExactType]) and external (e.g. `Animation`).
-  /// Shared by [unmount] (permanent) and [deactivate] (temporary; the next
-  /// rebuild re-establishes whatever the new tree position warrants).
+  /// Drops every dependency edge this element holds — both scope
+  /// ([Scope.of]) and external (e.g. `Animation`). Shared by [unmount]
+  /// (permanent) and [deactivate] (temporary; the next rebuild
+  /// re-establishes whatever the new tree position warrants).
   void _detachDependencies() {
-    final inherited = _inheritedDependencies;
-    if (inherited != null) {
-      for (final ancestor in inherited) {
+    final scopes = _scopeDependencies;
+    if (scopes != null) {
+      for (final ancestor in scopes) {
         ancestor._dependents.remove(this);
       }
-      _inheritedDependencies = null;
+      _scopeDependencies = null;
     }
 
     // Transfer ownership before callbacks: a re-entrant registration gets a
@@ -658,7 +651,7 @@ abstract class Element implements BuildContext {
       // Re-running the recursive deactivation would fire deactivate() hooks
       // twice and recompute _hadDependenciesWhenDeactivated from the
       // already-cleared dependency sets, leaving the moved subtree deaf to
-      // inherited values after reactivation (Flutter guards the same way in
+      // scope values after reactivation (Flutter guards the same way in
       // _InactiveElements.add). Detach + re-registration still happen above
       // and below.
       if (child._lifecycle == _ElementLifecycle.active) {
@@ -694,7 +687,7 @@ abstract class Element implements BuildContext {
   void _deactivate() {
     assert(_lifecycle == _ElementLifecycle.active);
     _hadDependenciesWhenDeactivated =
-        (_inheritedDependencies?.isNotEmpty ?? false) ||
+        (_scopeDependencies?.isNotEmpty ?? false) ||
         (_externalDependencies?.isNotEmpty ?? false);
     _detachDependencies();
     _owner?._dirtyElements.remove(this);
@@ -735,7 +728,7 @@ abstract class Element implements BuildContext {
     // Deactivation dropped this element's dependency edges; only a rebuild
     // re-registers them against the NEW tree position. When the reclaiming
     // parent delivers an IDENTICAL widget, update() skips that rebuild —
-    // force it, or the element stays permanently deaf to the inherited /
+    // force it, or the element stays permanently deaf to the scope /
     // external values it reads (Flutter's activate() likewise calls
     // didChangeDependencies()).
     if (_hadDependenciesWhenDeactivated) {
@@ -777,10 +770,10 @@ abstract class Element implements BuildContext {
   @protected
   void forgetChild(Element child) {}
 
-  // Ancestors this element has registered with via
-  // [dependOnInheritedWidgetOfExactType]. Most structural elements never read
-  // inherited state; allocate storage only when the first edge is registered.
-  Set<InheritedElement>? _inheritedDependencies;
+  // Scopes this element has registered with via [Scope.of]. Most structural
+  // elements never read one; allocate storage only when the first edge is
+  // registered.
+  Set<ScopeElement>? _scopeDependencies;
 
   // Non-widget dependencies (e.g. Animation) read during build. Detached
   // on unmount so the source stops marking this element dirty.
@@ -795,18 +788,15 @@ abstract class Element implements BuildContext {
     }
   }
 
-  @override
-  T? dependOnInheritedWidgetOfExactType<T extends InheritedWidget>() {
-    final ancestor = _findInheritedElementOfExactType<T>();
+  /// The nearest `Scope<T>` value above this element, registering this
+  /// element as a reader of that scope. Null when there is none. Backs
+  /// [Scope.of].
+  T? _dependOnScope<T extends Object>() {
+    final ancestor = _findScopeElement<T>();
     if (ancestor == null) return null;
     ancestor._dependents.add(this);
-    (_inheritedDependencies ??= <InheritedElement>{}).add(ancestor);
-    return ancestor.widget as T;
-  }
-
-  @override
-  T? getInheritedWidgetOfExactType<T extends InheritedWidget>() {
-    return _findInheritedElementOfExactType<T>()?.widget as T?;
+    (_scopeDependencies ??= <ScopeElement>{}).add(ancestor);
+    return ancestor.value as T;
   }
 
   @override
@@ -830,13 +820,14 @@ abstract class Element implements BuildContext {
     return _owner?.findRootRenderObject(this);
   }
 
-  InheritedElement?
-  _findInheritedElementOfExactType<T extends InheritedWidget>() {
+  /// The nearest ancestor `ScopeElement<T>`. The type argument is matched
+  /// exactly: a `Scope<Derived>` is not found for a `Scope<Base>` lookup,
+  /// nor the reverse. The walk tests the element class first (a cheap class
+  /// check on every ancestor) and compares the key only at scope elements.
+  ScopeElement? _findScopeElement<T extends Object>() {
     var element = _parent;
     while (element != null) {
-      if (element is InheritedElement && element.widget is T) {
-        return element;
-      }
+      if (element is ScopeElement && element._key == T) return element;
       element = element._parent;
     }
     return null;
@@ -870,7 +861,7 @@ abstract class Element implements BuildContext {
   /// The dirty bit is cleared BEFORE [performRebuild] runs, not
   /// after. This matters when the rebuild itself triggers a
   /// `markNeedsBuild` on this element (e.g. a descendant widget
-  /// mounts and an inherited dependency fires a notification that
+  /// mounts and a scope dependency fires a notification that
   /// targets this element). Clearing before performRebuild ensures
   /// the markNeedsBuild correctly re-adds this element to the dirty
   /// queue rather than short-circuiting on the still-set flag —
@@ -1176,7 +1167,7 @@ class StatefulElement extends ComponentElement {
   Widget buildChild() {
     // Fire didChangeDependencies before the first build of any
     // rebuild cycle where dependencies changed (initState start
-    // case, or an inherited dependency notified). NOT fired for
+    // case, or a scope dependency notified). NOT fired for
     // plain setState rebuilds — that contract matches Flutter and
     // lets State subclasses do expensive dependency-change work
     // without paying for every setState.
@@ -1197,7 +1188,7 @@ class StatefulElement extends ComponentElement {
   void activate() {
     super.activate();
     _state.activate();
-    // The subtree moved; inherited values may differ at the new position.
+    // The subtree moved; scope values may differ at the new position.
     // Force a didChangeDependencies before the post-move rebuild, matching
     // the contract on first mount.
     _state._dependenciesChanged = true;
@@ -1799,14 +1790,14 @@ abstract class RenderObjectElement extends Element {
     rebuild(force: true);
   }
 
-  /// Set by an inherited ancestor that notified this element (see
-  /// `InheritedElement._markDependencyChanged`); consumed by [rebuild].
+  /// Set by a scope ancestor that notified this element (see
+  /// [ScopeElement._markDependencyChanged]); consumed by [rebuild].
   bool _dependenciesChanged = false;
 
   @override
   void rebuild({bool force = false}) {
-    // A dependency-only rebuild: an inherited widget this element depends on
-    // changed (Theme swapped above a hoisted `const` render-object widget),
+    // A dependency-only rebuild: a scope this element depends on changed
+    // (Theme swapped above a hoisted `const` render-object widget),
     // but the widget instance did not, so [update] — the only place
     // `updateRenderObject` ran — never fires. The render object kept the
     // configuration it read at creation. Re-run `updateRenderObject` here so
@@ -2292,75 +2283,282 @@ class SingleChildRenderObjectElement extends RenderObjectElement {
 }
 
 // ---------------------------------------------------------------------------
-// ProxyWidget + InheritedWidget
+// ProxyWidget + Scope
 // ---------------------------------------------------------------------------
 
 /// A widget that proxies a single child without affecting layout or
-/// painting. Used as the base for widgets whose only purpose is to
-/// inject something into the tree (`InheritedWidget` data, future
-/// notifier propagation, etc.).
+/// painting. The base for widgets whose only purpose is to inject something
+/// into the tree: a [Scope] value, a semantics bridge.
 abstract class ProxyWidget extends Widget {
   const ProxyWidget({super.key, required this.child});
 
   final Widget child;
 }
 
-/// Base class for widgets that expose data to descendants without that
-/// data being passed down through constructors.
+/// Shares a value with the widgets below it.
 ///
-/// Descendants that read this widget via
-/// `BuildContext.dependOnInheritedWidgetOfExactType<T>()` are
-/// rebuilt whenever the framework swaps this widget for a new
-/// instance whose [updateShouldNotify] returns true.
-abstract class InheritedWidget extends ProxyWidget {
-  const InheritedWidget({super.key, required super.child});
+/// `Scope` is Fleury's tree-local state primitive — what React calls a
+/// Context, Flutter an `InheritedWidget`, SwiftUI the environment. Wrap a
+/// subtree in a `Scope<T>` and any descendant reads the value with
+/// `Scope.of<T>(context)`; the widgets in between neither accept nor forward
+/// it. The type argument is the key: the nearest `Scope<T>` above the reader
+/// wins, so an inner scope shadows an outer one, and a test overrides a value
+/// by wrapping the widget under test in a scope of its own.
+///
+/// ```dart
+/// // Share an object its owner keeps alive:
+/// Scope(value: chat, child: const ChatScreen())
+///
+/// // Let the scope own the object — created once on mount, disposed on
+/// // unmount:
+/// Scope<ChatModel>.create(
+///   create: (context) => ChatModel(),
+///   child: const ChatScreen(),
+/// )
+///
+/// // Anywhere below, in build or in an event handler:
+/// final chat = Scope.of<ChatModel>(context);
+/// ```
+///
+/// Reading a scope subscribes the reader. It rebuilds when:
+///
+///   - the value is a [Listenable] — a `ChangeNotifier`, a `ValueNotifier`,
+///     an `Animation` — and it notifies. The scope listens on every reader's
+///     behalf, so a shared model needs no `ListenableBuilder` under it;
+///   - the scope is rebuilt with a value that is not `==` to the previous
+///     one (see [updateShouldNotify]).
+///
+/// Notification is coarse: every reader of a scope rebuilds when its value
+/// notifies. Keep one scope per rate of change — two models that change at
+/// very different rates belong in two scopes — and narrow a hot rebuild
+/// below a scope with a `ListenableBuilder`.
+///
+/// [Scope.of] works in `build`, `initState`, and event handlers. An element
+/// in `dispose` has already left the tree, so a value needed there is kept
+/// in a field.
+class Scope<T extends Object> extends ProxyWidget {
+  /// Shares [value] with the subtree.
+  ///
+  /// The scope never disposes [value]; whoever created it keeps owning it.
+  /// Rebuilding this widget with a value that is not equal to the previous
+  /// one rebuilds the readers, and so does every notification when [value]
+  /// is a [Listenable].
+  const Scope({super.key, required T value, required super.child})
+    : _value = value,
+      _create = null,
+      _dispose = null;
 
-  /// Returns true if a dependent should rebuild when this widget
-  /// replaces [oldWidget]. Compare the data fields that consumers
-  /// actually depend on.
-  bool updateShouldNotify(covariant InheritedWidget oldWidget);
+  /// Shares an object the scope itself owns.
+  ///
+  /// [create] runs once — when the scope mounts, or when this position
+  /// switches from a shared value to an owned one — with the scope's own
+  /// [BuildContext], so it may read the scopes above it. Rebuilding the widget
+  /// does not run it again. When the scope unmounts the object is disposed:
+  /// through [dispose] when given, otherwise a [ChangeNotifier] is disposed
+  /// automatically and any other value is simply dropped.
+  const Scope.create({
+    super.key,
+    required T Function(BuildContext context) create,
+    void Function(T value)? dispose,
+    required super.child,
+  }) : _value = null,
+       _create = create,
+       _dispose = dispose;
+
+  final T? _value;
+  final T Function(BuildContext context)? _create;
+  final void Function(T value)? _dispose;
+
+  /// Whether readers should rebuild because this widget replaced [oldWidget]
+  /// at the same tree position. The default compares the two shared values
+  /// with `==`; a subclass can compare a narrower field. A scope that owns
+  /// its object ([Scope.create]) keeps it across rebuilds and never notifies
+  /// here.
+  ///
+  /// Notifications from a [Listenable] value are independent of this: they
+  /// always reach readers.
+  bool updateShouldNotify(covariant Scope<T> oldWidget) =>
+      _value != oldWidget._value;
+
+  /// The nearest `Scope<T>` value above [context], subscribing [context] to
+  /// it. Throws when no `Scope<T>` is above [context]; use [maybeOf] when the
+  /// scope is optional.
+  static T of<T extends Object>(BuildContext context) {
+    final value = maybeOf<T>(context);
+    if (value != null) return value;
+    if (!context.mounted) {
+      throw StateError(
+        'Scope.of<$T> was called on a context that is no longer in the tree '
+        '(for example from dispose). Read the value earlier and keep it in a '
+        'field.',
+      );
+    }
+    throw StateError(
+      'Scope.of<$T>: no Scope<$T> above this context. Wrap an ancestor in '
+      'Scope<$T>(value: ..., child: ...) or Scope<$T>.create(...).',
+    );
+  }
+
+  /// Like [of], but null when no `Scope<T>` is above [context].
+  static T? maybeOf<T extends Object>(BuildContext context) {
+    assert(
+      T != Object,
+      'Scope.of and Scope.maybeOf need a type argument — the type is the '
+      'key: Scope.of<MyModel>(context).',
+    );
+    return (context as Element)._dependOnScope<T>();
+  }
+
+  /// Framework-internal: the nearest `Scope<T>` value without subscribing
+  /// [context]. For plumbing that only needs a reference — a render object
+  /// registering with a service, an action fired from an event handler —
+  /// where a rebuild dependency would be wrong. Application code uses [of].
+  @internal
+  static T? maybeOfWithoutDependency<T extends Object>(BuildContext context) =>
+      (context as Element)._findScopeElement<T>()?.value as T?;
 
   @override
-  InheritedElement createElement() => InheritedElement(this);
+  ScopeElement<T> createElement() => ScopeElement<T>(this);
 }
 
-/// Element for an [InheritedWidget].
+/// Element for a [Scope].
 ///
-/// Tracks the set of dependent elements that have registered via
-/// `dependOnInheritedWidgetOfExactType`. On update, if
-/// [InheritedWidget.updateShouldNotify] returns true, every dependent
-/// is marked dirty.
-class InheritedElement extends ComponentElement {
-  InheritedElement(InheritedWidget super.widget);
+/// Holds the value the scope shares — the widget's own, or the object a
+/// [Scope.create] built — and the set of elements reading it through
+/// [Scope.of]. When the value is a [Listenable] the element listens and turns
+/// each notification into [notifyDependents]. Framework scopes with extra
+/// lifecycle (a pointer router learning where its tree is) subclass this.
+class ScopeElement<T extends Object> extends ComponentElement {
+  ScopeElement(Scope<T> super.widget);
 
   final Set<Element> _dependents = <Element>{};
 
+  // Resolved before the first build; see _firstBuild.
+  late T _value;
+  bool _owned = false;
+  Listenable? _listening;
+  late final VoidCallback _onNotify = notifyDependents;
+
   @override
-  InheritedWidget get widget => super.widget as InheritedWidget;
+  Scope<T> get widget => super.widget as Scope<T>;
+
+  /// The value this scope currently shares.
+  T get value => _value;
+
+  /// The lookup key: the type argument. [Scope.of] compares it exactly.
+  Type get _key => T;
 
   @override
   Widget buildChild() => widget.child;
 
   @override
-  void update(covariant InheritedWidget newWidget) {
-    final oldWidget = widget;
-    super.update(newWidget);
-    if (newWidget.updateShouldNotify(oldWidget)) {
-      for (final dependent in _dependents) {
-        _markDependencyChanged(dependent);
-        dependent.markNeedsBuild();
-      }
+  void _firstBuild() {
+    // Resolve and subscribe BEFORE the child cascade mounts: a descendant's
+    // first build may notify the value (a Focus widget's autofocus asking
+    // the manager for focus). Attaching afterwards would lose that event.
+    // The parent link is already set, so an owning scope can read the
+    // scopes above it.
+    final create = widget._create;
+    if (create == null) {
+      _value = widget._value!;
+    } else {
+      _value = create(this);
+      _owned = true;
     }
-    rebuild(force: true);
+    _listen(_value);
+    super._firstBuild();
   }
 
-  /// Notifies all dependents that this inherited element's effective
-  /// state has changed. Used by `InheritedNotifier` to broadcast a
-  /// listener notification without swapping widget instances.
+  @override
+  void update(covariant Scope<T> newWidget) {
+    final oldWidget = widget;
+    super.update(newWidget);
+    final previous = _value;
+    final wasOwned = _owned;
+    final create = newWidget._create;
+    final T next;
+    final bool nextOwned;
+    if (create != null) {
+      // An owning scope keeps its object across rebuilds; create runs once.
+      // Only a scope that previously shared a value creates here.
+      next = wasOwned ? previous : create(this);
+      nextOwned = true;
+    } else {
+      next = newWidget._value!;
+      nextOwned = false;
+    }
+    var swapped = false;
+    try {
+      if (!identical(next, previous)) {
+        // Keep the replacement live throughout the synchronous child rebuild
+        // below: a descendant may notify while it rebuilds. The element now
+        // exposes newWidget even if that rebuild throws, so the subscription
+        // follows the new value rather than rolling back.
+        _listen(next);
+        _value = next;
+        swapped = true;
+      }
+      // Ownership flips only once the value is in place. An object that
+      // stays (owned → shared with the same instance) passes to whoever
+      // supplies it now; one whose listener failed to attach stays owned and
+      // is released on unmount.
+      _owned = nextOwned;
+      if (newWidget.updateShouldNotify(oldWidget)) notifyDependents();
+      rebuild(force: true);
+    } finally {
+      // An object this scope created and no longer shares is released once
+      // the subtree has re-read the replacement.
+      if (swapped && wasOwned && !nextOwned) _release(oldWidget, previous);
+    }
+  }
+
+  @override
+  void unmount() {
+    final errors = _TeardownErrors();
+    errors.capture(_unlisten);
+    // Children go first: a descendant's dispose may still use the value.
+    errors.capture(super.unmount);
+    if (_owned) {
+      _owned = false;
+      errors.capture(() => _release(widget, _value));
+    }
+    errors.throwIfAny();
+  }
+
+  /// Marks every reader of this scope dirty, so each rebuilds in the next
+  /// flush with `didChangeDependencies` (or, for a render-object element,
+  /// `updateRenderObject`) run first. Fired by the value's notifications and
+  /// by [Scope.updateShouldNotify]; a subclass with its own change signal
+  /// calls it directly.
   void notifyDependents() {
     for (final dependent in _dependents) {
       _markDependencyChanged(dependent);
       dependent.markNeedsBuild();
+    }
+  }
+
+  void _listen(T next) {
+    final previous = _listening;
+    if (next is Listenable) {
+      next.addListener(_onNotify);
+      _listening = next;
+    } else {
+      _listening = null;
+    }
+    previous?.removeListener(_onNotify);
+  }
+
+  void _unlisten() {
+    _listening?.removeListener(_onNotify);
+    _listening = null;
+  }
+
+  void _release(Scope<T> scope, T value) {
+    final dispose = scope._dispose;
+    if (dispose != null) {
+      dispose(value);
+    } else if (value is ChangeNotifier) {
+      value.dispose();
     }
   }
 

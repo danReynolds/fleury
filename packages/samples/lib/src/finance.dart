@@ -28,7 +28,6 @@ class _FinanceBodyState extends State<_FinanceBody> {
   late final FinanceLedger _ledger = FinanceLedger.sample();
   late final List<FinanceTransaction> _stressRows = _ledger
       .stressTransactions();
-  final DataTableController _tableController = DataTableController();
   final TextEditingController _searchController = TextEditingController();
 
   late List<FinanceTransaction> _rows;
@@ -38,21 +37,16 @@ class _FinanceBodyState extends State<_FinanceBody> {
   FinanceTransactionSort _sort = FinanceTransactionSort.newest;
   String _query = '';
   bool _stressMode = false;
-  bool _syncingTableSelection = false;
 
   @override
   void initState() {
     super.initState();
     _rows = _ledger.queryTransactions();
     _selectedTransactionId = _rows.firstOrNull?.id;
-    _tableController.addListener(_onTableSelectionChanged);
   }
 
   @override
   void dispose() {
-    _tableController
-      ..removeListener(_onTableSelectionChanged)
-      ..dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -64,15 +58,6 @@ class _FinanceBodyState extends State<_FinanceBody> {
       if (transaction.id == selectedId) return transaction;
     }
     return null;
-  }
-
-  void _onTableSelectionChanged() {
-    if (_syncingTableSelection || _rows.isEmpty) return;
-    final index = _tableController.currentRowIndex;
-    if (index < 0 || index >= _rows.length) return;
-    final nextId = _rows[index].id;
-    if (nextId == _selectedTransactionId || !mounted) return;
-    setState(() => _selectedTransactionId = nextId);
   }
 
   void _refreshRows({
@@ -103,23 +88,6 @@ class _FinanceBodyState extends State<_FinanceBody> {
       nextRows,
       _selectedTransactionId,
     );
-    final nextSelectedIndex = nextSelected == null
-        ? 0
-        : nextRows.indexWhere((transaction) => transaction.id == nextSelected);
-
-    // DataTableController is positional. Prime it while the old row count is
-    // still installed, then hold the listener guard through the rebuild and
-    // reconcile the stable row ID after DataTable installs its new row count.
-    // Without the across-frame guard, a shrinking filter can synchronously
-    // clamp index 10 to index 6 and overwrite the intended selected ID.
-    _syncingTableSelection = true;
-    final oldRowCount = _tableController.rowCount;
-    if (oldRowCount > 0) {
-      _tableController.currentRowIndex = nextSelectedIndex.clamp(
-        0,
-        oldRowCount - 1,
-      );
-    }
     setState(() {
       _query = nextQuery;
       _accountFilter = nextAccount;
@@ -129,30 +97,6 @@ class _FinanceBodyState extends State<_FinanceBody> {
       _rows = nextRows;
       _selectedTransactionId = nextSelected;
     });
-    _scheduleTableSelectionSync(nextSelected);
-  }
-
-  void _scheduleTableSelectionSync(String? selectedId) {
-    void sync() {
-      if (!mounted) return;
-      try {
-        if (selectedId == null) return;
-        final index = _rows.indexWhere(
-          (transaction) => transaction.id == selectedId,
-        );
-        if (index < 0 || _tableController.currentRowIndex == index) return;
-        _tableController.currentRowIndex = index;
-      } finally {
-        _syncingTableSelection = false;
-      }
-    }
-
-    final binding = TuiBinding.maybeOf(context);
-    if (binding == null) {
-      sync();
-    } else {
-      binding.addPostFrameCallback((_) => sync());
-    }
   }
 
   void _selectRow(int rowIndex) {
@@ -738,7 +682,10 @@ class _FinanceBodyState extends State<_FinanceBody> {
           : DataTable(
               rowCount: _rows.length,
               columns: columns,
-              controller: _tableController,
+              currentRowIndex: _rows.indexWhere(
+                (transaction) => transaction.id == _selectedTransactionId,
+              ),
+              onFocusedItemChanged: _selectRow,
               rowKeyBuilder: (row) => _rows[row].id,
               cellBuilder: (row, columnId) {
                 final transaction = _rows[row];

@@ -37,6 +37,12 @@ does not take keyboard focus or choose it. Actual selected values and text/cell
 ranges remain distinct. Completion/history browsing uses the same current-item
 terminology. Tab `index` represents the active tab.
 
+DataTable also supports a parent-owned row cursor through `currentRowIndex`
+and `onFocusedItemChanged`. This is a controlled mode: ignored requests leave
+its displayed cursor unchanged, and subsequent input starts from the accepted
+row. Supply this value or a controller, never both. Data and cursor updates are
+applied together before controller observers run; cell ranges stay independent.
+
 ## Lifetime and attachment
 
 Create external controllers once in State and dispose them with their owner.
@@ -65,6 +71,8 @@ when a log or transcript should also start its cursor on a particular entry.
   `moveCurrent` before `accept` commits a suggestion. Semantic completion state
   uses `completionCurrentIndex` instead of `completionSelectedIndex`.
 - ScrollController constructor `offset:` becomes `initialOffset:`.
+- DataTable widget `selectedIndex` / `onSelectionChanged` become
+  `currentRowIndex` / `onFocusedItemChanged`; controlled ownership is retained.
 - DataTableController constructor `currentRowIndex:` / `currentColumnIndex:`
   become `initialRowIndex:` / `initialColumnIndex:`.
 - JsonView's continuing expansion fallback becomes `defaultExpandedDepth`.

@@ -6,7 +6,6 @@ import '../semantics/semantics.dart';
 import '../widgets/focus.dart';
 import '../widgets/focus_traversal.dart';
 import '../widgets/framework.dart';
-import '../widgets/inherited_notifier.dart';
 import '../widgets/key_bindings.dart';
 import '../widgets/navigator.dart';
 import '../widgets/theme.dart';
@@ -53,7 +52,7 @@ abstract class FleuryAppExtension {
 }
 
 /// Root controller installed by [FleuryApp].
-class FleuryAppController extends ChangeNotifier implements StatusHost {
+class FleuryAppController extends ChangeNotifier {
   FleuryAppController({
     required String title,
     required this.commands,
@@ -69,7 +68,6 @@ class FleuryAppController extends ChangeNotifier implements StatusHost {
   List<Object> _extensions;
   bool _disposed = false;
   final CommandRegistry commands;
-  @override
   final StatusController status;
 
   String get title => _title;
@@ -160,13 +158,14 @@ class FleuryAppController extends ChangeNotifier implements StatusHost {
   }
 }
 
-/// Shares a [FleuryAppController] with descendants.
-class FleuryAppScope extends InheritedNotifier<FleuryAppController> {
+/// Shares a [FleuryAppController] with descendants — a
+/// `Scope<FleuryAppController>` installed by [FleuryApp].
+class FleuryAppScope extends Scope<FleuryAppController> {
   const FleuryAppScope({
     super.key,
     required FleuryAppController controller,
     required super.child,
-  }) : super(notifier: controller);
+  }) : super(value: controller);
 
   static FleuryAppController of(BuildContext context) {
     final controller = maybeOf(context);
@@ -176,11 +175,8 @@ class FleuryAppScope extends InheritedNotifier<FleuryAppController> {
     return controller;
   }
 
-  static FleuryAppController? maybeOf(BuildContext context) {
-    return context
-        .dependOnInheritedWidgetOfExactType<FleuryAppScope>()
-        ?.notifier;
-  }
+  static FleuryAppController? maybeOf(BuildContext context) =>
+      Scope.maybeOf<FleuryAppController>(context);
 }
 
 extension FleuryCommandContext on CommandContext {
@@ -415,8 +411,8 @@ class _FleuryAppState extends State<FleuryApp> {
     }
     final app = CommandRegistryScope(
       registry: _commands,
-      child: StatusHostScope(
-        lookup: _app,
+      child: Scope<StatusController>(
+        value: _app.status,
         child: FleuryAppScope(
           controller: _app,
           child: _ContextBuilder(

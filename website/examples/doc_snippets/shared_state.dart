@@ -1,6 +1,6 @@
 // Compile-checked source behind the State management guide. It gives one
 // ChangeNotifier model a clear owner and demonstrates constructor-based and
-// inherited access to the same model.
+// scope-based access to the same model.
 //
 // Run it:  dart run doc_snippets/shared_state.dart
 
@@ -21,11 +21,11 @@ Widget valueNotifierDemoApp() =>
 Widget stateManagementDemoApp() =>
     const FleuryApp(title: 'Deployment', home: DeploymentScreen());
 
-Widget inheritedWidgetDemoApp() =>
-    const FleuryApp(title: 'Counter scope', home: InheritedCounterScreen());
+Widget scopeDemoApp() =>
+    const FleuryApp(title: 'Shared counter', home: ScopeCounterScreen());
 
-Widget inheritedNotifierDemoApp() =>
-    const FleuryApp(title: 'Notifier counter', home: NotifierCounterScreen());
+Widget scopeCreateDemoApp() =>
+    const FleuryApp(title: 'Owned counter', home: OwnedCounterScreen());
 
 class LocalCounter extends StatefulWidget {
   const LocalCounter({super.key});
@@ -92,52 +92,6 @@ class CounterButton extends StatelessWidget {
       Button(label: 'Increment', onPressed: onPressed);
 }
 
-class CounterScope extends InheritedWidget {
-  const CounterScope({super.key, required this.count, required super.child});
-
-  final int count;
-
-  static int of(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<CounterScope>()!.count;
-
-  @override
-  bool updateShouldNotify(CounterScope oldWidget) => count != oldWidget.count;
-}
-
-class InheritedCounterScreen extends StatefulWidget {
-  const InheritedCounterScreen({super.key});
-
-  @override
-  State<InheritedCounterScreen> createState() => _InheritedCounterScreenState();
-}
-
-class _InheritedCounterScreenState extends State<InheritedCounterScreen> {
-  int count = 0;
-
-  @override
-  Widget build(BuildContext context) => CounterScope(
-    count: count,
-    child: Padding(
-      padding: const EdgeInsets.all(1),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          const NestedCount(),
-          Button(label: 'Increment', onPressed: () => setState(() => count++)),
-        ],
-      ),
-    ),
-  );
-}
-
-class NestedCount extends StatelessWidget {
-  const NestedCount({super.key});
-
-  @override
-  Widget build(BuildContext context) =>
-      Text('Count: ${CounterScope.of(context)}');
-}
-
 class CounterModel extends ChangeNotifier {
   int count = 0;
 
@@ -147,26 +101,14 @@ class CounterModel extends ChangeNotifier {
   }
 }
 
-class CounterNotifierScope extends InheritedNotifier<CounterModel> {
-  const CounterNotifierScope({
-    super.key,
-    required CounterModel counter,
-    required super.child,
-  }) : super(notifier: counter);
-
-  static CounterModel of(BuildContext context) => context
-      .dependOnInheritedWidgetOfExactType<CounterNotifierScope>()!
-      .notifier;
-}
-
-class NotifierCounterScreen extends StatefulWidget {
-  const NotifierCounterScreen({super.key});
+class ScopeCounterScreen extends StatefulWidget {
+  const ScopeCounterScreen({super.key});
 
   @override
-  State<NotifierCounterScreen> createState() => _NotifierCounterScreenState();
+  State<ScopeCounterScreen> createState() => _ScopeCounterScreenState();
 }
 
-class _NotifierCounterScreenState extends State<NotifierCounterScreen> {
+class _ScopeCounterScreenState extends State<ScopeCounterScreen> {
   final counter = CounterModel();
 
   @override
@@ -177,7 +119,17 @@ class _NotifierCounterScreenState extends State<NotifierCounterScreen> {
 
   @override
   Widget build(BuildContext context) =>
-      CounterNotifierScope(counter: counter, child: const CounterPanel());
+      Scope(value: counter, child: const CounterPanel());
+}
+
+class OwnedCounterScreen extends StatelessWidget {
+  const OwnedCounterScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => Scope<CounterModel>.create(
+    create: (context) => CounterModel(),
+    child: const CounterPanel(),
+  );
 }
 
 class CounterPanel extends StatelessWidget {
@@ -185,7 +137,7 @@ class CounterPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final counter = CounterNotifierScope.of(context);
+    final counter = Scope.of<CounterModel>(context);
     return Padding(
       padding: const EdgeInsets.all(1),
       child: Column(

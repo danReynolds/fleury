@@ -117,7 +117,7 @@ These transfer with little or no adjustment:
 
 | Area | Carries over |
 |---|---|
-| Core model | `Widget`, `StatelessWidget`, `StatefulWidget`, `State`, `build`, `setState`, `BuildContext`, `InheritedWidget` |
+| Core model | `Widget`, `StatelessWidget`, `StatefulWidget`, `State`, `build`, `setState`, `BuildContext` |
 | Keys | `Key`, `ValueKey`, `UniqueKey`, `GlobalKey` |
 | Layout | `Column`, `Row`, `Expanded`, `Flexible`, `Spacer`, `Stack`, `Positioned`, `Padding`, `Center`, `Align`, `Container`, `ConstrainedBox`, `AspectRatio`, `SizedBox`, `Wrap`, `IntrinsicWidth`, `IntrinsicHeight`, `LayoutBuilder` |
 | Async | `FutureBuilder`, `StreamBuilder`, `AsyncSnapshot`, `ConnectionState` |
@@ -141,6 +141,7 @@ The table is intentionally boring: most of the muscle memory is valid.
 | `TweenAnimationBuilder` | `AnimationBuilder` | Animate a value toward a new target when it changes. |
 | `SingleChildScrollView` | `ScrollView` | A scrollable viewport around one child. |
 | `Shortcuts` / `Actions` / `Intent` | `KeyBindings` / `KeySequence` | A key sequence maps directly to a callback; no `Intent` layer. |
+| `InheritedWidget` / `InheritedNotifier` | `Scope<T>` | One tree-local primitive: the type argument is the key, `Scope.of<T>(context)` reads it, and a `ChangeNotifier` value notifies readers through the scope. `Scope<T>.create` lets the scope own the object. |
 
 `EdgeInsets` keeps the familiar constructors (`all`, `symmetric`, `only`), but
 the values are cells:

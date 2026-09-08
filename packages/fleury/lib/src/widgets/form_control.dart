@@ -38,23 +38,22 @@ abstract interface class FormControlRegistration {
 /// This is framework plumbing for `fleury_widgets.FormField`. A control only
 /// participates when it is below this scope; being below a `Form` alone does
 /// not alter its behavior.
-class FormControlScope extends InheritedWidget {
+class FormControlScope extends Scope<FormControlRegistration> {
   const FormControlScope({
     super.key,
-    required this.registration,
+    required FormControlRegistration registration,
     required this.error,
     required super.child,
-  });
+  }) : super(value: registration);
 
-  final FormControlRegistration registration;
+  /// The field's current validation error. Carried here so a change
+  /// rebuilds the control below even though the registration is the same.
   final String? error;
 
-  static FormControlRegistration? maybeOf(BuildContext context) => context
-      .dependOnInheritedWidgetOfExactType<FormControlScope>()
-      ?.registration;
+  static FormControlRegistration? maybeOf(BuildContext context) =>
+      Scope.maybeOf<FormControlRegistration>(context);
 
   @override
   bool updateShouldNotify(FormControlScope oldWidget) =>
-      error != oldWidget.error ||
-      !identical(registration, oldWidget.registration);
+      error != oldWidget.error || super.updateShouldNotify(oldWidget);
 }

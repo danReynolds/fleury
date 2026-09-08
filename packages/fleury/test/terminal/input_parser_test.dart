@@ -375,6 +375,56 @@ void main() {
         const KeyEvent(KeyCode.char('a'), modifiers: {KeyModifier.alt}),
       ]);
     });
+
+    for (final character in ['é', '中', '🙂']) {
+      test('Alt+$character survives every UTF-8 read boundary', () {
+        final bytes = [0x1b, ...utf8.encode(character)];
+        for (var split = 1; split <= bytes.length; split++) {
+          final parser = InputParser();
+          final sink = _ListSink();
+          parser.feed(bytes.sublist(0, split), sink);
+          // Once UTF-8 starts, an idle read must not lose the modifier.
+          // A lone ESC remains subject to the normal ambiguity timeout.
+          if (split > 1) parser.flush(sink);
+          parser.feed(bytes.sublist(split), sink);
+          parser.feed(utf8.encode('ñ'), sink);
+          parser.finish(sink);
+          expect(sink.events, [
+            KeyEvent(
+              KeyCode.forCharacter(character),
+              modifiers: const {KeyModifier.alt},
+            ),
+            const TextInputEvent('ñ'),
+          ], reason: 'read boundary $split');
+        }
+      });
+    }
+
+    test('truncated Alt UTF-8 preserves the modifier at EOF then resets', () {
+      final parser = InputParser();
+      final sink = _ListSink();
+      parser.feed([0x1b, 0xe4, 0xb8], sink);
+      parser.finish(sink);
+      parser.feed(utf8.encode('é'), sink);
+      expect(sink.events, [
+        const KeyEvent(
+          KeyCode.char(replacementCharacter),
+          modifiers: {KeyModifier.alt},
+        ),
+        const TextInputEvent('é'),
+      ]);
+    });
+
+    test('malformed Alt UTF-8 does not modify the next key', () {
+      final parser = InputParser();
+      final sink = _ListSink();
+      parser.feed([0x1b, 0xe4, 0x03], sink);
+      parser.feed(utf8.encode('é'), sink);
+      expect(sink.events, [
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+        const TextInputEvent('é'),
+      ]);
+    });
   });
 
   group('CSI cursor chords', () {

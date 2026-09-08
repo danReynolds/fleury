@@ -68,23 +68,20 @@ class TuiBinding implements TickerProvider {
   /// binding is installed — almost always means `runApp` wasn't
   /// used or the call site is outside the app's root.
   static TuiBinding of(BuildContext context) {
-    final scope = context.dependOnInheritedWidgetOfExactType<TuiBindingScope>();
-    if (scope == null) {
+    final binding = maybeOf(context);
+    if (binding == null) {
       throw StateError(
         'No TuiBinding above this BuildContext. runApp() installs '
         'one automatically; if you are constructing a tree manually '
         '(e.g. in a test), wrap it in TuiBindingScope(binding: ...).',
       );
     }
-    return scope.binding;
+    return binding;
   }
 
   /// Variant of [of] that returns null instead of throwing.
-  static TuiBinding? maybeOf(BuildContext context) {
-    return context
-        .dependOnInheritedWidgetOfExactType<TuiBindingScope>()
-        ?.binding;
-  }
+  static TuiBinding? maybeOf(BuildContext context) =>
+      Scope.maybeOf<TuiBinding>(context);
 
   /// Creates a [Ticker] registered against this binding's
   /// scheduler. Implements [TickerProvider] for non-widget contexts
@@ -146,20 +143,14 @@ class TuiBinding implements TickerProvider {
   }
 }
 
-/// Inherited widget that makes a [TuiBinding] reachable to its
-/// descendants via [TuiBinding.of].
-class TuiBindingScope extends InheritedWidget {
+/// Makes a [TuiBinding] reachable to its descendants via [TuiBinding.of] —
+/// a `Scope<TuiBinding>`.
+class TuiBindingScope extends Scope<TuiBinding> {
   const TuiBindingScope({
     super.key,
-    required this.binding,
+    required TuiBinding binding,
     required super.child,
-  });
-
-  final TuiBinding binding;
-
-  @override
-  bool updateShouldNotify(TuiBindingScope old) =>
-      !identical(binding, old.binding);
+  }) : super(value: binding);
 }
 
 /// `State` mixin that creates and owns one raw [Ticker], scoped to

@@ -17,7 +17,7 @@ class Flag extends ChangeNotifier {
 }
 
 /// Rebuilds `builder(flag.value)` whenever [flag] fires — an external-
-/// dependency leaf rebuild (the pattern an InheritedNotifier dependent has).
+/// dependency leaf rebuild (the pattern a Scope dependent has).
 class Reactive extends StatefulWidget {
   const Reactive({super.key, required this.flag, required this.builder});
   final Flag flag;

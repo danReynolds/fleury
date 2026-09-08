@@ -29,7 +29,6 @@ import '../runtime/input_dispatcher.dart';
 import 'focus.dart';
 import 'framework.dart';
 import 'keyboard.dart';
-import 'inherited_notifier.dart';
 
 // The pattern vocabulary a binding is written in lives in events.dart
 // (co-located with KeyCode/KeyEvent). Re-export it so importing this binding
@@ -136,13 +135,12 @@ final class PendingSequenceNotifier with ChangeNotifier {
 /// Shares the runtime [PendingSequenceNotifier] with the widget tree.
 /// Installed by `runApp`; depended on by [KeyBindings.pendingOf] so a
 /// which-key widget rebuilds as a sequence is pressed, advanced, or cleared.
-final class PendingSequenceScope
-    extends InheritedNotifier<PendingSequenceNotifier> {
+final class PendingSequenceScope extends Scope<PendingSequenceNotifier> {
   const PendingSequenceScope({
     super.key,
-    required super.notifier,
+    required PendingSequenceNotifier notifier,
     required super.child,
-  });
+  }) : super(value: notifier);
 }
 
 /// Passed to every [KeyBinding.onTrigger] handler. Exposes what matched
@@ -496,20 +494,18 @@ class KeyBindings extends StatefulWidget {
   /// flight. Rebuilds when a leader is pressed, advanced, completed, or
   /// cancelled — a which-key popup depends on this. Null unless `runApp`
   /// installed a [PendingSequenceScope] (it does by default).
-  static PendingKeySequenceMatch? pendingOf(BuildContext context) => context
-      .dependOnInheritedWidgetOfExactType<PendingSequenceScope>()
-      ?.notifier
-      .value;
+  static PendingKeySequenceMatch? pendingOf(BuildContext context) =>
+      Scope.maybeOf<PendingSequenceNotifier>(context)?.value;
 
   /// Cancels the in-flight sequence [pendingOf] reports, as if the user
   /// pressed Esc — for a which-key popup's close control or any custom
   /// dismiss affordance. No-op when nothing is pending or no
   /// [PendingSequenceScope] is installed. Reads the scope WITHOUT a rebuild
   /// dependency (it's an action, not a value read).
-  static void cancelPending(BuildContext context) => context
-      .getInheritedWidgetOfExactType<PendingSequenceScope>()
-      ?.notifier
-      .cancel();
+  static void cancelPending(BuildContext context) =>
+      Scope.maybeOfWithoutDependency<PendingSequenceNotifier>(
+        context,
+      )?.cancel();
 
   @override
   State<KeyBindings> createState() => _KeyBindingsState();

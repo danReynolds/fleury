@@ -88,7 +88,7 @@ class RenderErrorBoundary extends RenderObject
   /// The callback itself is recreated by ordinary widget updates. Identity is
   /// therefore determined by the owning element and the two input services,
   /// so a retained error does not churn false/true focus notifications merely
-  /// because its widget configuration rebuilt. A real inherited-service or
+  /// because its widget configuration rebuilt. A real service-scope swap or
   /// global-key move transfers an active exclusion to the new services.
   void updateInputContainmentBridge({
     required Object elementToken,

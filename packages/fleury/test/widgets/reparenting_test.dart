@@ -94,15 +94,16 @@ class _ReparentState extends State<_Reparent> {
   }
 }
 
-/// An inherited value used to prove a moved widget re-resolves its
+/// A scope value used to prove a moved widget re-resolves its
 /// dependencies against the new ancestor chain.
-class _Tag extends InheritedWidget {
-  const _Tag({required this.label, required super.child});
+final class _Tag {
+  const _Tag(this.label);
   final String label;
-  static String of(BuildContext c) =>
-      c.dependOnInheritedWidgetOfExactType<_Tag>()!.label;
+  static String of(BuildContext c) => Scope.of<_Tag>(c).label;
   @override
-  bool updateShouldNotify(_Tag old) => old.label != label;
+  bool operator ==(Object other) => other is _Tag && other.label == label;
+  @override
+  int get hashCode => label.hashCode;
 }
 
 /// Reads the ambient [_Tag] and counts dependency-change notifications.
@@ -144,12 +145,12 @@ class _DepHostState extends State<_DepHost> {
     final probe = _DepProbe(key: widget.probeKey);
     return Column(
       children: [
-        _Tag(
-          label: 'A',
+        Scope<_Tag>(
+          value: const _Tag('A'),
           child: Center(child: first ? probe : const Text('-')),
         ),
-        _Tag(
-          label: 'B',
+        Scope<_Tag>(
+          value: const _Tag('B'),
           child: Center(child: first ? const Text('-') : probe),
         ),
       ],
@@ -251,12 +252,12 @@ class _CachedLbHostState extends State<_CachedLbHost> {
     final wrapper = Center(key: widget.wrapperKey, child: _lb);
     return Column(
       children: [
-        _Tag(
-          label: 'A',
+        Scope<_Tag>(
+          value: const _Tag('A'),
           child: Center(child: first ? wrapper : const Text('-')),
         ),
-        _Tag(
-          label: 'B',
+        Scope<_Tag>(
+          value: const _Tag('B'),
           child: Center(child: first ? const Text('-') : wrapper),
         ),
       ],

@@ -4,7 +4,6 @@ import '../rendering/cell.dart';
 import '../semantics/semantics.dart';
 import '../widgets/basic.dart';
 import '../widgets/framework.dart';
-import '../widgets/listenable_builder.dart';
 import '../widgets/theme.dart';
 import 'commands.dart';
 
@@ -149,31 +148,30 @@ class AppStatusBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final app = StatusHost.of(context);
-    final status = app.status;
-    return ListenableBuilder(
-      listenable: status,
-      builder: (context, _) {
-        final items = status.items;
-        return Semantics(
-          role: SemanticRole.status,
-          label: label,
-          state: SemanticState({'statusCount': items.length}),
-          child: Row(
-            children: items.isEmpty
-                ? [
-                    if (emptyText != null)
-                      Text(emptyText!, style: const CellStyle(dim: true)),
-                  ]
-                : [
-                    for (var i = 0; i < items.length; i++) ...[
-                      if (i > 0) Text(separator, allowSelect: false),
-                      _StatusItemView(item: items[i]),
-                    ],
-                  ],
-          ),
-        );
-      },
+    // FleuryApp shares its StatusController in a scope; reading it here
+    // subscribes the bar, so it rebuilds as items change.
+    final status = Scope.maybeOf<StatusController>(context);
+    if (status == null) {
+      throw StateError('No FleuryApp status scope found in context.');
+    }
+    final items = status.items;
+    return Semantics(
+      role: SemanticRole.status,
+      label: label,
+      state: SemanticState({'statusCount': items.length}),
+      child: Row(
+        children: items.isEmpty
+            ? [
+                if (emptyText != null)
+                  Text(emptyText!, style: const CellStyle(dim: true)),
+              ]
+            : [
+                for (var i = 0; i < items.length; i++) ...[
+                  if (i > 0) Text(separator, allowSelect: false),
+                  _StatusItemView(item: items[i]),
+                ],
+              ],
+      ),
     );
   }
 }
@@ -224,31 +222,4 @@ CellStyle _styleFor(BuildContext context, StatusSeverity severity) {
     StatusSeverity.warning => CellStyle(foreground: colors.warning),
     StatusSeverity.error => CellStyle(foreground: colors.error),
   };
-}
-
-/// Private bridge implemented in app.dart to avoid making status.dart depend
-/// on app.dart and creating an import cycle.
-abstract interface class StatusHost {
-  StatusController get status;
-
-  static StatusHost of(BuildContext context) {
-    final widget = context
-        .dependOnInheritedWidgetOfExactType<StatusHostScope>()
-        ?.lookup;
-    if (widget == null) {
-      throw StateError('No FleuryApp status scope found in context.');
-    }
-    return widget;
-  }
-}
-
-class StatusHostScope extends InheritedWidget {
-  const StatusHostScope({required this.lookup, required super.child});
-
-  final StatusHost lookup;
-
-  @override
-  bool updateShouldNotify(StatusHostScope oldWidget) {
-    return lookup != oldWidget.lookup;
-  }
 }

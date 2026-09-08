@@ -26,6 +26,23 @@
   selects each new row. `scrollToBottom` catches up and enables following.
   Semantic state now includes both the policy and whether it is currently active.
 
+
+- `FormController.isBusy` reports the whole accepted submit attempt, including
+  validation, so submit and Back actions can be guarded immediately. Field
+  editing can still use `isSubmitting` to lock only after validation succeeds.
+  Submission also cancels safely if a notification detaches its form.
+
+- `Form.of(context)` now shares the `FormController` through a `Scope`, so a
+  widget that reads it rebuilds when the controller notifies (submission
+  state, errors) without a `ListenableBuilder`.
+
+- `DataTable.currentRowIndex` and `onFocusedItemChanged` support a parent-owned
+  row cursor, so filtering and sorting can update data and cursor together
+  without controller synchronization. This replaces `selectedIndex` and
+  `onSelectionChanged`; the parent must accept requests through a rebuild.
+  Table dimensions stay widget-owned and
+  update atomically before controller listeners are notified.
+
 - MultiSelect options expose a boolean semantic `setValue` action alongside
   toggling, so tests and other semantic consumers can request a desired checked
   state without changing the option key or dispatching duplicate callbacks.

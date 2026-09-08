@@ -338,7 +338,6 @@ export 'src/widgets/focus.dart'
         moveOrEscape;
 export 'src/widgets/focus_traversal.dart'
     show FocusTraversalGroup, TraversalDirection, nearestFocusableInDirection;
-export 'src/widgets/inherited_notifier.dart' show InheritedNotifier;
 export 'src/widgets/intrinsic.dart' show IntrinsicHeight, IntrinsicWidth;
 export 'src/widgets/keyboard.dart'
     show Keyboard, KeyboardScope, KeyboardStateNotifier, KeyDetector;
@@ -476,8 +475,6 @@ export 'src/widgets/framework.dart'
         ComponentElement,
         Element,
         GlobalKey,
-        InheritedElement,
-        InheritedWidget,
         LeafRenderObjectElement,
         LeafRenderObjectWidget,
         MultiChildRenderObjectElement,
@@ -485,6 +482,8 @@ export 'src/widgets/framework.dart'
         ProxyWidget,
         RenderObjectElement,
         RenderObjectWidget,
+        Scope,
+        ScopeElement,
         SingleChildRenderObjectElement,
         SingleChildRenderObjectWidget,
         State,

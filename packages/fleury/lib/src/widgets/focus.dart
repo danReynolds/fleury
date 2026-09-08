@@ -30,7 +30,6 @@ import '../rendering/layout.dart';
 import '../rendering/render_object.dart';
 import '../input/events.dart';
 import 'framework.dart';
-import 'inherited_notifier.dart';
 import 'key_bindings.dart' show KeyBinding;
 
 /// The result of handling a key event.
@@ -630,9 +629,11 @@ class FocusManager extends ChangeNotifier {
   }
 
   bool _acceptsInput(FocusNode node) {
-    if (_frameInputAborted) return false;
+    if (_frameInputAborted || !identical(node._manager, this)) return false;
     final element = node._element;
-    return element != null && !_isElementInputExcluded(element);
+    return element != null &&
+        element.mounted &&
+        !_isElementInputExcluded(element);
   }
 
   bool _isElementInputExcluded(Element element) {
@@ -1054,64 +1055,33 @@ class FocusManager extends ChangeNotifier {
   }
 }
 
-/// Inherited handle that lets descendants reach the surrounding
-/// [FocusManager] without threading it through constructors.
-class _FocusManagerProvider extends InheritedNotifier<FocusManager> {
-  const _FocusManagerProvider({
-    required FocusManager manager,
-    required super.child,
-  }) : super(notifier: manager);
-
-  static FocusManager of(BuildContext context) {
-    final provider = context
-        .dependOnInheritedWidgetOfExactType<_FocusManagerProvider>();
-    if (provider == null) {
-      throw StateError(
-        'No FocusManager found in this context. Did you call '
-        'runApp (which installs one)?',
-      );
-    }
-    return provider.notifier;
-  }
-
-  static FocusManager? maybeOf(BuildContext context) {
-    return context
-        .dependOnInheritedWidgetOfExactType<_FocusManagerProvider>()
-        ?.notifier;
-  }
-
-  static FocusManager? maybeOfWithoutDependency(BuildContext context) {
-    return context
-        .getInheritedWidgetOfExactType<_FocusManagerProvider>()
-        ?.notifier;
-  }
-}
-
-/// Identity-only companion to [_FocusManagerProvider].
+/// Identity-only handle on a [FocusManager].
 ///
 /// Broad framework boundaries sometimes need to rebind when the surrounding
 /// manager instance changes, but must not rebuild for every focus movement or
-/// geometry notification. Depending on this provider expresses that narrower
-/// contract while ordinary focus consumers keep using the notifier provider.
-class _FocusManagerIdentityProvider extends InheritedWidget {
-  const _FocusManagerIdentityProvider({
-    required this.manager,
-    required super.child,
-  });
+/// geometry notification. A `Scope<FocusManager>` listens to the manager, so
+/// they read this wrapper instead (through [Focus.maybeOfIdentityDependency]):
+/// it is not a [Listenable], and two handles are equal when they wrap the
+/// same manager, so its scope notifies only on replacement.
+final class _FocusManagerIdentity {
+  const _FocusManagerIdentity(this.manager);
 
   final FocusManager manager;
 
-  static FocusManager? maybeOf(BuildContext context) => context
-      .dependOnInheritedWidgetOfExactType<_FocusManagerIdentityProvider>()
-      ?.manager;
+  @override
+  bool operator ==(Object other) =>
+      other is _FocusManagerIdentity && identical(other.manager, manager);
 
   @override
-  bool updateShouldNotify(_FocusManagerIdentityProvider oldWidget) =>
-      !identical(manager, oldWidget.manager);
+  int get hashCode => identityHashCode(manager);
 }
 
 /// Root of the focus tree. Installed by `runApp` so application widget
 /// code can always reach a `FocusManager` via [Focus.of].
+///
+/// Installs a `Scope<FocusManager>`: readers rebuild on every focus change
+/// because the manager is a [ChangeNotifier]. An identity-only scope sits
+/// above it for framework boundaries that must not.
 class FocusManagerScope extends StatelessWidget {
   const FocusManagerScope({
     super.key,
@@ -1124,9 +1094,9 @@ class FocusManagerScope extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _FocusManagerIdentityProvider(
-      manager: manager,
-      child: _FocusManagerProvider(manager: manager, child: child),
+    return Scope<_FocusManagerIdentity>(
+      value: _FocusManagerIdentity(manager),
+      child: Scope<FocusManager>(value: manager, child: child),
     );
   }
 }
@@ -1192,13 +1162,21 @@ class Focus extends StatefulWidget {
   State<Focus> createState() => _FocusState();
 
   /// Returns the surrounding [FocusManager]. Throws if not present.
-  static FocusManager of(BuildContext context) =>
-      _FocusManagerProvider.of(context);
+  static FocusManager of(BuildContext context) {
+    final manager = maybeOf(context);
+    if (manager == null) {
+      throw StateError(
+        'No FocusManager found in this context. Did you call '
+        'runApp (which installs one)?',
+      );
+    }
+    return manager;
+  }
 
   /// Returns the surrounding [FocusManager], or null if there isn't
   /// one.
   static FocusManager? maybeOf(BuildContext context) =>
-      _FocusManagerProvider.maybeOf(context);
+      Scope.maybeOf<FocusManager>(context);
 
   /// Returns the surrounding manager without rebuilding [context] when its
   /// focus or active bindings change.
@@ -1208,13 +1186,13 @@ class Focus extends StatefulWidget {
   /// focus-change dependent. App/widget code should normally use [maybeOf].
   @internal
   static FocusManager? maybeOfWithoutDependency(BuildContext context) =>
-      _FocusManagerProvider.maybeOfWithoutDependency(context);
+      Scope.maybeOfWithoutDependency<FocusManager>(context);
 
   /// Returns the surrounding manager and rebuilds only when that manager
   /// instance is replaced, not when its ordinary focus state changes.
   @internal
   static FocusManager? maybeOfIdentityDependency(BuildContext context) =>
-      _FocusManagerIdentityProvider.maybeOf(context);
+      Scope.maybeOf<_FocusManagerIdentity>(context)?.manager;
 
   @override
   StatefulElement createElement() => _FocusElement(this);
@@ -1312,7 +1290,11 @@ class _FocusState extends State<Focus> {
   }
 
   void _attach() {
-    final manager = Focus.maybeOf(context);
+    // Follow provider identity even when the parent reuses the same child.
+    // Ordinary focus changes do not require repeating this ownership work.
+    final manager = Focus.maybeOfIdentityDependency(context);
+    if (identical(manager, _manager)) return;
+    _detach();
     if (manager == null) return;
     _manager = manager;
     _attachedNode = _node;
@@ -1333,9 +1315,10 @@ class _FocusState extends State<Focus> {
 
   void _detach() {
     final node = _attachedNode;
-    if (node != null) _manager?._unregister(node);
+    final manager = _manager;
     _attachedNode = null;
     _manager = null;
+    if (node != null) manager?._unregister(node);
   }
 
   @override
@@ -1343,7 +1326,7 @@ class _FocusState extends State<Focus> {
     // Idempotent attach on first build — later than didChangeDependencies
     // so an ancestor FocusScope inserted between mount and build still
     // resolves into the freshly-walked `_enclosingScope`.
-    if (_manager == null) _attach();
+    _attach();
     return _FocusBounds(node: _node, child: widget.child);
   }
 }
@@ -1533,13 +1516,13 @@ class _FocusScopeMarkerElement extends ComponentElement {
   // build so a temporarily-inactive subtree doesn't appear active.
   void _registerIfTrapping() {
     if (!_capturedTrapFocus) return;
-    if (_registeredManager != null) return;
-    // No dependency: this marker doesn't rebuild on manager changes — we
-    // just need a reference to register against.
-    final manager =
-        getInheritedWidgetOfExactType<_FocusManagerProvider>()?.notifier;
+    final manager = Scope.maybeOf<_FocusManagerIdentity>(this)?.manager;
+    if (identical(manager, _registeredManager)) return;
+    final replacingManager = _registeredManager != null;
+    _unregisterIfRegistered();
     if (manager == null) return;
-    _activationSeq = _nextActivationSeq++;
+    // Rebinding ownership must not reorder already-open sibling traps.
+    if (!replacingManager) _activationSeq = _nextActivationSeq++;
     manager._registerFocusTrap(this);
     _registeredManager = manager;
   }
@@ -1666,9 +1649,9 @@ class _ExcludeFocusMarkerElement extends ComponentElement {
 
   void _registerIfExcluding() {
     if (!excluding) return;
-    if (_registeredManager != null) return;
-    final manager =
-        getInheritedWidgetOfExactType<_FocusManagerProvider>()?.notifier;
+    final manager = Scope.maybeOf<_FocusManagerIdentity>(this)?.manager;
+    if (identical(manager, _registeredManager)) return;
+    _unregisterIfRegistered();
     if (manager == null) return;
     manager._registerExcludeFocus(this);
     _registeredManager = manager;
