@@ -1,0 +1,32 @@
+---
+import { Code } from '@astrojs/starlight/components';
+import CodeDemoSplit from './CodeDemoSplit.astro';
+import FleuryExample from './FleuryExample.astro';
+import rows from '../../examples/lib/datatable_rows.dart?raw';
+import cells from '../../examples/lib/datatable_cells.dart?raw';
+const examples = [
+  { source: rows, file: 'datatable_rows.dart', id: 'datatable.rows', title: 'Choose a row',
+    instructions: 'Use ↑ / ↓ to browse, then Enter to choose. A click chooses the row too. Watch Browsing and Chosen change separately.' },
+  { source: cells, file: 'datatable_cells.dart', id: 'datatable.cells', title: 'Select a cell range',
+    instructions: 'Click a cell, then Shift-click another to select a range. Arrow keys move the underlined cursor; Space selects that cell. Shift-arrow extends a range from the cursor. Ctrl+C copies the range. Enter or a double-click opens a row.' },
+];
+const complete = (source: string) => source.replace(/^ *\/\/ #(end)?docregion interaction\r?\n/gm, '');
+const excerpt = (source: string) => {
+  const match = source.match(/ *\/\/ #docregion interaction\n([\s\S]*?) *\/\/ #enddocregion interaction/);
+  if (!match) throw new Error('Missing DataTable interaction excerpt');
+  return match[1].trimEnd().split('\n').map(line => line.slice(6)).join('\n');
+};
+---
+{examples.map(example => <>
+  <h2>{example.title}</h2>
+  <p>{example.instructions}</p>
+  <CodeDemoSplit file={example.file} codeMaxHeight="28rem" demoLabel="Try it">
+    <Fragment slot="code">
+      <Code code={excerpt(example.source)} lang="dart" wrap />
+      <details><summary>Complete source file</summary><Code code={complete(example.source)} lang="dart" wrap /></details>
+    </Fragment>
+    <FleuryExample slot="demo" id={example.id} cols={30} rows={13} interactive />
+  </CodeDemoSplit>
+</>)}
+<p><code>onSelect</code> confirms a row choice. In cell mode, <code>onRangeChanged</code> reports the selected cells and <code>onAction</code> runs the row command. Scrolling leaves the cursor and range unchanged.</p>
+<p>For programmatic navigation, keep a <code>DataTableController</code> in state and set <code>currentRowIndex</code> or <code>currentColumnIndex</code>. Use <code>selectCell</code> to change the range. Controller writes do not call the interaction callbacks.</p>

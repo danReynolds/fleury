@@ -15,6 +15,9 @@ import 'package:image/image.dart' as img;
 
 import 'testing_guide.dart' as testing;
 import 'input_guide.dart' as input;
+import 'lists_guide.dart' as lists;
+import 'datatable_rows.dart';
+import 'datatable_cells.dart';
 
 /// Builds the root widget for one live example.
 typedef ExampleBuilder = Widget Function();
@@ -572,6 +575,29 @@ Tabs(
     ),
   ),
   ExampleInfo(
+    id: 'datatable.rows',
+    widget: 'Table row choice',
+    category: 'Guide examples',
+    blurb: 'Browse and choose rows, or select cell ranges for copying.',
+    cols: 30,
+    rows: 13,
+    interactive: true,
+    builder: () =>
+        const Padding(padding: EdgeInsets.all(1), child: TableRows()),
+  ),
+  ExampleInfo(
+    id: 'datatable.cells',
+    widget: 'Table cell selection',
+    category: 'Guide examples',
+    blurb:
+        'Cell ranges stay selected while the cursor moves; Enter opens a row.',
+    cols: 30,
+    rows: 13,
+    interactive: true,
+    builder: () =>
+        const Padding(padding: EdgeInsets.all(1), child: TableCells()),
+  ),
+  ExampleInfo(
     id: 'tree.basic',
     widget: 'Tree',
     category: 'Data & lists',
@@ -667,7 +693,7 @@ Tabs(
           'web': true,
           'targets': <String>['terminal', 'dom', 'serve'],
         },
-        initialExpandedDepth: 2,
+        defaultExpandedDepth: 2,
       ),
     ),
   ),
@@ -2265,16 +2291,60 @@ form.clearErrors();''',
     builder: () => const testing.TestingPublishDemo(),
   ),
   ExampleInfo(
+    id: 'lists.files',
+    widget: 'File list',
+    category: 'Guide examples',
+    blurb: 'Focus with arrows; select with click or Enter.',
+    cols: 34,
+    rows: 9,
+    interactive: true,
+    builder: () =>
+        const Padding(padding: EdgeInsets.all(1), child: lists.FileList()),
+  ),
+  ExampleInfo(
     id: 'lists.tasks',
-    widget: 'ListView',
+    widget: 'Task browser',
+    category: 'Guide examples',
+    blurb: 'Browse, select, or scroll a thousand tasks with separate outcomes.',
+    cols: 40,
+    rows: 22,
+    interactive: true,
+    builder: () =>
+        const Padding(padding: EdgeInsets.all(1), child: lists.TaskBrowser()),
+  ),
+  ExampleInfo(
+    id: 'lists.reorder',
+    widget: 'Reorder tasks',
+    category: 'Guide examples',
+    blurb: 'Reverse a collection while keeping the current task highlighted.',
+    cols: 38,
+    rows: 11,
+    interactive: true,
+    builder: () =>
+        const Padding(padding: EdgeInsets.all(1), child: lists.ReorderTasks()),
+  ),
+  ExampleInfo(
+    id: 'lists.document',
+    widget: 'Scroll edges',
     category: 'Guide examples',
     blurb:
-        'A thousand-row lazy task list with keyboard selection, activation, '
-        'paging, and a viewport scrollbar.',
-    cols: 56,
-    rows: 17,
+        'See the top and bottom, then let an arrow leave or stay in the pane.',
+    cols: 40,
+    rows: 16,
     interactive: true,
-    builder: () => const _TaskListTour(),
+    builder: () =>
+        const Padding(padding: EdgeInsets.all(1), child: lists.ScrollEdges()),
+  ),
+  ExampleInfo(
+    id: 'lists.log',
+    widget: 'Build log',
+    category: 'Guide examples',
+    blurb: 'Follow output, pause to read older entries, then catch up.',
+    cols: 46,
+    rows: 14,
+    interactive: true,
+    builder: () =>
+        const Padding(padding: EdgeInsets.all(1), child: lists.BuildLog()),
   ),
   ExampleInfo(
     id: 'layout.responsive',
@@ -3534,7 +3604,7 @@ class _ThemePickerExample extends StatefulWidget {
 }
 
 class _ThemePickerExampleState extends State<_ThemePickerExample> {
-  final ListController _list = ListController(selectedIndex: 0);
+  final ListController _list = ListController(initialIndex: 0);
 
   @override
   void initState() {
@@ -3552,7 +3622,7 @@ class _ThemePickerExampleState extends State<_ThemePickerExample> {
 
   @override
   Widget build(BuildContext context) {
-    final index = (_list.selectedIndex ?? 0).clamp(0, fleuryThemes.length - 1);
+    final index = (_list.currentIndex ?? 0).clamp(0, fleuryThemes.length - 1);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -5482,54 +5552,6 @@ class _ProjectFormTourState extends State<_ProjectFormTour> {
         ),
         const Spacer(),
         Text('status: $_status'),
-      ],
-    ),
-  );
-}
-
-/// A primary list where containment is deliberate: the demo is entirely about
-/// list navigation, so edge arrows should stay in the list instead of moving
-/// to unrelated guide chrome.
-class _TaskListTour extends StatefulWidget {
-  const _TaskListTour();
-
-  @override
-  State<_TaskListTour> createState() => _TaskListTourState();
-}
-
-class _TaskListTourState extends State<_TaskListTour> {
-  static const _count = 1000;
-  var _selected = 0;
-  String _lastAction = 'Choose a task';
-
-  @override
-  Widget build(BuildContext context) => _framed(
-    Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Text('TASKS', style: CellStyle(bold: true)),
-        Text('selected: ${_selected + 1} / $_count'),
-        const SizedBox(height: 1),
-        Expanded(
-          child: ListView.builder(
-            itemCount: _count,
-            autofocus: true,
-            edgeBehavior: EdgeBehavior.contain,
-            scrollbar: true,
-            onSelectionChanged: (index) => setState(() => _selected = index),
-            onActivate: (index) => setState(() {
-              _lastAction = 'Opened task ${index + 1}';
-            }),
-            itemBuilder: (context, index, selected) => Text(
-              '${selected ? '›' : ' '} Task ${(index + 1).toString().padLeft(4, '0')}',
-              style: selected
-                  ? Theme.of(context).selectionStyle
-                  : CellStyle.none,
-            ),
-          ),
-        ),
-        const SizedBox(height: 1),
-        Text('last: $_lastAction'),
       ],
     ),
   );

@@ -14,7 +14,7 @@ void main() {
     'jumping pauses following without changing its policy or selection',
     (tester) {
       final controller = MessageListController(
-        selectedIndex: 2,
+        initialIndex: 2,
         followTail: true,
       );
       tester.pumpWidget(
@@ -25,11 +25,11 @@ void main() {
       tester.pump();
       expect(controller.followTail, isTrue);
       expect(controller.isFollowing, isFalse);
-      expect(controller.selectedIndex, 2);
+      expect(controller.currentIndex, 2);
       controller.scrollToBottom();
       tester.pump();
       expect(controller.isFollowing, isTrue);
-      expect(controller.selectedIndex, 2);
+      expect(controller.currentIndex, 2);
     },
     viewportSize: const CellSize(40, 1),
   );

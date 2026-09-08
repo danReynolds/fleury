@@ -266,13 +266,13 @@ void main() {
           _at(MouseEventKind.scrollDown, 1, 1, button: MouseButton.none),
         );
         tester.pump();
-        expect(c.selectedIndex, 0);
+        expect(c.currentIndex, 0);
         expect(c.visibleRange, (first: 1, last: 2));
         tester.sendMouse(
           _at(MouseEventKind.scrollUp, 1, 1, button: MouseButton.none),
         );
         tester.pump();
-        expect(c.selectedIndex, 0);
+        expect(c.currentIndex, 0);
         expect(c.visibleRange, (first: 0, last: 1));
       },
     );

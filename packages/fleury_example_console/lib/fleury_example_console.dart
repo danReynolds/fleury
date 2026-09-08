@@ -262,7 +262,8 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
   final _indexedLogFilter = TextEditingController();
   final _composer = TextEditingController();
   final _composerHistory = TextHistoryController();
-  final _transcriptMessages = MessageListController();
+  // Start on the seeded worker entry; following output does not move this cursor.
+  final _transcriptMessages = MessageListController(initialIndex: 1);
   final _runsFilterFocus = FocusNode(debugLabel: 'runs filter');
   final _globalSearchFocus = FocusNode(debugLabel: 'global search query');
   final _globalSearchResultsFocus = FocusNode(
@@ -278,15 +279,15 @@ class _DemoConsoleAppState extends State<DemoConsoleApp> {
   final _docsFocus = FocusNode(debugLabel: 'docs markdown');
   final _composerFocus = FocusNode(debugLabel: 'transcript composer');
   final _transcriptFocus = FocusNode(debugLabel: 'transcript messages');
-  final _runsTable = DataTableController(selectedIndex: 0);
-  final _globalSearchList = ListController(selectedIndex: 0);
+  final _runsTable = DataTableController(initialRowIndex: 0);
+  final _globalSearchList = ListController(initialIndex: 0);
   final _indexedLogController = LogRegionController(followTail: false);
   final _treeTable = TreeTableController(expandedKeys: const {'core'});
   final _payloadJson = JsonViewController();
   final _changesReview = PatchReviewController();
-  final _changesDiff = DiffViewController(selectedIndex: 7);
-  final _sourceCode = CodeViewController(selectedIndex: 7);
-  final _docsMarkdown = MarkdownViewController(selectedIndex: 5);
+  final _changesDiff = DiffViewController(initialIndex: 7);
+  final _sourceCode = CodeViewController(initialIndex: 7);
+  final _docsMarkdown = MarkdownViewController(initialIndex: 5);
   final _connectionForm = FormController();
 
   final _navigation = _DemoNavigationController(demoScreenOverview);
@@ -2628,7 +2629,7 @@ class _PayloadScreen extends StatelessWidget {
             controller: controller,
             focusNode: focusNode,
             autofocus: true,
-            initialExpandedDepth: 1,
+            defaultExpandedDepth: 1,
             copyOptions: const JsonViewCopyOptions(
               clipboardPolicy: ClipboardWritePolicy.inProcessOnly,
             ),

@@ -26,12 +26,12 @@ Matcher _stateError(String message) {
 void main() {
   group('DiffViewController lifecycle', () {
     test('dispose is idempotent and keeps final readable state', () {
-      final controller = DiffViewController(selectedIndex: 7);
+      final controller = DiffViewController(initialIndex: 7);
 
       controller.dispose();
       controller.dispose();
 
-      expect(controller.selectedIndex, 7);
+      expect(controller.currentIndex, 7);
       expect(controller.visibleRange, isNull);
     });
 
@@ -39,7 +39,7 @@ void main() {
       final controller = DiffViewController()..dispose();
 
       const message = 'DiffViewController has been disposed.';
-      expect(() => controller.selectedIndex = 1, _stateError(message));
+      expect(() => controller.currentIndex = 1, _stateError(message));
       expect(() => controller.jumpToIndex(1), _stateError(message));
     });
   });
@@ -180,7 +180,7 @@ index 1111111..2222222 100644
     testWidgets('Ctrl+C copies the selected hunk when configured', (
       tester,
     ) async {
-      final controller = DiffViewController(selectedIndex: 7);
+      final controller = DiffViewController(initialIndex: 7);
       DiffViewCopyResult? copied;
       tester.pumpWidget(
         DiffView(
@@ -225,7 +225,7 @@ index 1111111..2222222 100644
     });
 
     testWidgets('semantic copy copies the selected diff hunk', (tester) async {
-      final controller = DiffViewController(selectedIndex: 7);
+      final controller = DiffViewController(initialIndex: 7);
       DiffViewCopyResult? copied;
       tester.pumpWidget(
         DiffView(
@@ -251,7 +251,7 @@ index 1111111..2222222 100644
     });
 
     testWidgets('semantic activate selects a diff row', (tester) async {
-      final controller = DiffViewController(selectedIndex: 0);
+      final controller = DiffViewController(initialIndex: 0);
       tester.pumpWidget(
         DiffView(
           diff: _sampleDiff,
@@ -276,7 +276,7 @@ index 1111111..2222222 100644
           .target(role: SemanticRole.diffLine, label: '+  run();')
           .press();
 
-      expect(controller.selectedIndex, 8);
+      expect(controller.currentIndex, 8);
 
       tester.render(size: const CellSize(80, 12));
       row = tester.semantics().single(
@@ -293,7 +293,7 @@ index 1111111..2222222 100644
       );
       expect(diff.focused, isTrue);
       expect(diff.state.selectedKey, 8);
-      expect(diff.state['selectedIndex'], 8);
+      expect(diff.state['currentIndex'], 8);
       expect(diff.state['selectedDiffKind'], 'addition');
       expect(diff.state['selectedNewLine'], 3);
     });
@@ -301,7 +301,7 @@ index 1111111..2222222 100644
     testWidgets('unsafe terminal payloads are collapsed before display/copy', (
       tester,
     ) async {
-      final controller = DiffViewController(selectedIndex: 4);
+      final controller = DiffViewController(initialIndex: 4);
       tester.pumpWidget(
         DiffView(
           autofocus: true,

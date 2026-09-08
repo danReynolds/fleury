@@ -2,6 +2,24 @@
 
 ## 0.1.0
 
+- Collection controllers use `initialIndex` for their constructor seed and
+  `currentIndex` for the live browsing cursor. DataTableController uses
+  `initialRowIndex` and `initialColumnIndex` with its existing live properties.
+  Explicit null row cursors stay unset; omitted row cursors default to zero.
+  Log and message tail-following controls the viewport independently of that cursor.
+- NumberInput.initialValue and FileBrowser.initialDirectory are one-time seeds;
+  parent rebuilds preserve edits and navigation. NumberInput rejects a seed
+  alongside an external controller. FileBrowserController.openDirectory handles
+  later navigation and exposes currentDirectory to observers.
+- FileBrowser and SearchPanel honor incoming controller cursors on mount and
+  replacement. Tables, tabs, data tables, and file browsers reject multiple active
+  owning views; normal deactivation and reattachment remain supported.
+- JsonView uses `defaultExpandedDepth` for its continuing expansion fallback.
+  Tree.initialExpandedDepth remains a one-time seed.
+- Text editing wrappers emit `onChanged` for user and semantic edits, including
+  numeric normalization and choosing a completion. Programmatic writes notify
+  controller listeners instead. See `docs/widget-state-ownership.md` for migration.
+
 - MessageListController and LogRegionController separate the enabled `followTail`
   policy from read-only `isFollowing`, and expose `atBottom` and `unseenCount`.
   `jumpToIndex` preserves selection, and following incoming output no longer

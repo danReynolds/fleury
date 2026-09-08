@@ -15,22 +15,22 @@ void main() {
       final controller = JsonViewController(
         expandedPointers: const {'/meta'},
         collapsedPointers: const {'/flags'},
-        selectedIndex: 2,
+        initialIndex: 2,
       );
 
       controller.dispose();
       controller.dispose();
 
-      expect(controller.selectedIndex, 2);
+      expect(controller.currentIndex, 2);
       expect(controller.visibleRange, isNull);
       expect(controller.expandedPointers, {'/meta'});
       expect(controller.collapsedPointers, {'/flags'});
       expect(
-        controller.isExpanded('/meta', depth: 1, initialExpandedDepth: 0),
+        controller.isExpanded('/meta', depth: 1, defaultExpandedDepth: 0),
         isTrue,
       );
       expect(
-        controller.isExpanded('/flags', depth: 1, initialExpandedDepth: 2),
+        controller.isExpanded('/flags', depth: 1, defaultExpandedDepth: 2),
         isFalse,
       );
     });
@@ -39,7 +39,7 @@ void main() {
       final controller = JsonViewController()..dispose();
 
       const message = 'JsonViewController has been disposed.';
-      expect(() => controller.selectedIndex = 1, _stateError(message));
+      expect(() => controller.currentIndex = 1, _stateError(message));
       expect(() => controller.jumpToIndex(1), _stateError(message));
       expect(() => controller.expand('/meta'), _stateError(message));
       expect(() => controller.collapse('/meta'), _stateError(message));
@@ -209,7 +209,7 @@ void main() {
 
   group('copy/export', () {
     testWidgets('Ctrl+C copies the selected JSON subtree', (tester) async {
-      final controller = JsonViewController(selectedIndex: 2);
+      final controller = JsonViewController(initialIndex: 2);
       JsonViewCopyResult? copied;
       tester.pumpWidget(
         JsonView(
@@ -256,7 +256,7 @@ void main() {
     testWidgets('semantic copy copies the selected JSON subtree', (
       tester,
     ) async {
-      final controller = JsonViewController(selectedIndex: 2);
+      final controller = JsonViewController(initialIndex: 2);
       JsonViewCopyResult? copied;
       tester.pumpWidget(
         JsonView(
@@ -299,7 +299,7 @@ void main() {
     testWidgets('display and copy collapse unsafe terminal payloads', (
       tester,
     ) async {
-      final controller = JsonViewController(selectedIndex: 0);
+      final controller = JsonViewController(initialIndex: 0);
       tester.pumpWidget(
         JsonView(
           autofocus: true,

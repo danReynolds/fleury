@@ -73,22 +73,55 @@ final class FileBrowserCopyResult {
   final ClipboardWriteReport report;
 }
 
-/// Controller for [FileBrowser] selection and visible-range observation.
+/// Controller for [FileBrowser] browsing and visible-range observation.
 class FileBrowserController extends ChangeNotifier {
-  FileBrowserController({int? selectedIndex})
-    : _list = ListController(selectedIndex: selectedIndex ?? 0) {
+  FileBrowserController({int? initialIndex = 0})
+    : _list = ListController(initialIndex: initialIndex) {
     _list.addListener(notifyListeners);
   }
 
   final ListController _list;
   bool _disposed = false;
+  _FileBrowserState? _host;
+
+  /// The directory displayed by the attached browser, or null before mount.
+  String? get currentDirectory => _host?._currentDirectory;
+
+  /// Navigates the attached browser and resets its row cursor.
+  /// This command notifies controller listeners, not onDirectoryChanged.
+  void openDirectory(String path) {
+    _checkNotDisposed();
+    final host = _host;
+    if (host == null) {
+      throw StateError(
+        "FileBrowserController is not attached to a FileBrowser.",
+      );
+    }
+    host._openDirectory(path, interaction: false);
+  }
+
+  void _directoryChanged() => notifyListeners();
+
+  void _attach(_FileBrowserState host) {
+    _checkNotDisposed();
+    if (_host != null && !identical(_host, host)) {
+      throw StateError(
+        "FileBrowserController can attach to only one FileBrowser.",
+      );
+    }
+    _host = host;
+  }
+
+  void _detach(_FileBrowserState host) {
+    if (identical(_host, host)) _host = null;
+  }
 
   ListController get _listController => _list;
 
-  int? get selectedIndex => _list.selectedIndex;
-  set selectedIndex(int? value) {
+  int? get currentIndex => _list.currentIndex;
+  set currentIndex(int? value) {
     _checkNotDisposed();
-    _list.selectedIndex = value;
+    _list.currentIndex = value;
   }
 
   ({int first, int last})? get visibleRange => _list.visibleRange;
@@ -161,6 +194,8 @@ class FileBrowser extends StatefulWidget {
   }) : assert(maxVisible > 0);
 
   /// Directory opened when the browser mounts.
+  /// Directory used on first mount. Use FileBrowserController.openDirectory
+  /// for later navigation; changing this seed does not navigate.
   final String initialDirectory;
 
   /// External selection and visible-range controller.
@@ -193,7 +228,8 @@ class FileBrowser extends StatefulWidget {
   /// Called when Enter activates a non-directory entry.
   final void Function(FileBrowserEntry entry)? onActivate;
 
-  /// Called after the browser changes directories.
+  /// Called after a navigation interaction changes directories.
+  /// Controller commands notify controller listeners instead.
   final void Function(String directory)? onDirectoryChanged;
 
   /// Called after a copy attempt completes.
@@ -216,13 +252,14 @@ class _FileBrowserState extends State<FileBrowser> {
   @override
   void initState() {
     super.initState();
-    _controller = widget.controller ?? FileBrowserController();
-    _ownsController = widget.controller == null;
-    _controller.addListener(_onControllerChange);
     _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'FileBrowser');
     _ownsFocusNode = widget.focusNode == null;
+    _controller = widget.controller ?? FileBrowserController();
+    _ownsController = widget.controller == null;
+    _controller._attach(this);
+    _controller.addListener(_onControllerChange);
     _currentDirectory = Directory(widget.initialDirectory).absolute.path;
-    _reloadCurrentDirectory();
+    _reloadCurrentDirectory(preserveCurrent: true);
   }
 
   @override
@@ -230,21 +267,20 @@ class _FileBrowserState extends State<FileBrowser> {
     super.didUpdateWidget(oldWidget);
     if (widget.controller != oldWidget.controller) {
       _controller.removeListener(_onControllerChange);
+      _controller._detach(this);
       if (_ownsController) _controller.dispose();
       _controller = widget.controller ?? FileBrowserController();
       _ownsController = widget.controller == null;
+      _controller._attach(this);
       _controller.addListener(_onControllerChange);
-      _resetSelection();
+      _resetSelection(preserveCurrent: true);
     }
     if (widget.focusNode != oldWidget.focusNode) {
       if (_ownsFocusNode) _focusNode.dispose();
       _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'FileBrowser');
       _ownsFocusNode = widget.focusNode == null;
     }
-    if (widget.initialDirectory != oldWidget.initialDirectory) {
-      _currentDirectory = Directory(widget.initialDirectory).absolute.path;
-      _reloadCurrentDirectory();
-    } else if (widget.entityFilter != oldWidget.entityFilter ||
+    if (widget.entityFilter != oldWidget.entityFilter ||
         widget.filter.showHidden != oldWidget.filter.showHidden) {
       _reloadCurrentDirectory();
     } else if (widget.filter.query != oldWidget.filter.query) {
@@ -258,16 +294,31 @@ class _FileBrowserState extends State<FileBrowser> {
   }
 
   @override
+  void deactivate() {
+    _controller.removeListener(_onControllerChange);
+    _controller._detach(this);
+    super.deactivate();
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    _controller._attach(this);
+    _controller.addListener(_onControllerChange);
+  }
+
+  @override
   void dispose() {
     _controller.removeListener(_onControllerChange);
+    _controller._detach(this);
     if (_ownsController) _controller.dispose();
     if (_ownsFocusNode) _focusNode.dispose();
     super.dispose();
   }
 
-  void _reloadCurrentDirectory() {
+  void _reloadCurrentDirectory({bool preserveCurrent = false}) {
     _entries = _readEntries(_currentDirectory);
-    _resetSelection();
+    _resetSelection(preserveCurrent: preserveCurrent);
   }
 
   List<FileBrowserEntry> _readEntries(String directory) {
@@ -327,11 +378,15 @@ class _FileBrowserState extends State<FileBrowser> {
     return a.name.toLowerCase().compareTo(b.name.toLowerCase());
   }
 
-  void _resetSelection() {
+  void _resetSelection({bool preserveCurrent = false}) {
     final order = _currentOrder;
     _updatingController = true;
     try {
-      _controller.selectedIndex = order.isEmpty ? null : 0;
+      _controller.currentIndex = order.isEmpty
+          ? null
+          : preserveCurrent
+          ? _controller.currentIndex?.clamp(0, order.length - 1)
+          : 0;
     } finally {
       _updatingController = false;
     }
@@ -342,9 +397,9 @@ class _FileBrowserState extends State<FileBrowser> {
 
   _SelectedFileEntry? _selectedEntry(List<int> order) {
     if (order.isEmpty) return null;
-    final selectedIndex = _controller.selectedIndex;
-    if (selectedIndex == null) return null;
-    final viewIndex = selectedIndex.clamp(0, order.length - 1);
+    final currentIndex = _controller.currentIndex;
+    if (currentIndex == null) return null;
+    final viewIndex = currentIndex.clamp(0, order.length - 1);
     final sourceIndex = order[viewIndex];
     return _SelectedFileEntry(
       viewIndex: viewIndex,
@@ -368,7 +423,7 @@ class _FileBrowserState extends State<FileBrowser> {
     final order = _currentOrder;
     if (viewIndex < 0 || viewIndex >= order.length) return;
     _focusNode.requestFocus();
-    _controller.selectedIndex = viewIndex;
+    _controller.currentIndex = viewIndex;
     _activateSelected();
   }
 
@@ -376,7 +431,7 @@ class _FileBrowserState extends State<FileBrowser> {
     final order = _currentOrder;
     if (viewIndex < 0 || viewIndex >= order.length) return;
     _focusNode.requestFocus();
-    _controller.selectedIndex = viewIndex;
+    _controller.currentIndex = viewIndex;
     await _copySelection();
   }
 
@@ -398,12 +453,13 @@ class _FileBrowserState extends State<FileBrowser> {
     }
   }
 
-  void _openDirectory(String path) {
+  void _openDirectory(String path, {bool interaction = true}) {
     setState(() {
       _currentDirectory = Directory(path).absolute.path;
       _reloadCurrentDirectory();
     });
-    widget.onDirectoryChanged?.call(_currentDirectory);
+    _controller._directoryChanged();
+    if (interaction) widget.onDirectoryChanged?.call(_currentDirectory);
   }
 
   void _goUp() {
@@ -477,10 +533,10 @@ class _FileBrowserState extends State<FileBrowser> {
                 focusNode: _focusNode,
                 autofocus: widget.autofocus,
                 itemCount: order.length,
-                onActivate: (_) => _activateSelected(),
+                onSelect: (_) => _activateSelected(),
                 itemBuilder: (context, viewIndex, activeSelected) {
                   final sourceIndex = order[viewIndex];
-                  final selected = viewIndex == _controller.selectedIndex;
+                  final selected = viewIndex == _controller.currentIndex;
                   return _FileBrowserRow(
                     entry: _entries[sourceIndex],
                     sourceIndex: sourceIndex,
@@ -540,8 +596,8 @@ class _FileBrowserState extends State<FileBrowser> {
           'visibleRangeStart': visibleRange.first,
           'visibleRangeEnd': visibleRange.last,
         },
-        if (_controller.selectedIndex != null)
-          'selectedIndex': _controller.selectedIndex,
+        if (_controller.currentIndex != null)
+          'currentIndex': _controller.currentIndex,
         if (selected != null) ..._selectedEntryState(selected.entry),
       }),
       child: Column(

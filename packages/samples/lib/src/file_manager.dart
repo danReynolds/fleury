@@ -120,7 +120,7 @@ class _FileManagerBodyState extends State<_FileManagerBody> {
       } catch (_) {
         decoded = node.content;
       }
-      return JsonView(value: decoded, initialExpandedDepth: 3);
+      return JsonView(value: decoded, defaultExpandedDepth: 3);
     }
     return CodeView(
       source: node.content ?? '',

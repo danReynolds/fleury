@@ -24,12 +24,12 @@ Matcher _stateError(String message) {
 void main() {
   group('CodeViewController lifecycle', () {
     test('dispose is idempotent and keeps final readable state', () {
-      final controller = CodeViewController(selectedIndex: 2);
+      final controller = CodeViewController(initialIndex: 2);
 
       controller.dispose();
       controller.dispose();
 
-      expect(controller.selectedIndex, 2);
+      expect(controller.currentIndex, 2);
       expect(controller.visibleRange, isNull);
     });
 
@@ -37,7 +37,7 @@ void main() {
       final controller = CodeViewController()..dispose();
 
       const message = 'CodeViewController has been disposed.';
-      expect(() => controller.selectedIndex = 1, _stateError(message));
+      expect(() => controller.currentIndex = 1, _stateError(message));
       expect(() => controller.jumpToIndex(1), _stateError(message));
     });
   });
@@ -149,7 +149,7 @@ void main() {
 
   group('copy/export', () {
     testWidgets('Ctrl+C copies the selected source line', (tester) async {
-      final controller = CodeViewController(selectedIndex: 2);
+      final controller = CodeViewController(initialIndex: 2);
       CodeViewCopyResult? copied;
       tester.pumpWidget(
         CodeView(
@@ -188,7 +188,7 @@ void main() {
     });
 
     testWidgets('semantic focus and copy drive CodeView', (tester) async {
-      final controller = CodeViewController(selectedIndex: 2);
+      final controller = CodeViewController(initialIndex: 2);
       CodeViewCopyResult? copied;
       tester.pumpWidget(
         CodeView(
@@ -224,7 +224,7 @@ void main() {
     });
 
     testWidgets('semantic activate selects a source line', (tester) async {
-      final controller = CodeViewController(selectedIndex: 0);
+      final controller = CodeViewController(initialIndex: 0);
       tester.pumpWidget(
         CodeView(
           source: _sampleCode,
@@ -251,7 +251,7 @@ void main() {
           )
           .press();
 
-      expect(controller.selectedIndex, 4);
+      expect(controller.currentIndex, 4);
 
       tester.render(size: const CellSize(80, 12));
       line = tester.semantics().single(
@@ -268,7 +268,7 @@ void main() {
       );
       expect(code.focused, isTrue);
       expect(code.state.selectedKey, 5);
-      expect(code.state['selectedIndex'], 4);
+      expect(code.state['currentIndex'], 4);
       expect(code.state['selectedCodeLineKind'], 'comment');
     });
 
@@ -288,7 +288,7 @@ void main() {
     testWidgets('unsafe terminal payloads are collapsed before display/copy', (
       tester,
     ) async {
-      final controller = CodeViewController(selectedIndex: 0);
+      final controller = CodeViewController(initialIndex: 0);
       tester.pumpWidget(
         CodeView(
           autofocus: true,

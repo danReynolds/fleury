@@ -68,7 +68,7 @@ class _FinanceBodyState extends State<_FinanceBody> {
 
   void _onTableSelectionChanged() {
     if (_syncingTableSelection || _rows.isEmpty) return;
-    final index = _tableController.selectedIndex;
+    final index = _tableController.currentRowIndex;
     if (index < 0 || index >= _rows.length) return;
     final nextId = _rows[index].id;
     if (nextId == _selectedTransactionId || !mounted) return;
@@ -115,7 +115,7 @@ class _FinanceBodyState extends State<_FinanceBody> {
     _syncingTableSelection = true;
     final oldRowCount = _tableController.rowCount;
     if (oldRowCount > 0) {
-      _tableController.selectedIndex = nextSelectedIndex.clamp(
+      _tableController.currentRowIndex = nextSelectedIndex.clamp(
         0,
         oldRowCount - 1,
       );
@@ -140,8 +140,8 @@ class _FinanceBodyState extends State<_FinanceBody> {
         final index = _rows.indexWhere(
           (transaction) => transaction.id == selectedId,
         );
-        if (index < 0 || _tableController.selectedIndex == index) return;
-        _tableController.selectedIndex = index;
+        if (index < 0 || _tableController.currentRowIndex == index) return;
+        _tableController.currentRowIndex = index;
       } finally {
         _syncingTableSelection = false;
       }

@@ -10,7 +10,7 @@ KeyEvent _code(KeyCode kc) => KeyEvent(kc);
 MouseEvent _mouse(MouseEventKind kind, int col, int row) =>
     MouseEvent(kind: kind, button: MouseButton.left, col: col, row: row);
 
-Widget _itemBuilder(BuildContext context, int index, bool selected) {
+Widget _itemBuilder(BuildContext context, int index, bool highlighted) {
   return Text('Item $index');
 }
 
@@ -18,12 +18,9 @@ Widget _keyedStringList(
   List<String> items, {
   ListController? controller,
   int height = 3,
-  void Function(int)? onActivate,
+  void Function(int)? onSelect,
   Widget Function(BuildContext, int, bool)? itemBuilder,
 }) {
-  final indexByKey = <String, int>{
-    for (var index = 0; index < items.length; index++) items[index]: index,
-  };
   return SizedBox(
     width: 12,
     height: height,
@@ -31,19 +28,18 @@ Widget _keyedStringList(
       controller: controller,
       itemCount: items.length,
       itemKeyBuilder: (index) => items[index],
-      findChildIndexCallback: (key) => indexByKey[key],
-      onActivate: onActivate,
+      onSelect: onSelect,
       itemBuilder:
-          itemBuilder ?? (context, index, selected) => Text(items[index]),
+          itemBuilder ?? (context, index, highlighted) => Text(items[index]),
     ),
   );
 }
 
 void main() {
   group('pointer selection', () {
-    testWidgets('tapping an item selects it and fires onActivate', (tester) {
-      final controller = ListController(selectedIndex: 0);
-      final activated = <int>[];
+    testWidgets('tapping an item selects it and fires onSelect', (tester) {
+      final controller = ListController(initialIndex: 0);
+      final chosenItems = <int>[];
       tester.pumpWidget(
         SizedBox(
           width: 12,
@@ -51,8 +47,8 @@ void main() {
           child: ListView.builder(
             controller: controller,
             itemCount: 4,
-            onActivate: activated.add,
-            itemBuilder: (context, index, selected) =>
+            onSelect: chosenItems.add,
+            itemBuilder: (context, index, highlighted) =>
                 SizedBox(width: 12, height: 1, child: Text('item $index')),
           ),
         ),
@@ -63,17 +59,16 @@ void main() {
       tester.sendMouse(_mouse(MouseEventKind.down, 1, 2));
       tester.sendMouse(_mouse(MouseEventKind.up, 1, 2));
 
-      expect(controller.selectedIndex, 2);
-      expect(activated, [2]);
+      expect(controller.currentIndex, 2);
+      expect(chosenItems, [2]);
     });
 
     testWidgets('tap survives a rebuild between press and release', (tester) {
       // Over the serve wire, down and up arrive in separate frames, and the
-      // press triggers a click-to-focus rebuild in between — which recreates
-      // the lazy list's item render objects. Acting on the press (not a
-      // release-time identity match) keeps the selection working anyway.
-      final controller = ListController(selectedIndex: 0);
-      final activated = <int>[];
+      // press triggers a click-to-focus rebuild in between. The release
+      // must still resolve the same logical item and select it once.
+      final controller = ListController(initialIndex: 0);
+      final chosenItems = <int>[];
       tester.pumpWidget(
         SizedBox(
           width: 12,
@@ -81,8 +76,8 @@ void main() {
           child: ListView.builder(
             controller: controller,
             itemCount: 4,
-            onActivate: activated.add,
-            itemBuilder: (context, index, selected) =>
+            onSelect: chosenItems.add,
+            itemBuilder: (context, index, highlighted) =>
                 SizedBox(width: 12, height: 1, child: Text('item $index')),
           ),
         ),
@@ -94,15 +89,15 @@ void main() {
       tester.render(size: const CellSize(12, 4));
       tester.sendMouse(_mouse(MouseEventKind.up, 1, 2));
 
-      expect(controller.selectedIndex, 2);
-      expect(activated, [2]);
+      expect(controller.currentIndex, 2);
+      expect(chosenItems, [2]);
     });
 
     testWidgets('a drag wiggle between press and release still taps', (tester) {
       // A real mouse click in the browser client emits a tiny drag between
       // pointerdown and pointerup. That wiggle must not suppress the tap.
-      final controller = ListController(selectedIndex: 0);
-      final activated = <int>[];
+      final controller = ListController(initialIndex: 0);
+      final chosenItems = <int>[];
       tester.pumpWidget(
         SizedBox(
           width: 12,
@@ -110,8 +105,8 @@ void main() {
           child: ListView.builder(
             controller: controller,
             itemCount: 4,
-            onActivate: activated.add,
-            itemBuilder: (context, index, selected) =>
+            onSelect: chosenItems.add,
+            itemBuilder: (context, index, highlighted) =>
                 SizedBox(width: 12, height: 1, child: Text('item $index')),
           ),
         ),
@@ -122,13 +117,13 @@ void main() {
       tester.sendMouse(_mouse(MouseEventKind.drag, 1, 2)); // wiggle, same cell
       tester.sendMouse(_mouse(MouseEventKind.up, 1, 2));
 
-      expect(controller.selectedIndex, 2);
-      expect(activated, [2]);
+      expect(controller.currentIndex, 2);
+      expect(chosenItems, [2]);
     });
   });
 
-  group('selection movement', () {
-    testWidgets('arrowDown advances selectedIndex', (tester) {
+  group('cursor movement', () {
+    testWidgets('arrowDown advances currentIndex', (tester) {
       final controller = ListController();
       tester.pumpWidget(
         ListView.builder(
@@ -138,16 +133,16 @@ void main() {
           autofocus: true,
         ),
       );
-      expect(controller.selectedIndex, 0);
+      expect(controller.currentIndex, 0);
 
       tester.sendKey(_code(KeyCode.arrowDown));
-      expect(controller.selectedIndex, 1);
+      expect(controller.currentIndex, 1);
       tester.sendKey(_code(KeyCode.arrowDown));
-      expect(controller.selectedIndex, 2);
+      expect(controller.currentIndex, 2);
     });
 
-    testWidgets('arrowUp decrements selectedIndex', (tester) {
-      final controller = ListController(selectedIndex: 3);
+    testWidgets('arrowUp decrements currentIndex', (tester) {
+      final controller = ListController(initialIndex: 3);
       tester.pumpWidget(
         ListView.builder(
           controller: controller,
@@ -156,10 +151,10 @@ void main() {
           autofocus: true,
         ),
       );
-      expect(controller.selectedIndex, 3);
+      expect(controller.currentIndex, 3);
 
       tester.sendKey(_code(KeyCode.arrowUp));
-      expect(controller.selectedIndex, 2);
+      expect(controller.currentIndex, 2);
     });
 
     testWidgets('home jumps to first, end jumps to last', (tester) {
@@ -174,19 +169,19 @@ void main() {
       );
 
       tester.sendKey(_code(KeyCode.end));
-      expect(controller.selectedIndex, 7);
+      expect(controller.currentIndex, 7);
       tester.sendKey(_code(KeyCode.home));
-      expect(controller.selectedIndex, 0);
+      expect(controller.currentIndex, 0);
     });
 
-    testWidgets('Enter fires onActivate with the current index', (tester) {
+    testWidgets('Enter fires onSelect with the current index', (tester) {
       int? selected;
       tester.pumpWidget(
         ListView.builder(
           itemCount: 3,
           itemBuilder: _itemBuilder,
           autofocus: true,
-          onActivate: (i) => selected = i,
+          onSelect: (i) => selected = i,
         ),
       );
 
@@ -195,12 +190,10 @@ void main() {
       expect(selected, 1);
     });
 
-    testWidgets('selection movement and activation are separate events', (
-      tester,
-    ) {
-      final controller = ListController(selectedIndex: 0);
-      final selections = <int>[];
-      final activations = <int>[];
+    testWidgets('browsing and selection are separate events', (tester) {
+      final controller = ListController(initialIndex: 0);
+      final focusedItems = <int>[];
+      final choices = <int>[];
       tester.pumpWidget(
         SizedBox(
           width: 12,
@@ -209,33 +202,34 @@ void main() {
             controller: controller,
             itemCount: 3,
             autofocus: true,
-            onSelectionChanged: selections.add,
-            onActivate: activations.add,
-            itemBuilder: (context, index, selected) => Text('item $index'),
+            onFocusedItemChanged: focusedItems.add,
+            onSelect: choices.add,
+            itemBuilder: (context, index, highlighted) => Text('item $index'),
           ),
         ),
       );
       tester.render(size: const CellSize(12, 3));
 
       tester.sendKey(_code(KeyCode.arrowDown));
-      expect(selections, [1]);
-      expect(activations, isEmpty);
+      expect(focusedItems, [1]);
+      expect(choices, isEmpty);
 
       tester.sendKey(_code(KeyCode.enter));
-      expect(selections, [1]);
-      expect(activations, [1]);
+      expect(focusedItems, [1]);
+      expect(choices, [1]);
 
       tester.sendMouse(_mouse(MouseEventKind.down, 1, 2));
-      expect(selections, [1, 2]);
-      expect(activations, [1]);
+      expect(focusedItems, [1, 2]);
+      expect(choices, [1]);
       tester.sendMouse(_mouse(MouseEventKind.up, 1, 2));
-      expect(activations, [1, 2]);
+      expect(choices, [1, 2]);
 
-      controller.selectedIndex = 0;
-      expect(selections, [
-        1,
-        2,
-      ], reason: 'programmatic selection is not reported as user input');
+      controller.currentIndex = 0;
+      expect(
+        focusedItems,
+        [1, 2],
+        reason: 'programmatic cursor movement is not reported as user input',
+      );
     });
   });
 
@@ -286,7 +280,7 @@ void main() {
     testWidgets('bubble lets down at the last item reach ancestor '
         'bindings', (tester) {
       var bubbled = 0;
-      final controller = ListController(selectedIndex: 2);
+      final controller = ListController(initialIndex: 2);
       tester.pumpWidget(
         KeyBindings(
           bindings: [
@@ -325,9 +319,7 @@ void main() {
       expect(controller.visibleRange, (first: 0, last: 4));
     });
 
-    testWidgets('selection moving past the bottom scrolls the viewport', (
-      tester,
-    ) {
+    testWidgets('cursor moving past the bottom scrolls the viewport', (tester) {
       final controller = ListController();
       tester.pumpWidget(
         ListView.builder(
@@ -340,9 +332,9 @@ void main() {
       tester.render(size: const CellSize(10, 5));
       expect(controller.visibleRange, (first: 0, last: 4));
 
-      controller.selectedIndex = 6;
+      controller.currentIndex = 6;
       tester.render(size: const CellSize(10, 5));
-      expect(controller.selectedIndex, 6);
+      expect(controller.currentIndex, 6);
       expect(controller.visibleRange, (first: 2, last: 6));
     });
 
@@ -355,7 +347,7 @@ void main() {
       // or the row goes dead / hits a stale index. This is the lazy-specific
       // guard the eager path can't provide.
       final controller = ListController();
-      final activated = <int>[];
+      final chosenItems = <int>[];
       tester.pumpWidget(
         SizedBox(
           width: 10,
@@ -363,9 +355,9 @@ void main() {
           child: ListView.builder(
             controller: controller,
             itemCount: 20,
-            onActivate: activated.add,
+            onSelect: chosenItems.add,
             autofocus: true,
-            itemBuilder: (context, index, selected) =>
+            itemBuilder: (context, index, highlighted) =>
                 SizedBox(width: 10, height: 1, child: Text('item $index')),
           ),
         ),
@@ -377,7 +369,7 @@ void main() {
       // boundary cache-hits on this frame — assert that explicitly, or the tap
       // below would pass even if item 2 repainted (live registration) and the
       // replay path this test exists for were broken.
-      controller.selectedIndex = 6;
+      controller.currentIndex = 6;
       RepaintBoundaryDebugStats.beginFrame(enabled: true);
       tester.render(size: const CellSize(10, 5));
       final stats = RepaintBoundaryDebugStats.takeFrameStats();
@@ -395,12 +387,12 @@ void main() {
       // boundary replayed it at the new screen row, mapped to the right index.
       tester.sendMouse(_mouse(MouseEventKind.down, 1, 0));
       tester.sendMouse(_mouse(MouseEventKind.up, 1, 0));
-      expect(controller.selectedIndex, 2);
-      expect(activated, [2]);
+      expect(controller.currentIndex, 2);
+      expect(chosenItems, [2]);
     });
 
-    testWidgets('selection moving above the top scrolls back up', (tester) {
-      final controller = ListController(selectedIndex: 10);
+    testWidgets('cursor moving above the top scrolls back up', (tester) {
+      final controller = ListController(initialIndex: 10);
       tester.pumpWidget(
         ListView.builder(
           controller: controller,
@@ -412,7 +404,7 @@ void main() {
       tester.render(size: const CellSize(10, 5));
       expect(controller.visibleRange, (first: 6, last: 10));
 
-      controller.selectedIndex = 4;
+      controller.currentIndex = 4;
       tester.render(size: const CellSize(10, 5));
       expect(controller.visibleRange, (first: 4, last: 8));
     });
@@ -449,11 +441,11 @@ void main() {
       );
 
       tester.sendKey(_code(KeyCode.arrowDown));
-      expect(controller.selectedIndex, 1);
+      expect(controller.currentIndex, 1);
     });
 
-    testWidgets('itemCount change clamps the existing selection', (tester) {
-      final controller = ListController(selectedIndex: 9);
+    testWidgets('itemCount change clamps the existing cursor', (tester) {
+      final controller = ListController(initialIndex: 9);
       tester.pumpWidget(
         ListView.builder(
           controller: controller,
@@ -462,7 +454,7 @@ void main() {
           autofocus: true,
         ),
       );
-      expect(controller.selectedIndex, 9);
+      expect(controller.currentIndex, 9);
 
       tester.pumpWidget(
         ListView.builder(
@@ -472,13 +464,13 @@ void main() {
           autofocus: true,
         ),
       );
-      expect(controller.selectedIndex, 2);
+      expect(controller.currentIndex, 2);
     });
 
     testWidgets('swapping controllers attaches without counting arrivals', (
       tester,
     ) {
-      var controller = ListController(selectedIndex: 3);
+      var controller = ListController(initialIndex: 3);
 
       Widget app() => ListView.builder(
         controller: controller,
@@ -490,11 +482,11 @@ void main() {
       expect(controller.itemCount, 5);
       expect(controller.unseenCount, 0);
 
-      controller = ListController(selectedIndex: 2);
+      controller = ListController(initialIndex: 2);
       tester.pumpWidget(app());
 
       expect(controller.itemCount, 5);
-      expect(controller.selectedIndex, 2);
+      expect(controller.currentIndex, 2);
       expect(
         controller.unseenCount,
         0,
@@ -506,12 +498,12 @@ void main() {
         'keyboard-navigable (L)', (tester) {
       // The audit's "renders permanently blank after a controller swap"
       // cluster (#473/#487): didUpdateWidget must re-push the count and default
-      // the selection onto the replacement controller — exactly as initState
+      // the cursor onto the replacement controller — exactly as initState
       // does — or the lazy render object reads itemCount == 0, unmounts every
       // row, and stays blank until some later itemCount change. Prior tests
       // only assert the controller's mirror fields; this pins the actual frame
       // and that arrow nav survives.
-      var controller = ListController(selectedIndex: 0);
+      var controller = ListController(initialIndex: 0);
       Widget app(ListController? c) => SizedBox(
         width: 12,
         height: 4,
@@ -519,7 +511,7 @@ void main() {
           controller: c,
           itemCount: 5,
           autofocus: true,
-          itemBuilder: (context, index, selected) => Text('Item $index'),
+          itemBuilder: (context, index, highlighted) => Text('Item $index'),
         ),
       );
 
@@ -530,7 +522,7 @@ void main() {
       );
 
       // (1) Swap to a *different* controller instance, itemCount unchanged.
-      controller = ListController(selectedIndex: 0);
+      controller = ListController(initialIndex: 0);
       tester.pumpWidget(app(controller));
       expect(
         tester.renderToString(size: const CellSize(12, 4), emptyMark: ' '),
@@ -541,7 +533,7 @@ void main() {
 
       // Keyboard nav is alive on the swapped-in controller.
       tester.sendKey(_code(KeyCode.arrowDown));
-      expect(controller.selectedIndex, 1);
+      expect(controller.currentIndex, 1);
 
       // (2) Drop the controller entirely — the state builds its own fallback.
       tester.pumpWidget(app(null));
@@ -566,10 +558,10 @@ void main() {
           autofocus: true,
         ),
       );
-      expect(controller.selectedIndex, isNull);
+      expect(controller.currentIndex, isNull);
 
       tester.sendKey(_code(KeyCode.arrowDown));
-      expect(controller.selectedIndex, isNull);
+      expect(controller.currentIndex, isNull);
     });
 
     testWidgets('a list populated after mounting restores its default cursor', (
@@ -585,10 +577,10 @@ void main() {
       );
 
       tester.pumpWidget(app());
-      expect(controller.selectedIndex, isNull);
+      expect(controller.currentIndex, isNull);
       count = 3;
       tester.pumpWidget(app());
-      expect(controller.selectedIndex, 0);
+      expect(controller.currentIndex, 0);
     });
 
     testWidgets('an explicitly cleared cursor stays in scroll-only mode', (
@@ -604,10 +596,10 @@ void main() {
       );
 
       tester.pumpWidget(app());
-      controller.selectedIndex = null;
+      controller.currentIndex = null;
       count = 3;
       tester.pumpWidget(app());
-      expect(controller.selectedIndex, isNull);
+      expect(controller.currentIndex, isNull);
     });
   });
 
@@ -705,10 +697,10 @@ void main() {
       expect(focusNode.hasFocus, isTrue);
 
       tester.sendKey(_code(KeyCode.arrowDown));
-      expect(controller.selectedIndex, 1);
+      expect(controller.currentIndex, 1);
     });
 
-    testWidgets('builder selected flag is active only while list is focused', (
+    testWidgets('current row stays highlighted when focus moves outside', (
       tester,
     ) {
       final controller = ListController();
@@ -722,8 +714,8 @@ void main() {
                 controller: controller,
                 itemCount: 3,
                 autofocus: true,
-                itemBuilder: (context, index, selected) =>
-                    Text('${selected ? '>' : ' '} Item $index'),
+                itemBuilder: (context, index, highlighted) =>
+                    Text('${highlighted ? '>' : ' '} Item $index'),
               ),
             ),
             Focus(focusNode: outside, child: const Text('Outside')),
@@ -743,8 +735,9 @@ void main() {
         size: const CellSize(40, 4),
         emptyMark: ' ',
       );
-      expect(controller.selectedIndex, 0);
-      expect(output, isNot(contains('> Item 0')));
+      expect(controller.currentIndex, 0);
+      expect(outside.hasFocus, isTrue);
+      expect(output, contains('> Item 0'));
       expect(output, contains('Item 0'));
 
       outside.dispose();
@@ -763,15 +756,15 @@ void main() {
         ),
       );
       tester.render(size: const CellSize(10, 5));
-      expect(controller.selectedIndex, 0);
+      expect(controller.currentIndex, 0);
 
       tester.sendKey(_code(KeyCode.pageDown));
       // Viewport is 5 rows of 1-row items, so page = 5.
-      expect(controller.selectedIndex, 5);
+      expect(controller.currentIndex, 5);
     });
 
     testWidgets('PageUp moves back by the page size', (tester) {
-      final controller = ListController(selectedIndex: 20);
+      final controller = ListController(initialIndex: 20);
       tester.pumpWidget(
         ListView.builder(
           controller: controller,
@@ -783,11 +776,11 @@ void main() {
       tester.render(size: const CellSize(10, 5));
 
       tester.sendKey(_code(KeyCode.pageUp));
-      expect(controller.selectedIndex, 15);
+      expect(controller.currentIndex, 15);
     });
 
     testWidgets('PageDown clamps at the last item', (tester) {
-      final controller = ListController(selectedIndex: 97);
+      final controller = ListController(initialIndex: 97);
       tester.pumpWidget(
         ListView.builder(
           controller: controller,
@@ -799,14 +792,14 @@ void main() {
       tester.render(size: const CellSize(10, 5));
 
       tester.sendKey(_code(KeyCode.pageDown));
-      expect(controller.selectedIndex, 99);
+      expect(controller.currentIndex, 99);
     });
 
     testWidgets('PageDown at the last item respects edgeBehavior bubble', (
       tester,
     ) {
       var bubbled = 0;
-      final controller = ListController(selectedIndex: 2);
+      final controller = ListController(initialIndex: 2);
       tester.pumpWidget(
         KeyBindings(
           bindings: [
@@ -827,11 +820,11 @@ void main() {
   });
 
   group('tail clamp — the anchor never sits past the last full page', () {
-    // A scroll-only list (no selection) that follows its tail used to anchor
+    // A scroll-only list (no cursor) that follows its tail used to anchor
     // the NEWEST item at the top of the viewport: every frame showed exactly
     // one item over a blank screen, forever, for a tailing log — a documented
-    // configuration. The "selection below the viewport" re-anchor only ran
-    // when there was a selection. The viewport now re-anchors whenever the
+    // configuration. The "cursor below the viewport" re-anchor only ran
+    // when there was a cursor. The viewport now re-anchors whenever the
     // forward walk runs out of items with rows to spare.
     testWidgets('a scroll-only list following its tail shows a full last '
         'page (lazy)', (tester) {
@@ -843,7 +836,7 @@ void main() {
       );
       tester.pumpWidget(list(20));
       tester.render(size: const CellSize(20, 5));
-      controller.selectedIndex = null; // scroll-only
+      controller.currentIndex = null; // scroll-only
       controller.followTail = true; // follow the tail
       tester.render(size: const CellSize(20, 5));
       expect(controller.visibleRange, (first: 15, last: 19));
@@ -863,7 +856,7 @@ void main() {
       );
       tester.pumpWidget(list(20));
       tester.render(size: const CellSize(20, 5));
-      controller.selectedIndex = null;
+      controller.currentIndex = null;
       controller.jumpToBottom();
       tester.render(size: const CellSize(20, 5));
       expect(controller.visibleRange, (first: 15, last: 19));
@@ -889,7 +882,7 @@ void main() {
     testWidgets('a viewport that grows taller re-fills from the tail', (
       tester,
     ) {
-      final controller = ListController(selectedIndex: 19);
+      final controller = ListController(initialIndex: 19);
       tester.pumpWidget(
         ListView.builder(
           controller: controller,
@@ -905,7 +898,7 @@ void main() {
   });
 
   group('followTail', () {
-    testWidgets('following appends preserves logical selection', (tester) {
+    testWidgets('following appends preserves the current item', (tester) {
       final controller = ListController(followTail: true);
       tester.pumpWidget(
         ListView.builder(
@@ -916,7 +909,7 @@ void main() {
       );
       tester.render();
       expect(
-        controller.selectedIndex,
+        controller.currentIndex,
         0,
         reason: 'following scrolls without selecting a different item',
       );
@@ -931,14 +924,14 @@ void main() {
         ),
       );
       expect(
-        controller.selectedIndex,
+        controller.currentIndex,
         0,
-        reason: 'following does not advance selection',
+        reason: 'following does not advance the cursor',
       );
     });
 
     testWidgets('default off: appending items does not move the '
-        'selection', (tester) {
+        'cursor', (tester) {
       final controller = ListController(); // followTail defaults to false
       tester.pumpWidget(
         ListView.builder(
@@ -948,7 +941,7 @@ void main() {
         ),
       );
       tester.render();
-      expect(controller.selectedIndex, 0);
+      expect(controller.currentIndex, 0);
 
       tester.pumpWidget(
         ListView.builder(
@@ -958,14 +951,14 @@ void main() {
         ),
       );
       expect(
-        controller.selectedIndex,
+        controller.currentIndex,
         0,
-        reason: 'appending never changes the logical selection',
+        reason: 'appending never changes the current item',
       );
     });
 
-    testWidgets('itemCount shrinking clamps selection', (tester) {
-      final controller = ListController(selectedIndex: 3, followTail: true);
+    testWidgets('itemCount shrinking clamps cursor', (tester) {
+      final controller = ListController(initialIndex: 3, followTail: true);
       tester.pumpWidget(
         ListView.builder(
           controller: controller,
@@ -974,9 +967,9 @@ void main() {
         ),
       );
       tester.render();
-      expect(controller.selectedIndex, 3);
+      expect(controller.currentIndex, 3);
 
-      // Shrinking clamps the logical selection to a surviving index. But the existing selection gets clamped to 1 (new
+      // Shrinking clamps the current item to a surviving index. But the existing cursor gets clamped to 1 (new
       // last index).
       tester.pumpWidget(
         ListView.builder(
@@ -985,7 +978,7 @@ void main() {
           itemBuilder: _itemBuilder,
         ),
       );
-      expect(controller.selectedIndex, 1);
+      expect(controller.currentIndex, 1);
     });
   });
 
@@ -993,31 +986,33 @@ void main() {
   // is exercised for both renderers in list_view_dx_test.dart.
 
   group('lazy ListView.builder', () {
-    testWidgets('duplicate keyed items fail on their initial mount', (tester) {
-      tester.mountWidget(
-        ListView.builder(
-          itemCount: 2,
-          itemKeyBuilder: (_) => 'duplicate',
-          findChildIndexCallback: (_) => 0,
-          itemBuilder: (context, index, selected) => Text('item $index'),
-        ),
-      );
-
+    testWidgets('duplicate offscreen keys fail before mounting rows', (tester) {
+      var rowsBuilt = 0;
       expect(
-        () => tester.render(size: const CellSize(10, 2)),
+        () => tester.pumpWidget(
+          ListView.builder(
+            itemCount: 100,
+            itemKeyBuilder: (index) => index == 99 ? 98 : index,
+            itemBuilder: (context, index, highlighted) {
+              rowsBuilt++;
+              return Text('item $index');
+            },
+          ),
+        ),
         throwsA(
           isA<StateError>().having(
             (error) => error.message,
             'message',
-            contains('being mounted at index 1'),
+            contains('indices 98 and 99'),
           ),
         ),
       );
+      expect(rowsBuilt, 0);
     });
 
     testWidgets('itemBuilder is only invoked for visible items', (tester) {
       final builtIndices = <int>[];
-      Widget builder(BuildContext context, int i, bool selected) {
+      Widget builder(BuildContext context, int i, bool highlighted) {
         builtIndices.add(i);
         return Text('Item $i');
       }
@@ -1029,7 +1024,7 @@ void main() {
       tester.render(size: const CellSize(10, 5));
 
       // 1000 items in the list, viewport is 5 rows, items are 1 row each.
-      // Only the visible window (plus what the auto-scroll-to-selection
+      // Only the visible window (plus what the auto-scroll-to-cursor
       // probe touches) should be built.
       expect(
         builtIndices.length,
@@ -1091,7 +1086,7 @@ void main() {
         ListView.builder(
           controller: controller,
           itemCount: 30,
-          itemBuilder: (context, index, selected) => _LifecycleWidget(
+          itemBuilder: (context, index, highlighted) => _LifecycleWidget(
             index: index,
             mounts: mountCounts,
             unmounts: unmountCounts,
@@ -1100,7 +1095,7 @@ void main() {
       );
       tester.render(size: const CellSize(10, 5));
 
-      controller.selectedIndex = 10;
+      controller.currentIndex = 10;
       tester.render(size: const CellSize(10, 5));
 
       expect(controller.visibleRange, (first: 6, last: 10));
@@ -1127,7 +1122,7 @@ void main() {
         ListView.builder(
           controller: controller,
           itemCount: 1000,
-          itemBuilder: (context, index, selected) => _LifecycleWidget(
+          itemBuilder: (context, index, highlighted) => _LifecycleWidget(
             index: index,
             mounts: mountCounts,
             unmounts: unmountCounts,
@@ -1136,7 +1131,7 @@ void main() {
       );
       tester.render(size: const CellSize(10, 10));
 
-      expect(controller.selectedIndex, 0);
+      expect(controller.currentIndex, 0);
       expect(controller.visibleRange, (first: 990, last: 999));
 
       // Net-mounted = mounted but not (yet) unmounted. Only the visible tail
@@ -1155,13 +1150,13 @@ void main() {
       );
     });
 
-    testWidgets('selection styling updates active items without '
+    testWidgets('highlight styling updates mounted items without '
         'remounting', (tester) {
       final mountCounts = <int, int>{};
       final unmountCounts = <int, int>{};
-      final lastSelected = <int, bool>{};
-      Widget builder(BuildContext context, int i, bool sel) {
-        lastSelected[i] = sel;
+      final lastHighlighted = <int, bool>{};
+      Widget builder(BuildContext context, int i, bool highlighted) {
+        lastHighlighted[i] = highlighted;
         return _LifecycleWidget(
           index: i,
           mounts: mountCounts,
@@ -1180,27 +1175,27 @@ void main() {
         ),
       );
       tester.render(size: const CellSize(10, 5));
-      expect(lastSelected[0], isTrue);
+      expect(lastHighlighted[0], isTrue);
       final initialMounts = Map<int, int>.from(mountCounts);
 
-      // Move selection within the visible window.
+      // Move the cursor within the visible window.
       tester.sendKey(_code(KeyCode.arrowDown));
       tester.render(size: const CellSize(10, 5));
 
       // Items shouldn't have remounted — the lazy element updates
       // existing children with new widgets reflecting the new
-      // `selected` flag.
+      // `highlighted` flag.
       expect(mountCounts, initialMounts);
       expect(unmountCounts, isEmpty);
-      expect(lastSelected[0], isFalse);
-      expect(lastSelected[1], isTrue);
+      expect(lastHighlighted[0], isFalse);
+      expect(lastHighlighted[1], isTrue);
     });
 
-    testWidgets('keyed prepend preserves selection, viewport, and row state', (
+    testWidgets('keyed prepend preserves the cursor, viewport, and row state', (
       tester,
     ) {
       var items = <String>['a', 'b', 'c', 'd'];
-      final controller = ListController(selectedIndex: 1);
+      final controller = ListController(initialIndex: 1);
       final mounts = <String, int>{};
       final unmounts = <String, int>{};
 
@@ -1211,11 +1206,7 @@ void main() {
           controller: controller,
           itemCount: items.length,
           itemKeyBuilder: (index) => items[index],
-          findChildIndexCallback: (key) {
-            final index = items.indexWhere((item) => item == key);
-            return index == -1 ? null : index;
-          },
-          itemBuilder: (context, index, selected) => _KeyedLifecycleWidget(
+          itemBuilder: (context, index, highlighted) => _KeyedLifecycleWidget(
             id: items[index],
             mounts: mounts,
             unmounts: unmounts,
@@ -1232,7 +1223,7 @@ void main() {
       tester.pumpWidget(app());
 
       expect(tester.renderToString(size: const CellSize(12, 2)), 'b:b\nc:c\n');
-      expect(controller.selectedIndex, 2, reason: 'the selected key is b');
+      expect(controller.currentIndex, 2, reason: 'the current key is b');
       expect(controller.visibleRange, (first: 2, last: 3));
       expect(controller.unseenCount, 0, reason: 'a prepend is not tail growth');
       expect(mounts['b'], 1);
@@ -1242,13 +1233,13 @@ void main() {
       items = [...items, 'e'];
       tester.pumpWidget(app());
       tester.render(size: const CellSize(12, 2));
-      expect(controller.selectedIndex, 2);
+      expect(controller.currentIndex, 2);
       expect(controller.unseenCount, 1, reason: 'only the true append is new');
     });
 
-    testWidgets('keyed reorder preserves the selected data item', (tester) {
+    testWidgets('keyed reorder preserves the current data item', (tester) {
       var items = <String>['a', 'b', 'c', 'd'];
-      final controller = ListController(selectedIndex: 2);
+      final controller = ListController(initialIndex: 2);
 
       Widget app() => SizedBox(
         width: 12,
@@ -1257,11 +1248,7 @@ void main() {
           controller: controller,
           itemCount: items.length,
           itemKeyBuilder: (index) => items[index],
-          findChildIndexCallback: (key) {
-            final index = items.indexWhere((item) => item == key);
-            return index == -1 ? null : index;
-          },
-          itemBuilder: (context, index, selected) => Text(items[index]),
+          itemBuilder: (context, index, highlighted) => Text(items[index]),
         ),
       );
 
@@ -1271,21 +1258,21 @@ void main() {
       tester.pumpWidget(app());
       tester.render(size: const CellSize(12, 4));
 
-      expect(controller.selectedIndex, 0, reason: 'the selected key remains c');
+      expect(controller.currentIndex, 0, reason: 'the current key remains c');
       expect(controller.unseenCount, 0);
     });
 
     testWidgets(
-      'keyed reorder preserves selection while viewport keeps following',
+      'keyed reorder preserves the cursor while viewport keeps following',
       (tester) {
         var items = <String>['a', 'b', 'c'];
-        final controller = ListController(selectedIndex: 2, followTail: true);
+        final controller = ListController(initialIndex: 2, followTail: true);
 
         Widget app() => _keyedStringList(items, controller: controller);
 
         tester.pumpWidget(app());
         tester.render(size: const CellSize(12, 3));
-        expect(controller.selectedIndex, 2);
+        expect(controller.currentIndex, 2);
         expect(controller.isFollowing, isTrue);
         expect(controller.atBottom, isTrue);
 
@@ -1293,12 +1280,12 @@ void main() {
         tester.pumpWidget(app());
         tester.render(size: const CellSize(12, 3));
 
-        expect(controller.selectedIndex, 0, reason: 'selected identity is c');
+        expect(controller.currentIndex, 0, reason: 'current identity is c');
         expect(
           controller.isFollowing,
           isTrue,
           reason:
-              'following describes the viewport, independently of selection',
+              'following describes the viewport, independently of the cursor',
         );
         expect(controller.atBottom, isTrue);
         expect(controller.unseenCount, 0);
@@ -1306,7 +1293,7 @@ void main() {
         items = [...items, 'd'];
         tester.pumpWidget(app());
 
-        expect(controller.selectedIndex, 0, reason: 'append does not yank c');
+        expect(controller.currentIndex, 0, reason: 'append does not yank c');
         expect(controller.unseenCount, 0);
       },
     );
@@ -1319,13 +1306,13 @@ void main() {
       // second-to-last index as "left the tail" — follow died on the FIRST
       // eviction, silently, with unseenCount stuck at 0.
       var items = <String>['a', 'b', 'c'];
-      final controller = ListController(selectedIndex: 2, followTail: true);
+      final controller = ListController(initialIndex: 2, followTail: true);
 
       Widget app() => _keyedStringList(items, controller: controller);
 
       tester.pumpWidget(app());
       tester.render(size: const CellSize(12, 3));
-      expect(controller.selectedIndex, 2);
+      expect(controller.currentIndex, 2);
       expect(controller.isFollowing, isTrue);
 
       items = ['b', 'c', 'd'];
@@ -1336,7 +1323,7 @@ void main() {
         isTrue,
         reason: 'an eviction is not a reorder',
       );
-      expect(controller.selectedIndex, 1, reason: 'selection remains on c');
+      expect(controller.currentIndex, 1, reason: 'cursor remains on c');
       expect(controller.atBottom, isTrue);
       expect(controller.unseenCount, 0);
 
@@ -1344,13 +1331,13 @@ void main() {
       tester.pumpWidget(app());
       tester.render(size: const CellSize(12, 3));
       expect(controller.isFollowing, isTrue, reason: 'and stays engaged');
-      expect(controller.selectedIndex, 0, reason: 'selection remains on c');
+      expect(controller.currentIndex, 0, reason: 'cursor remains on c');
     });
 
     testWidgets('a keyed rolling window while NOT following counts the '
         'arrival', (tester) {
       var items = <String>['a', 'b', 'c'];
-      final controller = ListController(selectedIndex: 1);
+      final controller = ListController(initialIndex: 1);
 
       Widget app() =>
           _keyedStringList(items, controller: controller, height: 2);
@@ -1362,7 +1349,7 @@ void main() {
       items = ['b', 'c', 'd'];
       tester.pumpWidget(app());
       tester.render(size: const CellSize(12, 3));
-      expect(controller.selectedIndex, 0, reason: 'selected identity is b');
+      expect(controller.currentIndex, 0, reason: 'current identity is b');
       expect(controller.isFollowing, isFalse);
       expect(controller.unseenCount, 1, reason: 'd arrived at the tail');
     });
@@ -1376,7 +1363,7 @@ void main() {
 
       tester.pumpWidget(app());
       tester.render(size: const CellSize(12, 2));
-      controller.selectedIndex = null;
+      controller.currentIndex = null;
       tester.render(size: const CellSize(12, 2));
       expect(controller.isFollowing, isTrue);
       expect(controller.atBottom, isTrue);
@@ -1385,24 +1372,24 @@ void main() {
       tester.pumpWidget(app());
       tester.render(size: const CellSize(12, 2));
 
-      expect(controller.selectedIndex, isNull);
+      expect(controller.currentIndex, isNull);
       expect(controller.isFollowing, isTrue);
       expect(controller.atBottom, isTrue);
       expect(controller.visibleRange?.last, 2);
     });
 
-    testWidgets('removing the selected key chooses its surviving successor', (
+    testWidgets('removing the current key chooses its surviving successor', (
       tester,
     ) {
       var items = <String>['a', 'b', 'c'];
-      final controller = ListController(selectedIndex: 1);
+      final controller = ListController(initialIndex: 1);
       final mounts = <String, int>{};
       final unmounts = <String, int>{};
 
       Widget app() => _keyedStringList(
         items,
         controller: controller,
-        itemBuilder: (context, index, selected) => _KeyedLifecycleWidget(
+        itemBuilder: (context, index, highlighted) => _KeyedLifecycleWidget(
           id: items[index],
           mounts: mounts,
           unmounts: unmounts,
@@ -1414,7 +1401,7 @@ void main() {
       items = ['a', 'c'];
       tester.pumpWidget(app());
 
-      expect(controller.selectedIndex, 1, reason: 'c succeeds the removed b');
+      expect(controller.currentIndex, 1, reason: 'c succeeds the removed b');
       expect(
         tester.renderToString(size: const CellSize(12, 3)),
         'a:a\nc:c\n\n',
@@ -1432,7 +1419,7 @@ void main() {
 
       Widget app() => _keyedStringList(
         items,
-        itemBuilder: (context, index, selected) => _KeyedLifecycleWidget(
+        itemBuilder: (context, index, highlighted) => _KeyedLifecycleWidget(
           id: items[index],
           mounts: mounts,
           unmounts: unmounts,
@@ -1464,14 +1451,14 @@ void main() {
       tester,
     ) {
       var items = <String>['a', 'b', 'c'];
-      final controller = ListController(selectedIndex: 0);
-      final activated = <({int index, String id})>[];
+      final controller = ListController(initialIndex: 0);
+      final chosenItems = <({int index, String id})>[];
 
       Widget app() => _keyedStringList(
         items,
         controller: controller,
-        onActivate: (index) => activated.add((index: index, id: items[index])),
-        itemBuilder: (context, index, selected) =>
+        onSelect: (index) => chosenItems.add((index: index, id: items[index])),
+        itemBuilder: (context, index, highlighted) =>
             SizedBox(width: 12, height: 1, child: Text(items[index])),
       );
 
@@ -1484,13 +1471,13 @@ void main() {
       tester.sendMouse(_mouse(MouseEventKind.down, 1, 1));
       tester.sendMouse(_mouse(MouseEventKind.up, 1, 1));
 
-      expect(controller.selectedIndex, 1);
-      expect(activated, [(index: 1, id: 'c')]);
+      expect(controller.currentIndex, 1);
+      expect(chosenItems, [(index: 1, id: 'c')]);
     });
 
     testWidgets('explicit jump wins over keyed anchor preservation', (tester) {
       var items = <String>['a', 'b', 'c', 'd', 'e'];
-      final controller = ListController(selectedIndex: 2);
+      final controller = ListController(initialIndex: 2);
 
       Widget app() =>
           _keyedStringList(items, controller: controller, height: 2);
@@ -1507,39 +1494,47 @@ void main() {
       expect(controller.visibleRange, (first: 0, last: 1));
     });
 
-    testWidgets('cursor movement does not rerun keyed data reconciliation', (
+    testWidgets('key snapshots refresh on data updates, not cursor or scroll', (
       tester,
     ) {
       final items = [for (var i = 0; i < 1000; i++) 'item-$i'];
-      var reverseLookups = 0;
-      tester.pumpWidget(
-        SizedBox(
-          width: 12,
-          height: 5,
-          child: ListView.builder(
-            itemCount: items.length,
-            autofocus: true,
-            itemKeyBuilder: (index) => items[index],
-            findChildIndexCallback: (key) {
-              reverseLookups++;
-              final index = items.indexWhere((item) => item == key);
-              return index == -1 ? null : index;
-            },
-            itemBuilder: (context, index, selected) => Text(items[index]),
-          ),
+      final controller = ListController(initialIndex: 2);
+      var keysRead = 0;
+      var rowsBuilt = 0;
+      // Deliberately reuse the same closure and mutate the same collection.
+      Object keyAt(int index) {
+        keysRead++;
+        return items[index];
+      }
+
+      Widget app() => SizedBox(
+        width: 16,
+        height: 5,
+        child: ListView.builder(
+          controller: controller,
+          itemCount: items.length,
+          autofocus: true,
+          itemKeyBuilder: keyAt,
+          itemBuilder: (context, index, highlighted) {
+            rowsBuilt++;
+            return Text(items[index]);
+          },
         ),
       );
-      tester.render(size: const CellSize(12, 5));
-      reverseLookups = 0;
+      tester.pumpWidget(app());
+      expect(keysRead, 1000);
+      expect(rowsBuilt, lessThan(30), reason: 'row widgets stay lazy');
+      keysRead = 0;
+      tester.press(KeySequence.down);
+      controller.jumpToIndex(500);
+      tester.pump();
+      expect(keysRead, 0, reason: 'cursor and viewport reuse the snapshot');
 
-      tester.sendKey(_code(KeyCode.arrowDown));
-      tester.render(size: const CellSize(12, 5));
-
-      expect(
-        reverseLookups,
-        0,
-        reason: 'selection-only rebuilds must stay O(visible rows)',
-      );
+      items.insert(0, 'new');
+      tester.pumpWidget(app());
+      expect(keysRead, 1001, reason: 'each key is read once on data update');
+      expect(controller.currentIndex, 4);
+      expect(tester.renderToString(), contains('item-500'));
     });
 
     testWidgets('leaving and re-entering keyed mode remounts safely', (tester) {
@@ -1554,13 +1549,7 @@ void main() {
         child: ListView.builder(
           itemCount: items.length,
           itemKeyBuilder: keyed ? (index) => items[index] : null,
-          findChildIndexCallback: keyed
-              ? (key) {
-                  final index = items.indexWhere((item) => item == key);
-                  return index == -1 ? null : index;
-                }
-              : null,
-          itemBuilder: (context, index, selected) => _KeyedLifecycleWidget(
+          itemBuilder: (context, index, highlighted) => _KeyedLifecycleWidget(
             id: items[index],
             mounts: mounts,
             unmounts: unmounts,
@@ -1586,7 +1575,7 @@ void main() {
   group('ListView.separated (F3)', () {
     // Single-line 'item{i}' rows and 'sep{i}' separators, so viewport row
     // math is easy to reason about in the assertions below.
-    Widget itemB(BuildContext c, int i, bool sel) => Text('item$i');
+    Widget itemB(BuildContext c, int i, bool highlighted) => Text('item$i');
     Widget? sepB(BuildContext c, int i) => Text('sep$i');
 
     List<String> nonEmptyRows(FleuryTester tester, CellSize size) => tester
@@ -1669,7 +1658,7 @@ void main() {
 
     testWidgets('arrow nav walks items only — separators never take the '
         'cursor', (tester) {
-      final selections = <int>[];
+      final focusedItems = <int>[];
       final controller = ListController();
       tester.pumpWidget(
         ListView.separated(
@@ -1678,33 +1667,33 @@ void main() {
           itemBuilder: itemB,
           separatorBuilder: sepB,
           autofocus: true,
-          onActivate: selections.add,
+          onSelect: focusedItems.add,
         ),
       );
       tester.render(size: const CellSize(8, 12)); // 4 items + 3 seps = 7 rows
-      expect(controller.selectedIndex, 0);
+      expect(controller.currentIndex, 0);
       // Each Down lands on the next item index — no half-step onto a separator.
       for (final expected in [1, 2, 3]) {
         tester.sendKey(_code(KeyCode.arrowDown));
         tester.render(size: const CellSize(8, 12));
-        expect(controller.selectedIndex, expected);
+        expect(controller.currentIndex, expected);
       }
       // At the last item, Down is an edge — no phantom trailing-separator row.
       tester.sendKey(_code(KeyCode.arrowDown));
       tester.render(size: const CellSize(8, 12));
-      expect(controller.selectedIndex, 3);
+      expect(controller.currentIndex, 3);
       // Enter reports the item index, not a separator position.
       tester.sendKey(_code(KeyCode.enter));
-      expect(selections, [3]);
+      expect(focusedItems, [3]);
     });
 
     testWidgets('clicking a separator selects the item it trails; clicking an '
-        'item selects and fires onActivate', (tester) {
+        'item selects and fires onSelect', (tester) {
       // A separator is composed into the block of the item it trails, and the
       // block is one tap target — so a click on the separator row selects that
       // item (it holds no index of its own).
-      final activated = <int>[];
-      final controller = ListController(selectedIndex: 0);
+      final chosenItems = <int>[];
+      final controller = ListController(initialIndex: 0);
       tester.pumpWidget(
         SizedBox(
           width: 12,
@@ -1712,7 +1701,7 @@ void main() {
           child: ListView.separated(
             controller: controller,
             itemCount: 3,
-            onActivate: activated.add,
+            onSelect: chosenItems.add,
             itemBuilder: (c, i, sel) =>
                 SizedBox(width: 12, height: 1, child: Text('item$i')),
             separatorBuilder: (c, i) =>
@@ -1725,13 +1714,13 @@ void main() {
       // sep0 (row 1) trails item0, so clicking it selects item0.
       tester.sendMouse(_mouse(MouseEventKind.down, 1, 1));
       tester.sendMouse(_mouse(MouseEventKind.up, 1, 1));
-      expect(controller.selectedIndex, 0);
-      expect(activated, [0], reason: 'a separator click selects its item');
-      // The item on row 2 selects and fires onActivate(1) as usual.
+      expect(controller.currentIndex, 0);
+      expect(chosenItems, [0], reason: 'a separator click selects its item');
+      // The item on row 2 selects and fires onSelect(1) as usual.
       tester.sendMouse(_mouse(MouseEventKind.down, 1, 2));
       tester.sendMouse(_mouse(MouseEventKind.up, 1, 2));
-      expect(controller.selectedIndex, 1);
-      expect(activated, [0, 1]);
+      expect(controller.currentIndex, 1);
+      expect(chosenItems, [0, 1]);
     });
 
     testWidgets('an item in an overflowing separator block stays clickable at '
@@ -1741,8 +1730,8 @@ void main() {
       // must still register its tap region at its true screen row (regression:
       // the clip path dropped screenOffset, leaving item1 unclickable and its
       // phantom region stealing item0's clicks at the scratch origin).
-      final activated = <int>[];
-      final controller = ListController(selectedIndex: 0);
+      final chosenItems = <int>[];
+      final controller = ListController(initialIndex: 0);
       tester.pumpWidget(
         SizedBox(
           width: 8,
@@ -1750,7 +1739,7 @@ void main() {
           child: ListView.separated(
             controller: controller,
             itemCount: 4,
-            onActivate: activated.add,
+            onSelect: chosenItems.add,
             itemBuilder: (c, i, sel) =>
                 SizedBox(width: 8, height: 1, child: Text('i$i')),
             // Only item 1 gets a (tall) trailing separator, so its block
@@ -1766,12 +1755,12 @@ void main() {
       // Clicking item0's row selects item0 (no phantom steal from i1's block).
       tester.sendMouse(_mouse(MouseEventKind.down, 0, 0));
       tester.sendMouse(_mouse(MouseEventKind.up, 0, 0));
-      expect(controller.selectedIndex, 0);
+      expect(controller.currentIndex, 0);
       // Clicking item1's row selects item1 (clickable despite its overflow).
       tester.sendMouse(_mouse(MouseEventKind.down, 0, 1));
       tester.sendMouse(_mouse(MouseEventKind.up, 0, 1));
-      expect(controller.selectedIndex, 1);
-      expect(activated, [0, 1]);
+      expect(controller.currentIndex, 1);
+      expect(chosenItems, [0, 1]);
     });
   });
 
@@ -1806,7 +1795,7 @@ void main() {
       expect(controller.visibleRange, (first: 9000, last: 9004));
     });
 
-    testWidgets('a selected item taller than the viewport is shown from its '
+    testWidgets('a current item taller than the viewport is shown from its '
         'top without wedging the auto-scroll math', (tester) {
       final controller = ListController();
       tester.pumpWidget(
@@ -1823,14 +1812,14 @@ void main() {
       tester.render(size: const CellSize(8, 5));
       expect(controller.visibleRange, (first: 0, last: 4));
 
-      // Jump the selection onto the oversized item, far below the fold.
-      controller.selectedIndex = 5000;
+      // Move the cursor onto the oversized item, far below the fold.
+      controller.currentIndex = 5000;
       tester.render(size: const CellSize(8, 5));
 
       // Graceful: the tall item anchors to the top and fills the viewport —
-      // the "does the selection fit?" math resolves to a single-item window
+      // the "does the current item fit?" math resolves to a single-item window
       // instead of throwing or looping on an item bigger than the viewport.
-      expect(controller.selectedIndex, 5000);
+      expect(controller.currentIndex, 5000);
       expect(controller.visibleRange, (first: 5000, last: 5000));
     });
   });
@@ -1895,30 +1884,28 @@ void main() {
       );
     });
 
-    testWidgets('a selection move repaints only the two affected rows', (
-      tester,
-    ) {
-      // Selection is the primary per-frame driver for keyboard-navigated
-      // lists. Moving it re-invokes itemBuilder with a new `selected` flag for
+    testWidgets('a cursor move repaints only the two affected rows', (tester) {
+      // Cursor movement is the primary per-frame driver for keyboard-navigated
+      // lists. Moving it re-invokes itemBuilder with a new `highlighted` flag for
       // exactly the old and new rows, so only those two boundaries repaint —
       // the rest of the visible window blits from cache.
-      final controller = ListController(selectedIndex: 0);
+      final controller = ListController(initialIndex: 0);
       tester.pumpWidget(
         ListView.builder(
           controller: controller,
           itemCount: 20,
           autofocus: true,
-          selectionActive: true,
-          itemBuilder: (context, index, selected) => SizedBox(
+          itemBuilder: (context, index, highlighted) => SizedBox(
             width: 10,
             height: 1,
-            child: Text(selected ? '>item $index' : ' item $index'),
+            child: Text(highlighted ? '>item $index' : ' item $index'),
           ),
         ),
       );
       tester.render(size: const CellSize(10, 6)); // warm the visible caches
 
-      controller.selectedIndex = 3; // 0 deselects, 3 selects — two rows change
+      controller.currentIndex =
+          3; // highlight moves from 0 to 3 — two rows change
       RepaintBoundaryDebugStats.beginFrame(enabled: true);
       tester.render(size: const CellSize(10, 6));
       final stats = RepaintBoundaryDebugStats.takeFrameStats();
@@ -1926,7 +1913,7 @@ void main() {
       expect(
         stats.repaintedCount,
         2,
-        reason: 'only the deselected + selected rows repaint',
+        reason: 'only the old and new highlighted rows repaint',
       );
       expect(
         stats.cachedCount,

@@ -178,7 +178,7 @@ void main() {
     tester,
   ) async {
     final rows = [for (var i = 0; i < 12; i++) Probe('row$i')];
-    final controller = ScrollController(offset: 5);
+    final controller = ScrollController(initialOffset: 5);
     tester.pumpWidget(
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,

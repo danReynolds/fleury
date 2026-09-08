@@ -188,7 +188,7 @@ void main() {
     tester.pump();
     tester.sendKey(const KeyEvent(KeyCode.tab));
 
-    expect(changes, ['ch', 'checkout']);
+    expect(changes, ['checkout']);
     final field = tester.semantics().single(
       role: SemanticRole.textField,
       label: 'Command field',

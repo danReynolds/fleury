@@ -86,11 +86,10 @@ class TextArea extends StatefulWidget {
   /// Whether to request focus when the widget first mounts.
   final bool autofocus;
 
-  /// Called with the new text whenever the controller text changes.
+  /// Called with the accepted text after an editing interaction changes it.
   ///
-  /// Like [TextInput.onChanged], this includes typing, deletion, paste,
-  /// semantic edits, and programmatic controller writes, but excludes
-  /// cursor-only and selection-only changes.
+  /// Like [TextInput.onChanged], reports user and semantic edits. Programmatic
+  /// controller writes notify controller listeners instead.
   final void Function(String text)? onChanged;
 
   /// Called when the user presses Escape; bubbles if null.
@@ -173,7 +172,7 @@ class _TextAreaState extends State<TextArea>
     policy: () => widget.pastePolicy,
     documentLength: () => _controller.text.length,
     applyEdit: (text, {required coalesce}) =>
-        _controller.paste(text, coalesce: coalesce),
+        _edit(() => _controller.paste(text, coalesce: coalesce)),
     isAttached: () => mounted,
     onProgressChanged: () => setState(() {}),
     schedulePostFrame: _schedulePasteStep,
@@ -189,6 +188,17 @@ class _TextAreaState extends State<TextArea>
       return;
     }
     binding.addPostFrameCallback((_) => step());
+  }
+
+  // Only edits initiated by this view emit its interaction callback. Controller
+  // listeners still update every observing view and form for all mutations.
+  void _edit(void Function() change) {
+    final controller = _controller;
+    final before = controller.text;
+    change();
+    if (!mounted || !identical(controller, _controller)) return;
+    final after = controller.text;
+    if (before != after) widget.onChanged?.call(after);
   }
 
   @override
@@ -287,7 +297,6 @@ class _TextAreaState extends State<TextArea>
     final text = _controller.text;
     if (text != _lastNotifiedText) {
       _lastNotifiedText = text;
-      widget.onChanged?.call(text);
       _formRegistration?.controlValueChanged(this);
     }
   }
@@ -330,7 +339,7 @@ class _TextAreaState extends State<TextArea>
         return KeyEventResult.handled;
     }
     if (cut) {
-      _controller.deleteSelection();
+      _edit(() => _controller.deleteSelection());
     }
     return KeyEventResult.handled;
   }
@@ -343,7 +352,7 @@ class _TextAreaState extends State<TextArea>
       case SemanticAction.clear:
         if (_canEdit) {
           _paste.finish();
-          _controller.clear();
+          _edit(() => _controller.clear());
         }
         return;
       case SemanticAction.copy:
@@ -366,7 +375,9 @@ class _TextAreaState extends State<TextArea>
   void _handleSemanticSetValue(Object? value) {
     if (!_canEdit) return;
     _paste.finish();
-    _controller.text = value?.toString() ?? '';
+    _edit(() {
+      _controller.text = value?.toString() ?? '';
+    });
   }
 
   @override
@@ -374,7 +385,7 @@ class _TextAreaState extends State<TextArea>
     if (!widget.enabled) return KeyEventResult.ignored;
     if (widget.readOnly) return KeyEventResult.handled;
     _paste.finish();
-    _controller.insert(text, coalesce: true);
+    _edit(() => _controller.insert(text, coalesce: true));
     return KeyEventResult.handled;
   }
 
@@ -408,7 +419,7 @@ class _TextAreaState extends State<TextArea>
     if (!widget.enabled) return KeyEventResult.ignored;
     if (widget.readOnly) return KeyEventResult.handled;
     _paste.finish();
-    _controller.updateComposingText(text);
+    _edit(() => _controller.updateComposingText(text));
     return KeyEventResult.handled;
   }
 
@@ -417,7 +428,7 @@ class _TextAreaState extends State<TextArea>
     if (!widget.enabled) return KeyEventResult.ignored;
     if (widget.readOnly) return KeyEventResult.handled;
     _paste.finish();
-    _controller.commitComposing(text: text);
+    _edit(() => _controller.commitComposing(text: text));
     return KeyEventResult.handled;
   }
 
@@ -426,7 +437,7 @@ class _TextAreaState extends State<TextArea>
     if (!widget.enabled) return KeyEventResult.ignored;
     if (widget.readOnly) return KeyEventResult.handled;
     _paste.finish();
-    _controller.cancelComposing();
+    _edit(() => _controller.cancelComposing());
     return KeyEventResult.handled;
   }
 
@@ -453,42 +464,53 @@ class _TextAreaState extends State<TextArea>
       case TextEditingKeyAction.undo:
         if (widget.readOnly) return KeyEventResult.handled;
         _paste.finish();
-        _controller.undo();
+        _edit(() => _controller.undo());
         return KeyEventResult.handled;
       case TextEditingKeyAction.redo:
         if (widget.readOnly) return KeyEventResult.handled;
         _paste.finish();
-        _controller.redo();
+        _edit(() => _controller.redo());
         return KeyEventResult.handled;
       case TextEditingKeyAction.backspace:
         if (!_canEdit) return KeyEventResult.handled;
         _paste.finish();
-        _controller.backspace();
+        _edit(() => _controller.backspace());
         return KeyEventResult.handled;
       case TextEditingKeyAction.deleteForward:
         if (!_canEdit) return KeyEventResult.handled;
         _paste.finish();
-        _controller.delete();
+        _edit(() => _controller.delete());
         return KeyEventResult.handled;
       case TextEditingKeyAction.killToLineEnd:
         if (!_canEdit) return KeyEventResult.handled;
         _paste.finish();
-        _controller.killToLineEnd(captureToKillRing: _captureKillRingText);
+        _edit(
+          () => _controller.killToLineEnd(
+            captureToKillRing: _captureKillRingText,
+          ),
+        );
         return KeyEventResult.handled;
       case TextEditingKeyAction.killToLineStart:
         if (!_canEdit) return KeyEventResult.handled;
         _paste.finish();
-        _controller.killToLineStart(captureToKillRing: _captureKillRingText);
+        _edit(
+          () => _controller.killToLineStart(
+            captureToKillRing: _captureKillRingText,
+          ),
+        );
         return KeyEventResult.handled;
       case TextEditingKeyAction.killWordLeft:
         if (!_canEdit) return KeyEventResult.handled;
         _paste.finish();
-        _controller.killWordLeft(captureToKillRing: _captureKillRingText);
+        _edit(
+          () =>
+              _controller.killWordLeft(captureToKillRing: _captureKillRingText),
+        );
         return KeyEventResult.handled;
       case TextEditingKeyAction.yank:
         if (!_canEdit) return KeyEventResult.handled;
         _paste.finish();
-        _controller.yank();
+        _edit(() => _controller.yank());
         return KeyEventResult.handled;
       case TextEditingKeyAction.moveLeft:
         _paste.finish();
@@ -533,7 +555,7 @@ class _TextAreaState extends State<TextArea>
       case TextEditingKeyAction.insertNewline:
         if (!_canEdit) return KeyEventResult.handled;
         _paste.finish();
-        _controller.insert('\n');
+        _edit(() => _controller.insert('\n'));
         return KeyEventResult.handled;
       case TextEditingKeyAction.escape:
         // Escape still bubbles when no callback is installed, but an ancestor

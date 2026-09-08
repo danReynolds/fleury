@@ -1,12 +1,12 @@
 // ListView: a keyboard-navigable list of items.
 //
 // Three pieces:
-//   - ListController — a ChangeNotifier holding the active (selected)
+//   - ListController — a ChangeNotifier holding the current
 //     index plus programmatic scroll commands. Optional; the widget
 //     creates its own when none is supplied.
 //   - ListView — the widget. Lays out items vertically, claims
 //     arrow-up / arrow-down / home / end / enter via KeyDetector, and
-//     auto-scrolls to keep the selected item visible.
+//     auto-scrolls to keep the current item visible.
 //   - _RenderListView — the render object. Lays out only items that
 //     fit in the viewport starting from a scroll anchor, paints them,
 //     and writes the resulting visible range back to the controller.
@@ -47,16 +47,6 @@ import 'tui_binding.dart';
 /// equal when that item moves after a prepend, reorder, or filtered update.
 typedef ListItemKeyBuilder = Object Function(int index);
 
-/// Finds the current index for a stable item [key], or returns null when that
-/// item is no longer present.
-///
-/// This is the lazy-list counterpart to Flutter's
-/// `findChildIndexCallback`: a sparse list cannot inspect every off-screen
-/// child to rediscover where a keyed item moved, so the data owner supplies
-/// the reverse lookup. It should normally be map-backed/O(1): Fleury invokes it
-/// once per mounted row when a parent supplies an updated list configuration.
-typedef ListItemIndexCallback = int? Function(Object key);
-
 /// How scrollable widgets handle navigation or wheel input at an edge.
 enum EdgeBehavior {
   /// The input is consumed (no-op) and stays in this scrollable. Opt in for a
@@ -70,27 +60,31 @@ enum EdgeBehavior {
   bubble,
 }
 
-/// Selection and viewport state for a [ListView].
+/// Navigation cursor and viewport state for a [ListView].
 ///
-/// Selection changes reveal the new selection. Scrolling leaves selection alone,
+/// Moving the cursor reveals its item. Scrolling leaves the cursor alone,
 /// and a rebuild preserves the viewport. Listeners receive changed viewport
 /// metrics after the frame, when [visibleRange] describes the rendered content.
 class ListController extends ChangeNotifier {
+  /// Starts with [initialIndex] as the current row and reveals it on mount.
+  /// The index is clamped to the available items. This does not select the row
+  /// or take keyboard focus; use [ListView.autofocus] to request focus.
+  /// An explicit viewport request or [followTail] takes precedence over reveal.
   ListController({
-    int? selectedIndex = 0,
+    int? initialIndex = 0,
     bool followTail = false,
     @Deprecated('Use followTail instead.') bool? pinToBottom,
-  }) : _selectedIndex = selectedIndex,
-       _restoreSelectionWhenNonEmpty = selectedIndex != null,
+  }) : _currentIndex = initialIndex,
+       _restoreCurrentWhenNonEmpty = initialIndex != null,
        _followTail = pinToBottom ?? followTail,
        _isFollowing = pinToBottom ?? followTail,
        _pendingBottom = pinToBottom ?? followTail;
 
-  int? _selectedIndex;
+  int? _currentIndex;
   int _itemCount = 0;
   bool _attached = false;
   bool _selectable = true;
-  bool _restoreSelectionWhenNonEmpty;
+  bool _restoreCurrentWhenNonEmpty;
   ({int first, int last})? _visibleRange;
   int _viewportExtent = 0;
   bool _atTop = true;
@@ -106,6 +100,18 @@ class ListController extends ChangeNotifier {
   bool _isFollowing;
   int _unseenCount = 0;
   bool _disposed = false;
+  Object? _owner;
+
+  void _attach(Object owner) {
+    _checkNotDisposed();
+    if (_owner != null && !identical(_owner, owner)) {
+      throw StateError(
+        'ListController can attach to only one owning view at a time.',
+      );
+    }
+    _owner = owner;
+  }
+
   TuiBinding? _binding;
   bool _metricsNotificationPending = false;
   int _attachment = 0;
@@ -168,26 +174,26 @@ class ListController extends ChangeNotifier {
   /// This is an estimate for variable-height items not yet measured.
   double get visibleFraction => _visibleFraction;
 
-  /// Logical selected index, independent of focus and scrolling. Defaults to
-  /// zero; an explicit null starts without a selection. A non-selectable list
+  /// Remembered cursor index, independent of keyboard focus and scrolling.
+  /// Defaults to zero; an explicit null starts without a cursor. A non-selectable list
   /// keeps this null. Values clamp once attached to a list.
-  int? get selectedIndex => _selectedIndex;
-  set selectedIndex(int? value) {
+  int? get currentIndex => _currentIndex;
+  set currentIndex(int? value) {
     _checkNotDisposed();
     if (!_selectable) return;
-    _restoreSelectionWhenNonEmpty = value != null;
-    final next = _clampSelection(value);
-    if (next == _selectedIndex) return;
-    _selectedIndex = next;
+    _restoreCurrentWhenNonEmpty = value != null;
+    final next = _clampCurrentIndex(value);
+    if (next == _currentIndex) return;
+    _currentIndex = next;
     _clearRequests();
     _pendingRevealIndex = next;
-    // The completed viewport, not the selected index, decides whether to resume.
+    // The completed viewport, not the current index, decides whether to resume.
     _isFollowing = false;
     notifyListeners();
   }
 
   /// Places an item at the top, clamped to the final full viewport. Does not
-  /// change selection. The resulting position survives unrelated rebuilds.
+  /// change the cursor. The resulting position survives unrelated rebuilds.
   void jumpToIndex(int index) {
     _checkNotDisposed();
     _clearRequests();
@@ -239,37 +245,37 @@ class ListController extends ChangeNotifier {
     _pendingBottom = false;
   }
 
-  void _revealSelection() {
-    if (_selectedIndex == null) return;
+  void _revealCurrentItem() {
+    if (_currentIndex == null) return;
     _clearRequests();
-    _pendingRevealIndex = _selectedIndex;
+    _pendingRevealIndex = _currentIndex;
     _isFollowing = false;
     notifyListeners();
   }
 
   void _handleCountChange(
     int newCount, {
-    int? selectedIndex,
+    int? currentIndex,
     int? appendedCount,
     bool identityAware = false,
   }) {
-    final before = (_itemCount, _selectedIndex, _unseenCount);
+    final before = (_itemCount, _currentIndex, _unseenCount);
     final oldCount = _itemCount;
     _itemCount = newCount;
     if (newCount == 0) {
-      if (oldCount > 0) _restoreSelectionWhenNonEmpty = _selectedIndex != null;
-      _selectedIndex = null;
+      if (oldCount > 0) _restoreCurrentWhenNonEmpty = _currentIndex != null;
+      _currentIndex = null;
     } else if (identityAware) {
-      _selectedIndex = _clampSelection(selectedIndex);
+      _currentIndex = _clampCurrentIndex(currentIndex);
     } else {
-      _selectedIndex = _clampSelection(_selectedIndex);
+      _currentIndex = _clampCurrentIndex(_currentIndex);
     }
     if (_selectable &&
         oldCount == 0 &&
         newCount > 0 &&
-        _selectedIndex == null &&
-        _restoreSelectionWhenNonEmpty) {
-      _selectedIndex = 0;
+        _currentIndex == null &&
+        _restoreCurrentWhenNonEmpty) {
+      _currentIndex = 0;
       if (!_isFollowing) _pendingRevealIndex = 0;
     }
     final arrived =
@@ -281,10 +287,11 @@ class ListController extends ChangeNotifier {
         _unseenCount += arrived;
       }
     }
-    if (before != (_itemCount, _selectedIndex, _unseenCount)) notifyListeners();
+    if (before != (_itemCount, _currentIndex, _unseenCount)) notifyListeners();
   }
 
-  int? _clampSelection(int? value) {
+  int? _clampCurrentIndex(int? value) {
+    if (!_attached) return value;
     if (!_selectable || value == null) return null;
     if (_itemCount == 0) return _attached ? null : value;
     return value.clamp(0, _itemCount - 1);
@@ -343,7 +350,9 @@ class ListController extends ChangeNotifier {
     });
   }
 
-  void _detach() {
+  void _detach([Object? owner]) {
+    if (owner != null && !identical(_owner, owner)) return;
+    _owner = null;
     _attachment++;
     _metricsNotificationPending = false;
     _binding = null;
@@ -372,7 +381,7 @@ class ListController extends ChangeNotifier {
 ///     built upfront on each rebuild; the layout/paint pass only
 ///     visits items that fit in the viewport. Best when you have a
 ///     bounded set of widgets you already constructed.
-///   - `ListView.builder(itemCount: N, itemBuilder: (context, index, active) {})` —
+///   - `ListView.builder(itemCount: N, itemBuilder: (context, index, highlighted) {})` —
 ///     lazy. Only items currently within the viewport are mounted as
 ///     element subtrees; items scroll into/out of the mounted set as
 ///     the user navigates. Supports variable item heights. Best for
@@ -381,28 +390,24 @@ class ListController extends ChangeNotifier {
 ///
 /// When focused, the widget claims arrow-up, arrow-down, home, end,
 /// and enter:
-///   - Arrows / Home / End move the selected item; the viewport
-///     auto-scrolls to keep it visible.
-///   - Enter fires [onActivate] with the current selected index.
+///   - Arrows / Home / End move the current item and report [onFocusedItemChanged];
+///     the viewport scrolls to keep it visible.
+///   - Enter or a completed click selects the current item via [onSelect].
 ///   - Up at the first item / Down at the last item respects
 ///     [edgeBehavior]: `contain` consumes the key, `bubble` returns
 ///     it to the focus chain so an ancestor `KeyBindings` (e.g. one
 ///     coordinating sidebar + main pane focus traversal) can react.
 ///
-/// [itemBuilder] (lazy form) is invoked with `(context, index,
-/// active)` for every visible item. The `active` flag is the
-/// active selected-row cue: by default it is true only while this
-/// [ListView] has focus. The [ListController.selectedIndex] still
-/// retains the logical selection while focus is elsewhere. Composite
-/// widgets that should keep the list visually active while another
-/// child owns focus can pass [selectionActive].
+/// [itemBuilder] receives `(context, index, highlighted)` for each visible item.
+/// The current item remains highlighted when keyboard focus leaves the list.
+/// The controller's [ListController.currentIndex] identifies that item.
+/// Setting it moves the cursor without selecting an item or taking focus.
 ///
-/// With `children:` (eager form), selection styling is the caller's
-/// responsibility.
+/// With `children:` (eager form), the caller supplies the highlight styling.
 class ListView extends StatefulWidget {
   /// Eager constructor: build all items upfront from a fixed list
   /// of widgets. Use when you have a bounded set of widgets already
-  /// constructed and selection styling is handled elsewhere (or not
+  /// constructed and cursor styling is handled elsewhere (or not
   /// needed).
   const ListView({
     super.key,
@@ -412,20 +417,18 @@ class ListView extends StatefulWidget {
     this.autofocus = false,
     this.selectable = true,
     this.edgeBehavior = EdgeBehavior.bubble,
-    this.onActivate,
-    this.onSelectionChanged,
-    this.selectionActive,
+    this.onSelect,
+    this.onFocusedItemChanged,
     this.scrollbar = false,
     this.addRepaintBoundaries = true,
   }) : itemCount = null,
        itemBuilder = null,
        separatorBuilder = null,
-       itemKeyBuilder = null,
-       findChildIndexCallback = null;
+       itemKeyBuilder = null;
 
   /// Lazy constructor: build items on demand by index, mount only the
-  /// visible ones. Each item builder invocation receives an `active`
-  /// flag for styling the active row.
+  /// visible ones. Each item builder invocation receives a `highlighted`
+  /// flag for styling the current row.
   const ListView.builder({
     super.key,
     this.controller,
@@ -433,20 +436,14 @@ class ListView extends StatefulWidget {
     required int this.itemCount,
     required Widget Function(BuildContext, int, bool) this.itemBuilder,
     this.itemKeyBuilder,
-    this.findChildIndexCallback,
     this.autofocus = false,
     this.selectable = true,
     this.edgeBehavior = EdgeBehavior.bubble,
-    this.onActivate,
-    this.onSelectionChanged,
-    this.selectionActive,
+    this.onSelect,
+    this.onFocusedItemChanged,
     this.scrollbar = false,
     this.addRepaintBoundaries = true,
   }) : assert(itemCount >= 0, 'itemCount must be non-negative'),
-       assert(
-         (itemKeyBuilder == null) == (findChildIndexCallback == null),
-         'itemKeyBuilder and findChildIndexCallback must be supplied together.',
-       ),
        separatorBuilder = null,
        children = null;
 
@@ -470,20 +467,14 @@ class ListView extends StatefulWidget {
     required Widget Function(BuildContext, int, bool) this.itemBuilder,
     required Widget? Function(BuildContext, int) this.separatorBuilder,
     this.itemKeyBuilder,
-    this.findChildIndexCallback,
     this.autofocus = false,
     this.selectable = true,
     this.edgeBehavior = EdgeBehavior.bubble,
-    this.onActivate,
-    this.onSelectionChanged,
-    this.selectionActive,
+    this.onSelect,
+    this.onFocusedItemChanged,
     this.scrollbar = false,
     this.addRepaintBoundaries = true,
   }) : assert(itemCount >= 0, 'itemCount must be non-negative'),
-       assert(
-         (itemKeyBuilder == null) == (findChildIndexCallback == null),
-         'itemKeyBuilder and findChildIndexCallback must be supplied together.',
-       ),
        children = null;
 
   /// External controller. If null, the widget creates its own and
@@ -503,8 +494,8 @@ class ListView extends StatefulWidget {
   final int? itemCount;
 
   /// Per-index widget builder (lazy form). Mutually exclusive with
-  /// [children]. Invoked with `(context, index, active)`.
-  final Widget Function(BuildContext context, int index, bool active)?
+  /// [children]. Invoked with `(context, index, highlighted)`.
+  final Widget Function(BuildContext context, int index, bool highlighted)?
   itemBuilder;
 
   /// Per-gap separator builder ([ListView.separated] form). Called with
@@ -515,22 +506,18 @@ class ListView extends StatefulWidget {
 
   /// Stable data identity for lazy items.
   ///
-  /// Supply this together with [findChildIndexCallback] when items can move.
-  /// Fleury then preserves the selected item, viewport anchor, and mounted
+  /// Supply this when items can move.
+  /// Fleury then preserves the current item, viewport anchor, and mounted
   /// element state across prepends, removals, filters, and reorders. Keys must
   /// be unique within this list. This is data identity only: it does not install
   /// a Fleury `Key` on the row or create a semantic identifier. Add those at the
   /// item-widget layer when the application needs either contract.
-  final ListItemKeyBuilder? itemKeyBuilder;
-
-  /// Resolves a stable item key to its current index.
   ///
-  /// Must be supplied together with [itemKeyBuilder]. Return null when the
-  /// keyed item was removed. Returning an out-of-range index or an index whose
-  /// key does not match is a contract error. Prefer a map-backed/O(1) lookup;
-  /// reconciliation invokes it once per currently mounted row, never once per
-  /// item in the full collection.
-  final ListItemIndexCallback? findChildIndexCallback;
+  /// Fleury reads all item keys once on mount and whenever the parent supplies
+  /// an updated ListView, building its own reverse lookup in O(itemCount) time
+  /// and space. The row widgets are still built and laid out only as needed.
+  /// Keys must have stable equality and hash codes; duplicates are an error.
+  final ListItemKeyBuilder? itemKeyBuilder;
 
   /// Wrap each item in a [RepaintBoundary] (default true, Flutter-parity) so a
   /// localized update — one row's setState, a streaming-token line — repaints
@@ -544,8 +531,8 @@ class ListView extends StatefulWidget {
   /// Whether to request focus on first mount.
   final bool autofocus;
 
-  /// Whether rows have a selection cursor and can activate. False keeps the
-  /// list scrollable by wheel and keyboard, without selecting rows. Interactive
+  /// Whether the list owns a row cursor and selects rows with click or Enter.
+  /// False keeps it scrollable without a row cursor. Interactive
   /// child widgets keep their own input behavior.
   final bool selectable;
 
@@ -563,23 +550,16 @@ class ListView extends StatefulWidget {
   /// than collapsing the list; wrap the list in an Expanded or a SizedBox.
   final bool scrollbar;
 
-  /// Called when the user activates an item with Enter or a completed click.
-  /// Not invoked when the list is empty or there is no selection.
-  final void Function(int index)? onActivate;
+  /// Selects an item on Enter or a completed click, including repeated choices.
+  /// Browsing, scrolling, and controller writes do not call this. Empty lists
+  /// and lists without a cursor cannot select an item.
+  final void Function(int index)? onSelect;
 
-  /// Called when user input moves the selection cursor.
+  /// Reports user input moving the cursor to a different item.
   ///
   /// Programmatic controller writes and identity-preserving data updates do
   /// not call this callback.
-  final void Function(int index)? onSelectionChanged;
-
-  /// Overrides whether the selected row should render as active.
-  ///
-  /// Null means "active while this list owns focus." Composite widgets
-  /// can pass a broader focus-within signal so the list keeps its
-  /// active row while a sibling control, such as a search input, owns
-  /// focus inside the same component.
-  final bool? selectionActive;
+  final void Function(int index)? onFocusedItemChanged;
 
   /// Effective number of items, regardless of which constructor was
   /// used. Returns `children!.length` for eager, `itemCount!` for
@@ -590,42 +570,73 @@ class ListView extends StatefulWidget {
   State<ListView> createState() => _ListViewState();
 }
 
+/// A single data revision's identities; widget creation stays lazy.
+class _ListItemIdentities {
+  _ListItemIdentities(this.keys, this.indexByKey);
+
+  final List<Object> keys;
+  final Map<Object, int> indexByKey;
+
+  static _ListItemIdentities? capture(ListView widget) {
+    final keyBuilder = widget.itemKeyBuilder;
+    if (keyBuilder == null) return null;
+    final keys = <Object>[];
+    final indexByKey = <Object, int>{};
+    for (var index = 0; index < widget.effectiveItemCount; index++) {
+      final key = keyBuilder(index);
+      final previous = indexByKey[key];
+      if (previous != null) {
+        throw StateError(
+          'Duplicate ListView item key $key at indices $previous and $index. '
+          'itemKeyBuilder must return a unique, stable key for each item.',
+        );
+      }
+      keys.add(key);
+      indexByKey[key] = index;
+    }
+    return _ListItemIdentities(keys, indexByKey);
+  }
+}
+
 class _ListViewState extends State<ListView> {
   late ListController _controller;
   late FocusNode _focusNode;
   bool _ownsController = false;
   bool _ownsFocusNode = false;
   Object? _pressedItem;
-  Object? _selectedItemKey;
+  Object? _currentItemKey;
   Object? _firstItemKey;
   Object? _lastItemKey;
   int _dataRevision = 0;
+  _ListItemIdentities? _identities;
 
   @override
   void initState() {
     super.initState();
+    _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'ListView');
+    _ownsFocusNode = widget.focusNode == null;
     final count = widget.effectiveItemCount;
     _controller = widget.controller ?? ListController();
     _ownsController = widget.controller == null;
     _initializeController(count);
     _controller.addListener(_onControllerChange);
-    _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'ListView');
-    _ownsFocusNode = widget.focusNode == null;
+    _identities = _ListItemIdentities.capture(widget);
     _captureIdentitySnapshot();
   }
 
   @override
   void didUpdateWidget(ListView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _identities = _ListItemIdentities.capture(widget);
     _dataRevision++;
     final oldCount = oldWidget.effectiveItemCount;
-    final oldSelectedKey = _selectedItemKey;
+    final oldCurrentKey = _currentItemKey;
     final oldFirstKey = _firstItemKey;
     final oldLastKey = _lastItemKey;
     var controllerChanged = false;
     if (widget.controller != oldWidget.controller) {
       _controller.removeListener(_onControllerChange);
-      _controller._detach();
+      _controller._detach(this);
       if (_ownsController) _controller.dispose();
       _controller = widget.controller ?? ListController();
       _ownsController = widget.controller == null;
@@ -641,21 +652,20 @@ class _ListViewState extends State<ListView> {
     if (widget.selectable != oldWidget.selectable) {
       _pressedItem = null;
       _controller._selectable = widget.selectable;
-      _controller._restoreSelectionWhenNonEmpty = widget.selectable;
-      _controller._selectedIndex =
+      _controller._restoreCurrentWhenNonEmpty = widget.selectable;
+      _controller._currentIndex =
           widget.selectable && widget.effectiveItemCount > 0 ? 0 : null;
-      _controller._pendingRevealIndex = _controller._selectedIndex;
+      _controller._pendingRevealIndex = _controller._currentIndex;
     }
     final newCount = widget.effectiveItemCount;
     final identityAware =
         !controllerChanged &&
         oldWidget.itemKeyBuilder != null &&
-        widget.itemKeyBuilder != null &&
-        widget.findChildIndexCallback != null;
+        _identities != null;
     if (identityAware) {
-      final remappedSelection = _remapSelectedIndex(
-        oldSelectedKey,
-        fallback: _controller.selectedIndex,
+      final remappedCurrent = _remapCurrentIndex(
+        oldCurrentKey,
+        fallback: _controller.currentIndex,
       );
       final appendedCount = _classifyTrailingGrowth(
         oldCount: oldCount,
@@ -665,12 +675,12 @@ class _ListViewState extends State<ListView> {
       );
       _controller._handleCountChange(
         newCount,
-        selectedIndex: remappedSelection,
+        currentIndex: remappedCurrent,
         appendedCount: appendedCount,
         identityAware: true,
       );
     } else if (!controllerChanged && newCount != oldCount) {
-      // Track new arrivals and clamp selection without coupling it to following.
+      // Track new arrivals and clamp cursor without coupling it to following.
       _controller._handleCountChange(newCount);
     }
     _captureIdentitySnapshot();
@@ -683,54 +693,50 @@ class _ListViewState extends State<ListView> {
   }
 
   void _initializeController(int count) {
+    _controller._attach(this);
     _controller._itemCount = count;
     _controller._attached = true;
     _controller._selectable = widget.selectable;
-    _controller._selectedIndex = _controller._clampSelection(
-      _controller._selectedIndex,
+    _controller._currentIndex = _controller._clampCurrentIndex(
+      _controller._currentIndex,
     );
-    if (!widget.selectable) _controller._restoreSelectionWhenNonEmpty = false;
+    if (!widget.selectable) _controller._restoreCurrentWhenNonEmpty = false;
     if (!_controller._pendingBottom &&
         _controller._pendingJumpIndex == null &&
         _controller._pendingFraction == null &&
         _controller._pendingScrollRows == 0) {
-      _controller._pendingRevealIndex = _controller._selectedIndex;
+      _controller._pendingRevealIndex = _controller._currentIndex;
     }
   }
 
   void _onControllerChange() {
-    _captureSelectedItemKey();
+    _captureCurrentItemKey();
     setState(() {});
   }
 
   void _captureIdentitySnapshot() {
-    final keyBuilder = widget.itemKeyBuilder;
-    final count = widget.effectiveItemCount;
-    if (keyBuilder == null || count == 0) {
-      _selectedItemKey = null;
+    final keys = _identities?.keys;
+    if (keys == null || keys.isEmpty) {
+      _currentItemKey = null;
       _firstItemKey = null;
       _lastItemKey = null;
       return;
     }
-    _firstItemKey = keyBuilder(0);
-    _lastItemKey = keyBuilder(count - 1);
-    _captureSelectedItemKey();
+    _firstItemKey = keys.first;
+    _lastItemKey = keys.last;
+    _captureCurrentItemKey();
   }
 
-  void _captureSelectedItemKey() {
-    final keyBuilder = widget.itemKeyBuilder;
-    final selected = _controller.selectedIndex;
-    final count = widget.effectiveItemCount;
-    _selectedItemKey =
-        keyBuilder != null &&
-            selected != null &&
-            selected >= 0 &&
-            selected < count
-        ? keyBuilder(selected)
+  void _captureCurrentItemKey() {
+    final keys = _identities?.keys;
+    final current = _controller.currentIndex;
+    _currentItemKey =
+        keys != null && current != null && current >= 0 && current < keys.length
+        ? keys[current]
         : null;
   }
 
-  int? _remapSelectedIndex(Object? key, {required int? fallback}) {
+  int? _remapCurrentIndex(Object? key, {required int? fallback}) {
     if (key == null) return fallback;
     return _validatedIndexForKey(key) ?? fallback;
   }
@@ -776,43 +782,22 @@ class _ListViewState extends State<ListView> {
     return trailing;
   }
 
-  int? _validatedIndexForKey(Object key) {
-    final findIndex = widget.findChildIndexCallback;
-    final keyBuilder = widget.itemKeyBuilder;
-    if (findIndex == null || keyBuilder == null) return null;
-    final index = findIndex(key);
-    if (index == null) return null;
-    final count = widget.effectiveItemCount;
-    if (index < 0 || index >= count) {
-      throw StateError(
-        'findChildIndexCallback returned $index for $key, outside the current '
-        'ListView range 0..${count - 1}.',
-      );
-    }
-    final resolvedKey = keyBuilder(index);
-    if (resolvedKey != key) {
-      throw StateError(
-        'findChildIndexCallback returned index $index for $key, but '
-        'itemKeyBuilder($index) returned $resolvedKey.',
-      );
-    }
-    return index;
-  }
+  int? _validatedIndexForKey(Object key) => _identities?.indexByKey[key];
 
-  void _setUserSelection(int index, {bool reveal = true}) {
+  void _moveCurrentItem(int index, {bool reveal = true}) {
     if (!widget.selectable) return;
-    final before = _controller.selectedIndex;
-    _controller.selectedIndex = index;
+    final before = _controller.currentIndex;
+    _controller.currentIndex = index;
     if (!reveal) {
       // The pressed item is already visible. Revealing its top would move a
       // partially visible row under the pointer before the click finishes.
       _controller._pendingRevealIndex = null;
-    } else if (_controller.selectedIndex == before) {
-      _controller._revealSelection();
+    } else if (_controller.currentIndex == before) {
+      _controller._revealCurrentItem();
     }
-    final after = _controller.selectedIndex;
+    final after = _controller.currentIndex;
     if (after != null && after != before) {
-      widget.onSelectionChanged?.call(after);
+      widget.onFocusedItemChanged?.call(after);
     }
   }
 
@@ -827,8 +812,8 @@ class _ListViewState extends State<ListView> {
     final count = widget.effectiveItemCount;
     if (count == 0) return KeyEventResult.ignored;
 
-    final selected = _controller.selectedIndex;
-    if (!widget.selectable || selected == null) {
+    final current = _controller.currentIndex;
+    if (!widget.selectable || current == null) {
       switch (code) {
         case KeyCode.arrowUp:
           return _scrollBy(-1)
@@ -857,29 +842,29 @@ class _ListViewState extends State<ListView> {
 
     switch (code) {
       case KeyCode.arrowUp:
-        if (selected <= 0) return _edgeResult();
-        _setUserSelection(selected - 1);
+        if (current <= 0) return _edgeResult();
+        _moveCurrentItem(current - 1);
         return KeyEventResult.handled;
       case KeyCode.arrowDown:
-        if (selected >= count - 1) return _edgeResult();
-        _setUserSelection(selected + 1);
+        if (current >= count - 1) return _edgeResult();
+        _moveCurrentItem(current + 1);
         return KeyEventResult.handled;
       case KeyCode.pageUp:
-        if (selected <= 0) return _edgeResult();
-        _setUserSelection((selected - _pageSize()).clamp(0, count - 1));
+        if (current <= 0) return _edgeResult();
+        _moveCurrentItem((current - _pageSize()).clamp(0, count - 1));
         return KeyEventResult.handled;
       case KeyCode.pageDown:
-        if (selected >= count - 1) return _edgeResult();
-        _setUserSelection((selected + _pageSize()).clamp(0, count - 1));
+        if (current >= count - 1) return _edgeResult();
+        _moveCurrentItem((current + _pageSize()).clamp(0, count - 1));
         return KeyEventResult.handled;
       case KeyCode.home:
-        _setUserSelection(0);
+        _moveCurrentItem(0);
         return KeyEventResult.handled;
       case KeyCode.end:
-        _setUserSelection(count - 1);
+        _moveCurrentItem(count - 1);
         return KeyEventResult.handled;
       case KeyCode.enter:
-        widget.onActivate?.call(selected);
+        widget.onSelect?.call(current);
         return KeyEventResult.handled;
       default:
         return KeyEventResult.ignored;
@@ -902,7 +887,7 @@ class _ListViewState extends State<ListView> {
         : KeyEventResult.handled;
   }
 
-  /// Viewport movement is independent of selection and never takes focus.
+  /// Viewport movement is independent of cursor and never takes focus.
   bool _scrollBy(int delta) {
     if (delta == 0 ||
         (delta < 0 && _controller.atTop) ||
@@ -914,24 +899,39 @@ class _ListViewState extends State<ListView> {
   }
 
   @override
+  void deactivate() {
+    _controller.removeListener(_onControllerChange);
+    _controller._detach(this);
+    super.deactivate();
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    _controller._attach(this);
+    _controller._attached = true;
+    _controller._binding = TuiBinding.maybeOf(context);
+    _controller.addListener(_onControllerChange);
+  }
+
+  @override
   void dispose() {
     _controller.removeListener(_onControllerChange);
-    _controller._detach();
+    _controller._detach(this);
     if (_ownsController) _controller.dispose();
     if (_ownsFocusNode) _focusNode.dispose();
     super.dispose();
   }
 
   Object _itemIdentity(int index) {
-    final key =
-        widget.itemKeyBuilder?.call(index) ?? widget.children?[index].key;
+    final key = _identities?.keys[index] ?? widget.children?[index].key;
     return key == null ? (index: index) : (key: key);
   }
 
   void _handleItemDown(int index) {
     if (index < 0 || index >= widget.effectiveItemCount) return;
     _pressedItem = _itemIdentity(index);
-    _setUserSelection(index, reveal: false);
+    _moveCurrentItem(index, reveal: false);
     _focusNode.requestFocus();
   }
 
@@ -944,7 +944,7 @@ class _ListViewState extends State<ListView> {
         pressed != _itemIdentity(index)) {
       return;
     }
-    widget.onActivate?.call(index);
+    widget.onSelect?.call(index);
   }
 
   Widget _maybeBoundary(Widget item) =>
@@ -953,7 +953,6 @@ class _ListViewState extends State<ListView> {
   @override
   Widget build(BuildContext context) {
     _controller._binding = TuiBinding.maybeOf(context);
-    final selected = _controller.selectedIndex;
     final Widget content = MouseRegion(
       onScroll: (details) => _scrollBy(details.delta.row),
       child: KeyDetector(
@@ -961,80 +960,7 @@ class _ListViewState extends State<ListView> {
         child: Focus(
           focusNode: _focusNode,
           autofocus: widget.autofocus,
-          child: _ListSelectionHost(
-            focusNode: _focusNode,
-            selectionActive: widget.selectionActive,
-            builder: (context, active) {
-              if (widget.children != null) {
-                // Eager: build all children upfront, render object picks the
-                // visible window. Each is made tappable for pointer selection,
-                // then wrapped in a RepaintBoundary so one item's change repaints
-                // only that item (boundary outermost = Flutter parity; it replays
-                // the item's pointer + semantic regions on cache-hit).
-                return _ListViewBody(
-                  controller: _controller,
-                  children: <Widget>[
-                    for (var i = 0; i < widget.children!.length; i++)
-                      _maybeBoundary(
-                        GestureDetector(
-                          onTapDown: (_) => _handleItemDown(i),
-                          onTap: () => _handleItemTap(i),
-                          onTapCancel: () => _pressedItem = null,
-                          child: widget.children![i],
-                        ),
-                      ),
-                  ],
-                );
-              }
-
-              // Lazy: builder + count. Item subtrees are mounted on demand by
-              // the render object during layout; wrap each so a press selects it.
-              // `.separated` composes a non-selectable separator into the row
-              // block below its item. Clicking the block selects its item;
-              // separators never enter
-              // the index math because they are sub-parts of an item's block.
-              final separatorBuilder = widget.separatorBuilder;
-              final itemCount = widget.itemCount!;
-              return _LazyListBody(
-                controller: _controller,
-                itemCount: itemCount,
-                dataRevision: _dataRevision,
-                itemKeyBuilder: widget.itemKeyBuilder,
-                findChildIndexCallback: widget.findChildIndexCallback,
-                itemBuilder: (context, index, itemActive) {
-                  final built = widget.itemBuilder!(context, index, itemActive);
-                  // No separator after the last item, when none was requested, or
-                  // when the builder returns null for this gap.
-                  final separator =
-                      separatorBuilder == null || index >= itemCount - 1
-                      ? null
-                      : separatorBuilder(context, index);
-                  final content = separator == null
-                      ? built
-                      : Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [built, separator],
-                        );
-                  // The GestureDetector wraps the WHOLE block (not the item
-                  // alone), so a tap on a separator row selects the item it
-                  // trails. Its region, like every other piece of geometry, is
-                  // derived from layout, so a scrolled-but-unchanged block
-                  // whose RepaintBoundary blits its cached cells at the new row
-                  // has its tap region follow for free.
-                  return _maybeBoundary(
-                    GestureDetector(
-                      onTapDown: (_) => _handleItemDown(index),
-                      onTap: () => _handleItemTap(index),
-                      onTapCancel: () => _pressedItem = null,
-                      child: content,
-                    ),
-                  );
-                },
-                selectedIndex: selected,
-                selectionActive: active,
-              );
-            },
-          ),
+          child: _buildBody(context),
         ),
       ),
     );
@@ -1045,68 +971,73 @@ class _ListViewState extends State<ListView> {
     // unbounded width rather than collapsing the list.)
     return Scrollbar.list(controller: _controller, child: content);
   }
-}
 
-class _ListSelectionHost extends StatefulWidget {
-  const _ListSelectionHost({
-    required this.focusNode,
-    required this.selectionActive,
-    required this.builder,
-  });
-
-  final FocusNode focusNode;
-  final bool? selectionActive;
-  final Widget Function(BuildContext context, bool selectionActive) builder;
-
-  @override
-  State<_ListSelectionHost> createState() => _ListSelectionHostState();
-}
-
-class _ListSelectionHostState extends State<_ListSelectionHost> {
-  FocusManager? _manager;
-  bool _active = false;
-
-  bool get _resolvedActive =>
-      widget.selectionActive ?? widget.focusNode.hasFocus;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final manager = Focus.maybeOf(context);
-    if (!identical(manager, _manager)) {
-      _manager?.removeListener(_onFocusChange);
-      _manager = manager;
-      _manager?.addListener(_onFocusChange);
+  Widget _buildBody(BuildContext context) {
+    if (widget.children != null) {
+      // Eager: build all children upfront, render object picks the
+      // visible window. Each is made tappable for pointer navigation,
+      // then wrapped in a RepaintBoundary so one item's change repaints
+      // only that item (boundary outermost = Flutter parity; it replays
+      // the item's pointer + semantic regions on cache-hit).
+      return _ListViewBody(
+        controller: _controller,
+        children: <Widget>[
+          for (var i = 0; i < widget.children!.length; i++)
+            _maybeBoundary(
+              GestureDetector(
+                onTapDown: (_) => _handleItemDown(i),
+                onTap: () => _handleItemTap(i),
+                onTapCancel: () => _pressedItem = null,
+                child: widget.children![i],
+              ),
+            ),
+        ],
+      );
     }
-    _active = _resolvedActive;
-  }
 
-  @override
-  void didUpdateWidget(covariant _ListSelectionHost oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _syncActive();
-  }
-
-  void _onFocusChange() => _syncActive();
-
-  void _syncActive() {
-    final next = _resolvedActive;
-    if (next == _active) return;
-    setState(() {
-      _active = next;
-    });
-  }
-
-  @override
-  void dispose() {
-    _manager?.removeListener(_onFocusChange);
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    _active = _resolvedActive;
-    return widget.builder(context, _active);
+    // Lazy: builder + count. Item subtrees are mounted on demand by
+    // the render object during layout; a completed click selects an item.
+    // `.separated` composes a non-selectable separator into the row
+    // block below its item. Clicking the block selects its item;
+    // separators never enter
+    // the index math because they are sub-parts of an item's block.
+    final separatorBuilder = widget.separatorBuilder;
+    final itemCount = widget.itemCount!;
+    return _LazyListBody(
+      controller: _controller,
+      itemCount: itemCount,
+      dataRevision: _dataRevision,
+      identities: _identities,
+      itemBuilder: (context, index, itemActive) {
+        final built = widget.itemBuilder!(context, index, itemActive);
+        // No separator after the last item, when none was requested, or
+        // when the builder returns null for this gap.
+        final separator = separatorBuilder == null || index >= itemCount - 1
+            ? null
+            : separatorBuilder(context, index);
+        final content = separator == null
+            ? built
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [built, separator],
+              );
+        // The GestureDetector wraps the WHOLE block (not the item
+        // alone), so a tap on a separator row selects the item it
+        // trails. Its region, like every other piece of geometry, is
+        // derived from layout, so a scrolled-but-unchanged block
+        // whose RepaintBoundary blits its cached cells at the new row
+        // has its tap region follow for free.
+        return _maybeBoundary(
+          GestureDetector(
+            onTapDown: (_) => _handleItemDown(index),
+            onTap: () => _handleItemTap(index),
+            onTapCancel: () => _pressedItem = null,
+            child: content,
+          ),
+        );
+      },
+      currentIndex: _controller.currentIndex,
+    );
   }
 }
 
@@ -1126,7 +1057,7 @@ class _ListViewBody extends MultiChildRenderObjectWidget {
     covariant _RenderListView renderObject,
   ) {
     renderObject.controller = controller;
-    // The controller is mutable; selection and pending jump changes are read
+    // The controller is mutable; cursor and pending jump changes are read
     // during layout even when the controller identity is stable.
     renderObject.markNeedsLayout();
   }
@@ -1225,7 +1156,7 @@ class _ListViewportLayout {
     final jump = controller._pendingJumpIndex;
     final fraction = controller._pendingFraction;
     final priorRange = controller.visibleRange;
-    final selected = controller.selectedIndex;
+    final current = controller.currentIndex;
     final keepSelectionOnResize =
         jump == null &&
         fraction == null &&
@@ -1233,13 +1164,13 @@ class _ListViewportLayout {
         controller._pendingScrollRows == 0 &&
         !controller._isFollowing &&
         controller._viewportExtent != rows &&
-        selected != null &&
+        current != null &&
         priorRange != null &&
-        selected >= priorRange.first &&
-        selected <= priorRange.last;
+        current >= priorRange.first &&
+        current <= priorRange.last;
     final reveal =
         controller._pendingRevealIndex ??
-        (keepSelectionOnResize ? selected : null);
+        (keepSelectionOnResize ? current : null);
     final scroll = controller._pendingScrollRows;
     final bottom = controller._pendingBottom || controller._isFollowing;
     controller._clearRequests();
@@ -1282,7 +1213,7 @@ class _ListViewportLayout {
       }
     }
     // A shrink or resize can leave blank space at the end. Backfill without
-    // changing selection, including a jump whose target has zero height.
+    // changing cursor, including a jump whose target has zero height.
     final end = offsets.isEmpty
         ? 0
         : offsets.values.last + height(offsets.keys.last);
@@ -1376,7 +1307,7 @@ class _RenderListView extends RenderObject implements RenderObjectWithChildren {
 
   /// Index of the first item that should appear at the top of the
   /// viewport. Persists across layouts so scroll position is stable
-  /// when only selection / item count changes.
+  /// when only cursor / item count changes.
   final _viewport = _ListViewportLayout();
 
   @override
@@ -1486,20 +1417,16 @@ class _LazyListBody extends RenderObjectWidget {
     required this.itemCount,
     required this.dataRevision,
     required this.itemBuilder,
-    required this.itemKeyBuilder,
-    required this.findChildIndexCallback,
-    required this.selectedIndex,
-    required this.selectionActive,
+    required this.identities,
+    required this.currentIndex,
   });
 
   final ListController controller;
   final int itemCount;
   final int dataRevision;
   final Widget Function(BuildContext, int, bool) itemBuilder;
-  final ListItemKeyBuilder? itemKeyBuilder;
-  final ListItemIndexCallback? findChildIndexCallback;
-  final int? selectedIndex;
-  final bool selectionActive;
+  final _ListItemIdentities? identities;
+  final int? currentIndex;
 
   @override
   _LazyListElement createElement() => _LazyListElement(this);
@@ -1515,7 +1442,7 @@ class _LazyListBody extends RenderObjectWidget {
     covariant _RenderLazyListView renderObject,
   ) {
     renderObject.controller = controller;
-    // The controller is mutable; selection and pending jump changes drive
+    // The controller is mutable; cursor and pending jump changes drive
     // visible child mounting during layout even when identity is stable.
     renderObject.markNeedsLayout();
   }
@@ -1572,9 +1499,8 @@ class _LazyListElement extends RenderObjectElement {
   }
 
   void _reconcileDataIndices(_LazyListBody newWidget) {
-    final findIndex = newWidget.findChildIndexCallback;
-    final keyBuilder = newWidget.itemKeyBuilder;
-    if (findIndex == null || keyBuilder == null) {
+    final identities = newWidget.identities;
+    if (identities == null) {
       if (_itemKeyByElement.isNotEmpty) {
         _itemKeyByElement.clear();
         renderObject._clearItemIdentity();
@@ -1594,30 +1520,10 @@ class _LazyListElement extends RenderObjectElement {
         removed.add((index: oldIndex, element: element));
         continue;
       }
-      final newIndex = findIndex(itemKey);
+      final newIndex = identities.indexByKey[itemKey];
       if (newIndex == null) {
         removed.add((index: oldIndex, element: element));
         continue;
-      }
-      if (newIndex < 0 || newIndex >= newWidget.itemCount) {
-        throw StateError(
-          'findChildIndexCallback returned $newIndex for $itemKey, outside '
-          'the current ListView range 0..${newWidget.itemCount - 1}.',
-        );
-      }
-      final resolvedKey = keyBuilder(newIndex);
-      if (resolvedKey != itemKey) {
-        throw StateError(
-          'findChildIndexCallback returned index $newIndex for $itemKey, but '
-          'itemKeyBuilder($newIndex) returned $resolvedKey.',
-        );
-      }
-      final collision = remapped[newIndex];
-      if (collision != null) {
-        throw StateError(
-          'Multiple mounted ListView items resolved to index $newIndex. '
-          'Stable item keys must be unique.',
-        );
       }
       remapped[newIndex] = element;
       oldToNew[oldIndex] = newIndex;
@@ -1629,12 +1535,7 @@ class _LazyListElement extends RenderObjectElement {
       entry.element.unmount();
     }
 
-    renderObject._remapDataIndices(
-      oldToNew,
-      itemKeyBuilder: keyBuilder,
-      findChildIndexCallback: findIndex,
-      newItemCount: newWidget.itemCount,
-    );
+    renderObject._remapDataIndices(oldToNew, identities: identities);
     _mountedChildren
       ..clear()
       ..addAll(remapped);
@@ -1649,36 +1550,12 @@ class _LazyListElement extends RenderObjectElement {
       ..addEntries(sorted);
   }
 
-  Object? _validateNewItemIdentity(int index, {Element? replacing}) {
-    final keyBuilder = widget.itemKeyBuilder;
-    final findIndex = widget.findChildIndexCallback;
-    if (keyBuilder == null || findIndex == null) return null;
-
-    final itemKey = keyBuilder(index);
-    final resolvedIndex = findIndex(itemKey);
-    if (resolvedIndex != index) {
-      throw StateError(
-        'findChildIndexCallback returned $resolvedIndex for $itemKey, but the '
-        'item is being mounted at index $index.',
-      );
-    }
-    for (final entry in _itemKeyByElement.entries) {
-      if (!identical(entry.key, replacing) && entry.value == itemKey) {
-        throw StateError(
-          'Duplicate ListView item key $itemKey at index $index. Stable item '
-          'keys must be unique.',
-        );
-      }
-    }
-    return itemKey;
-  }
-
   @override
   void performRebuild() {
     // Re-update each currently-mounted child with a freshly-built
     // widget from the (possibly new) itemBuilder. This is what
-    // propagates a selectedIndex change to existing items so their
-    // `active` flag can re-render the highlight without us
+    // propagates a currentIndex change to existing items so their
+    // `highlighted` flag can re-render the highlight without us
     // having to unmount/remount.
     final maxValid = widget.itemCount;
     final toRemove = <int>[];
@@ -1700,16 +1577,12 @@ class _LazyListElement extends RenderObjectElement {
     for (final entry in _mountedChildren.entries.toList()) {
       final i = entry.key;
       final oldEl = entry.value;
-      final newWidget = widget.itemBuilder(
-        this,
-        i,
-        widget.selectionActive && i == widget.selectedIndex,
-      );
+      final newWidget = widget.itemBuilder(this, i, i == widget.currentIndex);
       if (identical(oldEl.widget, newWidget)) continue;
       if (Widget.canUpdate(oldEl.widget, newWidget)) {
         oldEl.update(newWidget);
       } else {
-        final itemKey = _validateNewItemIdentity(i, replacing: oldEl);
+        final itemKey = itemKeyAt(i);
         oldEl.unmount();
         _itemKeyByElement.remove(oldEl);
         final fresh = newWidget.createElement();
@@ -1727,11 +1600,11 @@ class _LazyListElement extends RenderObjectElement {
     if (existing != null) {
       return _findRootRenderObject(existing);
     }
-    final itemKey = _validateNewItemIdentity(index);
+    final itemKey = itemKeyAt(index);
     final newWidget = widget.itemBuilder(
       this,
       index,
-      widget.selectionActive && index == widget.selectedIndex,
+      index == widget.currentIndex,
     );
     final element = newWidget.createElement();
     element.mount(this);
@@ -1754,7 +1627,7 @@ class _LazyListElement extends RenderObjectElement {
     el?.unmount();
   }
 
-  Object? itemKeyAt(int index) => widget.itemKeyBuilder?.call(index);
+  Object? itemKeyAt(int index) => widget.identities?.keys[index];
 
   Set<int> get mountedIndices => _mountedChildren.keys.toSet();
 
@@ -1795,7 +1668,7 @@ class _LazyListElement extends RenderObjectElement {
 ///
 /// Uses the shared row-offset viewport layout, measuring and mounting only the
 /// rows it visits. It then unmounts items outside the final visible range.
-/// Selection is revealed only on request; ordinary rebuilds keep the anchor.
+/// Cursor is revealed only on request; ordinary rebuilds keep the anchor.
 class _RenderLazyListView extends RenderObject
     implements RenderObjectWithChildren {
   @override
@@ -1890,31 +1763,10 @@ class _RenderLazyListView extends RenderObject
 
   void _remapDataIndices(
     Map<int, int> oldToNew, {
-    required ListItemKeyBuilder itemKeyBuilder,
-    required ListItemIndexCallback findChildIndexCallback,
-    required int newItemCount,
+    required _ListItemIdentities identities,
   }) {
-    final anchorKey = _scrollAnchorItemKey;
-    if (anchorKey != null) {
-      final remappedAnchor = findChildIndexCallback(anchorKey);
-      if (remappedAnchor != null) {
-        if (remappedAnchor < 0 || remappedAnchor >= newItemCount) {
-          throw StateError(
-            'findChildIndexCallback returned $remappedAnchor for $anchorKey, '
-            'outside the current ListView range 0..${newItemCount - 1}.',
-          );
-        }
-        final resolvedKey = itemKeyBuilder(remappedAnchor);
-        if (resolvedKey != anchorKey) {
-          throw StateError(
-            'findChildIndexCallback returned index $remappedAnchor for '
-            '$anchorKey, but itemKeyBuilder($remappedAnchor) returned '
-            '$resolvedKey.',
-          );
-        }
-        _scrollAnchor = remappedAnchor;
-      }
-    }
+    final remappedAnchor = identities.indexByKey[_scrollAnchorItemKey];
+    if (remappedAnchor != null) _scrollAnchor = remappedAnchor;
 
     if (_activeByIndex.isEmpty) return;
     final activeEntries = <MapEntry<int, RenderObject>>[];

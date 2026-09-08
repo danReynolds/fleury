@@ -354,12 +354,7 @@ export 'src/widgets/key_bindings.dart'
         PendingKeySequenceMatch,
         resolveActiveKeyBindings;
 export 'src/widgets/list_view.dart'
-    show
-        EdgeBehavior,
-        ListController,
-        ListItemIndexCallback,
-        ListItemKeyBuilder,
-        ListView;
+    show EdgeBehavior, ListController, ListItemKeyBuilder, ListView;
 export 'src/widgets/navigator.dart'
     show Navigator, NavigatorContext, NavigatorState, PopScope, RouteTransition;
 export 'src/widgets/layout_builder.dart'

@@ -20,8 +20,8 @@ class _ListInteractionFixtureState extends State<ListInteractionFixture> {
         height: 3,
         child: ListView.builder(
           itemCount: 3,
-          onSelectionChanged: (index) => setState(() => selected = index),
-          onActivate: (index) => setState(() => activated = '$index'),
+          onFocusedItemChanged: (index) => setState(() => selected = index),
+          onSelect: (index) => setState(() => activated = '$index'),
           itemBuilder: (_, index, active) => Text('Choice $index'),
         ),
       ),

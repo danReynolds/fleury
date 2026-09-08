@@ -694,7 +694,7 @@ class _WidgetSelector extends StatefulWidget {
 
 class _WidgetSelectorState extends State<_WidgetSelector> {
   final TextEditingController _queryController = TextEditingController();
-  final ListController _listController = ListController(selectedIndex: 0);
+  final ListController _listController = ListController(initialIndex: 0);
 
   List<SearchResult> _results() {
     final results = <SearchResult>[

@@ -19,8 +19,8 @@ Widget list(
   bool scrollbar = false,
   bool autofocus = false,
   String Function(int)? content,
-  void Function(int)? activate,
   void Function(int)? select,
+  void Function(int)? focusedItemChanged,
 }) {
   Widget row(int i) => Text(content?.call(i) ?? 'Item $i');
   return lazy
@@ -30,9 +30,9 @@ Widget list(
           selectable: selectable,
           scrollbar: scrollbar,
           autofocus: autofocus,
-          onActivate: activate,
-          onSelectionChanged: select,
-          itemBuilder: (_, i, active) => row(i),
+          onSelect: select,
+          onFocusedItemChanged: focusedItemChanged,
+          itemBuilder: (_, i, highlighted) => row(i),
         )
       : ListView(
           controller: controller,
@@ -40,8 +40,8 @@ Widget list(
           selectable: selectable,
           scrollbar: scrollbar,
           autofocus: autofocus,
-          onActivate: activate,
-          onSelectionChanged: select,
+          onSelect: select,
+          onFocusedItemChanged: focusedItemChanged,
         );
 }
 
@@ -49,23 +49,110 @@ void main() {
   for (final lazy in [false, true]) {
     group(lazy ? 'lazy viewport' : 'eager viewport', () {
       testWidgets(
-        'wheel scrolls without changing selection or focus',
+        'initial current index is visible without selecting or taking focus',
         (t) {
-          final c = ListController();
-          final selections = <int>[];
-          t.pumpWidget(list(c, lazy: lazy, select: selections.add));
+          final c = ListController(initialIndex: 24);
+          final outside = FocusNode(debugLabel: 'outside');
+          final events = <int>[];
+          t.pumpWidget(
+            Column(
+              children: [
+                Focus(
+                  focusNode: outside,
+                  autofocus: true,
+                  child: const Text('Outside'),
+                ),
+                SizedBox(
+                  height: 5,
+                  child: list(
+                    c,
+                    lazy: lazy,
+                    count: 100,
+                    select: events.add,
+                    focusedItemChanged: events.add,
+                  ),
+                ),
+              ],
+            ),
+          );
+          expect(c.currentIndex, 24);
+          expect(c.visibleRange!.first, lessThanOrEqualTo(24));
+          expect(c.visibleRange!.last, greaterThanOrEqualTo(24));
+          expect(t.renderToString(), contains('Item 24'));
+          expect(events, isEmpty);
+          expect(outside.hasFocus, isTrue);
+          t.pumpWidget(const Text('Done'));
+          outside.dispose();
+          c.dispose();
+        },
+        viewportSize: const CellSize(20, 6),
+      );
+
+      testWidgets(
+        'initial index clamps and an explicit initial viewport wins',
+        (t) {
+          final c = ListController(initialIndex: 200)..jumpToIndex(10);
+          t.pumpWidget(list(c, lazy: lazy, count: 30));
+          expect(c.currentIndex, 29);
+          expect(c.visibleRange, (first: 10, last: 14));
+        },
+        viewportSize: const CellSize(20, 5),
+      );
+
+      testWidgets(
+        'browsing reports focus; repeated Enter and clicks select; writes stay quiet',
+        (t) {
+          final controller = ListController();
+          final events = <String>[];
+          t.pumpWidget(
+            list(
+              controller,
+              lazy: lazy,
+              autofocus: true,
+              focusedItemChanged: (index) => events.add('browse $index'),
+              select: (index) => events.add('select $index'),
+            ),
+          );
+          t.sendKey(KeyEvent(KeyCode.arrowDown));
+          expect(events, ['browse 1']);
+          t.sendKey(KeyEvent(KeyCode.enter));
+          t.sendKey(KeyEvent(KeyCode.enter));
+          expect(events, ['browse 1', 'select 1', 'select 1']);
+          t.sendMouse(mouse(MouseEventKind.down, 1, 1));
+          expect(events, hasLength(3));
+          t.sendMouse(mouse(MouseEventKind.up, 1, 1));
+          expect(events.last, 'select 1');
+          events.clear();
+          controller.currentIndex = 2;
+          t.pump();
           t.sendMouse(mouse(MouseEventKind.scrollDown, 1, 2));
           t.pump();
-          expect(c.selectedIndex, 0);
+          expect(controller.currentIndex, 2);
+          expect(events, isEmpty);
+        },
+        viewportSize: const CellSize(20, 5),
+      );
+
+      testWidgets(
+        'wheel scrolls without changing the cursor or focus',
+        (t) {
+          final c = ListController();
+          final focusedItems = <int>[];
+          t.pumpWidget(
+            list(c, lazy: lazy, focusedItemChanged: focusedItems.add),
+          );
+          t.sendMouse(mouse(MouseEventKind.scrollDown, 1, 2));
+          t.pump();
+          expect(c.currentIndex, 0);
           expect(c.visibleRange, (first: 1, last: 5));
-          expect(selections, isEmpty);
+          expect(focusedItems, isEmpty);
           expect(t.renderToString(), contains('Item 5'));
         },
         viewportSize: const CellSize(20, 5),
       );
 
       testWidgets(
-        'jump survives rebuild and keyboard reveals selection',
+        'jump survives rebuild and keyboard reveals the current item',
         (t) {
           final c = ListController();
           Widget app() => list(c, lazy: lazy, autofocus: true);
@@ -74,10 +161,10 @@ void main() {
           t.pump();
           t.pumpWidget(app());
           expect(c.visibleRange, (first: 10, last: 14));
-          expect(c.selectedIndex, 0);
+          expect(c.currentIndex, 0);
           t.sendKey(KeyEvent(KeyCode.arrowDown));
           t.pump();
-          expect(c.selectedIndex, 1);
+          expect(c.currentIndex, 1);
           expect(c.visibleRange, (first: 1, last: 5));
         },
         viewportSize: const CellSize(20, 5),
@@ -114,7 +201,7 @@ void main() {
             expect(frame, contains('Line $i'));
           }
           expect(frame, contains('Outside'));
-          expect(c.selectedIndex, 0);
+          expect(c.currentIndex, 0);
           expect(c.atBottom, isFalse);
           c.scrollBy(1);
           t.pump();
@@ -130,15 +217,15 @@ void main() {
       testWidgets(
         'passive list scrolls by keyboard without selecting',
         (t) {
-          final c = ListController(selectedIndex: 4);
+          final c = ListController(initialIndex: 4);
           t.pumpWidget(list(c, lazy: lazy, selectable: false, autofocus: true));
-          expect(c.selectedIndex, isNull);
+          expect(c.currentIndex, isNull);
           t.sendMouse(mouse(MouseEventKind.down, 1, 2));
           t.sendMouse(mouse(MouseEventKind.up, 1, 2));
-          c.selectedIndex = 3;
+          c.currentIndex = 3;
           t.sendKey(KeyEvent(KeyCode.arrowDown));
           t.pump();
-          expect(c.selectedIndex, isNull);
+          expect(c.currentIndex, isNull);
           expect(c.visibleRange, (first: 1, last: 5));
           t.sendKey(KeyEvent(KeyCode.pageDown));
           t.pump();
@@ -172,7 +259,7 @@ void main() {
           t.pump();
           expect(c.isFollowing, isTrue);
           expect(c.unseenCount, 0);
-          expect(c.selectedIndex, 0);
+          expect(c.currentIndex, 0);
           t.pumpWidget(app(22));
           expect(c.visibleRange, (first: 17, last: 21));
         },
@@ -210,7 +297,7 @@ void main() {
       testWidgets(
         'follow tracks growth within the last item',
         (t) {
-          final c = ListController(followTail: true, selectedIndex: null);
+          final c = ListController(followTail: true, initialIndex: null);
           Widget app(int lines) => list(
             c,
             lazy: lazy,
@@ -257,14 +344,14 @@ void main() {
       testWidgets(
         'clicking a partial tall row keeps it under the pointer',
         (t) {
-          final c = ListController(selectedIndex: 1);
-          final activated = <int>[];
+          final c = ListController(initialIndex: 1);
+          final selected = <int>[];
           t.pumpWidget(
             list(
               c,
               lazy: lazy,
               count: 2,
-              activate: activated.add,
+              select: selected.add,
               content: (i) => i == 0 ? 'a0\na1\na2\na3\na4\na5\na6\na7' : 'end',
             ),
           );
@@ -274,10 +361,10 @@ void main() {
           final before = t.renderToString();
           t.sendMouse(mouse(MouseEventKind.down, 1, 0));
           t.pump();
-          expect(c.selectedIndex, 0);
+          expect(c.currentIndex, 0);
           expect(t.renderToString(), before);
           t.sendMouse(mouse(MouseEventKind.up, 1, 0));
-          expect(activated, [0]);
+          expect(selected, [0]);
         },
         viewportSize: const CellSize(20, 5),
       );
@@ -286,7 +373,7 @@ void main() {
         'nested buttons own the click in a clipped row',
         (t) {
           final c = ListController();
-          final activated = <int>[];
+          final selected = <int>[];
           var clicks = 0;
           Widget row(int i) => Column(
             mainAxisSize: MainAxisSize.min,
@@ -306,12 +393,12 @@ void main() {
               ? ListView.builder(
                   controller: c,
                   itemCount: 1,
-                  onActivate: activated.add,
-                  itemBuilder: (_, i, active) => row(i),
+                  onSelect: selected.add,
+                  itemBuilder: (_, i, highlighted) => row(i),
                 )
               : ListView(
                   controller: c,
-                  onActivate: activated.add,
+                  onSelect: selected.add,
                   children: [row(0)],
                 );
           t.pumpWidget(
@@ -340,7 +427,7 @@ void main() {
           t.pump();
           t.sendMouse(mouse(MouseEventKind.up, 2, 0));
           expect(clicks, 1);
-          expect(activated, isEmpty);
+          expect(selected, isEmpty);
           t.sendMouse(mouse(MouseEventKind.down, 2, 3));
           t.sendMouse(mouse(MouseEventKind.up, 2, 3));
           expect(
@@ -372,7 +459,7 @@ void main() {
       testWidgets(
         'empty boundary items do not hide content or invent scrolling',
         (t) {
-          final c = ListController(selectedIndex: null);
+          final c = ListController(initialIndex: null);
           Widget row(int i) =>
               i == 1 ? const Text('Only content') : const SizedBox(height: 0);
           t.pumpWidget(
@@ -380,7 +467,7 @@ void main() {
                 ? ListView.builder(
                     controller: c,
                     itemCount: 3,
-                    itemBuilder: (_, i, active) => row(i),
+                    itemBuilder: (_, i, highlighted) => row(i),
                   )
                 : ListView(controller: c, children: List.generate(3, row)),
           );
@@ -400,41 +487,41 @@ void main() {
       );
 
       testWidgets(
-        'pre-mount jump wins over the initial selection',
+        'pre-mount jump wins over the initial cursor',
         (t) {
           final c = ListController()..jumpToIndex(10);
           t.pumpWidget(list(c, lazy: lazy));
           expect(c.visibleRange, (first: 10, last: 14));
-          expect(c.selectedIndex, 0);
+          expect(c.currentIndex, 0);
         },
         viewportSize: const CellSize(20, 5),
       );
 
       testWidgets(
-        'selection and focus precede cancellable activation',
+        'cursor movement precedes cancellable selection',
         (t) {
           final c = ListController();
-          final activated = <int>[];
+          final selected = <int>[];
           Widget app() => SizedBox(
             width: 12,
             height: 3,
-            child: list(c, lazy: lazy, count: 3, activate: activated.add),
+            child: list(c, lazy: lazy, count: 3, select: selected.add),
           );
           t.pumpWidget(app());
           t.sendMouse(mouse(MouseEventKind.down, 1, 1));
-          expect(c.selectedIndex, 1);
-          expect(activated, isEmpty);
+          expect(c.currentIndex, 1);
+          expect(selected, isEmpty);
           t.pumpWidget(app());
           t.sendMouse(mouse(MouseEventKind.up, 1, 1));
-          expect(activated, [1]);
+          expect(selected, [1]);
           t.sendMouse(mouse(MouseEventKind.down, 1, 2));
           t.pump();
           t.sendMouse(mouse(MouseEventKind.up, 17, 4));
-          expect(activated, [1]);
+          expect(selected, [1]);
           t.sendMouse(mouse(MouseEventKind.down, 1, 0));
           t.sendMouse(mouse(MouseEventKind.cancel, 1, 0));
           t.sendMouse(mouse(MouseEventKind.up, 1, 0));
-          expect(activated, [1]);
+          expect(selected, [1]);
         },
         viewportSize: const CellSize(20, 5),
       );
@@ -442,16 +529,16 @@ void main() {
   }
 
   testWidgets(
-    'explicit null selection survives empty and nonempty updates',
+    'explicit null cursor survives empty and nonempty updates',
     (t) {
-      final c = ListController(selectedIndex: null);
+      final c = ListController(initialIndex: null);
       t.pumpWidget(list(c));
-      expect(c.selectedIndex, isNull);
+      expect(c.currentIndex, isNull);
       t.pumpWidget(list(c, count: 0));
       t.pumpWidget(list(c));
-      expect(c.selectedIndex, isNull);
+      expect(c.currentIndex, isNull);
       t.sendMouse(mouse(MouseEventKind.down, 1, 2));
-      expect(c.selectedIndex, 2);
+      expect(c.currentIndex, 2);
     },
     viewportSize: const CellSize(20, 5),
   );
@@ -496,16 +583,14 @@ void main() {
     (t) {
       final c = ListController();
       var items = ['a', 'b', 'c'];
-      final activated = <String>[];
+      final selected = <String>[];
       Widget app() {
-        final indices = {for (var i = 0; i < items.length; i++) items[i]: i};
         return ListView.builder(
           controller: c,
           itemCount: items.length,
           itemKeyBuilder: (i) => items[i],
-          findChildIndexCallback: (key) => indices[key],
-          onActivate: (i) => activated.add(items[i]),
-          itemBuilder: (_, i, active) =>
+          onSelect: (i) => selected.add(items[i]),
+          itemBuilder: (_, i, highlighted) =>
               Text('${items[i]}0\n${items[i]}1\n${items[i]}2\n${items[i]}3'),
         );
       }
@@ -521,7 +606,7 @@ void main() {
       items = ['new', 'replacement', 'b', 'c'];
       t.pumpWidget(app());
       t.sendMouse(mouse(MouseEventKind.up, 1, 0));
-      expect(activated, isEmpty);
+      expect(selected, isEmpty);
     },
     viewportSize: const CellSize(20, 5),
   );
@@ -530,16 +615,14 @@ void main() {
     (t) {
       final c = ListController();
       var items = ['a', 'b', 'c'];
-      final activated = <String>[];
+      final selected = <String>[];
       Widget app() {
-        final indices = {for (var i = 0; i < items.length; i++) items[i]: i};
         return ListView.builder(
           controller: c,
           itemCount: items.length,
           itemKeyBuilder: (i) => items[i],
-          findChildIndexCallback: (key) => indices[key],
-          onActivate: (i) => activated.add('$i:${items[i]}'),
-          itemBuilder: (_, i, active) => Text(items[i]),
+          onSelect: (i) => selected.add('$i:${items[i]}'),
+          itemBuilder: (_, i, highlighted) => Text(items[i]),
         );
       }
 
@@ -548,8 +631,8 @@ void main() {
       items = ['b', 'a', 'c'];
       t.pumpWidget(app());
       t.sendMouse(mouse(MouseEventKind.up, 0, 0));
-      expect(c.selectedIndex, 0);
-      expect(activated, ['0:b']);
+      expect(c.currentIndex, 0);
+      expect(selected, ['0:b']);
     },
     viewportSize: const CellSize(20, 5),
   );

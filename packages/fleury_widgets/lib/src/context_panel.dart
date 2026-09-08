@@ -72,10 +72,10 @@ final class ContextItem {
   String get displayId => id.toString();
 }
 
-/// Controller for [ContextPanel] selection and viewport state.
+/// Controller for [ContextPanel] browsing and viewport state.
 class ContextPanelController extends ChangeNotifier {
-  ContextPanelController({int selectedIndex = 0})
-    : _list = ListController(selectedIndex: selectedIndex) {
+  ContextPanelController({int? initialIndex = 0})
+    : _list = ListController(initialIndex: initialIndex) {
     _list.addListener(notifyListeners);
   }
 
@@ -84,10 +84,10 @@ class ContextPanelController extends ChangeNotifier {
 
   ListController get _listController => _list;
 
-  int? get selectedIndex => _list.selectedIndex;
-  set selectedIndex(int? value) {
+  int? get currentIndex => _list.currentIndex;
+  set currentIndex(int? value) {
     _checkNotDisposed();
-    _list.selectedIndex = value;
+    _list.currentIndex = value;
   }
 
   ({int first, int last})? get visibleRange => _list.visibleRange;
@@ -294,16 +294,13 @@ class _ContextPanelState extends State<ContextPanel> {
     _selectionSyncGeneration++;
     _pendingSelectedContextItemId = null;
     if (widget.items.isEmpty) {
-      _controller.selectedIndex = null;
+      _controller.currentIndex = null;
       return;
     }
-    final selectedIndex = _controller.selectedIndex;
-    if (selectedIndex == null) {
-      _controller.selectedIndex = 0;
-      return;
-    }
-    if (selectedIndex >= 0 && selectedIndex < oldItems.length) {
-      final selectedId = oldItems[selectedIndex].id;
+    final currentIndex = _controller.currentIndex;
+    if (currentIndex == null) return;
+    if (currentIndex >= 0 && currentIndex < oldItems.length) {
+      final selectedId = oldItems[currentIndex].id;
       final nextIndex = widget.items.indexWhere(
         (item) => item.id == selectedId,
       );
@@ -312,13 +309,13 @@ class _ContextPanelState extends State<ContextPanel> {
         return;
       }
     }
-    _controller.selectedIndex = selectedIndex.clamp(0, widget.items.length - 1);
+    _controller.currentIndex = currentIndex.clamp(0, widget.items.length - 1);
   }
 
   void _selectIndexAfterListCountRefresh(Object selectedId, int nextIndex) {
     final knownItemCount = _controller._listController.itemCount;
     if (knownItemCount == 0 || nextIndex < knownItemCount) {
-      _controller.selectedIndex = nextIndex;
+      _controller.currentIndex = nextIndex;
       return;
     }
 
@@ -345,7 +342,7 @@ class _ContextPanelState extends State<ContextPanel> {
       return;
     }
     _pendingSelectedContextItemId = null;
-    _controller.selectedIndex = nextIndex;
+    _controller.currentIndex = nextIndex;
   }
 
   void _onFocusDetectorChange(bool focused) {
@@ -357,7 +354,7 @@ class _ContextPanelState extends State<ContextPanel> {
 
   Future<void> _copySelection() async {
     if (!widget.copySelection || widget.items.isEmpty) return;
-    final selected = (_controller.selectedIndex ?? 0).clamp(
+    final selected = (_controller.currentIndex ?? 0).clamp(
       0,
       widget.items.length - 1,
     );
@@ -380,7 +377,7 @@ class _ContextPanelState extends State<ContextPanel> {
   void _selectCurrent() {
     if (widget.items.isEmpty) return;
     _focusNode.requestFocus();
-    final selected = (_controller.selectedIndex ?? 0).clamp(
+    final selected = (_controller.currentIndex ?? 0).clamp(
       0,
       widget.items.length - 1,
     );
@@ -394,14 +391,14 @@ class _ContextPanelState extends State<ContextPanel> {
   Future<void> _selectAt(int index) async {
     if (index < 0 || index >= widget.items.length) return;
     _focusNode.requestFocus();
-    _controller.selectedIndex = index;
+    _controller.currentIndex = index;
     _selectCurrent();
   }
 
   Future<void> _copyAt(int index) async {
     if (index < 0 || index >= widget.items.length) return;
     _focusNode.requestFocus();
-    _controller.selectedIndex = index;
+    _controller.currentIndex = index;
     await _copySelection();
   }
 
@@ -433,16 +430,16 @@ class _ContextPanelState extends State<ContextPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final selectedIndex = _controller.selectedIndex;
+    final currentIndex = _controller.currentIndex;
     final visibleRange = _controller.visibleRange;
     final copyEnabled = widget.copySelection && widget.items.isNotEmpty;
     final canSelect = widget.onSelect != null;
     final selectedItem =
-        selectedIndex == null ||
-            selectedIndex < 0 ||
-            selectedIndex >= widget.items.length
+        currentIndex == null ||
+            currentIndex < 0 ||
+            currentIndex >= widget.items.length
         ? null
-        : widget.items[selectedIndex];
+        : widget.items[currentIndex];
     final visible = widget.items.isEmpty
         ? 1
         : (widget.items.length > widget.maxVisible
@@ -456,9 +453,9 @@ class _ContextPanelState extends State<ContextPanel> {
             focusNode: _focusNode,
             autofocus: widget.autofocus,
             itemCount: widget.items.length,
-            onActivate: (_) => _selectCurrent(),
+            onSelect: (_) => _selectCurrent(),
             itemBuilder: (context, index, activeSelected) {
-              final selected = index == _controller.selectedIndex;
+              final selected = index == _controller.currentIndex;
               return _ContextItemRow(
                 item: widget.items[index],
                 index: index,
@@ -525,7 +522,7 @@ class _ContextPanelState extends State<ContextPanel> {
             'visibleRangeStart': visibleRange.first,
             'visibleRangeEnd': visibleRange.last,
           },
-          'selectedIndex': ?selectedIndex,
+          'currentIndex': ?currentIndex,
           if (selectedItem != null) ..._selectedItemState(selectedItem),
         }),
         child: child,

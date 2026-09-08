@@ -77,10 +77,10 @@ final class ConversationEntry {
 typedef ConversationMatcher =
     bool Function(ConversationEntry entry, String query);
 
-/// Controller for [ConversationNavigator] selection and viewport state.
+/// Controller for [ConversationNavigator] browsing and viewport state.
 class ConversationNavigatorController extends ChangeNotifier {
-  ConversationNavigatorController({int selectedIndex = 0})
-    : _list = ListController(selectedIndex: selectedIndex) {
+  ConversationNavigatorController({int? initialIndex = 0})
+    : _list = ListController(initialIndex: initialIndex) {
     _list.addListener(notifyListeners);
   }
 
@@ -89,10 +89,10 @@ class ConversationNavigatorController extends ChangeNotifier {
 
   ListController get _listController => _list;
 
-  int? get selectedIndex => _list.selectedIndex;
-  set selectedIndex(int? value) {
+  int? get currentIndex => _list.currentIndex;
+  set currentIndex(int? value) {
     _checkNotDisposed();
-    _list.selectedIndex = value;
+    _list.currentIndex = value;
   }
 
   ({int first, int last})? get visibleRange => _list.visibleRange;
@@ -402,9 +402,9 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
   );
 
   void _onQueryChange() {
-    final previous = _controller.selectedIndex;
+    final previous = _controller.currentIndex;
     _resetSelection(_currentOrder);
-    if (_controller.selectedIndex == previous) setState(() {});
+    if (_controller.currentIndex == previous) setState(() {});
   }
 
   void _onControllerChange() => setState(() {});
@@ -415,15 +415,15 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
     _selectionSyncGeneration++;
     _pendingSelectedConversationId = null;
     if (order.isEmpty) {
-      _controller.selectedIndex = null;
+      _controller.currentIndex = null;
       return;
     }
-    final selectedIndex = _controller.selectedIndex;
-    if (preserveCurrent && selectedIndex != null) {
-      _controller.selectedIndex = selectedIndex.clamp(0, order.length - 1);
+    final currentIndex = _controller.currentIndex;
+    if (preserveCurrent) {
+      _controller.currentIndex = currentIndex?.clamp(0, order.length - 1);
       return;
     }
-    _controller.selectedIndex = 0;
+    _controller.currentIndex = 0;
   }
 
   void _syncSelectionAfterOrderUpdate(
@@ -434,16 +434,13 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
     _pendingSelectedConversationId = null;
     final order = _currentOrder;
     if (order.isEmpty) {
-      _controller.selectedIndex = null;
+      _controller.currentIndex = null;
       return;
     }
-    final selectedIndex = _controller.selectedIndex;
-    if (selectedIndex == null) {
-      _controller.selectedIndex = 0;
-      return;
-    }
-    if (selectedIndex >= 0 && selectedIndex < oldOrder.length) {
-      final selectedId = oldEntries[oldOrder[selectedIndex]].id;
+    final currentIndex = _controller.currentIndex;
+    if (currentIndex == null) return;
+    if (currentIndex >= 0 && currentIndex < oldOrder.length) {
+      final selectedId = oldEntries[oldOrder[currentIndex]].id;
       final nextIndex = order.indexWhere(
         (entryIndex) => widget.conversations[entryIndex].id == selectedId,
       );
@@ -452,13 +449,13 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
         return;
       }
     }
-    _controller.selectedIndex = selectedIndex.clamp(0, order.length - 1);
+    _controller.currentIndex = currentIndex.clamp(0, order.length - 1);
   }
 
   void _selectIndexAfterListCountRefresh(Object selectedId, int nextIndex) {
     final knownItemCount = _controller._listController.itemCount;
     if (knownItemCount == 0 || nextIndex < knownItemCount) {
-      _controller.selectedIndex = nextIndex;
+      _controller.currentIndex = nextIndex;
       return;
     }
 
@@ -488,7 +485,7 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
       return;
     }
     _pendingSelectedConversationId = null;
-    _controller.selectedIndex = nextIndex;
+    _controller.currentIndex = nextIndex;
   }
 
   void _focusQuery() {
@@ -508,15 +505,15 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
   void _move(int delta) {
     final order = _currentOrder;
     if (order.isEmpty) return;
-    final current = _controller.selectedIndex ?? 0;
-    _controller.selectedIndex = (current + delta).clamp(0, order.length - 1);
+    final current = _controller.currentIndex ?? 0;
+    _controller.currentIndex = (current + delta).clamp(0, order.length - 1);
   }
 
   _SelectedConversation? _selectedConversation(List<int> order) {
     if (order.isEmpty) return null;
-    final selectedIndex = _controller.selectedIndex;
-    if (selectedIndex == null) return null;
-    final viewIndex = selectedIndex.clamp(0, order.length - 1);
+    final currentIndex = _controller.currentIndex;
+    if (currentIndex == null) return null;
+    final viewIndex = currentIndex.clamp(0, order.length - 1);
     final entryIndex = order[viewIndex];
     return _SelectedConversation(
       viewIndex: viewIndex,
@@ -584,7 +581,7 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
     final order = _currentOrder;
     if (viewIndex < 0 || viewIndex >= order.length) return;
     _focusListOrQuery();
-    _controller.selectedIndex = viewIndex;
+    _controller.currentIndex = viewIndex;
     _selectCurrent();
   }
 
@@ -592,7 +589,7 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
     final order = _currentOrder;
     if (viewIndex < 0 || viewIndex >= order.length) return;
     _focusListOrQuery();
-    _controller.selectedIndex = viewIndex;
+    _controller.currentIndex = viewIndex;
     await _copySelection();
   }
 
@@ -618,7 +615,6 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
     final visibleRange = _controller.visibleRange;
     final copyEnabled = widget.copySelection && selected != null;
     final canSelect = widget.onSelect != null;
-    final panelFocused = _queryFocusNode.hasFocus || _listFocusNode.hasFocus;
 
     Widget panel = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -647,12 +643,12 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
                   child: ListView.builder(
                     controller: _controller._listController,
                     focusNode: _listFocusNode,
-                    selectionActive: panelFocused,
+
                     itemCount: order.length,
-                    onActivate: (_) => _selectCurrent(),
+                    onSelect: (_) => _selectCurrent(),
                     itemBuilder: (context, viewIndex, activeSelected) {
                       final entryIndex = order[viewIndex];
-                      final selected = viewIndex == _controller.selectedIndex;
+                      final selected = viewIndex == _controller.currentIndex;
                       return _ConversationRow(
                         entry: widget.conversations[entryIndex],
                         entryIndex: entryIndex,
@@ -731,7 +727,7 @@ class _ConversationNavigatorState extends State<ConversationNavigator> {
             'visibleRangeStart': visibleRange.first,
             'visibleRangeEnd': visibleRange.last,
           },
-          'selectedIndex': ?_controller.selectedIndex,
+          'currentIndex': ?_controller.currentIndex,
           if (selected != null) ..._selectedConversationState(selected.entry),
         }),
         child: panel,

@@ -109,8 +109,8 @@ class CompletionTextInput extends StatefulWidget {
   /// Whether the field should request focus when mounted.
   final bool autofocus;
 
-  /// Called with the new text on every edit, including programmatic
-  /// [controller] changes. See [TextInput.onChanged].
+  /// Called after user and semantic edits. Programmatic controller writes
+  /// notify controller listeners instead. See [TextInput.onChanged].
   final void Function(String text)? onChanged;
 
   /// Called when the user submits the current text.
@@ -194,7 +194,7 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
   bool _ownsFocusNode = false;
 
   final BoundsNotifier _bounds = BoundsNotifier();
-  final ListController _list = ListController(selectedIndex: 0);
+  final ListController _list = ListController(initialIndex: 0);
   FocusManager? _manager;
   OverlayEntry? _entry;
   CellStyle _selectionStyle = const CellStyle(inverse: true);
@@ -260,7 +260,7 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
   }
 
   void _onCompletionChange() {
-    _list.selectedIndex = _completion.state.selectedIndex;
+    _list.currentIndex = _completion.state.currentIndex;
     _syncOverlay();
   }
 
@@ -290,7 +290,7 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
       range: request.range,
       query: request.query,
       options: options,
-      selectedIndex: _completion.state.selectedIndex,
+      currentIndex: _completion.state.currentIndex,
     );
   }
 
@@ -325,7 +325,10 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
     final state = _completion.state;
     if (!state.active || index < 0 || index >= state.options.length) return;
     final option = state.options[index];
+    final before = _controller.text;
     _controller.replaceRange(state.range, option.replacement, singleLine: true);
+    if (_controller.text != before) widget.onChanged?.call(_controller.text);
+    if (!mounted) return;
     _completion.close();
     widget.onCompletionAccepted?.call(option);
   }
@@ -356,7 +359,7 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
     var boxWidth = width + _markerCols;
     if (boxWidth > maxBoxWidth) boxWidth = maxBoxWidth;
     if (boxWidth < 1) boxWidth = 1;
-    _list.selectedIndex = state.selectedIndex;
+    _list.currentIndex = state.currentIndex;
     return Semantics(
       role: SemanticRole.menu,
       label: 'Completions',
@@ -370,7 +373,7 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
       state: SemanticState({
         'filterText': state.query,
         'collectionRowCount': options.length,
-        if (state.selectedIndex != null) 'selectedKey': state.selectedIndex,
+        if (state.currentIndex != null) 'selectedKey': state.currentIndex,
         'visibleRangeStart': 0,
         'visibleRangeEnd': visible - 1,
       }),
@@ -398,7 +401,7 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
             height: visible,
             child: ListView.builder(
               controller: _list,
-              selectionActive: true,
+
               itemCount: options.length,
               itemBuilder: (_, i, selected) {
                 final option = options[i];
@@ -433,7 +436,7 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
                     switch (action) {
                       case SemanticAction.select:
                       case SemanticAction.activate:
-                        _list.selectedIndex = i;
+                        _list.currentIndex = i;
                         _acceptCompletionAt(i);
                         return;
                       case _:
@@ -443,7 +446,7 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
                   // Click a completion to accept it (same as Tab/Enter).
                   child: GestureDetector(
                     onTap: () {
-                      _list.selectedIndex = i;
+                      _list.currentIndex = i;
                       _acceptCompletionAt(i);
                     },
                     child: Text(

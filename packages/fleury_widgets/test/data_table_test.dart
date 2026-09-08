@@ -65,8 +65,8 @@ void main() {
       controller.dispose();
       controller.dispose();
 
-      expect(controller.selectedIndex, 2);
-      expect(controller.selectedColumnIndex, 1);
+      expect(controller.currentRowIndex, 2);
+      expect(controller.currentColumnIndex, 1);
       expect(controller.selectionRange.startRow, 2);
       expect(controller.selectionRange.endRow, 2);
       expect(controller.selectionRange.startColumn, 1);
@@ -77,8 +77,8 @@ void main() {
       final controller = DataTableController()..dispose();
 
       const message = 'DataTableController has been disposed.';
-      expect(() => controller.selectedIndex = 1, _stateError(message));
-      expect(() => controller.selectedColumnIndex = 1, _stateError(message));
+      expect(() => controller.currentRowIndex = 1, _stateError(message));
+      expect(() => controller.currentColumnIndex = 1, _stateError(message));
       expect(() => controller.selectCell(1, 1), _stateError(message));
       expect(() => controller.moveSelection(rowDelta: 1), _stateError(message));
     });
@@ -275,8 +275,12 @@ void main() {
     );
     tester.render(size: const CellSize(48, 8));
 
-    expect(controllerB.selectedIndex, 7, reason: 'B (the target) moved');
-    expect(controllerA.selectedIndex, 0, reason: 'A (a sibling) is untouched');
+    expect(controllerB.currentRowIndex, 7, reason: 'B (the target) moved');
+    expect(
+      controllerA.currentRowIndex,
+      0,
+      reason: 'A (a sibling) is untouched',
+    );
   });
 
   testWidgets('a sortable header activates to request a sort; state carries '
@@ -496,7 +500,7 @@ void main() {
     expect(lines[4], 'run-2    ok');
 
     tester.sendKey(const KeyEvent(KeyCode.pageDown));
-    expect(controller.selectedIndex, 3);
+    expect(controller.currentRowIndex, 3);
     lines = _lines(tester, cols: 20, rows: 5);
     expect(lines[0], 'Run      Status');
     expect(lines[2], 'run-1    failed');
@@ -541,7 +545,11 @@ void main() {
     tester.pumpWidget(host(typeahead: true));
     tester.render(size: const CellSize(20, 8));
     tester.type('r');
-    expect(controller.selectedIndex, 1, reason: 'jumped to the next run- row');
+    expect(
+      controller.currentRowIndex,
+      1,
+      reason: 'jumped to the next run- row',
+    );
     tester.type('q');
     expect(quits, 0, reason: 'type-ahead on: the table swallows the key');
 
@@ -581,7 +589,7 @@ void main() {
       ),
     );
 
-    expect(controller.selectedIndex, 2);
+    expect(controller.currentRowIndex, 2);
     expect(
       tester
           .semantics()
@@ -592,37 +600,48 @@ void main() {
     expect(tester.target(role: SemanticRole.table), isFocused);
   });
 
-  testWidgets('wheel scroll moves the DataTable selection', (tester) {
-    final controller = DataTableController();
-    tester.pumpWidget(
-      DataTable(
-        rowCount: 8,
-        columns: _columns(),
-        controller: controller,
-        rowKeyBuilder: (row) => 'RUN-$row',
-        cellBuilder: _cell,
-      ),
-    );
-    tester.render(size: const CellSize(20, 6));
-    tester.sendMouse(
-      const MouseEvent(
-        kind: MouseEventKind.scrollDown,
-        button: MouseButton.none,
-        col: 1,
-        row: 2,
-      ),
-    );
-    expect(controller.selectedIndex, 1, reason: 'scrolled down one row');
-    tester.sendMouse(
-      const MouseEvent(
-        kind: MouseEventKind.scrollUp,
-        button: MouseButton.none,
-        col: 1,
-        row: 2,
-      ),
-    );
-    expect(controller.selectedIndex, 0, reason: 'scrolled back up');
-  });
+  testWidgets(
+    'wheel scroll moves the viewport without moving the current row',
+    (tester) {
+      final controller = DataTableController();
+      tester.pumpWidget(
+        DataTable(
+          rowCount: 8,
+          columns: _columns(),
+          controller: controller,
+          rowKeyBuilder: (row) => 'RUN-$row',
+          cellBuilder: _cell,
+        ),
+      );
+      tester.render(size: const CellSize(20, 6));
+      tester.sendMouse(
+        const MouseEvent(
+          kind: MouseEventKind.scrollDown,
+          button: MouseButton.none,
+          col: 1,
+          row: 2,
+        ),
+      );
+      expect(controller.currentRowIndex, 0);
+      expect(
+        tester
+            .target(role: SemanticRole.table)
+            .snapshot
+            .state
+            .visibleRangeStart,
+        1,
+      );
+      tester.sendMouse(
+        const MouseEvent(
+          kind: MouseEventKind.scrollUp,
+          button: MouseButton.none,
+          col: 1,
+          row: 2,
+        ),
+      );
+      expect(controller.currentRowIndex, 0, reason: 'scrolled back up');
+    },
+  );
 
   testWidgets('mouse click selects cells and Shift-click extends range', (
     tester,
@@ -659,8 +678,8 @@ void main() {
       ),
     );
 
-    expect(controller.selectedIndex, 1);
-    expect(controller.selectedColumnIndex, 1);
+    expect(controller.currentRowIndex, 1);
+    expect(controller.currentColumnIndex, 1);
     final table = tester.semantics().single(role: SemanticRole.table);
     expect(table.state.selectionStartRow, 0);
     expect(table.state.selectionEndRow, 1);
@@ -695,7 +714,7 @@ void main() {
 
     await row.select();
 
-    expect(controller.selectedIndex, 2);
+    expect(controller.currentRowIndex, 2);
     expect(tester.target(role: SemanticRole.table), isFocused);
 
     expect(row.snapshot.selected, isTrue);
@@ -841,7 +860,7 @@ void main() {
     testWidgets('Ctrl+C copies the selected row with clipboard semantics', (
       tester,
     ) async {
-      final controller = DataTableController(selectedIndex: 1);
+      final controller = DataTableController(initialRowIndex: 1);
       DataTableCopyResult? copied;
       tester.pumpWidget(
         DataTable(
@@ -894,7 +913,7 @@ void main() {
     testWidgets('semantic copy copies the current DataTable selection', (
       tester,
     ) async {
-      final controller = DataTableController(selectedIndex: 1);
+      final controller = DataTableController(initialRowIndex: 1);
       DataTableCopyResult? copied;
       tester.pumpWidget(
         DataTable(
@@ -949,8 +968,8 @@ void main() {
       var tree = tester.semantics();
       final table = tree.single(role: SemanticRole.table);
       expect(table.state.selectionMode, 'cell');
-      expect(table.state.selectedColumnIndex, 1);
-      expect(table.state.selectedColumnId, 'status');
+      expect(table.state.currentColumnIndex, 1);
+      expect(table.state.currentColumnId, 'status');
       expect(table.state.selectionStartRow, 0);
       expect(table.state.selectionEndRow, 1);
       expect(table.state.selectionStartColumn, 1);
@@ -980,7 +999,7 @@ void main() {
       tester,
     ) async {
       final requestedRows = <int>{};
-      final controller = DataTableController(selectedIndex: 2);
+      final controller = DataTableController(initialRowIndex: 2);
       tester.pumpWidget(
         DataTable(
           rowCount: 5,

@@ -46,7 +46,8 @@ import 'tui_binding.dart';
 /// until layout can clamp it — mirroring how [ListController] preserves a
 /// selection before `itemCount` is known.
 class ScrollController extends ChangeNotifier {
-  ScrollController({int offset = 0}) : _offset = offset < 0 ? 0 : offset;
+  ScrollController({int initialOffset = 0})
+    : _offset = initialOffset < 0 ? 0 : initialOffset;
 
   int _offset;
   int _maxOffset = 0;
@@ -54,6 +55,18 @@ class ScrollController extends ChangeNotifier {
   int _contentExtent = 0;
   bool _metricsKnown = false;
   bool _disposed = false;
+  Object? _owner;
+
+  void _attach(Object owner) {
+    _checkNotDisposed();
+    if (_owner != null && !identical(_owner, owner)) {
+      throw StateError(
+        'ScrollController can attach to only one owning view at a time.',
+      );
+    }
+    _owner = owner;
+  }
+
   TuiBinding? _binding;
   bool _metricsNotificationPending = false;
   int _attachment = 0;
@@ -63,7 +76,7 @@ class ScrollController extends ChangeNotifier {
   set offset(int value) {
     _checkNotDisposed();
     var v = value < 0 ? 0 : value;
-    if (_metricsKnown && v > _maxOffset) v = _maxOffset;
+    if (_owner != null && _metricsKnown && v > _maxOffset) v = _maxOffset;
     if (_offset == v) return;
     _offset = v;
     notifyListeners();
@@ -134,7 +147,9 @@ class ScrollController extends ChangeNotifier {
     });
   }
 
-  void _detach() {
+  void _detach([Object? owner]) {
+    if (owner != null && !identical(_owner, owner)) return;
+    _owner = null;
     _attachment++;
     _metricsNotificationPending = false;
     _binding = null;
@@ -214,11 +229,12 @@ class _ScrollViewState extends State<ScrollView> {
   @override
   void initState() {
     super.initState();
-    _controller = widget.controller ?? ScrollController();
-    _ownsController = widget.controller == null;
-    _controller.addListener(_onChange);
     _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'ScrollView');
     _ownsFocusNode = widget.focusNode == null;
+    _controller = widget.controller ?? ScrollController();
+    _ownsController = widget.controller == null;
+    _controller._attach(this);
+    _controller.addListener(_onChange);
   }
 
   @override
@@ -226,10 +242,11 @@ class _ScrollViewState extends State<ScrollView> {
     super.didUpdateWidget(oldWidget);
     if (widget.controller != oldWidget.controller) {
       _controller.removeListener(_onChange);
-      _controller._detach();
+      _controller._detach(this);
       if (_ownsController) _controller.dispose();
       _controller = widget.controller ?? ScrollController();
       _ownsController = widget.controller == null;
+      _controller._attach(this);
       _controller.addListener(_onChange);
     }
     if (widget.focusNode != oldWidget.focusNode) {
@@ -303,9 +320,24 @@ class _ScrollViewState extends State<ScrollView> {
       : KeyEventResult.handled;
 
   @override
+  void deactivate() {
+    _controller.removeListener(_onChange);
+    _controller._detach(this);
+    super.deactivate();
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    _controller._attach(this);
+    _controller._binding = TuiBinding.maybeOf(context);
+    _controller.addListener(_onChange);
+  }
+
+  @override
   void dispose() {
     _controller.removeListener(_onChange);
-    _controller._detach();
+    _controller._detach(this);
     if (_ownsController) _controller.dispose();
     if (_ownsFocusNode) _focusNode.dispose();
     super.dispose();

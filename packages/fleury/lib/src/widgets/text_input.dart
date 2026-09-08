@@ -608,19 +608,10 @@ class TextInput extends StatefulWidget {
   /// Whether to request focus on first mount.
   final bool autofocus;
 
-  /// Called with the new text on every edit — typing, deletion, paste,
-  /// accepting a completion, or a programmatic [controller] change. Fires only
-  /// when the text actually changes, not when the cursor or selection moves.
-  ///
-  /// One deliberate difference from Flutter's `TextField.onChanged`: Flutter
-  /// does **not** fire for programmatic `controller.text` changes; fleury
-  /// does — every text mutation flows through one choke point, so agent-driven
-  /// semantic edits, history navigation, and your own controller writes all
-  /// report the same way. Writing back to the controller from the callback is
-  /// safe (a last-text diff stops the echo), but if you set `controller.text`
-  /// in response to model changes, remember the callback will run for those
-  /// too. For the value on Enter, use [onSubmit]; for full read/write control,
-  /// pass a [controller].
+  /// Called after typing, deletion, paste, history navigation, completion,
+  /// or a semantic edit changes the text. Programmatic controller writes do
+  /// not call this; use controller listeners to observe changes from any origin.
+  /// Cursor-only moves and rejected edits do not call this callback.
   final void Function(String text)? onChanged;
 
   /// Called with the current text when the user presses Enter.
@@ -742,9 +733,7 @@ class _TextInputState extends State<TextInput>
   late TextEditingController _controller;
   late FocusNode _focusNode;
 
-  /// The last text handed to [TextInput.onChanged]. Guards the callback so it
-  /// fires on text changes only, not cursor/selection moves (the controller
-  /// notifies on both).
+  /// Last text observed by the form registration, from any origin.
   late String _lastNotifiedText;
   bool _ownsController = false;
   bool _ownsFocusNode = false;
@@ -754,7 +743,7 @@ class _TextInputState extends State<TextInput>
     policy: () => widget.pastePolicy,
     documentLength: () => _controller.text.length,
     applyEdit: (text, {required coalesce}) =>
-        _controller.paste(text, coalesce: coalesce),
+        _edit(() => _controller.paste(text, coalesce: coalesce)),
     isAttached: () => mounted,
     onProgressChanged: () => setState(() {}),
     schedulePostFrame: _schedulePasteStep,
@@ -784,6 +773,17 @@ class _TextInputState extends State<TextInput>
   /// means it renders as normal text (or empty, if the cursor is
   /// past the last character).
   bool _blinkOn = true;
+
+  // Only edits initiated by this view emit its interaction callback. Controller
+  // listeners still update every observing view and form for all mutations.
+  void _edit(void Function() change) {
+    final controller = _controller;
+    final before = controller.text;
+    change();
+    if (!mounted || !identical(controller, _controller)) return;
+    final after = controller.text;
+    if (before != after) widget.onChanged?.call(after);
+  }
 
   @override
   void initState() {
@@ -972,13 +972,10 @@ class _TextInputState extends State<TextInput>
       // briefly stay invisible during typing, which feels broken.
       _blinkOn = true;
     });
-    // The controller notifies on both text and selection changes; fire
-    // onChanged only when the text itself changed. The diff also makes a
-    // `onChanged: (v) => controller.text = f(v)` pattern loop-safe.
+    // Notify form registration for text changes from any origin.
     final text = _controller.text;
     if (text != _lastNotifiedText) {
       _lastNotifiedText = text;
-      widget.onChanged?.call(text);
       _formRegistration?.controlValueChanged(this);
     }
   }
@@ -1029,7 +1026,7 @@ class _TextInputState extends State<TextInput>
     final completion = widget.completionController;
     return completion != null &&
         completion.isOpen &&
-        completion.selectedOption != null;
+        completion.currentOption != null;
   }
 
   KeyEventResult _acceptCompletion() {
@@ -1043,10 +1040,16 @@ class _TextInputState extends State<TextInput>
     _paste.finish();
     if (!completion.isOpen) return KeyEventResult.ignored;
     final state = completion.state;
-    final option = state.selectedOption;
+    final option = state.currentOption;
     if (option == null) return KeyEventResult.ignored;
     _resetHistoryBrowsing();
-    _controller.replaceRange(state.range, option.replacement, singleLine: true);
+    _edit(
+      () => _controller.replaceRange(
+        state.range,
+        option.replacement,
+        singleLine: true,
+      ),
+    );
     completion.close();
     widget.onCompletionAccepted?.call(option);
     return KeyEventResult.handled;
@@ -1056,7 +1059,7 @@ class _TextInputState extends State<TextInput>
     final completion = widget.completionController;
     if (completion == null || !completion.isOpen) return KeyEventResult.ignored;
     if (completion.state.options.isEmpty) return KeyEventResult.ignored;
-    completion.moveSelection(delta);
+    completion.moveCurrent(delta);
     return KeyEventResult.handled;
   }
 
@@ -1073,7 +1076,9 @@ class _TextInputState extends State<TextInput>
         ? history.navigatePrevious(_controller.value)
         : history.navigateNext();
     if (next == null) return KeyEventResult.ignored;
-    _controller.value = next;
+    _edit(() {
+      _controller.value = next;
+    });
     return KeyEventResult.handled;
   }
 
@@ -1100,7 +1105,7 @@ class _TextInputState extends State<TextInput>
     }
     if (cut) {
       _resetHistoryBrowsing();
-      _controller.deleteSelection();
+      _edit(() => _controller.deleteSelection());
     }
     return KeyEventResult.handled;
   }
@@ -1126,7 +1131,9 @@ class _TextInputState extends State<TextInput>
     if (!_canEdit) return;
     _paste.finish();
     _resetHistoryBrowsing();
-    _controller.text = value?.toString() ?? '';
+    _edit(() {
+      _controller.text = value?.toString() ?? '';
+    });
   }
 
   void _handleSemanticAction(SemanticAction action) {
@@ -1138,7 +1145,7 @@ class _TextInputState extends State<TextInput>
         if (_canEdit) {
           _paste.finish();
           _resetHistoryBrowsing();
-          _controller.clear();
+          _edit(() => _controller.clear());
         }
         return;
       case SemanticAction.copy:
@@ -1178,49 +1185,60 @@ class _TextInputState extends State<TextInput>
         if (widget.readOnly) return KeyEventResult.handled;
         _paste.finish();
         _resetHistoryBrowsing();
-        _controller.undo();
+        _edit(() => _controller.undo());
         return KeyEventResult.handled;
       case TextEditingKeyAction.redo:
         if (widget.readOnly) return KeyEventResult.handled;
         _paste.finish();
         _resetHistoryBrowsing();
-        _controller.redo();
+        _edit(() => _controller.redo());
         return KeyEventResult.handled;
       case TextEditingKeyAction.backspace:
         if (!_canEdit) return KeyEventResult.handled;
         _paste.finish();
         _resetHistoryBrowsing();
-        _controller.backspace();
+        _edit(() => _controller.backspace());
         return KeyEventResult.handled;
       case TextEditingKeyAction.deleteForward:
         if (!_canEdit) return KeyEventResult.handled;
         _paste.finish();
         _resetHistoryBrowsing();
-        _controller.delete();
+        _edit(() => _controller.delete());
         return KeyEventResult.handled;
       case TextEditingKeyAction.killToLineEnd:
         if (!_canEdit) return KeyEventResult.handled;
         _paste.finish();
         _resetHistoryBrowsing();
-        _controller.killToLineEnd(captureToKillRing: _captureKillRingText);
+        _edit(
+          () => _controller.killToLineEnd(
+            captureToKillRing: _captureKillRingText,
+          ),
+        );
         return KeyEventResult.handled;
       case TextEditingKeyAction.killToLineStart:
         if (!_canEdit) return KeyEventResult.handled;
         _paste.finish();
         _resetHistoryBrowsing();
-        _controller.killToLineStart(captureToKillRing: _captureKillRingText);
+        _edit(
+          () => _controller.killToLineStart(
+            captureToKillRing: _captureKillRingText,
+          ),
+        );
         return KeyEventResult.handled;
       case TextEditingKeyAction.killWordLeft:
         if (!_canEdit) return KeyEventResult.handled;
         _paste.finish();
         _resetHistoryBrowsing();
-        _controller.killWordLeft(captureToKillRing: _captureKillRingText);
+        _edit(
+          () =>
+              _controller.killWordLeft(captureToKillRing: _captureKillRingText),
+        );
         return KeyEventResult.handled;
       case TextEditingKeyAction.yank:
         if (!_canEdit) return KeyEventResult.handled;
         _paste.finish();
         _resetHistoryBrowsing();
-        _controller.yank(singleLine: true);
+        _edit(() => _controller.yank(singleLine: true));
         return KeyEventResult.handled;
       case TextEditingKeyAction.moveLeft:
         _paste.finish();
@@ -1304,7 +1322,7 @@ class _TextInputState extends State<TextInput>
     if (widget.readOnly) return KeyEventResult.handled;
     _paste.finish();
     _resetHistoryBrowsing();
-    _controller.insert(text, singleLine: true, coalesce: true);
+    _edit(() => _controller.insert(text, singleLine: true, coalesce: true));
     return KeyEventResult.handled;
   }
 
@@ -1339,7 +1357,7 @@ class _TextInputState extends State<TextInput>
     if (widget.readOnly) return KeyEventResult.handled;
     _paste.finish();
     _resetHistoryBrowsing();
-    _controller.updateComposingText(text, singleLine: true);
+    _edit(() => _controller.updateComposingText(text, singleLine: true));
     return KeyEventResult.handled;
   }
 
@@ -1349,7 +1367,7 @@ class _TextInputState extends State<TextInput>
     if (widget.readOnly) return KeyEventResult.handled;
     _paste.finish();
     _resetHistoryBrowsing();
-    _controller.commitComposing(text: text, singleLine: true);
+    _edit(() => _controller.commitComposing(text: text, singleLine: true));
     return KeyEventResult.handled;
   }
 
@@ -1359,7 +1377,7 @@ class _TextInputState extends State<TextInput>
     if (widget.readOnly) return KeyEventResult.handled;
     _paste.finish();
     _resetHistoryBrowsing();
-    _controller.cancelComposing();
+    _edit(() => _controller.cancelComposing());
     return KeyEventResult.handled;
   }
 
@@ -1494,8 +1512,8 @@ class _TextInputState extends State<TextInput>
         'redactedValue': _redactSemanticValue,
         ...textClipboardSemanticState(_effectiveClipboardPolicy),
         if (history != null) 'historyCount': history.length,
-        if (history != null && history.selectedIndex != null)
-          'historyIndex': history.selectedIndex,
+        if (history != null && history.currentIndex != null)
+          'historyIndex': history.currentIndex,
         if (history != null) 'historyBrowsing': history.isBrowsing,
         if (completionState != null) 'completionActive': completionState.active,
         if (completionState != null &&
@@ -1510,8 +1528,8 @@ class _TextInputState extends State<TextInput>
           'completionOptionCount': completionState.options.length,
         if (completionState != null &&
             completionState.active &&
-            completionState.selectedIndex != null)
-          'completionSelectedIndex': completionState.selectedIndex,
+            completionState.currentIndex != null)
+          'completionCurrentIndex': completionState.currentIndex,
         'pasteInProgress': _paste.progress.active,
         'pasteInsertedLength': _paste.progress.insertedLength,
         'pasteTotalLength': _paste.progress.totalLength,

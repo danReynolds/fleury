@@ -119,12 +119,11 @@ final class MessageListCopyResult {
   final ClipboardWriteReport report;
 }
 
-/// Controller for [MessageList] selection and tail-follow behavior.
+/// Controller for [MessageList] browsing and tail-follow behavior.
 class MessageListController extends ChangeNotifier {
-  MessageListController({int? selectedIndex, bool followTail = true})
+  MessageListController({int? initialIndex = 0, bool followTail = true})
     : _list = ListController(
-        selectedIndex:
-            selectedIndex ?? (followTail ? _tailSelectionSentinel : 0),
+        initialIndex: initialIndex,
         followTail: followTail,
       ) {
     _list.addListener(notifyListeners);
@@ -135,10 +134,10 @@ class MessageListController extends ChangeNotifier {
 
   ListController get _listController => _list;
 
-  int? get selectedIndex => _list.selectedIndex;
-  set selectedIndex(int? value) {
+  int? get currentIndex => _list.currentIndex;
+  set currentIndex(int? value) {
     _checkNotDisposed();
-    _list.selectedIndex = value;
+    _list.currentIndex = value;
   }
 
   /// Whether following new output is enabled. Scrolling away pauses it;
@@ -183,8 +182,6 @@ class MessageListController extends ChangeNotifier {
     super.dispose();
   }
 }
-
-const _tailSelectionSentinel = 1 << 30;
 
 /// Exports messages as sanitized newline-delimited text.
 MessageListExportResult exportMessages(
@@ -283,7 +280,6 @@ class _MessageListState extends State<MessageList> {
   bool _ownsController = false;
   bool _ownsFocusNode = false;
   bool _focusedWithin = false;
-  late Map<Object, int> _itemIndexByKey;
 
   @override
   void initState() {
@@ -293,7 +289,6 @@ class _MessageListState extends State<MessageList> {
     _controller.addListener(_onControllerChange);
     _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'MessageList');
     _ownsFocusNode = widget.focusNode == null;
-    _rebuildMessageIndex();
   }
 
   @override
@@ -311,44 +306,9 @@ class _MessageListState extends State<MessageList> {
       _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'MessageList');
       _ownsFocusNode = widget.focusNode == null;
     }
-    if (!identical(widget.messages, oldWidget.messages)) {
-      _rebuildMessageIndex();
-    }
   }
 
   void _onControllerChange() => setState(() {});
-
-  void _rebuildMessageIndex() {
-    final indices = <Object, int>{};
-    for (var index = 0; index < widget.messages.length; index++) {
-      final key = _messageItemKey(widget.messages[index]);
-      if (indices.containsKey(key)) {
-        throw StateError(
-          'MessageEntry.id values must be unique within a MessageList. '
-          'Duplicate key: $key.',
-        );
-      }
-      indices[key] = index;
-    }
-    _itemIndexByKey = indices;
-  }
-
-  int? _findMessageIndex(Object key) {
-    final cached = _itemIndexByKey[key];
-    if (cached != null &&
-        cached < widget.messages.length &&
-        _messageItemKey(widget.messages[cached]) == key) {
-      return cached;
-    }
-
-    // Most callers pass a new immutable list, so didUpdateWidget rebuilds the
-    // map once and every reconciliation lookup is O(1). If an application
-    // mutates the same List instance in place, validate the cached answer and
-    // repair the whole map on the first stale/missing lookup instead of
-    // returning a wrong index or forcing every mounted row through a scan.
-    _rebuildMessageIndex();
-    return _itemIndexByKey[key];
-  }
 
   void _onFocusDetectorChange(bool focused) {
     if (_focusedWithin == focused) return;
@@ -373,7 +333,7 @@ class _MessageListState extends State<MessageList> {
   Future<void> _copySelection({bool focusList = false}) async {
     if (!widget.copySelection || widget.messages.isEmpty) return;
     if (focusList) _focusList();
-    final selected = (_controller.selectedIndex ?? 0).clamp(
+    final selected = (_controller.currentIndex ?? 0).clamp(
       0,
       widget.messages.length - 1,
     );
@@ -402,13 +362,13 @@ class _MessageListState extends State<MessageList> {
   void _activateAt(int index) {
     if (index < 0 || index >= widget.messages.length) return;
     _focusList();
-    _controller.selectedIndex = index;
+    _controller.currentIndex = index;
   }
 
   Future<void> _copyAt(int index) async {
     if (index < 0 || index >= widget.messages.length) return;
     _focusList();
-    _controller.selectedIndex = index;
+    _controller.currentIndex = index;
     await _copySelection();
   }
 
@@ -429,14 +389,14 @@ class _MessageListState extends State<MessageList> {
   @override
   Widget build(BuildContext context) {
     final visibleRange = _controller.visibleRange;
-    final selectedIndex = _controller.selectedIndex;
+    final currentIndex = _controller.currentIndex;
     final copyEnabled = widget.copySelection && widget.messages.isNotEmpty;
     final selectedMessage =
-        selectedIndex == null ||
-            selectedIndex < 0 ||
-            selectedIndex >= widget.messages.length
+        currentIndex == null ||
+            currentIndex < 0 ||
+            currentIndex >= widget.messages.length
         ? null
-        : widget.messages[selectedIndex];
+        : widget.messages[currentIndex];
 
     Widget list = ListView.builder(
       controller: _controller._listController,
@@ -444,10 +404,9 @@ class _MessageListState extends State<MessageList> {
       autofocus: widget.autofocus,
       itemCount: widget.messages.length,
       itemKeyBuilder: (index) => _messageItemKey(widget.messages[index]),
-      findChildIndexCallback: _findMessageIndex,
-      onActivate: _activateAt,
+      onSelect: _activateAt,
       itemBuilder: (context, index, activeSelected) {
-        final selected = index == _controller.selectedIndex;
+        final selected = index == _controller.currentIndex;
         return _MessageRow(
           message: widget.messages[index],
           index: index,
@@ -500,7 +459,7 @@ class _MessageListState extends State<MessageList> {
             'visibleRangeStart': visibleRange.first,
             'visibleRangeEnd': visibleRange.last,
           },
-          'selectedIndex': ?selectedIndex,
+          'currentIndex': ?currentIndex,
           ..._selectedMessageState(selectedMessage),
         }),
         child: list,

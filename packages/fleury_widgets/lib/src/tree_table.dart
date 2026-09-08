@@ -723,12 +723,13 @@ final class TreeTableCopyResult<T> {
   String get text => export.text;
 }
 
-/// Controller for [TreeTable] expansion, selection, and visible range.
+/// Controller for [TreeTable] expansion, browsing, and visible range.
 class TreeTableController extends ChangeNotifier {
   TreeTableController({
-    int? selectedIndex,
+    /// Initial browsing row. Null starts without a current row.
+    int? initialIndex = 0,
     Iterable<Object> expandedKeys = const <Object>[],
-  }) : _list = ListController(selectedIndex: selectedIndex ?? 0),
+  }) : _list = ListController(initialIndex: initialIndex),
        _expandedKeys = Set<Object>.of(expandedKeys) {
     _list.addListener(notifyListeners);
   }
@@ -746,10 +747,10 @@ class TreeTableController extends ChangeNotifier {
 
   ListController get _listController => _list;
 
-  int? get selectedIndex => _list.selectedIndex;
-  set selectedIndex(int? value) {
+  int? get currentIndex => _list.currentIndex;
+  set currentIndex(int? value) {
     _checkNotDisposed();
-    _list.selectedIndex = value;
+    _list.currentIndex = value;
   }
 
   ({int first, int last})? get visibleRange => _list.visibleRange;
@@ -1162,19 +1163,19 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
 
   TreeTableRow<T>? _selectedRow(List<TreeTableRow<T>> rows) {
     if (rows.isEmpty) return null;
-    final selectedIndex = _controller.selectedIndex;
-    if (selectedIndex == null) return null;
-    return rows[selectedIndex.clamp(0, rows.length - 1)];
+    final currentIndex = _controller.currentIndex;
+    if (currentIndex == null) return null;
+    return rows[currentIndex.clamp(0, rows.length - 1)];
   }
 
-  int _selectedIndex(List<TreeTableRow<T>> rows) {
+  int _currentIndex(List<TreeTableRow<T>> rows) {
     if (rows.isEmpty) return 0;
-    return (_controller.selectedIndex ?? 0).clamp(0, rows.length - 1);
+    return (_controller.currentIndex ?? 0).clamp(0, rows.length - 1);
   }
 
   void _activateSelected(List<TreeTableRow<T>> rows) {
     if (rows.isEmpty) return;
-    final row = rows[_selectedIndex(rows)];
+    final row = rows[_currentIndex(rows)];
     if (row.node.isBranch) {
       _controller.toggle(row.key);
     } else {
@@ -1185,7 +1186,7 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
   void _openRow(List<TreeTableRow<T>> rows, int index) {
     if (index < 0 || index >= rows.length) return;
     _focusNode.requestFocus();
-    _controller.selectedIndex = index;
+    _controller.currentIndex = index;
     final row = rows[index];
     if (!row.node.isBranch) return;
     _controller.expand(row.key);
@@ -1194,7 +1195,7 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
   void _collapseRow(List<TreeTableRow<T>> rows, int index) {
     if (index < 0 || index >= rows.length) return;
     _focusNode.requestFocus();
-    _controller.selectedIndex = index;
+    _controller.currentIndex = index;
     final row = rows[index];
     if (!row.node.isBranch) return;
     _controller.collapse(row.key);
@@ -1203,7 +1204,7 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
   void _activateRow(List<TreeTableRow<T>> rows, int index) {
     if (index < 0 || index >= rows.length) return;
     _focusNode.requestFocus();
-    _controller.selectedIndex = index;
+    _controller.currentIndex = index;
     final row = rows[index];
     if (row.node.isBranch) {
       _controller.expand(row.key);
@@ -1215,7 +1216,7 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
   Future<void> _copyRow(List<TreeTableRow<T>> rows, int index) async {
     if (index < 0 || index >= rows.length) return;
     _focusNode.requestFocus();
-    _controller.selectedIndex = index;
+    _controller.currentIndex = index;
     await _copySelection(rows);
   }
 
@@ -1230,10 +1231,10 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
         setState(() {});
         return;
       case SemanticAction.open:
-        _openRow(rows, _selectedIndex(rows));
+        _openRow(rows, _currentIndex(rows));
         return;
       case SemanticAction.close:
-        _collapseRow(rows, _selectedIndex(rows));
+        _collapseRow(rows, _currentIndex(rows));
         return;
       case SemanticAction.copy:
         await _copySelection(rows);
@@ -1246,13 +1247,13 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
   KeyEventResult _expandOrEnter(List<TreeTableRow<T>> rows) {
     final row = _selectedRow(rows);
     if (row == null || !row.node.isBranch) return KeyEventResult.ignored;
-    final index = _selectedIndex(rows);
+    final index = _currentIndex(rows);
     if (!_controller.isExpanded(row.key)) {
       _controller.expand(row.key);
       return KeyEventResult.handled;
     }
     if (index + 1 < rows.length && rows[index + 1].depth > row.depth) {
-      _controller.selectedIndex = index + 1;
+      _controller.currentIndex = index + 1;
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -1261,14 +1262,14 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
   KeyEventResult _collapseOrParent(List<TreeTableRow<T>> rows) {
     final row = _selectedRow(rows);
     if (row == null) return KeyEventResult.ignored;
-    final index = _selectedIndex(rows);
+    final index = _currentIndex(rows);
     if (row.node.isBranch && _controller.isExpanded(row.key)) {
       _controller.collapse(row.key);
       return KeyEventResult.handled;
     }
     for (var i = index - 1; i >= 0; i--) {
       if (rows[i].depth < row.depth) {
-        _controller.selectedIndex = i;
+        _controller.currentIndex = i;
         return KeyEventResult.handled;
       }
     }
@@ -1279,7 +1280,7 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
     if (!widget.copySelectedRow || rows.isEmpty || widget.columns.isEmpty) {
       return;
     }
-    final selectedIndex = _selectedIndex(rows);
+    final currentIndex = _currentIndex(rows);
     final export = exportTreeTableRows<T>(
       rows: rows,
       columns: widget.columns,
@@ -1289,7 +1290,7 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
         format: widget.copyOptions.format,
         includeHeader: widget.copyOptions.includeHeader,
         includeTreeIndent: widget.copyOptions.includeTreeIndent,
-        startRow: selectedIndex,
+        startRow: currentIndex,
         maxRows: 1,
       ),
     );
@@ -1297,10 +1298,10 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
       context,
     ).writeWithReport(export.text, policy: widget.copyOptions.clipboardPolicy);
     if (!mounted) return;
-    final row = rows[selectedIndex];
+    final row = rows[currentIndex];
     widget.onCopy?.call(
       TreeTableCopyResult<T>(
-        rowIndex: selectedIndex,
+        rowIndex: currentIndex,
         rowKey: row.key,
         row: row,
         export: export,
@@ -1349,10 +1350,10 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
                 focusNode: _focusNode,
                 autofocus: widget.autofocus,
                 itemCount: rows.length,
-                onActivate: (_) => _activateSelected(rows),
+                onSelect: (_) => _activateSelected(rows),
                 itemBuilder: (context, index, activeSelected) {
                   final row = rows[index];
-                  final selected = index == _controller.selectedIndex;
+                  final selected = index == _controller.currentIndex;
                   return _TreeTableRowWidget<T>(
                     row: row,
                     rowIndex: index,
@@ -1426,8 +1427,8 @@ class _TreeTableState<T> extends State<TreeTable<T>> {
             'visibleRangeStart': visibleRange.first,
             'visibleRangeEnd': visibleRange.last,
           },
-          if (_controller.selectedIndex != null)
-            'selectedIndex': _controller.selectedIndex,
+          if (_controller.currentIndex != null)
+            'currentIndex': _controller.currentIndex,
           if (selected != null) ...{
             'selectedKey': selected.key,
             'selectedDepth': selected.depth,

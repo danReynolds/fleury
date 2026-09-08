@@ -285,7 +285,7 @@ class _MenuBody extends StatefulWidget {
 
 class _MenuBodyState extends State<_MenuBody> {
   late final ListController _list = ListController(
-    selectedIndex: _firstSelectable(),
+    initialIndex: _firstSelectable(),
   );
   final FocusNode _focus = FocusNode(debugLabel: 'menu');
   late final GlobalKey _trapContentKey = widget.trapContentKey ?? GlobalKey();
@@ -361,13 +361,13 @@ class _MenuBodyState extends State<_MenuBody> {
   /// starts with [ch] (wrapping from the current selection).
   KeyEventResult _typeahead(String ch) {
     final lower = ch.toLowerCase();
-    final start = (_list.selectedIndex ?? -1) + 1;
+    final start = (_list.currentIndex ?? -1) + 1;
     for (var k = 0; k < widget.entries.length; k++) {
       final i = (start + k) % widget.entries.length;
       if (!_selectable(i)) continue;
       final label = _entryLabel(i);
       if (label != null && label.toLowerCase().startsWith(lower)) {
-        _list.selectedIndex = i;
+        _list.currentIndex = i;
         break;
       }
     }
@@ -470,28 +470,28 @@ class _MenuBodyState extends State<_MenuBody> {
   KeyEventResult _onKey(KeyEvent event) {
     switch (event.code) {
       case KeyCode.arrowUp:
-        final n = _step(_list.selectedIndex ?? 0, -1);
-        if (n != null) _list.selectedIndex = n;
+        final n = _step(_list.currentIndex ?? 0, -1);
+        if (n != null) _list.currentIndex = n;
         return KeyEventResult.handled;
       case KeyCode.arrowDown:
-        final n = _step(_list.selectedIndex ?? -1, 1);
-        if (n != null) _list.selectedIndex = n;
+        final n = _step(_list.currentIndex ?? -1, 1);
+        if (n != null) _list.currentIndex = n;
         return KeyEventResult.handled;
       case KeyCode.arrowRight:
-        final i = _list.selectedIndex;
+        final i = _list.currentIndex;
         if (i != null && widget.entries[i] is SubMenu) _activate(i);
         return KeyEventResult.handled;
       case KeyCode.arrowLeft:
         if (widget.canGoBack) _dismiss();
         return KeyEventResult.handled;
       case KeyCode.home:
-        _list.selectedIndex = _firstSelectable();
+        _list.currentIndex = _firstSelectable();
         return KeyEventResult.handled;
       case KeyCode.end:
-        _list.selectedIndex = _lastSelectable();
+        _list.currentIndex = _lastSelectable();
         return KeyEventResult.handled;
       case KeyCode.enter:
-        final i = _list.selectedIndex;
+        final i = _list.currentIndex;
         if (i != null && _selectable(i)) _activate(i);
         return KeyEventResult.handled;
       case KeyCode.escape:
@@ -553,7 +553,7 @@ class _MenuBodyState extends State<_MenuBody> {
       state: SemanticState({
         'menuDepth': widget.depth,
         'menuItemCount': _menuItemCount(widget.entries),
-        'selectedKey': _list.selectedIndex,
+        'selectedKey': _list.currentIndex,
         'canGoBack': widget.canGoBack,
       }),
       onAction: (action) {
@@ -592,7 +592,7 @@ class _MenuBodyState extends State<_MenuBody> {
                     height: widget.entries.length,
                     child: ListView.builder(
                       controller: _list,
-                      selectionActive: true,
+
                       itemCount: widget.entries.length,
                       itemBuilder: (_, i, selected) {
                         final entry = widget.entries[i];
@@ -709,12 +709,12 @@ class _MenuBodyState extends State<_MenuBody> {
         switch (action) {
           case SemanticAction.open:
             if (submenu) {
-              _list.selectedIndex = index;
+              _list.currentIndex = index;
               _openSubmenu(entry, index);
             }
             return;
           case SemanticAction.activate:
-            _list.selectedIndex = index;
+            _list.currentIndex = index;
             _activate(index);
             return;
           case _:
@@ -726,7 +726,7 @@ class _MenuBodyState extends State<_MenuBody> {
       child: enabled
           ? GestureDetector(
               onTap: () {
-                _list.selectedIndex = index;
+                _list.currentIndex = index;
                 _activate(index);
               },
               child: child,

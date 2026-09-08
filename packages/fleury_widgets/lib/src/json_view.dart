@@ -96,7 +96,7 @@ final class JsonViewCopyResult {
   final ClipboardWriteReport report;
 }
 
-/// Controller for [JsonView] expansion and selection.
+/// Controller for [JsonView] expansion and browsing.
 class JsonViewController extends ChangeNotifier {
   JsonViewController({
     /// JSON Pointer paths that start explicitly expanded.
@@ -105,11 +105,12 @@ class JsonViewController extends ChangeNotifier {
     /// JSON Pointer paths that start explicitly collapsed.
     Iterable<String> collapsedPointers = const <String>[],
 
-    /// Zero-based visible row selected when the controller is created.
-    int selectedIndex = 0,
+    /// Zero-based initial browsing row, or null for no current row.
+    /// Initial browsing row. Null starts without a current row.
+    int? initialIndex = 0,
   }) : _expandedPointers = Set<String>.of(expandedPointers),
        _collapsedPointers = Set<String>.of(collapsedPointers),
-       _list = ListController(selectedIndex: selectedIndex) {
+       _list = ListController(initialIndex: initialIndex) {
     _list.addListener(notifyListeners);
   }
 
@@ -129,10 +130,10 @@ class JsonViewController extends ChangeNotifier {
       Set<String>.unmodifiable(_collapsedPointers);
 
   /// Zero-based selected visible-row index, or null when nothing is selected.
-  int? get selectedIndex => _list.selectedIndex;
-  set selectedIndex(int? value) {
+  int? get currentIndex => _list.currentIndex;
+  set currentIndex(int? value) {
     _checkNotDisposed();
-    _list.selectedIndex = value;
+    _list.currentIndex = value;
   }
 
   ({int first, int last})? get visibleRange => _list.visibleRange;
@@ -140,10 +141,10 @@ class JsonViewController extends ChangeNotifier {
   bool isExpanded(
     String pointer, {
     required int depth,
-    required int initialExpandedDepth,
+    required int defaultExpandedDepth,
   }) {
     if (_collapsedPointers.contains(pointer)) return false;
-    return _expandedPointers.contains(pointer) || depth < initialExpandedDepth;
+    return _expandedPointers.contains(pointer) || depth < defaultExpandedDepth;
   }
 
   void expand(String pointer) {
@@ -259,7 +260,7 @@ final class JsonViewRow {
 /// Builds the visible [JsonViewRow] list without mounting widgets.
 List<JsonViewRow> buildJsonViewRows(
   Object? value, {
-  int initialExpandedDepth = 1,
+  int defaultExpandedDepth = 1,
   Set<String> expandedPointers = const <String>{},
   Set<String> collapsedPointers = const <String>{},
   int? maxLineLength = 1000,
@@ -270,7 +271,7 @@ List<JsonViewRow> buildJsonViewRows(
   bool expandedFor(String pointer, int depth, bool expandable) {
     if (!expandable) return false;
     if (collapsedPointers.contains(pointer)) return false;
-    return expandedPointers.contains(pointer) || depth < initialExpandedDepth;
+    return expandedPointers.contains(pointer) || depth < defaultExpandedDepth;
   }
 
   void visit(
@@ -370,14 +371,14 @@ class JsonView extends StatefulWidget {
     this.focusNode,
     this.autofocus = false,
     this.semanticLabel = 'JSON',
-    this.initialExpandedDepth = 1,
+    this.defaultExpandedDepth = 1,
     this.maxLineLength = 1000,
     this.maxVisible = 12,
     this.copySelection = true,
     this.copyOptions = const JsonViewCopyOptions(),
     this.onCopy,
   }) : document = JsonViewDocument.value(value),
-       assert(initialExpandedDepth >= 0),
+       assert(defaultExpandedDepth >= 0),
        assert(maxLineLength == null || maxLineLength >= 0),
        assert(maxVisible > 0);
 
@@ -391,13 +392,13 @@ class JsonView extends StatefulWidget {
     this.focusNode,
     this.autofocus = false,
     this.semanticLabel = 'JSON',
-    this.initialExpandedDepth = 1,
+    this.defaultExpandedDepth = 1,
     this.maxLineLength = 1000,
     this.maxVisible = 12,
     this.copySelection = true,
     this.copyOptions = const JsonViewCopyOptions(),
     this.onCopy,
-  }) : assert(initialExpandedDepth >= 0),
+  }) : assert(defaultExpandedDepth >= 0),
        assert(maxLineLength == null || maxLineLength >= 0),
        assert(maxVisible > 0);
 
@@ -413,7 +414,7 @@ class JsonView extends StatefulWidget {
     FocusNode? focusNode,
     bool autofocus = false,
     String semanticLabel = 'JSON',
-    int initialExpandedDepth = 1,
+    int defaultExpandedDepth = 1,
     int? maxLineLength = 1000,
     int maxVisible = 12,
     bool copySelection = true,
@@ -427,7 +428,7 @@ class JsonView extends StatefulWidget {
       focusNode: focusNode,
       autofocus: autofocus,
       semanticLabel: semanticLabel,
-      initialExpandedDepth: initialExpandedDepth,
+      defaultExpandedDepth: defaultExpandedDepth,
       maxLineLength: maxLineLength,
       maxVisible: maxVisible,
       copySelection: copySelection,
@@ -452,7 +453,7 @@ class JsonView extends StatefulWidget {
   final String semanticLabel;
 
   /// Depth expanded by default before user-controlled collapse state applies.
-  final int initialExpandedDepth;
+  final int defaultExpandedDepth;
 
   /// Maximum visible JSON rows before the viewer scrolls.
   ///
@@ -529,7 +530,7 @@ class _JsonViewState extends State<JsonView> {
 
   List<JsonViewRow> get _rows => buildJsonViewRows(
     widget.document.value,
-    initialExpandedDepth: widget.initialExpandedDepth,
+    defaultExpandedDepth: widget.defaultExpandedDepth,
     expandedPointers: _controller._expandedPointers,
     collapsedPointers: _controller._collapsedPointers,
     maxLineLength: widget.maxLineLength,
@@ -537,42 +538,42 @@ class _JsonViewState extends State<JsonView> {
 
   JsonViewRow? _selectedRow(List<JsonViewRow> rows) {
     if (rows.isEmpty) return null;
-    final selected = (_controller.selectedIndex ?? 0).clamp(0, rows.length - 1);
+    final selected = (_controller.currentIndex ?? 0).clamp(0, rows.length - 1);
     return rows[selected];
   }
 
   KeyEventResult _expandOrEnter(List<JsonViewRow> rows) {
-    final selectedIndex = _controller.selectedIndex;
-    if (selectedIndex == null ||
-        selectedIndex < 0 ||
-        selectedIndex >= rows.length) {
+    final currentIndex = _controller.currentIndex;
+    if (currentIndex == null ||
+        currentIndex < 0 ||
+        currentIndex >= rows.length) {
       return KeyEventResult.ignored;
     }
-    final row = rows[selectedIndex];
+    final row = rows[currentIndex];
     if (!row.expandable) return KeyEventResult.ignored;
     if (!row.expanded) {
       _controller.expand(row.pointer);
       return KeyEventResult.handled;
     }
-    _controller.selectedIndex = (selectedIndex + 1).clamp(0, rows.length - 1);
+    _controller.currentIndex = (currentIndex + 1).clamp(0, rows.length - 1);
     return KeyEventResult.handled;
   }
 
   KeyEventResult _collapseOrParent(List<JsonViewRow> rows) {
-    final selectedIndex = _controller.selectedIndex;
-    if (selectedIndex == null ||
-        selectedIndex < 0 ||
-        selectedIndex >= rows.length) {
+    final currentIndex = _controller.currentIndex;
+    if (currentIndex == null ||
+        currentIndex < 0 ||
+        currentIndex >= rows.length) {
       return KeyEventResult.ignored;
     }
-    final row = rows[selectedIndex];
+    final row = rows[currentIndex];
     if (row.expandable && row.expanded) {
       _controller.collapse(row.pointer);
       return KeyEventResult.handled;
     }
-    for (var index = selectedIndex - 1; index >= 0; index--) {
+    for (var index = currentIndex - 1; index >= 0; index--) {
       if (rows[index].depth < row.depth) {
-        _controller.selectedIndex = index;
+        _controller.currentIndex = index;
         return KeyEventResult.handled;
       }
     }
@@ -588,7 +589,7 @@ class _JsonViewState extends State<JsonView> {
 
   Future<void> _copySelection(List<JsonViewRow> rows) async {
     if (!widget.copySelection || rows.isEmpty) return;
-    final selected = (_controller.selectedIndex ?? 0).clamp(0, rows.length - 1);
+    final selected = (_controller.currentIndex ?? 0).clamp(0, rows.length - 1);
     final row = rows[selected];
     final text = exportJsonViewRow(row, options: widget.copyOptions);
     final report = await ClipboardScope.of(
@@ -608,7 +609,7 @@ class _JsonViewState extends State<JsonView> {
   void _openRow(List<JsonViewRow> rows, int index) {
     if (index < 0 || index >= rows.length) return;
     _focusNode.requestFocus();
-    _controller.selectedIndex = index;
+    _controller.currentIndex = index;
     final row = rows[index];
     if (row.expandable && !row.expanded) _controller.expand(row.pointer);
   }
@@ -616,7 +617,7 @@ class _JsonViewState extends State<JsonView> {
   void _closeRow(List<JsonViewRow> rows, int index) {
     if (index < 0 || index >= rows.length) return;
     _focusNode.requestFocus();
-    _controller.selectedIndex = index;
+    _controller.currentIndex = index;
     final row = rows[index];
     if (row.expandable && row.expanded) _controller.collapse(row.pointer);
   }
@@ -624,7 +625,7 @@ class _JsonViewState extends State<JsonView> {
   Future<void> _copyRow(List<JsonViewRow> rows, int index) async {
     if (index < 0 || index >= rows.length) return;
     _focusNode.requestFocus();
-    _controller.selectedIndex = index;
+    _controller.currentIndex = index;
     await _copySelection(rows);
   }
 
@@ -673,9 +674,9 @@ class _JsonViewState extends State<JsonView> {
           focusNode: _focusNode,
           autofocus: widget.autofocus,
           itemCount: rows.length,
-          onActivate: (index) => _toggleSelected(rows, index),
+          onSelect: (index) => _toggleSelected(rows, index),
           itemBuilder: (context, index, activeSelected) {
-            final selected = index == _controller.selectedIndex;
+            final selected = index == _controller.currentIndex;
             return _JsonRowWidget(
               row: rows[index],
               rowIndex: index,
@@ -744,8 +745,8 @@ class _JsonViewState extends State<JsonView> {
             'visibleRangeStart': visibleRange.first,
             'visibleRangeEnd': visibleRange.last,
           },
-          if (_controller.selectedIndex != null)
-            'selectedIndex': _controller.selectedIndex,
+          if (_controller.currentIndex != null)
+            'currentIndex': _controller.currentIndex,
           if (selected != null) ...{
             'selectedKey': selected.pointer,
             'selectedPath': selected.path,

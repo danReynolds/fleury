@@ -37,6 +37,10 @@ class NumberInput extends StatefulWidget {
     this.focusNode,
     this.autofocus = false,
   }) : assert(
+         controller == null || initialValue == null,
+         'Supply either initialValue or controller, not both.',
+       ),
+       assert(
          allowDecimal ||
              controller != null ||
              initialValue == null ||
@@ -58,16 +62,17 @@ class NumberInput extends StatefulWidget {
 
   /// Initial parsed value to seed the field with. `null` starts empty.
   ///
-  /// Ignored when [controller] is supplied; the controller text is treated as
-  /// the source of truth in controlled form bindings. Otherwise this must be
-  /// an [int] when [allowDecimal] is false.
+  /// Used once when the internal controller is created; rebuilds do not reset
+  /// edits. Supply either this seed or [controller]. This must be an [int]
+  /// when [allowDecimal] is false.
   final num? initialValue;
 
   /// Optional text controller for embedding this field in a larger form.
   final TextEditingController? controller;
 
-  /// Called with the parsed value on every change. `null` is passed
-  /// when the field is empty or holds an in-progress token like `"-"`
+  /// Called with the parsed value after user or semantic edits.
+  /// Programmatic controller writes notify controller listeners instead.
+  /// `null` is passed when the field is empty or holds an in-progress token like `"-"`
   /// or `"1."` that doesn't yet parse to a [num].
   final void Function(num? value)? onChanged;
 
@@ -162,20 +167,6 @@ class _NumberInputState extends State<NumberInput> {
       );
       return;
     }
-    if (widget.controller == null &&
-        widget.initialValue != oldWidget.initialValue) {
-      final text = widget.initialValue == null
-          ? ''
-          : _stringify(widget.initialValue!);
-      if (_controller.text != text) {
-        _lastAccepted = text;
-        _suppress = true;
-        _controller
-          ..text = text
-          ..caretOffset = text.length;
-        _suppress = false;
-      }
-    }
   }
 
   void _attachController(
@@ -250,7 +241,6 @@ class _NumberInputState extends State<NumberInput> {
     }
     _lastAccepted = text;
     setState(() {});
-    widget.onChanged?.call(_parse(text));
   }
 
   num? _clampedSubmit(num? v) {
@@ -287,6 +277,7 @@ class _NumberInputState extends State<NumberInput> {
       cursorStyle: widget.cursorStyle,
       semanticLabel: widget.semanticLabel,
       semanticState: _semanticState(),
+      onChanged: (text) => widget.onChanged?.call(_parse(text)),
       onSubmit: (text) {
         final parsed = _parse(text);
         final clamped = _clampedSubmit(parsed);

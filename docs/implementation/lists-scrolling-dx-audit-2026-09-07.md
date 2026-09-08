@@ -2,9 +2,12 @@
 
 Date: 2026-09-07. Baseline: merged main, `944f7fb71e9b99ec6644b797ecbb1d4b6ecc09b8`.
 Status: items 1–3 approved and implemented on `codex/lists-scrolling-dx`.
-Item 4 remains a proposal; neither the data-backed constructor nor row-label
-hooks have been added. The existing guide has received contract corrections;
-the full demonstration-led rewrite follows the remaining API decision.
+The user declined `ListView.items`: keep `ListView(children: ...)` and the
+index-based lazy builder. Optional semantic row-label hooks remain unapproved
+and are not a prerequisite for the rewrite; evaluate any need through concrete
+guide examples. The existing guide has received contract corrections and is
+now demonstrated by five source-backed live examples. The later ListView naming
+migration is recorded in the widget interaction audit and the addendum below.
 
 The lazy list foundation is useful: eager/builder/separated construction,
 variable-height layout, bounded mounting, item-index jumps, keyed reconciliation,
@@ -162,7 +165,10 @@ through the release/cancellation handling.
 
 ## 4. Add a convenient data-backed list with semantic row labels
 
-**Recommended ergonomics improvement, after the correctness work.**
+**Collection constructor declined by the user.** The constructor sketch below
+is retained as review history, not planned implementation. The independent
+semantic row-label idea can be reassessed if the guide demonstrates a concrete
+gap with the existing APIs.
 
 The existing forward/reverse identity callbacks are a sound low-level contract.
 Keep them for sparse or very large data sources. For an ordinary in-memory list,
@@ -244,8 +250,8 @@ identical click, focus, or selection defaults.
    reconciliation and bounded mounting guarantees.
 3. Correct click completion/cancellation and explicit selection initialization;
    add the passive-list option. Verify native browser and served-terminal paths.
-4. Discuss the independent collection convenience and semantic label proposals
-   before adding either; test identity and semantics if approved.
+4. Keep the existing constructors. Evaluate any remaining semantic row-label
+   friction in guide examples; propose a concrete change only if needed.
 5. Rewrite the guide using actual shared example source and executable tests:
    a task list with preview; a filter/reorder that preserves identity; a live log
    showing follow/pause/return and a tall entry; a small composed ScrollView demo.
@@ -351,3 +357,58 @@ Local logs: `/tmp/fleury-lists-final-core.log`,
 
 - The terminal output-byte gate also passed (SB1, SB6, SB9), retaining its
   baselines. Receipt: `/tmp/fleury-lists-wire-gate.log`.
+
+### Guide dogfood revision (2026-09-07)
+
+The browser review found the guide still relied on isolated API snippets. The
+revision replaces those with five focused widgets shared by the live registry,
+source tabs, and executable tests: row-owned file buttons, a large task browser
+with selection/scroll commands, keyed reordering, a document with switchable
+edge containment, and a following log with append/grow controls. The old
+standalone task implementation now imports that same task browser.
+
+The introduction is two sentences. Enter/click behavior is explained before
+`onActivate` appears. Controller, identity, edge, and following behavior is
+visible in the examples instead of introduced through API inventory tables.
+Each source tab has a focused excerpt plus the complete file, with actual source
+and test filenames. Both documentation and contributor checks run the guide's
+eight widget tests.
+
+No framework API was changed during this guide revision. The scrollbar remains
+cell-quantized; a short track over a large collection therefore jumps by many
+items per pointer cell. A continuous browser thumb would need a separate design.
+Flutter has `findChildIndexCallback(Key)`, but its forward mapping comes from
+child widget keys rather than a separate `itemKeyBuilder`. Fleury's separate data
+identity supports preserving selection and the viewport without constructing an
+offscreen widget. The guide demonstrates both row-owned button actions and the
+list-owned keyboard cursor; it does not present those as identical to Flutter's
+ListView/ListTile split.
+
+Validation for the guide revision:
+
+- Eight guide widget tests passed, including paused growth and following an
+  entry taller than its viewport.
+- Source, registry, and test analysis passed without diagnostics.
+- The updated `lists.tasks` Chrome regression passed.
+- `tool/verify_lists_guide.cjs` passed using native Chrome clicks, keys, and wheel
+  input against the actual guide preview. It covers all five demos plus source
+  and test tabs. Browser frame heights were increased after browser inspection caught
+  clipped status lines and controls at the guide's real font metrics.
+- Final `npm run build` passed: 86 Dart documentation tests, two export checks,
+  both dart2js bundles, and all 144 site pages. Log:
+  `/tmp/fleury-lists-guide-build-final.log`.
+
+### Focus and selection naming migration (2026-09-07)
+
+The user approved replacing ListView's `onActivate` with `onSelect`,
+`onSelectionChanged` with `onFocusedItemChanged`, `ListController.selectedIndex`
+with `currentIndex`, and `selectionActive` with `highlightCurrentItem`. The
+builder boolean is `highlighted`. The baseline and earlier revision receipts
+above retain their historical vocabulary; they do not describe the current names.
+
+All list callers and tests are migrated. The guide's task browser distinguishes
+browsing/preview, choosing/opening, and viewport movement with visible outcomes.
+The reorder demo preserves the current item's identity and shows the visual
+highlight independently of keyboard focus. See
+`widget-interaction-consistency-audit-2026-09-07.md` for the migration contract
+and current validation.

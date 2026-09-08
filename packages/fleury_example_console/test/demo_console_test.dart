@@ -577,7 +577,7 @@ void main() {
             state.startsWith('log ') &&
             state.contains('$demoIndexedLogInitialCount entries') &&
             state.contains('48 filtered') &&
-            state.contains('selected index 0'),
+            state.contains('current index 0'),
       ),
       isTrue,
     );
@@ -611,7 +611,7 @@ void main() {
         .target(role: SemanticRole.log, label: 'Indexed demo logs')
         .snapshot;
     expect(log.state.selectedKey, 'IDX-1004');
-    expect(log.state['selectedIndex'], 1);
+    expect(log.state['currentIndex'], 1);
     expect(log.state['followTail'], isFalse);
     expect(log.focused, isTrue);
 
@@ -1220,7 +1220,7 @@ void main() {
         .snapshot;
     expect(selectedMarkdown.focused, isTrue);
     expect(selectedMarkdown.state.selectedKey, 4);
-    expect(selectedMarkdown.state['selectedIndex'], 4);
+    expect(selectedMarkdown.state['currentIndex'], 4);
     expect(selectedMarkdown.state['selectedMarkdownBlockKind'], 'bullet');
 
     await _invoke(tester, demoCommandGoTranscript);
@@ -1541,7 +1541,7 @@ void main() {
         .snapshot;
     expect(log.state.collectionRowCount, 8);
     expect(log.state.selectedMessageId, targetId);
-    expect(log.state['selectedIndex'], 3);
+    expect(log.state['currentIndex'], 3);
     expect(log.state['followTail'], isTrue);
   });
 

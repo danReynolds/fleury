@@ -47,10 +47,10 @@ final class TaskGraphNode {
   bool get busy => status == TaskGraphStatus.running;
 }
 
-/// Controller for [TaskGraph] selection and viewport state.
+/// Controller for [TaskGraph] browsing and viewport state.
 class TaskGraphController extends ChangeNotifier {
-  TaskGraphController({int selectedIndex = 0})
-    : _list = ListController(selectedIndex: selectedIndex) {
+  TaskGraphController({int? initialIndex = 0})
+    : _list = ListController(initialIndex: initialIndex) {
     _list.addListener(notifyListeners);
   }
 
@@ -59,10 +59,10 @@ class TaskGraphController extends ChangeNotifier {
 
   ListController get _listController => _list;
 
-  int? get selectedIndex => _list.selectedIndex;
-  set selectedIndex(int? value) {
+  int? get currentIndex => _list.currentIndex;
+  set currentIndex(int? value) {
     _checkNotDisposed();
-    _list.selectedIndex = value;
+    _list.currentIndex = value;
   }
 
   ({int first, int last})? get visibleRange => _list.visibleRange;
@@ -235,16 +235,13 @@ class _TaskGraphState extends State<TaskGraph> {
     _selectionSyncGeneration++;
     _pendingSelectedTaskId = null;
     if (widget.nodes.isEmpty) {
-      _controller.selectedIndex = null;
+      _controller.currentIndex = null;
       return;
     }
-    final selectedIndex = _controller.selectedIndex;
-    if (selectedIndex == null) {
-      _controller.selectedIndex = 0;
-      return;
-    }
-    if (selectedIndex >= 0 && selectedIndex < oldNodes.length) {
-      final selectedId = oldNodes[selectedIndex].id;
+    final currentIndex = _controller.currentIndex;
+    if (currentIndex == null) return;
+    if (currentIndex >= 0 && currentIndex < oldNodes.length) {
+      final selectedId = oldNodes[currentIndex].id;
       final nextIndex = widget.nodes.indexWhere(
         (node) => node.id == selectedId,
       );
@@ -253,13 +250,13 @@ class _TaskGraphState extends State<TaskGraph> {
         return;
       }
     }
-    _controller.selectedIndex = selectedIndex.clamp(0, widget.nodes.length - 1);
+    _controller.currentIndex = currentIndex.clamp(0, widget.nodes.length - 1);
   }
 
   void _selectIndexAfterListCountRefresh(String selectedId, int nextIndex) {
     final knownItemCount = _controller._listController.itemCount;
     if (knownItemCount == 0 || nextIndex < knownItemCount) {
-      _controller.selectedIndex = nextIndex;
+      _controller.currentIndex = nextIndex;
       return;
     }
 
@@ -286,7 +283,7 @@ class _TaskGraphState extends State<TaskGraph> {
       return;
     }
     _pendingSelectedTaskId = null;
-    _controller.selectedIndex = nextIndex;
+    _controller.currentIndex = nextIndex;
   }
 
   void _onFocusDetectorChange(bool focused) {
@@ -312,7 +309,7 @@ class _TaskGraphState extends State<TaskGraph> {
   Future<void> _copySelection({bool focusGraph = false}) async {
     if (!widget.copySelection || widget.nodes.isEmpty) return;
     if (focusGraph) _focusGraph();
-    final selected = (_controller.selectedIndex ?? 0).clamp(
+    final selected = (_controller.currentIndex ?? 0).clamp(
       0,
       widget.nodes.length - 1,
     );
@@ -335,13 +332,13 @@ class _TaskGraphState extends State<TaskGraph> {
   void _activateAt(int index) {
     if (index < 0 || index >= widget.nodes.length) return;
     _focusGraph();
-    _controller.selectedIndex = index;
+    _controller.currentIndex = index;
   }
 
   Future<void> _copyAt(int index) async {
     if (index < 0 || index >= widget.nodes.length) return;
     _focusGraph();
-    _controller.selectedIndex = index;
+    _controller.currentIndex = index;
     await _copySelection();
   }
 
@@ -361,24 +358,24 @@ class _TaskGraphState extends State<TaskGraph> {
 
   @override
   Widget build(BuildContext context) {
-    final selectedIndex = _controller.selectedIndex;
+    final currentIndex = _controller.currentIndex;
     final visibleRange = _controller.visibleRange;
     final copyEnabled = widget.copySelection && widget.nodes.isNotEmpty;
     final selectedNode =
-        selectedIndex == null ||
-            selectedIndex < 0 ||
-            selectedIndex >= widget.nodes.length
+        currentIndex == null ||
+            currentIndex < 0 ||
+            currentIndex >= widget.nodes.length
         ? null
-        : widget.nodes[selectedIndex];
+        : widget.nodes[currentIndex];
 
     Widget list = ListView.builder(
       controller: _controller._listController,
       focusNode: _focusNode,
       autofocus: widget.autofocus,
       itemCount: widget.nodes.length,
-      onActivate: _activateAt,
+      onSelect: _activateAt,
       itemBuilder: (context, index, activeSelected) {
-        final selected = index == _controller.selectedIndex;
+        final selected = index == _controller.currentIndex;
         return _TaskGraphRow(
           node: widget.nodes[index],
           index: index,
@@ -432,7 +429,7 @@ class _TaskGraphState extends State<TaskGraph> {
             'visibleRangeStart': visibleRange.first,
             'visibleRangeEnd': visibleRange.last,
           },
-          'selectedIndex': ?selectedIndex,
+          'currentIndex': ?currentIndex,
           if (selectedNode != null) ...{
             'selectedTaskId': selectedNode.id,
             'selectedTaskStatus': selectedNode.status.name,

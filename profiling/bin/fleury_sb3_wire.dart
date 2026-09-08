@@ -122,11 +122,11 @@ final class _WireDataTableAppState extends State<_WireDataTableApp> {
         case 1:
           _controller.moveSelection(rowDelta: 20);
         case 2:
-          _controller.selectedIndex = widget.rows ~/ 2;
+          _controller.currentRowIndex = widget.rows ~/ 2;
         case 3:
-          _controller.selectedIndex = widget.rows - 1;
+          _controller.currentRowIndex = widget.rows - 1;
         case 4:
-          _controller.selectedColumnIndex = 1;
+          _controller.currentColumnIndex = 1;
       }
       _step++;
     });
