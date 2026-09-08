@@ -2,6 +2,10 @@
 
 ## 0.1.0
 
+- `Button` and `ButtonVariant` moved into core. This package continues to
+  reexport them unchanged. Core buttons and companion value controls share
+  one internal focus/activation implementation.
+
 - `FormController.isBusy` reports the whole accepted submit attempt, including
   validation, so submit and Back actions can be guarded immediately. Field
   editing can still use `isSubmitting` to lock only after validation succeeds.

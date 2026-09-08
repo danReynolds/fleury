@@ -13,6 +13,55 @@ String _row(CellBuffer buf, int row) {
 }
 
 void main() {
+  for (final softWrap in [false, true]) {
+    test('ordinary spaces preserve their span style, softWrap=$softWrap', () {
+      const first = CellStyle(inverse: true, background: AnsiColor(2));
+      const second = CellStyle(underline: true, foreground: AnsiColor(3));
+      final render = RenderRichText(
+        span: const TextSpan(
+          children: [
+            TextSpan(text: 'New ', style: first),
+            TextSpan(text: ' key', style: second),
+          ],
+        ),
+        base: CellStyle.none,
+        softWrap: softWrap,
+      )..layout(const CellConstraints(maxCols: 20));
+      final buffer = CellBuffer(const CellSize(20, 1));
+      render.paint(buffer, CellOffset.zero);
+      expect(_row(buffer, 0), 'New  key');
+      for (var col = 0; col < 8; col++) {
+        expect(
+          buffer.atColRow(col, 0).style,
+          col < 4 ? first : second,
+          reason: 'style at column $col, including the two separator spaces',
+        );
+      }
+    });
+  }
+
+  test('dropping a wrap separator does not shift following span styles', () {
+    const first = CellStyle(inverse: true);
+    const second = CellStyle(background: AnsiColor(2));
+    final render = RenderRichText(
+      span: const TextSpan(
+        children: [
+          TextSpan(text: 'New ', style: first),
+          TextSpan(text: 'key', style: second),
+        ],
+      ),
+      base: CellStyle.none,
+    )..layout(const CellConstraints(maxCols: 3));
+    final buffer = CellBuffer(const CellSize(3, 2));
+    render.paint(buffer, CellOffset.zero);
+    expect(_row(buffer, 0), 'New');
+    expect(_row(buffer, 1), 'key');
+    for (var col = 0; col < 3; col++) {
+      expect(buffer.atColRow(col, 0).style, first);
+      expect(buffer.atColRow(col, 1).style, second);
+    }
+  });
+
   test('shared ASCII glyphs keep each source style on every policy', () {
     for (final policy in [
       TextPresentationPolicy.spec,

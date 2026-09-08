@@ -423,7 +423,7 @@ class ListView extends StatefulWidget {
   /// list still addresses exactly [itemCount] items, and arrow / Home / End
   /// navigation walks items only. Each is composed into the row block beneath
   /// its item (reusing [ListView.builder]'s well-tested item-index machinery),
-  /// and the block is one tap target, so a mouse click on a separator selects
+  /// and only the item is a tap target. A separator cannot select or activate
   /// the item it trails.
   const ListView.separated({
     super.key,
@@ -928,23 +928,19 @@ class _ListViewState extends State<ListView> {
                       separatorBuilder == null || index >= itemCount - 1
                       ? null
                       : separatorBuilder(context, index);
-                  final content = separator == null
-                      ? built
-                      : Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [built, separator],
-                        );
-                  // The GestureDetector wraps the WHOLE block (not the item
-                  // alone), so a tap on a separator row selects the item it
-                  // trails. Its region, like every other piece of geometry, is
-                  // derived from layout, so a scrolled-but-unchanged block
-                  // whose RepaintBoundary blits its cached cells at the new row
-                  // has its tap region follow for free.
+                  final item = GestureDetector(
+                    onTapDown: (details) => _handleItemTap(index),
+                    child: built,
+                  );
+                  // Geometry follows the item through scrolling and cached
+                  // repaint; the separator never joins its activation region.
                   return _maybeBoundary(
-                    GestureDetector(
-                      onTapDown: (details) => _handleItemTap(index),
-                      child: content,
-                    ),
+                    separator == null
+                        ? item
+                        : Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [item, separator],
+                          ),
                   );
                 },
                 selectedIndex: selected,

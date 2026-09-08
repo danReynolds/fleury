@@ -63,6 +63,7 @@ class TextArea extends StatefulWidget {
     this.cursorStyle = const CellStyle(inverse: true),
     this.enabled = true,
     this.readOnly = false,
+    this.obscureText = false,
     this.validationError,
     this.semanticLabel,
     this.semanticState = SemanticState.empty,
@@ -140,6 +141,14 @@ class TextArea extends StatefulWidget {
 
   /// Policy future copy/cut actions should use for this area.
   final TextClipboardPolicy clipboardPolicy;
+
+  /// Mask every UTF-16 code unit except line breaks. Selection offsets remain
+  /// aligned with the editor's real value. While masked, semantics and
+  /// copy/cut/kill-ring capture cannot expose the value. An explicit disabled
+  /// clipboard policy stays disabled while masking is on.
+  /// Set clipboardPolicy to redacted explicitly when a Show control should
+  /// retain that policy after turning masking off.
+  final bool obscureText;
 
   /// Keymap used to resolve non-text key events into editing actions.
   final TextEditingKeymap keymap;
@@ -292,6 +301,16 @@ class _TextAreaState extends State<TextArea>
     }
   }
 
+  TextClipboardPolicy get _effectiveClipboardPolicy =>
+      widget.obscureText &&
+          widget.clipboardPolicy != TextClipboardPolicy.disabled
+      ? TextClipboardPolicy.redacted
+      : widget.clipboardPolicy;
+
+  bool get _redactSemanticValue =>
+      widget.obscureText ||
+      _effectiveClipboardPolicy == TextClipboardPolicy.redacted;
+
   bool get _canEdit => widget.enabled && !widget.readOnly;
 
   String _redactClipboardText(String text) {
@@ -306,7 +325,7 @@ class _TextAreaState extends State<TextArea>
   /// .allowed]. Redacted / disabled fields skip capture so a later Ctrl+Y
   /// elsewhere cannot recover the plaintext, matching the copy/cut path.
   bool get _captureKillRingText =>
-      widget.clipboardPolicy == TextClipboardPolicy.allowed;
+      _effectiveClipboardPolicy == TextClipboardPolicy.allowed;
 
   KeyEventResult _copyOrCutSelection({required bool cut}) {
     if (!widget.enabled) return KeyEventResult.ignored;
@@ -317,7 +336,7 @@ class _TextAreaState extends State<TextArea>
     if (selected.isEmpty) return KeyEventResult.ignored;
     if (cut && !_canEdit) return KeyEventResult.handled;
 
-    switch (widget.clipboardPolicy) {
+    switch (_effectiveClipboardPolicy) {
       case TextClipboardPolicy.allowed:
         unawaited(ClipboardScope.of(context).write(selected));
         break;
@@ -605,6 +624,7 @@ class _TextAreaState extends State<TextArea>
       _controller.value,
       offset,
       details,
+      obscured: widget.obscureText,
     );
     _focusNode.requestFocus();
   }
@@ -616,7 +636,11 @@ class _TextAreaState extends State<TextArea>
     }
     final offset = _offsetForPointer(details);
     if (offset == null) return;
-    final selection = _pointerSelection.drag(_controller.value, offset);
+    final selection = _pointerSelection.drag(
+      _controller.value,
+      offset,
+      obscured: widget.obscureText,
+    );
     if (selection != null) _controller.selection = selection;
   }
 
@@ -651,9 +675,7 @@ class _TextAreaState extends State<TextArea>
       label:
           widget.semanticLabel ??
           (widget.placeholder.isEmpty ? null : widget.placeholder),
-      value: widget.clipboardPolicy == TextClipboardPolicy.redacted
-          ? null
-          : _controller.text,
+      value: _redactSemanticValue ? null : _controller.text,
       enabled: widget.enabled,
       focused: focused,
       validationError: validationError,
@@ -663,7 +685,7 @@ class _TextAreaState extends State<TextArea>
         if (_canEdit) SemanticAction.setValue,
         if (widget.enabled &&
             _controller.hasSelection &&
-            widget.clipboardPolicy != TextClipboardPolicy.disabled)
+            _effectiveClipboardPolicy != TextClipboardPolicy.disabled)
           SemanticAction.copy,
         if (widget.enabled && widget.onSubmit != null) SemanticAction.submit,
       },
@@ -675,8 +697,8 @@ class _TextAreaState extends State<TextArea>
         'composingEnd': _controller.composing.normalizedEnd,
         'readOnly': widget.readOnly,
         'textEditable': true,
-        'redactedValue': widget.clipboardPolicy == TextClipboardPolicy.redacted,
-        ...textClipboardSemanticState(widget.clipboardPolicy),
+        'redactedValue': _redactSemanticValue,
+        ...textClipboardSemanticState(_effectiveClipboardPolicy),
         'pasteInProgress': _paste.progress.active,
         'pasteInsertedLength': _paste.progress.insertedLength,
         'pasteTotalLength': _paste.progress.totalLength,
@@ -695,7 +717,9 @@ class _TextAreaState extends State<TextArea>
           // would make the Focus widget overwrite them on every rebuild.
           child: _TextAreaDisplay(
             focusNode: _focusNode,
-            text: _controller.text,
+            text: widget.obscureText
+                ? _controller.text.replaceAll(RegExp(r'[^\n]'), '•')
+                : _controller.text,
             selection: _controller.selection,
             placeholder: widget.placeholder,
             placeholderStyle: displayPlaceholderStyle,

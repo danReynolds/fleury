@@ -39,6 +39,111 @@ List<String> _lines(FleuryTester tester, {int cols = 10, required int rows}) {
 }
 
 void main() {
+  testWidgets('masked multiline text keeps source, offsets and copy redacted', (
+    tester,
+  ) {
+    final ctl = TextEditingController(text: 'private\n🔑value');
+    addTearDown(ctl.dispose);
+    tester.pumpWidget(
+      TextArea(controller: ctl, obscureText: true, autofocus: true),
+    );
+    expect(_lines(tester, rows: 3), ['•••••••', '•••••••', '']);
+    expect(ctl.text, 'private\n🔑value');
+    ctl.selection = TextSelection(baseOffset: 0, extentOffset: ctl.text.length);
+    tester.sendKey(_ctrlChar('c'));
+    expect(tester.clipboard.readInProcess(), isNot(contains('private')));
+    tester.sendKey(const KeyEvent(KeyCode.end));
+    tester.sendKey(const KeyEvent(KeyCode.backspace));
+    expect(ctl.text, 'private\n🔑valu');
+    expect(tester.renderToString(), isNot(contains('private')));
+  });
+
+  testWidgets('masking preserves disabled clipboard and redacts semantics', (
+    tester,
+  ) async {
+    final ctl = TextEditingController(text: 'private\nvalue')
+      ..selection = const TextSelection(baseOffset: 0, extentOffset: 13);
+    addTearDown(ctl.dispose);
+    tester.pumpWidget(
+      TextArea(
+        controller: ctl,
+        autofocus: true,
+        obscureText: true,
+        clipboardPolicy: TextClipboardPolicy.disabled,
+        semanticLabel: 'Secret',
+      ),
+    );
+    tester.press(.ctrl.c);
+    tester.press(.ctrl.x);
+    await tester.settle();
+    expect(ctl.text, 'private\nvalue', reason: 'disabled cut must not delete');
+    expect(tester.clipboard.readInProcess(), isNull);
+    final node = tester.semantics().single(
+      role: SemanticRole.textArea,
+      label: 'Secret',
+    );
+    expect(node.value, isNull);
+    expect(node.state['redactedValue'], isTrue);
+    expect(node.actions, isNot(contains(SemanticAction.copy)));
+  });
+
+  testWidgets(
+    'revealing with explicit redaction retains private semantics and copy',
+    (tester) async {
+      final ctl = TextEditingController(text: 'private\nvalue');
+      addTearDown(ctl.dispose);
+      Widget area(bool masked) => TextArea(
+        controller: ctl,
+        autofocus: true,
+        obscureText: masked,
+        clipboardPolicy: TextClipboardPolicy.redacted,
+        semanticLabel: 'Secret',
+      );
+      tester.pumpWidget(area(true));
+      tester.pumpWidget(area(false));
+      expect(tester.renderToString(), contains('private'));
+      ctl.selection = const TextSelection(baseOffset: 0, extentOffset: 13);
+      tester.press(.ctrl.c);
+      await tester.settle();
+      expect(tester.clipboard.readInProcess(), '•••••••\n•••••');
+      expect(
+        tester
+            .semantics()
+            .single(role: SemanticRole.textArea, label: 'Secret')
+            .value,
+        isNull,
+      );
+      tester.pumpWidget(area(true));
+      expect(tester.renderToString(), isNot(contains('private')));
+    },
+  );
+
+  testWidgets(
+    'masked double-click and word drag do not reveal word boundaries',
+    (tester) {
+      final ctl = TextEditingController(text: 'private value\nsecond line');
+      addTearDown(ctl.dispose);
+      tester.pumpWidget(TextArea(controller: ctl, obscureText: true));
+      void mouse(MouseEventKind kind, int col, int row) => tester.sendMouse(
+        MouseEvent(kind: kind, button: MouseButton.left, col: col, row: row),
+      );
+      mouse(MouseEventKind.down, 2, 0);
+      mouse(MouseEventKind.up, 2, 0);
+      mouse(MouseEventKind.down, 2, 0);
+      expect(
+        ctl.selection,
+        TextSelection(baseOffset: 0, extentOffset: ctl.text.length),
+      );
+      mouse(MouseEventKind.drag, 3, 1);
+      expect(
+        ctl.selection,
+        TextSelection(baseOffset: 0, extentOffset: ctl.text.length),
+      );
+      mouse(MouseEventKind.up, 3, 1);
+      expect(tester.renderToString(), isNot(contains('private')));
+    },
+  );
+
   testWidgets('renders text across multiple rows', (tester) {
     final ctl = TextEditingController(text: 'one\ntwo\nthree');
     tester.pumpWidget(TextArea(controller: ctl));
@@ -313,7 +418,9 @@ void main() {
       expect(ctl.text, 'one\ntwo\nthree');
     });
 
-    testWidgets('large paste is chunked and preserves newlines', (tester) {
+    testWidgets('large paste is chunked and preserves newlines', (
+      tester,
+    ) async {
       final ctl = TextEditingController();
       tester.pumpWidget(
         TextArea(
@@ -334,8 +441,7 @@ void main() {
       expect(area.state.pasteInsertedLength, 3);
       expect(area.state.pasteTotalLength, 8);
 
-      // A post-frame pass can consume multiple chunks within its time budget.
-      tester.pumpAndSettle();
+      await tester.settle();
       expect(ctl.text, 'ab\ncd\nef');
       area = tester.semantics().single(role: SemanticRole.textArea);
       expect(area.state.pasteInProgress, isFalse);
@@ -522,7 +628,7 @@ void main() {
 
     testWidgets('parser-segmented paste is lossless and one undo transaction', (
       tester,
-    ) {
+    ) async {
       final ctl = TextEditingController();
       tester.pumpWidget(
         TextArea(
@@ -541,6 +647,7 @@ void main() {
       parser.feed('efgh'.codeUnits, sink);
       parser.feed('ijkl'.codeUnits, sink);
       parser.feed('\x1B[201~'.codeUnits, sink);
+      await tester.settle();
       expect(ctl.text, 'abcdefghijkl');
 
       tester.sendKey(_ctrlChar('z'));

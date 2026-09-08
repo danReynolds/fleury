@@ -2,6 +2,27 @@
 
 ## 0.1.0
 
+- **Sensitive multiline input.** `TextArea.obscureText` masks display and
+  redacts semantic values and clipboard capture, while preserving an explicit
+  disabled clipboard policy. Reveal/hide keeps the same editing controller;
+  masked mouse selection does not disclose word boundaries.
+- **Application-owned suspension.** `PosixTerminalDriver(suspendOnCtrlZ: false)`
+  delivers Ctrl+Z to the application. Raw startup fails if native termios is
+  unavailable, rather than silently restoring kernel-owned suspension.
+  Terminal restoration uses an owned close-on-exec descriptor even after
+  stdin closes.
+- **RichText spaces.** Ordinary spaces retain their source span's styling,
+  including inverse highlights, backgrounds and underline across span edges.
+- **Separated-list pointer behavior changed.** Clicking a separator no longer
+  selects or activates the preceding item. Only item bounds activate; keyboard
+  indices and navigation are unchanged.
+- **Paste lifetime.** `TextPastePolicy.immediate()` applies each received segment
+  synchronously for bounded forms. Default chunked paste still discards pending
+  work on unmount; surviving external controllers do not own that pending work.
+- **Core Button.** `Button` and `ButtonVariant` now come from `fleury_core.dart`
+  (also reexported by `fleury.dart`), without the companion image dependency.
+  Existing `fleury_widgets` imports reexport the same implementation.
+
 - **`Scope<T>` replaces `InheritedWidget` and `InheritedNotifier`.** One
   tree-local state primitive: `Scope(value: model, child: ...)` shares an
   object its owner keeps, `Scope<T>.create(create: ..., dispose: ...)` lets the

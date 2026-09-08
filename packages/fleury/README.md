@@ -69,6 +69,12 @@ detects terminal capabilities (color depth, image protocol, multiplexer),
 wires input dispatch and the frame scheduler, and renders your widget
 tree with a diffing ANSI renderer. Unhandled Ctrl+C exits by default.
 
+For a small application without companion packages, run
+`dart run example/core_editor.dart`: search a list, edit a value, save with
+Ctrl+S, and open a compact delete confirmation. Tab/Shift+Tab traverse the
+controls; arrows connect search and the list. `Button` is part of core.
+See [sensitive input](doc/sensitive_input.md) for masking and lifetime choices.
+
 ## What's in the box
 
 - **Framework**: `Widget` / `StatefulWidget` / `State`, `BuildContext`,
