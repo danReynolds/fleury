@@ -121,12 +121,13 @@ final class DiffLine {
   String? get filePath => newPath ?? oldPath;
 }
 
-/// Controller for [DiffView] selection.
+/// Controller for [DiffView] browsing.
 class DiffViewController extends ChangeNotifier {
   DiffViewController({
     /// Zero-based row selected when the controller is created.
-    int selectedIndex = 0,
-  }) : _list = ListController(selectedIndex: selectedIndex) {
+    /// Initial browsing row. Null starts without a current row.
+    int? initialIndex = 0,
+  }) : _list = ListController(initialIndex: initialIndex) {
     _list.addListener(notifyListeners);
   }
 
@@ -135,10 +136,10 @@ class DiffViewController extends ChangeNotifier {
 
   ListController get _listController => _list;
 
-  int? get selectedIndex => _list.selectedIndex;
-  set selectedIndex(int? value) {
+  int? get currentIndex => _list.currentIndex;
+  set currentIndex(int? value) {
     _checkNotDisposed();
-    _list.selectedIndex = value;
+    _list.currentIndex = value;
   }
 
   ({int first, int last})? get visibleRange => _list.visibleRange;
@@ -357,11 +358,11 @@ String exportDiffSelection(
   DiffViewCopyOptions options = const DiffViewCopyOptions(),
 }) {
   if (document.rows.isEmpty) return '';
-  final selectedIndex = rowIndex.clamp(0, document.rows.length - 1);
-  final row = document.rows[selectedIndex];
+  final currentIndex = rowIndex.clamp(0, document.rows.length - 1);
+  final row = document.rows[currentIndex];
   return switch (options.mode) {
     DiffViewCopyMode.line => row.text,
-    DiffViewCopyMode.hunk => _exportHunk(document, row, selectedIndex),
+    DiffViewCopyMode.hunk => _exportHunk(document, row, currentIndex),
   };
 }
 
@@ -494,20 +495,20 @@ class _DiffViewState extends State<DiffView> {
   DiffLine? _selectedRow() {
     final rows = widget.document.rows;
     if (rows.isEmpty) return null;
-    final selected = (_controller.selectedIndex ?? 0).clamp(0, rows.length - 1);
+    final selected = (_controller.currentIndex ?? 0).clamp(0, rows.length - 1);
     return rows[selected];
   }
 
   Future<void> _copySelection() async {
     final rows = widget.document.rows;
     if (!widget.copySelection || rows.isEmpty) return;
-    final selectedIndex = (_controller.selectedIndex ?? 0).clamp(
+    final currentIndex = (_controller.currentIndex ?? 0).clamp(
       0,
       rows.length - 1,
     );
     final text = exportDiffSelection(
       widget.document,
-      rowIndex: selectedIndex,
+      rowIndex: currentIndex,
       options: widget.copyOptions,
     );
     final report = await ClipboardScope.of(
@@ -516,8 +517,8 @@ class _DiffViewState extends State<DiffView> {
     if (!mounted) return;
     widget.onCopy?.call(
       DiffViewCopyResult(
-        rowIndex: selectedIndex,
-        row: rows[selectedIndex],
+        rowIndex: currentIndex,
+        row: rows[currentIndex],
         text: text,
         report: report,
       ),
@@ -528,7 +529,7 @@ class _DiffViewState extends State<DiffView> {
     final rows = widget.document.rows;
     if (index < 0 || index >= rows.length) return;
     _focusNode.requestFocus();
-    _controller.selectedIndex = index;
+    _controller.currentIndex = index;
     await _copySelection();
   }
 
@@ -536,7 +537,7 @@ class _DiffViewState extends State<DiffView> {
     final rows = widget.document.rows;
     if (index < 0 || index >= rows.length) return;
     _focusNode.requestFocus();
-    _controller.selectedIndex = index;
+    _controller.currentIndex = index;
   }
 
   Future<void> _handleDiffAction(SemanticAction action) async {
@@ -569,7 +570,7 @@ class _DiffViewState extends State<DiffView> {
             autofocus: widget.autofocus,
             itemCount: rows.length,
             itemBuilder: (context, index, activeSelected) {
-              final selected = index == _controller.selectedIndex;
+              final selected = index == _controller.currentIndex;
               return _DiffLineWidget(
                 row: rows[index],
                 selected: selected,
@@ -620,8 +621,8 @@ class _DiffViewState extends State<DiffView> {
             'visibleRangeStart': visibleRange.first,
             'visibleRangeEnd': visibleRange.last,
           },
-          if (_controller.selectedIndex != null)
-            'selectedIndex': _controller.selectedIndex,
+          if (_controller.currentIndex != null)
+            'currentIndex': _controller.currentIndex,
           if (selected != null) ...{
             'selectedKey': selected.index,
             'selectedDiffKind': selected.kind.name,
@@ -738,10 +739,10 @@ int _diffGutterWidth(List<DiffLine> rows) {
 
 final _hunkPattern = RegExp(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@');
 
-String _exportHunk(DiffDocument document, DiffLine row, int selectedIndex) {
+String _exportHunk(DiffDocument document, DiffLine row, int currentIndex) {
   final hunkIndex = row.hunkIndex;
   if (hunkIndex == null) return row.text;
-  var start = selectedIndex;
+  var start = currentIndex;
   while (start > 0 && document.rows[start - 1].hunkIndex == hunkIndex) {
     start -= 1;
   }
@@ -751,7 +752,7 @@ String _exportHunk(DiffDocument document, DiffLine row, int selectedIndex) {
       document.rows[start - 1].hunkIndex == hunkIndex) {
     start -= 1;
   }
-  var end = selectedIndex;
+  var end = currentIndex;
   while (end + 1 < document.rows.length &&
       document.rows[end + 1].hunkIndex == hunkIndex) {
     end += 1;

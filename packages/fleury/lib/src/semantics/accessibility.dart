@@ -1053,6 +1053,7 @@ String? _collectionState(SemanticState state) {
 String? _searchState(SemanticState state) {
   final total = state['totalResultCount'];
   final filtered = state['filteredResultCount'];
+  final currentIndex = state['currentIndex'];
   final selectedIndex = state['selectedIndex'];
   final selectedCategory = state['selectedCategory'];
   final selectedSource = state['selectedSource'];
@@ -1067,6 +1068,7 @@ String? _searchState(SemanticState state) {
   if (!hasSearchMarker) return null;
   if (total == null &&
       filtered == null &&
+      currentIndex == null &&
       selectedIndex == null &&
       selectedCategory == null &&
       selectedSource == null &&
@@ -1077,6 +1079,7 @@ String? _searchState(SemanticState state) {
   final parts = <String>[
     if (total is int) '$total results',
     if (filtered is int) '$filtered filtered',
+    if (currentIndex is int) 'current index $currentIndex',
     if (selectedIndex is int) 'selected index $selectedIndex',
     if (selectedCategory is String) 'selected category $selectedCategory',
     if (selectedSource is String) 'selected source $selectedSource',
@@ -1095,6 +1098,7 @@ String? _logState(SemanticState state) {
   final filterCaseSensitive = state['filterCaseSensitive'];
   final followTail = state['followTail'];
   final copyIncludesPrefix = state['copyIncludesPrefix'];
+  final currentIndex = state['currentIndex'];
   final selectedIndex = state['selectedIndex'];
   final lastKey = state['lastKey'];
   if (total == null &&
@@ -1105,6 +1109,7 @@ String? _logState(SemanticState state) {
       filterCaseSensitive == null &&
       followTail == null &&
       copyIncludesPrefix == null &&
+      currentIndex == null &&
       selectedIndex == null &&
       lastKey == null) {
     return null;
@@ -1118,6 +1123,7 @@ String? _logState(SemanticState state) {
     if (filterCaseSensitive == true) 'case sensitive',
     if (followTail == true) 'follow tail',
     if (copyIncludesPrefix == true) 'copy includes prefix',
+    if (currentIndex is int) 'current index $currentIndex',
     if (selectedIndex is int) 'selected index $selectedIndex',
     if (lastKey != null) 'last $lastKey',
   ];

@@ -82,10 +82,10 @@ final class TraceTimelineEntry {
   bool get busy => status == TraceTimelineStatus.running;
 }
 
-/// Controller for [TraceTimeline] selection and viewport state.
+/// Controller for [TraceTimeline] browsing and viewport state.
 class TraceTimelineController extends ChangeNotifier {
-  TraceTimelineController({int selectedIndex = 0})
-    : _list = ListController(selectedIndex: selectedIndex) {
+  TraceTimelineController({int? initialIndex = 0})
+    : _list = ListController(initialIndex: initialIndex) {
     _list.addListener(notifyListeners);
   }
 
@@ -94,10 +94,10 @@ class TraceTimelineController extends ChangeNotifier {
 
   ListController get _listController => _list;
 
-  int? get selectedIndex => _list.selectedIndex;
-  set selectedIndex(int? value) {
+  int? get currentIndex => _list.currentIndex;
+  set currentIndex(int? value) {
     _checkNotDisposed();
-    _list.selectedIndex = value;
+    _list.currentIndex = value;
   }
 
   ({int first, int last})? get visibleRange => _list.visibleRange;
@@ -304,16 +304,13 @@ class _TraceTimelineState extends State<TraceTimeline> {
     _selectionSyncGeneration++;
     _pendingSelectedTraceId = null;
     if (widget.events.isEmpty) {
-      _controller.selectedIndex = null;
+      _controller.currentIndex = null;
       return;
     }
-    final selectedIndex = _controller.selectedIndex;
-    if (selectedIndex == null) {
-      _controller.selectedIndex = 0;
-      return;
-    }
-    if (selectedIndex >= 0 && selectedIndex < oldEvents.length) {
-      final selectedId = oldEvents[selectedIndex].id;
+    final currentIndex = _controller.currentIndex;
+    if (currentIndex == null) return;
+    if (currentIndex >= 0 && currentIndex < oldEvents.length) {
+      final selectedId = oldEvents[currentIndex].id;
       final nextIndex = widget.events.indexWhere(
         (event) => event.id == selectedId,
       );
@@ -322,16 +319,13 @@ class _TraceTimelineState extends State<TraceTimeline> {
         return;
       }
     }
-    _controller.selectedIndex = selectedIndex.clamp(
-      0,
-      widget.events.length - 1,
-    );
+    _controller.currentIndex = currentIndex.clamp(0, widget.events.length - 1);
   }
 
   void _selectIndexAfterListCountRefresh(Object selectedId, int nextIndex) {
     final knownItemCount = _controller._listController.itemCount;
     if (knownItemCount == 0 || nextIndex < knownItemCount) {
-      _controller.selectedIndex = nextIndex;
+      _controller.currentIndex = nextIndex;
       return;
     }
 
@@ -360,7 +354,7 @@ class _TraceTimelineState extends State<TraceTimeline> {
       return;
     }
     _pendingSelectedTraceId = null;
-    _controller.selectedIndex = nextIndex;
+    _controller.currentIndex = nextIndex;
   }
 
   void _onFocusDetectorChange(bool focused) {
@@ -372,7 +366,7 @@ class _TraceTimelineState extends State<TraceTimeline> {
 
   Future<void> _copySelection() async {
     if (!widget.copySelection || widget.events.isEmpty) return;
-    final selected = (_controller.selectedIndex ?? 0).clamp(
+    final selected = (_controller.currentIndex ?? 0).clamp(
       0,
       widget.events.length - 1,
     );
@@ -395,7 +389,7 @@ class _TraceTimelineState extends State<TraceTimeline> {
   void _selectCurrent() {
     if (widget.events.isEmpty) return;
     _focusNode.requestFocus();
-    final selected = (_controller.selectedIndex ?? 0).clamp(
+    final selected = (_controller.currentIndex ?? 0).clamp(
       0,
       widget.events.length - 1,
     );
@@ -409,14 +403,14 @@ class _TraceTimelineState extends State<TraceTimeline> {
   Future<void> _selectAt(int index) async {
     if (index < 0 || index >= widget.events.length) return;
     _focusNode.requestFocus();
-    _controller.selectedIndex = index;
+    _controller.currentIndex = index;
     _selectCurrent();
   }
 
   Future<void> _copyAt(int index) async {
     if (index < 0 || index >= widget.events.length) return;
     _focusNode.requestFocus();
-    _controller.selectedIndex = index;
+    _controller.currentIndex = index;
     await _copySelection();
   }
 
@@ -448,16 +442,16 @@ class _TraceTimelineState extends State<TraceTimeline> {
 
   @override
   Widget build(BuildContext context) {
-    final selectedIndex = _controller.selectedIndex;
+    final currentIndex = _controller.currentIndex;
     final visibleRange = _controller.visibleRange;
     final copyEnabled = widget.copySelection && widget.events.isNotEmpty;
     final canSelect = widget.onSelect != null;
     final selectedEvent =
-        selectedIndex == null ||
-            selectedIndex < 0 ||
-            selectedIndex >= widget.events.length
+        currentIndex == null ||
+            currentIndex < 0 ||
+            currentIndex >= widget.events.length
         ? null
-        : widget.events[selectedIndex];
+        : widget.events[currentIndex];
 
     Widget list = widget.events.isEmpty
         ? Text('No trace events')
@@ -466,9 +460,9 @@ class _TraceTimelineState extends State<TraceTimeline> {
             focusNode: _focusNode,
             autofocus: widget.autofocus,
             itemCount: widget.events.length,
-            onActivate: (_) => _selectCurrent(),
+            onSelect: (_) => _selectCurrent(),
             itemBuilder: (context, index, activeSelected) {
-              final selected = index == _controller.selectedIndex;
+              final selected = index == _controller.currentIndex;
               return _TraceTimelineRow(
                 event: widget.events[index],
                 index: index,
@@ -524,7 +518,7 @@ class _TraceTimelineState extends State<TraceTimeline> {
             'visibleRangeStart': visibleRange.first,
             'visibleRangeEnd': visibleRange.last,
           },
-          'selectedIndex': ?selectedIndex,
+          'currentIndex': ?currentIndex,
           if (selectedEvent != null) ..._selectedTraceState(selectedEvent),
         }),
         child: list,

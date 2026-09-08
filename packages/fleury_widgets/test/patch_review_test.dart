@@ -32,12 +32,12 @@ Matcher _stateError(String message) {
 void main() {
   group('PatchReviewController lifecycle', () {
     test('dispose is idempotent and keeps final readable state', () {
-      final controller = PatchReviewController(selectedIndex: 1);
+      final controller = PatchReviewController(initialIndex: 1);
 
       controller.dispose();
       controller.dispose();
 
-      expect(controller.selectedIndex, 1);
+      expect(controller.currentIndex, 1);
       expect(controller.visibleRange, isNull);
     });
 
@@ -45,7 +45,7 @@ void main() {
       final controller = PatchReviewController()..dispose();
 
       const message = 'PatchReviewController has been disposed.';
-      expect(() => controller.selectedIndex = 1, _stateError(message));
+      expect(() => controller.currentIndex = 1, _stateError(message));
       expect(() => controller.jumpToIndex(1), _stateError(message));
     });
   });
@@ -101,8 +101,7 @@ void main() {
       emptyMark: ' ',
     );
     expect(output, contains('Launch patch: 2 files  +3 -2  2 hunks'));
-    expect(output, contains('  lib/app.dart'));
-    expect(output, isNot(contains('> lib/app.dart')));
+    expect(output, contains('> lib/app.dart'));
     expect(output, contains('test/app_test.dart'));
     expect(output, contains('+  print("new");'));
 
@@ -185,7 +184,7 @@ void main() {
     testWidgets('semantic activation selects a patch file and jumps the diff', (
       tester,
     ) async {
-      final diffController = DiffViewController(selectedIndex: 0);
+      final diffController = DiffViewController(initialIndex: 0);
       PatchReviewFileSelectResult? selected;
       tester.pumpWidget(
         PatchReview(
@@ -202,7 +201,7 @@ void main() {
           .press();
 
       expect(selected?.file.path, 'test/app_test.dart');
-      expect(diffController.selectedIndex, 10);
+      expect(diffController.currentIndex, 10);
       final review = tester.semantics().single(
         role: WidgetRoles.patchReview,
         label: 'Launch patch',
@@ -214,7 +213,7 @@ void main() {
       tester,
     ) async {
       final controller = PatchReviewController();
-      final diffController = DiffViewController(selectedIndex: 0);
+      final diffController = DiffViewController(initialIndex: 0);
       PatchReviewFileSelectResult? selected;
       tester.pumpWidget(
         PatchReview(
@@ -250,9 +249,9 @@ void main() {
       await tester
           .target(role: WidgetRoles.patchFile, label: 'test/app_test.dart')
           .press();
-      expect(controller.selectedIndex, 1);
+      expect(controller.currentIndex, 1);
       expect(selected?.file.path, 'test/app_test.dart');
-      expect(diffController.selectedIndex, 10);
+      expect(diffController.currentIndex, 10);
 
       tester.render(size: const CellSize(100, 18));
       final file = tester.semantics().single(
@@ -269,7 +268,7 @@ void main() {
         focused: true,
       );
       expect(review.state.selectedPatchFilePath, 'test/app_test.dart');
-      expect(review.state['selectedIndex'], 1);
+      expect(review.state['currentIndex'], 1);
     });
 
     testWidgets('preserves selected patch file identity across file refresh', (
@@ -277,7 +276,7 @@ void main() {
     ) {
       final document = parseUnifiedDiff(_sampleDiff);
       final files = buildPatchReviewFiles(document);
-      final controller = PatchReviewController(selectedIndex: 1);
+      final controller = PatchReviewController(initialIndex: 1);
       tester.pumpWidget(
         PatchReview.document(
           document: document,
@@ -318,7 +317,7 @@ void main() {
       tester.pump();
       tester.render(size: const CellSize(100, 18));
 
-      expect(controller.selectedIndex, 2);
+      expect(controller.currentIndex, 2);
       final review = tester.semantics().single(
         role: WidgetRoles.patchReview,
         label: 'Launch patch',

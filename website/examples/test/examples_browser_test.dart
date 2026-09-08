@@ -655,6 +655,8 @@ void main() {
   // manifest frame size so an undersized frame fails loudly.
   test('key demos render their essential content, not just something', () async {
     final checks = <String, List<String>>{
+      'datatable.rows': <String>['Browsing: Row 1', 'Chosen: None'],
+      'datatable.cells': <String>['Range: 1 × 1', 'No row opened'],
       'button.basic': <String>['Press me'],
       'approvalprompt.basic': <String>['Approve', 'Deny'],
       'commandpalette.basic': <String>['Ctrl-P'],
@@ -1299,7 +1301,7 @@ void main() {
   );
 
   test(
-    'lists.tasks pages, activates, and keeps the selection visible',
+    'lists.tasks browses, selects, and keeps the current item visible',
     () async {
       final fixture = await _mountExample('lists.tasks', useManifestSize: true);
       final keyboardCapture =
@@ -1325,26 +1327,28 @@ void main() {
         await fixture.app.awaitSemanticIdle();
       }
 
-      expect(fixture.host.textContent, contains('selected: 1 / 1000'));
+      expect(fixture.host.textContent, contains('Current: 25 / 1000'));
       await press('ArrowDown');
-      expect(fixture.host.textContent, contains('selected: 2 / 1000'));
+      expect(fixture.host.textContent, contains('Current: 26 / 1000'));
+      expect(fixture.host.textContent, contains('Focused: Task 26'));
+      expect(fixture.host.textContent, contains('Selected: None'));
       await press('PageDown');
       expect(
         fixture.host.textContent,
-        isNot(contains('selected: 2 / 1000')),
+        isNot(contains('Current: 26 / 1000')),
         reason: 'PageDown should advance by the visible page',
       );
       await press('End');
-      expect(fixture.host.textContent, contains('selected: 1000 / 1000'));
+      expect(fixture.host.textContent, contains('Current: 1000 / 1000'));
       expect(
         fixture.host.querySelector('.fleury-screen')?.textContent,
         contains('Task 1000'),
-        reason: 'the viewport must follow the selected row',
+        reason: 'the viewport must follow the current row',
       );
       await press('Enter', code: 'Enter');
-      expect(fixture.host.textContent, contains('last: Opened task 1000'));
+      expect(fixture.host.textContent, contains('Selected: Task 1000'));
       await press('Home');
-      expect(fixture.host.textContent, contains('selected: 1 / 1000'));
+      expect(fixture.host.textContent, contains('Current: 1 / 1000'));
     },
   );
 

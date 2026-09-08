@@ -104,7 +104,7 @@ final class _WireResizeStormAppState extends State<_WireResizeStormApp> {
       if (event is! ResizeEvent) return;
       setState(() {
         _resizeCount++;
-        _tableController.selectedIndex = _tableController.selectedIndex + 1;
+        _tableController.currentRowIndex = _tableController.currentRowIndex + 1;
       });
       if (_resizeCount >= widget.steps) _queueExitAfterFrame();
     });

@@ -277,12 +277,13 @@ final class MarkdownBlock {
   final int outputOriginalLength;
 }
 
-/// Controller for [MarkdownView] selection.
+/// Controller for [MarkdownView] browsing.
 class MarkdownViewController extends ChangeNotifier {
   MarkdownViewController({
     /// Zero-based block selected when the controller is created.
-    int selectedIndex = 0,
-  }) : _list = ListController(selectedIndex: selectedIndex) {
+    /// Initial browsing row. Null starts without a current row.
+    int? initialIndex = 0,
+  }) : _list = ListController(initialIndex: initialIndex) {
     _list.addListener(notifyListeners);
   }
 
@@ -291,10 +292,10 @@ class MarkdownViewController extends ChangeNotifier {
 
   ListController get _listController => _list;
 
-  int? get selectedIndex => _list.selectedIndex;
-  set selectedIndex(int? value) {
+  int? get currentIndex => _list.currentIndex;
+  set currentIndex(int? value) {
     _checkNotDisposed();
-    _list.selectedIndex = value;
+    _list.currentIndex = value;
   }
 
   ({int first, int last})? get visibleRange => _list.visibleRange;
@@ -574,9 +575,9 @@ String exportMarkdownSelection(
   MarkdownViewCopyOptions options = const MarkdownViewCopyOptions(),
 }) {
   if (document.blocks.isEmpty) return '';
-  final selectedIndex = blockIndex.clamp(0, document.blocks.length - 1);
+  final currentIndex = blockIndex.clamp(0, document.blocks.length - 1);
   return switch (options.mode) {
-    MarkdownViewCopyMode.block => document.blocks[selectedIndex].sourceText,
+    MarkdownViewCopyMode.block => document.blocks[currentIndex].sourceText,
     MarkdownViewCopyMode.document => document.source,
   };
 }
@@ -720,7 +721,7 @@ class _MarkdownViewState extends State<MarkdownView> {
   MarkdownBlock? _selectedBlock() {
     final blocks = widget.document.blocks;
     if (blocks.isEmpty) return null;
-    final selected = (_controller.selectedIndex ?? 0).clamp(
+    final selected = (_controller.currentIndex ?? 0).clamp(
       0,
       blocks.length - 1,
     );
@@ -730,13 +731,13 @@ class _MarkdownViewState extends State<MarkdownView> {
   Future<void> _copySelection() async {
     final blocks = widget.document.blocks;
     if (!widget.copySelection || blocks.isEmpty) return;
-    final selectedIndex = (_controller.selectedIndex ?? 0).clamp(
+    final currentIndex = (_controller.currentIndex ?? 0).clamp(
       0,
       blocks.length - 1,
     );
     final text = exportMarkdownSelection(
       widget.document,
-      blockIndex: selectedIndex,
+      blockIndex: currentIndex,
       options: widget.copyOptions,
     );
     final report = await ClipboardScope.of(
@@ -745,8 +746,8 @@ class _MarkdownViewState extends State<MarkdownView> {
     if (!mounted) return;
     widget.onCopy?.call(
       MarkdownViewCopyResult(
-        blockIndex: selectedIndex,
-        block: blocks[selectedIndex],
+        blockIndex: currentIndex,
+        block: blocks[currentIndex],
         text: text,
         report: report,
       ),
@@ -757,7 +758,7 @@ class _MarkdownViewState extends State<MarkdownView> {
     final blocks = widget.document.blocks;
     if (index < 0 || index >= blocks.length) return;
     _focusNode.requestFocus();
-    _controller.selectedIndex = index;
+    _controller.currentIndex = index;
     await _copySelection();
   }
 
@@ -765,7 +766,7 @@ class _MarkdownViewState extends State<MarkdownView> {
     final blocks = widget.document.blocks;
     if (index < 0 || index >= blocks.length) return;
     _focusNode.requestFocus();
-    _controller.selectedIndex = index;
+    _controller.currentIndex = index;
   }
 
   Future<void> _handleMarkdownAction(SemanticAction action) async {
@@ -797,7 +798,7 @@ class _MarkdownViewState extends State<MarkdownView> {
             autofocus: widget.autofocus,
             itemCount: blocks.length,
             itemBuilder: (context, index, activeSelected) {
-              final selected = index == _controller.selectedIndex;
+              final selected = index == _controller.currentIndex;
               return _MarkdownBlockWidget(
                 block: blocks[index],
                 selected: selected,
@@ -851,8 +852,8 @@ class _MarkdownViewState extends State<MarkdownView> {
             'visibleRangeStart': visibleRange.first,
             'visibleRangeEnd': visibleRange.last,
           },
-          if (_controller.selectedIndex != null)
-            'selectedIndex': _controller.selectedIndex,
+          if (_controller.currentIndex != null)
+            'currentIndex': _controller.currentIndex,
           if (selected != null) ...{
             'selectedKey': selected.index,
             'selectedMarkdownBlockKind': selected.kind.name,

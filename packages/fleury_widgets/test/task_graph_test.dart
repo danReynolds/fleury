@@ -38,12 +38,12 @@ void main() {
   group('TaskGraph', () {
     group('controller lifecycle', () {
       test('dispose is idempotent and keeps final readable state', () {
-        final controller = TaskGraphController(selectedIndex: 2);
+        final controller = TaskGraphController(initialIndex: 2);
 
         controller.dispose();
         controller.dispose();
 
-        expect(controller.selectedIndex, 2);
+        expect(controller.currentIndex, 2);
         expect(controller.visibleRange, isNull);
       });
 
@@ -51,7 +51,7 @@ void main() {
         final controller = TaskGraphController()..dispose();
 
         const message = 'TaskGraphController has been disposed.';
-        expect(() => controller.selectedIndex = 1, _stateError(message));
+        expect(() => controller.currentIndex = 1, _stateError(message));
         expect(() => controller.jumpToIndex(1), _stateError(message));
       });
     });
@@ -78,7 +78,7 @@ void main() {
     });
 
     testWidgets('renders sanitized tasks with graph semantics', (tester) {
-      final controller = TaskGraphController(selectedIndex: 1);
+      final controller = TaskGraphController(initialIndex: 1);
       tester.pumpWidget(
         TaskGraph(
           semanticLabel: 'Release plan',
@@ -130,7 +130,7 @@ void main() {
     testWidgets('semantic copy copies selected task', (tester) async {
       TaskGraphCopyResult? copied;
       try {
-        final controller = TaskGraphController(selectedIndex: 1);
+        final controller = TaskGraphController(initialIndex: 1);
         tester.pumpWidget(
           TaskGraph(
             controller: controller,
@@ -163,7 +163,7 @@ void main() {
     testWidgets('semantic focus and activation focus the task graph', (
       tester,
     ) async {
-      final controller = TaskGraphController(selectedIndex: 0);
+      final controller = TaskGraphController(initialIndex: 0);
       tester.pumpWidget(
         TaskGraph(
           semanticLabel: 'Release plan',
@@ -194,7 +194,7 @@ void main() {
       expect(graph.state.selectedTaskId, 'plan');
 
       await tester.target(role: SemanticRole.task, label: 'Run checks').press();
-      expect(controller.selectedIndex, 1);
+      expect(controller.currentIndex, 1);
 
       tester.render(size: const CellSize(80, 6));
       final task = tester.semantics().single(
@@ -211,11 +211,11 @@ void main() {
         focused: true,
       );
       expect(graph.state.selectedTaskId, 'run');
-      expect(graph.state['selectedIndex'], 1);
+      expect(graph.state['currentIndex'], 1);
     });
 
     testWidgets('semantic activate selects a task node', (tester) async {
-      final controller = TaskGraphController(selectedIndex: 0);
+      final controller = TaskGraphController(initialIndex: 0);
       tester.pumpWidget(
         TaskGraph(
           semanticLabel: 'Release plan',
@@ -234,7 +234,7 @@ void main() {
 
       await tester.target(role: SemanticRole.task, label: 'Run checks').press();
 
-      expect(controller.selectedIndex, 1);
+      expect(controller.currentIndex, 1);
 
       tester.render(size: const CellSize(80, 6));
       task = tester.semantics().single(
@@ -255,7 +255,7 @@ void main() {
     testWidgets('preserves selected task identity across node refresh', (
       tester,
     ) {
-      final controller = TaskGraphController(selectedIndex: 2);
+      final controller = TaskGraphController(initialIndex: 2);
       tester.pumpWidget(
         TaskGraph(
           semanticLabel: 'Release plan',
@@ -302,7 +302,7 @@ void main() {
       tester.pump();
       tester.render(size: const CellSize(80, 7));
 
-      expect(controller.selectedIndex, 3);
+      expect(controller.currentIndex, 3);
       final graph = tester.semantics().single(
         role: WidgetRoles.taskGraph,
         label: 'Release plan',

@@ -50,9 +50,9 @@ class _CounterState extends State<Counter> {
 }
 ```
 
-## setState — the one rule
+## Rebuild after changing state
 
-To change what's on screen, mutate your state inside **`setState`**:
+When a field in your `State` changes, use **`setState`** to rebuild its widget:
 
 ```dart
 setState(() => _count++);
@@ -64,8 +64,52 @@ layout and paint work that change requires, and diffs the new cell grid against
 the old. The terminal presenter writes only cells that actually changed; when
 the runtime has no frame work, it skips build, layout, paint, and presentation.
 
-The rule is simply: **any state your `build` reads, you must change inside
-`setState`.** Mutating a field without it leaves the screen stale.
+For fields owned by your `State`, use `setState` to schedule the rebuild.
+Controllers and other listenables notify their listeners themselves; use a
+`ListenableBuilder` when your surrounding UI reads their state.
+
+## Who owns a control's value?
+
+With `value` and `onChanged`, your state owns the value. The control asks for a
+change, and you supply the updated value:
+
+```dart
+Checkbox(
+  label: 'Contain arrows',
+  value: contain,
+  onChanged: (value) => setState(() => contain = value),
+)
+```
+
+Try that checkbox in the [scroll-edge demo](/fleury/guides/lists-and-scrolling/#see-what-happens-at-an-edge).
+The same `contain` field controls both its checkmark and the pane's edge behavior.
+
+A controller holds live state that both your code and the widget can change.
+Create it once in `State` and dispose it with that state:
+
+```dart
+final list = ListController(initialIndex: 24);
+
+@override
+void dispose() {
+  list.dispose();
+  super.dispose();
+}
+```
+
+The [task browser](/fleury/guides/lists-and-scrolling/#scroll-a-large-list)
+starts at task 25. Arrow keys and the **Go to 25** button update the same
+`list.currentIndex`; ordinary rebuilds preserve it.
+
+An `initial*` widget argument seeds internal state once. For example,
+`NumberInput(initialValue: 42)` keeps the user's edits when its parent rebuilds.
+Use a controller for later programmatic changes, or a new key for a deliberate
+reset. Supply a seed or a controller for the same value, not both.
+
+Input `onChanged` callbacks report user and semantic edits. Programmatic
+controller writes notify controller listeners, so updating a model does not
+echo through an input callback. Replacing a controller adopts the new one's
+state; omitting it creates fresh internally owned state.
 
 ## The State lifecycle
 

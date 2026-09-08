@@ -2,6 +2,45 @@
 
 ## 0.1.0
 
+- Navigation controllers use one-time constructor seeds: `ListController(initialIndex:)`
+  and `ScrollController(initialOffset:)`. Their live `currentIndex` and `offset`
+  properties remain mutable. Each viewport controller accepts one active owning
+  view and releases it on deactivation, including replacement and GlobalKey moves.
+- TextInput and TextArea `onChanged` now report user and semantic edits only.
+  Programmatic controller writes still update views, form state, and controller
+  listeners. Observe the controller for changes from every origin. Shared text
+  controllers emit the interaction callback only on the field that was edited.
+- Completion and history browsing expose `currentIndex`; completion also uses
+  `currentOption`, `focusOption`, and `moveCurrent`. Accepting a suggestion remains
+  a separate operation from browsing to it. Semantic completion state exposes
+  `completionCurrentIndex` in place of `completionSelectedIndex`.
+
+- **List scrolling and navigation.** Wheel, scrollbar, and `jumpToIndex` move the
+  viewport without moving the cursor; jumps survive rebuilds. Keyboard navigation
+  reveals the current item. Oversized rows can scroll within an item.
+  `ListController` now exposes `scrollBy`, fractional scrollbar metrics, and
+  post-frame viewport notifications; `ScrollController` also notifies after its
+  layout metrics change.
+- **Following output.** Use `followTail` for the enabled policy and `isFollowing`
+  for its current state. Leaving the end pauses following; returning resumes it
+  only when enabled. Following appends preserve the current item. `pinToBottom`
+  is deprecated, and `jumpToBottom` no longer enables following on ordinary lists.
+- **List interaction.** Primary down moves the cursor and focuses the list;
+  a completed click or Enter selects the item. Dragging away, cancellation, or
+  removing the keyed item cancels the choice. Replace `ListView.onActivate` with
+  `onSelect`, `onSelectionChanged` with `onFocusedItemChanged`, and
+  `ListController.selectedIndex` with `currentIndex`. Browsing reports a changed
+  current item; repeated choices still call `onSelect`. Controller writes and
+  scrolling do not emit either callback. An explicit null initial cursor is
+  honored; `selectable: false` leaves interaction to child controls. The builder's
+  `highlighted` boolean always marks the current item, including while keyboard
+  focus is elsewhere; `selectionActive` / `highlightCurrentItem` are removed.
+- **Keyed lists.** Supply only `itemKeyBuilder`; `findChildIndexCallback` and
+  `ListItemIndexCallback` are removed. ListView builds and validates the reverse
+  map once per widget configuration in O(itemCount) time and space, including
+  offscreen keys. Row widgets still mount lazily. `ListController(initialIndex:
+  n)` reveals its initial item without firing callbacks or taking focus.
+
 - **`Scope<T>` replaces `InheritedWidget` and `InheritedNotifier`.** One
   tree-local state primitive: `Scope(value: model, child: ...)` shares an
   object its owner keeps, `Scope<T>.create(create: ..., dispose: ...)` lets the
@@ -37,6 +76,7 @@
   before attachment, preserving the original owner and allowing safe retries.
 - **Remote startup.** Teardown resolves pending handshakes, overlapping startup
   calls are rejected, and peer failures cannot reactivate a closing session.
+
 
 - **Pointer input and selection.** TextInput and TextArea support click-to-caret,
   drag selection, Shift-click, and word/line selection. TextInput fills bounded

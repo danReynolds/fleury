@@ -20,8 +20,8 @@ DataTable _table(DataTableController controller, int rows, int columns) =>
 ) => (
   rows: controller.rowCount,
   columns: controller.columnCount,
-  row: controller.selectedIndex,
-  column: controller.selectedColumnIndex,
+  row: controller.currentRowIndex,
+  column: controller.currentColumnIndex,
 );
 
 void main() {
@@ -29,8 +29,8 @@ void main() {
     tester,
   ) {
     final controller = DataTableController(
-      selectedIndex: 4,
-      selectedColumnIndex: 2,
+      initialRowIndex: 4,
+      initialColumnIndex: 2,
     );
     final observed = <Object>[];
     controller.addListener(() => observed.add(_snapshot(controller)));
@@ -44,8 +44,8 @@ void main() {
     tester,
   ) {
     final controller = DataTableController(
-      selectedIndex: 4,
-      selectedColumnIndex: 2,
+      initialRowIndex: 4,
+      initialColumnIndex: 2,
     );
     var data = List.generate(5, (_) => ['a', 'b', 'c']);
     Widget table() => DataTable(
@@ -60,7 +60,7 @@ void main() {
     controller.addListener(() {
       observedStates.add(_snapshot(controller));
       observedCells.add(
-        data[controller.selectedIndex][controller.selectedColumnIndex],
+        data[controller.currentRowIndex][controller.currentColumnIndex],
       );
     });
 
@@ -77,8 +77,8 @@ void main() {
     final oldController = DataTableController();
     tester.pumpWidget(_table(oldController, 5, 3));
     final controller = DataTableController(
-      selectedIndex: 4,
-      selectedColumnIndex: 2,
+      initialRowIndex: 4,
+      initialColumnIndex: 2,
     );
     final observed = <Object>[];
     controller.addListener(() => observed.add(_snapshot(controller)));
@@ -130,8 +130,8 @@ void main() {
 
   testWidgets('empty data clears the stored range before regrowth', (tester) {
     final controller = DataTableController(
-      selectedIndex: 7,
-      selectedColumnIndex: 4,
+      initialRowIndex: 7,
+      initialColumnIndex: 4,
     );
     tester.pumpWidget(_table(controller, 8, 5));
     final observed = <Object>[];
@@ -152,14 +152,14 @@ void main() {
     tester,
   ) {
     final controller = DataTableController(
-      selectedIndex: 7,
-      selectedColumnIndex: 4,
+      initialRowIndex: 7,
+      initialColumnIndex: 4,
     );
     tester.pumpWidget(_table(controller, 8, 5));
     final observed = <Object>[];
     controller.addListener(() {
       observed.add(_snapshot(controller));
-      if (controller.selectedIndex == 2) controller.selectCell(1, 0);
+      if (controller.currentRowIndex == 2) controller.selectCell(1, 0);
     });
 
     tester.pumpWidget(_table(controller, 3, 2));

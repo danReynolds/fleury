@@ -26,31 +26,62 @@ final class FlexColumnWidth extends TableColumnWidth {
   final int flex;
 }
 
-/// Selected-row state for an interactive [Table]. Optional — the table
+/// Browsing cursor for an interactive [Table]. Optional — the table
 /// creates its own when none is supplied. `rowCount` is set by the widget
-/// on each build, so the selection stays clamped to the visible rows.
+/// on each build, so the cursor stays clamped to the available rows.
 class TableController extends ChangeNotifier {
-  TableController({int? selectedIndex}) : _selectedIndex = selectedIndex;
+  TableController({int? initialIndex = 0})
+    : _currentIndex = initialIndex,
+      _restoreCurrentWhenNonEmpty = initialIndex != null;
 
-  int? _selectedIndex;
+  int? _currentIndex;
   int _rowCount = 0;
+  bool _restoreCurrentWhenNonEmpty;
   bool _disposed = false;
+  Object? _owner;
 
-  /// Index of the highlighted body row, or null when nothing is
-  /// selected. Writes outside `0..rowCount-1` are clamped.
-  int? get selectedIndex => _selectedIndex;
-  set selectedIndex(int? value) {
+  void _attach(Object owner) {
     _checkNotDisposed();
+    if (_owner != null && !identical(_owner, owner)) {
+      throw StateError(
+        'TableController can attach to only one owning view at a time.',
+      );
+    }
+    _owner = owner;
+  }
+
+  void _detach(Object owner) {
+    if (identical(_owner, owner)) _owner = null;
+  }
+
+  /// Index of the current body row, or null when no row is current.
+  /// Writes outside `0..rowCount-1` are clamped while attached.
+  int? get currentIndex => _currentIndex;
+  set currentIndex(int? value) {
+    _checkNotDisposed();
+    _restoreCurrentWhenNonEmpty = value != null;
     final clamped = _clamp(value);
-    if (_selectedIndex == clamped) return;
-    _selectedIndex = clamped;
+    if (_currentIndex == clamped) return;
+    _currentIndex = clamped;
     notifyListeners();
   }
 
   int? _clamp(int? value) {
     if (value == null) return null;
-    if (_rowCount == 0) return value;
+    if (_owner == null) return value;
+    if (_rowCount == 0) return null;
     return value.clamp(0, _rowCount - 1);
+  }
+
+  void _setRowCount(int count) {
+    _checkNotDisposed();
+    _rowCount = count;
+    final next = count == 0
+        ? null
+        : _clamp(_currentIndex ?? (_restoreCurrentWhenNonEmpty ? 0 : null));
+    if (next == _currentIndex) return;
+    _currentIndex = next;
+    notifyListeners();
   }
 
   void _checkNotDisposed() {
@@ -204,14 +235,10 @@ class _TableState extends State<Table> {
   }
 
   void _attachInteractive() {
-    _controller = widget.controller ?? TableController(selectedIndex: 0);
+    _controller = widget.controller ?? TableController(initialIndex: 0);
     _ownsController = widget.controller == null;
-    _controller!._rowCount = widget.rows.length;
-    if (_controller!._selectedIndex == null && widget.rows.isNotEmpty) {
-      _controller!._selectedIndex = 0;
-    } else {
-      _controller!.selectedIndex = _controller!._selectedIndex;
-    }
+    _controller!._attach(this);
+    _controller!._setRowCount(widget.rows.length);
     _controller!.addListener(_onChange);
     _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'Table');
     _ownsFocusNode = widget.focusNode == null;
@@ -219,6 +246,7 @@ class _TableState extends State<Table> {
 
   void _detachInteractive() {
     _controller?.removeListener(_onChange);
+    _controller?._detach(this);
     if (_ownsController) _controller?.dispose();
     if (_ownsFocusNode) _focusNode?.dispose();
     _controller = null;
@@ -240,9 +268,11 @@ class _TableState extends State<Table> {
     }
     if (widget.controller != oldWidget.controller) {
       _controller!.removeListener(_onChange);
+      _controller?._detach(this);
       if (_ownsController) _controller!.dispose();
-      _controller = widget.controller ?? TableController(selectedIndex: 0);
+      _controller = widget.controller ?? TableController(initialIndex: 0);
       _ownsController = widget.controller == null;
+      _controller!._attach(this);
       _controller!.addListener(_onChange);
     }
     if (widget.focusNode != oldWidget.focusNode) {
@@ -250,8 +280,7 @@ class _TableState extends State<Table> {
       _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'Table');
       _ownsFocusNode = widget.focusNode == null;
     }
-    _controller!._rowCount = widget.rows.length;
-    _controller!.selectedIndex = _controller!._selectedIndex;
+    _controller!._setRowCount(widget.rows.length);
   }
 
   void _onChange() => setState(() {});
@@ -259,6 +288,20 @@ class _TableState extends State<Table> {
   void _onFocusDetectorChange(bool focused) {
     if (!_interactive) return;
     setState(() {});
+  }
+
+  @override
+  void deactivate() {
+    _controller?.removeListener(_onChange);
+    _controller?._detach(this);
+    super.deactivate();
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    _controller?._attach(this);
+    _controller?.addListener(_onChange);
   }
 
   @override
@@ -275,43 +318,37 @@ class _TableState extends State<Table> {
     final controller = _controller;
     final count = widget.rows.length;
     if (controller == null || count == 0) return;
-    final selected = controller.selectedIndex ?? 0;
+    final selected = controller.currentIndex ?? 0;
     final next = (selected + delta).clamp(0, count - 1);
-    if (next != selected) controller.selectedIndex = next;
+    if (next != selected) controller.currentIndex = next;
   }
 
   KeyEventResult _onKey(KeyEvent event) {
     final controller = _controller;
     final count = widget.rows.length;
     if (controller == null || count == 0) return KeyEventResult.ignored;
-    final selected = controller.selectedIndex;
+    final selected = controller.currentIndex;
     if (selected == null) return KeyEventResult.ignored;
     switch (event.code) {
       case KeyCode.arrowUp:
         if (selected <= 0) return KeyEventResult.handled;
-        controller.selectedIndex = selected - 1;
+        controller.currentIndex = selected - 1;
         return KeyEventResult.handled;
       case KeyCode.arrowDown:
         if (selected >= count - 1) return KeyEventResult.handled;
-        controller.selectedIndex = selected + 1;
+        controller.currentIndex = selected + 1;
         return KeyEventResult.handled;
       case KeyCode.pageUp:
-        controller.selectedIndex = (selected - _visibleRows).clamp(
-          0,
-          count - 1,
-        );
+        controller.currentIndex = (selected - _visibleRows).clamp(0, count - 1);
         return KeyEventResult.handled;
       case KeyCode.pageDown:
-        controller.selectedIndex = (selected + _visibleRows).clamp(
-          0,
-          count - 1,
-        );
+        controller.currentIndex = (selected + _visibleRows).clamp(0, count - 1);
         return KeyEventResult.handled;
       case KeyCode.home:
-        controller.selectedIndex = 0;
+        controller.currentIndex = 0;
         return KeyEventResult.handled;
       case KeyCode.end:
-        controller.selectedIndex = count - 1;
+        controller.currentIndex = count - 1;
         return KeyEventResult.handled;
       case KeyCode.enter:
         widget.onSelect?.call(selected);
@@ -357,7 +394,7 @@ class _TableState extends State<Table> {
             fittedRows[row][col],
             rowIndex: row,
             columnIndex: col,
-            selected: _interactive && _controller?.selectedIndex == row,
+            selected: _interactive && _controller?.currentIndex == row,
           ),
     ];
     final selectedStyle = (_focusNode?.hasFocus ?? false)
@@ -370,7 +407,7 @@ class _TableState extends State<Table> {
       hasHeader: widget.header != null,
       headerSeparator: widget.header != null && widget.headerSeparator,
       separatorStyle: widget.separatorStyle,
-      selectedRow: _interactive ? _controller?.selectedIndex : null,
+      selectedRow: _interactive ? _controller?.currentIndex : null,
       selectedStyle: selectedStyle,
       onVisibleRange: (first, count) {
         _visibleFirst = first;
@@ -378,15 +415,15 @@ class _TableState extends State<Table> {
       },
       children: cells,
     );
-    final selectedIndex = _controller?.selectedIndex;
+    final currentIndex = _controller?.currentIndex;
     final visibleEnd = _visibleEnd();
     final state = <String, Object?>{
       'collectionRowCount': widget.rows.length,
       'collectionColumnCount': c,
       'hasHeader': widget.header != null,
     };
-    if (selectedIndex != null) {
-      state['selectedKey'] = selectedIndex;
+    if (currentIndex != null) {
+      state['selectedKey'] = currentIndex;
     }
     if (_interactive) {
       state['visibleRangeStart'] = _visibleFirst;
@@ -398,7 +435,7 @@ class _TableState extends State<Table> {
     final table = Semantics(
       role: SemanticRole.table,
       label: widget.semanticLabel,
-      value: selectedIndex,
+      value: currentIndex,
       focused: _focusNode?.hasFocus ?? false,
       actions: _interactive
           ? <SemanticAction>{
@@ -461,7 +498,7 @@ class _TableState extends State<Table> {
         _focusNode?.requestFocus();
         return;
       case SemanticAction.activate:
-        final selected = _controller?.selectedIndex;
+        final selected = _controller?.currentIndex;
         if (selected != null) widget.onSelect?.call(selected);
         return;
       case _:
@@ -475,11 +512,11 @@ class _TableState extends State<Table> {
       case SemanticAction.focus:
       case SemanticAction.select:
         _focusNode?.requestFocus();
-        _controller?.selectedIndex = rowIndex;
+        _controller?.currentIndex = rowIndex;
         return;
       case SemanticAction.activate:
         _focusNode?.requestFocus();
-        _controller?.selectedIndex = rowIndex;
+        _controller?.currentIndex = rowIndex;
         widget.onSelect?.call(rowIndex);
         return;
       case _:

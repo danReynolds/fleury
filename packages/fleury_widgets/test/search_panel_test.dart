@@ -184,7 +184,9 @@ void main() {
     expect(output, contains('> Deploy production'));
   });
 
-  testWidgets('dims retained selection when focus leaves the panel', (tester) {
+  testWidgets('keeps the current row marked when focus leaves the panel', (
+    tester,
+  ) {
     final outside = FocusNode(debugLabel: 'outside');
     tester.pumpWidget(
       Row(
@@ -205,7 +207,8 @@ void main() {
     outside.requestFocus();
     tester.pump();
     output = tester.renderToString(size: const CellSize(80, 8), emptyMark: ' ');
-    expect(output, isNot(contains('> Build local package')));
+    expect(outside.hasFocus, isTrue);
+    expect(output, contains('> Build local package'));
     expect(output, contains('Build local package'));
 
     final row = tester.semantics().single(
@@ -338,7 +341,7 @@ void main() {
     expect(
       fallback.states,
       contains(
-        'search 3 results, 2 filtered, selected index 0, '
+        'search 3 results, 2 filtered, current index 0, '
         'selected category Runbook, selected source ops',
       ),
     );
@@ -428,6 +431,6 @@ void main() {
     expect(tester.exists(text('No matching results')), isTrue);
     final panel = tester.semantics().single(role: SemanticRole.region);
     expect(panel.state.collectionRowCount, 0);
-    expect(panel.state['selectedIndex'], isNull);
+    expect(panel.state['currentIndex'], isNull);
   });
 }

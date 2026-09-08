@@ -944,7 +944,7 @@ void main() {
           TextCompletionOption(label: 'checkout'),
           TextCompletionOption(label: 'cherry-pick'),
         ],
-        selectedIndex: 1,
+        currentIndex: 1,
       );
     tester.pumpWidget(
       TextInput(
@@ -961,7 +961,7 @@ void main() {
     expect(field.state.completionRangeStart, 4);
     expect(field.state.completionRangeEnd, 7);
     expect(field.state.completionOptionCount, 2);
-    expect(field.state.completionSelectedIndex, 1);
+    expect(field.state.completionCurrentIndex, 1);
   });
 
   testWidgets('TextInput exposes paste progress state', (tester) {

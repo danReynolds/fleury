@@ -610,8 +610,9 @@ final class SemanticState {
   String? get sortDirection => _string('sortDirection');
   String? get filterText => _string('filterText');
   String? get selectionMode => _string('selectionMode');
-  int? get selectedColumnIndex => _int('selectedColumnIndex');
-  String? get selectedColumnId => _string('selectedColumnId');
+  int? get currentRowIndex => _int('currentRowIndex');
+  int? get currentColumnIndex => _int('currentColumnIndex');
+  String? get currentColumnId => _string('currentColumnId');
   int? get selectionStartRow => _int('selectionStartRow');
   int? get selectionEndRow => _int('selectionEndRow');
   int? get selectionStartColumn => _int('selectionStartColumn');
@@ -643,7 +644,7 @@ final class SemanticState {
   int? get completionRangeStart => _int('completionRangeStart');
   int? get completionRangeEnd => _int('completionRangeEnd');
   int? get completionOptionCount => _int('completionOptionCount');
-  int? get completionSelectedIndex => _int('completionSelectedIndex');
+  int? get completionCurrentIndex => _int('completionCurrentIndex');
   bool? get pasteInProgress => _bool('pasteInProgress');
   int? get pasteInsertedLength => _int('pasteInsertedLength');
   int? get pasteTotalLength => _int('pasteTotalLength');

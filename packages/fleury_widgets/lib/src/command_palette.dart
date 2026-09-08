@@ -352,13 +352,13 @@ class _CommandPaletteView extends StatefulWidget {
 class _CommandPaletteState extends State<_CommandPaletteView> {
   final _query = TextEditingController();
   final _queryFocus = FocusNode(debugLabel: 'command-palette-query');
-  final _list = ListController(selectedIndex: 0);
+  final _list = ListController(initialIndex: 0);
   late List<_CommandEntry> _entries = _buildCommandEntries(widget.commands);
   late List<_CommandEntry> _filtered = _entries;
   int? _pendingSelectedIndex;
   int _selectionRefreshGeneration = 0;
 
-  int? get _selectedIndex => _pendingSelectedIndex ?? _list.selectedIndex;
+  int? get _selectedIndex => _pendingSelectedIndex ?? _list.currentIndex;
 
   @override
   void initState() {
@@ -396,7 +396,7 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
     if (nextIndex == null ||
         knownItemCount == 0 ||
         nextIndex < knownItemCount) {
-      _list.selectedIndex = nextIndex;
+      _list.currentIndex = nextIndex;
       return;
     }
 
@@ -412,7 +412,7 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
       if (pending == null) return;
       setState(() {
         _pendingSelectedIndex = null;
-        _list.selectedIndex = pending;
+        _list.currentIndex = pending;
       });
     }
 
@@ -429,7 +429,7 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
       _selectionRefreshGeneration++;
       _pendingSelectedIndex = null;
       _filtered = _match(_entries, _query.text);
-      _list.selectedIndex = _filtered.isEmpty ? null : 0;
+      _list.currentIndex = _filtered.isEmpty ? null : 0;
     });
   }
 
@@ -442,7 +442,7 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
       _pendingSelectedIndex = null;
       // Wrap top↔bottom like fzf / VS Code / Textual — after filtering the
       // list is short, so cycling beats stopping dead at an end.
-      _list.selectedIndex = ((current + delta) % n + n) % n;
+      _list.currentIndex = ((current + delta) % n + n) % n;
     });
   }
 
@@ -572,7 +572,7 @@ class _CommandPaletteState extends State<_CommandPaletteView> {
                           )
                         : ListView.builder(
                             controller: _list,
-                            selectionActive: true,
+
                             itemCount: _filtered.length,
                             itemBuilder: (context, index, _) => _CommandRow(
                               command: _filtered[index].command,

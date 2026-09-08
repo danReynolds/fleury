@@ -205,7 +205,7 @@ class ListViewSelectionChangeBenchmark extends BenchmarkBase {
 
   @override
   void run() {
-    controller.selectedIndex = _next;
+    controller.currentIndex = _next;
     _next = (_next + 1) % 1000;
     buffer.clear();
     owner.renderFrame(root, buffer);

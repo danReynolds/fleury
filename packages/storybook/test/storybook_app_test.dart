@@ -435,8 +435,8 @@ void main() {
       emptyMark: ' ',
     );
     expect(output, contains('ListView'));
-    expect(output, isNot(contains('> ListView  Core')));
-    expect(output, contains('  ListView  Core'));
+    // The selector remembers its current row after focus enters the preview.
+    expect(output, contains('> ListView  Core'));
     expect(output, contains('> Lazy row 2'));
   });
 

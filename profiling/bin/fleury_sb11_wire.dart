@@ -107,7 +107,7 @@ final class _WireTreeTableAppState extends State<_WireTreeTableApp> {
       cellBuilder: _cell,
     );
     _controller = TreeTableController(
-      selectedIndex: 1,
+      initialIndex: 1,
       expandedKeys: {_fixture.groupKey(0)},
     );
     _focusNode = FocusNode(debugLabel: 'SB.11 wire tree table');
@@ -134,24 +134,24 @@ final class _WireTreeTableAppState extends State<_WireTreeTableApp> {
       switch (_step % 6) {
         case 0:
           _controller.expand(_fixture.groupKey(1));
-          _controller.selectedIndex = _fixture.groupSize + 1;
+          _controller.currentIndex = _fixture.groupSize + 1;
         case 1:
           _moveSelection(20);
         case 2:
-          _controller.selectedIndex = _visibleRows().length - 1;
+          _controller.currentIndex = _visibleRows().length - 1;
         case 3:
           _filter = TreeTableFilterDescriptor(
             query: _fixture.targetQuery,
             mode: TreeTableFilterMode.exactToken,
           );
-          _controller.selectedIndex = 1;
+          _controller.currentIndex = 1;
         case 4:
           _copySelectedRow();
         case 5:
           _filter = null;
           _controller.collapseAll();
           _controller.expand(_fixture.groupKey(0));
-          _controller.selectedIndex = 1;
+          _controller.currentIndex = 1;
       }
       _step++;
     });
@@ -165,14 +165,14 @@ final class _WireTreeTableAppState extends State<_WireTreeTableApp> {
   void _moveSelection(int delta) {
     final rows = _visibleRows();
     if (rows.isEmpty) return;
-    final selected = (_controller.selectedIndex ?? 0) + delta;
-    _controller.selectedIndex = selected.clamp(0, rows.length - 1);
+    final selected = (_controller.currentIndex ?? 0) + delta;
+    _controller.currentIndex = selected.clamp(0, rows.length - 1);
   }
 
   void _copySelectedRow() {
     final rows = _visibleRows();
     if (rows.isEmpty) return;
-    final selected = (_controller.selectedIndex ?? 0).clamp(0, rows.length - 1);
+    final selected = (_controller.currentIndex ?? 0).clamp(0, rows.length - 1);
     final export = exportTreeTableRows<int>(
       rows: rows,
       columns: _treeColumns,

@@ -22,6 +22,21 @@ class TabController extends ChangeNotifier {
   int _index;
   int _length = 0;
   bool _disposed = false;
+  Object? _owner;
+
+  void _attach(Object owner) {
+    _checkNotDisposed();
+    if (_owner != null && !identical(_owner, owner)) {
+      throw StateError(
+        'TabController can attach to only one owning view at a time.',
+      );
+    }
+    _owner = owner;
+  }
+
+  void _detach(Object owner) {
+    if (identical(_owner, owner)) _owner = null;
+  }
 
   /// Zero-based index of the selected tab, or the pending selection while no
   /// tabs are attached.
@@ -32,8 +47,11 @@ class TabController extends ChangeNotifier {
 
   set index(int value) {
     _checkNotDisposed();
-    if (_length == 0) {
-      _index = value < 0 ? 0 : value;
+    if (_owner == null || _length == 0) {
+      final next = value < 0 ? 0 : value;
+      if (_index == next) return;
+      _index = next;
+      notifyListeners();
       return;
     }
     final clamped = value.clamp(0, _length - 1);
@@ -130,14 +148,15 @@ class _TabsState extends State<Tabs> {
   @override
   void initState() {
     super.initState();
+    _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'Tabs');
+    _ownsFocusNode = widget.focusNode == null;
     _controller = widget.controller ?? TabController();
     _ownsController = widget.controller == null;
+    _controller._attach(this);
     _controller._length = widget.tabs.length;
     // Clamp a positive initialIndex now that the controller has a tab count.
     _controller.index = _controller.index;
     _controller.addListener(_onChange);
-    _focusNode = widget.focusNode ?? FocusNode(debugLabel: 'Tabs');
-    _ownsFocusNode = widget.focusNode == null;
   }
 
   @override
@@ -145,9 +164,11 @@ class _TabsState extends State<Tabs> {
     super.didUpdateWidget(oldWidget);
     if (widget.controller != oldWidget.controller) {
       _controller.removeListener(_onChange);
+      _controller._detach(this);
       if (_ownsController) _controller.dispose();
       _controller = widget.controller ?? TabController();
       _ownsController = widget.controller == null;
+      _controller._attach(this);
       _controller.addListener(_onChange);
     }
     if (widget.focusNode != oldWidget.focusNode) {
@@ -185,8 +206,23 @@ class _TabsState extends State<Tabs> {
   }
 
   @override
+  void deactivate() {
+    _controller.removeListener(_onChange);
+    _controller._detach(this);
+    super.deactivate();
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    _controller._attach(this);
+    _controller.addListener(_onChange);
+  }
+
+  @override
   void dispose() {
     _controller.removeListener(_onChange);
+    _controller._detach(this);
     if (_ownsController) _controller.dispose();
     if (_ownsFocusNode) _focusNode.dispose();
     super.dispose();

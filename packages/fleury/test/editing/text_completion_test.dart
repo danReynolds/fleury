@@ -33,8 +33,8 @@ void main() {
       expect(completions.isOpen, isTrue);
       expect(completions.state.query, 'che');
       expect(completions.state.range, const TextRange(start: 4, end: 7));
-      expect(completions.selectedIndex, 0);
-      expect(completions.selectedOption?.label, 'checkout');
+      expect(completions.currentIndex, 0);
+      expect(completions.currentOption?.label, 'checkout');
     });
 
     test('moves selection with wrapping', () {
@@ -47,14 +47,14 @@ void main() {
           ],
         );
 
-      completions.moveSelection(1);
-      expect(completions.selectedIndex, 1);
+      completions.moveCurrent(1);
+      expect(completions.currentIndex, 1);
 
-      completions.moveSelection(1);
-      expect(completions.selectedIndex, 0);
+      completions.moveCurrent(1);
+      expect(completions.currentIndex, 0);
 
-      completions.moveSelection(-1);
-      expect(completions.selectedIndex, 1);
+      completions.moveCurrent(-1);
+      expect(completions.currentIndex, 1);
     });
 
     test('accept applies selected replacement and closes', () {
@@ -85,7 +85,7 @@ void main() {
             TextCompletionOption(label: 'one'),
             TextCompletionOption(label: 'two'),
           ],
-          selectedIndex: 1,
+          currentIndex: 1,
         );
 
       completions.update(
@@ -94,8 +94,8 @@ void main() {
       );
 
       expect(completions.state.query, 't');
-      expect(completions.selectedIndex, 0);
-      expect(completions.selectedOption?.label, 'two');
+      expect(completions.currentIndex, 0);
+      expect(completions.currentOption?.label, 'two');
     });
 
     test('dispose is idempotent and clears transient completion state', () {
@@ -111,8 +111,8 @@ void main() {
 
       expect(completions.isOpen, isFalse);
       expect(completions.state.active, isFalse);
-      expect(completions.selectedIndex, isNull);
-      expect(completions.selectedOption, isNull);
+      expect(completions.currentIndex, isNull);
+      expect(completions.currentOption, isNull);
     });
 
     test('mutating after dispose throws a lifecycle error', () {
@@ -125,8 +125,8 @@ void main() {
       );
       expect(() => completions.update(query: 'x'), _stateError(message));
       expect(() => completions.close(), _stateError(message));
-      expect(() => completions.select(0), _stateError(message));
-      expect(() => completions.moveSelection(1), _stateError(message));
+      expect(() => completions.focusOption(0), _stateError(message));
+      expect(() => completions.moveCurrent(1), _stateError(message));
       expect(
         () => completions.accept(TextEditingValue(text: 'git che')),
         _stateError(message),

@@ -43,12 +43,12 @@ void main() {
   group('TraceTimeline', () {
     group('controller lifecycle', () {
       test('dispose is idempotent and keeps final readable state', () {
-        final controller = TraceTimelineController(selectedIndex: 2);
+        final controller = TraceTimelineController(initialIndex: 2);
 
         controller.dispose();
         controller.dispose();
 
-        expect(controller.selectedIndex, 2);
+        expect(controller.currentIndex, 2);
         expect(controller.visibleRange, isNull);
       });
 
@@ -56,7 +56,7 @@ void main() {
         final controller = TraceTimelineController()..dispose();
 
         const message = 'TraceTimelineController has been disposed.';
-        expect(() => controller.selectedIndex = 1, _stateError(message));
+        expect(() => controller.currentIndex = 1, _stateError(message));
         expect(() => controller.jumpToIndex(1), _stateError(message));
       });
     });
@@ -236,7 +236,7 @@ void main() {
       await tester
           .target(role: WidgetRoles.traceEvent, label: 'Capture diagnostics')
           .press();
-      expect(controller.selectedIndex, 2);
+      expect(controller.currentIndex, 2);
       expect(selected?.event.id, 'trace.diagnostics');
 
       tester.render(size: const CellSize(90, 5));
@@ -254,13 +254,13 @@ void main() {
         focused: true,
       );
       expect(timeline.state.selectedTraceId, 'trace.diagnostics');
-      expect(timeline.state['selectedIndex'], 2);
+      expect(timeline.state['currentIndex'], 2);
     });
 
     testWidgets('preserves selected trace identity across event refresh', (
       tester,
     ) {
-      final controller = TraceTimelineController(selectedIndex: 2);
+      final controller = TraceTimelineController(initialIndex: 2);
       tester.pumpWidget(
         TraceTimeline(
           label: 'Demo trace',
@@ -297,7 +297,7 @@ void main() {
       tester.pump();
       tester.render(size: const CellSize(90, 6));
 
-      expect(controller.selectedIndex, 3);
+      expect(controller.currentIndex, 3);
       final timeline = tester.semantics().single(
         role: WidgetRoles.traceTimeline,
         label: 'Demo trace',

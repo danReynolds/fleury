@@ -757,7 +757,7 @@ Future<_LogRegionJourneySample> _runLogRegionJourney(
         log.state.filterText == filterQuery &&
         log.actions.contains(SemanticAction.copy) &&
         log.state['filterActive'] == true &&
-        controller.selectedIndex == entries.length - 1 &&
+        controller.currentIndex == entries.length - 1 &&
         visibleEnd == entries.length - 1 &&
         visibleStart <= visibleEnd &&
         scrollbackVisibleStart <= scrollbackTarget &&
@@ -1143,7 +1143,7 @@ Future<_StreamingMarkdownJourneySample> _runStreamingMarkdownJourney(
     final selectedIndex = document.blocks.isEmpty
         ? 0
         : document.blocks.length - 1;
-    controller.selectedIndex = selectedIndex;
+    controller.currentIndex = selectedIndex;
     controller.jumpToIndex(selectedIndex);
     tester.pump();
     final finalRender = Stopwatch()..start();
@@ -3086,7 +3086,7 @@ Future<_TreeTableJourneySample> _runTreeTableJourney(
     );
 
     final expand = Stopwatch()..start();
-    controller.selectedIndex = initialRows.length;
+    controller.currentIndex = initialRows.length;
     tester.pump();
     tester.sendKey(const KeyEvent(KeyCode.arrowRight));
     tester.render(size: config.terminalSize);
@@ -3111,7 +3111,7 @@ Future<_TreeTableJourneySample> _runTreeTableJourney(
     final targetRow = config.rowCount - 1;
     final targetKey = fixture.leafKey(targetRow);
     final targetQuery = fixture.targetQuery;
-    final filterController = TreeTableController(selectedIndex: 1);
+    final filterController = TreeTableController(initialIndex: 1);
     final filter = Stopwatch()..start();
     tester.pumpWidget(
       _TreeTableHarness(

@@ -9,36 +9,36 @@ Matcher _stateError(String message) {
 
 void main() {
   group('ListController construction', () {
-    test('default has null selection and zero item count', () {
+    test('default selects the first item and has zero item count', () {
       final c = ListController();
-      expect(c.selectedIndex, isNull);
+      expect(c.currentIndex, 0);
       expect(c.itemCount, 0);
       expect(c.visibleRange, isNull);
     });
 
-    test('initial selectedIndex is kept as-is before widget mounts', () {
+    test('initial currentIndex is kept as-is before widget mounts', () {
       // Before a widget pushes itemCount, the controller can't clamp;
       // the initial value is stored verbatim.
-      final c = ListController(selectedIndex: 7);
-      expect(c.selectedIndex, 7);
+      final c = ListController(initialIndex: 7);
+      expect(c.currentIndex, 7);
     });
   });
 
-  group('selectedIndex setter', () {
+  group('currentIndex setter', () {
     test('notifies when value changes', () {
-      final c = ListController(selectedIndex: 0);
+      final c = ListController(initialIndex: 0);
       var fires = 0;
       c.addListener(() => fires += 1);
-      c.selectedIndex = 1;
-      expect(c.selectedIndex, 1);
+      c.currentIndex = 1;
+      expect(c.currentIndex, 1);
       expect(fires, 1);
     });
 
     test('no-op when set to the same value', () {
-      final c = ListController(selectedIndex: 3);
+      final c = ListController(initialIndex: 3);
       var fires = 0;
       c.addListener(() => fires += 1);
-      c.selectedIndex = 3;
+      c.currentIndex = 3;
       expect(fires, 0);
     });
   });
@@ -55,24 +55,24 @@ void main() {
 
   group('lifecycle', () {
     test('dispose is idempotent and keeps final readable state', () {
-      final c = ListController(selectedIndex: 3, pinToBottom: true);
+      final c = ListController(initialIndex: 3, followTail: true);
 
       c.dispose();
       c.dispose();
 
-      expect(c.selectedIndex, 3);
+      expect(c.currentIndex, 3);
       expect(c.itemCount, 0);
       expect(c.visibleRange, isNull);
-      expect(c.pinToBottom, isTrue);
+      expect(c.followTail, isTrue);
     });
 
     test('mutating after dispose throws a lifecycle error', () {
-      final c = ListController(selectedIndex: 1)..dispose();
+      final c = ListController(initialIndex: 1)..dispose();
 
       const message = 'ListController has been disposed.';
-      expect(() => c.selectedIndex = 2, _stateError(message));
+      expect(() => c.currentIndex = 2, _stateError(message));
       expect(() => c.jumpToIndex(2), _stateError(message));
-      expect(() => c.pinToBottom = true, _stateError(message));
+      expect(() => c.followTail = true, _stateError(message));
     });
   });
 }

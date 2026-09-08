@@ -194,7 +194,7 @@ void main() {
     testWidgets('Table visible selection updates reuse cached layout', (
       tester,
     ) {
-      final controller = TableController(selectedIndex: 0);
+      final controller = TableController(initialIndex: 0);
       tester.pumpWidget(
         SizedBox(
           width: 12,
@@ -214,7 +214,7 @@ void main() {
       );
       tester.render(size: const CellSize(12, 4));
 
-      controller.selectedIndex = 1;
+      controller.currentIndex = 1;
       tester.pump();
 
       _expectPaintOnlyStats(_renderStats(tester, const CellSize(12, 4)));
@@ -249,7 +249,7 @@ void main() {
       );
       tester.render(size: const CellSize(20, 6));
 
-      controller.selectedIndex = 1;
+      controller.currentRowIndex = 1;
       tester.pump();
 
       _expectPaintOnlyStats(_renderStats(tester, const CellSize(20, 6)));

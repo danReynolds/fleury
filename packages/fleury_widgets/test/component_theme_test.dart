@@ -675,7 +675,7 @@ void main() {
         ),
         child: MarkdownView(
           markdown: '# Title\n```dart\nfinal x = 1;\n```',
-          controller: MarkdownViewController(selectedIndex: 1),
+          controller: MarkdownViewController(initialIndex: 1),
         ),
       ),
     );

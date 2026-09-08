@@ -41,8 +41,9 @@ class Scrollbar extends StatefulWidget {
        _scrollTo = ((f) =>
            controller.offset = (controller.maxOffset * f).round());
 
-  /// Scrollbar for an item-scrolled [ListView]; the thumb reflects the
-  /// visible item range, and dragging jumps the viewport by item.
+  /// Scrollbar for a [ListView], including partial visibility within tall items.
+  /// Unmeasured items count equally, so geometry is approximate for mixed
+  /// heights. Dragging to either endpoint reaches the actual content edge.
   Scrollbar.list({
     super.key,
     required ListController controller,
@@ -51,23 +52,17 @@ class Scrollbar extends StatefulWidget {
     this.trackStyle = const CellStyle(dim: true),
     this.thumbStyle = CellStyle.none,
   }) : _metrics = (() {
-         final range = controller.visibleRange;
-         if (range == null) {
-           return (controller.itemCount, controller.itemCount, 0);
-         }
+         // Fixed precision keeps the bar independent of whether the viewport
+         // spans many short items or part of one tall item.
+         const units = 1000000;
+         final visible = (controller.visibleFraction * units).round();
          return (
-           controller.itemCount,
-           range.last - range.first + 1,
-           range.first,
+           units,
+           visible,
+           (controller.scrollFraction * (units - visible)).round(),
          );
        }),
-       _scrollTo = ((f) {
-         final range = controller.visibleRange;
-         final visible = range == null ? 0 : range.last - range.first + 1;
-         final maxFirst = controller.itemCount - visible;
-         if (maxFirst <= 0) return;
-         controller.jumpToIndex((maxFirst * f).round().clamp(0, maxFirst));
-       });
+       _scrollTo = controller.jumpToFraction;
 
   final _ScrollbarMetrics Function() _metrics;
   final void Function(double fraction) _scrollTo;

@@ -183,7 +183,7 @@ void main() {
   testWidgets('paints the child into a viewport-sized scratch buffer', (
     tester,
   ) {
-    final ctl = ScrollController(offset: 10);
+    final ctl = ScrollController(initialOffset: 10);
     final probe = _PaintProbe();
     tester.pumpWidget(
       SizedBox(
@@ -296,7 +296,7 @@ void main() {
   testWidgets(
     'controller dispose keeps metrics readable and rejects mutation',
     (tester) {
-      final ctl = ScrollController(offset: 2);
+      final ctl = ScrollController(initialOffset: 2);
       tester.viewportSize = const CellSize(6, 3);
       tester.pumpWidget(ScrollView(controller: ctl, child: _rows(10)));
       expect(_lines(tester, rows: 3), ['r2', 'r3', 'r4']);

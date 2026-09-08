@@ -134,12 +134,13 @@ final class CodeLine {
   final int outputOriginalLength;
 }
 
-/// Controller for [CodeView] selection.
+/// Controller for [CodeView] browsing.
 class CodeViewController extends ChangeNotifier {
   CodeViewController({
     /// Zero-based row selected when the controller is created.
-    int selectedIndex = 0,
-  }) : _list = ListController(selectedIndex: selectedIndex) {
+    /// Initial browsing row. Null starts without a current row.
+    int? initialIndex = 0,
+  }) : _list = ListController(initialIndex: initialIndex) {
     _list.addListener(notifyListeners);
   }
 
@@ -148,10 +149,10 @@ class CodeViewController extends ChangeNotifier {
 
   ListController get _listController => _list;
 
-  int? get selectedIndex => _list.selectedIndex;
-  set selectedIndex(int? value) {
+  int? get currentIndex => _list.currentIndex;
+  set currentIndex(int? value) {
     _checkNotDisposed();
-    _list.selectedIndex = value;
+    _list.currentIndex = value;
   }
 
   ({int first, int last})? get visibleRange => _list.visibleRange;
@@ -280,9 +281,9 @@ String exportCodeSelection(
   CodeViewCopyOptions options = const CodeViewCopyOptions(),
 }) {
   if (document.lines.isEmpty) return '';
-  final selectedIndex = lineIndex.clamp(0, document.lines.length - 1);
+  final currentIndex = lineIndex.clamp(0, document.lines.length - 1);
   return switch (options.mode) {
-    CodeViewCopyMode.line => document.lines[selectedIndex].text,
+    CodeViewCopyMode.line => document.lines[currentIndex].text,
     CodeViewCopyMode.document => [
       for (final line in document.lines) line.text,
     ].join('\n'),
@@ -457,23 +458,20 @@ class _CodeViewState extends State<CodeView> {
   CodeLine? _selectedLine() {
     final lines = widget.document.lines;
     if (lines.isEmpty) return null;
-    final selected = (_controller.selectedIndex ?? 0).clamp(
-      0,
-      lines.length - 1,
-    );
+    final selected = (_controller.currentIndex ?? 0).clamp(0, lines.length - 1);
     return lines[selected];
   }
 
   Future<void> _copySelection() async {
     final lines = widget.document.lines;
     if (!widget.copySelection || lines.isEmpty) return;
-    final selectedIndex = (_controller.selectedIndex ?? 0).clamp(
+    final currentIndex = (_controller.currentIndex ?? 0).clamp(
       0,
       lines.length - 1,
     );
     final text = exportCodeSelection(
       widget.document,
-      lineIndex: selectedIndex,
+      lineIndex: currentIndex,
       options: widget.copyOptions,
     );
     final report = await ClipboardScope.of(
@@ -482,8 +480,8 @@ class _CodeViewState extends State<CodeView> {
     if (!mounted) return;
     widget.onCopy?.call(
       CodeViewCopyResult(
-        lineIndex: selectedIndex,
-        line: lines[selectedIndex],
+        lineIndex: currentIndex,
+        line: lines[currentIndex],
         text: text,
         report: report,
       ),
@@ -494,7 +492,7 @@ class _CodeViewState extends State<CodeView> {
     final lines = widget.document.lines;
     if (index < 0 || index >= lines.length) return;
     _focusNode.requestFocus();
-    _controller.selectedIndex = index;
+    _controller.currentIndex = index;
     await _copySelection();
   }
 
@@ -502,7 +500,7 @@ class _CodeViewState extends State<CodeView> {
     final lines = widget.document.lines;
     if (index < 0 || index >= lines.length) return;
     _focusNode.requestFocus();
-    _controller.selectedIndex = index;
+    _controller.currentIndex = index;
   }
 
   Future<void> _handleCodeAction(SemanticAction action) async {
@@ -537,7 +535,7 @@ class _CodeViewState extends State<CodeView> {
             autofocus: widget.autofocus,
             itemCount: lines.length,
             itemBuilder: (context, index, activeSelected) {
-              final selected = index == _controller.selectedIndex;
+              final selected = index == _controller.currentIndex;
               return _CodeLineWidget(
                 line: lines[index],
                 selected: selected,
@@ -607,8 +605,8 @@ class _CodeViewState extends State<CodeView> {
             'visibleRangeStart': visibleRange.first,
             'visibleRangeEnd': visibleRange.last,
           },
-          if (_controller.selectedIndex != null)
-            'selectedIndex': _controller.selectedIndex,
+          if (_controller.currentIndex != null)
+            'currentIndex': _controller.currentIndex,
           if (selected != null) ...{
             'selectedKey': selected.lineNumber,
             'selectedLineNumber': selected.lineNumber,

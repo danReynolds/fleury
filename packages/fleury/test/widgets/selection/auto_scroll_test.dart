@@ -147,7 +147,7 @@ void main() {
     ) async {
       // Start scrolled partway down. Drag toward the top edge —
       // controller should scroll up to reveal earlier content.
-      final controller = ScrollController(offset: 3);
+      final controller = ScrollController(initialOffset: 3);
       tester.viewportSize = const CellSize(20, 3);
       tester.pumpWidget(
         SelectionArea(

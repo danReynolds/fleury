@@ -383,15 +383,15 @@ void main() {
       expect(controller.text, 'two');
       expect(controller.caretOffset, 3);
       expect(history.isBrowsing, isTrue);
-      expect(history.selectedIndex, 1);
+      expect(history.currentIndex, 1);
 
       tester.sendKey(_code(KeyCode.arrowUp));
       expect(controller.text, 'one');
-      expect(history.selectedIndex, 0);
+      expect(history.currentIndex, 0);
 
       tester.sendKey(_code(KeyCode.arrowDown));
       expect(controller.text, 'two');
-      expect(history.selectedIndex, 1);
+      expect(history.currentIndex, 1);
 
       tester.sendKey(_code(KeyCode.arrowDown));
       expect(controller.text, 'draft');
@@ -604,7 +604,7 @@ void main() {
 
       tester.sendKey(_code(KeyCode.arrowDown));
 
-      expect(completions.selectedIndex, 1);
+      expect(completions.currentIndex, 1);
       expect(history.isBrowsing, isFalse);
       expect(controller.text, 'git che');
 
@@ -1412,22 +1412,23 @@ void main() {
       expect(changes, isEmpty);
     });
 
-    testWidgets('fires for a programmatic controller edit (loop-safe)', (
-      tester,
-    ) {
-      final changes = <String>[];
-      final controller = TextEditingController();
-      tester.pumpWidget(
-        TextInput(controller: controller, onChanged: changes.add),
-      );
+    testWidgets(
+      'programmatic controller edits do not emit interaction callbacks',
+      (tester) {
+        final changes = <String>[];
+        final controller = TextEditingController();
+        tester.pumpWidget(
+          TextInput(controller: controller, onChanged: changes.add),
+        );
 
-      controller.text = 'seed';
-      tester.pump();
-      controller.text = 'seed'; // same value must not re-fire
-      tester.pump();
+        controller.text = 'seed';
+        tester.pump();
+        controller.text = 'seed'; // same value must not re-fire
+        tester.pump();
 
-      expect(changes, ['seed']);
-    });
+        expect(changes, isEmpty);
+      },
+    );
   });
 
   group('placeholder', () {

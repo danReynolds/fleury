@@ -73,9 +73,9 @@ class _FilePickerState extends State<FilePicker> {
   // The selected row lives on a ListController so the entries can render in a
   // scrolling ListView that keeps the cursor in view (a plain Column clipped
   // long directories and let the cursor move off-screen).
-  final ListController _list = ListController(selectedIndex: 0);
-  int get _cursor => _list.selectedIndex ?? 0;
-  set _cursor(int value) => _list.selectedIndex = value;
+  final ListController _list = ListController(initialIndex: 0);
+  int get _cursor => _list.currentIndex ?? 0;
+  set _cursor(int value) => _list.currentIndex = value;
 
   @override
   void initState() {
@@ -145,7 +145,7 @@ class _FilePickerState extends State<FilePicker> {
     _error = null;
     _cwd = dir;
     _entries = filtered;
-    _list.selectedIndex = filtered.isEmpty ? null : 0;
+    _list.currentIndex = filtered.isEmpty ? null : 0;
   }
 
   String _basename(String path) {
@@ -365,7 +365,7 @@ class _FilePickerState extends State<FilePicker> {
         'outputSanitized': safeCwd != _cwd.path,
         if (_error != null) 'error': _safeText(_error!),
         if (selected != null) ...{
-          'selectedIndex': _cursor,
+          'currentIndex': _cursor,
           'selectedKey': _safeText(selected.path),
           'selectedPath': _safeText(selected.path),
           'selectedEntryType': _entryType(selected),

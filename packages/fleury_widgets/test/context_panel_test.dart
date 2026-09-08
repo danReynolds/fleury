@@ -43,12 +43,12 @@ void main() {
   group('ContextPanel', () {
     group('controller lifecycle', () {
       test('dispose is idempotent and keeps final readable state', () {
-        final controller = ContextPanelController(selectedIndex: 2);
+        final controller = ContextPanelController(initialIndex: 2);
 
         controller.dispose();
         controller.dispose();
 
-        expect(controller.selectedIndex, 2);
+        expect(controller.currentIndex, 2);
         expect(controller.visibleRange, isNull);
       });
 
@@ -56,7 +56,7 @@ void main() {
         final controller = ContextPanelController()..dispose();
 
         const message = 'ContextPanelController has been disposed.';
-        expect(() => controller.selectedIndex = 1, _stateError(message));
+        expect(() => controller.currentIndex = 1, _stateError(message));
         expect(() => controller.jumpToIndex(1), _stateError(message));
       });
     });
@@ -200,7 +200,7 @@ void main() {
       await tester
           .target(role: WidgetRoles.contextItem, label: 'Demo scenario')
           .press();
-      expect(controller.selectedIndex, 1);
+      expect(controller.currentIndex, 1);
       expect(selected?.item.id, 'ctx.scenario');
 
       tester.render(size: const CellSize(100, 6));
@@ -218,13 +218,13 @@ void main() {
         focused: true,
       );
       expect(panel.state.selectedContextItemId, 'ctx.scenario');
-      expect(panel.state['selectedIndex'], 1);
+      expect(panel.state['currentIndex'], 1);
     });
 
     testWidgets('preserves selected context identity across item refresh', (
       tester,
     ) {
-      final controller = ContextPanelController(selectedIndex: 2);
+      final controller = ContextPanelController(initialIndex: 2);
       tester.pumpWidget(
         ContextPanel(
           label: 'Context pack',
@@ -262,7 +262,7 @@ void main() {
       tester.pump();
       tester.render(size: const CellSize(100, 6));
 
-      expect(controller.selectedIndex, 3);
+      expect(controller.currentIndex, 3);
       final panel = tester.semantics().single(
         role: WidgetRoles.contextPanel,
         label: 'Context pack',

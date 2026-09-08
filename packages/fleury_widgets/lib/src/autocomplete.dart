@@ -48,8 +48,8 @@ class Autocomplete<T extends Object> extends StatefulWidget {
   /// Whether the input should request focus when mounted.
   final bool autofocus;
 
-  /// Called with the new text on every edit, including programmatic
-  /// [controller] changes. See [TextInput.onChanged].
+  /// Called after user and semantic edits. Programmatic controller writes
+  /// notify controller listeners instead. See [TextInput.onChanged].
   final void Function(String text)? onChanged;
 
   /// Hint text passed to the underlying [TextInput].
@@ -110,7 +110,7 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
   bool _ownsFocusNode = false;
 
   final BoundsNotifier _bounds = BoundsNotifier();
-  final ListController _list = ListController(selectedIndex: 0);
+  final ListController _list = ListController(initialIndex: 0);
   FocusManager? _manager;
   OverlayEntry? _entry;
   List<T> _filtered = const [];
@@ -199,13 +199,13 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
 
   void _refreshMatches({required bool resetSelection}) {
     final query = _controller.text;
-    final selectedIndex = _list.selectedIndex;
-    final selectedOption =
+    final currentIndex = _list.currentIndex;
+    final currentOption =
         !resetSelection &&
-            selectedIndex != null &&
-            selectedIndex >= 0 &&
-            selectedIndex < _filtered.length
-        ? _filtered[selectedIndex]
+            currentIndex != null &&
+            currentIndex >= 0 &&
+            currentIndex < _filtered.length
+        ? _filtered[currentIndex]
         : null;
     _filtered = (query.isEmpty || query == _justPicked)
         ? const []
@@ -213,10 +213,10 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
             for (final o in widget.options)
               if (_display(o).toLowerCase().contains(query.toLowerCase())) o,
           ];
-    final preservedIndex = selectedOption == null
+    final preservedIndex = currentOption == null
         ? -1
-        : _filtered.indexOf(selectedOption);
-    _list.selectedIndex = _filtered.isEmpty
+        : _filtered.indexOf(currentOption);
+    _list.currentIndex = _filtered.isEmpty
         ? null
         : preservedIndex >= 0
         ? preservedIndex
@@ -261,22 +261,25 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
 
   void _move(int delta) {
     if (_filtered.isEmpty) return;
-    final current = _list.selectedIndex ?? 0;
+    final current = _list.currentIndex ?? 0;
     final n = _filtered.length;
     // Wrap like fzf / gum filter — Up from the first item lands on the last.
-    _list.selectedIndex = ((current + delta) % n + n) % n;
+    _list.currentIndex = ((current + delta) % n + n) % n;
     _entry?.markNeedsBuild();
   }
 
   void _pick() {
     if (_entry == null) return;
-    final i = _list.selectedIndex;
+    final i = _list.currentIndex;
     if (i == null || i < 0 || i >= _filtered.length) return;
     final option = _filtered[i];
     final text = _display(option);
     _justPicked = text; // set before mutating text so _onChange suppresses
+    final before = _controller.text;
     _controller.text = text;
     _controller.caretOffset = text.length;
+    if (_controller.text != before) widget.onChanged?.call(_controller.text);
+    if (!mounted) return;
     _close();
     widget.onSelect?.call(option);
   }
@@ -319,7 +322,7 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
       state: SemanticState({
         'menuDepth': 0,
         'menuItemCount': _filtered.length,
-        'selectedKey': _list.selectedIndex,
+        'selectedKey': _list.currentIndex,
         'completionQuery': _controller.text,
       }),
       onAction: (action) {
@@ -344,7 +347,7 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
           height: height,
           child: ListView.builder(
             controller: _list,
-            selectionActive: true,
+
             itemCount: _filtered.length,
             itemBuilder: (_, i, selected) {
               final label = sanitizeOptionLabel(_display(_filtered[i]));
@@ -370,7 +373,7 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
                   switch (action) {
                     case SemanticAction.select:
                     case SemanticAction.activate:
-                      _list.selectedIndex = i;
+                      _list.currentIndex = i;
                       _pick();
                       return;
                     case _:
@@ -381,7 +384,7 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
                 // keyboard's Tab/Enter performs.
                 child: GestureDetector(
                   onTap: () {
-                    _list.selectedIndex = i;
+                    _list.currentIndex = i;
                     _pick();
                   },
                   child: Text(

@@ -228,7 +228,7 @@ void main() {
   for (final edge in EdgeBehavior.values) {
     testWidgets('nested wheel respects $edge at the inner edge', (tester) {
       final outer = ScrollController();
-      final inner = ScrollController(offset: 3);
+      final inner = ScrollController(initialOffset: 3);
       addTearDown(outer.dispose);
       addTearDown(inner.dispose);
       tester.pumpWidget(
@@ -365,7 +365,7 @@ void main() {
           child: SizedBox(
             height: 2,
             child: ScrollView(
-              controller: ScrollController(offset: 3),
+              controller: ScrollController(initialOffset: 3),
               child: Focus(
                 focusNode: clipped,
                 child: const SizedBox(width: 10, height: 10),
