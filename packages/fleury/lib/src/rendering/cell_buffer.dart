@@ -131,6 +131,14 @@ final class CellBuffer {
   // Per-placement geometry, one entry per [writeImage] call, in paint order.
   final List<InlineImagePlacement> _imagePlacements = <InlineImagePlacement>[];
   var _damageTrackingEnabled = false;
+
+  /// Whether this buffer already holds the previous frame's cells.
+  ///
+  /// Set by the frame loop on the back buffer when incremental paint carries it
+  /// forward instead of clearing it. Scratch buffers — a repaint-boundary
+  /// cache, a viewport, an effect — always start empty, so they leave this
+  /// false and nothing painting into them may be skipped.
+  bool carriesPreviousFrame = false;
   // Damage bounds as raw ints (left/top inclusive, right/bottom exclusive),
   // updated by min/max in [_recordDamageRect] so the paint hot path allocates
   // no geometry per write. A CellRect is materialized only when the bounds are
@@ -230,6 +238,23 @@ final class CellBuffer {
   /// cell is shared across the region, so a uniform fill does not allocate
   /// or measure a glyph for every cell. Image placements are left unchanged,
   /// as they are by individual grapheme writes.
+  /// Resets [rect] to empty cells — what [clear] does, restricted to a
+  /// rectangle. Distinct from [fillRect], which paints SPACES: a space is
+  /// drawn content and would not compare equal to the empty cell a full
+  /// repaint leaves behind.
+  @internal
+  void eraseRect(CellRect rect) {
+    final clipped = rect.intersect(
+      CellRect(offset: CellOffset.zero, size: _size),
+    );
+    if (clipped == null || clipped.size.isEmpty) return;
+    for (var row = clipped.top; row < clipped.bottom; row++) {
+      final base = row * _size.cols;
+      _cells.fillRange(base + clipped.left, base + clipped.right,
+          const Cell.empty());
+    }
+  }
+
   void fillRect(CellRect rect, {CellStyle style = CellStyle.none}) {
     final clipped = rect.intersect(
       CellRect(offset: CellOffset.zero, size: _size),

@@ -146,6 +146,13 @@ class RenderFlexible extends RenderObject
 /// division is given to the leftmost flexible children in order, so the
 /// layout is deterministic.
 class RenderFlex extends RenderObject implements RenderObjectWithChildren {
+  // Flex places children end to end along the main axis; two children never
+  // share a cell. That is what makes skipping a clean child sound: a skip
+  // writes nothing, so it is only safe where no sibling can have painted over
+  // the region being carried forward.
+  @override
+  bool get paintsChildrenDisjointly => true;
+
   @override
   CellOffset childOffsetOf(RenderObject child) =>
       _childOffsets[child] ?? CellOffset.zero;

@@ -250,6 +250,42 @@ abstract class RenderObject implements ScreenGeometrySource {
   // walk-up target; the boundary clears it after painting its cache.
   bool _needsPaint = true;
 
+  // ---- Incremental paint ---------------------------------------------------
+  //
+  // Two bits, recorded by the invalidation walk that already runs to the root:
+  // [_selfDirty] means THIS node's own painted cells may differ, [_subtreeDirty]
+  // means something below it is self-dirty. The distinction is what keeps the
+  // root from clearing the screen every time a leaf changes — an ancestor on
+  // the dirty path repaints its own chrome and recurses, while a clean sibling
+  // of the changed leaf is skipped outright.
+  bool _selfDirty = true;
+  bool _subtreeDirty = true;
+
+  /// The paint pass whose output this node's carried cells came from.
+  ///
+  /// A frame can be rendered and then NOT committed — the loop supports it, and
+  /// an uncommitted frame must not become the reference. Clearing the dirty
+  /// bits during paint would lose the invalidation for good, so paint stamps
+  /// the pass instead and a node only counts as carried once that pass has
+  /// been committed.
+  int _paintedAtPass = -1;
+
+  /// Geometry this node was last painted at, so a subtree that MOVED is never
+  /// mistaken for one that did not change. Derived, not declared: a widget
+  /// cannot forget to report it (see [screenGeometry]).
+  RenderGeometry? _lastPaintGeometry;
+
+  /// Whether this object paints its children into pairwise-disjoint rectangles
+  /// of the same buffer.
+  ///
+  /// Only a child of such a parent may be skipped. Skipping writes nothing, so
+  /// under overlap it is unsound in a way that is easy to miss: if a sibling
+  /// that overlaps me repaints and I skip, the region keeps the sibling's new
+  /// cells where last frame it held mine. Flex-family layouts are disjoint by
+  /// construction; Stack and Overlay are not, and opt out by leaving this
+  /// false.
+  bool get paintsChildrenDisjointly => false;
+
   /// Whether the enclosing boundary's cache has been invalidated. Set true
   /// by [markNeedsPaint]; subclasses that implement a paint cache clear it
   /// once they have re-painted into their cache.
@@ -326,6 +362,7 @@ abstract class RenderObject implements ScreenGeometrySource {
     if (DebugInvalidations.isRecording) {
       DebugInvalidations.recordLayout(_debugInvalidationLabel);
     }
+    _markPaintOriginDirty();
     _markNeedsLayoutUp();
     _markEnclosingRepaintBoundariesDirty();
   }
@@ -353,6 +390,7 @@ abstract class RenderObject implements ScreenGeometrySource {
     if (DebugInvalidations.isRecording) {
       DebugInvalidations.recordPaint(_debugInvalidationLabel);
     }
+    _markPaintOriginDirty();
     _markNeedsLayoutUp();
     _markEnclosingRepaintBoundariesDirty();
   }
@@ -368,6 +406,7 @@ abstract class RenderObject implements ScreenGeometrySource {
     if (DebugInvalidations.isRecording) {
       DebugInvalidations.recordPaint(_debugInvalidationLabel);
     }
+    _markPaintOriginDirty();
     _rootFrameDamage?.recordVisualChange();
     _markEnclosingRepaintBoundariesDirty();
   }
@@ -387,6 +426,29 @@ abstract class RenderObject implements ScreenGeometrySource {
       _needsPaint = true;
     }
     _parent?._markEnclosingRepaintBoundariesDirty();
+  }
+
+  /// Records an invalidation whose ORIGIN is this node: its own painted cells
+  /// may differ, and every ancestor now contains a change without necessarily
+  /// having changed itself.
+  ///
+  /// The distinction is the whole design. If an ancestor were marked
+  /// self-dirty it would erase its own rect before repainting — and its clean
+  /// children, skipping into that hole, would leave it blank. Ancestors repaint
+  /// their own chrome and recurse; only the origin erases.
+  void _markPaintOriginDirty() {
+    _selfDirty = true;
+    _markPaintPathDirty();
+  }
+
+  /// Marks the path to the root as containing a change, without claiming any
+  /// of those nodes changed themselves. Free: the boundary walk already visits
+  /// exactly these nodes, it just never recorded anything on them.
+  void _markPaintPathDirty() {
+    for (RenderObject? node = _parent; node != null; node = node._parent) {
+      if (node._subtreeDirty) return; // already marked, and so is everything above
+      node._subtreeDirty = true;
+    }
   }
 
   /// Marks every repaint boundary STRICTLY ABOVE this node as needing paint.
@@ -534,7 +596,69 @@ abstract class RenderObject implements ScreenGeometrySource {
   @nonVirtual
   void paint(CellBuffer buffer, CellOffset offset) {
     assert(_debugCheckPaintPlacement(buffer, offset));
-    performPaint(buffer, offset);
+    if (!IncrementalPaint.enabled || !buffer.carriesPreviousFrame) {
+      // Scratch buffers (a boundary cache, a viewport, an effect) start empty,
+      // so nothing in them was carried and nothing may be skipped.
+      performPaint(buffer, offset);
+      return;
+    }
+    final geometry = screenGeometry();
+    if (!_selfDirty && !_subtreeDirty && _isSkippable(geometry)) {
+      IncrementalPaint._skipped += 1;
+      return;
+    }
+    // A self-dirty node may paint FEWER cells than last frame — shorter text in
+    // a fixed-width box — so its footprint has to be erased first. Only its own
+    // rect, and only under a disjoint parent, so this can never erase a
+    // sibling. Union with the old rect covers a node that moved or shrank.
+    if (_selfDirty) {
+      final erase = _eraseRect(geometry);
+      if (erase != null) buffer.eraseRect(erase);
+      // Erasing invalidates the carried cells of everything inside this rect,
+      // so nothing below may skip: a clean child would otherwise skip straight
+      // into the hole just made. This is the cost of the design — a self-dirty
+      // parent repaints its whole subtree — and it is why marking the ORIGIN
+      // rather than the path matters so much.
+      IncrementalPaint._forceDepth += 1;
+      try {
+        performPaint(buffer, offset);
+      } finally {
+        IncrementalPaint._forceDepth -= 1;
+      }
+    } else {
+      performPaint(buffer, offset);
+    }
+    _lastPaintGeometry = geometry;
+    _selfDirty = false;
+    _subtreeDirty = false;
+    IncrementalPaint._painted += 1;
+  }
+
+  /// Whether this node's cells from the previous frame are still valid where
+  /// they sit: nothing changed under it, it has not moved or resized, and its
+  /// parent guarantees siblings do not overlap it.
+  bool _isSkippable(RenderGeometry? geometry) {
+    if (IncrementalPaint._forceDepth > 0) return false;
+    // Painted in a pass that was never committed: those cells are not what the
+    // reference buffer holds, so they cannot be carried.
+    if (_paintedAtPass > IncrementalPaint._committedPass) return false;
+    if (geometry == null || _lastPaintGeometry == null) return false;
+    if (geometry != _lastPaintGeometry) return false;
+    final parent = _parent;
+    return parent != null && parent.paintsChildrenDisjointly;
+  }
+
+  /// The region to erase before repainting: what this node covered last frame
+  /// together with what it covers now.
+  CellRect? _eraseRect(RenderGeometry? geometry) {
+    // `visible`, not `clip`: clip is the intersection of ANCESTOR clips — the
+    // whole screen when nothing clips — so erasing it would wipe every sibling
+    // painted before this one, leaving only the last child on screen.
+    final now = geometry?.visible;
+    final before = _lastPaintGeometry?.visible;
+    if (now == null) return before;
+    if (before == null) return now;
+    return now.union(before);
   }
 
   /// Paints this render object's cells into [buffer] at [offset].
@@ -879,4 +1003,49 @@ int? singleRemovedRenderChildIndex(
     if (i >= removedIndex && !identical(current[i + 1], next[i])) return null;
   }
   return removedIndex;
+}
+
+
+/// Incremental paint: carry the previous frame forward and skip subtrees whose
+/// cells are still valid where they sit.
+///
+/// The usual way to skip painting is a per-subtree cache that gets blitted —
+/// which costs memory, a placement decision, and a penalty whenever the cache
+/// misses. None of that is needed here. The frame loop already keeps the
+/// previous frame in the other buffer, so carrying it forward makes it a cache
+/// of EVERYTHING; and screen geometry is DERIVED from layout rather than
+/// declared by paint, so "did this subtree move" is not something a widget can
+/// forget to report. What was missing was only a per-node dirty bit — and the
+/// invalidation walk already visits every ancestor, so recording one costs no
+/// extra traversal.
+///
+/// Off by default while it proves itself. [assertMatchesFullRepaint] is the
+/// check that makes it adoptable: paint the same tree the old way into a third
+/// buffer and require the two agree cell for cell.
+final class IncrementalPaint {
+  IncrementalPaint._();
+
+  static bool enabled = false;
+
+  static int _forceDepth = 0;
+  static int _pass = 0;
+  static int _committedPass = -1;
+
+  /// Starts a render pass. Called by the frame loop before painting.
+  static void beginPass() => _pass += 1;
+
+  /// Marks the current pass as the one the reference buffer now holds. Only
+  /// committed passes may be carried forward.
+  static void commitPass() => _committedPass = _pass;
+
+  static int get skippedCount => _skipped;
+  static int _skipped = 0;
+
+  static int get paintedCount => _painted;
+  static int _painted = 0;
+
+  static void resetCounters() {
+    _skipped = 0;
+    _painted = 0;
+  }
 }
