@@ -1029,21 +1029,6 @@ KeyEvent? keyEventFromBrowser(web.KeyboardEvent event) {
 
   if (_isBrowserTextInputModifiedKey(event, key)) return null;
 
-  // Alt-only printable: emit a shortcut from the physical code's US twin
-  // (Digit1 → '1') so first-party accelerators like Tabs Alt+1..9 work on
-  // serve/browser. Without a twin, leave the press to the text channel —
-  // Option-produced glyphs and IME must not become spurious Alt+char keys.
-  if (event.altKey && !event.ctrlKey && !event.metaKey && key.length == 1) {
-    final twin = position?.usTwin;
-    if (twin == null) return null;
-    return KeyEvent(
-      twin,
-      modifiers: _shortcutModifiersFromKeyboard(event),
-      type: type,
-      position: position,
-    );
-  }
-
   final shortcut = event.ctrlKey || event.altKey || event.metaKey;
   if (shortcut && key.length == 1) {
     return KeyEvent(
@@ -1085,9 +1070,18 @@ bool _isBrowserPasteAccelerator(
 
 bool _isBrowserTextInputModifiedKey(web.KeyboardEvent event, String key) {
   if (key.length != 1) return false;
-  // AltGraph (and Ctrl+Alt stand-ins) produce text; keep them off the
-  // shortcut lane. Plain Alt-only printables are handled above via usTwin.
-  return event.getModifierState('AltGraph');
+  // AltGraph and plain Alt both PRODUCE TEXT on the surfaces that matter —
+  // Option+a is 'å' on macOS — so they stay off the shortcut lane entirely.
+  //
+  // Mapping Alt-only printables to their US twin (Digit1 -> '1') to give the
+  // browser Alt+1..9 accelerators cost every Option glyph: returning a
+  // KeyEvent here stops `_handleKeyDown` early-returning, so it calls
+  // `preventDefault()`, and this file's own doc says that suppresses the
+  // insertion, the `input` event, and therefore all typing. `å ø ç œ ß é ñ`
+  // became untypable in every Fleury field over `fleury serve`. An
+  // accelerator main never had is not worth a keyboard layout.
+  if (event.getModifierState('AltGraph')) return true;
+  return event.altKey && !event.ctrlKey && !event.metaKey;
 }
 
 KeyCode? _keyCodeFor(String key) => switch (key) {
