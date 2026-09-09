@@ -372,8 +372,8 @@ class ListController extends ChangeNotifier {
 ///   - `ListView.builder(itemCount: N, itemBuilder: (context, index, highlighted) {})` —
 ///     lazy. Only items currently within the viewport are mounted as
 ///     element subtrees; items scroll into/out of the mounted set as
-///     the user navigates. Supports variable item sizes along the scrolling axis. Best for
-///     long lists where most items are off-screen (file pickers, log
+///     the user navigates. Supports variable sizes along the scrolling axis.
+///     Best for long lists where most items are off-screen (file pickers, log
 ///     viewers, completion menus).
 ///
 /// When focused, the widget claims the main-axis arrows, Home, End,
@@ -446,8 +446,7 @@ class ListView extends StatefulWidget {
   ///
   /// Separators never take the cursor and hold no index of their own — the
   /// list still addresses exactly [itemCount] items, and arrow / Home / End
-  /// navigation walks items only. Each is composed into the row block beneath
-  /// its item (reusing [ListView.builder]'s well-tested item-index machinery),
+  /// navigation walks items only. Each follows its item along [scrollDirection],
   /// and only the item is a tap target. A separator cannot move the cursor or
   /// select the item it trails.
   const ListView.separated({

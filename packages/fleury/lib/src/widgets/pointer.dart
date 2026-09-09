@@ -54,7 +54,9 @@ final class PointerDragDetails extends PointerDetails {
   final CellOffset globalPressPosition;
 }
 
-/// One wheel step. Negative [delta.row] scrolls up, positive scrolls down.
+/// One wheel step in cells. Negative [delta.row] scrolls up and positive
+/// scrolls down; negative [delta.col] scrolls left and positive scrolls right.
+/// Shift+vertical wheel input is delivered as horizontal movement.
 @immutable
 final class PointerScrollDetails extends PointerDetails {
   PointerScrollDetails({
