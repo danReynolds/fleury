@@ -35,6 +35,7 @@ import 'package:stdio/stdio.dart' as fd;
 import '../terminal/native_driver.dart';
 import '../terminal/posix_driver.dart';
 import '../terminal/terminal_driver.dart';
+import '../terminal/pointer_shapes.dart';
 import '../widgets/focus.dart';
 import '../widgets/framework.dart';
 import '../widgets/terminal_session.dart';
@@ -666,6 +667,7 @@ Future<AppExit> _runAppImpl(
         // Same-size resize events represent a resumed/handed-off terminal and
         // still require a full repaint even though size comparison sees no
         // change.
+        runtime.pointerRouter.cancel();
         frameDriver?.forceFullRepaint();
         DebugEvents.emitTerminalDiagnosis(currentTerminalDiagnosis());
       }
@@ -1030,6 +1032,11 @@ Future<AppExit> _runAppImpl(
         switch (sessionProfile.presentation) {
           case final AnsiTerminalPresentation ansi:
             ansiPresentation = ansi;
+            if (ansi.pointerShapes) {
+              runtime.pointerRouter.onCursorChanged = (cursor) {
+                if (!disposed) usedDriver.write(pointerShapeSequence(cursor));
+              };
+            }
             final capabilities = ansi.capabilities;
             renderer = AnsiRenderer(
               colorMode: capabilities.colorMode,

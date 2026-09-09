@@ -429,7 +429,10 @@ void main() {
     tester.pump();
 
     expect(tester.exists(text('No matching results')), isTrue);
-    final panel = tester.semantics().single(role: SemanticRole.region);
+    final panel = tester.semantics().single(
+      role: SemanticRole.region,
+      label: 'Search',
+    );
     expect(panel.state.collectionRowCount, 0);
     expect(panel.state['currentIndex'], isNull);
   });

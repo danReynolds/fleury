@@ -1590,6 +1590,7 @@ class _TextInputState extends State<TextInput>
       ),
     );
     return MouseRegion(
+      cursor: widget.enabled ? MouseCursor.text : MouseCursor.basic,
       onEnter: () {
         if (!_hovered) setState(() => _hovered = true);
       },

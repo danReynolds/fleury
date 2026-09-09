@@ -2,10 +2,64 @@ import 'dart:async';
 
 import 'package:fleury/src/input/events.dart';
 import 'package:fleury/src/terminal/input_parser.dart';
+import 'package:fleury/src/terminal/pointer_shapes.dart';
 import 'package:fleury/src/terminal/terminal_query_runner.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test(
+    'fragmented OSC 22 replies are consumed without losing typed input',
+    () async {
+      final parser = InputParser();
+      final input = _InputSink();
+      late TerminalQueryRunner runner;
+      runner = TerminalQueryRunner(
+        parser: parser,
+        inputSink: input,
+        write: (_) async {
+          for (final byte in 'a\x1b]22;1,1,1,1,1\x1b\\\x1b[?1;2cb'.codeUnits) {
+            parser.feed([byte], input, responseSink: runner);
+          }
+        },
+      );
+      final reply = await runner.request(
+        pointerShapesQuery,
+        timeout: const Duration(milliseconds: 50),
+      );
+      expect(parsePointerShapesReply(reply), isTrue);
+      expect(input.events, [
+        const TextInputEvent('a'),
+        const TextInputEvent('b'),
+      ]);
+      runner.dispose();
+    },
+  );
+
+  test('late OSC 22 reply stays in the query quarantine', () async {
+    final parser = InputParser();
+    final input = _InputSink();
+    final runner = TerminalQueryRunner(
+      parser: parser,
+      inputSink: input,
+      lateResponseGrace: const Duration(milliseconds: 100),
+      write: (_) async {},
+    );
+    await expectLater(
+      runner.request(
+        pointerShapesQuery,
+        timeout: const Duration(milliseconds: 5),
+      ),
+      throwsA(isA<TimeoutException>()),
+    );
+    parser.feed(
+      'x\x1b]22;1,1,1,1,1\x1b\\\x1b[?1;2c'.codeUnits,
+      input,
+      responseSink: runner,
+    );
+    expect(input.events, [const TextInputEvent('x')]);
+    runner.dispose();
+  });
+
   test(
     'routes typed replies to a query while preserving interleaved input',
     () async {
