@@ -35,6 +35,17 @@ jobs:
       # (never loosen a tolerance). Heavier PTY gates (wire-gate,
       # serve-wire-live) stay on-demand; see
       # docs/implementation/perf-gates.md.
+      - name: Repaint-cache staleness check (fleury suite)
+        # Re-runs the core suite with every repaint-boundary cache HIT verified
+        # against a fresh repaint of the subtree. A boundary is the one place
+        # where an under-reported change is unrecoverable: frame damage is
+        # derived by comparing buffers, so it cannot see a stale blit — by then
+        # the buffer genuinely matches. Measured overhead on this suite is
+        # within run-to-run noise, because few tests reach a cache hit.
+        working-directory: packages/fleury
+        env:
+          FLEURY_VERIFY_REPAINT_CACHE: '1'
+        run: dart test
       - name: Perf gates (fast suite)
         run: dart tool/fleury_dev.dart benchmark gates
 
