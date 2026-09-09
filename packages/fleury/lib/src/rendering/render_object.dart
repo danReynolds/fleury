@@ -1121,6 +1121,17 @@ int? singleRemovedRenderChildIndex(
 /// invalidation walk already visits every ancestor, so recording one costs no
 /// extra traversal.
 ///
+/// KNOWN GAP, and the reason this is still off: `fleury serve` keeps its OWN
+/// mirror of the screen and applies the loop's damage hint to it, so the hint
+/// is only sound while the wire's previous frame and the loop's agree. Full
+/// repaint made that true by construction — every `next` was self-contained.
+/// Carrying forward makes `next` meaningful only relative to an intact chain,
+/// and `error_containment (d) serve mirror stays exact across contain/recover`
+/// is where the two diverge: the terminal is correct, the mirror is not.
+/// Resolving it means either giving serve its own carry chain or having it
+/// rebuild from a self-contained frame — a serve-side decision, not a paint
+/// one.
+///
 /// Off by default while it proves itself. [assertMatchesFullRepaint] is the
 /// check that makes it adoptable: paint the same tree the old way into a third
 /// buffer and require the two agree cell for cell.
