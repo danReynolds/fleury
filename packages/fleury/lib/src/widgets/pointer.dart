@@ -78,6 +78,7 @@ class PointerRouter {
   final List<RenderPointerListener> _tapTargets = [];
   RenderPointerListener? _downTarget;
   RenderPointerListener? _dragTarget;
+  RenderPointerListener? _captureCursorTarget;
   MouseEvent? _press;
   CellOffset? _lastDragPosition;
   MouseEvent? _lastHoverEvent;
@@ -327,6 +328,7 @@ class PointerRouter {
   }
 
   void _clearSequence() {
+    _captureCursorTarget = null;
     _downTarget = null;
     _dragTarget = null;
     _tapTargets.clear();
@@ -411,6 +413,11 @@ class PointerRouter {
           if (drag != null && _isLive(drag)) drag.onDragCancel?.call();
         }
         _press = event;
+        _captureCursorTarget = _topmost(
+          event.col,
+          event.row,
+          (r) => r.cursor != null || _hasHover(r) || _hasTap(r) || _hasDrag(r),
+        );
         _lastDragPosition = CellOffset(event.col, event.row);
         _downTarget = _topmost(
           event.col,
@@ -540,7 +547,19 @@ class PointerRouter {
       (r) => r.cursor != null || _hasHover(r) || _hasTap(r) || _hasDrag(r),
     );
     var cursor = MouseCursor.basic;
-    for (RenderObject? node = top; node != null; node = node.parent) {
+    final captured = _captureCursorTarget;
+    final keepsCapture =
+        _press != null &&
+        event.kind != MouseEventKind.down &&
+        event.kind != MouseEventKind.up &&
+        captured != null &&
+        _isLive(captured) &&
+        (_downTarget != null || _dragTarget != null);
+    for (
+      RenderObject? node = keepsCapture ? captured : top;
+      node != null;
+      node = node.parent
+    ) {
       if (node is RenderPointerListener && node.cursor != null) {
         cursor = node.cursor!;
         break;

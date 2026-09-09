@@ -105,4 +105,56 @@ void main() {
     router.abortFrame();
     expect(changes.last, MouseCursor.basic);
   });
+
+  for (final ending in ['release', 'cancel', 'disable', 'remove', 'abort']) {
+    testWidgets('captured cursor survives motion and ends on $ending', (
+      tester,
+    ) {
+      final changes = <MouseCursor>[];
+      late PointerRouter router;
+      var updates = 0;
+      Widget tree({bool enabled = true, bool removed = false}) => LayoutBuilder(
+        builder: (context, _) {
+          router = PointerRouterScope.maybeOf(context)!
+            ..onCursorChanged = changes.add;
+          return Align(
+            alignment: Alignment.topLeft,
+            child: removed
+                ? const SizedBox(width: 2, height: 2)
+                : MouseRegion(
+                    cursor: enabled
+                        ? MouseCursor.resizeLeftRight
+                        : MouseCursor.basic,
+                    child: GestureDetector(
+                      onDragUpdate: enabled ? (_) => updates++ : null,
+                      child: const SizedBox(width: 2, height: 2),
+                    ),
+                  ),
+          );
+        },
+      );
+      void send(MouseEventKind kind, int col) => tester.sendMouse(
+        MouseEvent(kind: kind, button: MouseButton.left, col: col, row: 0),
+      );
+      tester.pumpWidget(tree());
+      send(MouseEventKind.down, 1);
+      send(MouseEventKind.drag, 8);
+      tester.pump();
+      expect(updates, 1);
+      expect(changes, [MouseCursor.resizeLeftRight]);
+      switch (ending) {
+        case 'release':
+          send(MouseEventKind.up, 8);
+        case 'cancel':
+          router.cancel();
+        case 'disable':
+          tester.pumpWidget(tree(enabled: false));
+        case 'remove':
+          tester.pumpWidget(tree(removed: true));
+        case 'abort':
+          router.abortFrame();
+      }
+      expect(changes.last, MouseCursor.basic);
+    });
+  }
 }
