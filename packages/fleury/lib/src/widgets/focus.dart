@@ -535,8 +535,12 @@ class FocusManager extends ChangeNotifier {
 
   /// Whether [node] sits under an active (`excluding: true`) [ExcludeFocus]
   /// marker. THE exclusion test: click-to-focus ([isClickable]), traversal,
-  /// [requestFocus], and exclusion activation all consult this one walk so
-  /// the boundary rule can never diverge between them.
+  /// [requestFocus], sticky paste/IME routing, and exclusion activation all
+  /// consult this one walk so the boundary rule can never diverge between
+  /// them.
+  @internal
+  bool isExcludedFromFocus(FocusNode node) => _isExcludedFromFocus(node);
+
   bool _isExcludedFromFocus(FocusNode node) {
     if (_activeExcludeFocusMarkers.isEmpty) return false;
     Element? e = node._element?.elementParent;

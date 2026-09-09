@@ -582,11 +582,33 @@ class InputDispatcher {
   /// arrive. Push-to-talk over a modal is the case that makes the
   /// difference user-visible (§10, §14.5).
   void _onFocusChanged() {
-    if (_keyObservers.isEmpty || _disposed) return;
+    if (_disposed) return;
+    _abandonStickyStreamsIfExcluded();
+    if (_keyObservers.isEmpty) return;
     final chain = focusManager.activeChain();
     for (final registration in List.of(_keyObservers)) {
       if (registration._removed) continue;
       registration._projectScopeChange(chain);
+    }
+  }
+
+  /// When [ExcludeFocus] covers a sticky paste/IME owner, drop ownership so
+  /// further segments/commits cannot write into a hidden-but-enabled pane.
+  /// Prefer the FocusManager exclusion helper over reading markers here.
+  void _abandonStickyStreamsIfExcluded() {
+    final paste = _pasteOwner;
+    if (paste != null && focusManager.isExcludedFromFocus(paste)) {
+      _clearPasteOwner();
+    }
+    final composition = _compositionOwner;
+    if (composition != null && focusManager.isExcludedFromFocus(composition)) {
+      // Bypass offer-path exclusion: the owner is already covered, but we
+      // still owe it a cancel so composing underline/state does not stick.
+      final claimant = composition.textCompositionClaimant;
+      if (claimant != null && composition.acceptsInput) {
+        claimant.onTextCompositionCancel();
+      }
+      _clearCompositionOwner();
     }
   }
 
@@ -965,7 +987,11 @@ class InputDispatcher {
 
   KeyEventResult _offerPasteTo(FocusNode node, PasteEvent event) {
     final claimant = node.textInputClaimant;
-    if (claimant == null || !node.acceptsInput) return KeyEventResult.ignored;
+    if (claimant == null ||
+        !node.acceptsInput ||
+        focusManager.isExcludedFromFocus(node)) {
+      return KeyEventResult.ignored;
+    }
     return claimant is PasteEventClaimant
         ? (claimant as PasteEventClaimant).onPasteEvent(event)
         : claimant.onPaste(event.text);
@@ -989,7 +1015,9 @@ class InputDispatcher {
     if (pasteId != null && _pasteOwnerId == pasteId && _pasteOwner != null) {
       final owner = _pasteOwner!;
       final result = _offerPasteTo(owner, event);
-      if (event.isFinal || !owner.acceptsInput) {
+      if (event.isFinal ||
+          !owner.acceptsInput ||
+          focusManager.isExcludedFromFocus(owner)) {
         _clearPasteOwner();
       }
       return result;
@@ -1019,7 +1047,9 @@ class InputDispatcher {
     TextCompositionEvent event,
   ) {
     final claimant = node.textCompositionClaimant;
-    if (claimant == null || !node.acceptsInput) {
+    if (claimant == null ||
+        !node.acceptsInput ||
+        focusManager.isExcludedFromFocus(node)) {
       return KeyEventResult.ignored;
     }
     return switch (event.kind) {
@@ -1179,6 +1209,19 @@ class InputDispatcher {
       // matched and bubbled; a bubble is the deliberate per-key passthrough,
       // so it must NOT be trapped.
       if (source != null && source.isModalScope && !bubbledHere) {
+        // Sequence starts collected ON this modal must still arm — the
+        // boundary traps the unmatched remainder for ancestors/globals,
+        // not candidates that already matched here (or deeper).
+        if (allowSequenceStart && sequenceCandidates.isNotEmpty) {
+          _startPending(
+            event,
+            sequenceCandidates,
+            sequenceSources ?? const <KeyBindingSource>[],
+            textOrigin,
+            lane,
+          );
+          return KeyEventResult.handled;
+        }
         // Globals are suppressed with everything else: a modal surface
         // traps the unmatched remainder completely.
         return KeyEventResult.ignored;

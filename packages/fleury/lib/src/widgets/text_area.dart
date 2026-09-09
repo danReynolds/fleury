@@ -799,7 +799,16 @@ class _TextAreaState extends State<TextArea>
         onDragUpdate: _pointerDrag,
         onDragEnd: (_) => _pointerSelection.end(),
         onDragCancel: _pointerSelection.end,
-        child: ExcludeFocus(excluding: !widget.enabled, child: content),
+        child: ExcludeFocus(
+          // Stay focusable to sticky paste/IME while an in-flight
+          // stream still owes segments to this field — disable must
+          // not cut mid-paste. External ExcludeFocus (tabs/routes)
+          // still covers the node via the FocusManager walk.
+          excluding: !widget.enabled &&
+              !_paste.isActive &&
+              !_controller.hasComposingRange,
+          child: content,
+        ),
       ),
     );
   }

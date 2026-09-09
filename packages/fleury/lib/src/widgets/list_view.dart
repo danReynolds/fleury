@@ -182,6 +182,17 @@ class ListController extends ChangeNotifier {
   void jumpToIndex(int index) {
     _checkNotDisposed();
     _clearRequests();
+    // A realized zero-row layout with items (collapsed pane) cannot show a
+    // jump. Drop it rather than stash a target that would scroll away from
+    // the still-current selection on expand. Distinguish from pre-first-
+    // layout (defaults keep visibleFraction at 1) so jump-before-render
+    // still works. Empty lists still stash — restore+reveal keep selection
+    // on-screen after refill.
+    if (_viewportExtent == 0 && _itemCount > 0 && _visibleFraction == 0) {
+      _isFollowing = false;
+      notifyListeners();
+      return;
+    }
     _pendingJumpIndex = _itemCount == 0
         ? index
         : index.clamp(0, _itemCount - 1);
@@ -1113,6 +1124,13 @@ class _ListViewportLayout {
       // A temporarily collapsed viewport must not discard follow intent.
       if (viewportExtent == 0 && controller._isFollowing) {
         controller._pendingBottom = true;
+      }
+      // Zero-row (collapsed pane): a jump cannot be realized. Drop it so
+      // expand does not scroll the window away from the still-current
+      // selection and leave the cursor stranded off-screen. Empty lists
+      // keep a stashed jump — restore+reveal keep selection on-screen.
+      if (rows == 0) {
+        controller._pendingJumpIndex = null;
       }
       if (count == 0) {
         anchor = 0;
