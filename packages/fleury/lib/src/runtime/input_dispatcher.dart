@@ -103,6 +103,17 @@ class InputDispatcher {
   Timer? _timer;
   bool _disposed = false;
 
+  /// Focus node that accepted the in-flight segmented paste identified by
+  /// [_pasteOwnerId]. Continuations and the end of that pasteId stay glued
+  /// here even if focus moves mid-stream; orphans never start on a new field.
+  FocusNode? _pasteOwner;
+  int? _pasteOwnerId;
+
+  /// Focus node that owns the active IME composition. Commit/cancel (and
+  /// further updates) keep routing here until the composition ends, so a
+  /// focus change cannot leave the old field stuck composing.
+  FocusNode? _compositionOwner;
+
   /// Reactive view of the current pending sequence, shared with the widget
   /// tree by `runApp` (via `PendingSequenceScope`) so a which-key widget can
   /// read it through `KeyBindings.pendingOf`. Updated whenever the pending
@@ -680,7 +691,13 @@ class InputDispatcher {
     // Could the event extend the sequence by one more step?
     final survivors = pending.surviveOneMoreStep(event, lane, textOrigin);
     if (survivors.isNotEmpty) {
-      _pending = pending.advance(event, survivors, textOrigin, lane);
+      _pending = pending.advance(
+        event,
+        survivors,
+        textOrigin,
+        lane,
+        textOrigin == null ? null : _nearestTextInputOwner(),
+      );
       _timer?.cancel();
       _timer = Timer(sequenceTimeout, _onTimeout);
       return KeyEventResult.handled;
@@ -894,8 +911,15 @@ class InputDispatcher {
     var delivered = false;
     for (var i = 0; i < pending.events.length; i++) {
       final text = pending.texts[i];
-      if (text != null && _deliverText(text) == KeyEventResult.handled) {
-        delivered = true;
+      if (text != null) {
+        // Text-origin steps are owed to the claimant that was focused when
+        // the character was typed — not whoever holds focus at timeout.
+        if (_deliverText(text, owner: pending.textOwners[i]) ==
+            KeyEventResult.handled) {
+          delivered = true;
+          continue;
+        }
+        // Owner gone or declined: do not fall through to the live chain.
         continue;
       }
       _dispatchPlain(
@@ -909,9 +933,26 @@ class InputDispatcher {
     return delivered || _firedCount != firedBefore;
   }
 
-  /// Offers [text] to each [TextInputClaimant] up the focus chain until
-  /// one consumes it.
-  KeyEventResult _deliverText(String text) {
+  /// Nearest focus node on the live chain that currently claims typed text.
+  FocusNode? _nearestTextInputOwner() {
+    for (final node in focusManager.activeChain()) {
+      if (node.textInputClaimant != null) return node;
+    }
+    return null;
+  }
+
+  /// Offers [text] to [owner] when set, otherwise to each [TextInputClaimant]
+  /// up the live focus chain until one consumes it.
+  KeyEventResult _deliverText(String text, {FocusNode? owner}) {
+    if (owner != null) {
+      final claimant = owner.textInputClaimant;
+      if (claimant != null &&
+          owner.acceptsInput &&
+          claimant.onTextInput(text) == KeyEventResult.handled) {
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
     for (final node in focusManager.activeChain()) {
       final claimant = node.textInputClaimant;
       if (claimant != null &&
@@ -922,40 +963,114 @@ class InputDispatcher {
     return KeyEventResult.ignored;
   }
 
-  /// Offers bracketed paste content to each [TextInputClaimant] up the focus
-  /// chain until one consumes it.
+  KeyEventResult _offerPasteTo(FocusNode node, PasteEvent event) {
+    final claimant = node.textInputClaimant;
+    if (claimant == null || !node.acceptsInput) return KeyEventResult.ignored;
+    return claimant is PasteEventClaimant
+        ? (claimant as PasteEventClaimant).onPasteEvent(event)
+        : claimant.onPaste(event.text);
+  }
+
+  void _clearPasteOwner() {
+    _pasteOwner = null;
+    _pasteOwnerId = null;
+  }
+
+  /// Offers bracketed paste content with sticky pasteId routing.
+  ///
+  /// The field that accepted `start` owns that [PasteEvent.pasteId] until
+  /// `end`. Continuations never follow a mid-paste focus change, and orphan
+  /// continuation/end segments are rejected rather than starting a fresh
+  /// paste on whoever is focused next.
   KeyEventResult _deliverPaste(PasteEvent event) {
-    for (final node in focusManager.activeChain()) {
-      final claimant = node.textInputClaimant;
-      if (claimant == null) continue;
-      final result = claimant is PasteEventClaimant
-          ? (claimant as PasteEventClaimant).onPasteEvent(event)
-          : claimant.onPaste(event.text);
-      if (result == KeyEventResult.handled) {
-        return KeyEventResult.handled;
+    final pasteId = event.pasteId;
+
+    // In-flight segmented paste: stay glued to the original owner.
+    if (pasteId != null &&
+        _pasteOwnerId == pasteId &&
+        _pasteOwner != null) {
+      final owner = _pasteOwner!;
+      final result = _offerPasteTo(owner, event);
+      if (event.isFinal || !owner.acceptsInput) {
+        _clearPasteOwner();
       }
+      return result;
+    }
+
+    // Orphan continuation/end: never silently start on a new field.
+    if (pasteId != null && !event.isFirst) {
+      return KeyEventResult.ignored;
+    }
+
+    for (final node in focusManager.activeChain()) {
+      final result = _offerPasteTo(node, event);
+      if (result != KeyEventResult.handled) continue;
+      if (pasteId != null && !event.isFinal) {
+        _pasteOwner = node;
+        _pasteOwnerId = pasteId;
+      } else {
+        _clearPasteOwner();
+      }
+      return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
   }
 
-  /// Offers IME composition content to each [TextCompositionClaimant] up the
-  /// focus chain until one consumes it.
-  KeyEventResult _deliverComposition(TextCompositionEvent event) {
-    for (final node in focusManager.activeChain()) {
-      final claimant = node.textCompositionClaimant;
-      if (claimant == null) continue;
-      final result = switch (event.kind) {
-        TextCompositionEventKind.update => claimant.onTextCompositionUpdate(
-          event.text ?? '',
-        ),
-        TextCompositionEventKind.commit => claimant.onTextCompositionCommit(
-          event.text,
-        ),
-        TextCompositionEventKind.cancel => claimant.onTextCompositionCancel(),
-      };
-      if (result == KeyEventResult.handled) return result;
+  KeyEventResult _offerCompositionTo(
+    FocusNode node,
+    TextCompositionEvent event,
+  ) {
+    final claimant = node.textCompositionClaimant;
+    if (claimant == null || !node.acceptsInput) {
+      return KeyEventResult.ignored;
     }
-    return KeyEventResult.ignored;
+    return switch (event.kind) {
+      TextCompositionEventKind.update => claimant.onTextCompositionUpdate(
+        event.text ?? '',
+      ),
+      TextCompositionEventKind.commit => claimant.onTextCompositionCommit(
+        event.text,
+      ),
+      TextCompositionEventKind.cancel => claimant.onTextCompositionCancel(),
+    };
+  }
+
+  void _clearCompositionOwner() {
+    _compositionOwner = null;
+  }
+
+  /// Offers IME composition content with sticky ownership until commit/cancel.
+  KeyEventResult _deliverComposition(TextCompositionEvent event) {
+    switch (event.kind) {
+      case TextCompositionEventKind.update:
+        final sticky = _compositionOwner;
+        if (sticky != null) {
+          final result = _offerCompositionTo(sticky, event);
+          if (result == KeyEventResult.handled) return result;
+          // Owner gone or declined — drop sticky and try the live chain.
+          _clearCompositionOwner();
+        }
+        for (final node in focusManager.activeChain()) {
+          final result = _offerCompositionTo(node, event);
+          if (result != KeyEventResult.handled) continue;
+          _compositionOwner = node;
+          return result;
+        }
+        return KeyEventResult.ignored;
+      case TextCompositionEventKind.commit:
+      case TextCompositionEventKind.cancel:
+        final owner = _compositionOwner;
+        _clearCompositionOwner();
+        if (owner != null) {
+          final result = _offerCompositionTo(owner, event);
+          if (result == KeyEventResult.handled) return result;
+        }
+        for (final node in focusManager.activeChain()) {
+          final result = _offerCompositionTo(node, event);
+          if (result == KeyEventResult.handled) return result;
+        }
+        return KeyEventResult.ignored;
+    }
   }
 
   static KeyEvent? _keyEventForText(String text, {bool repeat = false}) {
@@ -1159,6 +1274,7 @@ class InputDispatcher {
       candidates: candidates,
       sources: sources,
       texts: [textOrigin],
+      textOwners: [textOrigin == null ? null : _nearestTextInputOwner()],
       lanes: [lane],
     );
     _timer = Timer(sequenceTimeout, _onTimeout);
@@ -1235,6 +1351,8 @@ class InputDispatcher {
     }
     _keyObservers.clear();
     _clearPending();
+    _clearPasteOwner();
+    _clearCompositionOwner();
     // Unhook before disposing: this both drops the notifier's reference back
     // to us and makes a late `cancel()` (a click racing teardown) a silent
     // no-op instead of a disposed-dispatcher throw.
@@ -1341,6 +1459,7 @@ class _PendingSequence {
     required this.candidates,
     required this.sources,
     required this.texts,
+    required this.textOwners,
     required this.lanes,
   });
 
@@ -1364,8 +1483,15 @@ class _PendingSequence {
   /// Per-held-event text origin: `texts[i]` is the original typed text
   /// when `events[i]` was synthesized from a [TextInputEvent], null for a
   /// real key event. On cancel/timeout a text-origin step is owed to the
-  /// focused text claimant, not just direct key dispatch.
+  /// text claimant that owned focus at type time, not just direct key
+  /// dispatch — see [textOwners].
   final List<String?> texts;
+
+  /// Per-held-event text claimant focus node captured when the text-origin
+  /// step was held. Parallel to [texts]; null when `texts[i]` is null.
+  /// Timeout/cancel replay delivers through this owner so a focus change
+  /// mid-chord cannot reroute the held printable.
+  final List<FocusNode?> textOwners;
 
   /// Which command view matched each held event. This keeps aliases honest:
   /// a physical match cannot later masquerade as a logical-text prefix merely
@@ -1438,12 +1564,14 @@ class _PendingSequence {
     List<KeyBinding> survivors,
     String? textOrigin,
     _BindingLane lane,
+    FocusNode? textOwner,
   ) {
     return _PendingSequence(
       events: [...events, event],
       candidates: survivors,
       sources: sources,
       texts: [...texts, textOrigin],
+      textOwners: [...textOwners, textOwner],
       lanes: [...lanes, lane],
     );
   }
@@ -1455,6 +1583,7 @@ class _PendingSequence {
         candidates: candidates,
         sources: sources,
         texts: texts,
+        textOwners: textOwners,
         lanes: lanes,
       );
 }

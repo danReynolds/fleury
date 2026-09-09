@@ -178,6 +178,11 @@ class FocusNode {
   Element? _element;
   FocusScopeRef? _enclosingScope;
 
+  /// Nearest ancestor [Focus] node, recorded at attach time. Used when this
+  /// node unmounts while focused: the element parent link is already cleared
+  /// by then, so fallback cannot walk the live tree and must use this chain.
+  FocusNode? _enclosingFocus;
+
   /// Optional source of `KeyBinding`s contributed by a `KeyBindings`
   /// widget. The `InputDispatcher` reads this to find bindings on each
   /// node of the focus chain. Null for `Focus` widgets that use
@@ -320,6 +325,7 @@ class FocusNode {
     _manager = null;
     _element = null;
     _enclosingScope = null;
+    _enclosingFocus = null;
     keyDetector = null;
     bindingSource = null;
     textInputClaimant = null;
@@ -672,17 +678,43 @@ class FocusManager extends ChangeNotifier {
   /// node whose element is defunct — which would route every key into a
   /// disposed State's handler. The sanctioned unmount-then-remount reuse of
   /// a long-lived node keeps working because [_register] re-sets both.
+  ///
+  /// When the focused node unmounts (e.g. a lazy [ListView] virtualizes its
+  /// focused row away), focus falls back to the nearest still-attached
+  /// ancestor [Focus] that can take it — typically the list's own node —
+  /// instead of dropping to null and abandoning keyboard ownership (audit 8.g).
   void _unregister(FocusNode node) {
     if (!identical(node._manager, this)) return;
+    final wasFocused = identical(_focusedNode, node);
+    // Capture before clearing: fallback walks the attach-time enclosing chain.
+    final fallback = wasFocused ? _focusFallbackAncestor(node) : null;
     node._manager = null;
     node._element = null;
     node._enclosingScope = null;
+    node._enclosingFocus = null;
     if (_disposed) return;
-    if (identical(_focusedNode, node)) {
-      _focusedNode = null;
+    _attachedNodes.remove(node);
+    if (wasFocused) {
+      _focusedNode = fallback;
+      if (fallback != null) _rememberFocusInScopes(fallback);
       notifyListeners();
     }
-    _attachedNodes.remove(node);
+  }
+
+  /// Walk [node]'s attach-time enclosing-focus chain for a still-clickable
+  /// ancestor. The live element parent link is already null during unmount
+  /// dispose, so this cannot walk the element tree.
+  FocusNode? _focusFallbackAncestor(FocusNode node) {
+    var candidate = node._enclosingFocus;
+    while (candidate != null) {
+      if (identical(candidate._manager, this) &&
+          _attachedNodes.contains(candidate) &&
+          isClickable(candidate)) {
+        return candidate;
+      }
+      candidate = candidate._enclosingFocus;
+    }
+    return null;
   }
 
   /// Requests that [node] become the focused node (null to clear
@@ -1038,6 +1070,7 @@ class FocusManager extends ChangeNotifier {
         node._manager = null;
         node._element = null;
         node._enclosingScope = null;
+        node._enclosingFocus = null;
       }
     }
     _attachedNodes.clear();
@@ -1293,7 +1326,16 @@ class _FocusState extends State<Focus> {
     // Follow provider identity even when the parent reuses the same child.
     // Ordinary focus changes do not require repeating this ownership work.
     final manager = Focus.maybeOfIdentityDependency(context);
-    if (identical(manager, _manager)) return;
+    if (identical(manager, _manager)) {
+      // Still refresh ancestry: an ancestor Focus/FocusScope may have
+      // appeared between mounts, and unmount fallback needs a current chain.
+      if (manager != null) {
+        manager._register(_node, context as Element);
+        _node._enclosingScope = FocusScope._enclosingOf(context as Element);
+        _node._enclosingFocus = _ancestorFocusNode(context as Element);
+      }
+      return;
+    }
     _detach();
     if (manager == null) return;
     _manager = manager;
@@ -1301,6 +1343,9 @@ class _FocusState extends State<Focus> {
     manager._register(_node, context as Element);
     // Carry the nearest enclosing scope down.
     _node._enclosingScope = FocusScope._enclosingOf(context as Element);
+    // And the nearest ancestor Focus — needed for unmount focus fallback
+    // after the element parent link is cleared.
+    _node._enclosingFocus = _ancestorFocusNode(context as Element);
 
     if (widget.autofocus && !_didAutofocus) {
       // Consume the one-shot opportunity on first attach (even if the scope is
@@ -1319,6 +1364,16 @@ class _FocusState extends State<Focus> {
     _attachedNode = null;
     _manager = null;
     if (node != null) manager?._unregister(node);
+  }
+
+  /// Nearest ancestor [Focus] above [from], or null at the root.
+  static FocusNode? _ancestorFocusNode(Element from) {
+    Element? element = from.elementParent;
+    while (element != null) {
+      if (element is _FocusElement) return element.node;
+      element = element.elementParent;
+    }
+    return null;
   }
 
   @override
