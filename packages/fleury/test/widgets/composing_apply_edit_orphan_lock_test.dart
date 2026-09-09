@@ -125,7 +125,7 @@ void main() {
     });
 
     test(
-      'a later peer commit after an orphaning insert must not duplicate',
+      'a later peer commit after an orphaning insert does not duplicate',
       () {
         final c = TextEditingController(text: 'git ');
         addTearDown(c.dispose);
@@ -136,11 +136,14 @@ void main() {
 
         expect(
           c.text,
-          'git checkout',
+          'git Xcheckout',
           reason:
-              'after a mid-composition insert resolved the preedit, a stale '
-              'peer commit must replace/apply cleanly — not append onto the '
-              'orphaned interim text (git cheXcheckout)',
+              'the interim preedit `che` is gone — the insert resolved it, so '
+              'the commit cannot append onto it (git cheXcheckout). It lands '
+              'after the X, which the user typed and must keep: rewinding to '
+              'read `git checkout` would also delete a paste made during '
+              'composition, and the two are indistinguishable here. See '
+              'composing_orphan_scope_lock_test.dart.',
         );
       },
     );

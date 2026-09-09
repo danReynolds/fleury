@@ -1,14 +1,18 @@
-// Lock test: a late peer commit resolves the composition an edit orphaned —
-// and NOTHING else. The rewind that places it correctly deletes the edit it
-// replaces, so it must be reachable only from the edit that did the orphaning.
-// Keyed on "was a composition orphaned, and how long ago", not on "the last
-// transaction happened to be typing", which is also true of an ordinary run.
+// Lock test: a commit that arrives after its composition was already resolved
+// INSERTS. It never rewinds, because every edit that can resolve a preedit
+// early — a keystroke, a paste, a clear — is an edit whose result the user has
+// already seen, and rewinding deletes it with no way to tell which one it was.
+//
+// The tempting case is `git che` + `X` + commit(`checkout`): rewinding reads
+// `git checkout` instead of `git Xcheckout`. The same rewind deletes a paste
+// made during composition, which is reachable in a browser — the DOM source
+// suppresses keydown and input while composing, but not paste.
 import 'package:fleury/fleury.dart';
 import 'package:test/test.dart';
 
 void main() {
-  group('orphaned-composition commit is scoped to its own edit', () {
-    test('the orphaning keystroke is replaced by the late commit', () {
+  group('a late composition commit never deletes existing text', () {
+    test('after an interrupting keystroke it appends', () {
       final c = TextEditingController(text: 'git ');
       addTearDown(c.dispose);
       c.updateComposingText('che');
@@ -17,73 +21,67 @@ void main() {
 
       expect(
         c.text,
-        'git checkout',
-        reason: 'the commit resolves the preedit the keystroke interrupted',
+        'git Xcheckout',
+        reason: 'the typed X survives; the late commit lands after it',
       );
     });
 
-    test('typing on past the interruption keeps every typed character', () {
+    test('a paste made during composition survives', () {
       final c = TextEditingController(text: 'git ');
       addTearDown(c.dispose);
       c.updateComposingText('che');
-      c.insert('X', coalesce: true);
-      for (final ch in ['a', 'b', 'c']) {
-        c.insert(ch, coalesce: true);
-      }
+      c.paste('~/Downloads/report.pdf');
       c.commitComposing(text: 'checkout');
 
       expect(
         c.text,
-        'git Xabccheckout',
+        contains('~/Downloads/report.pdf'),
         reason:
-            'the run coalesces into one undo entry, so rewinding it would '
-            'delete Xabc — four characters the user typed and watched appear',
+            'clipboard content the user pasted and watched appear cannot be '
+            'silently replaced by a late commit',
       );
     });
 
-    test('a commit with no composition behind it cannot eat a typing run', () {
+    test('a deliberate clear stays cleared', () {
+      final c = TextEditingController(text: 'git ');
+      addTearDown(c.dispose);
+      c.updateComposingText('che');
+      c.clear();
+      c.commitComposing(text: 'checkout');
+
+      expect(
+        c.text,
+        'checkout',
+        reason:
+            'the commit inserts into the cleared field, it does not '
+            'restore what clear() removed',
+      );
+    });
+
+    test('a whole typing run survives a commit that follows it', () {
       final c = TextEditingController();
       addTearDown(c.dispose);
       for (final ch in ['h', 'e', 'l', 'l', 'o']) {
         c.insert(ch, coalesce: true);
       }
-      // No composition was ever started here — a spurious or stale peer
-      // commit must insert, never rewind.
       c.commitComposing(text: 'zzz');
 
-      expect(c.text, 'hellozzz');
+      expect(c.text, 'hellozzz', reason: 'a coalesced run is not a preedit');
     });
 
-    test('a destructive edit that stops at the cancel still resolves', () {
-      final c = TextEditingController(text: 'git ');
-      addTearDown(c.dispose);
-      c.updateComposingText('che');
-      // backspace resolves the preedit and stops, applying no edit of its own.
-      c.backspace();
-      expect(c.text, 'git ');
-      c.commitComposing(text: 'checkout');
-
-      expect(
-        c.text,
-        'git checkout',
-        reason: 'delta of zero edits is still the orphaning edit',
-      );
-    });
-
-    test('the record is single use', () {
+    test('a commit cannot rewind past the user own undo', () {
       final c = TextEditingController(text: 'git ');
       addTearDown(c.dispose);
       c.updateComposingText('che');
       c.insert('X', coalesce: true);
+      c.undo();
+      final afterUndo = c.text;
       c.commitComposing(text: 'checkout');
-      expect(c.text, 'git checkout');
 
-      // A second late commit has no orphan left to resolve.
-      c.commitComposing(text: 'status');
       expect(
         c.text,
-        'git checkoutstatus',
-        reason: 'the first commit consumed the record; the second inserts',
+        startsWith(afterUndo),
+        reason: 'undo decided what the text is; the commit only adds to it',
       );
     });
   });

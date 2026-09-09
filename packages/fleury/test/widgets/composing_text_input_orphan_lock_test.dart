@@ -97,10 +97,11 @@ void main() {
 
       expect(
         c.text,
-        'git checkout',
+        'git Xcheckout',
         reason:
             'after type resolved the preedit, a stale peer commit must not '
-            'produce git cheXcheckout',
+            'produce git cheXcheckout — it appends past the typed X rather '
+            'than rewinding it away',
       );
     },
   );
