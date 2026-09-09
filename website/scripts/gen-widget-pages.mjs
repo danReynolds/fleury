@@ -476,8 +476,8 @@ const DOC_ONLY = [
     code: "FileBrowser(\n  initialDirectory: Directory.current.path,\n  onActivate: (entry) => openFile(entry.path),\n)" },
   { slug: 'filepicker', widget: 'FilePicker', category: 'Inputs & controls', reason: 'native',
     code: "FilePicker(\n  initialDirectory: Directory.current.path,\n  filter: (entity) => entity is Directory || entity.path.endsWith('.dart'),\n  onSelect: (file) => openFile(file.path),\n)" },
-  { slug: 'image', widget: 'Image', category: 'Data & lists', reason: 'native',
-    code: "Image.file('assets/logo.png', fit: ImageFit.contain)" },
+  { slug: 'image', widget: 'Image', category: 'Data & lists', reason: 'image-file',
+    code: "Image.bytes(logoBytes, fit: ImageFit.contain)\n// Image.file(...) needs dart:io — use bytes/decoded in embeds" },
   { slug: 'logregion', widget: 'LogRegion', category: 'Agent surfaces', reason: 'native',
     code: "LogRegion(\n  entries: const [\n    LogEntry(message: 'Starting build', source: 'build'),\n    LogEntry(message: 'Tests failed', severity: LogSeverity.error),\n  ],\n  filter: const LogRegionFilterDescriptor(query: 'build'),\n)" },
   { slug: 'terminaloutputregion', widget: 'TerminalOutputRegion', category: 'Agent surfaces', reason: 'native',
@@ -487,7 +487,7 @@ const DOC_ONLY = [
   { slug: 'toaster', widget: 'Toaster', category: 'Navigation & overlays', reason: 'imperative',
     code: "// Wrap your app once:\nToaster(child: app)\n\n// …then from anywhere below it:\nToaster.show(context, 'Saved', severity: ToastSeverity.success);" },
 ];
-const DOC_ONLY_REASONS = new Set(['native', 'native-model', 'imperative']);
+const DOC_ONLY_REASONS = new Set(['native', 'native-model', 'imperative', 'image-file']);
 for (const entry of DOC_ONLY) {
   if (!DOC_ONLY_REASONS.has(entry.reason)) {
     throw new Error(
@@ -498,10 +498,19 @@ for (const entry of DOC_ONLY) {
 }
 const docNote = (d) => {
   const reason = d.reason;
+  if (reason === 'image-file')
+    return (
+      `:::note[Embed-safe with bytes]\n\`Image\` itself is web-safe — use ` +
+      `\`Image.bytes\` or \`Image.decoded\` in client-side embeds. Only ` +
+      `\`Image.file\` needs \`dart:io\` (terminal or ` +
+      `[\`fleury serve\`](/fleury/architecture/serving-and-embedding/)). ` +
+      `This page has no live browser demo yet; the reference below is generated ` +
+      `from the source.\n:::\n`
+    );
   if (reason === 'native')
     return (
-      `:::note[Runs locally]\nThis widget uses \`dart:io\` (filesystem, processes, ` +
-      `or image decoding), so it runs in a terminal or through ` +
+      `:::note[Runs locally]\nThis widget uses \`dart:io\` (filesystem or processes), ` +
+      `so it runs in a terminal or through ` +
       `[\`fleury serve\`](/fleury/architecture/serving-and-embedding/) — which is ` +
       `why this page has no live browser demo. The reference below is generated ` +
       `from the source.\n:::\n`

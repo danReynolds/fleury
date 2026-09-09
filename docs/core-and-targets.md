@@ -100,7 +100,7 @@ package; `fleury_widgets` and `fleury_web` are separate packages.
 | `fleury/fleury_core.dart` | framework primitives and the cell model | ✅ |
 | `fleury/fleury_host.dart` | the above, plus the host SPI a target plugs into | ✅ |
 | `fleury/fleury_wire.dart` | explicitly unstable remote frames/codecs/transports for matching first-party peers | ✅ |
-| `fleury/fleury.dart` | core + stable host SPI + the native runtime: `runApp`, terminal drivers, `serve`, file/process/log | ❌ — pulls in `dart:io` |
+| `fleury/fleury.dart` | core + stable host SPI + the native runtime: `runApp`, terminal drivers, file/process/log | ❌ — pulls in `dart:io` |
 | `fleury_widgets` | the widget library | ✅ mostly — a few native-only |
 | `fleury_web` | the web/DOM target and the served browser client | ✅ — compiled with dart2js |
 
