@@ -36,6 +36,8 @@ class NumberInput extends StatefulWidget {
     this.semanticLabel,
     this.focusNode,
     this.autofocus = false,
+    this.enabled = true,
+    this.readOnly = false,
   }) : assert(
          controller == null || initialValue == null,
          'Supply either initialValue or controller, not both.',
@@ -122,6 +124,12 @@ class NumberInput extends StatefulWidget {
 
   /// Whether the field should request focus when mounted.
   final bool autofocus;
+
+  /// Whether the field accepts focus and user input.
+  final bool enabled;
+
+  /// Whether the field can receive focus but not edit text.
+  final bool readOnly;
 
   @override
   State<NumberInput> createState() => _NumberInputState();
@@ -275,6 +283,8 @@ class _NumberInputState extends State<NumberInput> {
       placeholderStyle: widget.placeholderStyle,
       style: widget.style,
       cursorStyle: widget.cursorStyle,
+      enabled: widget.enabled,
+      readOnly: widget.readOnly,
       semanticLabel: widget.semanticLabel,
       semanticState: _semanticState(),
       onChanged: (text) => widget.onChanged?.call(_parse(text)),
