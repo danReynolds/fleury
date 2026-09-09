@@ -139,7 +139,7 @@ void main() {
       expect(copied!.viewIndex, 0);
     });
 
-    testWidgets('semantic activate selects a terminal output row', (
+    testWidgets('semantic select selects a terminal output row', (
       tester,
     ) async {
       final buffer = LogBuffer()
@@ -168,13 +168,13 @@ void main() {
       var row = tester.semantics().single(
         role: SemanticRole.listItem,
         label: 'deploy failed',
-        action: SemanticAction.activate,
+        action: SemanticAction.select,
       );
       expect(row.selected, isFalse);
 
       await tester
           .target(role: SemanticRole.listItem, label: 'deploy failed')
-          .press();
+          .select();
 
       expect(controller.followTail, isFalse);
       expect(controller.currentIndex, 1);

@@ -205,6 +205,7 @@ final class DiffViewCopyResult {
 DiffDocument parseUnifiedDiff(String source, {int? maxLineLength = 1000}) {
   final rows = <DiffLine>[];
   var fileIndex = -1;
+  var sawGitHeader = false;
   var hunkIndex = -1;
   int? currentHunkIndex;
   var additionCount = 0;
@@ -263,7 +264,14 @@ DiffDocument parseUnifiedDiff(String source, {int? maxLineLength = 1000}) {
     // file after the first, inflated the counts, and left oldPath/newPath
     // pointing at file 1. The counters cannot decide it either — that is what
     // an understated `@@ -1,1 +1,1 @@` breaks.
+    // ...and only for a file that did NOT announce itself with `diff --git`.
+    // A git diff already has an unambiguous file boundary, so mid-body the
+    // lookahead can only be wrong there — a deletion of `-- x` followed by an
+    // addition of `++ y` and then the next `@@` (SQL, Lua, Haskell and Ada
+    // comments all produce that shape) was being reclassified as a header
+    // pair, deleting two real edits from the rendered diff.
     final startsHeaderRun =
+        !sawGitHeader &&
         line.startsWith('--- ') &&
         lineAt(lineIndex + 1).startsWith('+++ ') &&
         _hunkPattern.hasMatch(lineAt(lineIndex + 2));
@@ -274,6 +282,7 @@ DiffDocument parseUnifiedDiff(String source, {int? maxLineLength = 1000}) {
     // `diff --git` and `@@` never carry a +/-/space prefix, so a bare one at
     // column 0 is unambiguous even mid-hunk — a new file/hunk resets the body.
     if (line.startsWith('diff --git ')) {
+      sawGitHeader = true;
       fileIndex += 1;
       oldPath = null;
       newPath = null;
@@ -289,7 +298,16 @@ DiffDocument parseUnifiedDiff(String source, {int? maxLineLength = 1000}) {
     // identical prefix is a deleted/added line whose content starts with -/+.
     if ((!inHunkBody || startsHeaderRun) && line.startsWith('--- ')) {
       oldPath = _normalizeDiffPath(line.substring(4));
-      if (fileIndex < 0) fileIndex = 0;
+      // A header run reached from inside a hunk body is the next file in a
+      // plain `diff -u`, which has no `diff --git` to bump the index. Without
+      // this every file in such a diff shared fileIndex 0, so anything that
+      // groups by file — the file list, per-file collapse, jump-to-file —
+      // merged them all into one.
+      if (startsHeaderRun && inHunkBody) {
+        fileIndex += 1;
+      } else if (fileIndex < 0) {
+        fileIndex = 0;
+      }
       currentHunkIndex = null;
       addRow(kind: DiffLineKind.fileHeader, text: line);
       continue;

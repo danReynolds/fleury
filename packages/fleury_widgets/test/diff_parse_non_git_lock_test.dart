@@ -32,6 +32,42 @@ void main() {
     expect(parsed.deletionCount, 2);
   });
 
+  test('the header lookahead never fires inside a git hunk body', () {
+    // A deletion of `-- x` followed by an addition of `++ y` and then the
+    // next hunk header looks exactly like a file-header run. In a git diff it
+    // cannot be one — `diff --git` already marked the boundary — and reading
+    // it as one DELETED two real edits from the rendered diff.
+    const source =
+        'diff --git a/q.sql b/q.sql\n--- a/q.sql\n+++ b/q.sql\n'
+        '@@ -1,3 +1,3 @@\n select 1\n--- deprecated helper\n+++ new helper\n'
+        '@@ -9,1 +9,1 @@\n-x\n+y\n';
+    final parsed = parseUnifiedDiff(source);
+
+    expect(parsed.deletionCount, 2, reason: 'the SQL comment line is an edit');
+    expect(parsed.additionCount, 2);
+    expect(
+      parsed.rows.last.oldPath,
+      'q.sql',
+      reason: 'and the file path is not rewritten to the comment text',
+    );
+  });
+
+  test('plain diff -u gives each file its own index', () {
+    const source =
+        '--- a/x\n+++ b/x\n@@ -1 +1 @@\n-old\n+new\n'
+        '--- a/y\n+++ b/y\n@@ -1 +1 @@\n-old2\n+new2\n';
+    final parsed = parseUnifiedDiff(source);
+
+    expect(
+      parsed.fileCount,
+      2,
+      reason:
+          'no `diff --git` line bumps the index here, so the header run has '
+          'to — otherwise everything that groups by file merges them',
+    );
+    expect(parsed.rows.map((r) => r.fileIndex).toSet(), {0, 1});
+  });
+
   test('an understated hunk keeps its extra body lines as edits', () {
     const source = '--- a/x\n+++ b/x\n@@ -1,1 +1,1 @@\n-one\n-two\n+three\n';
     final parsed = parseUnifiedDiff(source);
