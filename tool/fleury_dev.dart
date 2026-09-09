@@ -438,11 +438,7 @@ class _Runner {
     // Explicit platforms: fleury_web splits VM-safe suites from
     // @TestOn('browser') ones, and a bare `dart test` silently skips the
     // browser set.
-    await _run('dart', [
-      'test',
-      '-p',
-      'vm,chrome',
-    ], workingDirectory: web);
+    await _run('dart', ['test', '-p', 'vm,chrome'], workingDirectory: web);
     await _run('dart', ['test'], workingDirectory: samples);
     await _run('dart', ['test'], workingDirectory: mcp);
     if (!quick) {
@@ -568,9 +564,7 @@ class _Runner {
     final depsFile = File(depsPath);
     if (depsFile.existsSync()) depsFile.deleteSync();
 
-    final assetFile = File(
-      '$fleury/lib/src/remote/remote_client_asset.dart',
-    );
+    final assetFile = File('$fleury/lib/src/remote/remote_client_asset.dart');
 
     // --check: verify freshness without rewriting the asset (the freshness
     // gate). The compile above doubles as a "still compiles" check.
@@ -593,9 +587,7 @@ class _Runner {
     final b64 = base64.encode(js);
     final lines = <String>[];
     for (var i = 0; i < b64.length; i += 100) {
-      lines.add(
-        "    '${b64.substring(i, math.min(i + 100, b64.length))}'",
-      );
+      lines.add("    '${b64.substring(i, math.min(i + 100, b64.length))}'");
     }
     final out =
         '''// GENERATED — do not edit by hand.
@@ -1252,6 +1244,9 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       case 'alloc-gate':
         await benchmarkAllocGate(rest);
         return;
+      case 'alloc-trace':
+        await benchmarkAllocTrace(rest);
+        return;
       case 'input-alloc-gate':
         await benchmarkInputAllocGate(rest);
         return;
@@ -1664,6 +1659,21 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
     ], workingDirectory: profiling);
   }
 
+  /// Allocation-site attribution for the same scenario `alloc-gate` measures.
+  /// A diagnostic, not a gate: it never fails. Run it when the gate's `total`
+  /// axis goes red and the class breakdown (`_List`, `_OneByteString`) does not
+  /// say who allocated. Needs the profiler ON, so — unlike the gates — it must
+  /// NOT pass `--deterministic`, which disables it.
+  Future<void> benchmarkAllocTrace(List<String> args) async {
+    await _run('dart', [
+      '--profiler',
+      '--enable-vm-service=0',
+      '--disable-service-auth-codes',
+      'bin/alloc_trace.dart',
+      ...args,
+    ], workingDirectory: profiling);
+  }
+
   /// Per-key input-path allocation gate (RFC 0020 §19). Drives raw terminal
   /// bytes through parser -> dispatcher -> session -> binding walk and gates
   /// on bytes/key of `package:fleury` churn — the axis the per-frame gate
@@ -1738,33 +1748,40 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
   /// auto-run — invoke them explicitly. See docs/implementation/perf-gates.md.
   Future<void> benchmarkGates(List<String> args) async {
     const fast = <({String name, List<String> cmd})>[
-      (name: 'serve-semantics-gate', cmd: [
-        'run',
-        'bin/serve_semantics_profile.dart',
-        '--gate',
-      ]),
+      (
+        name: 'serve-semantics-gate',
+        cmd: ['run', 'bin/serve_semantics_profile.dart', '--gate'],
+      ),
       (name: 'image-bench', cmd: ['run', 'bin/image_bench.dart', '--gate']),
-      (name: 'bundle-size', cmd: ['run', 'bin/bundle_size_gate.dart', '--gate']),
-      (name: 'alloc-gate', cmd: [
-        '--deterministic',
-        '--enable-vm-service=0',
-        '--disable-service-auth-codes',
-        'bin/alloc_gate.dart',
-        '--gate',
-      ]),
-      (name: 'input-alloc-gate', cmd: [
-        '--deterministic',
-        '--enable-vm-service=0',
-        '--disable-service-auth-codes',
-        'bin/input_alloc_gate.dart',
-        '--gate',
-      ]),
+      (
+        name: 'bundle-size',
+        cmd: ['run', 'bin/bundle_size_gate.dart', '--gate'],
+      ),
+      (
+        name: 'alloc-gate',
+        cmd: [
+          '--deterministic',
+          '--enable-vm-service=0',
+          '--disable-service-auth-codes',
+          'bin/alloc_gate.dart',
+          '--gate',
+        ],
+      ),
+      (
+        name: 'input-alloc-gate',
+        cmd: [
+          '--deterministic',
+          '--enable-vm-service=0',
+          '--disable-service-auth-codes',
+          'bin/input_alloc_gate.dart',
+          '--gate',
+        ],
+      ),
       (name: 'paint-gate', cmd: ['run', 'bin/paint_gate.dart', '--gate']),
-      (name: 'selection-gate', cmd: [
-        'run',
-        'bin/selection_gate.dart',
-        '--gate',
-      ]),
+      (
+        name: 'selection-gate',
+        cmd: ['run', 'bin/selection_gate.dart', '--gate'],
+      ),
       (name: 'runtime-gate', cmd: ['run', 'bin/runtime_gate.dart', '--gate']),
     ];
     final results = <({String name, bool ok, int ms})>[];
@@ -1784,25 +1801,27 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
       );
       final code = await process.exitCode;
       sw.stop();
-      results.add((
-        name: gate.name,
-        ok: code == 0,
-        ms: sw.elapsedMilliseconds,
-      ));
+      results.add((name: gate.name, ok: code == 0, ms: sw.elapsedMilliseconds));
     }
 
     stdout.writeln('\n=== perf gate summary ===');
     var allOk = true;
     for (final r in results) {
-      stdout.writeln('  ${r.ok ? 'PASS' : 'FAIL'}  ${r.name.padRight(22)} '
-          '${(r.ms / 1000).toStringAsFixed(1)}s');
+      stdout.writeln(
+        '  ${r.ok ? 'PASS' : 'FAIL'}  ${r.name.padRight(22)} '
+        '${(r.ms / 1000).toStringAsFixed(1)}s',
+      );
       allOk = allOk && r.ok;
     }
-    stdout.writeln('  (heavier PTY/subprocess gates not auto-run — invoke '
-        'explicitly: wire-gate, serve-wire-live)');
+    stdout.writeln(
+      '  (heavier PTY/subprocess gates not auto-run — invoke '
+      'explicitly: wire-gate, serve-wire-live)',
+    );
     if (!allOk) {
-      stderr.writeln('\nperf gates: one or more gates FAILED — see output '
-          'above and docs/implementation/perf-gates.md.');
+      stderr.writeln(
+        '\nperf gates: one or more gates FAILED — see output '
+        'above and docs/implementation/perf-gates.md.',
+      );
       exit(1);
     }
     stdout.writeln('\nperf gates: all fast gates pass.');
@@ -6738,8 +6757,10 @@ void _printBenchmarkUsage() {
     '  wire <scenario> [...]   Build/capture/analyze real PTY peer runs',
   );
   stdout.writeln('');
-  stdout.writeln('Regression gates (pass --gate to fail on regression; see '
-      'docs/implementation/perf-gates.md):');
+  stdout.writeln(
+    'Regression gates (pass --gate to fail on regression; see '
+    'docs/implementation/perf-gates.md):',
+  );
   stdout.writeln(
     '  gates                   Run the fast gate suite + pass/fail summary',
   );
@@ -6759,7 +6780,10 @@ void _printBenchmarkUsage() {
     '  bundle-size [--gate]    Served-browser first-load client raw + gzip',
   );
   stdout.writeln(
-    '  alloc-gate [--gate]     Per-frame package:fleury allocation churn',
+    '  alloc-gate [--gate]     Per-frame allocation churn (total + project)',
+  );
+  stdout.writeln(
+    '  alloc-trace [--class=..] Attribute per-frame allocation to call sites',
   );
   stdout.writeln(
     '  input-alloc-gate [--gate] Per-key input-path allocation churn',

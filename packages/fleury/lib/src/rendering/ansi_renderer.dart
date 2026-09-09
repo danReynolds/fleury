@@ -294,7 +294,7 @@ final class AnsiRenderer {
       onDirtyCell?.call(col, row);
 
       // Cursor positioning. Pick the shortest encoding that lands the
-      // cursor at (row, col); see [_cursorMove]. Bytes-on-the-wire matter
+      // cursor at (row, col); see [_cursorMoveLength]. Bytes-on-the-wire matter
       // more than CPU here, and cursor moves are the dominant frame
       // overhead on scroll/dashboard/sparse updates.
       final fromCol = cursorCol;
@@ -309,8 +309,8 @@ final class AnsiRenderer {
           emittedLink,
         );
         if (gap != null) {
-          final move = _cursorMove(cursorRow, cursorCol, row, col);
-          if (gap.bytes.length < move.length) {
+          final moveLength = _cursorMoveLength(cursorRow, cursorCol, row, col);
+          if (gap.bytes.length < moveLength) {
             buf.write(gap.bytes);
             cursorCol = col;
             if (gap.emittedSgr) {
@@ -321,7 +321,7 @@ final class AnsiRenderer {
         }
       }
       if (cursorRow != row || cursorCol != col) {
-        buf.write(_cursorMove(cursorRow, cursorCol, row, col));
+        _writeCursorMove(buf, cursorRow, cursorCol, row, col);
         cursorRow = row;
         cursorCol = col;
       }
@@ -506,8 +506,15 @@ final class AnsiRenderer {
   ///
   /// Absolute positions omit defaults: `CSI H` at home, and `CSI row H` when
   /// the column is 1.
-  static String _cursorMove(int? fromRow, int? fromCol, int row, int col) {
-    final absolute = _absolutePosition(row, col);
+  ///
+  /// Split into a LENGTH function and a WRITER rather than returning a string:
+  /// one call site needs only the byte count (to compare against a gap
+  /// rewrite) and was allocating a string just to measure it, and the other
+  /// writes straight into the frame buffer. Both branches' lengths are exact
+  /// arithmetic on the same digit counts the writer emits, so the pair stays
+  /// byte-equivalent to the single-string form it replaces.
+  static int _cursorMoveLength(int? fromRow, int? fromCol, int row, int col) {
+    final absolute = _absolutePositionLength(row, col);
     // Same-row moves are column-relative (CUF/CUB) and safe: the tracked column
     // is kept exact (last-column and ambiguous-width writes invalidate it, so a
     // following move re-pins absolutely). CROSS-ROW relative moves (`\r\n`, CNL,
@@ -521,26 +528,105 @@ final class AnsiRenderer {
     // absolute CUP for any row change re-pins the row and cannot drift; the cost
     // is ~1 byte/row over `\r\n`+CUF, and only on row transitions.
     if (fromRow != null && fromCol != null && fromRow == row) {
-      return _shorter(absolute, _horizontalMove(fromCol, col));
+      final horizontal = _horizontalMoveLength(fromCol, col);
+      return horizontal < absolute ? horizontal : absolute;
     }
     return absolute;
   }
 
-  /// Absolute cursor position (1-indexed), omitting defaults: `CSI H` at home,
-  /// `CSI row H` when the column is 1.
-  static String _absolutePosition(int row, int col) {
-    if (row == 0 && col == 0) return '\x1B[H';
-    if (col == 0) return '\x1B[${row + 1}H';
-    return '\x1B[${row + 1};${col + 1}H';
+  /// Writes the same escape [_cursorMoveLength] measured.
+  ///
+  /// The two must agree exactly: a length that overstates the bytes makes the
+  /// gap rewrite lose comparisons it should win (wasted bytes), and one that
+  /// understates them makes it win comparisons it should lose (the gap rewrite
+  /// is chosen while being the LONGER encoding). Neither corrupts the frame,
+  /// so no output test can see it — hence the assert, which runs on every
+  /// cursor move in every debug frame the suite renders. In practice the
+  /// relative branch beats absolute by several bytes whenever it is reachable,
+  /// so an off-by-one in the arithmetic would otherwise sit undetected.
+  static void _writeCursorMove(
+    StringBuffer buf,
+    int? fromRow,
+    int? fromCol,
+    int row,
+    int col,
+  ) {
+    final startLength = buf.length;
+    if (fromRow != null && fromCol != null && fromRow == row) {
+      if (_horizontalMoveLength(fromCol, col) <
+          _absolutePositionLength(row, col)) {
+        _writeHorizontalMove(buf, fromCol, col);
+        assert(
+          buf.length - startLength ==
+              _cursorMoveLength(fromRow, fromCol, row, col),
+          'cursor-move length arithmetic disagrees with the bytes written',
+        );
+        return;
+      }
+    }
+    _writeAbsolutePosition(buf, row, col);
+    assert(
+      buf.length - startLength == _cursorMoveLength(fromRow, fromCol, row, col),
+      'cursor-move length arithmetic disagrees with the bytes written',
+    );
   }
 
-  static String _shorter(String a, String b) => b.length < a.length ? b : a;
+  /// Absolute cursor position (1-indexed), omitting defaults: `CSI H` at home,
+  /// `CSI row H` when the column is 1.
+  static void _writeAbsolutePosition(StringBuffer buf, int row, int col) {
+    if (row == 0 && col == 0) {
+      buf.write('\x1B[H');
+      return;
+    }
+    buf.write('\x1B[');
+    _writeInt(buf, row + 1);
+    if (col != 0) {
+      buf.writeCharCode(0x3B); // ;
+      _writeInt(buf, col + 1);
+    }
+    buf.writeCharCode(0x48); // H
+  }
 
-  static String _horizontalMove(int fromCol, int col) {
-    if (fromCol == col) return '';
+  static int _absolutePositionLength(int row, int col) {
+    if (row == 0 && col == 0) return 3; // CSI H
+    if (col == 0) return 3 + _digits(row + 1); // CSI row H
+    return 4 + _digits(row + 1) + _digits(col + 1); // CSI row ; col H
+  }
+
+  static void _writeHorizontalMove(StringBuffer buf, int fromCol, int col) {
+    if (fromCol == col) return;
     final n = (col - fromCol).abs();
-    final dir = col > fromCol ? 'C' : 'D';
-    return n == 1 ? '\x1B[$dir' : '\x1B[$n$dir';
+    buf.write('\x1B[');
+    if (n != 1) _writeInt(buf, n); // CSI C / CSI D default to 1
+    buf.writeCharCode(col > fromCol ? 0x43 : 0x44); // C / D
+  }
+
+  static int _horizontalMoveLength(int fromCol, int col) {
+    if (fromCol == col) return 0;
+    final n = (col - fromCol).abs();
+    return n == 1 ? 3 : 3 + _digits(n);
+  }
+
+  /// Decimal digit count of a non-negative [value].
+  static int _digits(int value) {
+    if (value < 10) return 1;
+    if (value < 100) return 2;
+    if (value < 1000) return 3;
+    if (value < 10000) return 4;
+    return value.toString().length;
+  }
+
+  /// Appends [value]'s decimal digits without materializing a string. Cursor
+  /// parameters are small, so the common cases stay branch-and-write.
+  static void _writeInt(StringBuffer buf, int value) {
+    if (value >= 10000) {
+      buf.write(value);
+      return;
+    }
+    if (value >= 1000) buf.writeCharCode(0x30 + (value ~/ 1000) % 10);
+    if (value >= 100) buf.writeCharCode(0x30 + (value ~/ 100) % 10);
+    if (value >= 10) buf.writeCharCode(0x30 + (value ~/ 10) % 10);
+    buf.writeCharCode(0x30 + value % 10);
   }
 
   static String _scrollUp(int rows) => rows == 1 ? '\x1B[S' : '\x1B[${rows}S';

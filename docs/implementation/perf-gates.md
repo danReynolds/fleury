@@ -36,7 +36,7 @@ The heavier PTY/subprocess gates (`wire-gate`, `serve-wire-live`) are not in the
 | Gate | Protects | When to run (trigger) | Speed | Baseline |
 | --- | --- | --- | --- | --- |
 | `wire-gate` | Terminal ANSI **output bytes** (SB.1/6/9: startup, dashboard steady-state, untrusted-output encoding) | `lib/src/rendering/ansi_renderer.dart`, cell paint, any diff/cursor/SGR change | ~30s (PTY) | `profiling/wire_gate_baseline.json` |
-| `alloc-gate` | Per-frame **`package:fleury` allocation churn** (build → reconcile → layout → paint → diff) | `lib/src/widgets/framework.dart`, `lib/src/rendering/**`, anything on the per-frame path | ~10s (VM service) | `profiling/alloc_gate_baseline.json` |
+| `alloc-gate` | Per-frame **allocation churn** (build → reconcile → layout → paint → diff) on **two axes**: `total` — every Dart-level allocation the frame makes, which is what the GC sees — and `project` — `package:fleury` classes only | `lib/src/widgets/framework.dart`, `lib/src/rendering/**`, anything on the per-frame path | ~10s (VM service) | `profiling/alloc_gate_baseline.json` |
 | `input-alloc-gate` | Per-**key** `package:fleury` allocation churn (parser → dispatcher → session regularizer → binding/detector walk), driving a held key through lifecycle mode | `lib/src/input/**`, `lib/src/terminal/input_parser.dart`, `lib/src/runtime/input_dispatcher.dart`, `lib/src/widgets/key_bindings.dart`, `keyboard.dart`, `focus.dart` | ~5s (VM service) | `profiling/input_alloc_gate_baseline.json` |
 | `paint-gate` | Paint-walk pruning as **exact repaint-boundary counters**: the real `ListView.builder`'s auto-boundaries prune a localized update to one repaint; Overlay entry boundaries engage adaptively (dashboard+floater fixtures — real leaf widgets in bespoke two-entry scaffolding); the **lazy-layer convention** (the real `Toaster` with zero toasts idles pure pass-through: `boundaryCount == 0`); full-invalidate staleness (`cached == 0` when everything is dirty). Paint-phase µs is recorded warn-only (measured with debug stats on — not a clean paint time) and never fails | `lib/src/rendering/**` (esp. `render_repaint_boundary.dart`, cell paint), `lib/src/widgets/overlay.dart`, `lib/src/widgets/list_view.dart`, any widget that mounts overlay entries (toasts, banners, dropdowns) | ~4s (dart-run startup dominates; the measurement is <0.5s) | `profiling/paint_gate_baseline.json` (counters exact, tolerance 0; structural invariants also enforced in-code, even under `--update-baseline`) |
 | `selection-gate` | Default-on text **selection** driven through a **real `SelectionArea`** — press/drag/release, Ctrl+A, Ctrl+C, Esc, routed through a real `InputDispatcher` + `PointerRouter` against real painted geometry. Gated counters: chars a drag selects and copies, chars a select-all selects and copies, and the **highlight cells actually painted**. Structural invariants (a drag selects something; Esc clears the highlight to zero) hold even under `--update-baseline`. The per-frame µs a held selection adds is recorded **warn-only** (machine-dependent, and this path's per-frame allocation is JIT-sink-nondeterministic — a hard alloc gate would flap CI ~24×, so cost is surfaced, not gated) | `lib/src/widgets/selection/**`, `selectable_text_mixin.dart`, `selection_area.dart`, `pointer.dart`, the default-on wrap in `run_app.dart` | ~5s | `profiling/selection_gate_baseline.json` (counters exact, tolerance 0) |
@@ -45,6 +45,12 @@ The heavier PTY/subprocess gates (`wire-gate`, `serve-wire-live`) are not in the
 | `serve-semantics-gate` | Semantics wire **anti-cliff**: diff stays flat in tree size (never falls off the 32 KiB DEFLATE cliff) | `lib/src/remote/remote_semantics.dart`, `SemanticsWireEncoder` | ~5s | structural (in code) |
 | `serve-wire-live` | Live `fleury serve` **socket bytes** (plan + semantics) **+ input→paint latency** (G4): the `input-latency` scenario injects keys closed-loop — starting only after the initial paint **quiesces** — and enforces the structural invariant *every key answered by exactly one PLAN within the per-key timeout* (2s default, flag-tunable). A violated run (missed plan, unsolicited plan, dropped socket) is **discarded and retried**; the gate fails only when every run fails, with the message separating a reproducing input-path break from socket/infra drops. Its latency p50/p95 axes are **warn-only** (live-socket wall-clock), and its byte axes start warn-only too — promote them to gated once run-to-run variance is characterized | `lib/src/remote/**`, `lib/src/serve/**`, plan/wire codec, input dispatch on the served path | ~40s (boots serve) | `profiling/serve_wire_live_baseline.json` |
 | `bundle-size` | Served-browser **first-load client** weight (`remote_client.dart.js`, raw + gzip) | `web/remote_client.dart` and its imports | ~2s (no recompile) | generous fixed threshold (512 / 160 KiB) |
+
+## Diagnostics (not gates)
+
+| Tool | Answers | Run |
+| --- | --- | --- |
+| `alloc-trace` | **Which call sites** produce the per-frame churn `alloc-gate` counts. Drives the same scenario, turns on the VM's per-class allocation tracing, and aggregates the stacks. Use it when the `total` axis goes red: the classes on top are `_List` and `_OneByteString`, which name no owner. Never fails; no baseline. | `dart tool/fleury_dev.dart benchmark alloc-trace [--class=_List,...] [--frames=N]` |
 
 Trigger paths are a guide, not a lockout — if a change plausibly moves a number,
 run the gate. When several apply, run them all; they're cheap.
@@ -103,9 +109,46 @@ CI SDK is pinned (see check.yml), which keeps the SDK-sensitive axes stable:
   runs the input path in **lifecycle mode** (`KeyboardCapabilities.full`)
   deliberately — under the legacy projection the session keeps no press
   records and the number would flatter us.
-- **`alloc-gate`** has ±10% headroom for machine drift on a fixed SDK. If a
-  deliberate SDK bump moves it past tolerance, re-baseline in the bump
-  commit — never loosen the tolerance.
+- **`alloc-gate`** gates two axes with different bands. `project`
+  (`package:fleury` only) is byte-exact on a fixed SDK and keeps ±10% headroom
+  for machine drift. `total` (every `dart:` / `package:` class) gets **±3%**,
+  because it is the axis that can actually see a dart:core regression and a
+  wide band wastes it. Classes with no library (VM-internal JIT artifacts, plus
+  closure `Context`s that share that bucket) and `package:vm_service` are
+  excluded from both.
+
+  **Why the total axis exists.** The project axis alone is nearly blind: a
+  framework frame allocates mostly dart:core — the lists, strings and iterators
+  fleury code *creates* but does not *own*. The three fixes this axis shipped
+  with moved the gate's scenario 103667 → 93764 B/frame total (−9.6%) while
+  moving the project axis −2.4%, comfortably inside its tolerance — i.e. a gate
+  watching only the project axis would have called all three nothing. Reverting
+  either the width scan or the semantic-anchor pre-scan reads **+4.6% / +5.3%
+  on total and +0.0% / +2.5% on project**: red on the new axis, green on the
+  old one. On a border-heavy 120×40 dashboard, where box drawing makes the
+  width path far hotter, the same fixes cut measured churn ~34%.
+
+  **How the number is measured** (this is what makes ±3% safe rather than
+  flaky). The RPC that resets the allocation counters *returns the profile it
+  is clearing*, so the client-side JSON decode of that response lands inside
+  the next measured window — and its size depends on what the previous window
+  accumulated. With one reset the windows alternate by ~10%. The gate therefore
+  **resets twice** (the second response covers only the first decode, so it is
+  small and history-independent), **discards the first window** as measurement
+  warm-up, and reports the **median of 5** further windows. Six consecutive
+  runs against a fresh baseline then landed between −0.2% and 0.0%, with no
+  excursion above it.
+
+  Two caveats worth knowing. One profile-response decode (~15 kB/frame at this
+  window size) is still allocated inside every window and cannot be separated
+  from the frame's churn by class, so the absolute number is inflated and
+  relative deltas are damped ~15%. Read `total` as a regression detector
+  against a baseline measured the same way, not as the absolute cost of a
+  frame. And the gate's fixture is a plain-text dashboard: it under-represents
+  box drawing, so it understates changes to the width path.
+
+  If a deliberate SDK bump moves either axis past tolerance, re-baseline in the
+  bump commit — never loosen the tolerance.
 - **`paint-gate`**'s gated axes are exact counters (machine- and
   SDK-independent); its µs axes are warn-only by design.
 - **`selection-gate`** gates exact counters (drag / select-all characters and

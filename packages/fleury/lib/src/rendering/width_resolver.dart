@@ -64,17 +64,26 @@ final class DefaultWidthResolver implements WidthResolver {
     // classes they were measured on — a selector inside a composite must
     // never leak the simple-sequence answer onto the whole cluster
     // (`👩‍⚕️` contains FE0F; `emojiVariationSequence: one` may not narrow it).
-    final iterator = grapheme.runes.iterator;
-    if (!iterator.moveNext()) return 0;
-    final base = iterator.current;
+    // Decoded from code units rather than `grapheme.runes`, whose iterator is
+    // a heap allocation per call. This runs three times per painted non-ASCII
+    // grapheme (measure, paint, buffer write), so every box-drawing run in a
+    // frame's chrome was paying an iterator per cell per pass to be told what
+    // range checks answer. `hasUncertainWidth` below already avoids it the
+    // same way; scanning code units keeps ONE ladder rather than duplicating
+    // the branch table behind a fast path that could drift from it.
+    final length = grapheme.length;
+    var index = 0;
+    final base = _codePointAt(grapheme, index, length);
+    index += base > 0xFFFF ? 2 : 1;
     var hasZwj = false;
     var hasKeycap = false;
     var hasTag = false;
     var hasModifier = false;
     var hasCompanion = false;
     var selector = 0; // First VS15/VS16 in the cluster; first one wins.
-    while (iterator.moveNext()) {
-      final r = iterator.current;
+    while (index < length) {
+      final r = _codePointAt(grapheme, index, length);
+      index += r > 0xFFFF ? 2 : 1;
       if (r == 0x200D) {
         hasZwj = true;
       } else if (r == 0x20E3) {
@@ -273,4 +282,21 @@ bool hasUncertainWidth(String grapheme) {
     if (r == 0xFE0E || r == 0xFE0F || r == 0x200D) return true;
   }
   return false;
+}
+
+/// The code point starting at [index] in [s], matching `Runes` semantics
+/// exactly — including that an unpaired surrogate decodes to its own code
+/// unit value rather than U+FFFD.
+///
+/// Exists so the width scans can walk a cluster without allocating a
+/// [RuneIterator] per call; they run on every painted non-ASCII cell.
+int _codePointAt(String s, int index, int length) {
+  final c = s.codeUnitAt(index);
+  if (c >= 0xD800 && c <= 0xDBFF && index + 1 < length) {
+    final low = s.codeUnitAt(index + 1);
+    if (low >= 0xDC00 && low <= 0xDFFF) {
+      return 0x10000 + ((c - 0xD800) << 10) + (low - 0xDC00);
+    }
+  }
+  return c;
 }

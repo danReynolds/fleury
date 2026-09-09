@@ -299,4 +299,64 @@ void main() {
       expect(resolver.widthOfText('ok \u{26A0}\u{FE0F}', inertVs16), 4);
     });
   });
+
+  // The cluster scan decodes UTF-16 code units by hand rather than allocating a
+  // `Runes` iterator per call (it runs three times per painted non-ASCII
+  // grapheme). That hand-rolled decode has to reproduce `Runes` semantics
+  // exactly, including the parts nothing else in this file exercised: how a
+  // surrogate PAIR combines, and that an UNPAIRED surrogate decodes to its own
+  // code-unit value rather than U+FFFD. A decoder that mis-advanced past a pair
+  // would read the trailing low surrogate as a second code point and mistake a
+  // bare emoji for a two-scalar cluster.
+  group('widthOfGrapheme — UTF-16 decoding', () {
+    test('a surrogate pair is one astral code point, not two units', () {
+      expect(resolver.widthOfGrapheme('\u{1F600}', spec), 2);
+      expect(resolver.widthOfGrapheme('\u{20000}', spec), 2); // CJK ext B
+      expect(resolver.widthOfGrapheme('\u{1F600}', narrowEmoji), 1);
+    });
+
+    test('astral markers are read as whole code points', () {
+      // Each of these classifies on a marker that only exists above the BMP,
+      // so a decoder that walked code units would miss it entirely.
+      expect(
+        resolver.widthOfGrapheme('\u{1F44D}\u{1F3FD}', spec),
+        2,
+      ); // modifier
+      expect(
+        resolver.widthOfGrapheme('\u{1F1E8}\u{1F1E6}', spec),
+        2,
+      ); // flag pair
+      expect(
+        resolver.widthOfGrapheme(
+          '\u{1F3F4}\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}',
+          spec,
+        ),
+        2, // tag sequence
+      );
+    });
+
+    test('unpaired surrogates decode to themselves and stay zero-width', () {
+      // Matches `Runes`: a lone surrogate yields its own code-unit value, which
+      // the tables classify zero-width. Not U+FFFD, and never a crash.
+      for (final g in ['\uD83D', '\uDE00', '\uDBFF', '\uDFFF']) {
+        expect(
+          resolver.widthOfGrapheme(g, spec),
+          0,
+          reason: 'g=${g.codeUnits}',
+        );
+      }
+      expect(resolver.widthOfGrapheme('\uD83D\uD83D', spec), 0);
+      expect(resolver.widthOfGrapheme('\uDC00\uDC00', spec), 0);
+    });
+
+    test('a malformed pair does not swallow the following character', () {
+      // High surrogate + non-low: the high surrogate is its own (zero-width)
+      // base, and 'a' is a separate spacing code point.
+      expect(resolver.widthOfGrapheme('\uD83Da', spec), 0);
+      expect(resolver.widthOfGrapheme('a\uDC00', spec), 1);
+      // A well-formed pair followed by a stray low surrogate still measures the
+      // pair, which is what a correct advance guarantees.
+      expect(resolver.widthOfGrapheme('\u{1F600}\uDC00', spec), 2);
+    });
+  });
 }

@@ -989,6 +989,24 @@ String _renderSemanticKeySegment(Key key) {
 /// own-`key:` form, this scheme treats `Key`s as structural identifiers, not a
 /// place to encode secrets.
 String? semanticAnchorOf(Element element) {
+  // Allocation-free pre-scan for the answer that decides everything else. A
+  // fully-unkeyed subtree returns null, and that is the common shape — but the
+  // walk below cannot know it without reaching the root, so it used to build a
+  // list of every ancestor and then discard it. This runs per SemanticsElement
+  // per update, which made it the framework's single largest per-frame list
+  // allocation (measured: ~120 growable-list allocations/frame on a 120x40
+  // dashboard). Pointer-chasing the same chain twice is cheaper than allocating
+  // once, and the keyed case only re-walks as far as its nearest key.
+  var hasKey = false;
+  for (Element? probe = element; probe != null; probe = probe.elementParent) {
+    final key = probe.widget.key;
+    if (key != null && key is! GlobalKey) {
+      hasKey = true;
+      break;
+    }
+  }
+  if (!hasKey) return null;
+
   final scope = <String>[]; // keyed segments, leaf→root
   // Elements below the nearest key (leaf→root). We only need their POSITIONAL
   // indices, but `_childIndexOf` is O(siblings), and a fully-unkeyed subtree
@@ -1350,9 +1368,18 @@ final class SemanticsElement extends ComponentElement
       );
     }
     final anchor = semanticAnchorOf(this);
-    if (anchor == null) return SemanticNodeId('element-$hashCode');
+    if (anchor == null) {
+      return _elementFallbackId ??= SemanticNodeId('element-$hashCode');
+    }
     return SemanticNodeId('$anchor/${widget.role.name}');
   }
+
+  /// Memoized `element-<hash>` fallback. Only the *string* is cached, never the
+  /// decision to use it: whether this element has a keyed ancestor is
+  /// position-dependent and stays recomputed per read (see [_nodeId]). The
+  /// string itself is a pure function of [hashCode], which is fixed for the
+  /// element's lifetime, so rebuilding it every update was pure churn.
+  SemanticNodeId? _elementFallbackId;
 
   bool get _canBuildRetainedLeaf => !widget.includeChildren;
 
