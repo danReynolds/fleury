@@ -10,7 +10,10 @@ void main() {
   ) {
     tester.pumpWidget(const FileList());
     tester.press(KeySequence.down);
-    expect(tester.renderToString(), contains('› notes.md'));
+    expect(
+      tester.render().atColRow(0, 1).style.inverse,
+      isTrue,
+    );
     expect(tester.exists(text('Selected: None')), isTrue);
     tester.press(KeySequence.enter);
     expect(
@@ -19,8 +22,8 @@ void main() {
     );
     tester.press(KeySequence.down);
     expect(
-      tester.renderToString(),
-      contains('› sketches.txt'),
+      tester.render().atColRow(0, 2).style.inverse,
+      isTrue,
     );
     expect(
       tester.exists(text('Selected: notes.md')),

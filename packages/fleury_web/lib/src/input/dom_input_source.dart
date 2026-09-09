@@ -871,6 +871,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
   // and stepping once per row of travel ties scroll speed to finger distance,
   // not event count.
   double _wheelAccumY = 0;
+  double _wheelAccumX = 0;
 
   void _handleWheel(web.Event raw) {
     final event = raw as web.WheelEvent;
@@ -880,35 +881,64 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
     // zoom impossible anywhere on the page. Leave the gesture to the browser
     // and don't feed it into the scroll accumulator either.
     if (event.ctrlKey || event.metaKey) return;
-    if (event.deltaY == 0) return;
+    if (event.deltaY == 0 && event.deltaX == 0) return;
     final cell = _cellForPointer(event);
     if (cell == null) return;
     raw.preventDefault();
 
-    // One scroll step per row of travel (content-following). Fall back to a
-    // sane line height before the canvas has been measured.
     final box = _cellMetrics.cachedMeasurement;
-    final stepPx = (box != null && box.cssCellHeight > 0)
+    final cellWidth = (box != null && box.cssCellWidth > 0)
+        ? box.cssCellWidth
+        : 9.0;
+    final cellHeight = (box != null && box.cssCellHeight > 0)
         ? box.cssCellHeight
         : 18.0;
-    final px = _wheelDeltaToPixels(event);
-    // Reset on direction reversal so a stale remainder can't fire a late step
-    // the wrong way.
-    if (_wheelAccumY != 0 && px.sign != _wheelAccumY.sign) _wheelAccumY = 0;
-    _wheelAccumY += px;
+    // Keep independent remainders: a diagonal gesture can scroll a horizontal
+    // child and its vertical ancestor without losing either component.
+    _wheelAccumX = _emitWheelSteps(
+      event,
+      cell,
+      event.deltaX,
+      _wheelAccumX,
+      cellWidth,
+      MouseEventKind.scrollLeft,
+      MouseEventKind.scrollRight,
+    );
+    _wheelAccumY = _emitWheelSteps(
+      event,
+      cell,
+      event.deltaY,
+      _wheelAccumY,
+      cellHeight,
+      MouseEventKind.scrollUp,
+      MouseEventKind.scrollDown,
+    );
+  }
 
-    var steps = _wheelAccumY.abs() ~/ stepPx;
-    if (steps == 0) return;
-    // Cap a single event's burst so a page-sized delta can't fire dozens.
-    if (steps > 8) steps = 8;
-    final up = _wheelAccumY < 0;
-    _wheelAccumY -= (up ? -1 : 1) * steps * stepPx;
-
-    final kind = up ? MouseEventKind.scrollUp : MouseEventKind.scrollDown;
+  double _emitWheelSteps(
+    web.WheelEvent event,
+    CellOffset cell,
+    double delta,
+    double accumulated,
+    double stepPx,
+    MouseEventKind negative,
+    MouseEventKind positive,
+  ) {
+    if (delta == 0) return accumulated;
+    final px = switch (event.deltaMode) {
+      1 => delta * 16.0, // DOM_DELTA_LINE
+      2 => delta * 400.0, // DOM_DELTA_PAGE
+      _ => delta, // DOM_DELTA_PIXEL
+    };
+    if (accumulated != 0 && px.sign != accumulated.sign) accumulated = 0;
+    accumulated += px;
+    final steps = (accumulated.abs() ~/ stepPx).clamp(0, 8);
+    final backwards = accumulated < 0;
+    accumulated -= (backwards ? -1 : 1) * steps * stepPx;
     for (var i = 0; i < steps; i++) {
       _emit(
         MouseEvent(
-          kind: kind,
+          kind: backwards ? negative : positive,
           button: MouseButton.none,
           col: cell.col,
           row: cell.row,
@@ -916,17 +946,7 @@ final class DomInputSource implements TuiInputSource, KeyboardCaptureTarget {
         ),
       );
     }
-  }
-
-  /// Normalizes a wheel event's deltaY to CSS pixels regardless of its
-  /// `deltaMode` (0 = pixel, 1 = line, 2 = page).
-  static double _wheelDeltaToPixels(web.WheelEvent event) {
-    final d = event.deltaY;
-    return switch (event.deltaMode) {
-      1 => d * 16.0, // DOM_DELTA_LINE — ~one text line
-      2 => d * 400.0, // DOM_DELTA_PAGE — ~one viewport
-      _ => d, // DOM_DELTA_PIXEL
-    };
+    return accumulated;
   }
 
   void _clearTextArea() {

@@ -11,7 +11,7 @@ class ScrollEdges extends StatefulWidget {
 
 class _ScrollEdgesState extends State<ScrollEdges> {
   final scroll = ScrollController();
-  bool contain = false;
+  EdgeBehavior edgeBehavior = EdgeBehavior.bubble;
   bool paneFocused = false;
   bool continued = false;
 
@@ -27,11 +27,22 @@ class _ScrollEdgesState extends State<ScrollEdges> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Checkbox(
-          label: 'Contain arrows',
-          value: contain,
+        const Text('Edge behavior'),
+        Select<EdgeBehavior>(
+          semanticLabel: 'Edge behavior',
+          value: edgeBehavior,
+          options: const [
+            SelectOption(
+              value: EdgeBehavior.bubble,
+              label: 'Bubble (leave pane)',
+            ),
+            SelectOption(
+              value: EdgeBehavior.contain,
+              label: 'Contain (stay in pane)',
+            ),
+          ],
           onChanged: (value) =>
-              setState(() => contain = value),
+              setState(() => edgeBehavior = value),
         ),
         const SizedBox(height: 1),
         ListenableBuilder(
@@ -63,9 +74,7 @@ class _ScrollEdgesState extends State<ScrollEdges> {
                     controller: scroll,
                     autofocus: true,
                     scrollbar: true,
-                    edgeBehavior: contain
-                        ? EdgeBehavior.contain
-                        : EdgeBehavior.bubble,
+                    edgeBehavior: edgeBehavior,
                     child: Column(
                       crossAxisAlignment:
                           CrossAxisAlignment.start,

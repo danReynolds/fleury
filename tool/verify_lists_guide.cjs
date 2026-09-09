@@ -44,14 +44,18 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await click('lists.files', 'notes.md');
     await waitText('lists.files', 'Selected: notes.md');
     await page.keyboard.press('ArrowDown');
-    await waitText('lists.files', '› sketches.txt');
+    await page.waitForFunction(() => {
+      const rows = document.querySelectorAll('[data-fleury-example="lists.files"] .fleury-row');
+      const row = [...rows].find(row => row.textContent.trim() === 'sketches.txt');
+      return row?.querySelector('span[style*="background"]');
+    });
     assert.match(await screen('lists.files').innerText(), /Selected: notes.md/);
     await page.keyboard.press('Enter');
     await waitText('lists.files', 'Selected: sketches.txt');
     await host('lists.files').locator('xpath=ancestor::figure[contains(@class,"cds")]').screenshot({path: '/tmp/fleury-lists-first-demo.png'});
 
     await show('lists.tasks');
-    await waitText('lists.tasks', '› Task 25');
+    await waitText('lists.tasks', 'Task 25');
     await waitText('lists.tasks', 'Selected: None');
     await click('lists.tasks', 'Go to 25');
     await waitText('lists.tasks', 'Current: 25 / 1000');
@@ -75,25 +79,85 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await waitText('lists.tasks', 'Selected: Task 501');
     await host('lists.tasks').locator('xpath=ancestor::figure[contains(@class,"cds")]').screenshot({path: '/tmp/fleury-lists-task-browser-verified.png'});
 
-    await show('lists.reorder');
-    await click('lists.reorder', 'Reverse order');
-    await waitText('lists.reorder', 'Current: Build the prototype');
-    await page.waitForFunction(() =>
-      document.querySelector('[data-fleury-example="lists.reorder"] .fleury-screen')
-        ?.textContent.indexOf('Ship the guide') < document.querySelector('[data-fleury-example="lists.reorder"] .fleury-screen')
-        ?.textContent.indexOf('Build the prototype'));
-    await click('lists.reorder', 'Test the keyboard path');
-    await waitText('lists.reorder', 'Current: Test the keyboard path');
-    await click('lists.reorder', 'Reverse order');
-    await waitText('lists.reorder', 'Current: Test the keyboard path');
-    await page.waitForFunction(() => document.querySelectorAll('[data-fleury-example="lists.reorder"] .fleury-row')[1]?.textContent.includes('Sketch the layout'));
-    const order = await screen('lists.reorder').innerText();
-    assert.ok(order.indexOf('Sketch the layout') < order.indexOf('› Test the keyboard path'));
+    // The confirmed task keeps a visible cue after the browsing cursor moves.
+    await page.keyboard.press('ArrowDown');
+    await waitText('lists.tasks', '✓ Task 501');
+    const chosen = screen('lists.tasks').locator('.fleury-row').filter({hasText: '✓ Task 501'}).first();
+    const next = screen('lists.tasks').locator('.fleury-row').filter({hasText: /^\s*Task 502\s*$/}).first();
+    const chosenStyle = await chosen.locator('span').filter({hasText: '✓ Task 501'}).first().getAttribute('style');
+    assert.match(chosenStyle, /color:/);
+    assert.notEqual(chosenStyle, await next.locator('span').filter({hasText: 'Task 502'}).first().getAttribute('style'));
+    await page.keyboard.press('Enter');
+    await waitText('lists.tasks', '✓ Task 502');
+    assert.doesNotMatch(await screen('lists.tasks').innerText(), /✓ Task 501/);
+    await host('lists.tasks').locator('xpath=ancestor::figure[contains(@class,"cds")]').screenshot({path: '/tmp/fleury-lists-task-browser-verified.png'});
+
+    await show('datatable.rows');
+    await click('datatable.rows', 'Row 2');
+    await waitText('datatable.rows', 'Chosen: Row 2');
+    await page.keyboard.press('ArrowDown');
+    await waitText('datatable.rows', 'Browsing: Row 3');
+    assert.match(await screen('datatable.rows').innerText(), /Chosen: Row 2/);
+    await page.keyboard.press('Enter');
+    await waitText('datatable.rows', 'Chosen: Row 3');
+    await page.keyboard.press('PageDown');
+    assert.match(await screen('datatable.rows').innerText(), /Name\s+Status/);
+
+    await show('lists.horizontal');
+    await click('lists.horizontal', 'Preview');
+    await waitText('lists.horizontal', 'Selected: Preview');
+    await page.keyboard.press('End');
+    await waitText('lists.horizontal', 'Outline');
+    await page.keyboard.press('Enter');
+    await waitText('lists.horizontal', 'Selected: Outline');
+    await page.keyboard.press('Home');
+    await waitText('lists.horizontal', 'Editor');
+    const galleryPoint = await point('lists.horizontal', 'Editor');
+    await page.mouse.move(galleryPoint.x, galleryPoint.y);
+    await page.mouse.wheel(240, 0);
+    await page.waitForFunction(() => !document.querySelector('[data-fleury-example="lists.horizontal"] .fleury-screen').textContent.includes('Editor'));
+    assert((await screen('lists.horizontal').textContent()).includes('Selected: Outline'));
+    await page.keyboard.press('Home');
+    await waitText('lists.horizontal', 'Editor');
+    await page.keyboard.down('Shift');
+    await page.mouse.wheel(0, 240);
+    await page.keyboard.up('Shift');
+    await page.waitForFunction(() => !document.querySelector('[data-fleury-example="lists.horizontal"] .fleury-screen').textContent.includes('Editor'));
+    await host('lists.horizontal').locator('xpath=ancestor::figure[contains(@class,"cds")]').screenshot({path: '/tmp/fleury-horizontal-list-verified.png'});
+
+    await show('lists.wide-content');
+    await click('lists.wide-content', 'NAME');
+    await page.keyboard.press('End');
+    await waitText('lists.wide-content', '· END');
+    assert((await screen('lists.wide-content').textContent()).includes('SUCCESS'));
+    await page.keyboard.press('Home');
+    await waitText('lists.wide-content', '· START');
+    const reportPoint = await point('lists.wide-content', 'NAME');
+    await page.mouse.move(reportPoint.x, reportPoint.y);
+    await page.mouse.wheel(240, 0);
+    await page.waitForFunction(() => !document.querySelector('[data-fleury-example="lists.wide-content"] .fleury-screen').textContent.includes('· START'));
+    await page.keyboard.press('End');
+    await waitText('lists.wide-content', '· END');
+    await page.keyboard.press('Home');
+    await waitText('lists.wide-content', '· START');
+    // Box-drawing cells are CSS graphics, so they have no DOM text.
+    const reportBar = screen('lists.wide-content').locator('.fleury-row').nth(4);
+    const reportBarBounds = await reportBar.boundingBox();
+    await page.mouse.move(reportBarBounds.x + reportBarBounds.width * 0.05, reportBarBounds.y + reportBarBounds.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(reportBarBounds.x + reportBarBounds.width + 30, reportBarBounds.y + reportBarBounds.height / 2, {steps: 6});
+    await page.mouse.up();
+    await waitText('lists.wide-content', '· END');
+    await host('lists.wide-content').locator('xpath=ancestor::figure[contains(@class,"cds")]').screenshot({path: '/tmp/fleury-horizontal-content-verified.png'});
 
     await show('lists.document');
     await waitText('lists.document', 'Rows 1–4 / 8 · TOP');
-    await click('lists.document', 'Contain arrows');
-    await host('lists.document').locator('[role="checkbox"][aria-checked="true"]').waitFor({state: 'attached'});
+    await click('lists.document', 'Bubble (leave pane)');
+    await host('lists.document').locator('[role="menu"]').waitFor({state: 'attached'});
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    await host('lists.document').locator('[role="menu"]').waitFor({state: 'detached'});
+    await waitText('lists.document', 'Contain (stay in pane)');
     await page.keyboard.press('Tab');
     await page.keyboard.press('End');
     await waitText('lists.document', 'Rows 5–8 / 8 · BOTTOM');
@@ -101,36 +165,56 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.keyboard.press('Enter');
     assert.match(await screen('lists.document').innerText(), /Focus: scroll pane/);
     await host('lists.document').locator('xpath=ancestor::figure[contains(@class,"cds")]').screenshot({path: '/tmp/fleury-lists-edges-demo.png'});
-    await click('lists.document', 'Contain arrows');
-    await host('lists.document').locator('[role="checkbox"][aria-checked="false"]').waitFor({state: 'attached'});
+    await click('lists.document', 'Contain (stay in pane)');
+    await host('lists.document').locator('[role="menu"]').waitFor({state: 'attached'});
+    await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('Enter');
+    await host('lists.document').locator('[role="menu"]').waitFor({state: 'detached'});
+    await waitText('lists.document', 'Bubble (leave pane)');
     await page.keyboard.press('Tab');
     await page.keyboard.press('End');
     await page.keyboard.press('ArrowDown');
-    await host('lists.document').locator('[role="button"][data-fleury-focused="true"]').waitFor({state: 'attached'});
+    await host('lists.document').locator('[role="button"][aria-label="Next"][data-fleury-focused="true"]').waitFor({state: 'attached'});
     await page.keyboard.press('Enter');
     await waitText('lists.document', 'Next selected');
 
     assert.equal(await host('lists.log').count(), 0);
-    const overflow = await page.locator('.cds-pane[data-pane="code"] [data-cds-code-file="0"] .expressive-code:first-child').evaluateAll(blocks =>
-      blocks.flatMap((block, index) => [...block.querySelectorAll('.ec-line')]
-        .filter(line => line.getBoundingClientRect().height > parseFloat(getComputedStyle(line).lineHeight) * 1.5)
-        .map(line => ({demo: index, text: line.textContent})))
-    );
-    assert.deepEqual(overflow, [], 'Displayed source lines should fit without forced wrapping.');
+    assert.equal(await host('lists.reorder').count(), 0);
+    assert.equal(await page.getByText('Complete source file', {exact: true}).count(), 0);
+    assert.equal(await page.getByRole('heading', {name: 'Other layouts', exact: true}).count(), 0);
 
-    // The source/test tabs and complete-file disclosure work at the guide size.
-    const demo = host('lists.reorder').locator('xpath=ancestor::figure[contains(@class,"cds")]');
-    await demo.getByRole('tab', {name: 'reorder_tasks_test.dart', exact: true}).click();
-    assert.match(await demo.innerText(), /reversing keeps the current task/);
-    await demo.getByRole('tab', {name: 'reorder_tasks.dart', exact: true}).click();
-    await demo.getByText('Complete source file', {exact: true}).click();
-    assert.match(await demo.innerText(), /class ReorderTasks/);
+    // Complete files begin at the relevant widget, including after tab switches
+    // and in the expanded playground. Their imports remain reachable above.
+    const demo = host('lists.document').locator('xpath=ancestor::figure[contains(@class,"cds")]');
+    const verifySourcePosition = async scope => {
+      await page.waitForTimeout(100);
+      const position = await scope.locator('[data-code-focus-line]').first().evaluate(source => {
+        const scroll = source.closest('.cds-scroll');
+        const line = source.querySelectorAll('.ec-line')[Number(source.dataset.codeFocusLine) - 1];
+        return {top: line.getBoundingClientRect().top - scroll.getBoundingClientRect().top,
+          height: scroll.clientHeight, offset: scroll.scrollTop};
+      });
+      assert.ok(position.offset > 0, 'Complete source should open partway through the file.');
+      assert.ok(position.top >= 0 && position.top < position.height, 'Relevant widget should start in view.');
+    };
+    await verifySourcePosition(demo);
+    await demo.getByRole('tab', {name: 'scroll_edges_test.dart', exact: true}).click();
+    assert.match(await demo.innerText(), /contain keeps the edge arrow/);
+    await demo.getByRole('tab', {name: 'scroll_edges.dart', exact: true}).click();
+    await verifySourcePosition(demo);
+    assert.match(await demo.innerText(), /class ScrollEdges/);
+    await demo.locator('.cds-scroll').first().evaluate(el => {el.scrollTop = 0;});
+    assert.match(await demo.innerText(), /import 'package:fleury/);
+    await demo.getByRole('button', {name: 'Open the full playground', exact: true}).click();
+    const modal = page.locator('dialog.cds-modal');
+    await verifySourcePosition(modal);
+    await modal.getByRole('button', {name: /Close/}).click();
     await demo.screenshot({path: '/tmp/fleury-lists-guide-verified.png'});
     assert.deepEqual(errors, []);
-    console.log(JSON.stringify({result: 'passed', demos: 4, checks: [
-      'selectable first list', 'cursor vs viewport', 'click and Enter select; arrows browse',
-      'stable cursor through reorder', 'edge containment and focus escape',
-      'numbered viewport and edge markers', 'source fits its pane', 'source and test tabs',
+    console.log(JSON.stringify({result: 'passed', demos: 6, checks: [
+      'selectable first list', 'horizontal list navigation and selection', 'native horizontal and Shift+wheel', 'wide content and bottom scrollbar', 'cursor vs viewport', 'click and Enter select; arrows browse',
+      'persistent chosen row', 'table navigation and fixed header', 'edge containment and focus escape',
+      'numbered viewport and edge markers', 'complete source positioned at the relevant code', 'source and test tabs',
     ]}));
   } catch (error) {
     await page.screenshot({path: '/tmp/fleury-lists-guide-failure.png'});

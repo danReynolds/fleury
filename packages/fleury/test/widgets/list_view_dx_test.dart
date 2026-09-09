@@ -46,8 +46,56 @@ Widget list(
 }
 
 void main() {
+  testWidgets(
+    'separated rows inherit the theme and retain explicit styles',
+    (t) {
+      final controller = ListController();
+      Widget build(Color color) => Theme(
+        data: ThemeData(selectionStyle: CellStyle(background: color)),
+        child: ListView.separated(
+          controller: controller,
+          itemCount: 2,
+          itemBuilder: (_, i, _) =>
+              Text('Row $i', style: const CellStyle(foreground: AnsiColor(2))),
+          separatorBuilder: (_, _) => const Text('---'),
+        ),
+      );
+      t.pumpWidget(build(const AnsiColor(4)));
+      expect(t.render().atColRow(0, 0).style.background, const AnsiColor(4));
+      expect(t.render().atColRow(0, 0).style.foreground, const AnsiColor(2));
+      expect(t.render().atColRow(0, 1).style.background, isNull);
+      t.pumpWidget(build(const AnsiColor(5)));
+      expect(t.render().atColRow(0, 0).style.background, const AnsiColor(5));
+      controller.currentIndex = 1;
+      t.pump();
+      expect(t.render().atColRow(0, 0).style.background, isNull);
+      expect(t.render().atColRow(0, 2).style.background, const AnsiColor(5));
+    },
+    viewportSize: const CellSize(20, 3),
+  );
   for (final lazy in [false, true]) {
     group(lazy ? 'lazy viewport' : 'eager viewport', () {
+      testWidgets(
+        'plain rows get the theme highlight without builder styling',
+        (t) {
+          final controller = ListController();
+          t.pumpWidget(list(controller, lazy: lazy, count: 3, autofocus: true));
+          expect(t.render().atColRow(0, 0).style.inverse, isTrue);
+          expect(t.render().atColRow(0, 1).style.inverse, isFalse);
+          t.sendKey(KeyEvent(KeyCode.arrowDown));
+          expect(t.render().atColRow(0, 0).style.inverse, isFalse);
+          expect(t.render().atColRow(0, 1).style.inverse, isTrue);
+          controller.currentIndex = null;
+          t.pump();
+          expect(t.render().atColRow(0, 1).style.inverse, isFalse);
+          t.pumpWidget(
+            list(controller, lazy: lazy, count: 3, selectable: false),
+          );
+          expect(t.render().atColRow(0, 0).style.inverse, isFalse);
+        },
+        viewportSize: const CellSize(20, 3),
+      );
+
       testWidgets(
         'initial current index is visible without selecting or taking focus',
         (t) {
@@ -81,6 +129,8 @@ void main() {
           expect(t.renderToString(), contains('Item 24'));
           expect(events, isEmpty);
           expect(outside.hasFocus, isTrue);
+          final row = 1 + 24 - c.visibleRange!.first;
+          expect(t.render().atColRow(0, row).style.inverse, isTrue);
           t.pumpWidget(const Text('Done'));
           outside.dispose();
           c.dispose();

@@ -23,6 +23,24 @@ class _TaskBrowserState extends State<TaskBrowser> {
     super.dispose();
   }
 
+  Widget buildTask(
+    BuildContext context,
+    int index,
+    bool _,
+  ) {
+    final chosen = selected == index;
+    final label = 'Task ${index + 1}';
+    return Text(
+      '${chosen ? '✓' : ' '} $label',
+      style: chosen
+          ? CellStyle(
+              foreground: context.colors.success,
+              bold: true,
+            )
+          : CellStyle.none,
+    );
+  }
+
   @override
   Widget build(BuildContext context) => Column(
     mainAxisSize: MainAxisSize.min,
@@ -55,13 +73,7 @@ class _TaskBrowserState extends State<TaskBrowser> {
                     setState(() => focused = index),
                 onSelect: (index) =>
                     setState(() => selected = index),
-                itemBuilder:
-                    (context, index, highlighted) => Text(
-                      '${highlighted ? '›' : ' '} Task ${index + 1}',
-                      style: highlighted
-                          ? Theme.of(context).selectionStyle
-                          : CellStyle.none,
-                    ),
+                itemBuilder: buildTask,
               ),
             ),
         // #enddocregion interaction

@@ -1,32 +1,12 @@
-// ScrollView: a scrollable window onto a single, taller child.
-//
-// Where `ListView` windows a list of items (only the visible ones are
-// laid out), `ScrollView` takes one arbitrary child — a long paragraph,
-// a form, a rendered document — measures it at its full natural height,
-// and paints a clipped window at the current scroll offset. It is the
-// generic viewport primitive the rest of the widget layer reuses (a
-// pager, a tree body, scrollable panels) rather than each reinventing
-// scroll math + clipping.
-//
-// Three pieces, mirroring ListView:
-//   - ScrollController — a ChangeNotifier holding the scroll offset plus
-//     read-back metrics (max offset, viewport / content extent). Optional;
-//     the widget creates its own when none is given.
-//   - ScrollView — the widget. Claims arrow / page / home / end when
-//     focused and scrolls the viewport.
-//   - _RenderScrollView — measures the child with an unbounded main axis,
-//     clamps the offset, and paints the visible window (clipping the rest).
-//
-// Intentionally not here: horizontal scrolling, momentum/smooth scroll
-// (cells are integers — scrolling is discrete), and windowed building for
-// enormous children (use `ListView.builder` when most content is
-// off-screen; ScrollView still lays out the whole child, but paints only
-// the visible viewport into an intermediate buffer).
+// A one-axis viewport onto an eagerly laid out child. ListView uses the same
+// axis conventions while mounting and measuring only its visible items.
 
 import '../foundation/change_notifier.dart';
 import '../foundation/geometry.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/layout.dart';
+import '../rendering/render_flex.dart' show Axis;
+import '../rendering/scroll_axis.dart';
 import '../rendering/render_object.dart';
 import '../input/events.dart';
 import 'focus.dart';
@@ -40,11 +20,11 @@ import 'tui_binding.dart';
 /// Mutable scroll state for a [ScrollView]: the current offset plus
 /// read-only metrics the render object writes back after each layout.
 ///
-/// `offset` is in rows from the top of the content. It is clamped to
+/// `offset` is in cells from the start of the content along the view's axis. It is clamped to
 /// `0..maxOffset`; before the first layout (when metrics aren't known
 /// yet) only the lower bound is enforced, so an initial offset survives
 /// until layout can clamp it — mirroring how [ListController] preserves a
-/// selection before `itemCount` is known.
+/// current item before `itemCount` is known.
 class ScrollController extends ChangeNotifier {
   ScrollController({int initialOffset = 0})
     : _offset = initialOffset < 0 ? 0 : initialOffset;
@@ -71,7 +51,7 @@ class ScrollController extends ChangeNotifier {
   bool _metricsNotificationPending = false;
   int _attachment = 0;
 
-  /// Rows scrolled from the top. Clamped to `0..maxOffset`.
+  /// Cells scrolled from the start along [ScrollView.scrollDirection]. Clamped to `0..maxOffset`.
   int get offset => _offset;
   set offset(int value) {
     _checkNotDisposed();
@@ -86,38 +66,51 @@ class ScrollController extends ChangeNotifier {
   /// when the content fits). Known only after the first layout.
   int get maxOffset => _maxOffset;
 
-  /// Visible rows in the viewport (after the last layout).
+  /// Visible cells along the scrolling axis (after the last layout).
   int get viewportExtent => _viewportExtent;
 
-  /// Total rows the content occupies (after the last layout).
+  /// Content extent in cells along the scrolling axis (after the last layout).
   int get contentExtent => _contentExtent;
 
-  /// Whether the viewport is at the top / bottom of the content.
-  bool get atTop => _offset <= 0;
-  bool get atBottom => _offset >= _maxOffset;
+  /// Whether the viewport is at the start / end of the content.
+  bool get atStart => _offset <= 0;
+  bool get atEnd => _offset >= _maxOffset;
 
-  /// Scrolls by [delta] rows (negative scrolls up).
+  /// Vertical spelling of [atStart].
+  bool get atTop => atStart;
+
+  /// Vertical spelling of [atEnd].
+  bool get atBottom => atEnd;
+
+  /// Scrolls by [delta] cells along the scrolling axis (negative moves back).
   void scrollBy(int delta) {
     _checkNotDisposed();
     offset = _offset + delta;
   }
 
-  /// Scrolls so [value] is the top row.
+  /// Scrolls so cell [value] is at the start of the viewport.
   void jumpTo(int value) {
     _checkNotDisposed();
     offset = value;
   }
 
-  /// Scrolls to the very top / bottom.
-  void scrollToTop() {
+  /// Scrolls to the start of the content.
+  void scrollToStart() {
     _checkNotDisposed();
     offset = 0;
   }
 
-  void scrollToBottom() {
+  /// Scrolls to the end of the content.
+  void scrollToEnd() {
     _checkNotDisposed();
     offset = _metricsKnown ? _maxOffset : _offset;
   }
+
+  /// Vertical spelling of [scrollToStart].
+  void scrollToTop() => scrollToStart();
+
+  /// Vertical spelling of [scrollToEnd].
+  void scrollToBottom() => scrollToEnd();
 
   /// Layout writes metrics immediately; observers are notified after the frame.
   void _applyMetrics(int contentExtent, int viewportExtent) {
@@ -173,11 +166,11 @@ class ScrollController extends ChangeNotifier {
 /// A scrollable viewport onto a single [child].
 ///
 /// When focused, claims:
-///   - Up / Down — scroll one row (respecting [edgeBehavior] at the ends).
+///   - Up / Down (vertical), Left / Right (horizontal) — scroll one cell.
 ///   - PageUp / PageDown — scroll a viewport's worth.
-///   - Home / End — jump to top / bottom.
+///   - Home / End — jump to the start / end.
 ///
-/// At the top/bottom edge, [edgeBehavior] decides whether the key is
+/// At either edge, [edgeBehavior] decides whether the key is
 /// consumed (`contain`) or returned to the focus chain (`bubble`) so an
 /// ancestor — e.g. a pane coordinator — can move focus instead.
 class ScrollView extends StatefulWidget {
@@ -185,6 +178,7 @@ class ScrollView extends StatefulWidget {
     super.key,
     required this.child,
     this.controller,
+    this.scrollDirection = Axis.vertical,
     this.focusNode,
     this.autofocus = false,
     this.edgeBehavior = EdgeBehavior.bubble,
@@ -193,6 +187,9 @@ class ScrollView extends StatefulWidget {
 
   /// The full content subtree; it is laid out eagerly and clipped to the viewport.
   final Widget child;
+
+  /// The axis along which content scrolls. The other axis stays constrained.
+  final Axis scrollDirection;
 
   /// External controller. If null, the widget creates and disposes its own.
   final ScrollController? controller;
@@ -203,16 +200,16 @@ class ScrollView extends StatefulWidget {
   /// Whether to request focus on first mount.
   final bool autofocus;
 
-  /// What to do with up/down at the top/bottom edge.
+  /// How main-axis arrows and wheel gestures behave at an edge.
   final EdgeBehavior edgeBehavior;
 
   /// When true, wrap the viewport in a [Scrollbar] gutter that reflects the
   /// scroll position and lets the mouse drag/click to scroll. A one-line
   /// opt-in sharing this view's own controller.
   ///
-  /// Needs a bounded width to anchor the right-edge gutter — under an unbounded
-  /// width it throws a clear error rather than collapsing the content; wrap the
-  /// view in an Expanded or a SizedBox.
+  /// The gutter is on the right for vertical scrolling and below the content
+  /// for horizontal scrolling. It needs a bounded cross axis: width for a
+  /// vertical view, height for a horizontal one.
   final bool scrollbar;
 
   @override
@@ -273,40 +270,42 @@ class _ScrollViewState extends State<ScrollView> {
     final page = _controller.viewportExtent < 1
         ? 1
         : _controller.viewportExtent;
-    switch (event.code) {
+    final code = widget.scrollDirection.navigationKey(event.code);
+    if (code == null) return KeyEventResult.ignored;
+    switch (code) {
       case KeyCode.arrowUp:
-        if (_controller.atTop) return _edge();
+        if (_controller.atStart) return _edge();
         _controller.scrollBy(-1);
         return KeyEventResult.handled;
       case KeyCode.arrowDown:
-        if (_controller.atBottom) return _edge();
+        if (_controller.atEnd) return _edge();
         _controller.scrollBy(1);
         return KeyEventResult.handled;
       case KeyCode.pageUp:
-        if (_controller.atTop) return _edge();
+        if (_controller.atStart) return _edge();
         _controller.scrollBy(-page);
         return KeyEventResult.handled;
       case KeyCode.pageDown:
-        if (_controller.atBottom) return _edge();
+        if (_controller.atEnd) return _edge();
         _controller.scrollBy(page);
         return KeyEventResult.handled;
       case KeyCode.home:
-        _controller.scrollToTop();
+        _controller.scrollToStart();
         return KeyEventResult.handled;
       case KeyCode.end:
-        _controller.scrollToBottom();
+        _controller.scrollToEnd();
         return KeyEventResult.handled;
       default:
         // Ctrl+D / Ctrl+U scroll a half page (the less / vim convention).
         if (event.hasCtrl && !event.hasAlt) {
           final half = page < 2 ? 1 : page ~/ 2;
           if (event.code.character == 'd') {
-            if (_controller.atBottom) return _edge();
+            if (_controller.atEnd) return _edge();
             _controller.scrollBy(half);
             return KeyEventResult.handled;
           }
           if (event.code.character == 'u') {
-            if (_controller.atTop) return _edge();
+            if (_controller.atStart) return _edge();
             _controller.scrollBy(-half);
             return KeyEventResult.handled;
           }
@@ -348,8 +347,10 @@ class _ScrollViewState extends State<ScrollView> {
     _controller._binding = TuiBinding.maybeOf(context);
     final Widget content = MouseRegion(
       onScroll: (details) {
+        final delta = widget.scrollDirection.position(details.delta);
+        if (delta == 0) return false;
         final before = _controller.offset;
-        _controller.scrollBy(details.delta.row * 3);
+        _controller.scrollBy(delta * 3);
         return _controller.offset != before ||
             widget.edgeBehavior == EdgeBehavior.contain;
       },
@@ -360,6 +361,7 @@ class _ScrollViewState extends State<ScrollView> {
           autofocus: widget.autofocus,
           child: _ScrollViewport(
             controller: _controller,
+            scrollDirection: widget.scrollDirection,
             paintRevision: _paintRevision,
             child: widget.child,
           ),
@@ -367,9 +369,12 @@ class _ScrollViewState extends State<ScrollView> {
       ),
     );
     if (!widget.scrollbar) return content;
-    // Needs a bounded width to anchor the right-edge gutter — Scrollbar throws
-    // a clear error under unbounded width rather than collapsing the content.
-    return Scrollbar(controller: _controller, child: content);
+    // The gutter shares this view's controller and axis.
+    return Scrollbar(
+      controller: _controller,
+      scrollDirection: widget.scrollDirection,
+      child: content,
+    );
   }
 }
 
@@ -377,15 +382,20 @@ class _ScrollViewport extends SingleChildRenderObjectWidget {
   const _ScrollViewport({
     required this.controller,
     required this.paintRevision,
+    required this.scrollDirection,
     required super.child,
   });
 
   final ScrollController controller;
   final int paintRevision;
+  final Axis scrollDirection;
 
   @override
-  RenderObject createRenderObject(BuildContext context) =>
-      _RenderScrollView(controller: controller, paintRevision: paintRevision);
+  RenderObject createRenderObject(BuildContext context) => _RenderScrollView(
+    controller: controller,
+    paintRevision: paintRevision,
+    scrollDirection: scrollDirection,
+  );
 
   @override
   void updateRenderObject(
@@ -393,19 +403,18 @@ class _ScrollViewport extends SingleChildRenderObjectWidget {
     covariant _RenderScrollView renderObject,
   ) {
     renderObject.controller = controller;
+    renderObject.scrollDirection = scrollDirection;
     renderObject.paintRevision = paintRevision;
   }
 }
 
-/// Measures the child with an unbounded main axis (so it reports its full
-/// height), fills the bounded viewport, clamps the controller's offset to
-/// the content, and paints the visible window — dropping everything above
-/// and below it.
+/// Measures the child with an unbounded scrolling axis, clamps the offset,
+/// and paints the visible window into a viewport-sized scratch buffer.
 class _RenderScrollView extends RenderObject
     implements RenderObjectWithSingleChild {
   @override
   CellOffset childOffsetOf(RenderObject child) =>
-      CellOffset(0, -_controller.offset);
+      _scrollDirection.offset(-_controller.offset);
 
   @override
   CellRect? childClipOf(RenderObject child) =>
@@ -414,8 +423,17 @@ class _RenderScrollView extends RenderObject
   _RenderScrollView({
     required ScrollController controller,
     required int paintRevision,
+    required Axis scrollDirection,
   }) : _controller = controller,
-       _paintRevision = paintRevision;
+       _paintRevision = paintRevision,
+       _scrollDirection = scrollDirection;
+
+  Axis _scrollDirection;
+  set scrollDirection(Axis value) {
+    if (_scrollDirection == value) return;
+    _scrollDirection = value;
+    markNeedsLayout();
+  }
 
   ScrollController _controller;
   ScrollController get controller => _controller;
@@ -450,13 +468,9 @@ class _RenderScrollView extends RenderObject
       _controller._applyMetrics(0, 0);
       return constraints.constrain(CellSize.zero);
     }
-    // Bound the cross axis to our width; leave the main axis unbounded so
-    // the child reports its full content height.
+    // Constrain the cross axis and measure the child's full scrolling extent.
     final childSize = c.layout(
-      CellConstraints(
-        minCols: constraints.minCols,
-        maxCols: constraints.maxCols,
-      ),
+      _scrollDirection.childConstraints(constraints, keepCrossMinimum: true),
     );
     final cols = constraints.hasBoundedWidth
         ? constraints.maxCols!
@@ -465,7 +479,10 @@ class _RenderScrollView extends RenderObject
         ? constraints.maxRows!
         : childSize.rows;
     final size = constraints.constrain(CellSize(cols, rows));
-    _controller._applyMetrics(childSize.rows, size.rows);
+    _controller._applyMetrics(
+      _scrollDirection.extent(childSize),
+      _scrollDirection.extent(size),
+    );
     return size;
   }
 
@@ -484,11 +501,11 @@ class _RenderScrollView extends RenderObject
 
     final scroll = _controller.offset;
     // Paint only the visible viewport into scratch: the negative child offset
-    // drops the rows above the scroll window and the scratch's bounds clip
+    // drops content before the scroll window and the scratch's bounds clip
     // the rest. Descendants derive their screen position from
     // [childOffsetOf], never from where they land in the scratch.
     final scratch = CellBuffer(size);
-    c.paint(scratch, CellOffset(0, -scroll));
+    c.paint(scratch, _scrollDirection.offset(-scroll));
 
     final bufCols = buffer.size.cols;
     final bufRows = buffer.size.rows;

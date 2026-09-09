@@ -2,6 +2,17 @@
 
 ## 0.1.0
 
+- Add `scrollDirection: Axis.horizontal` to all `ListView` constructors,
+  `ScrollView`, and `Scrollbar`. Horizontal views support left/right navigation,
+  native horizontal wheel input, Shift+wheel, clipping, and bottom scrollbars.
+- Add axis-neutral controller edge helpers (`atStart` / `atEnd`,
+  `scrollToStart` / `scrollToEnd`, and `ListController.jumpToEnd`). Existing
+  vertical spellings remain supported.
+
+- ListView applies the theme's current-row text highlight in all constructors.
+  Plain Text children and builders no longer need to paint their own cursor;
+  explicit child styles and the builder flag remain available for customization.
+
 - **Text controller cleanup.** Disposal now releases the current value as well
   as editing history; getters read empty state after disposal. Assigning equal
   text or an equal editing value still resets undo/redo and composition history.

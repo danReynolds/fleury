@@ -1257,7 +1257,8 @@ class _DataTableState extends State<DataTable> {
           focusNode: _focusNode,
           autofocus: widget.autofocus,
           child: MouseRegion(
-            onScroll: (details) => _scrollBy(details.delta.row),
+            onScroll: (details) =>
+                details.delta.row != 0 && _scrollBy(details.delta.row),
             child: GestureDetector(
               onTapDown: (details) {
                 _pressPosition = details.globalPosition;

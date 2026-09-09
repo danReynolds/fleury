@@ -9,7 +9,11 @@ void main() {
     'the numbered viewport reports top, middle, and bottom',
     (tester) {
       tester.pumpWidget(
-        const SizedBox(width: 36, child: ScrollEdges()),
+        const SizedBox(
+          width: 38,
+          height: 16,
+          child: ScrollEdges(),
+        ),
       );
       tester.pump();
       expect(
@@ -37,7 +41,10 @@ void main() {
         isTrue,
       );
       tester.press(KeySequence.enter);
-      expect(tester.exists(text('Next selected')), isTrue);
+      expect(
+        tester.renderToString(),
+        contains('Next selected'),
+      );
     },
   );
 
@@ -45,9 +52,22 @@ void main() {
     'contain keeps the edge arrow; Tab still leaves',
     (tester) async {
       tester.pumpWidget(
-        const SizedBox(width: 36, child: ScrollEdges()),
+        const SizedBox(
+          width: 38,
+          height: 16,
+          child: ScrollEdges(),
+        ),
       );
-      await tester.checkbox('Contain arrows').check();
+      await tester.button('Edge behavior').focus();
+      await tester.button('Edge behavior').press();
+      tester.press(KeySequence.down);
+      tester.press(KeySequence.enter);
+      tester.pump();
+      expect(
+        tester.button('Edge behavior'),
+        hasValue('Contain (stay in pane)'),
+      );
+      tester.press(KeySequence.tab);
       tester.press(KeySequence.end);
       tester.press(KeySequence.down);
       expect(

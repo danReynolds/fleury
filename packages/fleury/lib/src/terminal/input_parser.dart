@@ -1148,17 +1148,13 @@ class InputParser {
     if (cb & 16 != 0) mods.add(KeyModifier.ctrl);
 
     if (cb & 64 != 0) {
-      // Wheel. The low two bits select which wheel: 64 up, 65 down, 66 left,
-      // 67 right. Only the vertical pair maps to a MouseEventKind; a horizontal
-      // wheel gesture is dropped rather than mis-reported as a vertical scroll
-      // (there is no horizontal scroll kind, and scrolling the wrong axis is
-      // worse than ignoring the gesture).
+      // SGR wheel buttons: 64 up, 65 down, 66 left, 67 right.
       final kind = switch (cb & 3) {
         0 => MouseEventKind.scrollUp,
         1 => MouseEventKind.scrollDown,
-        _ => null, // 66/67 — horizontal wheel-left/right.
+        2 => MouseEventKind.scrollLeft,
+        _ => MouseEventKind.scrollRight,
       };
-      if (kind == null) return;
       sink.add(
         MouseEvent(
           kind: kind,

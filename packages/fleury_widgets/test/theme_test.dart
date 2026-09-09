@@ -54,6 +54,71 @@ void main() {
     expect(found, isTrue, reason: 'menu opened with the selected row');
   });
 
+  testWidgets('Select popup keeps the source theme for its list highlight', (
+    tester,
+  ) {
+    tester.pumpWidget(
+      Theme(
+        data: const ThemeData(selectionStyle: CellStyle(underline: true)),
+        child: Select<int>(
+          autofocus: true,
+          value: 1,
+          options: const [SelectOption(value: 1, label: 'Option')],
+          onChanged: (_) {},
+        ),
+      ),
+    );
+    tester.press(KeySequence.enter);
+    final buffer = tester.render(size: const CellSize(24, 8));
+    var found = false;
+    for (var row = 0; row < buffer.size.rows; row++) {
+      for (var col = 0; col < buffer.size.cols; col++) {
+        final cell = buffer.atColRow(col, row);
+        if (cell.grapheme == 'O' && cell.style.underline) {
+          expect(cell.style.inverse, isFalse);
+          found = true;
+        }
+      }
+    }
+    expect(found, isTrue);
+  });
+
+  testWidgets('nested Menu carries the source theme into its own overlay', (
+    tester,
+  ) {
+    tester.pumpWidget(
+      Theme(
+        data: const ThemeData(selectionStyle: CellStyle(underline: true)),
+        child: Menu(
+          trigger: const Text('File'),
+          autofocus: true,
+          items: [
+            SubMenu(
+              label: 'More',
+              items: [MenuItem(label: 'Nested', onSelect: () {})],
+            ),
+          ],
+        ),
+      ),
+    );
+    tester.press(KeySequence.enter);
+    tester.pump();
+    tester.press(KeySequence.right);
+    final buffer = tester.render(size: const CellSize(30, 8));
+    var found = false;
+    for (var row = 0; row < buffer.size.rows; row++) {
+      for (var col = 0; col < buffer.size.cols; col++) {
+        final cell = buffer.atColRow(col, row);
+        if (cell.grapheme == 'N') {
+          expect(cell.style.underline, isTrue);
+          expect(cell.style.inverse, isFalse);
+          found = true;
+        }
+      }
+    }
+    expect(found, isTrue);
+  });
+
   testWidgets('Toaster severity colors come from the theme colorScheme', (
     tester,
   ) {

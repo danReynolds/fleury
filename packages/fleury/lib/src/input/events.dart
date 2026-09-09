@@ -2224,6 +2224,10 @@ enum MouseEventKind {
 
   /// The pointer left the surface; clear hover, retaining active capture.
   leave,
+
+  /// Horizontal wheel movement. Appended to preserve remote wire indices.
+  scrollLeft,
+  scrollRight,
 }
 
 /// A mouse report (SGR 1006). [col]/[row] are 0-based cell coordinates.
