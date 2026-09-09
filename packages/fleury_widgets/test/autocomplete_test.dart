@@ -344,6 +344,89 @@ void main() {
     expect(field.state['fieldKind'], 'fruit');
   });
 
+  testWidgets('disabled field does not autofocus, edit, or open suggestions', (
+    tester,
+  ) {
+    final controller = TextEditingController(text: 'ap');
+    final changes = <String>[];
+    final selected = <String>[];
+    tester.pumpWidget(
+      Autocomplete(
+        options: _fruits,
+        controller: controller,
+        autofocus: true,
+        enabled: false,
+        onChanged: changes.add,
+        onSelect: selected.add,
+      ),
+    );
+
+    tester.type('p');
+    tester.paste('ple');
+    expect(controller.text, 'ap');
+    expect(changes, isEmpty);
+    expect(tester.target(role: SemanticRole.menu), hasCount(0));
+
+    final field = tester.semantics().single(
+      role: SemanticRole.textField,
+      enabled: false,
+    );
+    expect(field.focused, isFalse);
+    expect(selected, isEmpty);
+  });
+
+  testWidgets('readOnly field focuses but rejects edits and suggestions', (
+    tester,
+  ) {
+    final controller = TextEditingController(text: 'ap');
+    final changes = <String>[];
+    final selected = <String>[];
+    tester.pumpWidget(
+      Autocomplete(
+        options: _fruits,
+        controller: controller,
+        autofocus: true,
+        readOnly: true,
+        onChanged: changes.add,
+        onSelect: selected.add,
+      ),
+    );
+
+    final field = tester.semantics().single(
+      role: SemanticRole.textField,
+      focused: true,
+    );
+    expect(field.enabled, isTrue);
+    expect(tester.target(role: SemanticRole.menu), hasCount(0));
+
+    tester.type('p');
+    tester.paste('ple');
+    tester.sendKey(const KeyEvent(KeyCode.backspace));
+    expect(controller.text, 'ap');
+    expect(changes, isEmpty);
+    expect(selected, isEmpty);
+    expect(tester.target(role: SemanticRole.menu), hasCount(0));
+
+    tester.sendKey(const KeyEvent(KeyCode.arrowLeft));
+    expect(controller.caretOffset, 1);
+  });
+
+  testWidgets('forwards validationError to the text field', (tester) {
+    tester.pumpWidget(
+      const Autocomplete(
+        options: _fruits,
+        validationError: 'Pick a known fruit.',
+        fieldSemanticLabel: 'Fruit field',
+      ),
+    );
+
+    final field = tester.semantics().single(
+      role: SemanticRole.textField,
+      label: 'Fruit field',
+    );
+    expect(field.validationError, 'Pick a known fruit.');
+  });
+
   group('semantics', () {
     testWidgets('suggestion menu exposes filtered option semantics', (tester) {
       tester.pumpWidget(

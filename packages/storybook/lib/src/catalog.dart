@@ -176,13 +176,13 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
       StoryVariant(
         id: 'disabled',
         label: 'Disabled',
-        description: 'NumberInput and peers render disabled (enabled: false).',
+        description: 'Text-entry fields render disabled (enabled: false).',
         controlValues: <String, Object?>{'disabled': 1},
       ),
       StoryVariant(
         id: 'readOnly',
         label: 'Read-only',
-        description: 'NumberInput and peers accept focus but reject edits.',
+        description: 'Text-entry fields accept focus but reject edits.',
         controlValues: <String, Object?>{'readOnly': 1},
       ),
     ],
@@ -1739,6 +1739,8 @@ class _TextEntryStoryState extends State<_TextEntryStory> {
               'bubble tea',
             ],
             placeholder: 'Type f...',
+            enabled: widget.enabled,
+            readOnly: widget.readOnly,
             onSelect: (value) {
               setState(() => _selected = value);
               widget.onAction('autocomplete.selected', <String, Object?>{
