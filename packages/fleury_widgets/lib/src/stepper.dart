@@ -428,6 +428,7 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
               // isn't disruptive.
               child: MouseRegion(
                 onScroll: (details) {
+                  if (details.delta.row == 0) return false;
                   _nudge(-details.delta.row * widget.step);
                   return true;
                 },

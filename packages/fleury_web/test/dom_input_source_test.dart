@@ -1797,6 +1797,94 @@ void main() {
     },
   );
 
+  test(
+    'wheel axes accumulate independently and preserve horizontal gestures',
+    () {
+      final events = <TuiEvent>[];
+      final host = web.document.createElement('div');
+      final textArea =
+          web.document.createElement('textarea') as web.HTMLTextAreaElement;
+      web.document.body!.appendChild(host);
+      final source = DomInputSource(
+        hostElement: host,
+        textArea: textArea,
+        cellMetrics: _FakeMetrics(
+          const MeasuredCellBox(
+            cssCellWidth: 10,
+            cssCellHeight: 20,
+            cssCanvasWidth: 80,
+            cssCanvasHeight: 60,
+            cssCanvasLeft: 10,
+            cssCanvasTop: 20,
+            devicePixelRatio: 1,
+            cols: 8,
+            rows: 3,
+          ),
+        ),
+      );
+      addTearDown(() {
+        source.dispose();
+        host.parentNode?.removeChild(host);
+      });
+      source.start(events.add);
+      void wheel(
+        double x,
+        double y, {
+        int mode = 0,
+        bool ctrl = false,
+        bool shift = false,
+      }) {
+        host.dispatchEvent(
+          web.WheelEvent(
+            'wheel',
+            web.WheelEventInit(
+              clientX: 15,
+              clientY: 25,
+              deltaX: x,
+              deltaY: y,
+              deltaMode: mode,
+              ctrlKey: ctrl,
+              shiftKey: shift,
+              bubbles: true,
+              cancelable: true,
+            ),
+          ),
+        );
+      }
+
+      wheel(4, 9);
+      expect(events, isEmpty);
+      wheel(6, 11);
+      expect(events.whereType<MouseEvent>().map((e) => e.kind), [
+        MouseEventKind.scrollRight,
+        MouseEventKind.scrollDown,
+      ]);
+      events.clear();
+      wheel(9, 0);
+      wheel(-10, 0); // reversal discards the positive remainder
+      expect(
+        events.single,
+        const MouseEvent(
+          kind: MouseEventKind.scrollLeft,
+          button: MouseButton.none,
+          col: 0,
+          row: 0,
+        ),
+      );
+      events.clear();
+      wheel(100, 100, ctrl: true);
+      expect(events, isEmpty);
+      wheel(0, 20, shift: true);
+      expect((events.single as MouseEvent).hasShift, isTrue);
+      events.clear();
+      wheel(1, 0, mode: 1);
+      expect((events.single as MouseEvent).kind, MouseEventKind.scrollRight);
+      events.clear();
+      wheel(1, 0, mode: 2);
+      expect(events, hasLength(8), reason: 'page-sized bursts are bounded');
+    },
+  );
+
   test('a zoom wheel gesture stays the browser\'s (ctrl/meta + wheel)', () {
     // Chrome delivers a trackpad pinch as ctrl+wheel, and ctrl/Cmd+wheel is
     // the keyboard zoom gesture. The surface root's wheel listener is

@@ -127,23 +127,26 @@ class _MenuState extends State<Menu> {
       // click on the menu's backdrop fires whatever the app painted there.
       // Submenu entries deliberately do NOT add one — they paint above this
       // barrier, and a second barrier would shadow the root panel's own rows.
-      builder: (_) => AnchoredFloat(
-        notifier: _bounds,
-        onTapOutside: _close,
-        child: _MenuBody(
-          key: _bodyKey,
-          trapContentKey: _trapContentKey,
-          entries: widget.items,
-          semanticLabel: widget.semanticLabel,
-          depth: 0,
-          selectionStyle: theme.selectionStyle,
-          mutedStyle: theme.mutedStyle,
-          borderStyle: theme.borderStyle,
-          onLeafSelected: (action) {
-            _close();
-            action();
-          },
-          onDismiss: _close,
+      builder: (_) => Theme(
+        data: theme,
+        child: AnchoredFloat(
+          notifier: _bounds,
+          onTapOutside: _close,
+          child: _MenuBody(
+            key: _bodyKey,
+            trapContentKey: _trapContentKey,
+            entries: widget.items,
+            semanticLabel: widget.semanticLabel,
+            depth: 0,
+            selectionStyle: theme.selectionStyle,
+            mutedStyle: theme.mutedStyle,
+            borderStyle: theme.borderStyle,
+            onLeafSelected: (action) {
+              _close();
+              action();
+            },
+            onDismiss: _close,
+          ),
         ),
       ),
     );
@@ -423,32 +426,36 @@ class _MenuBodyState extends State<_MenuBody> {
     final manager = Focus.of(context);
     final childKey = GlobalKey<_MenuBodyState>();
     final anchor = _boundsForRow(index);
+    final theme = Theme.of(context);
     final entry = OverlayEntry(
       // A bare BoundsAnchor, deliberately: this panel paints ABOVE the root
       // panel's barrier, so its own rows already win, and a second barrier
       // would shadow the root panel's rows instead.
-      builder: (_) => BoundsAnchor(
-        notifier: anchor,
-        alignment: Alignment.topRight,
-        anchorAlignment: Alignment.topLeft,
-        gap: 1,
-        child: _MenuBody(
-          key: childKey,
-          entries: sub.items,
-          semanticLabel: sub.label,
-          depth: widget.depth + 1,
-          selectionStyle: widget.selectionStyle,
-          mutedStyle: widget.mutedStyle,
-          borderStyle: widget.borderStyle,
-          onLeafSelected: (action) {
-            // Retire this panel's trap as the leaf selection bubbles through
-            // each parent panel. The root can then restore the trigger in the
-            // same close transaction.
-            _releaseFocusTrap();
-            widget.onLeafSelected(action);
-          },
-          onDismiss: _closeSubmenu,
-          canGoBack: true,
+      builder: (_) => Theme(
+        data: theme,
+        child: BoundsAnchor(
+          notifier: anchor,
+          alignment: Alignment.topRight,
+          anchorAlignment: Alignment.topLeft,
+          gap: 1,
+          child: _MenuBody(
+            key: childKey,
+            entries: sub.items,
+            semanticLabel: sub.label,
+            depth: widget.depth + 1,
+            selectionStyle: widget.selectionStyle,
+            mutedStyle: widget.mutedStyle,
+            borderStyle: widget.borderStyle,
+            onLeafSelected: (action) {
+              // Retire this panel's trap as the leaf selection bubbles through
+              // each parent panel. The root can then restore the trigger in the
+              // same close transaction.
+              _releaseFocusTrap();
+              widget.onLeafSelected(action);
+            },
+            onDismiss: _closeSubmenu,
+            canGoBack: true,
+          ),
         ),
       ),
     );

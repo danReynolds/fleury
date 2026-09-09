@@ -2330,10 +2330,36 @@ form.clearErrors();''',
     blurb:
         'See the top and bottom, then let an arrow leave or stay in the pane.',
     cols: 40,
-    rows: 16,
+    rows: 18,
     interactive: true,
     builder: () =>
         const Padding(padding: EdgeInsets.all(1), child: lists.ScrollEdges()),
+  ),
+  ExampleInfo(
+    id: 'lists.horizontal',
+    widget: 'Horizontal list',
+    category: 'Guide examples',
+    blurb: 'Browse with left/right and select with Enter or a click.',
+    cols: 40,
+    rows: 8,
+    interactive: true,
+    builder: () => const Padding(
+      padding: EdgeInsets.all(1),
+      child: lists.HorizontalList(),
+    ),
+  ),
+  ExampleInfo(
+    id: 'lists.wide-content',
+    widget: 'Horizontal content',
+    category: 'Guide examples',
+    blurb: 'Scroll a wide report without wrapping its lines.',
+    cols: 40,
+    rows: 10,
+    interactive: true,
+    builder: () => const Padding(
+      padding: EdgeInsets.all(1),
+      child: lists.HorizontalContent(),
+    ),
   ),
   ExampleInfo(
     id: 'lists.log',

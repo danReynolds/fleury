@@ -6,6 +6,8 @@ description: Select list items, scroll content, and move between panes.
 import FleuryExample from '../../../components/FleuryExample.astro';
 import CodeDemoSplit from '../../../components/CodeDemoSplit.astro';
 import ListsGuideCode from '../../../components/ListsGuideCode.astro';
+import DemoSource from '../../../components/DemoSource.astro';
+import tableRows from '../../../../examples/lib/datatable_rows.dart?raw';
 
 Use `ListView` for rows and `ScrollView` for a taller block of content.
 Both support the keyboard, mouse wheel, and an optional scrollbar.
@@ -15,20 +17,20 @@ Both support the keyboard, mouse wheel, and an optional scrollbar.
 Use **↑ / ↓** to focus a file, then **Enter** to select it. Clicking a row
 selects it too. Moving to another row leaves **Selected** unchanged:
 
-<CodeDemoSplit files={['file_list.dart', 'file_list_test.dart']} codeLabel="Source and test" demoLabel="Focus, then select" codeMaxHeight="34rem" layout="code-wide">
-<ListsGuideCode slot="code-0" file="file_list.dart" />
+<CodeDemoSplit files={['file_list.dart', 'file_list_test.dart']} codeLabel="Source and test" demoLabel="Focus, then select" codeMaxHeight="27rem" layout="code-wide">
+<ListsGuideCode slot="code-0" file="file_list.dart" focus="child: ListView(" />
 <ListsGuideCode slot="code-1" file="file_list_test.dart" test />
 <FleuryExample slot="demo" id="lists.files" cols={34} rows={9} interactive />
 </CodeDemoSplit>
 
-`onSelect` handles both click and Enter. The builder's `highlighted` argument
-identifies the row to mark. `ListView` also accepts `children: [...]` when you
-already have row widgets; the builder makes it convenient to style each row.
+`ListView` highlights the current row automatically. `onSelect` handles both
+click and Enter; the only state this example keeps is the chosen filename.
 
 ## Scroll a large list
 
-The same builder works for 1,000 tasks, building only visible rows. Here the
-**Focused** and **Selected** labels show the two callbacks separately.
+`ListView.builder` builds rows as they become visible. Choose a task: its
+green **✓** stays until you choose another. The browsing highlight moves
+independently.
 `ListController(initialIndex: 24)` starts with task 25 highlighted and visible;
 **Selected** stays **None** until you choose a task.
 
@@ -39,14 +41,14 @@ Try **Scroll to 500**, then **Go to 25**. Scrolling leaves the current item
 alone; **Go to 25** brings it back into view. Neither selects a task.
 
 <CodeDemoSplit files={['task_browser.dart', 'task_browser_test.dart']} codeLabel="Source and test" demoLabel="Focus and selection" codeMaxHeight="29rem" layout="code-wide">
-<ListsGuideCode slot="code-0" file="task_browser.dart" />
+<ListsGuideCode slot="code-0" file="task_browser.dart" focus="child: ListView.builder(" />
 <ListsGuideCode slot="code-1" file="task_browser_test.dart" test />
 <FleuryExample slot="demo" id="lists.tasks" cols={40} rows={22} interactive />
 </CodeDemoSplit>
 
 `onFocusedItemChanged` reports arrow-key or pointer navigation; `onSelect`
 reports the choice. `ListController.currentIndex` remembers the current item
-when focus moves to a button. Its marker stays visible, and the demo says
+when focus moves to a button. Its highlight stays visible, and the demo says
 **Focused: outside list**.
 
 Changing `currentIndex` from code updates the list without firing either
@@ -57,34 +59,66 @@ item. The wheel and scrollbar scroll without moving focus or selecting an item.
 The scrollbar moves in terminal-cell steps; on a short track over many items,
 the wheel and arrow keys give finer control.
 
-## Keep your place when rows move
+## Horizontal scrolling
 
-**Build the prototype** starts as the current item. Reverse the order: the
-marker stays with that task. Click another task and reverse again.
+Set `scrollDirection: Axis.horizontal` to arrange list items from left to right.
+Use **← / →** to browse, then **Enter** or click to select. The scrollbar moves
+to the bottom:
 
-<CodeDemoSplit files={['reorder_tasks.dart', 'reorder_tasks_test.dart']} codeLabel="Source and test" demoLabel="Reverse the rows" codeMaxHeight="29rem" layout="code-wide">
-<ListsGuideCode slot="code-0" file="reorder_tasks.dart" />
-<ListsGuideCode slot="code-1" file="reorder_tasks_test.dart" test />
-<FleuryExample slot="demo" id="lists.reorder" cols={38} rows={11} interactive />
+<CodeDemoSplit files={['horizontal_list.dart', 'horizontal_list_test.dart']} codeLabel="Source and test" demoLabel="Browse sideways" codeMaxHeight="29rem">
+<ListsGuideCode slot="code-0" file="horizontal_list.dart" focus="child: ListView.separated(" />
+<ListsGuideCode slot="code-1" file="horizontal_list_test.dart" test />
+<FleuryExample slot="demo" id="lists.horizontal" cols={40} rows={8} interactive />
 </CodeDemoSplit>
 
-`itemKeyBuilder` gives each item a unique, stable identity. Fleury builds the
-reverse lookup, keeping the current item and visible rows with their keys when
-the data moves. Static lists do not need it.
+`ScrollView` accepts the same property for wide content. This report keeps each
+line intact. Try **Home / End** to reach its first and last columns:
 
-## See what happens at an edge
+<CodeDemoSplit files={['horizontal_content.dart', 'horizontal_content_test.dart']} codeLabel="Source and test" demoLabel="Read the whole line" codeMaxHeight="29rem">
+<ListsGuideCode slot="code-0" file="horizontal_content.dart" focus="child: ScrollView(" />
+<ListsGuideCode slot="code-1" file="horizontal_content_test.dart" test />
+<FleuryExample slot="demo" id="lists.wide-content" cols={40} rows={10} interactive />
+</CodeDemoSplit>
+
+Both support sideways trackpad gestures, **Shift + wheel**, and dragging the
+scrollbar. A regular vertical wheel can still scroll a surrounding vertical
+pane. **Page Up / Page Down** move along the chosen axis.
+
+Controllers work in either direction: `ScrollController.offset` counts cells
+from the start, and `ListController.currentIndex` identifies the current item.
+Give a horizontal list a bounded **width**; with a scrollbar, also bound its
+height, as these examples do.
+
+## Data tables
+
+Use `DataTable` to compare items across named columns, such as a task's name
+and status. It builds visible text cells on demand and keeps the header in
+place as you scroll.
+
+Try **↑ / ↓** and **Page Down** to browse, then click or press **Enter** to
+select a row:
+
+<CodeDemoSplit file="datatable_rows.dart" codeLabel="Source" demoLabel="Browse a table" codeMaxHeight="29rem" layout="code-wide">
+<DemoSource slot="code" code={tableRows} focus="child: DataTable(" />
+<FleuryExample slot="demo" id="datatable.rows" cols={36} rows={13} interactive />
+</CodeDemoSplit>
+
+For spreadsheet-style interaction, the [DataTable examples](/fleury/widgets/datatable/)
+show selecting and copying cell ranges.
+
+## Scroll edges
 
 Scroll these eight numbered lines. The counter and **TOP / BOTTOM** markers
 show exactly where the four-row viewport is.
 
-At **BOTTOM**, press **↓** again: focus moves to **Next**. Turn on
-**Contain arrows**, Tab back into the pane, and repeat. Now **↓** stays in the
-pane; **Tab** still leaves it.
+With **Bubble (leave pane)**, press **↓** at **BOTTOM**: focus moves to **Next**.
+Choose **Contain (stay in pane)** from **Edge behavior**, Tab back into the pane,
+and try again. Now **↓** stays in the pane; **Tab** still leaves it.
 
 <CodeDemoSplit files={['scroll_edges.dart', 'scroll_edges_test.dart']} codeLabel="Source and test" demoLabel="Reach the bottom" codeMaxHeight="31rem" layout="code-wide">
-<ListsGuideCode slot="code-0" file="scroll_edges.dart" />
+<ListsGuideCode slot="code-0" file="scroll_edges.dart" focus="child: ScrollView(" />
 <ListsGuideCode slot="code-1" file="scroll_edges_test.dart" test />
-<FleuryExample slot="demo" id="lists.document" cols={40} rows={16} interactive />
+<FleuryExample slot="demo" id="lists.document" cols={40} rows={18} interactive />
 </CodeDemoSplit>
 
 `EdgeBehavior.bubble` lets an unused arrow move focus onward.

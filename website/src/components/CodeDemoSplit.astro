@@ -122,6 +122,20 @@ const expandIcon =
 
 <script>
   import { attachPreferencesTest } from '../scripts/preferences-test-runner';
+  // Keep the full file available while starting at the part the demo teaches.
+  const positionSource = (scope: ParentNode) => {
+    const source = Array.from(scope.querySelectorAll<HTMLElement>('[data-code-focus-line]'))
+      .find(source => source.getClientRects().length > 0);
+    const scroll = scope.querySelector<HTMLElement>('.cds-scroll');
+    if (!scroll) return;
+    const line = source?.querySelectorAll<HTMLElement>('.ec-line')[
+      Number(source.dataset.codeFocusLine) - 1
+    ];
+    scroll.scrollTop = line
+      ? scroll.scrollTop + line.getBoundingClientRect().top
+        - scroll.getBoundingClientRect().top - scroll.clientHeight / 3
+      : 0;
+  };
   const wireFileTabs = (scope: ParentNode) => {
     const tabs = Array.from(
       scope.querySelectorAll<HTMLButtonElement>('[data-cds-file-tab]'),
@@ -141,7 +155,7 @@ const expandIcon =
       panes.forEach((pane, paneIndex) => {
         pane.hidden = paneIndex !== index;
       });
-      scope.querySelector<HTMLElement>('.cds-scroll')?.scrollTo(0, 0);
+      requestAnimationFrame(() => positionSource(scope));
     };
 
     tabs.forEach((tab, index) => {
@@ -164,6 +178,7 @@ const expandIcon =
     if (root.dataset.cdsWired === 'true') continue;
     root.dataset.cdsWired = 'true';
     wireFileTabs(root);
+    document.fonts.ready.then(() => positionSource(root));
     const toggle = root.querySelector<HTMLButtonElement>('.cds-toggle')!;
     const file = root.dataset.file ?? '';
     const codeLabel =
@@ -218,9 +233,7 @@ const expandIcon =
         '.cds-pane[data-pane="code"] .cds-scroll',
       );
       if (codeSrc) {
-        const codeClone = codeSrc.cloneNode(true) as HTMLElement;
-        codeClone.style.removeProperty('max-height');
-        codeScroll.append(codeClone);
+        codeScroll.append(...Array.from(codeSrc.childNodes, node => node.cloneNode(true)));
       }
       codeCol.append(codeCap, codeScroll);
 
@@ -249,6 +262,7 @@ const expandIcon =
       document.body.appendChild(dlg);
       wireFileTabs(dlg);
       dlg.showModal();
+      requestAnimationFrame(() => positionSource(dlg));
       const disposeTest = fx?.dataset.test === 'preferences'
         ? attachPreferencesTest(host, dlg)
         : undefined;

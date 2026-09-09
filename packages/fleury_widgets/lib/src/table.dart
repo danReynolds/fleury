@@ -461,6 +461,7 @@ class _TableState extends State<Table> {
           // Wheel over the table scrolls the row window by moving the selection.
           child: MouseRegion(
             onScroll: (details) {
+              if (details.delta.row == 0) return false;
               _scrollBy(details.delta.row);
               return true;
             },

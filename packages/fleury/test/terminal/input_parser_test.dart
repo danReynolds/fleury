@@ -860,31 +860,25 @@ void main() {
       expect(e.hasAlt, isFalse);
     });
 
-    test('horizontal wheel (Cb 66/67) is not reported as vertical scroll', () {
-      // SGR encodes wheel-left as 66 and wheel-right as 67. The decoder must
-      // NOT treat them as scrollUp/scrollDown (a horizontal trackpad swipe
-      // scrolling a ListView vertically). With no horizontal MouseEventKind,
-      // the correct behaviour is to drop them rather than mis-report the axis.
-      expect(
-        _parse(sgr(66, 1, 1, 'M')).whereType<MouseEvent>(),
-        isEmpty,
-        reason: 'wheel-left must not become a vertical scroll',
-      );
-      expect(
-        _parse(sgr(67, 1, 1, 'M')).whereType<MouseEvent>(),
-        isEmpty,
-        reason: 'wheel-right must not become a vertical scroll',
-      );
-      // Vertical wheel (64/65) is unaffected.
-      expect(
-        (_parse(sgr(64, 1, 1, 'M')).single as MouseEvent).kind,
-        MouseEventKind.scrollUp,
-      );
-      expect(
-        (_parse(sgr(65, 1, 1, 'M')).single as MouseEvent).kind,
-        MouseEventKind.scrollDown,
-      );
-    });
+    test(
+      'horizontal wheel (Cb 66/67) retains axis, coordinates and modifiers',
+      () {
+        for (final (code, kind) in [
+          (66, MouseEventKind.scrollLeft),
+          (67, MouseEventKind.scrollRight),
+        ]) {
+          expect(_parse(sgr(code + 4, 5, 3, 'M')), [
+            MouseEvent(
+              kind: kind,
+              button: MouseButton.none,
+              col: 4,
+              row: 2,
+              modifiers: const {KeyModifier.shift},
+            ),
+          ]);
+        }
+      },
+    );
 
     test('extended buttons 8-11 (Cb 128+) do not alias to left/middle/right', () {
       // SGR button 8 (mouse back/thumb) is cb=128. It must not decode as a left

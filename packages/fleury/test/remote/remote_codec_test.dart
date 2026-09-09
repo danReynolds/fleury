@@ -825,6 +825,21 @@ void main() {
       }
     });
 
+    test('mouse kinds round-trip with stable existing wire indices', () {
+      expect(MouseEventKind.cancel.index, 6);
+      expect(MouseEventKind.leave.index, 7);
+      for (final kind in MouseEventKind.values) {
+        final event = MouseEvent(
+          kind: kind,
+          button: MouseButton.none,
+          col: 3,
+          row: 4,
+          modifiers: const {KeyModifier.shift},
+        );
+        expect(decodeInputEvent(encodeInputEvent(event)), event);
+      }
+    });
+
     test('paste, resize, and composition kinds', () {
       final events = <TuiEvent>[
         const PasteEvent('multi\nline\tpaste'),

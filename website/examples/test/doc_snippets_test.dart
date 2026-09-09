@@ -497,7 +497,7 @@ void main() {
     tester.pumpWidget(lists.listsDemoApp());
     final rendered = tester.renderToString(emptyMark: ' ');
     expect(rendered, contains('Current: 25 / 1000'));
-    expect(rendered, contains('› Task 25'));
+    expect(rendered, contains('Task 25'));
     expect(rendered, contains('Selected: None'));
     expect(rendered, contains('Go to 25'));
   });

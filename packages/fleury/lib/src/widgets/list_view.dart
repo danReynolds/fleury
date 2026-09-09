@@ -1,34 +1,12 @@
-// ListView: a keyboard-navigable list of items.
-//
-// Three pieces:
-//   - ListController — a ChangeNotifier holding the current
-//     index plus programmatic scroll commands. Optional; the widget
-//     creates its own when none is supplied.
-//   - ListView — the widget. Lays out items vertically, claims
-//     arrow-up / arrow-down / home / end / enter via KeyDetector, and
-//     auto-scrolls to keep the current item visible.
-//   - _RenderListView — the render object. Lays out only items that
-//     fit in the viewport starting from a scroll anchor, paints them,
-//     and writes the resulting visible range back to the controller.
-//
-// Building modes:
-//   - Eager — `ListView(children:)` builds every child up front; the
-//     layout/paint pass still visits only the visible window.
-//   - Lazy — `ListView.builder` / `ListView.separated` mount only the
-//     items in the viewport, on demand during layout, so they scale to
-//     tens of thousands of variable-height rows.
-//
-// Items are measured at their natural height. The viewport keeps an item
-// anchor and a row offset, so tall items can be read without skipping content.
-//
-// What's intentionally not here yet:
-//   - Horizontal scrolling. Items are constrained to the viewport
-//     width.
+// An eager or lazy one-axis list. Both renderers share item-anchor viewport
+// calculations; only measurement and offsets depend on the scrolling axis.
 
 import '../foundation/change_notifier.dart';
 import '../foundation/geometry.dart';
 import '../rendering/cell_buffer.dart';
+import '../rendering/cell.dart';
 import '../rendering/layout.dart';
+import '../rendering/scroll_axis.dart';
 import '../rendering/render_flex.dart';
 import '../rendering/render_object.dart';
 import '../input/events.dart';
@@ -40,6 +18,7 @@ import 'keyboard.dart';
 import 'pointer.dart';
 import 'scrollbar.dart';
 import 'tui_binding.dart';
+import 'theme.dart';
 
 /// Returns the stable data identity for the item currently at [index].
 ///
@@ -93,7 +72,7 @@ class ListController extends ChangeNotifier {
   double _visibleFraction = 1;
   int? _pendingJumpIndex;
   int? _pendingRevealIndex;
-  int _pendingScrollRows = 0;
+  int _pendingScrollCells = 0;
   double? _pendingFraction;
   bool _pendingBottom;
   bool _followTail;
@@ -151,9 +130,15 @@ class ListController extends ChangeNotifier {
     }
   }
 
-  /// Whether the viewport includes the first / final row of content.
-  bool get atTop => _atTop;
-  bool get atBottom => _atBottom;
+  /// Whether the viewport includes the start / end of the content.
+  bool get atStart => _atTop;
+  bool get atEnd => _atBottom;
+
+  /// Vertical spelling of [atStart].
+  bool get atTop => atStart;
+
+  /// Vertical spelling of [atEnd].
+  bool get atBottom => atEnd;
 
   /// Appended items not yet seen at the end of an ordered feed. Prepends do not
   /// count when stable item keys are provided. Mixed reorders and insertions are
@@ -162,16 +147,16 @@ class ListController extends ChangeNotifier {
   int get itemCount => _itemCount;
 
   /// Visible item indices, including partially visible items; null when empty
-  /// or before layout. Items can occupy more than one terminal row.
+  /// or before layout. Items can span multiple cells along the scrolling axis.
   ({int first, int last})? get visibleRange => _visibleRange;
 
   /// Approximate scrollbar position in 0..1. Unmeasured items count equally;
   /// partial visible items contribute their measured fraction. The endpoints
-  /// always correspond to the first and final content rows.
+  /// always correspond to the start and end of the content.
   double get scrollFraction => _scrollFraction;
 
-  /// Fraction of the item collection visible, accounting for partial rows.
-  /// This is an estimate for variable-height items not yet measured.
+  /// Fraction of the item collection visible, accounting for partially visible items.
+  /// This is an estimate for variable-size items not yet measured.
   double get visibleFraction => _visibleFraction;
 
   /// Remembered cursor index, independent of keyboard focus and scrolling.
@@ -192,7 +177,7 @@ class ListController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Places an item at the top, clamped to the final full viewport. Does not
+  /// Places an item at the viewport start, clamped to the final full viewport. Does not
   /// change the cursor. The resulting position survives unrelated rebuilds.
   void jumpToIndex(int index) {
     _checkNotDisposed();
@@ -204,13 +189,13 @@ class ListController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Scrolls by terminal rows, including within an oversized item.
-  void scrollBy(int rows) {
+  /// Scrolls by cells along the list's axis, including within an oversized item.
+  void scrollBy(int delta) {
     _checkNotDisposed();
-    if (rows == 0) return;
+    if (delta == 0) return;
     _pendingRevealIndex = null;
     _pendingBottom = false;
-    _pendingScrollRows += rows;
+    _pendingScrollCells += delta;
     _isFollowing = false;
     notifyListeners();
   }
@@ -226,9 +211,9 @@ class ListController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Shows the final content row. Resumes following only if [followTail] is
+  /// Shows the end of the final item. Resumes following only if [followTail] is
   /// enabled; a normal list does not become a live feed by jumping to its end.
-  void jumpToBottom() {
+  void jumpToEnd() {
     _checkNotDisposed();
     _clearRequests();
     _pendingBottom = true;
@@ -237,10 +222,13 @@ class ListController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Vertical spelling of [jumpToEnd].
+  void jumpToBottom() => jumpToEnd();
+
   void _clearRequests() {
     _pendingJumpIndex = null;
     _pendingRevealIndex = null;
-    _pendingScrollRows = 0;
+    _pendingScrollCells = 0;
     _pendingFraction = null;
     _pendingBottom = false;
   }
@@ -384,11 +372,11 @@ class ListController extends ChangeNotifier {
 ///   - `ListView.builder(itemCount: N, itemBuilder: (context, index, highlighted) {})` —
 ///     lazy. Only items currently within the viewport are mounted as
 ///     element subtrees; items scroll into/out of the mounted set as
-///     the user navigates. Supports variable item heights. Best for
+///     the user navigates. Supports variable item sizes along the scrolling axis. Best for
 ///     long lists where most items are off-screen (file pickers, log
 ///     viewers, completion menus).
 ///
-/// When focused, the widget claims arrow-up, arrow-down, home, end,
+/// When focused, the widget claims the main-axis arrows, Home, End,
 /// and enter:
 ///   - Arrows / Home / End move the current item and report [onFocusedItemChanged];
 ///     the viewport scrolls to keep it visible.
@@ -403,12 +391,13 @@ class ListController extends ChangeNotifier {
 /// The controller's [ListController.currentIndex] identifies that item.
 /// Setting it moves the cursor without selecting an item or taking focus.
 ///
-/// With `children:` (eager form), the caller supplies the highlight styling.
+/// Both constructors apply the theme's selection style to the current row's
+/// text. Plain Text children need no cursor styling. Explicit child styles
+/// override that default; the builder flag is available for custom decoration.
 class ListView extends StatefulWidget {
   /// Eager constructor: build all items upfront from a fixed list
   /// of widgets. Use when you have a bounded set of widgets already
-  /// constructed and cursor styling is handled elsewhere (or not
-  /// needed).
+  /// constructed. The current row is highlighted automatically.
   const ListView({
     super.key,
     this.controller,
@@ -420,6 +409,7 @@ class ListView extends StatefulWidget {
     this.onSelect,
     this.onFocusedItemChanged,
     this.scrollbar = false,
+    this.scrollDirection = Axis.vertical,
     this.addRepaintBoundaries = true,
   }) : itemCount = null,
        itemBuilder = null,
@@ -442,6 +432,7 @@ class ListView extends StatefulWidget {
     this.onSelect,
     this.onFocusedItemChanged,
     this.scrollbar = false,
+    this.scrollDirection = Axis.vertical,
     this.addRepaintBoundaries = true,
   }) : assert(itemCount >= 0, 'itemCount must be non-negative'),
        separatorBuilder = null,
@@ -473,6 +464,7 @@ class ListView extends StatefulWidget {
     this.onSelect,
     this.onFocusedItemChanged,
     this.scrollbar = false,
+    this.scrollDirection = Axis.vertical,
     this.addRepaintBoundaries = true,
   }) : assert(itemCount >= 0, 'itemCount must be non-negative'),
        children = null;
@@ -536,8 +528,8 @@ class ListView extends StatefulWidget {
   /// child widgets keep their own input behavior.
   final bool selectable;
 
-  /// What to do with up/down at the boundary of the list. See
-  /// [EdgeBehavior].
+  /// How main-axis arrows and wheel gestures behave at an edge.
+  /// Cross-axis input can reach other controls or a surrounding scroll view.
   final EdgeBehavior edgeBehavior;
 
   /// When true, wrap the list in a [Scrollbar] gutter that reflects the
@@ -545,10 +537,13 @@ class ListView extends StatefulWidget {
   /// opt-in: the bar shares this list's controller, so there is nothing extra
   /// to wire. See [Scrollbar.list].
   ///
-  /// Needs a bounded width to anchor the right-edge gutter — under an unbounded
-  /// width (e.g. a non-Expanded child of a Row) it throws a clear error rather
-  /// than collapsing the list; wrap the list in an Expanded or a SizedBox.
+  /// The gutter needs a bounded cross axis: width for a vertical list,
+  /// height for a horizontal list. The list itself needs a bounded main axis.
   final bool scrollbar;
+
+  /// Layout and scrolling axis. Items are measured at their natural extent
+  /// along this axis and constrained to the viewport on the other axis.
+  final Axis scrollDirection;
 
   /// Selects an item on Enter or a completed click, including repeated choices.
   /// Browsing, scrolling, and controller writes do not call this. Empty lists
@@ -704,7 +699,7 @@ class _ListViewState extends State<ListView> {
     if (!_controller._pendingBottom &&
         _controller._pendingJumpIndex == null &&
         _controller._pendingFraction == null &&
-        _controller._pendingScrollRows == 0) {
+        _controller._pendingScrollCells == 0) {
       _controller._pendingRevealIndex = _controller._currentIndex;
     }
   }
@@ -808,7 +803,8 @@ class _ListViewState extends State<ListView> {
   }
 
   KeyEventResult _handleKey(KeyEvent event) {
-    final code = event.code;
+    final code = widget.scrollDirection.navigationKey(event.code);
+    if (code == null) return KeyEventResult.ignored;
     final count = widget.effectiveItemCount;
     if (count == 0) return KeyEventResult.ignored;
 
@@ -833,7 +829,7 @@ class _ListViewState extends State<ListView> {
           _controller.jumpToIndex(0);
           return KeyEventResult.handled;
         case KeyCode.end:
-          _controller.jumpToBottom();
+          _controller.jumpToEnd();
           return KeyEventResult.handled;
         default:
           return KeyEventResult.ignored;
@@ -890,8 +886,8 @@ class _ListViewState extends State<ListView> {
   /// Viewport movement is independent of cursor and never takes focus.
   bool _scrollBy(int delta) {
     if (delta == 0 ||
-        (delta < 0 && _controller.atTop) ||
-        (delta > 0 && _controller.atBottom)) {
+        (delta < 0 && _controller.atStart) ||
+        (delta > 0 && _controller.atEnd)) {
       return widget.edgeBehavior == EdgeBehavior.contain;
     }
     _controller.scrollBy(delta);
@@ -947,6 +943,11 @@ class _ListViewState extends State<ListView> {
     widget.onSelect?.call(index);
   }
 
+  Widget _styleItem(Widget item, bool highlighted) => DefaultTextStyle.merge(
+    style: highlighted ? Theme.of(context).selectionStyle : CellStyle.none,
+    child: item,
+  );
+
   Widget _maybeBoundary(Widget item) =>
       widget.addRepaintBoundaries ? RepaintBoundary(child: item) : item;
 
@@ -954,7 +955,10 @@ class _ListViewState extends State<ListView> {
   Widget build(BuildContext context) {
     _controller._binding = TuiBinding.maybeOf(context);
     final Widget content = MouseRegion(
-      onScroll: (details) => _scrollBy(details.delta.row),
+      onScroll: (details) {
+        final delta = widget.scrollDirection.position(details.delta);
+        return delta != 0 && _scrollBy(delta);
+      },
       child: KeyDetector(
         onKey: _detectKey,
         child: Focus(
@@ -965,11 +969,12 @@ class _ListViewState extends State<ListView> {
       ),
     );
     if (!widget.scrollbar) return content;
-    // Shares the list's own controller: the gutter reflects the visible item
-    // range, and dragging/clicking it scrolls by item. (Needs a bounded width
-    // to anchor the right-edge gutter — Scrollbar throws a clear error under
-    // unbounded width rather than collapsing the list.)
-    return Scrollbar.list(controller: _controller, child: content);
+    // The gutter shares this list's controller and axis.
+    return Scrollbar.list(
+      controller: _controller,
+      scrollDirection: widget.scrollDirection,
+      child: content,
+    );
   }
 
   Widget _buildBody(BuildContext context) {
@@ -981,6 +986,7 @@ class _ListViewState extends State<ListView> {
       // the item's pointer + semantic regions on cache-hit).
       return _ListViewBody(
         controller: _controller,
+        scrollDirection: widget.scrollDirection,
         children: <Widget>[
           for (var i = 0; i < widget.children!.length; i++)
             _maybeBoundary(
@@ -988,7 +994,10 @@ class _ListViewState extends State<ListView> {
                 onTapDown: (_) => _handleItemDown(i),
                 onTap: () => _handleItemTap(i),
                 onTapCancel: () => _pressedItem = null,
-                child: widget.children![i],
+                child: _styleItem(
+                  widget.children![i],
+                  i == _controller.currentIndex,
+                ),
               ),
             ),
         ],
@@ -1005,11 +1014,15 @@ class _ListViewState extends State<ListView> {
     final itemCount = widget.itemCount!;
     return _LazyListBody(
       controller: _controller,
+      scrollDirection: widget.scrollDirection,
       itemCount: itemCount,
       dataRevision: _dataRevision,
       identities: _identities,
       itemBuilder: (context, index, itemActive) {
-        final built = widget.itemBuilder!(context, index, itemActive);
+        final built = _styleItem(
+          widget.itemBuilder!(context, index, itemActive),
+          itemActive,
+        );
         // No separator after the last item, when none was requested, or
         // when the builder returns null for this gap.
         final separator = separatorBuilder == null || index >= itemCount - 1
@@ -1017,10 +1030,12 @@ class _ListViewState extends State<ListView> {
             : separatorBuilder(context, index);
         final content = separator == null
             ? built
-            : Column(
+            : widget.scrollDirection == Axis.vertical
+            ? Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [built, separator],
-              );
+              )
+            : Row(mainAxisSize: MainAxisSize.min, children: [built, separator]);
         // The GestureDetector wraps the WHOLE block (not the item
         // alone), so a tap on a separator row selects the item it
         // trails. Its region, like every other piece of geometry, is
@@ -1042,13 +1057,21 @@ class _ListViewState extends State<ListView> {
 }
 
 class _ListViewBody extends MultiChildRenderObjectWidget {
-  const _ListViewBody({required this.controller, required super.children});
+  const _ListViewBody({
+    required this.controller,
+    required this.scrollDirection,
+    required super.children,
+  });
 
   final ListController controller;
+  final Axis scrollDirection;
 
   @override
   RenderObject createRenderObject(BuildContext context) {
-    return _RenderListView(controller: controller);
+    return _RenderListView(
+      controller: controller,
+      scrollDirection: scrollDirection,
+    );
   }
 
   @override
@@ -1057,53 +1080,55 @@ class _ListViewBody extends MultiChildRenderObjectWidget {
     covariant _RenderListView renderObject,
   ) {
     renderObject.controller = controller;
+    renderObject.scrollDirection = scrollDirection;
     // The controller is mutable; cursor and pending jump changes are read
     // during layout even when the controller identity is stable.
     renderObject.markNeedsLayout();
   }
 }
 
-/// The diagnostic both list render objects raise when handed an unbounded main
-/// axis. A [ListView] windows its items to the viewport height, so an unbounded
-/// `maxRows` (a [ScrollView], or a `mainAxisSize: MainAxisSize.min` Column/Row
-/// child) has no window to fill and would drop every item with no diagnostic.
-/// Mirrors [Scrollbar]'s unbounded-width failure — loud and actionable rather
-/// than a silently blank frame.
-Never _throwUnboundedListHeight() {
+/// Both list renderers require a bounded main axis to know which items to mount.
+Never _throwUnboundedListExtent(Axis direction) {
+  final dimension = direction == Axis.vertical ? 'height' : 'width';
   throw StateError(
-    'ListView needs a bounded height to window its items, but was given an '
-    'unbounded height (a ScrollView, or a Column/Row child with '
+    'ListView needs a bounded $dimension to window its items, but was given an '
+    'unbounded $dimension (a ScrollView, or a Column/Row child with '
     'mainAxisSize.min, gets an unbounded main axis). Every item would be '
-    'dropped. Give it a bounded height — wrap it in an Expanded or a '
-    'SizedBox(height: ...).',
+    'dropped. Give it a bounded $dimension — wrap it in an Expanded or a '
+    'SizedBox($dimension: ...).',
   );
 }
 
-/// Shared row-based viewport math for eager and lazy lists. Only measuring an
-/// item can mount it; all walks stop at the viewport except an explicit jump or
-/// scroll through intervening rows. No global height table is required.
+/// Shared one-dimensional viewport math for eager and lazy lists. Only measuring
+/// an item can mount it. No global table of item extents is required.
 class _ListViewportLayout {
   int anchor = 0;
-  int rowOffset = 0;
+  int itemOffset = 0;
+  bool _axisChanged = false;
+
+  void changeAxis() {
+    itemOffset = 0;
+    _axisChanged = true;
+  }
 
   Map<int, int> layout({
     required ListController controller,
     required int count,
-    required int rows,
+    required int viewportExtent,
     required int Function(int index) measure,
   }) {
-    if (count == 0 || rows == 0) {
+    if (count == 0 || viewportExtent == 0) {
       // A temporarily collapsed viewport must not discard follow intent.
-      if (rows == 0 && controller._isFollowing) {
+      if (viewportExtent == 0 && controller._isFollowing) {
         controller._pendingBottom = true;
       }
       if (count == 0) {
         anchor = 0;
-        rowOffset = 0;
+        itemOffset = 0;
       }
       controller._applyViewport(
         range: null,
-        extent: rows,
+        extent: viewportExtent,
         atTop: count == 0,
         atBottom: count == 0,
         scrollFraction: 0,
@@ -1111,44 +1136,45 @@ class _ListViewportLayout {
       );
       return {};
     }
-    final heights = <int, int>{};
-    int height(int index) => heights.putIfAbsent(index, () => measure(index));
+    final extents = <int, int>{};
+    int itemExtent(int index) =>
+        extents.putIfAbsent(index, () => measure(index));
 
     void normalize() {
-      while (rowOffset < 0 && anchor > 0) {
+      while (itemOffset < 0 && anchor > 0) {
         anchor--;
-        rowOffset += height(anchor);
+        itemOffset += itemExtent(anchor);
       }
-      if (rowOffset < 0) rowOffset = 0;
+      if (itemOffset < 0) itemOffset = 0;
       while (anchor < count - 1 &&
-          rowOffset > 0 &&
-          rowOffset >= height(anchor)) {
-        rowOffset -= height(anchor);
+          itemOffset > 0 &&
+          itemOffset >= itemExtent(anchor)) {
+        itemOffset -= itemExtent(anchor);
         anchor++;
       }
-      final lastHeight = height(anchor);
-      if (anchor == count - 1 && rowOffset >= lastHeight) {
-        rowOffset = lastHeight > 0 ? lastHeight - 1 : 0;
+      final lastExtent = itemExtent(anchor);
+      if (anchor == count - 1 && itemOffset >= lastExtent) {
+        itemOffset = lastExtent > 0 ? lastExtent - 1 : 0;
       }
     }
 
     void endAt(int index) {
       anchor = index;
-      rowOffset = height(index) - rows;
+      itemOffset = itemExtent(index) - viewportExtent;
       normalize();
     }
 
     var reachesEnd = false;
     Map<int, int> window() {
       final offsets = <int, int>{};
-      var row = -rowOffset;
+      var positionInViewport = -itemOffset;
       var index = anchor;
-      for (; index < count && row < rows; index++) {
-        final extent = height(index);
-        if (extent > 0) offsets[index] = row;
-        row += extent;
+      for (; index < count && positionInViewport < viewportExtent; index++) {
+        final extent = itemExtent(index);
+        if (extent > 0) offsets[index] = positionInViewport;
+        positionInViewport += extent;
       }
-      reachesEnd = index == count && row <= rows;
+      reachesEnd = index == count && positionInViewport <= viewportExtent;
       return offsets;
     }
 
@@ -1161,17 +1187,18 @@ class _ListViewportLayout {
         jump == null &&
         fraction == null &&
         !controller._pendingBottom &&
-        controller._pendingScrollRows == 0 &&
+        controller._pendingScrollCells == 0 &&
         !controller._isFollowing &&
-        controller._viewportExtent != rows &&
+        (_axisChanged || controller._viewportExtent != viewportExtent) &&
         current != null &&
         priorRange != null &&
         current >= priorRange.first &&
         current <= priorRange.last;
+    _axisChanged = false;
     final reveal =
         controller._pendingRevealIndex ??
         (keepSelectionOnResize ? current : null);
-    final scroll = controller._pendingScrollRows;
+    final scroll = controller._pendingScrollCells;
     final bottom = controller._pendingBottom || controller._isFollowing;
     controller._clearRequests();
 
@@ -1179,33 +1206,33 @@ class _ListViewportLayout {
       endAt(count - 1);
     } else if (jump != null) {
       anchor = jump.clamp(0, count - 1);
-      rowOffset = 0;
+      itemOffset = 0;
     } else if (fraction != null) {
       if (fraction == 1) {
         endAt(count - 1);
       } else {
         final position = fraction * count * (1 - controller.visibleFraction);
         anchor = position.floor().clamp(0, count - 1);
-        rowOffset = ((position - anchor) * height(anchor)).round();
+        itemOffset = ((position - anchor) * itemExtent(anchor)).round();
       }
     }
     if (!bottom && jump == null && fraction == null) {
       // Preserve the anchor identity on reflow instead of interpreting an old
       // local offset as movement into a different item.
-      final anchorHeight = height(anchor);
-      rowOffset = rowOffset.clamp(0, anchorHeight > 0 ? anchorHeight - 1 : 0);
+      final anchorExtent = itemExtent(anchor);
+      itemOffset = itemOffset.clamp(0, anchorExtent > 0 ? anchorExtent - 1 : 0);
     }
-    rowOffset += scroll;
+    itemOffset += scroll;
     normalize();
     var offsets = window();
 
     if (reveal != null) {
       final target = reveal.clamp(0, count - 1);
       final top = offsets[target];
-      if (top == null || top < 0 || top + height(target) > rows) {
-        if (target <= anchor || height(target) > rows) {
+      if (top == null || top < 0 || top + itemExtent(target) > viewportExtent) {
+        if (target <= anchor || itemExtent(target) > viewportExtent) {
           anchor = target;
-          rowOffset = 0;
+          itemOffset = 0;
         } else {
           endAt(target);
         }
@@ -1213,31 +1240,35 @@ class _ListViewportLayout {
       }
     }
     // A shrink or resize can leave blank space at the end. Backfill without
-    // changing cursor, including a jump whose target has zero height.
+    // changing cursor, including a jump whose target has zero extent.
     final end = offsets.isEmpty
         ? 0
-        : offsets.values.last + height(offsets.keys.last);
-    if (reachesEnd && end < rows && (anchor > 0 || rowOffset > 0)) {
-      rowOffset -= rows - end;
+        : offsets.values.last + itemExtent(offsets.keys.last);
+    if (reachesEnd && end < viewportExtent && (anchor > 0 || itemOffset > 0)) {
+      itemOffset -= viewportExtent - end;
       normalize();
       offsets = window();
     }
     final first = offsets.isEmpty ? null : offsets.keys.first;
     final last = offsets.isEmpty ? null : offsets.keys.last;
-    final atTop = anchor == 0 && rowOffset == 0;
+    final atTop = anchor == 0 && itemOffset == 0;
     final atBottom = reachesEnd;
     var visibleUnits = 0.0;
     for (final entry in offsets.entries) {
-      final start = entry.value.clamp(0, rows);
-      final end = (entry.value + height(entry.key)).clamp(0, rows);
-      visibleUnits += (end - start) / height(entry.key);
+      final start = entry.value.clamp(0, viewportExtent);
+      final end = (entry.value + itemExtent(entry.key)).clamp(
+        0,
+        viewportExtent,
+      );
+      visibleUnits += (end - start) / itemExtent(entry.key);
     }
     final position =
-        anchor + (height(anchor) == 0 ? 0.0 : rowOffset / height(anchor));
+        anchor +
+        (itemExtent(anchor) == 0 ? 0.0 : itemOffset / itemExtent(anchor));
     final maxPosition = count - visibleUnits;
     controller._applyViewport(
       range: first == null ? null : (first: first, last: last!),
-      extent: rows,
+      extent: viewportExtent,
       atTop: atTop,
       atBottom: atBottom,
       scrollFraction: atTop
@@ -1261,6 +1292,8 @@ void _paintListViewport(
 ) {
   final needsClip = children.entries.any(
     (entry) =>
+        entry.value.col < 0 ||
+        entry.value.col + entry.key.size.cols > size.cols ||
         entry.value.row < 0 ||
         entry.value.row + entry.key.size.rows > size.rows,
   );
@@ -1289,8 +1322,19 @@ class _RenderListView extends RenderObject implements RenderObjectWithChildren {
   CellRect? childClipOf(RenderObject child) =>
       CellRect(offset: CellOffset.zero, size: size);
 
-  _RenderListView({required ListController controller})
-    : _controller = controller;
+  _RenderListView({
+    required ListController controller,
+    required Axis scrollDirection,
+  }) : _controller = controller,
+       _scrollDirection = scrollDirection;
+
+  Axis _scrollDirection;
+  set scrollDirection(Axis value) {
+    if (_scrollDirection == value) return;
+    _scrollDirection = value;
+    _viewport.changeAxis();
+    markNeedsLayout();
+  }
 
   ListController _controller;
   ListController get controller => _controller;
@@ -1364,24 +1408,35 @@ class _RenderListView extends RenderObject implements RenderObjectWithChildren {
   @override
   CellSize performLayout(CellConstraints constraints) {
     final count = _children.length;
-    final rows = constraints.maxRows;
-    if (rows == null && count > 0) _throwUnboundedListHeight();
+    final extent = _scrollDirection.maxExtent(constraints);
+    if (extent == null && count > 0) {
+      _throwUnboundedListExtent(_scrollDirection);
+    }
     final offsets = _viewport.layout(
       controller: _controller,
       count: count,
-      rows: rows ?? 0,
-      measure: (index) => _children[index]
-          .layout(CellConstraints(maxCols: constraints.maxCols))
-          .rows,
+      viewportExtent: extent ?? 0,
+      measure: (index) => _scrollDirection.extent(
+        _children[index].layout(_scrollDirection.childConstraints(constraints)),
+      ),
     );
     _childOffsets.clear();
     _visibleChildren.clear();
     for (final entry in offsets.entries) {
       final child = _children[entry.key];
-      _childOffsets[child] = CellOffset(0, entry.value);
+      _childOffsets[child] = _scrollDirection.offset(entry.value);
       _visibleChildren.add(child);
     }
-    return constraints.constrain(CellSize(constraints.maxCols ?? 0, rows ?? 0));
+    return constraints.constrain(
+      _scrollDirection.size(
+        extent ?? 0,
+        _scrollDirection.maxCrossExtent(constraints) ??
+            _childOffsets.keys.fold<int>(0, (extent, child) {
+              final childExtent = _scrollDirection.crossExtent(child.size);
+              return childExtent > extent ? childExtent : extent;
+            }),
+      ),
+    );
   }
 
   @override
@@ -1414,6 +1469,7 @@ class _RenderListView extends RenderObject implements RenderObjectWithChildren {
 class _LazyListBody extends RenderObjectWidget {
   const _LazyListBody({
     required this.controller,
+    required this.scrollDirection,
     required this.itemCount,
     required this.dataRevision,
     required this.itemBuilder,
@@ -1422,6 +1478,7 @@ class _LazyListBody extends RenderObjectWidget {
   });
 
   final ListController controller;
+  final Axis scrollDirection;
   final int itemCount;
   final int dataRevision;
   final Widget Function(BuildContext, int, bool) itemBuilder;
@@ -1433,7 +1490,10 @@ class _LazyListBody extends RenderObjectWidget {
 
   @override
   RenderObject createRenderObject(BuildContext context) {
-    return _RenderLazyListView(controller: controller);
+    return _RenderLazyListView(
+      controller: controller,
+      scrollDirection: scrollDirection,
+    );
   }
 
   @override
@@ -1442,6 +1502,7 @@ class _LazyListBody extends RenderObjectWidget {
     covariant _RenderLazyListView renderObject,
   ) {
     renderObject.controller = controller;
+    renderObject.scrollDirection = scrollDirection;
     // The controller is mutable; cursor and pending jump changes drive
     // visible child mounting during layout even when identity is stable.
     renderObject.markNeedsLayout();
@@ -1666,8 +1727,8 @@ class _LazyListElement extends RenderObjectElement {
 /// scroll anchor (top-of-viewport data index) that persists across
 /// layouts.
 ///
-/// Uses the shared row-offset viewport layout, measuring and mounting only the
-/// rows it visits. It then unmounts items outside the final visible range.
+/// Uses the shared item-offset viewport layout, measuring and mounting only the
+/// items it visits. It then unmounts items outside the final visible range.
 /// Cursor is revealed only on request; ordinary rebuilds keep the anchor.
 class _RenderLazyListView extends RenderObject
     implements RenderObjectWithChildren {
@@ -1681,8 +1742,19 @@ class _RenderLazyListView extends RenderObject
     return index != null && identical(_activeByIndex[index], child);
   }
 
-  _RenderLazyListView({required ListController controller})
-    : _controller = controller;
+  _RenderLazyListView({
+    required ListController controller,
+    required Axis scrollDirection,
+  }) : _controller = controller,
+       _scrollDirection = scrollDirection;
+
+  Axis _scrollDirection;
+  set scrollDirection(Axis value) {
+    if (_scrollDirection == value) return;
+    _scrollDirection = value;
+    _viewport.changeAxis();
+    markNeedsLayout();
+  }
 
   ListController _controller;
   ListController get controller => _controller;
@@ -1788,21 +1860,23 @@ class _RenderLazyListView extends RenderObject
 
   @override
   CellSize performLayout(CellConstraints constraints) {
-    final rows = constraints.maxRows;
+    final extent = _scrollDirection.maxExtent(constraints);
     final element = _element;
     final count = _controller._itemCount;
-    if (rows == null && count > 0 && element != null) {
-      _throwUnboundedListHeight();
+    if (extent == null && count > 0 && element != null) {
+      _throwUnboundedListExtent(_scrollDirection);
     }
     final measured = <int, RenderObject>{};
     final offsets = _viewport.layout(
       controller: _controller,
       count: element == null ? 0 : count,
-      rows: rows ?? 0,
+      viewportExtent: extent ?? 0,
       measure: (index) {
         final child = element!.createChild(index)!;
         measured[index] = child;
-        return child.layout(CellConstraints(maxCols: constraints.maxCols)).rows;
+        return _scrollDirection.extent(
+          child.layout(_scrollDirection.childConstraints(constraints)),
+        );
       },
     );
     _activeByIndex.clear();
@@ -1812,7 +1886,7 @@ class _RenderLazyListView extends RenderObject
       final child = measured[entry.key]!;
       _activeByIndex[entry.key] = child;
       _indexByObject[child] = entry.key;
-      _childOffsets[child] = CellOffset(0, entry.value);
+      _childOffsets[child] = _scrollDirection.offset(entry.value);
     }
     if (element != null) {
       for (final index in element.mountedIndices) {
@@ -1822,7 +1896,16 @@ class _RenderLazyListView extends RenderObject
     _scrollAnchorItemKey = count == 0
         ? null
         : element?.itemKeyAt(_scrollAnchor);
-    return constraints.constrain(CellSize(constraints.maxCols ?? 0, rows ?? 0));
+    return constraints.constrain(
+      _scrollDirection.size(
+        extent ?? 0,
+        _scrollDirection.maxCrossExtent(constraints) ??
+            _childOffsets.keys.fold<int>(0, (extent, child) {
+              final childExtent = _scrollDirection.crossExtent(child.size);
+              return childExtent > extent ? childExtent : extent;
+            }),
+      ),
+    );
   }
 
   @override

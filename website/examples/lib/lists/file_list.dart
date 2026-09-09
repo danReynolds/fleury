@@ -1,21 +1,16 @@
-// dart format width=50
+// dart format width=60
 import 'package:fleury/fleury_core.dart';
 
 class FileList extends StatefulWidget {
   const FileList({super.key});
 
   @override
-  State<FileList> createState() =>
-      _FileListState();
+  State<FileList> createState() => _FileListState();
 }
 
 class _FileListState extends State<FileList> {
   // #docregion interaction
-  final files = [
-    'README.md',
-    'notes.md',
-    'sketches.txt',
-  ];
+  final files = ['README.md', 'notes.md', 'sketches.txt'];
   String selected = 'None';
   // #enddocregion interaction
 
@@ -27,14 +22,11 @@ class _FileListState extends State<FileList> {
       // #docregion interaction
       SizedBox(
         height: 3,
-        child: ListView.builder(
+        child: ListView(
           autofocus: true,
-          itemCount: files.length,
           onSelect: (i) =>
               setState(() => selected = files[i]),
-          itemBuilder: (_, i, highlighted) => Text(
-            '${highlighted ? '›' : ' '} ${files[i]}',
-          ),
+          children: [for (final file in files) Text(file)],
         ),
       ),
       // #enddocregion interaction

@@ -1,0 +1,14 @@
+---
+import { Code } from '@astrojs/starlight/components';
+
+interface Props { code: string; focus?: string }
+const { code, focus } = Astro.props;
+const complete = code.replace(/^[ \t]*\/\/ #(end)?docregion .*\r?\n/gm, '');
+const focusLine = focus
+  ? complete.split('\n').findIndex(line => line.includes(focus)) + 1
+  : 1;
+if (focus && !focusLine) throw new Error(`Demo source focus is missing: ${focus}`);
+---
+<div data-code-focus-line={focusLine}>
+  <Code code={complete} lang="dart" wrap />
+</div>

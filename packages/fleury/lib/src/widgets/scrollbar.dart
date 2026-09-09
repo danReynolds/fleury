@@ -2,7 +2,8 @@ import '../foundation/geometry.dart';
 import '../rendering/cell.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/layout.dart';
-import '../rendering/render_flex.dart' show CrossAxisAlignment;
+import '../rendering/render_flex.dart' show Axis, CrossAxisAlignment;
+import '../rendering/scroll_axis.dart';
 import '../rendering/render_object.dart';
 import '../rendering/width_resolver.dart';
 import 'basic.dart';
@@ -12,10 +13,10 @@ import 'media_query.dart';
 import 'pointer.dart';
 import 'scroll_view.dart' show ScrollController;
 
-/// (content, viewport, offset) in rows or items.
+/// (content, viewport, offset) in cells or item fractions.
 typedef _ScrollbarMetrics = (int, int, int);
 
-/// A vertical scroll indicator drawn in a gutter on the right of [child],
+/// A scroll indicator drawn beside [child] (vertical) or below it (horizontal),
 /// reflecting a [ScrollController] (or a [ListController] via
 /// [Scrollbar.list]). The thumb's size shows the visible fraction and its
 /// position shows how far you've scrolled; when everything fits, the thumb
@@ -31,6 +32,7 @@ class Scrollbar extends StatefulWidget {
     required ScrollController controller,
     required this.child,
     this.thickness = 1,
+    this.scrollDirection = Axis.vertical,
     this.trackStyle = const CellStyle(dim: true),
     this.thumbStyle = CellStyle.none,
   }) : _metrics = (() => (
@@ -41,19 +43,20 @@ class Scrollbar extends StatefulWidget {
        _scrollTo = ((f) =>
            controller.offset = (controller.maxOffset * f).round());
 
-  /// Scrollbar for a [ListView], including partial visibility within tall items.
+  /// Scrollbar for a [ListView], including partial visibility within oversized items.
   /// Unmeasured items count equally, so geometry is approximate for mixed
-  /// heights. Dragging to either endpoint reaches the actual content edge.
+  /// sizes. Dragging to either endpoint reaches the actual content edge.
   Scrollbar.list({
     super.key,
     required ListController controller,
     required this.child,
     this.thickness = 1,
+    this.scrollDirection = Axis.vertical,
     this.trackStyle = const CellStyle(dim: true),
     this.thumbStyle = CellStyle.none,
   }) : _metrics = (() {
          // Fixed precision keeps the bar independent of whether the viewport
-         // spans many short items or part of one tall item.
+         // spans many short items or part of one oversized item.
          const units = 1000000;
          final visible = (controller.visibleFraction * units).round();
          return (
@@ -68,6 +71,9 @@ class Scrollbar extends StatefulWidget {
   final void Function(double fraction) _scrollTo;
   final Widget child;
   final int thickness;
+
+  /// Must match the axis of the owning view. Horizontal bars use a bottom gutter.
+  final Axis scrollDirection;
   final CellStyle trackStyle;
   final CellStyle thumbStyle;
 
@@ -76,7 +82,7 @@ class Scrollbar extends StatefulWidget {
 }
 
 /// Where the bar is on screen: derived from its render object's layout when
-/// a drag on the track needs to map a screen row to a scroll fraction.
+/// a drag on the track needs to map a local pointer position to a scroll fraction.
 class _ScrollbarGeometry {
   RenderObject? host;
 }
@@ -84,39 +90,43 @@ class _ScrollbarGeometry {
 class _ScrollbarState extends State<Scrollbar> {
   final _ScrollbarGeometry _geom = _ScrollbarGeometry();
 
-  void _jumpToRow(int row) {
-    final height = _geom.host?.size.rows ?? 0;
-    if (height <= 1) return;
-    final f = (row / (height - 1)).clamp(0.0, 1.0);
+  void _jumpToPosition(CellOffset position) {
+    final host = _geom.host;
+    if (host == null) return;
+    final extent = widget.scrollDirection.extent(host.size);
+    if (extent <= 1) return;
+    final f = (widget.scrollDirection.position(position) / (extent - 1)).clamp(
+      0.0,
+      1.0,
+    );
     widget._scrollTo(f);
   }
 
   @override
   Widget build(BuildContext context) {
     final policy = MediaQuery.textPolicyOf(context);
-    // The gutter lives at the right edge of a bounded region, and the
-    // Expanded below fills the rest. Under an unbounded width the Row would
-    // give Expanded zero columns and the content would silently vanish — the
-    // guard turns that into a clear, actionable error instead.
-    return _RequireBoundedWidth(
-      child: Row(
+    final vertical = widget.scrollDirection == Axis.vertical;
+    // The flex divides the cross axis between the viewport and its gutter.
+    // On ambiguous-wide surfaces a vertical bar reserves whole glyph widths.
+    return _RequireBoundedCrossAxis(
+      scrollDirection: widget.scrollDirection,
+      child: Flex(
+        direction: vertical ? Axis.horizontal : Axis.vertical,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(child: widget.child),
           GestureDetector(
-            onTapDown: (details) => _jumpToRow(details.localPosition.row),
-
-            onDragUpdate: (details) => _jumpToRow(details.localPosition.row),
+            onTapDown: (details) => _jumpToPosition(details.localPosition),
+            onDragUpdate: (details) => _jumpToPosition(details.localPosition),
             child: SizedBox(
-              // The gutter reserves what the bar's glyphs actually draw:
-              // `█` and `│` are East Asian Ambiguous, so a surface whose
-              // probe measured ambiguous glyphs wide gets a two-column
-              // gutter per unit of thickness (RFC 0019). Reserving one
-              // there would put the thumb's second cell over the content.
-              width: widget.thickness * _barGlyphWidth(policy),
+              width: vertical
+                  ? widget.thickness * _barGlyphWidth(policy)
+                  : null,
+              height: vertical ? null : widget.thickness,
               child: _BarView(
                 metrics: widget._metrics,
                 geometry: _geom,
+                scrollDirection: widget.scrollDirection,
                 trackStyle: widget.trackStyle,
                 thumbStyle: widget.thumbStyle,
                 textPolicy: policy,
@@ -129,24 +139,35 @@ class _ScrollbarState extends State<Scrollbar> {
   }
 }
 
-/// Fails loudly if given an unbounded width instead of letting the
-/// [Scrollbar]'s `Row`/`Expanded` collapse the content to zero columns — a
-/// right-edge gutter has nothing to anchor to without a bounded width. Mirrors
-/// how [LayoutBuilder] rejects an unbounded main axis. Transparent otherwise
-/// (same size, same paint offset, so the gutter's pointer region is intact).
-class _RequireBoundedWidth extends SingleChildRenderObjectWidget {
-  const _RequireBoundedWidth({required super.child});
+/// A gutter needs a bounded cross axis. Otherwise Expanded would silently
+/// allocate zero cells to its sibling viewport.
+class _RequireBoundedCrossAxis extends SingleChildRenderObjectWidget {
+  const _RequireBoundedCrossAxis({
+    required this.scrollDirection,
+    required super.child,
+  });
+  final Axis scrollDirection;
 
   @override
   RenderObject createRenderObject(BuildContext context) =>
-      _RenderRequireBoundedWidth();
+      _RenderRequireBoundedCrossAxis(scrollDirection);
 
   @override
-  void updateRenderObject(BuildContext context, RenderObject renderObject) {}
+  void updateRenderObject(
+    BuildContext context,
+    covariant _RenderRequireBoundedCrossAxis renderObject,
+  ) {
+    if (renderObject.scrollDirection != scrollDirection) {
+      renderObject.scrollDirection = scrollDirection;
+      renderObject.markNeedsLayout();
+    }
+  }
 }
 
-class _RenderRequireBoundedWidth extends RenderObject
+class _RenderRequireBoundedCrossAxis extends RenderObject
     implements RenderObjectWithSingleChild {
+  _RenderRequireBoundedCrossAxis(this.scrollDirection);
+  Axis scrollDirection;
   RenderObject? _child;
 
   @override
@@ -162,12 +183,12 @@ class _RenderRequireBoundedWidth extends RenderObject
 
   @override
   CellSize performLayout(CellConstraints constraints) {
-    if (!constraints.hasBoundedWidth) {
+    if (scrollDirection.maxCrossExtent(constraints) == null) {
+      final dimension = scrollDirection == Axis.vertical ? 'width' : 'height';
       throw StateError(
-        'Scrollbar needs a bounded width to anchor its gutter, but was given '
-        'an unbounded width (e.g. a non-Expanded child of a Row gets an '
-        'unbounded main axis). Give it a bounded width — wrap it in Expanded '
-        'or a SizedBox(width: ...).',
+        'Scrollbar needs a bounded $dimension to anchor its gutter, but was given '
+        'an unbounded $dimension. Give it a bounded $dimension — wrap it in Expanded '
+        'or a SizedBox($dimension: ...).',
       );
     }
     final c = _child;
@@ -177,10 +198,7 @@ class _RenderRequireBoundedWidth extends RenderObject
 
   @override
   void performPaint(CellBuffer buffer, CellOffset offset) {
-    final c = _child;
-    if (c != null) {
-      c.paint(buffer, offset);
-    }
+    _child?.paint(buffer, offset);
   }
 }
 
@@ -205,6 +223,7 @@ class _BarView extends LeafRenderObjectWidget {
   const _BarView({
     required this.metrics,
     required this.geometry,
+    required this.scrollDirection,
     required this.trackStyle,
     required this.thumbStyle,
     required this.textPolicy,
@@ -212,6 +231,7 @@ class _BarView extends LeafRenderObjectWidget {
 
   final _ScrollbarMetrics Function() metrics;
   final _ScrollbarGeometry geometry;
+  final Axis scrollDirection;
   final CellStyle trackStyle;
   final CellStyle thumbStyle;
   final TextPresentationPolicy textPolicy;
@@ -220,6 +240,7 @@ class _BarView extends LeafRenderObjectWidget {
   RenderObject createRenderObject(BuildContext context) => _RenderScrollbar(
     metrics: metrics,
     geometry: geometry,
+    scrollDirection: scrollDirection,
     trackStyle: trackStyle,
     thumbStyle: thumbStyle,
     textPolicy: textPolicy,
@@ -233,6 +254,7 @@ class _BarView extends LeafRenderObjectWidget {
     renderObject
       ..metrics = metrics
       ..geometry = geometry
+      ..scrollDirection = scrollDirection
       ..trackStyle = trackStyle
       ..thumbStyle = thumbStyle
       ..textPolicy = textPolicy;
@@ -246,15 +268,24 @@ class _RenderScrollbar extends RenderObject {
   _RenderScrollbar({
     required _ScrollbarMetrics Function() metrics,
     required _ScrollbarGeometry geometry,
+    required Axis scrollDirection,
     required CellStyle trackStyle,
     required CellStyle thumbStyle,
     required TextPresentationPolicy textPolicy,
   }) : _metrics = metrics,
        _geometry = geometry,
+       _scrollDirection = scrollDirection,
        _trackStyle = trackStyle,
        _thumbStyle = thumbStyle,
        _textPolicy = textPolicy {
     geometry.host = this;
+  }
+
+  Axis _scrollDirection;
+  set scrollDirection(Axis value) {
+    if (_scrollDirection == value) return;
+    _scrollDirection = value;
+    markNeedsPaintOnly();
   }
 
   TextPresentationPolicy _textPolicy;
@@ -304,7 +335,13 @@ class _RenderScrollbar extends RenderObject {
   @override
   void performPaint(CellBuffer buffer, CellOffset offset) {
     if (size.isEmpty) return;
-    final h = size.rows;
+    // Quantize horizontal geometry to whole glyphs. A minimum one-cell thumb
+    // at the last column would disappear on an ambiguous-wide surface.
+    final glyphWidth = _barGlyphWidth(_textPolicy);
+    final h = _scrollDirection == Axis.vertical
+        ? size.rows
+        : size.cols ~/ glyphWidth;
+    if (h == 0) return;
     final (content, viewport, scrollOffset) = _metrics();
     final int thumbSize;
     final int thumbTop;
@@ -325,21 +362,25 @@ class _RenderScrollbar extends RenderObject {
     // way. A glyph that no longer fits is skipped rather than written
     // half-in — on an ambiguous-wide surface a one-column write would put
     // the thumb's second cell over the content beside it.
-    final glyphWidth = _barGlyphWidth(_textPolicy);
     final widths = _textPolicy.widths;
     final lastCol = offset.col + size.cols;
-    for (var r = 0; r < h; r++) {
+    for (var r = 0; r < size.rows; r++) {
       final row = offset.row + r;
       if (row < 0 || row >= buffer.size.rows) continue;
-      final isThumb = r >= thumbTop && r < thumbTop + thumbSize;
-      final glyph = isThumb ? _thumbGlyph : _trackGlyph;
-      final style = isThumb ? _thumbStyle : _trackStyle;
       for (
         var col = offset.col;
         col + glyphWidth <= lastCol;
         col += glyphWidth
       ) {
         if (col < 0 || col >= buffer.size.cols) continue;
+        final position = _scrollDirection == Axis.vertical
+            ? r
+            : (col - offset.col) ~/ glyphWidth;
+        final isThumb = position >= thumbTop && position < thumbTop + thumbSize;
+        final glyph = isThumb
+            ? _thumbGlyph
+            : (_scrollDirection == Axis.vertical ? _trackGlyph : '\u2500');
+        final style = isThumb ? _thumbStyle : _trackStyle;
         buffer.writeGrapheme(
           CellOffset(col, row),
           glyph,

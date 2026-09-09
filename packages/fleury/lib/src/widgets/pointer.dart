@@ -366,6 +366,8 @@ class PointerRouter {
     switch (event.kind) {
       case MouseEventKind.scrollUp:
       case MouseEventKind.scrollDown:
+      case MouseEventKind.scrollLeft:
+      case MouseEventKind.scrollRight:
         final target = _topmost(
           event.col,
           event.row,
@@ -380,10 +382,16 @@ class PointerRouter {
                   globalPosition: details.globalPosition,
                   button: details.button,
                   modifiers: details.modifiers,
-                  delta: CellOffset(
-                    0,
-                    event.kind == MouseEventKind.scrollUp ? -1 : 1,
-                  ),
+                  delta: switch (event.kind) {
+                    MouseEventKind.scrollLeft => const CellOffset(-1, 0),
+                    MouseEventKind.scrollRight => const CellOffset(1, 0),
+                    MouseEventKind.scrollUp when event.hasShift =>
+                      const CellOffset(-1, 0),
+                    MouseEventKind.scrollDown when event.hasShift =>
+                      const CellOffset(1, 0),
+                    MouseEventKind.scrollUp => const CellOffset(0, -1),
+                    _ => const CellOffset(0, 1),
+                  },
                 ),
               ) ??
               false) {
