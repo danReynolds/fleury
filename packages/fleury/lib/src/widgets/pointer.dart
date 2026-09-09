@@ -2,6 +2,7 @@
 import 'package:meta/meta.dart';
 
 import '../foundation/geometry.dart';
+import '../foundation/mouse_cursor.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/layout.dart';
 import '../rendering/render_object.dart';
@@ -10,9 +11,7 @@ import 'framework.dart';
 import 'focus.dart';
 import '../semantics/semantics.dart';
 
-/// Pointer shapes for hosts that can display them, such as the browser.
-/// Terminal hosts keep their own pointer appearance.
-enum MouseCursor { basic, pointer, text, resizeLeftRight, resizeUpDown }
+export '../foundation/mouse_cursor.dart';
 
 typedef PointerTapCallback = void Function();
 typedef PointerCallback = void Function(PointerDetails details);
@@ -92,6 +91,17 @@ class PointerRouter {
     if (identical(_scope, scope)) _scope = null;
   }
 
+  /// Host presentation hook. Uses the same clipped hit path as hover and taps.
+  @internal
+  void Function(MouseCursor cursor)? onCursorChanged;
+  MouseCursor _cursor = MouseCursor.basic;
+
+  void _setCursor(MouseCursor cursor) {
+    if (_cursor == cursor) return;
+    _cursor = cursor;
+    onCursorChanged?.call(cursor);
+  }
+
   void beginFrame() {}
 
   /// Reconciles targets after layout. Hidden live controls receive cancellation;
@@ -138,6 +148,7 @@ class PointerRouter {
   }
 
   void abortFrame() {
+    _setCursor(MouseCursor.basic);
     _aborted = true;
     _hovered.clear();
     _lastHoverEvent = null;
@@ -344,6 +355,7 @@ class PointerRouter {
   }
 
   void _leave() {
+    _setCursor(MouseCursor.basic);
     _lastHoverEvent = null;
     final previous = _hovered;
     _hovered = [];
@@ -525,8 +537,16 @@ class PointerRouter {
     final top = _topmost(
       event.col,
       event.row,
-      (r) => _hasHover(r) || _hasTap(r) || _hasDrag(r),
+      (r) => r.cursor != null || _hasHover(r) || _hasTap(r) || _hasDrag(r),
     );
+    var cursor = MouseCursor.basic;
+    for (RenderObject? node = top; node != null; node = node.parent) {
+      if (node is RenderPointerListener && node.cursor != null) {
+        cursor = node.cursor!;
+        break;
+      }
+    }
+    _setCursor(cursor);
     final next = <RenderPointerListener>[];
     for (RenderObject? node = top; node != null; node = node.parent) {
       if (node is RenderPointerListener && _isLive(node) && _hasHover(node)) {

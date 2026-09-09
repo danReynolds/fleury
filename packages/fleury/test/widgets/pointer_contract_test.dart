@@ -37,8 +37,10 @@ void main() {
           ),
         ),
       );
-      Iterable<SemanticNode> cursors() =>
-          tester.semantics().nodes.where((n) => n.state['mouseCursor'] != null);
+      Iterable<SemanticNode> cursors() => tester.semantics().nodes.where(
+        (n) =>
+            n.state['mouseCursor'] != null && n.state['mouseCursor'] != 'text',
+      );
       tester.pumpWidget(tree(null, 0));
       tester.type('Ada');
       expect(cursors(), isEmpty);

@@ -237,6 +237,7 @@ class _FocusableControlState extends State<FocusableControl>
     // Opt its label out of the ambient text selection, the way a browser makes
     // `<button>` text non-selectable. Standalone Text stays selectable.
     return MouseRegion(
+      cursor: widget.enabled ? MouseCursor.pointer : MouseCursor.basic,
       onEnter: () {
         if (!_hovered) setState(() => _hovered = true);
       },
