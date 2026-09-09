@@ -21,6 +21,38 @@ void main() {
     });
   });
 
+  test(
+    'immediate paste segments apply synchronously with one undo transaction',
+    () {
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+      final pending = <void Function()>[];
+      final driver = TextPasteDriver(
+        policy: () => const TextPastePolicy.immediate(),
+        documentLength: () => controller.text.length,
+        applyEdit: (text, {required coalesce}) =>
+            controller.paste(text, coalesce: coalesce),
+        isAttached: () => true,
+        onProgressChanged: () {},
+        schedulePostFrame: pending.add,
+      );
+      final first = 'x' * 20000;
+      driver.start(
+        PasteEvent.segment(first, pasteId: 1, phase: PasteEventPhase.start),
+        first,
+      );
+      expect(controller.text, first);
+      driver.start(
+        const PasteEvent.segment('end', pasteId: 1, phase: PasteEventPhase.end),
+        'end',
+      );
+      expect(controller.text, '${first}end');
+      expect(pending, isEmpty);
+      controller.undo();
+      expect(controller.text, isEmpty);
+    },
+  );
+
   group('TextPasteSession', () {
     test('tracks inserted length and completes after the last chunk', () {
       final session = TextPasteSession(

@@ -457,8 +457,8 @@ class ListView extends StatefulWidget {
   /// list still addresses exactly [itemCount] items, and arrow / Home / End
   /// navigation walks items only. Each is composed into the row block beneath
   /// its item (reusing [ListView.builder]'s well-tested item-index machinery),
-  /// and the block is one tap target, so a mouse click on a separator selects
-  /// the item it trails.
+  /// and only the item is a tap target. A separator cannot move the cursor or
+  /// select the item it trails.
   const ListView.separated({
     super.key,
     this.controller,
@@ -998,9 +998,8 @@ class _ListViewState extends State<ListView> {
     // Lazy: builder + count. Item subtrees are mounted on demand by
     // the render object during layout; a completed click selects an item.
     // `.separated` composes a non-selectable separator into the row
-    // block below its item. Clicking the block selects its item;
-    // separators never enter
-    // the index math because they are sub-parts of an item's block.
+    // block below its item. Only the item participates in the click gesture;
+    // separators never enter the index math.
     final separatorBuilder = widget.separatorBuilder;
     final itemCount = widget.itemCount!;
     return _LazyListBody(
@@ -1015,25 +1014,21 @@ class _ListViewState extends State<ListView> {
         final separator = separatorBuilder == null || index >= itemCount - 1
             ? null
             : separatorBuilder(context, index);
-        final content = separator == null
-            ? built
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [built, separator],
-              );
-        // The GestureDetector wraps the WHOLE block (not the item
-        // alone), so a tap on a separator row selects the item it
-        // trails. Its region, like every other piece of geometry, is
-        // derived from layout, so a scrolled-but-unchanged block
-        // whose RepaintBoundary blits its cached cells at the new row
-        // has its tap region follow for free.
+        final item = GestureDetector(
+          onTapDown: (_) => _handleItemDown(index),
+          onTap: () => _handleItemTap(index),
+          onTapCancel: () => _pressedItem = null,
+          child: built,
+        );
+        // Geometry follows the item through scrolling and cached repaint.
+        // Releasing over a separator cancels the item's click gesture.
         return _maybeBoundary(
-          GestureDetector(
-            onTapDown: (_) => _handleItemDown(index),
-            onTap: () => _handleItemTap(index),
-            onTapCancel: () => _pressedItem = null,
-            child: content,
-          ),
+          separator == null
+              ? item
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [item, separator],
+                ),
         );
       },
       currentIndex: _controller.currentIndex,

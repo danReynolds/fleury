@@ -10,12 +10,29 @@ final class TextPastePolicy {
     this.largePasteThreshold = 8192,
     this.chunkSize = 2048,
   }) : assert(largePasteThreshold >= 0),
-       assert(chunkSize > 0);
+       assert(chunkSize > 0),
+       _immediate = false;
+
+  /// Applies each received paste segment in one synchronous edit.
+  ///
+  /// Use for bounded forms whose input may be temporarily unmounted while an
+  /// external controller survives. There is no scheduled tail to discard on
+  /// unmount. The application must bound input size; large synchronous edits
+  /// can block input and rendering. Future terminal segments are not received
+  /// or preserved by this policy after the field goes away.
+  const TextPastePolicy.immediate()
+    : largePasteThreshold = 8192,
+      chunkSize = 2048,
+      _immediate = true;
+
+  final bool _immediate;
 
   /// Pasted text longer than this many Dart string code units is chunked.
+  /// Ignored by [TextPastePolicy.immediate].
   final int largePasteThreshold;
 
   /// Maximum approximate chunk size in Dart string code units.
+  /// Ignored by [TextPastePolicy.immediate].
   ///
   /// Chunks never split extended grapheme clusters, so an individual chunk may
   /// exceed this value when one grapheme is larger than [chunkSize].
@@ -26,7 +43,8 @@ final class TextPastePolicy {
   /// string. See [TextPasteSession.nextBatch].
   final int chunkSize;
 
-  bool shouldChunk(String text) => text.length > largePasteThreshold;
+  bool shouldChunk(String text) =>
+      !_immediate && text.length > largePasteThreshold;
 
   Iterable<String> chunks(String text) sync* {
     if (text.isEmpty) return;

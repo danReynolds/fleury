@@ -8,3 +8,4 @@ export 'src/rendering/text_projection.dart' show projectText;
 export 'src/widgets/form_control.dart'
     show FormControlRegistration, FormControlScope;
 export 'src/widgets/pointer.dart' show RenderPointerListener;
+export 'src/widgets/focusable_control.dart' show FocusableControl;

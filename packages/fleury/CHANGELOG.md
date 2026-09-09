@@ -2,6 +2,31 @@
 
 ## 0.1.0
 
+- **Text controller cleanup.** Disposal now releases the current value as well
+  as editing history; getters read empty state after disposal. Assigning equal
+  text or an equal editing value still resets undo/redo and composition history.
+  Listeners are notified when that reset changes history, even if text is unchanged.
+- **Sensitive multiline input.** `TextArea.obscureText` masks display and
+  redacts semantic values and clipboard capture, while preserving an explicit
+  disabled clipboard policy. Reveal/hide keeps the same editing controller;
+  masked mouse selection does not disclose word boundaries.
+- **Application-owned suspension.** `PosixTerminalDriver(suspendOnCtrlZ: false)`
+  delivers Ctrl+Z to the application. Raw startup fails if native termios is
+  unavailable, rather than silently restoring kernel-owned suspension.
+  Terminal restoration uses an owned close-on-exec descriptor even after
+  stdin closes.
+- **RichText spaces.** Ordinary spaces retain their source span's styling,
+  including inverse highlights, backgrounds and underline across span edges.
+- **Separated-list pointer behavior changed.** Clicking a separator no longer
+  moves the cursor or selects the preceding item. Only completed clicks on items
+  select; keyboard indices and navigation are unchanged.
+- **Paste lifetime.** `TextPastePolicy.immediate()` applies each received segment
+  synchronously for bounded forms. Default chunked paste still discards pending
+  work on unmount; surviving external controllers do not own that pending work.
+- **Core Button.** `Button` and `ButtonVariant` now come from `fleury_core.dart`
+  (also reexported by `fleury.dart`), without the companion image dependency.
+  Existing `fleury_widgets` imports reexport the same implementation.
+
 - Navigation controllers use one-time constructor seeds: `ListController(initialIndex:)`
   and `ScrollController(initialOffset:)`. Their live `currentIndex` and `offset`
   properties remain mutable. Each viewport controller accepts one active owning

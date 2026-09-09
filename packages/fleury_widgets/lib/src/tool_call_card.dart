@@ -3,7 +3,6 @@ import 'dart:async' show unawaited;
 import 'package:characters/characters.dart';
 import 'package:fleury/fleury_core.dart';
 
-import 'controls.dart' show Button, ButtonVariant;
 import 'semantic_roles.dart';
 
 /// Protocol-neutral status for one tool call.

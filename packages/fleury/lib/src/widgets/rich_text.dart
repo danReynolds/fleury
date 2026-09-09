@@ -583,16 +583,9 @@ class RenderRichText extends RenderObject
         ww += _glyphs[wordEnd].width;
         wordEnd++;
       }
-      // The space preceding this word. Re-emit the ORIGINAL space glyph (with
-      // its style) only when it carries a link, so a multi-word link stays ONE
-      // contiguous run — one `<a>`, one unbroken underline — rather than
-      // splitting at every space. A non-link separator stays a bare unstyled
-      // space, so every non-link run is byte-identical to before (no wire or
-      // paint drift). Whitespace at a wrap boundary is still dropped.
-      final separator =
-          wordStart > start && _glyphs[wordStart - 1].style.linkUri != null
-          ? _glyphs[wordStart - 1]
-          : emptySpace;
+      // A separator belongs to its source span, including ordinary spaces.
+      // Only whitespace at an actual wrap boundary is dropped below.
+      final separator = wordStart > start ? _glyphs[wordStart - 1] : emptySpace;
       final isFirst = lineWidth == 0;
       if (wordStart == wordEnd) {
         if (!isFirst &&
