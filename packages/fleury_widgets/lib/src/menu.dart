@@ -116,7 +116,7 @@ class _MenuState extends State<Menu> {
 
   void _open() {
     if (widget.items.isEmpty || _isOpen) return;
-    final manager = Focus.of(context);
+    final manager = FocusManager.of(context);
     final overlay = Overlay.of(context);
     _priorFocus = manager.focusedNode;
     final theme = Theme.of(
@@ -165,7 +165,7 @@ class _MenuState extends State<Menu> {
     // the close bubbles up; a close driven from OUT here (the barrier, a tap on
     // the trigger, the semantic close action) has to walk down instead.
     _bodyKey.currentState?.releaseChainFocusTraps();
-    Focus.of(context).releaseFocusTrapIn(_trapContentKey.currentContext);
+    FocusManager.of(context).releaseFocusTrapIn(_trapContentKey.currentContext);
     _entry?.remove();
     _entry = null;
     final prior = _priorFocus;
@@ -182,7 +182,7 @@ class _MenuState extends State<Menu> {
 
   @override
   Widget build(BuildContext context) {
-    Focus.maybeOf(context); // Rebuild trigger semantics when focus moves.
+    FocusManager.maybeOf(context); // Rebuild trigger semantics when focus moves.
     return BoundsObserver(
       notifier: _bounds,
       child: Semantics(
@@ -397,7 +397,7 @@ class _MenuBodyState extends State<_MenuBody> {
   }
 
   void _releaseFocusTrap() {
-    Focus.of(context).releaseFocusTrapIn(_trapContentKey.currentContext);
+    FocusManager.of(context).releaseFocusTrapIn(_trapContentKey.currentContext);
   }
 
   /// Retires this panel's trap and every panel it opened, deepest first.
@@ -423,7 +423,7 @@ class _MenuBodyState extends State<_MenuBody> {
   void _openSubmenu(SubMenu sub, int index) {
     if (sub.items.isEmpty || _childEntry != null) return;
     final overlay = Overlay.of(context);
-    final manager = Focus.of(context);
+    final manager = FocusManager.of(context);
     final childKey = GlobalKey<_MenuBodyState>();
     final anchor = _boundsForRow(index);
     final theme = Theme.of(context);
@@ -527,7 +527,7 @@ class _MenuBodyState extends State<_MenuBody> {
 
   @override
   Widget build(BuildContext context) {
-    Focus.maybeOf(context); // Rebuild menu/item semantics when focus moves.
+    FocusManager.maybeOf(context); // Rebuild menu/item semantics when focus moves.
     final hasSubmenu = widget.entries.any((e) => e is SubMenu);
     // Row layout: a 2-cell leading marker (`› ` selected / blank), the label,
     // the cascade `▸` indicator right-aligned in its own column, and a trailing

@@ -55,7 +55,7 @@ class KeyHintBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final manager = Focus.maybeOf(context);
+    final manager = FocusManager.maybeOf(context);
     if (manager == null) return const EmptyBox();
     // Positional bindings name a SPOT, not a cap. Ask the keyboard what that
     // spot is actually labelled before telling anyone to press it (§9).

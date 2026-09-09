@@ -375,7 +375,7 @@ class _FleuryAppState extends State<FleuryApp> {
   }
 
   BuildContext _commandSourceContext(BuildContext fallback) {
-    final focused = Focus.maybeOf(fallback)?.focusedNode?.context;
+    final focused = FocusManager.maybeOf(fallback)?.focusedNode?.context;
     if (_isCurrentAppContext(focused)) return focused!;
     final route = _navigatorKey.currentState?.activeRouteContext;
     if (_isCurrentAppContext(route)) return route!;

@@ -1235,7 +1235,7 @@ Future<AppExit> _runAppImpl(
           //   - TuiBindingScope so animation (and future cross-cutting
           //     services) can reach the binding via TuiBinding.of(context).
           //   - FocusManagerScope so descendants can reach the manager
-          //     via Focus.of(context).
+          //     via FocusManager.of(context).
           //   - Overlay as the floating-layer primitive (direct OverlayEntry
           //     use: tooltips, toasts).
           // The user's root is otherwise mounted as supplied, with one host

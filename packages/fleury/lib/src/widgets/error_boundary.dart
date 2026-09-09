@@ -58,7 +58,7 @@ class ErrorBoundary extends SingleChildRenderObjectWidget {
     // Both reads are dependencies. _ErrorBoundaryElement refreshes the bridge
     // from performRebuild, so inherited service swaps and global-key moves
     // transfer any active exclusion instead of leaving it in the old runtime.
-    final focusManager = Focus.maybeOfIdentityDependency(context);
+    final focusManager = FocusManager.maybeOfIdentityDependency(context);
     final pointerRouter = PointerRouterScope.maybeOf(context);
     render
       ..rethrowContained =

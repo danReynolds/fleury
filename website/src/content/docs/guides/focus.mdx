@@ -230,6 +230,39 @@ counter does not change. Tab to Preview and the detector reports one leave.
 This avoids false leave-and-enter cycles when focus merely moves between
 children of the same region.
 
+### Reading focus while you build
+
+`FocusDetector` reports a change. When you only need to *render* from the
+current state, read the enclosing node instead — `Focus.of(context)` returns
+the `FocusNode` of the closest `Focus` above you, and reading it subscribes the
+caller, so the value stays current without a detector or a `setState`:
+
+```dart
+ListView.builder(
+  focusNode: listFocus,
+  itemCount: keys.length,
+  itemBuilder: (context, index, highlighted) {
+    // Fill the row only while the list itself holds the keyboard; keep the
+    // marker on the current row either way.
+    final focused = highlighted && Focus.of(context).hasFocus;
+    return Row(
+      children: [
+        Text(highlighted ? '> ' : '  '),
+        Text(keys[index], style: focused ? theme.selectionStyle : null),
+      ],
+    );
+  },
+)
+```
+
+A list is one focus stop with a row cursor, not one focusable node per row —
+so `highlighted` means *current*, and `Focus.of(context).hasFocus` is what
+tells you whether the keyboard is actually there.
+
+The manager itself is `FocusManager.of(context)`, which answers what has focus
+anywhere in the application. One manager exists per application rather than per
+process, which is why it is reached through the tree.
+
 ## Screens and dialogs
 
 Each screen and dialog gets its own `FocusScope`. A scope remembers the last

@@ -230,7 +230,7 @@ class _TabsState extends State<Tabs> {
 
   @override
   Widget build(BuildContext context) {
-    Focus.maybeOf(context); // Rebuild tab semantics when focus moves.
+    FocusManager.maybeOf(context); // Rebuild tab semantics when focus moves.
     _controller._length = widget.tabs.length;
     if (widget.tabs.isEmpty) return const EmptyBox();
     final active = _controller.index.clamp(0, widget.tabs.length - 1);

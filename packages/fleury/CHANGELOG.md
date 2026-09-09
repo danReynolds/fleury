@@ -2,6 +2,14 @@
 
 ## 0.1.0
 
+- **Breaking:** `Focus.of` / `Focus.maybeOf` now return the nearest enclosing
+  `FocusNode` instead of the `FocusManager`. The manager moved to
+  `FocusManager.of` / `FocusManager.maybeOf`. An item builder can now render
+  from the focus state of the region it is inside — `Focus.of(context).hasFocus`
+  — instead of comparing `FocusManager.focusedNode` against a node the caller
+  had to thread in by hand. Reading either still subscribes the caller to focus
+  changes, so no `FocusDetector` is needed to keep `hasFocus` current.
+
 - Add `scrollDirection: Axis.horizontal` to all `ListView` constructors,
   `ScrollView`, and `Scrollbar`. Horizontal views support left/right navigation,
   native horizontal wheel input, Shift+wheel, clipping, and bottom scrollbars.

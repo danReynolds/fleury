@@ -381,6 +381,43 @@ class FocusManager extends ChangeNotifier {
   /// The currently focused node, or null when nothing is focused.
   FocusNode? get focusedNode => _focusedNode;
 
+  /// The surrounding [FocusManager]. Throws when there isn't one — the
+  /// manager is installed by `runApp`.
+  ///
+  /// One manager exists per application, not per process, so it is reached
+  /// through the tree: a test host can stand up several independent apps.
+  /// Reading it also subscribes [context] to focus changes.
+  static FocusManager of(BuildContext context) {
+    final manager = maybeOf(context);
+    if (manager == null) {
+      throw StateError(
+        'No FocusManager found in this context. Did you call '
+        'runApp (which installs one)?',
+      );
+    }
+    return manager;
+  }
+
+  /// The surrounding [FocusManager], or null if there isn't one. See [of].
+  static FocusManager? maybeOf(BuildContext context) =>
+      Scope.maybeOf<FocusManager>(context);
+
+  /// Returns the surrounding manager without rebuilding [context] when its
+  /// focus or active bindings change.
+  ///
+  /// Framework widgets that only need to issue imperative manager operations
+  /// use this to avoid accidentally making a broad structural ancestor a
+  /// focus-change dependent. App/widget code should normally use [maybeOf].
+  @internal
+  static FocusManager? maybeOfWithoutDependency(BuildContext context) =>
+      Scope.maybeOfWithoutDependency<FocusManager>(context);
+
+  /// Returns the surrounding manager and rebuilds only when that manager
+  /// instance is replaced, not when its ordinary focus state changes.
+  @internal
+  static FocusManager? maybeOfIdentityDependency(BuildContext context) =>
+      Scope.maybeOf<_FocusManagerIdentity>(context)?.manager;
+
   /// All currently attached nodes, in attachment order. Used by the
   /// dispatcher to find the autofocus candidate, etc.
   final List<FocusNode> _attachedNodes = <FocusNode>[];
@@ -1111,7 +1148,8 @@ class FocusManager extends ChangeNotifier {
 /// Broad framework boundaries sometimes need to rebind when the surrounding
 /// manager instance changes, but must not rebuild for every focus movement or
 /// geometry notification. A `Scope<FocusManager>` listens to the manager, so
-/// they read this wrapper instead (through [Focus.maybeOfIdentityDependency]):
+/// they read this wrapper instead (through
+/// [FocusManager.maybeOfIdentityDependency]):
 /// it is not a [Listenable], and two handles are equal when they wrap the
 /// same manager, so its scope notifies only on replacement.
 final class _FocusManagerIdentity {
@@ -1212,38 +1250,51 @@ class Focus extends StatefulWidget {
   @override
   State<Focus> createState() => _FocusState();
 
-  /// Returns the surrounding [FocusManager]. Throws if not present.
-  static FocusManager of(BuildContext context) {
-    final manager = maybeOf(context);
-    if (manager == null) {
+  /// The nearest enclosing [FocusNode] — the node of the closest [Focus]
+  /// ancestor, or of this widget itself when called from its own subtree.
+  /// Throws when the context is not inside a [Focus].
+  ///
+  /// Use it to render from the state of the focusable region you are inside,
+  /// rather than comparing against [FocusManager.focusedNode] with a node the
+  /// caller had to thread in by hand:
+  ///
+  /// ```dart
+  /// // Inside a ListView item builder: fill the row only while the list
+  /// // itself holds the keyboard.
+  /// final focused = highlighted && Focus.of(context).hasFocus;
+  /// ```
+  ///
+  /// The caller rebuilds when focus moves, so reading [FocusNode.hasFocus]
+  /// from a build method stays correct.
+  static FocusNode of(BuildContext context) {
+    final node = maybeOf(context);
+    if (node == null) {
       throw StateError(
-        'No FocusManager found in this context. Did you call '
-        'runApp (which installs one)?',
+        'No enclosing Focus found in this context. Wrap the subtree in a '
+        'Focus, or use FocusManager.of(context) for the focus manager.',
       );
     }
-    return manager;
+    return node;
   }
 
-  /// Returns the surrounding [FocusManager], or null if there isn't
-  /// one.
-  static FocusManager? maybeOf(BuildContext context) =>
-      Scope.maybeOf<FocusManager>(context);
-
-  /// Returns the surrounding manager without rebuilding [context] when its
-  /// focus or active bindings change.
-  ///
-  /// Framework widgets that only need to issue imperative manager operations
-  /// use this to avoid accidentally making a broad structural ancestor a
-  /// focus-change dependent. App/widget code should normally use [maybeOf].
-  @internal
-  static FocusManager? maybeOfWithoutDependency(BuildContext context) =>
-      Scope.maybeOfWithoutDependency<FocusManager>(context);
-
-  /// Returns the surrounding manager and rebuilds only when that manager
-  /// instance is replaced, not when its ordinary focus state changes.
-  @internal
-  static FocusManager? maybeOfIdentityDependency(BuildContext context) =>
-      Scope.maybeOf<_FocusManagerIdentity>(context)?.manager;
+  /// The nearest enclosing [FocusNode], or null when the context is not
+  /// inside a [Focus]. See [of].
+  static FocusNode? maybeOf(BuildContext context) {
+    // Depend on the manager so the caller rebuilds when focus moves; the node
+    // identity alone would not tell it that `hasFocus` flipped.
+    FocusManager.maybeOf(context);
+    // Start at the context itself: a Focus's own element is its State's
+    // context, so a widget can ask for the node it just installed. Otherwise
+    // walk out to the closest enclosing one.
+    for (
+      Element? element = context is Element ? context : null;
+      element != null;
+      element = element.elementParent
+    ) {
+      if (element is _FocusElement) return element.node;
+    }
+    return null;
+  }
 
   @override
   StatefulElement createElement() => _FocusElement(this);
@@ -1343,7 +1394,7 @@ class _FocusState extends State<Focus> {
   void _attach() {
     // Follow provider identity even when the parent reuses the same child.
     // Ordinary focus changes do not require repeating this ownership work.
-    final manager = Focus.maybeOfIdentityDependency(context);
+    final manager = FocusManager.maybeOfIdentityDependency(context);
     if (identical(manager, _manager)) return;
     _detach();
     if (manager == null) return;
@@ -1806,7 +1857,7 @@ class _FocusDetectorState extends State<FocusDetector> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final manager = Focus.maybeOf(context);
+    final manager = FocusManager.maybeOf(context);
     if (!identical(manager, _manager)) {
       _manager?.removeListener(_onFocusChange);
       _manager = manager;

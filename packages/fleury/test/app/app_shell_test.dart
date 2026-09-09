@@ -457,7 +457,7 @@ void main() {
 
     final initialRouteContext = navigator!.activeRouteContext;
     expect(initialRouteContext, isNotNull);
-    expect(Focus.maybeOf(initialRouteContext!)?.focusedNode, isNull);
+    expect(FocusManager.maybeOf(initialRouteContext!)?.focusedNode, isNull);
 
     final semanticResult = await tester.invokeSemanticAction(
       SemanticAction.navigate,

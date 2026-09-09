@@ -28,6 +28,7 @@ InputDispatcher _dispatcherFor(FocusManager manager) {
 }
 
 void main() {
+  _enclosingNodeLookup();
   group('FocusNode and FocusManager', () {
     test('requestFocus moves focus and notifies listeners', () {
       final manager = FocusManager();
@@ -637,4 +638,119 @@ void main() {
       expect(changes, [true, false, true]);
     });
   });
+}
+
+void _enclosingNodeLookup() {
+  group('Focus.of resolves the enclosing node, FocusManager.of the manager', () {
+    test('a descendant reads the node of the Focus it is inside', () {
+      final outer = FocusNode(debugLabel: 'outer');
+      final inner = FocusNode(debugLabel: 'inner');
+      addTearDown(outer.dispose);
+      addTearDown(inner.dispose);
+      FocusNode? seenByInner;
+      FocusNode? seenByOuter;
+      final tester = FleuryTester();
+      addTearDown(tester.dispose);
+      tester.pumpWidget(
+        Focus(
+          focusNode: outer,
+          child: _Probe(
+            builder: (context) {
+              seenByOuter = Focus.of(context);
+              return Focus(
+                focusNode: inner,
+                child: _Probe(
+                  builder: (context) {
+                    seenByInner = Focus.of(context);
+                    return const Text('leaf');
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+      );
+      expect(seenByOuter, same(outer));
+      expect(seenByInner, same(inner));
+    });
+
+    test('hasFocus read through Focus.of rebuilds when focus moves', () {
+      final first = FocusNode(debugLabel: 'first');
+      final second = FocusNode(debugLabel: 'second');
+      addTearDown(first.dispose);
+      addTearDown(second.dispose);
+      final tester = FleuryTester();
+      addTearDown(tester.dispose);
+      tester.pumpWidget(
+        Row(
+          children: [
+            Focus(
+              focusNode: first,
+              autofocus: true,
+              child: _Probe(
+                builder: (context) =>
+                    Text(Focus.of(context).hasFocus ? 'first:on' : 'first:off'),
+              ),
+            ),
+            Focus(focusNode: second, child: const Text('second')),
+          ],
+        ),
+      );
+      expect(tester.renderToString(), contains('first:on'));
+      second.requestFocus();
+      tester.pump();
+      // No FocusDetector, no setState: reading the node subscribes the caller.
+      expect(tester.renderToString(), contains('first:off'));
+    });
+
+    test('with no nearer Focus, the lookup lands on the app root', () {
+      // A Fleury tree always has an ambient root Focus, so the enclosing-node
+      // lookup resolves rather than returning null. `of` throwing is reserved
+      // for a context outside any app.
+      FocusNode? seen;
+      final tester = FleuryTester();
+      addTearDown(tester.dispose);
+      tester.pumpWidget(
+        _Probe(
+          builder: (context) {
+            seen = Focus.maybeOf(context);
+            return const Text('bare');
+          },
+        ),
+      );
+      expect(seen, isNotNull);
+      expect(seen!.debugLabel, contains('DefaultRootSelection'));
+    });
+
+    test('the manager is reached through FocusManager, not Focus', () {
+      final node = FocusNode(debugLabel: 'node');
+      addTearDown(node.dispose);
+      FocusManager? manager;
+      final tester = FleuryTester();
+      addTearDown(tester.dispose);
+      tester.pumpWidget(
+        Focus(
+          focusNode: node,
+          autofocus: true,
+          child: _Probe(
+            builder: (context) {
+              manager = FocusManager.of(context);
+              return const Text('leaf');
+            },
+          ),
+        ),
+      );
+      expect(manager, same(tester.focusManager));
+      expect(manager!.focusedNode, same(node));
+    });
+  });
+}
+
+/// Minimal context probe: Fleury has no `Builder`, and these tests need a
+/// build context beneath a [Focus].
+final class _Probe extends StatelessWidget {
+  const _Probe({required this.builder});
+  final Widget Function(BuildContext) builder;
+  @override
+  Widget build(BuildContext context) => builder(context);
 }

@@ -158,7 +158,7 @@ final class PendingSequenceScope extends Scope<PendingSequenceNotifier> {
 ///
 /// ```dart
 /// KeyBinding(.tab, onTrigger: (event) {
-///   if (!Focus.of(context).focusNext()) event.bubble();
+///   if (!FocusManager.of(context).focusNext()) event.bubble();
 /// })
 /// ```
 ///
@@ -485,7 +485,7 @@ class KeyBindings extends StatefulWidget {
   /// bars, help overlays, and command palettes read this instead of walking
   /// the focus tree. Rebuilds when focus moves or the active bindings change.
   static List<ActiveKeyBinding> activeOf(BuildContext context) {
-    final manager = Focus.maybeOf(context);
+    final manager = FocusManager.maybeOf(context);
     if (manager == null) return const <ActiveKeyBinding>[];
     return resolveActiveKeyBindings(manager);
   }
@@ -621,7 +621,7 @@ class _KeyBindingsState extends State<KeyBindings> implements KeyBindingSource {
     // renders sequences + labels, not handlers. The notify is
     // microtask-deferred by the manager (we're mid-build here).
     if (_hintContentChanged(oldWidget.bindings, widget.bindings)) {
-      Focus.maybeOf(context)?.notifyBindingsChanged();
+      FocusManager.maybeOf(context)?.notifyBindingsChanged();
     }
     _syncHoldObserver();
   }

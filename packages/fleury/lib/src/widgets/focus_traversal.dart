@@ -136,7 +136,7 @@ class FocusTraversalGroup extends StatelessWidget {
         KeyBinding(
           KeySequence.tab,
           onTrigger: (event) {
-            if (!Focus.of(context).focusNext()) event.bubble();
+            if (!FocusManager.of(context).focusNext()) event.bubble();
           },
           hideFromHintBar: true,
           // Held arrows/Tab move continuously — the repeat-reliant class
@@ -148,7 +148,7 @@ class FocusTraversalGroup extends StatelessWidget {
         KeyBinding(
           KeySequence.shiftTab,
           onTrigger: (event) {
-            if (!Focus.of(context).focusPrevious()) event.bubble();
+            if (!FocusManager.of(context).focusPrevious()) event.bubble();
           },
           hideFromHintBar: true,
           // Held arrows/Tab move continuously — the repeat-reliant class
@@ -163,7 +163,7 @@ class FocusTraversalGroup extends StatelessWidget {
   }
 
   KeyEventResult _navigate(BuildContext context, TraversalDirection direction) {
-    final manager = Focus.of(context);
+    final manager = FocusManager.of(context);
     final current = manager.focusedNode;
     if (current == null) return KeyEventResult.ignored;
     final currentRect = current.rect;

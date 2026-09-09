@@ -103,7 +103,7 @@ class _FilePickerState extends State<FilePicker> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    Focus.maybeOf(context);
+    FocusManager.maybeOf(context);
   }
 
   @override

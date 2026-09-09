@@ -128,7 +128,7 @@ Three cases needed a value type of their own instead of a flag:
   initializer list; `TickerMode` avoids the layer only because its wrapper is
   one of two constants.
 - The focus manager is shared twice: `Scope<FocusManager>` (notifying, what
-  `Focus.of` reads) and `Scope<_FocusManagerIdentity>` (an equality-by-manager
+  `FocusManager.of` reads) and `Scope<_FocusManagerIdentity>` (an equality-by-manager
   handle for boundaries that must rebind on replacement but not rebuild on
   every focus move).
 - `SelectionScope(registrar: null)` shares a const no-op registrar so the

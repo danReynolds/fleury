@@ -247,7 +247,7 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final manager = Focus.maybeOf(context);
+    final manager = FocusManager.maybeOf(context);
     if (!identical(manager, _manager)) {
       _manager?.removeListener(_syncCompletion);
       _manager = manager;

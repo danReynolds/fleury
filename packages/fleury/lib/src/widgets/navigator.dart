@@ -325,7 +325,7 @@ class NavigatorState extends State<Navigator> {
     return null;
   }
 
-  FocusManager? get _manager => Focus.maybeOfWithoutDependency(context);
+  FocusManager? get _manager => FocusManager.maybeOfWithoutDependency(context);
 
   @override
   void didChangeDependencies() {

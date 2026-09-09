@@ -284,7 +284,7 @@ class _TextAreaState extends State<TextArea>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    Focus.maybeOf(context); // rebuild on focus change (cursor visibility)
+    FocusManager.maybeOf(context); // rebuild on focus change (cursor visibility)
     final registration = FormControlScope.maybeOf(context);
     if (!identical(registration, _formRegistration)) {
       _formRegistration?.release(this);
@@ -653,7 +653,7 @@ class _TextAreaState extends State<TextArea>
 
   void _pointerDown(PointerDetails details) {
     if (!widget.enabled ||
-        !(Focus.maybeOf(context)?.isClickable(_focusNode) ?? false)) {
+        !(FocusManager.maybeOf(context)?.isClickable(_focusNode) ?? false)) {
       return;
     }
     final offset = _offsetForPointer(details);
@@ -669,7 +669,7 @@ class _TextAreaState extends State<TextArea>
 
   void _pointerDrag(PointerDragDetails details) {
     if (!widget.enabled ||
-        !(Focus.maybeOf(context)?.isClickable(_focusNode) ?? false)) {
+        !(FocusManager.maybeOf(context)?.isClickable(_focusNode) ?? false)) {
       return;
     }
     final offset = _offsetForPointer(details);
