@@ -114,6 +114,14 @@ class InputDispatcher {
   /// focus change cannot leave the old field stuck composing.
   FocusNode? _compositionOwner;
 
+  /// Set when a composition's owner was taken away mid-flight (covered by
+  /// [ExcludeFocus], or it dropped its claimant). The commit that follows is
+  /// an ORPHAN and must be dropped rather than landing on whoever holds focus
+  /// now. Distinguishes that from a commit with no owner because no
+  /// composition was ever started — a candidate-selection IME commits
+  /// directly, with no preceding update, and that text must be delivered.
+  bool _compositionOrphaned = false;
+
   /// Reactive view of the current pending sequence, shared with the widget
   /// tree by `runApp` (via `PendingSequenceScope`) so a which-key widget can
   /// read it through `KeyBindings.pendingOf`. Updated whenever the pending
@@ -651,6 +659,7 @@ class InputDispatcher {
         claimant.onTextCompositionCancel();
       }
       _clearCompositionOwner();
+      _compositionOrphaned = true;
     }
   }
 
@@ -1110,6 +1119,7 @@ class InputDispatcher {
 
   void _clearCompositionOwner() {
     _compositionOwner = null;
+    _compositionOrphaned = false;
   }
 
   /// Offers IME composition content with sticky ownership until commit/cancel.
@@ -1120,13 +1130,16 @@ class InputDispatcher {
         if (sticky != null) {
           final result = _offerCompositionTo(sticky, event);
           if (result == KeyEventResult.handled) return result;
-          // Owner gone or declined — drop sticky and try the live chain.
+          // Owner gone or declined — drop sticky and try the live chain. The
+          // composition is orphaned unless a live node picks it up below.
           _clearCompositionOwner();
+          _compositionOrphaned = true;
         }
         for (final node in focusManager.activeChain()) {
           final result = _offerCompositionTo(node, event);
           if (result != KeyEventResult.handled) continue;
           _compositionOwner = node;
+          _compositionOrphaned = false;
           return result;
         }
         return KeyEventResult.ignored;
@@ -1137,12 +1150,24 @@ class InputDispatcher {
         // to the live chain — that is how an orphan commit lands on whoever
         // gained focus next.
         final owner = _compositionOwner;
-        if (owner == null) {
+        if (owner != null) {
+          final result = _offerCompositionTo(owner, event);
+          _clearCompositionOwner();
+          return result;
+        }
+        if (_compositionOrphaned) {
+          // The owner was taken away mid-composition; this is its commit.
+          _clearCompositionOwner();
           return KeyEventResult.ignored;
         }
-        final result = _offerCompositionTo(owner, event);
-        _clearCompositionOwner();
-        return result;
+        // No composition was ever owned, so this is a direct commit — a
+        // candidate-selection IME that never sent an update. Deliver it the
+        // way an ordinary insertion is delivered.
+        for (final node in focusManager.activeChain()) {
+          final result = _offerCompositionTo(node, event);
+          if (result == KeyEventResult.handled) return result;
+        }
+        return KeyEventResult.ignored;
     }
   }
 

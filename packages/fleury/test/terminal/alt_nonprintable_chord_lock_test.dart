@@ -29,6 +29,19 @@ void main() {
     ]);
   });
 
+  test('ESC+CR+LF is ONE Alt+Enter, not Alt+Enter then Enter', () {
+    final parser = InputParser();
+    final sink = _Sink();
+    // A terminal that sends CRLF turns Alt+Enter into these three bytes. The
+    // trailing LF is the pair's second half and must be swallowed, exactly as
+    // ground mode swallows it after a bare CR — otherwise a chat composer
+    // inserts the newline and then submits on one keypress.
+    parser.feed(const [0x1B, 0x0D, 0x0A], sink);
+    expect(sink.events, [
+      const KeyEvent(KeyCode.enter, modifiers: {KeyModifier.alt}),
+    ]);
+  });
+
   test('ESC+a remains Alt+a (control)', () {
     final parser = InputParser();
     final sink = _Sink();

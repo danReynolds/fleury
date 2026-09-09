@@ -1104,11 +1104,19 @@ void main() {
 
       h.dispatcher.dispatch(const TextCompositionEvent.update('あ'));
       h.dispatcher.dispatch(const TextCompositionEvent.commit('亜'));
-      // Sticky IME: commit clears composition owner; trailing cancel is an
-      // orphan and must be ignored (16g covers cancel-while-composing).
+      // Commit ends the composition and releases the sticky owner, so this
+      // cancel is a fresh terminal event with no owner — NOT an orphan. It
+      // reaches the claimant the way a bare commit does. (A cancel that
+      // follows an owner being taken away IS an orphan and is dropped; see
+      // composition_direct_commit_lock_test.dart and
+      // exclude_focus_sticky_stream_lock_test.dart.)
       h.dispatcher.dispatch(const TextCompositionEvent.cancel());
 
-      expect(events, ['composition-update:あ', 'composition-commit:亜']);
+      expect(events, [
+        'composition-update:あ',
+        'composition-commit:亜',
+        'composition-cancel',
+      ]);
     });
 
     test(

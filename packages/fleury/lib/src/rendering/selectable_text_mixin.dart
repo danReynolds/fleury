@@ -512,15 +512,19 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
       if (range.start < lineEnd && range.end > offset) {
         final start = offset + (range.start - offset).clamp(0, line.length);
         final end = offset + (range.end - offset).clamp(0, line.length);
-        if (start < end) {
-          // Answer from SOURCE, exactly as getSelectedContent does: slicing
-          // the display line would hand back lowered atoms and drop the
-          // joiners of a ZWJ cluster (RFC 0019 decision 3).
-          final text = flat == null
-              ? line.substring(start - offset, end - offset)
-              : _sourceSlice(flat, start, end, groups);
-          if (text.isNotEmpty) out[bounds.offset.row + i] = text;
-        }
+        // Answer from SOURCE, exactly as getSelectedContent does: slicing the
+        // display line would hand back lowered atoms and drop the joiners of a
+        // ZWJ cluster (RFC 0019 decision 3).
+        //
+        // A selected blank line yields an EMPTY fragment and is still
+        // recorded: the delegate joins the rows it gets with `\n`, so dropping
+        // the row would drop the blank line with it and copy `a\nb` for
+        // `a\n\nb`. The enclosing test already establishes that this line is
+        // inside the selection, and a non-empty line inside it always has
+        // start < end, so this cannot record a spurious row.
+        out[bounds.offset.row + i] = flat == null
+            ? line.substring(start - offset, end - offset)
+            : _sourceSlice(flat, start, end, groups);
       }
       if (range.end <= lineEnd) break;
       offset = lineEnd + 1; // +1 for implicit newline

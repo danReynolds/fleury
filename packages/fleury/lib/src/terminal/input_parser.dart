@@ -506,6 +506,11 @@ class InputParser {
     };
     if (altNonPrintable != null) {
       sink.add(KeyEvent(altNonPrintable, modifiers: const {KeyModifier.alt}));
+      // Arm the CRLF latch exactly as ground mode does. A terminal that sends
+      // CRLF turns Alt+Enter into ESC CR LF, and without this the trailing LF
+      // surfaces as a second, bare Enter — so a chat composer would insert the
+      // newline and then submit on the same keypress.
+      _swallowNextLf = byte == 0x0D;
       _clearEscapeSequence();
       _state = _State.ground;
       return;
