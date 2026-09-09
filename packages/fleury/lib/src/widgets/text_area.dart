@@ -417,7 +417,11 @@ class _TextAreaState extends State<TextArea>
     // replacement glyph plus the tail of the sequence as literal text.
     _paste.start(
       PasteEvent(text),
-      TextEditingModel.prepareInput(text, singleLine: false),
+      TextEditingModel.prepareInput(
+        text,
+        singleLine: false,
+        preserveText: _controller.preserveText,
+      ),
     );
     return KeyEventResult.handled;
   }
@@ -428,7 +432,11 @@ class _TextAreaState extends State<TextArea>
     if (widget.readOnly) return KeyEventResult.handled;
     _paste.start(
       event,
-      TextEditingModel.prepareInput(event.text, singleLine: false),
+      TextEditingModel.prepareInput(
+        event.text,
+        singleLine: false,
+        preserveText: _controller.preserveText,
+      ),
     );
     return KeyEventResult.handled;
   }
@@ -920,22 +928,9 @@ class RenderTextArea extends RenderObject implements CaretHost {
     _focusNode.attachCaretHost(this);
   }
 
-  /// Identity fast path for model text.
-  ///
-  /// [value] arrives from a [TextEditingValue], which canonicalized it with
-  /// [sanitizeMultiline] on construction — the same rule this boundary used to
-  /// apply, now applied where it keeps the model's offsets and the painted
-  /// rows/columns in one index space. Sanitizing here as well would be dead
-  /// work; the assert holds the invariant instead.
-  static String _displayText(String value) {
-    assert(
-      isSanitizedMultiline(value),
-      'RenderTextArea was handed text that is not in canonical form. Model '
-      'text must be canonicalized at the model boundary (TextEditingValue), '
-      'not here, or offsets and painted cells disagree.',
-    );
-    return value;
-  }
+  // Keep original offsets; unsafe graphemes are replaced during measurement
+  // and paint rather than by rewriting the model text.
+  static String _displayText(String value) => value;
 
   FocusNode _focusNode;
   String _text;
@@ -1074,7 +1069,7 @@ class RenderTextArea extends RenderObject implements CaretHost {
     final lines = _showPlaceholder ? _linesOf(_placeholder) : _lines;
     var widest = 0;
     for (final line in lines) {
-      final w = _widthResolver.widthOfText(line, _policy);
+      final w = _lineDisplayWidth(line);
       if (w > widest) widest = w;
     }
     final cols = constraints.hasBoundedWidth ? constraints.maxCols! : widest;
@@ -1112,8 +1107,16 @@ class RenderTextArea extends RenderObject implements CaretHost {
     return nextSize;
   }
 
-  int _lineDisplayWidth(String line) =>
-      _widthResolver.widthOfText(line, _policy);
+  int _lineDisplayWidth(String line) {
+    var width = 0;
+    for (final grapheme in line.characters) {
+      width += _widthResolver.widthOfGrapheme(
+        safeEditingGrapheme(grapheme),
+        _policy,
+      );
+    }
+    return width;
+  }
 
   int _displayCellForLineOffset(String line, int textOffset) {
     var cell = 0;
@@ -1121,7 +1124,10 @@ class RenderTextArea extends RenderObject implements CaretHost {
     for (final grapheme in line.characters) {
       if (textOffset <= codeUnitOffset) return cell;
       codeUnitOffset += grapheme.length;
-      cell += _widthResolver.widthOfGrapheme(grapheme, _policy);
+      cell += _widthResolver.widthOfGrapheme(
+        safeEditingGrapheme(grapheme),
+        _policy,
+      );
       if (textOffset <= codeUnitOffset) return cell;
     }
     return cell;
@@ -1137,7 +1143,10 @@ class RenderTextArea extends RenderObject implements CaretHost {
     var cell = 0;
     var offset = 0;
     for (final grapheme in line.characters) {
-      final width = _widthResolver.widthOfGrapheme(grapheme, _policy);
+      final width = _widthResolver.widthOfGrapheme(
+        safeEditingGrapheme(grapheme),
+        _policy,
+      );
       if (wanted <= cell) return start + offset;
       if (wanted < cell + width) {
         return start +
@@ -1153,7 +1162,12 @@ class RenderTextArea extends RenderObject implements CaretHost {
     if (cellOffset <= 0) return 0;
     var cell = 0;
     for (final grapheme in line.characters) {
-      final next = cell + _widthResolver.widthOfGrapheme(grapheme, _policy);
+      final next =
+          cell +
+          _widthResolver.widthOfGrapheme(
+            safeEditingGrapheme(grapheme),
+            _policy,
+          );
       if (cellOffset <= cell) return cell;
       if (cellOffset < next) return next;
       cell = next;
@@ -1243,7 +1257,10 @@ class RenderTextArea extends RenderObject implements CaretHost {
       for (final g in line.characters) {
         final globalStart = lineStartOffset + cu;
         final globalEnd = globalStart + g.length;
-        final width = _widthResolver.widthOfGrapheme(g, _policy);
+        final width = _widthResolver.widthOfGrapheme(
+          safeEditingGrapheme(g),
+          _policy,
+        );
         final displayStart = displayCell;
         final displayEnd = displayStart + width;
         cu += g.length;
@@ -1265,7 +1282,7 @@ class RenderTextArea extends RenderObject implements CaretHost {
             : _style;
         buffer.writeGrapheme(
           CellOffset(offset.col + (displayStart - visibleStart), row),
-          g,
+          safeEditingGrapheme(g),
           style: st,
           widthResolver: _widthResolver,
           policy: _policy,

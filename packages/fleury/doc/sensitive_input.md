@@ -5,6 +5,8 @@ Use `TextInput` for one line or `TextArea` for multiple lines. Both support
 controller, not mount a second plaintext preview.
 
 ```dart
+final draft = TextEditingController(preserveText: true);
+
 TextArea(
   controller: draft,
   focusNode: valueFocus,
@@ -15,6 +17,26 @@ TextArea(
   maxLines: 6,
 )
 ```
+
+Use `preserveText: true` when exact contents matter. It preserves controls,
+line endings, and Unicode through programmatic writes, edits, paste, composition,
+and undo/redo. The default controller still canonicalizes terminal control
+sequences and input line endings. This choice is fixed for a controller's lifetime.
+Load original contents through `controller.text`; a `TextEditingValue` that was
+already sanitized cannot recover the original text when assigned later.
+
+Preserving text never writes raw controls to the terminal. The editor measures
+and paints each unsafe grapheme as a replacement glyph while selection and
+editing refer to the original string. A revealed escape sequence therefore
+appears as a replacement glyph followed by literal payload characters. For an
+unambiguous view of each control or invisible Unicode character, applications
+can provide an escaped preview. CRLF remains one line terminator for editing;
+a single-line field paints it as one replacement glyph.
+
+Text preservation does not enable any privacy protections by itself. Pair it
+with masking and the clipboard/semantics policies below. Avoid submission
+history for secrets; it deliberately retains accepted values separately from
+the editing controller.
 
 An explicit `redacted` clipboard policy keeps semantic values, copy/cut and
 kill-ring capture redacted even while the value is visible. Use `disabled` to

@@ -222,3 +222,12 @@ bool _isC1StringControl(int unit) {
 
 bool _isHighSurrogate(int unit) => unit >= 0xD800 && unit <= 0xDBFF;
 bool _isLowSurrogate(int unit) => unit >= 0xDC00 && unit <= 0xDFFF;
+
+/// Safe display of one editing grapheme, without changing model offsets.
+///
+/// Unlike whole-string sanitization, this keeps escape-sequence payload text
+/// visible as literal characters. No control byte can reach the cell buffer.
+/// Both measurement and painting must use this same projection. CRLF, when
+/// presented as one grapheme in a single-line field, becomes one safe glyph.
+String safeEditingGrapheme(String grapheme) =>
+    isSanitizedForDisplay(grapheme) ? grapheme : replacementCharacter;

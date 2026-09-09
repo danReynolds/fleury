@@ -132,19 +132,18 @@ enum _EditTransaction { edit, typing, paste }
 ///     folds newlines to spaces on typed and pasted input, and paints any that
 ///     a programmatic write leaves behind as [replacementCharacter].)
 ///
-/// So an app reads back the sanitized string, not the bytes it wrote: after
-/// `controller.text = 'a\x1B[31mb'`, [text] is `'a�b'` and `text.length`
-/// is 3. That is deliberate. A terminal field cannot display raw control bytes,
-/// and holding them anyway would leave the model's offsets counting characters
-/// the screen never draws — putting the caret in the wrong cell, highlighting
-/// different characters than are selected, and deleting the wrong span. Keeping
-/// the model canonical means an offset means the same thing everywhere.
-///
-/// Keep the original elsewhere if you need it; do not expect to recover it from
-/// the controller.
+/// For secrets or other exact text, opt into [preserveText]. This retains
+/// controls and line endings through construction, edits, paste, and history.
+/// Rendering replaces unsafe graphemes without changing the model or offsets.
+/// Masking, semantic redaction, and clipboard protection remain separate policies.
 class TextEditingController extends ChangeNotifier {
-  TextEditingController({String text = ''})
-    : _value = TextEditingValue(text: text);
+  TextEditingController({String text = '', this.preserveText = false})
+    : _value = TextEditingValue(text: text, preserveText: preserveText);
+
+  /// Preserve exact text instead of canonicalizing controls and line endings.
+  /// This is fixed for the controller's lifetime. Set [text] to load raw text;
+  /// assigning a value that was already sanitized cannot recover its original.
+  final bool preserveText;
 
   static const int _maxHistoryEntries = 200;
 
@@ -160,7 +159,7 @@ class TextEditingController extends ChangeNotifier {
   TextEditingValue get value => _value;
   set value(TextEditingValue next) => _setValue(next, resetHistory: true);
 
-  /// The current text, always canonical — control bytes have been replaced.
+  /// The current text, canonical unless [preserveText] is true.
   /// See the class doc for exactly what is rewritten and what you read back.
   /// Assigning text resets editing history even when the text is unchanged.
   String get text => _value.text;
@@ -198,7 +197,7 @@ class TextEditingController extends ChangeNotifier {
 
   void clear() {
     _checkNotDisposed();
-    _applyEdit(TextEditingValue.empty());
+    _applyEdit(TextEditingValue(text: '', preserveText: preserveText));
   }
 
   /// Inserts [s] at the current cursor and advances the cursor past
@@ -517,6 +516,14 @@ class TextEditingController extends ChangeNotifier {
     bool clearTransaction = true,
   }) {
     _checkNotDisposed();
+    if (next.preserveText != preserveText) {
+      next = TextEditingValue(
+        text: next.text,
+        selection: next.selection,
+        composing: next.composing,
+        preserveText: preserveText,
+      );
+    }
     final valueChanged = _value != next;
     if (!valueChanged && !resetHistory) return;
     final historyChanged =
@@ -549,7 +556,7 @@ class TextEditingController extends ChangeNotifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
-    _value = TextEditingValue.empty();
+    _value = TextEditingValue(text: '', preserveText: preserveText);
     _compositionBase = null;
     _undoStack.clear();
     _redoStack.clear();
@@ -574,8 +581,8 @@ class TextEditingController extends ChangeNotifier {
 ///   - Escape — fires [onEscape], or bubbles if [onEscape] is null.
 ///   - Tab and other unhandled special chords — bubble.
 ///
-/// Typed, pasted and programmatically written text is canonicalized before it
-/// reaches the model: control bytes are replaced and escape sequences are
+/// Unless the controller opts into preserving text, input is canonicalized
+/// before it reaches the model: control bytes are replaced and escape sequences are
 /// collapsed, so the field's content is exactly what it draws. See
 /// [TextEditingController] for the rules and what an app reads back.
 class TextInput extends StatefulWidget {
@@ -1347,7 +1354,11 @@ class _TextInputState extends State<TextInput>
     // Canonicalized ONCE, before batching (see TextArea.onPaste).
     _paste.start(
       PasteEvent(text),
-      TextEditingModel.prepareInput(text, singleLine: true),
+      TextEditingModel.prepareInput(
+        text,
+        singleLine: true,
+        preserveText: _controller.preserveText,
+      ),
     );
     return KeyEventResult.handled;
   }
@@ -1359,7 +1370,11 @@ class _TextInputState extends State<TextInput>
     _resetHistoryBrowsing();
     _paste.start(
       event,
-      TextEditingModel.prepareInput(event.text, singleLine: true),
+      TextEditingModel.prepareInput(
+        event.text,
+        singleLine: true,
+        preserveText: _controller.preserveText,
+      ),
     );
     return KeyEventResult.handled;
   }
@@ -1699,24 +1714,9 @@ class RenderTextInput extends RenderObject implements CaretHost {
     _focusNode.attachCaretHost(this);
   }
 
-  /// Identity fast path for model text.
-  ///
-  /// [text] arrives from a [TextEditingValue], which canonicalized it with
-  /// [sanitizeMultiline] on construction — so there is nothing left to strip
-  /// and, crucially, nothing that would shift an offset. The one rune the
-  /// multiline canonical form keeps is `\n`, which a single-line field cannot
-  /// paint; it maps 1:1 to [replacementCharacter], so the index space still
-  /// matches cell for cell.
-  static String _displayText(String text) {
-    assert(
-      isSanitizedMultiline(text),
-      'RenderTextInput was handed text that is not in canonical form. Model '
-      'text must be canonicalized at the model boundary (TextEditingValue), '
-      'not here, or offsets and painted columns disagree.',
-    );
-    if (!text.contains('\n')) return text;
-    return text.replaceAll('\n', replacementCharacter);
-  }
+  // Retain model offsets. Unsafe graphemes are replaced only when measuring
+  // and painting; sanitizing the whole string here would shift selections.
+  static String _displayText(String text) => text;
 
   FocusNode _focusNode;
   String _text;
@@ -1833,7 +1833,7 @@ class RenderTextInput extends RenderObject implements CaretHost {
   }
 
   String _displayGrapheme(String grapheme) =>
-      _obscureText ? _obscuringCharacter : grapheme;
+      _obscureText ? _obscuringCharacter : safeEditingGrapheme(grapheme);
 
   int _displayWidthOf(String grapheme) {
     return _widthResolver.widthOfGrapheme(_displayGrapheme(grapheme), _policy);

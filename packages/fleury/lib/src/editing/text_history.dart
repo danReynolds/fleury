@@ -21,7 +21,7 @@ final class TextHistoryController extends ChangeNotifier {
   final bool storeDuplicateConsecutiveEntries;
 
   final List<String> _entries = <String>[];
-  String? _draft;
+  TextEditingValue? _draft;
   int? _currentIndex;
   bool _disposed = false;
 
@@ -37,7 +37,7 @@ final class TextHistoryController extends ChangeNotifier {
   bool get isBrowsing => _currentIndex != null;
 
   /// The draft captured before entering history browsing.
-  String? get draft => _draft;
+  String? get draft => _draft?.text;
 
   /// Stores an accepted field value.
   ///
@@ -87,7 +87,7 @@ final class TextHistoryController extends ChangeNotifier {
     if (_entries.isEmpty) return null;
 
     if (_currentIndex == null) {
-      _draft = current.text;
+      _draft = current;
       _currentIndex = _entries.length - 1;
       notifyListeners();
       return _valueFor(_entries[_currentIndex!]);
@@ -112,10 +112,10 @@ final class TextHistoryController extends ChangeNotifier {
       return _valueFor(_entries[_currentIndex!]);
     }
 
-    final draft = _draft ?? '';
+    final draft = _valueFor(_draft?.text ?? '');
     _clearBrowsingState();
     notifyListeners();
-    return _valueFor(draft);
+    return draft;
   }
 
   /// Leaves history browsing without changing stored entries.
@@ -124,7 +124,8 @@ final class TextHistoryController extends ChangeNotifier {
     if (_clearBrowsingState()) notifyListeners();
   }
 
-  TextEditingValue _valueFor(String text) => TextEditingValue(text: text);
+  TextEditingValue _valueFor(String text) =>
+      TextEditingValue(text: text, preserveText: _draft?.preserveText ?? false);
 
   bool _clearBrowsingState() {
     if (_draft == null && _currentIndex == null) return false;

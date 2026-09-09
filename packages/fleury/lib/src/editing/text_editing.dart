@@ -92,26 +92,39 @@ final class TextSelection {
 
 /// Immutable editing value shared by single-line and multiline fields.
 ///
-/// [text] is canonicalized on construction with [sanitizeMultiline]: control
-/// bytes cannot survive in an editing model. That is what makes the model's
-/// index space and the rendered cell grid the same space — a caret offset, a
-/// selection range and a painted column all count the same characters. See
-/// [TextEditingController] for what an app reads back.
+/// By default [text] is canonicalized with [sanitizeMultiline]. Set
+/// [preserveText] for values whose exact contents matter, such as secrets.
+/// Text fields still render control graphemes as safe replacement glyphs;
+/// selection and editing continue to address the original text.
 final class TextEditingValue {
   TextEditingValue({
     required String text,
     TextSelection? selection,
     TextRange composing = TextRange.empty,
-  }) : this._(sanitizeMultiline(text), selection, composing);
+    bool preserveText = false,
+  }) : this._(
+         preserveText ? text : sanitizeMultiline(text),
+         selection,
+         composing,
+         preserveText,
+       );
 
-  TextEditingValue._(this.text, TextSelection? selection, TextRange composing)
-    : selection = (selection ?? TextSelection.collapsed(offset: text.length))
+  TextEditingValue._(
+    this.text,
+    TextSelection? selection,
+    TextRange composing,
+    this.preserveText,
+  ) : selection = (selection ?? TextSelection.collapsed(offset: text.length))
           .normalizeForText(text),
       composing = composing.clamp(text.length);
 
   factory TextEditingValue.empty() => TextEditingValue(text: '');
 
-  /// The editing text, always in canonical form (see [sanitizeMultiline]).
+  /// Whether edits preserve controls and line endings exactly.
+  /// This does not enable masking, semantic redaction, or clipboard protection.
+  final bool preserveText;
+
+  /// The editing text; canonical unless [preserveText] is true.
   final String text;
   final TextSelection selection;
   final TextRange composing;
@@ -124,6 +137,7 @@ final class TextEditingValue {
     final nextText = text ?? this.text;
     return TextEditingValue(
       text: nextText,
+      preserveText: preserveText,
       selection: selection ?? this.selection,
       composing: composing ?? this.composing,
     );
@@ -133,11 +147,12 @@ final class TextEditingValue {
   bool operator ==(Object other) =>
       other is TextEditingValue &&
       other.text == text &&
+      other.preserveText == preserveText &&
       other.selection == selection &&
       other.composing == composing;
 
   @override
-  int get hashCode => Object.hash(text, selection, composing);
+  int get hashCode => Object.hash(text, selection, composing, preserveText);
 
   @override
   String toString() => 'TextEditingValue(text: $text, selection: $selection)';
@@ -202,7 +217,12 @@ final class TextEditingModel {
   /// is what keeps offsets honest: every length the caller goes on to compute
   /// (`start + input.length`, a composing range, the caret) is measured on the
   /// text that will actually be painted.
-  static String prepareInput(String text, {required bool singleLine}) {
+  static String prepareInput(
+    String text, {
+    required bool singleLine,
+    bool preserveText = false,
+  }) {
+    if (preserveText) return text;
     return sanitizeMultiline(
       singleLine
           ? normalizeSingleLineInput(text)
@@ -218,7 +238,11 @@ final class TextEditingModel {
     String text, {
     bool singleLine = false,
   }) {
-    final input = prepareInput(text, singleLine: singleLine);
+    final input = prepareInput(
+      text,
+      singleLine: singleLine,
+      preserveText: value.preserveText,
+    );
     if (input.isEmpty && value.selection.isCollapsed) return value;
     return replaceSelection(value, input);
   }
@@ -236,7 +260,11 @@ final class TextEditingModel {
     String replacement, {
     bool singleLine = false,
   }) {
-    final input = prepareInput(replacement, singleLine: singleLine);
+    final input = prepareInput(
+      replacement,
+      singleLine: singleLine,
+      preserveText: value.preserveText,
+    );
     final snappedRange = TextRange(
       start: snapOffsetToGraphemeBoundary(value.text, range.start),
       end: snapOffsetToGraphemeBoundary(value.text, range.end),
@@ -248,6 +276,7 @@ final class TextEditingModel {
     );
     final nextOffset = snappedRange.normalizedStart + input.length;
     return TextEditingValue(
+      preserveText: value.preserveText,
       text: nextText,
       selection: TextSelection.collapsed(offset: nextOffset),
     );
@@ -279,7 +308,11 @@ final class TextEditingModel {
     String text, {
     bool singleLine = false,
   }) {
-    final input = prepareInput(text, singleLine: singleLine);
+    final input = prepareInput(
+      text,
+      singleLine: singleLine,
+      preserveText: value.preserveText,
+    );
     final range = value.composing.isCollapsed
         ? value.selection.range
         : value.composing;
@@ -295,6 +328,7 @@ final class TextEditingModel {
     final nextStart = snappedRange.normalizedStart;
     final nextEnd = nextStart + input.length;
     return TextEditingValue(
+      preserveText: value.preserveText,
       text: nextText,
       selection: TextSelection.collapsed(offset: nextEnd),
       composing: TextRange(start: nextStart, end: nextEnd),
@@ -326,6 +360,7 @@ final class TextEditingModel {
     if (offset <= 0) return value;
     final start = previousGraphemeBoundary(value.text, offset);
     return TextEditingValue(
+      preserveText: value.preserveText,
       text: value.text.replaceRange(start, offset, ''),
       selection: TextSelection.collapsed(offset: start),
     );
@@ -339,6 +374,7 @@ final class TextEditingModel {
     if (offset >= value.text.length) return value;
     final end = nextGraphemeBoundary(value.text, offset);
     return TextEditingValue(
+      preserveText: value.preserveText,
       text: value.text.replaceRange(offset, end, ''),
       selection: TextSelection.collapsed(offset: offset),
     );
@@ -379,6 +415,7 @@ final class TextEditingModel {
     if (lo == hi) return value;
     if (captureToKillRing) killRing = value.text.substring(lo, hi);
     return TextEditingValue(
+      preserveText: value.preserveText,
       text: value.text.replaceRange(lo, hi, ''),
       selection: TextSelection.collapsed(offset: lo),
     );
@@ -392,8 +429,8 @@ final class TextEditingModel {
   }) {
     final offset = value.selection.extentOffset;
     var end = lineEndOffset(value.text, offset);
-    if (end == offset && end < value.text.length && value.text[end] == '\n') {
-      end += 1;
+    if (end == offset && end < value.text.length) {
+      end = nextGraphemeBoundary(value.text, end);
     }
     return killRange(value, offset, end, captureToKillRing: captureToKillRing);
   }
@@ -432,11 +469,14 @@ final class TextEditingModel {
     bool singleLine = false,
   }) {
     if (killRing.isEmpty) return value;
-    // The ring only ever holds text cut out of a canonical model, so this is
-    // the line-mode conversion; the control-byte pass is already a no-op.
+    // Apply the destination policy, including when yanking from a preserving field.
     return replaceSelection(
       value,
-      prepareInput(killRing, singleLine: singleLine),
+      prepareInput(
+        killRing,
+        singleLine: singleLine,
+        preserveText: value.preserveText,
+      ),
     );
   }
 
@@ -559,7 +599,7 @@ final class TextEditingModel {
     final currentStart = lineStartOffset(text, selection);
     if (currentStart == 0) return value;
     final column = graphemeColumn(text, currentStart, selection);
-    final previousEnd = currentStart - 1;
+    final previousEnd = previousGraphemeBoundary(text, currentStart);
     final previousStart = lineStartOffset(text, previousEnd);
     final nextOffset = offsetForGraphemeColumn(
       text,
@@ -584,7 +624,7 @@ final class TextEditingModel {
     if (currentEnd == text.length) return value;
     final currentStart = lineStartOffset(text, selection);
     final column = graphemeColumn(text, currentStart, selection);
-    final nextStart = currentEnd + 1;
+    final nextStart = nextGraphemeBoundary(text, currentEnd);
     final nextEnd = lineEndOffset(text, nextStart);
     final nextOffset = offsetForGraphemeColumn(
       text,
@@ -609,7 +649,10 @@ final class TextEditingModel {
   static int lineEndOffset(String text, int offset) {
     final clamped = snapOffsetToGraphemeBoundary(text, offset);
     final newline = text.indexOf('\n', clamped);
-    return newline == -1 ? text.length : newline;
+    if (newline == -1) return text.length;
+    return newline > 0 && text.codeUnitAt(newline - 1) == 0x0D
+        ? newline - 1
+        : newline;
   }
 
   static int previousWordBoundary(String text, int offset) {
