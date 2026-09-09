@@ -646,6 +646,13 @@ class InputDispatcher {
   /// further segments/commits cannot write into a hidden-but-enabled pane.
   /// Prefer the FocusManager exclusion helper over reading markers here.
   void _abandonStickyStreamsIfExcluded() {
+    // Any orphan latched by an EARLIER focus change is stale. The abandoned
+    // composition's terminal event, if the peer sends one at all, arrives
+    // before the user can move focus again — so once focus has moved on, a
+    // commit is new news and must not be eaten. Without this the latch
+    // survived with no owner and no other path to clear it, and swallowed a
+    // direct commit belonging to a completely different field.
+    _compositionOrphaned = false;
     final paste = _pasteOwner;
     final pasteId = _pasteOwnerId;
     if (paste != null &&
@@ -1161,10 +1168,8 @@ class InputDispatcher {
         if (sticky != null) {
           final result = _offerCompositionTo(sticky, event);
           if (result == KeyEventResult.handled) return result;
-          // Owner gone or declined — drop sticky and try the live chain. The
-          // composition is orphaned unless a live node picks it up below.
+          // Owner gone or declined — drop sticky and try the live chain.
           _clearCompositionOwner();
-          _compositionOrphaned = true;
         }
         for (final node in focusManager.activeChain()) {
           final result = _offerCompositionTo(node, event);
@@ -1173,6 +1178,12 @@ class InputDispatcher {
           _compositionOrphaned = false;
           return result;
         }
+        // Nobody took the update, so no field is showing a preedit and there
+        // is no composition to orphan. Latching here left the flag set with
+        // no owner and nothing to clear it, so the next DIRECT commit — a
+        // different composition entirely — was swallowed by the orphan branch
+        // below. Only losing an owner that was actually composing counts, and
+        // `_abandonStickyStreamsIfExcluded` is where that happens.
         return KeyEventResult.ignored;
       case TextCompositionEventKind.commit:
       case TextCompositionEventKind.cancel:
