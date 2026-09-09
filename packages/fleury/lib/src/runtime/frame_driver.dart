@@ -388,6 +388,10 @@ final class FrameDriver {
     try {
       frame = _frameLoop.render(
         size: size,
+        // The render tree is the only painter that can uphold the incremental
+        // contract: it knows which node vacated which rectangle. The backstop
+        // render below paints raw cells and deliberately does not opt in.
+        paintsIncrementally: true,
         paint: (next) {
           RenderLayoutDebugStats.beginFrame(enabled: debugWatching);
           RepaintBoundaryDebugStats.beginFrame(enabled: debugWatching);

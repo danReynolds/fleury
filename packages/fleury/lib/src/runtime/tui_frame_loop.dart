@@ -78,6 +78,7 @@ final class TuiFrameLoop {
   TuiRenderedFrame? render({
     required CellSize size,
     required TuiFramePaintCallback paint,
+    bool paintsIncrementally = false,
   }) {
     if (size.isEmpty) return null;
     if (_frontBuffer == null || _frontBuffer!.size != size) {
@@ -94,8 +95,20 @@ final class TuiFrameLoop {
     // paying for bookkeeping the presenter no longer consumes. A repaint
     // boundary still arms tracking on its OWN cache, where the question really
     // is "what did I paint" rather than "what must be presented".
-    if (IncrementalPaint.enabled) {
-      IncrementalPaint.beginPass();
+    // Carrying the previous frame forward changes this loop's contract with its
+    // painter. The default contract is "you are handed a cleared buffer; paint
+    // everything you want shown", and it is what makes a vacated cell
+    // observable: the cell held content, the clear emptied it, the diff sees a
+    // change. A painter that opts in takes on the other half — it must erase
+    // what it stops painting — and only the render tree can, because only it
+    // knows which node vacated which rectangle. A raw callback cannot, so it
+    // keeps the cleared buffer.
+    // A forced full repaint means the buffers are new or the screen is about to
+    // be wiped: there is no previous frame to carry, and a subtree whose
+    // geometry happens to be unchanged would skip into an empty buffer. Take
+    // the cleared path and let everything repaint.
+    if (IncrementalPaint.enabled && paintsIncrementally) IncrementalPaint.beginPass();
+    if (IncrementalPaint.enabled && paintsIncrementally && !_requireFullRepaint) {
       // Carry the previous frame forward rather than clearing. The buffer the
       // loop already keeps becomes a cache of the whole screen, so a subtree
       // whose cells are still valid where they sit needs no cache of its own
@@ -106,6 +119,8 @@ final class TuiFrameLoop {
       next.clear();
       next.carriesPreviousFrame = false;
     }
+    next.isFrameBuffer = true;
+    previous.isFrameBuffer = true;
     // A forced full repaint means the presenter wipes the screen before
     // drawing, so `previous` must describe that wiped screen — otherwise the
     // diff skips every cell that "matches" content the wipe just destroyed,
@@ -172,7 +187,9 @@ final class TuiFrameLoop {
     _frontBuffer = frame.next;
     // Only now are the cells this pass painted the reference. A rendered but
     // uncommitted frame must not let the tree believe its output was kept.
-    if (IncrementalPaint.enabled) IncrementalPaint.commitPass();
+    if (IncrementalPaint.enabled && frame.next.isFrameBuffer) {
+      IncrementalPaint.commitPass();
+    }
   }
 }
 

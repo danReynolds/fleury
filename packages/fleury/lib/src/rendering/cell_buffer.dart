@@ -139,6 +139,13 @@ final class CellBuffer {
   /// cache, a viewport, an effect — always start empty, so they leave this
   /// false and nothing painting into them may be skipped.
   bool carriesPreviousFrame = false;
+
+  /// Whether this is one of the frame loop's two screen buffers, as opposed to
+  /// a scratch buffer. Painting into one is what lets a node record where it
+  /// last put its cells; that record is needed even on a full-repaint frame,
+  /// because the NEXT frame has to know the footprint to erase when the node
+  /// shrinks.
+  bool isFrameBuffer = false;
   // Damage bounds as raw ints (left/top inclusive, right/bottom exclusive),
   // updated by min/max in [_recordDamageRect] so the paint hot path allocates
   // no geometry per write. A CellRect is materialized only when the bounds are
