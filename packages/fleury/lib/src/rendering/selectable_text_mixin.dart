@@ -505,11 +505,30 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
     final groups = loweredGroups;
     final flat = groups.isEmpty ? null : _flatText();
     final out = <int, String>{};
+    // Only rows this leaf actually PAINTS may be keyed. Line `i` sits at
+    // `bounds.offset.row + i` solely within the painted box: paint stops at
+    // `size.rows`, and a clip can cut it further. Keying an unpainted line
+    // handed its text to a screen row another widget owns, and the delegate
+    // — which joins one fragment per row with no separator — glued them
+    // together, so a 1-row `Text('one\ntwo')` above a `Text('BOTTOM')`
+    // copied `one\ntwoBOTTOM`.
+    final clip = selectionClipRect;
+    var firstRow = bounds.offset.row;
+    var lastRow = bounds.offset.row + bounds.size.rows - 1;
+    if (clip != null) {
+      final clipLast = clip.offset.row + clip.size.rows - 1;
+      if (clip.offset.row > firstRow) firstRow = clip.offset.row;
+      if (clipLast < lastRow) lastRow = clipLast;
+    }
     var offset = 0;
     for (var i = 0; i < lines.length; i++) {
       final line = lines[i];
       final lineEnd = offset + line.length;
-      if (range.start < lineEnd && range.end > offset) {
+      final row = bounds.offset.row + i;
+      if (row >= firstRow &&
+          row <= lastRow &&
+          range.start < lineEnd &&
+          range.end > offset) {
         final start = offset + (range.start - offset).clamp(0, line.length);
         final end = offset + (range.end - offset).clamp(0, line.length);
         // Answer from SOURCE, exactly as getSelectedContent does: slicing the
@@ -522,7 +541,7 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
         // `a\n\nb`. The enclosing test already establishes that this line is
         // inside the selection, and a non-empty line inside it always has
         // start < end, so this cannot record a spurious row.
-        out[bounds.offset.row + i] = flat == null
+        out[row] = flat == null
             ? line.substring(start - offset, end - offset)
             : _sourceSlice(flat, start, end, groups);
       }

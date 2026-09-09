@@ -1125,13 +1125,13 @@ class _ListViewportLayout {
       if (viewportExtent == 0 && controller._isFollowing) {
         controller._pendingBottom = true;
       }
-      // Zero-row (collapsed pane): a jump cannot be realized. Drop it so
-      // expand does not scroll the window away from the still-current
-      // selection and leave the cursor stranded off-screen. Empty lists
-      // keep a stashed jump — restore+reveal keep selection on-screen.
-      if (viewportExtent == 0) {
-        controller._pendingJumpIndex = null;
-      }
+      // No pending-jump clear here. `jumpToIndex` already refuses to stash a
+      // jump aimed at a collapsed pane that HAS items — it can show nothing,
+      // so it drops it at the source. Clearing again from layout also killed
+      // jumps issued BEFORE the collapse, which is a different thing and a
+      // legitimate one: a list told to jump to 50, laid out once inside a
+      // collapsed pane, then expanded, rendered from 0 instead of 50.
+
       if (count == 0) {
         anchor = 0;
         itemOffset = 0;

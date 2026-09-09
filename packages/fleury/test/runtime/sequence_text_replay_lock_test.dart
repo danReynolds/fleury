@@ -7,8 +7,6 @@
 import 'package:fleury/fleury.dart';
 import 'package:test/test.dart';
 
-import '../support/harness.dart';
-
 void main() {
   test(
     'an unclaimed held printable still fires its deferred binding',
