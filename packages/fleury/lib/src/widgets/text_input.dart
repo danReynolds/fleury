@@ -162,17 +162,18 @@ class TextEditingController extends ChangeNotifier {
   /// The current text, canonical unless [preserveText] is true.
   /// See the class doc for exactly what is rewritten and what you read back.
   /// Assigning text resets editing history even when the text is unchanged,
-  /// clears any active IME composing range, and places the caret at the end.
-  /// Leaving a stale composing range against the new string would let a later
-  /// commit rewrite the wrong span (audit 10.f).
+  /// and clears any active IME composing range — leaving a stale one against
+  /// the new string would let a later commit rewrite the wrong span
+  /// (audit 10.f).
+  ///
+  /// The caret is NOT moved. An as-you-type formatter
+  /// (`onChanged: (v) => controller.text = format(v)`) assigns on every
+  /// keystroke, and collapsing the selection to the end there makes it
+  /// impossible to edit anywhere but the end of the field.
   String get text => _value.text;
   set text(String text) {
     _setValue(
-      _value.copyWith(
-        text: text,
-        selection: TextSelection.collapsed(offset: text.length),
-        composing: TextRange.empty,
-      ),
+      _value.copyWith(text: text, composing: TextRange.empty),
       resetHistory: true,
     );
   }

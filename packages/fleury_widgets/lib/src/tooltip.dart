@@ -49,7 +49,14 @@ class _TooltipState extends State<Tooltip> {
   void _show() {
     if (_entry != null) return;
     final entry = OverlayEntry(
-      builder: (_) => AnchoredFloat(
+      // BoundsAnchor, not AnchoredFloat: a tooltip is decorative chrome that
+      // shows on focus/hover and is never dismissed by a click, so it must not
+      // stack AnchoredFloat's full-screen AbsorbPointer. That barrier ate every
+      // click, scroll and click-to-focus in the app for as long as a tooltip
+      // was visible. The dismissable floats (Autocomplete, ColorPicker,
+      // CompletionTextInput) keep AnchoredFloat — they each pass onTapOutside
+      // and need the outside click.
+      builder: (_) => BoundsAnchor(
         notifier: _bounds,
         // Container.framed supplies the float's skin: an opaque fill so the
         // app beneath doesn't bleed through, plus the frame. The tooltip's

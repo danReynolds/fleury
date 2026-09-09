@@ -263,8 +263,14 @@ class _TabsState extends State<Tabs> {
                     label: widget.tabs[i].label,
                     focused: _focusNode.hasFocus && i == active,
                     selected: i == active,
+                    // No `focus`. A tab is not independently focusable — the
+                    // strip is, and `focused` here is
+                    // `strip.hasFocus && i == active`, so an inactive tab can
+                    // never satisfy a focus request. Advertising it made
+                    // `.focus()` throw "Focus was refused"; making it select
+                    // instead turned a read-only sweep destructive. `select`
+                    // is how you move the strip.
                     actions: const <SemanticAction>{
-                      SemanticAction.focus,
                       SemanticAction.select,
                       SemanticAction.activate,
                     },
@@ -277,13 +283,6 @@ class _TabsState extends State<Tabs> {
                     }),
                     onAction: (action) {
                       switch (action) {
-                        case SemanticAction.focus:
-                          // Advertised focus must select this tab — same path
-                          // as arrows / Alt+N / click. Focusing the strip alone
-                          // leaves focused=false on inactive tabs.
-                          _controller.index = i;
-                          _focusNode.requestFocus();
-                          return;
                         case SemanticAction.select:
                         case SemanticAction.activate:
                           _controller.index = i;

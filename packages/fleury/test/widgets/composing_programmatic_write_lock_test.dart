@@ -32,12 +32,33 @@ void main() {
       tester.dispatcher.dispatch(const TextCompositionEvent.commit('亜'));
       expect(
         controller.text,
-        'programmatic亜',
+        isNot('亜rogrammatic'),
+        reason: 'the stale (0,1) range must not be rewritten — audit 10.f',
+      );
+      expect(
+        controller.text,
+        'p亜rogrammatic',
         reason:
-            'with composing cleared, commit inserts at the caret / replaces '
-            'selection — it must not rewrite a stale (0,1) range into '
-            '`亜rogrammatic`',
+            'with composing cleared the commit inserts at the caret, and the '
+            'write left the caret where it was. Forcing it to the end here '
+            'would read `programmatic亜`, but that is the same line that '
+            'sends the cursor to the end of an as-you-type formatter on '
+            'every keystroke — see the caret test below',
       );
     },
   );
+
+  test('a programmatic write leaves the caret alone', () {
+    final c = TextEditingController(text: '5551234');
+    addTearDown(c.dispose);
+    c.selection = const TextSelection.collapsed(offset: 3);
+
+    // What `onChanged: (v) => controller.text = format(v)` does every
+    // keystroke. Collapsing to the end here makes it impossible to edit
+    // anywhere but the end of the field.
+    c.text = '555-1234';
+
+    expect(c.selection.baseOffset, 3);
+    expect(c.composing, TextRange.empty);
+  });
 }
