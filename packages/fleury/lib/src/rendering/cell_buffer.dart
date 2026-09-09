@@ -18,6 +18,23 @@ CellStyle _paintStyle(CellStyle style) => plainCellStyle(style);
 /// placement share one width decision; clipping and wide-pair repair remain
 /// owned by the buffer. The caller supplies a sanitized single grapheme and
 /// a width of 0, 1, or 2 under its current surface policy.
+/// Row-major cell read that skips the bounds check.
+///
+/// For callers that have already established the index is in range — the diff
+/// encoder walks a rectangle derived from the buffer's own size, and
+/// [AnsiRenderer.renderDiff] asserts both buffers share that size. Re-running
+/// four comparisons and a multiply per cell is pure overhead on the hottest
+/// loop in the renderer, and it is entered twice per cell (previous and next).
+/// The assert keeps a genuinely out-of-range caller loud in debug.
+@internal
+Cell cellAtIndex(CellBuffer buffer, int index) {
+  assert(
+    index >= 0 && index < buffer._cells.length,
+    'cellAtIndex($index) out of range for ${buffer._size}',
+  );
+  return buffer._cells[index];
+}
+
 @internal
 int paintMeasuredGrapheme(
   CellBuffer buffer,
