@@ -5,6 +5,7 @@ import 'package:fleury/fleury_core.dart';
 
 import 'component_theme.dart';
 import 'table.dart' show FixedColumnWidth, FlexColumnWidth, TableColumnWidth;
+import 'tabular_export.dart';
 
 /// Direction for an app-provided [DataTable] sort state.
 enum DataTableSortDirection { ascending, descending }
@@ -307,39 +308,12 @@ DataTableExportResult exportDataTableRows({
   );
 }
 
-final _ansiEscapePattern = RegExp(
-  r'\x1B(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1B]*(?:\x07|\x1B\\)|[@-_])',
-);
-
 String _formatExportLine(
   Iterable<String> fields,
   DataTableExportFormat format,
-) {
-  return fields.map((field) => _formatExportField(field, format)).join(
-    switch (format) {
-      DataTableExportFormat.tsv => '\t',
-      DataTableExportFormat.csv => ',',
-    },
-  );
-}
+) => formatExportLine(fields, csv: format == DataTableExportFormat.csv);
 
-String _formatExportField(String field, DataTableExportFormat format) {
-  final sanitized = _sanitizeExportField(field);
-  return switch (format) {
-    DataTableExportFormat.tsv => sanitized,
-    DataTableExportFormat.csv => _quoteCsvField(sanitized),
-  };
-}
-
-String _sanitizeExportField(String field) {
-  final withoutAnsi = field.replaceAll(_ansiEscapePattern, '');
-  return sanitizeSingleLine(withoutAnsi);
-}
-
-String _quoteCsvField(String field) {
-  if (!field.contains(',') && !field.contains('"')) return field;
-  return '"${field.replaceAll('"', '""')}"';
-}
+String _sanitizeExportField(String field) => sanitizeExportField(field);
 
 bool _rowMatchesFilter(
   int row,
