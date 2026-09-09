@@ -1,6 +1,10 @@
 import 'dart:async';
 
+import 'dart:io';
+
 import 'package:fleury/fleury.dart';
+import 'package:fleury/src/rendering/render_repaint_boundary.dart'
+    show RepaintBoundaryCacheVerification;
 import 'package:fleury/fleury_test_support.dart';
 import 'package:meta/meta.dart';
 import 'package:test/test.dart' as pkg_test;
@@ -27,6 +31,13 @@ void testWidgets(
   pkg_test.test(
     description,
     () async {
+      // One env flag turns the entire suite into a repaint-cache staleness
+      // check: every boundary cache HIT is compared against a fresh repaint of
+      // the subtree, so a change that reached the screen without marking its
+      // boundary fails the test that caused it. Off by default because it
+      // repaints every hit — the whole cost the cache exists to avoid.
+      RepaintBoundaryCacheVerification.enabled =
+          Platform.environment['FLEURY_VERIFY_REPAINT_CACHE'] == '1';
       final tester = FleuryTester(
         animationPolicy: animationPolicy,
         viewportSize: viewportSize,
