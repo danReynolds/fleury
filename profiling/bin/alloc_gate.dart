@@ -34,11 +34,12 @@
 // into dropped frames. It's the axis the encoder zero-image fast path (#30) and
 // the reconcile redundant-copy cleanup (#35) both moved — and nothing gated it.
 //
-// The number is deterministic byte-for-byte on a fixed SDK, so a small
-// tolerance catches a real per-frame allocation without flaking. The absolute
-// baseline shifts with the Dart SDK (object layout / list growth) and the
-// scenario; regenerate with --update-baseline after an intentional change or an
-// SDK bump, exactly like the wire gate.
+// The PROJECT axis is deterministic byte-for-byte on a fixed SDK. The TOTAL
+// axis is not — see _totalFailFraction for what it costs and why the number is
+// a median of several windows. The absolute baseline on both shifts with the
+// Dart SDK (object layout / list growth) and the scenario; regenerate with
+// --update-baseline after an intentional change or an SDK bump, exactly like
+// the wire gate.
 //
 // MUST be launched with the VM service enabled so it can self-connect, AND
 // with --deterministic: without it, the background JIT can land an
@@ -49,6 +50,7 @@
 // default-window number.
 //   dart --deterministic --enable-vm-service=0 --disable-service-auth-codes \
 //     bin/alloc_gate.dart [--gate] [--update-baseline] [--frames=N] [--top=N]
+//       [--repeats=N] [--warmup=N] [--baseline=PATH]
 //
 // Exit codes: 0 pass, 1 regression, 64 usage/setup error.
 
@@ -88,9 +90,12 @@ const _failFraction = 0.10;
 /// project, the semantic-anchor pre-scan +5.3% / +2.5%).
 ///
 /// 3% is calibrated, not guessed. With the double reset and the discarded
-/// warm-up window (see [_measure] and the measurement loop), six consecutive
-/// runs against a fresh baseline landed between -0.2% and 0.0% — no excursion
-/// above it at all — while the regressions above sit at +4.6% and +5.3%.
+/// warm-up window (see [_measure] and the measurement loop), 14 runs against a
+/// fresh baseline spanned -0.2% to +1.2% — the high end on a loaded machine —
+/// while the regressions above sit at +4.6% and +5.3%. That is ~2.5x headroom
+/// over observed noise and ~1.6pp of margin before a real regression hides.
+/// Do not widen it without re-measuring both ends: at 4% the width-scan
+/// regression is only 0.6pp from passing.
 ///
 /// Two honest caveats. The axis is NOT byte-exact the way the project axis is,
 /// and it carries a roughly constant instrument offset: one profile-response
@@ -185,6 +190,14 @@ Future<void> main(List<String> args) async {
       exitCode = 64;
       return;
     }
+  }
+  // Both drive division and list indexing below; without this a `--repeats=0`
+  // typo dies in _median on an empty list rather than saying what is wrong.
+  if (frames < 1 || repeats < 1) {
+    stderr.writeln('alloc_gate: --frames and --repeats must be >= 1 '
+        '(got frames=$frames, repeats=$repeats).');
+    exitCode = 64;
+    return;
   }
 
   final info = await developer.Service.getInfo();

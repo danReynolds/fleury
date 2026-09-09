@@ -136,8 +136,10 @@ CI SDK is pinned (see check.yml), which keeps the SDK-sensitive axes stable:
   **resets twice** (the second response covers only the first decode, so it is
   small and history-independent), **discards the first window** as measurement
   warm-up, and reports the **median of 5** further windows. Six consecutive
-  runs against a fresh baseline then landed between −0.2% and 0.0%, with no
-  excursion above it.
+  runs against a fresh baseline then spanned −0.2% to +1.2% (the high end
+  on a loaded machine) — ~2.5× headroom over the ±3% band, against regressions
+  that read +4.6% and +5.3%. Do not widen the band without re-measuring both
+  ends: at 4% the width-scan regression is only 0.6pp from passing.
 
   Two caveats worth knowing. One profile-response decode (~15 kB/frame at this
   window size) is still allocated inside every window and cannot be separated
