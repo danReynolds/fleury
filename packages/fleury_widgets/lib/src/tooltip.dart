@@ -49,7 +49,7 @@ class _TooltipState extends State<Tooltip> {
   void _show() {
     if (_entry != null) return;
     final entry = OverlayEntry(
-      builder: (_) => BoundsAnchor(
+      builder: (_) => AnchoredFloat(
         notifier: _bounds,
         // Container.framed supplies the float's skin: an opaque fill so the
         // app beneath doesn't bleed through, plus the frame. The tooltip's

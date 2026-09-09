@@ -305,8 +305,11 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
     }
     if (_entry == null) {
       final entry = OverlayEntry(
-        builder: (context) =>
-            BoundsAnchor(notifier: _bounds, child: _suggestions(context)),
+        builder: (context) => AnchoredFloat(
+          notifier: _bounds,
+          onTapOutside: _dismissOverlay,
+          child: _suggestions(context),
+        ),
       );
       _entry = entry;
       Overlay.of(context).insert(entry);
@@ -318,6 +321,11 @@ class _CompletionTextInputState extends State<CompletionTextInput> {
   void _close() {
     _entry?.remove();
     _entry = null;
+  }
+
+  void _dismissOverlay() {
+    _completion.close();
+    _close();
   }
 
   void _acceptCompletionAt(int index) {

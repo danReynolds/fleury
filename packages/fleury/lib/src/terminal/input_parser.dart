@@ -21,6 +21,7 @@
 //   - SS3 sequences `ESC O <final>`: A/B/C/D map to arrows; some
 //     terminals report F1..F4 here.
 //   - ESC followed by a printable byte → emitted as Alt+<char>.
+//   - ESC followed by Tab/Enter/Backspace → Alt+Tab / Alt+Enter / Alt+Backspace.
 //   - Bracketed paste markers (`CSI 200~` / `CSI 201~`).
 //   - SGR mouse encoding (`CSI < ... M|m`).
 //   - Kitty keyboard protocol (CSI-u): `CSI codepoint ; mods[:event] u`
@@ -490,6 +491,21 @@ class InputParser {
           modifiers: const {KeyModifier.alt},
         ),
       );
+      _clearEscapeSequence();
+      _state = _State.ground;
+      return;
+    }
+    // Alt + restricted non-printables. Only the keys ground mode emits as
+    // KeyEvents (Tab/Enter/Backspace) — other C0 bytes stay on the unknown
+    // path so ESC then Ctrl+letter does not invent Alt+Ctrl chords.
+    final altNonPrintable = switch (byte) {
+      0x09 => KeyCode.tab,
+      0x0D || 0x0A => KeyCode.enter,
+      0x7F || 0x08 => KeyCode.backspace,
+      _ => null,
+    };
+    if (altNonPrintable != null) {
+      sink.add(KeyEvent(altNonPrintable, modifiers: const {KeyModifier.alt}));
       _clearEscapeSequence();
       _state = _State.ground;
       return;

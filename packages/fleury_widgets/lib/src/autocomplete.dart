@@ -254,8 +254,11 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
     }
     if (_entry == null) {
       final entry = OverlayEntry(
-        builder: (context) =>
-            BoundsAnchor(notifier: _bounds, child: _suggestions(context)),
+        builder: (context) => AnchoredFloat(
+          notifier: _bounds,
+          onTapOutside: _dismiss,
+          child: _suggestions(context),
+        ),
       );
       _entry = entry;
       Overlay.of(context).insert(entry);
