@@ -155,11 +155,14 @@ class TextEditingController extends ChangeNotifier {
   _EditTransaction? _lastTransaction;
   bool _disposed = false;
 
+  /// Current editing value. Assigning it resets undo/redo and composition
+  /// history, even when the assigned value is equal to the current value.
   TextEditingValue get value => _value;
   set value(TextEditingValue next) => _setValue(next, resetHistory: true);
 
   /// The current text, always canonical — control bytes have been replaced.
   /// See the class doc for exactly what is rewritten and what you read back.
+  /// Assigning text resets editing history even when the text is unchanged.
   String get text => _value.text;
   set text(String text) {
     _setValue(_value.copyWith(text: text), resetHistory: true);
@@ -514,7 +517,13 @@ class TextEditingController extends ChangeNotifier {
     bool clearTransaction = true,
   }) {
     _checkNotDisposed();
-    if (_value == next) return;
+    final valueChanged = _value != next;
+    if (!valueChanged && !resetHistory) return;
+    final historyChanged =
+        resetHistory &&
+        (_compositionBase != null ||
+            _undoStack.isNotEmpty ||
+            _redoStack.isNotEmpty);
     _value = next;
     if (resetHistory) {
       _compositionBase = null;
@@ -524,7 +533,7 @@ class TextEditingController extends ChangeNotifier {
     if (resetHistory || clearTransaction) {
       _lastTransaction = null;
     }
-    notifyListeners();
+    if (valueChanged || historyChanged) notifyListeners();
   }
 
   void _checkNotDisposed() {
@@ -533,10 +542,14 @@ class TextEditingController extends ChangeNotifier {
     }
   }
 
+  /// Releases the current value and editing history without notifying listeners.
+  /// Readable state becomes empty; subsequent edits throw. This drops the
+  /// controller's references, not the bytes of immutable Dart strings.
   @override
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    _value = TextEditingValue.empty();
     _compositionBase = null;
     _undoStack.clear();
     _redoStack.clear();

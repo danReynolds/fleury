@@ -2,6 +2,10 @@
 
 ## 0.1.0
 
+- **Text controller cleanup.** Disposal now releases the current value as well
+  as editing history; getters read empty state after disposal. Assigning equal
+  text or an equal editing value still resets undo/redo and composition history.
+  Listeners are notified when that reset changes history, even if text is unchanged.
 - **Sensitive multiline input.** `TextArea.obscureText` masks display and
   redacts semantic values and clipboard capture, while preserving an explicit
   disabled clipboard policy. Reveal/hide keeps the same editing controller;

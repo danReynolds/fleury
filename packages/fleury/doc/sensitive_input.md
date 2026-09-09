@@ -35,9 +35,11 @@ if a layout removes it, the external controller preserves committed edits.
 Close/cancel should unmount the form, dispose its controller and focus node,
 and drop the application's references to them. Create a fresh controller for
 the next form so it cannot inherit the previous form's undo history.
-`draft.clear()` is undoable, and assigning `draft.text = ''` when the value is
-already empty does not purge its history. Neither is a sensitive-form disposal
-boundary. Dart strings have no guaranteed memory-zeroing operation.
+Disposal releases the controller's current value and editing history; retained
+references to a disposed controller read an empty value and cannot edit it.
+Assigning `draft.text = ''` also resets editing history, even when already empty.
+`draft.clear()` is an undoable edit. Finish the form's lifetime with disposal;
+Dart strings have no guaranteed memory-zeroing operation.
 
 ## Choose a paste boundary deliberately
 
