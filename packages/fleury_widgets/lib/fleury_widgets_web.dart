@@ -225,7 +225,14 @@ export 'src/table.dart'
         IntrinsicColumnWidth,
         Table,
         TableColumnWidth,
-        TableController;
+        TableController,
+        TableCopyOptions,
+        TableCopyResult,
+        TableExportFormat,
+        TableExportOptions,
+        TableExportResult,
+        exportTableRows,
+        tableCellText;
 export 'src/task_graph.dart'
     show
         TaskGraph,

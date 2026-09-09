@@ -812,4 +812,146 @@ void main() {
       expect(picked, 1);
     });
   });
+
+  group('copy/export', () {
+    testWidgets('Ctrl+C copies the selected row with clipboard semantics', (
+      tester,
+    ) async {
+      final controller = TableController(initialIndex: 1);
+      TableCopyResult? copied;
+      tester.pumpWidget(
+        Table(
+          selectable: true,
+          autofocus: true,
+          controller: controller,
+          header: const [Text('Name'), Text('Age')],
+          copyOptions: const TableCopyOptions(
+            clipboardPolicy: ClipboardWritePolicy.inProcessOnly,
+          ),
+          onCopy: (result) => copied = result,
+          rows: const [
+            [Text('Al'), Text('30')],
+            [Text('Bo'), Text('40')],
+            [Text('Cy'), Text('50')],
+          ],
+        ),
+      );
+
+      tester.render(size: const CellSize(12, 5));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(tester.clipboard.readInProcess(), 'Name\tAge\nBo\t40');
+      expect(copied, isNotNull);
+      expect(copied!.rowIndex, 1);
+      expect(copied!.text, 'Name\tAge\nBo\t40');
+      expect(copied!.report.policy.name, 'inProcessOnly');
+      expect(copied!.report.result, ClipboardWriteResult.inProcessOnly);
+
+      final table = tester.semantics().single(
+        role: SemanticRole.table,
+        action: SemanticAction.copy,
+      );
+      expect(table.state['copyEnabled'], isTrue);
+      expect(table.state['copyFormat'], 'tsv');
+      expect(table.state['copyIncludesHeader'], isTrue);
+      expect(table.state.clipboardPolicy, 'inProcessOnly');
+      expect(table.state.clipboardCapability, 'clipboardWrite');
+      expect(table.state.clipboardCapabilityResolution, 'available');
+
+      final selectedCells = tester
+          .semantics()
+          .where(
+            role: SemanticRole.tableCell,
+            selected: true,
+            action: SemanticAction.copy,
+          )
+          .toList();
+      expect(selectedCells, hasLength(2));
+      expect(selectedCells.first.state['rowIndex'], 1);
+    });
+
+    testWidgets('semantic copy copies the current Table selection', (
+      tester,
+    ) async {
+      final controller = TableController(initialIndex: 1);
+      TableCopyResult? copied;
+      tester.pumpWidget(
+        Table(
+          selectable: true,
+          controller: controller,
+          header: const [Text('Name'), Text('Age')],
+          copyOptions: const TableCopyOptions(
+            clipboardPolicy: ClipboardWritePolicy.inProcessOnly,
+          ),
+          onCopy: (result) => copied = result,
+          rows: const [
+            [Text('Al'), Text('30')],
+            [Text('Bo'), Text('40')],
+          ],
+        ),
+      );
+
+      tester.render(size: const CellSize(12, 4));
+      await tester.target(role: SemanticRole.table).copy();
+
+      expect(tester.clipboard.readInProcess(), 'Name\tAge\nBo\t40');
+      expect(copied?.rowIndex, 1);
+      expect(copied?.report.result, ClipboardWriteResult.inProcessOnly);
+    });
+
+    testWidgets('copySelectedRow false lets Ctrl+C bubble without writing', (
+      tester,
+    ) async {
+      tester.pumpWidget(
+        Table(
+          selectable: true,
+          autofocus: true,
+          copySelectedRow: false,
+          copyOptions: const TableCopyOptions(
+            clipboardPolicy: ClipboardWritePolicy.inProcessOnly,
+          ),
+          onCopy: (_) => fail('onCopy should not run'),
+          rows: const [
+            [Text('Al'), Text('30')],
+            [Text('Bo'), Text('40')],
+          ],
+        ),
+      );
+
+      tester.render(size: const CellSize(12, 3));
+      tester.sendKey(
+        const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(tester.clipboard.readInProcess(), isNull);
+      final table = tester.semantics().single(role: SemanticRole.table);
+      expect(table.actions, isNot(contains(SemanticAction.copy)));
+      expect(table.state['copyEnabled'], isNull);
+    });
+
+    test('exportTableRows sanitizes ANSI and supports CSV', () {
+      final export = exportTableRows(
+        header: const [Text('Name'), Text('Age')],
+        rows: const [
+          [Text('Al\x1b]52;c;secret\x07'), Text('30')],
+        ],
+        options: const TableExportOptions(
+          format: TableExportFormat.csv,
+          includeHeader: true,
+        ),
+      );
+
+      expect(export.text, isNot(contains('\x1b]52')));
+      expect(export.text, isNot(contains('secret')));
+      expect(export.text, startsWith('Name,Age\n'));
+      expect(export.text, contains('Al'));
+      expect(export.text, contains('30'));
+      expect(export.format, TableExportFormat.csv);
+      expect(export.rowCount, 1);
+    });
+  });
 }

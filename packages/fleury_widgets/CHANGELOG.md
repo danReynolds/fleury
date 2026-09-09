@@ -13,6 +13,11 @@
   Prefer tester `.select()` when the action only changes selection.
 
 - `Table` wheel/viewport scroll no longer assigns `controller.currentIndex` (ListView / DataTable parity). Keyboard navigation still reveals the cursor; `onFocusedItemChanged` reports user cursor moves.
+- Interactive `Table` mirrors DataTable/FileBrowser/SearchPanel copy:
+  `TableCopyOptions`, `TableCopyResult`, `exportTableRows`, Ctrl+C /
+  `SemanticAction.copy`, and `onCopy`. Composition cells export via
+  `tableCellText`, which reads `Text.data` — a cell built from any other
+  widget exports as an empty field. Tree copy remains deferred to `TreeTable`.
 - `Button` and `ButtonVariant` moved into core. This package continues to
   reexport them unchanged. Core buttons and companion value controls share
   one internal focus/activation implementation.

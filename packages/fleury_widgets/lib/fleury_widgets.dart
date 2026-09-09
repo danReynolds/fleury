@@ -246,7 +246,14 @@ export 'src/table.dart'
         IntrinsicColumnWidth,
         Table,
         TableColumnWidth,
-        TableController;
+        TableController,
+        TableCopyOptions,
+        TableCopyResult,
+        TableExportFormat,
+        TableExportOptions,
+        TableExportResult,
+        exportTableRows,
+        tableCellText;
 export 'src/terminal_output_region.dart'
     show TerminalOutputRegion, buildTerminalOutputLogEntries;
 export 'src/task_graph.dart'

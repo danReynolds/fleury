@@ -1,3 +1,5 @@
+import 'dart:async' show unawaited;
+
 import 'package:fleury/fleury_core.dart';
 
 import 'glyphs.dart';
@@ -98,6 +100,207 @@ class TableController extends ChangeNotifier {
   }
 }
 
+/// How [exportTableRows] encodes copied cell text.
+enum TableExportFormat { tsv, csv }
+
+/// Options for [exportTableRows].
+final class TableExportOptions {
+  const TableExportOptions({
+    this.format = TableExportFormat.tsv,
+    this.includeHeader = true,
+    this.startRow = 0,
+    this.maxRows,
+  }) : assert(startRow >= 0),
+       assert(maxRows == null || maxRows >= 0);
+
+  final TableExportFormat format;
+  final bool includeHeader;
+  final int startRow;
+  final int? maxRows;
+}
+
+/// Result of [exportTableRows].
+final class TableExportResult {
+  const TableExportResult({
+    required this.text,
+    required this.rowCount,
+    required this.columnCount,
+    required this.startRow,
+    required this.format,
+    required this.truncated,
+  });
+
+  final String text;
+  final int rowCount;
+  final int columnCount;
+  final int startRow;
+  final TableExportFormat format;
+  final bool truncated;
+}
+
+/// Clipboard behavior for [Table] selected-row copy.
+final class TableCopyOptions {
+  const TableCopyOptions({
+    this.format = TableExportFormat.tsv,
+    this.includeHeader = true,
+    this.clipboardPolicy = ClipboardWritePolicy.standard,
+  });
+
+  final TableExportFormat format;
+  final bool includeHeader;
+  final ClipboardWritePolicy clipboardPolicy;
+}
+
+/// Result delivered after a [Table] selected-row copy completes.
+final class TableCopyResult {
+  const TableCopyResult({
+    required this.rowIndex,
+    required this.export,
+    required this.report,
+  });
+
+  final int rowIndex;
+  final TableExportResult export;
+  final ClipboardWriteReport report;
+
+  String get text => export.text;
+}
+
+/// Extracts plain text from a table cell widget for copy/export.
+///
+/// Returns [Text.data] for [Text] cells and an empty string for other
+/// widgets (including padding placeholders).
+String tableCellText(Widget cell) {
+  if (cell is Text) return cell.data;
+  return '';
+}
+
+/// Exports composition-[Table] rows as sanitized TSV/CSV without mounting
+/// cells. Cell text comes from [cellText] (defaults to [tableCellText]).
+TableExportResult exportTableRows({
+  required List<List<Widget>> rows,
+  List<Widget>? header,
+  TableExportOptions options = const TableExportOptions(),
+  String Function(Widget cell) cellText = tableCellText,
+}) {
+  final columnCount = header?.length ?? (rows.isNotEmpty ? rows.first.length : 0);
+  if (columnCount == 0 || (rows.isEmpty && !(options.includeHeader && header != null))) {
+    return TableExportResult(
+      text: '',
+      rowCount: 0,
+      columnCount: columnCount,
+      startRow: options.startRow,
+      format: options.format,
+      truncated: options.startRow < rows.length,
+    );
+  }
+
+  final start = options.startRow > rows.length ? rows.length : options.startRow;
+  final available = rows.length - start;
+  final limit = options.maxRows == null || options.maxRows! > available
+      ? available
+      : options.maxRows!;
+  final output = StringBuffer();
+  var wroteLine = false;
+
+  void writeLine(Iterable<String> fields) {
+    if (wroteLine) output.writeln();
+    output.write(_formatTableExportLine(fields, options.format));
+    wroteLine = true;
+  }
+
+  if (options.includeHeader && header != null) {
+    writeLine([
+      for (var col = 0; col < columnCount; col++)
+        cellText(col < header.length ? header[col] : const Text('')),
+    ]);
+  }
+  for (var offset = 0; offset < limit; offset++) {
+    final row = rows[start + offset];
+    writeLine([
+      for (var col = 0; col < columnCount; col++)
+        cellText(col < row.length ? row[col] : const Text('')),
+    ]);
+  }
+
+  return TableExportResult(
+    text: output.toString(),
+    rowCount: limit,
+    columnCount: columnCount,
+    startRow: start,
+    format: options.format,
+    truncated: start + limit < rows.length,
+  );
+}
+
+final _tableAnsiEscapePattern = RegExp(
+  r'\x1B(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1B]*(?:\x07|\x1B\\)|[@-_])',
+);
+
+String _formatTableExportLine(
+  Iterable<String> fields,
+  TableExportFormat format,
+) {
+  return fields
+      .map((field) => _formatTableExportField(field, format))
+      .join(switch (format) {
+        TableExportFormat.tsv => '\t',
+        TableExportFormat.csv => ',',
+      });
+}
+
+String _formatTableExportField(String field, TableExportFormat format) {
+  final sanitized = _sanitizeTableExportField(field);
+  return switch (format) {
+    TableExportFormat.tsv => sanitized,
+    TableExportFormat.csv => _quoteTableCsvField(sanitized),
+  };
+}
+
+String _sanitizeTableExportField(String field) {
+  final withoutAnsi = field.replaceAll(_tableAnsiEscapePattern, '');
+  return sanitizeSingleLine(withoutAnsi);
+}
+
+String _quoteTableCsvField(String field) {
+  if (!field.contains(',') && !field.contains('"')) return field;
+  return '"${field.replaceAll('"', '""')}"';
+}
+
+Map<String, Object?> _tableClipboardSemanticState(TableCopyOptions options) {
+  final resolution = resolveCapabilityRequirement(
+    const CapabilityRequirement(
+      feature: TerminalFeature.clipboardWrite,
+      level: CapabilityLevel.preferred,
+      reason: 'Copy selected table row.',
+      fallback: CapabilityFallback(label: 'in-process register'),
+    ),
+    const CapabilityTruth(
+      feature: TerminalFeature.clipboardWrite,
+      support: CapabilitySupport.supported,
+      enablement: CapabilityEnablement.notApplicable,
+      delivery: CapabilityDelivery.notApplicable,
+      evidence: <CapabilityEvidence>[
+        CapabilityEvidence(
+          source: CapabilityEvidenceSource.fallback,
+          detail: 'The in-process clipboard register is available.',
+        ),
+      ],
+    ),
+  );
+  return <String, Object?>{
+    'copyEnabled': true,
+    'copyFormat': options.format.name,
+    'copyIncludesHeader': options.includeHeader,
+    'clipboardPolicy': options.clipboardPolicy.name,
+    'clipboardCapability': resolution.feature.name,
+    'clipboardCapabilityResolution': resolution.state.name,
+    if (resolution.fallbackLabel != null)
+      'clipboardFallback': resolution.fallbackLabel,
+    'clipboardRedacted': false,
+  };
+}
+
 /// A grid of cells with columns aligned across every row — the one thing
 /// `Row`/`Column` can't do, since they size each row independently.
 ///
@@ -127,12 +330,14 @@ class TableController extends ChangeNotifier {
 /// Set [selectable] (or pass a [controller] / [onSelect]) to make the
 /// table keyboard-navigable: Up/Down move a highlighted row, Home/End
 /// jump, PageUp/PageDown page, and Enter fires [onSelect]. Arrow and
-/// pointer selection report [onFocusedItemChanged]. When the table is
-/// given a bounded height (e.g. inside an `Expanded` or `SizedBox`) and
-/// the body is taller than the viewport, it scrolls — the header stays
-/// pinned. Keyboard navigation reveals the current row; the wheel moves
-/// only the viewport and leaves the cursor alone (ListView / DataTable
-/// parity). Column widths are still negotiated over *all* rows, so
+/// pointer selection report [onFocusedItemChanged]. When interactive,
+/// Ctrl+C and semantic copy export the highlighted row as TSV or CSV through
+/// the framework clipboard service and report a [TableCopyResult] to [onCopy].
+/// When the table is given a bounded height (e.g. inside an `Expanded` or
+/// `SizedBox`) and the body is taller than the viewport, it scrolls — the
+/// header stays pinned. Keyboard navigation reveals the current row; the
+/// wheel moves only the viewport and leaves the cursor alone (ListView /
+/// DataTable parity). Column widths are still negotiated over *all* rows, so
 /// columns never jitter as you scroll.
 class Table extends StatefulWidget {
   Table({
@@ -149,6 +354,9 @@ class Table extends StatefulWidget {
     this.autofocus = false,
     this.onSelect,
     this.onFocusedItemChanged,
+    this.copySelectedRow = true,
+    this.copyOptions = const TableCopyOptions(),
+    this.onCopy,
     this.selectedStyle,
     this.sortColumnIndex,
     this.sortAscending = true,
@@ -206,6 +414,16 @@ class Table extends StatefulWidget {
   /// semantic focus/select). Scrolling and programmatic controller writes
   /// do not fire it — ListView / DataTable parity.
   final void Function(int index)? onFocusedItemChanged;
+
+  /// Whether Ctrl+C and semantic copy export the highlighted row.
+  /// Only applies while the table is interactive.
+  final bool copySelectedRow;
+
+  /// Export and clipboard options used when copying table data.
+  final TableCopyOptions copyOptions;
+
+  /// Called after a copy attempt completes.
+  final void Function(TableCopyResult result)? onCopy;
 
   /// Style merged into the highlighted row. Defaults to the theme's
   /// selection style (reverse video).
@@ -347,6 +565,43 @@ class _TableState extends State<Table> {
     }
   }
 
+  bool get _copyEnabled {
+    if (!_interactive || !widget.copySelectedRow) return false;
+    if (widget.rows.isEmpty || widget.columnCount <= 0) return false;
+    return _controller?.currentIndex != null;
+  }
+
+  Future<void> _copySelection() async {
+    if (!_copyEnabled) return;
+    final rowIndex = _controller!.currentIndex!;
+    final export = exportTableRows(
+      rows: widget.rows,
+      header: widget.header,
+      options: TableExportOptions(
+        format: widget.copyOptions.format,
+        includeHeader: widget.copyOptions.includeHeader,
+        startRow: rowIndex,
+        maxRows: 1,
+      ),
+    );
+    final report = await ClipboardScope.of(
+      context,
+    ).writeWithReport(export.text, policy: widget.copyOptions.clipboardPolicy);
+    if (!mounted) return;
+    widget.onCopy?.call(
+      TableCopyResult(rowIndex: rowIndex, export: export, report: report),
+    );
+  }
+
+  Future<void> _copyRowAt(int rowIndex) async {
+    if (rowIndex < 0 || rowIndex >= widget.rows.length) return;
+    _focusNode?.requestFocus();
+    // Copying a specific row moves the browsing cursor there, so it reports
+    // like any other user cursor move and reveals the row.
+    _moveCurrent(rowIndex);
+    await _copySelection();
+  }
+
   KeyEventResult _onKey(KeyEvent event) {
     final controller = _controller;
     final count = widget.rows.length;
@@ -459,6 +714,11 @@ class _TableState extends State<Table> {
       state['visibleRangeEnd'] = visibleEnd;
     }
 
+    final copyEnabled = _copyEnabled;
+    if (copyEnabled) {
+      state.addAll(_tableClipboardSemanticState(widget.copyOptions));
+    }
+
     final table = Semantics(
       role: SemanticRole.table,
       label: widget.semanticLabel,
@@ -469,6 +729,7 @@ class _TableState extends State<Table> {
               SemanticAction.focus,
               SemanticAction.select,
               if (widget.onSelect != null) SemanticAction.activate,
+              if (copyEnabled) SemanticAction.copy,
             }
           : const <SemanticAction>{},
       state: SemanticState(state),
@@ -476,7 +737,7 @@ class _TableState extends State<Table> {
       child: body,
     );
     if (!_interactive) return table;
-    return FocusDetector(
+    Widget interactive = FocusDetector(
       onFocusChange: _onFocusDetectorChange,
       child: KeyDetector(
         onKey: (event) {
@@ -497,6 +758,19 @@ class _TableState extends State<Table> {
         ),
       ),
     );
+    if (copyEnabled) {
+      interactive = KeyBindings(
+        bindings: [
+          KeyBinding(
+            KeySequence.ctrl.c,
+            label: 'Copy selected row',
+            onTrigger: (_) => unawaited(_copySelection()),
+          ),
+        ],
+        child: interactive,
+      );
+    }
+    return interactive;
   }
 
   int? _visibleEnd() {
@@ -519,7 +793,7 @@ class _TableState extends State<Table> {
     ];
   }
 
-  void _handleTableAction(SemanticAction action) {
+  Future<void> _handleTableAction(SemanticAction action) async {
     switch (action) {
       case SemanticAction.focus:
       case SemanticAction.select:
@@ -529,12 +803,16 @@ class _TableState extends State<Table> {
         final selected = _controller?.currentIndex;
         if (selected != null) widget.onSelect?.call(selected);
         return;
+      case SemanticAction.copy:
+        if (!_copyEnabled) return;
+        await _copySelection();
+        return;
       case _:
         return;
     }
   }
 
-  void _handleCellAction(int rowIndex, SemanticAction action) {
+  Future<void> _handleCellAction(int rowIndex, SemanticAction action) async {
     if (rowIndex < 0) return;
     switch (action) {
       case SemanticAction.focus:
@@ -546,6 +824,10 @@ class _TableState extends State<Table> {
         _focusNode?.requestFocus();
         _moveCurrent(rowIndex);
         widget.onSelect?.call(rowIndex);
+        return;
+      case SemanticAction.copy:
+        if (!widget.copySelectedRow) return;
+        await _copyRowAt(rowIndex);
         return;
       case _:
         return;
@@ -560,6 +842,7 @@ class _TableState extends State<Table> {
     bool selected = false,
   }) {
     final interactiveBodyCell = _interactive && !header && rowIndex >= 0;
+    final copyEnabled = interactiveBodyCell && selected && _copyEnabled;
     return Semantics(
       role: SemanticRole.tableCell,
       focused:
@@ -570,6 +853,7 @@ class _TableState extends State<Table> {
               SemanticAction.focus,
               SemanticAction.select,
               if (widget.onSelect != null) SemanticAction.activate,
+              if (copyEnabled) SemanticAction.copy,
             }
           : const <SemanticAction>{},
       state: SemanticState({
