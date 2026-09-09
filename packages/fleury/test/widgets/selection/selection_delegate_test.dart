@@ -82,18 +82,6 @@ class _StubSelectable extends ChangeNotifier implements Selectable {
   }
 
   @override
-  Map<int, String> selectedTextByScreenRow() {
-    final content = getSelectedContent();
-    if (content == null) return const {};
-    final lines = content.plainText.split('\n');
-    final out = <int, String>{};
-    for (var i = 0; i < lines.length; i++) {
-      out[bounds.offset.row + i] = lines[i];
-    }
-    return out;
-  }
-
-  @override
   ({int end, int start})? getSelectionRange() {
     final s = _startRel;
     final e = _endRel;
