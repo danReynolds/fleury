@@ -436,6 +436,18 @@ class _LogRegionState extends State<LogRegion> {
     }
   }
 
+  /// An `itemKeyBuilder` over [LogEntry.id], or null when the ids cannot
+  /// identify rows. Recomputed per build alongside `order`, which is already
+  /// an O(n) pass over the same entries.
+  Object Function(int)? _stableIds(List<int> order) {
+    final seen = <Object>{};
+    for (final sourceIndex in order) {
+      final id = widget.entries[sourceIndex].id;
+      if (id == null || !seen.add(id)) return null;
+    }
+    return (viewIndex) => widget.entries[order[viewIndex]].id!;
+  }
+
   @override
   Widget build(BuildContext context) {
     final order = _entryOrder();
@@ -454,10 +466,16 @@ class _LogRegionState extends State<LogRegion> {
       itemCount: order.length,
       // Stable LogEntry.id (e.g. LogBuffer baseIndex+index) keeps selection on
       // the same logical row across head trims when the visible count is flat.
-      itemKeyBuilder: (viewIndex) {
-        final id = widget.entries[order[viewIndex]].id;
-        return id ?? viewIndex;
-      },
+      //
+      // Only when EVERY visible entry carries a distinct non-null id.
+      // LogEntry.id is a plain `Object?` documented for semantics and copy —
+      // it carries no uniqueness contract — and ListView treats a duplicate
+      // key as fatal, so keying on it unconditionally turned two entries that
+      // share a subsystem id into a crash at mount. `id ?? viewIndex` was
+      // worse still: it mixed ids with positions, so a null id collided with
+      // an int id. Without usable ids the list falls back to positional
+      // identity, which is what it had before.
+      itemKeyBuilder: _stableIds(order),
       itemBuilder: (context, viewIndex, activeSelected) {
         final sourceIndex = order[viewIndex];
         final selected = viewIndex == _controller.currentIndex;
