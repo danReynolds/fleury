@@ -1129,7 +1129,7 @@ class _ListViewportLayout {
       // expand does not scroll the window away from the still-current
       // selection and leave the cursor stranded off-screen. Empty lists
       // keep a stashed jump — restore+reveal keep selection on-screen.
-      if (rows == 0) {
+      if (viewportExtent == 0) {
         controller._pendingJumpIndex = null;
       }
       if (count == 0) {
