@@ -1166,7 +1166,7 @@ final class _FocusManagerIdentity {
 }
 
 /// Root of the focus tree. Installed by `runApp` so application widget
-/// code can always reach a `FocusManager` via [Focus.of].
+/// code can always reach a `FocusManager` via [FocusManager.of].
 ///
 /// Installs a `Scope<FocusManager>`: readers rebuild on every focus change
 /// because the manager is a [ChangeNotifier]. An identity-only scope sits
