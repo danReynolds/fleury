@@ -541,7 +541,7 @@ class _CodeViewState extends State<CodeView> {
                 selected: selected,
                 activeSelection: activeSelected,
                 copyEnabled: copyEnabled,
-                onActivate: () => _selectLineAt(index),
+                onSelect: () => _selectLineAt(index),
                 onCopy: () => _copyLineAt(index),
               );
             },
@@ -625,7 +625,7 @@ class _CodeLineWidget extends StatelessWidget {
     required this.selected,
     required this.activeSelection,
     required this.copyEnabled,
-    required this.onActivate,
+    required this.onSelect,
     required this.onCopy,
   });
 
@@ -633,7 +633,7 @@ class _CodeLineWidget extends StatelessWidget {
   final bool selected;
   final bool activeSelection;
   final bool copyEnabled;
-  final VoidCallback onActivate;
+  final VoidCallback onSelect;
   final Future<void> Function() onCopy;
 
   @override
@@ -653,13 +653,13 @@ class _CodeLineWidget extends StatelessWidget {
       value: line.text,
       selected: selected,
       actions: {
-        SemanticAction.activate,
+        SemanticAction.select,
         if (selected && copyEnabled) SemanticAction.copy,
       },
       onAction: (action) async {
         switch (action) {
-          case SemanticAction.activate:
-            onActivate();
+          case SemanticAction.select:
+            onSelect();
             return;
           case SemanticAction.copy:
             if (selected && copyEnabled) await onCopy();

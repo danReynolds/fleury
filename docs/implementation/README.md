@@ -650,21 +650,21 @@ reactive TUI vision.
   `ApprovalPrompt` now exposes approval role/state and semantic submit/cancel
   actions for protocol-neutral approval workflows.
   `LogRegion` now exposes aggregate focus/navigation plus semantic row
-  activation for selecting visible log entries before selected-row copy.
-  `DiffView` now exposes semantic row activation for selecting visible diff
+  `select` for choosing visible log entries before selected-row copy.
+  `DiffView` now exposes semantic row `select` for choosing visible diff
   lines before selected-line or selected-hunk copy.
-  `CodeView` now exposes semantic line activation for selecting visible source
+  `CodeView` now exposes semantic line `select` for choosing visible source
   lines before selected-line copy.
   `MarkdownView` now exposes semantic block activation for selecting visible
   Markdown blocks before selected-block copy.
   `MessageList` now exposes message-list/message roles, semantic
-  focus/navigation, row activation, selected-message copy, and refreshed-list
+  focus/navigation, row `select`, selected-message copy, and refreshed-list
   selected-message preservation for protocol-neutral transcript workflows while
   preserving tail-follow append behavior.
   `ToolCallCard` now exposes tool-call role/state plus semantic copy/cancel
   actions for protocol-neutral execution workflows.
   `TaskGraph` now exposes task-graph summary state, aggregate
-  focus/navigation, task-node activation/copy actions, and refreshed-list
+  focus/navigation, task-node `select`/copy actions, and refreshed-list
   selected-task preservation for protocol-neutral plan/workflow views.
   `ModelStatusBar` and `TokenMeter` now expose model/context status state and
   safe accessibility fallback summaries for protocol-neutral model-backed

@@ -329,7 +329,7 @@ class _TaskGraphState extends State<TaskGraph> {
     );
   }
 
-  void _activateAt(int index) {
+  void _selectAt(int index) {
     if (index < 0 || index >= widget.nodes.length) return;
     _focusGraph();
     _controller.currentIndex = index;
@@ -373,7 +373,7 @@ class _TaskGraphState extends State<TaskGraph> {
       focusNode: _focusNode,
       autofocus: widget.autofocus,
       itemCount: widget.nodes.length,
-      onSelect: _activateAt,
+      onSelect: _selectAt,
       itemBuilder: (context, index, activeSelected) {
         final selected = index == _controller.currentIndex;
         return _TaskGraphRow(
@@ -382,7 +382,7 @@ class _TaskGraphState extends State<TaskGraph> {
           selected: selected,
           activeSelection: activeSelected,
           copyEnabled: copyEnabled,
-          onActivate: () => _activateAt(index),
+          onSelect: () => _selectAt(index),
           onCopy: () => _copyAt(index),
         );
       },
@@ -448,7 +448,7 @@ class _TaskGraphRow extends StatelessWidget {
     required this.selected,
     required this.activeSelection,
     required this.copyEnabled,
-    required this.onActivate,
+    required this.onSelect,
     required this.onCopy,
   });
 
@@ -457,7 +457,7 @@ class _TaskGraphRow extends StatelessWidget {
   final bool selected;
   final bool activeSelection;
   final bool copyEnabled;
-  final VoidCallback onActivate;
+  final VoidCallback onSelect;
   final Future<void> Function() onCopy;
 
   @override
@@ -480,13 +480,13 @@ class _TaskGraphRow extends StatelessWidget {
           ? node.description
           : null,
       actions: {
-        SemanticAction.activate,
+        SemanticAction.select,
         if (selected && copyEnabled) SemanticAction.copy,
       },
       onAction: (action) async {
         switch (action) {
-          case SemanticAction.activate:
-            onActivate();
+          case SemanticAction.select:
+            onSelect();
             return;
           case SemanticAction.copy:
             if (selected && copyEnabled) await onCopy();

@@ -221,7 +221,7 @@ void main() {
 
     await tester
         .target(role: SemanticRole.task, label: 'Capture diagnostics')
-        .press();
+        .select();
     tester.render(size: const CellSize(90, 26));
 
     final diagnosticsTask = tester.semantics().single(
@@ -595,9 +595,9 @@ void main() {
         .semantics()
         .where(role: SemanticRole.listItem)
         .singleWhere((node) => node.state['rowKey'] == 'IDX-1004');
-    expect(secondRow.actions, contains(SemanticAction.activate));
+    expect(secondRow.actions, contains(SemanticAction.select));
 
-    await tester.target(id: secondRow.id).press();
+    await tester.target(id: secondRow.id).select();
     tester.render(size: const CellSize(96, 28));
 
     final selectedIndexedRow = tester.semantics().single(
@@ -1007,7 +1007,7 @@ void main() {
           role: SemanticRole.diffLine,
           label: '-  final mode = \'legacy\';',
         )
-        .press();
+        .select();
     tester.render(size: const CellSize(90, 26));
 
     final selectedDeletion = tester.semantics().single(
@@ -1102,7 +1102,7 @@ void main() {
           role: SemanticRole.codeLine,
           label: 'final class LaunchShell extends StatelessWidget {',
         )
-        .press();
+        .select();
     tester.render(size: const CellSize(90, 26));
 
     final selectedClassLine = tester.semantics().single(
@@ -1459,13 +1459,13 @@ void main() {
         .where(
           role: WidgetRoles.message,
           selected: false,
-          action: SemanticAction.activate,
+          action: SemanticAction.select,
         )
         .first;
     final candidateKey = candidate.state['rowKey'];
     await tester
         .target(role: WidgetRoles.message, label: candidate.label)
-        .press();
+        .select();
     tester.pump();
 
     final selectedMessage = tester.semantics().single(
@@ -1499,12 +1499,12 @@ void main() {
     final target = tester.semantics().single(
       role: WidgetRoles.message,
       label: '[log] stream: burst 2.2',
-      action: SemanticAction.activate,
+      action: SemanticAction.select,
     );
     final targetId = target.state.messageId;
     expect(targetId, isNotNull);
 
-    await tester.target(id: target.id).press();
+    await tester.target(id: target.id).select();
     tester.render(size: const CellSize(110, 32));
 
     var selected = tester.semantics().single(

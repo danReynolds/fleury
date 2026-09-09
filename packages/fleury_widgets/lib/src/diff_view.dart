@@ -577,7 +577,7 @@ class _DiffViewState extends State<DiffView> {
                 activeSelection: activeSelected,
                 copyEnabled: copyEnabled,
                 gutterWidth: gutterWidth,
-                onActivate: () => _selectRowAt(index),
+                onSelect: () => _selectRowAt(index),
                 onCopy: () => _copyRowAt(index),
               );
             },
@@ -647,7 +647,7 @@ class _DiffLineWidget extends StatelessWidget {
     required this.activeSelection,
     required this.copyEnabled,
     required this.gutterWidth,
-    required this.onActivate,
+    required this.onSelect,
     required this.onCopy,
   });
 
@@ -656,7 +656,7 @@ class _DiffLineWidget extends StatelessWidget {
   final bool activeSelection;
   final bool copyEnabled;
   final int gutterWidth;
-  final VoidCallback onActivate;
+  final VoidCallback onSelect;
   final Future<void> Function() onCopy;
 
   @override
@@ -676,13 +676,13 @@ class _DiffLineWidget extends StatelessWidget {
       value: row.text,
       selected: selected,
       actions: {
-        SemanticAction.activate,
+        SemanticAction.select,
         if (selected && copyEnabled) SemanticAction.copy,
       },
       onAction: (action) async {
         switch (action) {
-          case SemanticAction.activate:
-            onActivate();
+          case SemanticAction.select:
+            onSelect();
             return;
           case SemanticAction.copy:
             if (selected && copyEnabled) await onCopy();

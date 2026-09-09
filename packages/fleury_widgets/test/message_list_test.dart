@@ -121,7 +121,7 @@ void main() {
     expect(output, isNot(contains('09:04:05 [assistant]')));
   });
 
-  testWidgets('semantic activate selects a message row', (tester) async {
+  testWidgets('semantic select selects a message row', (tester) async {
     final controller = MessageListController(
       initialIndex: 0,
       followTail: false,
@@ -146,11 +146,11 @@ void main() {
     var row = tester.semantics().single(
       role: WidgetRoles.message,
       label: 'answer',
-      action: SemanticAction.activate,
+      action: SemanticAction.select,
     );
     expect(row.selected, isFalse);
 
-    await tester.target(role: WidgetRoles.message, label: 'answer').press();
+    await tester.target(role: WidgetRoles.message, label: 'answer').select();
 
     expect(controller.currentIndex, 1);
 
@@ -208,7 +208,7 @@ void main() {
     );
     expect(list.state.selectedMessageId, 'm1');
 
-    await tester.target(role: WidgetRoles.message, label: 'answer').press();
+    await tester.target(role: WidgetRoles.message, label: 'answer').select();
     expect(controller.currentIndex, 1);
     expect(controller.followTail, isFalse);
 
@@ -766,7 +766,7 @@ void main() {
       final seen = <bool>[];
       controller.addListener(() => seen.add(controller.followTail));
 
-      await tester.target(role: WidgetRoles.message, label: 'third').press();
+      await tester.target(role: WidgetRoles.message, label: 'third').select();
       expect(controller.currentIndex, 2);
       expect(
         controller.followTail,
@@ -795,7 +795,7 @@ void main() {
       );
       tester.render(size: const CellSize(60, 6));
 
-      await tester.target(role: WidgetRoles.message, label: 'first').press();
+      await tester.target(role: WidgetRoles.message, label: 'first').select();
       expect(controller.currentIndex, 0);
       expect(controller.followTail, isTrue);
       expect(controller.isFollowing, isTrue);

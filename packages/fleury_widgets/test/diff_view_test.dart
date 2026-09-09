@@ -250,7 +250,7 @@ index 1111111..2222222 100644
       expect(copied?.report.result, ClipboardWriteResult.inProcessOnly);
     });
 
-    testWidgets('semantic activate selects a diff row', (tester) async {
+    testWidgets('semantic select selects a diff row', (tester) async {
       final controller = DiffViewController(initialIndex: 0);
       tester.pumpWidget(
         DiffView(
@@ -268,13 +268,13 @@ index 1111111..2222222 100644
       var row = tester.semantics().single(
         role: SemanticRole.diffLine,
         label: '+  run();',
-        action: SemanticAction.activate,
+        action: SemanticAction.select,
       );
       expect(row.selected, isFalse);
 
       await tester
           .target(role: SemanticRole.diffLine, label: '+  run();')
-          .press();
+          .select();
 
       expect(controller.currentIndex, 8);
 

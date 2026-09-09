@@ -6,6 +6,11 @@
 - `Autocomplete` forwards `enabled`, `readOnly`, and `validationError` to the
   inner `TextInput`, matching `PasswordInput`, `CompletionTextInput`, and
   `TextArea`. Disabled and read-only fields do not open the suggestion menu.
+- Inspector/viewer rows (`CodeView`, `DiffView`, `LogRegion`, `MessageList`,
+  `TaskGraph`, and `TerminalOutputRegion` via `LogRegion`) advertise
+  `SemanticAction.select` for browse/selection. Handlers only move
+  `currentIndex`; `activate` / tester `.press()` stay reserved for open/run.
+  Prefer tester `.select()` when the action only changes selection.
 
 - `Button` and `ButtonVariant` moved into core. This package continues to
   reexport them unchanged. Core buttons and companion value controls share

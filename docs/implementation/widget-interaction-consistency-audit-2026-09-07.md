@@ -201,7 +201,7 @@ The public API inventory was checked against event handlers and existing tests. 
 | TextInput, PasswordInput, NumberInput, CompletionTextInput | Edit text/value; completion may intercept acceptance | Submit or accept completion according to input mode | Position caret / select text | `onChanged`, `onSubmit`, completion callback where supported |
 | TextArea | Edit and select text | Defined by editing keymap, including multiline/chat behavior | Position caret / select text | `onChanged`, optional `onSubmit` |
 | Form | Descendant controls retain their own behavior | Form submission runs validation before callback | Explicit submit control reaches form controller | `onSubmit` |
-| CodeView, DiffView, LogRegion, MessageList, TaskGraph | Select a line/row for inspection/copy | No independent application row command | Select row through list interaction | `onCopy`; row semantic `activate` currently only selects |
+| CodeView, DiffView, LogRegion, MessageList, TaskGraph | Select a line/row for inspection/copy | No independent application row command | Select row through list interaction | `onCopy`; row semantic `select` moves the cursor |
 | JsonView | Select/navigate nodes, expand/collapse containers | Built-in tree navigation | Built-in navigation | `onCopy`; node semantics omit ordinary selection |
 
 Low-level `GestureDetector.onTap*`, `MouseRegion.onHover/onScroll`, key handling, outside-tap handlers, and text-selection callbacks describe physical events or their own state. They should keep those meanings. Passive rendering surfaces and lifecycle callbacks are outside this naming migration.
@@ -230,7 +230,7 @@ Evidence: core `packages/fleury/lib/src/widgets/list_view.dart:881` and `:947`; 
 
 There are three concrete mismatches:
 
-- CodeView, DiffView, LogRegion, MessageList and TaskGraph expose `activate` to do only selection. Their items need `select`; an unrelated action must not be required just to select a line.
+- ~~CodeView, DiffView, LogRegion, MessageList and TaskGraph expose `activate` to do only selection.~~ **Fixed (2026-09-09):** those inspector/viewer rows advertise `SemanticAction.select`; handlers only move `currentIndex`. Keep `activate`/`.press()` for true open/run.
 - ContextPanel, TraceTimeline, ConversationNavigator, SearchPanel, PatchReview and FileMentionPicker expose `submit` on the collection root to invoke its current item, while their actionable rows expose `activate`. A test changes from `.submit()` to `.press()` depending on whether it targets the container or row. CommandPalette also exposes root `submit` for command invocation. Standardize the collection primary action on `activate`; actual query-input submission can still invoke that same handler.
 - Tree and TreeTable items have selected state but offer only open/close for branches and activate for actionable leaves. JsonView similarly exposes expansion/copy without ordinary node selection. They need a way to select without opening or invoking.
 
