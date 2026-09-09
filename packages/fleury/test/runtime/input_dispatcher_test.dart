@@ -1104,12 +1104,13 @@ void main() {
 
       h.dispatcher.dispatch(const TextCompositionEvent.update('あ'));
       h.dispatcher.dispatch(const TextCompositionEvent.commit('亜'));
+      // Sticky IME: commit clears composition owner; trailing cancel is an
+      // orphan and must be ignored (16g covers cancel-while-composing).
       h.dispatcher.dispatch(const TextCompositionEvent.cancel());
 
       expect(events, [
         'composition-update:あ',
         'composition-commit:亜',
-        'composition-cancel',
       ]);
     });
 
