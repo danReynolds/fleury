@@ -41,15 +41,25 @@ class LogBuffer extends ChangeNotifier {
 
   final int capacity;
   final List<LogLine> _lines = <LogLine>[];
+  int _totalAdded = 0;
   bool _disposed = false;
 
   List<LogLine> get lines => List.unmodifiable(_lines);
   bool get isEmpty => _lines.isEmpty;
   int get length => _lines.length;
 
+  /// Monotonic count of lines ever appended (including ones trimmed from the
+  /// head). Stable entry ids are [baseIndex] + list index.
+  int get totalAdded => _totalAdded;
+
+  /// Index of the oldest retained line in the [totalAdded] sequence.
+  /// Equal to `totalAdded - length`; survives capacity head trims.
+  int get baseIndex => _totalAdded - _lines.length;
+
   void add(LogLine line) {
     _checkNotDisposed();
     _lines.add(line);
+    _totalAdded++;
     if (_lines.length > capacity) {
       _lines.removeRange(0, _lines.length - capacity);
     }

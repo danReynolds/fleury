@@ -285,6 +285,14 @@ class RenderText extends RenderObject
     // overhead would be a net loss.
     if (!hasNewlines &&
         (!_softWrap || maxCols == null || _intrinsicWidth <= maxCols)) {
+      // Honor maxLines on the fast path too (0 → empty), matching the
+      // wrapping / multi-paragraph cap below.
+      if (_maxLines != null && _maxLines! <= 0) {
+        _lines = const <String>[];
+        _lineWidths = const <int>[];
+        _moreLinesTruncated = true;
+        return constraints.constrain(CellSize.zero);
+      }
       _lines = <String>[_text];
       _lineWidths = const <int>[];
       _moreLinesTruncated = false;

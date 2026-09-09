@@ -452,6 +452,12 @@ class _LogRegionState extends State<LogRegion> {
       focusNode: _focusNode,
       autofocus: widget.autofocus,
       itemCount: order.length,
+      // Stable LogEntry.id (e.g. LogBuffer baseIndex+index) keeps selection on
+      // the same logical row across head trims when the visible count is flat.
+      itemKeyBuilder: (viewIndex) {
+        final id = widget.entries[order[viewIndex]].id;
+        return id ?? viewIndex;
+      },
       itemBuilder: (context, viewIndex, activeSelected) {
         final sourceIndex = order[viewIndex];
         final selected = viewIndex == _controller.currentIndex;
