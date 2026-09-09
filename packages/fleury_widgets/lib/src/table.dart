@@ -3,6 +3,7 @@ import 'dart:async' show unawaited;
 import 'package:fleury/fleury_core.dart';
 
 import 'glyphs.dart';
+import 'tabular_export.dart';
 
 /// How a [Table] column is sized.
 sealed class TableColumnWidth {
@@ -183,8 +184,10 @@ TableExportResult exportTableRows({
   TableExportOptions options = const TableExportOptions(),
   String Function(Widget cell) cellText = tableCellText,
 }) {
-  final columnCount = header?.length ?? (rows.isNotEmpty ? rows.first.length : 0);
-  if (columnCount == 0 || (rows.isEmpty && !(options.includeHeader && header != null))) {
+  final columnCount =
+      header?.length ?? (rows.isNotEmpty ? rows.first.length : 0);
+  if (columnCount == 0 ||
+      (rows.isEmpty && !(options.includeHeader && header != null))) {
     return TableExportResult(
       text: '',
       rowCount: 0,
@@ -205,7 +208,9 @@ TableExportResult exportTableRows({
 
   void writeLine(Iterable<String> fields) {
     if (wroteLine) output.writeln();
-    output.write(_formatTableExportLine(fields, options.format));
+    output.write(
+      formatExportLine(fields, csv: options.format == TableExportFormat.csv),
+    );
     wroteLine = true;
   }
 
@@ -231,40 +236,6 @@ TableExportResult exportTableRows({
     format: options.format,
     truncated: start + limit < rows.length,
   );
-}
-
-final _tableAnsiEscapePattern = RegExp(
-  r'\x1B(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1B]*(?:\x07|\x1B\\)|[@-_])',
-);
-
-String _formatTableExportLine(
-  Iterable<String> fields,
-  TableExportFormat format,
-) {
-  return fields
-      .map((field) => _formatTableExportField(field, format))
-      .join(switch (format) {
-        TableExportFormat.tsv => '\t',
-        TableExportFormat.csv => ',',
-      });
-}
-
-String _formatTableExportField(String field, TableExportFormat format) {
-  final sanitized = _sanitizeTableExportField(field);
-  return switch (format) {
-    TableExportFormat.tsv => sanitized,
-    TableExportFormat.csv => _quoteTableCsvField(sanitized),
-  };
-}
-
-String _sanitizeTableExportField(String field) {
-  final withoutAnsi = field.replaceAll(_tableAnsiEscapePattern, '');
-  return sanitizeSingleLine(withoutAnsi);
-}
-
-String _quoteTableCsvField(String field) {
-  if (!field.contains(',') && !field.contains('"')) return field;
-  return '"${field.replaceAll('"', '""')}"';
 }
 
 Map<String, Object?> _tableClipboardSemanticState(TableCopyOptions options) {
