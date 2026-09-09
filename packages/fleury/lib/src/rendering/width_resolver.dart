@@ -188,11 +188,34 @@ final class DefaultWidthResolver implements WidthResolver {
       asciiPrefix--;
     }
 
-    // Mixed text: count the ASCII prefix at width 1/char, then fall
-    // back to grapheme iteration for the rest.
+    // Mixed text: walk code units for as long as each one is provably its own
+    // grapheme cluster, and only hand the remainder to `characters`.
+    //
+    // The old code bailed to `characters` at the first non-ASCII code unit and
+    // gave it the ENTIRE rest of the line. `CharacterRange.current` cuts a
+    // fresh substring per cluster, so a dashboard row whose only "complex"
+    // character is a `│` allocated a string per remaining cell, twice per frame
+    // (measure + paint). Measured on a bordered 120x40 dashboard, that path was
+    // ~7% of frame CPU.
+    //
+    // [isStandaloneCodeUnit] decides where the cheap walk has to stop.
     var total = asciiPrefix;
-    final rest = text.substring(asciiPrefix);
-    for (final g in rest.characters) {
+    var i = asciiPrefix;
+    while (i < len && isStandaloneCodeUnit(text, i)) {
+      final c = text.codeUnitAt(i);
+      if (c >= 0x20 && c <= 0x7E) {
+        total += 1;
+        i++;
+        continue;
+      }
+      // Class 1 is the zero-width class; _scalarWidth has no case for it and
+      // would fall through to 1. Mirrors widthOfGrapheme's single-unit path.
+      final scalarClass = _scalarClassOf(c);
+      total += scalarClass == 1 ? 0 : _scalarWidth(scalarClass, policy);
+      i++;
+    }
+    if (i == len) return total;
+    for (final g in text.substring(i).characters) {
       total += widthOfGrapheme(g, policy);
     }
     return total;
@@ -287,3 +310,40 @@ bool hasUncertainWidth(String grapheme) {
   }
   return false;
 }
+
+/// Whether the code unit at [index] in [s] is a complete grapheme cluster on
+/// its own — so a caller can walk code units and skip the `characters`
+/// iterator, which cuts a fresh substring per cluster and advances a range
+/// object to do it.
+///
+/// This is the hot question for text rendering: measuring and painting a line
+/// both do per-grapheme work, and for the characters a TUI actually paints,
+/// every cluster is exactly one code unit.
+///
+/// Implemented as an ALLOWLIST of code units that can neither join a preceding
+/// cluster nor take a following one — no combining marks, no SpacingMarks, no
+/// Hangul jamo, no Prepends, no surrogates. That inversion is the point: "is
+/// this a mark?" is a large-table question, while "is this box drawing?" is two
+/// comparisons. Anything outside the list answers false and goes to the real
+/// segmenter, so the cost of omitting a range is speed, never correctness.
+///
+/// Both [index] and its successor must qualify. The successor check is what
+/// proves nothing attaches to this cluster from the right; the caller
+/// guarantees the left by only advancing through units this already accepted.
+bool isStandaloneCodeUnit(String s, int index) {
+  if (!_isFreestanding(s.codeUnitAt(index))) return false;
+  final next = index + 1;
+  return next >= s.length || _isFreestanding(s.codeUnitAt(next));
+}
+
+/// Ranges containing no `Grapheme_Cluster_Break` value that joins clusters
+/// (Extend, SpacingMark, ZWJ, Prepend, L/V/T jamo, Regional_Indicator) and no
+/// surrogates. Ordered by how often TUI text hits them.
+bool _isFreestanding(int c) =>
+    (c >= 0x20 && c <= 0x7E) || // printable ASCII
+    (c >= 0x2500 && c <= 0x25FF) || // box drawing, blocks, geometric shapes
+    (c >= 0xA0 && c <= 0x2FF) || // Latin-1, Latin Ext A/B, IPA, modifiers
+    (c >= 0x2010 && c <= 0x2027) || // dashes, quotes, bullets
+    (c >= 0x2190 && c <= 0x22FF) || // arrows, math operators
+    (c >= 0x2600 && c <= 0x26FF) || // miscellaneous symbols
+    (c >= 0x4E00 && c <= 0x9FFF); // CJK unified ideographs

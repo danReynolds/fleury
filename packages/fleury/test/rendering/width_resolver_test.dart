@@ -4,7 +4,12 @@
 // a ZWJ sequence or keycap must never take the simple-variation-sequence
 // width, and the emoji veto must never touch CJK.
 
+import 'dart:math';
+
+import 'package:characters/characters.dart';
 import 'package:fleury/fleury.dart';
+import 'package:fleury/src/rendering/width_resolver.dart'
+    show isStandaloneCodeUnit;
 import 'package:test/test.dart';
 
 void main() {
@@ -297,6 +302,93 @@ void main() {
     test('a VS16 cluster in mixed text follows the axis', () {
       expect(resolver.widthOfText('ok \u{26A0}\u{FE0F}', spec), 5);
       expect(resolver.widthOfText('ok \u{26A0}\u{FE0F}', inertVs16), 4);
+    });
+  });
+
+  // The contract every caller of the code-unit walk relies on: whenever
+  // isStandaloneCodeUnit accepts a position that is a real cluster start, the
+  // segmenter must agree the cluster there is exactly one code unit long.
+  // Callers advance only through accepted units, so by induction they stay on
+  // cluster starts and never split one.
+  //
+  // Fuzzed against `characters` rather than reasoned about: the predicate is an
+  // allowlist over Unicode's cluster rules, and the two mistakes already caught
+  // here (a Prepend that is not zero-width, and a box-drawing run bailing on
+  // its own neighbour) were both invisible from the spec text alone.
+  group('isStandaloneCodeUnit agrees with the segmenter', () {
+    /// Byte offsets where a real grapheme cluster starts, and its unit length.
+    Map<int, int> clusters(String s) {
+      final out = <int, int>{};
+      var offset = 0;
+      for (final cluster in s.characters) {
+        out[offset] = cluster.length;
+        offset += cluster.length;
+      }
+      return out;
+    }
+
+    void check(String s) {
+      final starts = clusters(s);
+      for (var i = 0; i < s.length; i++) {
+        if (!isStandaloneCodeUnit(s, i)) continue;
+        final length = starts[i];
+        if (length == null) continue; // not a cluster start; caller never asks
+        expect(
+          length,
+          1,
+          reason:
+              'accepted a ${length}-unit cluster at $i in '
+              '${s.codeUnits.map((u) => u.toRadixString(16)).join(' ')}',
+        );
+      }
+    }
+
+    test('every BMP code unit, alone and in company', () {
+      for (var c = 0; c <= 0xFFFF; c++) {
+        final ch = String.fromCharCode(c);
+        check(ch);
+        check('a$ch');
+        check('$ch\u0301');
+        check('│$ch');
+      }
+    });
+
+    test('fuzz over cluster-forming pieces', () {
+      final rnd = Random(4242);
+      const pieces = [
+        'a',
+        '│',
+        '─',
+        '█',
+        '漢',
+        'é',
+        '\u0301',
+        '\u200D',
+        '\uFE0F',
+        '\u20E3',
+        '😀',
+        '🇨🇦',
+        '\u0600',
+        '\u0D4E',
+        '\u1100',
+        '\u1161',
+        '\u0903',
+        '\r',
+        '\n',
+        '\u094D',
+        'क',
+        '\uD800',
+        '\uDC00',
+        '⚠',
+        '→',
+      ];
+      for (var i = 0; i < 60000; i++) {
+        final b = StringBuffer();
+        for (var j = 0; j < 1 + rnd.nextInt(6); j++) {
+          b.write(pieces[rnd.nextInt(pieces.length)]);
+        }
+        check(b.toString());
+      }
     });
   });
 }

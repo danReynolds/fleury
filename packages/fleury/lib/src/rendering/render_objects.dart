@@ -464,9 +464,27 @@ class RenderText extends RenderObject
     final contentMaxCol = maxCol - ellipsisWidth;
     var col = startCol;
     var off = lineStartOffset;
-    for (final grapheme in line.characters) {
+
+    // Walk code units for as long as each one is provably its own cluster, and
+    // only hand the remainder to `characters`. The segmenter cuts a fresh
+    // substring per cluster and advances a range object to do it; measured on a
+    // bordered dashboard, that machinery was ~23% of frame CPU across this path
+    // and the width measurement. For ASCII, box drawing, block elements and CJK
+    // the cheap walk covers the whole line and the segmenter never runs.
+    //
+    // The two loops are deliberately not factored into a closure: this runs per
+    // line per frame, and capturing `col`/`off` would allocate a context on
+    // every call — trading the win away to tidy the shape.
+    final len = line.length;
+    var i = 0;
+    var truncated = false;
+    while (i < len && isStandaloneCodeUnit(line, i)) {
+      final grapheme = _singleUnitGrapheme(line.codeUnitAt(i));
       final w = _widthResolver.widthOfGrapheme(grapheme, _policy);
-      if (col + w > contentMaxCol) break;
+      if (col + w > contentMaxCol) {
+        truncated = true;
+        break;
+      }
       // Cell style is the painting style merged with a selection
       // highlight (reverse) when this grapheme falls inside the
       // current selection range.
@@ -476,7 +494,21 @@ class RenderText extends RenderObject
           : _style;
       paintMeasuredGrapheme(buffer, col, row, grapheme, w, cellStyle);
       col += w;
-      off += grapheme.length;
+      off += 1;
+      i++;
+    }
+    if (!truncated && i < len) {
+      for (final grapheme in line.substring(i).characters) {
+        final w = _widthResolver.widthOfGrapheme(grapheme, _policy);
+        if (col + w > contentMaxCol) break;
+        final cellStyle =
+            selection != null && off >= selection.start && off < selection.end
+            ? selectedStyle
+            : _style;
+        paintMeasuredGrapheme(buffer, col, row, grapheme, w, cellStyle);
+        col += w;
+        off += grapheme.length;
+      }
     }
     // `col + ellipsisWidth <= maxCol`, not `col < maxCol`: the ellipsis must
     // fit INSIDE the box, never half-in with its continuation cell over the
@@ -1172,3 +1204,18 @@ class RenderBorder extends RenderObject implements RenderObjectWithSingleChild {
     c?.paint(buffer, innerOffset);
   }
 }
+
+/// Printable-ASCII single-character strings, interned.
+///
+/// A code-unit walk still has to hand a `String` to the cell. Building one per
+/// painted cell would give back what skipping the segmenter saves, and these
+/// are the characters almost every cell holds. Non-ASCII falls through to
+/// `String.fromCharCode`, which allocates exactly what the segmenter's
+/// substring allocated before — no worse, and the walk is still cheaper.
+final List<String> _asciiGraphemes = [
+  for (var c = 0x20; c <= 0x7E; c++) String.fromCharCode(c),
+];
+
+String _singleUnitGrapheme(int codeUnit) => codeUnit >= 0x20 && codeUnit <= 0x7E
+    ? _asciiGraphemes[codeUnit - 0x20]
+    : String.fromCharCode(codeUnit);
