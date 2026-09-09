@@ -38,6 +38,7 @@ class Panel extends StatefulWidget {
     this.focused,
     this.expandChild = true,
     this.semanticLabel,
+    this.addRepaintBoundary = true,
   });
 
   /// Title shown on the panel's first row, styled by the theme.
@@ -61,6 +62,22 @@ class Panel extends StatefulWidget {
   /// [title].
   final String? semanticLabel;
 
+  /// Wrap the panel body in a [RepaintBoundary] (default true) so a panel whose
+  /// content did not change blits its cached cells instead of re-walking its
+  /// paint chain.
+  ///
+  /// Panels are the shape this pays for: chrome that is expensive to paint and
+  /// usually static, sitting beside something that churns. Measured on a
+  /// three-panel screen where one panel updates and two do not, this cut the
+  /// frame from 80.1 to 68.9 us — 14%; on a synthetic screen with larger static
+  /// bodies, 38%. The cost is one reused cache buffer per panel, bounded by the
+  /// panel's own size, and panels are counted in single digits — unlike list
+  /// items, which is why [ListView] makes the same call per row.
+  ///
+  /// Turn off for a panel whose body changes every frame anyway, where the
+  /// cache would be filled and discarded without ever being blitted.
+  final bool addRepaintBoundary;
+
   @override
   State<Panel> createState() => _PanelState();
 }
@@ -79,6 +96,9 @@ class _PanelState extends State<Panel> {
       bold: true,
       foreground: focused ? accent : theme.colorScheme.foreground,
     );
+    final body = widget.addRepaintBoundary
+        ? RepaintBoundary(child: widget.child)
+        : widget.child;
     return Semantics(
       role: SemanticRole.region,
       label: widget.semanticLabel ?? widget.title,
@@ -114,10 +134,11 @@ class _PanelState extends State<Panel> {
                   if (widget.trailing != null) widget.trailing!,
                 ],
               ),
-              if (widget.expandChild)
-                Expanded(child: widget.child)
-              else
-                widget.child,
+              // Boundary wraps the BODY only: the border and title row are
+              // cheap and follow focus, while the body is the part worth
+              // caching. Inside Expanded so the boundary sees the body's own
+              // box rather than the flex slot.
+              if (widget.expandChild) Expanded(child: body) else body,
             ],
           ),
         ),

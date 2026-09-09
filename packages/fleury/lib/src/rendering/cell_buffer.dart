@@ -230,8 +230,9 @@ final class CellBuffer {
     for (var row = clipped.top; row < clipped.bottom; row++) {
       // The interior is completely replaced; only the two edges can leave
       // an orphaned half outside the fill.
-      _evictWideNeighbors(left, row);
-      _evictWideNeighbors(right - 1, row);
+      final rowBase = row * _size.cols;
+      _evictWideNeighbors(left, row, rowBase + left);
+      _evictWideNeighbors(right - 1, row, rowBase + right - 1);
       final base = row * _size.cols;
       _cells.fillRange(base + left, base + right, fill);
     }
@@ -382,8 +383,17 @@ final class CellBuffer {
       // one column and the terminal drew as two: everything after it on the
       // row landed one cell to the right, and stayed there, because the
       // shown buffer believed the frame was correct.
-      _evictWideNeighbors(dstCol0 + colStart, dstRow);
-      _evictWideNeighbors(dstCol0 + colEnd - 1, dstRow);
+      final dstBase = dstRow * _size.cols;
+      _evictWideNeighbors(
+        dstCol0 + colStart,
+        dstRow,
+        dstBase + dstCol0 + colStart,
+      );
+      _evictWideNeighbors(
+        dstCol0 + colEnd - 1,
+        dstRow,
+        dstBase + dstCol0 + colEnd - 1,
+      );
       _cells.setRange(dstStart, dstStart + len, source._cells, srcStart);
       // The copied slice itself can be cut mid-pair when the destination
       // clip trimmed it (a blit partly off-screen) or the caller's rect did.
@@ -562,25 +572,31 @@ final class CellBuffer {
       !hasCellStyleStates(style),
       'interaction-aware styles must resolve first',
     );
-    // Include adjacent cells because writing can evict wide-cell neighbors.
-    _recordDamageRect(col - 1, row, width + 2, 1);
-
     final base = row * _size.cols + col;
+
+    // Guard inlined rather than left to _recordDamageRect: this is the
+    // per-cell paint path, and the frame buffer deliberately arms no damage
+    // tracking (see TuiFrameLoop.render), so the overwhelmingly common case is
+    // a call that computes four arguments and returns immediately.
+    // Include adjacent cells because writing can evict wide-cell neighbors.
+    if (_damageTrackingEnabled) {
+      _recordDamageRect(col - 1, row, width + 2, 1);
+    }
 
     if (width == 2) {
       if (col + 1 >= _size.cols) {
-        _evictWideNeighbors(col, row);
+        _evictWideNeighbors(col, row, base);
         _cells[base] = Cell.leading(grapheme: '?', style: style);
         return 1;
       }
-      _evictWideNeighbors(col, row);
-      _evictWideNeighbors(col + 1, row);
+      _evictWideNeighbors(col, row, base);
+      _evictWideNeighbors(col + 1, row, base + 1);
       _cells[base] = Cell.leading(grapheme: grapheme, style: style);
       _cells[base + 1] = Cell.continuation(style: style);
       return 2;
     }
 
-    _evictWideNeighbors(col, row);
+    _evictWideNeighbors(col, row, base);
     _cells[base] = Cell.leading(grapheme: grapheme, style: style);
     return 1;
   }
@@ -910,8 +926,9 @@ final class CellBuffer {
       // leading just left of the region, or a continuation just right of it,
       // would otherwise be orphaned (the interior is fully overwritten). This
       // keeps the same wide-cell invariant every grapheme write maintains.
-      _evictWideNeighbors(col, r);
-      _evictWideNeighbors(col + cols - 1, r);
+      final rBase = r * _size.cols;
+      _evictWideNeighbors(col, r, rBase + col);
+      _evictWideNeighbors(col + cols - 1, r, rBase + col + cols - 1);
       for (var c = col; c < col + cols; c++) {
         _cells[base + c] = const Cell.overlay();
       }
@@ -952,15 +969,17 @@ final class CellBuffer {
   /// If `(col, row)` is currently a leading cell whose continuation is at
   /// `(col+1, row)`, the continuation is now orphaned — replace it with
   /// empty.
-  void _evictWideNeighbors(int col, int row) {
-    final current = _cells[row * _size.cols + col];
-    if (current.role == CellRole.continuation && col > 0) {
-      _cells[row * _size.cols + col - 1] = const Cell.empty();
-    }
-    if (current.role == CellRole.leading && col + 1 < _size.cols) {
-      final right = _cells[row * _size.cols + col + 1];
-      if (right.role == CellRole.continuation) {
-        _cells[row * _size.cols + col + 1] = const Cell.empty();
+  /// [base] is `row * cols + col`, which every caller already computed; taking
+  /// it avoids redoing the multiply three times on the per-cell paint path.
+  /// A cell cannot be both a continuation and a leading, so the second test is
+  /// an `else`.
+  void _evictWideNeighbors(int col, int row, int base) {
+    final current = _cells[base];
+    if (current.role == CellRole.continuation) {
+      if (col > 0) _cells[base - 1] = const Cell.empty();
+    } else if (current.role == CellRole.leading && col + 1 < _size.cols) {
+      if (_cells[base + 1].role == CellRole.continuation) {
+        _cells[base + 1] = const Cell.empty();
       }
     }
   }

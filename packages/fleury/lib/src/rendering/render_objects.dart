@@ -478,9 +478,16 @@ class RenderText extends RenderObject
     final len = line.length;
     var i = 0;
     var truncated = false;
+    // Hoisted: the default resolver can answer from a code unit directly, which
+    // saves re-deriving one from the string per cell. Tested once per line
+    // rather than per cell, and null for a custom resolver.
+    final resolver = _widthResolver;
+    final fastResolver = resolver is DefaultWidthResolver ? resolver : null;
     while (i < len && isStandaloneCodeUnit(line, i)) {
-      final grapheme = _singleUnitGrapheme(line.codeUnitAt(i));
-      final w = _widthResolver.widthOfGrapheme(grapheme, _policy);
+      final codeUnit = line.codeUnitAt(i);
+      final w = fastResolver != null
+          ? fastResolver.widthOfCodeUnit(codeUnit, _policy)
+          : resolver.widthOfGrapheme(_singleUnitGrapheme(codeUnit), _policy);
       if (col + w > contentMaxCol) {
         truncated = true;
         break;
@@ -492,7 +499,14 @@ class RenderText extends RenderObject
           selection != null && off >= selection.start && off < selection.end
           ? selectedStyle
           : _style;
-      paintMeasuredGrapheme(buffer, col, row, grapheme, w, cellStyle);
+      paintMeasuredGrapheme(
+        buffer,
+        col,
+        row,
+        _singleUnitGrapheme(codeUnit),
+        w,
+        cellStyle,
+      );
       col += w;
       off += 1;
       i++;
