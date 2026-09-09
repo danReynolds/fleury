@@ -387,16 +387,29 @@ class TextEditingController extends ChangeNotifier {
     _checkNotDisposed();
     final base = _compositionBase;
     if (base == null) {
-      // A stale peer commit can arrive after an interrupting type already
-      // resolved the preedit (cancel + insert). Replace that typing run with
-      // the committed text so we do not leave `git Xcheckout`.
-      if (text != null &&
-          _lastTransaction == _EditTransaction.typing &&
-          _undoStack.isNotEmpty) {
-        final beforeTyping = _undoStack.removeLast();
-        _redoStack.clear();
-        _lastTransaction = null;
-        _setValue(beforeTyping, clearTransaction: false);
+      // A stale peer commit can arrive after an interrupting edit already
+      // resolved the preedit (cancel + insert). It belongs to THAT
+      // composition, so it replaces the interrupting edit rather than
+      // appending to it — otherwise `git che` + `X` + commit(`checkout`)
+      // leaves `git Xcheckout`.
+      //
+      // Strictly bounded to the orphaning edit itself: see
+      // [_orphanedCompositionBase]. A commit that arrives later is ordinary
+      // news and takes the plain path below, because rewinding then would
+      // delete text the user typed and watched appear.
+      if (text != null && _resolvesOrphanedComposition) {
+        final orphan = _orphanedCompositionBase!;
+        _clearOrphanedComposition();
+        if (_value != orphan) {
+          // Undo the one interrupting edit. It pushed exactly one entry,
+          // holding the pre-composition value.
+          if (_undoStack.isNotEmpty && _undoStack.last == orphan) {
+            _undoStack.removeLast();
+          }
+          _redoStack.clear();
+          _lastTransaction = null;
+          _setValue(orphan, clearTransaction: false);
+        }
         _applyEdit(
           TextEditingModel.insert(_value, text, singleLine: singleLine),
         );
@@ -530,9 +543,45 @@ class TextEditingController extends ChangeNotifier {
   /// was resolved so destructive edits can stop without also mutating the
   /// restored baseline.
   bool _cancelComposingForEdit() {
-    if (_compositionBase == null) return false;
+    final base = _compositionBase;
+    if (base == null) return false;
     cancelComposing();
+    _orphanedCompositionBase = base;
+    _orphanedCompositionSerial = _editSerial;
     return true;
+  }
+
+  /// Value the text held before a composition that an edit then resolved out
+  /// from under a peer IME that has not seen the cancel. Read only by
+  /// [commitComposing], to place that peer's late commit correctly.
+  TextEditingValue? _orphanedCompositionBase;
+
+  /// [_editSerial] when the composition above was orphaned.
+  int? _orphanedCompositionSerial;
+
+  /// Counts applied edits, so the orphan record can be scoped to the single
+  /// edit that caused it. Nothing else reads it.
+  int _editSerial = 0;
+
+  /// Whether a late commit is still the resolution of the orphaned
+  /// composition rather than unrelated news.
+  ///
+  /// True only while at most the orphaning edit itself has been applied
+  /// (delta 0 for a destructive edit that stopped at the cancel, 1 for one
+  /// that went on to change the text). Once the user has typed anything
+  /// further, the commit takes the ordinary insert path: appending stray text
+  /// is a visible, correctable annoyance, while rewinding would silently
+  /// delete a typing run.
+  bool get _resolvesOrphanedComposition {
+    final serial = _orphanedCompositionSerial;
+    return _orphanedCompositionBase != null &&
+        serial != null &&
+        _editSerial - serial <= 1;
+  }
+
+  void _clearOrphanedComposition() {
+    _orphanedCompositionBase = null;
+    _orphanedCompositionSerial = null;
   }
 
   void _applyEdit(
@@ -542,6 +591,7 @@ class TextEditingController extends ChangeNotifier {
   }) {
     _checkNotDisposed();
     if (_value == next) return;
+    _editSerial++;
     // Safety net: public edit methods cancel first. Any remaining caller that
     // reaches here with a live base would otherwise orphan the preedit.
     _compositionBase = null;
