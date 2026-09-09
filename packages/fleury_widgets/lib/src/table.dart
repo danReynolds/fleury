@@ -126,12 +126,14 @@ class TableController extends ChangeNotifier {
 ///
 /// Set [selectable] (or pass a [controller] / [onSelect]) to make the
 /// table keyboard-navigable: Up/Down move a highlighted row, Home/End
-/// jump, PageUp/PageDown page, and Enter fires [onSelect]. When the table
-/// is given a bounded height (e.g. inside an `Expanded` or `SizedBox`) and
+/// jump, PageUp/PageDown page, and Enter fires [onSelect]. Arrow and
+/// pointer selection report [onFocusedItemChanged]. When the table is
+/// given a bounded height (e.g. inside an `Expanded` or `SizedBox`) and
 /// the body is taller than the viewport, it scrolls — the header stays
-/// pinned while the body window follows the selection. Column widths are
-/// still negotiated over *all* rows, so columns never jitter as you
-/// scroll.
+/// pinned. Keyboard navigation reveals the current row; the wheel moves
+/// only the viewport and leaves the cursor alone (ListView / DataTable
+/// parity). Column widths are still negotiated over *all* rows, so
+/// columns never jitter as you scroll.
 class Table extends StatefulWidget {
   Table({
     super.key,
@@ -146,6 +148,7 @@ class Table extends StatefulWidget {
     this.focusNode,
     this.autofocus = false,
     this.onSelect,
+    this.onFocusedItemChanged,
     this.selectedStyle,
     this.sortColumnIndex,
     this.sortAscending = true,
@@ -199,6 +202,11 @@ class Table extends StatefulWidget {
   /// Called with the body-row index when Enter activates a row.
   final void Function(int index)? onSelect;
 
+  /// Reports user navigation to a different row (keyboard, click, or
+  /// semantic focus/select). Scrolling and programmatic controller writes
+  /// do not fire it — ListView / DataTable parity.
+  final void Function(int index)? onFocusedItemChanged;
+
   /// Style merged into the highlighted row. Defaults to the theme's
   /// selection style (reverse video).
   final CellStyle? selectedStyle;
@@ -225,6 +233,10 @@ class _TableState extends State<Table> {
   // Written from layout without notifying; read on the next key.
   int _visibleFirst = 0;
   int _visibleRows = 1;
+  // Independent viewport anchor (DataTable / ListView parity). Wheel scroll
+  // moves this; keyboard/click bump [_revealRevision] to reveal the cursor.
+  int _firstRow = 0;
+  int _revealRevision = 0;
 
   bool get _interactive => widget._interactive;
 
@@ -283,7 +295,7 @@ class _TableState extends State<Table> {
     _controller!._setRowCount(widget.rows.length);
   }
 
-  void _onChange() => setState(() {});
+  void _onChange() => setState(() => _revealRevision++);
 
   void _onFocusDetectorChange(bool focused) {
     if (!_interactive) return;
@@ -310,17 +322,29 @@ class _TableState extends State<Table> {
     super.dispose();
   }
 
-  /// Wheel scroll moves the selection (and the window follows it, since the
-  /// body window is derived from the selected row). Selection changes don't
-  /// fire onSelect — that's reserved for Enter / activate — so scrolling never
-  /// triggers row actions.
+  /// Wheel scroll moves only the viewport. The cursor stays put — keyboard
+  /// navigation or an explicit controller write reveals it again. Scrolling
+  /// never fires [Table.onSelect] (Enter / activate only).
   void _scrollBy(int delta) {
-    final controller = _controller;
     final count = widget.rows.length;
-    if (controller == null || count == 0) return;
-    final selected = controller.currentIndex ?? 0;
-    final next = (selected + delta).clamp(0, count - 1);
-    if (next != selected) controller.currentIndex = next;
+    if (count == 0) return;
+    final maxFirst = (count - _visibleRows).clamp(0, count);
+    final next = (_firstRow + delta).clamp(0, maxFirst);
+    if (next == _firstRow) return;
+    setState(() => _firstRow = next);
+  }
+
+  /// Moves the browsing cursor from user input and reports
+  /// [Table.onFocusedItemChanged] when the index actually changes.
+  void _moveCurrent(int index) {
+    final controller = _controller;
+    if (controller == null) return;
+    final before = controller.currentIndex;
+    controller.currentIndex = index;
+    final after = controller.currentIndex;
+    if (after != null && after != before) {
+      widget.onFocusedItemChanged?.call(after);
+    }
   }
 
   KeyEventResult _onKey(KeyEvent event) {
@@ -332,23 +356,23 @@ class _TableState extends State<Table> {
     switch (event.code) {
       case KeyCode.arrowUp:
         if (selected <= 0) return KeyEventResult.handled;
-        controller.currentIndex = selected - 1;
+        _moveCurrent(selected - 1);
         return KeyEventResult.handled;
       case KeyCode.arrowDown:
         if (selected >= count - 1) return KeyEventResult.handled;
-        controller.currentIndex = selected + 1;
+        _moveCurrent(selected + 1);
         return KeyEventResult.handled;
       case KeyCode.pageUp:
-        controller.currentIndex = (selected - _visibleRows).clamp(0, count - 1);
+        _moveCurrent((selected - _visibleRows).clamp(0, count - 1));
         return KeyEventResult.handled;
       case KeyCode.pageDown:
-        controller.currentIndex = (selected + _visibleRows).clamp(0, count - 1);
+        _moveCurrent((selected + _visibleRows).clamp(0, count - 1));
         return KeyEventResult.handled;
       case KeyCode.home:
-        controller.currentIndex = 0;
+        _moveCurrent(0);
         return KeyEventResult.handled;
       case KeyCode.end:
-        controller.currentIndex = count - 1;
+        _moveCurrent(count - 1);
         return KeyEventResult.handled;
       case KeyCode.enter:
         widget.onSelect?.call(selected);
@@ -409,8 +433,11 @@ class _TableState extends State<Table> {
       separatorStyle: widget.separatorStyle,
       selectedRow: _interactive ? _controller?.currentIndex : null,
       selectedStyle: selectedStyle,
+      viewportStart: _firstRow,
+      revealRevision: _revealRevision,
       onVisibleRange: (first, count) {
         _visibleFirst = first;
+        _firstRow = first;
         _visibleRows = count < 1 ? 1 : count;
       },
       children: cells,
@@ -458,7 +485,7 @@ class _TableState extends State<Table> {
         child: Focus(
           focusNode: _focusNode,
           autofocus: widget.autofocus,
-          // Wheel over the table scrolls the row window by moving the selection.
+          // Wheel over the table scrolls the viewport without moving the cursor.
           child: MouseRegion(
             onScroll: (details) {
               if (details.delta.row == 0) return false;
@@ -513,11 +540,11 @@ class _TableState extends State<Table> {
       case SemanticAction.focus:
       case SemanticAction.select:
         _focusNode?.requestFocus();
-        _controller?.currentIndex = rowIndex;
+        _moveCurrent(rowIndex);
         return;
       case SemanticAction.activate:
         _focusNode?.requestFocus();
-        _controller?.currentIndex = rowIndex;
+        _moveCurrent(rowIndex);
         widget.onSelect?.call(rowIndex);
         return;
       case _:
@@ -579,6 +606,8 @@ class _TableBody extends MultiChildRenderObjectWidget {
     required this.separatorStyle,
     required this.selectedRow,
     required this.selectedStyle,
+    required this.viewportStart,
+    required this.revealRevision,
     required this.onVisibleRange,
     required super.children,
   });
@@ -591,6 +620,8 @@ class _TableBody extends MultiChildRenderObjectWidget {
   final CellStyle separatorStyle;
   final int? selectedRow;
   final CellStyle selectedStyle;
+  final int viewportStart;
+  final int revealRevision;
   final void Function(int visibleFirst, int visibleRows) onVisibleRange;
 
   @override
@@ -604,6 +635,8 @@ class _TableBody extends MultiChildRenderObjectWidget {
     separatorStyle: separatorStyle,
     selectedRow: selectedRow,
     selectedStyle: selectedStyle,
+    viewportStart: viewportStart,
+    revealRevision: revealRevision,
     onVisibleRange: onVisibleRange,
   );
 
@@ -618,6 +651,8 @@ class _TableBody extends MultiChildRenderObjectWidget {
       ..separatorStyle = separatorStyle
       ..selectedRow = selectedRow
       ..selectedStyle = selectedStyle
+      ..viewportStart = viewportStart
+      ..revealRevision = revealRevision
       ..onVisibleRange = onVisibleRange
       ..glyphTier = drawingGlyphTierOf(context);
   }
@@ -626,7 +661,8 @@ class _TableBody extends MultiChildRenderObjectWidget {
 /// Lays cells into a grid with shared, negotiated column widths and
 /// per-row heights, optionally ruling under the header row. When
 /// [selectedRow] is set the body scrolls within a bounded height (header
-/// pinned) and the selected row is highlighted.
+/// pinned) and the selected row is highlighted. [viewportStart] owns the
+/// body window; a [revealRevision] bump reveals the selected row again.
 class RenderTable extends RenderObject implements RenderObjectWithChildren {
   RenderTable({
     GlyphTier glyphTier = GlyphTier.unicode,
@@ -638,6 +674,8 @@ class RenderTable extends RenderObject implements RenderObjectWithChildren {
     required CellStyle separatorStyle,
     required int? selectedRow,
     required CellStyle selectedStyle,
+    int viewportStart = 0,
+    int revealRevision = 0,
     required void Function(int, int) onVisibleRange,
   }) : _glyphTier = glyphTier,
        _columnCount = columnCount,
@@ -648,6 +686,8 @@ class RenderTable extends RenderObject implements RenderObjectWithChildren {
        _separatorStyle = separatorStyle,
        _selectedRow = selectedRow,
        _selectedStyle = selectedStyle,
+       _bodyAnchor = viewportStart < 0 ? 0 : viewportStart,
+       _revealRevision = revealRevision,
        _onVisibleRange = onVisibleRange;
 
   GlyphTier _glyphTier;
@@ -718,6 +758,26 @@ class RenderTable extends RenderObject implements RenderObjectWithChildren {
     markNeedsPaintOnly();
   }
 
+  int _revealRevision;
+  bool _revealCurrent = true;
+
+  set viewportStart(int v) {
+    final next = v < 0 ? 0 : v;
+    if (_bodyAnchor == next) return;
+    _bodyAnchor = next;
+    _revealCurrent = false;
+    markNeedsLayout();
+  }
+
+  set revealRevision(int v) {
+    if (_revealRevision == v) return;
+    _revealRevision = v;
+    _revealCurrent = true;
+    if (_selectedRow == null || !_rowVisible(_selectedRow!)) {
+      markNeedsLayout();
+    }
+  }
+
   void Function(int, int) _onVisibleRange;
   set onVisibleRange(void Function(int, int) v) => _onVisibleRange = v;
 
@@ -735,6 +795,11 @@ class RenderTable extends RenderObject implements RenderObjectWithChildren {
   int _visibleFirst = 0;
   int _visibleRows = 0;
   bool _windowing = false;
+
+  bool _rowVisible(int row) {
+    if (_visibleRows <= 0) return false;
+    return row >= _visibleFirst && row < _visibleFirst + _visibleRows;
+  }
 
   int get _headerOffset => _hasHeader ? 1 : 0;
 
@@ -959,6 +1024,7 @@ class RenderTable extends RenderObject implements RenderObjectWithChildren {
     _headerBlock = _hasHeader ? rowHeight[0] + (_headerSeparator ? 1 : 0) : 0;
 
     // 5. Resolve the scrolling window for the interactive body.
+    // Viewport anchor is independent of the cursor; reveal only when asked.
     final bodyCount = gridRows - _headerOffset;
     _windowing = false;
     if (_selectedRow != null && maxCols != null) {
@@ -967,16 +1033,30 @@ class RenderTable extends RenderObject implements RenderObjectWithChildren {
         final viewport = (maxRows - _headerBlock).clamp(0, maxRows);
         _windowing = _naturalHeight > maxRows && viewport > 0 && bodyCount > 0;
         final selected = _selectedRow!.clamp(0, bodyCount - 1);
-        _bodyAnchor = _bodyAnchor.clamp(0, bodyCount - 1);
-        if (selected < _bodyAnchor) _bodyAnchor = selected;
-        var (first, last) = _bodyWindow(_bodyAnchor, viewport, bodyCount);
-        if (selected > last) {
-          _bodyAnchor = _anchorEndingAt(selected, viewport);
-          (first, last) = _bodyWindow(_bodyAnchor, viewport, bodyCount);
+        if (bodyCount > 0) {
+          final maxAnchor = _anchorEndingAt(bodyCount - 1, viewport);
+          _bodyAnchor = _bodyAnchor.clamp(0, maxAnchor);
+          if (_revealCurrent) {
+            if (selected < _bodyAnchor) _bodyAnchor = selected;
+            var (first, last) = _bodyWindow(_bodyAnchor, viewport, bodyCount);
+            if (selected > last) {
+              _bodyAnchor = _anchorEndingAt(selected, viewport);
+              (first, last) = _bodyWindow(_bodyAnchor, viewport, bodyCount);
+            }
+            _visibleFirst = first;
+            _visibleRows = last - first + 1;
+            _revealCurrent = false;
+          } else {
+            final (first, last) = _bodyWindow(_bodyAnchor, viewport, bodyCount);
+            _visibleFirst = first;
+            _visibleRows = last - first + 1;
+          }
+        } else {
+          _bodyAnchor = 0;
+          _visibleFirst = 0;
+          _visibleRows = 0;
         }
-        _visibleFirst = first;
-        _visibleRows = last - first + 1;
-        _onVisibleRange(first, last - first + 1);
+        _onVisibleRange(_visibleFirst, _visibleRows);
       } else {
         _bodyAnchor = 0;
         _visibleFirst = 0;

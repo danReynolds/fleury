@@ -450,10 +450,26 @@ void main() {
       expect(picked, isNull, reason: 'click selects but does not activate');
     });
 
-    testWidgets('wheel scroll moves the selection', (tester) {
+    testWidgets('wheel scroll moves the viewport without moving the cursor', (
+      tester,
+    ) {
       final c = TableController();
-      tester.pumpWidget(people(controller: c));
-      tester.render(size: const CellSize(8, 5));
+      final focused = <int>[];
+      Table build() => Table(
+        selectable: true,
+        autofocus: true,
+        controller: c,
+        onFocusedItemChanged: focused.add,
+        headerSeparator: false,
+        header: const [Text('H')],
+        rows: [
+          for (var i = 0; i < 10; i++) [Text('r$i')],
+        ],
+      );
+      tester.pumpWidget(build());
+      expect(_lines(tester, cols: 4, rows: 3), ['H', 'r0', 'r1']);
+      expect(c.currentIndex, 0);
+
       tester.sendMouse(
         const MouseEvent(
           kind: MouseEventKind.scrollDown,
@@ -462,7 +478,20 @@ void main() {
           row: 1,
         ),
       );
-      expect(c.currentIndex, 1, reason: 'scrolled down one row');
+      expect(c.currentIndex, 0, reason: 'wheel leaves the cursor alone');
+      expect(focused, isEmpty, reason: 'scrolling is not cursor movement');
+      expect(_lines(tester, cols: 4, rows: 3), ['H', 'r1', 'r2']);
+      // Rebuild so Semantics picks up the visible range written during layout.
+      tester.pumpWidget(build());
+      expect(
+        tester
+            .target(role: SemanticRole.table)
+            .snapshot
+            .state
+            .visibleRangeStart,
+        1,
+      );
+
       tester.sendMouse(
         const MouseEvent(
           kind: MouseEventKind.scrollUp,
@@ -472,6 +501,78 @@ void main() {
         ),
       );
       expect(c.currentIndex, 0, reason: 'scrolled back up');
+      expect(_lines(tester, cols: 4, rows: 3), ['H', 'r0', 'r1']);
+    });
+
+    testWidgets('keyboard and click still move the selection cursor', (tester) {
+      final c = TableController();
+      final focused = <int>[];
+      int? picked;
+      tester.pumpWidget(
+        Table(
+          selectable: true,
+          autofocus: true,
+          controller: c,
+          onSelect: (i) => picked = i,
+          onFocusedItemChanged: focused.add,
+          headerSeparator: false,
+          header: const [Text('Name'), Text('Age')],
+          rows: const [
+            [Text('Al'), Text('30')],
+            [Text('Bo'), Text('40')],
+            [Text('Cy'), Text('50')],
+          ],
+        ),
+      );
+      tester.render(size: const CellSize(8, 5));
+
+      tester.sendKey(const KeyEvent(KeyCode.arrowDown));
+      expect(c.currentIndex, 1);
+      expect(focused, [1]);
+
+      _clickAt(tester, col: 0, row: 3); // body index 2 (Cy)
+      expect(c.currentIndex, 2);
+      expect(focused, [1, 2]);
+      expect(picked, isNull, reason: 'click selects but does not activate');
+
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      expect(picked, 2);
+    });
+
+    testWidgets('wheel then Enter activates the unchanged cursor row', (
+      tester,
+    ) {
+      final c = TableController();
+      int? picked;
+      tester.pumpWidget(
+        Table(
+          selectable: true,
+          autofocus: true,
+          controller: c,
+          onSelect: (i) => picked = i,
+          headerSeparator: false,
+          header: const [Text('H')],
+          rows: [
+            for (var i = 0; i < 10; i++) [Text('r$i')],
+          ],
+        ),
+      );
+      tester.render(size: const CellSize(4, 3));
+      tester.sendMouse(
+        const MouseEvent(
+          kind: MouseEventKind.scrollDown,
+          button: MouseButton.none,
+          col: 0,
+          row: 1,
+        ),
+      );
+      expect(c.currentIndex, 0);
+      tester.sendKey(const KeyEvent(KeyCode.enter));
+      expect(
+        picked,
+        0,
+        reason: 'Enter still targets the cursor, not the scroll',
+      );
     });
 
     testWidgets('a controller drives selection programmatically', (tester) {

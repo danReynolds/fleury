@@ -12,6 +12,7 @@
   `currentIndex`; `activate` / tester `.press()` stay reserved for open/run.
   Prefer tester `.select()` when the action only changes selection.
 
+- `Table` wheel/viewport scroll no longer assigns `controller.currentIndex` (ListView / DataTable parity). Keyboard navigation still reveals the cursor; `onFocusedItemChanged` reports user cursor moves.
 - `Button` and `ButtonVariant` moved into core. This package continues to
   reexport them unchanged. Core buttons and companion value controls share
   one internal focus/activation implementation.
