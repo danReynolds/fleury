@@ -14,7 +14,7 @@ and loses your place.
 ## Quick start
 
 ```sh
-dart run bin/main.dart
+dart run bin/run_app.dart
 ```
 
 That's the whole setup. A plain JIT run on a real terminal starts Fleury's
@@ -152,7 +152,7 @@ your behalf: opening a debug port is your call.
 Opting out entirely:
 
 ```sh
-FLEURY_HOT_RELOAD=0 dart run bin/main.dart
+FLEURY_HOT_RELOAD=0 dart run bin/run_app.dart
 ```
 
 or `runApp(enableHotReload: false)` — the right setting for production

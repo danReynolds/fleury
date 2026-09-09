@@ -2,8 +2,9 @@
 
 Fleury runs in a browser two different ways. They paint to the **same** DOM
 cell-grid surface, so cell output renders identically — inline images are the
-one exception (served sessions get true-pixel `<img>` overlays; embedded apps
-don't ship the `Image` widget at all). They differ in **where your widget tree
+one exception (served sessions get true-pixel `<img>` overlays; embeds still
+ship `Image` via `Image.bytes` / `Image.decoded`, while `Image.file` stays
+native-only). They differ in **where your widget tree
 actually executes**:
 
 - **Embed** — compile your app to JavaScript with **dart2js** and run the whole
@@ -68,8 +69,8 @@ void main() {
 **Constraints**
 
 - **Web-safe widgets only.** Anything that reaches `dart:io` won't compile to JS
-  — that includes six native-only widgets (file I/O, image, log capture,
-  process, and the widgets built on them). The supporting `WorkflowSnapshot`
+  — that includes four native-only widgets (`FileBrowser`, `FilePicker`,
+  `LogRegion`, `TerminalOutputRegion`). The supporting `WorkflowSnapshot`
   model is also absent from the web barrel today because its `LogEntry`
   dependency lives in the native-only log library.
   Import `package:fleury/fleury_core.dart`, not `fleury.dart` (see
