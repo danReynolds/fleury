@@ -667,6 +667,11 @@ String _frameReasonForEvent(TuiEvent event) {
 /// surface, projects focus, syncs the IME caret, and records per-frame
 /// instrumentation after commit.
 final class _SurfaceFramePresenter implements FramePresenter {
+  // The retained DOM surface keeps its own view of the grid; frames stay
+  // self-contained until it is measured on the carried path.
+  @override
+  bool get requiresSelfContainedFrames => true;
+
   _SurfaceFramePresenter({
     required this.surface,
     required this.inputSource,

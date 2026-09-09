@@ -577,7 +577,12 @@ void main() {
         tester.render(size: size);
         final stats = RepaintBoundaryDebugStats.takeFrameStats();
 
-        expect(stats.cachedCount, 1);
+        // The boundary does no repainting. WHICH mechanism spares it depends
+        // on the frame: a self-contained frame walks to it and blits its
+        // cache; a carried one skips the subtree before reaching it. What has
+        // to hold either way is below — the clipped subtree stays hidden.
+        expect(stats.repaintedCount, 0);
+        expect(stats.cachedCount, stats.boundaryCount);
         expect(focusNode.rect, isNull);
         expect(focusNode.caretRect, isNull);
         expect(

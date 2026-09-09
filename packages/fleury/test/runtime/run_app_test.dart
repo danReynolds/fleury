@@ -1097,10 +1097,16 @@ void main() {
         final secondFrame = frames.last;
         expect(secondFrame.layoutStats.skippedCount, greaterThan(0));
         final secondBoundaries = secondFrame.repaintBoundaries;
-        expect(secondBoundaries.boundaryCount, 1);
+        // The boundary does no repainting. WHICH mechanism spares it depends
+        // on the frame: a self-contained frame walks to it and blits its
+        // cache; a carried one skips the subtree before reaching it, so the
+        // boundary never paints and copies nothing.
         expect(secondBoundaries.repaintedCount, 0);
-        expect(secondBoundaries.cachedCount, 1);
-        expect(secondBoundaries.copiedCellCount, greaterThan(0));
+        expect(secondBoundaries.cachedCount, secondBoundaries.boundaryCount);
+        expect(
+          secondBoundaries.copiedCellCount,
+          secondBoundaries.boundaryCount == 0 ? 0 : greaterThan(0),
+        );
 
         driver.enqueue(
           const KeyEvent(KeyCode.char('c'), modifiers: {KeyModifier.ctrl}),

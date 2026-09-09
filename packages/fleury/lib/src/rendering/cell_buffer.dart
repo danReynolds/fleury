@@ -131,6 +131,21 @@ final class CellBuffer {
   // Per-placement geometry, one entry per [writeImage] call, in paint order.
   final List<InlineImagePlacement> _imagePlacements = <InlineImagePlacement>[];
   var _damageTrackingEnabled = false;
+
+  /// Whether this buffer already holds the previous frame's cells.
+  ///
+  /// Set by the frame loop on the back buffer when incremental paint carries it
+  /// forward instead of clearing it. Scratch buffers — a repaint-boundary
+  /// cache, a viewport, an effect — always start empty, so they leave this
+  /// false and nothing painting into them may be skipped.
+  bool carriesPreviousFrame = false;
+
+  /// Whether this is one of the frame loop's two screen buffers, as opposed to
+  /// a scratch buffer. Painting into one is what lets a node record where it
+  /// last put its cells; that record is needed even on a full-repaint frame,
+  /// because the NEXT frame has to know the footprint to erase when the node
+  /// shrinks.
+  bool isFrameBuffer = false;
   // Damage bounds as raw ints (left/top inclusive, right/bottom exclusive),
   // updated by min/max in [_recordDamageRect] so the paint hot path allocates
   // no geometry per write. A CellRect is materialized only when the bounds are
@@ -187,6 +202,35 @@ final class CellBuffer {
     return result;
   }
 
+  /// Whether any write has been recorded since the last reset.
+  @internal
+  bool get hasDamage => _hasDamage;
+
+  @internal
+  int get damageLeft => _dmgLeft;
+
+  @internal
+  int get damageTop => _dmgTop;
+
+  @internal
+  int get damageRight => _dmgRight;
+
+  @internal
+  int get damageBottom => _dmgBottom;
+
+  /// Forgets the accumulated damage without disarming tracking.
+  ///
+  /// Paired with [addDamage] by the paint walk, which measures what each node
+  /// wrote by clearing the window, painting, and reading it back — then puts
+  /// the enclosing node's window back with what it just measured folded in.
+  @internal
+  void clearDamage() => _hasDamage = false;
+
+  /// Unions a left/top/right/bottom rectangle into the damage window.
+  @internal
+  void addDamage(int left, int top, int right, int bottom) =>
+      _recordDamageRect(left, top, right - left, bottom - top);
+
   /// Runs [body] without recording buffer writes as damage.
   ///
   /// Used by repaint boundaries when blitting an unchanged cached subtree into
@@ -221,6 +265,57 @@ final class CellBuffer {
     _cells.fillRange(0, _cells.length, const Cell.empty());
     _images.clear();
     _imagePlacements.clear();
+  }
+
+  /// Resets [rect] to empty cells — what [clear] does, restricted to a
+  /// rectangle. Distinct from [fillRect], which paints SPACES: a space is
+  /// drawn content and would not compare equal to the empty cell a full
+  /// repaint leaves behind.
+  @internal
+  void eraseRect(CellRect rect) {
+    final clipped = rect.intersect(
+      CellRect(offset: CellOffset.zero, size: _size),
+    );
+    if (clipped == null || clipped.size.isEmpty) return;
+    final cols = _size.cols;
+    for (var row = clipped.top; row < clipped.bottom; row++) {
+      final base = row * cols;
+      var left = clipped.left;
+      var right = clipped.right;
+      // A wide glyph straddling either edge has to go whole. Erasing only the
+      // half inside the rect leaves a lone leading cell claiming two columns,
+      // or a continuation with no leading cell in front of it — either way the
+      // row's widths stop adding up and every later column is drawn shifted.
+      while (left > 0 && _cells[base + left].role == CellRole.continuation) {
+        left -= 1;
+      }
+      while (right < cols &&
+          _cells[base + right].role == CellRole.continuation) {
+        right += 1;
+      }
+      _cells.fillRange(base + left, base + right, const Cell.empty());
+    }
+    // The guard columns either side, for the same reason [fillRect] widens its
+    // damage: a wide pair repaired at an edge is a write outside the rect.
+    _recordDamageRect(
+      clipped.left - 1,
+      clipped.top,
+      clipped.size.cols + 2,
+      clipped.size.rows,
+    );
+    // Image placements live OFF the grid — the cells under one are payload-free
+    // overlays — so emptying cells does not touch them. Under a carried-forward
+    // frame that is a leak with teeth: the previous frame's placements come
+    // across with the cells, and an image that moved or went away would keep
+    // being drawn by the presenter, from a record no cell comparison can see.
+    // Erasing a region invalidates what is in it, placements included.
+    _imagePlacements.removeWhere(
+      (p) =>
+          p.col < clipped.right &&
+          clipped.left < p.col + p.cols &&
+          p.row < clipped.bottom &&
+          clipped.top < p.row + p.rows,
+    );
   }
 
   /// Fills [rect] with single-cell spaces painted with [style].
@@ -1021,10 +1116,24 @@ final class CellBuffer {
   /// multiply per cell, twice per comparison, which measures 2.4-4.8x slower.
   /// It also produces the counts [screenDiffStats] computed separately, so
   /// scroll detection no longer pays for a second full scan.
-  CellBufferDiff diffAgainst(CellBuffer previous) {
+  CellBufferDiff diffAgainst(CellBuffer previous, {CellRect? within}) {
     if (previous._size != _size) return CellBufferDiff.incomparable;
     final cols = _size.cols;
     final rowCount = _size.rows;
+    // [within] is a PROMISE from the caller, not a hint: every cell outside it
+    // is identical in the two buffers. Only one caller can make that promise —
+    // the frame loop when it carried the previous frame forward, because the
+    // buffer started as a copy and every write since was recorded. It turns
+    // the diff from a scan of the screen into a scan of what changed, which is
+    // most of what the carry-forward saves on a quiet frame.
+    final scanLeft = within == null ? 0 : (within.left < 0 ? 0 : within.left);
+    final scanTop = within == null ? 0 : (within.top < 0 ? 0 : within.top);
+    final scanRight = within == null
+        ? cols
+        : (within.right > cols ? cols : within.right);
+    final scanBottom = within == null
+        ? rowCount
+        : (within.bottom > rowCount ? rowCount : within.bottom);
     final mine = _cells;
     final theirs = previous._cells;
     // Overlay cells are written only by [_recordImagePlacement], so the
@@ -1045,11 +1154,11 @@ final class CellBuffer {
     Cell? equalMine;
     Cell? equalTheirs;
 
-    for (var row = 0; row < rowCount; row++) {
+    for (var row = scanTop; row < scanBottom; row++) {
       final base = row * cols;
       var first = -1;
       var last = -1;
-      for (var col = 0; col < cols; col++) {
+      for (var col = scanLeft; col < scanRight; col++) {
         final cell = mine[base + col];
         final previousCell = theirs[base + col];
         if (identical(cell, previousCell) ||

@@ -16,6 +16,14 @@ import 'terminal_image_encoder.dart';
 
 /// Presents rendered frames as diffed ANSI bytes on [sink].
 final class AnsiFramePresenter implements FramePresenter {
+  // The ANSI path diffs the two buffers the loop already holds, so a carried
+  // buffer serves it exactly as well as a cleared one — and carrying lets the
+  // render tree skip subtrees whose cells are still valid where they sit.
+  // Surfaces that keep their own mirror (the serve wire) answer true and keep
+  // self-contained frames.
+  @override
+  bool get requiresSelfContainedFrames => false;
+
   AnsiFramePresenter({
     required AnsiSink sink,
     required AnsiRenderer renderer,

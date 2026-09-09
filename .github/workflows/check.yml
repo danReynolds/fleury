@@ -46,6 +46,24 @@ jobs:
         env:
           FLEURY_VERIFY_REPAINT_CACHE: '1'
         run: dart test
+      - name: Incremental-paint verification (fleury suite)
+        # Re-runs the core suite with every carried-forward frame compared, cell
+        # for cell, against a full repaint of the same tree. This is the only
+        # check that can see the failure incremental paint makes possible: a
+        # subtree that keeps cells from the previous frame leaves a buffer that
+        # matches what was painted, so frame damage — derived by comparing the
+        # two buffers — reports no change. The screen is wrong and everything
+        # downstream agrees it is right.
+        #
+        # `-x integration`: the verifier only ever fires in a test that renders
+        # through FleuryTester, and the integration tag is the suite's
+        # subprocess/PTY tests — seconds each, no in-process painting. Running
+        # them a third time bought no coverage and pushed this job past its
+        # 30-minute cap.
+        working-directory: packages/fleury
+        env:
+          FLEURY_VERIFY_INCREMENTAL_PAINT: '1'
+        run: dart test -x integration
       - name: Perf gates (fast suite)
         run: dart tool/fleury_dev.dart benchmark gates
 

@@ -59,6 +59,24 @@ abstract interface class FramePresenter {
   /// construction — [FramePresentInfo.plan] is null then.
   bool get wantsPresentationPlan;
 
+  /// Whether this surface needs every frame buffer to be SELF-CONTAINED —
+  /// cleared and fully repainted — rather than carried forward from the frame
+  /// before it.
+  ///
+  /// Defaults to true, which is the conservative answer and preserves the
+  /// contract every presenter was written against. A surface that keeps its own
+  /// mirror of the screen and rebuilds it from a frame needs that frame to
+  /// stand alone; `fleury serve` does, because coalescing means the wire's
+  /// previous frame is not always the loop's. The ANSI path does not: it diffs
+  /// the two buffers the loop already holds, so a carried buffer is exactly as
+  /// good and lets the render tree skip subtrees whose cells are still valid
+  /// where they sit (see `IncrementalPaint`).
+  ///
+  /// This is the frame contract made explicit. It used to be implicit and
+  /// universal — "you always get a cleared buffer" — which is why carrying one
+  /// forward could not be a property of the loop alone.
+  bool get requiresSelfContainedFrames => true;
+
   /// Presents one rendered frame.
   void presentFrame(TuiRenderedFrame frame, FramePresentInfo info);
 
@@ -388,6 +406,12 @@ final class FrameDriver {
     try {
       frame = _frameLoop.render(
         size: size,
+        // Two conditions, and both are contracts rather than switches: the
+        // render tree is the only painter that can erase what it stops
+        // painting, and the presenter is the only party that knows whether it
+        // needs a self-contained frame. The backstop render below paints raw
+        // cells and deliberately does not opt in.
+        paintsIncrementally: !_presenter.requiresSelfContainedFrames,
         paint: (next) {
           RenderLayoutDebugStats.beginFrame(enabled: debugWatching);
           RepaintBoundaryDebugStats.beginFrame(enabled: debugWatching);

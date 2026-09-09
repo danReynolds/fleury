@@ -1370,7 +1370,7 @@ const String _remoteClientJsBase64 =
     'PWYKXy5yPWcKXy53PWgKXy54PWl9LApkaDpmdW5jdGlvbiBkaChhLGIpe3RoaXMuYT1hCnRoaXMuYj1ifSwKYjM6ZnVuY3Rpb24g'
     'YjMoYSxiLGMpe3RoaXMuYT1hCnRoaXMuYj1iCnRoaXMuYz1jfSwKakIoYSl7dmFyIHM9QS5uKFtdLHQuZzgpCnJldHVybiBuZXcg'
     'QS5mVChhLEEuY0YoYS5hKmEuYixCLnYsITEsdC5kSiksQS54KHQuTix0LmJVKSxzKX0sCmZUOmZ1bmN0aW9uIGZUKGEsYixjLGQp'
-    'e3ZhciBfPXRoaXMKXy5hPWEKXy5iPWIKXy5jPWMKXy5kPWQKXy5mPSExCl8ueT1fLng9Xy53PV8ucj0wfSwKbTEoYSl7c3dpdGNo'
+    'e3ZhciBfPXRoaXMKXy5hPWEKXy5iPWIKXy5jPWMKXy5kPWQKXy53PSExCl8uUT1fLno9Xy55PV8ueD0wfSwKbTEoYSl7c3dpdGNo'
     'KGEpe2Nhc2UiXHUyNTAyIjpjYXNlIlx1MjU1MSI6cmV0dXJuIDMKY2FzZSJcdTI1MDAiOmNhc2UiXHUyNTUwIjpyZXR1cm4gMTIK'
     'Y2FzZSJcdTI1NmQiOmNhc2UiXHUyNTBjIjpjYXNlIlx1MjU1NCI6cmV0dXJuIDYKY2FzZSJcdTI1NmUiOmNhc2UiXHUyNTEwIjpj'
     'YXNlIlx1MjU1NyI6cmV0dXJuIDEwCmNhc2UiXHUyNTcwIjpjYXNlIlx1MjUxNCI6Y2FzZSJcdTI1NWEiOnJldHVybiA1CmNhc2Ui'
@@ -5376,7 +5376,7 @@ const String _remoteClientJsBase64 =
 /// SDK-independent fingerprint of the client's source closure at build time.
 /// The freshness gate compares this instead of the compiled bytes (which vary
 /// by SDK). Regenerated with the bundle.
-const String remoteClientSourceFingerprint = 'f71cf7e367d89477';
+const String remoteClientSourceFingerprint = 'fc63904f7a1b7c26';
 
 /// The compiled client JavaScript bytes.
 Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);

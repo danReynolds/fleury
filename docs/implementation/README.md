@@ -100,6 +100,7 @@ reactive TUI vision.
 - [RFC 0013: Capability and security contract](../rfcs/0013-capability-security-contract.md)
 - [RFC 0014: Text editing v2](../rfcs/0014-text-editing-v2.md)
 - [RFC 0024: Derived geometry](../rfcs/0024-derived-geometry.md)
+- [RFC 0026: Incremental paint](../rfcs/0026-incremental-paint.md)
 
 ## Workstream Trackers
 

@@ -84,6 +84,9 @@ final class SampleFrameHost {
     var paintFinished = 0;
     final frame = _loop.render(
         size: size,
+        // The ANSI presenter accepts carried-forward frames, so the terminal
+        // path renders incrementally; this host stands in for it.
+        paintsIncrementally: true,
         paint: (buffer) {
           _router.beginFrame();
           // Match TuiRuntime's input transaction in this unpublished host.

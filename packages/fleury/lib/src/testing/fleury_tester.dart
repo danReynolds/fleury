@@ -33,6 +33,8 @@ import '../foundation/geometry.dart';
 import '../foundation/key.dart' show UniqueKey;
 import '../rendering/cell.dart';
 import '../rendering/cell_buffer.dart';
+import '../rendering/render_repaint_boundary.dart'
+    show RepaintBoundaryDebugStats;
 import '../rendering/render_object.dart';
 import '../rendering/surface_capabilities.dart';
 import '../rendering/width_policy.dart' show TextPresentationPolicy;
@@ -753,11 +755,72 @@ class FleuryTester {
     // With a ticker registered this is a no-op; the tick publishes instead.
     _publishFrameLatch();
     final buffer = CellBuffer(viewportSize);
+    // Render like the frame loop does, not like a one-off snapshot. When
+    // incremental paint is on, the loop hands the painter the PREVIOUS frame
+    // carried forward and lets the tree repaint only what changed; a harness
+    // that always hands over a cleared buffer would exercise the full-repaint
+    // branch and leave every skip untested. Carrying it here puts the whole
+    // widget suite on the incremental path, where a stale carried cell shows
+    // up as a wrong `renderToString` in whichever test already asserts on it.
+    //
+    // A fresh buffer is still allocated and returned each time — callers hold
+    // frames across renders — so this copies rather than swapping.
+    final previous = _previousFrame;
+    if (IncrementalPaint.enabled &&
+        previous != null &&
+        previous.size == viewportSize) {
+      buffer.copyFrom(previous, CellOffset.zero);
+      buffer.carriesPreviousFrame = true;
+      previous.isFrameBuffer = true;
+    }
+    buffer.isFrameBuffer = true;
+    buffer.resetDamageTracking();
+    IncrementalPaint.beginPass();
     _pointerRouter.beginFrame();
-    _owner.renderFrame(_root!, buffer);
+    final rootRender = _owner.renderFrame(_root!, buffer);
     _pointerRouter.endFrame();
+    if (IncrementalPaint.verifyAgainstFullRepaint &&
+        buffer.carriesPreviousFrame &&
+        !IncrementalPaint.dirtiedDuringPass) {
+      // Paint the same tree the old way and require the two agree. A cleared
+      // buffer carries nothing, so every node repaints — no dirty bookkeeping
+      // to reset, and the comparison is against the very thing incremental
+      // paint claims to reproduce. Painting through the root render object
+      // rather than through `renderFrame` deliberately skips build, layout and
+      // the paint-pass participants: they already ran for this frame, and
+      // running them twice would publish each fact twice.
+      // OBSERVING: the tree is painted but no bookkeeping is touched, so this
+      // extra walk cannot decide the next frame's skips. (It used to record an
+      // empty footprint for every node — the walk measures footprints from
+      // what the buffer says was written — and the next frame then skipped
+      // everything, leaving holes wherever damage had erased. 127 tests
+      // "diverged", every one of them the checker's own doing.)
+      //
+      // Not counted either: this is a second walk of the same frame, and every
+      // boundary-counter assertion in the suite would double.
+      final check = CellBuffer(viewportSize);
+      RepaintBoundaryDebugStats.withoutRecording(
+        () => IncrementalPaint.observing(
+          () => rootRender.paint(check, CellOffset.zero),
+        ),
+      );
+      final difference = describeFirstCellDifference(buffer, check);
+      if (difference != null) {
+        throw StateError(
+          'incremental paint diverged from a full repaint — $difference.\n'
+          'A subtree kept cells from the previous frame that a repaint would '
+          'have changed: something altered what it paints without marking it '
+          'dirty.',
+        );
+      }
+    }
+    IncrementalPaint.commitPass();
+    _previousFrame = buffer;
     return buffer;
   }
+
+  /// The frame this tester last produced, carried forward into the next one.
+  CellBuffer? _previousFrame;
 
   /// Renders the current tree and stringifies the buffer with one
   /// row per line. Leading cells write their grapheme, continuation
@@ -1001,6 +1064,7 @@ class FleuryTester {
       root.unmount();
     }
     _root = null;
+    _previousFrame = null;
     // A layout-time swap in the final pump can leave deactivated subtrees
     // unfinalized; drain so their State.dispose runs and cannot leak
     // timers/subscriptions into the next test.

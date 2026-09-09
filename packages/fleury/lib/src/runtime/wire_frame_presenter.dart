@@ -9,6 +9,12 @@ import 'tui_frame_loop.dart';
 
 /// Presents rendered frames as wire plans through a [RemoteSurfaceSink].
 final class WireFramePresenter implements FramePresenter {
+  // The wire keeps its OWN mirror of the screen and rebuilds it from the
+  // frames it receives, and coalescing means the wire's previous frame is not
+  // always the loop's — so each frame has to stand alone.
+  @override
+  bool get requiresSelfContainedFrames => true;
+
   WireFramePresenter(this._sink, {CellRect? Function()? readCaret})
     : _readCaret = readCaret;
 

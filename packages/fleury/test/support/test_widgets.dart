@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/src/rendering/render_object.dart' show IncrementalPaint;
 import 'package:fleury/src/rendering/render_repaint_boundary.dart'
     show RepaintBoundaryCacheVerification;
 import 'package:fleury/fleury_test_support.dart';
@@ -38,6 +39,17 @@ void testWidgets(
       // repaints every hit — the whole cost the cache exists to avoid.
       RepaintBoundaryCacheVerification.enabled =
           Platform.environment['FLEURY_VERIFY_REPAINT_CACHE'] == '1';
+      // This package's suite runs the incremental path: it is the only place
+      // the mode is exercised while it is off by default, and running it here
+      // is what keeps the verifier below meaningful rather than vacuous.
+      IncrementalPaint.enabled = true;
+      // The same question one level up: a skipped subtree carries its cells
+      // forward, and if they were stale nothing downstream can tell — frame
+      // damage is derived from the buffer, which matches what was painted.
+      // Repainting the whole tree and comparing is the only check that can
+      // disagree.
+      IncrementalPaint.verifyAgainstFullRepaint =
+          Platform.environment['FLEURY_VERIFY_INCREMENTAL_PAINT'] == '1';
       final tester = FleuryTester(
         animationPolicy: animationPolicy,
         viewportSize: viewportSize,

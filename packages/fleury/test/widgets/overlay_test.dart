@@ -540,7 +540,12 @@ void main() {
       final out2 = tester.renderToString(size: size);
       stats = RepaintBoundaryDebugStats.takeFrameStats();
       expect(stats.repaintedCount, 1);
-      expect(stats.cachedCount, 1);
+      // Every boundary that was REACHED and did not repaint blitted its cache.
+      // Which mechanism spares the idle entry depends on the frame: a
+      // self-contained one walks to the boundary and blits, while a carried
+      // one skips the entry before reaching it — strictly less work, and the
+      // cells below assert the result is the same either way.
+      expect(stats.cachedCount, stats.boundaryCount - stats.repaintedCount);
       expect(out2, contains('base=1'));
       expect(out2, contains('float=1'));
     });

@@ -1,3 +1,5 @@
+import 'package:meta/meta.dart';
+
 import '../foundation/geometry.dart';
 import 'cell.dart';
 import 'cell_buffer.dart';
@@ -67,6 +69,18 @@ final class RepaintBoundaryDebugStats {
   /// [RepaintBoundaryCacheVerification]. Without it a nested boundary records a
   /// second cache hit for one frame and every counter assertion doubles.
   static int _suppressDepth = 0;
+
+  /// Runs [body] with recording suppressed. For verification repaints, which
+  /// walk the tree a second time in the same frame and must not be counted.
+  @internal
+  static T withoutRecording<T>(T Function() body) {
+    _suppressDepth += 1;
+    try {
+      return body();
+    } finally {
+      _suppressDepth -= 1;
+    }
+  }
 
   static void recordPaint({
     required bool repainted,
@@ -251,14 +265,29 @@ class RenderRepaintBoundary extends RenderObject
     }
 
     var cache = _cache;
+    // A local, not `needsPaint = true`. Allocating the cache means this paint
+    // must fill it — a fact about the next few lines, not an invalidation.
+    // Routing it through the setter raised a real dirty mark on a node whose
+    // paint had already cleared its bits, so the mark outlived the frame that
+    // serviced it: the boundary stayed dirty forever, and an ancestor that
+    // later skipped over it tripped the "dirty descendant" invariant.
+    var mustRepaint = needsPaint;
     if (cache == null || cache.size != s) {
       cache = CellBuffer(s);
       _cache = cache;
-      needsPaint = true;
+      mustRepaint = true;
     }
 
     var repainted = false;
-    if (needsPaint) {
+    if (mustRepaint) {
+      // Cleared BEFORE the subtree paints, not after. Painting can itself
+      // raise an invalidation — a lazy list mounting rows, a builder run
+      // during layout-in-paint — and clearing afterwards discarded the mark
+      // that had just been set, so the cache stayed stale for the life of the
+      // app. Cleared first, the mark survives into the next frame, which is
+      // where the tracker's own phase model says a paint-time invalidation
+      // belongs.
+      needsPaint = false;
       final targetCache = cache;
       // Clear untracked, then arm the cache's own damage tracking around the
       // child's paint: the damage rect falls out of the writes themselves —
@@ -279,7 +308,6 @@ class RenderRepaintBoundary extends RenderObject
       _cacheBounds = damage == null
           ? null
           : cache.boundingBoxOfNonEmptyWithin(damage);
-      needsPaint = false;
       repainted = true;
     }
 
@@ -332,7 +360,7 @@ class RenderRepaintBoundary extends RenderObject
       // position is derived from layout rather than the paint offset, so the
       // facts participants publish here are identical to the ones already
       // published this pass — and publishing an unchanged fact notifies nobody.
-      _child!.paint(scratch, CellOffset.zero);
+      IncrementalPaint.observing(() => _child!.paint(scratch, CellOffset.zero));
     } finally {
       RepaintBoundaryDebugStats._suppressDepth -= 1;
     }

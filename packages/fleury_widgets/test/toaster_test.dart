@@ -266,17 +266,22 @@ void main() {
       );
 
       // Enqueue: the entry mounts on the same turn and boundaries engage.
+      // Counted around the frame that MOUNTS the entry, which is the frame in
+      // which the boundaries do their work. A later frame repaints nothing —
+      // incremental paint skips both entries before reaching either boundary —
+      // so counting there would measure the absence of work, not its absence
+      // of engagement.
       Toaster.show(ctx, 'Saved');
-      tester.pump();
-      expect(overlayKey.currentState!.entries, hasLength(2));
       RepaintBoundaryDebugStats.beginFrame(enabled: true);
-      expect(_screen(tester).contains('Saved'), isTrue);
+      tester.pump();
       stats = RepaintBoundaryDebugStats.takeFrameStats();
+      expect(overlayKey.currentState!.entries, hasLength(2));
       expect(
         stats.boundaryCount,
         2,
         reason: 'two visible entries → both boundaries engaged',
       );
+      expect(_screen(tester).contains('Saved'), isTrue);
 
       // Auto-dismiss empties the toasts: the entry unmounts and the
       // overlay returns to single-entry pass-through.

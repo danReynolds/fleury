@@ -568,6 +568,9 @@ class _SelfDirtyingState extends State<_SelfDirtying> {
 }
 
 class _ProbePresenter implements FramePresenter {
+  @override
+  bool get requiresSelfContainedFrames => true;
+
   final frames = <String>[];
 
   @override

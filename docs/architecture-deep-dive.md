@@ -101,6 +101,14 @@ placement against the contract in debug mode and delegates to
 `performPaint` — so every painted frame of every test verifies the two agree.
 See [RFC 0024](rfcs/0024-derived-geometry.md).
 
+Derived geometry is also what makes paint incremental. The frame loop carries
+the previous frame forward instead of clearing, erases the region that changed
+— found by comparing the geometry each node painted at against the geometry
+layout now gives it — and the paint walk skips every subtree whose cells are
+still valid where they sit. "Did this move" is therefore not something a widget
+can forget to report, which is the property the whole scheme rests on. See
+[RFC 0026](rfcs/0026-incremental-paint.md).
+
 ### CellBuffer: frame truth and paint damage
 
 `CellBuffer` is the frame image: a two-dimensional grid where each cell is a

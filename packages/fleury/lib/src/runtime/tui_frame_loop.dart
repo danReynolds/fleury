@@ -36,6 +36,11 @@ final class TuiFrameLoop {
 
   CellBuffer? _frontBuffer;
   CellBuffer? _backBuffer;
+
+  /// The region in which the retired buffer differs from the committed frame,
+  /// or null when that is unknown (a full repaint, a resize, a dropped frame)
+  /// and the whole grid has to be copied to carry forward.
+  CellRect? _staleRegion;
   var _requireFullRepaint = true;
 
   /// Drops the buffer pool and forces the next frame to repaint from scratch.
@@ -78,6 +83,7 @@ final class TuiFrameLoop {
   TuiRenderedFrame? render({
     required CellSize size,
     required TuiFramePaintCallback paint,
+    bool paintsIncrementally = false,
   }) {
     if (size.isEmpty) return null;
     if (_frontBuffer == null || _frontBuffer!.size != size) {
@@ -94,7 +100,59 @@ final class TuiFrameLoop {
     // paying for bookkeeping the presenter no longer consumes. A repaint
     // boundary still arms tracking on its OWN cache, where the question really
     // is "what did I paint" rather than "what must be presented".
-    next.clear();
+    // Carrying the previous frame forward changes this loop's contract with its
+    // painter. The default contract is "you are handed a cleared buffer; paint
+    // everything you want shown", and it is what makes a vacated cell
+    // observable: the cell held content, the clear emptied it, the diff sees a
+    // change. A painter that opts in takes on the other half — it must erase
+    // what it stops painting — and only the render tree can, because only it
+    // knows which node vacated which rectangle. A raw callback cannot, so it
+    // keeps the cleared buffer.
+    // A forced full repaint means the buffers are new or the screen is about to
+    // be wiped: there is no previous frame to carry, and a subtree whose
+    // geometry happens to be unchanged would skip into an empty buffer. Take
+    // the cleared path and let everything repaint.
+    if (IncrementalPaint.enabled && paintsIncrementally) {
+      IncrementalPaint.beginPass();
+    }
+    if (IncrementalPaint.enabled &&
+        paintsIncrementally &&
+        !_requireFullRepaint) {
+      // Carry the previous frame forward rather than clearing. The buffer the
+      // loop already keeps becomes a cache of the whole screen, so a subtree
+      // whose cells are still valid where they sit needs no cache of its own
+      // and no blit — it is simply not painted.
+      // Copy only where the two buffers actually differ. [next] holds the
+      // frame BEFORE last, and the only cells in which it differs from [previous]
+      // are the ones last frame changed — which last frame's own diff already
+      // bounded. Blitting the whole grid to carry it forward cost as much as
+      // clearing it did, on every frame; this makes carrying proportional to
+      // what moved, like everything else here.
+      final stale = _staleRegion;
+      if (stale == null) {
+        next.copyFrom(previous, CellOffset.zero);
+      } else if (!stale.size.isEmpty) {
+        next.copyRectFrom(previous, stale, stale.offset);
+      }
+      next.carriesPreviousFrame = true;
+      // Arm tracking for the paint walk: with the previous frame carried
+      // forward, what each node WRITES is how the walk measures the cells it
+      // owns — geometry cannot answer that for a node whose composite puts
+      // cells somewhere other than where it sits. Reset after the copy so the
+      // copy itself is not counted.
+      next.resetDamageTracking();
+    } else {
+      next.clear();
+      next.carriesPreviousFrame = false;
+      next.resetDamageTracking();
+    }
+    // Until this frame is committed, [next] is not a reference for anything,
+    // and a rendered-but-dropped frame would leave the OTHER buffer stale in a
+    // region no diff described. Cleared here and set from this frame's own
+    // diff at commit.
+    _staleRegion = null;
+    next.isFrameBuffer = true;
+    previous.isFrameBuffer = true;
     // A forced full repaint means the presenter wipes the screen before
     // drawing, so `previous` must describe that wiped screen — otherwise the
     // diff skips every cell that "matches" content the wipe just destroyed,
@@ -112,7 +170,14 @@ final class TuiFrameLoop {
     // Damage is DERIVED, not reported: comparing the two buffers is ground
     // truth, so nothing upstream can under-report by failing to declare what it
     // touched — and no conservative fallback is needed for when it does.
-    final diff = next.diffAgainst(previous);
+    // A carried frame started as a copy of [previous], so the only cells that
+    // can differ are the ones this frame wrote or erased — and the buffer
+    // recorded exactly those. An empty window means nothing was written, which
+    // is a real answer (the frame is unchanged), not "no window".
+    final CellRect? scanWindow = next.carriesPreviousFrame
+        ? (next.takeDamageBounds() ?? CellRect.fromLTWH(0, 0, 0, 0))
+        : null;
+    final diff = next.diffAgainst(previous, within: scanWindow);
     // Scroll detection used to ride on "damage is unbounded", which every
     // relayout published. Exact damage is never unbounded, so the trigger has
     // to be explicit or the terminal's ESC[S path and the surface's row-shift
@@ -159,6 +224,20 @@ final class TuiFrameLoop {
   void commit(TuiRenderedFrame frame) {
     _backBuffer = frame.previous;
     _frontBuffer = frame.next;
+    // What the next frame has to copy to carry this one forward: the buffer it
+    // will paint into is the one just retired, and it differs from this frame
+    // exactly where this frame's diff said.
+    // `diffBounds` is null both for "nothing changed" and for "everything may
+    // have": the first needs no copy at all, the second needs the whole grid.
+    final damage = frame.damage;
+    _staleRegion = damage is FrameUnchanged
+        ? CellRect.fromLTWH(0, 0, 0, 0)
+        : damage.diffBounds;
+    // Only now are the cells this pass painted the reference. A rendered but
+    // uncommitted frame must not let the tree believe its output was kept.
+    if (IncrementalPaint.enabled && frame.next.isFrameBuffer) {
+      IncrementalPaint.commitPass();
+    }
   }
 }
 
