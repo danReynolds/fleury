@@ -223,7 +223,7 @@ void main() {
       expect(copied?.report.result, ClipboardWriteResult.inProcessOnly);
     });
 
-    testWidgets('semantic activate selects a source line', (tester) async {
+    testWidgets('semantic select selects a source line', (tester) async {
       final controller = CodeViewController(initialIndex: 0);
       tester.pumpWidget(
         CodeView(
@@ -240,7 +240,7 @@ void main() {
       var line = tester.semantics().single(
         role: SemanticRole.codeLine,
         label: '  // Builds source diagnostics.',
-        action: SemanticAction.activate,
+        action: SemanticAction.select,
       );
       expect(line.selected, isFalse);
 
@@ -249,7 +249,7 @@ void main() {
             role: SemanticRole.codeLine,
             label: '  // Builds source diagnostics.',
           )
-          .press();
+          .select();
 
       expect(controller.currentIndex, 4);
 

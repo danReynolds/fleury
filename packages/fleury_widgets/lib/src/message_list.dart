@@ -359,7 +359,7 @@ class _MessageListState extends State<MessageList> {
 
   /// Selects a message and reveals it. Following resumes only if the
   /// resulting viewport reaches the end and the policy is still enabled.
-  void _activateAt(int index) {
+  void _selectAt(int index) {
     if (index < 0 || index >= widget.messages.length) return;
     _focusList();
     _controller.currentIndex = index;
@@ -404,7 +404,7 @@ class _MessageListState extends State<MessageList> {
       autofocus: widget.autofocus,
       itemCount: widget.messages.length,
       itemKeyBuilder: (index) => _messageItemKey(widget.messages[index]),
-      onSelect: _activateAt,
+      onSelect: _selectAt,
       itemBuilder: (context, index, activeSelected) {
         final selected = index == _controller.currentIndex;
         return _MessageRow(
@@ -416,7 +416,7 @@ class _MessageListState extends State<MessageList> {
           showTimestamp: widget.showTimestamp,
           maxLineLength: widget.maxLineLength,
           copyEnabled: copyEnabled,
-          onActivate: () => _activateAt(index),
+          onSelect: () => _selectAt(index),
           onCopy: () => _copyAt(index),
         );
       },
@@ -483,7 +483,7 @@ class _MessageRow extends StatelessWidget {
     required this.showTimestamp,
     required this.maxLineLength,
     required this.copyEnabled,
-    required this.onActivate,
+    required this.onSelect,
     required this.onCopy,
   });
 
@@ -495,7 +495,7 @@ class _MessageRow extends StatelessWidget {
   final bool showTimestamp;
   final int? maxLineLength;
   final bool copyEnabled;
-  final VoidCallback onActivate;
+  final VoidCallback onSelect;
   final Future<void> Function() onCopy;
 
   @override
@@ -520,13 +520,13 @@ class _MessageRow extends StatelessWidget {
       value: line.text,
       selected: selected,
       actions: {
-        SemanticAction.activate,
+        SemanticAction.select,
         if (selected && copyEnabled) SemanticAction.copy,
       },
       onAction: (action) async {
         switch (action) {
-          case SemanticAction.activate:
-            onActivate();
+          case SemanticAction.select:
+            onSelect();
             return;
           case SemanticAction.copy:
             if (selected && copyEnabled) await onCopy();

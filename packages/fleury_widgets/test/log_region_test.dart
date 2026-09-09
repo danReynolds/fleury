@@ -211,9 +211,7 @@ void main() {
       expect(copied?.viewIndex, 1);
     });
 
-    testWidgets('semantic activate selects a visible log entry', (
-      tester,
-    ) async {
+    testWidgets('semantic select selects a visible log entry', (tester) async {
       final controller = LogRegionController(followTail: true);
       tester.pumpWidget(
         LogRegion(
@@ -233,13 +231,13 @@ void main() {
       var row = tester.semantics().single(
         role: SemanticRole.listItem,
         label: 'middle row',
-        action: SemanticAction.activate,
+        action: SemanticAction.select,
       );
       expect(row.selected, isFalse);
 
       await tester
           .target(role: SemanticRole.listItem, label: 'middle row')
-          .press();
+          .select();
 
       expect(controller.followTail, isTrue);
       expect(controller.isFollowing, isTrue);

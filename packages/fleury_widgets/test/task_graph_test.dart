@@ -193,7 +193,9 @@ void main() {
       );
       expect(graph.state.selectedTaskId, 'plan');
 
-      await tester.target(role: SemanticRole.task, label: 'Run checks').press();
+      await tester
+          .target(role: SemanticRole.task, label: 'Run checks')
+          .select();
       expect(controller.currentIndex, 1);
 
       tester.render(size: const CellSize(80, 6));
@@ -214,7 +216,7 @@ void main() {
       expect(graph.state['currentIndex'], 1);
     });
 
-    testWidgets('semantic activate selects a task node', (tester) async {
+    testWidgets('semantic select selects a task node', (tester) async {
       final controller = TaskGraphController(initialIndex: 0);
       tester.pumpWidget(
         TaskGraph(
@@ -228,11 +230,13 @@ void main() {
       var task = tester.semantics().single(
         role: SemanticRole.task,
         label: 'Run checks',
-        action: SemanticAction.activate,
+        action: SemanticAction.select,
       );
       expect(task.selected, isFalse);
 
-      await tester.target(role: SemanticRole.task, label: 'Run checks').press();
+      await tester
+          .target(role: SemanticRole.task, label: 'Run checks')
+          .select();
 
       expect(controller.currentIndex, 1);
 
