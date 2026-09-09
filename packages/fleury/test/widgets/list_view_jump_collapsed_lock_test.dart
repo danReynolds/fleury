@@ -31,25 +31,19 @@ void main() {
       final controller = ListController();
       addTearDown(controller.dispose);
 
-      tester.pumpWidget(
-        _list(controller: controller, itemCount: 20, rows: 5),
-      );
+      tester.pumpWidget(_list(controller: controller, itemCount: 20, rows: 5));
       tester.render(size: const CellSize(20, 5));
       expect(controller.currentIndex, 0);
 
       // Collapse the pane to zero rows (split view / hidden panel).
-      tester.pumpWidget(
-        _list(controller: controller, itemCount: 20, rows: 0),
-      );
+      tester.pumpWidget(_list(controller: controller, itemCount: 20, rows: 0));
       tester.render(size: const CellSize(20, 1));
 
       controller.jumpToIndex(12);
       expect(controller.currentIndex, 0, reason: 'jump does not move cursor');
 
       // Re-expand.
-      tester.pumpWidget(
-        _list(controller: controller, itemCount: 20, rows: 5),
-      );
+      tester.pumpWidget(_list(controller: controller, itemCount: 20, rows: 5));
       tester.render(size: const CellSize(20, 5));
 
       final range = controller.visibleRange;
@@ -78,26 +72,20 @@ void main() {
       final controller = ListController();
       addTearDown(controller.dispose);
 
-      tester.pumpWidget(
-        _list(controller: controller, itemCount: 10, rows: 5),
-      );
+      tester.pumpWidget(_list(controller: controller, itemCount: 10, rows: 5));
       tester.render(size: const CellSize(20, 5));
       controller.currentIndex = 4;
       tester.pump();
 
       // Filter / clear → empty. Selection cleared; restore flag set.
-      tester.pumpWidget(
-        _list(controller: controller, itemCount: 0, rows: 5),
-      );
+      tester.pumpWidget(_list(controller: controller, itemCount: 0, rows: 5));
       tester.render(size: const CellSize(20, 5));
       expect(controller.currentIndex, isNull);
 
       controller.jumpToIndex(7);
 
       // Unfilter / refill.
-      tester.pumpWidget(
-        _list(controller: controller, itemCount: 10, rows: 5),
-      );
+      tester.pumpWidget(_list(controller: controller, itemCount: 10, rows: 5));
       tester.render(size: const CellSize(20, 5));
 
       final range = controller.visibleRange;

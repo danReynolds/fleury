@@ -163,6 +163,14 @@ class InputDispatcher {
   /// false so unbound Option typing still reaches the field.
   bool _suppressNextTextAny = false;
 
+  /// Drops a text suppression armed by an earlier press whose paired
+  /// insertion never arrived. Called when the next press proves the pairing
+  /// window closed.
+  void _dropStaleTextSuppression() {
+    _suppressNextText = null;
+    _suppressNextTextAny = false;
+  }
+
   /// Abandons an in-flight sequence as if the user pressed Esc: held events
   /// replay (a shorter binding fires, a text-owed char reaches the field) and
   /// the pending state clears, dropping any which-key popup. No-op when
@@ -222,6 +230,9 @@ class InputDispatcher {
       // step, so a consuming key view suppresses text and an ignored key view
       // cannot cancel a sequence before its text view is considered.
       final key = event.key;
+      if (key != null && key.type != KeyEventType.up) {
+        _dropStaleTextSuppression();
+      }
       if (key != null) _regularizeAndObserve(key);
       // Stage 4: an armed capture takes the whole batch — key AND text —
       // ahead of every routed lane, but only AFTER the session and the
@@ -282,6 +293,12 @@ class InputDispatcher {
       return _dispatchMouse(event);
     }
     if (event is KeyEvent) {
+      // A suppression armed for the PREVIOUS press is only ever paid by the
+      // insertion paired with it (keydown → input, no keydown between). A new
+      // press means that insertion never came — Chrome/Firefox emit no `input`
+      // for Alt+digit off macOS — so drop it rather than eat the next
+      // unrelated character.
+      if (event.type != KeyEventType.up) _dropStaleTextSuppression();
       _regularizeAndObserve(event);
       if (_tryCapture(event)) return KeyEventResult.handled;
       // Stage 5 (§6): the key walk runs before text. Where printables
@@ -981,9 +998,12 @@ class InputDispatcher {
   }
 
   /// Nearest focus node on the live chain that currently claims typed text.
+  /// Mirrors [_deliverText]'s own filter — capturing a node that cannot take
+  /// input would make the replay drop the held character instead of handing
+  /// it to the claimant that actually owns typing.
   FocusNode? _nearestTextInputOwner() {
     for (final node in focusManager.activeChain()) {
-      if (node.textInputClaimant != null) return node;
+      if (node.textInputClaimant != null && node.acceptsInput) return node;
     }
     return null;
   }

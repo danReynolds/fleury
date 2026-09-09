@@ -804,7 +804,8 @@ class _TextAreaState extends State<TextArea>
           // stream still owes segments to this field — disable must
           // not cut mid-paste. External ExcludeFocus (tabs/routes)
           // still covers the node via the FocusManager walk.
-          excluding: !widget.enabled &&
+          excluding:
+              !widget.enabled &&
               !_paste.isActive &&
               !_controller.hasComposingRange,
           child: content,

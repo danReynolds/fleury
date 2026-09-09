@@ -71,29 +71,31 @@ void main() {
       expect(c.text, 'git ');
     });
 
-    test('killToLineStart cancels before cutting, and does not capture preedit',
-        () {
-      TextEditingModel.killRing = '';
-      final c = TextEditingController(text: 'git ');
-      addTearDown(c.dispose);
-      c.updateComposingText('che');
+    test(
+      'killToLineStart cancels before cutting, and does not capture preedit',
+      () {
+        TextEditingModel.killRing = '';
+        final c = TextEditingController(text: 'git ');
+        addTearDown(c.dispose);
+        c.updateComposingText('che');
 
-      c.killToLineStart();
+        c.killToLineStart();
 
-      expect(
-        c.text,
-        'git ',
-        reason: 'kill mid-composition must cancel first, not cut the preedit',
-      );
-      expect(
-        TextEditingModel.killRing,
-        isEmpty,
-        reason:
-            'cancelling composition is not a kill — the abandoned preedit must '
-            'not enter the process-wide kill ring',
-      );
-      expect(c.composing, TextRange.empty);
-    });
+        expect(
+          c.text,
+          'git ',
+          reason: 'kill mid-composition must cancel first, not cut the preedit',
+        );
+        expect(
+          TextEditingModel.killRing,
+          isEmpty,
+          reason:
+              'cancelling composition is not a kill — the abandoned preedit must '
+              'not enter the process-wide kill ring',
+        );
+        expect(c.composing, TextRange.empty);
+      },
+    );
 
     test('yank cancels the preedit, then yanks against the baseline', () {
       TextEditingModel.killRing = 'ZZ';

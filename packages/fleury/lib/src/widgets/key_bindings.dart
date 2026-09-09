@@ -582,9 +582,9 @@ class _KeyBindingsState extends State<KeyBindings> implements KeyBindingSource {
         // Live capability guard: demotion synthesizes ends then notifies,
         // but a press that races before unregister must not re-latch a
         // hold that can never receive a real release.
-        final caps = KeyboardScope.maybeDispatcherOf(context)
-            ?.keyboardSession
-            .capabilities;
+        final caps = KeyboardScope.maybeDispatcherOf(
+          context,
+        )?.keyboardSession.capabilities;
         if (caps == null || !caps.supportsHeldState) return;
         if (_openHolds.containsKey(event.code)) return;
         for (final binding in widget.bindings) {

@@ -24,11 +24,7 @@ void main() {
       tester.pumpWidget(
         Column(
           children: [
-            TextInput(
-              controller: first,
-              focusNode: firstNode,
-              autofocus: true,
-            ),
+            TextInput(controller: first, focusNode: firstNode, autofocus: true),
             TextInput(controller: second, focusNode: secondNode),
           ],
         ),
@@ -44,11 +40,7 @@ void main() {
       tester.pumpWidget(
         Column(
           children: [
-            TextInput(
-              controller: first,
-              focusNode: firstNode,
-              enabled: false,
-            ),
+            TextInput(controller: first, focusNode: firstNode, enabled: false),
             TextInput(controller: second, focusNode: secondNode),
           ],
         ),

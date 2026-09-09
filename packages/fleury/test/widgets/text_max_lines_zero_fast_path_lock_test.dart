@@ -25,50 +25,44 @@ void main() {
     },
   );
 
-  testWidgets(
-    'maxLines: 0 with softWrap: false also suppresses short text',
-    (tester) {
-      tester.pumpWidget(
-        const SizedBox(
-          width: 20,
-          height: 2,
-          child: Text('hello', softWrap: false, maxLines: 0),
-        ),
-      );
-      final out = tester.renderToString(size: const CellSize(20, 2));
-      expect(
-        out.replaceAll(RegExp(r'\s'), ''),
-        isEmpty,
-        reason:
-            'softWrap: false still hits the single-line fast path; maxLines: 0 '
-            'must not be skipped there either',
-      );
-    },
-  );
+  testWidgets('maxLines: 0 with softWrap: false also suppresses short text', (
+    tester,
+  ) {
+    tester.pumpWidget(
+      const SizedBox(
+        width: 20,
+        height: 2,
+        child: Text('hello', softWrap: false, maxLines: 0),
+      ),
+    );
+    final out = tester.renderToString(size: const CellSize(20, 2));
+    expect(
+      out.replaceAll(RegExp(r'\s'), ''),
+      isEmpty,
+      reason:
+          'softWrap: false still hits the single-line fast path; maxLines: 0 '
+          'must not be skipped there either',
+    );
+  });
 
-  testWidgets(
-    'maxLines: 0 is consistent across short and wrapping inputs',
-    (tester) {
-      // Control: wrapping path already honors maxLines: 0.
-      tester.pumpWidget(
-        const SizedBox(
-          width: 4,
-          height: 3,
-          child: Text('abcdefgh', maxLines: 0),
-        ),
-      );
-      final wrapped = tester.renderToString(size: const CellSize(10, 3));
-      expect(wrapped.replaceAll(RegExp(r'\s'), ''), isEmpty);
+  testWidgets('maxLines: 0 is consistent across short and wrapping inputs', (
+    tester,
+  ) {
+    // Control: wrapping path already honors maxLines: 0.
+    tester.pumpWidget(
+      const SizedBox(width: 4, height: 3, child: Text('abcdefgh', maxLines: 0)),
+    );
+    final wrapped = tester.renderToString(size: const CellSize(10, 3));
+    expect(wrapped.replaceAll(RegExp(r'\s'), ''), isEmpty);
 
-      tester.pumpWidget(const Text('ab', maxLines: 0));
-      final short = tester.renderToString(size: const CellSize(10, 3));
-      expect(
-        short.replaceAll(RegExp(r'\s'), ''),
-        isEmpty,
-        reason:
-            'short text must match the wrapping-path empty result under '
-            'maxLines: 0 — today the fast path paints "ab"',
-      );
-    },
-  );
+    tester.pumpWidget(const Text('ab', maxLines: 0));
+    final short = tester.renderToString(size: const CellSize(10, 3));
+    expect(
+      short.replaceAll(RegExp(r'\s'), ''),
+      isEmpty,
+      reason:
+          'short text must match the wrapping-path empty result under '
+          'maxLines: 0 — today the fast path paints "ab"',
+    );
+  });
 }

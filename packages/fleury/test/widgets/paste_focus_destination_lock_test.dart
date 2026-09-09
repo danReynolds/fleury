@@ -121,30 +121,25 @@ void main() {
       tester.pumpWidget(
         Column(
           children: [
-            TextInput(
-              controller: first,
-              focusNode: firstNode,
-              autofocus: true,
-            ),
+            TextInput(controller: first, focusNode: firstNode, autofocus: true),
             TextInput(controller: second, focusNode: secondNode),
           ],
         ),
       );
       tester.render(size: const CellSize(40, 3));
 
-      tester.dispatcher.dispatch(
-        const TextCompositionEvent.update('に'),
-      );
+      tester.dispatcher.dispatch(const TextCompositionEvent.update('に'));
       expect(first.hasComposingRange, isTrue);
-      expect(first.text.substring(first.composing.start, first.composing.end), 'に');
+      expect(
+        first.text.substring(first.composing.start, first.composing.end),
+        'に',
+      );
 
       secondNode.requestFocus();
       tester.pump();
       expect(secondNode.hasFocus, isTrue);
 
-      tester.dispatcher.dispatch(
-        const TextCompositionEvent.commit('日本'),
-      );
+      tester.dispatcher.dispatch(const TextCompositionEvent.commit('日本'));
       tester.pump();
 
       // Commit must resolve on the field that held the composition, not the

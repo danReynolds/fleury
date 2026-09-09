@@ -24,9 +24,7 @@ void main() {
       late BuildContext ctx;
       var undone = 0;
       tester.pumpWidget(
-        Toaster(
-          child: Focus(autofocus: true, child: _Capture((c) => ctx = c)),
-        ),
+        Toaster(child: Focus(autofocus: true, child: _Capture((c) => ctx = c))),
       );
       tester.render(size: const CellSize(40, 8));
       Toaster.show(

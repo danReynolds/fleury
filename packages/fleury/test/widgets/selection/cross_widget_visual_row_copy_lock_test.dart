@@ -35,42 +35,36 @@ MouseEvent _up(int col, int row) => MouseEvent(
 );
 
 void main() {
-  testWidgets(
-    'side-by-side multi-line Texts copy in visual row order (5.e)',
-    (tester) {
-      SelectedContent? captured;
-      tester.pumpWidget(
-        SelectionArea(
-          onSelectionChanged: (sel) => captured = sel,
-          child: const Row(
-            children: [
-              Text('L1\nL2'),
-              Text('R1\nR2'),
-            ],
-          ),
-        ),
-      );
-      // Each column is 2 cells wide + newline → 2 rows. Row packs left|right.
-      tester.render(size: const CellSize(8, 2));
+  testWidgets('side-by-side multi-line Texts copy in visual row order (5.e)', (
+    tester,
+  ) {
+    SelectedContent? captured;
+    tester.pumpWidget(
+      SelectionArea(
+        onSelectionChanged: (sel) => captured = sel,
+        child: const Row(children: [Text('L1\nL2'), Text('R1\nR2')]),
+      ),
+    );
+    // Each column is 2 cells wide + newline → 2 rows. Row packs left|right.
+    tester.render(size: const CellSize(8, 2));
 
-      // Drag across the whole area so both Selectables are fully selected.
-      tester.sendMouse(_down(0, 0));
-      tester.sendMouse(_drag(5, 1));
-      tester.sendMouse(_up(5, 1));
+    // Drag across the whole area so both Selectables are fully selected.
+    tester.sendMouse(_down(0, 0));
+    tester.sendMouse(_drag(5, 1));
+    tester.sendMouse(_up(5, 1));
 
-      final text = captured?.plainText ?? '';
-      final r1 = text.indexOf('R1');
-      final l2 = text.indexOf('L2');
-      expect(r1, isNonNegative, reason: 'copied text must include R1: $text');
-      expect(l2, isNonNegative, reason: 'copied text must include L2: $text');
-      expect(
-        r1 < l2,
-        isTrue,
-        reason:
-            'visual row order puts R1 (row 0 right) before L2 (row 1 left); '
-            'widget-order join puts all of the left Text first, so L2 '
-            'precedes R1. got: $text',
-      );
-    },
-  );
+    final text = captured?.plainText ?? '';
+    final r1 = text.indexOf('R1');
+    final l2 = text.indexOf('L2');
+    expect(r1, isNonNegative, reason: 'copied text must include R1: $text');
+    expect(l2, isNonNegative, reason: 'copied text must include L2: $text');
+    expect(
+      r1 < l2,
+      isTrue,
+      reason:
+          'visual row order puts R1 (row 0 right) before L2 (row 1 left); '
+          'widget-order join puts all of the left Text first, so L2 '
+          'precedes R1. got: $text',
+    );
+  });
 }

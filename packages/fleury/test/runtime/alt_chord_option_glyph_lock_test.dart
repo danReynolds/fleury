@@ -24,10 +24,7 @@ void main() {
           manager: manager,
           child: KeyBindings(
             bindings: [
-              KeyBinding(
-                KeySequence.alt.char('1'),
-                onTrigger: (_) => jumped++,
-              ),
+              KeyBinding(KeySequence.alt.char('1'), onTrigger: (_) => jumped++),
             ],
             child: TextInput(controller: controller, autofocus: true),
           ),
@@ -75,10 +72,7 @@ void main() {
           manager: manager,
           child: KeyBindings(
             bindings: [
-              KeyBinding(
-                KeySequence.alt.char('1'),
-                onTrigger: (_) => jumped++,
-              ),
+              KeyBinding(KeySequence.alt.char('1'), onTrigger: (_) => jumped++),
             ],
             child: TextInput(controller: controller, autofocus: true),
           ),
@@ -168,10 +162,7 @@ void main() {
 
       expect(
         dispatcher.dispatch(
-          const KeyEvent(
-            KeyCode.char('s'),
-            modifiers: {KeyModifier.ctrl},
-          ),
+          const KeyEvent(KeyCode.char('s'), modifiers: {KeyModifier.ctrl}),
         ),
         KeyEventResult.handled,
       );

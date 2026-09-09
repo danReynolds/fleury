@@ -15,9 +15,7 @@ void main() {
       var appSaw = 0;
       tester.pumpWidget(
         KeyBindings(
-          bindings: [
-            KeyBinding(KeyCode.x, onTrigger: (_) => appSaw++),
-          ],
+          bindings: [KeyBinding(KeyCode.x, onTrigger: (_) => appSaw++)],
           child: KeyBindings(
             modal: true,
             bindings: [
@@ -29,9 +27,7 @@ void main() {
       );
       tester.render(size: const CellSize(40, 3));
 
-      tester.sendKey(
-        const KeyEvent(KeyCode.x, modifiers: {KeyModifier.ctrl}),
-      );
+      tester.sendKey(const KeyEvent(KeyCode.x, modifiers: {KeyModifier.ctrl}));
       expect(
         tester.dispatcher.hasPendingSequence,
         isTrue,

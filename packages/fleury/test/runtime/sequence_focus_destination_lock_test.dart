@@ -38,9 +38,7 @@ void main() {
       expect(aNode.hasFocus, isTrue);
 
       // Arm a multi-step chord, then hold a text-origin continuation.
-      tester.sendKey(
-        const KeyEvent(KeyCode.x, modifiers: {KeyModifier.ctrl}),
-      );
+      tester.sendKey(const KeyEvent(KeyCode.x, modifiers: {KeyModifier.ctrl}));
       tester.dispatcher.dispatch(const TextInputEvent('a'));
       expect(a.text, isEmpty, reason: 'held while the chord lives');
       expect(tester.dispatcher.hasPendingSequence, isTrue);
@@ -65,7 +63,8 @@ void main() {
       expect(
         b.text,
         isEmpty,
-        reason: 'newly focused field must not absorb another field\'s held char',
+        reason:
+            'newly focused field must not absorb another field\'s held char',
       );
     },
   );

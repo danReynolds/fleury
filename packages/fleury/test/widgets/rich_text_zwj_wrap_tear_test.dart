@@ -40,7 +40,10 @@ void main() {
     // line when the full cluster fits after lowering... but 6 > 4 so it must
     // either overflow-clip as a unit or wrap as a unit (not mid-cluster).
     // Mid-cluster wrap is the bug (4.b).
-    expect(nonEmpty.length, 1,
-        reason: 'lowered ZWJ cluster must not tear across lines; got $nonEmpty');
+    expect(
+      nonEmpty.length,
+      1,
+      reason: 'lowered ZWJ cluster must not tear across lines; got $nonEmpty',
+    );
   });
 }

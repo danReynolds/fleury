@@ -625,8 +625,7 @@ class RenderRichText extends RenderObject
             var unitEnd = i + 1;
             var unitWidth = g.width;
             if (groupId != null) {
-              while (unitEnd < wordEnd &&
-                  _glyphs[unitEnd].groupId == groupId) {
+              while (unitEnd < wordEnd && _glyphs[unitEnd].groupId == groupId) {
                 unitWidth += _glyphs[unitEnd].width;
                 unitEnd++;
               }

@@ -93,7 +93,8 @@ void main() {
       expect(
         second.text,
         isEmpty,
-        reason: 'disabled-owner paste must not spill into the newly focused field',
+        reason:
+            'disabled-owner paste must not spill into the newly focused field',
       );
       expect(
         first.text,

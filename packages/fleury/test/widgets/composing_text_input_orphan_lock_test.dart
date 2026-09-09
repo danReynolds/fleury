@@ -9,43 +9,42 @@ import 'package:test/test.dart';
 import '../support/harness.dart';
 
 void main() {
-  testWidgets(
-    'typed text mid-composition cancels the preedit, then inserts',
-    (tester) {
-      final c = TextEditingController(text: 'git ');
-      addTearDown(c.dispose);
-      tester.pumpWidget(
-        SizedBox(
-          width: 40,
-          height: 1,
-          child: TextInput(controller: c, autofocus: true),
-        ),
-      );
-      tester.render(size: const CellSize(40, 3));
+  testWidgets('typed text mid-composition cancels the preedit, then inserts', (
+    tester,
+  ) {
+    final c = TextEditingController(text: 'git ');
+    addTearDown(c.dispose);
+    tester.pumpWidget(
+      SizedBox(
+        width: 40,
+        height: 1,
+        child: TextInput(controller: c, autofocus: true),
+      ),
+    );
+    tester.render(size: const CellSize(40, 3));
 
-      tester.dispatcher.dispatch(const TextCompositionEvent.update('che'));
-      expect(c.text, 'git che');
-      expect(c.composing, const TextRange(start: 4, end: 7));
+    tester.dispatcher.dispatch(const TextCompositionEvent.update('che'));
+    expect(c.text, 'git che');
+    expect(c.composing, const TextRange(start: 4, end: 7));
 
-      tester.type('X');
+    tester.type('X');
 
-      expect(
-        c.text,
-        'git X',
-        reason:
-            'onTextInput mid-composition must cancel the sticky preedit '
-            'before inserting — same contract paste already honors',
-      );
-      expect(c.composing, TextRange.empty);
+    expect(
+      c.text,
+      'git X',
+      reason:
+          'onTextInput mid-composition must cancel the sticky preedit '
+          'before inserting — same contract paste already honors',
+    );
+    expect(c.composing, TextRange.empty);
 
-      tester.dispatcher.dispatch(const TextCompositionEvent.cancel());
-      expect(
-        c.text,
-        'git X',
-        reason: 'a late peer cancel must not find an orphaned base to restore',
-      );
-    },
-  );
+    tester.dispatcher.dispatch(const TextCompositionEvent.cancel());
+    expect(
+      c.text,
+      'git X',
+      reason: 'a late peer cancel must not find an orphaned base to restore',
+    );
+  });
 
   testWidgets(
     'backspace mid-composition cancels the preedit instead of editing it',
@@ -94,9 +93,7 @@ void main() {
 
       tester.dispatcher.dispatch(const TextCompositionEvent.update('che'));
       tester.type('X');
-      tester.dispatcher.dispatch(
-        const TextCompositionEvent.commit('checkout'),
-      );
+      tester.dispatcher.dispatch(const TextCompositionEvent.commit('checkout'));
 
       expect(
         c.text,

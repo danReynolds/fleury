@@ -1108,10 +1108,7 @@ void main() {
       // orphan and must be ignored (16g covers cancel-while-composing).
       h.dispatcher.dispatch(const TextCompositionEvent.cancel());
 
-      expect(events, [
-        'composition-update:あ',
-        'composition-commit:亜',
-      ]);
+      expect(events, ['composition-update:あ', 'composition-commit:亜']);
     });
 
     test(

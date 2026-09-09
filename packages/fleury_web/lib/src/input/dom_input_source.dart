@@ -1033,10 +1033,7 @@ KeyEvent? keyEventFromBrowser(web.KeyboardEvent event) {
   // (Digit1 → '1') so first-party accelerators like Tabs Alt+1..9 work on
   // serve/browser. Without a twin, leave the press to the text channel —
   // Option-produced glyphs and IME must not become spurious Alt+char keys.
-  if (event.altKey &&
-      !event.ctrlKey &&
-      !event.metaKey &&
-      key.length == 1) {
+  if (event.altKey && !event.ctrlKey && !event.metaKey && key.length == 1) {
     final twin = position?.usTwin;
     if (twin == null) return null;
     return KeyEvent(

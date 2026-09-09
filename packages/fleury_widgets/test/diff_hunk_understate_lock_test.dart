@@ -24,14 +24,8 @@ diff --git a/f b/f
       reason:
           'understated @@ counts must not demote remaining hunk body to metadata',
     );
-    expect(
-      doc.rows.where((r) => r.kind == DiffLineKind.deletion).length,
-      1,
-    );
-    expect(
-      doc.rows.where((r) => r.kind == DiffLineKind.addition).length,
-      1,
-    );
+    expect(doc.rows.where((r) => r.kind == DiffLineKind.deletion).length, 1);
+    expect(doc.rows.where((r) => r.kind == DiffLineKind.addition).length, 1);
   });
 
   test('blank mid-hunk line preserves hunkIndex for following body', () {

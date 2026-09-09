@@ -15,29 +15,26 @@ void main() {
     final parser = InputParser();
     final sink = _Sink();
     parser.feed(const [0x1B, 0x09], sink);
-    expect(
-      sink.events,
-      [const KeyEvent(KeyCode.tab, modifiers: {KeyModifier.alt})],
-    );
+    expect(sink.events, [
+      const KeyEvent(KeyCode.tab, modifiers: {KeyModifier.alt}),
+    ]);
   });
 
   test('ESC+Enter is Alt+Enter', () {
     final parser = InputParser();
     final sink = _Sink();
     parser.feed(const [0x1B, 0x0D], sink);
-    expect(
-      sink.events,
-      [const KeyEvent(KeyCode.enter, modifiers: {KeyModifier.alt})],
-    );
+    expect(sink.events, [
+      const KeyEvent(KeyCode.enter, modifiers: {KeyModifier.alt}),
+    ]);
   });
 
   test('ESC+a remains Alt+a (control)', () {
     final parser = InputParser();
     final sink = _Sink();
     parser.feed(const [0x1B, 0x61], sink);
-    expect(
-      sink.events,
-      [const KeyEvent(KeyCode.char('a'), modifiers: {KeyModifier.alt})],
-    );
+    expect(sink.events, [
+      const KeyEvent(KeyCode.char('a'), modifiers: {KeyModifier.alt}),
+    ]);
   });
 }

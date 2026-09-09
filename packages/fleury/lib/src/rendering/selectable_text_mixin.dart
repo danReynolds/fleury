@@ -502,22 +502,58 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
       return const {};
     }
     final lines = selectionLines;
+    final groups = loweredGroups;
+    final flat = groups.isEmpty ? null : _flatText();
     final out = <int, String>{};
     var offset = 0;
     for (var i = 0; i < lines.length; i++) {
       final line = lines[i];
       final lineEnd = offset + line.length;
       if (range.start < lineEnd && range.end > offset) {
-        final start = (range.start - offset).clamp(0, line.length);
-        final end = (range.end - offset).clamp(0, line.length);
+        final start = offset + (range.start - offset).clamp(0, line.length);
+        final end = offset + (range.end - offset).clamp(0, line.length);
         if (start < end) {
-          out[bounds.offset.row + i] = line.substring(start, end);
+          // Answer from SOURCE, exactly as getSelectedContent does: slicing
+          // the display line would hand back lowered atoms and drop the
+          // joiners of a ZWJ cluster (RFC 0019 decision 3).
+          final text = flat == null
+              ? line.substring(start - offset, end - offset)
+              : _sourceSlice(flat, start, end, groups);
+          if (text.isNotEmpty) out[bounds.offset.row + i] = text;
         }
       }
       if (range.end <= lineEnd) break;
       offset = lineEnd + 1; // +1 for implicit newline
     }
     return out;
+  }
+
+  /// `flat[start..end)` with every lowered group spliced back to its
+  /// canonical joined source, exactly once.
+  ///
+  /// A group whose atoms straddle a forced line break belongs to the row it
+  /// STARTS on: continuation rows skip it rather than repeating the source.
+  String _sourceSlice(
+    String flat,
+    int start,
+    int end,
+    List<({int start, int end, String source})> groups,
+  ) {
+    final out = StringBuffer();
+    var cursor = start;
+    for (final group in groups) {
+      if (group.end <= start) continue;
+      if (group.start >= end) break;
+      if (group.start >= cursor) {
+        out.write(flat.substring(cursor, group.start));
+        out.write(group.source);
+      }
+      // Straddling group that opened on an earlier row: its source was
+      // already emitted there, so only advance past its atoms here.
+      if (group.end > cursor) cursor = group.end;
+    }
+    if (cursor < end) out.write(flat.substring(cursor, end));
+    return out.toString();
   }
 
   @override
@@ -551,23 +587,14 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
       }
       return SelectedContent(plainText: out.toString());
     }
-    final flat = _flatText();
     // Copy answers from SOURCE (RFC 0019 decision 3): each lowered group's
     // flat range — which may contain a forced line break between atoms — is
     // spliced back to its canonical joined cluster, exactly once. The range
     // is already group-snapped by getSelectionRange, so groups intersecting
     // it are fully contained.
-    final out = StringBuffer();
-    var cursor = range.start;
-    for (final group in groups) {
-      if (group.end <= range.start) continue;
-      if (group.start >= range.end) break;
-      out.write(flat.substring(cursor, group.start));
-      out.write(group.source);
-      cursor = group.end;
-    }
-    out.write(flat.substring(cursor, range.end));
-    return SelectedContent(plainText: out.toString());
+    return SelectedContent(
+      plainText: _sourceSlice(_flatText(), range.start, range.end, groups),
+    );
   }
 
   @override

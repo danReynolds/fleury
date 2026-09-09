@@ -156,10 +156,7 @@ void main() {
           children: [
             ExcludeFocus(
               excluding: true,
-              child: TextInput(
-                controller: hidden,
-                focusNode: hiddenNode,
-              ),
+              child: TextInput(controller: hidden, focusNode: hiddenNode),
             ),
             TextInput(controller: visible, focusNode: visibleNode),
           ],

@@ -255,6 +255,5 @@ void main() {
       },
       viewportSize: const CellSize(6, 1),
     );
-
   });
 }
