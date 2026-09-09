@@ -156,6 +156,13 @@ class InputDispatcher {
   /// swallowing unrelated input.
   String? _suppressNextText;
 
+  /// One-shot suppress for a handled Alt/Ctrl printable on a split key/text
+  /// surface. Unlike [_suppressNextText], the following insertion may be an
+  /// Option glyph (Alt+1 → "¡") that does not equal the US-twin character
+  /// ("1"), so equality alone cannot drop it. Unhandled Alt must leave this
+  /// false so unbound Option typing still reaches the field.
+  bool _suppressNextTextAny = false;
+
   /// Abandons an in-flight sequence as if the user pressed Esc: held events
   /// replay (a shorter binding fires, a text-owed char reaches the field) and
   /// the pending state clears, dropping any which-key popup. No-op when
@@ -253,6 +260,11 @@ class InputDispatcher {
       return KeyEventResult.ignored;
     }
     if (event is TextInputEvent) {
+      if (_suppressNextTextAny) {
+        _suppressNextTextAny = false;
+        _suppressNextText = null;
+        return KeyEventResult.handled;
+      }
       final suppressed = _suppressNextText;
       if (suppressed != null) {
         _suppressNextText = null;
@@ -300,6 +312,19 @@ class InputDispatcher {
         }
         // Unconsumed: the text half still owns it, exactly as before.
         return KeyEventResult.ignored;
+      }
+      // Handled Alt/Ctrl printables on split surfaces (DOM): the Option glyph
+      // or a leftover text half may still arrive as a separate TextInputEvent
+      // after the shortcut fires. Arm any-next suppression — character match
+      // alone is wrong (Alt+1 twin is "1", glyph is "¡"). Unhandled Alt does
+      // not arm, so unbound Option typing still inserts.
+      if (result == KeyEventResult.handled &&
+          keyboardSession.capabilities.reportsPrintableKeys &&
+          event.code.isCharacter &&
+          event.type != KeyEventType.up &&
+          (event.modifiers.contains(KeyModifier.alt) ||
+              event.modifiers.contains(KeyModifier.ctrl))) {
+        _suppressNextTextAny = true;
       }
       return result;
     }
