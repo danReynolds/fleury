@@ -67,7 +67,15 @@ final class FormController extends ChangeNotifier {
       if (!isCurrent()) return false;
       _setSubmitting(true);
       if (!isCurrent()) return false;
-      await host.submit();
+      // Contain onSubmit failures so fire-and-forget submit
+      // (SemanticAction.submit → unawaited) does not leave them as
+      // unhandled async errors. Validation errors still propagate via
+      // the validate completer. State resets in the outer finally.
+      try {
+        await host.submit();
+      } catch (_) {
+        return false;
+      }
       return true;
     } finally {
       if (_submissionGeneration == generation) {
