@@ -775,7 +775,10 @@ class _TextInputState extends State<TextInput>
     applyEdit: (text, {required coalesce}) =>
         _edit(() => _controller.paste(text, coalesce: coalesce)),
     isAttached: () => mounted,
-    onProgressChanged: () => setState(() {}),
+    onProgressChanged: () {
+      if (!widget.enabled && !_paste.isActive) _syncClaimants();
+      setState(() {});
+    },
     schedulePostFrame: _schedulePasteStep,
   );
 
@@ -842,7 +845,14 @@ class _TextInputState extends State<TextInput>
   /// claimant would make the hint bar hide keys that actually work. A
   /// read-only field keeps claiming (it swallows input, honestly).
   void _syncClaimants() {
-    final claimant = widget.enabled ? this : null;
+    // Keep claiming while an in-flight sticky paste or IME composition still
+    // owes terminal segments/events to this field, even if enabled flipped
+    // false mid-flight. Clearing immediately would drop continuations and let
+    // commits fall through after sticky decline.
+    final claimant =
+        widget.enabled || _paste.isActive || _controller.hasComposingRange
+        ? this
+        : null;
     _focusNode.textInputClaimant = claimant;
     _focusNode.textCompositionClaimant = claimant;
   }
@@ -869,8 +879,12 @@ class _TextInputState extends State<TextInput>
     }
     if (widget.focusNode != oldWidget.focusNode) {
       // Stop claiming text on the old node before letting it go.
-      _focusNode.textInputClaimant = null;
-      _focusNode.textCompositionClaimant = null;
+      if (identical(_focusNode.textInputClaimant, this)) {
+        _focusNode.textInputClaimant = null;
+      }
+      if (identical(_focusNode.textCompositionClaimant, this)) {
+        _focusNode.textCompositionClaimant = null;
+      }
       if (_ownsFocusNode) _focusNode.dispose();
       _focusNode =
           widget.focusNode ??
@@ -887,10 +901,13 @@ class _TextInputState extends State<TextInput>
         _focusNode.unfocus();
       }
     }
-    if ((!widget.enabled || widget.readOnly) &&
-        (oldWidget.enabled != widget.enabled ||
-            oldWidget.readOnly != widget.readOnly)) {
-      _paste.discard();
+    if (oldWidget.enabled != widget.enabled ||
+        oldWidget.readOnly != widget.readOnly) {
+      // Read-only always invalidates the destination. Disabled keeps an
+      // in-flight sticky paste applying on this controller through end.
+      if (widget.readOnly || (widget.enabled == false && !_paste.isActive)) {
+        _paste.discard();
+      }
     }
     if (widget.blinkInterval != oldWidget.blinkInterval ||
         widget.enableBlink != oldWidget.enableBlink) {
@@ -1375,7 +1392,9 @@ class _TextInputState extends State<TextInput>
 
   @override
   KeyEventResult onPasteEvent(PasteEvent event) {
-    if (!widget.enabled) return KeyEventResult.ignored;
+    // Disabled fields decline NEW pastes, but must keep accepting segments of
+    // a sticky paste already in flight on this controller.
+    if (!widget.enabled && !_paste.isActive) return KeyEventResult.ignored;
     if (widget.readOnly) return KeyEventResult.handled;
     _resetHistoryBrowsing();
     _paste.start(
@@ -1386,12 +1405,15 @@ class _TextInputState extends State<TextInput>
         preserveText: _controller.preserveText,
       ),
     );
+    if (!widget.enabled && !_paste.isActive) _syncClaimants();
     return KeyEventResult.handled;
   }
 
   @override
   KeyEventResult onTextCompositionUpdate(String text) {
-    if (!widget.enabled) return KeyEventResult.ignored;
+    if (!widget.enabled && !_controller.hasComposingRange) {
+      return KeyEventResult.ignored;
+    }
     if (widget.readOnly) return KeyEventResult.handled;
     _paste.finish();
     _resetHistoryBrowsing();
@@ -1401,21 +1423,27 @@ class _TextInputState extends State<TextInput>
 
   @override
   KeyEventResult onTextCompositionCommit(String? text) {
-    if (!widget.enabled) return KeyEventResult.ignored;
+    if (!widget.enabled && !_controller.hasComposingRange) {
+      return KeyEventResult.ignored;
+    }
     if (widget.readOnly) return KeyEventResult.handled;
     _paste.finish();
     _resetHistoryBrowsing();
     _edit(() => _controller.commitComposing(text: text, singleLine: true));
+    if (!widget.enabled) _syncClaimants();
     return KeyEventResult.handled;
   }
 
   @override
   KeyEventResult onTextCompositionCancel() {
-    if (!widget.enabled) return KeyEventResult.ignored;
+    if (!widget.enabled && !_controller.hasComposingRange) {
+      return KeyEventResult.ignored;
+    }
     if (widget.readOnly) return KeyEventResult.handled;
     _paste.finish();
     _resetHistoryBrowsing();
     _edit(() => _controller.cancelComposing());
+    if (!widget.enabled) _syncClaimants();
     return KeyEventResult.handled;
   }
 
@@ -1427,8 +1455,14 @@ class _TextInputState extends State<TextInput>
     widget.completionController?.removeListener(_onCompletionChange);
     _controller.removeListener(_onControllerChange);
     if (_ownsController) _controller.dispose();
-    _focusNode.textInputClaimant = null;
-    _focusNode.textCompositionClaimant = null;
+    // Only clear claimants we still own — a remounted sibling may already
+    // have claimed the same FocusNode during this rebuild.
+    if (identical(_focusNode.textInputClaimant, this)) {
+      _focusNode.textInputClaimant = null;
+    }
+    if (identical(_focusNode.textCompositionClaimant, this)) {
+      _focusNode.textCompositionClaimant = null;
+    }
     if (_ownsFocusNode) _focusNode.dispose();
     _formRegistration?.release(this);
     super.dispose();

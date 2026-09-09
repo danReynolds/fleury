@@ -183,7 +183,10 @@ class _TextAreaState extends State<TextArea>
     applyEdit: (text, {required coalesce}) =>
         _edit(() => _controller.paste(text, coalesce: coalesce)),
     isAttached: () => mounted,
-    onProgressChanged: () => setState(() {}),
+    onProgressChanged: () {
+      if (!widget.enabled && !_paste.isActive) _syncClaimants();
+      setState(() {});
+    },
     schedulePostFrame: _schedulePasteStep,
   );
 
@@ -228,7 +231,10 @@ class _TextAreaState extends State<TextArea>
   /// area declines printables (they fall through to chord matching), so a
   /// registered claimant would make the hint bar hide keys that still work.
   void _syncClaimants() {
-    final claimant = widget.enabled ? this : null;
+    final claimant =
+        widget.enabled || _paste.isActive || _controller.hasComposingRange
+        ? this
+        : null;
     _focusNode.textInputClaimant = claimant;
     _focusNode.textCompositionClaimant = claimant;
   }
@@ -246,8 +252,12 @@ class _TextAreaState extends State<TextArea>
       _controller.addListener(_onChange);
     }
     if (widget.focusNode != oldWidget.focusNode) {
-      _focusNode.textInputClaimant = null;
-      _focusNode.textCompositionClaimant = null;
+      if (identical(_focusNode.textInputClaimant, this)) {
+        _focusNode.textInputClaimant = null;
+      }
+      if (identical(_focusNode.textCompositionClaimant, this)) {
+        _focusNode.textCompositionClaimant = null;
+      }
       if (_ownsFocusNode) _focusNode.dispose();
       _focusNode =
           widget.focusNode ??
@@ -264,10 +274,11 @@ class _TextAreaState extends State<TextArea>
         _focusNode.unfocus();
       }
     }
-    if ((!widget.enabled || widget.readOnly) &&
-        (oldWidget.enabled != widget.enabled ||
-            oldWidget.readOnly != widget.readOnly)) {
-      _paste.discard();
+    if (oldWidget.enabled != widget.enabled ||
+        oldWidget.readOnly != widget.readOnly) {
+      if (widget.readOnly || (widget.enabled == false && !_paste.isActive)) {
+        _paste.discard();
+      }
     }
     _formRegistration?.updateClaim(
       this,
@@ -428,7 +439,7 @@ class _TextAreaState extends State<TextArea>
 
   @override
   KeyEventResult onPasteEvent(PasteEvent event) {
-    if (!widget.enabled) return KeyEventResult.ignored;
+    if (!widget.enabled && !_paste.isActive) return KeyEventResult.ignored;
     if (widget.readOnly) return KeyEventResult.handled;
     _paste.start(
       event,
@@ -438,12 +449,15 @@ class _TextAreaState extends State<TextArea>
         preserveText: _controller.preserveText,
       ),
     );
+    if (!widget.enabled && !_paste.isActive) _syncClaimants();
     return KeyEventResult.handled;
   }
 
   @override
   KeyEventResult onTextCompositionUpdate(String text) {
-    if (!widget.enabled) return KeyEventResult.ignored;
+    if (!widget.enabled && !_controller.hasComposingRange) {
+      return KeyEventResult.ignored;
+    }
     if (widget.readOnly) return KeyEventResult.handled;
     _paste.finish();
     _edit(() => _controller.updateComposingText(text));
@@ -452,19 +466,25 @@ class _TextAreaState extends State<TextArea>
 
   @override
   KeyEventResult onTextCompositionCommit(String? text) {
-    if (!widget.enabled) return KeyEventResult.ignored;
+    if (!widget.enabled && !_controller.hasComposingRange) {
+      return KeyEventResult.ignored;
+    }
     if (widget.readOnly) return KeyEventResult.handled;
     _paste.finish();
     _edit(() => _controller.commitComposing(text: text));
+    if (!widget.enabled) _syncClaimants();
     return KeyEventResult.handled;
   }
 
   @override
   KeyEventResult onTextCompositionCancel() {
-    if (!widget.enabled) return KeyEventResult.ignored;
+    if (!widget.enabled && !_controller.hasComposingRange) {
+      return KeyEventResult.ignored;
+    }
     if (widget.readOnly) return KeyEventResult.handled;
     _paste.finish();
     _edit(() => _controller.cancelComposing());
+    if (!widget.enabled) _syncClaimants();
     return KeyEventResult.handled;
   }
 
@@ -615,8 +635,12 @@ class _TextAreaState extends State<TextArea>
     _paste.discard();
     _controller.removeListener(_onChange);
     if (_ownsController) _controller.dispose();
-    _focusNode.textInputClaimant = null;
-    _focusNode.textCompositionClaimant = null;
+    if (identical(_focusNode.textInputClaimant, this)) {
+      _focusNode.textInputClaimant = null;
+    }
+    if (identical(_focusNode.textCompositionClaimant, this)) {
+      _focusNode.textCompositionClaimant = null;
+    }
     if (_ownsFocusNode) _focusNode.dispose();
     _formRegistration?.release(this);
     super.dispose();

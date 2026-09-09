@@ -278,6 +278,10 @@ class _TabsState extends State<Tabs> {
                     onAction: (action) {
                       switch (action) {
                         case SemanticAction.focus:
+                          // Advertised focus must select this tab — same path
+                          // as arrows / Alt+N / click. Focusing the strip alone
+                          // leaves focused=false on inactive tabs.
+                          _controller.index = i;
                           _focusNode.requestFocus();
                           return;
                         case SemanticAction.select:

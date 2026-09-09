@@ -69,6 +69,15 @@ abstract interface class Selectable implements Listenable {
   /// or null if [geometry] reports nothing selected.
   SelectedContent? getSelectedContent();
 
+  /// Selected fragments keyed by absolute screen row.
+  ///
+  /// Used by [SelectionContainerDelegate.getSelectedText] to join
+  /// cross-widget selections in visual reading order (row by row)
+  /// rather than whole-widget order. Empty when nothing is selected.
+  /// Implementations that cannot split by row may return a single
+  /// entry at [cellBounds]'s top row with the full selected text.
+  Map<int, String> selectedTextByScreenRow();
+
   /// Returns the absolute (start, end) range of the live selection as
   /// it sits inside this leaf's content (character offsets), or null
   /// when nothing is selected.

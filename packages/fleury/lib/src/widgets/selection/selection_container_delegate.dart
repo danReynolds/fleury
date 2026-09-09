@@ -214,31 +214,42 @@ class SelectionContainerDelegate extends ChangeNotifier
     _selection = Selection(start: start, end: end);
   }
 
-  /// Concatenates the selected portions of all Selectables (in
-  /// reading order) into one user-facing string. Empty when no
+  /// Concatenates the selected portions of all Selectables in visual
+  /// reading order (row by row, then left to right). Empty when no
   /// Selectable reports any selected content.
   ///
-  /// Inserts a `\n` between portions whose Selectables live on
-  /// different screen rows — so selecting across two paragraphs
-  /// produces a multiline string the user can paste back as
-  /// separated paragraphs. Portions on the same row are joined
-  /// without a separator (continuing inline text).
+  /// Multi-line Selectables contribute per screen row so side-by-side
+  /// columns copy as `L1R1\nL2R2` rather than whole-widget
+  /// `L1\nL2R1\nR2`. Portions on the same row are joined without a
+  /// separator (same-row separator is a product call; callers that
+  /// need gaps can post-process).
   String getSelectedText() {
     assert(() {
       debugSelectedTextBuilds++;
       return true;
     }());
-    final buf = StringBuffer();
-    int? lastRow;
-    for (final s in _selectablesInReadingOrder()) {
-      final c = s.getSelectedContent();
-      if (c == null) continue;
-      final myRow = s.cellBounds?.offset.row;
-      if (lastRow != null && myRow != null && myRow != lastRow) {
-        buf.write('\n');
+    // row -> list of (col, text) fragments on that screen row
+    final byRow = <int, List<({int col, String text})>>{};
+    for (final s in _selectables) {
+      final pieces = s.selectedTextByScreenRow();
+      if (pieces.isEmpty) continue;
+      final col = s.cellBounds?.offset.col ?? 0;
+      for (final entry in pieces.entries) {
+        byRow.putIfAbsent(entry.key, () => <({int col, String text})>[]).add((
+          col: col,
+          text: entry.value,
+        ));
       }
-      buf.write(c.plainText);
-      if (myRow != null) lastRow = myRow;
+    }
+    if (byRow.isEmpty) return '';
+    final rows = byRow.keys.toList()..sort();
+    final buf = StringBuffer();
+    for (var i = 0; i < rows.length; i++) {
+      if (i > 0) buf.write('\n');
+      final fragments = byRow[rows[i]]!..sort((a, b) => a.col.compareTo(b.col));
+      for (final fragment in fragments) {
+        buf.write(fragment.text);
+      }
     }
     return buf.toString();
   }

@@ -986,9 +986,7 @@ class InputDispatcher {
     final pasteId = event.pasteId;
 
     // In-flight segmented paste: stay glued to the original owner.
-    if (pasteId != null &&
-        _pasteOwnerId == pasteId &&
-        _pasteOwner != null) {
+    if (pasteId != null && _pasteOwnerId == pasteId && _pasteOwner != null) {
       final owner = _pasteOwner!;
       final result = _offerPasteTo(owner, event);
       if (event.isFinal || !owner.acceptsInput) {
@@ -1059,17 +1057,17 @@ class InputDispatcher {
         return KeyEventResult.ignored;
       case TextCompositionEventKind.commit:
       case TextCompositionEventKind.cancel:
+        // Terminal events stay glued to the sticky owner. Declining (e.g. the
+        // owner was disabled and dropped its claimant) must NOT fall through
+        // to the live chain — that is how an orphan commit lands on whoever
+        // gained focus next.
         final owner = _compositionOwner;
+        if (owner == null) {
+          return KeyEventResult.ignored;
+        }
+        final result = _offerCompositionTo(owner, event);
         _clearCompositionOwner();
-        if (owner != null) {
-          final result = _offerCompositionTo(owner, event);
-          if (result == KeyEventResult.handled) return result;
-        }
-        for (final node in focusManager.activeChain()) {
-          final result = _offerCompositionTo(node, event);
-          if (result == KeyEventResult.handled) return result;
-        }
-        return KeyEventResult.ignored;
+        return result;
     }
   }
 

@@ -285,9 +285,12 @@ class _ToasterState extends State<Toaster> {
         dot,
         message,
         const Text('   '),
-        Text(
-          action.label,
-          style: CellStyle(foreground: theme.colorScheme.primary, bold: true),
+        GestureDetector(
+          onTap: () => _activateAction(toast),
+          child: Text(
+            action.label,
+            style: CellStyle(foreground: theme.colorScheme.primary, bold: true),
+          ),
         ),
         Text(' [${action.key.hintLabel}]', style: theme.mutedStyle),
       ],

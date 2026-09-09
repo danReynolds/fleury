@@ -495,6 +495,32 @@ mixin SelectableTextMixin on RenderObject implements Selectable {
   }
 
   @override
+  Map<int, String> selectedTextByScreenRow() {
+    final range = getSelectionRange();
+    final bounds = selectionPaintRect;
+    if (range == null || range.start == range.end || bounds == null) {
+      return const {};
+    }
+    final lines = selectionLines;
+    final out = <int, String>{};
+    var offset = 0;
+    for (var i = 0; i < lines.length; i++) {
+      final line = lines[i];
+      final lineEnd = offset + line.length;
+      if (range.start < lineEnd && range.end > offset) {
+        final start = (range.start - offset).clamp(0, line.length);
+        final end = (range.end - offset).clamp(0, line.length);
+        if (start < end) {
+          out[bounds.offset.row + i] = line.substring(start, end);
+        }
+      }
+      if (range.end <= lineEnd) break;
+      offset = lineEnd + 1; // +1 for implicit newline
+    }
+    return out;
+  }
+
+  @override
   SelectedContent? getSelectedContent() {
     final range = getSelectionRange();
     if (range == null || range.start == range.end) return null;
