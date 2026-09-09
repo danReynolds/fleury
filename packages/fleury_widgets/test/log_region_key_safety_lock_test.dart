@@ -50,43 +50,48 @@ void main() {
     expect(tester.renderToString(), contains('second'));
   });
 
-  testWidgets('unique ids are still used for row identity', (tester) {
+  testWidgets('unique ids keep the cursor on the same logical row', (
+    tester,
+  ) async {
     final controller = LogRegionController();
     addTearDown(controller.dispose);
-    tester.pumpWidget(
-      SizedBox(
-        width: 30,
-        height: 4,
-        child: LogRegion(
-          controller: controller,
-          entries: const [
-            LogEntry(message: 'a', id: 10),
-            LogEntry(message: 'b', id: 11),
-            LogEntry(message: 'c', id: 12),
-          ],
-        ),
-      ),
+    Widget build(List<LogEntry> entries) => SizedBox(
+      width: 30,
+      height: 6,
+      child: LogRegion(controller: controller, entries: entries),
     );
-    tester.render(size: const CellSize(30, 4));
-    controller.currentIndex = 2;
+
+    tester.pumpWidget(
+      build(const [
+        LogEntry(message: 'aaa', id: 10),
+        LogEntry(message: 'bbb', id: 11),
+        LogEntry(message: 'ccc', id: 12),
+        LogEntry(message: 'ddd', id: 13),
+      ]),
+    );
+    tester.render(size: const CellSize(30, 6));
+    controller.currentIndex = 1; // 'bbb'
     tester.pump();
 
-    // Drop the head: with id identity the selection stays on 'c'.
+    // Head trim of one: 'bbb' moves from index 1 to index 0. Positional
+    // identity would leave the cursor on index 1, which is now 'ccc' — a
+    // different logical line — and no clamp hides the difference because
+    // both indices are still in range.
     tester.pumpWidget(
-      SizedBox(
-        width: 30,
-        height: 4,
-        child: LogRegion(
-          controller: controller,
-          entries: const [
-            LogEntry(message: 'b', id: 11),
-            LogEntry(message: 'c', id: 12),
-          ],
-        ),
-      ),
+      build(const [
+        LogEntry(message: 'bbb', id: 11),
+        LogEntry(message: 'ccc', id: 12),
+        LogEntry(message: 'ddd', id: 13),
+      ]),
     );
-    tester.render(size: const CellSize(30, 4));
+    tester.render(size: const CellSize(30, 6));
 
-    expect(tester.renderToString(), contains('c'));
+    expect(
+      controller.currentIndex,
+      0,
+      reason:
+          'the cursor follows bbb to its new index; keying on the stable id '
+          'is the whole point of itemKeyBuilder here',
+    );
   });
 }

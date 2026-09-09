@@ -52,14 +52,27 @@ List<String> _paintPlain(String text, int cols, int rows) {
 }
 
 void main() {
-  test('a cluster that fits a line is never torn', () {
-    // 6 cells of family, 8 cells of room: it fits, so it stays on one row.
-    final lines = _paintRich(_family, 8, 3);
-    final nonEmpty = lines.where((l) => l.contains(RegExp(r'[^\.]'))).toList();
+  test('a cluster that fits a line is never torn mid-word', () {
+    // The case that actually exercises the wrap change: the WORD is 11 cells
+    // and does not fit in 8, so it takes the hard-break path — but the
+    // cluster itself is only 6 and does fit, so it must move to the next line
+    // whole rather than being split at the break point.
+    final rich = _paintRich('abcde$_family', 8, 3);
+    final plain = _paintPlain('abcde$_family', 8, 3);
+
     expect(
-      nonEmpty.length,
-      1,
-      reason: 'a fitting lowered cluster must not split; got $nonEmpty',
+      rich,
+      plain,
+      reason:
+          'Text and RichText must break the same way; before the fix '
+          'RichText tore the cluster (abcde+man / woman+child) while '
+          'RenderText moved it whole',
+    );
+    final clusterRow = rich.indexWhere((l) => l.contains('\u{1F468}'));
+    expect(
+      rich[clusterRow],
+      contains('\u{1F466}'),
+      reason: 'all three components land on the same row',
     );
   });
 
