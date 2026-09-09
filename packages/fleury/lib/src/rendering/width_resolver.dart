@@ -1,4 +1,7 @@
+import 'dart:typed_data';
+
 import 'package:characters/characters.dart';
+import 'package:meta/meta.dart';
 
 import 'width_policy.dart';
 import 'width_tables.dart';
@@ -145,7 +148,50 @@ final class DefaultWidthResolver implements WidthResolver {
         _ => 1,
       };
 
+  /// Width of a lone BMP code unit the caller has already proven is a complete
+  /// cluster (see [isStandaloneCodeUnit]).
+  ///
+  /// `@internal`, and deliberately NOT on the [WidthResolver] interface. The
+  /// interface is an `abstract interface class`, so even a concrete member
+  /// there becomes required of every external implementer; and the precondition
+  /// this carries — that the code unit really is a whole cluster — is one the
+  /// signature cannot enforce, so it has no business being public. Callers that
+  /// have not proven it must use [widthOfGrapheme]. The paint loop type-tests
+  /// for this class once per line.
+  @internal
+  int widthOfCodeUnit(int codeUnit, CellWidthPolicy policy) {
+    if (codeUnit >= 0x20 && codeUnit <= 0x7E) return 1;
+    final scalarClass = _scalarClassOf(codeUnit);
+    return scalarClass == 1 ? 0 : _scalarWidth(scalarClass, policy);
+  }
+
   int _scalarClassOf(int scalar) {
+    // U+2000..U+2FFF is where a TUI's non-ASCII lives: box drawing, block
+    // elements, geometric shapes, arrows, symbols. The general path binary
+    // searches the whole range table per character; memoizing this one block
+    // makes the hot case a single array read. Stored as class + 1 so 0 means
+    // "not computed" — class 0 is itself a legal answer. 4 KiB, filled on
+    // demand, and the source table is immutable so the memo cannot go stale.
+    if (scalar >= 0x2000 && scalar < 0x3000) {
+      final index = scalar - 0x2000;
+      final cached = _symbolScalarClasses[index];
+      if (cached != 0) return cached - 1;
+      final computed = _searchScalarClass(scalar);
+      // Stores are truncated to 8 bits silently, so a class that did not fit
+      // would be cached wrong and read back wrong forever after. Classes are a
+      // small fixed set today; this is the guard that keeps that an assumption
+      // the code states rather than one it relies on.
+      assert(
+        computed >= 0 && computed < 255,
+        'scalar class $computed does not fit the memo',
+      );
+      _symbolScalarClasses[index] = computed + 1;
+      return computed;
+    }
+    return _searchScalarClass(scalar);
+  }
+
+  int _searchScalarClass(int scalar) {
     var lo = 0;
     var hi = scalarWidthRanges.length ~/ 3 - 1;
     while (lo <= hi) {
@@ -347,3 +393,6 @@ bool _isFreestanding(int c) =>
     (c >= 0x2190 && c <= 0x22FF) || // arrows, math operators
     (c >= 0x2600 && c <= 0x26FF) || // miscellaneous symbols
     (c >= 0x4E00 && c <= 0x9FFF); // CJK unified ideographs
+
+/// Memo backing `DefaultWidthResolver._scalarClassOf` over U+2000..U+2FFF.
+final Uint8List _symbolScalarClasses = Uint8List(0x1000);

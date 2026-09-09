@@ -264,13 +264,16 @@ final class AnsiRenderer {
     var anyDirty = false;
 
     void appendCell(int col, int row) {
-      final newCell = next.atColRow(col, row);
+      // One index for both buffers: renderDiff has already asserted they share
+      // a size, and the caller's rectangle is clamped to it.
+      final index = row * size.cols + col;
+      final newCell = cellAtIndex(next, index);
 
       // Continuation cells emit nothing — the leading's grapheme
       // advances the terminal cursor across them.
       if (newCell.role == CellRole.continuation) return;
 
-      final oldCell = previous.atColRow(col, row);
+      final oldCell = cellAtIndex(previous, index);
 
       // Overlay cells are owned by an inline-image placement: the
       // presenter's image encoder paints pixels over the region
@@ -385,7 +388,7 @@ final class AnsiRenderer {
       final isWide =
           newCell.role == CellRole.leading &&
           col + 1 < size.cols &&
-          next.atColRow(col + 1, row).role == CellRole.continuation;
+          cellAtIndex(next, index + 1).role == CellRole.continuation;
       cursorCol = col + (isWide ? 2 : 1);
 
       // Invalidate the tracked cursor — forcing the next dirty cell to
