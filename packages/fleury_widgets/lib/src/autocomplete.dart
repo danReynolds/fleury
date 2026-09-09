@@ -28,6 +28,9 @@ class Autocomplete<T extends Object> extends StatefulWidget {
     this.semanticLabel,
     this.semanticState = SemanticState.empty,
     this.style = CellStyle.none,
+    this.enabled = true,
+    this.readOnly = false,
+    this.validationError,
     this.onSelect,
     this.maxVisible = 6,
   });
@@ -74,6 +77,15 @@ class Autocomplete<T extends Object> extends StatefulWidget {
   /// Text-field base styling, plus optional hover, focus, disabled, and invalid
   /// state entries from [CellStyle.interactive].
   final CellStyle style;
+
+  /// Whether the field accepts focus and user input.
+  final bool enabled;
+
+  /// Whether the field can receive focus but not edit text.
+  final bool readOnly;
+
+  /// Optional validation error displayed by the underlying input.
+  final String? validationError;
 
   /// Called with the selected option when the user picks a suggestion.
   final void Function(T value)? onSelect;
@@ -232,7 +244,10 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
       return;
     }
     final shouldOpen =
-        _filtered.isNotEmpty && _dismissedQuery != _controller.text;
+        widget.enabled &&
+        !widget.readOnly &&
+        _filtered.isNotEmpty &&
+        _dismissedQuery != _controller.text;
     if (!shouldOpen) {
       _close();
       return;
@@ -269,6 +284,7 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
   }
 
   void _pick() {
+    if (!widget.enabled || widget.readOnly) return;
     if (_entry == null) return;
     final i = _list.currentIndex;
     if (i == null || i < 0 || i >= _filtered.length) return;
@@ -495,6 +511,9 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
           onChanged: widget.onChanged,
           placeholder: widget.placeholder,
           style: widget.style,
+          enabled: widget.enabled,
+          readOnly: widget.readOnly,
+          validationError: widget.validationError,
           semanticLabel: widget.fieldSemanticLabel,
           semanticState: widget.semanticState,
           keymap: _textKeymap,

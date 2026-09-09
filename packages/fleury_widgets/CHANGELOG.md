@@ -3,7 +3,9 @@
 - `NumberInput` forwards `enabled` and `readOnly` to the inner `TextInput`,
   matching `PasswordInput`, `CompletionTextInput`, and `TextArea`. Disable with
   those flags — `onChanged: null` does not disable numeric entry.
-
+- `Autocomplete` forwards `enabled`, `readOnly`, and `validationError` to the
+  inner `TextInput`, matching `PasswordInput`, `CompletionTextInput`, and
+  `TextArea`. Disabled and read-only fields do not open the suggestion menu.
 
 - `Button` and `ButtonVariant` moved into core. This package continues to
   reexport them unchanged. Core buttons and companion value controls share
@@ -32,7 +34,6 @@
   `jumpToIndex` preserves selection, and following incoming output no longer
   selects each new row. `scrollToBottom` catches up and enables following.
   Semantic state now includes both the policy and whether it is currently active.
-
 
 - `FormController.isBusy` reports the whole accepted submit attempt, including
   validation, so submit and Back actions can be guarded immediately. Field
