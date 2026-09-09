@@ -18,6 +18,20 @@ CellStyle _paintStyle(CellStyle style) => plainCellStyle(style);
 /// placement share one width decision; clipping and wide-pair repair remain
 /// owned by the buffer. The caller supplies a sanitized single grapheme and
 /// a width of 0, 1, or 2 under its current surface policy.
+@internal
+int paintMeasuredGrapheme(
+  CellBuffer buffer,
+  int col,
+  int row,
+  String grapheme,
+  int width,
+  CellStyle style,
+) {
+  assert(width >= 0 && width <= 2);
+  if (width == 0 || !buffer._containsColRow(col, row)) return 0;
+  return buffer._placeGrapheme(col, row, grapheme, width, _paintStyle(style));
+}
+
 /// Row-major cell read that skips the bounds check.
 ///
 /// For callers that have already established the index is in range — the diff
@@ -33,20 +47,6 @@ Cell cellAtIndex(CellBuffer buffer, int index) {
     'cellAtIndex($index) out of range for ${buffer._size}',
   );
   return buffer._cells[index];
-}
-
-@internal
-int paintMeasuredGrapheme(
-  CellBuffer buffer,
-  int col,
-  int row,
-  String grapheme,
-  int width,
-  CellStyle style,
-) {
-  assert(width >= 0 && width <= 2);
-  if (width == 0 || !buffer._containsColRow(col, row)) return 0;
-  return buffer._placeGrapheme(col, row, grapheme, width, _paintStyle(style));
 }
 
 /// Supplies [color] to painted glyphs in [rect] without their own background.

@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:characters/characters.dart';
+import 'package:meta/meta.dart';
 
 import 'width_policy.dart';
 import 'width_tables.dart';
@@ -150,9 +151,14 @@ final class DefaultWidthResolver implements WidthResolver {
   /// Width of a lone BMP code unit the caller has already proven is a complete
   /// cluster (see [isStandaloneCodeUnit]).
   ///
-  /// Deliberately NOT on the [WidthResolver] interface: that is an
-  /// `abstract interface class`, so even a concrete member becomes required of
-  /// every implementer. The paint loop type-tests once per line instead.
+  /// `@internal`, and deliberately NOT on the [WidthResolver] interface. The
+  /// interface is an `abstract interface class`, so even a concrete member
+  /// there becomes required of every external implementer; and the precondition
+  /// this carries — that the code unit really is a whole cluster — is one the
+  /// signature cannot enforce, so it has no business being public. Callers that
+  /// have not proven it must use [widthOfGrapheme]. The paint loop type-tests
+  /// for this class once per line.
+  @internal
   int widthOfCodeUnit(int codeUnit, CellWidthPolicy policy) {
     if (codeUnit >= 0x20 && codeUnit <= 0x7E) return 1;
     final scalarClass = _scalarClassOf(codeUnit);
@@ -171,6 +177,14 @@ final class DefaultWidthResolver implements WidthResolver {
       final cached = _symbolScalarClasses[index];
       if (cached != 0) return cached - 1;
       final computed = _searchScalarClass(scalar);
+      // Stores are truncated to 8 bits silently, so a class that did not fit
+      // would be cached wrong and read back wrong forever after. Classes are a
+      // small fixed set today; this is the guard that keeps that an assumption
+      // the code states rather than one it relies on.
+      assert(
+        computed >= 0 && computed < 255,
+        'scalar class $computed does not fit the memo',
+      );
       _symbolScalarClasses[index] = computed + 1;
       return computed;
     }
