@@ -168,9 +168,29 @@ final List<Story> storybookStories = _perWidgetStories(<Story>[
       'Autocomplete',
       'CompletionTextInput',
     ],
+    controls: const <StoryControl>[
+      StoryControl.toggle(id: 'disabled', label: 'Disabled'),
+      StoryControl.toggle(id: 'readOnly', label: 'Read-only'),
+    ],
+    variants: const <StoryVariant>[
+      StoryVariant(
+        id: 'disabled',
+        label: 'Disabled',
+        description: 'NumberInput and peers render disabled (enabled: false).',
+        controlValues: <String, Object?>{'disabled': 1},
+      ),
+      StoryVariant(
+        id: 'readOnly',
+        label: 'Read-only',
+        description: 'NumberInput and peers accept focus but reject edits.',
+        controlValues: <String, Object?>{'readOnly': 1},
+      ),
+    ],
     initialHeight: 17,
     builder: (context) => _TextEntryStory(
       selectedWidgetName: context.selectedWidgetName,
+      enabled: !context.enabled('disabled'),
+      readOnly: context.enabled('readOnly'),
       onAction: context.action,
     ),
   ),
@@ -1635,10 +1655,14 @@ class _SelectionInputsStoryState extends State<_SelectionInputsStory> {
 class _TextEntryStory extends StatefulWidget {
   const _TextEntryStory({
     required this.selectedWidgetName,
+    required this.enabled,
+    required this.readOnly,
     required this.onAction,
   });
 
   final String? selectedWidgetName;
+  final bool enabled;
+  final bool readOnly;
   final StoryActionRecorder onAction;
 
   @override
@@ -1681,7 +1705,12 @@ class _TextEntryStoryState extends State<_TextEntryStory> {
     return switch (widget.selectedWidgetName) {
       'TextArea' => SizedBox(
         height: 5,
-        child: TextArea(controller: _multi, placeholder: 'Multi-line note'),
+        child: TextArea(
+          controller: _multi,
+          placeholder: 'Multi-line note',
+          enabled: widget.enabled,
+          readOnly: widget.readOnly,
+        ),
       ),
       'NumberInput' => NumberInput(
         initialValue: 42,
@@ -1689,11 +1718,15 @@ class _TextEntryStoryState extends State<_TextEntryStory> {
         max: 100,
         placeholder: 'Budget',
         semanticLabel: 'Budget',
+        enabled: widget.enabled,
+        readOnly: widget.readOnly,
       ),
       'PasswordInput' => PasswordInput(
         controller: _secret,
         placeholder: 'Token',
         semanticLabel: 'API token',
+        enabled: widget.enabled,
+        readOnly: widget.readOnly,
       ),
       'Autocomplete' => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1720,11 +1753,15 @@ class _TextEntryStoryState extends State<_TextEntryStory> {
         provider: _complete,
         placeholder: 'Completion query',
         showOnEmptyQuery: true,
+        enabled: widget.enabled,
+        readOnly: widget.readOnly,
       ),
       _ => TextInput(
         controller: _single,
         placeholder: 'Project name',
         semanticLabel: 'Project name',
+        enabled: widget.enabled,
+        readOnly: widget.readOnly,
       ),
     };
   }

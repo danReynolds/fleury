@@ -1,6 +1,9 @@
-# Changelog
-
 ## 0.1.0
+
+- `NumberInput` forwards `enabled` and `readOnly` to the inner `TextInput`,
+  matching `PasswordInput`, `CompletionTextInput`, and `TextArea`. Disable with
+  those flags — `onChanged: null` does not disable numeric entry.
+
 
 - `Button` and `ButtonVariant` moved into core. This package continues to
   reexport them unchanged. Core buttons and companion value controls share

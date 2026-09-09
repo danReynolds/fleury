@@ -284,6 +284,58 @@ void main() {
       expect(states, contains('value 2, min 0, max 5'));
     });
 
+    testWidgets('disabled field does not autofocus or edit', (tester) {
+      final controller = TextEditingController(text: '7');
+      final calls = <num?>[];
+      tester.pumpWidget(
+        NumberInput(
+          controller: controller,
+          autofocus: true,
+          enabled: false,
+          onChanged: calls.add,
+        ),
+      );
+
+      tester.type('9');
+      tester.paste('8');
+      expect(controller.text, '7');
+      expect(calls, isEmpty);
+
+      final field = tester.semantics().single(
+        role: SemanticRole.textField,
+        enabled: false,
+      );
+      expect(field.focused, isFalse);
+    });
+
+    testWidgets('readOnly field focuses but rejects edits', (tester) {
+      final controller = TextEditingController(text: '42');
+      final calls = <num?>[];
+      tester.pumpWidget(
+        NumberInput(
+          controller: controller,
+          autofocus: true,
+          readOnly: true,
+          onChanged: calls.add,
+        ),
+      );
+
+      final field = tester.semantics().single(
+        role: SemanticRole.textField,
+        focused: true,
+      );
+      expect(field.enabled, isTrue);
+
+      tester.type('9');
+      tester.paste('8');
+      tester.sendKey(const KeyEvent(KeyCode.backspace));
+      expect(controller.text, '42');
+      expect(calls, isEmpty);
+
+      tester.sendKey(const KeyEvent(KeyCode.arrowLeft));
+      expect(controller.caretOffset, 1);
+    });
+
     testWidgets('semantic submit clamps through the existing submit path', (
       tester,
     ) async {

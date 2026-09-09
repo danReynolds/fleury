@@ -228,6 +228,27 @@ render one `Form` for the current screen, and advance from that form's
 survive moving forward and back. Use a nested `Navigator` when the flow needs
 its own back stack; otherwise a simple step value is enough.
 
+## Enabling and disabling controls
+
+Text-family inputs (`TextInput`, `TextArea`, `NumberInput`, `PasswordInput`,
+`CompletionTextInput`) use `enabled` / `readOnly` the same way Flutter's
+`TextField` does:
+
+- `enabled: false` — no focus, no edits, disabled semantics.
+- `readOnly: true` — can focus and navigate the caret, but rejects edits.
+
+Choice controls (`Checkbox`, `Radio`, `Toggle`, `Switch`, `Select`,
+`MultiSelect`, and similar) disable with `onChanged: null`, matching Flutter's
+nullable-callback convention.
+
+`NumberInput.onChanged: null` does **not** disable the field. Omit the callback
+when you do not need parsed updates; pass `enabled: false` or `readOnly: true`
+to lock input.
+
+During form submission, use `FormController.isSubmitting` to make text fields
+read-only or to pass `onChanged: null` on choice controls. Keep fields enabled
+during validation so required-field checks still run.
+
 ## API reference
 
 | API | What it does |
