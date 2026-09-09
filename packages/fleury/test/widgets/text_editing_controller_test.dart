@@ -322,6 +322,65 @@ void main() {
       expect(c.text, 'reset');
     });
 
+    for (final useValue in [false, true]) {
+      for (final current in ['', 'kept']) {
+        test(
+          'same ${useValue ? 'value' : 'text'} assignment clears both '
+          'history stacks with ${current.isEmpty ? 'empty' : 'nonempty'} text',
+          () {
+            final c = TextEditingController(text: 'discarded');
+            addTearDown(c.dispose);
+            c.clear();
+            c.insert(current);
+            c.insert('redo-only');
+            c.undo();
+            expect(c.text, current);
+            expect(c.canUndo, isTrue);
+            expect(c.canRedo, isTrue);
+            var notifications = 0;
+            c.addListener(() => notifications++);
+            void reset() {
+              if (useValue) {
+                c.value = c.value;
+              } else {
+                c.text = c.text;
+              }
+            }
+
+            reset();
+
+            expect(c.canUndo, isFalse);
+            expect(c.canRedo, isFalse);
+            expect(notifications, 1, reason: 'history observers see the reset');
+            c.undo();
+            c.redo();
+            expect(c.text, current);
+            reset();
+            expect(
+              notifications,
+              1,
+              reason: 'an already-reset value is a no-op',
+            );
+          },
+        );
+      }
+    }
+
+    test('same-value assignment also discards the composition baseline', () {
+      final c = TextEditingController(text: 'discarded');
+      addTearDown(c.dispose);
+      c.selection = const TextSelection(baseOffset: 0, extentOffset: 9);
+      c.updateComposingText('replacement');
+      c.value = c.value;
+
+      c.undo();
+      expect(c.text, 'replacement');
+      c.cancelComposing();
+      expect(c.text, 'replacement');
+      expect(c.canUndo, isFalse);
+      expect(c.canRedo, isFalse);
+    });
+
     test('consecutive typed inserts coalesce into one undo step', () {
       final c = TextEditingController();
       c.insert('a', coalesce: true);
@@ -671,18 +730,27 @@ void main() {
   });
 
   group('lifecycle', () {
-    test('dispose is idempotent and keeps the last readable value', () {
+    test('dispose releases the value and history without notifying', () {
       final c = TextEditingController(text: 'hello');
       c.insert('!');
+      c.insert('?');
+      c.undo();
       expect(c.canUndo, isTrue);
+      expect(c.canRedo, isTrue);
+      c.updateComposingText('pending');
+      var notifications = 0;
+      c.addListener(() => notifications++);
 
       c.dispose();
       c.dispose();
 
-      expect(c.text, 'hello!');
-      expect(c.value.text, 'hello!');
+      expect(c.text, isEmpty);
+      expect(c.value, TextEditingValue.empty());
+      expect(c.hasSelection, isFalse);
+      expect(c.hasComposingRange, isFalse);
       expect(c.canUndo, isFalse);
       expect(c.canRedo, isFalse);
+      expect(notifications, 0);
     });
 
     test('mutating after dispose throws a lifecycle error', () {

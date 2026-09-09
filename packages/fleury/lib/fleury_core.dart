@@ -414,6 +414,7 @@ export 'src/widgets/selection/selection_event.dart'
         SelectionGranularEvent,
         SelectionGranularity,
         SelectionResult;
+export 'src/widgets/button.dart' show Button, ButtonVariant;
 export 'src/widgets/spinner.dart' show Spinner, SpinnerStyle;
 export 'src/widgets/text_area.dart' show TextArea;
 export 'src/widgets/text_input.dart'

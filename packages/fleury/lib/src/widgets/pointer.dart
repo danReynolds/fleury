@@ -2,6 +2,7 @@
 import 'package:meta/meta.dart';
 
 import '../foundation/geometry.dart';
+import '../foundation/mouse_cursor.dart';
 import '../rendering/cell_buffer.dart';
 import '../rendering/layout.dart';
 import '../rendering/render_object.dart';
@@ -10,9 +11,7 @@ import 'framework.dart';
 import 'focus.dart';
 import '../semantics/semantics.dart';
 
-/// Pointer shapes for hosts that can display them, such as the browser.
-/// Terminal hosts keep their own pointer appearance.
-enum MouseCursor { basic, pointer, text, resizeLeftRight, resizeUpDown }
+export '../foundation/mouse_cursor.dart';
 
 typedef PointerTapCallback = void Function();
 typedef PointerCallback = void Function(PointerDetails details);
@@ -79,6 +78,7 @@ class PointerRouter {
   final List<RenderPointerListener> _tapTargets = [];
   RenderPointerListener? _downTarget;
   RenderPointerListener? _dragTarget;
+  RenderPointerListener? _captureCursorTarget;
   MouseEvent? _press;
   CellOffset? _lastDragPosition;
   MouseEvent? _lastHoverEvent;
@@ -90,6 +90,17 @@ class PointerRouter {
   void _attachScope(Element scope) => _scope ??= scope;
   void _detachScope(Element scope) {
     if (identical(_scope, scope)) _scope = null;
+  }
+
+  /// Host presentation hook. Uses the same clipped hit path as hover and taps.
+  @internal
+  void Function(MouseCursor cursor)? onCursorChanged;
+  MouseCursor _cursor = MouseCursor.basic;
+
+  void _setCursor(MouseCursor cursor) {
+    if (_cursor == cursor) return;
+    _cursor = cursor;
+    onCursorChanged?.call(cursor);
   }
 
   void beginFrame() {}
@@ -138,6 +149,7 @@ class PointerRouter {
   }
 
   void abortFrame() {
+    _setCursor(MouseCursor.basic);
     _aborted = true;
     _hovered.clear();
     _lastHoverEvent = null;
@@ -316,6 +328,7 @@ class PointerRouter {
   }
 
   void _clearSequence() {
+    _captureCursorTarget = null;
     _downTarget = null;
     _dragTarget = null;
     _tapTargets.clear();
@@ -344,6 +357,7 @@ class PointerRouter {
   }
 
   void _leave() {
+    _setCursor(MouseCursor.basic);
     _lastHoverEvent = null;
     final previous = _hovered;
     _hovered = [];
@@ -407,6 +421,11 @@ class PointerRouter {
           if (drag != null && _isLive(drag)) drag.onDragCancel?.call();
         }
         _press = event;
+        _captureCursorTarget = _topmost(
+          event.col,
+          event.row,
+          (r) => r.cursor != null || _hasHover(r) || _hasTap(r) || _hasDrag(r),
+        );
         _lastDragPosition = CellOffset(event.col, event.row);
         _downTarget = _topmost(
           event.col,
@@ -533,8 +552,28 @@ class PointerRouter {
     final top = _topmost(
       event.col,
       event.row,
-      (r) => _hasHover(r) || _hasTap(r) || _hasDrag(r),
+      (r) => r.cursor != null || _hasHover(r) || _hasTap(r) || _hasDrag(r),
     );
+    var cursor = MouseCursor.basic;
+    final captured = _captureCursorTarget;
+    final keepsCapture =
+        _press != null &&
+        event.kind != MouseEventKind.down &&
+        event.kind != MouseEventKind.up &&
+        captured != null &&
+        _isLive(captured) &&
+        (_downTarget != null || _dragTarget != null);
+    for (
+      RenderObject? node = keepsCapture ? captured : top;
+      node != null;
+      node = node.parent
+    ) {
+      if (node is RenderPointerListener && node.cursor != null) {
+        cursor = node.cursor!;
+        break;
+      }
+    }
+    _setCursor(cursor);
     final next = <RenderPointerListener>[];
     for (RenderObject? node = top; node != null; node = node.parent) {
       if (node is RenderPointerListener && _isLive(node) && _hasHover(node)) {

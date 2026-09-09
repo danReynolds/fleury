@@ -21,12 +21,17 @@ final class AnsiTerminalPresentation extends TerminalPresentation {
   const AnsiTerminalPresentation(
     this.capabilities, {
     this.synchronizedOutput = false,
+    this.pointerShapes = false,
   });
 
   final TerminalCapabilities capabilities;
 
   /// Whether frame output uses DEC synchronized-update markers.
   final bool synchronizedOutput;
+
+  /// OSC 22 pointer shapes, actively confirmed by the native terminal driver.
+  /// The driver owns the matching shape-stack push/pop across terminal leases.
+  final bool pointerShapes;
 }
 
 /// Structured frame presentation to a negotiated remote surface.
@@ -55,12 +60,14 @@ final class TerminalSessionProfile {
     KeyboardCapabilities keyboard = KeyboardCapabilities.legacy,
     SurfaceCapabilities? surface,
     bool synchronizedOutput = false,
+    bool pointerShapes = false,
   }) => TerminalSessionProfile(
     surface: surface ?? terminal.toSurfaceCapabilities(),
     keyboard: keyboard,
     presentation: AnsiTerminalPresentation(
       terminal,
       synchronizedOutput: synchronizedOutput,
+      pointerShapes: pointerShapes,
     ),
   );
 

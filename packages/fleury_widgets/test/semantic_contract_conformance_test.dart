@@ -39,7 +39,8 @@ const Map<String, List<String>> _semanticCatalog = {
   'command_palette': ['command', 'commandPalette'],
   'completion_text_input': ['menu', 'menuItem'],
   'context_panel': ['contextItem', 'contextPanel'],
-  'controls': ['button', 'checkbox', 'radio', 'region', 'toggle'],
+  // Button now declares its role in core; runtime compatibility is checked below.
+  'controls': ['checkbox', 'radio', 'region', 'toggle'],
   'conversation_navigator': ['conversation', 'conversationNavigator', 'list'],
   'data_table': ['table', 'tableCell', 'tableRow'],
   'date_picker': ['datePicker'],

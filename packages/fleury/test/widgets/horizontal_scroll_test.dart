@@ -441,6 +441,48 @@ void main() {
   );
 
   testWidgets(
+    'horizontal gaps do not select or complete an item click after scrolling',
+    (t) {
+      final c = ListController(initialIndex: 1);
+      final selected = <int>[];
+      t.pumpWidget(
+        ListView.separated(
+          controller: c,
+          scrollDirection: Axis.horizontal,
+          itemCount: 10,
+          onSelect: selected.add,
+          itemBuilder: (_, i, _) => Text('$i..'),
+          separatorBuilder: (_, _) => const SizedBox(width: 2),
+        ),
+      );
+      void click(int col) {
+        t.sendMouse(mouse(MouseEventKind.down, col, 0));
+        t.sendMouse(mouse(MouseEventKind.up, col, 0));
+        t.pump();
+      }
+
+      click(3);
+      expect(c.currentIndex, 1);
+      expect(selected, isEmpty);
+      t.sendMouse(mouse(MouseEventKind.down, 0, 0));
+      t.sendMouse(mouse(MouseEventKind.up, 3, 0));
+      t.pump();
+      expect(selected, isEmpty);
+      click(5);
+      expect(selected, [1]);
+      c.jumpToIndex(4);
+      t.pump();
+      expect(line(t.render()), '4..  5..  ');
+      click(3);
+      expect(c.currentIndex, 1);
+      expect(selected, [1]);
+      click(5);
+      expect(selected, [1, 5]);
+    },
+    viewportSize: const CellSize(10, 1),
+  );
+
+  testWidgets(
     'horizontal lazy lists mount only the window on a distant jump',
     (t) {
       final c = ListController();

@@ -245,3 +245,15 @@ its own back stack; otherwise a simple step value is enough.
 - [Navigation](/fleury/guides/navigation/) shows multi-screen flows and unsaved-change guards.
 - See [TextInput](/fleury/widgets/textinput/), [Select](/fleury/widgets/select/),
   and [Checkbox](/fleury/widgets/checkbox/) for individual control behavior.
+
+## Small applications and sensitive values
+
+`Button`, `TextInput`, `TextArea`, lists, layout and focus traversal are available
+from core. You can compose a small form without the companion widget package;
+`Form` remains useful when you need coordinated validation.
+
+The runnable [core editor example](https://github.com/danReynolds/fleury/blob/main/packages/fleury/example/core_editor.dart)
+shows search/list traversal, editing, actions and a compact confirmation.
+The [sensitive-input recipe](https://github.com/danReynolds/fleury/blob/main/packages/fleury/doc/sensitive_input.md)
+covers reveal toggling, clipboard policy, draft/undo lifetime, paste boundaries
+and native runtime options using the same ordinary controls.

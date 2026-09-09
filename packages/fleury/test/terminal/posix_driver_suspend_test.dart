@@ -15,6 +15,8 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:fleury/fleury.dart';
+import 'package:fleury/src/terminal/posix_driver.dart'
+    show PosixTerminalModeController;
 import 'package:test/test.dart';
 
 /// Records every [write]; reports as a non-terminal so enter() stays cheap.
@@ -48,10 +50,11 @@ class _RecordingStdout implements Stdout {
 /// A non-terminal stdin backed by a controller — enter()'s listen() attaches,
 /// nothing is fed.
 class _FakeStdin implements Stdin {
+  _FakeStdin({this.hasTerminal = false});
   final _controller = StreamController<List<int>>();
 
   @override
-  bool get hasTerminal => false;
+  final bool hasTerminal;
 
   @override
   StreamSubscription<List<int>> listen(
@@ -72,7 +75,83 @@ class _FakeStdin implements Stdin {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class _RawMode implements PosixTerminalModeController {
+  _RawMode({this.available = true});
+  final bool available;
+  @override
+  bool enableRawMode() => available;
+  @override
+  bool restoreMode() => true;
+}
+
 void main() {
+  test('applications can own Ctrl+Z without driver self-suspension', () async {
+    final input = _FakeStdin(hasTerminal: true);
+    var stops = 0;
+    final driver = PosixTerminalDriver(
+      stdinOverride: input,
+      stdoutOverride: _RecordingStdout(),
+      suspendOnCtrlZ: false,
+      terminalModeController: _RawMode(),
+      selfStopOverride: () {
+        stops++;
+        return true;
+      },
+    );
+    final events = <TuiEvent>[];
+    final subscription = driver.events.listen(events.add);
+    try {
+      await driver.enter(TerminalMode.interactive);
+      input._controller.add([0x1a]);
+      await Future<void>.delayed(Duration.zero);
+      final chord = events.whereType<KeyEvent>().single;
+      expect(chord.code, KeyCode.z);
+      expect(chord.hasCtrl, isTrue);
+      expect(stops, 0);
+      expect(driver.debugSuspended, isFalse);
+    } finally {
+      await driver.restore();
+      await subscription.cancel();
+      await input.close();
+    }
+  });
+
+  test(
+    'application-owned Ctrl+Z rejects native raw-mode failure before fallback',
+    () async {
+      final input = _FakeStdin(hasTerminal: true);
+      final output = _RecordingStdout();
+      final driver = PosixTerminalDriver(
+        stdinOverride: input,
+        stdoutOverride: output,
+        suspendOnCtrlZ: false,
+        terminalModeController: _RawMode(available: false),
+      );
+      try {
+        await expectLater(
+          driver.enter(TerminalMode.interactive),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              contains('requires native POSIX raw mode'),
+            ),
+          ),
+        );
+        expect(driver.isActive, isFalse);
+        expect(input._controller.hasListener, isFalse);
+        expect(output.written.toString(), isEmpty);
+      } finally {
+        await driver.restore();
+        // Rejection intentionally never subscribes to stdin; drain only to close
+        // this test controller. A fallback getter/setter would throw in the fake.
+        final drained = input._controller.stream.drain<void>();
+        await input.close();
+        await drained;
+      }
+    },
+  );
+
   group('PosixTerminalDriver Ctrl+Z self-stop gating (F7)', () {
     late _RecordingStdout out;
     late _FakeStdin input;

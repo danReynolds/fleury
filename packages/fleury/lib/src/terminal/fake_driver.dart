@@ -17,6 +17,7 @@ final class FakeTerminalDriver
     this.capabilities = TerminalCapabilities.defaultCapabilities,
     this.keyboardCapabilities = KeyboardCapabilities.legacy,
     this.synchronizedOutput = true,
+    this.pointerShapes = false,
     bool isInteractive = true,
   }) : _size = size,
        _isInteractive = isInteractive;
@@ -28,6 +29,9 @@ final class FakeTerminalDriver
 
   /// ANSI presentation policy declared by this fake session.
   final bool synchronizedOutput;
+
+  /// Whether this fake session confirms OSC 22 pointer shapes.
+  final bool pointerShapes;
 
   /// Whether this fake stands in for an interactive terminal. Set false to
   /// exercise the non-TTY (piped/redirected) code paths.
@@ -116,6 +120,7 @@ final class FakeTerminalDriver
       terminal: capabilities,
       keyboard: keyboardCapabilities,
       synchronizedOutput: synchronizedOutput,
+      pointerShapes: pointerShapes,
     );
   }
 

@@ -2,8 +2,6 @@ import 'dart:async' show unawaited;
 
 import 'package:fleury/fleury_core.dart';
 
-import 'controls.dart';
-
 /// A [Button] backed by an [AppCommand] in the active command registry.
 ///
 /// The command supplies the default label, enabled state, and action. This

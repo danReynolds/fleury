@@ -1687,13 +1687,11 @@ void main() {
       expect(focusedItems, [3]);
     });
 
-    testWidgets('clicking a separator selects the item it trails; clicking an '
-        'item selects and fires onSelect', (tester) {
-      // A separator is composed into the block of the item it trails, and the
-      // block is one tap target — so a click on the separator row selects that
-      // item (it holds no index of its own).
+    testWidgets('separators and trailing space are inert; items select', (
+      tester,
+    ) {
       final chosenItems = <int>[];
-      final controller = ListController(initialIndex: 0);
+      final controller = ListController(initialIndex: 1);
       tester.pumpWidget(
         SizedBox(
           width: 12,
@@ -1711,16 +1709,69 @@ void main() {
       );
       tester.render(size: const CellSize(12, 6));
       // Rows: 0 item0, 1 sep0, 2 item1, 3 sep1, 4 item2.
-      // sep0 (row 1) trails item0, so clicking it selects item0.
+      // A separator neither moves the cursor nor selects a neighbor.
       tester.sendMouse(_mouse(MouseEventKind.down, 1, 1));
       tester.sendMouse(_mouse(MouseEventKind.up, 1, 1));
-      expect(controller.currentIndex, 0);
-      expect(chosenItems, [0], reason: 'a separator click selects its item');
+      expect(controller.currentIndex, 1);
+      expect(chosenItems, isEmpty);
+      tester.sendMouse(_mouse(MouseEventKind.down, 1, 5));
+      tester.sendMouse(_mouse(MouseEventKind.up, 1, 5));
+      expect(controller.currentIndex, 1);
+      expect(chosenItems, isEmpty);
       // The item on row 2 selects and fires onSelect(1) as usual.
       tester.sendMouse(_mouse(MouseEventKind.down, 1, 2));
       tester.sendMouse(_mouse(MouseEventKind.up, 1, 2));
       expect(controller.currentIndex, 1);
-      expect(chosenItems, [0, 1]);
+      expect(chosenItems, [1]);
+    });
+
+    testWidgets('separated clicks preserve completion and cancellation rules', (
+      tester,
+    ) {
+      final controller = ListController();
+      final chosenItems = <String>[];
+      var items = ['a', 'b', 'c'];
+      Widget app() => SizedBox(
+        width: 12,
+        height: 6,
+        child: ListView.separated(
+          controller: controller,
+          itemCount: items.length,
+          itemKeyBuilder: (index) => items[index],
+          onSelect: (index) => chosenItems.add(items[index]),
+          itemBuilder: (_, index, _) =>
+              SizedBox(width: 12, height: 1, child: Text(items[index])),
+          separatorBuilder: (_, _) => const SizedBox(height: 1),
+        ),
+      );
+
+      tester.pumpWidget(app());
+      tester.render(size: const CellSize(12, 6));
+      tester.sendMouse(_mouse(MouseEventKind.down, 1, 2));
+      expect(controller.currentIndex, 1);
+      expect(chosenItems, isEmpty);
+      tester.pumpWidget(app());
+      tester.render(size: const CellSize(12, 6));
+      tester.sendMouse(_mouse(MouseEventKind.up, 1, 2));
+      expect(chosenItems, ['b']);
+
+      // Releasing over the separator cancels a press on the preceding item.
+      tester.sendMouse(_mouse(MouseEventKind.down, 1, 0));
+      tester.sendMouse(_mouse(MouseEventKind.up, 1, 1));
+      expect(controller.currentIndex, 0);
+      expect(chosenItems, ['b']);
+      tester.sendMouse(_mouse(MouseEventKind.down, 1, 0));
+      tester.sendMouse(_mouse(MouseEventKind.cancel, 1, 0));
+      tester.sendMouse(_mouse(MouseEventKind.up, 1, 0));
+      expect(chosenItems, ['b']);
+
+      // A replacement at the pressed index cannot inherit the old click.
+      tester.sendMouse(_mouse(MouseEventKind.down, 1, 2));
+      items = ['a', 'replacement', 'c'];
+      tester.pumpWidget(app());
+      tester.render(size: const CellSize(12, 6));
+      tester.sendMouse(_mouse(MouseEventKind.up, 1, 2));
+      expect(chosenItems, ['b']);
     });
 
     testWidgets('an item in an overflowing separator block stays clickable at '
@@ -1762,6 +1813,50 @@ void main() {
       expect(controller.currentIndex, 1);
       expect(chosenItems, [0, 1]);
     });
+
+    testWidgets(
+      'separated hit regions follow variable-height rows after scrolling and repaint',
+      (tester) {
+        final chosenItems = <int>[];
+        final controller = ListController(initialIndex: 0);
+        tester.pumpWidget(
+          SizedBox(
+            width: 12,
+            height: 7,
+            child: ListView.separated(
+              controller: controller,
+              itemCount: 20,
+              onSelect: chosenItems.add,
+              itemBuilder: (_, i, _) => SizedBox(
+                height: i.isEven ? 2 : 1,
+                width: 12,
+                child: Text('item$i'),
+              ),
+              separatorBuilder: (_, _) =>
+                  const SizedBox(height: 1, child: Text('---')),
+            ),
+          ),
+        );
+        tester.render(size: const CellSize(12, 7));
+        controller.currentIndex = 2;
+        controller.jumpToIndex(2);
+        tester.render(size: const CellSize(12, 7));
+        // Rows: item2 [0,1], separator [2], item3 [3], separator [4].
+        // Repeating after repaint exercises cached item boundaries as well.
+        for (var pass = 0; pass < 2; pass++) {
+          for (final row in [2, 4]) {
+            tester.sendMouse(_mouse(MouseEventKind.down, 5, row));
+            tester.sendMouse(_mouse(MouseEventKind.up, 5, row));
+          }
+          expect(chosenItems, List.filled(pass, 3));
+          tester.sendMouse(_mouse(MouseEventKind.down, 10, 3));
+          tester.sendMouse(_mouse(MouseEventKind.up, 10, 3));
+          expect(chosenItems, List.filled(pass + 1, 3));
+          tester.render(size: const CellSize(12, 7));
+        }
+        controller.dispose();
+      },
+    );
   });
 
   group('ListView.builder at chat scale (F3 tall-row verification)', () {
