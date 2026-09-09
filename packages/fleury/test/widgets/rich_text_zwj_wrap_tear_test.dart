@@ -1,3 +1,15 @@
+// Lock test (audit 4.b): wrapping must not tear a lowered ZWJ cluster.
+//
+// Two halves, and the second is why this is not just "keep the group whole":
+//   * A cluster that FITS on a line is never split across rows.
+//   * A cluster too wide for ANY line splits into its atoms, because keeping
+//     it whole cannot make it fit — it only pushes the tail past the box for
+//     paint to clip, and those components are then gone with no ellipsis.
+//
+// RenderText already resolves it that way (`_breakUnits` falls back to
+// `displayAtomRanges` when a group exceeds maxWidth), and `Text` and
+// `RichText` disagreeing about the same string is itself a bug, so the
+// assertion below is parity between the two renderers.
 import 'package:fleury/fleury.dart';
 import 'package:fleury/src/widgets/rich_text.dart' show RenderRichText;
 import 'package:test/test.dart';
@@ -16,34 +28,58 @@ String row(CellBuffer buf, int r) {
   return sb.toString();
 }
 
+const _family = '\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F466}';
+const _split = TextPresentationPolicy(lowering: ClusterLowering.split);
+
+List<String> _paintRich(String text, int cols, int rows) {
+  final render = RenderRichText(
+    span: TextSpan(text: text),
+    base: CellStyle.none,
+    softWrap: true,
+    textPolicy: _split,
+  )..layout(CellConstraints(maxCols: cols));
+  final buf = CellBuffer(CellSize(cols, rows));
+  render.paint(buf, CellOffset.zero);
+  return [for (var r = 0; r < rows; r++) row(buf, r)];
+}
+
+List<String> _paintPlain(String text, int cols, int rows) {
+  final render = RenderText(text: text, softWrap: true, textPolicy: _split)
+    ..layout(CellConstraints(maxCols: cols));
+  final buf = CellBuffer(CellSize(cols, rows));
+  render.paint(buf, CellOffset.zero);
+  return [for (var r = 0; r < rows; r++) row(buf, r)];
+}
+
 void main() {
-  test('lowered ZWJ family does not tear across wrap lines', () {
-    // 👨 = 2, 👩 = 2, 👦 = 2 under typical emoji width; three components = 6.
-    // Wrap at 4 cols should keep a logical cluster together or at least not
-    // split mid-group without marking — today wrap treats atoms as a word and
-    // breaks between components when ww > maxCols.
-    const family = '\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F466}';
-    final render = RenderRichText(
-      span: const TextSpan(text: family),
-      base: CellStyle.none,
-      softWrap: true,
-      textPolicy: const TextPresentationPolicy(lowering: ClusterLowering.split),
-    )..layout(const CellConstraints(maxCols: 4));
-    final buf = CellBuffer(const CellSize(4, 4));
-    render.paint(buf, CellOffset.zero);
-    final lines = [for (var r = 0; r < 4; r++) row(buf, r)];
-    // If torn across lines, more than one non-empty row appears for a single
-    // cluster with no spaces — document the actual behavior.
+  test('a cluster that fits a line is never torn', () {
+    // 6 cells of family, 8 cells of room: it fits, so it stays on one row.
+    final lines = _paintRich(_family, 8, 3);
     final nonEmpty = lines.where((l) => l.contains(RegExp(r'[^\.]'))).toList();
-    // A "tear" means components of one groupId landed on different rows.
-    // We assert the preferred contract: single-cluster content stays on one
-    // line when the full cluster fits after lowering... but 6 > 4 so it must
-    // either overflow-clip as a unit or wrap as a unit (not mid-cluster).
-    // Mid-cluster wrap is the bug (4.b).
     expect(
       nonEmpty.length,
       1,
-      reason: 'lowered ZWJ cluster must not tear across lines; got $nonEmpty',
+      reason: 'a fitting lowered cluster must not split; got $nonEmpty',
+    );
+  });
+
+  test('a cluster too wide for any line splits, and matches RenderText', () {
+    // 6 cells of family, 4 cells of room: it cannot fit on one row either way.
+    final rich = _paintRich(_family, 4, 4);
+    final plain = _paintPlain(_family, 4, 4);
+
+    expect(
+      rich,
+      plain,
+      reason: 'Text and RichText must render the same string the same way',
+    );
+    final richCells = rich.join().replaceAll(RegExp(r'[\.]'), '');
+    expect(
+      richCells,
+      contains('\u{1F466}'),
+      reason:
+          'the third component must still be painted somewhere — keeping the '
+          'group whole clipped it away entirely',
     );
   });
 }

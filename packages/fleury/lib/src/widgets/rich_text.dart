@@ -614,10 +614,14 @@ class RenderRichText extends RenderObject
         if (ww > maxCols) {
           // Hard-break at unit boundaries. A unit is one glyph, or one whole
           // lowered cluster group (shared groupId): atoms of one source
-          // grapheme stay on one line even when the group alone exceeds the
-          // line — paint clips what does not fit (RFC 0019 decision 15 /
-          // audit 4.b). Mirrors selection's groupId tracking so
-          // ClusterLowering.split cannot tear a ZWJ sequence across rows.
+          // grapheme stay on one line, so ClusterLowering.split cannot tear a
+          // ZWJ sequence across rows (RFC 0019 decision 15 / audit 4.b).
+          //
+          // A group that alone exceeds the line falls back to its atoms,
+          // matching RenderText._breakUnits. Keeping it whole would push the
+          // overflow past the box and let paint clip it away — the atoms that
+          // did not fit would simply be gone, with no ellipsis, and the two
+          // text renderers would disagree on the same input.
           var i = wordStart;
           while (i < wordEnd) {
             final g = _glyphs[i];
@@ -628,6 +632,24 @@ class RenderRichText extends RenderObject
               while (unitEnd < wordEnd && _glyphs[unitEnd].groupId == groupId) {
                 unitWidth += _glyphs[unitEnd].width;
                 unitEnd++;
+              }
+              if (unitWidth > maxCols) {
+                // Oversized group: lay the WHOLE group out atom by atom. Only
+                // re-measuring the first atom would let the remainder re-form
+                // a sub-group on the next pass, which breaks the line one atom
+                // early and diverges from RenderText again.
+                for (var j = i; j < unitEnd; j++) {
+                  final atom = _glyphs[j];
+                  if (lineWidth > 0 && lineWidth + atom.width > maxCols) {
+                    out.add(line);
+                    line = <_Glyph>[];
+                    lineWidth = 0;
+                  }
+                  line.add(atom);
+                  lineWidth += atom.width;
+                }
+                i = unitEnd;
+                continue;
               }
             }
             if (lineWidth > 0 && lineWidth + unitWidth > maxCols) {

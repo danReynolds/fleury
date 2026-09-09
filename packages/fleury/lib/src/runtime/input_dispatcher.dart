@@ -647,19 +647,41 @@ class InputDispatcher {
   /// Prefer the FocusManager exclusion helper over reading markers here.
   void _abandonStickyStreamsIfExcluded() {
     final paste = _pasteOwner;
-    if (paste != null && focusManager.isExcludedFromFocus(paste)) {
+    final pasteId = _pasteOwnerId;
+    if (paste != null &&
+        (!paste.isAttached || focusManager.isExcludedFromFocus(paste))) {
+      final claimant = paste.textInputClaimant;
+      final notify = paste.acceptsInput && pasteId != null;
+      // Release BEFORE notifying. The callback can move focus, which
+      // re-enters this method synchronously; leaving ownership set meant
+      // abandoning the same stream twice.
       _clearPasteOwner();
+      // Close the transaction out on the claimant. Dropping the dispatcher's
+      // reference alone left the field's paste driver `_active` forever: it
+      // never received a terminal segment, so it kept its claimants pinned
+      // (even through `enabled: false`) and reported `pasteInProgress`. A
+      // terminal segment finishes it — the segments it already accepted are
+      // the user's and still apply; only further ones stop routing here.
+      if (notify && claimant is PasteEventClaimant) {
+        (claimant as PasteEventClaimant).onPasteEvent(
+          PasteEvent.segment('', pasteId: pasteId, phase: PasteEventPhase.end),
+        );
+      }
     }
     final composition = _compositionOwner;
-    if (composition != null && focusManager.isExcludedFromFocus(composition)) {
+    if (composition != null &&
+        (!composition.isAttached ||
+            focusManager.isExcludedFromFocus(composition))) {
       // Bypass offer-path exclusion: the owner is already covered, but we
       // still owe it a cancel so composing underline/state does not stick.
       final claimant = composition.textCompositionClaimant;
-      if (claimant != null && composition.acceptsInput) {
-        claimant.onTextCompositionCancel();
-      }
+      final notify = composition.acceptsInput;
+      // Release first, for the same re-entrancy reason as the paste above.
       _clearCompositionOwner();
       _compositionOrphaned = true;
+      if (claimant != null && notify) {
+        claimant.onTextCompositionCancel();
+      }
     }
   }
 
@@ -992,8 +1014,12 @@ class InputDispatcher {
           delivered = true;
           continue;
         }
-        // Owner gone or declined: do not fall through to the live chain.
-        continue;
+        // Nobody took the text. It still has to reach the KEY lane: a bare
+        // printable that armed a prefix also defers a direct binding on the
+        // same key, and that binding is what `_dispatchPlain` fires. Skipping
+        // it left the shorter binding dead AND `_onTimeout` reading an
+        // ambiguous prefix as a pure one, so the pending sequence — and its
+        // which-key popup — stayed open forever with no timer to close it.
       }
       _dispatchPlain(
         pending.events[i],
@@ -1022,8 +1048,13 @@ class InputDispatcher {
   KeyEventResult _deliverText(String text, {FocusNode? owner}) {
     if (owner != null) {
       final claimant = owner.textInputClaimant;
+      // `isExcludedFromFocus` as well as `acceptsInput`, matching
+      // `_offerPasteTo`/`_offerCompositionTo`: `_acceptsInput` only tests
+      // mount and the render-failure set, so without this a held printable
+      // replays into a pane ExcludeFocus has since covered.
       if (claimant != null &&
           owner.acceptsInput &&
+          !focusManager.isExcludedFromFocus(owner) &&
           claimant.onTextInput(text) == KeyEventResult.handled) {
         return KeyEventResult.handled;
       }
