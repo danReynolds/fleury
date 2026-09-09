@@ -883,6 +883,82 @@ void main() {
       Timer(delay, () => input.push(bytesToPush));
     };
 
+    for (final supported in [true, false]) {
+      for (final alternateScreen in [true, false]) {
+        test('pointer shapes supported=$supported alt=$alternateScreen restore '
+            'across handoff and suspend without leaking replies', () async {
+          final trace = <String>[];
+          final input = _FakeStdin(terminal: true);
+          final out = _RecordingStdout(
+            terminal: true,
+            trace: trace,
+            onWrite: (bytes) {
+              var reply = answerEveryQuery(bytes);
+              if (bytes.contains('\x1b]22;?')) {
+                reply = '${supported ? '\x1b]22;1,1,1,1,1\x1b\\' : ''}$reply';
+              }
+              if (reply.isNotEmpty) input.push(reply.codeUnits);
+            },
+          );
+          final driver = PosixTerminalDriver(
+            stdinOverride: input,
+            stdoutOverride: out,
+            terminalModeController: _FakeModeController(trace),
+            selfStopOverride: () => true,
+          );
+          final events = <TuiEvent>[];
+          final subscription = driver.events.listen(events.add);
+          int count(String sequence) =>
+              sequence.allMatches(out.written.toString()).length;
+          const push = '\x1b]22;>default\x1b\\';
+          const pop = '\x1b]22;<\x1b\\';
+          try {
+            final profile = await driver.enter(
+              TerminalMode(mouseMotion: true, alternateScreen: alternateScreen),
+            );
+            expect(
+              (profile.presentation as AnsiTerminalPresentation).pointerShapes,
+              supported,
+            );
+            expect(count(push), supported ? 1 : 0);
+            await driver.runWithTerminalHandoff(() async {
+              expect(count(pop), supported ? 1 : 0);
+            });
+            expect(count(push), supported ? 2 : 0);
+            input.push([0x1a]);
+            await Future<void>.delayed(const Duration(milliseconds: 20));
+            expect(count(pop), supported ? 2 : 0);
+            driver.debugResume();
+            expect(count(push), supported ? 3 : 0);
+            expect(events.whereType<KeyEvent>(), isEmpty);
+            expect(events.whereType<TextInputEvent>(), isEmpty);
+            await driver.restore();
+            await driver.restore();
+            expect(
+              count(pop),
+              supported ? 3 : 0,
+              reason: 'one pop per owned push',
+            );
+            if (supported && alternateScreen) {
+              final bytes = out.written.toString();
+              expect(
+                bytes.lastIndexOf(pop),
+                lessThan(bytes.lastIndexOf('\x1b[?1049l')),
+              );
+              expect(
+                bytes.indexOf(push),
+                greaterThan(bytes.indexOf('\x1b[?1049h')),
+              );
+            }
+          } finally {
+            await driver.restore();
+            await subscription.cancel();
+            await input.close();
+          }
+        });
+      }
+    }
+
     test('the capability probes after keyboard negotiation go out in ONE '
         'exchange', () async {
       // Sent one after another, synchronized output, the image protocol

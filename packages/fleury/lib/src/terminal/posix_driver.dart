@@ -28,6 +28,7 @@ import 'terminal_driver.dart';
 import 'terminal_probe.dart';
 import 'terminal_query_runner.dart';
 import 'terminal_sequences.dart';
+import 'pointer_shapes.dart';
 
 /// Native POSIX terminal lifecycle and byte-input driver.
 ///
@@ -140,6 +141,8 @@ class PosixTerminalDriver
   AppSignal? _pendingSignal;
   bool _pendingSignalDelivered = false;
 
+  bool _pointerShapes = false;
+  bool _pointerStackOwned = false;
   bool _active = false;
   bool _entering = false;
   bool _restoring = false;
@@ -416,6 +419,7 @@ class PosixTerminalDriver
       );
     }
     _restoring = false;
+    _pointerShapes = false;
     _entering = true;
     final enterGeneration = ++_lifecycleGeneration;
     _terminalState = ActiveTerminalState(
@@ -526,6 +530,7 @@ class PosixTerminalDriver
       if (!_events.isClosed) _events.add(ResizeEvent(size));
     });
 
+    _stdout.write(_pushPointerShape());
     _active = true;
     _entering = false;
     _emitPendingSignalIfListened();
@@ -534,6 +539,7 @@ class PosixTerminalDriver
       terminal: terminal,
       keyboard: keyboardCapabilities,
       synchronizedOutput: _synchronizedOutput,
+      pointerShapes: _pointerShapes,
     );
   }
 
@@ -580,6 +586,7 @@ class PosixTerminalDriver
       Platform.environment,
     );
     _synchronizedOutput = syncOverride ?? false;
+    _pointerShapes = false;
     if (!_stdoutIsTerminal || !_changedStdin) return;
     if (_terminalSilent) return;
     // Order matters twice over. Segmentation is positional, so a query the
@@ -589,6 +596,9 @@ class PosixTerminalDriver
     // screen ends with an erase — the width battery's own, and a cleanup
     // variant of the image query for a terminal that prints the APC as text.
     final queries = <(_CapabilityProbe, String)>[
+      if (_mode!.mouseMotion &&
+          !detectTerminalMultiplexerFromEnvironment(Platform.environment))
+        (_CapabilityProbe.pointerShapes, pointerShapesQuery),
       if (syncOverride == null)
         (_CapabilityProbe.synchronizedOutput, synchronizedOutputQuery),
       if (onAlternateScreen &&
@@ -613,6 +623,8 @@ class PosixTerminalDriver
       final reply = replies[i];
       if (reply == null) continue;
       switch (queries[i].$1) {
+        case _CapabilityProbe.pointerShapes:
+          _pointerShapes = parsePointerShapesReply(reply);
         case _CapabilityProbe.synchronizedOutput:
           _synchronizedOutput = parseSynchronizedOutputReply(
             reply,
@@ -823,7 +835,7 @@ class PosixTerminalDriver
   /// Builds the mode-entry escape sequence (alt screen, hide cursor,
   /// bracketed paste, Kitty keyboard, mouse), shared by [enter] and resume.
   String _enterSequences(TerminalMode mode) =>
-      buildTerminalEnterSequences(mode);
+      buildTerminalEnterSequences(mode) + _pushPointerShape();
 
   /// Applies the fleet override before any sequence is built.
   ///
@@ -841,10 +853,20 @@ class PosixTerminalDriver
     return terminalModeWithKeyboardProtocol(mode, tier);
   }
 
-  /// Builds the mode-exit escape sequence, shared by [restore] and
-  /// suspend. Disables mouse modes unconditionally (incl. all-motion
-  /// 1003) so none leak back to the shell.
-  String _exitSequences(TerminalMode mode) => buildTerminalExitSequences(mode);
+  // Each terminal lease owns one entry on the active screen's shape stack.
+  String _pushPointerShape() {
+    if (!_pointerShapes || _pointerStackOwned) return '';
+    _pointerStackOwned = true;
+    return pushPointerShape;
+  }
+
+  /// Restores pointer ownership before leaving the screen that owns it.
+  String _exitSequences(TerminalMode mode) {
+    final pointer = _pointerStackOwned ? popPointerShape : '';
+    _pointerStackOwned = false;
+    // Pop on the same screen where we pushed, before leaving the alt screen.
+    return pointer + buildTerminalExitSequences(mode);
+  }
 
   bool _interceptParsedEvent(TuiEvent event) {
     if (!suspendOnCtrlZ ||
@@ -1486,4 +1508,4 @@ KeyboardProtocolMode resolveKeyboardTier({
 }
 
 /// What each segment of the batched capability exchange answers.
-enum _CapabilityProbe { synchronizedOutput, image, glyphWidths }
+enum _CapabilityProbe { synchronizedOutput, image, glyphWidths, pointerShapes }
