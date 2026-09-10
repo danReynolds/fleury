@@ -98,30 +98,57 @@ void main() {
       );
     });
 
-    // Pins the limitation the `chat` doc now states outright. Alt+Enter on a
-    // legacy (non-CSI-u) terminal — Terminal.app, xterm, gnome-terminal — is
-    // bare ESC CR, which the parser cannot tell from Escape-then-Enter, so it
-    // reports a bare Enter and the composer SUBMITS. If a parser change ever
-    // makes Alt survive that byte pair, this test fails and the doc must be
-    // revisited rather than quietly becoming true again.
-    test('chat map submits on a legacy terminal Alt+Enter (ESC CR)', () {
+    // Pins what the `chat` doc states outright. Alt+Enter on a legacy
+    // (non-CSI-u) terminal — Terminal.app, xterm, gnome-terminal — is bare
+    // ESC CR. The two bytes arriving in ONE read is the evidence that this is
+    // a chord and not Escape-then-Enter: a human pressing Escape then Enter
+    // is separated by the driver's ~30ms idle flush, which emits the lone ESC
+    // as Escape first. Both halves are pinned below; if either changes, the
+    // `chat` doc must be revisited rather than quietly going stale.
+    test(
+      'chat map inserts a newline on a legacy terminal Alt+Enter (ESC CR)',
+      () {
+        final sink = _CollectingSink();
+        InputParser()
+          ..feed(const <int>[0x1B, 0x0D], sink)
+          ..flush(sink);
+
+        expect(sink.events, hasLength(1));
+        final event = sink.events.single as KeyEvent;
+        expect(event.code, KeyCode.enter);
+        expect(event.modifiers, {
+          KeyModifier.alt,
+        }, reason: 'one read means one chord, so the alt survives');
+        expect(
+          TextEditingKeymap.chat.resolve(event),
+          TextEditingKeyAction.insertNewline,
+          reason: 'so the chat preset inserts a newline, it does not submit',
+        );
+      },
+    );
+
+    test('a flushed Escape then Enter still submits, it is not Alt+Enter', () {
       final sink = _CollectingSink();
-      InputParser()
-        ..feed(const <int>[0x1B, 0x0D], sink)
+      final parser = InputParser();
+      // Escape, then the idle flush a real keypress gap produces, then Enter.
+      parser
+        ..feed(const <int>[0x1B], sink)
+        ..flush(sink)
+        ..feed(const <int>[0x0D], sink)
         ..flush(sink);
 
-      expect(sink.events, hasLength(1));
-      final event = sink.events.single as KeyEvent;
-      expect(event.code, KeyCode.enter);
+      expect(sink.events, hasLength(2));
+      expect((sink.events.first as KeyEvent).code, KeyCode.escape);
+      final enter = sink.events.last as KeyEvent;
+      expect(enter.code, KeyCode.enter);
       expect(
-        event.modifiers,
+        enter.modifiers,
         isEmpty,
-        reason: 'ESC CR is ambiguous with Escape-then-Enter; alt is dropped',
+        reason: 'the flush separated them, so this is not a chord',
       );
       expect(
-        TextEditingKeymap.chat.resolve(event),
+        TextEditingKeymap.chat.resolve(enter),
         TextEditingKeyAction.submit,
-        reason: 'so the chat preset submits, it does not insert a newline',
       );
     });
 

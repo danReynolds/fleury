@@ -295,8 +295,9 @@ class _ColorPickerState extends State<ColorPicker>
     final overlay = Overlay.of(context);
     final theme = Theme.of(context);
     final entry = OverlayEntry(
-      builder: (_) => BoundsAnchor(
+      builder: (_) => AnchoredFloat(
         notifier: _bounds,
+        onTapOutside: _closeHex,
         child: _HexEntry(
           initial: widget.value.toRgb(),
           borderStyle: theme.borderStyle,

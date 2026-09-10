@@ -3,12 +3,21 @@ import 'package:fleury/fleury.dart';
 import 'log_region.dart';
 
 /// Converts captured terminal output into structured [LogRegion] entries.
-List<LogEntry> buildTerminalOutputLogEntries(List<LogLine> lines) {
+///
+/// [baseIndex] is the monotonic index of `lines.first` in the producer
+/// sequence (typically [LogBuffer.baseIndex]). Entry [LogEntry.id] values are
+/// `baseIndex + index` so a capacity head trim does not shift identity.
+List<LogEntry> buildTerminalOutputLogEntries(
+  List<LogLine> lines, {
+  int baseIndex = 0,
+}) {
+  assert(baseIndex >= 0);
   return List<LogEntry>.unmodifiable(
     List<LogEntry>.generate(lines.length, (index) {
       final line = lines[index];
+      final id = baseIndex + index;
       return LogEntry(
-        id: index,
+        id: id,
         severity: line.source == LogSource.stderr
             ? LogSeverity.error
             : LogSeverity.info,
@@ -85,7 +94,10 @@ class TerminalOutputRegion extends StatelessWidget {
       listenable: buffer,
       builder: (context, _) {
         return LogRegion(
-          entries: buildTerminalOutputLogEntries(buffer.lines),
+          entries: buildTerminalOutputLogEntries(
+            buffer.lines,
+            baseIndex: buffer.baseIndex,
+          ),
           controller: controller,
           focusNode: focusNode,
           autofocus: autofocus,
