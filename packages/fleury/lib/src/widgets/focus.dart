@@ -1252,20 +1252,20 @@ class Focus extends StatefulWidget {
 
   /// The nearest enclosing [FocusNode] — the node of the closest [Focus]
   /// ancestor, or of this widget itself when called from its own subtree.
-  /// Throws when the context is not inside a [Focus].
+  /// Throws when the context is not inside a [Focus]. Overlay entries sit
+  /// beside the app root, so a context in an entry with no local [Focus] throws
+  /// even though [FocusManager.of] still works.
   ///
-  /// Use it to render from the state of the focusable region you are inside,
-  /// rather than comparing against [FocusManager.focusedNode] with a node the
-  /// caller had to thread in by hand:
+  /// [FocusNode.hasFocus] is identity with the focused node, not
+  /// descendant-inclusive. Use [FocusDetector] when a region should stay
+  /// active while a child holds the keyboard.
   ///
   /// ```dart
-  /// // Inside a ListView item builder: fill the row only while the list
-  /// // itself holds the keyboard.
   /// final focused = highlighted && Focus.of(context).hasFocus;
   /// ```
   ///
-  /// The caller rebuilds when focus moves, so reading [FocusNode.hasFocus]
-  /// from a build method stays correct.
+  /// Reading this subscribes [context] to focus changes, so a build method
+  /// can keep [FocusNode.hasFocus] current without a detector.
   static FocusNode of(BuildContext context) {
     final node = maybeOf(context);
     if (node == null) {

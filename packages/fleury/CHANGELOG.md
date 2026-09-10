@@ -8,7 +8,9 @@
   from the focus state of the region it is inside — `Focus.of(context).hasFocus`
   — instead of comparing `FocusManager.focusedNode` against a node the caller
   had to thread in by hand. Reading either still subscribes the caller to focus
-  changes, so no `FocusDetector` is needed to keep `hasFocus` current.
+  changes, so a build method can keep `FocusNode.hasFocus` current without a
+  detector. `hasFocus` is identity with the focused node; `FocusDetector`
+  remains the descendant-inclusive signal.
 
 - Add `scrollDirection: Axis.horizontal` to all `ListView` constructors,
   `ScrollView`, and `Scrollbar`. Horizontal views support left/right navigation,

@@ -28,7 +28,8 @@ reaches the focused region, see
 | Let users move between ordinary controls | Built in with `FleuryApp` |
 | Make a custom widget focusable | `Focus` |
 | Move focus from code | `FocusNode` |
-| React when a region gains or loses focus | `FocusDetector` |
+| React when focus enters or leaves a subtree | `FocusDetector` |
+| Render from whether this `Focus` is the keyboard target | `Focus.of(context).hasFocus` |
 | Open a dialog and restore focus afterward | `Navigator.present` |
 
 ## Automatic traversal
@@ -232,36 +233,57 @@ children of the same region.
 
 ### Reading focus while you build
 
-`FocusDetector` reports a change. When you only need to *render* from the
-current state, read the enclosing node instead — `Focus.of(context)` returns
-the `FocusNode` of the closest `Focus` above you, and reading it subscribes the
-caller, so the value stays current without a detector or a `setState`:
+`FocusDetector` and `Focus.of(context).hasFocus` answer different questions.
+
+`FocusDetector` is descendant-inclusive: it stays true while *anything inside*
+the region is focused, and moving between children is not a leave. That is the
+active-pane signal.
+
+`Focus.of(context).hasFocus` is identity: it is true only while the nearest
+`Focus` *is* the focused node. Inside a pane that contains buttons or inputs,
+that check is false while a child holds the keyboard. Use it when the region
+is itself one focus stop — a list, a slider — not as a stand-in for the
+detector.
+
+Reading `Focus.of` or `FocusManager.of` subscribes the caller, so a build
+method can keep the value current without a detector or a `setState`.
+
+A list is one focus stop with a row cursor. `highlighted` means *current* and
+stays true when the keyboard leaves; `Focus.of(context).hasFocus` is whether
+the list itself holds the keyboard. `ListView` already paints the theme
+selection style on the current row, so a two-state look — marker always, fill
+only while focused — has to **replace** that default rather than merge onto
+it:
 
 ```dart
 ListView.builder(
   focusNode: listFocus,
   itemCount: keys.length,
   itemBuilder: (context, index, highlighted) {
-    // Fill the row only while the list itself holds the keyboard; keep the
-    // marker on the current row either way.
+    final theme = Theme.of(context);
     final focused = highlighted && Focus.of(context).hasFocus;
-    return Row(
-      children: [
-        Text(highlighted ? '> ' : '  '),
-        Text(keys[index], style: focused ? theme.selectionStyle : null),
-      ],
+    return DefaultTextStyle(
+      style: focused
+          ? theme.textStyle.merge(theme.selectionStyle)
+          : theme.textStyle,
+      child: Row(
+        children: [
+          Text(highlighted ? '> ' : '  '),
+          Text(keys[index]),
+        ],
+      ),
     );
   },
 )
 ```
 
-A list is one focus stop with a row cursor, not one focusable node per row —
-so `highlighted` means *current*, and `Focus.of(context).hasFocus` is what
-tells you whether the keyboard is actually there.
-
 The manager itself is `FocusManager.of(context)`, which answers what has focus
 anywhere in the application. One manager exists per application rather than per
-process, which is why it is reached through the tree.
+process, which is why it is reached through the tree. Overlay entries
+(menus, toasts, the error overlay) sit beside the app root, not under it: a
+context in an entry with no local `Focus` has no enclosing node
+(`Focus.maybeOf` returns null and `Focus.of` throws) while `FocusManager.of`
+still works.
 
 ## Screens and dialogs
 
@@ -343,9 +365,10 @@ individual target. Skipping traversal does not disable pointer input.
 
 | API | What it does |
 |---|---|
-| `Focus` | Makes a custom subtree focusable. |
+| `Focus` | Makes a custom subtree focusable. `Focus.of` returns its node. |
 | `FocusNode` | Owns a target you can request, inspect, and dispose. |
 | `FocusDetector` | Reports focus entering or leaving a subtree. |
+| `FocusManager.of` | The application's focus manager. |
 | `FocusScope` | Remembers focus within a subtree; `trapFocus` can contain it. |
 | `FocusTraversalGroup` | Installs Tab and arrow traversal for a bare root. |
 | `ExcludeFocus` | Removes a whole subtree from every focus path. |

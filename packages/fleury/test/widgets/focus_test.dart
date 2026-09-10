@@ -703,25 +703,6 @@ void _enclosingNodeLookup() {
       expect(tester.renderToString(), contains('first:off'));
     });
 
-    test('with no nearer Focus, the lookup lands on the app root', () {
-      // A Fleury tree always has an ambient root Focus, so the enclosing-node
-      // lookup resolves rather than returning null. `of` throwing is reserved
-      // for a context outside any app.
-      FocusNode? seen;
-      final tester = FleuryTester();
-      addTearDown(tester.dispose);
-      tester.pumpWidget(
-        _Probe(
-          builder: (context) {
-            seen = Focus.maybeOf(context);
-            return const Text('bare');
-          },
-        ),
-      );
-      expect(seen, isNotNull);
-      expect(seen!.debugLabel, contains('DefaultRootSelection'));
-    });
-
     test('the manager is reached through FocusManager, not Focus', () {
       final node = FocusNode(debugLabel: 'node');
       addTearDown(node.dispose);
@@ -742,6 +723,192 @@ void _enclosingNodeLookup() {
       );
       expect(manager, same(tester.focusManager));
       expect(manager!.focusedNode, same(node));
+    });
+
+    test('Focus.of throws when the context is not inside a Focus', () {
+      late BuildContext probeContext;
+      final owner = BuildOwner();
+      owner.mountRoot(
+        _Probe(
+          builder: (context) {
+            probeContext = context;
+            return const EmptyBox();
+          },
+        ),
+      );
+      expect(Focus.maybeOf(probeContext), isNull);
+      expect(FocusManager.maybeOf(probeContext), isNull);
+      expect(
+        () => Focus.of(probeContext),
+        _stateError(
+          'No enclosing Focus found in this context. Wrap the subtree in a '
+          'Focus, or use FocusManager.of(context) for the focus manager.',
+        ),
+      );
+    });
+
+    test('a sibling overlay entry has no enclosing Focus; the manager is still '
+        'there', () {
+      // runApp / FleuryTester wrap only the user overlay entry in a Focus
+      // (the selection host). Additional entries are siblings of that wrap,
+      // not descendants, so lookup there is the same as outside any Focus.
+      late BuildContext mainContext;
+      late BuildContext floatContext;
+      final tester = FleuryTester();
+      addTearDown(tester.dispose);
+      tester.pumpWidget(
+        _Probe(
+          builder: (context) {
+            mainContext = context;
+            return const Text('main');
+          },
+        ),
+      );
+      expect(Focus.maybeOf(mainContext), isNotNull);
+      expect(FocusManager.of(mainContext), same(tester.focusManager));
+
+      final float = OverlayEntry(
+        builder: (context) {
+          floatContext = context;
+          return const Text('float');
+        },
+      );
+      tester.overlay.insert(float);
+      addTearDown(float.dispose);
+      tester.pump();
+
+      expect(Focus.maybeOf(floatContext), isNull);
+      expect(
+        () => Focus.of(floatContext),
+        _stateError(
+          'No enclosing Focus found in this context. Wrap the subtree in a '
+          'Focus, or use FocusManager.of(context) for the focus manager.',
+        ),
+      );
+      expect(FocusManager.of(floatContext), same(tester.focusManager));
+    });
+
+    test('hasFocus is identity; FocusDetector is descendant-inclusive', () {
+      final pane = FocusNode(debugLabel: 'pane');
+      final child = FocusNode(debugLabel: 'child');
+      addTearDown(pane.dispose);
+      addTearDown(child.dispose);
+      final detector = <bool>[];
+      final tester = FleuryTester();
+      addTearDown(tester.dispose);
+      tester.pumpWidget(
+        FocusDetector(
+          onFocusChange: detector.add,
+          child: Focus(
+            focusNode: pane,
+            child: Column(
+              children: [
+                _Probe(
+                  builder: (context) => Text(
+                    Focus.of(context).hasFocus ? 'pane-on' : 'pane-off',
+                  ),
+                ),
+                Focus(
+                  focusNode: child,
+                  autofocus: true,
+                  child: const Text('child'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      expect(child.hasFocus, isTrue);
+      expect(pane.hasFocus, isFalse);
+      expect(
+        tester.renderToString(),
+        contains('pane-off'),
+        reason: 'the pane is not the focused node while a child holds it',
+      );
+      expect(
+        detector,
+        [true],
+        reason: 'the detector stays true while a descendant holds focus',
+      );
+
+      pane.requestFocus();
+      tester.pump();
+      expect(pane.hasFocus, isTrue);
+      expect(tester.renderToString(), contains('pane-on'));
+      expect(
+        detector,
+        [true],
+        reason: 'moving to the pane itself is not a leave',
+      );
+
+      child.requestFocus();
+      tester.pump();
+      expect(tester.renderToString(), contains('pane-off'));
+      expect(detector, [true]);
+    });
+
+    test('ListView itemBuilder fills only while the list holds the keyboard', () {
+      const fill = AnsiColor(4);
+      final outside = FocusNode(debugLabel: 'outside');
+      addTearDown(outside.dispose);
+      final tester = FleuryTester();
+      addTearDown(tester.dispose);
+      tester.pumpWidget(
+        Theme(
+          data: const ThemeData(
+            textStyle: CellStyle(foreground: AnsiColor(2)),
+            selectionStyle: CellStyle(background: fill),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 12,
+                child: ListView.builder(
+                  autofocus: true,
+                  itemCount: 2,
+                  itemBuilder: (context, index, highlighted) {
+                    final theme = Theme.of(context);
+                    final focused =
+                        highlighted && Focus.of(context).hasFocus;
+                    return DefaultTextStyle(
+                      style: focused
+                          ? theme.textStyle.merge(theme.selectionStyle)
+                          : theme.textStyle,
+                      child: Row(
+                        children: [
+                          Text(highlighted ? '> ' : '  '),
+                          Text('k$index'),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+              Focus(focusNode: outside, child: const Text('out')),
+            ],
+          ),
+        ),
+      );
+
+      const size = CellSize(20, 3);
+      var buffer = tester.render(size: size);
+      expect(buffer.atColRow(0, 0).style.background, fill);
+      expect(tester.renderToString(size: size, emptyMark: ' '), contains('> k0'));
+
+      outside.requestFocus();
+      tester.pump();
+      buffer = tester.render(size: size);
+      expect(
+        buffer.atColRow(0, 0).style.background,
+        isNull,
+        reason: 'replacing DefaultTextStyle drops ListView\'s automatic fill',
+      );
+      expect(
+        tester.renderToString(size: size, emptyMark: ' '),
+        contains('> k0'),
+        reason: 'the current-row marker stays when the keyboard leaves',
+      );
     });
   });
 }
