@@ -1170,7 +1170,48 @@ void main() {
         reason: 'the outer boundary must repaint, not blit its stale cache',
       );
     });
+
+    testWidgets('a paint-time mark on a child forces the next cache miss', (
+      tester,
+    ) {
+      // Regression: needsPaint used to be cleared AFTER the subtree painted,
+      // so a mark raised during that paint was discarded and the cache
+      // stayed stale forever.
+      tester.pumpWidget(const RepaintBoundary(child: _DirtyFromPaint()));
+      const size = CellSize(4, 1);
+      tester.render(size: size);
+
+      RepaintBoundaryDebugStats.beginFrame(enabled: true);
+      tester.render(size: size);
+      final stats = RepaintBoundaryDebugStats.takeFrameStats();
+      expect(
+        stats.repaintedCount,
+        1,
+        reason:
+            'the mark raised while filling the cache must survive into '
+            'the next frame',
+      );
+    });
   });
+}
+
+class _DirtyFromPaint extends LeafRenderObjectWidget {
+  const _DirtyFromPaint();
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderDirtyFromPaint();
+}
+
+class _RenderDirtyFromPaint extends RenderObject {
+  @override
+  CellSize performLayout(CellConstraints constraints) =>
+      constraints.constrain(const CellSize(1, 1));
+
+  @override
+  void performPaint(CellBuffer buffer, CellOffset offset) {
+    buffer.writeGrapheme(offset, 'x');
+    markNeedsPaint();
+  }
 }
 
 class _Toggle extends StatefulWidget {
