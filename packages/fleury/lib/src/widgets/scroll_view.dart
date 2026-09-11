@@ -451,6 +451,7 @@ class _RenderScrollView extends RenderObject
   }
 
   RenderObject? _child;
+  CellBuffer? _scratch;
   @override
   RenderObject? get child => _child;
   @override
@@ -504,7 +505,7 @@ class _RenderScrollView extends RenderObject
     // drops content before the scroll window and the scratch's bounds clip
     // the rest. Descendants derive their screen position from
     // [childOffsetOf], never from where they land in the scratch.
-    final scratch = CellBuffer(size);
+    final scratch = _scratch = CellBuffer.acquire(_scratch, size);
     c.paint(scratch, _scrollDirection.offset(-scroll));
 
     final bufCols = buffer.size.cols;

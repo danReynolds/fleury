@@ -78,6 +78,7 @@ class RenderCellEffect extends RenderObject
   }
 
   RenderObject? _child;
+  CellBuffer? _scratch;
   @override
   RenderObject? get child => _child;
   @override
@@ -106,7 +107,7 @@ class RenderCellEffect extends RenderObject
     final size = c.size;
     if (size.isEmpty) return;
 
-    final scratch = CellBuffer(size);
+    final scratch = _scratch = CellBuffer.acquire(_scratch, size);
     c.paint(scratch, CellOffset.zero);
 
     final cols = buffer.size.cols;
@@ -210,6 +211,7 @@ class RenderCellTranslation extends RenderObject
   }
 
   RenderObject? _child;
+  CellBuffer? _scratch;
   CellSize? _childSize;
 
   @override
@@ -252,7 +254,7 @@ class RenderCellTranslation extends RenderObject
       return;
     }
 
-    final scratch = CellBuffer(c.size);
+    final scratch = _scratch = CellBuffer.acquire(_scratch, c.size);
     c.paint(scratch, CellOffset.zero);
     // The translated cells may overflow this object's own box; the buffer —
     // a viewport's scratch, or the screen — is the only clip. Interaction
@@ -329,6 +331,7 @@ class RenderClip extends RenderObject implements RenderObjectWithSingleChild {
   }
 
   RenderObject? _child;
+  CellBuffer? _scratch;
   CellSize? _naturalSize;
   CellConstraints? _lastConstraints;
   @override
@@ -372,7 +375,7 @@ class RenderClip extends RenderObject implements RenderObjectWithSingleChild {
     final clipped = size;
     if (c.size.isEmpty) return;
 
-    final scratch = CellBuffer(c.size);
+    final scratch = _scratch = CellBuffer.acquire(_scratch, c.size);
     c.paint(scratch, CellOffset.zero);
     if (clipped.isEmpty) return;
     _compositePaintedRect(

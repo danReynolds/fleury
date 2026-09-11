@@ -123,6 +123,18 @@ final class CellBuffer {
         growable: false,
       );
 
+  /// [existing] after [clear] if it already has [size], otherwise a new
+  /// buffer. Compositors that paint into scratch every frame keep the
+  /// result and pass it back on the next paint so they do not allocate a
+  /// grid-sized list each time.
+  static CellBuffer acquire(CellBuffer? existing, CellSize size) {
+    if (existing != null && existing.size == size) {
+      existing.clear();
+      return existing;
+    }
+    return CellBuffer(size);
+  }
+
   CellSize _size;
   List<Cell> _cells;
   // Inline image bytes placed this frame, deduplicated by content hash.
