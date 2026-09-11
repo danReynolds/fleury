@@ -119,7 +119,7 @@ void main() {
       expect(child.layoutCount, 2);
     });
 
-    test('paint invalidation conservatively invalidates layout', () {
+    test('paint invalidation does not invalidate layout', () {
       final child = _CountingRenderObject(const CellSize(3, 2));
       final parent = _CountingParentRenderObject(child);
       const constraints = CellConstraints(maxCols: 10, maxRows: 10);
@@ -132,8 +132,68 @@ void main() {
       child.markNeedsPaint();
       parent.layout(constraints);
 
-      expect(parent.layoutCount, 2);
+      expect(parent.layoutCount, 1);
+      expect(child.layoutCount, 1);
+    });
+
+    test('tight constraints stop the layout ancestor walk', () {
+      final child = _CountingRenderObject(const CellSize(3, 2));
+      final parent = _CountingParentRenderObject(child);
+      final tight = CellConstraints.tight(const CellSize(10, 10));
+
+      parent.layout(tight);
+      expect(parent.layoutCount, 1);
+      expect(child.layoutCount, 1);
+      expect(child.isRelayoutBoundary, isTrue);
+
+      child.markNeedsLayout();
+      parent.layout(tight);
+      expect(
+        parent.layoutCount,
+        1,
+        reason: 'a tight child is a relayout boundary; the parent stays cached',
+      );
+
+      child.layout(tight);
       expect(child.layoutCount, 2);
+      expect(parent.layoutCount, 1);
+    });
+
+    testWidgets('tight sized box flushes without laying out the whole column', (
+      tester,
+    ) {
+      tester.pumpWidget(
+        const Column(
+          children: [
+            SizedBox(width: 10, height: 1, child: Text('aa')),
+            Text('sibling'),
+          ],
+        ),
+      );
+      tester.render(size: const CellSize(20, 3));
+
+      RenderLayoutDebugStats.beginFrame(enabled: true);
+      tester.pumpWidget(
+        const Column(
+          children: [
+            SizedBox(width: 10, height: 1, child: Text('bbbbbbbbbb')),
+            Text('sibling'),
+          ],
+        ),
+      );
+      tester.render(size: const CellSize(20, 3));
+      final stats = RenderLayoutDebugStats.takeFrameStats();
+      expect(
+        tester.renderToString(size: const CellSize(20, 3)).trim(),
+        contains('bbbbbbbbbb'),
+      );
+      expect(
+        stats.performedCount,
+        lessThan(4),
+        reason:
+            'only the tight box and its text should performLayout; '
+            'the sibling branch must stay cached',
+      );
     });
 
     test('paint-only invalidation preserves cached layout', () {

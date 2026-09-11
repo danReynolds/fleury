@@ -117,6 +117,30 @@ final class RenderDamageTracker {
     return result;
   }
 
+  final Set<RenderObject> _scheduledLayouts = Set<RenderObject>.identity();
+
+  /// Registers [node] to be laid out with its last constraints after the
+  /// root layout pass. Used when a tight-constraint node stops the
+  /// ancestor walk so the rest of the tree stays cached.
+  void scheduleLayout(RenderObject node) {
+    _scheduledLayouts.add(node);
+  }
+
+  /// Layouts dirtied relayout-boundary subtrees the root pass did not
+  /// reach. Parent-before-child; a node already laid out this frame is
+  /// skipped. Loops so a size change that dirties a parent is flushed
+  /// in the same frame.
+  void flushScheduledLayouts() {
+    while (_scheduledLayouts.isNotEmpty) {
+      final nodes = _scheduledLayouts.toList(growable: false);
+      _scheduledLayouts.clear();
+      nodes.sort((a, b) => a._layoutDepth - b._layoutDepth);
+      for (final node in nodes) {
+        node._flushScheduledLayout();
+      }
+    }
+  }
+
   bool takeRequiresFullDiff() {
     final result = _requiresFullDiff;
     _requiresFullDiff = false;
@@ -270,6 +294,17 @@ abstract class RenderObject implements ScreenGeometrySource {
   /// true in subclasses that implement the cache discipline.
   bool get isRepaintBoundary => false;
 
+  /// Whether a descendant layout invalidation can stop here.
+  ///
+  /// Tight constraints fully determine [size], so a child's size change
+  /// cannot change this node, and the parent does not need to relayout.
+  /// The node itself is scheduled for a constraints-cached layout pass
+  /// instead of dirtying the ancestor chain.
+  bool get isRelayoutBoundary {
+    final constraints = _constraints;
+    return constraints != null && constraints.isTight;
+  }
+
   /// The frame damage tracker for this render tree, held at the root.
   ///
   /// Set by the frame driver (via [attachFrameDamageTracker]) on the root
@@ -331,6 +366,7 @@ abstract class RenderObject implements ScreenGeometrySource {
   }
 
   void _markNeedsLayoutUp() {
+    if (_needsLayout) return;
     _needsLayout = true;
     final parent = _parent;
     if (parent == null) {
@@ -339,22 +375,21 @@ abstract class RenderObject implements ScreenGeometrySource {
       _frameDamage?.recordLayoutOrConservativePaint();
       return;
     }
+    if (isRelayoutBoundary) {
+      _rootFrameDamage?.scheduleLayout(this);
+      _rootFrameDamage?.recordVisualChange();
+      return;
+    }
     parent._markNeedsLayoutUp();
   }
 
-  /// Marks this render object as visually stale and conservatively marks
-  /// layout dirty.
+  /// Marks this render object as visually stale without dirtying layout.
   ///
-  /// This remains the compatibility-safe default for unaudited setters. Use
-  /// [markNeedsLayout] when the value can change size, child constraints,
-  /// offsets, or layout-derived paint state. Use [markNeedsPaintOnly] only
-  /// after verifying that the value cannot affect layout.
+  /// Size, constraints, and child offsets are unchanged. Use
+  /// [markNeedsLayout] when they might be. [markNeedsPaintOnly] is the
+  /// same signal with an audited-setter name.
   void markNeedsPaint() {
-    if (DebugInvalidations.isRecording) {
-      DebugInvalidations.recordPaint(_debugInvalidationLabel);
-    }
-    _markNeedsLayoutUp();
-    _markEnclosingRepaintBoundariesDirty();
+    markNeedsPaintOnly();
   }
 
   /// Marks only the nearest enclosing repaint boundary as visually stale.
@@ -513,8 +548,32 @@ abstract class RenderObject implements ScreenGeometrySource {
     if (previousSize != null && previousSize != result) {
       _rootFrameDamage?.recordLayoutOrConservativePaint();
       _markEnclosingRepaintBoundariesDirty();
+      // A relayout boundary stopped the ancestor walk. If our size
+      // actually changed, the parent still has to run — unless it is
+      // already laying us out (its `_needsLayout` is still true).
+      final parent = _parent;
+      if (parent != null && !parent._needsLayout) {
+        parent.markNeedsLayout();
+      }
     }
     return result;
+  }
+
+  int get _layoutDepth {
+    var depth = 0;
+    var node = _parent;
+    while (node != null) {
+      depth++;
+      node = node._parent;
+    }
+    return depth;
+  }
+
+  void _flushScheduledLayout() {
+    if (!_needsLayout) return;
+    final constraints = _constraints;
+    if (constraints == null) return;
+    layout(constraints);
   }
 
   /// Override to compute the chosen size and lay out children. Must
