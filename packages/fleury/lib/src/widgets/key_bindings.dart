@@ -158,7 +158,7 @@ final class PendingSequenceScope extends Scope<PendingSequenceNotifier> {
 ///
 /// ```dart
 /// KeyBinding(.tab, onTrigger: (event) {
-///   if (!Focus.of(context).focusNext()) event.bubble();
+///   if (!FocusManager.of(context).focusNext()) event.bubble();
 /// })
 /// ```
 ///
@@ -442,10 +442,10 @@ List<ActiveKeyBinding> resolveActiveKeyBindings(FocusManager manager) {
 /// )
 /// ```
 ///
-/// `KeyBindings` wraps its child in a non-focusable `Focus` node (so it
-/// appears in the focus chain but never becomes the focused node itself). The
-/// bindings it carries are consulted by the `InputDispatcher` when a
-/// `KeyEvent` reaches this node's spot in the chain.
+/// `KeyBindings` joins the input chain as a mailbox, not a [Focus] target:
+/// it fires while a descendant holds the keyboard, [Focus.of] walks past it,
+/// and it never becomes the focused node. The dispatcher consults its
+/// bindings when a [KeyEvent] reaches this node's spot in the chain.
 class KeyBindings extends StatefulWidget {
   const KeyBindings({
     super.key,
@@ -485,7 +485,7 @@ class KeyBindings extends StatefulWidget {
   /// bars, help overlays, and command palettes read this instead of walking
   /// the focus tree. Rebuilds when focus moves or the active bindings change.
   static List<ActiveKeyBinding> activeOf(BuildContext context) {
-    final manager = Focus.maybeOf(context);
+    final manager = FocusManager.maybeOf(context);
     if (manager == null) return const <ActiveKeyBinding>[];
     return resolveActiveKeyBindings(manager);
   }
@@ -621,7 +621,7 @@ class _KeyBindingsState extends State<KeyBindings> implements KeyBindingSource {
     // renders sequences + labels, not handlers. The notify is
     // microtask-deferred by the manager (we're mid-build here).
     if (_hintContentChanged(oldWidget.bindings, widget.bindings)) {
-      Focus.maybeOf(context)?.notifyBindingsChanged();
+      FocusManager.maybeOf(context)?.notifyBindingsChanged();
     }
     _syncHoldObserver();
   }
@@ -660,6 +660,6 @@ class _KeyBindingsState extends State<KeyBindings> implements KeyBindingSource {
     // [isModalScope]), independently of FocusScope.trapFocus. Keeping the
     // ancestor chain intact is what lets a binding at this boundary call
     // `bubble()` for explicit per-key passthrough.
-    return Focus(focusNode: _node, child: widget.child);
+    return InputScope(node: _node, child: widget.child);
   }
 }

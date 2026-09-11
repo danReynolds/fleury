@@ -150,7 +150,7 @@ class _ColorPickerState extends State<ColorPicker>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    Focus.maybeOf(context);
+    FocusManager.maybeOf(context);
     final registration = FormControlScope.maybeOf(context);
     if (!identical(registration, _formRegistration)) {
       _formRegistration?.release(this);
@@ -291,7 +291,7 @@ class _ColorPickerState extends State<ColorPicker>
   /// Opens a small popover anchored to the picker for typing a hex code.
   void _openHex() {
     if (_hexEntry != null) return;
-    final manager = Focus.of(context);
+    final manager = FocusManager.of(context);
     final overlay = Overlay.of(context);
     final theme = Theme.of(context);
     final entry = OverlayEntry(

@@ -268,7 +268,7 @@ class CommandPalette extends StatelessWidget {
 }
 
 BuildContext _defaultCommandSourceContext(BuildContext context) {
-  final focused = Focus.maybeOf(context)?.focusedNode?.context;
+  final focused = FocusManager.maybeOf(context)?.focusedNode?.context;
   if (focused != null &&
       focused.mounted &&
       CommandRegistryScope.maybeOf(focused) != null) {

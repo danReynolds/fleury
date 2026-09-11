@@ -85,11 +85,11 @@ class _ChatAppState extends State<ChatApp> {
     });
   }
 
-  // Focus.of(context) participates in Scope dependency
+  // FocusManager.of(context) participates in Scope dependency
   // tracking, so this build runs on every focus change automatically —
   // no manual listener needed.
   bool _isFocused(BuildContext context, FocusNode node) =>
-      Focus.of(context).focusedNode == node;
+      FocusManager.of(context).focusedNode == node;
 
   BoxBorder _borderFor(BuildContext context, FocusNode node) => BoxBorder(
     style: BorderStyle.rounded,

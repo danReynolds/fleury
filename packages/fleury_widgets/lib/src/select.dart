@@ -137,7 +137,7 @@ class _SelectState<T> extends State<Select<T>> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    Focus.maybeOf(context); // rebuild on focus change (focus cue)
+    FocusManager.maybeOf(context); // rebuild on focus change (focus cue)
     final registration = FormControlScope.maybeOf(context);
     if (!identical(registration, _formRegistration)) {
       _formRegistration?.release(this);
@@ -200,7 +200,7 @@ class _SelectState<T> extends State<Select<T>> {
   void _open() {
     if (widget.onChanged == null) return;
     if (widget.options.isEmpty || _isOpen) return;
-    final manager = Focus.of(context);
+    final manager = FocusManager.of(context);
     final overlay = Overlay.of(context);
     final theme = Theme.of(
       context,
@@ -238,7 +238,7 @@ class _SelectState<T> extends State<Select<T>> {
   }
 
   void _close({bool rebuild = true}) {
-    Focus.of(context).releaseFocusTrapIn(_trapContentKey.currentContext);
+    FocusManager.of(context).releaseFocusTrapIn(_trapContentKey.currentContext);
     _entry?.remove();
     _entry = null;
     final prior = _priorFocus;
@@ -291,7 +291,7 @@ class _SelectState<T> extends State<Select<T>> {
 
   @override
   Widget build(BuildContext context) {
-    Focus.maybeOf(context); // Rebuild trigger semantics when focus moves.
+    FocusManager.maybeOf(context); // Rebuild trigger semantics when focus moves.
     final theme = Theme.of(context);
     final enabled = widget.onChanged != null;
     final focused = _triggerFocus.hasFocus;
@@ -502,7 +502,7 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    Focus.maybeOf(context);
+    FocusManager.maybeOf(context);
     final registration = FormControlScope.maybeOf(context);
     if (!identical(registration, _formRegistration)) {
       _formRegistration?.release(this);
@@ -665,7 +665,7 @@ class _MultiSelectState<T> extends State<MultiSelect<T>>
 
   @override
   Widget build(BuildContext context) {
-    Focus.maybeOf(context);
+    FocusManager.maybeOf(context);
     final theme = Theme.of(context);
     final enabled = _enabled;
     final focused = enabled && _focusNode.hasFocus;
@@ -925,7 +925,7 @@ class _SelectListState<T> extends State<_SelectList<T>> {
   }
 
   void _releaseFocusTrap() {
-    Focus.of(context).releaseFocusTrapIn(widget.trapContentKey.currentContext);
+    FocusManager.of(context).releaseFocusTrapIn(widget.trapContentKey.currentContext);
   }
 
   void _dismiss() {
@@ -997,7 +997,7 @@ class _SelectListState<T> extends State<_SelectList<T>> {
 
   @override
   Widget build(BuildContext context) {
-    Focus.maybeOf(context); // Rebuild list/item semantics when focus moves.
+    FocusManager.maybeOf(context); // Rebuild list/item semantics when focus moves.
     // Cells, not code units: a CJK or emoji label is wider than its length.
     final widths = MediaQuery.textPolicyOf(context).widths;
     var labelWidth = 0;

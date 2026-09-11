@@ -191,7 +191,7 @@ class _AutocompleteState<T extends Object> extends State<Autocomplete<T>> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final manager = Focus.maybeOf(context);
+    final manager = FocusManager.maybeOf(context);
     if (!identical(manager, _manager)) {
       _manager?.removeListener(_sync);
       _manager = manager;

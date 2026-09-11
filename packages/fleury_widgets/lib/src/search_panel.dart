@@ -294,7 +294,7 @@ class _SearchPanelState extends State<SearchPanel> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final manager = Focus.maybeOf(context);
+    final manager = FocusManager.maybeOf(context);
     if (identical(manager, _focusManager)) return;
     _focusManager?.removeListener(_onFocusChange);
     _focusManager = manager;

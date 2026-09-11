@@ -920,7 +920,7 @@ class _DetailsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final focused = Focus.maybeOf(context)?.focusedNode;
+    final focused = FocusManager.maybeOf(context)?.focusedNode;
     final rows = <Widget>[
       Text(story.description),
       const SizedBox(height: 1),
@@ -1181,7 +1181,7 @@ class _PanelState extends State<_Panel> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final manager = Focus.maybeOf(context);
+    final manager = FocusManager.maybeOf(context);
     if (identical(manager, _manager)) return;
     _manager?.removeListener(_onFocusChange);
     _manager = manager;

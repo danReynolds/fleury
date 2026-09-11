@@ -114,7 +114,7 @@ class _StepperState extends State<Stepper> implements TextInputClaimant {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    Focus.maybeOf(context); // rebuild on focus change
+    FocusManager.maybeOf(context); // rebuild on focus change
     final registration = FormControlScope.maybeOf(context);
     if (!identical(registration, _formRegistration)) {
       _formRegistration?.release(this);

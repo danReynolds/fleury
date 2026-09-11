@@ -98,7 +98,7 @@ class _FocusableControlState extends State<FocusableControl>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    Focus.maybeOf(context); // rebuild on focus change (focus cue)
+    FocusManager.maybeOf(context); // rebuild on focus change (focus cue)
     final registration = FormControlScope.maybeOf(context);
     if (!identical(registration, _formRegistration)) {
       _formRegistration?.release(this);

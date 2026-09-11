@@ -157,7 +157,7 @@ class _FocusDependentContainedFailure extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     onBuild();
-    Focus.of(context);
+    FocusManager.of(context);
     return const ErrorBoundary(
       rethrowContained: false,
       child: Boom(mode: BoomMode.paint),

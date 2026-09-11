@@ -6,7 +6,7 @@ import 'package:fleury/fleury_core.dart';
 
 /// Walks the active focus chain and renders each visible binding as
 /// "`[label] description`". Updates automatically when focus moves (because it
-/// depends on the [FocusManager] via [Focus.of]).
+/// depends on the [FocusManager] via [FocusManager.of]).
 ///
 /// Under width pressure it degrades **honestly**: it fits as many whole
 /// bindings as the width allows and collapses the rest into a trailing `+N`,
@@ -55,7 +55,7 @@ class KeyHintBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final manager = Focus.maybeOf(context);
+    final manager = FocusManager.maybeOf(context);
     if (manager == null) return const EmptyBox();
     // Positional bindings name a SPOT, not a cap. Ask the keyboard what that
     // spot is actually labelled before telling anyone to press it (§9).

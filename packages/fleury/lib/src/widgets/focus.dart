@@ -77,8 +77,8 @@ abstract interface class CaretHost implements ScreenGeometrySource {
 /// active focus chain.
 ///
 /// `KeyBindings` widgets implement this and attach themselves to a
-/// `FocusNode.bindingSource`. The `InputDispatcher` walks the focus chain and
-/// reads `activeBindings` from each non-null source. User-facing key discovery
+/// `FocusNode.bindingSource` on an [InputScope] mailbox. The `InputDispatcher`
+/// walks the input chain and reads `activeBindings` from each non-null source. User-facing key discovery
 /// surfaces use `resolveActiveKeyBindings`, which applies the same precedence
 /// plus hint visibility and text-input shadowing rules.
 ///
@@ -380,6 +380,43 @@ class FocusManager extends ChangeNotifier {
 
   /// The currently focused node, or null when nothing is focused.
   FocusNode? get focusedNode => _focusedNode;
+
+  /// The surrounding [FocusManager]. Throws when there isn't one — the
+  /// manager is installed by `runApp`.
+  ///
+  /// One manager exists per application, not per process, so it is reached
+  /// through the tree: a test host can stand up several independent apps.
+  /// Reading it also subscribes [context] to focus changes.
+  static FocusManager of(BuildContext context) {
+    final manager = maybeOf(context);
+    if (manager == null) {
+      throw StateError(
+        'No FocusManager found in this context. Did you call '
+        'runApp (which installs one)?',
+      );
+    }
+    return manager;
+  }
+
+  /// The surrounding [FocusManager], or null if there isn't one. See [of].
+  static FocusManager? maybeOf(BuildContext context) =>
+      Scope.maybeOf<FocusManager>(context);
+
+  /// Returns the surrounding manager without rebuilding [context] when its
+  /// focus or active bindings change.
+  ///
+  /// Framework widgets that only need to issue imperative manager operations
+  /// use this to avoid accidentally making a broad structural ancestor a
+  /// focus-change dependent. App/widget code should normally use [maybeOf].
+  @internal
+  static FocusManager? maybeOfWithoutDependency(BuildContext context) =>
+      Scope.maybeOfWithoutDependency<FocusManager>(context);
+
+  /// Returns the surrounding manager and rebuilds only when that manager
+  /// instance is replaced, not when its ordinary focus state changes.
+  @internal
+  static FocusManager? maybeOfIdentityDependency(BuildContext context) =>
+      Scope.maybeOf<_FocusManagerIdentity>(context)?.manager;
 
   /// All currently attached nodes, in attachment order. Used by the
   /// dispatcher to find the autofocus candidate, etc.
@@ -994,8 +1031,8 @@ class FocusManager extends ChangeNotifier {
     if (_acceptsInput(focused)) chain.add(focused);
     var element = focused._element?.elementParent;
     while (element != null) {
-      if (element is _FocusElement) {
-        if (_acceptsInput(element.node)) chain.add(element.node);
+      if (element is _InputChainParticipant) {
+        if (_acceptsInput(element.chainNode)) chain.add(element.chainNode);
       }
       element = element.elementParent;
     }
@@ -1111,7 +1148,8 @@ class FocusManager extends ChangeNotifier {
 /// Broad framework boundaries sometimes need to rebind when the surrounding
 /// manager instance changes, but must not rebuild for every focus movement or
 /// geometry notification. A `Scope<FocusManager>` listens to the manager, so
-/// they read this wrapper instead (through [Focus.maybeOfIdentityDependency]):
+/// they read this wrapper instead (through
+/// [FocusManager.maybeOfIdentityDependency]):
 /// it is not a [Listenable], and two handles are equal when they wrap the
 /// same manager, so its scope notifies only on replacement.
 final class _FocusManagerIdentity {
@@ -1128,7 +1166,7 @@ final class _FocusManagerIdentity {
 }
 
 /// Root of the focus tree. Installed by `runApp` so application widget
-/// code can always reach a `FocusManager` via [Focus.of].
+/// code can always reach a `FocusManager` via [FocusManager.of].
 ///
 /// Installs a `Scope<FocusManager>`: readers rebuild on every focus change
 /// because the manager is a [ChangeNotifier]. An identity-only scope sits
@@ -1212,49 +1250,75 @@ class Focus extends StatefulWidget {
   @override
   State<Focus> createState() => _FocusState();
 
-  /// Returns the surrounding [FocusManager]. Throws if not present.
-  static FocusManager of(BuildContext context) {
-    final manager = maybeOf(context);
-    if (manager == null) {
+  /// The nearest enclosing [FocusNode] — the node of the closest [Focus]
+  /// ancestor, or of this widget itself when called from its own subtree.
+  /// Throws when the context is not inside a [Focus]. Overlay entries sit
+  /// beside the app root, so a context in an entry with no local [Focus] throws
+  /// even though [FocusManager.of] still works. [KeyBindings] and
+  /// [KeyDetector] join the input chain without being [Focus] targets, so
+  /// this walk skips them.
+  ///
+  /// [FocusNode.hasFocus] is identity with the focused node, not
+  /// descendant-inclusive. Use [FocusDetector] when a region should stay
+  /// active while a child holds the keyboard.
+  ///
+  /// ```dart
+  /// final focused = highlighted && Focus.of(context).hasFocus;
+  /// ```
+  ///
+  /// Reading this subscribes [context] to focus changes, so a build method
+  /// can keep [FocusNode.hasFocus] current without a detector.
+  static FocusNode of(BuildContext context) {
+    final node = maybeOf(context);
+    if (node == null) {
       throw StateError(
-        'No FocusManager found in this context. Did you call '
-        'runApp (which installs one)?',
+        'No enclosing Focus found in this context. Wrap the subtree in a '
+        'Focus, or use FocusManager.of(context) for the focus manager.',
       );
     }
-    return manager;
+    return node;
   }
 
-  /// Returns the surrounding [FocusManager], or null if there isn't
-  /// one.
-  static FocusManager? maybeOf(BuildContext context) =>
-      Scope.maybeOf<FocusManager>(context);
-
-  /// Returns the surrounding manager without rebuilding [context] when its
-  /// focus or active bindings change.
-  ///
-  /// Framework widgets that only need to issue imperative manager operations
-  /// use this to avoid accidentally making a broad structural ancestor a
-  /// focus-change dependent. App/widget code should normally use [maybeOf].
-  @internal
-  static FocusManager? maybeOfWithoutDependency(BuildContext context) =>
-      Scope.maybeOfWithoutDependency<FocusManager>(context);
-
-  /// Returns the surrounding manager and rebuilds only when that manager
-  /// instance is replaced, not when its ordinary focus state changes.
-  @internal
-  static FocusManager? maybeOfIdentityDependency(BuildContext context) =>
-      Scope.maybeOf<_FocusManagerIdentity>(context)?.manager;
+  /// The nearest enclosing [FocusNode], or null when the context is not
+  /// inside a [Focus]. See [of].
+  static FocusNode? maybeOf(BuildContext context) {
+    // Depend on the manager so the caller rebuilds when focus moves; the node
+    // identity alone would not tell it that `hasFocus` flipped.
+    FocusManager.maybeOf(context);
+    // Start at the context itself: a Focus's own element is its State's
+    // context, so a widget can ask for the node it just installed. Otherwise
+    // walk out to the closest enclosing one.
+    for (
+      Element? element = context is Element ? context : null;
+      element != null;
+      element = element.elementParent
+    ) {
+      if (element is _FocusElement) return element.node;
+    }
+    return null;
+  }
 
   @override
   StatefulElement createElement() => _FocusElement(this);
 }
 
-class _FocusElement extends StatefulElement {
+/// An element that contributes a [FocusNode] to [FocusManager.activeChain].
+///
+/// [Focus] is the keyboard-target case. [InputScope] is the mailbox case
+/// ([KeyBindings], [KeyDetector]) — on the chain, invisible to [Focus.of].
+mixin _InputChainParticipant on Element {
+  FocusNode get chainNode;
+}
+
+class _FocusElement extends StatefulElement with _InputChainParticipant {
   _FocusElement(Focus super.widget);
 
   /// The node this element is wiring up. Exposed so the manager can
   /// build the focus chain by walking element parents.
   FocusNode get node => (state as _FocusState)._node;
+
+  @override
+  FocusNode get chainNode => node;
 }
 
 class _FocusState extends State<Focus> {
@@ -1343,7 +1407,7 @@ class _FocusState extends State<Focus> {
   void _attach() {
     // Follow provider identity even when the parent reuses the same child.
     // Ordinary focus changes do not require repeating this ownership work.
-    final manager = Focus.maybeOfIdentityDependency(context);
+    final manager = FocusManager.maybeOfIdentityDependency(context);
     if (identical(manager, _manager)) return;
     _detach();
     if (manager == null) return;
@@ -1379,6 +1443,89 @@ class _FocusState extends State<Focus> {
     // resolves into the freshly-walked `_enclosingScope`.
     _attach();
     return _FocusBounds(node: _node, child: widget.child);
+  }
+}
+
+/// Puts [node] on [FocusManager.activeChain] without making it a [Focus]
+/// target. [Focus.of] walks past this widget.
+///
+/// [KeyBindings] and [KeyDetector] use this so shortcuts and detectors fire
+/// while a descendant holds the keyboard, without answering "am I focused?"
+/// as this mailbox.
+@internal
+final class InputScope extends StatefulWidget {
+  const InputScope({super.key, required this.node, required this.child});
+
+  final FocusNode node;
+  final Widget child;
+
+  @override
+  StatefulElement createElement() => _InputScopeElement(this);
+
+  @override
+  State<InputScope> createState() => _InputScopeState();
+}
+
+final class _InputScopeElement extends StatefulElement
+    with _InputChainParticipant {
+  _InputScopeElement(InputScope super.widget);
+
+  @override
+  FocusNode get chainNode => (state as _InputScopeState)._node;
+}
+
+final class _InputScopeState extends State<InputScope> {
+  FocusManager? _manager;
+  FocusNode? _attachedNode;
+
+  FocusNode get _node => widget.node;
+
+  @override
+  void didUpdateWidget(InputScope oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(widget.node, oldWidget.node)) {
+      _detach();
+      _attach();
+    }
+  }
+
+  @override
+  void deactivate() {
+    _detach();
+    super.deactivate();
+  }
+
+  @override
+  void dispose() {
+    _detach();
+    super.dispose();
+  }
+
+  void _attach() {
+    final manager = FocusManager.maybeOfIdentityDependency(context);
+    if (identical(manager, _manager)) return;
+    _detach();
+    if (manager == null) return;
+    _manager = manager;
+    _attachedNode = widget.node;
+    manager._register(widget.node, context as Element);
+    widget.node._enclosingScope = FocusScope._enclosingOf(context as Element);
+  }
+
+  void _detach() {
+    final node = _attachedNode;
+    final manager = _manager;
+    _attachedNode = null;
+    _manager = null;
+    if (node != null) manager?._unregister(node);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Same attach timing as [Focus]: after dependencies so a manager or
+    // FocusScope inserted this frame is the one we register with.
+    _attach();
+    return widget.child;
   }
 }
 
@@ -1806,7 +1953,7 @@ class _FocusDetectorState extends State<FocusDetector> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final manager = Focus.maybeOf(context);
+    final manager = FocusManager.maybeOf(context);
     if (!identical(manager, _manager)) {
       _manager?.removeListener(_onFocusChange);
       _manager = manager;

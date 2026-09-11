@@ -965,7 +965,7 @@ class _TextInputState extends State<TextInput>
     // Rebuild on focus change so cursor visibility flips.
     // Scope.of subscribes us to the
     // FocusManagerScope.
-    Focus.maybeOf(context);
+    FocusManager.maybeOf(context);
     final registration = FormControlScope.maybeOf(context);
     if (!identical(registration, _formRegistration)) {
       _formRegistration?.release(this);
@@ -1510,7 +1510,7 @@ class _TextInputState extends State<TextInput>
 
   void _pointerDown(PointerDetails details) {
     if (!widget.enabled ||
-        !(Focus.maybeOf(context)?.isClickable(_focusNode) ?? false)) {
+        !(FocusManager.maybeOf(context)?.isClickable(_focusNode) ?? false)) {
       return;
     }
     final offset = _offsetForPointer(details);
@@ -1526,7 +1526,7 @@ class _TextInputState extends State<TextInput>
 
   void _pointerDrag(PointerDragDetails details) {
     if (!widget.enabled ||
-        !(Focus.maybeOf(context)?.isClickable(_focusNode) ?? false)) {
+        !(FocusManager.maybeOf(context)?.isClickable(_focusNode) ?? false)) {
       return;
     }
     final offset = _offsetForPointer(details);
