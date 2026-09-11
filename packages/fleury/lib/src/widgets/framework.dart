@@ -1653,6 +1653,7 @@ class BuildOwner {
       ..screenSize = buffer.size
       ..phase = RenderFramePhase.layout;
     rootRender.layout(CellConstraints.loose(buffer.size));
+    renderDamageTracker.flushScheduledLayouts();
     final layoutElapsed = sw?.elapsed ?? Duration.zero;
     // Layout can rebuild (LayoutBuilder) and deactivate subtrees AFTER this
     // frame's flushBuild already finalized — without this, their
