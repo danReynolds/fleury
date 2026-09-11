@@ -205,6 +205,7 @@ final class DiffViewCopyResult {
 DiffDocument parseUnifiedDiff(String source, {int? maxLineLength = 1000}) {
   final rows = <DiffLine>[];
   var fileIndex = -1;
+  var sawGitHeader = false;
   var hunkIndex = -1;
   int? currentHunkIndex;
   var additionCount = 0;
@@ -214,9 +215,9 @@ DiffDocument parseUnifiedDiff(String source, {int? maxLineLength = 1000}) {
   int? oldCursor;
   int? newCursor;
   // Unconsumed old/new-side lines promised by the current hunk's `@@` header.
-  // While either is positive we are inside a hunk body, where a leading
-  // '-'/'+' is always a removed/added content line (its remaining text is
-  // arbitrary) — never a '---'/'+++' file header.
+  // They still help describe hunk size, but an understated count must not end
+  // the body early: once a hunk is open we stay in it until the next `@@`,
+  // `diff --git`, or a non-body line (not +/-/space-prefixed and not blank).
   var remainingOld = 0;
   var remainingNew = 0;
 
@@ -248,12 +249,40 @@ DiffDocument parseUnifiedDiff(String source, {int? maxLineLength = 1000}) {
 
   final rawLines = source.split('\n');
   if (rawLines.isNotEmpty && rawLines.last.isEmpty) rawLines.removeLast();
-  for (final raw in rawLines) {
-    final line = raw.endsWith('\r') ? raw.substring(0, raw.length - 1) : raw;
-    final inHunkBody = remainingOld > 0 || remainingNew > 0;
+  String lineAt(int index) {
+    if (index < 0 || index >= rawLines.length) return '';
+    final raw = rawLines[index];
+    return raw.endsWith('\r') ? raw.substring(0, raw.length - 1) : raw;
+  }
+
+  for (var lineIndex = 0; lineIndex < rawLines.length; lineIndex++) {
+    final line = lineAt(lineIndex);
+    // A `--- x` / `+++ y` / `@@` run is a file header even mid-body. The open
+    // hunk alone cannot decide it: plain `diff -u` (no `diff --git` line) puts
+    // the next file's headers directly after the previous hunk's last body
+    // line, and reading them as a deletion and an addition swallowed every
+    // file after the first, inflated the counts, and left oldPath/newPath
+    // pointing at file 1. The counters cannot decide it either — that is what
+    // an understated `@@ -1,1 +1,1 @@` breaks.
+    // ...and only for a file that did NOT announce itself with `diff --git`.
+    // A git diff already has an unambiguous file boundary, so mid-body the
+    // lookahead can only be wrong there — a deletion of `-- x` followed by an
+    // addition of `++ y` and then the next `@@` (SQL, Lua, Haskell and Ada
+    // comments all produce that shape) was being reclassified as a header
+    // pair, deleting two real edits from the rendered diff.
+    final startsHeaderRun =
+        !sawGitHeader &&
+        line.startsWith('--- ') &&
+        lineAt(lineIndex + 1).startsWith('+++ ') &&
+        _hunkPattern.hasMatch(lineAt(lineIndex + 2));
+    // Hunk membership tracks the open hunk, not the remaining counters — an
+    // understated `@@ -1,1 +1,1 @@` still has body lines after the counters
+    // hit zero, and those must stay edits rather than demoting to metadata.
+    final inHunkBody = currentHunkIndex != null;
     // `diff --git` and `@@` never carry a +/-/space prefix, so a bare one at
     // column 0 is unambiguous even mid-hunk — a new file/hunk resets the body.
     if (line.startsWith('diff --git ')) {
+      sawGitHeader = true;
       fileIndex += 1;
       oldPath = null;
       newPath = null;
@@ -267,14 +296,29 @@ DiffDocument parseUnifiedDiff(String source, {int? maxLineLength = 1000}) {
     }
     // '---'/'+++' are file headers only outside a hunk body; inside one an
     // identical prefix is a deleted/added line whose content starts with -/+.
-    if (!inHunkBody && line.startsWith('--- ')) {
+    if ((!inHunkBody || startsHeaderRun) && line.startsWith('--- ')) {
       oldPath = _normalizeDiffPath(line.substring(4));
-      if (fileIndex < 0) fileIndex = 0;
+      // A header run reached from inside a hunk body is the next file in a
+      // plain `diff -u`, which has no `diff --git` to bump the index. Without
+      // this every file in such a diff shared fileIndex 0, so anything that
+      // groups by file — the file list, per-file collapse, jump-to-file —
+      // merged them all into one.
+      if (startsHeaderRun && inHunkBody) {
+        fileIndex += 1;
+      } else if (fileIndex < 0) {
+        fileIndex = 0;
+      }
       currentHunkIndex = null;
       addRow(kind: DiffLineKind.fileHeader, text: line);
       continue;
     }
-    if (!inHunkBody && line.startsWith('+++ ')) {
+    // The `+++` half of a run whose `---` was just taken as a file header.
+    final continuesHeaderRun =
+        line.startsWith('+++ ') &&
+        rows.isNotEmpty &&
+        rows.last.kind == DiffLineKind.fileHeader &&
+        rows.last.text.startsWith('--- ');
+    if ((!inHunkBody || continuesHeaderRun) && line.startsWith('+++ ')) {
       newPath = _normalizeDiffPath(line.substring(4));
       if (fileIndex < 0) fileIndex = 0;
       currentHunkIndex = null;
@@ -331,6 +375,32 @@ DiffDocument parseUnifiedDiff(String source, {int? maxLineLength = 1000}) {
       if (remainingOld > 0) remainingOld -= 1;
       if (remainingNew > 0) remainingNew -= 1;
       continue;
+    }
+    // A blank mid-hunk line IS a context line — an empty one, whose single
+    // leading space got stripped somewhere between the generator and here
+    // (routine in emailed and pasted diffs). It consumes one old and one new
+    // line like any other context row; leaving the cursors alone made every
+    // row after it off by one and let two rows claim the same old line.
+    if (inHunkBody && line.isEmpty) {
+      final currentOld = oldCursor;
+      final currentNew = newCursor;
+      addRow(
+        kind: DiffLineKind.context,
+        text: line,
+        oldLine: currentOld,
+        newLine: currentNew,
+      );
+      if (oldCursor != null) oldCursor += 1;
+      if (newCursor != null) newCursor += 1;
+      if (remainingOld > 0) remainingOld -= 1;
+      if (remainingNew > 0) remainingNew -= 1;
+      continue;
+    }
+    // Non-body line ends the open hunk (next `@@` / `diff --git` already reset
+    // above). Remaining counters clear so a later '---'/'+++' is a file header.
+    if (inHunkBody) {
+      remainingOld = 0;
+      remainingNew = 0;
     }
     currentHunkIndex = null;
     addRow(kind: DiffLineKind.metadata, text: line);

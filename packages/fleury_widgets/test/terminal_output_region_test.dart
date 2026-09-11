@@ -246,16 +246,6 @@ void main() {
           'L1',
         );
       },
-      // The root-cause fix needs a stable logical id that survives a head
-      // trim. LogBuffer (packages/fleury/lib/src/runtime/output_capture.dart)
-      // exposes no monotonic base/total-added, and its LogLine carries no
-      // sequence, so buildTerminalOutputLogEntries can only key on the list
-      // index — which is exactly what shifts under a trim. Re-anchoring in the
-      // widget alone (delta-tracking or LogLine-instance keys) is a band-aid
-      // that misses the null-controller path and const-canonicalized dup
-      // lines. Unskip once LogBuffer carries a monotonic offset and the id is
-      // base+index. See audit finding terminal_output_region.dart:11.
-      skip: 'Blocked on LogBuffer monotonic base offset (core, out of scope).',
     );
   });
 }

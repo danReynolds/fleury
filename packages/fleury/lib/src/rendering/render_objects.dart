@@ -259,6 +259,11 @@ class RenderText extends RenderObject
     int nextIntrinsicWidth,
   ) {
     if (needsLayout) return false;
+    // `maxLines <= 0` means "no lines", which performLayout enforces. This
+    // path skips performLayout entirely, so without bailing here the reuse
+    // restores `_lines = [display]` and the cap silently stops holding on the
+    // first text change.
+    if (_maxLines != null && _maxLines! <= 0) return false;
     if (_text.isEmpty != nextText.isEmpty) return false;
     if (_text.contains('\n') || nextText.contains('\n')) return false;
     if (_intrinsicWidth != nextIntrinsicWidth) return false;
@@ -285,6 +290,14 @@ class RenderText extends RenderObject
     // overhead would be a net loss.
     if (!hasNewlines &&
         (!_softWrap || maxCols == null || _intrinsicWidth <= maxCols)) {
+      // Honor maxLines on the fast path too (0 → empty), matching the
+      // wrapping / multi-paragraph cap below.
+      if (_maxLines != null && _maxLines! <= 0) {
+        _lines = const <String>[];
+        _lineWidths = const <int>[];
+        _moreLinesTruncated = true;
+        return constraints.constrain(CellSize.zero);
+      }
       _lines = <String>[_text];
       _lineWidths = const <int>[];
       _moreLinesTruncated = false;

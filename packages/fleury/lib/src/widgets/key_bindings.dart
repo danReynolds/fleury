@@ -549,6 +549,10 @@ class _KeyBindingsState extends State<KeyBindings> implements KeyBindingSource {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Subscribe to keyboard capability changes (Scope listens to the
+    // Listenable notifier) so a mid-session demotion re-runs hold sync and
+    // unregisters the observation-lane latch when held-state is lost.
+    Scope.maybeOf<KeyboardStateNotifier>(context);
     _syncHoldObserver();
   }
 
@@ -575,6 +579,13 @@ class _KeyBindingsState extends State<KeyBindings> implements KeyBindingSource {
   void _observeHold(KeyEvent event) {
     switch (event.type) {
       case KeyEventType.down:
+        // Live capability guard: demotion synthesizes ends then notifies,
+        // but a press that races before unregister must not re-latch a
+        // hold that can never receive a real release.
+        final caps = KeyboardScope.maybeDispatcherOf(
+          context,
+        )?.keyboardSession.capabilities;
+        if (caps == null || !caps.supportsHeldState) return;
         if (_openHolds.containsKey(event.code)) return;
         for (final binding in widget.bindings) {
           if (!binding.isHold || !binding.enabled) continue;

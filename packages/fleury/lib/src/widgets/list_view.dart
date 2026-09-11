@@ -181,6 +181,20 @@ class ListController extends ChangeNotifier {
   /// change the cursor. The resulting position survives unrelated rebuilds.
   void jumpToIndex(int index) {
     _checkNotDisposed();
+    // Refuse BEFORE clearing. A realized zero-row layout with items
+    // (collapsed pane) cannot show a jump, so drop it rather than stash a
+    // target that would scroll away from the still-current selection on
+    // expand — but clearing first meant a second jump while collapsed also
+    // destroyed the stash the FIRST one left, then recorded nothing, so an
+    // expand rendered from 0. Distinguish from pre-first-layout (defaults
+    // keep visibleFraction at 1) so jump-before-render still works. Empty
+    // lists still stash — restore+reveal keep selection on-screen after
+    // refill.
+    if (_viewportExtent == 0 && _itemCount > 0 && _visibleFraction == 0) {
+      _isFollowing = false;
+      notifyListeners();
+      return;
+    }
     _clearRequests();
     _pendingJumpIndex = _itemCount == 0
         ? index
@@ -1114,6 +1128,13 @@ class _ListViewportLayout {
       if (viewportExtent == 0 && controller._isFollowing) {
         controller._pendingBottom = true;
       }
+      // No pending-jump clear here. `jumpToIndex` already refuses to stash a
+      // jump aimed at a collapsed pane that HAS items — it can show nothing,
+      // so it drops it at the source. Clearing again from layout also killed
+      // jumps issued BEFORE the collapse, which is a different thing and a
+      // legitimate one: a list told to jump to 50, laid out once inside a
+      // collapsed pane, then expanded, rendered from 0 instead of 50.
+
       if (count == 0) {
         anchor = 0;
         itemOffset = 0;

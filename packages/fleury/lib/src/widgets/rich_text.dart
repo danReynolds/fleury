@@ -612,15 +612,56 @@ class RenderRichText extends RenderObject
           lineWidth = 0;
         }
         if (ww > maxCols) {
-          for (var i = wordStart; i < wordEnd; i++) {
+          // Hard-break at unit boundaries. A unit is one glyph, or one whole
+          // lowered cluster group (shared groupId): atoms of one source
+          // grapheme stay on one line, so ClusterLowering.split cannot tear a
+          // ZWJ sequence across rows (RFC 0019 decision 15 / audit 4.b).
+          //
+          // A group that alone exceeds the line falls back to its atoms,
+          // matching RenderText._breakUnits. Keeping it whole would push the
+          // overflow past the box and let paint clip it away — the atoms that
+          // did not fit would simply be gone, with no ellipsis, and the two
+          // text renderers would disagree on the same input.
+          var i = wordStart;
+          while (i < wordEnd) {
             final g = _glyphs[i];
-            if (lineWidth > 0 && lineWidth + g.width > maxCols) {
+            final groupId = g.groupId;
+            var unitEnd = i + 1;
+            var unitWidth = g.width;
+            if (groupId != null) {
+              while (unitEnd < wordEnd && _glyphs[unitEnd].groupId == groupId) {
+                unitWidth += _glyphs[unitEnd].width;
+                unitEnd++;
+              }
+              if (unitWidth > maxCols) {
+                // Oversized group: lay the WHOLE group out atom by atom. Only
+                // re-measuring the first atom would let the remainder re-form
+                // a sub-group on the next pass, which breaks the line one atom
+                // early and diverges from RenderText again.
+                for (var j = i; j < unitEnd; j++) {
+                  final atom = _glyphs[j];
+                  if (lineWidth > 0 && lineWidth + atom.width > maxCols) {
+                    out.add(line);
+                    line = <_Glyph>[];
+                    lineWidth = 0;
+                  }
+                  line.add(atom);
+                  lineWidth += atom.width;
+                }
+                i = unitEnd;
+                continue;
+              }
+            }
+            if (lineWidth > 0 && lineWidth + unitWidth > maxCols) {
               out.add(line);
               line = <_Glyph>[];
               lineWidth = 0;
             }
-            line.add(g);
-            lineWidth += g.width;
+            for (var j = i; j < unitEnd; j++) {
+              line.add(_glyphs[j]);
+            }
+            lineWidth += unitWidth;
+            i = unitEnd;
           }
         } else {
           for (var i = wordStart; i < wordEnd; i++) {
@@ -688,7 +729,15 @@ class RenderRichText extends RenderObject
     ({int start, int end})? selection,
   ) {
     final maxCol = startCol + size.cols;
-    final contentMaxCol = ellipsize ? maxCol - 1 : maxCol;
+    // Reserve what the ellipsis actually measures on this surface. `…` is
+    // East Asian Ambiguous, so an ambiguous-wide terminal draws it two cells
+    // wide; reserving one there put the ellipsis one column past the box —
+    // where it was degraded to `?` at the buffer edge (RFC 0019). Matches
+    // RenderText._paintLine.
+    final ellipsisWidth = ellipsize
+        ? _widthResolver.widthOfGrapheme(_ellipsis, _policy)
+        : 0;
+    final contentMaxCol = maxCol - ellipsisWidth;
     var col = startCol;
     var off = lineStartOffset;
     CellStyle? previousStyle;
@@ -721,13 +770,20 @@ class RenderRichText extends RenderObject
       col += g.width;
       off += g.grapheme.length;
     }
-    if (ellipsize && col < maxCol) {
+    // `col + ellipsisWidth <= maxCol`, not `col < maxCol`: the ellipsis must
+    // fit INSIDE the box, never half-in with its continuation cell over the
+    // neighbour.
+    if (ellipsize && col + ellipsisWidth <= maxCol) {
       buffer.writeGrapheme(
         CellOffset(col, row),
-        '…',
+        _ellipsis,
         widthResolver: _widthResolver,
         policy: _policy,
       );
     }
   }
+
+  /// The overflow marker. `…` is East Asian Ambiguous — one cell under the
+  /// spec policy, two on a surface that measured ambiguous glyphs wide.
+  static const String _ellipsis = '…';
 }

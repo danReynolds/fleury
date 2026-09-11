@@ -161,10 +161,21 @@ class TextEditingController extends ChangeNotifier {
 
   /// The current text, canonical unless [preserveText] is true.
   /// See the class doc for exactly what is rewritten and what you read back.
-  /// Assigning text resets editing history even when the text is unchanged.
+  /// Assigning text resets editing history even when the text is unchanged,
+  /// and clears any active IME composing range — leaving a stale one against
+  /// the new string would let a later commit rewrite the wrong span
+  /// (audit 10.f).
+  ///
+  /// The caret is NOT moved. An as-you-type formatter
+  /// (`onChanged: (v) => controller.text = format(v)`) assigns on every
+  /// keystroke, and collapsing the selection to the end there makes it
+  /// impossible to edit anywhere but the end of the field.
   String get text => _value.text;
   set text(String text) {
-    _setValue(_value.copyWith(text: text), resetHistory: true);
+    _setValue(
+      _value.copyWith(text: text, composing: TextRange.empty),
+      resetHistory: true,
+    );
   }
 
   /// The current directional selection, normalized to grapheme boundaries
@@ -197,6 +208,7 @@ class TextEditingController extends ChangeNotifier {
 
   void clear() {
     _checkNotDisposed();
+    _cancelComposingForEdit();
     _applyEdit(TextEditingValue(text: '', preserveText: preserveText));
   }
 
@@ -208,6 +220,7 @@ class TextEditingController extends ChangeNotifier {
   /// the run. Text widgets use this for typed input.
   void insert(String s, {bool singleLine = false, bool coalesce = false}) {
     _checkNotDisposed();
+    _cancelComposingForEdit();
     _applyEdit(
       TextEditingModel.insert(_value, s, singleLine: singleLine),
       transaction: coalesce ? _EditTransaction.typing : _EditTransaction.edit,
@@ -224,7 +237,7 @@ class TextEditingController extends ChangeNotifier {
     // duplicate; undo restores a half-composed value). Cancel the abandoned
     // composition (restore the pre-composition value), then insert against
     // that clean value.
-    if (_compositionBase != null) cancelComposing();
+    _cancelComposingForEdit();
     _applyEdit(
       TextEditingModel.insert(_value, s, singleLine: singleLine),
       transaction: _EditTransaction.paste,
@@ -236,6 +249,9 @@ class TextEditingController extends ChangeNotifier {
   /// left. No-op when the cursor is at the start.
   void backspace() {
     _checkNotDisposed();
+    // Mid-composition backspace resolves the preedit (restore baseline) and
+    // stops — it must not also delete into the restored value.
+    if (_cancelComposingForEdit()) return;
     _applyEdit(TextEditingModel.backspace(_value));
   }
 
@@ -243,11 +259,13 @@ class TextEditingController extends ChangeNotifier {
   /// No-op when the cursor is at the end.
   void delete() {
     _checkNotDisposed();
+    if (_cancelComposingForEdit()) return;
     _applyEdit(TextEditingModel.delete(_value));
   }
 
   void deleteSelection() {
     _checkNotDisposed();
+    if (_cancelComposingForEdit()) return;
     if (!hasSelection) return;
     _applyEdit(TextEditingModel.replaceSelection(_value, ''));
   }
@@ -262,6 +280,9 @@ class TextEditingController extends ChangeNotifier {
   /// your own obscured/policy state, or the plaintext becomes Ctrl+Y-yankable.
   void killToLineEnd({bool captureToKillRing = true}) {
     _checkNotDisposed();
+    // Cancelling composition is not a kill — do not cut the restored baseline
+    // or push the abandoned preedit into the process-wide kill ring.
+    if (_cancelComposingForEdit()) return;
     _applyEdit(
       TextEditingModel.killToLineEnd(
         _value,
@@ -275,6 +296,7 @@ class TextEditingController extends ChangeNotifier {
   /// See [killToLineEnd] for [captureToKillRing].
   void killToLineStart({bool captureToKillRing = true}) {
     _checkNotDisposed();
+    if (_cancelComposingForEdit()) return;
     _applyEdit(
       TextEditingModel.killToLineStart(
         _value,
@@ -288,6 +310,7 @@ class TextEditingController extends ChangeNotifier {
   /// See [killToLineEnd] for [captureToKillRing].
   void killWordLeft({bool captureToKillRing = true}) {
     _checkNotDisposed();
+    if (_cancelComposingForEdit()) return;
     _applyEdit(
       TextEditingModel.killWordLeft(
         _value,
@@ -299,6 +322,7 @@ class TextEditingController extends ChangeNotifier {
   /// Insert the kill ring at the caret (replacing any selection).
   void yank({bool singleLine = false}) {
     _checkNotDisposed();
+    _cancelComposingForEdit();
     _applyEdit(TextEditingModel.yank(_value, singleLine: singleLine));
   }
 
@@ -308,6 +332,7 @@ class TextEditingController extends ChangeNotifier {
     bool singleLine = false,
   }) {
     _checkNotDisposed();
+    _cancelComposingForEdit();
     _applyEdit(
       TextEditingModel.replaceRange(
         _value,
@@ -363,6 +388,18 @@ class TextEditingController extends ChangeNotifier {
     _checkNotDisposed();
     final base = _compositionBase;
     if (base == null) {
+      // No live composition: this commit is late — the preedit it belongs to
+      // was already resolved by an edit the user made (a keystroke, a paste,
+      // a clear). It inserts at the caret and nothing is removed.
+      //
+      // An earlier version rewound the interrupting edit so that
+      // `git che` + `X` + commit(`checkout`) read `git checkout` instead of
+      // `git Xcheckout`. That trade is not available: the same rewind deletes
+      // a paste made during composition — reachable in a browser, where the
+      // DOM source suppresses keydown and input while composing but not
+      // paste — and there is no way to tell the two apart after the fact.
+      // Stray appended text is visible and correctable; a deleted paste is
+      // neither.
       final next = TextEditingModel.commitComposing(
         _value,
         text: text,
@@ -486,6 +523,16 @@ class TextEditingController extends ChangeNotifier {
     }
   }
 
+  /// Cancels an active composition (restore preedit baseline) before a
+  /// programmatic edit, matching [paste]. Returns true when a composition
+  /// was resolved so destructive edits can stop without also mutating the
+  /// restored baseline.
+  bool _cancelComposingForEdit() {
+    if (_compositionBase == null) return false;
+    cancelComposing();
+    return true;
+  }
+
   void _applyEdit(
     TextEditingValue next, {
     _EditTransaction transaction = _EditTransaction.edit,
@@ -493,6 +540,8 @@ class TextEditingController extends ChangeNotifier {
   }) {
     _checkNotDisposed();
     if (_value == next) return;
+    // Safety net: public edit methods cancel first. Any remaining caller that
+    // reaches here with a live base would otherwise orphan the preedit.
     _compositionBase = null;
     if (_value.text != next.text) {
       final shouldCoalesce =
@@ -832,6 +881,10 @@ class _TextInputState extends State<TextInput>
   /// claimant would make the hint bar hide keys that actually work. A
   /// read-only field keeps claiming (it swallows input, honestly).
   void _syncClaimants() {
+    // Keep claiming while an in-flight sticky paste or IME composition still
+    // owes terminal segments/events to this field, even if enabled flipped
+    // false mid-flight. Clearing immediately would drop continuations and let
+    // commits fall through after sticky decline.
     final claimant = widget.enabled ? this : null;
     _focusNode.textInputClaimant = claimant;
     _focusNode.textCompositionClaimant = claimant;
@@ -859,8 +912,12 @@ class _TextInputState extends State<TextInput>
     }
     if (widget.focusNode != oldWidget.focusNode) {
       // Stop claiming text on the old node before letting it go.
-      _focusNode.textInputClaimant = null;
-      _focusNode.textCompositionClaimant = null;
+      if (identical(_focusNode.textInputClaimant, this)) {
+        _focusNode.textInputClaimant = null;
+      }
+      if (identical(_focusNode.textCompositionClaimant, this)) {
+        _focusNode.textCompositionClaimant = null;
+      }
       if (_ownsFocusNode) _focusNode.dispose();
       _focusNode =
           widget.focusNode ??
@@ -1417,8 +1474,14 @@ class _TextInputState extends State<TextInput>
     widget.completionController?.removeListener(_onCompletionChange);
     _controller.removeListener(_onControllerChange);
     if (_ownsController) _controller.dispose();
-    _focusNode.textInputClaimant = null;
-    _focusNode.textCompositionClaimant = null;
+    // Only clear claimants we still own — a remounted sibling may already
+    // have claimed the same FocusNode during this rebuild.
+    if (identical(_focusNode.textInputClaimant, this)) {
+      _focusNode.textInputClaimant = null;
+    }
+    if (identical(_focusNode.textCompositionClaimant, this)) {
+      _focusNode.textCompositionClaimant = null;
+    }
     if (_ownsFocusNode) _focusNode.dispose();
     _formRegistration?.release(this);
     super.dispose();

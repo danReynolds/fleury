@@ -246,8 +246,12 @@ class _TextAreaState extends State<TextArea>
       _controller.addListener(_onChange);
     }
     if (widget.focusNode != oldWidget.focusNode) {
-      _focusNode.textInputClaimant = null;
-      _focusNode.textCompositionClaimant = null;
+      if (identical(_focusNode.textInputClaimant, this)) {
+        _focusNode.textInputClaimant = null;
+      }
+      if (identical(_focusNode.textCompositionClaimant, this)) {
+        _focusNode.textCompositionClaimant = null;
+      }
       if (_ownsFocusNode) _focusNode.dispose();
       _focusNode =
           widget.focusNode ??
@@ -615,8 +619,12 @@ class _TextAreaState extends State<TextArea>
     _paste.discard();
     _controller.removeListener(_onChange);
     if (_ownsController) _controller.dispose();
-    _focusNode.textInputClaimant = null;
-    _focusNode.textCompositionClaimant = null;
+    if (identical(_focusNode.textInputClaimant, this)) {
+      _focusNode.textInputClaimant = null;
+    }
+    if (identical(_focusNode.textCompositionClaimant, this)) {
+      _focusNode.textCompositionClaimant = null;
+    }
     if (_ownsFocusNode) _focusNode.dispose();
     _formRegistration?.release(this);
     super.dispose();

@@ -349,8 +349,10 @@ void main() {
       );
       expect(
         selected.actions,
+        // No `focus`: an inactive tab could never satisfy it, and making it
+        // select turned a read-only sweep destructive. See
+        // tabs_inactive_focus_lock_test.dart.
         containsAll(<SemanticAction>[
-          SemanticAction.focus,
           SemanticAction.select,
           SemanticAction.activate,
         ]),
@@ -451,7 +453,7 @@ void main() {
       );
 
       expect(node.announcement, contains('selected'));
-      expect(node.announcement, contains('actions: activate, focus, select'));
+      expect(node.announcement, contains('actions: activate, select'));
     });
   });
 

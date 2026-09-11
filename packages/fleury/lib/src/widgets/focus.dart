@@ -449,6 +449,7 @@ class FocusManager extends ChangeNotifier {
       final focused = _focusedNode;
       if (focused != null && _isExcludedFromFocus(focused)) {
         _focusedNode = null;
+        _focusedAncestry = null;
       }
       _notifyManagerScopeChanged();
     }
@@ -529,8 +530,12 @@ class FocusManager extends ChangeNotifier {
 
   /// Whether [node] sits under an active (`excluding: true`) [ExcludeFocus]
   /// marker. THE exclusion test: click-to-focus ([isClickable]), traversal,
-  /// [requestFocus], and exclusion activation all consult this one walk so
-  /// the boundary rule can never diverge between them.
+  /// [requestFocus], sticky paste/IME routing, and exclusion activation all
+  /// consult this one walk so the boundary rule can never diverge between
+  /// them.
+  @internal
+  bool isExcludedFromFocus(FocusNode node) => _isExcludedFromFocus(node);
+
   bool _isExcludedFromFocus(FocusNode node) {
     if (_activeExcludeFocusMarkers.isEmpty) return false;
     Element? e = node._element?.elementParent;
@@ -672,18 +677,51 @@ class FocusManager extends ChangeNotifier {
   /// node whose element is defunct — which would route every key into a
   /// disposed State's handler. The sanctioned unmount-then-remount reuse of
   /// a long-lived node keeps working because [_register] re-sets both.
+  ///
+  /// When the focused node unmounts (e.g. a lazy [ListView] virtualizes its
+  /// focused row away), focus falls back to the nearest still-attached
+  /// ancestor [Focus] that can take it — typically the list's own node —
+  /// instead of dropping to null and abandoning keyboard ownership (audit 8.g).
   void _unregister(FocusNode node) {
     if (!identical(node._manager, this)) return;
+    final wasFocused = identical(_focusedNode, node);
+    // Capture before clearing: fallback walks the attach-time enclosing chain.
+    final fallback = wasFocused ? _focusFallbackAncestor(node) : null;
     node._manager = null;
     node._element = null;
     node._enclosingScope = null;
     if (_disposed) return;
-    if (identical(_focusedNode, node)) {
-      _focusedNode = null;
+    _attachedNodes.remove(node);
+    if (wasFocused) {
+      _focusedNode = fallback;
+      if (fallback != null) _rememberFocusInScopes(fallback);
       notifyListeners();
     }
-    _attachedNodes.remove(node);
   }
+
+  /// Nearest enclosing [Focus] of the unmounting focused [node] that can
+  /// still take focus, from the chain captured when it was focused.
+  ///
+  /// The live tree cannot be walked here: `_deactivateChild` clears the
+  /// removed subtree root's `_parent` *before* `deactivate` runs, so by the
+  /// time this is called the path to the list's own node is already cut.
+  /// Each candidate is revalidated, so an entry that has since detached or
+  /// been excluded is skipped rather than trusted.
+  FocusNode? _focusFallbackAncestor(FocusNode node) {
+    final ancestry = _focusedAncestry;
+    if (ancestry == null || !identical(_focusedNode, node)) return null;
+    for (final candidate in ancestry) {
+      if (identical(candidate._manager, this) && isClickable(candidate)) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  /// Enclosing [Focus] nodes of [_focusedNode], nearest first, captured on the
+  /// focus-change walk in [_rememberFocusInScopes]. Only [_focusFallbackAncestor]
+  /// reads it.
+  List<FocusNode>? _focusedAncestry;
 
   /// Requests that [node] become the focused node (null to clear
   /// focus). Returns whether focus actually moved.
@@ -696,7 +734,11 @@ class FocusManager extends ChangeNotifier {
     if (node != null && !isClickable(node)) return false;
     if (identical(_focusedNode, node)) return false;
     _focusedNode = node;
-    if (node != null) _rememberFocusInScopes(node);
+    if (node != null) {
+      _rememberFocusInScopes(node);
+    } else {
+      _focusedAncestry = null;
+    }
     notifyListeners();
     return true;
   }
@@ -707,11 +749,19 @@ class FocusManager extends ChangeNotifier {
   /// it (not just the nearest) so an outer scope — a route — remembers focus
   /// held inside a nested inner scope.
   void _rememberFocusInScopes(FocusNode node) {
+    // One walk, two jobs: scope memory, and the enclosing-Focus chain that
+    // [_focusFallbackAncestor] needs after the tree is gone. Focus changes are
+    // user-paced, so this costs nothing per frame.
+    final ancestry = <FocusNode>[];
     Element? element = node._element;
     while (element != null) {
       if (element is _FocusScopeMarkerElement) element._rememberedFocus = node;
+      if (element is _FocusElement && !identical(element.node, node)) {
+        ancestry.add(element.node);
+      }
       element = element.elementParent;
     }
+    _focusedAncestry = ancestry.isEmpty ? null : ancestry;
   }
 
   /// Restores focus to the node most recently focused within the nearest
@@ -1033,6 +1083,7 @@ class FocusManager extends ChangeNotifier {
     if (_disposed) return;
     _disposed = true;
     _focusedNode = null;
+    _focusedAncestry = null;
     for (final node in List<FocusNode>.of(_attachedNodes)) {
       if (identical(node._manager, this)) {
         node._manager = null;

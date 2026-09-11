@@ -67,6 +67,12 @@ final class FormController extends ChangeNotifier {
       if (!isCurrent()) return false;
       _setSubmitting(true);
       if (!isCurrent()) return false;
+      // onSubmit failures propagate. Containing them HERE made a thrown
+      // error indistinguishable from a validation rejection for an awaiting
+      // caller — `if (await controller.submit()) close(); else showErrors();`
+      // took the else branch on a network failure, showed nothing, and the
+      // exception reached no zone handler. Only the fire-and-forget call site
+      // (SemanticAction.submit) needs containment, and it does it itself.
       await host.submit();
       return true;
     } finally {
@@ -310,7 +316,16 @@ final class _FormWidgetState extends State<Form> implements _FormHost {
             : const <SemanticAction>{SemanticAction.submit},
         onAction: (action) {
           if (action == SemanticAction.submit) {
-            unawaited(_controller.submit());
+            // Fire-and-forget: nobody is awaiting this, and runApp's
+            // runZonedGuarded treats an uncaught async error as fatal — it
+            // restores the terminal and ends the app. So an onSubmit throw
+            // reached by a semantic submit would take the whole app down.
+            //
+            // Contain it HERE, at the one call site that cannot observe the
+            // result, rather than inside _runSubmission: an awaiting caller
+            // can observe it, and swallowing there made a network failure
+            // indistinguishable from a validation rejection.
+            unawaited(_controller.submit().catchError((Object _) => false));
           }
         },
         child: child!,

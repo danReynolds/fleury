@@ -225,5 +225,35 @@ void main() {
             'the content must give up two columns for it — not one',
       );
     }, viewportSize: const CellSize(6, 1));
+
+    // Bug-hunt lock: RichText still hard-codes a 1-col ellipsis reserve
+    // (rich_text.dart _paintLine) while Text measures under the active policy.
+    // On ambiguous-wide surfaces `…` is two cells wide, so RichText either
+    // overruns the box or drops the marker — Text already gets this right.
+    testWidgetsOnBothTextPolicies(
+      'RichText ellipsis reserves what it measures',
+      (tester, policy) {
+        const size = CellSize(6, 1);
+        tester.pumpWidget(
+          const SizedBox(
+            width: 6,
+            height: 1,
+            child: RichText(
+              softWrap: false,
+              overflow: TextOverflow.ellipsis,
+              text: TextSpan(text: 'abcdefgh'),
+            ),
+          ),
+        );
+        expect(
+          _row(tester.render(size: size)),
+          _perPolicy(policy, spec: 'abcde…', wide: 'abcd…>'),
+          reason:
+              'RichText must reserve the measured ellipsis width the same way '
+              'Text does — not a hard-coded single column',
+        );
+      },
+      viewportSize: const CellSize(6, 1),
+    );
   });
 }
