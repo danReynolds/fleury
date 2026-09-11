@@ -38,21 +38,46 @@ final class SampleFrameHost {
     }
     renderObjects.clear();
     visit(tester.root!);
-    // Choose a text mutation that actually changes visible cells. A mounted
+    // Choose text mutations that actually change visible cells. A mounted
     // label may be clipped or off screen, especially at smaller viewports.
+    // [hasLeaf] is the first visible RenderText (may sit outside any
+    // boundary). [hasInside] is the first visible RenderText under a
+    // caching RepaintBoundary — the localized update that misses a cache.
+    RenderText? firstVisible;
+    var firstOriginal = '';
     for (final render in renderObjects.whereType<RenderText>()) {
       if (render.text.isEmpty) continue;
+      final original = render.text;
       _text = render;
-      _originalText = render.text;
+      _originalText = original;
       frame('leaf', 0);
       final visible = frame('leaf', 1).changed;
-      render.text = _originalText;
+      render.text = original;
       frame('clean', 0);
-      if (visible) return;
+      if (!visible) continue;
+      firstVisible ??= render;
+      if (firstVisible == render) firstOriginal = original;
+      if (_inside == null) {
+        final boundary = _enclosingCachingBoundary(render);
+        if (boundary != null) {
+          _inside = render;
+          _insideOriginal = original;
+          _insideBoundary = boundary;
+        }
+      }
+      if (_inside != null) break;
     }
-    // Some apps draw their visible text in custom render objects. Do not
-    // report a localized text measurement when no such mutation is visible.
-    _text = null;
+    _text = firstVisible;
+    _originalText = firstOriginal;
+  }
+
+  static RenderRepaintBoundary? _enclosingCachingBoundary(RenderObject node) {
+    for (var parent = node.parent; parent != null; parent = parent.parent) {
+      if (parent is RenderRepaintBoundary && parent.cachingEnabled) {
+        return parent;
+      }
+    }
+    return null;
   }
 
   CellSize get size => tester.viewportSize;
@@ -63,16 +88,25 @@ final class SampleFrameHost {
   late final TuiFrameLoop _loop;
   RenderText? _text;
   late String _originalText;
+  RenderText? _inside;
+  String _insideOriginal = '';
+  RenderRepaintBoundary? _insideBoundary;
 
   bool get hasLeaf => _text != null;
+  bool get hasInside => _inside != null;
   int? get leafRenderObjectIndex =>
       _text == null ? null : renderObjects.indexOf(_text!);
+  int? get insideRenderObjectIndex =>
+      _inside == null ? null : renderObjects.indexOf(_inside!);
+  CellSize? get insideBoundarySize => _insideBoundary?.size;
 
   FrameSample frame(String mode, int iteration,
       {void Function(TuiRenderedFrame frame)? onFramePresented}) {
     final watch = Stopwatch()..start();
     if (mode == 'leaf') {
       _text?.text = '${iteration & 1} $_originalText';
+    } else if (mode == 'inside') {
+      _inside?.text = '${iteration & 1} $_insideOriginal';
     } else if (mode == 'full') {
       for (final render in renderObjects) {
         render.markNeedsPaint();

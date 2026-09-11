@@ -6,9 +6,16 @@
 //   - phase times: build / layout / paint / buffer-prepare / diff-finish
 //   - repaint-boundary mix: cache misses vs hits vs cells blitted
 //
-// Read it as: if leaf paint is almost all one cache-miss subtree, finer
-// boundaries or incremental caches might pay. If it is mostly hits+blits
-// and a large diff, they will not.
+// Modes:
+//   clean  — nothing dirty (forced paint; production FrameDriver skips this)
+//   leaf   — first visible RenderText, often chrome outside any boundary
+//   inside — first visible RenderText under a caching RepaintBoundary
+//   full   — every render object marked dirty
+//
+// Read `inside` as the incremental-cache question: if that frame is a single
+// cache miss whose paint is close to `full`, carry-inside-the-cache might
+// pay. If `repaintedCount` is 1 and paint is close to `leaf`/`clean`, it
+// will not.
 //
 //   dart run bin/leaf_frame_probe.dart [--cols 120] [--rows 40] [--frames 300]
 import 'dart:convert';
@@ -73,7 +80,12 @@ void main(List<String> args) {
       for (var i = 0; i < 30; i++) {
         host.frame(host.hasLeaf ? 'leaf' : 'full', i);
       }
-      final modes = ['clean', if (host.hasLeaf) 'leaf', 'full'];
+      final modes = [
+        'clean',
+        if (host.hasLeaf) 'leaf',
+        if (host.hasInside) 'inside',
+        'full',
+      ];
       for (final mode in modes) {
         final totals = <int>[];
         final builds = <int>[];
@@ -108,6 +120,13 @@ void main(List<String> args) {
             'mode': mode,
             'renderObjects': host.renderObjects.length,
             'hasLeaf': host.hasLeaf,
+            'hasInside': host.hasInside,
+            'insideBoundarySize': host.insideBoundarySize == null
+                ? null
+                : {
+                    'cols': host.insideBoundarySize!.cols,
+                    'rows': host.insideBoundarySize!.rows,
+                  },
             'changedFrames': changed,
             'totalUs': distribution(totals),
             'buildUs': distribution(builds),
