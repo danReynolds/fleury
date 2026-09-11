@@ -1,4 +1,5 @@
 import '../foundation/geometry.dart';
+import 'cell.dart';
 import 'cell_buffer.dart';
 import 'layout.dart';
 import 'render_object.dart';
@@ -62,11 +63,16 @@ final class RepaintBoundaryDebugStats {
     return stats;
   }
 
+  /// Suppresses recording while a verification repaint re-enters the tree; see
+  /// [RepaintBoundaryCacheVerification]. Without it a nested boundary records a
+  /// second cache hit for one frame and every counter assertion doubles.
+  static int _suppressDepth = 0;
+
   static void recordPaint({
     required bool repainted,
     required CellRect? copiedBounds,
   }) {
-    if (!_enabled) return;
+    if (!_enabled || _suppressDepth > 0) return;
     _boundaryCount += 1;
     if (repainted) {
       _repaintedCount += 1;
@@ -118,6 +124,50 @@ final class RepaintBoundaryDebugStats {
 /// The boundary is opaque to its caller: parents call `paint(buffer, offset)`
 /// as usual; the cache discipline is internal. Use the [RepaintBoundary]
 /// widget to wrap subtrees that are expensive to paint and change rarely.
+/// Debug-only check that a cache HIT would have produced the same cells as a
+/// real repaint.
+///
+/// A repaint boundary is the one place in the render path where an
+/// under-reported change is unrecoverable. Everywhere else, frame damage is
+/// DERIVED by comparing the two buffers, so nothing upstream can hide a change
+/// by failing to declare it. A boundary inverts that: if no invalidation
+/// reached it, the subtree is never repainted, the stale cache is blitted, and
+/// the buffer diff then faithfully reports "nothing changed" — because by then
+/// the buffer really does match. The safety net protects the wire, not the
+/// cache.
+///
+/// This closes that gap by asking the question the diff cannot: repaint the
+/// subtree anyway and compare. A mismatch means some mutation reached the
+/// screen without marking this boundary — exactly the bug class that produced
+/// the nested-boundary staleness fixed in `repaint_boundary_test.dart` (an
+/// inner change that never dirtied the outer, so the outer blitted stale cells
+/// and replayed regions from a subtree that had already changed).
+///
+/// Off by default: it repaints every cache hit, which is the entire cost the
+/// cache exists to avoid. Turn it on around a scenario, or for a whole suite,
+/// and read [mismatches].
+final class RepaintBoundaryCacheVerification {
+  RepaintBoundaryCacheVerification._();
+
+  /// Whether cache hits are verified against a fresh repaint.
+  static bool enabled = false;
+
+  /// Cache hits checked since the last [reset].
+  static int get checkedCount => _checked;
+  static int _checked = 0;
+
+  /// Descriptions of hits whose cache did not match a fresh repaint.
+  static List<String> get mismatches => List.unmodifiable(_mismatches);
+  static final List<String> _mismatches = [];
+
+  static void reset() {
+    _checked = 0;
+    _mismatches.clear();
+  }
+
+  static void _record(String description) => _mismatches.add(description);
+}
+
 class RenderRepaintBoundary extends RenderObject
     implements RenderObjectWithSingleChild {
   RenderRepaintBoundary({bool cachingEnabled = true})
@@ -201,14 +251,23 @@ class RenderRepaintBoundary extends RenderObject
     }
 
     var cache = _cache;
+    // Filling a newly allocated cache is a fact about this paint, not an
+    // invalidation. Setting [needsPaint] here would raise a dirty mark that
+    // outlives the frame if paint has already consumed the previous one.
+    var mustRepaint = needsPaint;
     if (cache == null || cache.size != s) {
       cache = CellBuffer(s);
       _cache = cache;
-      needsPaint = true;
+      mustRepaint = true;
     }
 
     var repainted = false;
-    if (needsPaint) {
+    if (mustRepaint) {
+      // Clear before the subtree paints. A child that invalidates during
+      // this paint (lazy mount, paint-time mark) must keep the mark for the
+      // next frame; clearing afterwards discarded it and the cache went
+      // stale for the life of the app.
+      needsPaint = false;
       final targetCache = cache;
       // Clear untracked, then arm the cache's own damage tracking around the
       // child's paint: the damage rect falls out of the writes themselves —
@@ -229,10 +288,12 @@ class RenderRepaintBoundary extends RenderObject
       _cacheBounds = damage == null
           ? null
           : cache.boundingBoxOfNonEmptyWithin(damage);
-      needsPaint = false;
       repainted = true;
     }
 
+    if (!repainted && RepaintBoundaryCacheVerification.enabled) {
+      _verifyCacheAgainstRepaint(cache);
+    }
     final bounds = _cacheBounds;
     RepaintBoundaryDebugStats.recordPaint(
       repainted: repainted,
@@ -257,5 +318,52 @@ class RenderRepaintBoundary extends RenderObject
     // painted into it from this damage: suppressing hid a nested cache-hit
     // child from its parent's bounds and blanked the row.
     buffer.copyRectFrom(cacheForCopy, bounds, destOffset);
+  }
+
+  static String _describeCell(Cell cell) =>
+      '${cell.role.name}(grapheme: ${cell.grapheme == null ? 'none' : '"${cell.grapheme}"'}, '
+      'style: ${cell.style})';
+
+  /// Repaints the subtree into a scratch buffer and compares it to [cache].
+  ///
+  /// Only ever called on a cache hit, where the invalidation contract says
+  /// every nested boundary must be clean too — a change below marks EVERY
+  /// enclosing boundary, not just the nearest. So the repaint below re-blits
+  /// nested caches rather than rebuilding them, and mutates no boundary state.
+  /// (If a nested boundary WERE dirty here, that is itself the bug this looks
+  /// for, and the comparison reports it.)
+  void _verifyCacheAgainstRepaint(CellBuffer cache) {
+    final scratch = CellBuffer(cache.size);
+    RepaintBoundaryDebugStats._suppressDepth += 1;
+    try {
+      // Cache-local origin, exactly as the real repaint paints it. Screen
+      // position is derived from layout rather than the paint offset, so the
+      // facts participants publish here are identical to the ones already
+      // published this pass — and publishing an unchanged fact notifies nobody.
+      _child!.paint(scratch, CellOffset.zero);
+    } finally {
+      RepaintBoundaryDebugStats._suppressDepth -= 1;
+    }
+    RepaintBoundaryCacheVerification._checked += 1;
+    final size = cache.size;
+    for (var row = 0; row < size.rows; row++) {
+      for (var col = 0; col < size.cols; col++) {
+        final cached = cache.atColRow(col, row);
+        final fresh = scratch.atColRow(col, row);
+        if (cached == fresh) continue;
+        // Cell.toString() shows only the grapheme, so a style-only mismatch
+        // reads as two identical cells. Spell out what actually differs.
+        final message =
+            'stale repaint-boundary cache at ($col, $row) in a $size boundary. '
+            'Blitting ${_describeCell(cached)}; a repaint produces '
+            '${_describeCell(fresh)}. Some change reached this subtree '
+            'without marking this boundary dirty.';
+        RepaintBoundaryCacheVerification._record(message);
+        // Throws as well as records: recording alone is silent unless a test
+        // remembers to assert on it, and the point of this mode is to fail
+        // whichever test triggered the staleness, wherever it lives.
+        throw StateError(message);
+      }
+    }
   }
 }
