@@ -366,7 +366,10 @@ abstract class RenderObject implements ScreenGeometrySource {
   }
 
   void _markNeedsLayoutUp() {
-    if (_needsLayout) return;
+    // Do not skip when already dirty. A failed `performLayout` leaves
+    // `_needsLayout` true while the parent (e.g. ErrorBoundary) completed
+    // and cleared its own flag. A later mark must still walk so the parent
+    // re-enters and retries the child.
     _needsLayout = true;
     final parent = _parent;
     if (parent == null) {
