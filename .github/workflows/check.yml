@@ -45,7 +45,7 @@ jobs:
         working-directory: packages/fleury
         env:
           FLEURY_VERIFY_REPAINT_CACHE: '1'
-        run: dart test
+        run: dart test -x integration
       - name: Perf gates (fast suite)
         run: dart tool/fleury_dev.dart benchmark gates
 

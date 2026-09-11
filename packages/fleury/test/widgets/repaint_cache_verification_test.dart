@@ -80,10 +80,40 @@ void main() {
       expect(RepaintBoundaryCacheVerification.mismatches, isEmpty);
     });
 
-    test('the mode is off by default', () {
-      // It repaints every cache hit, which is the whole cost the cache exists
-      // to avoid. CI opts in with FLEURY_VERIFY_REPAINT_CACHE=1.
-      expect(RepaintBoundaryCacheVerification.enabled, isFalse);
+    testWidgets('a missed mark throws on the next cache hit', (tester) {
+      RepaintBoundaryCacheVerification.enabled = true;
+      _RenderUngovernedPaint.glyph = 'a';
+      tester.pumpWidget(const RepaintBoundary(child: _UngovernedPaint()));
+      const size = CellSize(4, 1);
+      tester.render(size: size);
+
+      _RenderUngovernedPaint.glyph = 'b';
+      expect(
+        () => tester.render(size: size),
+        throwsA(isA<StateError>()),
+        reason: 'a comparator that always treated cells as equal would pass',
+      );
+      expect(RepaintBoundaryCacheVerification.mismatches, isNotEmpty);
     });
   });
+}
+
+class _UngovernedPaint extends LeafRenderObjectWidget {
+  const _UngovernedPaint();
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderUngovernedPaint();
+}
+
+class _RenderUngovernedPaint extends RenderObject {
+  static String glyph = 'a';
+
+  @override
+  CellSize performLayout(CellConstraints constraints) =>
+      constraints.constrain(const CellSize(1, 1));
+
+  @override
+  void performPaint(CellBuffer buffer, CellOffset offset) {
+    buffer.writeGrapheme(offset, glyph);
+  }
 }

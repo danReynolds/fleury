@@ -95,6 +95,32 @@ final class RepaintBoundaryDebugStats {
   }
 }
 
+/// Debug-only: on a cache hit, repaint the subtree and compare cells.
+///
+/// Off by default — it pays the cost the cache exists to avoid. Enable via
+/// [enabled] or `FLEURY_VERIFY_REPAINT_CACHE=1`.
+final class RepaintBoundaryCacheVerification {
+  RepaintBoundaryCacheVerification._();
+
+  /// Whether cache hits are verified against a fresh repaint.
+  static bool enabled = false;
+
+  /// Cache hits checked since the last [reset].
+  static int get checkedCount => _checked;
+  static int _checked = 0;
+
+  /// Descriptions of hits whose cache did not match a fresh repaint.
+  static List<String> get mismatches => List.unmodifiable(_mismatches);
+  static final List<String> _mismatches = [];
+
+  static void reset() {
+    _checked = 0;
+    _mismatches.clear();
+  }
+
+  static void _record(String description) => _mismatches.add(description);
+}
+
 /// A render object that owns a [CellBuffer] cache for its subtree's paint.
 ///
 /// On the first frame (and any frame after something inside it changed), the
@@ -124,50 +150,6 @@ final class RepaintBoundaryDebugStats {
 /// The boundary is opaque to its caller: parents call `paint(buffer, offset)`
 /// as usual; the cache discipline is internal. Use the [RepaintBoundary]
 /// widget to wrap subtrees that are expensive to paint and change rarely.
-/// Debug-only check that a cache HIT would have produced the same cells as a
-/// real repaint.
-///
-/// A repaint boundary is the one place in the render path where an
-/// under-reported change is unrecoverable. Everywhere else, frame damage is
-/// DERIVED by comparing the two buffers, so nothing upstream can hide a change
-/// by failing to declare it. A boundary inverts that: if no invalidation
-/// reached it, the subtree is never repainted, the stale cache is blitted, and
-/// the buffer diff then faithfully reports "nothing changed" — because by then
-/// the buffer really does match. The safety net protects the wire, not the
-/// cache.
-///
-/// This closes that gap by asking the question the diff cannot: repaint the
-/// subtree anyway and compare. A mismatch means some mutation reached the
-/// screen without marking this boundary — exactly the bug class that produced
-/// the nested-boundary staleness fixed in `repaint_boundary_test.dart` (an
-/// inner change that never dirtied the outer, so the outer blitted stale cells
-/// and replayed regions from a subtree that had already changed).
-///
-/// Off by default: it repaints every cache hit, which is the entire cost the
-/// cache exists to avoid. Turn it on around a scenario, or for a whole suite,
-/// and read [mismatches].
-final class RepaintBoundaryCacheVerification {
-  RepaintBoundaryCacheVerification._();
-
-  /// Whether cache hits are verified against a fresh repaint.
-  static bool enabled = false;
-
-  /// Cache hits checked since the last [reset].
-  static int get checkedCount => _checked;
-  static int _checked = 0;
-
-  /// Descriptions of hits whose cache did not match a fresh repaint.
-  static List<String> get mismatches => List.unmodifiable(_mismatches);
-  static final List<String> _mismatches = [];
-
-  static void reset() {
-    _checked = 0;
-    _mismatches.clear();
-  }
-
-  static void _record(String description) => _mismatches.add(description);
-}
-
 class RenderRepaintBoundary extends RenderObject
     implements RenderObjectWithSingleChild {
   RenderRepaintBoundary({bool cachingEnabled = true})
