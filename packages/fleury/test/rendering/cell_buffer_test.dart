@@ -32,6 +32,21 @@ void main() {
       }
     });
 
+    test('acquire reuses a same-size buffer after clear', () {
+      final first = CellBuffer(const CellSize(3, 1));
+      first.writeGrapheme(const CellOffset(0, 0), 'A');
+      final reused = CellBuffer.acquire(first, const CellSize(3, 1));
+      expect(identical(reused, first), isTrue);
+      expect(reused.atColRow(0, 0), const Cell.empty());
+    });
+
+    test('acquire allocates when the size changes', () {
+      final first = CellBuffer(const CellSize(3, 1));
+      final next = CellBuffer.acquire(first, const CellSize(2, 2));
+      expect(identical(next, first), isFalse);
+      expect(next.size, const CellSize(2, 2));
+    });
+
     test('resize discards content', () {
       final buf = CellBuffer(const CellSize(3, 1));
       buf.writeGrapheme(const CellOffset(0, 0), 'A');
