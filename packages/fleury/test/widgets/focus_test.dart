@@ -703,6 +703,56 @@ void _enclosingNodeLookup() {
       expect(tester.renderToString(), contains('first:off'));
     });
 
+    test('KeyBindings does not shadow Focus.of', () {
+      final pane = FocusNode(debugLabel: 'pane');
+      addTearDown(pane.dispose);
+      late FocusNode seen;
+      final tester = FleuryTester();
+      addTearDown(tester.dispose);
+      tester.pumpWidget(
+        Focus(
+          focusNode: pane,
+          autofocus: true,
+          child: KeyBindings(
+            bindings: [KeyBinding(KeyCode.escape, onTrigger: (_) {})],
+            child: _Probe(
+              builder: (context) {
+                seen = Focus.of(context);
+                return Text(seen.hasFocus ? 'on' : 'off');
+              },
+            ),
+          ),
+        ),
+      );
+      expect(seen, same(pane));
+      expect(tester.renderToString(), contains('on'));
+    });
+
+    test('KeyDetector does not shadow Focus.of', () {
+      final pane = FocusNode(debugLabel: 'pane');
+      addTearDown(pane.dispose);
+      late FocusNode seen;
+      final tester = FleuryTester();
+      addTearDown(tester.dispose);
+      tester.pumpWidget(
+        Focus(
+          focusNode: pane,
+          autofocus: true,
+          child: KeyDetector(
+            onKey: (_) {},
+            child: _Probe(
+              builder: (context) {
+                seen = Focus.of(context);
+                return Text(seen.hasFocus ? 'on' : 'off');
+              },
+            ),
+          ),
+        ),
+      );
+      expect(seen, same(pane));
+      expect(tester.renderToString(), contains('on'));
+    });
+
     test('the manager is reached through FocusManager, not Focus', () {
       final node = FocusNode(debugLabel: 'node');
       addTearDown(node.dispose);
@@ -804,9 +854,8 @@ void _enclosingNodeLookup() {
             child: Column(
               children: [
                 _Probe(
-                  builder: (context) => Text(
-                    Focus.of(context).hasFocus ? 'pane-on' : 'pane-off',
-                  ),
+                  builder: (context) =>
+                      Text(Focus.of(context).hasFocus ? 'pane-on' : 'pane-off'),
                 ),
                 Focus(
                   focusNode: child,
@@ -826,21 +875,17 @@ void _enclosingNodeLookup() {
         contains('pane-off'),
         reason: 'the pane is not the focused node while a child holds it',
       );
-      expect(
-        detector,
-        [true],
-        reason: 'the detector stays true while a descendant holds focus',
-      );
+      expect(detector, [
+        true,
+      ], reason: 'the detector stays true while a descendant holds focus');
 
       pane.requestFocus();
       tester.pump();
       expect(pane.hasFocus, isTrue);
       expect(tester.renderToString(), contains('pane-on'));
-      expect(
-        detector,
-        [true],
-        reason: 'moving to the pane itself is not a leave',
-      );
+      expect(detector, [
+        true,
+      ], reason: 'moving to the pane itself is not a leave');
 
       child.requestFocus();
       tester.pump();
@@ -848,68 +893,73 @@ void _enclosingNodeLookup() {
       expect(detector, [true]);
     });
 
-    test('ListView itemBuilder fills only while the list holds the keyboard', () {
-      const fill = AnsiColor(4);
-      final outside = FocusNode(debugLabel: 'outside');
-      addTearDown(outside.dispose);
-      final tester = FleuryTester();
-      addTearDown(tester.dispose);
-      tester.pumpWidget(
-        Theme(
-          data: const ThemeData(
-            textStyle: CellStyle(foreground: AnsiColor(2)),
-            selectionStyle: CellStyle(background: fill),
-          ),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 12,
-                child: ListView.builder(
-                  autofocus: true,
-                  itemCount: 2,
-                  itemBuilder: (context, index, highlighted) {
-                    final theme = Theme.of(context);
-                    final focused =
-                        highlighted && Focus.of(context).hasFocus;
-                    return DefaultTextStyle(
-                      style: focused
-                          ? theme.textStyle.merge(theme.selectionStyle)
-                          : theme.textStyle,
-                      child: Row(
-                        children: [
-                          Text(highlighted ? '> ' : '  '),
-                          Text('k$index'),
-                        ],
-                      ),
-                    );
-                  },
+    test(
+      'ListView itemBuilder fills only while the list holds the keyboard',
+      () {
+        const fill = AnsiColor(4);
+        final outside = FocusNode(debugLabel: 'outside');
+        addTearDown(outside.dispose);
+        final tester = FleuryTester();
+        addTearDown(tester.dispose);
+        tester.pumpWidget(
+          Theme(
+            data: const ThemeData(
+              textStyle: CellStyle(foreground: AnsiColor(2)),
+              selectionStyle: CellStyle(background: fill),
+            ),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 12,
+                  child: ListView.builder(
+                    autofocus: true,
+                    itemCount: 2,
+                    itemBuilder: (context, index, highlighted) {
+                      final theme = Theme.of(context);
+                      final focused = highlighted && Focus.of(context).hasFocus;
+                      return DefaultTextStyle(
+                        style: focused
+                            ? theme.textStyle.merge(theme.selectionStyle)
+                            : theme.textStyle,
+                        child: Row(
+                          children: [
+                            Text(highlighted ? '> ' : '  '),
+                            Text('k$index'),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
                 ),
-              ),
-              Focus(focusNode: outside, child: const Text('out')),
-            ],
+                Focus(focusNode: outside, child: const Text('out')),
+              ],
+            ),
           ),
-        ),
-      );
+        );
 
-      const size = CellSize(20, 3);
-      var buffer = tester.render(size: size);
-      expect(buffer.atColRow(0, 0).style.background, fill);
-      expect(tester.renderToString(size: size, emptyMark: ' '), contains('> k0'));
+        const size = CellSize(20, 3);
+        var buffer = tester.render(size: size);
+        expect(buffer.atColRow(0, 0).style.background, fill);
+        expect(
+          tester.renderToString(size: size, emptyMark: ' '),
+          contains('> k0'),
+        );
 
-      outside.requestFocus();
-      tester.pump();
-      buffer = tester.render(size: size);
-      expect(
-        buffer.atColRow(0, 0).style.background,
-        isNull,
-        reason: 'replacing DefaultTextStyle drops ListView\'s automatic fill',
-      );
-      expect(
-        tester.renderToString(size: size, emptyMark: ' '),
-        contains('> k0'),
-        reason: 'the current-row marker stays when the keyboard leaves',
-      );
-    });
+        outside.requestFocus();
+        tester.pump();
+        buffer = tester.render(size: size);
+        expect(
+          buffer.atColRow(0, 0).style.background,
+          isNull,
+          reason: 'replacing DefaultTextStyle drops ListView\'s automatic fill',
+        );
+        expect(
+          tester.renderToString(size: size, emptyMark: ' '),
+          contains('> k0'),
+          reason: 'the current-row marker stays when the keyboard leaves',
+        );
+      },
+    );
   });
 }
 

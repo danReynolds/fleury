@@ -77,8 +77,8 @@ abstract interface class CaretHost implements ScreenGeometrySource {
 /// active focus chain.
 ///
 /// `KeyBindings` widgets implement this and attach themselves to a
-/// `FocusNode.bindingSource`. The `InputDispatcher` walks the focus chain and
-/// reads `activeBindings` from each non-null source. User-facing key discovery
+/// `FocusNode.bindingSource` on an [InputScope] mailbox. The `InputDispatcher`
+/// walks the input chain and reads `activeBindings` from each non-null source. User-facing key discovery
 /// surfaces use `resolveActiveKeyBindings`, which applies the same precedence
 /// plus hint visibility and text-input shadowing rules.
 ///
@@ -1031,8 +1031,8 @@ class FocusManager extends ChangeNotifier {
     if (_acceptsInput(focused)) chain.add(focused);
     var element = focused._element?.elementParent;
     while (element != null) {
-      if (element is _FocusElement) {
-        if (_acceptsInput(element.node)) chain.add(element.node);
+      if (element is _InputChainParticipant) {
+        if (_acceptsInput(element.chainNode)) chain.add(element.chainNode);
       }
       element = element.elementParent;
     }
@@ -1254,7 +1254,9 @@ class Focus extends StatefulWidget {
   /// ancestor, or of this widget itself when called from its own subtree.
   /// Throws when the context is not inside a [Focus]. Overlay entries sit
   /// beside the app root, so a context in an entry with no local [Focus] throws
-  /// even though [FocusManager.of] still works.
+  /// even though [FocusManager.of] still works. [KeyBindings] and
+  /// [KeyDetector] join the input chain without being [Focus] targets, so
+  /// this walk skips them.
   ///
   /// [FocusNode.hasFocus] is identity with the focused node, not
   /// descendant-inclusive. Use [FocusDetector] when a region should stay
@@ -1300,12 +1302,23 @@ class Focus extends StatefulWidget {
   StatefulElement createElement() => _FocusElement(this);
 }
 
-class _FocusElement extends StatefulElement {
+/// An element that contributes a [FocusNode] to [FocusManager.activeChain].
+///
+/// [Focus] is the keyboard-target case. [InputScope] is the mailbox case
+/// ([KeyBindings], [KeyDetector]) — on the chain, invisible to [Focus.of].
+mixin _InputChainParticipant on Element {
+  FocusNode get chainNode;
+}
+
+class _FocusElement extends StatefulElement with _InputChainParticipant {
   _FocusElement(Focus super.widget);
 
   /// The node this element is wiring up. Exposed so the manager can
   /// build the focus chain by walking element parents.
   FocusNode get node => (state as _FocusState)._node;
+
+  @override
+  FocusNode get chainNode => node;
 }
 
 class _FocusState extends State<Focus> {
@@ -1430,6 +1443,89 @@ class _FocusState extends State<Focus> {
     // resolves into the freshly-walked `_enclosingScope`.
     _attach();
     return _FocusBounds(node: _node, child: widget.child);
+  }
+}
+
+/// Puts [node] on [FocusManager.activeChain] without making it a [Focus]
+/// target. [Focus.of] walks past this widget.
+///
+/// [KeyBindings] and [KeyDetector] use this so shortcuts and detectors fire
+/// while a descendant holds the keyboard, without answering "am I focused?"
+/// as this mailbox.
+@internal
+final class InputScope extends StatefulWidget {
+  const InputScope({super.key, required this.node, required this.child});
+
+  final FocusNode node;
+  final Widget child;
+
+  @override
+  StatefulElement createElement() => _InputScopeElement(this);
+
+  @override
+  State<InputScope> createState() => _InputScopeState();
+}
+
+final class _InputScopeElement extends StatefulElement
+    with _InputChainParticipant {
+  _InputScopeElement(InputScope super.widget);
+
+  @override
+  FocusNode get chainNode => (state as _InputScopeState)._node;
+}
+
+final class _InputScopeState extends State<InputScope> {
+  FocusManager? _manager;
+  FocusNode? _attachedNode;
+
+  FocusNode get _node => widget.node;
+
+  @override
+  void didUpdateWidget(InputScope oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(widget.node, oldWidget.node)) {
+      _detach();
+      _attach();
+    }
+  }
+
+  @override
+  void deactivate() {
+    _detach();
+    super.deactivate();
+  }
+
+  @override
+  void dispose() {
+    _detach();
+    super.dispose();
+  }
+
+  void _attach() {
+    final manager = FocusManager.maybeOfIdentityDependency(context);
+    if (identical(manager, _manager)) return;
+    _detach();
+    if (manager == null) return;
+    _manager = manager;
+    _attachedNode = widget.node;
+    manager._register(widget.node, context as Element);
+    widget.node._enclosingScope = FocusScope._enclosingOf(context as Element);
+  }
+
+  void _detach() {
+    final node = _attachedNode;
+    final manager = _manager;
+    _attachedNode = null;
+    _manager = null;
+    if (node != null) manager?._unregister(node);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Same attach timing as [Focus]: after dependencies so a manager or
+    // FocusScope inserted this frame is the one we register with.
+    _attach();
+    return widget.child;
   }
 }
 

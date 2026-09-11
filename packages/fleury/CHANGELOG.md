@@ -10,7 +10,10 @@
   had to thread in by hand. Reading either still subscribes the caller to focus
   changes, so a build method can keep `FocusNode.hasFocus` current without a
   detector. `hasFocus` is identity with the focused node; `FocusDetector`
-  remains the descendant-inclusive signal.
+  remains the descendant-inclusive signal. `KeyBindings` and `KeyDetector`
+  join the input chain without being `Focus` targets, so `Focus.of` from
+  inside them returns the enclosing focusable region rather than a mailbox
+  whose `hasFocus` is always false.
 
 - Add `scrollDirection: Axis.horizontal` to all `ListView` constructors,
   `ScrollView`, and `Scrollbar`. Horizontal views support left/right navigation,

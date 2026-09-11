@@ -279,5 +279,5 @@ class _KeyDetectorState extends State<KeyDetector> {
 
   @override
   Widget build(BuildContext context) =>
-      Focus(focusNode: _marker, child: widget.child);
+      InputScope(node: _marker, child: widget.child);
 }

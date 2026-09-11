@@ -247,6 +247,8 @@ detector.
 
 Reading `Focus.of` or `FocusManager.of` subscribes the caller, so a build
 method can keep the value current without a detector or a `setState`.
+`KeyBindings` and `KeyDetector` are input-chain mailboxes, not `Focus`
+targets — `Focus.of` walks past them to the enclosing keyboard target.
 
 A list is one focus stop with a row cursor. `highlighted` means *current* and
 stays true when the keyboard leaves; `Focus.of(context).hasFocus` is whether
