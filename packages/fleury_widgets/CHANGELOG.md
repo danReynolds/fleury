@@ -1,5 +1,13 @@
 ## 0.1.0
 
+- Forms refresh revealed validation after field and control updates, including
+  programmatic choice changes and rules that read another registered field.
+  Named and inline validators behave consistently; cleared errors stay hidden.
+- First-invalid focus reveals the control and, when it fits, its error through
+  enclosing vertical or horizontal `ScrollView`s after layout.
+- Custom form fields can attach `field.focusNode` without managing another
+  node. Focus diagnostics now check attachment rather than constructor syntax.
+
 - `NumberInput` forwards `enabled` and `readOnly` to the inner `TextInput`,
   matching `PasswordInput`, `CompletionTextInput`, and `TextArea`. Disable with
   those flags — `onChanged: null` does not disable numeric entry.
