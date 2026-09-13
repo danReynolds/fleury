@@ -8,6 +8,12 @@
 - Custom form fields can attach `field.focusNode` without managing another
   node. Focus diagnostics now check attachment rather than constructor syntax.
 
+- `Toaster.show` returns an idempotent `ToastHandle`, accepts an optional `id`
+  for replacement in place, and supports `persistent: true` without an expiry
+  timer. Old handles/timers cannot dismiss replacements. `Toaster.maxToasts`
+  optionally bounds retained toasts by evicting the oldest without queuing.
+  Messages wrap within their available width; existing calls keep stacking.
+
 - `NumberInput` forwards `enabled` and `readOnly` to the inner `TextInput`,
   matching `PasswordInput`, `CompletionTextInput`, and `TextArea`. Disable with
   those flags — `onChanged: null` does not disable numeric entry.

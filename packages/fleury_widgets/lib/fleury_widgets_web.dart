@@ -262,7 +262,7 @@ export 'src/tool_call_card.dart'
         ToolCallStatus,
         exportToolCallSummary;
 export 'src/tabs.dart' show TabController, TabItem, Tabs;
-export 'src/toaster.dart' show Toaster, ToastAction, ToastSeverity;
+export 'src/toaster.dart' show Toaster, ToastAction, ToastHandle, ToastSeverity;
 export 'src/tooltip.dart' show Tooltip;
 export 'src/tree.dart' show Tree, TreeNode;
 export 'src/tree_table.dart'

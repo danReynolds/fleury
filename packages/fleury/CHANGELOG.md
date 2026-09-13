@@ -6,6 +6,10 @@
   unbounded. Links in stretching columns retain their content width, and
   alignment still applies on the bounded axis.
 
+- `Container.color` changes, including null transitions, preserve stateful
+  descendants. The stable background layer paints nothing when color is null;
+  editors retain text/selection/focus and lists retain their viewport.
+
 - **Breaking:** `Focus.of` / `Focus.maybeOf` now return the nearest enclosing
   `FocusNode` instead of the `FocusManager`. The manager moved to
   `FocusManager.of` / `FocusManager.maybeOf`. An item builder can now render
