@@ -82,8 +82,11 @@ Form(
 </CodeDemoSplit>
 
 Try submitting immediately. Both text errors appear and focus moves to **Name**.
-Enter a name, try an invalid slug, then correct it and submit. Once an error has
-been shown, editing that field revalidates it so stale feedback disappears.
+Enter a name, try an invalid slug, then correct it and submit. Once validation
+feedback has been shown, changes to registered fields refresh that feedback
+after pending widget updates. This works for programmatic updates and rules
+that read another field too. Validators should only read state and return an
+error; they can run again when fields or controls rebuild.
 
 ## How fields participate
 
@@ -194,14 +197,13 @@ semantics:
 
 ```dart
 FormField.builder(
-  focusNode: startFocus,
   validator: () => end.isBefore(start)
       ? 'End must follow start.'
       : null,
   builder: (context, field) => DateRangeEditor(
     start: start,
     end: end,
-    focusNode: startFocus,
+    focusNode: field.focusNode,
     error: field.error,
     onChanged: (range) {
       setState(() {
@@ -214,11 +216,11 @@ FormField.builder(
 )
 ```
 
-The focus destination is not optional. A builder field is the one field the
-form cannot discover a control inside, so without a `focusNode` attached to a
-focusable widget there is nothing for first-invalid focus to move to. Debug
-builds report that as an error the first time such a field is the first invalid
-one, instead of skipping the focus move silently.
+Attach `field.focusNode` to the custom control that should receive focus when
+the field is invalid. The field manages that node's lifetime. If the application
+already owns a node, pass it to `FormField.builder(focusNode: ...)` and attach
+the same node inside the builder. Debug builds report missing or unattached
+destinations when validation needs to focus the field.
 
 ### Multi-screen flows
 

@@ -9,3 +9,4 @@ export 'src/widgets/form_control.dart'
     show FormControlRegistration, FormControlScope;
 export 'src/widgets/pointer.dart' show RenderPointerListener;
 export 'src/widgets/focusable_control.dart' show FocusableControl;
+export 'src/widgets/scroll_view.dart' show revealInScrollViews;
