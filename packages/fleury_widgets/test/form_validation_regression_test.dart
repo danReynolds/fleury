@@ -12,6 +12,22 @@ Future<bool> validate(FleuryTester tester, FormController form) {
 }
 
 void main() {
+  testWidgets('form rebuild refreshes rules even when its fields are cached', (
+    tester,
+  ) async {
+    final form = FormController();
+    final key = GlobalKey<_CachedRuleState>();
+    tester.pumpWidget(_CachedRule(key: key, form: form));
+    expect(await validate(tester, form), isFalse);
+    await tester.settle();
+    expect(tester.renderToString(), contains('Required by policy'));
+    key.currentState!.relaxRule();
+    await tester.settle();
+    expect(tester.renderToString(), isNot(contains('Required by policy')));
+    tester.pumpWidget(const Text('gone'));
+    form.dispose();
+  });
+
   testWidgets(
     'cached fields revalidate applied values, not requested changes',
     (tester) async {
@@ -420,6 +436,25 @@ void main() {
       unused.dispose();
     });
   }
+}
+
+class _CachedRule extends StatefulWidget {
+  const _CachedRule({super.key, required this.form});
+  final FormController form;
+  @override
+  State<_CachedRule> createState() => _CachedRuleState();
+}
+
+class _CachedRuleState extends State<_CachedRule> {
+  bool requiredByPolicy = true;
+  late final Widget field = FormField(
+    validator: () => requiredByPolicy ? 'Required by policy' : null,
+    child: const TextInput(),
+  );
+  void relaxRule() => setState(() => requiredByPolicy = false);
+  @override
+  Widget build(BuildContext context) =>
+      Form(controller: widget.form, onSubmit: () {}, child: field);
 }
 
 class _LocalChoice extends StatefulWidget {

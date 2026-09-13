@@ -228,10 +228,13 @@ final class _FormWidgetState extends State<Form> implements _FormHost {
   @override
   void didUpdateWidget(Form oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.controller == oldWidget.controller) return;
-    _controller._detach(this);
-    if (_ownsController) _controller.dispose();
-    _attach(widget.controller);
+    if (widget.controller != oldWidget.controller) {
+      _controller._detach(this);
+      if (_ownsController) _controller.dispose();
+      _attach(widget.controller);
+    }
+    // Rules can read app state even when the form reuses its field widgets.
+    scheduleRevalidation();
   }
 
   List<FormFieldState> _fieldsInTraversalOrder() {
@@ -413,7 +416,8 @@ class FormField extends StatefulWidget {
   /// Returns the current error by reading application-owned state.
   ///
   /// Keep validators free of side effects: revealed validation can refresh
-  /// after fields or registered controls rebuild, including dependent fields.
+  /// after forms, fields, or registered controls rebuild, including dependent
+  /// fields.
   final String? Function()? validator;
 
   /// Controlled external error, typically returned by a server.
