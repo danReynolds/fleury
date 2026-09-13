@@ -159,6 +159,7 @@ abstract interface class _FormHost {
   Future<bool> validate();
   FutureOr<void> submit();
   void clearErrors();
+  void scheduleRevalidation();
 }
 
 /// A behavioral boundary that coordinates descendant [FormField] widgets.
@@ -210,6 +211,7 @@ final class _FormWidgetState extends State<Form> implements _FormHost {
   late FormController _controller;
   bool _ownsController = false;
   Completer<bool>? _pendingValidation;
+  bool _revalidationScheduled = false;
 
   @override
   void initState() {
@@ -226,10 +228,13 @@ final class _FormWidgetState extends State<Form> implements _FormHost {
   @override
   void didUpdateWidget(Form oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.controller == oldWidget.controller) return;
-    _controller._detach(this);
-    if (_ownsController) _controller.dispose();
-    _attach(widget.controller);
+    if (widget.controller != oldWidget.controller) {
+      _controller._detach(this);
+      if (_ownsController) _controller.dispose();
+      _attach(widget.controller);
+    }
+    // Rules can read app state even when the form reuses its field widgets.
+    scheduleRevalidation();
   }
 
   List<FormFieldState> _fieldsInTraversalOrder() {
@@ -276,7 +281,39 @@ final class _FormWidgetState extends State<Form> implements _FormHost {
     }
     firstInvalid?._debugCheckFocusDestination();
     firstInvalid?.focusNode.requestFocus();
+    if (firstInvalid != null) {
+      final field = firstInvalid;
+      // Error messages change layout. Reveal after that layout, and only if
+      // the invalid control still owns focus (the user may have moved on).
+      TuiBinding.of(context).addPostFrameCallback((_) {
+        if (!mounted || !field.mounted || field.error == null) return;
+        final node = field.focusNode;
+        if (!node.hasFocus) return;
+        final target = node.context?.findRenderObject();
+        if (target != null) {
+          revealInScrollViews(
+            target,
+            surrounding: field.context.findRenderObject(),
+          );
+        }
+      });
+    }
     return firstInvalid == null;
+  }
+
+  @override
+  void scheduleRevalidation() {
+    if (_revalidationScheduled) return;
+    _revalidationScheduled = true;
+    TuiBinding.of(context).addPostFrameCallback((_) {
+      _revalidationScheduled = false;
+      if (!mounted || _pendingValidation != null) return;
+      // A control may depend on another field. Read the applied app state
+      // after rebuilds, without revealing untouched errors or moving focus.
+      for (final field in _fieldsInTraversalOrder()) {
+        field._refreshRevealedError();
+      }
+    });
   }
 
   @override
@@ -377,6 +414,10 @@ class FormField extends StatefulWidget {
   final Widget Function(BuildContext context, FormFieldState field)? builder;
 
   /// Returns the current error by reading application-owned state.
+  ///
+  /// Keep validators free of side effects: revealed validation can refresh
+  /// after forms, fields, or registered controls rebuild, including dependent
+  /// fields.
   final String? Function()? validator;
 
   /// Controlled external error, typically returned by a server.
@@ -385,7 +426,8 @@ class FormField extends StatefulWidget {
   /// Disabled fields are skipped by validation and first-invalid focus.
   final bool enabled;
 
-  /// Focus destination for [FormField.builder].
+  /// Optional external focus destination for [FormField.builder].
+  /// Otherwise attach [FormFieldState.focusNode] inside the builder.
   final FocusNode? focusNode;
 
   /// Whether the field renders its current error below the control.
@@ -406,6 +448,7 @@ final class FormFieldState extends State<FormField>
   String? _validatorError;
   bool _validatorErrorVisible = false;
   bool _claimCheckScheduled = false;
+  bool _revalidationScheduled = false;
 
   _FormControlClaim? get _controlClaim =>
       _controlClaims.isEmpty ? null : _controlClaims.last;
@@ -425,6 +468,9 @@ final class FormFieldState extends State<FormField>
       (widget.builder != null || _controlClaim?.enabled != false);
 
   /// The focus destination used when this is the first invalid field.
+  ///
+  /// A custom builder can attach this node to its control. The field owns its
+  /// lifetime unless an external [FormField.focusNode] was supplied.
   FocusNode get focusNode =>
       widget.focusNode ??
       _controlClaim?.focusNode ??
@@ -432,12 +478,35 @@ final class FormFieldState extends State<FormField>
 
   /// Reports that the app-owned value represented by a custom field changed.
   ///
-  /// Once a validator error has been shown, changes revalidate this field so
-  /// stale feedback clears promptly. Controlled [FormField.error] values stay
-  /// visible until the application updates them.
+  /// After pending widget updates, revalidates revealed feedback in the nearest
+  /// form (or this field when standalone). This also refreshes rules that read
+  /// another field. Controlled [FormField.error] values stay visible until the
+  /// application updates them.
   void valueChanged() {
-    if (!enabled || !_validatorErrorVisible) return;
+    _scheduleRevalidation();
+  }
+
+  void _refreshRevealedError() {
+    if (!_validatorErrorVisible) return;
+    if (!enabled) {
+      _clearValidatorError();
+      return;
+    }
     _runValidator(reveal: true);
+  }
+
+  void _scheduleRevalidation() {
+    final host = Form.maybeOf(context)?._host;
+    if (host != null) {
+      host.scheduleRevalidation();
+      return;
+    }
+    if (_revalidationScheduled) return;
+    _revalidationScheduled = true;
+    TuiBinding.of(context).addPostFrameCallback((_) {
+      _revalidationScheduled = false;
+      if (mounted) _refreshRevealedError();
+    });
   }
 
   /// Validates this field and reveals its current error.
@@ -469,15 +538,12 @@ final class FormFieldState extends State<FormField>
   @override
   void didUpdateWidget(FormField oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // didUpdateWidget is followed by build, so update derived validation state
-    // directly instead of scheduling a redundant setState rebuild.
     if (!widget.enabled && oldWidget.enabled) {
       _validatorError = null;
       _validatorErrorVisible = false;
-    } else if (_validatorErrorVisible &&
-        widget.validator != oldWidget.validator) {
-      _validatorError = widget.validator?.call();
     }
+    // Callback identity says nothing about the values a validator reads.
+    _scheduleRevalidation();
   }
 
   @override
@@ -504,6 +570,7 @@ final class FormFieldState extends State<FormField>
       validationError: validationError,
     );
     _scheduleClaimCheck();
+    _scheduleRevalidation();
   }
 
   @override
@@ -529,6 +596,10 @@ final class FormFieldState extends State<FormField>
       enabled: enabled,
       validationError: validationError,
     );
+    // Claims are synchronized after control updates too, including changes to
+    // controlled values. Coalesce rather than keeping a second copy of values
+    // here or requiring each control to compare arbitrary application models.
+    _scheduleRevalidation();
   }
 
   void _updateControlClaim(
@@ -578,13 +649,9 @@ final class FormFieldState extends State<FormField>
   /// Debug-only: the first invalid field must have a focus destination that
   /// can actually receive focus.
   ///
-  /// A [FormField.builder] installs no [FormControlScope], so nothing inside
-  /// it can claim the field. Without [FormField.focusNode], [focusNode] then
-  /// falls back to an owned node attached to no [Focus] widget, and
-  /// `requestFocus` on an unattached node is a documented no-op: the form
-  /// promises to focus the first invalid field and silently doesn't. Nothing
-  /// throws, nothing blurs, the caret never moves — the failure is invisible
-  /// until a user reports it.
+  /// A builder attaches either the field-owned [focusNode] or an external
+  /// [FormField.focusNode]. Check the node, not which constructor argument
+  /// provided it: an explicit but unattached node cannot receive focus either.
   ///
   /// Reported from a microtask, like [_scheduleClaimCheck]. The caller runs
   /// inside the post-frame callback that owns the pending-validation
@@ -594,13 +661,14 @@ final class FormFieldState extends State<FormField>
   void _debugCheckFocusDestination() {
     assert(() {
       if (widget.builder == null) return true;
-      if (widget.focusNode != null || _controlClaim != null) return true;
+      if (focusNode.isAttached && focusNode.canRequestFocus) return true;
       scheduleMicrotask(() {
+        if (!mounted) return;
         throw StateError(
           'FormField.builder is the first invalid field but has no focus '
-          'destination, so validation cannot focus it. Pass '
-          'FormField.builder(focusNode: ...) and give that same FocusNode to '
-          'a focusable widget the builder renders.',
+          'destination attached to a focusable control. Attach field.focusNode '
+          'inside the builder, or pass FormField.builder(focusNode: ...) and '
+          'attach that same node to a focusable widget the builder renders.',
         );
       });
       return true;
