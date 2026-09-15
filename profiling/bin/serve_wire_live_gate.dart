@@ -19,10 +19,9 @@
 // `input-latency` is the G4 closed-loop input→paint probe riding this harness.
 // Its structural invariant — every injected key answered by exactly one PLAN
 // within the per-key timeout — is enforced inside the profiler: a violated
-// run (missed plan, unsolicited plan, dropped socket) is DISCARDED and the
-// next run tried, and the profiler exits non-zero — failing this gate — only
-// when every run fails, with the message separating an input-path break that
-// reproduces across runs from repeated socket/infra drops. Its numeric axes
+// run (missed plan, unsolicited plan, dropped socket) is retained as a failed
+// attempt. Any failed run makes the profiler exit non-zero and fails this gate.
+// The artifact preserves failure reasons and partial latency samples. Its numeric axes
 // (latency percentiles AND, for now, its byte axes) are all WARN-ONLY: timing
 // on a live socket is machine-sensitive (cadence precedent), and the byte axes
 // stay warn-only until their run-to-run variance is characterized — promotion

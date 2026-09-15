@@ -1,0 +1,8 @@
+Analyzing profiling...
+
+   info - bin/input_alloc_gate.dart:38:8 - The import of 'package:fleury/src/input/keyboard_state.dart' is unnecessary because all of the used elements are also provided by the import of 'package:fleury/fleury.dart'. Try removing the import directive. - unnecessary_import
+   info - bin/input_alloc_gate.dart:39:8 - The import of 'package:fleury/src/runtime/input_dispatcher.dart' is unnecessary because all of the used elements are also provided by the import of 'package:fleury/fleury.dart'. Try removing the import directive. - unnecessary_import
+   info - bin/input_alloc_gate.dart:40:8 - The import of 'package:fleury/src/terminal/input_parser.dart' is unnecessary because all of the used elements are also provided by the import of 'package:fleury/fleury.dart'. Try removing the import directive. - unnecessary_import
+   info - bin/input_alloc_gate.dart:41:8 - The import of 'package:fleury/src/widgets/focus.dart' is unnecessary because all of the used elements are also provided by the import of 'package:fleury/fleury.dart'. Try removing the import directive. - unnecessary_import
+
+4 issues found.

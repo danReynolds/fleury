@@ -1,8 +1,12 @@
 # fleury TUI profiling harness (all-Dart)
 
+For framework changes, start with [`benchmark lab`](../docs/implementation/profiling-v2.md):
+paired AOT comparisons, raw per-operation samples, completeness checks, and
+CPU/heap diagnosis. The tools below cover native terminal and peer comparisons.
+
 Compare fleury vs peer TUIs on language-agnostic output axes (bytes on the wire,
 frames, control overhead, ttfb) plus field-standard runtime axes (RSS, CPU load,
-sustained FPS) and band each: way-off / ballpark / competitive / leading. Spec:
+observed update cadence) and band each: way-off / ballpark / competitive / leading. Spec:
 `docs/implementation/profiling-harness.md`.
 
 ```sh
@@ -92,7 +96,7 @@ the same commit:
 dart tool/fleury_dev.dart benchmark wire-gate --update-baseline
 ```
 
-There is no CI in this repo yet; run the gate before any commit that
-touches `ansi_renderer.dart`, `cell_buffer.dart`, or
+CI runs the fast gate suite. Also run the relevant gate before changes that
+touch `ansi_renderer.dart`, `cell_buffer.dart`, or
 `terminal_sequences.dart`. The byte-equivalence oracle covers
 correctness; this gate covers cost.

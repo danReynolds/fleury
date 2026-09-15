@@ -1,0 +1,6 @@
+serve live-wire: scenario=input-latency samples=5 runs=2 port=63922
+run 1/2: plan 11f 27.1 B/f · semantics 11f 605.0 B/f · total 12615 B raw / 759 B deflated · input→paint p50 1.1 p95 1.3 max 1.3 ms (5 keys)
+run 2/2: plan 11f 27.1 B/f · semantics 11f 605.0 B/f · total 12615 B raw / 758 B deflated · input→paint p50 1.5 p95 1.7 max 1.7 ms (5 keys)
+
+median: input→paint p50 1.5 ms · p95 1.7 ms · total 12615.0 B raw / 759.0 B deflated
+wrote /tmp/fleury-lab-v2-live-success.json
