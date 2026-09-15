@@ -247,13 +247,11 @@ class FocusNode {
 
   CaretHost? _caretHost;
 
-  /// Framework-internal: the editable render object that owns this node's
-  /// caret.
-  @internal
+  /// Attaches the custom editable render object that owns this node's caret.
+  /// Detach the same host when it unmounts or changes focus nodes.
   void attachCaretHost(CaretHost host) => _caretHost = host;
 
-  /// Framework-internal: forgets [host] if it is the current caret host.
-  @internal
+  /// Forgets [host] if it is the current caret host.
   void detachCaretHost(CaretHost host) {
     if (identical(_caretHost, host)) _caretHost = null;
   }

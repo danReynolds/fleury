@@ -1254,6 +1254,13 @@ class _TextInputState extends State<TextInput>
       return KeyEventResult.ignored;
     }
     switch (action) {
+      case TextEditingKeyAction.selectAll:
+        _paste.finish();
+        _controller.selection = TextSelection(
+          baseOffset: 0,
+          extentOffset: _controller.text.length,
+        );
+        return KeyEventResult.handled;
       case TextEditingKeyAction.copy:
         return _copyOrCutSelection(cut: false);
       case TextEditingKeyAction.cut:
