@@ -26,13 +26,16 @@ class ColorPicker extends StatefulWidget {
     this.colors,
     this.columns = 8,
     this.swatchWidth = 3,
+    this.rowSpacing = 0,
+    this.showHelp = true,
     this.semanticLabel = 'Colors',
     this.semanticColorLabelBuilder,
     this.focusNode,
     this.autofocus = false,
     this.style,
   }) : assert(columns >= 1, 'columns must be >= 1'),
-       assert(swatchWidth >= 1, 'swatchWidth must be >= 1');
+       assert(swatchWidth >= 1, 'swatchWidth must be >= 1'),
+       assert(rowSpacing >= 0, 'rowSpacing must be >= 0');
 
   /// Currently-selected color. The first matching entry in [colors] (or the
   /// default palette) becomes the committed cell and initial preview cursor.
@@ -51,6 +54,13 @@ class ColorPicker extends StatefulWidget {
   /// Cell width per swatch (≥ 1). Wider swatches read more clearly at
   /// the cost of horizontal space.
   final int swatchWidth;
+
+  /// Blank cell rows between palette rows. Defaults to zero.
+  final int rowSpacing;
+
+  /// Show keyboard instructions when focused. Disable when the surrounding
+  /// panel supplies persistent help and should keep a stable height on focus.
+  final bool showHelp;
 
   /// Label exposed through the semantic app graph for the picker.
   final String semanticLabel;
@@ -427,6 +437,9 @@ class _ColorPickerState extends State<ColorPicker>
           ),
         );
       }
+      if (r > 0 && widget.rowSpacing > 0) {
+        rows.add(SizedBox(height: widget.rowSpacing));
+      }
       rows.add(Row(children: cells));
     }
 
@@ -439,7 +452,7 @@ class _ColorPickerState extends State<ColorPicker>
         ...rows,
         // Spell out the model while focused: navigating only previews; you
         // commit with Enter/Space (or a click) and back out with Esc.
-        if (focused)
+        if (focused && widget.showHelp)
           Text(
             '↑↓←→ preview · Enter/Space lock in · Esc cancel · # hex',
             style: theme.mutedStyle,

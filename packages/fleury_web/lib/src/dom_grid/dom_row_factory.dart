@@ -180,7 +180,7 @@ final class DomRowFactory {
   ) {
     if (run.correction != WidthCorrection.pinToCellWidth) return '';
     if (metrics == null) {
-      return 'display:inline-block;width:${run.widthCols}ch;overflow:hidden';
+      return '$kFillsCellBoxCss;width:${run.widthCols}ch;overflow:hidden';
     }
     return _pinnedWidthCss(run, stats, metrics, withDisplay: true);
   }
@@ -209,7 +209,7 @@ final class DomRowFactory {
     }
     stats?.widthCacheMisses += 1;
     final css =
-        '${withDisplay ? 'display:inline-block;' : ''}'
+        '${withDisplay ? '$kFillsCellBoxCss;' : ''}'
         'width:${_cssPx(run.widthCols * metrics.cssCellWidth)};overflow:hidden';
     _widthCssCache[key] = css;
     return css;

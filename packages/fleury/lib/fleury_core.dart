@@ -322,6 +322,7 @@ export 'src/terminal/terminal_driver.dart'
 // Widgets
 export 'src/widgets/focus.dart'
     show
+        CaretHost,
         ExcludeFocus,
         Focus,
         FocusManager,

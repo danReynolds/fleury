@@ -5,6 +5,7 @@ import '../input/events.dart';
 /// Text widgets decide whether an action is valid in their current state. The
 /// keymap only answers "what editing intent does this key represent?".
 enum TextEditingKeyAction {
+  selectAll,
   copy,
   cut,
   undo,
@@ -61,8 +62,9 @@ final class TextEditingKeyBinding {
   bool matches(KeyEvent event) {
     if (event.type == KeyEventType.up) return false;
     if (keyCode != null && event.code != keyCode) return false;
-    if (char != null && event.code.character?.toLowerCase() != char)
+    if (char != null && event.code.character?.toLowerCase() != char) {
       return false;
+    }
     for (final modifier in modifiers) {
       if (!event.modifiers.contains(modifier)) return false;
     }
@@ -121,7 +123,41 @@ final class TextEditingKeymap {
   }
 }
 
+const _selectionAndCommandKeys = <TextEditingKeyBinding>[
+  TextEditingKeyBinding(
+    action: TextEditingKeyAction.selectAll,
+    char: 'a',
+    modifiers: {KeyModifier.ctrl},
+  ),
+  TextEditingKeyBinding(
+    action: TextEditingKeyAction.selectAll,
+    char: 'a',
+    modifiers: {KeyModifier.superKey},
+  ),
+  TextEditingKeyBinding(
+    action: TextEditingKeyAction.copy,
+    char: 'c',
+    modifiers: {KeyModifier.superKey},
+  ),
+  TextEditingKeyBinding(
+    action: TextEditingKeyAction.cut,
+    char: 'x',
+    modifiers: {KeyModifier.superKey},
+  ),
+  TextEditingKeyBinding(
+    action: TextEditingKeyAction.redo,
+    char: 'z',
+    modifiers: {KeyModifier.superKey, KeyModifier.shift},
+  ),
+  TextEditingKeyBinding(
+    action: TextEditingKeyAction.undo,
+    char: 'z',
+    modifiers: {KeyModifier.superKey},
+  ),
+];
+
 const _defaultSingleLine = <TextEditingKeyBinding>[
+  ..._selectionAndCommandKeys,
   TextEditingKeyBinding(
     action: TextEditingKeyAction.copy,
     char: 'c',
@@ -222,6 +258,7 @@ const _defaultSingleLine = <TextEditingKeyBinding>[
 ];
 
 const _defaultMultiline = <TextEditingKeyBinding>[
+  ..._selectionAndCommandKeys,
   TextEditingKeyBinding(
     action: TextEditingKeyAction.copy,
     char: 'c',
