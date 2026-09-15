@@ -16,6 +16,12 @@ final class ToastHandle {
 
   void Function()? _dismiss;
 
+  /// Whether this exact toast is still retained by its host.
+  ///
+  /// False after dismissal, expiry, replacement, eviction or host disposal.
+  /// This is a snapshot, not a subscription.
+  bool get isActive => _dismiss != null;
+
   /// Dismisses this toast. Safe to call repeatedly or after host disposal.
   void dismiss() {
     final dismiss = _dismiss;

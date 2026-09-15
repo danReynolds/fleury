@@ -40,6 +40,57 @@ void main() {
     },
   );
 
+  for (final composed in [false, true]) {
+    testWidgets(
+      'plain content is left aligned and styles full bounds ($composed)',
+      (tester) {
+        var presses = 0;
+        tester.pumpWidget(
+          SizedBox(
+            width: 12,
+            height: 1,
+            child: Button(
+              appearance: ButtonAppearance.plain,
+              text: composed ? null : 'Copy',
+              child: composed ? const Text('Copy') : null,
+              semanticLabel: 'Copy',
+              autofocus: true,
+              onPressed: () => presses++,
+            ),
+          ),
+        );
+        final buffer = tester.render(size: const CellSize(12, 1));
+        expect(tester.renderToString(emptyMark: ' ').trimRight(), 'Copy');
+        for (var col = 0; col < 12; col++) {
+          expect(buffer.atColRow(col, 0).style.inverse, isTrue);
+        }
+        tester.press(.enter);
+        tester.press(.space);
+        tester.sendMouse(
+          const MouseEvent(
+            kind: MouseEventKind.down,
+            button: MouseButton.left,
+            col: 11,
+            row: 0,
+          ),
+        );
+        tester.sendMouse(
+          const MouseEvent(
+            kind: MouseEventKind.up,
+            button: MouseButton.left,
+            col: 11,
+            row: 0,
+          ),
+        );
+        expect(presses, 3);
+        expect(
+          tester.semantics().single(role: SemanticRole.button).label,
+          'Copy',
+        );
+      },
+    );
+  }
+
   testWidgets('Tab traverses core field and button in both directions', (
     tester,
   ) {

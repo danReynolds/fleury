@@ -16,9 +16,20 @@ import 'theme.dart';
 /// Accent for a [Button], resolved against the active [ColorScheme].
 enum ButtonVariant { normal, primary, success, warning, error }
 
+/// Framing independent of a button's content and color role.
+enum ButtonAppearance {
+  /// Brackets and padding, centered when given a tight width.
+  bracketed,
+
+  /// Unframed, left-aligned content; interaction styling fills its bounds.
+  plain,
+}
+
 /// A pressable button: `[ content ]`. Provide exactly one of [text] or [child].
 /// [text] is the convenience form for a plain label; [child] accepts composed
-/// content with the same frame and interaction styling. Do not put other
+/// content with the same frame and interaction styling. [appearance] defaults
+/// to [ButtonAppearance.bracketed]; [ButtonAppearance.plain] removes the frame
+/// and left-aligns either content form. Do not put other
 /// interactive controls inside [child].
 ///
 /// Focusable; Enter/Space or a click
@@ -40,6 +51,7 @@ class Button extends StatelessWidget {
     this.semanticLabel,
     required this.onPressed,
     this.variant = ButtonVariant.normal,
+    this.appearance = ButtonAppearance.bracketed,
     this.focusNode,
     this.autofocus = false,
     this.style,
@@ -48,10 +60,10 @@ class Button extends StatelessWidget {
          'Button requires exactly one of text or child.',
        );
 
-  /// Text shown inside the `[ … ]` button frame.
+  /// Text shown using [appearance].
   final String? text;
 
-  /// Composed content shown inside the same `[ … ]` frame as [text].
+  /// Composed content shown using the same [appearance] as [text].
   ///
   /// Text descendants inherit the button's resolved interaction style.
   /// Mutually exclusive with [text].
@@ -69,6 +81,9 @@ class Button extends StatelessWidget {
 
   /// Accent applied to the label, resolved from the theme's [ColorScheme].
   final ButtonVariant variant;
+
+  /// Visual frame, independent of [variant] and the text/child choice.
+  final ButtonAppearance appearance;
 
   /// Focus node for the button.
   final FocusNode? focusNode;
@@ -143,13 +158,14 @@ class Button extends StatelessWidget {
       semanticLabel: name,
       builder: (style, enabled, states) => ExcludeSemantics(
         excluding: name != null,
-        child: child == null
+        child: child == null && appearance == ButtonAppearance.bracketed
             ? _text(context, '[ $text ]', style)
             : DefaultTextStyle.merge(
                 style: style,
                 child: _ButtonSurface(
                   style: DefaultTextStyle.of(context).merge(style),
-                  child: child!,
+                  appearance: appearance,
+                  child: child ?? Text(text!, allowSelect: false),
                 ),
               ),
       ),
@@ -160,26 +176,42 @@ class Button extends StatelessWidget {
 // Padding between composed content and its brackets must carry the same
 // focus/disabled style as the glyphs, including inverse-video themes.
 class _ButtonSurface extends SingleChildRenderObjectWidget {
-  const _ButtonSurface({required this.style, required super.child});
+  const _ButtonSurface({
+    required this.style,
+    required this.appearance,
+    required super.child,
+  });
 
   final CellStyle style;
+  final ButtonAppearance appearance;
 
   @override
   RenderObject createRenderObject(BuildContext context) =>
-      _RenderButtonSurface(style);
+      _RenderButtonSurface(style, appearance);
 
   @override
   void updateRenderObject(
     BuildContext context,
     _RenderButtonSurface renderObject,
   ) {
-    renderObject.style = style;
+    renderObject
+      ..style = style
+      ..appearance = appearance;
   }
 }
 
 class _RenderButtonSurface extends RenderObject
     implements RenderObjectWithSingleChild {
-  _RenderButtonSurface(this._style);
+  _RenderButtonSurface(this._style, this._appearance);
+
+  ButtonAppearance _appearance;
+  int get _inset => _appearance == ButtonAppearance.bracketed ? 2 : 0;
+
+  set appearance(ButtonAppearance value) {
+    if (_appearance == value) return;
+    _appearance = value;
+    markNeedsLayout();
+  }
 
   CellStyle _style;
   set style(CellStyle value) {
@@ -209,19 +241,28 @@ class _RenderButtonSurface extends RenderObject
     final contentSize =
         _child?.layout(
           CellConstraints(
-            maxCols: maxCols == null ? null : (maxCols - 4).clamp(0, maxCols),
+            maxCols: maxCols == null
+                ? null
+                : (maxCols - 2 * _inset).clamp(0, maxCols),
             maxRows: constraints.maxRows,
           ),
         ) ??
         CellSize.zero;
     final result = constraints.constrain(
       CellSize(
-        contentSize.cols + 4,
+        contentSize.cols + 2 * _inset,
         contentSize.rows < 1 ? 1 : contentSize.rows,
       ),
     );
     _childOffset = CellOffset(
-      2 + ((result.cols - 4 - contentSize.cols).clamp(0, result.cols) ~/ 2),
+      _inset == 0
+          ? 0
+          : _inset +
+                ((result.cols - 2 * _inset - contentSize.cols).clamp(
+                      0,
+                      result.cols,
+                    ) ~/
+                    2),
       (result.rows - contentSize.rows) ~/ 2,
     );
     return result;
@@ -229,23 +270,23 @@ class _RenderButtonSurface extends RenderObject
 
   @override
   int computeMaxIntrinsicWidth(int? height) =>
-      (_child?.computeMaxIntrinsicWidth(height) ?? 0) + 4;
+      (_child?.computeMaxIntrinsicWidth(height) ?? 0) + 2 * _inset;
 
   @override
   int computeMinIntrinsicWidth(int? height) =>
-      (_child?.computeMinIntrinsicWidth(height) ?? 0) + 4;
+      (_child?.computeMinIntrinsicWidth(height) ?? 0) + 2 * _inset;
 
   @override
   int computeMaxIntrinsicHeight(int? width) =>
       _child?.computeMaxIntrinsicHeight(
-        width == null ? null : (width - 4).clamp(0, width),
+        width == null ? null : (width - 2 * _inset).clamp(0, width),
       ) ??
       1;
 
   @override
   int computeMinIntrinsicHeight(int? width) =>
       _child?.computeMinIntrinsicHeight(
-        width == null ? null : (width - 4).clamp(0, width),
+        width == null ? null : (width - 2 * _inset).clamp(0, width),
       ) ??
       1;
 
@@ -257,13 +298,15 @@ class _RenderButtonSurface extends RenderObject
       style: _style,
     );
     final row = offset.row + (size.rows - 1) ~/ 2;
-    buffer.writeGrapheme(CellOffset(offset.col, row), '[', style: _style);
-    if (size.cols > 1) {
-      buffer.writeGrapheme(
-        CellOffset(offset.col + size.cols - 1, row),
-        ']',
-        style: _style,
-      );
+    if (_appearance == ButtonAppearance.bracketed) {
+      buffer.writeGrapheme(CellOffset(offset.col, row), '[', style: _style);
+      if (size.cols > 1) {
+        buffer.writeGrapheme(
+          CellOffset(offset.col + size.cols - 1, row),
+          ']',
+          style: _style,
+        );
+      }
     }
     _child?.paint(buffer, offset + _childOffset);
   }

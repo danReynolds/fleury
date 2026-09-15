@@ -106,6 +106,7 @@ void main() {
         id: 'operation',
         duration: const Duration(seconds: 2),
       );
+      expect(first.isActive, isTrue);
       tester.pump(const Duration(seconds: 1));
       final second = Toaster.show(
         ctx,
@@ -113,6 +114,8 @@ void main() {
         id: 'operation',
         duration: const Duration(seconds: 4),
       );
+      expect(first.isActive, isFalse);
+      expect(second.isActive, isTrue);
       first.dismiss();
       tester.pump(const Duration(seconds: 1));
       expect(
@@ -124,6 +127,7 @@ void main() {
       expect(_screen(tester), contains('second'));
       tester.pump(const Duration(seconds: 1));
       expect(_screen(tester), isNot(contains('second')));
+      expect(second.isActive, isFalse);
       second.dismiss();
       second.dismiss();
     });
