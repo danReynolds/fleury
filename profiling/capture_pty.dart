@@ -667,6 +667,7 @@ void main(List<String> args) {
       if (inputBytes != null && inputBytes.isNotEmpty)
         'input': <String, Object?>{
           'delayMs': inputDelayMs,
+          'sentAtMs': inputAtMs,
           'bytes': inputBytes.length,
         },
       if (signals.isNotEmpty) 'signals': signals,

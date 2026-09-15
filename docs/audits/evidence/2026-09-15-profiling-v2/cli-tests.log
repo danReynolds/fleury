@@ -1,0 +1,10 @@
+00:00 +0: loading test/tool/dev_cli_contract_test.dart
+00:00 +0: fleury CLI discovery top-level help separates app and framework commands
+00:02 +1: repo-local development launcher help promotes canonical command groups
+00:02 +2: repo-local development launcher list exposes runnable demo names
+00:02 +3: repo-local development launcher dry-run routes demo and quick checks through current files
+00:04 +4: repo-local development launcher check explains a missing bootstrap before analysis
+00:05 +5: benchmark command discovery help uses nested benchmark commands as canonical
+00:05 +6: benchmark command discovery removed benchmark aliases are rejected
+00:05 +7: benchmark command discovery wire peer discovery exposes SB.10 demo-app peers
+00:06 +8: All tests passed!

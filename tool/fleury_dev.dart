@@ -445,6 +445,7 @@ class _Runner {
     ], workingDirectory: web);
     await _run('dart', ['test'], workingDirectory: samples);
     await _run('dart', ['test'], workingDirectory: mcp);
+    await _run('dart', ['test', '--concurrency=1'], workingDirectory: profiling);
     if (!quick) {
       // Public documentation is part of the supported developer experience.
       // Keep its source/API contracts in the pull-request gate instead of
@@ -1245,6 +1246,10 @@ Uint8List remoteClientJs() => base64.decode(_remoteClientJsBase64);
         return;
       case 'local':
         await benchmarkLocal(rest);
+        return;
+      case 'lab':
+        await _run('dart', ['run', 'bin/profile_lab.dart', ...rest],
+            workingDirectory: '$root/profiling');
         return;
       case 'profile':
         await benchmarkProfile(rest);
@@ -6751,6 +6756,9 @@ void _printBenchmarkUsage() {
   );
   stdout.writeln(
     '  profile <SB.id> [...]    Run local benchmark under VM CPU/allocation profiler',
+  );
+  stdout.writeln(
+    '  lab <command> [...]     Paired AOT comparisons, raw samples, and JIT diagnosis',
   );
   stdout.writeln(
     '  wire <scenario> [...]   Build/capture/analyze real PTY peer runs',

@@ -1,0 +1,10 @@
+{
+  "schema": 2,
+  "status": "incomplete",
+  "problems": [
+    "panes-40 pair 0 baseline: Bad state: missing raw artifact"
+  ],
+  "comparisonsSuppressed": 72,
+  "totalComparisons": 72,
+  "note": "Summary of the deliberate raw-artifact corruption check. Original experiment was not modified."
+}

@@ -1,0 +1,6 @@
+serve live-wire: scenario=input-latency samples=5 runs=1 port=64208
+input-latency: no initial PLAN within 1ms of INIT — session never painted.
+run 1/1: input-latency run failed (no initial paint).
+Incomplete capture: all attempted runs are retained; do not use successful-run medians as a passing baseline.
+
+wrote /tmp/fleury-lab-v2-live-failure.json

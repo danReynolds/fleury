@@ -3,6 +3,10 @@
 This folder is the index for Fleury performance work. Benchmark source stays
 next to the package or peer fixture that owns its dependencies:
 
+For baseline/candidate iteration, start with the [profiling V2 lab](../docs/implementation/profiling-v2.md).
+It runs the same workload on pinned AOT revisions, preserves failures and raw
+samples, and provides a separate CPU/heap diagnostic mode.
+
 | Area | Source | Run through |
 | --- | --- | --- |
 | Core Fleury scenarios | `packages/fleury/benchmark` | `fleury benchmark local SB.1` / `SB.2` / `SB.12` |

@@ -1,0 +1,16 @@
+{
+  "scenario": "input-latency",
+  "runtime": "JIT live socket",
+  "boundary": "INPUT_EVENT send to PLAN socket arrival; excludes display",
+  "requestedRuns": 1,
+  "successfulRuns": 0,
+  "failedRuns": 1,
+  "status": "incomplete",
+  "attempts": [
+    {
+      "run": 1,
+      "status": "failed",
+      "error": "no initial paint"
+    }
+  ]
+}

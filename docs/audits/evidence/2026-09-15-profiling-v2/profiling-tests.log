@@ -1,0 +1,30 @@
+00:00 +0: loading test/sample_frame_host_test.dart
+00:00 +0: test/sample_frame_host_test.dart: resize updates ambient MediaQuery and rendered constraints together
+00:00 +1: test/sample_frame_host_test.dart: failed paint aborts pointer and focus input, then a frame recovers
+00:00 +2: loading test/capture_attempts_test.dart
+00:00 +2: test/capture_attempts_test.dart: partial and all-failed captures retain failures and never pass
+00:00 +3: loading test/lab_test.dart
+00:00 +3: test/lab_test.dart: percentiles retain precision and do not mutate raw samples
+00:00 +4: test/lab_test.dart: known slowdown and speedup are detected at the process level
+00:00 +5: test/lab_test.dart: no directional claim from too few runs, zero baseline, or noisy pairs
+00:00 +6: test/lab_test.dart: complete paired experiment produces reproducible report
+00:00 +7: test/lab_test.dart: one failed process suppresses all performance claims
+00:00 +8: test/lab_test.dart: source/harness mismatch cannot masquerade as a valid pair
+00:00 +9: test/lab_test.dart: missing raw samples and duplicated IDs invalidate the run
+00:00 +10: test/lab_test.dart: correctness failure and timing boundary mismatch invalidate the run
+00:00 +11: test/lab_test.dart: matching final state does not excuse dropped intermediate edits
+00:00 +12: test/lab_test.dart: interrupted build still yields an incomplete, reviewable report
+00:00 +13: loading test/lab_workload_test.dart
+00:00 +13: test/lab_workload_test.dart: trace collects externally between explicit workload boundaries
+00:06 +14: test/lab_workload_test.dart: panes-16 completes with all expected work and valid output
+00:10 +15: test/lab_workload_test.dart: panes-40 completes with all expected work and valid output
+00:14 +16: test/lab_workload_test.dart: panes-96 completes with all expected work and valid output
+00:17 +17: test/lab_workload_test.dart: dashboard-leaf completes with all expected work and valid output
+00:21 +18: test/lab_workload_test.dart: editor-leaf completes with all expected work and valid output
+00:25 +19: test/lab_workload_test.dart: resize completes with all expected work and valid output
+00:28 +20: test/lab_workload_test.dart: typing completes with all expected work and valid output
+00:32 +21: test/lab_workload_test.dart: list completes with all expected work and valid output
+00:36 +22: test/lab_workload_test.dart: paste completes with all expected work and valid output
+00:39 +23: test/lab_workload_test.dart: burst completes with all expected work and valid output
+00:43 +24: test/lab_workload_test.dart: slow-output completes with all expected work and valid output
+00:47 +25: All tests passed!

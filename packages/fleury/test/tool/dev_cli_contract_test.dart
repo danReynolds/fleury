@@ -205,6 +205,7 @@ void main() {
       expect(output, contains('manifest [options]'));
       expect(output, contains('result [options]'));
       expect(output, contains('variance [options]'));
+      expect(output, contains('lab <command>'));
       expect(output, contains('fleury benchmark list'));
       expect(output, isNot(contains('benchmark-manifest')));
     });

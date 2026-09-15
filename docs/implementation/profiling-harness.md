@@ -1,5 +1,10 @@
 # TUI Profiling Harness
 
+For repeatable comparisons between Fleury revisions, use the
+[profiling V2 lab](profiling-v2.md). This document describes the older peer/PTY
+harness and its historical results. Its FPS numbers describe observed scenario
+update cadence, not maximum rendering capacity; PTY read counts are a proxy.
+
 **Status:** Core built + proven and axis set formalized (2026-06-04); the
 current primary peer matrix is runnable for
 SB.1/SB.2/SB.3/SB.4/SB.5/SB.6/SB.7/SB.8/SB.9/SB.10/SB.11/SB.12

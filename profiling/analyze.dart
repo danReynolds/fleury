@@ -175,7 +175,7 @@ void main(List<String> args) {
   _row('bytes on the wire (total)', all, (a) => a.bytes.total, (v) => '$v B');
   _row('bytes / frame', all, (a) => a.bytesPerFrame,
       (v) => v.toStringAsFixed(0));
-  _row('frames emitted', all, (a) => a.frames, (v) => '$v');
+  _row('updates (see frame source)', all, (a) => a.frames, (v) => '$v');
   _row('control overhead %', all, (a) => (a.bytes.overheadFraction * 100),
       (v) => '${v.toStringAsFixed(0)}%');
   _row('time-to-first-byte', all, (a) => a.ttfbMs,
@@ -184,7 +184,7 @@ void main(List<String> args) {
       (v) => '${v.toStringAsFixed(1)} MiB');
   _row('CPU load during capture', all, (a) => a.cpuLoadPercent,
       (v) => '${v.toStringAsFixed(0)}%');
-  _row('sustained frame rate', all, (a) => a.fps,
+  _row('observed update cadence (not capacity)', all, (a) => a.fps,
       (v) => '${v.toStringAsFixed(1)} fps',
       higherIsBetter: true);
 

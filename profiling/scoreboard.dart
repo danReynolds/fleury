@@ -330,7 +330,7 @@ String _scoreboardMarkdown(
     )
     ..writeln()
     ..writeln(
-      '| Priority | Benchmark | Runs | Peers seen | Bytes | B/frame | Overhead | TTFB | RSS | CPU | FPS | Position |',
+      '| Priority | Benchmark | Runs | Peers seen | Bytes | B/frame | Overhead | TTFB | RSS | CPU | Update cadence | Position |',
     )
     ..writeln(
       '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
