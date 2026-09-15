@@ -4,6 +4,10 @@
 
 Initial public release.
 
+- Dim text, block elements and box-drawing glyphs without fading cell
+  backgrounds, keeping selected-row highlights continuous in the browser.
+  Overlapping glyph layers retain uniform intensity at their intersections.
+
 - Pointer cancellation, surface exit, and focus loss reach core gesture
   handlers. Captured input retains outside-surface coordinates, and browser
   cursors honor `MouseRegion.cursor` through capture and geometry changes.
