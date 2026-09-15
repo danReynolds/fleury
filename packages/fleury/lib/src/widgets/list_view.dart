@@ -1297,11 +1297,12 @@ class _ListViewportLayout {
   }
 }
 
-void _paintListViewport(
+CellBuffer? _paintListViewport(
   CellBuffer buffer,
   CellOffset offset,
   CellSize size,
   Map<RenderObject, CellOffset> children,
+  CellBuffer? scratch,
 ) {
   final needsClip = children.entries.any(
     (entry) =>
@@ -1314,13 +1315,14 @@ void _paintListViewport(
     for (final entry in children.entries) {
       entry.key.paint(buffer, offset + entry.value);
     }
-    return;
+    return scratch;
   }
-  final scratch = CellBuffer(size);
+  scratch = CellBuffer.acquire(scratch, size);
   for (final entry in children.entries) {
     entry.key.paint(scratch, entry.value);
   }
   buffer.copyFrom(scratch, offset);
+  return scratch;
 }
 
 class _RenderListView extends RenderObject implements RenderObjectWithChildren {
@@ -1361,6 +1363,7 @@ class _RenderListView extends RenderObject implements RenderObjectWithChildren {
   final Map<RenderObject, CellOffset> _childOffsets =
       <RenderObject, CellOffset>{};
   final Set<RenderObject> _visibleChildren = Set<RenderObject>.identity();
+  CellBuffer? _scratch;
 
   /// Index of the first item that should appear at the top of the
   /// viewport. Persists across layouts so scroll position is stable
@@ -1453,8 +1456,15 @@ class _RenderListView extends RenderObject implements RenderObjectWithChildren {
   }
 
   @override
-  void performPaint(CellBuffer buffer, CellOffset offset) =>
-      _paintListViewport(buffer, offset, size, _childOffsets);
+  void performPaint(CellBuffer buffer, CellOffset offset) {
+    _scratch = _paintListViewport(
+      buffer,
+      offset,
+      size,
+      _childOffsets,
+      _scratch,
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1792,6 +1802,7 @@ class _RenderLazyListView extends RenderObject
   /// Paint offsets for the children that fit in the current viewport.
   final Map<RenderObject, CellOffset> _childOffsets =
       <RenderObject, CellOffset>{};
+  CellBuffer? _scratch;
 
   /// All children we've adopted (whether currently in the layout
   /// window or not). Tracks parent-child render-object relationships
@@ -1922,6 +1933,13 @@ class _RenderLazyListView extends RenderObject
   }
 
   @override
-  void performPaint(CellBuffer buffer, CellOffset offset) =>
-      _paintListViewport(buffer, offset, size, _childOffsets);
+  void performPaint(CellBuffer buffer, CellOffset offset) {
+    _scratch = _paintListViewport(
+      buffer,
+      offset,
+      size,
+      _childOffsets,
+      _scratch,
+    );
+  }
 }

@@ -224,6 +224,7 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
   final List<RenderObject> _children = <RenderObject>[];
   final Map<RenderObject, CellOffset> _childOffsets =
       <RenderObject, CellOffset>{};
+  CellBuffer? _scratch;
 
   @override
   List<RenderObject> get children => List.unmodifiable(_children);
@@ -479,9 +480,11 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
       return child != null && _subtreeNeedsOffscreenPaint(child);
     }
     if (object is RenderObjectWithChildren) {
-      for (final child in object.children) {
-        if (_subtreeNeedsOffscreenPaint(child)) return true;
-      }
+      var found = false;
+      object.visitRenderChildren((child) {
+        if (!found && _subtreeNeedsOffscreenPaint(child)) found = true;
+      });
+      return found;
     }
     return false;
   }
@@ -499,7 +502,7 @@ class RenderFlex extends RenderObject implements RenderObjectWithChildren {
       if (reachCol > w) w = reachCol;
       if (reachRow > h) h = reachRow;
     }
-    final scratch = CellBuffer(CellSize(w, h));
+    final scratch = _scratch = CellBuffer.acquire(_scratch, CellSize(w, h));
     for (final c in _children) {
       c.paint(scratch, _childOffsets[c] ?? CellOffset.zero);
     }
