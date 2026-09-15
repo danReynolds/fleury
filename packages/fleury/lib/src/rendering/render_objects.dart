@@ -796,6 +796,12 @@ class RenderText extends RenderObject
 /// the parent's bounds, while a box without a child uses the parent's minimum.
 class RenderSizedBox extends RenderObject
     implements RenderObjectWithSingleChild {
+  @override
+  bool get isolatesChildLayout => _width != null && _height != null;
+
+  @override
+  bool get canReuseLayoutForDescendantChanges => true;
+
   RenderSizedBox({int? width, int? height, RenderObject? child})
     : _width = width,
       _height = height {
@@ -897,6 +903,9 @@ class RenderSizedBox extends RenderObject
 /// Insets a child by [padding] cells on each side.
 class RenderPadding extends RenderObject
     implements RenderObjectWithSingleChild {
+  @override
+  bool get canReuseLayoutForDescendantChanges => true;
+
   @override
   CellOffset childOffsetOf(RenderObject child) =>
       CellOffset(_padding.left, _padding.top);

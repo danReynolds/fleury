@@ -244,6 +244,25 @@ abstract class RenderObject implements ScreenGeometrySource {
   CellConstraints? _constraints;
   CellSize? _size;
   bool _needsLayout = true;
+  // Work stays reachable from the root even when a fixed-size descendant
+  // shields this object's own geometry from the change.
+  bool _descendantNeedsLayout = false;
+
+  /// Whether child layout changes leave both this object's allocated size
+  /// and its intrinsic dimensions unchanged. This is a property of the
+  /// object's layout contract, not of its last constraints. The default is
+  /// conservative; a box with explicit width AND height can opt in.
+  @protected
+  bool get isolatesChildLayout => false;
+
+  /// Whether existing child constraints and offsets remain valid when work
+  /// is confined behind a descendant's [isolatesChildLayout] boundary.
+  ///
+  /// Opt-in containers visit dirty children in place of recomputing their
+  /// layout. Other render objects still run [performLayout], preserving
+  /// custom layout behavior, intrinsic queries, and exception containment.
+  @protected
+  bool get canReuseLayoutForDescendantChanges => false;
 
   // Cache-invalidation flag, meaningful only at [isRepaintBoundary] render
   // objects. Non-boundary nodes always re-paint, so the flag is just the
@@ -259,11 +278,10 @@ abstract class RenderObject implements ScreenGeometrySource {
   @protected
   set needsPaint(bool value) => _needsPaint = value;
 
-  /// Whether this render object must run [performLayout] the next time it is
-  /// reached with the same constraints. Constraints changes always force a new
-  /// layout even when this flag is false.
+  /// Whether this object or its descendants have pending layout work.
+  /// Constraint changes always force a layout pass, even when this is false.
   @protected
-  bool get needsLayout => _needsLayout;
+  bool get needsLayout => _needsLayout || _descendantNeedsLayout;
 
   /// Whether this render object owns its own paint cache (a `CellBuffer`
   /// it can blit instead of re-walking its subtree's paint). Override to
@@ -318,10 +336,10 @@ abstract class RenderObject implements ScreenGeometrySource {
     return runtimeType.toString();
   }
 
-  /// Marks this render object and its ancestors as needing layout, and marks
-  /// the nearest enclosing repaint boundary as dirty. Use this for changes
-  /// that can affect size, child constraints, child offsets, or layout-derived
-  /// paint state.
+  /// Marks layout work along the path to the root and dirties enclosing
+  /// repaint boundaries. An isolating container can keep ancestor geometry
+  /// cached, but the frame still visits the dirty subtree. Use this for changes
+  /// to size, child constraints, offsets, or layout-derived paint state.
   void markNeedsLayout() {
     if (DebugInvalidations.isRecording) {
       DebugInvalidations.recordLayout(_debugInvalidationLabel);
@@ -332,14 +350,17 @@ abstract class RenderObject implements ScreenGeometrySource {
 
   void _markNeedsLayoutUp() {
     _needsLayout = true;
-    final parent = _parent;
-    if (parent == null) {
-      // Terminal node of the invalidation walk: publish frame damage at the
-      // root so the presenter falls back to a full diff this frame.
-      _frameDamage?.recordLayoutOrConservativePaint();
-      return;
+    var affectsGeometry = true;
+    var node = this;
+    while (node._parent != null) {
+      node = node._parent!;
+      node._descendantNeedsLayout = true;
+      if (affectsGeometry) node._needsLayout = true;
+      if (node.isolatesChildLayout) affectsGeometry = false;
     }
-    parent._markNeedsLayoutUp();
+    // Layout can move or remove painted cells even when the outer size is
+    // fixed. Keep the existing conservative damage contract.
+    node._frameDamage?.recordLayoutOrConservativePaint();
   }
 
   /// Marks this render object as visually stale and conservatively marks
@@ -483,8 +504,37 @@ abstract class RenderObject implements ScreenGeometrySource {
   CellSize layout(CellConstraints constraints) {
     final cachedSize = _size;
     if (!_needsLayout && cachedSize != null && _constraints == constraints) {
-      RenderLayoutDebugStats.recordSkipped();
-      return cachedSize;
+      if (!_descendantNeedsLayout) {
+        RenderLayoutDebugStats.recordSkipped();
+        return cachedSize;
+      }
+      if (canReuseLayoutForDescendantChanges) {
+        // Stay on the live tree and on the normal ancestor call stack.
+        // Removed children cannot be reached, and enclosing error boundaries
+        // retain ownership of failures and recovery. No separate queue or
+        // frame-owner attachment is needed for this traversal.
+        var childSizeChanged = false;
+        visitRenderChildren((child) {
+          if (!child._needsLayout && !child._descendantNeedsLayout) return;
+          final childConstraints = child._constraints;
+          if (childConstraints == null) {
+            childSizeChanged = true;
+            return;
+          }
+          final previousSize = child._size;
+          if (child.layout(childConstraints) != previousSize) {
+            childSizeChanged = true;
+          }
+        });
+        // An intervening container may recover from a first-layout error:
+        // its fallback extent need not equal its recovered child extent.
+        // Recompute constraints and offsets normally if any size changed.
+        if (!childSizeChanged && !_needsLayout) {
+          _descendantNeedsLayout = false;
+          RenderLayoutDebugStats.recordSkipped();
+          return cachedSize;
+        }
+      }
     }
     final previousSize = _size;
     _constraints = constraints;
@@ -509,6 +559,7 @@ abstract class RenderObject implements ScreenGeometrySource {
     }
     _size = result;
     _needsLayout = false;
+    _descendantNeedsLayout = false;
     RenderLayoutDebugStats.recordPerformed();
     if (previousSize != null && previousSize != result) {
       _rootFrameDamage?.recordLayoutOrConservativePaint();

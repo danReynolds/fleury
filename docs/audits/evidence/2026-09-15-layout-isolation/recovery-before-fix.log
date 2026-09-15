@@ -1,0 +1,18 @@
+00:00 +0: loading test/rendering/layout_isolation_test.dart
+00:00 +0: first-error recovery recomputes ancestor sibling positions
+00:00 +0 -1: first-error recovery recomputes ancestor sibling positions [E]
+  Expected: 'after'
+    Actual: ''
+     Which: is different. Both strings start the same, but the actual value is missing the following trailing characters: after
+
+  package:matcher                                  expect
+  test/rendering/layout_isolation_test.dart 235:5  main.<fn>
+  test/support/test_widgets.dart 52:19             testWidgets.<fn>
+
+00:00 +0 -1: Some tests failed.
+
+Failing tests:
+  test/rendering/layout_isolation_test.dart: first-error recovery recomputes ancestor sibling positions
+
+Consider enabling the flag chain-stack-traces to receive more detailed exceptions.
+For example, 'dart test --chain-stack-traces'.
