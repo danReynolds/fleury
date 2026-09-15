@@ -14,6 +14,91 @@ void main() {
   const planner = FramePresentationPlanner();
 
   group('DomGridSurface', () {
+    test('dim glyphs preserve opaque row backgrounds', () {
+      const background = RgbColor(39, 62, 49);
+      const foreground = RgbColor(167, 215, 183);
+      for (final inverse in [false, true]) {
+        final root = web.document.createElement('div');
+        web.document.body!.appendChild(root);
+        // JS interop members cannot be torn off by dart2js.
+        // ignore: unnecessary_lambdas
+        addTearDown(() => root.remove());
+        final surface = DomGridSurface(root: root, size: size);
+        final loop = TuiFrameLoop();
+        final frame = loop.render(
+          size: size,
+          paint: (buffer) {
+            for (var row = 0; row < 3; row++) {
+              buffer.writeText(
+                CellOffset(0, row),
+                ['••', '██', '──'][row],
+                style: CellStyle(
+                  foreground: foreground,
+                  background: background,
+                  dim: true,
+                  inverse: inverse,
+                ),
+              );
+            }
+          },
+        )!;
+        surface.present(
+          frame.previous,
+          frame.next,
+          planner.build(reason: 'dim selection', frame: frame),
+        );
+        for (final row in surface.rowElements) {
+          final style = web.window.getComputedStyle(row.firstElementChild!);
+          expect(style.opacity, '1', reason: 'dim must affect ink only');
+          expect(
+            style.backgroundColor,
+            inverse ? 'rgb(167, 215, 183)' : 'rgb(39, 62, 49)',
+          );
+          expect(
+            style.color,
+            inverse ? 'rgba(39, 62, 49, 0.6)' : 'rgba(167, 215, 183, 0.6)',
+          );
+        }
+      }
+    });
+
+    test('dim without an explicit foreground preserves the inherited ink', () {
+      final root = web.document.createElement('div') as web.HTMLElement;
+      web.document.body!.appendChild(root);
+      // JS interop members cannot be torn off by dart2js.
+      // ignore: unnecessary_lambdas
+      addTearDown(() => root.remove());
+      final surface = DomGridSurface(root: root, size: size);
+      root.style.color = 'rgb(100, 150, 200)';
+      final loop = TuiFrameLoop();
+      final frame = loop.render(
+        size: size,
+        paint: (buffer) => buffer.writeText(
+          const CellOffset(0, 0),
+          'dim',
+          style: const CellStyle(dim: true, background: RgbColor(39, 62, 49)),
+        ),
+      )!;
+      surface.present(
+        frame.previous,
+        frame.next,
+        planner.build(reason: 'inherited dim', frame: frame),
+      );
+      final style = web.window.getComputedStyle(
+        surface.rowElements.first.firstElementChild!,
+      );
+      expect(style.opacity, '1');
+      expect(style.backgroundColor, 'rgb(39, 62, 49)');
+      expect(style.color, contains('/ 0.6)'));
+      // Compare with the same browser's computed representation of the
+      // inherited foreground with alpha, allowing color serialization changes.
+      final reference = web.document.createElement('span') as web.HTMLElement;
+      root.appendChild(reference);
+      reference.style.color =
+          'color-mix(in srgb, rgb(100, 150, 200) 60%, transparent)';
+      expect(style.color, web.window.getComputedStyle(reference).color);
+    });
+
     test('scroll plans move retained row elements instead of rebuilding', () {
       final damage = RenderDamageTracker();
       final loop = TuiFrameLoop(renderDamage: damage);

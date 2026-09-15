@@ -42,13 +42,17 @@ String cellStyleToCss(CellStyle style) {
 
   final parts = <String>[];
   if (fg != null) {
-    parts.add('color:${rgbCss(fg)}');
+    parts.add('color:${_foregroundCss(fg, dim: style.dim)}');
   } else if (style.linkUri != null && isSafeLinkScheme(style.linkUri!)) {
     // A safe link renders as an <a>, whose UA color (#0000EE blue) would
     // otherwise win over the row's inherited foreground. Pin it to the default
     // foreground so a link reads as default-fg + underline, never browser blue.
     // Link-free runs (and links with an explicit fg) are unaffected.
-    parts.add('color:${rgbCss(kDefaultForeground)}');
+    parts.add('color:${_foregroundCss(kDefaultForeground, dim: style.dim)}');
+  } else if (style.dim) {
+    // Dim only the ink. Element opacity would also fade the cell background,
+    // leaving a dark patch in a highlighted row. Preserve inherited colors.
+    parts.add('color:color-mix(in srgb, currentColor 60%, transparent)');
   }
   if (bg != null) {
     parts
@@ -60,7 +64,6 @@ String cellStyleToCss(CellStyle style) {
       ..add(kFillsCellBoxCss);
   }
   if (style.bold) parts.add('font-weight:700');
-  if (style.dim) parts.add('opacity:.6');
   if (style.italic) parts.add('font-style:italic');
   final decorations = <String>[
     if (style.underline) 'underline',
@@ -75,6 +78,12 @@ String cellStyleToCss(CellStyle style) {
 String rgbCss(Color color) {
   final c = color.toRgb();
   return 'rgb(${c.r}, ${c.g}, ${c.b})';
+}
+
+String _foregroundCss(Color color, {required bool dim}) {
+  if (!dim) return rgbCss(color);
+  final c = color.toRgb();
+  return 'rgba(${c.r}, ${c.g}, ${c.b}, .6)';
 }
 
 /// Inline CSS that paints a block-element glyph as solid rectangles instead of
@@ -128,14 +137,13 @@ String blockElementCss(CellStyle style, List<BlockRect> rects) {
     // Solid ink must reach the row edges and meet its neighbours above and
     // below with no seam — the same rule as any painted cell.
     kFillsCellBoxCss,
-    'color:${rgbCss(fg ?? kDefaultForeground)}',
+    'color:${_foregroundCss(fg ?? kDefaultForeground, dim: style.dim)}',
     if (bg != null) 'background-color:${rgbCss(bg)}',
     'background-image:${images.join(',')}',
     'background-position:${positions.join(',')}',
     'background-size:${sizes.join(',')}',
     'background-repeat:no-repeat',
   ];
-  if (style.dim) parts.add('opacity:.6');
   return parts.join(';');
 }
 
@@ -205,13 +213,12 @@ String boxDrawingCss(CellStyle style, int mask) {
     // A box-drawing line must reach the row edges and meet its neighbours
     // above and below with no seam — the same rule as any painted cell.
     kFillsCellBoxCss,
-    'color:${rgbCss(fg ?? kDefaultForeground)}',
+    'color:${_foregroundCss(fg ?? kDefaultForeground, dim: style.dim)}',
     if (bg != null) 'background-color:${rgbCss(bg)}',
     'background-image:${images.join(',')}',
     'background-position:${positions.join(',')}',
     'background-size:${sizes.join(',')}',
     'background-repeat:no-repeat',
   ];
-  if (style.dim) parts.add('opacity:.6');
   return parts.join(';');
 }

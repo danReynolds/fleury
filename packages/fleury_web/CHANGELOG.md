@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Dim text, block elements and box-drawing glyphs without fading cell
+  backgrounds, keeping selected-row highlights continuous in the browser.
+
 ## 0.1.0
 
 Initial public release.
