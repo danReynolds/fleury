@@ -77,6 +77,17 @@ The render layer has two invalidation paths:
 - `markNeedsPaintOnly` is for audited visual-only changes such as color, cursor
   blink, and style.
 
+Layout work always remains reachable through the render tree. A `SizedBox`
+with both width and height specified isolates its allocated and intrinsic
+dimensions from child changes. Ancestors still visit that work, but audited
+containers (`Row`/`Column`, padding, and sized boxes) can retain their geometry
+when child sizes stay unchanged. Other containers run their normal layout;
+error boundaries therefore keep their normal catch and recovery scope. A
+changed child size falls back to normal parent layout in the same traversal.
+Tight constraints alone do not establish this isolation. See
+[layout isolation](implementation/layout-isolation.md) for the contract and
+validation.
+
 Fleury keeps this conservative by default. A layout-affecting change can make
 old cells disappear without writing over them, so the presenter cannot trust a
 paint-bounds hint for that frame. Paint-only changes can stay bounded by the

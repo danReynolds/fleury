@@ -1,0 +1,18 @@
+00:00 +0: loading test/rendering/layout_isolation_test.dart
+00:00 +0: intrinsic content grows through wrapper=false
+00:00 +1: layout failure remains contained through wrapper=false
+00:00 +2: contained layout recovers through wrapper=false
+00:00 +3: intrinsic content grows through wrapper=true
+00:00 +4: layout failure remains contained through wrapper=true
+00:00 +5: contained layout recovers through wrapper=true
+00:00 +6: removed dirty nodes are not laid out
+00:00 +7: trees without a frame tracker still propagate layout changes
+00:00 +8: fixed pane updates preserve parent layout and sibling offsets
+00:00 +9: one fixed axis does not isolate intrinsic or allocated size
+00:00 +10: custom parents retain their normal layout behavior
+00:00 +11: error scope above an isolated pane contains and recovers
+00:00 +12: moving a dirty pane uses its new parent constraints
+00:00 +13: first-error recovery recomputes ancestor sibling positions
+00:00 +14: intrinsic height follows multiline changes through wrappers
+00:00 +15: incremental cells and geometry match forced layout over mutations
+00:00 +16: All tests passed!

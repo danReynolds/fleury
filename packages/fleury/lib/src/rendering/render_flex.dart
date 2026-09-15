@@ -147,6 +147,9 @@ class RenderFlexible extends RenderObject
 /// layout is deterministic.
 class RenderFlex extends RenderObject implements RenderObjectWithChildren {
   @override
+  bool get canReuseLayoutForDescendantChanges => true;
+
+  @override
   CellOffset childOffsetOf(RenderObject child) =>
       _childOffsets[child] ?? CellOffset.zero;
 

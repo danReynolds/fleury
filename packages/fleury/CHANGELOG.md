@@ -2,6 +2,11 @@
 
 ## 0.1.0
 
+- Preserve parent layout geometry for descendant changes inside boxes with
+  explicit width and height. Work remains in the root traversal, with normal
+  error containment and a fallback when child sizes change. Intrinsic sizing,
+  resizing, and custom render objects keep their normal layout behavior.
+
 - **Breaking:** `Focus.of` / `Focus.maybeOf` now return the nearest enclosing
   `FocusNode` instead of the `FocusManager`. The manager moved to
   `FocusManager.of` / `FocusManager.maybeOf`. An item builder can now render

@@ -1,0 +1,29 @@
+{
+  "16_panes": {
+    "viewport": "36x24",
+    "frames": 5000,
+    "layout_p50_us": 1.21,
+    "layout_p95_us": 1.38,
+    "frame_p50_us": 6.25,
+    "frame_p95_us": 8.83,
+    "layouts_per_frame": 4.0
+  },
+  "40_panes": {
+    "viewport": "90x24",
+    "frames": 5000,
+    "layout_p50_us": 1.13,
+    "layout_p95_us": 1.5,
+    "frame_p50_us": 13.71,
+    "frame_p95_us": 19.58,
+    "layouts_per_frame": 4.0
+  },
+  "96_panes": {
+    "viewport": "216x24",
+    "frames": 5000,
+    "layout_p50_us": 1.54,
+    "layout_p95_us": 1.79,
+    "frame_p50_us": 31.88,
+    "frame_p95_us": 46.29,
+    "layouts_per_frame": 4.0
+  }
+}
