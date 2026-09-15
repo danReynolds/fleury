@@ -3,10 +3,10 @@
 00:00 +0 -1: fixed pane updates preserve parent layout and sibling offsets [E]
   Expected: <1>
     Actual: <2>
-  
+
   package:matcher                                  expect
   test/rendering/layout_isolation_test.dart 147:5  main.<fn>
-  
+
 00:00 +0 -1: Some tests failed.
 
 Failing tests:

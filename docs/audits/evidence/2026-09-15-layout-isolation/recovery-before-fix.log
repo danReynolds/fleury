@@ -4,11 +4,11 @@
   Expected: 'after'
     Actual: ''
      Which: is different. Both strings start the same, but the actual value is missing the following trailing characters: after
-  
+
   package:matcher                                  expect
   test/rendering/layout_isolation_test.dart 235:5  main.<fn>
   test/support/test_widgets.dart 52:19             testWidgets.<fn>
-  
+
 00:00 +0 -1: Some tests failed.
 
 Failing tests:

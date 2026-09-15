@@ -67,8 +67,13 @@ wrapping, inside status panes. It keeps paint work present in the timings.
   Every output cell and pane geometry must match.
 
 The original eight probes passed on main and failed on the original PR. All 16
-pass with the replacement. Full core/widget, repaint-cache, and performance gate
-results are recorded separately as validation completes.
+pass with the replacement. The completed contributor check passes, including
+all package/browser tests, dart2js smoke, and 64 terminal/remote integration
+cases. The final core suite also passes with repaint-cache verification enabled
+(3,536 tests; one existing skip), and all 1,293 widget tests pass. Changed files
+and the benchmark analyze cleanly; hot reload and all required fast performance
+gates pass. The parent-reuse assertion fails on main, establishing that it guards
+new behavior. See the validation receipt alongside the benchmark results.
 
 ## Performance evidence
 
