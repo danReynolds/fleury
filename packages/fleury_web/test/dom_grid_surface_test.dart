@@ -31,7 +31,7 @@ void main() {
             for (var row = 0; row < 3; row++) {
               buffer.writeText(
                 CellOffset(0, row),
-                ['••', '██', '──'][row],
+                ['••', '▟▟', '┼┼'][row],
                 style: CellStyle(
                   foreground: foreground,
                   background: background,
@@ -47,7 +47,8 @@ void main() {
           frame.next,
           planner.build(reason: 'dim selection', frame: frame),
         );
-        for (final row in surface.rowElements) {
+        for (var index = 0; index < 3; index++) {
+          final row = surface.rowElements[index];
           final style = web.window.getComputedStyle(row.firstElementChild!);
           expect(style.opacity, '1', reason: 'dim must affect ink only');
           expect(
@@ -56,9 +57,52 @@ void main() {
           );
           expect(
             style.color,
-            inverse ? 'rgba(39, 62, 49, 0.6)' : 'rgba(167, 215, 183, 0.6)',
+            index == 0
+                ? inverse
+                      ? 'rgba(39, 62, 49, 0.6)'
+                      : 'rgba(167, 215, 183, 0.6)'
+                : inverse
+                ? 'rgb(90, 123, 103)'
+                : 'rgb(116, 154, 129)',
+            reason: 'overlapping glyph layers must not compound ink alpha',
           );
         }
+      }
+    });
+
+    test('dim compound glyphs without a cell fill use group opacity', () {
+      final root = web.document.createElement('div');
+      web.document.body!.appendChild(root);
+      // JS interop members cannot be torn off by dart2js.
+      // ignore: unnecessary_lambdas
+      addTearDown(() => root.remove());
+      final surface = DomGridSurface(root: root, size: size);
+      final loop = TuiFrameLoop();
+      final frame = loop.render(
+        size: size,
+        paint: (buffer) {
+          for (var row = 0; row < 2; row++) {
+            buffer.writeText(
+              CellOffset(0, row),
+              ['▟▟', '┼┼'][row],
+              style: const CellStyle(
+                dim: true,
+                foreground: RgbColor(167, 215, 183),
+              ),
+            );
+          }
+        },
+      )!;
+      surface.present(
+        frame.previous,
+        frame.next,
+        planner.build(reason: 'transparent compound ink', frame: frame),
+      );
+      for (final row in surface.rowElements.take(2)) {
+        final style = web.window.getComputedStyle(row.firstElementChild!);
+        expect(style.opacity, '0.6');
+        expect(style.color, 'rgb(167, 215, 183)');
+        expect(style.backgroundColor, 'rgba(0, 0, 0, 0)');
       }
     });
 

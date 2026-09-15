@@ -1,13 +1,12 @@
 # Changelog
 
-## Unreleased
-
-- Dim text, block elements and box-drawing glyphs without fading cell
-  backgrounds, keeping selected-row highlights continuous in the browser.
-
 ## 0.1.0
 
 Initial public release.
+
+- Dim text, block elements and box-drawing glyphs without fading cell
+  backgrounds, keeping selected-row highlights continuous in the browser.
+  Overlapping glyph layers retain uniform intensity at their intersections.
 
 - Pointer cancellation, surface exit, and focus loss reach core gesture
   handlers. Captured input retains outside-surface coordinates, and browser

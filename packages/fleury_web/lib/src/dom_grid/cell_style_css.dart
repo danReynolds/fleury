@@ -86,6 +86,24 @@ String _foregroundCss(Color color, {required bool dim}) {
   return 'rgba(${c.r}, ${c.g}, ${c.b}, .6)';
 }
 
+// Compound glyphs can have overlapping rectangles or strokes. Giving each
+// layer alpha would make their intersections brighter. Over a solid cell
+// background, preblend the ink once and keep every layer opaque. Without a
+// cell background, group opacity can dim the glyph without fading any fill.
+String _glyphForegroundCss(
+  Color color,
+  Color? background, {
+  required bool dim,
+}) {
+  if (!dim || background == null) return rgbCss(color);
+  final fg = color.toRgb();
+  final bg = background.toRgb();
+  int blend(int ink, int fill) => (ink * .6 + fill * .4).round();
+  return rgbCss(
+    RgbColor(blend(fg.r, bg.r), blend(fg.g, bg.g), blend(fg.b, bg.b)),
+  );
+}
+
 /// Inline CSS that paints a block-element glyph as solid rectangles instead of
 /// relying on the font glyph.
 ///
@@ -137,12 +155,13 @@ String blockElementCss(CellStyle style, List<BlockRect> rects) {
     // Solid ink must reach the row edges and meet its neighbours above and
     // below with no seam — the same rule as any painted cell.
     kFillsCellBoxCss,
-    'color:${_foregroundCss(fg ?? kDefaultForeground, dim: style.dim)}',
+    'color:${_glyphForegroundCss(fg ?? kDefaultForeground, bg, dim: style.dim)}',
     if (bg != null) 'background-color:${rgbCss(bg)}',
     'background-image:${images.join(',')}',
     'background-position:${positions.join(',')}',
     'background-size:${sizes.join(',')}',
     'background-repeat:no-repeat',
+    if (style.dim && bg == null) 'opacity:.6',
   ];
   return parts.join(';');
 }
@@ -213,12 +232,13 @@ String boxDrawingCss(CellStyle style, int mask) {
     // A box-drawing line must reach the row edges and meet its neighbours
     // above and below with no seam — the same rule as any painted cell.
     kFillsCellBoxCss,
-    'color:${_foregroundCss(fg ?? kDefaultForeground, dim: style.dim)}',
+    'color:${_glyphForegroundCss(fg ?? kDefaultForeground, bg, dim: style.dim)}',
     if (bg != null) 'background-color:${rgbCss(bg)}',
     'background-image:${images.join(',')}',
     'background-position:${positions.join(',')}',
     'background-size:${sizes.join(',')}',
     'background-repeat:no-repeat',
+    if (style.dim && bg == null) 'opacity:.6',
   ];
   return parts.join(';');
 }
