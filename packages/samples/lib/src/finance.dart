@@ -569,7 +569,7 @@ class _FinanceBodyState extends State<_FinanceBody> {
       semanticLabel: 'Transaction sort',
     );
     final stress = Button(
-      label: _stressMode ? 'Stress on · 2,500' : 'Stress +2,500',
+      text: _stressMode ? 'Stress on · 2,500' : 'Stress +2,500',
       variant: _stressMode ? ButtonVariant.warning : ButtonVariant.normal,
       onPressed: () => _refreshRows(stressMode: !_stressMode),
     );

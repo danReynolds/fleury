@@ -1,4 +1,8 @@
+import '../foundation/geometry.dart';
 import '../rendering/cell.dart';
+import '../rendering/cell_buffer.dart';
+import '../rendering/layout.dart';
+import '../rendering/render_object.dart';
 import '../rendering/width_resolver.dart';
 import '../semantics/semantics.dart';
 import 'basic.dart';
@@ -12,7 +16,12 @@ import 'theme.dart';
 /// Accent for a [Button], resolved against the active [ColorScheme].
 enum ButtonVariant { normal, primary, success, warning, error }
 
-/// A pressable button: `[ Label ]`. Focusable; Enter/Space or a click
+/// A pressable button: `[ content ]`. Provide exactly one of [text] or [child].
+/// [text] is the convenience form for a plain label; [child] accepts composed
+/// content with the same frame and interaction styling. Do not put other
+/// interactive controls inside [child].
+///
+/// Focusable; Enter/Space or a click
 /// fires [onPressed]. Passing a null [onPressed] disables it — shown
 /// muted and not focusable.
 ///
@@ -26,16 +35,34 @@ enum ButtonVariant { normal, primary, success, warning, error }
 class Button extends StatelessWidget {
   const Button({
     super.key,
-    required this.label,
+    this.text,
+    this.child,
+    this.semanticLabel,
     required this.onPressed,
     this.variant = ButtonVariant.normal,
     this.focusNode,
     this.autofocus = false,
     this.style,
-  });
+  }) : assert(
+         (text == null) != (child == null),
+         'Button requires exactly one of text or child.',
+       );
 
   /// Text shown inside the `[ … ]` button frame.
-  final String label;
+  final String? text;
+
+  /// Composed content shown inside the same `[ … ]` frame as [text].
+  ///
+  /// Text descendants inherit the button's resolved interaction style.
+  /// Mutually exclusive with [text].
+  final Widget? child;
+
+  /// Accessible action name. Defaults to [text] for a plain-text button.
+  ///
+  /// Supply this for composed content whose name is not conveyed by its
+  /// descendant semantics, or to omit decorative shortcuts from the name.
+  /// An explicit name replaces descendant semantics, not visible content.
+  final String? semanticLabel;
 
   /// Pressed handler, or null to disable the button.
   final void Function()? onPressed;
@@ -85,7 +112,7 @@ class Button extends StatelessWidget {
           final before = slack ~/ 2;
           final after = slack - before;
           return Text(
-            '[ ${' ' * before}$label${' ' * after} ]',
+            '[ ${' ' * before}$text${' ' * after} ]',
             allowSelect: false,
             style: style,
           );
@@ -94,8 +121,13 @@ class Button extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Keep the const constructor, while enforcing the contract in release
+    // builds as well as assertion-enabled development builds.
+    if ((text == null) == (child == null)) {
+      throw ArgumentError('Button requires exactly one of text or child.');
+    }
     final theme = Theme.of(context);
-    final content = '[ $label ]';
+    final name = semanticLabel ?? text;
     final base = CellStyle(foreground: _color(variant, theme.colorScheme));
     return FocusableControl(
       defaultStyle: CellStyle.interactive(
@@ -108,8 +140,131 @@ class Button extends StatelessWidget {
       autofocus: autofocus,
       onActivate: onPressed,
       semanticRole: SemanticRole.button,
-      semanticLabel: label,
-      builder: (style, enabled, states) => _text(context, content, style),
+      semanticLabel: name,
+      builder: (style, enabled, states) => ExcludeSemantics(
+        excluding: name != null,
+        child: child == null
+            ? _text(context, '[ $text ]', style)
+            : DefaultTextStyle.merge(
+                style: style,
+                child: _ButtonSurface(
+                  style: DefaultTextStyle.of(context).merge(style),
+                  child: child!,
+                ),
+              ),
+      ),
     );
+  }
+}
+
+// Padding between composed content and its brackets must carry the same
+// focus/disabled style as the glyphs, including inverse-video themes.
+class _ButtonSurface extends SingleChildRenderObjectWidget {
+  const _ButtonSurface({required this.style, required super.child});
+
+  final CellStyle style;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderButtonSurface(style);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderButtonSurface renderObject,
+  ) {
+    renderObject.style = style;
+  }
+}
+
+class _RenderButtonSurface extends RenderObject
+    implements RenderObjectWithSingleChild {
+  _RenderButtonSurface(this._style);
+
+  CellStyle _style;
+  set style(CellStyle value) {
+    if (_style == value) return;
+    _style = value;
+    markNeedsPaintOnly();
+  }
+
+  RenderObject? _child;
+  CellOffset _childOffset = CellOffset.zero;
+  @override
+  CellOffset childOffsetOf(RenderObject child) => _childOffset;
+
+  @override
+  RenderObject? get child => _child;
+  @override
+  set child(RenderObject? value) {
+    if (identical(_child, value)) return;
+    if (_child != null) dropChild(_child!);
+    _child = value;
+    if (value != null) adoptChild(value);
+  }
+
+  @override
+  CellSize performLayout(CellConstraints constraints) {
+    final maxCols = constraints.maxCols;
+    final contentSize =
+        _child?.layout(
+          CellConstraints(
+            maxCols: maxCols == null ? null : (maxCols - 4).clamp(0, maxCols),
+            maxRows: constraints.maxRows,
+          ),
+        ) ??
+        CellSize.zero;
+    final result = constraints.constrain(
+      CellSize(
+        contentSize.cols + 4,
+        contentSize.rows < 1 ? 1 : contentSize.rows,
+      ),
+    );
+    _childOffset = CellOffset(
+      2 + ((result.cols - 4 - contentSize.cols).clamp(0, result.cols) ~/ 2),
+      (result.rows - contentSize.rows) ~/ 2,
+    );
+    return result;
+  }
+
+  @override
+  int computeMaxIntrinsicWidth(int? height) =>
+      (_child?.computeMaxIntrinsicWidth(height) ?? 0) + 4;
+
+  @override
+  int computeMinIntrinsicWidth(int? height) =>
+      (_child?.computeMinIntrinsicWidth(height) ?? 0) + 4;
+
+  @override
+  int computeMaxIntrinsicHeight(int? width) =>
+      _child?.computeMaxIntrinsicHeight(
+        width == null ? null : (width - 4).clamp(0, width),
+      ) ??
+      1;
+
+  @override
+  int computeMinIntrinsicHeight(int? width) =>
+      _child?.computeMinIntrinsicHeight(
+        width == null ? null : (width - 4).clamp(0, width),
+      ) ??
+      1;
+
+  @override
+  void performPaint(CellBuffer buffer, CellOffset offset) {
+    if (size.isEmpty) return;
+    buffer.fillRect(
+      CellRect(offset: offset, size: size),
+      style: _style,
+    );
+    final row = offset.row + (size.rows - 1) ~/ 2;
+    buffer.writeGrapheme(CellOffset(offset.col, row), '[', style: _style);
+    if (size.cols > 1) {
+      buffer.writeGrapheme(
+        CellOffset(offset.col + size.cols - 1, row),
+        ']',
+        style: _style,
+      );
+    }
+    _child?.paint(buffer, offset + _childOffset);
   }
 }

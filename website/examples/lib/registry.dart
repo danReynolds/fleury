@@ -873,7 +873,7 @@ TextArea(
       validator: () => name.text.isEmpty ? 'Enter a name.' : null,
       child: TextInput(controller: name),
     ),
-    Button(label: 'Save', onPressed: form.submit),
+    Button(text: 'Save', onPressed: form.submit),
   ]),
 )''',
     builder: () => const _ProjectFormTour(),
@@ -926,7 +926,7 @@ form.clearErrors();''',
     rows: 5,
     interactive: true,
     code: '''Button(
-  label: 'Save',
+  text: 'Save',
   variant: ButtonVariant.primary,
   onPressed: () => save(),
 )''',
@@ -1251,7 +1251,7 @@ form.clearErrors();''',
     builder: () => _framed(
       Tooltip(
         message: 'Saves the current file',
-        child: Button(label: 'Save', autofocus: true, onPressed: () {}),
+        child: Button(text: 'Save', autofocus: true, onPressed: () {}),
       ),
     ),
   ),
@@ -2703,7 +2703,7 @@ class _CounterAppState extends State<CounterApp> {
         children: <Widget>[
           Text('count: \$_count'),
           const SizedBox(height: 1),
-          Button(label: '+1', onPressed: _increment),
+          Button(text: '+1', onPressed: _increment),
         ],
       ),
     );
@@ -2824,7 +2824,7 @@ class _ContainerFillExampleState extends State<_ContainerFillExample> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Button(
-          label: _open ? 'Hide layer' : 'Show layer',
+          text: _open ? 'Hide layer' : 'Show layer',
           autofocus: true,
           onPressed: _toggle,
         ),
@@ -3271,7 +3271,7 @@ class _ButtonExampleState extends State<_ButtonExample> {
         Text('Pressed $_count×'),
         const SizedBox(height: 1),
         Button(
-          label: 'Press me',
+          text: 'Press me',
           variant: ButtonVariant.primary,
           autofocus: true,
           onPressed: () => setState(() => _count++),
@@ -3753,10 +3753,10 @@ void _noop() {}
 const String _localInteractiveSource = '''
 Row(
   children: [
-    Button(label: 'Theme focus', onPressed: deploy),
+    Button(text: 'Theme focus', onPressed: deploy),
     SizedBox(width: 2),
     Button(
-      label: 'Local focus',
+      text: 'Local focus',
       style: CellStyle.interactive(
         focused: CellStyle(
           foreground: Colors.cyan,
@@ -3787,10 +3787,10 @@ class _LocalStateTour extends StatelessWidget {
           Text('Tab or click to compare focus cues'),
           Row(
             children: <Widget>[
-              Button(label: 'Theme focus', autofocus: true, onPressed: _noop),
+              Button(text: 'Theme focus', autofocus: true, onPressed: _noop),
               SizedBox(width: 2),
               Button(
-                label: 'Local focus',
+                text: 'Local focus',
                 style: CellStyle.interactive(
                   focused: CellStyle(foreground: Colors.cyan, underline: true),
                 ),
@@ -3857,7 +3857,7 @@ class _InvalidNoneTourState extends State<_InvalidNoneTour> {
               ),
             ),
           ),
-          Button(label: 'Submit', onPressed: _form.submit),
+          Button(text: 'Submit', onPressed: _form.submit),
         ],
       ),
     ),
@@ -4175,7 +4175,7 @@ class _NetworkImageLoadingTourState extends State<_NetworkImageLoadingTour> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               const Text('Could not load a photo.'),
-              Button(label: 'Retry', onPressed: _reload),
+              Button(text: 'Retry', onPressed: _reload),
             ],
           );
         }
@@ -4199,7 +4199,7 @@ class _NetworkImageLoadingTourState extends State<_NetworkImageLoadingTour> {
             ),
             const SizedBox(height: 1),
             Button(
-              label: 'Load another',
+              text: 'Load another',
               onPressed: refreshing ? null : _reload,
             ),
           ],
@@ -4280,7 +4280,7 @@ class _StreamLoadingTourState extends State<_StreamLoadingTour> {
             children: <Widget>[
               const Text('STAR MAP TRANSMISSION', style: CellStyle(bold: true)),
               const Text('Signal lost.'),
-              Button(label: 'Restart', onPressed: _restart),
+              Button(text: 'Restart', onPressed: _restart),
             ],
           );
         }
@@ -4305,13 +4305,13 @@ class _StreamLoadingTourState extends State<_StreamLoadingTour> {
             Row(
               children: <Widget>[
                 Button(
-                  label: 'Next packet',
+                  text: 'Next packet',
                   onPressed: snapshot.connectionState == ConnectionState.done
                       ? null
                       : _transmission.receiveNext,
                 ),
                 const SizedBox(width: 1),
-                Button(label: 'Restart', onPressed: _restart),
+                Button(text: 'Restart', onPressed: _restart),
               ],
             ),
           ],
@@ -4415,7 +4415,7 @@ class _AnimationStateTourState extends State<_AnimationStateTour> {
           const Text('A tiny package. One very large delivery.'),
           const SizedBox(height: 1),
           Button(
-            label: _launched ? 'Reset mission' : 'Launch',
+            text: _launched ? 'Reset mission' : 'Launch',
             onPressed: _toggleMission,
           ),
           const SizedBox(height: 1),
@@ -4509,7 +4509,7 @@ class _ManualAnimationTourState extends State<_ManualAnimationTour> {
           const Text('Own it to chain, await, and interrupt motion.'),
           const SizedBox(height: 1),
           Button(
-            label: _running ? 'Return now' : 'Run route',
+            text: _running ? 'Return now' : 'Run route',
             onPressed: _running ? _returnNow : _runRoute,
           ),
           const SizedBox(height: 1),
@@ -4540,7 +4540,7 @@ class _AnimationProgressTourState extends State<_AnimationProgressTour> {
         const Text('Change the target; the builder interpolates the value.'),
         const SizedBox(height: 1),
         Button(
-          label: _delivered ? 'Return to depot' : 'Send to station',
+          text: _delivered ? 'Return to depot' : 'Send to station',
           onPressed: () => setState(() => _delivered = !_delivered),
         ),
         const SizedBox(height: 1),
@@ -4655,7 +4655,7 @@ class _AnimationTimingTourState extends State<_AnimationTimingTour> {
         const Text('TIMING COMPARISON', style: CellStyle(bold: true)),
         const SizedBox(height: 1),
         Button(
-          label: _enabled ? 'Reset' : 'Animate',
+          text: _enabled ? 'Reset' : 'Animate',
           onPressed: () => setState(() => _enabled = !_enabled),
         ),
         const Text('Shared timing: width + color together'),
@@ -4687,7 +4687,7 @@ class _EntranceEffectTourState extends State<_EntranceEffectTour> {
         const Text('The effect runs when the status enters the tree.'),
         const SizedBox(height: 1),
         Button(
-          label: _connected ? 'Disconnect' : 'Connect',
+          text: _connected ? 'Disconnect' : 'Connect',
           onPressed: () => setState(() => _connected = !_connected),
         ),
         const SizedBox(height: 1),
@@ -4842,7 +4842,7 @@ class _EffectPickerTourState extends State<_EffectPickerTour> {
         ),
         const SizedBox(height: 1),
         Button(
-          label: _visible ? 'Hide sample' : 'Show sample',
+          text: _visible ? 'Hide sample' : 'Show sample',
           onPressed: () => setState(() => _visible = !_visible),
         ),
         const SizedBox(height: 1),
@@ -4952,7 +4952,7 @@ class _ValidationFeedbackTourState extends State<_ValidationFeedbackTour> {
         const SizedBox(height: 1),
         _feedback(),
         const SizedBox(height: 1),
-        Button(label: 'Validate pilot', onPressed: _submit),
+        Button(text: 'Validate pilot', onPressed: _submit),
       ],
     ),
   );
@@ -5044,7 +5044,7 @@ class _AnimationChainTourState extends State<_AnimationChainTour> {
           Text(_statusFor(position)),
           const SizedBox(height: 1),
           Button(
-            label: _sending
+            text: _sending
                 ? 'Restart route'
                 : position >= 30
                 ? 'Send another'
@@ -5092,12 +5092,12 @@ class _FrameCadenceTourState extends State<_FrameCadenceTour> {
         Row(
           children: <Widget>[
             Button(
-              label: _fast ? 'Slow down' : 'Speed up',
+              text: _fast ? 'Slow down' : 'Speed up',
               onPressed: () => setState(() => _fast = !_fast),
             ),
             const SizedBox(width: 1),
             Button(
-              label: _running ? 'Pause' : 'Resume',
+              text: _running ? 'Pause' : 'Resume',
               onPressed: () => setState(() => _running = !_running),
             ),
           ],
@@ -5187,7 +5187,7 @@ class _TickerSimulationTourState extends State<_TickerSimulationTour>
           Text('position ${_position.toStringAsFixed(1)} cells'),
           const SizedBox(height: 1),
           Button(
-            label: _ticker?.isActive == true
+            text: _ticker?.isActive == true
                 ? 'Pause simulation'
                 : 'Resume simulation',
             onPressed: _toggle,
@@ -5217,7 +5217,7 @@ class _LocalCounterTourState extends State<_LocalCounterTour> {
         const Text('COUNTER', style: CellStyle(bold: true)),
         const SizedBox(height: 1),
         Text('Count: $_count'),
-        Button(label: 'Increment', onPressed: () => setState(() => _count++)),
+        Button(text: 'Increment', onPressed: () => setState(() => _count++)),
       ],
     ),
   );
@@ -5264,7 +5264,7 @@ class _CounterButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) =>
-      Button(label: 'Increment', onPressed: onPressed);
+      Button(text: 'Increment', onPressed: onPressed);
 }
 
 /// A guide-level example: a parent owns the model and shares it in a Scope.
@@ -5316,7 +5316,7 @@ class _ScopeCounterPanel extends StatelessWidget {
         Text(title, style: const CellStyle(bold: true)),
         const SizedBox(height: 1),
         Text('Count: ${counter.count}'),
-        Button(label: 'Increment', onPressed: counter.increment),
+        Button(text: 'Increment', onPressed: counter.increment),
       ],
     );
   }
@@ -5359,7 +5359,7 @@ class _ValueNotifierTourState extends State<_ValueNotifierTour> {
           const SizedBox(height: 1),
           Text(isOnline ? 'Online' : 'Offline'),
           Button(
-            label: isOnline ? 'Disconnect' : 'Connect',
+            text: isOnline ? 'Disconnect' : 'Connect',
             onPressed: _connection.toggle,
           ),
         ],
@@ -5427,9 +5427,9 @@ class _DeploymentView extends StatelessWidget {
         const SizedBox(height: 1),
         Row(
           children: <Widget>[
-            Button(label: 'Complete next', onPressed: deployment.completeNext),
+            Button(text: 'Complete next', onPressed: deployment.completeNext),
             Button(
-              label: deployment.paused ? 'Resume' : 'Pause',
+              text: deployment.paused ? 'Resume' : 'Pause',
               onPressed: deployment.togglePaused,
             ),
           ],
@@ -5521,7 +5521,7 @@ class _ProjectFormTourState extends State<_ProjectFormTour> {
               ListenableBuilder(
                 listenable: _form,
                 builder: (context, child) => Button(
-                  label: _form.isBusy ? 'Creating…' : 'Create',
+                  text: _form.isBusy ? 'Creating…' : 'Create',
                   onPressed: _form.isBusy ? null : _form.submit,
                 ),
               ),
@@ -5573,12 +5573,12 @@ class _ResponsiveWorkspaceTourState extends State<_ResponsiveWorkspaceTour> {
         Row(
           children: [
             Button(
-              label: 'Narrow',
+              text: 'Narrow',
               autofocus: true,
               onPressed: () => setState(() => _width = 42),
             ),
             const SizedBox(width: 1),
-            Button(label: 'Wide', onPressed: () => setState(() => _width = 68)),
+            Button(text: 'Wide', onPressed: () => setState(() => _width = 68)),
           ],
         ),
         const SizedBox(height: 1),
@@ -5656,7 +5656,7 @@ class _NavigationBasicsTourState extends State<_NavigationBasicsTour> {
       children: [
         const Text('HOME · STACK DEPTH 1', style: CellStyle(bold: true)),
         const SizedBox(height: 1),
-        Button(label: 'Push details', autofocus: true, onPressed: _openDetails),
+        Button(text: 'Push details', autofocus: true, onPressed: _openDetails),
         const Spacer(),
         Text('result: $_result'),
       ],
@@ -5691,15 +5691,15 @@ class _NavigationDetailsTourState extends State<_NavigationDetailsTour> {
         Text('dialog: $_dialogResult'),
         const SizedBox(height: 1),
         Button(
-          label: 'Present dialog',
+          text: 'Present dialog',
           autofocus: true,
           onPressed: _presentDialog,
         ),
         Button(
-          label: 'Pop with result',
+          text: 'Pop with result',
           onPressed: () => context.pop(_NavigationResult.done),
         ),
-        Button(label: 'Pop without result', onPressed: context.pop),
+        Button(text: 'Pop without result', onPressed: context.pop),
       ],
     ),
   );
@@ -5717,7 +5717,7 @@ class _NavigationConfirmationDialog extends StatelessWidget {
       focused: true,
       child: Center(
         child: Button(
-          label: 'Confirm and pop',
+          text: 'Confirm and pop',
           autofocus: true,
           onPressed: () => context.pop(true),
         ),
@@ -5781,7 +5781,7 @@ class _PlacedDialogTour extends StatelessWidget {
       title: 'PLACED DIALOG',
       focused: true,
       child: Center(
-        child: Button(label: 'Close', autofocus: true, onPressed: context.pop),
+        child: Button(text: 'Close', autofocus: true, onPressed: context.pop),
       ),
     ),
   );
@@ -5808,7 +5808,7 @@ class _BackGuardHomeTourState extends State<_BackGuardHomeTour> {
         Text('saved: $_savedText'),
         const SizedBox(height: 1),
         Button(
-          label: 'Edit draft',
+          text: 'Edit draft',
           autofocus: true,
           onPressed: () => context.push<void>(
             _GuardedEditorTour(initialText: _savedText, onSave: _saveDraft),
@@ -5885,11 +5885,11 @@ class _GuardedEditorTourState extends State<_GuardedEditorTour> {
           ),
           const SizedBox(height: 1),
           Button(
-            label: 'Back',
+            text: 'Back',
             onPressed: () => Navigator.of(context).maybePop(),
           ),
-          Button(label: 'Save', onPressed: _save),
-          Button(label: 'Discard', onPressed: context.pop),
+          Button(text: 'Save', onPressed: _save),
+          Button(text: 'Discard', onPressed: context.pop),
         ],
       ),
     ),
@@ -5933,7 +5933,7 @@ class _TransitionTourState extends State<_TransitionTour> {
           onChanged: (value) => setState(() => _kind = value),
         ),
         Button(
-          label: 'Preview push',
+          text: 'Preview push',
           onPressed: () => context.push<void>(
             _TransitionScreenTour(kind: _kind),
             transition: _previewTransition,
@@ -5958,7 +5958,7 @@ class _TransitionScreenTour extends StatelessWidget {
       children: [
         Text('${kind.name.toUpperCase()} · PUSHED SCREEN'),
         const Spacer(),
-        Button(label: 'Preview pop', autofocus: true, onPressed: context.pop),
+        Button(text: 'Preview pop', autofocus: true, onPressed: context.pop),
       ],
     ),
   );
@@ -5975,7 +5975,7 @@ class _NestedProjectsTour extends StatelessWidget {
         const Text('PROJECTS · OUTER STACK 1', style: CellStyle(bold: true)),
         const SizedBox(height: 1),
         Button(
-          label: 'Start setup',
+          text: 'Start setup',
           autofocus: true,
           onPressed: () => context.push<void>(const _NestedSetupTour()),
         ),
@@ -6030,21 +6030,21 @@ class _NestedFlowStepTour extends StatelessWidget {
         const Spacer(),
         if (step < 3)
           Button(
-            label: 'Next step',
+            text: 'Next step',
             autofocus: true,
             onPressed: () =>
                 context.push<void>(_NestedFlowStepTour(step: step + 1)),
           )
         else
           Button(
-            label: 'Finish setup',
+            text: 'Finish setup',
             autofocus: true,
             onPressed: () => context.rootNavigator.pushReplacement<void>(
               const _NestedProjectReadyTour(),
             ),
           ),
-        if (step > 1) Button(label: 'Previous', onPressed: context.pop),
-        Button(label: 'Cancel setup', onPressed: context.rootNavigator.pop),
+        if (step > 1) Button(text: 'Previous', onPressed: context.pop),
+        Button(text: 'Cancel setup', onPressed: context.rootNavigator.pop),
       ],
     ),
   );
@@ -6062,7 +6062,7 @@ class _NestedProjectReadyTour extends StatelessWidget {
         const Text('The entire inner history was removed together.'),
         const Spacer(),
         Button(
-          label: 'Back to projects',
+          text: 'Back to projects',
           autofocus: true,
           onPressed: context.pop,
         ),
@@ -6113,7 +6113,7 @@ class _FocusExplorerTourState extends State<_FocusExplorerTour> {
     bool autofocus = false,
   }) => SizedBox(
     width: 14,
-    child: Button(label: label, autofocus: autofocus, onPressed: onPressed),
+    child: Button(text: label, autofocus: autofocus, onPressed: onPressed),
   );
 
   Widget _region({required String name, required List<Widget> controls}) =>
@@ -6214,13 +6214,13 @@ class _FocusExplorerPublishDialog extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Button(
-                  label: 'Cancel',
+                  text: 'Cancel',
                   autofocus: true,
                   onPressed: () => Navigator.of(context).pop(false),
                 ),
                 const SizedBox(width: 1),
                 Button(
-                  label: 'Publish',
+                  text: 'Publish',
                   variant: ButtonVariant.primary,
                   onPressed: () => Navigator.of(context).pop(true),
                 ),
@@ -6265,7 +6265,7 @@ class _ProgrammaticFocusTourState extends State<_ProgrammaticFocusTour> {
         Row(
           children: [
             Button(
-              label: 'Focus search',
+              text: 'Focus search',
               autofocus: true,
               onPressed: _focusSearch,
             ),
@@ -6339,15 +6339,15 @@ class _FocusDetectorTourState extends State<_FocusDetectorTour> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Button(label: 'Title', autofocus: true, onPressed: () {}),
-                  Button(label: 'Body', onPressed: () {}),
+                  Button(text: 'Title', autofocus: true, onPressed: () {}),
+                  Button(text: 'Body', onPressed: () {}),
                 ],
               ),
             ),
           ),
         ),
         const SizedBox(height: 1),
-        Button(label: 'Preview (outside)', onPressed: () {}),
+        Button(text: 'Preview (outside)', onPressed: () {}),
         const Text(
           'Tab Title → Body: same region · Preview: leaves once',
           style: CellStyle(dim: true),

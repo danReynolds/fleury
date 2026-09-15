@@ -134,7 +134,7 @@ void main() {
             disabled: CellStyle(foreground: AnsiColor(13)),
           ),
         ),
-        child: Button(label: 'Save', onPressed: null),
+        child: Button(text: 'Save', onPressed: null),
       ),
     );
 
@@ -222,7 +222,7 @@ void main() {
         child: Column(
           children: [
             Checkbox(value: true, onChanged: _ignoreBool),
-            Button(label: 'Run', onPressed: _noop),
+            Button(text: 'Run', onPressed: _noop),
           ],
         ),
       ),
@@ -255,7 +255,7 @@ void main() {
             hovered: CellStyle(underline: true),
           ),
         ),
-        child: Button(label: 'Run', onPressed: _noop),
+        child: Button(text: 'Run', onPressed: _noop),
       ),
     );
     tester.render(size: const CellSize(40, 6));

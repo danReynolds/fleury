@@ -43,7 +43,7 @@ class _FocusExplorerExampleState extends State<FocusExplorerExample> {
     bool autofocus = false,
   }) => SizedBox(
     width: 14,
-    child: Button(label: label, autofocus: autofocus, onPressed: onPressed),
+    child: Button(text: label, autofocus: autofocus, onPressed: onPressed),
   );
 
   Widget _region({required String name, required List<Widget> controls}) =>
@@ -142,13 +142,13 @@ class _PublishDialog extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Button(
-                  label: 'Cancel',
+                  text: 'Cancel',
                   autofocus: true,
                   onPressed: () => Navigator.of(context).pop(false),
                 ),
                 const SizedBox(width: 1),
                 Button(
-                  label: 'Publish',
+                  text: 'Publish',
                   variant: ButtonVariant.primary,
                   onPressed: () => Navigator.of(context).pop(true),
                 ),
@@ -194,12 +194,12 @@ class _FocusBoundaryExampleState extends State<FocusBoundaryExample> {
         onFocusChange: _onFocusChange,
         child: Column(
           children: [
-            Button(label: 'Title', autofocus: true, onPressed: () {}),
-            Button(label: 'Body', onPressed: () {}),
+            Button(text: 'Title', autofocus: true, onPressed: () {}),
+            Button(text: 'Body', onPressed: () {}),
           ],
         ),
       ),
-      Button(label: 'Preview', onPressed: () {}),
+      Button(text: 'Preview', onPressed: () {}),
     ],
   );
 }
@@ -226,11 +226,7 @@ class _EditorFocusExampleState extends State<EditorFocusExample> {
     children: [
       Row(
         children: [
-          Button(
-            label: 'Focus search',
-            autofocus: true,
-            onPressed: focusSearch,
-          ),
+          Button(text: 'Focus search', autofocus: true, onPressed: focusSearch),
           SizedBox(
             width: 24,
             child: TextInput(

@@ -45,12 +45,12 @@ class _ResponsiveWorkspaceState extends State<ResponsiveWorkspace> {
         Row(
           children: [
             Button(
-              label: 'Narrow',
+              text: 'Narrow',
               autofocus: true,
               onPressed: () => setState(() => _width = 42),
             ),
             const SizedBox(width: 1),
-            Button(label: 'Wide', onPressed: () => setState(() => _width = 68)),
+            Button(text: 'Wide', onPressed: () => setState(() => _width = 68)),
           ],
         ),
         const SizedBox(height: 1),

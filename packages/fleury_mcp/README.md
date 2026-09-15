@@ -101,7 +101,7 @@ Two things to notice:
 - The `Semantics(...)` wrappers are doing *two* jobs, and both are optional:
   high-level widgets like `Button`, `TextInput`, `DataTable`, and `Select` (from
   `package:fleury_widgets`) already contribute their role, label, and actions for
-  free — a `Button(label: 'Increment', onPressed: …)` is agent-drivable as-is.
+  free — a `Button(text: 'Increment', onPressed: …)` is agent-drivable as-is.
   The one genuinely useful thing to add is the **`id:`**, which gives the agent a
   stable handle (see *Make your app drive well* below).
 

@@ -814,8 +814,8 @@ void main() {
       () => themedExampleRoot(
         () => Column(
           children: <Widget>[
-            Button(label: 'First', onPressed: () {}),
-            Button(label: 'Second', onPressed: () {}),
+            Button(text: 'First', onPressed: () {}),
+            Button(text: 'Second', onPressed: () {}),
           ],
         ),
         DocsExampleThemeController(DocsExampleStyle.dark),

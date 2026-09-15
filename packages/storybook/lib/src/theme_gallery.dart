@@ -387,7 +387,7 @@ class _ConsolePane extends StatelessWidget {
 
   Widget _button(String label, ButtonVariant variant) => Padding(
     padding: const EdgeInsets.only(right: 1),
-    child: Button(label: label, variant: variant, onPressed: () {}),
+    child: Button(text: label, variant: variant, onPressed: () {}),
   );
 }
 

@@ -72,8 +72,8 @@ class _DeploymentFormState extends State<DeploymentForm> {
         ),
         Row(
           children: [
-            Button(label: 'Deploy', onPressed: _form.submit),
-            const Button(label: 'Queued', onPressed: null),
+            Button(text: 'Deploy', onPressed: _form.submit),
+            const Button(text: 'Queued', onPressed: null),
           ],
         ),
       ],

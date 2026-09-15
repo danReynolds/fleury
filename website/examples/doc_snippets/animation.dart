@@ -117,7 +117,7 @@ class _MissionLaunchState extends State<MissionLaunch> {
     return Column(
       children: <Widget>[
         Button(
-          label: launched ? 'Reset mission' : 'Launch',
+          text: launched ? 'Reset mission' : 'Launch',
           onPressed: toggleMission,
         ),
         Container(
@@ -192,7 +192,7 @@ class _ManualRouteState extends State<ManualRoute> {
     return Column(
       children: <Widget>[
         Button(
-          label: running ? 'Return now' : 'Run route',
+          text: running ? 'Return now' : 'Run route',
           onPressed: running ? returnNow : runRoute,
         ),
         Text('Package position: $position · progress.value is a double'),
@@ -215,7 +215,7 @@ class _ProgressDemoState extends State<ProgressDemo> {
   Widget build(BuildContext context) => Column(
     children: <Widget>[
       Button(
-        label: delivered ? 'Return to depot' : 'Send to station',
+        text: delivered ? 'Return to depot' : 'Send to station',
         onPressed: () => setState(() => delivered = !delivered),
       ),
       AnimationBuilder<double>(
@@ -305,7 +305,7 @@ class _TimingComparisonState extends State<TimingComparison> {
   Widget build(BuildContext context) => Column(
     children: <Widget>[
       Button(
-        label: active ? 'Reset' : 'Animate',
+        text: active ? 'Reset' : 'Animate',
         onPressed: () => setState(() => active = !active),
       ),
       sharedTimingStatus(active),
@@ -328,7 +328,7 @@ class _ConnectionEntranceState extends State<ConnectionEntrance> {
   Widget build(BuildContext context) => Column(
     children: <Widget>[
       Button(
-        label: connected ? 'Disconnect' : 'Connect',
+        text: connected ? 'Disconnect' : 'Connect',
         onPressed: () => setState(() => connected = !connected),
       ),
       if (connected)
@@ -416,7 +416,7 @@ class _EffectPickerState extends State<EffectPicker> {
         onChanged: (value) => setState(() => exit = value),
       ),
       Button(
-        label: visible ? 'Hide sample' : 'Show sample',
+        text: visible ? 'Hide sample' : 'Show sample',
         onPressed: () => setState(() => visible = !visible),
       ),
       AnimatedVisibility(
@@ -508,7 +508,7 @@ class _ValidationFeedbackState extends State<ValidationFeedback> {
         ),
       ),
       feedback(),
-      Button(label: 'Validate pilot', onPressed: submit),
+      Button(text: 'Validate pilot', onPressed: submit),
     ],
   );
 }
@@ -567,7 +567,7 @@ class _PacketRouteState extends State<PacketRoute> {
   Widget build(BuildContext context) => Column(
     children: <Widget>[
       PacketTrack(position: packet.position.value),
-      Button(label: sending ? 'Restart route' : 'Send packet', onPressed: send),
+      Button(text: sending ? 'Restart route' : 'Send packet', onPressed: send),
     ],
   );
 
@@ -622,12 +622,12 @@ class _PacketTransferFramesState extends State<PacketTransferFrames> {
       Row(
         children: <Widget>[
           Button(
-            label: fast ? 'Slow down' : 'Speed up',
+            text: fast ? 'Slow down' : 'Speed up',
             onPressed: () => setState(() => fast = !fast),
           ),
           const SizedBox(width: 1),
           Button(
-            label: running ? 'Pause' : 'Resume',
+            text: running ? 'Pause' : 'Resume',
             onPressed: () => setState(() => running = !running),
           ),
         ],
@@ -697,7 +697,7 @@ class _TickerSimulationState extends State<TickerSimulation>
     children: <Widget>[
       Text('Simulation position: ${position.toStringAsFixed(1)}'),
       Button(
-        label: ticker?.isActive == true
+        text: ticker?.isActive == true
             ? 'Pause simulation'
             : 'Resume simulation',
         onPressed: toggle,

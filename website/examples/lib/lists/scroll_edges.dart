@@ -91,7 +91,7 @@ class _ScrollEdgesState extends State<ScrollEdges> {
           ),
         ),
         Button(
-          label: 'Next',
+          text: 'Next',
           onPressed: () => setState(() => continued = true),
         ),
         Text(

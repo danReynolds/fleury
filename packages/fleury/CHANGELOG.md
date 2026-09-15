@@ -6,6 +6,12 @@
   unbounded. Links in stretching columns retain their content width, and
   alignment still applies on the bounded axis.
 
+- **Breaking:** `Button.label` is now `Button.text`. Provide exactly one of
+  `text` or the new `child` slot; both and neither are rejected, including
+  when building with assertions disabled. Both forms retain the button frame,
+  focus/hover/disabled styling and keyboard, pointer and semantic activation.
+  `semanticLabel` names composed content without announcing decorative text.
+
 - `Container.color` changes, including null transitions, preserve stateful
   descendants. The stable background layer paints nothing when color is null;
   editors retain text/selection/focus and lists retain their viewport.

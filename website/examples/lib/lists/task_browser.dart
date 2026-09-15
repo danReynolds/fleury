@@ -83,7 +83,7 @@ class _TaskBrowserState extends State<TaskBrowser> {
         children: [
           // #docregion interaction
           Button(
-            label: 'Go to 25',
+            text: 'Go to 25',
             onPressed: () {
               list
                 ..currentIndex = 24
@@ -92,7 +92,7 @@ class _TaskBrowserState extends State<TaskBrowser> {
             },
           ),
           Button(
-            label: 'Scroll to 500',
+            text: 'Scroll to 500',
             onPressed: () => list.jumpToIndex(499),
           ),
           // #enddocregion interaction

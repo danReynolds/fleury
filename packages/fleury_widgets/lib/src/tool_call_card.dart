@@ -219,14 +219,14 @@ class _ToolCallCardState extends State<ToolCallCard> {
             children: [
               if (widget.copyEnabled)
                 Button(
-                  label: 'Copy',
+                  text: 'Copy',
                   variant: ButtonVariant.normal,
                   onPressed: () => unawaited(_copy()),
                 ),
               if (widget.copyEnabled && canCancel) const SizedBox(width: 1),
               if (canCancel)
                 Button(
-                  label: 'Cancel',
+                  text: 'Cancel',
                   variant: ButtonVariant.warning,
                   onPressed: _cancel,
                 ),

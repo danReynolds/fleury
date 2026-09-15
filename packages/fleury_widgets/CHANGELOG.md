@@ -8,6 +8,10 @@
 - Custom form fields can attach `field.focusNode` without managing another
   node. Focus diagnostics now check attachment rather than constructor syntax.
 
+- The reexported core `Button` now takes `text` or `child`, exactly one, instead
+  of `label`. Companion controls and examples use the renamed core argument;
+  `CommandButton.label` remains its optional command-title override.
+
 - `Toaster.show` returns an idempotent `ToastHandle`, accepts an optional `id`
   for replacement in place, and supports `persistent: true` without an expiry
   timer. Old handles/timers cannot dismiss replacements. `Toaster.maxToasts`

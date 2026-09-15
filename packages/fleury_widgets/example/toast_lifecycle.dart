@@ -39,12 +39,12 @@ class _ToastDemoState extends State<ToastDemo> {
     children: [
       const Text('One copy result, updated in place'),
       Button(
-        label: 'Copy succeeds',
+        text: 'Copy succeeds',
         autofocus: true,
         onPressed: () => _result(failure: false),
       ),
-      Button(label: 'Copy fails', onPressed: () => _result(failure: true)),
-      Button(label: 'Dismiss', onPressed: () => _toast?.dismiss()),
+      Button(text: 'Copy fails', onPressed: () => _result(failure: true)),
+      Button(text: 'Dismiss', onPressed: () => _toast?.dismiss()),
       const Text('Tab moves focus · Enter activates · Esc dismisses toast'),
     ],
   );

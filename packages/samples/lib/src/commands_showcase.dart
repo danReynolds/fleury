@@ -448,7 +448,7 @@ class _FileRail extends StatelessWidget {
               children: <Widget>[
                 Expanded(
                   child: Button(
-                    label: files[index].name,
+                    text: files[index].name,
                     variant: index == currentIndex
                         ? ButtonVariant.primary
                         : ButtonVariant.normal,

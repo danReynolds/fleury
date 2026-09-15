@@ -9,7 +9,7 @@ String _text(FleuryTester tester, {int cols = 20}) =>
 void main() {
   group('Button', () {
     testWidgets('renders the label inside brackets', (tester) {
-      tester.pumpWidget(Button(label: 'Save', onPressed: () {}));
+      tester.pumpWidget(Button(text: 'Save', onPressed: () {}));
       expect(_text(tester), '[ Save ]');
     });
 
@@ -17,7 +17,7 @@ void main() {
       tester.pumpWidget(
         SizedBox(
           width: 10,
-          child: Button(label: 'Go', onPressed: () {}),
+          child: Button(text: 'Go', onPressed: () {}),
         ),
       );
 
@@ -32,7 +32,7 @@ void main() {
     testWidgets('Enter activates when focused', (tester) {
       var presses = 0;
       tester.pumpWidget(
-        Button(label: 'Save', autofocus: true, onPressed: () => presses++),
+        Button(text: 'Save', autofocus: true, onPressed: () => presses++),
       );
       tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(presses, 1);
@@ -41,7 +41,7 @@ void main() {
     testWidgets('Space activates when focused', (tester) {
       var presses = 0;
       tester.pumpWidget(
-        Button(label: 'Save', autofocus: true, onPressed: () => presses++),
+        Button(text: 'Save', autofocus: true, onPressed: () => presses++),
       );
       tester.type(' ');
       expect(presses, 1);
@@ -49,7 +49,7 @@ void main() {
 
     testWidgets('a click activates', (tester) {
       var presses = 0;
-      tester.pumpWidget(Button(label: 'Save', onPressed: () => presses++));
+      tester.pumpWidget(Button(text: 'Save', onPressed: () => presses++));
       tester.render(size: const CellSize(20, 1)); // register the tap region
       tester.sendMouse(
         const MouseEvent(
@@ -72,13 +72,13 @@ void main() {
 
     testWidgets('does not activate when unfocused', (tester) {
       var presses = 0;
-      tester.pumpWidget(Button(label: 'Save', onPressed: () => presses++));
+      tester.pumpWidget(Button(text: 'Save', onPressed: () => presses++));
       tester.sendKey(const KeyEvent(KeyCode.enter));
       expect(presses, 0);
     });
 
     testWidgets('focused button shows the selection highlight', (tester) {
-      tester.pumpWidget(Button(label: 'Go', autofocus: true, onPressed: () {}));
+      tester.pumpWidget(Button(text: 'Go', autofocus: true, onPressed: () {}));
       final buf = tester.render(size: const CellSize(10, 1));
       // The default selectionStyle uses inverse video.
       expect(buf.atColRow(0, 0).style.inverse, isTrue);
@@ -86,7 +86,7 @@ void main() {
 
     testWidgets('exposes button semantics', (tester) {
       tester.pumpWidget(
-        Button(label: 'Save', autofocus: true, onPressed: () {}),
+        Button(text: 'Save', autofocus: true, onPressed: () {}),
       );
 
       final node = tester.semantics().single(
@@ -104,7 +104,7 @@ void main() {
       tester,
     ) async {
       var presses = 0;
-      tester.pumpWidget(Button(label: 'Save', onPressed: () => presses++));
+      tester.pumpWidget(Button(text: 'Save', onPressed: () => presses++));
 
       await tester.button('Save').press();
 
@@ -117,7 +117,7 @@ void main() {
         const Theme(
           data: ThemeData(),
           child: Button(
-            label: 'Go',
+            text: 'Go',
             variant: ButtonVariant.primary,
             onPressed: _noop,
           ),
@@ -131,7 +131,7 @@ void main() {
       testWidgets('renders muted and does not autofocus or activate', (tester) {
         var presses = 0;
         tester.pumpWidget(
-          const Button(label: 'Save', autofocus: true, onPressed: null),
+          const Button(text: 'Save', autofocus: true, onPressed: null),
         );
         expect(_text(tester), '[ Save ]');
         final buf = tester.render(size: const CellSize(10, 1));
@@ -142,7 +142,7 @@ void main() {
       });
 
       testWidgets('exposes disabled semantics', (tester) {
-        tester.pumpWidget(const Button(label: 'Save', onPressed: null));
+        tester.pumpWidget(const Button(text: 'Save', onPressed: null));
 
         final node = tester.semantics().single(
           role: SemanticRole.button,
@@ -156,7 +156,7 @@ void main() {
       testWidgets('semantic activate reports disabled for explicit node', (
         tester,
       ) async {
-        tester.pumpWidget(const Button(label: 'Save', onPressed: null));
+        tester.pumpWidget(const Button(text: 'Save', onPressed: null));
 
         final node = tester.semantics().single(
           role: SemanticRole.button,

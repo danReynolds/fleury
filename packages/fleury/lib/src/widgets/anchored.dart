@@ -118,7 +118,7 @@ class AnchoredFloat extends StatelessWidget {
 ///   visible: _showDetails,
 ///   alignment: Alignment.bottomLeft,   // below, left edges flush
 ///   overlay: Container.framed(child: Text('build 2214')),
-///   child: Button(label: 'Details', onPressed: _toggle),
+///   child: Button(text: 'Details', onPressed: _toggle),
 /// )
 /// ```
 ///

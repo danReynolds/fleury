@@ -390,7 +390,7 @@ void main() {
         child: Column(
           children: [
             _Capture((c) => ctx = c),
-            Button(label: 'x', autofocus: true, onPressed: () {}),
+            Button(text: 'x', autofocus: true, onPressed: () {}),
           ],
         ),
       ),
