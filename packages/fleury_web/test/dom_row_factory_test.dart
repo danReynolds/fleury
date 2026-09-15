@@ -21,6 +21,32 @@ web.Element _render(int cols, void Function(CellBuffer b) paint) {
 }
 
 void main() {
+  test('a caret split keeps the text baseline beside a wide glyph', () {
+    final root = _render(16, (buffer) {
+      buffer.writeText(const CellOffset(0, 0), 'a link 界');
+      buffer.writeText(
+        const CellOffset(3, 0),
+        'i',
+        style: const CellStyle(inverse: true, underline: true),
+      );
+    });
+    root.setAttribute(
+      'style',
+      'font:16px/22.5px monospace;white-space:pre;height:22.5px',
+    );
+    web.document.body!.appendChild(root);
+    addTearDown(() => root.remove());
+    final spans = root.querySelectorAll('span');
+    double textTop(int index) {
+      final range = web.document.createRange();
+      range.selectNodeContents(spans.item(index)!);
+      return range.getBoundingClientRect().top;
+    }
+
+    expect(textTop(1), closeTo(textTop(0), 0.01));
+    expect(textTop(2), closeTo(textTop(0), 0.01));
+  });
+
   group('DomRowFactory style cache bounds', () {
     test('distinct styles do not grow the CSS cache without bound', () {
       // One factory (as a DomGridSurface owns for the whole session), fed rows
