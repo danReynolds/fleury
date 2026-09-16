@@ -30,7 +30,16 @@ void validateResult(Map<String, dynamic> result, Map<String, dynamic> config) {
     }
   }
   final checks = result['checks'] as Map;
-  if (isPipeline(scenario)) {
+  if (isListRebuild(scenario)) {
+    final expectedKeys = scenario == 'unkeyed-list-rebuild'
+        ? 0
+        : listRebuildCount(scenario) * expected;
+    if (checks['verifiedUpdates'] != expected ||
+        checks['keysRead'] != expectedKeys ||
+        checks['visibleRowsVerifiedPerUpdate'] != 20) {
+      throw StateError('List rebuild correctness check failed');
+    }
+  } else if (isPipeline(scenario)) {
     if (checks['changedFrames'] != expected ||
         checks['expectedFrames'] != expected) {
       throw StateError('Frame correctness check failed');

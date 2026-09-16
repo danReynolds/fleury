@@ -9,6 +9,7 @@ import 'package:fleury_samples/samples.dart';
 
 import '../sample_frame_host.dart';
 import 'catalog.dart';
+import 'list_rebuild.dart';
 
 typedef MeasurementHook = Future<void> Function();
 
@@ -24,9 +25,11 @@ class WorkloadFailure implements Exception {
 /// decoding, wire re-encoding, or profiling RPC happens in a timing window.
 Future<Map<String, Object?>> runWorkload(LabOptions options,
     {MeasurementHook? start, MeasurementHook? stop}) async {
-  final result = isPipeline(options.scenario)
-      ? await _pipeline(options, start, stop)
-      : await _interactive(options, start, stop);
+  final result = isListRebuild(options.scenario)
+      ? await runListRebuild(options, start: start, stop: stop)
+      : isPipeline(options.scenario)
+          ? await _pipeline(options, start, stop)
+          : await _interactive(options, start, stop);
   return {
     'schema': labSchema,
     'config': options.toJson(),

@@ -10,6 +10,13 @@ const scenarios = <String, String>{
   'resize': 'Dashboard; alternate 120x40 and 100x32 viewports',
   'typing': 'Real TextInput; alternate insertion and deletion, closed loop',
   'list': '100,000 rows; move focus down through a lazy list, closed loop',
+  'keyed-list-1k': '1,000 integer keys; parent updates visible row labels',
+  'keyed-list': '100,000 integer keys; parent updates visible row labels',
+  'keyed-list-strings':
+      '100,000 string keys; parent updates visible row labels',
+  'keyed-list-reorder': '100,000 keys; swap the first two items on each update',
+  'keyed-list-replace': '100,000 keys; replace the final key on each update',
+  'unkeyed-list-rebuild': '100,000 unkeyed rows; parent updates visible labels',
   'paste': 'Real TextInput; paste 4 KiB then clear, closed loop',
   'burst':
       'TextInput plus log; 16 input events injected without awaiting replies',
@@ -19,23 +26,32 @@ const scenarios = <String, String>{
 
 bool isPipeline(String name) =>
     scenarios.containsKey(name) &&
+    !isListRebuild(name) &&
     !const {'typing', 'list', 'paste', 'burst', 'slow-output'}.contains(name);
+
+bool isListRebuild(String name) =>
+    name.startsWith('keyed-list') || name == 'unkeyed-list-rebuild';
+
+int listRebuildCount(String name) => name == 'keyed-list-1k' ? 1000 : 100000;
 
 Map<String, Object> contract(String scenario) => {
       'scenario': scenario,
       'fixture': scenarios[scenario]!,
-      'viewport': [120, 40],
-      'boundary': isPipeline(scenario)
-          ? 'mutation through build/layout/paint/diff/commit; excludes output encoding'
-          : 'enqueue to next event-loop checkpoint after dispatch; not display latency',
+      'viewport': isListRebuild(scenario) ? [80, 20] : [120, 40],
+      'boundary': isListRebuild(scenario)
+          ? 'parent setState through tester pump; excludes encoding, transport and display'
+          : isPipeline(scenario)
+              ? 'mutation through build/layout/paint/diff/commit; excludes output encoding'
+              : 'enqueue to next event-loop checkpoint after dispatch; not display latency',
       'load': switch (scenario) {
         'burst' ||
         'slow-output' =>
           '16-event batch; no per-event response pacing',
         _ => 'closed loop',
       },
-      'sink':
-          isPipeline(scenario) ? 'cell buffer' : 'structured in-memory peer',
+      'sink': isPipeline(scenario) || isListRebuild(scenario)
+          ? 'cell buffer'
+          : 'structured in-memory peer',
       'debugCounters': false,
     };
 

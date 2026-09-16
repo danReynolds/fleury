@@ -1,105 +1,59 @@
 # Cache recovery, geometry and keyed-list rebuilds
 
-Follow-up to the September 15 architecture audit, based on main `ebc05ea5`.
-Measured runtime candidate: `147626b5adc31cfdb5272966c1bb0f3d7d48589b`.
+Follow-up to the September 15 architecture audit, updated against main
+`f00a5b3182933501e1195ae47d2e245510b66919`.
 
 ## Changes
 
 - A repaint exception leaves that cache and enclosing caches invalid. Partially
   written cells are never reused as a completed cache. Recovery stays with the
-  host/error boundary; a persistent exception does not create a new retry loop.
-  Invalidations raised during a successful paint still survive for the next
-  frame.
+  host/error boundary; a persistent exception does not create a retry loop.
+  Invalidations raised during a successful paint survive for the next frame.
 - Repaint boundaries declare the clip already imposed by their finite cache.
   Fully clipped content no longer advertises visible focus/semantic bounds;
-  partially clipped semantic bounds match the displayed cells. Switching
-  caching in either direction invalidates geometry and enclosing caches.
-  This keeps existing clipping behavior. It does not add overflow painting to
-  the cache: overflowing content needs layout space or an external overlay.
-- Lazy lists accept optional `itemKeyRevision`. An unchanged non-null revision
-  and item count reuse the ordered-key snapshot. Visible rows still rebuild;
-  the revision describes identities, not row content. Omitting it keeps the
-  previous safe behavior for callbacks over mutable data. Snapshot creation
-  must succeed before its revision can be reused.
+  partially clipped semantic bounds match displayed cells. Switching caching
+  in either direction invalidates geometry and enclosing caches. Overflowing
+  content still needs layout space or an external overlay.
+- Keyed lazy lists automatically reuse their validated reverse lookup when the
+  ordered keys are unchanged. Every key is still read on each parent update;
+  visible rows still rebuild. Changed keys rebuild the lookup, validating
+  duplicates including those outside the viewport. There is no new public API.
 
-The list API is opt-in because a callback can close over mutable data. Neither
-callback identity nor unchanged item count proves that the keys stayed the same.
-Use a persistent integer revision and increment it whenever keys or their order
-change. A count change automatically refreshes the index. Switching into or out
-of revision mode also refreshes it. No reverse-lookup callback is reintroduced.
+## Identity ownership and complexity
+
+The key callback may close over mutable data. Neither unchanged callback
+identity nor unchanged item count establishes that keys stayed the same.
+A parent update therefore compares every key against the prior snapshot. This
+is O(itemCount), but avoids a new key array and reverse map when keys match.
+
+At the first changed key, capture reuses the already checked prefix and builds
+a fresh map. Remaining keys are read once, and duplicates checked against the
+entire captured prefix. The previous snapshot is never mutated: callbacks and
+validation must succeed before publishing the replacement. Count changes use
+a full capture. Navigation without a parent update already reuses the snapshot.
+
+Keys require stable equality and hash codes. Equal fresh key objects can reuse
+the snapshot; as with any map cache, the old equal key instances can remain
+retained until keys change or the list unmounts. Row state, current-item identity,
+viewport anchoring and pointer selection keep their existing behavior.
 
 ## Correctness evidence
 
-New regressions cover:
+Regressions cover paint exceptions before and after partial writes in single
+and nested boundaries; frame-driver recovery after an unrelated repaint;
+clipping and cache-mode changes under an outer cache; visible labels updating
+with stable keys; same-closure mutable data; offscreen mutations and duplicates;
+failed-capture retry; and a 200-update identity oracle exercising insertion,
+removal, replacement, swapping, reversal and navigation.
 
-- An exception before or after partial writes, with one cache and nested caches;
-  the next paint succeeds without reinvalidating the failed subtree and then
-  becomes cacheable again.
-- The real frame driver presents its root-backstop error, then recovers cached
-  content when an unrelated sibling asks for a repaint.
-- Fully and partially clipped focus/semantic geometry, cache hits, and mode
-  changes below an outer cache. Disabling a cache restores pass-through overflow
-  and enabling it restores the existing bounded clip.
-- Both lazy list constructors avoiding a full key scan while updating visible
-  row content, scrolling into later rows, reordered cursor/viewport/state,
-  count changes, revision/keyed-mode transitions, mutable unversioned callbacks,
-  and retrying a revision whose first key capture failed.
+The focused suite also covers eager/lazy controllers, horizontal scrolling,
+follow-tail behavior, cursor/viewport preservation and pointer selection. The
+profiling lab checks every measured update's 20 visible labels and exact key
+read counts. Validation receipts and final measurements are recorded below.
 
-All 3,541 core tests (one skipped), 1,294 companion widget tests, 120 focused
-list tests and all eight fast performance gates passed.
-The core suite ran with repaint-cache verification enabled; real-process and
-PTY integration tests were excluded locally. Static analysis of changed code
-and tests is clean. The browser client was regenerated: only its source
-fingerprint changed, not its JavaScript payload. Full repository CI is tracked
-on the PR separately from these local receipts.
+## Reproduction
 
-## Keyed-list measurement
-
-`profiling/bin/keyed_list_rebuild_probe.dart` compares two configurations of the
-same candidate binary, not two historical revisions. Both rebuild a keyed list
-and change the labels of its 20 visible rows. Only the revision mode reuses the
-key snapshot. Each process performs 30 warmups and 150 measured updates. Five
-fresh process pairs per size alternate mode order; correctness checks verify
-the displayed labels and exact key-call counts. Dart 3.12.2, macOS arm64.
-
-| Item count | Automatic rescan p50 | Revision reuse p50 | Keys per update, auto / revision |
-| ---: | ---: | ---: | ---: |
-| 1,000 | 89 µs | 57 µs | 1,000 / 0 |
-| 100,000 | 5,783 µs | 57 µs | 100,000 / 0 |
-
-Values are medians of the five per-process p50s. Both modes rebuilt 20 rows per
-update. The result supports an opt-in improvement for repeated parent rebuilds
-with unchanged identities, not a universal list speedup. It measures setState
-through the tester pump, excluding encoding, transport and display. It does not
-quantify retained memory or physical terminal latency.
-
-## V2 comparison with main
-
-The unchanged V2 harness compared main `ebc05ea5` with candidate `147626b5` in
-40 fresh AOT processes: five pairs across four scenarios, 500 samples and 60
-warmups per process, alternating side order. All correctness checks passed.
-No other tests or builds from this task ran during timed measurements.
-
-| Scenario | Main p50 | Candidate p50 | Assessment at the 5% threshold |
-| --- | ---: | ---: | --- |
-| 40 panes | 45 µs | 45 µs | No clear change |
-| Dashboard leaf update | 112 µs | 113 µs | No clear change |
-| Typing | 223 µs | 224 µs | No clear change |
-| List navigation | 1,019 µs | 1,052 µs | No clear change |
-
-The paired intervals and p95 results are retained in the local V2 report. These are
-single-machine measurements; no clear change is not a guarantee that every
-workload has zero overhead. Frame workloads exclude encoding and display; input
-workloads measure enqueue through a dispatch checkpoint, not physical latency.
-
-## Receipts and reproduction
-
-The review run retains the targeted raw samples (mode/order, counters, raw
-per-process timings and executable checksum), the V2 manifest/frozen harness/
-raw results, and complete local test logs. All 40 V2 raw-result checksums were
-verified. Raw machine/build/test receipts stay local; this source change ships
-only this measurement summary and the reproducible probes. The commands below
-produce fresh evidence for another environment.
+From a bootstrapped checkout, after committing the candidate:
 
 ```sh
 cd packages/fleury
@@ -110,15 +64,17 @@ From the repository root:
 
 ```sh
 dart tool/fleury_dev.dart benchmark gates
-dart compile exe profiling/bin/keyed_list_rebuild_probe.dart -o /tmp/keyed-list-probe
-/tmp/keyed-list-probe 100000 auto
-/tmp/keyed-list-probe 100000 revision
 dart tool/fleury_dev.dart benchmark lab compare \
-  --baseline=ebc05ea5 --candidate=147626b5 \
+  --baseline=f00a5b31 --candidate=HEAD \
+  --scenario=keyed-list-1k,keyed-list,keyed-list-strings,keyed-list-reorder,keyed-list-replace,unkeyed-list-rebuild \
+  --runs=5 --samples=150 --warmup=30 --out=/tmp/keyed-list-comparison
+dart tool/fleury_dev.dart benchmark lab compare \
+  --baseline=f00a5b31 --candidate=HEAD \
   --scenario=panes-40,dashboard-leaf,typing,list \
-  --runs=5 --samples=500 --warmup=60 --out=/tmp/cache-list-comparison-new
+  --runs=5 --samples=500 --warmup=60 --out=/tmp/cache-list-comparison
 ```
 
-Run timing comparisons serially on a quiet machine and use a new output
-directory. The targeted probe's comparison protocol is also documented in
-`docs/implementation/profiling-v2.md`.
+Use new output directories and run on a quiet machine without concurrent
+builds/tests. The lab retains frozen harnesses, source/binary/dependency hashes,
+raw samples, correctness counters and per-process confidence intervals. Raw
+machine/build/test receipts remain local; only the summary ships with the PR.
