@@ -11,6 +11,8 @@
   when building with assertions disabled. Both forms retain the button frame,
   focus/hover/disabled styling and keyboard, pointer and semantic activation.
   `semanticLabel` names composed content without announcing decorative text.
+  `ButtonAppearance.plain` removes the frame and left-aligns content while
+  retaining the same keyboard, pointer, focus and semantic behavior.
 
 - `Container.color` changes, including null transitions, preserve stateful
   descendants. The stable background layer paints nothing when color is null;

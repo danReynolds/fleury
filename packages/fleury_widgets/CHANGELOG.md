@@ -16,6 +16,7 @@
   for replacement in place, and supports `persistent: true` without an expiry
   timer. Old handles/timers cannot dismiss replacements. `Toaster.maxToasts`
   optionally bounds retained toasts by evicting the oldest without queuing.
+  `ToastHandle.isActive` reports whether the exact toast is still retained.
   Messages wrap within their available width; existing calls keep stacking.
 
 - `NumberInput` forwards `enabled` and `readOnly` to the inner `TextInput`,

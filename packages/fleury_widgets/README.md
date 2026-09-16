@@ -117,6 +117,10 @@ Toaster.show(
 toast.dismiss();
 ```
 
+`toast.isActive` reports whether that exact toast is still retained. It becomes
+false on expiry, replacement, eviction, dismissal or host disposal; it is a
+snapshot rather than a subscription.
+
 Persistence disables the timer; explicit dismissal, replacement, eviction and
 host disposal still remove a toast. Do not supply both `persistent: true` and
 an explicit duration. Calls without an ID create distinct toasts, and omitting
