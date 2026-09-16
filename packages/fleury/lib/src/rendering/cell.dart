@@ -694,11 +694,11 @@ final class Cell {
       role = CellRole.continuation;
 
   /// A cell inside an inline-image placement's rectangle. Carries no
-  /// grapheme and no style — the overlay's pixels own the region.
-  const Cell.overlay()
+  /// grapheme. The background remains in the text plane for transparent
+  /// pixels and aspect-ratio letterboxing.
+  const Cell.overlay({this.style = CellStyle.none})
     : grapheme = null,
-      role = CellRole.overlay,
-      style = CellStyle.none;
+      role = CellRole.overlay;
 
   /// The grapheme owned by this cell. Always null on `empty`,
   /// `continuation`, and `overlay` cells.
@@ -707,8 +707,8 @@ final class Cell {
   /// This cell's role in its (possibly wide) grapheme.
   final CellRole role;
 
-  /// Visual style applied to the cell. Always empty for `overlay`
-  /// cells — the overlay's pixels carry their own coloring.
+  /// Visual style applied to the cell. Overlay cells retain the underlying
+  /// background for transparent pixels and letterboxed image areas.
   final CellStyle style;
 
   @override

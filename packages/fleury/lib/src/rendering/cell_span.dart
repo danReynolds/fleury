@@ -163,15 +163,21 @@ final class CellSpanBuilder {
           } else {
             final grapheme = cell.grapheme!;
             // Cheap range gate before the string switches: box-drawing
-            // (U+2500–257F) and block elements (U+2580–259F) are the only
-            // graphemes with a CSS-painted form, so ordinary text pays one
+            // (U+2500–257F) and block elements (including legacy edge blocks)
+            // are the only graphemes with a CSS-painted form, so ordinary text pays one
             // integer compare per cell instead of switches it can never
             // match. The ranges are disjoint, so no glyph runs both.
-            final cp = grapheme.length == 1 ? grapheme.codeUnitAt(0) : 0;
+            final cp = grapheme.length == 1
+                ? grapheme.codeUnitAt(0)
+                : grapheme.length == 2
+                ? grapheme.runes.first
+                : 0;
             final mask = (cp >= 0x2500 && cp <= 0x257F)
                 ? boxDrawingMask(grapheme)
                 : null;
-            final rects = (cp >= 0x2580 && cp <= 0x259F)
+            final rects =
+                (cp >= 0x2580 && cp <= 0x259F) ||
+                    (cp >= 0x1FB7C && cp <= 0x1FB7F)
                 ? blockElementRects(grapheme)
                 : null;
             if (mask != null) {
@@ -197,12 +203,13 @@ final class CellSpanBuilder {
 
         case CellRole.overlay:
           // Inline-image region: the DOM surface renders the pixels as an
-          // absolutely-positioned <img>; the grid underneath stays blank.
+          // absolutely-positioned <img>; preserve the underlying background
+          // for transparent pixels and letterboxed areas.
           appendText(
             col: col,
             text: ' ',
             widthCols: 1,
-            style: CellStyle.none,
+            style: cell.style,
             kind: CellRunKind.emptyText,
           );
           col += 1;
@@ -381,6 +388,16 @@ final class BlockRect {
 /// Results are `const`, so a lookup allocates nothing on the per-frame path.
 List<BlockRect>? blockElementRects(String grapheme) {
   switch (grapheme) {
+    // Unicode legacy-computing corners. Unlike box-drawing strokes these
+    // join at the cell's outside edge, useful for flush surface frames.
+    case '🭼':
+      return const [BlockRect(0, 0, 1, 8), BlockRect(0, 7, 8, 1)];
+    case '🭽':
+      return const [BlockRect(0, 0, 1, 8), BlockRect(0, 0, 8, 1)];
+    case '🭾':
+      return const [BlockRect(7, 0, 1, 8), BlockRect(0, 0, 8, 1)];
+    case '🭿':
+      return const [BlockRect(7, 0, 1, 8), BlockRect(0, 7, 8, 1)];
     // Vertical eighth ramp, growing up from the bottom edge (`▁`..`▇`), and the
     // two halves — the glyphs bar charts, sparklines and area fills paint with.
     case '▁':

@@ -119,6 +119,25 @@ void main() {
       expect('linear-gradient'.allMatches(css).length, 2);
     });
 
+    test('frame corners join the exact outside edges of the cell', () {
+      expect(cssFor('🭽'), contains('background-position:left top,left top'));
+      expect(
+        cssFor('🭼'),
+        contains('background-position:left top,left bottom'),
+      );
+      expect(cssFor('🭾'), contains('background-position:right top,left top'));
+      expect(
+        cssFor('🭿'),
+        contains('background-position:right top,left bottom'),
+      );
+      for (final glyph in ['🭼', '🭽', '🭾', '🭿']) {
+        expect(
+          cssFor(glyph),
+          contains('background-size:12.5% 100%,100% 12.5%'),
+        );
+      }
+    });
+
     test('an image cell keeps its background behind the ink', () {
       // The half-block image tier is two colors per cell: background behind,
       // foreground rectangle over half of it.

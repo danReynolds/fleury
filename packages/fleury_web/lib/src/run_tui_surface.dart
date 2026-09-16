@@ -754,7 +754,7 @@ final class _SurfaceFramePresenter implements FramePresenter {
       overlay.cacheImage(image.id, image.bytes);
     }
     overlay.presentPlan([
-      for (final p in next.imagePlacements)
+      for (final p in next.visibleImagePlacements)
         ImagePlacement(
           id: p.id,
           col: p.col,
