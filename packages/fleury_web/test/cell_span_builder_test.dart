@@ -148,6 +148,24 @@ void main() {
       expect(row.runs[2].kind, CellRunKind.emptyText);
     });
 
+    test(
+      'edge-anchored frame corners keep one cell despite surrogate pairs',
+      () {
+        final row = builder.buildRow(
+          frame(5, 1, (b) => b.writeText(const CellOffset(0, 0), '🭼🭽🭾🭿x')),
+          0,
+        );
+        expect(
+          row.runs.take(4).map((r) => (r.kind, r.widthCols)),
+          List.filled(4, (CellRunKind.blockElement, 1)),
+        );
+        expect(row.runs.last.text, 'x');
+        for (final run in row.runs.take(4)) {
+          expect(blockElementRects(run.text), hasLength(2));
+        }
+      },
+    );
+
     test('adjacent same-style text cannot be absorbed into a block run', () {
       // A CSS-painted run's text IS its lookup key. Let a plain character
       // append onto it and the key stops resolving, so the adapter quietly

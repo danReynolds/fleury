@@ -73,18 +73,21 @@ _Reference _referenceDiff(CellBuffer previous, CellBuffer next) {
   }
 
   // Cells under an image are payload-free overlays, so a placement change can
-  // be invisible above. Compare the lists on every field that reaches the fit
-  // resolver or the overlay's geometry.
+  // be invisible above. Compare the visible presenter lists, not the recorded
+  // paint calls: later opaque cells can cut holes in those placements.
   // Whole-value comparison: listing fields here would be a transcription of
   // the implementation's list, so a field missing from BOTH would be
   // structurally invisible — which is how the fit/box fields went uncompared.
   final samePlacements = const ListEquality<InlineImagePlacement>().equals(
-    next.imagePlacements,
-    previous.imagePlacements,
+    next.visibleImagePlacements,
+    previous.visibleImagePlacements,
   );
 
   if (!samePlacements) {
-    for (final list in [next.imagePlacements, previous.imagePlacements]) {
+    for (final list in [
+      next.visibleImagePlacements,
+      previous.visibleImagePlacements,
+    ]) {
       for (final p in list) {
         // Placements are always recorded on-grid (writeImageWithId clips), so
         // this mirrors the implementation's intent without its dead clamps.

@@ -284,6 +284,7 @@ final class AnsiRenderer {
       // already-blank cell (empty, or a prior overlay from a static image)
       // needs nothing, so an unchanging image costs zero bytes.
       if (newCell.role == CellRole.overlay &&
+          newCell.style.sameVisualStyleAs(oldCell.style) &&
           (oldCell.role == CellRole.empty ||
               oldCell.role == CellRole.overlay)) {
         return;

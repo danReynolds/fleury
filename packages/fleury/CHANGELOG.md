@@ -2,6 +2,13 @@
 
 ## 0.1.0
 
+- Inline images respect later text and opaque popup backgrounds across cached,
+  web, remote and terminal composition. Visible slices retain the original fit
+  box; transparent and letterboxed areas inherit the painted background.
+  Image-only visibility changes invalidate retained frames.
+- Browser cell rendering supports the four outer-edge corner glyphs
+  U+1FB7C–U+1FB7F, including their single-cell surrogate-pair encoding.
+
 - Repaint caches remain invalid after a paint exception, including nested
   caches. Focus and semantic geometry now honor the cache's layout-size clip,
   including when caching is enabled or disabled at runtime.

@@ -142,6 +142,8 @@ final class CellBuffer {
   final Map<String, InlineImage> _images = <String, InlineImage>{};
   // Per-placement geometry, one entry per [writeImage] call, in paint order.
   final List<InlineImagePlacement> _imagePlacements = <InlineImagePlacement>[];
+  bool _imageOcclusionDirty = false;
+  List<InlineImagePlacement>? _retainedImagePlacements;
   var _damageTrackingEnabled = false;
   // Damage bounds as raw ints (left/top inclusive, right/bottom exclusive),
   // updated by min/max in [_recordDamageRect] so the paint hot path allocates
@@ -164,6 +166,66 @@ final class CellBuffer {
   /// order. Each entry is a distinct on-screen rectangle even when two share an
   /// [InlineImagePlacement.id] (same bytes drawn twice). Read-only.
   List<InlineImagePlacement> get imagePlacements => _imagePlacements;
+
+  /// Presenter rectangles after later text and backgrounds have occluded the
+  /// recorded images. Each slice preserves the original fit box and offset.
+  List<InlineImagePlacement> get visibleImagePlacements {
+    final placements = _retainedImagePlacements ?? _imagePlacements;
+    if (placements.isEmpty || !_imageOcclusionDirty) return placements;
+    final visible = <InlineImagePlacement>[];
+    for (final placement in placements) {
+      bool owns(int x, int y) =>
+          _cells[y * _size.cols + x].role == CellRole.overlay;
+      // Text and opaque widget backgrounds painted later replace overlay
+      // cells. Presenters must receive those same holes, otherwise a DOM or
+      // terminal pixel plane floats above a later dialog/popover.
+      var active = <(int, int), (int, int)>{};
+      void emit((int, int) span, (int, int) extent) {
+        visible.add(
+          InlineImagePlacement(
+            id: placement.id,
+            col: span.$1,
+            row: extent.$1,
+            cols: span.$2,
+            rows: extent.$2,
+            fit: placement.fit,
+            boxCols: placement.boxCols,
+            boxRows: placement.boxRows,
+            boxOffsetCol: placement.boxOffsetCol + span.$1 - placement.col,
+            boxOffsetRow: placement.boxOffsetRow + extent.$1 - placement.row,
+          ),
+        );
+      }
+
+      for (var y = placement.row; y < placement.row + placement.rows; y++) {
+        final next = <(int, int), (int, int)>{};
+        var x = placement.col;
+        while (x < placement.col + placement.cols) {
+          if (!owns(x, y)) {
+            x++;
+            continue;
+          }
+          final start = x++;
+          while (x < placement.col + placement.cols && owns(x, y)) {
+            x++;
+          }
+          final span = (start, x - start);
+          final previous = active.remove(span);
+          next[span] = previous == null
+              ? (y, 1)
+              : (previous.$1, previous.$2 + 1);
+        }
+        for (final entry in active.entries) {
+          emit(entry.key, entry.value);
+        }
+        active = next;
+      }
+      for (final entry in active.entries) {
+        emit(entry.key, entry.value);
+      }
+    }
+    return visible;
+  }
 
   /// Conservative bounds of cells mutated since the last
   /// [resetDamageTracking].
@@ -233,6 +295,8 @@ final class CellBuffer {
     _cells.fillRange(0, _cells.length, const Cell.empty());
     _images.clear();
     _imagePlacements.clear();
+    _retainedImagePlacements = null;
+    _imageOcclusionDirty = false;
   }
 
   /// Fills [rect] with single-cell spaces painted with [style].
@@ -264,6 +328,7 @@ final class CellBuffer {
       _evictWideNeighbors(right - 1, row, rowBase + right - 1);
       final base = row * _size.cols;
       _cells.fillRange(base + left, base + right, fill);
+      if (_imagePlacements.isNotEmpty) _imageOcclusionDirty = true;
     }
   }
 
@@ -297,6 +362,8 @@ final class CellBuffer {
     );
     _images.clear();
     _imagePlacements.clear();
+    _retainedImagePlacements = null;
+    _imageOcclusionDirty = false;
     _hasDamage = false;
     _recordDamageRect(0, 0, newSize.cols, newSize.rows);
   }
@@ -334,6 +401,30 @@ final class CellBuffer {
     );
   }
 
+  void _copyCellRange(
+    CellBuffer source,
+    int srcStart,
+    int dstStart,
+    int length,
+  ) {
+    if (source._imagePlacements.isEmpty) {
+      _cells.setRange(dstStart, dstStart + length, source._cells, srcStart);
+      return;
+    }
+    var inherited = const Cell.overlay();
+    for (var i = 0; i < length; i++) {
+      var cell = source._cells[srcStart + i];
+      if (cell.role == CellRole.overlay && cell.style.background == null) {
+        final background = _cells[dstStart + i].style.background;
+        if (inherited.style.background != background) {
+          inherited = Cell.overlay(style: CellStyle(background: background));
+        }
+        cell = inherited;
+      }
+      _cells[dstStart + i] = cell;
+    }
+  }
+
   void _copyRect(
     CellBuffer source,
     int srcCol,
@@ -363,6 +454,7 @@ final class CellBuffer {
       recordDamage: false,
     );
 
+    if (_imagePlacements.isNotEmpty) _imageOcclusionDirty = true;
     // Fast path: full-width rows landing at column 0 of this buffer — the
     // sliced source rows map to a contiguous range in the destination, so
     // one `setRange` covers the whole block.
@@ -379,11 +471,11 @@ final class CellBuffer {
       }
       if (dstEndRow > _size.rows) dstEndRow = _size.rows;
       if (dstEndRow <= dstStartRow) return;
-      _cells.setRange(
-        dstStartRow * _size.cols,
-        dstEndRow * _size.cols,
-        source._cells,
+      _copyCellRange(
+        source,
         srcStartRow * srcStride,
+        dstStartRow * _size.cols,
+        (dstEndRow - dstStartRow) * _size.cols,
       );
       return;
     }
@@ -423,7 +515,7 @@ final class CellBuffer {
         dstRow,
         dstBase + dstCol0 + colEnd - 1,
       );
-      _cells.setRange(dstStart, dstStart + len, source._cells, srcStart);
+      _copyCellRange(source, srcStart, dstStart, len);
       // The copied slice itself can be cut mid-pair when the destination
       // clip trimmed it (a blit partly off-screen) or the caller's rect did.
       // A continuation as the first copied cell has its leading outside the
@@ -602,6 +694,7 @@ final class CellBuffer {
       'interaction-aware styles must resolve first',
     );
     final base = row * _size.cols + col;
+    if (_imagePlacements.isNotEmpty) _imageOcclusionDirty = true;
 
     // Guard inlined rather than left to _recordDamageRect: this is the
     // per-cell paint path, and the frame buffer deliberately arms no damage
@@ -806,6 +899,7 @@ final class CellBuffer {
     if (left >= right || top >= bottom) return;
     // Bytes are deduplicated by id; geometry is recorded per placement so the
     // same image drawn twice (or at two sizes) keeps independent rectangles.
+    _retainVisibleImages();
     final image = InlineImage(
       id: id,
       bytes: bytes,
@@ -877,8 +971,9 @@ final class CellBuffer {
     required bool recordDamage,
   }) {
     if (source._imagePlacements.isEmpty || sourceRect.size.isEmpty) return;
+    _retainVisibleImages();
     final destinationBounds = CellRect(offset: CellOffset.zero, size: _size);
-    for (final p in source._imagePlacements) {
+    for (final p in source.visibleImagePlacements) {
       final sourceVisible = CellRect.fromLTWH(p.col, p.row, p.cols, p.rows);
       final copied = sourceVisible.intersect(sourceRect);
       if (copied == null) continue;
@@ -912,7 +1007,34 @@ final class CellBuffer {
         markOverlayCells: markOverlayCells,
         recordDamage: recordDamage,
       );
+      if (markOverlayCells) {
+        // Cell replays omit overlay cells; carry their background through a
+        // scratch crop as well as carrying the image's original fit box.
+        final sourceCol = copied.left + visible.left - translated.left;
+        final sourceRow = copied.top + visible.top - translated.top;
+        for (var y = 0; y < visible.size.rows; y++) {
+          for (var x = 0; x < visible.size.cols; x++) {
+            final cell = source
+                ._cells[(sourceRow + y) * source._size.cols + sourceCol + x];
+            // A cached Image often has no background of its own. Inherit the
+            // newly painted parent, rather than replacing it with terminal
+            // default. An explicit source background still survives the crop.
+            if (cell.style.background != null) {
+              _cells[(visible.top + y) * _size.cols + visible.left + x] = cell;
+            }
+          }
+        }
+      }
     }
+  }
+
+  // Freeze holes before a later image overwrites their cell roles. Overlapping
+  // images retain paint order (including alpha), while text-covered pixels of
+  // an older image cannot reappear under a newer image.
+  void _retainVisibleImages() {
+    if (!_imageOcclusionDirty) return;
+    _retainedImagePlacements = List.of(visibleImagePlacements);
+    _imageOcclusionDirty = false;
   }
 
   void _recordImagePlacement(
@@ -930,25 +1052,26 @@ final class CellBuffer {
     bool recordDamage = true,
   }) {
     _images[image.id] = image;
-    _imagePlacements.add(
-      InlineImagePlacement(
-        id: image.id,
-        col: col,
-        row: row,
-        cols: cols,
-        rows: rows,
-        fit: fit,
-        boxCols: boxCols,
-        boxRows: boxRows,
-        boxOffsetCol: boxOffsetCol,
-        boxOffsetRow: boxOffsetRow,
-      ),
+    final placement = InlineImagePlacement(
+      id: image.id,
+      col: col,
+      row: row,
+      cols: cols,
+      rows: rows,
+      fit: fit,
+      boxCols: boxCols,
+      boxRows: boxRows,
+      boxOffsetCol: boxOffsetCol,
+      boxOffsetRow: boxOffsetRow,
     );
+    _imagePlacements.add(placement);
+    _retainedImagePlacements?.add(placement);
     // Include the ±1 edge columns: _evictWideNeighbors below empties a
     // leading at col-1 or a continuation at col+cols, which sit outside the
     // region proper — the same reason grapheme writes damage col-1..col+width+1.
     if (recordDamage) _recordDamageRect(col - 1, row, cols + 2, rows);
     if (!markOverlayCells) return;
+    var overlay = const Cell.overlay();
     for (var r = row; r < row + rows; r++) {
       final base = r * _size.cols;
       // Sever any wide pair the region's edges bisect before stamping — a
@@ -959,7 +1082,11 @@ final class CellBuffer {
       _evictWideNeighbors(col, r, rBase + col);
       _evictWideNeighbors(col + cols - 1, r, rBase + col + cols - 1);
       for (var c = col; c < col + cols; c++) {
-        _cells[base + c] = const Cell.overlay();
+        final background = _cells[base + c].style.background;
+        if (overlay.style.background != background) {
+          overlay = Cell.overlay(style: CellStyle(background: background));
+        }
+        _cells[base + c] = overlay;
       }
     }
   }
@@ -1089,13 +1216,14 @@ final class CellBuffer {
     // Inline images live beside the grid, not in it: every cell under a
     // placement is a payload-free `Cell.overlay`, so a placement that changed
     // how it renders — different bytes, or the same bytes fitted differently —
-    // leaves the cells byte-identical. Deriving from cells alone would call
-    // that frame unchanged.
-    if (!_placementsMatch(_imagePlacements, previous._imagePlacements)) {
+    // leaves the cells byte-identical. A changed hole beneath a later image
+    // can also leave both the cells and recorded placements identical. Compare
+    // the visible slices that presenters actually draw.
+    final visible = visibleImagePlacements;
+    final previousVisible = previous.visibleImagePlacements;
+    if (!_placementsMatch(visible, previousVisible)) {
       for (var list = 0; list < 2; list++) {
-        final placements = list == 0
-            ? _imagePlacements
-            : previous._imagePlacements;
+        final placements = list == 0 ? visible : previousVisible;
         for (final placement in placements) {
           final firstCol = placement.col < 0 ? 0 : placement.col;
           final lastCol = placement.col + placement.cols > cols

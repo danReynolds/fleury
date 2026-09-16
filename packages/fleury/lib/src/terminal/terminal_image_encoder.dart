@@ -107,7 +107,7 @@ final class TerminalImageEncoder {
     // below; and if either live set is non-empty (images were on screen and are
     // now gone) the normal path runs to emit the deletions.
     if (!fullRepaint &&
-        next.imagePlacements.isEmpty &&
+        next.visibleImagePlacements.isEmpty &&
         _kittyLive.isEmpty &&
         _rasterLive.isEmpty) {
       return '';
@@ -193,7 +193,7 @@ final class TerminalImageEncoder {
   void _encodeKitty(CellBuffer next, StringBuffer out) {
     // Resolve this frame's wanted placements.
     final wanted = <_KittyPlacement>[];
-    for (final p in next.imagePlacements) {
+    for (final p in next.visibleImagePlacements) {
       final image = next.images[p.id];
       if (image == null) continue;
       final f = _resolve(p, image);
@@ -353,7 +353,7 @@ final class TerminalImageEncoder {
   void _encodeIterm2(CellBuffer next, StringBuffer out) {
     final wanted = <_RasterPlacement>[];
     final croppers = <Uint8List Function(int, int, int, int)?>[];
-    for (final p in next.imagePlacements) {
+    for (final p in next.visibleImagePlacements) {
       final image = next.images[p.id];
       if (image == null) continue;
       var f = _resolve(p, image);
@@ -412,7 +412,7 @@ final class TerminalImageEncoder {
 
   void _encodeSixelFrame(CellBuffer next, StringBuffer out) {
     final wanted = <_RasterPlacement>[];
-    for (final p in next.imagePlacements) {
+    for (final p in next.visibleImagePlacements) {
       final image = next.images[p.id];
       if (image == null) continue;
       final pixels = image.pixels;

@@ -849,7 +849,7 @@ List<ImagePlacement> _imagePlacements(
   CellBuffer next, {
   required bool includeImageWindows,
 }) {
-  final placements = next.imagePlacements;
+  final placements = next.visibleImagePlacements;
   if (placements.isEmpty) return const <ImagePlacement>[];
   return [
     for (final p in placements)
